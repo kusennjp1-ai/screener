@@ -1,3 +1,4 @@
+import { calendarAt } from '../src/static/testMarketCalendarFixture.js';
 // @vitest-environment node
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -12,6 +13,8 @@ import { withFinancialProof, FINANCIAL_TEST_DATE as date, FINANCIAL_TEST_NOW as 
 import { assess, researchCsv } from '../src/static/researchEngine.js';
 import { auditDailyBars } from '../src/static/qualificationAudit.js';
 import { buildBookMarketEvidence } from '../src/static/bookMarketEvidence.js';
+import { validateResearchParity } from './research-quality.mjs';
+import { setupReadiness } from '../src/static/setupReadiness.js';
 
 const write = async (path, value) => {
   await mkdir(resolve(path, '..'), { recursive: true });
@@ -20,16 +23,17 @@ const write = async (path, value) => {
 const read = async path => JSON.parse(await readFile(path, 'utf8'));
 const symbols = rows => rows.map(row => row.symbol);
 
-async function fixture({ withBreadth = false } = {}) {
+async function fixture({ withBreadth = false, withCalendar = true, setupReports = null, financiallyUnavailableSymbols = [], rejectedFinancialSymbols = [] } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'research-export-order-'));
   const frontend = join(directory, 'frontend'), root = join(frontend, 'public/static-data');
   const bars = [];
-  for (let time = Date.parse(date); bars.length < 280; time -= 86400000) {
-    if ([0, 6].includes(new Date(time).getUTCDay())) continue;
+  for (const day of calendarAt(date).sessions.slice(-280).reverse()) {
     const close = 100 - bars.length * .1;
-    bars.unshift({ date: new Date(time).toISOString().slice(0, 10), open: close, high: close + 1, low: close - 1, close, volume: 1000000 });
+    bars.unshift({ date: day, open: close, high: close + 1, low: close - 1, close, volume: 1000000 });
   }
-  const sourceSymbols = withBreadth ? Array.from({ length: 101 }, (_, index) => `S${String(index).padStart(3, '0')}`) : ['ZETA', 'BETA', 'ALPHA'];
+  if (withCalendar) await write(join(root, 'trading-calendar.json'), calendarAt(date));
+  const sourceSymbols = setupReports ? setupReports.map((_, index) => `SETUP${index}`) : withBreadth ? Array.from({ length: 101 }, (_, index) => `S${String(index).padStart(3, '0')}`) : ['ZETA', 'BETA', 'ALPHA'];
+  if (financiallyUnavailableSymbols.length) sourceSymbols.splice(-financiallyUnavailableSymbols.length, financiallyUnavailableSymbols.length, ...financiallyUnavailableSymbols);
   const sourceCharts = sourceSymbols.map((symbol, index) => {
     const series = withBreadth ? bars.map((bar, offset) => {
       const close = 100 + offset * (.1 + index / 503) + (index + 1) * (offset % 7) / 1000000;
@@ -40,14 +44,20 @@ async function fixture({ withBreadth = false } = {}) {
       const close = Math.max(...series.slice(-21, -1).map(bar => bar.high)) * 1.01;
       Object.assign(series.at(-1), { open: close, close, high: close + 1, low: close - 1, volume: 2000000 + index * 137 });
     }
-    return { symbol, market: 'US', as_of_date: date, bars: series };
+    return { session_calendar: calendarAt(date), symbol, market: 'US', as_of_date: date, bars: series };
   });
   const rows = sourceSymbols.map((symbol, index) => withFinancialProof({
     symbol, company_name: `${symbol} Corporation`, quoteType: 'EQUITY', currency: 'USD', current_price: sourceCharts[index].bars.at(-1).close,
     volume: 1000000, adv_usd: 100000000, se_setup_score: (index + 1) * 10,
     setup_recalculation: { status: 'calculated', as_of_date: date }, eps_growth_yy: 30 + index, sales_growth_yy: 40 + index,
   }, now, date));
-  const histories = Object.fromEntries(rows.map(row => [row.symbol, {
+  for (const row of rows.filter(row => rejectedFinancialSymbols.includes(row.symbol))) {
+    const reasons = row.financial_current.r.split('');
+    for (const index of [1, 3]) { reasons[index] = '1'; delete row.financial_current.p[index]; }
+    row.financial_current.r = reasons.join('');
+  }
+  if (setupReports) for (const [index, report] of setupReports.entries()) Object.assign(rows[index], report);
+  const histories = Object.fromEntries(rows.filter(row => !financiallyUnavailableSymbols.includes(row.symbol)).map(row => [row.symbol, {
     symbol: row.symbol, as_of_date: date, status: 'available', basis: 'reported_diluted_eps', currency: 'USD',
     source: 'Synthetic regression fixture', retrieved_at: new Date(now - 3600000).toISOString(),
     annual: [2022, 2023, 2024, 2025].map((year, index) => ({ end: `${year}-12-31`, eps: 2 ** index })), quarterly: [],
@@ -205,6 +215,157 @@ it.each(['malformed JSON', 'duplicate identities'])('rejects %s in an existing a
     const before = await Promise.all(paths.map(file => readFile(file)));
     expect(run).toThrow('Invalid research export order anchor');
     expect(await Promise.all(paths.map(file => readFile(file)))).toEqual(before);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+it('keeps verified calendar coverage through export, compact transport, detail and chart re-audit', async () => {
+  const { directory, run, outputs } = await fixture({ withBreadth: true });
+  try {
+    run();
+    const result = await outputs();
+    expect(result.index.rows.every(row => row.technical_audit.status === 'verified')).toBe(true);
+    expect(result.index.rows.every(row => row.rs_universe_size === 101)).toBe(true);
+    expect(result.index.rows.some(row => assess(row).qualified)).toBe(true);
+    for (const [index, row] of result.details.entries()) {
+      expect(auditDailyBars(row, result.charts[index], date)).toEqual(row.technical_audit);
+      expect(row.technical_audit.window_52w.from).toBe('2025-10-03');
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('preserves a passing technical template while excluding the five unavailable financial histories through export and worker preparation', async () => {
+  const unavailable = ['NVDA', 'FUTU', 'AAOI', 'ALH', 'AVT'];
+  const { directory, root, rows, sourceCharts, run, outputs } = await fixture({ withBreadth: true, financiallyUnavailableSymbols: unavailable });
+  try {
+    const financialBytes = await readFile(join(root, 'financial-history.json'));
+    run();
+    const result = await outputs(), prepared = prepareResearchBundle([result.index], date, { now });
+    for (const symbol of unavailable) {
+      const index = result.index.rows.findIndex(row => row.symbol === symbol);
+      for (const row of [result.index.rows[index], result.details[index], result.charts[index].stock_data]) {
+        expect(row.passes_template).toBe(true);
+      }
+      // Chart stock_data is a light scan row; canonical rule inputs live in the list/detail.
+      for (const row of [result.index.rows[index], result.details[index]]) {
+        expect(assess(row, 'minervini', now)).toMatchObject({ passed: 9, total: 9, qualified: false, templateMismatch: false, financial_exclusion: { symbol } });
+      }
+      const detail = result.details[index];
+      expect(detail.method_summary.minervini).toMatchObject({ qualified: false, templateMismatch: false, financial_exclusion: { symbol } });
+      expect(detail.financial_current).toEqual(rows.find(row => row.symbol === symbol).financial_current);
+      expect(result.charts[index].bars).toEqual(sourceCharts.find(chart => chart.symbol === symbol).bars);
+      for (const method of RESEARCH_METHODS) {
+        expect(prepared.rankings[method].find(item => item.row.symbol === symbol).assessment)
+          .toMatchObject({ qualified: false, financial_exclusion: { symbol } });
+      }
+    }
+    expect(result.index.rows.some(row => !unavailable.includes(row.symbol) && assess(row, 'minervini', now).qualified)).toBe(true);
+    expect(await readFile(join(root, 'financial-history.json'))).toEqual(financialBytes);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('preserves rejected scalar and quarterly inputs through the actual export list selection', async () => {
+  const unavailable = ['NVDA', 'FUTU', 'AAOI', 'ALH', 'AVT'];
+  const { directory, root, rows, histories, run, outputs } = await fixture({ withBreadth: true,
+    financiallyUnavailableSymbols: unavailable, rejectedFinancialSymbols: ['AVT'] });
+  try {
+    run();
+    const baseline = new Map((await outputs()).index.rows.map(row => [row.symbol, row]));
+    // Synthetic contradictory input must stay rejected; omitting its nonempty
+    // quarterly cells would incorrectly grant the unavailable-history exception.
+    histories.AAOI = { symbol: 'AAOI', as_of_date: date, status: 'unavailable', basis: 'reported_diluted_eps',
+      currency: 'USD', source: 'Synthetic rejected history', retrieved_at: new Date(now - 3600000).toISOString(),
+      annual: [], quarterly: [{ end: '2026-06-30', eps: 2 }] };
+    await write(join(root, 'financial-history.json'), { as_of_date: date, results: histories });
+    const originalHistory = await readFile(join(root, 'financial-history.json'));
+    const originalRows = structuredClone(rows);
+    run();
+    const result = await outputs();
+    const wire = await read(join(root, result.manifest.markets.US.assets.research.path));
+    for (const clock of [now, now + 10 * 86400000]) {
+      expect(() => validateResearchParity(wire, result.details, clock)).not.toThrow();
+    }
+    for (const symbol of unavailable) {
+      const index = result.index.rows.findIndex(row => row.symbol === symbol);
+      for (const row of [result.index.rows[index], result.details[index]]) for (const method of RESEARCH_METHODS) {
+        const assessment = assess(row, method, now);
+        if (['AVT', 'AAOI'].includes(symbol)) expect(assessment).not.toHaveProperty('financial_exclusion');
+        else expect(assessment).toMatchObject({ qualified: false, financial_exclusion: { symbol, label: '財務未確認・判定対象外' } });
+      }
+    }
+    const avt = result.index.rows.find(row => row.symbol === 'AVT');
+    const originalAvt = rows.find(row => row.symbol === 'AVT');
+    expect(avt.financial_historical.values).toEqual({ eps_growth_yy: originalAvt.eps_growth_yy, sales_growth_yy: originalAvt.sales_growth_yy });
+    expect(result.index.rows.find(row => row.symbol === 'AAOI').financial_history).toEqual(histories.AAOI);
+    for (const row of result.index.rows.filter(row => !unavailable.includes(row.symbol))) {
+      expect(row).not.toHaveProperty('financial_historical');
+      expect(row.financial_history).not.toHaveProperty('quarterly');
+      for (const method of RESEARCH_METHODS) expect(assess(row, method, now)).toEqual(assess(baseline.get(row.symbol), method, now));
+    }
+    expect(await readFile(join(root, 'financial-history.json'))).toEqual(originalHistory);
+    expect(rows).toEqual(originalRows);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('fails closed on absent independent calendar despite old chart and scan certification', async () => {
+  const { directory, run, outputs } = await fixture({ withBreadth: true, withCalendar: false });
+  try {
+    run();
+    const result = await outputs();
+    for (const row of result.index.rows) {
+      expect(row.technical_audit.status).toBe('unknown');
+      expect(row.technical_audit.valid).toBe(false);
+      expect(row.rs_rating).toBeNull(); expect(row.rs_universe_size).toBe(0);
+      expect(assess(row).unknown).toBe(9); expect(assess(row).qualified).toBe(false);
+    }
+    expect(result.charts.every(chart => chart.session_calendar === null)).toBe(true);
+    const csv = researchCsv(result.index.rows.map(row => ({ row })), 'minervini', date, now);
+    expect(csv).not.toContain('"pass"'); expect(csv).toContain('"unknown"');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('excludes a single missing session from the published RS population without altering prices', async () => {
+  const { directory, root, run, outputs } = await fixture({ withBreadth: true });
+  try {
+    const path = join(root, 'charts/S100.json'), chart = await read(path);
+    chart.bars.splice(150, 1); await write(path, chart);
+    run();
+    const result = await outputs(), target = result.index.rows.find(row => row.symbol === 'S100');
+    expect(target.technical_audit.status).toBe('unknown'); expect(target.rs_rating).toBeNull();
+    expect(result.index.rows.every(row => row.rs_universe_size === 100)).toBe(true);
+    const targetChart = result.charts.find(chart => chart.symbol === 'S100');
+    expect(targetChart.bars).toEqual(chart.bars);
+    expect(targetChart.bars).toHaveLength(279);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+
+it('preserves calculated and unavailable setup reasons through actual export, compact transport and every profile CSV', async () => {
+  const setupReports = [
+    { se_setup_ready: false, setup_recalculation: { status: 'calculated', as_of_date: date, reason: 'not_implemented / outside_early_zone / volume_below_minimum' } },
+    { se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date, reason: 'measured ready' } },
+    { se_setup_ready: false, setup_recalculation: { status: 'unavailable', as_of_date: date, reason: 'detector error' } },
+    { se_setup_ready: false, setup_recalculation: { status: 'unavailable', as_of_date: date } },
+    { se_setup_ready: null, setup_recalculation: { status: 'calculated', as_of_date: date, reason: '=literal reason, "quoted"' } },
+    { se_setup_ready: false, setup_recalculation: { status: 'calculated', as_of_date: date } },
+  ];
+  const { directory, root, run, outputs } = await fixture({ setupReports });
+  try {
+    run();
+    const { manifest, index, details } = await outputs();
+    const wire = await read(join(root, manifest.markets.US.assets.research.path));
+    expect(() => validateResearchParity(wire, details, now)).not.toThrow();
+    for (const [offset, row] of index.rows.entries()) {
+      const detail = details[offset];
+      expect(row.setup_recalculation).toEqual(setupReports[offset].setup_recalculation);
+      expect(setupReadiness(row)).toEqual(setupReadiness(detail));
+      for (const method of RESEARCH_METHODS) {
+        expect(researchCsv([{ row }], method, date, now)).toBe(researchCsv([{ row: detail }], method, date, now));
+        expect(assess(row, method, now)).toEqual(assess(detail, method, now));
+      }
+    }
+    expect(index.rows.map(row => setupReadiness(row).state)).toEqual(['fail', 'pass', 'unknown', 'unknown', 'unknown', 'fail']);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

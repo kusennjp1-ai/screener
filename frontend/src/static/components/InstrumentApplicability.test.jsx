@@ -23,7 +23,7 @@ it('shows fund applicability in the list while retaining its price and technical
 it('shows financial target exclusion independently of fresh fund financial numbers',()=>{
   const evidence=buildFinancialEvidencePresentation(row,{method:'oneil',date,now,generation:'test'});
   const {container}=render(<FinancialEvidencePanel evidence={evidence} history={row.financial_history} symbol="BITU" method="oneil" date={date} now={now} generation="test"/>);
-  expect(container.querySelectorAll('[data-state="not_applicable"]')).toHaveLength(7);
+  expect(container.querySelectorAll('.financial-evidence-rows > li[data-state="not_applicable"]')).toHaveLength(7);
   expect(container.querySelectorAll('[data-state="pass"], [data-state="fail"]')).toHaveLength(0);
   expect(screen.getAllByText(/NAVやファンドの財務値/, {selector:'.financial-evidence-reason'})).toHaveLength(7);
 });

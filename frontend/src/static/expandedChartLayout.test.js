@@ -31,3 +31,11 @@ describe('expanded chart viewport fit', () => {
     expect(fitExpandedChartHeight(789, -2)).toBe(789);
   });
 });
+
+it('counts a wrapping price legend in the measured offset without shrinking a short plot below300',()=>{
+  // Representative extra in-flow rows, not measurements of rendered pixels.
+  for(const legendHeight of [18,36,54]){
+    expect(fitExpandedChartHeight(789,332+legendHeight)).toBe(457-legendHeight);
+    expect(fitExpandedChartHeight(568-97-25,136+legendHeight,{mobile:true})).toBe(300);
+  }
+});

@@ -9,6 +9,7 @@ import './candidateGuidance.css';
 import { entryReadiness } from '../entryReadiness';
 import { verifiedVolumeRatio } from '../qualificationAudit';
 import { signed, times, stateKey, STATES } from '../positionGeometry';
+import { useStickyHeaderClearance } from '../useStickyHeaderClearance';
 const SORTS={rank:'選定・買い位置',distance:'ピボットに近い順',rs:'RSが高い順',volume:'出来高比が高い順',state:'状態'};
 const stateOrder=state=>['zone','wait','ext','na','low','acq'].indexOf(stateKey(state));
 const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onSelect,onCompare,onMove,now}) {
@@ -19,7 +20,7 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
  // must not hide a separate freshness, earnings, or price warning.
  const dailyDetail=readiness?.ready?'日次の購入条件をすべて通過。発注前に最新価格とリスクを確認':blockers?.length?blockers.map(rule=>`${rule.label}：${rule.state==='not_applicable'?'対象外':rule.state==='unknown'?'未確認':'未達'}。${rule.detail}`).join('。'):'分析日または市場環境が未確認';
  const missing=useMemo(()=>nearOnly?singleMissingCondition(assess(r,method,now)):null,[nearOnly,r,method,now]);
- return <button className="candidate-row" data-near-pass={nearOnly||undefined} aria-current={selected?'true':undefined} aria-label={`${r.symbol} の分析を表示。${label}。ピボット比 ${signed(p.distance)}。RS ${Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'未確認'}。出来高 ${times(volume)}。${a.applicability_label || `選定 ${a.passed}/${a.total}`}。${dailyLabel}。${dailyDetail}${nearOnly?`。${missing?.csv||'判定を再確認してください'}`:''}`} onClick={()=>onSelect(r.symbol)} onKeyDown={e=>{
+ return <button className="candidate-row" data-near-pass={nearOnly&&!a.financial_exclusion||undefined} aria-current={selected?'true':undefined} aria-label={`${r.symbol} の分析を表示。${label}。ピボット比 ${signed(p.distance)}。RS ${Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'未確認'}。出来高 ${times(volume)}。${a.financial_exclusion?.label || a.applicability_label || `選定 ${a.passed}/${a.total}`}。${dailyLabel}。${dailyDetail}${nearOnly&&!a.financial_exclusion?`。${missing?.csv||'判定を再確認してください'}`:''}`} onClick={()=>onSelect(r.symbol)} onKeyDown={e=>{
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();onMove(r.symbol,e.key==='ArrowDown'?1:-1,e.currentTarget);}
   if(e.key==='Enter'&&onCompare){e.preventDefault();onCompare(r.symbol);}
  }}>
@@ -28,13 +29,14 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
   <span className="candidate-distance mono" style={{color:`var(--${tone})`}}>{signed(p.distance)}</span>
   <span className="candidate-rs mono"><span className="mobile-caption">RS </span>{Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'—'}</span>
   <span className="candidate-volume mono">{times(volume)}</span>
-  {nearOnly&&<span className="candidate-missing" data-state={missing?.state||'unknown'} title={missing?`${missing.csv}${missing.evidence?` · ${missing.evidence}`:''}`:'公開サマリーと現在の根拠を再照合してください'}>{missing?.text||'判定資料を再確認'}</span>}
-  {!a.qualified&&!nearOnly&&<span className="candidate-incomplete">{a.applicability_label || `選定 ${a.passed}/${a.total}${a.unknown ? ` · ?${a.unknown}` : ''}`}</span>}
+  {nearOnly&&!a.financial_exclusion&&<span className="candidate-missing" data-state={missing?.state||'unknown'} title={missing?`${missing.csv}${missing.evidence?` · ${missing.evidence}`:''}`:'公開サマリーと現在の根拠を再照合してください'}>{missing?.text||'判定資料を再確認'}</span>}
+  {!a.qualified&&(!nearOnly||a.financial_exclusion)&&<span className="candidate-incomplete">{a.financial_exclusion?.label || a.applicability_label || `選定 ${a.passed}/${a.total}${a.unknown ? ` · ?${a.unknown}` : ''}`}</span>}
  </button>;
 });
 export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNearToggle,selectedSymbol,loading,onSelect,view='list',onView,date,generation,market,now,onCompare,paused,toolbar,onFilters,compareOnly=false}) {
  const [sort,setSort]=useState('rank'),[page,setPage]=useState(0);
  const scrollRef=useRef(null),pageStartRef=useRef(null);
+ useStickyHeaderClearance(scrollRef,view==='list'&&!compareOnly);
  const ordered=useMemo(()=>{
   if(sort==='rank')return ranked;
   const values=ranked.map(item=>({...item,plan:entryPlan(item.row,null,method)}));

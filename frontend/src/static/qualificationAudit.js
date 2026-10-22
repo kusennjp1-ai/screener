@@ -1,29 +1,52 @@
+import { validEvidenceDay as validDate } from './evidenceTime.js';
 // Independent verification from published daily OHLCV, never from pass flags.
-export const AUDIT_VERSION = 'ohlcv-v1';
+export const AUDIT_VERSION = 'ohlcv-v2-session-calendar';
 const number = v => typeof v === 'number' && Number.isFinite(v);
 const positive = v => number(v) && v > 0;
-const validDate = v => typeof v === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v;
 export function auditDailyBars(row, payload, date) {
-  const errors = [];
+  const errors = [], unavailable = [];
   if (!validDate(date)) errors.push('分析基準日が不正');
-  if (!payload) errors.push('日足データ未配信');
+  if (!payload) unavailable.push('日足データ未配信');
   else if (payload.symbol !== row.symbol || payload.as_of_date !== date) errors.push('銘柄または分析日が不一致');
   const bars = Array.isArray(payload?.bars) ? payload.bars : [];
-  if (bars.length < 252) errors.push('252営業日分の日足が不足');
-  if (bars.some((b, i) => !validDate(b.date) || [0, 6].includes(new Date(b.date).getUTCDay()) || b.date > date || (i > 0 && b.date <= bars[i - 1].date) ||
+  if (bars.length < 252) unavailable.push('252営業日分の日足が不足');
+  if (bars.some((b, i) => !b || !validDate(b.date) || b.date > date || (i > 0 && b.date <= bars[i - 1].date) ||
     ![b.open, b.high, b.low, b.close].every(positive) || !number(b.volume) || b.volume < 0 ||
     b.high < Math.max(b.open, b.close, b.low) || b.low > Math.min(b.open, b.close))) errors.push('日足の順序・重複・OHLCVに異常');
-  if (bars.at(-1)?.date !== date) errors.push('最終日足が分析日と不一致');
-  if (bars.some((b, i) => i > 0 && positive(b.close) && positive(bars[i - 1].close) &&
+  if (bars.length && bars.at(-1)?.date !== date) errors.push('最終日足が分析日と不一致');
+  if (bars.some((b, i) => i > 0 && positive(b?.close) && positive(bars[i - 1]?.close) &&
     (b.close / bars[i - 1].close >= 1.8 || b.close / bars[i - 1].close <= .55))) errors.push('大幅な価格断絶：分割・併合調整を要確認');
-  if (!positive(row.current_price) || !positive(bars.at(-1)?.close) || Math.abs(row.current_price - bars.at(-1).close) > Math.max(.02, row.current_price * .0001)) errors.push('スキャン価格と日足終値が不一致');
-  const result = { version: AUDIT_VERSION, symbol: row.symbol, as_of_date: date, bars: bars.length, errors, valid: !errors.length, values: {} };
+  if (bars.length && (!positive(row.current_price) || !positive(bars.at(-1)?.close) || Math.abs(row.current_price - bars.at(-1).close) > Math.max(.02, row.current_price * .0001))) errors.push('スキャン価格と日足終値が不一致');
+  // Calendar sessions come from the exchange provider, independently of prices.
+  // A missing feed day must never be compressed into a trading-day lookback.
+  const cutoff = validDate(date) ? new Date(Date.parse(date) - 52 * 7 * 86400000).toISOString().slice(0, 10) : null;
+  const calendar = payload?.session_calendar;
+  const sessions = Array.isArray(calendar?.sessions) ? calendar.sessions : [];
+  const calendarValid = row.market === 'US' && calendar?.schema_version === 'market-sessions-v1' &&
+    calendar.market === 'US' && calendar.exchange === 'XNYS' && calendar.provider === 'pandas_market_calendars' &&
+    typeof calendar.provider_version === 'string' && calendar.provider_version.length > 0 &&
+    calendar.as_of_date === date && calendar.range_end === date && validDate(calendar.range_start) &&
+    calendar.range_start <= cutoff && calendar.range_start <= bars[0]?.date &&
+    sessions.length > 0 && sessions.at(-1) === date &&
+    sessions.every((day, i) => validDate(day) && day >= calendar.range_start && day <= date && (!i || day > sessions[i - 1]));
+  if (!calendarValid) unavailable.push('取引所営業日カレンダーの出典・対象期間を確認できません');
+  else if (bars.length) {
+    const expected = sessions.filter(day => day >= bars[0].date);
+    if (expected.length !== bars.length || expected.some((day, i) => day !== bars[i]?.date)) {
+      unavailable.push('取引所営業日と日足の日付が不一致（欠損・余分な日足）');
+    }
+    if (bars[0].date > sessions.find(day => day >= cutoff)) unavailable.push('52週分の日足履歴が不足（新規上場を含む）');
+  }
+  const status = errors.length ? 'invalid' : unavailable.length ? 'unknown' : 'verified';
+  errors.push(...unavailable);
+  const result = { status, version: AUDIT_VERSION, symbol: row.symbol, as_of_date: date, bars: bars.length, errors, valid: !errors.length, values: {} };
   if (errors.length) return result;
   const mean = values => values.reduce((sum, v) => sum + v, 0) / values.length;
   const sma = (n, lag = 0) => mean(bars.slice(bars.length - n - lag, bars.length - lag).map(b => b.close));
-  const year = bars.slice(-252), last = bars.at(-1);
+  const year = bars.filter(bar => bar.date >= cutoff), last = bars.at(-1);
   const high = Math.max(...year.map(b => b.high)), low = Math.min(...year.map(b => b.low));
   const averageVolume = mean(bars.slice(-51, -1).map(b => b.volume));
+  result.window_52w = { from: cutoff, through: date, observations: year.length };
   result.values = { close: last.close, sma50: sma(50), sma150: sma(150), sma200: sma(200), sma200_21ago: sma(200, 21),
     high, low, aboveLow: (last.close / low - 1) * 100, belowHigh: (1 - last.close / high) * 100,
     volumeRatio: averageVolume > 0 ? last.volume / averageVolume : null,
@@ -32,7 +55,7 @@ export function auditDailyBars(row, payload, date) {
   return result;
 }
 
-export const RS_METHOD = 'published-bars-weighted-percentile-v1';
+export const RS_METHOD = 'published-bars-weighted-percentile-v2-session-verified';
 export function rankVerifiedUniverse(rows) {
   const eligible = rows.filter(row => row.market === 'US' && row.currency === 'USD' && number(auditValues(row).momentum));
   const dates = new Set(eligible.map(row => row.technical_audit.as_of_date));
@@ -55,8 +78,13 @@ export function rankVerifiedUniverse(rows) {
 
 export function auditValues(row) {
   const a = row.technical_audit;
-  return a?.version === AUDIT_VERSION && a.symbol === row.symbol && validDate(a.as_of_date) && a.valid === true && a.errors?.length === 0 &&
+  return a?.version === AUDIT_VERSION && a.symbol === row.symbol && validDate(a.as_of_date) && a.valid === true && a.status === 'verified' && a.errors?.length === 0 &&
     positive(row.current_price) && positive(a.values?.close) && Math.abs(row.current_price - a.values.close) <= Math.max(.02, row.current_price * .0001) ? a.values : {};
+}
+
+// All consumers use the same current audit contract, never a legacy valid flag.
+export function hasVerifiedDailyBars(row, date = null) {
+  return Boolean(row && (!date || row.technical_audit?.as_of_date === date) && Object.keys(auditValues(row)).length);
 }
 
 // Use the same dated observation in list, comparison and daily purchase checks.

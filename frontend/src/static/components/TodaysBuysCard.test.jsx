@@ -32,7 +32,7 @@ it.each([undefined, null, 0, 1, 2, 3])('does not turn unknown market or barrel c
   renderCard({ scanRows: [], indexData: { ...dailyObservationIndex, symbols: [{ ...entries[0], buy: { ...entries[0].buy, barrels_passed: barrels } }] } });
   expect(screen.getByTestId('todays-buys-market-context')).toHaveTextContent('未確認');
   expect(screen.getByTestId('todays-buys-position-CDNA')).toHaveTextContent('基準値より上');
-  expect(screen.getByTestId('todays-buys-row-CDNA')).toHaveTextContent(`旧モデル確認数（barrels） ${barrels == null ? '未確認' : `${barrels}/3（記録値）`}`);
+  expect(screen.getByTestId('todays-buys-row-CDNA')).toHaveTextContent(`旧モデルの確認項目 ${barrels == null ? '未確認' : `${barrels}/3（記録値）`}`);
   expect(screen.getByTestId('todays-buys-card')).toHaveTextContent('現在の購入条件通過を示しません');
   expect(screen.getByTestId('todays-buys-card').textContent).not.toMatch(/BUY NOW|WAIT|EXTENDED|買い1/);
 });
@@ -109,8 +109,40 @@ it('preserves distinct source dates and a negative difference without current-pr
   expect(card).toHaveTextContent('配信基準日 2026-10-01 · シグナル基準日 2026-09-29');
   expect(card).toHaveTextContent('基準値比 −1.0%');
   expect(card).toHaveTextContent('旧モデル参考帯（基準値〜+5%） 100.00〜105.00 · 参考帯より下');
-  expect(card).toHaveTextContent('検出元 未確認');
+  expect(card).toHaveTextContent('検出経路 未確認');
   expect(card.textContent).not.toMatch(/-1\.0%|BUY NOW|now |size |資金|株数/);
+});
+
+it.each([[true, '有効（記録時点）'], [false, '無効（記録時点）'], ['true', '未確認']])('shows a human historical status for %j and keeps raw diagnostics collapsed', (active, label) => {
+  const entry = { ...entries[0], buy: { ...entries[0].buy, active, vcp_source: 'ma_tight' } };
+  const before = JSON.stringify(entry);
+  renderCard({ indexData: { ...dailyObservationIndex, symbols: [entry] } });
+  const row = screen.getByTestId('todays-buys-row-CDNA');
+  expect(within(row).getByText(`記録時のシグナル ${label}`)).toBeVisible();
+  expect(within(row).getByText('旧モデルの確認項目 3/3（記録値） · 検出経路 10日移動平均線付近の持ち合い')).toBeVisible();
+  expect(within(row).getByText('テクニカル観測のみ · 購入条件は未判定')).toBeVisible();
+  const details = within(row).getByText('観測記録の説明・元の値').closest('details');
+  expect(details).not.toHaveAttribute('open');
+  expect(within(details).getByText(`active: ${active}`)).not.toBeVisible();
+  expect(within(details).getByText('barrels_passed: 3')).not.toBeVisible();
+  expect(within(details).getByText('vcp_source: ma_tight')).not.toBeVisible();
+  fireEvent.click(within(details).getByText('観測記録の説明・元の値'));
+  expect(details).toHaveAttribute('open');
+  expect(within(details).getByText('vcp_source: ma_tight')).toBeVisible();
+  expect(details).toHaveTextContent('現在の購入条件通過を示しません');
+  fireEvent.click(within(details).getByText('観測記録の説明・元の値'));
+  expect(details).not.toHaveAttribute('open');
+  expect(JSON.stringify(entry)).toBe(before);
+});
+
+it('keeps an unsupported detector unconfirmed while retaining its exact raw code', () => {
+  renderCard({ indexData: { ...dailyObservationIndex, symbols: [{ ...entries[0], buy: { ...entries[0].buy, active: null, barrels_passed: '3', vcp_source: 'future_detector' } }] } });
+  const row = screen.getByTestId('todays-buys-row-CDNA');
+  expect(within(row).getByText('記録時のシグナル 未確認')).toBeVisible();
+  expect(within(row).getByText('旧モデルの確認項目 未確認 · 検出経路 未確認')).toBeVisible();
+  expect(within(row).getByText('vcp_source: future_detector')).not.toBeVisible();
+  expect(row).toHaveTextContent('active: null');
+  expect(row).toHaveTextContent('barrels_passed: 3');
 });
 
 it('keeps native watch and chart controls keyboard-operable and separate', async () => {

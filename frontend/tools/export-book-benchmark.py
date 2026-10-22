@@ -10,7 +10,9 @@ import argparse
 from datetime import date, datetime, timedelta, timezone
 import json
 import math
+import os
 from pathlib import Path
+from tempfile import NamedTemporaryFile
 from zoneinfo import ZoneInfo
 
 
@@ -38,16 +40,84 @@ def validate_bars(bars, expected_sessions, as_of_date):
             raise ValueError(f"Invalid SPY volume at {bar['date']}")
 
 
+def export_session_calendar(root: Path, manifest, mcal, target, now=None):
+    """Publish provider sessions independently of whether any SPY prices arrive."""
+    now = now or datetime.now(timezone.utc)
+    start = target - timedelta(days=730)
+    entry = manifest.get("markets", {}).get("US", manifest)
+    index_path = entry.get("assets", {}).get("charts", {}).get("path")
+    # Price dates only widen the requested calendar interval. They never define
+    # which days were sessions, so missing prices cannot erase an expected day.
+    if index_path:
+        root = root.resolve()
+        def read_payload(relative):
+            path = (root / relative).resolve()
+            if not path.is_relative_to(root):
+                raise ValueError("Calendar input path escapes static-data root")
+            return json.loads(path.read_text(encoding="utf-8"))
+        index = read_payload(index_path)
+        for item in index.get("symbols", []):
+            try:
+                chart = read_payload(item["path"])
+            except FileNotFoundError:
+                continue
+            first = next(iter(chart.get("bars", [])), {})
+            try:
+                first_day = date.fromisoformat(first.get("date", ""))
+            except (ValueError, TypeError, AttributeError):
+                continue
+            start = min(start, first_day)
+    schedule = mcal.get_calendar("NYSE").schedule(start_date=start, end_date=target)
+    sessions = [stamp.date().isoformat() for stamp in schedule.index]
+    if not sessions or sessions[-1] != target.isoformat() or schedule.iloc[-1]["market_close"].to_pydatetime() > now:
+        raise ValueError("Calendar target is not a completed NYSE session")
+    calendar = {"schema_version": "market-sessions-v1", "market": "US", "exchange": "XNYS",
+                "provider": "pandas_market_calendars", "provider_version": mcal.__version__,
+                "as_of_date": target.isoformat(), "range_start": start.isoformat(), "range_end": target.isoformat(),
+                "sessions": sessions, "generated_at": now.isoformat(),
+                "completed_session_close": schedule.iloc[-1]["market_close"].isoformat()}
+    destination = root / "trading-calendar.json"
+    # An authenticated input may already contain a similarly named file. Use
+    # exclusive fresh staging, never overwrite or follow a fixed .tmp path.
+    with NamedTemporaryFile(mode="w", encoding="utf-8", dir=root, prefix=".trading-calendar-", suffix=".tmp", delete=False) as output:
+        temporary = Path(output.name)
+        output.write(json.dumps(calendar, allow_nan=False, separators=(",", ":")))
+        os.fchmod(output.fileno(), 0o644)  # Preserve ordinary public-asset readability.
+    try:
+        temporary.replace(destination)
+    finally:
+        temporary.unlink(missing_ok=True)
+    return calendar
+
+
+
+def export_calendar_only(root: Path, evaluated_at: str):
+    """Offline derivation for a candidate copy; never fetch or alter price evidence."""
+    import pandas_market_calendars as mcal
+
+    evaluated = datetime.fromisoformat(evaluated_at.replace("Z", "+00:00"))
+    if evaluated.tzinfo is None or evaluated > datetime.now(timezone.utc):
+        raise ValueError("Calendar derivation requires a fixed, nonfuture timezone-aware evaluation time")
+    manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
+    market_day = manifest.get("markets", {}).get("US", {}).get("as_of_date")
+    target_day = market_day or manifest.get("as_of_date")
+    if market_day and manifest.get("as_of_date", market_day) != market_day:
+        raise ValueError("Calendar manifest and US price dates disagree")
+    target = date.fromisoformat(target_day)
+    return export_session_calendar(root, manifest, mcal, target, evaluated)
+
+
 def export_benchmark(root: Path):
     # Imports here keep validation tests independent from network dependencies.
     import pandas_market_calendars as mcal
-    import yfinance as yf
 
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     target = date.fromisoformat(manifest["as_of_date"])
     today = datetime.now(ZoneInfo("America/New_York")).date()
     if target > today:
         raise ValueError("Manifest as_of_date is in the future")
+    export_session_calendar(root, manifest, mcal, target)
+    import yfinance as yf
     start = target - timedelta(days=730)
     schedule = mcal.get_calendar("NYSE").schedule(start_date=start, end_date=target)
     expected = [stamp.date().isoformat() for stamp in schedule.index]
@@ -92,7 +162,19 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, default=Path(__file__).resolve().parents[1] / "public" / "static-data")
     parser.add_argument("--allow-unavailable", action="store_true", help="Publish explicitly missing optional evidence instead of retaining an old benchmark")
+    parser.add_argument("--calendar-only", action="store_true", help="Derive only offline exchange sessions on an unpublished candidate copy; never acquire prices")
+    parser.add_argument("--evaluated-at", help="Fixed timezone-aware derivation timestamp, required for --calendar-only replay")
     args = parser.parse_args()
+    if args.calendar_only:
+        if not args.evaluated_at or args.allow_unavailable:
+            parser.error("--calendar-only requires --evaluated-at and forbids --allow-unavailable")
+        result = export_calendar_only(args.root, args.evaluated_at)
+        print(json.dumps({"path": str(args.root / "trading-calendar.json"), "as_of_date": result["as_of_date"],
+                          "sessions": len(result["sessions"]), "provider": result["provider"],
+                          "provider_version": result["provider_version"], "generated_at": result["generated_at"]}))
+        raise SystemExit(0)
+    if args.evaluated_at:
+        parser.error("--evaluated-at is only valid with --calendar-only")
     try:
         result = export_benchmark(args.root)
     except Exception as error:

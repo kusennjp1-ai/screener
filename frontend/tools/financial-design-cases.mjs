@@ -1,12 +1,17 @@
+import { createHash } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { currentFinancialHistory, mergeFinancialDetail, projectFinancialRow } from '../src/static/financialCurrent.js';
-import { nativeAnnualHistoryContract } from '../src/static/financialHistory.js';
+import { annualAvailabilityText, nativeAnnualHistoryContract } from '../src/static/financialHistory.js';
 import { buildFinancialEvidencePresentation, financialEvidencePresentation } from '../src/static/financialEvidencePresentation.js';
 import { assess, researchCsv } from '../src/static/researchEngine.js';
+import { limitedResearchPreview, limitedResearchPreviewCsvMetadata, previewBuildMetadata } from '../src/static/limitedResearchPreview.js';
 import { entryReadiness } from '../src/static/entryReadiness.js';
 import { modelMarket } from '../src/static/portfolioPlan.js';
 import { scrollFinancialViewport } from './financial-viewport-geometry.mjs';
 import { createDesignAssetObserver } from './design-static-assets.mjs';
+import { FINANCIAL_PUBLICATION_EXCEPTION, financialPublicationException } from '../src/static/financialPublicationException.js';
 
 // Selected from the receipt-replayed 2026-10-04 native annual projection:
 // NVDA: ordinary USD; FUTU: HKD annualDilutedEPS receipt; AAOI: negative
@@ -74,6 +79,63 @@ export function financialCaseSource(row, item, date, now = Date.now()) {
     annual_source: data.annual_source || null, quarterly_eps: eps, quarterly_sales: sales };
 }
 
+// Explicit assessment-only path. It never substitutes symbols, ages timestamps,
+// or promotes reference/unknown values into qualifying current evidence.
+export function limitedFinancialCaseSource(row, item, date, now = Date.now()) {
+  requireValue(FINANCIAL_DESIGN_CASES.some(value => value.symbol === item.symbol && value.category === item.category), 'Unknown fixed financial case');
+  requireValue(row?.symbol === item.symbol && row.as_of_date === date, `${item.symbol}: published source identity/date mismatch`);
+  requireValue(Number.isFinite(now) && now > 0, 'Financial evaluation clock is invalid');
+  const current = projectFinancialRow(row, { now, asOfDate: date });
+  const data = current.financial_history;
+  requireValue(!data || (data.symbol === item.symbol && data.as_of_date === date), `${item.symbol}: financial history identity/date mismatch`);
+  const history = currentFinancialHistory(data, item.symbol, date, now, current);
+  requireValue(history.annualReason !== 'inconsistent_annual_metadata', `${item.symbol}: annual source metadata is inconsistent`);
+  const assessment = assess(current, 'oneil', now);
+  requireValue(!assessment.unknown || !assessment.qualified, 'Unknown mandatory rules must never qualify');
+  let demonstration;
+  try {
+    financialCaseSource(row, item, date, now);
+    demonstration = { category: item.category, status: 'demonstrated', reason: null };
+  } catch (error) {
+    demonstration = { category: item.category, status: 'unavailable', reason: error.message };
+  }
+  return { category: item.category, original_category: demonstration,
+    currency: data?.annual_currency || data?.currency || null,
+    annual: history.annual.map(({ end, eps }) => ({ end, eps })),
+    numeric_annual_periods: history.annual.filter(point => Number.isFinite(point.eps)).length,
+    annual_complete: history.annualComplete, annual_growth: history.annualGrowth,
+    annual_comparisons: history.annualComparisons,
+    annual_rule_state: assessment.rules.find(rule => rule.label.includes('3年'))?.state,
+    annual_observed_at: data?.annual_source?.observed_at || data?.retrieved_at || null,
+    annual_source: data?.annual_source || null,
+    source_history: data || null,
+    history_valid: history.valid, history_annual_reason: history.annualReason || null,
+    history_unavailable_text: history.annualReason ? annualAvailabilityText(history) : !history.valid
+      ? 'この銘柄の有効な報告財務履歴は未取得、または取得から72時間を超えています。'
+      : '年次EPSは未取得です。連続4期の実績がないため、3年の成長履歴を確認できません。',
+    quarterly_eps: current.financial_current_state.fields.eps_growth_yy,
+    quarterly_sales: current.financial_current_state.fields.sales_growth_yy,
+    qualified: assessment.qualified, unknown: assessment.unknown };
+}
+
+// Ordinary Design accepts only the reviewed five-symbol absence/expiry policy.
+// Contradictions remain failures; existing limited-preview/performance modes
+// are not enabled, and all required views and browser checks still run.
+export function publicationFinancialCaseSource(row, item, date, now = Date.now()) {
+  const exclusion = financialPublicationException(row, { date, now });
+  if (!exclusion) return financialCaseSource(row, item, date, now);
+  requireValue(['oneil', 'ibd', 'minervini', 'minervini2'].every(method => !assess(row, method, now).qualified),
+    `${item.symbol}: unavailable financial evidence must exclude every qualification`);
+  return { ...limitedFinancialCaseSource(row, item, date, now), publication_exception: exclusion };
+}
+
+export function verifyFinancialDetailClock(summary, detail) {
+  const bothMissing = summary.financial_current == null && detail.financial_current == null;
+  requireValue((bothMissing && FINANCIAL_PUBLICATION_EXCEPTION.symbols.includes(summary.symbol)) ||
+    (detail.financial_current?.t === summary.financial_current?.t && Number.isFinite(detail.financial_current?.t)),
+  'Browser detail and research financial generations do not match');
+}
+
 // Parse the actual browser download, including quoted commas/newlines. This
 // report is an export audit; it is not a screenshot or a visual review score.
 export function parseFinancialCsv(text) {
@@ -101,6 +163,20 @@ export function parseFinancialCsv(text) {
     requireValue(cells.length === headers.length, 'CSV record/header length mismatch');
     return Object.fromEntries(headers.map((header, index) => [header, cells[index]]));
   }) };
+}
+
+// The harness runs in plain Node, while the application receives a Vite build
+// constant. Add the same shared, explicit preview metadata to its canonical CSV.
+export function financialCaseCanonicalCsv(summary, date, now, limited = false) {
+  const canonical = parseFinancialCsv(researchCsv([{ row: summary }], 'oneil', date, now));
+  if (limited) {
+    const metadata = limitedResearchPreviewCsvMetadata(limitedResearchPreview(previewBuildMetadata('v1')));
+    for (const [index, header] of metadata.headers.entries()) {
+      if (!canonical.headers.includes(header)) canonical.headers.push(header);
+      for (const row of canonical.rows) row[header] = metadata.values[index];
+    }
+  }
+  return canonical;
 }
 
 async function inspectFinancialRows(panel, expected, check, key) {
@@ -132,10 +208,11 @@ async function inspectFinancialRows(panel, expected, check, key) {
   return observed;
 }
 
-export async function verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl }) {
+export async function verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl, output }) {
   if (!financialDesignScreens(viewport, theme).length) return;
   const staticUrl = path => new URL(`static-data/${path}`, currentUrl).href;
   report.financial_cases ||= [];
+  report.financial_publication_exception_policy = FINANCIAL_PUBLICATION_EXCEPTION;
   let assets;
   try {
     assets = await createDesignAssetObserver({ baseURL: currentUrl });
@@ -168,8 +245,7 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         const { value: detail, observation } = await assets.observeJson(page, summary.research_detail_path, () => financialTab.click());
         record.loaded_detail_transport = observation;
         requireValue(detail.symbol === item.symbol && detail.as_of_date === date, 'Browser detail symbol/date mismatch');
-        requireValue(detail.financial_current?.t === summary.financial_current?.t && Number.isFinite(detail.financial_current?.t),
-          'Browser detail and research financial generations do not match');
+        verifyFinancialDetailClock(summary, detail);
         const panel = page.getByRole('region', { name: '財務の判定根拠', exact: true });
         await ready(panel);
         const panelText = await panel.innerText();
@@ -178,7 +254,14 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         requireValue(Number.isFinite(now) && Math.abs(browserNow - now) < 90000, 'Rendered financial evaluation clock is missing or not current');
         const selected = mergeFinancialDetail(summary, detail, { now, asOfDate: date, generation, detailGeneration: generation,
           expectedDetailPath: summary.research_detail_path, detailPath: summary.research_detail_path });
-        record.source = financialCaseSource(selected, item, date, now);
+        record.source = report.assessment_mode === 'limited-research-preview-v1'
+          ? limitedFinancialCaseSource(selected, item, date, now) : publicationFinancialCaseSource(selected, item, date, now);
+        if (record.source.publication_exception) {
+          const notice = page.locator('.research-symbol-head [data-financial-exclusion]');
+          check(await notice.getAttribute('data-financial-exclusion') === record.source.publication_exception.policy &&
+            await notice.getAttribute('data-qualification') === 'excluded' &&
+            (await notice.innerText()).includes(record.source.publication_exception.label), `${key}: financial exclusion must be visible and explicit`);
+        }
         record.financial_evaluated_at = evaluatedAt;
         record.loaded_detail_path = summary.research_detail_path;
         check(panelText.includes(`価格の基準日 ${date}`) && panelText.includes('基準日当時に公表済みだったことの証明ではありません'), `${key}: source observation and price/publication clocks are not separated`);
@@ -209,6 +292,14 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
           await disclosure.locator('summary').click();
           requireValue(await disclosure.evaluate(node => node.open), 'Annual history disclosure did not open');
           const table = disclosure.getByRole('table', { name: '年次の希薄化EPS', exact: true });
+          if ((report.assessment_mode === 'limited-research-preview-v1' || record.source.publication_exception) && !record.source.annual.length) {
+            check(await table.count() === 0, `${key}: unavailable annual history must not render a numeric table`);
+            check((await disclosure.innerText()).includes(record.source.history_unavailable_text), `${key}: current unavailable history explanation mismatch`);
+            record.history_cells = [];
+            record.history_status = 'unavailable';
+            await takeViewport('history', ['#detail-panel-financial > details.research-disclosure > summary',
+              '#detail-panel-financial > details.research-disclosure > :nth-child(2)']);
+          } else {
           const cells = await table.locator('tbody tr').evaluateAll(rows => rows.map(row => [...row.cells].map(cell => cell.textContent)));
           const expectedCells = record.source.annual.map(({ end, eps }) => [end, financialHistoryCell(eps)]);
           check(JSON.stringify(cells) === JSON.stringify(expectedCells), `${key}: annual history periods/EPS differ from source`);
@@ -218,11 +309,13 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
           await takeViewport('history', ['#detail-panel-financial > details.research-disclosure > summary',
             '#detail-panel-financial > details.research-disclosure > div:first-of-type > table.financial-history-table > caption',
             '#detail-panel-financial > details.research-disclosure > div:first-of-type > table.financial-history-table']);
+          }
         }
         await page.getByRole('tab', { name: '判定根拠', exact: true }).click();
         const selection = page.locator('#detail-panel-evidence');
         await ready(selection);
         const assessment = assess(selected, 'oneil', now);
+        check(!assessment.unknown || !assessment.qualified, `${key}: unknown mandatory selection rules must not qualify`);
         const selectedRules = await selection.locator('.research-rules > li').allTextContents();
         record.selection = { heading: await selection.locator('h3').textContent(), rules: selectedRules, passed: assessment.passed, total: assessment.total, failed: assessment.failed, unknown: assessment.unknown };
         check(record.selection.heading === `選定 ${assessment.passed}/${assessment.total} · 未達 ${assessment.failed} · 未確認 ${assessment.unknown}`, `${key}: selected-method totals differ from current assessment`);
@@ -258,16 +351,21 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         const stream = await download.createReadStream(), chunks = [];
         requireValue(stream, 'CSV download stream unavailable');
         for await (const chunk of stream) chunks.push(chunk);
-        const exported = parseFinancialCsv(Buffer.concat(chunks).toString('utf8'));
+        const csvBytes = Buffer.concat(chunks);
+        const exported = parseFinancialCsv(csvBytes.toString('utf8'));
         const matches = exported.rows.filter(row => row.symbol === item.symbol);
         requireValue(matches.length === 1, `${item.symbol}: CSV must contain exactly one matching symbol`);
         const csvNow = Date.parse(matches[0].financial_evaluated_at);
         requireValue(Number.isFinite(csvNow) && Math.abs(await page.evaluate(() => Date.now()) - csvNow) < 90000, 'CSV evaluation clock is missing or not current');
-        const canonical = parseFinancialCsv(researchCsv([{ row: summary }], 'oneil', date, csvNow));
+        check(matches[0].unknown === '0' || matches[0].qualified === 'false', `${key}: CSV unknown mandatory rules must not qualify`);
+        const canonical = financialCaseCanonicalCsv(summary, date, csvNow, report.assessment_mode === 'limited-research-preview-v1');
         check(JSON.stringify(exported.headers) === JSON.stringify(canonical.headers), `${key}: CSV labels differ from canonical export`);
         check(JSON.stringify(matches[0]) === JSON.stringify(canonical.rows[0]), `${key}: downloaded CSV values/states differ from current source`);
         check(matches[0].annual_eps_rule_state === expected.rows.find(row => row.id === 'annual_eps_growth_3y').state, `${key}: CSV/financial annual state mismatch`);
-        record.csv = { filename: download.suggestedFilename(), headers: exported.headers, row: matches[0], source: 'actual browser download' };
+        const artifact = `financial-${item.symbol}-${viewport.width}-${theme}.csv`;
+        await writeFile(resolve(output, artifact), csvBytes);
+        record.csv = { filename: download.suggestedFilename(), artifact, sha256: createHash('sha256').update(csvBytes).digest('hex'), bytes: csvBytes.length,
+          headers: exported.headers, row: matches[0], source: 'actual browser download' };
         await filters.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
       } catch (error) {
         record.error = error.message;

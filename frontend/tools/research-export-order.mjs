@@ -2,6 +2,8 @@ import { readFile } from 'node:fs/promises';
 import { AUDIT_VERSION } from '../src/static/qualificationAudit.js';
 import { validEvidenceDay } from '../src/static/evidenceTime.js';
 
+// Older audited bundles may supply ordering identities only, never certification.
+const anchorVersions = new Set([AUDIT_VERSION, 'ohlcv-v1']);
 const object = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 const fail = message => { throw Error(`Invalid research export order anchor: ${message}`); };
 
@@ -14,7 +16,7 @@ async function priorSymbols(path, asOfDate) {
   let anchor;
   try { anchor = JSON.parse(raw); }
   catch { fail('malformed JSON'); }
-  if (!object(anchor) || anchor.version !== AUDIT_VERSION || !validEvidenceDay(anchor.as_of_date) ||
+  if (!object(anchor) || !anchorVersions.has(anchor.version) || !validEvidenceDay(anchor.as_of_date) ||
       !validEvidenceDay(asOfDate) || anchor.as_of_date > asOfDate || !Array.isArray(anchor.results) ||
       !Number.isSafeInteger(anchor.total) || anchor.total !== anchor.results.length) fail('invalid envelope');
   const symbols = new Set();

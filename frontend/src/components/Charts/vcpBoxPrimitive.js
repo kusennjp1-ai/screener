@@ -12,6 +12,41 @@
 import { placeAnnotationLabels } from './annotationLabelLayout';
 import { palettes } from '../../static/theme/tokens';
 
+// Compare only canonical calendar days. Other time types (including malformed
+// dates) retain the library's original conversion/null/error behavior.
+function calendarDayKey(time, cache) {
+  const cached = typeof time === 'string' ? cache?.get(time) : undefined;
+  if (cached !== undefined) return cached;
+  let year, month, day;
+  if (typeof time === 'string') {
+    const parts = /^([1-9]\d{3})-(\d{2})-(\d{2})$/.exec(time);
+    if (!parts) return null;
+    year = Number(parts[1]); month = Number(parts[2]); day = Number(parts[3]);
+  } else if (time && typeof time === 'object') {
+    ({ year, month, day } = time);
+  }
+  if (!Number.isInteger(year) || year < 1000 || year > 9999 || !Number.isInteger(month) || month < 1 || month > 12 || !Number.isInteger(day) || day < 1) return null;
+  const days = month === 2 ? (year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0) ? 29 : 28) : ([4, 6, 9, 11].includes(month) ? 30 : 31);
+  const key = day <= days
+    ? (typeof time === 'string' ? time : `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`)
+    : null;
+  // Only the pure parse of an immutable string is retained, never coordinates,
+  // prices or mutable BusinessDay objects. Bound memory over a reused surface.
+  if (cache && typeof time === 'string' && cache.size < 4096) cache.set(time, key);
+  return key;
+}
+
+function candleDayBounds(timeScale, width, spacing, candleWidth) {
+  if (typeof timeScale.coordinateToTime !== 'function' || !Number.isFinite(width) || width <= 0 || !Number.isFinite(spacing) || spacing <= 0) return [null, null];
+  // coordinateToTime rounds to a bar. Sample a whole extra candle width beyond
+  // each retained half-bar edge; this also covers subpixel bar spacing.
+  // Null/out-of-data bounds leave that side unbounded. Re-read on every update:
+  // panning, zooming, resizing and other series can all change the time scale.
+  const from = calendarDayKey(timeScale.coordinateToTime(-1.5 * candleWidth));
+  const to = calendarDayKey(timeScale.coordinateToTime(width + 1.5 * candleWidth));
+  return from !== null && to !== null && from > to ? [null, null] : [from, to];
+}
+
 class VcpBoxRenderer {
   constructor(rects, candles) {
     this._rects = rects;
@@ -76,6 +111,7 @@ class VcpBoxPaneView {
     this._source = source;
     this._rects = [];
     this._candles = [];
+    this._calendarDays = new Map();
   }
 
   update() {
@@ -89,9 +125,22 @@ class VcpBoxPaneView {
     // 8px obstacle misses the edges once the user increases bar spacing.
     const spacing = timeScale.options?.().barSpacing;
     const candleWidth = Number.isFinite(spacing) && spacing > 0 ? Math.max(1, spacing) : 8;
+    const [from, to] = candleDayBounds(timeScale, width, spacing, candleWidth);
     this._candles = candles.map(candle => {
-      const x = timeScale.timeToCoordinate(candle.time ?? candle.date), high = series.priceToCoordinate(candle.high), low = series.priceToCoordinate(candle.low);
-      return x == null || high == null || low == null || x < -candleWidth / 2 || x > width + candleWidth / 2 ? null : { x: x - candleWidth / 2, y: Math.min(high, low), width: candleWidth, height: Math.max(1, Math.abs(low - high)) };
+      const time = candle.time ?? candle.date;
+      // Strings already inside the bounds need no validation/cache entry: they
+      // go directly to the original API. Validate any prospective exclusion so
+      // malformed dates still retain the API's conversion/null/error behavior.
+      const key = (from !== null || to !== null)
+        && (typeof time !== 'string' || (from !== null && time < from) || (to !== null && time > to))
+        ? calendarDayKey(time, this._calendarDays) : null;
+      if (key !== null && ((from !== null && key < from) || (to !== null && key > to))) return null;
+      const x = timeScale.timeToCoordinate(time);
+      // Keep partially visible bar slots, but avoid price conversions for bars
+      // that cannot obstruct a label in this viewport.
+      if (x == null || x < -candleWidth / 2 || x > width + candleWidth / 2) return null;
+      const high = series.priceToCoordinate(candle.high), low = series.priceToCoordinate(candle.low);
+      return high == null || low == null ? null : { x: x - candleWidth / 2, y: Math.min(high, low), width: candleWidth, height: Math.max(1, Math.abs(low - high)) };
     }).filter(Boolean);
     for (const box of boxes) {
       const y1 = series.priceToCoordinate(box.high);

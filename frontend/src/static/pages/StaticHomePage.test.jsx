@@ -278,7 +278,7 @@ describe('StaticHomePage', () => {
     const card = await screen.findByTestId('todays-buys-card');
     expect(card).toHaveTextContent('テクニカル観測記録');
     expect(card).toHaveTextContent('記録終値 66.23 · シグナル基準値 65.63');
-    expect(card).toHaveTextContent('旧モデル確認数（barrels） 未確認');
+    expect(card).toHaveTextContent('旧モデルの確認項目 未確認');
     expect(card).toHaveTextContent('配信基準日 2026-10-01');
     expect(card).toHaveTextContent('スキャン基準日 2026-09-30');
     expect(card).toHaveTextContent('最新取引日は未確認');

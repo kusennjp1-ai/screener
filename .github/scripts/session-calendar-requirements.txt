@@ -1,0 +1,6 @@
+# Offline NYSE schedule derivation. No price-provider dependency or request.
+# Keep preparation and independent replay on the same calendar implementation.
+pandas-market-calendars==5.4.0
+exchange-calendars==4.11.2
+pandas==2.2.0
+numpy==1.26.4

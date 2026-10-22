@@ -58,6 +58,17 @@ def frame(bars):
     return data
 
 
+def benchmark_frame(payload, as_of):
+    if not isinstance(payload, dict) or payload.get('schema_version') != 'book-benchmark-v1' or payload.get('symbol') != 'SPY' or payload.get('as_of_date') != as_of:
+        raise ValueError('Benchmark identity / session mismatch')
+    if payload.get('unavailable') is True:
+        if payload.get('bars') != [] or not isinstance(payload.get('error'), str) or not payload['error'].strip():
+            raise ValueError('Malformed unavailable benchmark')
+        return None
+    validate(payload['bars'], as_of)
+    return frame(payload['bars'])
+
+
 def clear_setup(row):
     for key in list(row):
         if key.startswith(('se_', 'vcp_')):
@@ -75,6 +86,8 @@ def clear_setup(row):
 
 def recalculate(row, bars, benchmark, universe):
     clear_setup(row)
+    if benchmark is None:
+        raise ValueError('SPY benchmark unavailable; benchmark-dependent setup and RS remain unknown')
     data = StockData(symbol=row['symbol'], price_data=frame(bars), benchmark_data=benchmark,
                      fundamentals={}, market='US', currency='USD', rs_universe_performances=universe)
     result = SetupEngineScanner().scan_stock(row['symbol'], data)
@@ -139,7 +152,8 @@ def main():
     chunks = [(c['path'], read(c['path'])) for c in scan['chunks']]
     rows = {r['symbol']: r for r in [*scan['initial_rows'], *(r for _, p in chunks for r in p['rows'])]}
     paths = {r['symbol']: r['path'] for r in read(market['assets']['charts']['path'])['symbols']}
-    benchmark = frame(read('book-benchmark.json')['bars'])
+    benchmark_payload = read('book-benchmark.json')
+    benchmark = benchmark_frame(benchmark_payload, as_of)
     engine_files = [*(REPO/'backend/app/analysis/patterns').rglob('*.py'), *(REPO/'backend/app/scanners').rglob('*.py')]
     engine_hash = hashlib.sha256(Path(__file__).read_bytes()+b''.join(p.read_bytes() for p in sorted(engine_files))).hexdigest()
     prices, failures = {}, {}
@@ -151,24 +165,26 @@ def main():
             prices[symbol] = chart['bars']
         except (KeyError, ValueError, OSError) as error:
             failures[symbol] = str(error)
-    calc = RelativeStrengthCalculator(); benchmark_rev = benchmark.Close.iloc[::-1].reset_index(drop=True)
-    performances = [calc.calculate_weighted_performance(pd.Series([b['close'] for b in bars][::-1]), benchmark_rev) for bars in prices.values()]
-    universe = {'weighted': [n for n in performances if n is not None and math.isfinite(n)]}
-    for period in (21,63,252):
-        benchmark_return=calc.calculate_return(benchmark_rev,period)
-        universe[period]=[]
-        for bars in prices.values():
-            stock_return=calc.calculate_return(pd.Series([b['close'] for b in bars][::-1]),period)
-            if stock_return is not None and benchmark_return is not None:
-                universe[period].append(stock_return-benchmark_return)
-    context_hash=hashlib.sha256(json.dumps({'universe':universe,'benchmark':benchmark.to_json()}).encode()).hexdigest()
+    universe = {'weighted': [], 21: [], 63: [], 252: []}
+    if benchmark is not None:
+        calc = RelativeStrengthCalculator(); benchmark_rev = benchmark.Close.iloc[::-1].reset_index(drop=True)
+        performances = [calc.calculate_weighted_performance(pd.Series([b['close'] for b in bars][::-1]), benchmark_rev) for bars in prices.values()]
+        universe = {'weighted': [n for n in performances if n is not None and math.isfinite(n)]}
+        for period in (21,63,252):
+            benchmark_return=calc.calculate_return(benchmark_rev,period)
+            universe[period]=[]
+            for bars in prices.values():
+                stock_return=calc.calculate_return(pd.Series([b['close'] for b in bars][::-1]),period)
+                if stock_return is not None and benchmark_return is not None:
+                    universe[period].append(stock_return-benchmark_return)
+    context_hash=hashlib.sha256(json.dumps({'universe':universe,'benchmark':benchmark.to_json() if benchmark is not None else benchmark_payload}).encode()).hexdigest()
     report = []; started = time.monotonic(); tasks=[]
     for symbol, row in rows.items():
         if args.symbols and symbol not in args.symbols: continue
         bars = prices.get(symbol)
         input_hash = hashlib.sha256(json.dumps(bars, sort_keys=True).encode()).hexdigest()
         prior = row.get('setup_recalculation', {})
-        if prior.get('input_sha256') == input_hash and prior.get('engine_sha256') == engine_hash and prior.get('context_sha256') == context_hash and prior.get('status') == 'calculated':
+        if benchmark is not None and prior.get('input_sha256') == input_hash and prior.get('engine_sha256') == engine_hash and prior.get('context_sha256') == context_hash and prior.get('status') == 'calculated':
             report.append({'symbol':symbol, **prior}); continue
         metadata = {'as_of_date':as_of, 'input_sha256':input_hash, 'engine_sha256':engine_hash, 'context_sha256':context_hash,'calculated_at':datetime.now(timezone.utc).isoformat()}
         tasks.append((row,bars,metadata,failures.get(symbol)))

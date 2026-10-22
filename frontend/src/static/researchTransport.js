@@ -1,4 +1,5 @@
-import { NATIVE_ANNUAL_SCHEMA, nativeAnnualHistoryContract } from './financialHistory.js';
+import { annualHistoryMetadataValid } from './financialHistory.js';
+import { FINANCIAL_PUBLICATION_EXCEPTION } from './financialPublicationExceptionPolicy.js';
 // Versioned wire format. Decision inputs remain lossless; displayed numbers are
 // formatted by the UI, never rounded before a threshold or order calculation.
 import { encodeResearchFloat64, decodeResearchFloat64 } from './researchFloat64.js';
@@ -12,15 +13,27 @@ export const RESEARCH_METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
 const evaluationFields = ['financial_evaluated_at', 'financial_semantics', 'assessment_version', 'summary_storage', 'financial_generation', 'financial_knowledge_basis', 'financial_point_in_time', 'financial_source_publication_date', 'financial_policy_version', 'instrument_applicability_universe'];
 
 const pick = (value, fields) => value && Object.fromEntries(fields.filter(key => Object.hasOwn(value, key)).map(key => [key, value[key]]));
+const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 export function researchListRow(row) {
   const out = { ...row };
+  const needsFinancialExceptionInputs = row.market === 'US' && FINANCIAL_PUBLICATION_EXCEPTION.symbols.includes(row.symbol);
+  if (!needsFinancialExceptionInputs) delete out.financial_publication_input;
   // Evidence envelopes and raw history belong to immutable on-demand detail.
   delete out.financial_current_state; delete out.financial_historical; delete out.financial_source_evidence;
-  if (row.institutional_evidence) {
+  // These five decisions also reject contradictory original scalars. Dropping
+  // them after projection would turn a rejected detail into a list exception.
+  if (needsFinancialExceptionInputs && record(row.financial_historical?.values)) {
+    out.financial_historical = { values: pick(row.financial_historical.values, ['eps_growth_yy', 'sales_growth_yy']) };
+  }
+  if (record(row.institutional_evidence)) {
     // Preserve the validator's dates/unit, not just a precomputed pass flag.
     out.institutional_evidence = pick(row.institutional_evidence, ['symbol', 'status', 'unit', 'publication_cutoff']);
     out.institutional_evidence.observations = Array.isArray(row.institutional_evidence.observations)
-      ? row.institutional_evidence.observations.map(item => pick(item, ['period', 'filing_date_first', 'filing_date_last', 'manager_count'])) : row.institutional_evidence.observations;
+      ? row.institutional_evidence.observations.map((item, index, observations) =>
+        // Do not turn array-shaped records or inherited missing slots into
+        // valid own records. Missing slots remain missing (null on JSON wire).
+        Object.hasOwn(observations, index) ? record(item) ? pick(item, ['period', 'filing_date_first', 'filing_date_last', 'manager_count']) : item : undefined)
+      : row.institutional_evidence.observations;
   }
   if (row.entry_evidence) out.entry_evidence = {
     as_of_date: row.entry_evidence.as_of_date,
@@ -30,13 +43,15 @@ export function researchListRow(row) {
     volumeRatio: row.entry_evidence.volumeRatio,
   };
   if (row.technical_audit) out.technical_audit = {
-    ...pick(row.technical_audit, ['version', 'symbol', 'as_of_date', 'bars', 'errors', 'valid']),
+    ...pick(row.technical_audit, ['version', 'status', 'symbol', 'as_of_date', 'bars', 'errors', 'valid', 'window_52w']),
     values: pick(row.technical_audit.values, ['close', 'sma50', 'sma150', 'sma200', 'sma200_21ago', 'aboveLow', 'belowHigh', 'volumeRatio', 'change', 'momentum']),
   };
-  if (row.financial_history) out.financial_history = {
+  // The exception validates quarterly cells as well as annual metadata. Keep
+  // its complete history input; the rest of the universe retains the compact form.
+  if (row.financial_history && !needsFinancialExceptionInputs) out.financial_history = {
     ...pick(row.financial_history, ['symbol', 'as_of_date', 'status', 'basis', 'currency', 'retrieved_at', 'source', 'schema_version', 'annual_currency', 'quarterly_currency', 'quarterly_retrieved_at', 'annual_source']),
     // Do not strip contradictory per-cell currency/unit metadata into valid proof.
-    annual: row.financial_history.schema_version === NATIVE_ANNUAL_SCHEMA && !nativeAnnualHistoryContract(row.financial_history, row.symbol) ? []
+    annual: !annualHistoryMetadataValid(row.financial_history, row.symbol) ? row.financial_history.annual
       : Array.isArray(row.financial_history.annual) ? row.financial_history.annual.map(item => pick(item, ['end', 'eps'])) : row.financial_history.annual,
   };
   return out;
@@ -253,10 +268,12 @@ export function decodeResearchIndex(value) {
     // Restore signs before dependent copy/factor columns consume this vector.
     for (const [row, path] of negativeZeros.get(column) || []) cells[row] = restoreNegativeZero(cells[row], path);
     decoded.push(cells);
+    // A column has one path: avoid allocating a prefix array for every row.
+    const parentPath = path.slice(0, -1), key = path.at(-1);
     rows.forEach((row, i) => {
       if (cells[i] === undefined) return;
       let target = row;
-      for (const key of path.slice(0, -1)) {
+      for (const key of parentPath) {
         if (!Object.hasOwn(target, key)) {
           target[key] = {};
           branches.add(target[key]);
@@ -266,7 +283,6 @@ export function decodeResearchIndex(value) {
       // Only decoder-created branches may be traversed. A cell is atomic,
       // including arrays and empty objects. Prefixes can occur on different
       // rows, but cannot merge with or overwrite a cell in the same row.
-      const key = path.at(-1);
       if (Object.hasOwn(target, key)) throw Error('Conflicting research fields');
       target[key] = cells[i];
     });

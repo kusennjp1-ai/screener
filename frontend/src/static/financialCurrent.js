@@ -246,6 +246,8 @@ export function mergeFinancialDetail(summary, detail, { now = Date.now(), asOfDa
   // List proof owns the current generation. Missing list proof/fields cannot be
   // certified by an older, late detail response.
   merged.financial_current = summary.financial_current;
+  if (Object.hasOwn(summary, 'financial_publication_input')) merged.financial_publication_input = summary.financial_publication_input;
+  else delete merged.financial_publication_input;
   for (const field of protectedFields) {
     if (Object.hasOwn(summary,field)) merged[field]=summary[field];
     else if (Object.hasOwn(contract.aliases,field)) delete merged[field];

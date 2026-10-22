@@ -152,11 +152,14 @@ function fontGateFixture(){
   const fixture=fontRequestFixture(),denials=[],gate=createBrowserNetworkGate({origin:fontOrigin,getPage:()=>fixture.page,denials,symbol:'NVDA'});
   return {...fixture,denials,gate};
 }
-test('blocked font constants bind only the exact two unchanged approved CSS imports',()=>{
+// These are the immutable approved-predecessor CSS bytes, not the candidate UI.
+// The candidate may remove external font imports without changing which legacy
+// attempts the publisher's pinned approved UI is allowed to classify as blocked.
+test('blocked font constants bind only the exact two pinned approved CSS imports',()=>{
   assert.equal(EXPECTED_BLOCKED_FONT_STYLESHEETS.length,2);assert(Object.isFrozen(EXPECTED_BLOCKED_FONT_STYLESHEETS));
   for(const [path,blob,url]of [
-    ['../../frontend/src/static/theme/foundation.css','d2790d3b3b1764c34a936b26d719fdbce4e35e5f',EXPECTED_BLOCKED_FONT_STYLESHEETS[0]],
-    ['../../frontend/src/index.css','3909758330379e3061badf17624a1698288e616a',EXPECTED_BLOCKED_FONT_STYLESHEETS[1]],
+    ['./fixtures/approved-ui-fonts/foundation.css','d2790d3b3b1764c34a936b26d719fdbce4e35e5f',EXPECTED_BLOCKED_FONT_STYLESHEETS[0]],
+    ['./fixtures/approved-ui-fonts/index.css','3909758330379e3061badf17624a1698288e616a',EXPECTED_BLOCKED_FONT_STYLESHEETS[1]],
   ]){
     const raw=readFileSync(new URL(path,import.meta.url));assert.equal(createHash('sha1').update(Buffer.from('blob '+raw.length+'\0')).update(raw).digest('hex'),blob);
     assert(raw.toString('utf8').startsWith("@import url('"+url+"');"));

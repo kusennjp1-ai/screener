@@ -25,6 +25,7 @@ from app.domain.markets.key_markets import key_market_instruments
 from app.infra.db.models.feature_store import FeatureRun, FeatureRunPointer
 from app.infra.db.repositories.feature_store_repo import SqlFeatureStoreRepository
 from app.services.static_financial_evidence import add_static_financial_metadata, subset_static_financial_current
+from app.services.cache.price_history_diagnostics import observe, scoped
 from app.models.stock import StockPrice
 from app.schemas.groups import (
     ConstituentStock,
@@ -163,8 +164,21 @@ class StaticSiteSectionUnavailableError(RuntimeError):
 class StaticSiteExportService:
     """Generate a static JSON bundle for the read-only frontend."""
 
-    def __init__(self, session_factory: sessionmaker) -> None:
+    def __init__(
+        self,
+        session_factory: sessionmaker,
+        *,
+        chart_omissions: dict[str, dict[str, str]] | None = None,
+        pipeline_observations: dict | None = None,
+    ) -> None:
+        """Optionally collect chart omission reasons by market and symbol.
+
+        Each attempted chart bundle replaces that market's diagnostics. The
+        caller-owned mapping is not added to published files or return values.
+        """
         self._session_factory = session_factory
+        self._chart_omissions = chart_omissions
+        self._pipeline_observations = pipeline_observations
         self._ui_snapshot_service = UISnapshotService(session_factory)
         self._price_cache = get_price_cache()
         self._fundamentals_cache = get_fundamentals_cache()
@@ -394,8 +408,8 @@ class StaticSiteExportService:
         if skipped_chart_symbols:
             preview = ", ".join(skipped_chart_symbols[:5])
             warnings.append(
-                f"Static charts skipped {len(skipped_chart_symbols)} {market} symbols without cached "
-                f"{STATIC_CHART_PERIOD} price history" + (f": {preview}" if preview else "")
+                f"Static charts skipped {len(skipped_chart_symbols)} {market} symbols without usable cached "
+                f"2y price history through {latest_run.as_of_date.isoformat()}" + (f": {preview}" if preview else "")
             )
 
         breadth_path = path_prefix / "breadth.json"
@@ -789,6 +803,12 @@ class StaticSiteExportService:
         groups_payload: dict[str, Any] | None = None,
         preset_screens: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        omissions = None
+        if self._chart_omissions is not None:
+            # Do not leave a prior attempt's reasons if setup fails. Keep the
+            # original setup order when diagnostics have not been requested.
+            omissions = {}
+            self._chart_omissions[self._run_market(run) or STATIC_DEFAULT_MARKET] = omissions
         normalized_prefix = Path() if path_prefix is None else Path(path_prefix)
         chart_dir = output_dir / normalized_prefix / "charts"
         chart_dir.mkdir(parents=True, exist_ok=True)
@@ -796,18 +816,55 @@ class StaticSiteExportService:
         # Market benchmark (fetched once) drives the per-symbol RS line + blue dots.
         market = self._run_market(run) or STATIC_DEFAULT_MARKET
         benchmark_symbol, benchmark_df = self._get_market_benchmark_history(market, period="2y")
+        benchmark_df = self._chart_history_through(benchmark_df, run.as_of_date)
 
         entries: list[dict[str, Any]] = []
         skipped_symbols: list[str] = []
         row_by_symbol: dict[str, Any] = {}
         ordered_rows = list(rows)
+        cache_miss_reasons: dict[str, str] = {}
+
+        def _chart_prices(symbols):
+            if omissions is None:
+                cached = self._price_cache.get_many_cached_only(
+                    symbols, period="2y",
+                    **({"observations": self._pipeline_observations}
+                       if self._pipeline_observations is not None else {}),
+                )
+            else:
+                cached = self._price_cache.get_many_cached_only(
+                    symbols, period="2y", miss_reasons=cache_miss_reasons,
+                    **({"observations": self._pipeline_observations}
+                       if self._pipeline_observations is not None else {}),
+                )
+            bounded = {symbol: self._chart_history_through(frame, run.as_of_date)
+                       for symbol, frame in cached.items()}
+            if self._pipeline_observations is not None:
+                for symbol, frame in bounded.items():
+                    observe(self._pipeline_observations, "chart_snapshot", symbol=symbol,
+                            frame=frame, snapshot_date=run.as_of_date, row_count=0)
+            return bounded
+
+        def _skip_chart(symbol) -> None:
+            skipped_symbols.append(symbol)
+            observe(self._pipeline_observations, "chart_output", symbol=symbol,
+                    status="omitted", reason=cache_miss_reasons.get(symbol, "no_serializable_bars"))
+            if omissions is not None:
+                # A usable SQL frame can still serialize to zero chart bars.
+                omissions[symbol] = cache_miss_reasons.get(symbol, "no_serializable_bars")
 
         def _emit_chart(symbol, *, rank, stock_data, price_df, fundamentals_value) -> None:
             """Serialize + write one chart payload, recording it in ``entries`` (or skip)."""
-            bars = self._serialize_chart_bars(price_df)
+            bars = self._serialize_chart_bars(
+                price_df,
+                **({"observations": scoped(self._pipeline_observations, symbol=symbol)}
+                   if self._pipeline_observations is not None else {}),
+            )
             if not bars:
-                skipped_symbols.append(symbol)
+                _skip_chart(symbol)
                 return
+            observe(self._pipeline_observations, "chart_serialize", symbol=symbol,
+                    status="nonempty", bar_count=len(bars))
             # The independently cached fundamentals cannot borrow a scan's
             # source proof, even when their financial numbers happen to match.
             stock_data = add_static_financial_metadata(
@@ -886,7 +943,7 @@ class StaticSiteExportService:
                     row_by_symbol[sym] = row
             for offset in range(0, len(extra), STATIC_CHART_LOOKUP_BATCH_SIZE):
                 batch = extra[offset:offset + STATIC_CHART_LOOKUP_BATCH_SIZE]
-                price_data = self._price_cache.get_many_cached_only(batch, period="2y")
+                price_data = _chart_prices(batch)
                 fundamentals = self._fundamentals_cache.get_many_cached_only(batch)
                 for symbol in batch:
                     domain_row = row_by_symbol.get(symbol)
@@ -931,7 +988,7 @@ class StaticSiteExportService:
 
             batch_rows = list(ordered_rows[start:start + STATIC_CHART_LOOKUP_BATCH_SIZE])
             symbols = [row.symbol for row in batch_rows if getattr(row, "symbol", None)]
-            price_data = self._price_cache.get_many_cached_only(symbols, period="2y")
+            price_data = _chart_prices(symbols)
             fundamentals = self._fundamentals_cache.get_many_cached_only(symbols)
 
             for rank, row in enumerate(batch_rows, start=start + 1):
@@ -981,14 +1038,14 @@ class StaticSiteExportService:
         for offset in range(0, len(remaining), STATIC_CHART_LOOKUP_BATCH_SIZE):
             batch = remaining[offset:offset + STATIC_CHART_LOOKUP_BATCH_SIZE]
             symbols = [row.symbol for row in batch if getattr(row, "symbol", None)]
-            cached = self._price_cache.get_many_cached_only(symbols, period="2y")
+            cached = _chart_prices(symbols)
             for row in batch:
                 symbol = getattr(row, "symbol", None)
                 if not symbol:
                     continue
                 bars = self._serialize_chart_bars(cached.get(symbol))
                 if not bars:
-                    skipped_symbols.append(symbol)
+                    _skip_chart(symbol)
                     continue
                 rel_path = self._chart_payload_path(symbol, path_prefix=normalized_prefix)
                 stock_data = add_static_financial_metadata(
@@ -2194,6 +2251,18 @@ class StaticSiteExportService:
         )
 
     @staticmethod
+    def _chart_history_through(data: pd.DataFrame | None, snapshot_date: date) -> pd.DataFrame | None:
+        """Bound cached inputs before any chart/indicator calculation.
+
+        Cache reads can include sessions newer than the published scan. Keep
+        their original listing-calendar dates and values, and leave the cache
+        untouched. Missing sessions and stale/short histories remain missing.
+        """
+        if data is None or data.empty:
+            return data
+        return data.loc[data.index.date <= snapshot_date].copy()
+
+    @staticmethod
     def _static_chart_cutoff(index) -> datetime:
         """The display-window cutoff (``STATIC_CHART_PERIOD_DAYS``), converted to ``index``'s tz.
 
@@ -2608,11 +2677,14 @@ class StaticSiteExportService:
                 continue
         return boxes
 
-    def _serialize_chart_bars(self, data) -> list[dict[str, Any]]:
+    def _serialize_chart_bars(self, data, *, observations=None) -> list[dict[str, Any]]:
         if data is None or getattr(data, "empty", True):
             return []
 
-        filtered = data[data.index >= self._static_chart_cutoff(data.index)]
+        cutoff = self._static_chart_cutoff(data.index)
+        filtered = data[data.index >= cutoff]
+        observe(observations, "chart_display", frame=filtered, cutoff=cutoff,
+                input_rows=len(data))
         if filtered.empty:
             return []
 

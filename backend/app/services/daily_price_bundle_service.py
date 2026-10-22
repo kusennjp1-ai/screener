@@ -22,6 +22,7 @@ from ..models.stock import StockPrice
 from ..models.stock_universe import StockUniverse
 from .github_release_sync_service import GitHubReleaseSyncService
 from .market_calendar_service import MarketCalendarService
+from .cache.price_history_diagnostics import observe, observe_input, observe_manifest, scoped
 
 
 class DailyPriceBundleService:
@@ -374,6 +375,8 @@ class DailyPriceBundleService:
         *,
         input_path: Path,
         warm_redis_symbols: int | None = None,
+        observations: dict | None = None,
+        verified_input_sha256: str | None = None,
     ) -> dict[str, Any]:
         payload = self._read_bundle_payload(input_path)
         if payload.get("schema_version") != self.DAILY_PRICE_BUNDLE_SCHEMA_VERSION:
@@ -391,6 +394,7 @@ class DailyPriceBundleService:
                 f"expected {self.DAILY_PRICE_BAR_PERIOD!r}"
             )
 
+        observe_input(observations, input_path, payload, verified_sha256=verified_input_sha256)
         bundle_rows = payload.get("rows") or []
         batch_data: dict[str, pd.DataFrame] = {}
         imported_rows = 0
@@ -399,15 +403,32 @@ class DailyPriceBundleService:
             prices = row.get("prices") or []
             if not symbol or not prices:
                 continue
-            batch_data[symbol] = self._build_batch_dataframe(prices)
+            try:
+                batch_data[symbol] = self._build_batch_dataframe(prices)
+            except Exception as error:
+                observe(observations, "seed_prepare", symbol=symbol, status="raised",
+                        exception_type=type(error).__name__)
+                raise
+            observe(observations, "seed_prepare", symbol=symbol,
+                    frame=batch_data[symbol], status="prepared")
             imported_rows += len(prices)
 
         if batch_data:
             for chunk_start in range(0, len(batch_data), 100):
                 chunk_symbols = list(batch_data.keys())[chunk_start:chunk_start + 100]
-                self.price_cache._store_batch_in_database(  # noqa: SLF001 - intentional import path reuse
-                    {symbol: batch_data[symbol] for symbol in chunk_symbols}
-                )
+                chunk = {symbol: batch_data[symbol] for symbol in chunk_symbols}
+                trace = scoped(observations, source="seed_import", batch=chunk_start // 100 + 1)
+                observe(trace, "seed_batch", status="started", input_symbols=len(chunk))
+                try:
+                    if observations is None:
+                        self.price_cache._store_batch_in_database(chunk)
+                    else:
+                        self.price_cache._store_batch_in_database(chunk, observations=trace)
+                except Exception as error:
+                    observe(trace, "seed_batch", status="raised", exception_type=type(error).__name__,
+                            unattempted_batches=(len(batch_data) - chunk_start - 1) // 100)
+                    raise
+                observe(trace, "seed_batch", status="returned")
 
         redis_target = (
             settings.github_daily_price_redis_warm_symbols
@@ -465,6 +486,7 @@ class DailyPriceBundleService:
         warm_redis_symbols: int | None = None,
         allow_stale: bool = False,
         github_sync_service: GitHubReleaseSyncService | None = None,
+        observations: dict | None = None,
     ) -> dict[str, Any]:
         normalized_market = str(market or "").strip().upper()
         if normalized_market not in self.DAILY_PRICE_SUPPORTED_MARKETS:
@@ -537,6 +559,8 @@ class DailyPriceBundleService:
             sync_result.setdefault("bar_period", manifest.get("bar_period"))
             sync_result.setdefault("symbol_count", manifest.get("symbol_count"))
 
+        observe(observations, "seed_sync", status=sync_result.get("status"))
+        observe_manifest(observations, manifest)
         if sync_result.get("status") != "success":
             shutil.rmtree(download_dir, ignore_errors=True)
             return sync_result
@@ -546,6 +570,9 @@ class DailyPriceBundleService:
                 db,
                 input_path=Path(str(bundle_path)),
                 warm_redis_symbols=warm_redis_symbols,
+                **({"observations": observations,
+                    "verified_input_sha256": manifest.get("sha256") if isinstance(manifest, dict) else None}
+                   if observations is not None else {}),
             )
         finally:
             if bundle_path:

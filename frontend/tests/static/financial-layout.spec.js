@@ -7,6 +7,7 @@ import registry from '../../contracts/financial_instrument_applicability_v1.json
 
 const date='2026-09-29';
 const observedAt=`${date}T22:00:00.000Z`;
+const generation='f34ea759d821fdcc3f81abc9ef7bfc1cfc595c9fcb032e0d95b49041b27649c8';
 const nativeAnnual=nativeAnnualFixture('CAD',[1,2,4,8]);
 const nativeHistory={...nativeAnnual,symbol:'ALPHA',as_of_date:date,retrieved_at:observedAt,
  annual_source:{...nativeAnnual.annual_source,symbol:'ALPHA',observed_at:observedAt}};
@@ -25,7 +26,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  await page.clock.setFixedTime(new Date(`${date}T23:30:00Z`));
  await page.route('**/static-data/**',route=>{
   const file=new URL(route.request().url()).pathname.split('/').pop(),row=candidates.find(item=>item.chart_path===file);
-  const payload=file==='manifest.json'?{as_of_date:date,generated_at:`${date}T23:00:00Z`,research_generation:'financial-layout-fixture',assets:{research:{path:'research.json'}}}
+  const payload=file==='manifest.json'?{as_of_date:date,generated_at:`${date}T23:00:00Z`,research_generation:generation,assets:{research:{path:'research.json'}}}
    :file==='research.json'?{as_of_date:date,rows}:row?{symbol:row.symbol,as_of_date:date,bars,rs_line:[],stock_data:row}:{};
   return route.fulfill({json:payload});
  });
@@ -43,6 +44,13 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
   await expect(page.locator('.research-detail .research-chart canvas').first()).toBeVisible();
   expect((await page.getByTestId('home-hero').boundingBox()).height).toBeLessThanOrEqual(320);
   expect((await page.locator('.research-detail .research-chart canvas').first().boundingBox()).y).toBeLessThanOrEqual(540);
+  const sourceLine=page.locator('.research-symbol-head .symbol-context');
+  const qualification=page.getByLabel('価格位置と購入条件');
+  await expect(sourceLine).toBeVisible();await expect(qualification).toBeVisible();
+  const sourceBounds=await sourceLine.boundingBox(),qualificationBounds=await qualification.boundingBox();
+  expect(qualificationBounds.y).toBeGreaterThanOrEqual(sourceBounds.y+sourceBounds.height);
+  expect(await qualification.evaluate(node=>node.scrollWidth<=node.clientWidth && node.scrollHeight<=node.clientHeight)).toBe(true);
+  expect((await page.locator('.research-symbol-head .watch-button').boundingBox()).height).toBeGreaterThanOrEqual(44);
   expect((await page.getByRole('link',{name:'業種の追い風を見る →'}).boundingBox()).height).toBeGreaterThanOrEqual(44);
  }else{
   const visible=await page.locator('.candidate-row').evaluateAll(rows=>{
@@ -73,9 +81,33 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  await filters.getByRole('button',{name:'絞り込みを閉じる',exact:true}).click();
  if(width===390)await page.getByRole('button',{name:/^ALPHA の分析を表示/}).click();
  const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
+ await expect(detail.getByLabel('価格位置と購入条件')).toContainText('価格位置は購入可否と別です。');
+ await expect(detail.getByLabel('価格位置と購入条件')).toContainText(/未達 \d+・未確認 \d+/);
+ const controls=detail.getByRole('group',{name:'チャート操作',exact:true});
+ await controls.scrollIntoViewIfNeeded();
+ const controlsFit=()=>controls.evaluate(node=>{
+  const bounds=node.getBoundingClientRect();
+  return node.scrollWidth<=node.clientWidth && [...node.querySelectorAll('button')].every(button=>{const box=button.getBoundingClientRect();return box.left>=bounds.left && box.right<=bounds.right && box.top>=bounds.top && box.bottom<=bounds.bottom;});
+ });
+ expect(await controlsFit()).toBe(true);
+ await controls.getByRole('button',{name:/^図解 /}).click();expect(await controlsFit()).toBe(true);
+ await expect(controls.getByRole('button',{name:'リセット',exact:true})).toBeVisible();
+ await expect(controls.getByRole('button',{name:'日次チャートを分析',exact:true})).toBeVisible();
  await detail.getByRole('tab',{name:'財務・機関',exact:true}).click();
  const panel=detail.getByRole('region',{name:'財務の判定根拠',exact:true});
  await expect(panel).toBeVisible();
+ await panel.locator(':scope > header').evaluate(node=>node.scrollIntoView({block:'start'}));
+ const provenance=panel.locator('.compact-evidence-context details');
+ await expect(provenance).not.toHaveAttribute('open');
+ await expect(provenance).toContainText(generation);
+ await expect(panel.locator('.compact-evidence-context > p:first-child')).toContainText('配信版の対応 一致');
+ await expect(panel.locator('.financial-evidence-rows > li').first().locator('.financial-evidence-value')).toBeInViewport();
+ if(width===390){
+  const context=page.locator('.leader-header').getByRole('group',{name:'表示中の銘柄と分析基準日'});
+  await expect(context).toHaveText(/ALPHA分析 2026-09-29/);await expect(context).toBeInViewport();
+ }
+ await provenance.locator('summary').click();await expect(provenance).toHaveAttribute('open');
+ await provenance.locator('summary').click();await expect(provenance).not.toHaveAttribute('open');
  const annual=panel.locator('#financial-evidence-annual_eps_growth_3y');
  await annual.scrollIntoViewIfNeeded();
  await expect(annual.locator('.financial-evidence-value strong')).toHaveText('100% → 100% → 100%');
@@ -87,6 +119,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  await expect(history).toBeVisible();
  await expect(history.getByRole('columnheader',{name:'EPS（CAD / 提供元の株式単位）',exact:true})).toBeVisible();
  await expect(history.locator('tbody td')).toHaveText(['1','2','4','8']);
+ if(width===390)await expect(page.locator('.leader-header').getByRole('group',{name:'表示中の銘柄と分析基準日'})).toBeInViewport();
  await expect(detail).toContainText('株式分割・ADR');
  await expect(detail.locator('.research-symbol-price strong')).toHaveText('$104.00');
  await expect(detail.locator('.research-chart canvas').first()).toBeVisible();

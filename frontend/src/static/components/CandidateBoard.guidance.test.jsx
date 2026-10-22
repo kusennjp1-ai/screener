@@ -4,6 +4,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import CandidateBoard from './CandidateBoard';
 import { entryReadiness } from '../entryReadiness';
 import { withAuditFixture } from '../testAuditFixture';
+import { assess } from '../researchEngine';
 vi.mock('../entryReadiness',()=>({entryReadiness:vi.fn()}));
 vi.mock('./CandidateCharts',()=>({default:()=> <div>比較チャート</div>}));
 afterEach(()=>{cleanup();vi.resetAllMocks();});
@@ -89,4 +90,17 @@ it('displays and sorts the audited daily volume without falling back to a confli
  expect(screen.getByRole('button',{name:/^UNKNOWN の分析/})).toHaveAccessibleName(/出来高 —/);
  fireEvent.click(screen.getByRole('button',{name:'出来高で並べ替え'}));
  expect([...container.querySelectorAll('.candidate-row')].map(row=>row.querySelector('.candidate-name strong').textContent)).toEqual(['B','A','UNKNOWN']);
+});
+it('retains the financial exclusion label if an excluded row is supplied to the near-pass view',()=>{
+ entryReadiness.mockReturnValue(waiting);
+ const row=withAuditFixture({...ranked[0].row,symbol:'NVDA',market:'US'},props.date);
+ row.technical_audit.values.sma200_21ago=120;
+ const assessment=assess(row,'minervini',props.now);
+ expect(assessment).toMatchObject({passed:8,total:9,financial_exclusion:{symbol:'NVDA'}});
+ render(<CandidateBoard {...props} nearOnly ranked={[{row,assessment}]}/>);
+ const button=screen.getByRole('button',{name:/NVDA の分析を表示/});
+ expect(button).toHaveTextContent('財務未確認・判定対象外');
+ expect(button).toHaveAccessibleName(/財務未確認・判定対象外/);
+ expect(button).not.toHaveAttribute('data-near-pass');
+ expect(button.querySelector('.candidate-missing')).toBeNull();
 });

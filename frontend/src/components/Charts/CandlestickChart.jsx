@@ -1,4 +1,4 @@
-import { chartHistoryWarning, dateKey, relativeStrengthScale, setResearchRange, researchVolumeBars } from './researchChartModel';
+import { chartHistoryWarning, invalidChartHistory, dateKey, relativeStrengthScale, setResearchRange, researchVolumeBars } from './researchChartModel';
 import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } from 'react';
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
@@ -13,6 +13,7 @@ import { rsBandForRange } from './rsBand';
 import ChartSkeleton from './ChartSkeleton';
 import { transformToCandlestickData } from './candlestickData';
 import { palettes } from '../../static/theme/tokens';
+import { formatPrice } from '../../static/positionGeometry';
 import './researchChartControls.css';
 
 // Debounce utility
@@ -57,6 +58,13 @@ function CandlestickChart({
   blueDots = null,
   dataUpdatedAtOverride = null,
   compact = false,
+  // Only a parent that renders the complete, visible price/RS/volume legend
+  // may opt out of this component's default in-flow legend.
+  externalResearchLegend = false,
+  // Ordinary detail pages keep the plot in its existing first-screen position.
+  // Expanded viewers retain the default above-plot legend for height measurement.
+  researchLegendBelow = false,
+  compactResearchChrome = false,
   hideTimeframeToggle = false,
   hideOhlcLegend = false,
   interactive = true,
@@ -76,6 +84,11 @@ function CandlestickChart({
   buyPoints = null,
 }) {
   const chartContainerRef = useRef(null);
+  const movingAverageSummaryRef = useRef(null);
+  const movingAverageFocused = useRef(false);
+  useLayoutEffect(() => {
+    if (movingAverageFocused.current) movingAverageSummaryRef.current?.focus({preventScroll:true});
+  }, [compactResearchChrome]);
   const chartRef = useRef(null);
   const appliedInteractiveRef = useRef(interactive);
   const candlestickSeriesRef = useRef(null);
@@ -109,8 +122,10 @@ function CandlestickChart({
   const instanceSymbol = chartIdentity == null ? symbol : null;
 
   const [annotationDetail, setAnnotationDetail] = useState(null);
+  const [movingAverageOpen, setMovingAverageOpen] = useState(false);
   const showBookAnnotations = annotationDetail ?? !smallScreen;
   const setShowBookAnnotations = value => setAnnotationDetail(typeof value === 'function' ? value(showBookAnnotations) : value);
+  const invalidHistory = useMemo(() => invalidChartHistory(priceData), [priceData]);
   const historyWarning = useMemo(() => chartHistoryWarning(priceData), [priceData]);
   const annotations = useMemo(() => buildBookAnnotations(bookAnnotations && !historyWarning ? priceData : null), [bookAnnotations, priceData, historyWarning]);
   const [windowRange, setWindowRange] = useState(null);
@@ -210,7 +225,7 @@ function CandlestickChart({
   // toggled off. This drives BOTH the reserved-strip layout (price/volume
   // reclaim the strip's space when RS is hidden) and the "RS" label.
   const rsStripShown =
-    showRSLine &&
+    !invalidHistory && showRSLine &&
     (effectiveTimeframe === 'daily' || researchView) &&
     Array.isArray(rsData?.rs_line) &&
     rsData.rs_line.length > 0;
@@ -218,8 +233,16 @@ function CandlestickChart({
   // Transform data - memoized to avoid expensive EMA recalculations on every render
   const chartData = useMemo(() => {
     if (!apiData) return null;
-    return transformToCandlestickData(apiData, effectiveTimeframe);
-  }, [apiData, effectiveTimeframe]);
+    // Never coerce missing OHLCV into zero or leave the previous series behind.
+    // Keep raw daily values available in the separate numeric disclosure.
+    return transformToCandlestickData(invalidHistory ? [] : apiData, effectiveTimeframe, { includeEMA: !bookAnnotations && !researchView });
+  }, [apiData, effectiveTimeframe, invalidHistory, bookAnnotations, researchView]);
+  const finalBar = chartData?.candlesticks.at(-1);
+  const referenceLegend = !historyWarning ? [
+    { key: 'upper', label: '上限', price: buyCeiling, color: chartPalette.zone },
+    { key: 'pivot', label: 'ピボット', price: pivotPrice, color: chartPalette.zone },
+    { key: 'stop', label: '損切り例', price: stopPrice, color: chartPalette.neg, dashed: true },
+  ].filter(level => Number.isFinite(level.price) && level.price > 0) : [];
 
   // Initialize chart on mount using useLayoutEffect for synchronous DOM access
   useLayoutEffect(() => {
@@ -557,7 +580,7 @@ function CandlestickChart({
   useLayoutEffect(() => {
     const series = candlestickSeriesRef.current;
     if (!researchView || historyWarning || !series) return undefined;
-    const levels = new TradeLevelsPrimitive({ pivot: pivotPrice, upper: buyCeiling, stop: stopPrice }, chartPalette);
+    const levels = new TradeLevelsPrimitive({ pivot: pivotPrice, upper: buyCeiling, stop: stopPrice }, chartPalette, { axisLabels: false });
     series.attachPrimitive(levels);
     return () => { if (candlestickSeriesRef.current === series) { try { series.detachPrimitive(levels); } catch { /* series recreated */ } } };
   }, [researchView, historyWarning, pivotPrice, buyCeiling, stopPrice, chartPalette, chartData, symbol, height, compact]);
@@ -661,11 +684,11 @@ function CandlestickChart({
   useLayoutEffect(() => {
     const series = epsLineSeriesRef.current;
     if (!series) return;
-    const pts = !bookAnnotations && Array.isArray(epsLine) ? epsLine : [];
+    const pts = !invalidHistory && !bookAnnotations && Array.isArray(epsLine) ? epsLine : [];
     try {
       series.setData(pts.map((p) => ({ time: p.time, value: p.value })));
     } catch { /* series recreated — ignore */ }
-  }, [epsLine, chartData, compact, height, isDarkMode, symbol, bookAnnotations]);
+  }, [epsLine, chartData, compact, height, isDarkMode, symbol, bookAnnotations, invalidHistory]);
 
   // Update the RS line overlay + blue-dot markers.
   // Only rendered on the daily timeframe (the RS series is daily); cleared
@@ -812,29 +835,46 @@ function CandlestickChart({
   // suppressed for dense grid tiles.
   const rsLineVisible = !researchView && !compact && rsStripShown;
 
+  const movingAverageDetails = <Box component={smallScreen ? 'details' : 'div'} {...(smallScreen ? {open:movingAverageOpen,onToggle:event=>setMovingAverageOpen(event.currentTarget.open)} : {})} sx={{mt:compactResearchChrome ? 0 : .5,fontSize:11,'&[open]':{flexBasis:'100%'},'& summary':{minHeight:44,cursor:'pointer',display:'flex',alignItems:'center'}}}>
+        {smallScreen && <summary ref={movingAverageSummaryRef} onFocus={() => {movingAverageFocused.current=true;}} onBlur={() => {movingAverageFocused.current=false;}} aria-label="移動平均線・株価の乖離率">{compactResearchChrome ? '移動平均' : researchMetaActions ? '移動平均・乖離率' : '移動平均線・株価の乖離率'}</summary>}
+        {[[50,chartData?.sma50],[150,chartData?.sma150],[200,chartData?.sma200]].map(([period,points])=>{const value=points?.at(-1)?.value, delta=(chartData?.candlesticks.at(-1)?.close/value-1)*100;return <span key={period} style={{display:'inline-block',marginRight:12}}>SMA{effectiveTimeframe==='weekly'?period/5:period} {Number.isFinite(value)?`${value.toFixed(2)} / 株価${delta>=0?'+':''}${delta.toFixed(1)}%`:'—'}</span>;})}
+      </Box>;
+
+  // Keep every numeric legend in normal flow, never over the plotted data.
+  // Only the ordinary detail caller moves it below; modal sizing stays unchanged.
+  const researchLegend = researchView && hasData && !externalResearchLegend && <Box data-testid="chart-pane-legend" role="group" aria-label="価格・RS・出来高の凡例" sx={{display:'flex',flexWrap:'wrap',columnGap:compact ? .75 : 1.5,rowGap:0,px:compact || compactResearchChrome ? .5 : 1.5,py:.25,color:'text.secondary','& > span':{fontSize:11,lineHeight:compactResearchChrome ? 1.35 : 1.5}}}>
+      {finalBar && <Typography component="span" data-testid="chart-final-bar-legend" sx={{order:compactResearchChrome ? 2 : 0,color:'text.primary'}}>
+        <span aria-hidden="true" style={{color:finalBar.close >= finalBar.open ? chartPalette.up : chartPalette.down}}>⋯ </span>最終{effectiveTimeframe === 'weekly' ? '週足 バー日' : '日足'} {dateKey(finalBar.time)} 終値 {formatPrice(finalBar.close)}
+      </Typography>}
+      {referenceLegend.map(level => <Typography component="span" key={level.key} data-testid={`chart-level-legend-${level.key}`} sx={{color:level.color}}>
+        <Box component="span" aria-hidden="true" sx={{display:'inline-block',width:10,mr:.5,verticalAlign:'middle',borderTop:`1px ${level.dashed ? 'dashed' : 'solid'} currentColor`}} />{level.label} {formatPrice(level.price)}
+      </Typography>)}
+      <Typography component="span" sx={{fontSize:11,order:compactResearchChrome ? 1 : 0,color:chartPalette.accent}}>RS{compact || compactResearchChrome ? rsStripShown ? compactResearchChrome ? `線${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : '' : ' 未配信' : ` · ${rsStripShown ? `対市場の強さ${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : 'データ未配信'}`}</Typography>
+      <Typography component="span" sx={{fontSize:11,order:compactResearchChrome ? 3 : 0}}>出来高{!compact && ` · 破線は${effectiveTimeframe === 'weekly' ? '10週' : '50日'}平均`}</Typography>
+    </Box>;
+
   return (
     <>
     {comparisonSessions && <Typography data-testid="comparison-visible-range" className="sr-only">SMA50日 · {windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : '表示期間を計算中'}</Typography>}
-    {researchView && historyWarning && <Alert severity="warning">{historyWarning} 自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。</Alert>}
+    {compactResearchChrome && <span className="sr-only" data-testid="chart-visible-range">{windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : ''}</span>}
+    {researchView && historyWarning && <Alert severity="warning">{historyWarning} {invalidHistory ? 'チャートは未表示です。日足の数値で未確認の項目を確認してください。' : '自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。'}</Alert>}
     {researchView && !compact && keepResearchChrome && <div className="research-chart-controls" role="group" aria-label="チャート操作" aria-hidden={!hasData} style={{display:hasData?'flex':'none','--chart-control-accent':theme.palette.primary.main,'--chart-control-text':theme.palette.text.primary,'--chart-control-muted':theme.palette.text.secondary,'--chart-control-line':theme.palette.divider,'--chart-control-hover':theme.palette.action.hover,'--chart-control-selected':theme.palette.action.selected}}>
       <div className="research-chart-timeframe" role="group" aria-label="足の種類">{[['daily','日足'],['weekly','週足']].map(([value,label])=><button key={value} type="button" aria-pressed={timeframe===value} onClick={()=>{if(timeframe!==value){isFirstDataLoadRef.current=true;setTimeframe(value);}}}>{label}</button>)}</div>
       {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <button type="button" key={label} onClick={() => { setResearchRange(chartRef.current,chartData.candlesticks,effectiveTimeframe === "weekly" ? Math.ceil(count/5) : count); }}>{label}</button>)}
       <button type="button" aria-label="チャートを拡大" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)*.7,to:r.to}); }}>＋</button>
       <button type="button" aria-label="チャートを縮小" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)/.7,to:r.to}); }}>−</button>
       <button type="button" onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>リセット</button>
-      <button type="button" aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'詳細':'簡易'}</button>{researchActions}
+      <button type="button" aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'詳細':'簡易'}</button>{compactResearchChrome && movingAverageDetails}{researchActions}
     </div>}
-    {researchView && !compact && keepResearchChrome && <Box className="chart-research-meta" hidden={!hasData} style={!hasData ? {display:'none'} : undefined} sx={{px:1.5,py:.5,fontSize:11,color:'text.secondary',...(researchMetaActions && {display:'flex',flexWrap:'wrap',alignItems:'center',gap:1,'& > details':{flexShrink:0},'& > details[open]':{flexBasis:'100%',maxWidth:'100%'}})}}>
+    {researchView && !compact && !compactResearchChrome && keepResearchChrome && <Box className="chart-research-meta" hidden={!hasData} style={!hasData ? {display:'none'} : undefined} sx={{px:1.5,py:.5,fontSize:11,color:'text.secondary',...(researchMetaActions && {display:'flex',flexWrap:'wrap',alignItems:'center',gap:1,'& > details':{flexShrink:0},'& > details[open]':{flexBasis:'100%',maxWidth:'100%'}})}}>
       <span data-testid="chart-visible-range">{windowRange ? `${dateKey(windowRange.from)} ～ ${dateKey(windowRange.to)}` : ''}</span>
-      <Box component={smallScreen ? 'details' : 'div'} sx={{mt:.5,'& summary':{minHeight:44,cursor:'pointer',display:'flex',alignItems:'center'}}}>
-        {smallScreen && <summary aria-label="移動平均線・株価の乖離率">{researchMetaActions ? '移動平均・乖離率' : '移動平均線・株価の乖離率'}</summary>}
-        {[[50,chartData?.sma50],[150,chartData?.sma150],[200,chartData?.sma200]].map(([period,points])=>{const value=points?.at(-1)?.value, delta=(chartData?.candlesticks.at(-1)?.close/value-1)*100;return <span key={period} style={{display:'inline-block',marginRight:12}}>SMA{effectiveTimeframe==='weekly'?period/5:period} {Number.isFinite(value)?`${value.toFixed(2)} / 株価${delta>=0?'+':''}${delta.toFixed(1)}%`:'—'}</span>;})}
-      </Box>
+      {movingAverageDetails}
       {researchMetaActions}
     </Box>}
     {researchView && !compact && !smallScreen && !hideOhlcLegend && legendData && <Typography sx={{px:1.5,py:.5,fontSize:12,color:'text.secondary',fontVariantNumeric:'tabular-nums'}}>
       始 {legendData.open.toFixed(2)} · 高 {legendData.high.toFixed(2)} · 安 {legendData.low.toFixed(2)} · 終 {legendData.close.toFixed(2)}
     </Typography>}
+    {!researchLegendBelow && researchLegend}
     <Box
       sx={{
         width: '100%',
@@ -973,10 +1013,6 @@ function CandlestickChart({
         </Typography>
       )}
 
-      {researchView && hasData && <>
-        <Typography sx={{position:'absolute',top:compact?'57%':'70%',left:8,fontSize:11,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>RS{compact ? rsStripShown ? '' : ' 未配信' : ` · ${rsStripShown ? `対市場の強さ${Number.isFinite(rsRatingValue) ? ` / 推計${Math.round(rsRatingValue)}` : ''}` : 'データ未配信'}`}</Typography>
-        <Typography sx={{position:'absolute',top:compact?'72%':'82%',left:8,fontSize:11,bgcolor:'background.paper',zIndex:10,pointerEvents:'none'}}>出来高{!compact && ` · 破線は${effectiveTimeframe === 'weekly' ? '10週' : '50日'}平均`}</Typography>
-      </>}
       {/* Loading skeleton overlay */}
       {showLoading && (
         <Box
@@ -1081,6 +1117,7 @@ function CandlestickChart({
         </Box>
       )}
     </Box>
+    {researchLegendBelow && researchLegend}
     {bookAnnotations && !compact && !showLoading && !showError && !showNoData && <Box sx={{ px: 1.5, py: 1, bgcolor: 'background.paper' }}>
         {!researchView && <Button size="small" onClick={() => setShowBookAnnotations(v => !v)} aria-pressed={showBookAnnotations}>書籍の図解 {showBookAnnotations ? 'ON' : 'OFF'}</Button>}
         {!researchView && <Typography sx={{ fontSize: 12 }} role="status">{effectiveTimeframe !== 'daily' ? '図解は日足で表示します。日足に切り替えてください。' : showBookAnnotations ? `${annotations.boxes[0]?.label ? annotations.boxes[0].label + '。' : ''}${annotations.summary}` : researchView ? '簡易表示：ベース候補の枠と共通ピボット。図解ボタンで収縮区間・過去の上抜けを表示します。' : '自動注記を非表示にしています。'}</Typography>}

@@ -19,6 +19,7 @@ import { scanListRow } from './scan-list-payload.mjs';
 import { validatePublishedSummaries, validateResearchListSummaries, validateResearchParity } from './research-quality.mjs';
 import { verifyWorkbenchComparison } from './workbench-comparison.mjs';
 import { observedFinancialCarryScope } from './financial-generation-carry.mjs';
+import { captureFinancialPublicationInput } from '../src/static/financialPublicationInput.js';
 
 export const FINANCIAL_CORRECTION_SCHEMA = 'financial-statement-projection-v1';
 export const CORRECTION_FIELDS = Object.freeze([...FINANCIAL_FIELDS, 'eps_growth_quarterly', 'eps_growth_annual', 'recent_quarter_date', 'previous_quarter_date', 'growth_comparable_period_date', 'growth_reporting_cadence', 'growth_metric_basis', 'growth_reference_gap_days']);
@@ -46,7 +47,7 @@ const historicalSnapshot = row => row.financial_historical || {
 // Only financial-correction-v1 fields written by this projector may cross the
 // alias boundary. All nonfinancial properties retain their original ownership.
 const financialOutputFields = [...CORRECTION_FIELDS, ...CORRECTION_DEPENDENT_FIELDS, ...CORRECTION_METADATA_FIELDS,
-  'financial_source_evidence', 'financial_current', 'financial_history', 'book_financials', 'bookFinancialCurrent',
+  'financial_source_evidence', 'financial_current', 'financial_publication_input', 'financial_history', 'book_financials', 'bookFinancialCurrent',
   'financial_source_diagnostics', 'financial_history_source_diagnostics', 'financial_identity', 'instrument_applicability',
   'financial_current_state', 'financial_historical', 'method_summary', 'passes_template', 'eps_line'];
 function financialAlias(original, projected) {
@@ -189,6 +190,9 @@ export function overlayFinancialCorrection(row, projection, inheritedScope = {})
   for (const key of ['market', 'as_of_date']) if (!Object.hasOwn(row, key) && !Object.hasOwn(inheritedScope, key)) out[key] = undefined;
   delete out.financial_current_state; delete out.bookFinancialCurrent; delete out.method_summary;
   for (const field of CORRECTION_DEPENDENT_FIELDS) if (Object.hasOwn(out, field)) out[field] = null;
+  delete out.financial_publication_input;
+  const publicationInput = captureFinancialPublicationInput(out);
+  if (publicationInput) out.financial_publication_input = publicationInput;
   return out;
 }
 
@@ -297,7 +301,7 @@ export async function verifyFinancialProjectionCompatibility({root, projection, 
     checkNestedScanners(row,expected,name);
     checkMetadata(row, `${name}/${row.symbol}`);
     if(item.instrument_applicability) equal(row.instrument_applicability,instrumentApplicability(row),`${name}/${row.symbol}/instrument applicability mismatch`);
-    for (const field of [...FINANCIAL_FIELDS, 'eps_growth_quarterly', 'eps_growth_annual', 'financial_current', 'instrument_applicability', 'financial_identity']) equal(row[field], expected[field], `${name}/${row.symbol}/${field} mismatch`);
+    for (const field of [...FINANCIAL_FIELDS, 'eps_growth_quarterly', 'eps_growth_annual', 'financial_current', 'financial_publication_input', 'instrument_applicability', 'financial_identity']) equal(row[field], expected[field], `${name}/${row.symbol}/${field} mismatch`);
     if(full || Object.hasOwn(row,'financial_current_state')) equal(row.financial_current_state,expected.financial_current_state,`${name}/${row.symbol}/state mismatch`);
     for (const field of CORRECTION_DEPENDENT_FIELDS) if (Object.hasOwn(row, field) && row[field] !== null) fail(`${name}/${row.symbol}/${field} retained unverified value`);
     if (full) {

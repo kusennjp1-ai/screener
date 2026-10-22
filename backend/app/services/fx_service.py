@@ -252,7 +252,8 @@ class FXService:
                 self._memo[currency] = quote
                 self._stale_fallback_retry_after.pop(currency, None)
                 return quote
-            stale_quote = quote
+            if stale_quote is None or quote.as_of_date > stale_quote.as_of_date:
+                stale_quote = quote
 
         # 3. DB (most recent row)
         quote = self._read_database(currency)
@@ -272,6 +273,15 @@ class FXService:
         if stale_quote is not None:
             suppressed_quote = self._retry_suppressed_stale_quote(currency, latest_close)
             if suppressed_quote is not None:
+                # Cooldown limits upstream calls, not improvements from caches.
+                # Preserve the original deadline and the quote's actual date.
+                if stale_quote.as_of_date > suppressed_quote.as_of_date:
+                    _, retry_after, retry_close = self._stale_fallback_retry_after[currency]
+                    self._stale_fallback_retry_after[currency] = (
+                        stale_quote, retry_after, retry_close,
+                    )
+                    self._memo[currency] = stale_quote
+                    return stale_quote
                 return suppressed_quote
 
         # 4. Upstream fetch

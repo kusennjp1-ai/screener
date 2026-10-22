@@ -1,4 +1,4 @@
-import { buildFinancialEvidencePresentation } from '../financialEvidencePresentation';
+import { hasVerifiedDailyBars } from '../qualificationAudit.js';
 import { useFinancialClock } from '../useFinancialClock';
 import { mergeFinancialDetail } from '../financialCurrent';
 import ConnectionStatus from '../components/ConnectionStatus';
@@ -27,6 +27,7 @@ import { useResearchBundle } from '../useResearchBundle';
 import { refreshResearchBundle } from '../researchWorkerClient';
 import { prepareResearchBundle, researchBundleCurrent, researchBundleTemporal } from '../researchPreprocess';
 import '../research.css';
+import { BOOK_SOURCE_PAGE_NOTE, BOOK_SOURCE_SCOPE_NOTE } from '../bookSourceContext';
 
 const METHODS = { minervini: 'ミネルヴィニ', minervini2: '基本と原則', oneil: 'オニール / CAN SLIM', ibd: 'IBD型リーダー' };
 
@@ -45,6 +46,7 @@ export default function ResearchPage({compareOnly=false}) {
   const workbench=useWorkbench(entry);
   const [personalKey, setPersonalKey] = useState('');
   const [search, setSearch] = useState(() => params.get('symbol') || '');
+  const [searchResetKey, setSearchResetKey] = useState(0);
   const [strict, setStrict] = useState(false);
   const [nearOnly, setNearOnly] = useState(false);
   const [filtersOpen,setFiltersOpen]=useState(false);
@@ -52,7 +54,7 @@ export default function ResearchPage({compareOnly=false}) {
   const deferredSearch = useDeferredValue(search);
   useEffect(()=>{
     const searchEvent=e=>setSearch(e.detail||'');
-    const backEvent=()=>setMobileView('list');
+    const backEvent=()=>{setMobileView('list');requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
     window.addEventListener('research:search',searchEvent);window.addEventListener('research:back',backEvent);
     return()=>{window.removeEventListener('research:search',searchEvent);window.removeEventListener('research:back',backEvent);};
   },[]);
@@ -80,7 +82,7 @@ export default function ResearchPage({compareOnly=false}) {
   const radarRanked=useMemo(()=>filterRanked(bundle.data?.rankings?.minervini||[],{liquidOnly:liquid}),[bundle.data,liquid]);
   // Coverage is independent of method; all exported rankings share one universe.
   const coverageRows = radarRanked;
-  const verifiedCount = useMemo(() => coverageRows.filter(r => r.row.technical_audit?.valid === true).length, [coverageRows]);
+  const verifiedCount = useMemo(() => coverageRows.filter(r => hasVerifiedDailyBars(r.row, bundle.data?.date)).length, [coverageRows, bundle.data?.date]);
   const temporal = researchBundleTemporal(bundle.data);
   const sessionCurrentAt = useMemo(() => temporal ? sessionCurrentFromIntervals(temporal.session_intervals, bundle.data?.date) : prepareSessionCurrent(rows, bundle.data?.date), [temporal, rows, bundle.data?.date]);
   const readinessBoundaryAt = useMemo(() => temporal ? readinessTimelineFromBoundaries(temporal.readiness_boundaries) : prepareReadinessTimeline(rows), [temporal, rows]);
@@ -161,7 +163,6 @@ export default function ResearchPage({compareOnly=false}) {
   const clock = useQuery({ queryKey: ['researchClock'], queryFn: () => Date.now(), refetchInterval: 15000, initialData: Date.now, select:clockSelector });
   // Preserve clock checks but notify the page only when a decision actually changes.
   const now = useMemo(() => { void clock.data; void quote.data; void personal.quote; void selected; return Date.now(); }, [clock.data,quote.data,personal.quote,selected]);
-  const financialEvidence = useMemo(()=>selected ? buildFinancialEvidencePresentation(selected,{method,date:bundle.data?.date,generation:version,now}) : undefined,[selected,method,bundle.data?.date,version,now]);
   const portfolioPlan = useMemo(() => buildPortfolioPlan(rows, bundle.data?.date, 100000, now, portfolioPrepared, sessionCurrentAt), [rows, bundle.data?.date, now, portfolioPrepared, sessionCurrentAt]);
   const activeQuote = personalKey ? personal.quote : quote.data;
   const liveStatus = personalKey && personal.status !== '接続済み' ? personal.status : !personalKey && quote.isError ? '接続エラー' : quoteStatus(activeQuote, now);
@@ -213,6 +214,17 @@ export default function ResearchPage({compareOnly=false}) {
   const expandChart = useCallback(()=>setChart(selected?.symbol),[selected?.symbol]);
   const disconnect = useCallback(()=>setPersonalKey(''),[]);
   const openFilters = useCallback(()=>setFiltersOpen(true),[]);
+  function resetFilters() {
+    setSearch('');
+    // Remount only the search input to cancel even an uncommitted debounce.
+    setSearchResetKey(value => value + 1);
+    setStrict(false);
+    setNearOnly(false);
+    setOnlyWatch(false);
+    setSector('');
+    setCoverage('all');
+    setLiquid(true);
+  }
   const toggleNear = useCallback(()=>{setNearOnly(value=>!value);setStrict(false);},[]);
   const detailState = useMemo(()=>({isLoading:detail.isLoading,isError:detail.isError,isSuccess:detail.isSuccess,refetch:detail.refetch}),[detail.isLoading,detail.isError,detail.isSuccess,detail.refetch]);
   const browse = () => {setMobileView('list'); requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
@@ -235,7 +247,7 @@ export default function ResearchPage({compareOnly=false}) {
     {detailFreshness&&freshnessNotice}
     <Drawer anchor="right" open={filtersOpen} onClose={()=>setFiltersOpen(false)} PaperProps={{role:'dialog','aria-modal':true,'aria-labelledby':'research-filter-title',sx:{width:{xs:'100%',sm:420},p:3}}}>
       <header className="drawer-title"><h2 id="research-filter-title">候補を絞り込む</h2><Button onClick={()=>setFiltersOpen(false)} aria-label="絞り込みを閉じる">×</Button></header>
-      <ResearchSearch value={search} onChange={setSearch}/>
+      <ResearchSearch key={searchResetKey} value={search} onChange={setSearch}/>
       {methodControls}
       <FormControlLabel control={<Switch checked={strict} onChange={e=>{setStrict(e.target.checked);if(e.target.checked)setNearOnly(false);}}/>} label="全条件通過のみ"/>
       <FormControlLabel control={<Switch checked={nearOnly} onChange={e=>{setNearOnly(e.target.checked);if(e.target.checked)setStrict(false);}}/>} label="あと1条件"/>
@@ -245,6 +257,8 @@ export default function ResearchPage({compareOnly=false}) {
       <p>日足検証済み {verifiedCount.toLocaleString()} / {coverageRows.length.toLocaleString()}銘柄。未確認は合格に数えません。</p>
       <label className="sector-filter">検証状況 <select aria-label="検証状況" value={coverage} onChange={e=>setCoverage(e.target.value)}><option value="all">全銘柄</option><option value="verified">日足検証済み</option><option value="unverified">判定資料不足</option></select></label>
       <FormControlLabel control={<Switch checked={liquid} onChange={e=>setLiquid(e.target.checked)}/>} label="流動性：株価 $10以上・平均売買代金 $2,000万以上"/>
+      <Button onClick={resetFilters} aria-describedby="research-filter-reset-note" sx={{ minHeight: 44 }}>検索・絞り込みを初期化</Button>
+      <Typography id="research-filter-reset-note" variant="caption" color="text.secondary">投資手法は維持し、流動性条件をオンに戻します。</Typography>
       <Button onClick={download} disabled={!ranked.length}>全検索結果をCSV保存 ↓</Button>
       <Button component="a" href={`${import.meta.env.BASE_URL}qualification-audit.json`} download>全銘柄の検証記録 ↓</Button>
       <Button onClick={()=>{manifest.refetch?.();if(bundle.isError)bundle.refetch();}}>データを再確認 ↻</Button>
@@ -257,7 +271,7 @@ export default function ResearchPage({compareOnly=false}) {
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
     <div className="research-grid" data-view={actualView}>
       <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={methodControls} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
-      {actualView!=='charts' && <ResearchDetail financialEvidence={financialEvidence} ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
+      {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     {!compareOnly&&<footer className="research-method-note">
       <CandidatePerformance entry={entry}/>
@@ -265,7 +279,7 @@ export default function ResearchPage({compareOnly=false}) {
       <details><summary>補助ビュー</summary><Stack direction="row" gap={2}><Button component="a" href="#/daily">デイリー一覧</Button><Button component="a" href="#/groups">業種ランキング</Button></Stack></details>
       <Typography variant="body2">{overlap ? `IBD公式リストとの一致：${Math.round(overlap.recall * 100)}%` : '公開ルールに基づく独自スクリーナー'}</Typography>
       <details className="research-disclosure"><summary>選定方式とデータの読み方</summary>
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>資料確認の範囲：今回は『ミネルヴィニの成長株投資法』の一部を照合。ピボット追随は約2〜3%が目安です。第1方式の5%や第2方式の3%は既存アプリ設定で、第2冊の指定値を今回確認したものではありません。第1冊のトレンドテンプレート8条件も確認済み（Kindle表示115/421）。ただし、SMA・21営業日前との上向き比較・252営業日の高安値窓・独自RSの計算はアプリの近似で、原典との完全な同等性は未検証です。</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{BOOK_SOURCE_SCOPE_NOTE} {BOOK_SOURCE_PAGE_NOTE}</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>{endpoint || personalKey ? `価格配信は15秒ごとに確認。配信時刻：${usableQuote?.as_of || '未確認'}。${usableQuote?.feed === 'iex' ? 'IEX取引所のみの価格です。' : ''}` : 'エントリー位置の「場中価格を接続する」から自分用APIキーで接続できます。未接続時は日次価格で計算します。'} ピボット・財務条件・チャートは日次です。候補は購入推奨ではありません。</Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1, lineHeight: 1.9 }}>オニールは前年同期比成長、ミネルヴィニはトレンドテンプレート、IBD型は独自レーティングで比較します。RSは検証できた公開日足の母集団内で、63・126・189・252営業日リターンを40・20・20・20%で加重した順位です。全米株の公式RSとは異なり、未配信銘柄による母集団の偏りがあります。新製品・経営変化・機関投資家の質は個別確認が必要です。IBD公式の選定銘柄・非公開の計算式を再現したものではありません。</Typography>
       <Stack direction="row" gap={2} flexWrap="wrap" sx={{ mt: 1 }}><Button size="small" component="a" href="https://shop.investors.com/images/promotional/20-Rules_102808.pdf" target="_blank" rel="noopener noreferrer">IBDの公開ルール ↗</Button><Button size="small" component="a" href="https://cdn.minervini.com/static/dist/mtp-review.1f8e8633.pdf" target="_blank" rel="noopener noreferrer">ミネルヴィニの資料 ↗</Button><Button size="small" component="a" href="https://github.com/kusennjp1-ai/screener/issues/new?template=research-feedback.yml" target="_blank" rel="noopener noreferrer">不具合・使い勝手を報告 ↗</Button></Stack>

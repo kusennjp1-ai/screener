@@ -70,9 +70,9 @@ def _make_scan(scan_id="scan-001", status="completed", **kwargs) -> FakeScan:
 # ---------------------------------------------------------------------------
 
 @pytest_asyncio.fixture
-async def client():
+async def client(server_auth_headers):
     transport = httpx.ASGITransport(app=app)
-    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
+    async with httpx.AsyncClient(transport=transport, base_url="http://test", headers=server_auth_headers) as c:
         yield c
 
 
@@ -101,8 +101,10 @@ class TestListScans:
             assert data["scans"][0]["universe_def"] == {
                 "type": "all",
                 "market": None,
+                "mic": None,
                 "exchange": None,
                 "index": None,
+                "listing_tier": None,
                 "symbols": None,
                 "allow_inactive_symbols": False,
             }

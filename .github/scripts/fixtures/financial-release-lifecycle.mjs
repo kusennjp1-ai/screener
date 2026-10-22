@@ -52,13 +52,22 @@ function projection(source) {
   return {base,value,bytes:JSON.stringify(value,null,2)};
 }
 
+// Real provider sessions are independent from the synthetic fixture prices.
+const fixtureCalendar=JSON.parse(readFileSync(new URL('../../../frontend/src/static/__fixtures__/nyse-sessions-2024-2026.json',import.meta.url),'utf8'));
+function calendar(date){
+  const {schema_version,market,exchange,provider,provider_version,range_start}=fixtureCalendar;
+  const sessions=fixtureCalendar.sessions.filter(day=>day<=date);
+  assert.equal(sessions.at(-1),date,'lifecycle price date must be a verified NYSE session');
+  return {schema_version,market,exchange,provider,provider_version,range_start,as_of_date:date,range_end:date,sessions};
+}
 function bars(date,price) {
-  const dates=[];
-  for(let time=Date.parse(date);dates.length<260;time-=day){const weekday=new Date(time).getUTCDay();if(weekday!==0&&weekday!==6)dates.unshift(new Date(time).toISOString().slice(0,10));}
+  const dates=calendar(date).sessions.slice(-260);
+  assert.equal(dates.length,260,'lifecycle fixture needs complete observed history');
   return dates.map((date,index)=>{const close=price*(0.8+0.2*index/259);return {date,open:close,high:close*1.01,low:close*0.99,close,volume:1000000};});
 }
 
-export function lifecycleFixture({controllerPath=controller,packedTransport=false}={}) {
+export function lifecycleFixture({controllerPath=controller,packedTransport=false,omitAcquiredHistory=false,calendarCheckout=false,withoutSeedCalendar=false}={}) {
+  const sha=calendarCheckout?execFileSync('git',['-C',repoRoot,'rev-parse','HEAD'],{encoding:'utf8'}).trim():'b'.repeat(40);
   const root=mkdtempSync(join(tmpdir(),'financial-release-lifecycle-')),certificate=certifiedSourceFixture();
   const configPath=join(root,'remote.json'),preload=join(root,'transport.mjs'),bin=join(root,'bin');mkdirSync(bin);
   const config={api:{},zips:{},liveRoot:null},api=config.api,prefix=`repos/${repository}`;
@@ -93,19 +102,28 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
   const save=()=>write(configPath,config);
   const environment=extra=>({PATH:`${bin}:${process.env.PATH}`,RUNNER_TEMP:join(releaseRoot||root,'runner'),GITHUB_REPOSITORY:repository,
     GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_EVENT_PATH:join(root,'event.json'),RELEASE_SHA:sha,GITHUB_RUN_ID:String(releaseId),GITHUB_RUN_ATTEMPT:'1',
-    RELEASE_CLI_FIXTURE:configPath,RELEASE_CLI_TRACE:join(root,'trace.jsonl'),RELEASE_FIXTURE_NOW:now,NODE_OPTIONS:`--import=${preload}`,...extra});
-  function invoke(path,args=[],cwd=releaseRoot,extra={}){save();return spawnSync(process.execPath,[path,...args],{cwd,encoding:'utf8',timeout:30000,env:environment(extra)});}
+    RELEASE_CLI_FIXTURE:configPath,RELEASE_CLI_TRACE:join(root,'trace.jsonl'),RELEASE_FIXTURE_NOW:now,...(process.env.SESSION_CALENDAR_PYTHON?{SESSION_CALENDAR_PYTHON:process.env.SESSION_CALENDAR_PYTHON}:{}),NODE_OPTIONS:`--import=${preload}`,...extra});
+  // Real deployed receipts include raw historical evidence; keep capture bounded above Node's 1 MiB default.
+  function invoke(path,args=[],cwd=releaseRoot,extra={}){save();return spawnSync(process.execPath,[path,...args],{cwd,encoding:'utf8',timeout:30000,maxBuffer:16*1024*1024,env:environment(extra)});}
   function success(result,label){assert.ifError(result.error);assert.equal(result.status,0,`${label}\n${result.stdout}\n${result.stderr}`);return result;}
-  function frontendAt(directory){mkdirSync(join(directory,'frontend'),{recursive:true});for(const name of ['src','tools','package.json'])symlinkSync(join(repoRoot,'frontend',name),join(directory,'frontend',name));mkdirSync(join(directory,'data/ibd_reference/ibd50'),{recursive:true});return join(directory,'frontend');}
+  function frontendAt(directory){
+    if(calendarCheckout){
+      execFileSync('git',['clone','--shared','--no-checkout',repoRoot,directory],{stdio:'pipe'});
+      execFileSync('git',['-C',directory,'checkout',sha,'--','frontend/src','frontend/tools','frontend/contracts','frontend/package.json','contracts','data/ibd_reference'],{stdio:'pipe'});
+      symlinkSync(join(repoRoot,'frontend/node_modules'),join(directory,'frontend/node_modules'),'dir');
+    }else{mkdirSync(join(directory,'frontend'),{recursive:true});for(const name of ['src','tools','package.json'])symlinkSync(join(repoRoot,'frontend',name),join(directory,'frontend',name));mkdirSync(join(directory,'data/ibd_reference/ibd50'),{recursive:true});}
+    return join(directory,'frontend');
+  }
   function exportBundle(directory,date,price,history=null,extra={}){
     const frontend=frontendAt(directory),dataRoot=join(frontend,'public/static-data'),value=row(date,price);
     write(join(dataRoot,'manifest.json'),{as_of_date:date,default_market:'US',supported_markets:['US'],generated_at:now,markets:{US:{market:'US',as_of_date:date,pages:{scan:{path:'scan.json'}},assets:{charts:{path:'charts-index.json'}}}}});
     write(join(dataRoot,'scan.json'),{as_of_date:date,initial_rows:[value],preview_rows:[value],chunks:[{path:'chunk.json'}]});
     write(join(dataRoot,'chunk.json'),{as_of_date:date,rows:[value]});
     write(join(dataRoot,'charts-index.json'),{market:'US',symbols:[{symbol:'OWNED',path:'charts/OWNED.json'}]});
+    write(join(dataRoot,'trading-calendar.json'),calendar(date));
     const chart={symbol:'OWNED',market:'US',as_of_date:date,bars:bars(date,price),stock_data:value,fundamentals:{...value},eps_line:[]};
     write(join(dataRoot,'charts/OWNED.json'),chart);write(join(dataRoot,'raw/OWNED.json'),chart);
-    write(join(dataRoot,'financial-history.json'),{as_of_date:date,results:{OWNED:{symbol:'OWNED',annual:[],quarterly:[]}}});
+    if(!omitAcquiredHistory)write(join(dataRoot,'financial-history.json'),{as_of_date:date,results:{OWNED:{symbol:'OWNED',annual:[],quarterly:[]}}});
     if(history)cpSync(history,join(dataRoot,'candidate-history'),{recursive:true});
     else {write(join(dataRoot,'candidate-history/index.json'),{schema_version:1,snapshots:[]});write(join(dataRoot,'candidate-history/retained-history.json'),'retained original history bytes\n');}
     write(join(dataRoot,'candidate-performance-history/index.json'),{schema_version:1,cohorts:[]});
@@ -133,6 +151,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     // exercises the two subsequent strict carry publication lifecycles.
     write(join(root,'source-projection.json'),original.bytes);
     const publicRoot=exportBundle(join(root,'seed'),sourceDate,100,null,{FINANCIAL_CORRECTION_PROJECTION:join(root,'source-projection.json'),FINANCIAL_CORRECTION_SHA256:sha256(original.bytes),FINANCIAL_CORRECTION_TARGET_IDENTITY:original.value.bindings.target_publication_identity,FINANCIAL_CORRECTION_TARGET_BASE_SHA256:sha256(original.base)});
+    if(withoutSeedCalendar)rmSync(join(publicRoot,'static-data/trading-calendar.json'));
     // Record the established first observation before testing subsequent days.
     success(invoke(join(root,'seed/frontend/tools/record-candidate-history.mjs'),[],join(root,'seed/frontend')),'seed daily history');
     write(join(publicRoot,'index.html'),'<!doctype html><title>Offline approved UI</title>');write(join(publicRoot,'sw.js'),'// offline approved worker\n');
@@ -164,10 +183,11 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     retainedPublicationArtifact=pack(900030,'github-pages-30-1',config.liveRoot,'artifact.tar',null,30);
     seedRecaptured=true;save();
   }
-  function advance({id,date,price,time}){
+  function advance({id,date,price,time,withoutCalendar=false}){
     now=time;releaseId=id;releaseRoot=join(root,`release-${id}`);frontendAt(join(releaseRoot,'release'));
     const output=join(releaseRoot,'output'),envFile=join(releaseRoot,'environment');
     const fresh=exportBundle(join(root,`export-${id}`),date,price,join(config.liveRoot,'static-data/candidate-history'));
+    if(withoutCalendar)rmSync(join(fresh,'static-data/trading-calendar.json'));
     const exportId=id+100,artifact=pack(exportId,`static-site-data-${exportId}-1`,fresh);
     const manifestBytes=readFileSync(join(fresh,'static-data/manifest.json')),observed=extractPriceObservations({dataRoot:join(fresh,'static-data'),manifest:JSON.parse(manifestBytes)});
     const metadata=join(root,`source-${id}.json`);write(metadata,{run_id:exportId,run_attempt:1,source_sha:sha,artifact_name:artifact.name,manifest_json:manifestBytes.toString(),manifest_sha256:sha256(manifestBytes),price_observations:observed,price_observations_sha256:priceObservationDigest(observed)});

@@ -1,6 +1,7 @@
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { validEvidenceDay } from '../src/static/evidenceTime.js';
 import { observedBarrels, observedPrice, signalDateLabel } from '../src/static/technicalObservation.js';
+import { observedSignalLabel, observedSourceLabel, observationRawValue } from '../src/static/observationLabels.js';
 import { scrollFinancialViewport } from './financial-viewport-geometry.mjs';
 
 // Additional real /daily viewport coverage, outside the performance samples.
@@ -64,7 +65,15 @@ export async function verifyDailyObservationCases({ page, viewport, theme, captu
     const text = await row.innerText(), now = await page.evaluate(() => Date.now());
     check(text.includes(`記録終値 ${entry.buy.last_close.toFixed(2)} · シグナル基準値 ${entry.buy.trigger_price.toFixed(2)}`), `${key}: displayed technical prices differ from the source record`);
     check(text.includes(`配信基準日 ${index.as_of_date}`) && text.includes(`シグナル基準日 ${signalDateLabel(entry.buy.signal_as_of, now)}`), `${key}: observation/signal dates are missing or conflated`);
-    check(text.includes(`旧モデル確認数（barrels） ${observedBarrels(entry.buy)}`), `${key}: barrel confirmation differs from source or missing became confirmed`);
+    check(text.includes(`旧モデルの確認項目 ${observedBarrels(entry.buy)}`), `${key}: barrel confirmation differs from source or missing became confirmed`);
+    check(text.includes(`記録時のシグナル ${observedSignalLabel(entry.buy.active)}`)
+      && text.includes(`検出経路 ${observedSourceLabel(entry.buy.vcp_source)}`), `${key}: human record labels differ from source or an unknown gained a meaning`);
+    const diagnostics = row.locator('details').filter({ hasText: '観測記録の説明・元の値' });
+    const raw = await diagnostics.textContent();
+    for (const field of ['active', 'barrels_passed', 'vcp_source']) {
+      check(raw.includes(`${field}: ${observationRawValue(entry.buy[field])}`), `${key}: original ${field} is missing from the record disclosure`);
+    }
+    check(!await diagnostics.evaluate(node => node.open), `${key}: raw diagnostics should start collapsed`);
     check(text.includes('テクニカル観測のみ · 購入条件は未判定'), `${key}: the recorded technical position lacks its decision scope`);
     const cardText = await card.innerText();
     check(cardText.includes('未確認や履歴不足は合格に数えません'), `${key}: missing-evidence scope is absent`);

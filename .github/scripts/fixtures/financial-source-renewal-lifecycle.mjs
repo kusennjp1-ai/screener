@@ -42,8 +42,17 @@ export function syntheticQuotaHttpResponse(options={},now=Date.now()){
     metadata:{clock:'SYNTHETIC fixture Date.now',sampled_at:now,date:headers.date??null,resource:headers['x-ratelimit-resource']??null,limit,remaining,used,reset}};
 }
 
+// Session evidence is generated independently from the synthetic prices.
+const fixtureCalendar=read(new URL('../../../frontend/src/static/__fixtures__/nyse-sessions-2024-2026.json',import.meta.url));
+function calendar(date){
+  const {schema_version,market,exchange,provider,provider_version,range_start}=fixtureCalendar;
+  const sessions=fixtureCalendar.sessions.filter(day=>day<=date);
+  assert.equal(sessions.at(-1),date,'renewal price date must be a verified NYSE session');
+  return {schema_version,market,exchange,provider,provider_version,range_start,as_of_date:date,range_end:date,sessions};
+}
 function bars(date,price){
-  const dates=[];for(let time=Date.parse(date);dates.length<260;time-=86400000){const day=new Date(time).getUTCDay();if(day!==0&&day!==6)dates.unshift(new Date(time).toISOString().slice(0,10));}
+  const dates=calendar(date).sessions.slice(-260);
+  assert.equal(dates.length,260,'renewal fixture needs complete observed history');
   return dates.map((date,index)=>{const close=price*(.8+.2*index/259);return {date,open:close,high:close*1.01,low:close*.99,close,volume:1000000};});
 }
 
@@ -285,6 +294,7 @@ export function seedGenuineSourcePublication(f){
   write(join(root,'scan.json'),{as_of_date:sourceDate,initial_rows:rows,preview_rows:rows,chunks:[{path:'chunk.json'}]});
   write(join(root,'chunk.json'),{as_of_date:sourceDate,rows});
   write(join(root,'charts-index.json'),{market:'US',symbols:rows.map(row=>({symbol:row.symbol,path:`charts/${row.symbol}.json`}))});
+  write(join(root,'trading-calendar.json'),calendar(sourceDate));
   write(join(root,'book-benchmark.json'),{symbol:'SPY',as_of_date:sourceDate,bars:bars(sourceDate,400)});
   write(join(root,'sector-prices.json'),{as_of_date:sourceDate,series:{}});
   for(const row of rows){const chart={symbol:row.symbol,market:'US',as_of_date:sourceDate,bars:bars(sourceDate,row.current_price),stock_data:row,fundamentals:{...row},eps_line:[]};
@@ -514,6 +524,7 @@ export function carryGenuineRenewal(f,{date='2026-10-05',evaluatedAt='2026-10-06
     write(path,value);assertSyntheticPriceAdvance(old,read(path).bars,date);advanced[path.slice(data.length+1)]={old,after:value.bars};
   }}visit(data);
   assert.ok(Object.keys(advanced).length>=2);market.as_of_date=date;manifest.as_of_date=date;manifest.generated_at=evaluatedAt;write(join(data,'manifest.json'),manifest);
+  write(join(data,'trading-calendar.json'),calendar(date));
   f.exportData(frontend);assert.deepEqual(readFileSync(join(data,'candidate-history/index.json')),historyBytes);
   for(const [path,hash]of Object.entries(priorAudit))assert.equal(hashFile(join(data,'financial-corrections',path)),hash);
   const zip=f.archive(publicRoot,`next-price-${runId}`),exportRun=runId+1;

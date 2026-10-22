@@ -98,7 +98,7 @@ export const aggregateToWeekly = (dailyData) => {
 /**
  * Transform API data to TradingView Lightweight Charts format
  */
-export const transformToCandlestickData = (apiData, timeframe = 'daily') => {
+export const transformToCandlestickData = (apiData, timeframe = 'daily', { includeEMA = true } = {}) => {
   if (!apiData || apiData.length === 0) {
     return {
       candlesticks: [], volume: [],
@@ -131,10 +131,11 @@ export const transformToCandlestickData = (apiData, timeframe = 'daily') => {
     });
   });
 
-  // Calculate EMAs (short-term entry guides)
-  const ema10 = calculateEMA(processedData, 10);
-  const ema20 = calculateEMA(processedData, 20);
-  const ema50 = calculateEMA(processedData, 50);
+  // Research/book views never plot these guides. Avoid allocating three
+  // unused histories there; ordinary charts retain all EMA calculations.
+  const ema10 = includeEMA ? calculateEMA(processedData, 10) : [];
+  const ema20 = includeEMA ? calculateEMA(processedData, 20) : [];
+  const ema50 = includeEMA ? calculateEMA(processedData, 50) : [];
 
   // Calculate the Minervini trend-template SMA stack (50 / 150 / 200-day).
   const sma50 = calculateSMA(processedData, timeframe === "weekly" ? 10 : 50);

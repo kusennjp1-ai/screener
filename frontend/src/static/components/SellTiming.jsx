@@ -9,6 +9,7 @@ import RemoveIcon from '@mui/icons-material/Remove';
 import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
 import { C } from '../designTokens';
 import { observationFreshness } from '../technicalObservation';
+import { observedStopBasisLabel, observationRawValue } from '../observationLabels';
 
 // These are exported model observations, without a verified holding, entry,
 // current quote, or executed order. Rank preserves the existing watchlist order.
@@ -66,7 +67,7 @@ function Pill({ meta, compact }) {
       borderRadius: 1, bgcolor: `color-mix(in srgb, ${meta.color} 13%, transparent)`, border: `1px solid ${meta.color}`,
     }}>
       <Icon sx={{ fontSize: compact ? 12 : 13, color: meta.color }} />
-      <Typography sx={{ fontWeight: 800, fontSize: 11, color: meta.color, lineHeight: 1.2 }}>
+      <Typography sx={{ fontWeight: 800, fontSize: 12, color: meta.color, lineHeight: 1.5 }}>
         {meta.label}
       </Typography>
     </Box>
@@ -78,26 +79,35 @@ function Pill({ meta, compact }) {
 export default function SellTiming({ sell, compact = false, stale = false, freshness = observationFreshness(null), currency = '' }) {
   const n = normalizeSell(sell) || { action: 'no_data', stop: null };
   const meta = ACTION_META[n.action] || DEFAULT_META;
-  const basis = n.stopBasis === 'initial' ? '初期モデル' : n.stopBasis;
+  const basis = observedStopBasisLabel(n.stopBasis);
   const freshnessLabel = `${stale ? '前回の保存記録・鮮度未確認 · ' : ''}${freshness.label}`;
 
   return (
     <Box data-testid="sell-timing" data-action={n.action} data-freshness={freshness.state} data-record-source={stale ? 'saved' : 'exported'}
       sx={{ display: 'flex', alignItems: 'center', gap: 0.75, flexWrap: 'wrap', rowGap: 0.5 }}>
-      <Typography sx={{ fontSize: 11, color: C.grey }}>売却モデル参考</Typography>
+      <Typography sx={{ fontSize: 12, color: C.ink }}>売却モデル参考</Typography>
       <Pill meta={meta} compact={compact} />
-      {n.stop != null && <Typography sx={{ fontSize: 12, color: C.ink, fontFamily: 'monospace' }}>
-        モデル停止水準 {currency}{fmt(n.stop)}{basis ? ` · ${basis}` : ''}
+      {n.stop != null && <Typography sx={{ fontSize: 13, color: C.inkStrong, lineHeight: 1.8 }}>
+        モデル停止水準 {currency}{fmt(n.stop)} · {basis}
       </Typography>}
-      <Typography sx={{ fontSize: 11, color: C.grey, flexBasis: '100%' }}>
+      <Typography sx={{ fontSize: 12, color: C.ink, lineHeight: 1.8, flexBasis: '100%' }}>
         配信基準日 {freshness.date || '未確認'} · {freshnessLabel}
       </Typography>
-      {compact && <Typography sx={{ fontSize: 11, color: C.grey, flexBasis: '100%' }}>実際の保有・注文は未確認</Typography>}
-      {!compact && <Box component="details" sx={{ flexBasis: '100%', fontSize: 12, color: C.grey }}>
-        <summary style={{ cursor: 'pointer', minHeight: 44, display: 'flex', alignItems: 'center' }}>売却モデルの記録について</summary>
-        <p>{EXPLANATIONS[n.action]}</p>
-        <p>停止水準は別の売却モデルの参考値です。上のシグナル基準値に対する損失率や、実際の保有の損益・追随ストップを示しません。あなたの保有・注文・約定を確認したものではありません。</p>
-      </Box>}
+      {compact && <Typography sx={{ fontSize: 12, color: C.ink, lineHeight: 1.8, flexBasis: '100%' }}>実際の保有・注文は未確認</Typography>}
+      <Box component="details" sx={{ flexBasis: '100%', minWidth: 0, fontSize: 13, color: C.ink, lineHeight: 1.8, overflowWrap: 'anywhere',
+        '& > summary': { cursor: 'pointer', minHeight: 44, py: 1, boxSizing: 'border-box' },
+        '& > summary:focus-visible': { outline: '2px solid var(--accent)', outlineOffset: 2 },
+      }}>
+        <summary>売却モデルの説明・元の値</summary>
+        {!compact && <>
+          <p>{EXPLANATIONS[n.action]}</p>
+          <p>停止水準は別の売却モデルの参考値です。上のシグナル基準値に対する損失率や、実際の保有の損益・追随ストップを示しません。あなたの保有・注文・約定を確認したものではありません。</p>
+        </>}
+        <Box sx={{ fontFamily: 'monospace' }}>
+          <div>action: {observationRawValue(sell?.action)}</div>
+          <div>stop_basis: {observationRawValue(sell?.stop_basis)}</div>
+        </Box>
+      </Box>
     </Box>
   );
 }

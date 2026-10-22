@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { performance } from 'node:perf_hooks';
 import { createImmutableGitApi } from './immutable-github-api.mjs';
 import {priceControllerRoot,verifyPriceSourceCompletion,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
 import {readRepairRequest,validateRepairRequest} from './retained-price-source-admission.mjs';
@@ -53,10 +54,47 @@ export function publicationDecision({ eventName, event, sha, currentSha, runs = 
   return { publish: true, mode: 'data', reason: 'Keep the approved live UI; validate data with its pinned code' };
 }
 
+// Transport retries never cover JSON/provenance validation or retain partial pages.
+export const githubReadRetryPolicy = Object.freeze({ attempts: 3, totalMs: 120000, attemptMs: 60000, delaysMs: Object.freeze([1000, 2000]) });
+export function transientGithubReadError(error) {
+  const stderr = `${String(error?.stderr ?? '')}\n${String(error?.message ?? '')}`;
+  const statuses = [...stderr.matchAll(/\bHTTP (\d{3})\b/g)].map(match => Number(match[1]));
+  if (error?.signal || ['ENOBUFS', 'ENOENT', 'EACCES', 'EPERM'].includes(error?.code) ||
+      /authentication|authorization|unauthorized|forbidden|permission|access denied|rate limit|bad credentials|gh auth login|certificate|unknown authority/i.test(stderr)) return false;
+  if (statuses.length) return statuses.every(status => [500, 502, 503, 504].includes(status));
+  return ['ECONNRESET', 'ETIMEDOUT', 'EAI_AGAIN'].includes(error?.code) ||
+    /(?:connection reset by peer|TLS handshake timeout|dial tcp[^\n]*: i\/o timeout|temporary failure in name resolution)/i.test(stderr);
+}
+export function createGithubReadApi({ execute = execFileSync, sleep = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms), now = () => performance.now() } = {}) {
+  return (endpoint, paginate = false) => {
+    const args = ['api', ...(paginate ? ['--paginate', '--slurp'] : []), endpoint];
+    const started = now();
+    let output, lastError;
+    for (let attempt = 0; attempt < githubReadRetryPolicy.attempts; attempt++) {
+      const remaining = githubReadRetryPolicy.totalMs - (now() - started);
+      if (remaining <= 0) throw lastError ?? Error('GitHub read time budget exhausted');
+      try {
+        output = execute('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024,
+          timeout: Math.max(1, Math.min(githubReadRetryPolicy.attemptMs, Math.floor(remaining))), killSignal: 'SIGKILL' });
+        break;
+      } catch (error) {
+        lastError = error;
+        const delay = githubReadRetryPolicy.delaysMs[attempt];
+        if (!transientGithubReadError(error) || attempt + 1 >= githubReadRetryPolicy.attempts ||
+            now() - started + delay >= githubReadRetryPolicy.totalMs) throw error;
+        sleep(delay);
+        if (now() - started >= githubReadRetryPolicy.totalMs) throw error;
+      }
+    }
+    return JSON.parse(output);
+  };
+}
+const readGithubApi = createGithubReadApi();
+
 export function githubApi(endpoint, paginate = false) {
   const scopedApi = invocationApi.getStore();
   if (scopedApi) return scopedApi(endpoint, paginate);
-  return JSON.parse(execFileSync('gh', ['api', ...(paginate ? ['--paginate', '--slurp'] : []), endpoint], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }));
+  return readGithubApi(endpoint, paginate);
 }
 
 export function checkPublication(event, sha, repository, api = githubApi) {

@@ -1,8 +1,13 @@
 export const dateKey = time => typeof time === 'object' && time ? `${time.year}-${String(time.month).padStart(2,'0')}-${String(time.day).padStart(2,'0')}` : String(time);
+export function invalidChartHistory(bars) {
+  if(!Array.isArray(bars) || !bars.length)return null;
+  const index=bars.findIndex((b,i)=>![b?.open,b?.high,b?.low,b?.close,b?.volume].every(Number.isFinite) || b.low<=0 || b.volume<0 || b.high<Math.max(b.open,b.close,b.low) || b.low>Math.min(b.open,b.close) || (i>0 && b.date<=bars[i-1].date));
+  return index >= 0 ? `${bars[index]?.date || '対象日未確認'}：日足の価格・出来高または日付に不整合があります。` : null;
+}
 export function chartHistoryWarning(bars) {
   if(!Array.isArray(bars) || !bars.length)return null;
-  const invalid=bars.find((b,i)=>![b.open,b.high,b.low,b.close,b.volume].every(Number.isFinite) || b.low<=0 || b.volume<0 || b.high<Math.max(b.open,b.close,b.low) || b.low>Math.min(b.open,b.close) || (i>0 && b.date<=bars[i-1].date));
-  if(invalid)return `${invalid.date}：日足の価格・出来高または日付に不整合があります。`;
+  const invalid=invalidChartHistory(bars);
+  if(invalid)return invalid;
   const jump=bars.find((b,i)=>i>0 && (b.close/bars[i-1].close>=1.8 || b.close/bars[i-1].close<=.55));
   return jump ? `${jump.date}：大幅な価格断絶があります。分割・併合調整を確認してください。` : null;
 }

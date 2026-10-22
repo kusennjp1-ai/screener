@@ -17,9 +17,13 @@ export const palettes = {
 };
 export const fontSizes = [42,34,26,20,16,14,13,12,11];
 export const radii = [4,8,12,16];
-export const fonts = { body:'"Zen Kaku Gothic New", sans-serif', mono:'"Geist Mono", monospace' };
+// Local/system fonts keep offline and origin-pinned builds self-contained.
+export const fonts = {
+  body:'-apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif',
+  mono:'"SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", monospace',
+};
 export const themeCss = Object.entries(palettes).map(([mode,palette]) =>
-  `:root[data-theme="${mode}"],.leader-shell[data-theme="${mode}"]{${Object.entries(palette).map(([key,value])=>`--${key}:${value}`).join(';')};color-scheme:${mode}}`
+  `:root[data-theme="${mode}"],.leader-shell[data-theme="${mode}"]{${Object.entries(palette).map(([key,value])=>`--${key}:${value}`).join(';')};--font-body:${fonts.body};--font-mono:${fonts.mono};color-scheme:${mode}}`
 ).join('\n');
 export function researchTheme(mode) {
   const p=palettes[mode] || palettes.dark;

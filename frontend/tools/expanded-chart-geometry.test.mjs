@@ -38,4 +38,18 @@ describe('expanded chart browser acceptance checks', () => {
     expect(failuresFor({...mobile,content_client_height:402,footer:{top:499},plot:{top:233,bottom:533,height:300},plot_visible:false,date_axis_visible:false,date_axis_hit:false},false)).toEqual([]);
     expect(failuresFor({...mobile,content_client_height:678,footer:{top:775},plot:{top:233,bottom:653,height:420}},false)).toEqual([]);
   });
+  it('requires the full short-phone plot with 44px header navigation clear of the close control', () => {
+    const compact={viewport:{width:390,height:568},content:{top:140,bottom:568},content_client_height:428,scroll_top:0,
+      plot:{top:266,bottom:568,height:302},footer:{top:4,bottom:48,left:234,right:326},close:{left:330,right:374,top:4,bottom:48},footer_placement:'header',navigation_count:2,
+      footer_controls:['前','次'].map(text=>({text,visible:true,hit:true,rect:{width:44,height:44}}))};
+    expect(failuresFor(compact)).toEqual([]);
+    expect(failuresFor({...compact,plot_visible:false,date_axis_visible:false,date_axis_hit:false})).toContainEqual(expect.stringContaining('complete plot/date axis'));
+    expect(failuresFor({...compact,footer:{...compact.footer,right:331}})).toContainEqual(expect.stringContaining('overlaps'));
+    expect(failuresFor({...compact,footer_controls:[{text:'前',visible:true,hit:true,rect:{width:24,height:24}}]})).toEqual(expect.arrayContaining([expect.stringContaining('controls are missing'),expect.stringContaining('smaller than 44px')]));
+    expect(failuresFor({...compact,footer_visible:false,footer_hit:false,navigation_count:0,footer_controls:[]})).toEqual([]);
+    const warning={left:16,right:374,top:100,bottom:135};
+    expect(failuresFor({...compact,warning,warning_visible:true})).toEqual([]);
+    expect(failuresFor({...compact,warning:{...warning,top:0,bottom:70},warning_visible:true})).toContainEqual(expect.stringContaining('warning is clipped or covered'));
+    expect(failuresFor({...compact,close:{...compact.close,top:74,bottom:118}})).toContainEqual(expect.stringContaining('outside the title row'));
+  });
 });

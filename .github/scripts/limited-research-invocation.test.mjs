@@ -1,0 +1,8 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {assertLimitedPublisherInvocation} from './limited-research-publisher.mjs';
+const sha='a'.repeat(40),repository='kusennjp1-ai/screener';
+function fixture(){const env={GITHUB_REPOSITORY:repository,GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_REF:'refs/heads/main',GITHUB_WORKFLOW_SHA:sha,GITHUB_SHA:sha,GITHUB_WORKFLOW_REF:`${repository}/.github/workflows/research-ui-release.yml@refs/heads/main`,GITHUB_RUN_ID:'1',GITHUB_RUN_ATTEMPT:'2'};const run={id:1,run_attempt:2,repository:{full_name:repository},head_repository:{full_name:repository},head_sha:sha,head_branch:'main',event:'workflow_dispatch',path:'.github/workflows/research-ui-release.yml',status:'in_progress',conclusion:null};return {env,run,api:()=>run};}
+test('exact in-progress main manual publisher is accepted',()=>{const f=fixture();assertLimitedPublisherInvocation(sha,f.api,f.env);});
+test('stale executed workflow SHA and all alternate execution origins are rejected',()=>{for(const key of ['GITHUB_REPOSITORY','GITHUB_EVENT_NAME','GITHUB_REF','GITHUB_WORKFLOW_SHA','GITHUB_SHA','GITHUB_WORKFLOW_REF','GITHUB_RUN_ID','GITHUB_RUN_ATTEMPT']){const f=fixture();f.env[key]='changed';assert.throws(()=>assertLimitedPublisherInvocation(sha,f.api,f.env),/executed main/);}});
+test('stale attempts and mismatched remote publisher identity reject',()=>{for(const edit of [r=>r.run_attempt=3,r=>r.head_sha='b'.repeat(40),r=>r.repository.full_name='other/repo',r=>r.event='workflow_run',r=>r.path='.github/workflows/static-site.yml',r=>r.status='completed',r=>r.conclusion='failure']){const f=fixture();edit(f.run);assert.throws(()=>assertLimitedPublisherInvocation(sha,f.api,f.env),/attempt identity/);}});

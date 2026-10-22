@@ -1,5 +1,5 @@
-import { expect, it } from 'vitest';
-import { evidenceTimestamp, newYorkDate } from './evidenceTime';
+import { expect, it, vi } from 'vitest';
+import { evidenceTimestamp, newYorkDate, validClock, validEvidenceDay } from './evidenceTime';
 import { snapshotFreshness, quoteStatus } from './researchEngine';
 import { prepareSessionCurrent, sessionCurrent } from './researchPresentation';
 import { buildPortfolioPlan } from './portfolioPlan';
@@ -39,4 +39,45 @@ it('ignores malformed calendar observations while retaining verified long closur
   expect(prepareSessionCurrent([malformed], date)(now)).toBe(false);
   expect(sessionCurrent([malformed, row], date, now)).toBe(true);
   expect(prepareSessionCurrent([row], { toString: 42 })(now)).toBe(false);
+});
+
+it('keeps primitive caches equivalent across eviction, invalid dates and input types', () => {
+  const dayOracle = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value;
+  const inputs = [null, undefined, {}, [], 0, NaN, '2026-02-30', '2024-02-29', '2026-02-29', 'not a date', ' '.repeat(100), '2026-10-16T03:59:59.999Z'];
+  for (let day = 0; day < 600; day++) inputs.push(new Date(Date.UTC(2024, 0, 1) + day * 86400000).toISOString().slice(0, 10));
+  for (const value of [...inputs, ...inputs.slice().reverse(), ...inputs]) {
+    expect(validEvidenceDay(value)).toBe(dayOracle(value));
+    expect(evidenceTimestamp(value)).toBe(typeof value === 'string' ? Date.parse(value) : NaN);
+  }
+});
+it('preserves Date time-clip validation including fractional and boundary clocks', () => {
+  for (const value of [undefined, null, '', '0', [], {}, NaN, Infinity, -Infinity, 0, -0, .9, -.9, 8640000000000000, -8640000000000000, 8640000000000001, -8640000000000001]) {
+    expect(validClock(value)).toBe(typeof value === 'number' && Number.isFinite(value) && Number.isFinite(new Date(value).getTime()));
+  }
+});
+it('does not round or reuse the day across midnight, DST or clock rollback', () => {
+  const formatter = new Intl.DateTimeFormat('en-CA', {timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'});
+  const clocks = ['2026-10-16T03:59:59.999Z', '2026-10-16T04:00:00.000Z', '2026-03-08T06:59:59.999Z', '2026-03-08T07:00:00.000Z', '2026-11-01T05:59:59.999Z', '2026-11-01T06:00:00.000Z'].map(Date.parse);
+  for (const now of [...clocks, ...clocks.slice().reverse()]) {
+    expect(newYorkDate(now)).toBe(formatter.format(now));
+    expect(newYorkDate(now)).toBe(formatter.format(now));
+    expect(newYorkDate(NaN)).toBeNull();
+    expect(newYorkDate(now)).toBe(formatter.format(now));
+  }
+});
+
+it('reuses primitive parsing and ICU formatting for repeated exact inputs', () => {
+  const parse = vi.spyOn(Date, 'parse');
+  const format = vi.spyOn(Intl.DateTimeFormat.prototype, 'format', 'get');
+  try {
+    for (let repeat = 0; repeat < 100; repeat++) {
+      expect(evidenceTimestamp('1987-01-17T12:34:56.789Z')).toBe(537885296789);
+      expect(validEvidenceDay('1987-01-17')).toBe(true);
+      expect(newYorkDate(537885296789)).toBe('1987-01-17');
+    }
+    expect(parse).toHaveBeenCalledTimes(2);
+    expect(format).toHaveBeenCalledTimes(1);
+  } finally {
+    parse.mockRestore(); format.mockRestore();
+  }
 });

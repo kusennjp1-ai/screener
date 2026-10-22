@@ -1,8 +1,9 @@
+import { withAuditFixture } from './testAuditFixture';
 import { expect, it, vi } from 'vitest';
 import { advanceDailyWatch, advanceLiveWatch, deliverLocalWatchNotification, emptyWatchState, readWatchState, WATCH_NOTIFICATION_KEY } from './watchNotifications';
 
 const d1 = '2026-09-29', d2 = '2026-09-30', now = Date.parse('2026-10-01T14:00:00Z');
-const row = (price, date = d1, extra = {}) => ({ symbol: 'CASE', current_price: price, se_pivot_price: 100, technical_audit: { valid: true, as_of_date: date }, ...extra });
+const row = (price, date = d1, extra = {}) => ({ ...withAuditFixture({ symbol: 'CASE', current_price: price, se_pivot_price: 100 }, date), ...extra });
 const daily = (previous, price, date = d1, extra = {}) => advanceDailyWatch(previous, { rows: [row(price, date)], watch: ['CASE'], asOf: date, method: 'minervini', now, ...extra });
 const quote = (price, ms = 0, extra = {}) => ({ symbol: 'CASE', price, source: 'Finnhub', as_of: new Date(now + ms).toISOString(), is_realtime: true, delay_seconds: 0, ...extra });
 const live = (previous, price, ms = 0, extra = {}) => advanceLiveWatch(previous, { row: row(98), watch: ['CASE'], asOf: d1, method: 'minervini', quote: quote(price, ms), connected: true, now: now + ms, ...extra });
@@ -87,4 +88,23 @@ it('opens the symbol when a supported desktop notification is clicked without a 
     expect(focus).toHaveBeenCalledOnce();
     expect(assign).toHaveBeenCalledWith('https://example.com/screener/#/?symbol=CASE');
   } finally { vi.unstubAllGlobals(); }
+});
+
+it('never creates daily or live alerts from a legacy audit that still says valid', () => {
+  const legacy = row(102, d2);
+  legacy.technical_audit.version = 'ohlcv-v1';
+  delete legacy.technical_audit.status;
+  const before = daily(emptyWatchState(), 98).state;
+  const result = daily(before, 102, d2, { rows: [legacy] });
+  expect(result.added).toEqual([]);
+  expect(result.state.observations['minervini:CASE'].state).toBeNull();
+  const liveResult = advanceLiveWatch({ symbol: 'CASE', method: 'minervini', timestamp: now - 1000, state: 'ピボット待ち' }, {
+    row: legacy, watch: ['CASE'], asOf: d2, method: 'minervini', quote: quote(102), connected: true, now });
+  expect(liveResult).toEqual({ observation: null, event: null });
+});
+
+it.each([undefined, null, ''])('rejects live transitions without an analysis date: %s', asOf => {
+  const result = advanceLiveWatch({ symbol: 'CASE', method: 'minervini', timestamp: now - 1000, state: 'ピボット待ち' }, {
+    row: row(102), watch: ['CASE'], asOf, method: 'minervini', quote: quote(102), connected: true, now });
+  expect(result).toEqual({ observation: null, event: null });
 });

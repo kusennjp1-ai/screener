@@ -3,15 +3,17 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { bootstrap } from './publication-state.mjs';
+import { completeInventory, validateCandidateRecord, validateFinancialReleaseReceipt } from './financial-release-activation.mjs';
+import { validateRenewalCandidate } from './financial-source-renewal.mjs';
 
 const releaseCli = fileURLToPath(new URL('./select-release-source.mjs', import.meta.url));
 const previewUrl = new URL('./financial-candidate-preview.mjs', import.meta.url).href;
 const sha = 'a'.repeat(40);
 
-function fixture(t, { currentSha = sha, preload = '', systemTools = false } = {}) {
+function fixture(t, { currentSha = sha, preload = '', systemTools = false, runtimeHook = true } = {}) {
   const root = mkdtempSync(join(tmpdir(), 'release-source-cli-'));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const bin = join(root, 'bin'), event = join(root, 'event.json'), output = join(root, 'output');
@@ -39,13 +41,13 @@ process.stdout.write(JSON.stringify(api[endpoint]));
   const hook = join(root, 'fetch.mjs');
   writeFileSync(hook, preload || "globalThis.fetch = () => { throw Error('Unexpected fixture fetch'); };");
   return {
-    root, output, trace,
-    invoke(command = 'plan') {
+    root, output, trace, event,
+    invoke(command = 'plan', eventName = 'workflow_dispatch') {
       // Start the real entrypoint in a fresh process: importing its exports in
       // the test runner would complete evaluation before dispatch and hide this bug.
-      return spawnSync(process.execPath, ['--import', hook, releaseCli, command], {
+      return spawnSync(process.execPath, [...(runtimeHook ? ['--import', hook] : []), releaseCli, command], {
         cwd: root, encoding: 'utf8', timeout: 10000,
-        env: { PATH: systemTools ? `${bin}:${process.env.PATH}` : bin, RUNNER_TEMP: root, GITHUB_EVENT_PATH: event, GITHUB_EVENT_NAME: 'workflow_dispatch',
+        env: { PATH: systemTools ? `${bin}:${process.env.PATH}` : bin, RUNNER_TEMP: root, GITHUB_EVENT_PATH: event, GITHUB_EVENT_NAME: eventName,
           GITHUB_REPOSITORY: bootstrap.repository, RELEASE_SHA: sha, GITHUB_OUTPUT: output },
       });
     },
@@ -132,4 +134,58 @@ test('prepare-only correction recheck remains outside the hosted payload guard',
   assert.equal(result.stdout, '');
   assert.match(result.stderr, /Current-main publication gates changed/);
   assert.ok(existsSync(f.trace));
+});
+
+const previewRecord={schema:'design-financial-carry-preview-v1',publication_authority:'none',financial_admission:false,
+  ui_sha:sha,baseline_sha:'b'.repeat(40),source_financial_generation:'c'.repeat(64),financial_generation:'d'.repeat(64),financial_lineage_sha256:'e'.repeat(64),logical_data_inventory_sha256:'f'.repeat(64)};
+
+test('ordinary carry build rejects runtime hooks before reading state or producing effects', t => {
+  const f = fixture(t), before = completeInventory(f.root);
+  assert.equal(existsSync(join(f.root, 'verified-publication/state.json')), false);
+  const result = f.invoke('ordinary-carry-build');
+  assert.ifError(result.error);
+  assert.equal(result.status, 1, result.stderr);
+  assert.match(result.stderr, /Ordinary carry does not accept runtime hooks/);
+  assert.equal(result.stdout, '');
+  assert.equal(existsSync(f.trace), false);
+  assert.equal(existsSync(f.output), false);
+  assert.deepEqual(completeInventory(f.root), before);
+});
+
+for(const command of ['restore','prepare-carry','ordinary-carry-build','publisher-build-before','publisher-build-after','compose','recheck']){
+  test(`publisher ${command} rejects Design and preview markers before any effect`, t=>{
+    for(const state of [
+      {decision:{mode:'design'}},
+      {...previewRecord,decision:{mode:'data'}},
+      {decision:{mode:'activation'},publication_authority:'publish'},
+      {decision:{mode:'renewal'},financial_admission:true},
+      {decision:{mode:'data'},carry:{schema:'design-financial-carry-preview-v1'}},
+      {decision:{mode:'data'},designCarryPreview:null},
+      {decision:{mode:'activation'},activation:{record:previewRecord}},
+      {decision:{mode:'renewal'},renewal:{record:previewRecord}},
+      {decision:{mode:'data'},source:{publication:previewRecord}},
+      {decision:{mode:'data'},correction:{record:previewRecord}},
+    ]){
+      // Keep this probe hook-free so ordinary-carry-build reaches the preview
+      // guard; runtime-hook rejection is tested separately above.
+      const f=fixture(t,{runtimeHook:false}),directory=join(f.root,'verified-publication');mkdirSync(directory);
+      writeFileSync(join(directory,'state.json'),JSON.stringify(state));
+      writeFileSync(f.event,JSON.stringify({workflow_run:{path:'.github/workflows/ci.yml'}}));
+      // Include representative authority controls so a rejected preview must
+      // leave the request, pins, registry and existing release bytes untouched.
+      for(const path of ['.github/financial-release-request.json','.github/financial-activation-candidate.json','.github/financial-source-renewal-registry.json','release/frontend/dist/publication.json']){
+        const file=join(f.root,path);mkdirSync(dirname(file),{recursive:true});writeFileSync(file,'{"unchanged":true}');
+      }
+      const before=completeInventory(f.root),result=f.invoke(command,'workflow_run');
+      assert.ifError(result.error);assert.equal(result.status,1,result.stderr);assert.match(result.stderr,/Design preview state cannot enter publisher commands/);
+      assert.equal(result.stdout,'');assert.equal(existsSync(f.trace),false);assert.equal(existsSync(f.output),false);
+      assert.deepEqual(completeInventory(f.root),before,`${command} must fail before modifying any local state`);
+    }
+  });
+}
+
+test('carry Design provenance cannot serve as an activation, renewal or financial release record',()=>{
+  assert.throws(()=>validateCandidateRecord(previewRecord));
+  assert.throws(()=>validateRenewalCandidate(previewRecord));
+  assert.throws(()=>validateFinancialReleaseReceipt(previewRecord));
 });

@@ -1,3 +1,5 @@
+import { formatPrice } from '../../static/positionGeometry';
+
 const valid = value => Number.isFinite(value) && value > 0;
 
 export function tradeLevelRange({ pivot, upper, stop }) {
@@ -8,7 +10,7 @@ export function tradeLevelRange({ pivot, upper, stop }) {
 class LevelAxisView {
   constructor(source, price, label, color) { Object.assign(this, { source, price, label, color }); }
   coordinate() { return this.source.series?.priceToCoordinate(this.price) ?? -10000; }
-  text() { return `${this.label} ${this.price.toFixed(2)}`; }
+  text() { return `${this.label} ${formatPrice(this.price)}`; }
   textColor() { return this.color; }
   backColor() { return this.source.palette.panel; }
   visible() { return valid(this.price); }
@@ -45,11 +47,11 @@ class LevelPaneView {
 // Uses the same pivot / upper / stop values as the entry card. Expands only the
 // visual price range, never the selected setup or any purchase condition.
 export class TradeLevelsPrimitive {
-  constructor(levels, palette) {
+  constructor(levels, palette, { axisLabels = true } = {}) {
     this.levels = levels; this.palette = palette;
     this.pane = [new LevelPaneView(this)];
     this.axis = [[levels.upper, '上限', palette.zone], [levels.pivot, 'ピボット', palette.zone], [levels.stop, '損切り例', palette.neg]]
-      .filter(([price]) => valid(price)).map(([price, label, color]) => new LevelAxisView(this, price, label, color));
+      .filter(([price]) => axisLabels && valid(price)).map(([price, label, color]) => new LevelAxisView(this, price, label, color));
   }
   attached({ series }) { this.series = series; }
   detached() { this.series = null; }

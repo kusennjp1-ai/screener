@@ -39,6 +39,15 @@ describe('one-condition-away is a distinct watch view', () => {
     expect(filterRanked(ranked, { nearOnly: true, liquidOnly: true })).toHaveLength(1);
     expect(filterRanked(ranked, { nearOnly: true, search: 'small', watchlist: ['SMALL'] }).map(item => item.row.symbol)).toEqual(['SMALL']);
   });
+  it('excludes a financially unconfirmed symbol even when only one technical condition is missing', () => {
+    const value = sample('NVDA', { financial_history: null });
+    value.technical_audit.values.sma200_21ago = 120;
+    const ranked = rankCandidates([value], 'minervini', { now });
+    expect(ranked[0].assessment).toMatchObject({ passed: 8, total: 9, qualified: false, financial_exclusion: { symbol: 'NVDA' } });
+    expect(singleMissingCondition(ranked[0].assessment)).toBeNull();
+    expect(filterRanked(ranked, { nearOnly: true })).toEqual([]);
+    expect(filterRanked(ranked, { search: 'NVDA' })).toHaveLength(1);
+  });
   it('exports the full missing rule and its state; passes and multiple-missing rows stay empty', () => {
     const rows = [sample('PASS'), sample('FAIL', { rs_rating: 69 }), sample('UNKNOWN', { institutional_evidence: null })];
     const minervini = researchCsv(rankCandidates(rows, 'minervini',{now}), 'minervini', date,now);

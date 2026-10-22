@@ -29,7 +29,7 @@ export default function QualificationVerification({ row, entry, date, generation
     {includeFinancial && <FinancialHistory row={row} date={date} now={now} />}
     {includeFinancial && <InstitutionalEvidence row={row} date={date} />}
     <Typography component="h3" variant="subtitle1" sx={{ mt: 2 }}>選出条件の再検証</Typography>
-    <Typography sx={{ fontSize: 12, my: 1 }}>公開時に日足から再計算。トレンド8条件とデータ整合性を別々に確認します。252営業日を52週の近似とし、SMA200の方向は21営業日前との比較です。RS・財務値の提供元そのものの正確性は保証しません。</Typography>
+    <Typography sx={{ fontSize: 12, my: 1 }}>公開時に日足から再計算。トレンド8条件とデータ整合性を別々に確認します。取引所営業日との連続性を確認し、52週高安は基準日の364日前から当日までの日付範囲で計算します。SMA200の方向は21営業日前との比較です。RS・財務値の提供元そのものの正確性は保証しません。</Typography>
     <Button variant="outlined" size="small" disabled={!entry?.path || query.isFetching} onClick={async () => {
       const response = await query.refetch();
       if (!response.isError && response.data) onVerified?.(row.symbol, { ...response.data, assessment: assess({ ...row, technical_audit: response.data.audit }, method, Date.now()) }, date, generation);

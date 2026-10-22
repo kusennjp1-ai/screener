@@ -1,6 +1,6 @@
 vi.mock('./staticPublication', async importOriginal => ({ ...await importOriginal(), resolveStaticPublication: async ({ publication, generation } = {}) => publication || { mode: 'legacy', baseURL: new URL('/', location.href).href, generation } }));
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor, fireEvent, act } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent, act, within } from '@testing-library/react';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -12,6 +12,7 @@ import { staticChartKeys } from './chartClient';
 
 // Vitest stubs CSS imports in this suite, so read the actual cascade input.
 const workbenchCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'workbench.css'), 'utf8');
+const chartControlsCss = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../components/Charts/researchChartControls.css'), 'utf8');
 
 const chartSpy = vi.fn();
 const sidebarSpy = vi.fn();
@@ -19,7 +20,7 @@ const sidebarSpy = vi.fn();
 vi.mock('../components/Charts/CandlestickChart', () => ({
   default: (props) => {
     chartSpy(props);
-    return <><div className="chart-research-meta" data-testid="chart-meta-actions">{props.researchMetaActions}</div><div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div></>;
+    return <><div className="research-chart-controls" data-testid="chart-control-actions">{props.researchActions}</div><div className="chart-research-meta" data-testid="chart-meta-actions">{props.researchMetaActions}</div><div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div></>;
   },
 }));
 
@@ -55,6 +56,37 @@ const renderModal = (props, cachedPayload = null) => {
   const view = render(element(props));
   return { ...view, rerenderModal: nextProps => view.rerender(element(nextProps)) };
 };
+
+it('separates expanded selection evidence from purchase readiness and discloses its actual date', async () => {
+  const date='2026-10-02', row={symbol:'SYNTH',as_of_date:'2026-10-01',current_price:100};
+  const payload={symbol:row.symbol,as_of_date:date,bars:[{date,close:100}],stock_data:row};
+  const view=renderModal({open:true,onClose:vi.fn(),initialSymbol:row.symbol,date,now:Date.parse('2026-10-03T12:00:00Z'),
+    researchRows:[row],chartIndex:{symbols:[{symbol:row.symbol,path:'synthetic.json'}]}},payload);
+  await screen.findByTestId('static-candlestick-chart');
+  fireEvent.click(screen.getByText('選定条件の詳細（0/9）'));
+  expect(screen.getByText(/選出の一次条件です/)).toHaveTextContent('購入条件とは別に確認');
+  const context=screen.getByRole('group',{name:'選出データの参照情報'});
+  expect(context).toHaveTextContent('分析基準日 2026-10-02 ／ 画面の配信版 未確認');
+  expect(context).toHaveTextContent('選出データの対象日 2026-10-01 ／ 日付の対応 不一致');
+  expect(screen.getByText(/条件ごとの提供元/)).toHaveTextContent('記載がない提供元・対象日は未確認');
+  view.unmount();
+});
+
+it('keeps not-applicable rules out of the mobile failed-or-unknown summary', async () => {
+  vi.stubGlobal('matchMedia',vi.fn(()=>({matches:true,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+  const date='2026-10-02', row={symbol:'BITU',market:'US',company_name:'ProShares Ultra Bitcoin ETF',as_of_date:date,current_price:100};
+  const payload={symbol:row.symbol,as_of_date:date,bars:[{date,close:100}],stock_data:row};
+  const view=renderModal({open:true,onClose:vi.fn(),initialSymbol:row.symbol,date,now:Date.parse('2026-10-03T12:00:00Z'),method:'oneil',
+    researchRows:[row],chartIndex:{symbols:[{symbol:row.symbol,path:'synthetic-fund.json'}]}},payload);
+  await screen.findByTestId('static-candlestick-chart');
+  const readiness=screen.getByTestId('mobile-chart-readiness');
+  expect(readiness).toHaveTextContent('対象外：共通購入モデルへの適合');
+  expect(within(readiness).getByText(/^未達・未確認：/)).not.toHaveTextContent('共通購入モデルへの適合');
+  expect(readiness).not.toHaveTextContent('日次条件を確認済み');
+  const rules=screen.getByRole('list',{name:'選定条件の判定内訳',hidden:true});
+  expect(within(rules).getByText(/C：四半期 EPS/).textContent).toContain('対象外');
+  view.unmount();vi.unstubAllGlobals();
+});
 
 describe('StaticChartViewerModal', () => {
   it('does not assess a missing selection while the global scan list loads', () => {
@@ -227,6 +259,7 @@ describe('StaticChartViewerModal', () => {
 });
 
 it.each([false, true])('keeps the complete mobile warning and swipe controls when short-viewport reflow is %s', async short => {
+  render(<style>{chartControlsCss}</style>);
   vi.stubGlobal('matchMedia', vi.fn(query => ({ matches: query.includes('max-height') ? short : true, addEventListener: vi.fn(), removeEventListener: vi.fn(), addListener: vi.fn(), removeListener: vi.fn() })));
   vi.stubGlobal('fetch', vi.fn());
   const props = { open:true, onClose:vi.fn(), initialSymbol:'FIT', date:'2026-10-01', chartIndex:{symbols:[{symbol:'FIT',path:'charts/FIT.json'}]} };
@@ -237,6 +270,13 @@ it.each([false, true])('keeps the complete mobile warning and swipe controls whe
   // including a late-loaded stylesheet. RTL cleans up this style node.
   expect(workbenchCss).toContain('.chart-research-meta>div{margin:0!important;font-size:11px}');
   render(<style>{workbenchCss}</style>);
+  const controls=document.createElement('div');controls.className='research-chart-controls';
+  const target=document.createElement('button');controls.append(target);screen.getByTestId('static-candlestick-chart').append(controls);
+  expect(getComputedStyle(controls).paddingTop).toBe(short?'0px':'4px');
+  expect(getComputedStyle(controls).paddingBottom).toBe(short?'0px':'4px');
+  expect(getComputedStyle(controls).paddingLeft).toBe('4px');expect(getComputedStyle(controls).paddingRight).toBe('4px');
+  expect(getComputedStyle(target).minHeight).toBe('44px');
+  expect(getComputedStyle(controls).gap).toBe('2px');
   const header = screen.getByTestId('expanded-chart-header');
   const readiness = screen.getByTestId('mobile-chart-readiness');
   const interaction = screen.getByTestId('mobile-chart-interaction');
@@ -246,7 +286,10 @@ it.each([false, true])('keeps the complete mobile warning and swipe controls whe
   expect(getComputedStyle(readiness).fontSize).toBe('12px');
   expect(readiness.querySelector('.entry-source-badge')).toHaveTextContent('△ 書籍目安2〜3%超');
   expect(screen.getByText('$104.00 · 2026-10-01 日次終値')).toBeInTheDocument();
-  expect(interaction.closest('[data-testid="chart-meta-actions"]') !== null).toBe(short);
+  expect(interaction.closest('[data-testid="chart-control-actions"]') !== null).toBe(short);
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({compactResearchChrome:short}));
+  expect(getComputedStyle(interaction).minWidth).toBe(short?'max-content':'0px');
+  expect(interaction.querySelector('span').classList.contains('sr-only')).toBe(short);
   expect(interaction).toHaveTextContent('左スワイプ：次 ／ 右：前');
   expect(getComputedStyle(interaction).fontSize).toBe('12px');
   expect(screen.getByRole('button',{name:'チャート操作（拡大・移動）'})).toHaveStyle({minHeight:'44px'});
@@ -276,7 +319,7 @@ it('preserves pan mode and keyboard focus as short-phone controls move between r
     const control = screen.getByRole('button',{name:'銘柄スワイプに戻る'});
     expect(control).toHaveFocus();
     expect(control).toHaveAttribute('aria-pressed','true');
-    expect(control.closest('[data-testid="chart-meta-actions"]') !== null).toBe(short);
+    expect(control.closest('[data-testid="chart-control-actions"]') !== null).toBe(short);
     expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({interactive:true}));
   }
   const close = screen.getByRole('button',{name:'チャートを閉じる'});
@@ -286,6 +329,57 @@ it('preserves pan mode and keyboard focus as short-phone controls move between r
   fireEvent.keyDown(window,{key:'Escape'});
   expect(props.onClose).toHaveBeenCalledOnce();
   unmount(); vi.unstubAllGlobals();
+});
+
+it('uses the same focused 44px navigation targets in short-phone title space without a bottom row', async () => {
+  const heightListeners=new Set(),heightQuery={matches:false,addListener:callback=>heightListeners.add(callback),removeListener:callback=>heightListeners.delete(callback)};
+  vi.stubGlobal('matchMedia',vi.fn(query=>query.includes('max-height')?heightQuery:{matches:true,addListener:vi.fn(),removeListener:vi.fn()}));
+  vi.stubGlobal('fetch',vi.fn());
+  const props={open:true,onClose:vi.fn(),initialSymbol:'FIT',date:'2026-10-01',chartIndex:{symbols:[{symbol:'FIT',path:'charts/FIT.json'},{symbol:'NEXT',path:'charts/NEXT.json'}]}};
+  const payload={symbol:'FIT',as_of_date:'2026-10-01',bars:[{date:'2026-10-01',close:104}],stock_data:{symbol:'FIT',current_price:104,se_pivot_price:100}};
+  const {unmount}=renderModal(props,payload);
+  await screen.findByTestId('static-candlestick-chart');
+  const next=screen.getByRole('button',{name:'次の銘柄'}),navigation=screen.getByTestId('expanded-chart-footer');
+  act(()=>next.focus());
+  for(const short of [true,false,true]) {
+    act(()=>{heightQuery.matches=short;heightListeners.forEach(callback=>callback());});
+    expect(screen.getByRole('button',{name:'次の銘柄'})).toBe(next);expect(next).toHaveFocus();
+    expect(navigation).toHaveAttribute('data-placement',short?'header':'footer');
+    expect(navigation).toHaveStyle({position:short?'absolute':'relative'});
+    expect(next).toHaveTextContent(short?'次':'次の銘柄');
+    if(short)expect(next).toHaveStyle({minWidth:'44px',height:'44px'});
+    expect(screen.getByText('$104.00 · 2026-10-01 日次終値')).toBeInTheDocument();
+    expect(screen.getByTestId('mobile-chart-readiness')).toHaveTextContent('未達・未確認');
+  }
+  expect(navigation).toHaveAttribute('data-navigation-count','2');
+  expect(screen.getByRole('button',{name:'チャートを閉じる'})).toHaveStyle({width:'44px',height:'44px'});
+  fireEvent.keyDown(window,{key:'Escape'});expect(props.onClose).toHaveBeenCalledOnce();
+  unmount();vi.unstubAllGlobals();
+});
+
+it('keeps a real failed-detail warning below compact title controls across height changes', async () => {
+  const heightListeners=new Set(),heightQuery={matches:true,addListener:callback=>heightListeners.add(callback),removeListener:callback=>heightListeners.delete(callback)};
+  vi.stubGlobal('matchMedia',vi.fn(query=>query.includes('max-height')?heightQuery:{matches:true,addListener:vi.fn(),removeListener:vi.fn()}));
+  const fetch=vi.fn().mockRejectedValue(new Error('detail unavailable'));
+  vi.stubGlobal('fetch',fetch);
+  const row={symbol:'FAILED',current_price:104,se_pivot_price:100,research_detail_path:'failed-detail.json'};
+  const props={open:true,onClose:vi.fn(),initialSymbol:row.symbol,date:'2026-10-01',researchRows:[row],chartIndex:{symbols:[{symbol:row.symbol,path:'charts/FAILED.json'},{symbol:'NEXT',path:'charts/NEXT.json'}]}};
+  const payload={symbol:row.symbol,as_of_date:props.date,bars:[{date:props.date,close:104}],stock_data:row};
+  const {unmount}=renderModal(props,payload);
+  await screen.findByTestId('static-candlestick-chart');
+  await screen.findByTestId('expanded-chart-warning');
+  expect(fetch).toHaveBeenCalledWith(expect.stringContaining('failed-detail.json'),expect.anything());
+  const next=screen.getByRole('button',{name:'次の銘柄'});act(()=>next.focus());
+  for(const short of [true,false,true]){
+    act(()=>{heightQuery.matches=short;heightListeners.forEach(callback=>callback());});
+    const warning=screen.getByTestId('expanded-chart-warning'),header=screen.getByTestId('expanded-chart-header');
+    expect(warning).toHaveTextContent('詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。');
+    expect(header.contains(warning)).toBe(short);
+    if(short){expect(getComputedStyle(warning).gridColumn.replaceAll(' ','')).toBe('1/-1');expect(getComputedStyle(warning).gridRow).toBe('3');}
+    else expect(warning.nextElementSibling).toBe(header);
+    expect(next).toHaveFocus();expect(screen.getByRole('button',{name:'次の銘柄'})).toBe(next);
+  }
+  unmount();vi.unstubAllGlobals();
 });
 
 it('fits mobile cached opens and resizes without allowing scrolling or below-chart disclosures to shrink the plot', async () => {

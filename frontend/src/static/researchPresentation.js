@@ -1,10 +1,12 @@
+import { setupReadiness } from './setupReadiness.js';
+import { hasVerifiedDailyBars } from './qualificationAudit.js';
 import { corporateFinancialsAllowed } from './instrumentApplicability.js';
 import { sectorKey } from './sectorDefinitions.js';
 import { evidenceTimestamp, newYorkDate, validEvidenceDay } from './evidenceTime.js';
 // Shared presentation contracts: a price level is not evidence of a valid base.
 export function canonicalPivot(row) {
   const raw = row?.se_pivot_price ?? row?.vcp_pivot;
-  if (!Number.isFinite(raw) || raw <= 0) return { price: null, reason: row?.setup_recalculation?.status === 'calculated' ? '再計算済み・現在有効なピボットなし' : row?.setup_recalculation?.status === 'unavailable' ? '日足の不足・不整合で再計算不可。旧水準は無効' : row?.price_quality?.status === 'replaced' ? '日足修復済み・セットアップの再計算待ち' : 'ピボット未取得' };
+  if (!Number.isFinite(raw) || raw <= 0) return { price: null, reason: row?.setup_recalculation?.status === 'calculated' ? '再計算済み・現在有効なピボットなし' : row?.setup_recalculation?.status === 'unavailable' ? `セットアップ再計算不可。${setupReadiness(row).reason}。旧水準は無効` : row?.price_quality?.status === 'replaced' ? '日足修復済み・セットアップの再計算待ち' : 'ピボット未取得' };
   const distance = row.current_price / raw - 1;
   if (Number.isFinite(distance) && Math.abs(distance) > .25) return { price: null, reason: '現在値から25%超離れた旧水準・ベースの再形成待ち' };
   return { price: raw, reason: row.se_pivot_price != null ? 'Setup Engine（日次）' : 'VCP（日次）' };
@@ -16,9 +18,9 @@ export function filterRanked(ranked, { search = '', qualifiedOnly = false, nearO
     (!sector || sectorKey(r.gics_sector)===sector) &&
     (!liquidOnly || (Number.isFinite(r.current_price) && Number.isFinite(r.adv_usd) && r.current_price >= 10 && r.adv_usd >= 20000000)) &&
     (!qualifiedOnly || (corporateFinancialsAllowed(r) && a.qualified)) && (!watchlist || watchlist.includes(r.symbol)) &&
-    (!nearOnly || (corporateFinancialsAllowed(r) && a.total > 0 && a.passed === a.total - 1 && !a.qualified)) &&
+    (!nearOnly || (corporateFinancialsAllowed(r) && !a.financial_exclusion && a.total > 0 && a.passed === a.total - 1 && !a.qualified)) &&
     (!query || `${r.symbol} ${r.company_name || ''}`.toUpperCase().includes(query)) &&
-    (coverage === 'all' || (coverage === 'verified') === (r.technical_audit?.valid === true)));
+    (coverage === 'all' || (coverage === 'verified') === (hasVerifiedDailyBars(r))));
 }
 
 export function sessionCurrent(rows, date, now) {

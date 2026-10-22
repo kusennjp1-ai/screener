@@ -619,3 +619,182 @@
 - **③ 前サイクルの説明訂正**: 「敗因は現金保有の機会損失」は誤り（強気年にマイナス＝機会損失では説明不能）。真因の大半は上記②で、残る劣後は「乗り切れない」であって「負ける」ではない。OBJECTIVE.md/scorecard.jsonを訂正値に更新（スマホにも訂正注記を表示）。
 - **④ CIスモークの根本原因（07d1c7c）**: 3PR連続で全6件が「画面が描画されない」で失敗。`webServer.port`＝TCP接続で準備完了と誤判定していたため`url`待ちに変更＋CI用に30s。**ただし修正後も同症状が継続＝仮説は反証**（30s適用済み・サーバー起動正常・12/12失敗）。手元はCI=trueでも通過するため環境依存。調査継続（次: 失敗時のerror-context/traceとdev-server stdoutの採取）。
 - **教訓（恒久）**: 戦略の優劣を語る前に**計測系を疑う**。今回は結論の6割が計測由来だった。
+
+
+### 2026-10-12 — 銘柄詳細・履歴のアクセシビリティ（ローカル限定）
+
+- 依頼：3649934を保持して、操作/フォーカス復帰/状態名/チャート数値代替を点検。既存EPS理由・閾値・日付の可読性を確認。
+- 既存財務パネルは必要情報を文字表示済み。不足していた拡大チャートの状態名・値・既存根拠、日足のキーボード選択可能な数値代替を追加。判定・財務の算定は無変更。
+- 購入条件へのfocus移動、モバイル上部の一覧戻りのfocus復帰を修正。375pxのfocus下端812pxがナビ上端756pxより下に残る問題を再現し、研究ページ限定scroll-paddingで解消。
+- 最終全Vitest233 files/2938 passed。関連81、Playwright詳細4/市場履歴2、axe0、lint0errors/既存6warnings、build成功/既存chunk警告。Golden43passed。redline262passed/既存1failed（ftnt.csv tight_near_highs、前段baselineと同じ）。期待値の緩和なし。
+- 合成fixtureのみ、375/1440px×明暗の最終画像20枚。実音声screen reader未試聴、実データ精度・全履歴・投資性能は未検証。新規ライブラリなし。最初のCLIはcwd誤りでnpxがregistry解決を試み失敗、その後は既存frontendバイナリのみ。
+- ローカル私有ブランチと検証ZIPに保存。Library接続再試行・push・PR・公開・通信設定変更なし。次：実音声読み上げの確認、実データproducerは別作業として残る。
+
+
+### 2026-10-12 — 日足数値の選択日を配列更新から保護（ローカル限定・別コミット）
+
+- 基点a665631を保持。回帰テストを先に追加（関連28件中12失敗）、逆順indexによる選択を日付保持へ変更した。実装変更はChartNumericDataのみ。
+- 初期は配信内の最新日、選択後は同じ日。消えた日付は理由付きで最新日にリセットし、空→再配信で古い選択を復活させない。未来日を補完しない。配列を変更せず、銘柄/分析基準日/末尾日の既存照合と0/欠損を維持。
+- 関連28成功（追加11件）、全Vitest233 files/2949成功。Playwright詳細4＋市場履歴2成功、axe0、lint0errors/既存6warnings、build成功/既存chunk警告。Golden43成功。redline262成功/既存1失敗（ftnt.csv tight_near_highs）。
+- 合成データのみ。375/1440×明暗の通常の数値選択と最新日のチャート属性一致を実画面確認。動的配列差し替えのブラウザ検証、独立画像レビュー、実音声screen readerは未実施。順序不正/重複日付payloadの修復は対象外。
+- 前回成果物を保持し、今回分はchart-date-selection-verificationへ分離。Library保存再試行・外部取得・公開なし。次：独立画像レビューと実音声確認。市場履歴producer、財務capture/admissionには触れない。
+
+
+### 2026-10-12 — 選出/購入条件の参照情報と対象外の表示（ローカル限定・別コミット）
+
+- 基点3dc0da7の日付選択修正を保持。既存UIを監査し、拡大画面の選出/購入の区別と、根拠の対象日/画面基準日/表示用配信版の対応表示を追加。
+- 条件state/合格数を変更せず、pass/fail/unknown/not_applicable/referenceを維持。モバイル要約で対象外を未達・未確認から分離し、購入条件の対象外に「?」を付けないよう修正。
+- 出典やas-ofを補作しない。source対応不整合や欠損は既存の未確認理由を表示。generationは表示用envelopeであり提供元の原データ版ではないと明記。全ルールの構造化source/as-ofは未整備のまま。
+- 全Vitest234 files/2964成功、関連65成功（追加15件）。Playwright詳細4＋市場履歴2成功、axe0、lint0errors/既存6warnings、build成功/既存chunk警告。Golden43成功、redline262成功/既存1失敗（ftnt.csv tight_near_highs）。
+- 最初のブラウザ実行は候補順に対するテスト操作の誤りで1失敗し、操作を修正して6件再成功。合成fixtureのみ。参照情報8枚・対象外1枚を今回ZIPに含める。作者画像抜き取り確認と独立レビュー/音声screen reader未実施を区別。
+- 財務capture/admission/閾値・公開条件・missing-data規則は変更なし。複数比較/新依存/ピボット100は保留。Library保存再試行、外部取得、push/PR/公開なし。詳細はEVIDENCE_CONTEXT_AUDIT.md。
+
+
+### 2026-10-12 — 配列更新・異常値・前銘柄遅延応答の実画面検証（ローカル限定・別コミット）
+
+- 基点a7ece14と3dc0da7を保持。既存fixtureで375/1440pxの実画面を検査。最初の有効な20ケースの結果は7成功/13失敗。不正日付4種×2幅、不正数値2種×2幅の計12件で制御された欠損表示に到達せず、画面が失われた。残る1件はテスト側のOTHER既存キャッシュを消していなかった準備誤りで、製品の遅延応答バグとは扱わない。
+- 受信payloadの日付を既存validEvidenceDayで検証し、欠損/存在しない日/重複/順序逆転を拒否。既存の銘柄/as-of/末尾日照合を維持。並べ替え・重複解消・未来日の補完はしない。
+- 既存のOHLCV妥当性条件を共有関数へ分離。不正時は全描画系列を空にし、日足数値欄の未確認と実測0を維持。財務計算やEPS取得には触れず、EPS補助線の描画だけを旧系列とともに消去する。
+- 最終Playwright22成功（各幅11件、dark）。拡大画面も追加確認。既存詳細4＋市場履歴2成功、既存axe0。関連79/全Vitest2977成功（235 files、追加13件）。lint0errors/既存6warnings、build成功/既存chunk警告。Golden43成功、redline262成功/既存1失敗（ftnt.csv tight_near_highs）。
+- 同じidentityの履歴増減、選択日消失、空→復帰、同一as-ofでの末尾日変更拒否、重複/不正日/不正数値、前銘柄の遅延応答、数値と日付の一致を確認。数値欠損時の全11系列消去と復帰は描画APIの単体回帰で確認。日付選択の単体での並べ替え耐性と、受信契約の順序不正拒否を混同しない。
+- ブラウザではテスト専用に実QueryClientの参照だけを公開してHTTP再取得を指示。既存query key、fetch、選出/公開条件は変更なし。外部リクエストは遮断。描画エラーへの対処として条件ゲートを緩めていない。
+- 新しい検証ZIPはchart-payload-browser-verificationに保存。Library再試行、外部データ取得、push/PR/公開なし。次：未実施の独立画像レビュー/実音声確認、実データproducerは別作業。詳細はCHART_PAYLOAD_BROWSER_AUDIT.md。
+
+
+### 2026-10-12 — 年次EPS境界・通貨整合・Q/Qラベル修正（ローカル限定）
+
+- bb090658と元ブランチを保持し、private/financial-consistency-20261012で3項目を分離。25%ちょうどの浮動小数誤差を、受信数値の十進表記を用いた整数比比較で解消。直下・直上・ゼロ/負の比較元を固定し、epsilonや閾値緩和を使わない。丸めて25%と表示する直下ケースは未達の理由を追加表示。
+- legacy年次履歴のroot/cellの通貨・出典・単位不整合を完全/部分履歴で共通拒否。一覧変換で情報を消さず、raw/list/decoded/detailの未確認状態を一致させた。native通貨USD/CAD/EUR/GBP/CNYと独立した四半期履歴を維持。
+- 詳細スキャンの表・入力・適用チップに前四半期比を明記。Q/Q40/35とYoY−10/−5の合成入力で、補助フィルター通過と主画面EPS/売上条件未達の違いを確認。戦略やフィールド/保存キー/売買条件を統一しない。
+- 初回全Vitest236 files/2,995 testsは2,977成功・18失敗。新ヘルパーを公開処理テストの仮想checkoutへコピーする修正17件、版名のfinancial-current識別語復元1件で解消。該当2ファイルを含む最終6 files/273 tests成功。全体一括再走は未実施。公開処理本体・公開条件の変更なし。
+- 合成9例×4経路が一致。Python Decimalの独立計算2,708例一致。Playwright最終18成功（375/1440、dark）。作者が画面を抜き取り確認し、独立レビューは未実施。初回のブラウザ準備誤りと外部フォントの遮断記録も残す。外部取得は行わない。
+- lint0 errors/既存6 warnings、build成功/既存chunk警告、Golden43成功。backend redline262成功/前段からのftnt.csv tight_near_highs 1失敗。全ゲートgreenとは記録しない。実データbundleなし/export skip。
+- 旧バックエンド隔離・capture/admission・公開条件・認証・閾値を保持。原文/230ルール表は未確認のため書籍準拠を断言しない。外部取得・Library再試行・push/PR/merge/Actions/公開なし。本文diff/入力/期待値/出力はFINANCIAL_CONSISTENCY_REVIEW.md、ローカル検証パッケージはfinancial-consistency-fix-20261012。
+
+
+### 2026-10-11 — VCP footprint の経路別契約（ローカルのみ）
+- 基準 `8cf7d9b` で FTNT の既存テスト失敗を再現。終値151.350006、legacy高値87.820000、ATR比0.65465095。legacy false / MAなし / vol_contract true は正しい共存。
+- `legacy_detected` を追加し legacy 根拠と集約判定を明文化。既存キー、判定優先順位、pivot、閾値、fixture は変更しない。テストは legacy gates を legacy 判定に結び、全経路・非検出・経路重複・FTNTの実データを検証。
+- 対象＋legacy 32 passed。関連は変更前262 passed/1 failed → 272 passed。golden 43 passed。既存13 fixtureの既存フィールド完全一致。908 harnessの前後JSON完全一致（588 analyzable、FIRE87.2%、control61.4%、判別+25.8pp、SETUP判別+52.0pp）。right-edge P82/BR92/TPR100%、overall91%。
+- 既存消費側: Markets360 scannerのdetails、quality_rankのsource tier、static exportのbuy項目は従来の集約/sourceを使用。TechnicalIndicatorsのtightness表示は別legacy API。新キーは追加互換だが、未知の外部strict-key consumerは要確認。
+- 全体unit検証の最終結果・環境制約・ソース差分・生ログはLibrary検証パッケージで報告。bdは未インストール。push/PR/merge/公開/認証変更/外部市場データ取得なし。
+- 全unitの分割確認: 5590 passed / 80 failed / 2 skipped、Celery/Redis接続待ちの12件未完了。80失敗は同一環境の基準コミットでも全件再現。backend全体の収集はintegrationのlocalhost:8000接続拒否→SystemExitで停止。制限回避なし。
+
+
+### 2026-10-12 — 全体80失敗の初回分類・欠損価格によるclimax誤検出修正（ローカル）
+- VCPレビュー済みcb90cf2、unit隔離f8801abを親として保持。保存済み80失敗を暫定6群へ分類: API認証テスト前提29、同期/非同期契約12、rating/スキーマ/fixture契約22、参照資産/市場メタデータ11、時系列/キャッシュ5、依存境界1。分類は原因確定や全件修正を意味しない。
+- 実装不具合: climax判定の暗黙forward-fillで、欠損の前後にまたがる騰落を1日の上昇と誤認。合成データで偽のup-day frenzyとlargest-up-dayを再現し、sell_into_strengthが誤発火。既存pct_change方針に合わせfill_method=Noneを明示。閾値・score重み・既存fixture不変。
+- 欠損2ケースは修正前sell_into_strength→修正後hold。隣接する実測値の正例はsell_into_strength維持。新規3ケース＋既存を含む対象は修正前23 passed/3 failed→26 passed。関連302 passed（VCP/隔離修正含む）、golden43 passed、ネットワーク試行0。元の80失敗のうちpct_change policyの1件を解消。
+- 他79件は今回未対応。仕様根拠の不足や参照ファイル欠落を期待値変更/skip/閾値緩和で隠さない。全体suiteの再実行・本番反映なし。生ログ・node別分類・差分はローカル検証パッケージに保存。
+
+
+### 2026-10-12 — PR #98 exact head と財務UIのローカル統合候補
+- UI `134737f901bc5a3847fc50ceaac2ad59bda935de` と PR #98 `2de4270a0fb7608f3a892b6b04bfd2f1a5b4229d` のみを統合。共通祖先 `8cf7d9b231a5926696d261da51a4bab531f33cfa`。元ブランチを保持し、通常HTTPS git fetchで指定headの一致を確認。
+- 競合はSTATE/PROGRESSの2文書のみ。PROGRESSは共通本文と両側の追記を全保持、STATEは統合候補の現状に更新。コード・テスト・SPECは双方の差分をそのまま保持。83009c0等の別候補・保留境界修正は取り込まない。
+- UI単独の最終全体Vitestは236ファイル/2995件成功（exit 0、504.46秒）。追加の独立ソースレビューで主経路のブロッカーなし。これらは統合候補の検証結果とは区別する。
+- 統合候補のFTNT/関連backend/Golden/frontend全体/重要browser回帰をこれから検証。生ログと入力差分は `/workspace/pr98-ui-integration-20261012/` に保存。push/PR変更/main merge/Actions/公開なし。
+
+
+### 2026-10-13 — carry chart projection 所有境界の最小修正（ローカル限定）
+- 承認済みPR #99 head `32ee9c2116f8d8d42c70ed4607a94a7b311c0aa6`と元ブランチを保持し、private/projection-idempotence-20261013へ分離。remote操作・実データ取得なし。
+- 合成A/US、対象日2026-10-12、EPS YoY40、build2026-10-13T05:12:49.746Z、observed2026-10-04T11:00Z、expiry2026-10-10T12:00Zでstale_source→missing_or_invalid_valueを再現。aliasの新規objectに対する二重projectionがnullを期限より先に判定する。実際の失敗A bytesは不在で本番原因確定とは扱わない。
+- 通常exporterの1行を2行へ置換し、carry-owned chartはoverlayの一度のprojectionを保持。全ファイルが既存固定publisher fixtureのSHA-256 f9e0ad58f7bbaf911eab2943fcfb18df32f6ee881c3847272f5201e448d9cf40と一致。carryなしの出力を保持。一般projector、proof、理由コード、capture/admission、期限、generation、verifier、公開条件は変更しない。
+- 既存固定fixtureのテストを実exporterとも比較し、完全export/JSON/再exportの追加回帰を作成。修正前24成功/4失敗（verified-charts/.../fundamentals/.../state mismatch含む）→修正後28成功。raw/list/detail/chartの値・proof・generation・保存state一致、stale/missing/identity mismatch/current、値復活/状態偽装/改変拒否を確認。
+- 関連9 files/386成功、全Vitest236 files/2,996成功（exit0、501.94秒）、backend redline275成功、Golden43成功。lint0errors/既存6warnings、build成功/既存chunk警告。実bundleなしのbuild export skipを合成完全export検証と区別。UI component変更なし、ブラウザ未実施。
+- 追加controller203成功/1失敗はumask0077によるmode0600/期待0644。基点と同じcontroller/testを子プロセスのumask0022で対象全111成功。権限assertion/製品設定は変更せず、無条件greenとは記録しない。
+- 一般のコピー後の診断変化は残り、nullからの値復活は認めない。旧exporter hash固定helperは新候補を引き続き拒否。公開承認/条件の更新は今回の対象外。外部取得・archive/Library再試行・push・PR変更・merge・Actions・公開なし。生ログ/差分/入力/hashはprojection-idempotence-20261013へ保存。
+
+
+## 2026-10-13 市場履歴再監査・表示だけの追加修正
+
+基点c789647、private/market-history-audit-20261013。6項目9系列の表示契約が実装済みであることを確認。本番producer/exporter・実データbundleは不在。外部取得なし。
+
+小さい正のP/Cが0表示になる問題を科学表記で防御。既存銘柄別13F表示の欠損TypeError、空欄・文字列・取得不能0の数値らしい表示を未確認へ修正。四半期・購入者数との違いと銘柄identityを明示。institutionalGrowth/集計・財務ルール・公開gateは無変更。
+
+修正前：P/C4失敗、機関19/22失敗。修正後：関連44＋機関31成功（既存9重複）、全Vitest237 files/3023成功、node36成功、独立fixture36成功、13F合成5成功、backend275成功、Golden43成功、lint0 errors/既存6 warnings、build成功/実bundleなしexport skip。ブラウザ市場2＋機関2成功、375/1440px・明暗、外部遮断・合成のみ。画像目視・独立レビューblockingなし。
+
+残件は実producer・当時の母集団・確認済み方法・実データ検証、上流comparatorのnull観測オブジェクト防御（componentまで届く前の問題）、同瞬間Z/.000Zの保守的重複扱い。push/PR/merge/Actions/公開/認証変更なし。検証パッケージ `/workspace/market-history-audit-20261013/`。
+
+
+## 2026-10-13 13F履歴の上流入力防御
+
+68aedd0を保存しprivate/13f-history-guard-20261013で継続。null/非object/誤型/NaN/無効日付/重複期/逆順/疎配列・継承slotを未確認として拒否し、値補完・0化・合格化なし。transportによるarray→recordの正当化も防止。件数safe integer、通常増加/同数0/減少を保持。公表期限/期間日数/財務capture-admission/公開gate/exporterは不変。
+
+修正前node113中18失敗、consumer113中18失敗。後13Fnode114＋市場node36、独立コピー150、関連Vitest293、全Vitest238 files/3137（273.55秒）、backend275、Golden43、13F集計5成功。lint0 errors/既存6 warnings、build成功/実bundle不在export skip。ブラウザ6成功、375/1440px・明暗の全入力は合成で、retained財務データや本番Design実データ検証は未使用/未実施。前回画面確認も同じ区分。独立レビューblockingなし。
+
+PR99はc789647/draft/open/未mergeをread-only確認。68aedd0と今回修正はローカルのみ、push等なし。新market_indicator_history producerは未接続だが既存銘柄別13F producerは別途接続済み。pinned exporterの先行mapはmalformed sourceで引き続き停止するため公開経路全体の修復完了とは扱わない。詳細証拠 `/workspace/13f-history-guard-20261013/`。
+
+
+## 2026-10-13 — 市場履歴の疎配列と13F期間契約の追加修正（ローカルのみ）
+
+基点e02309a、branch private/history-period-contract-20261013。市場履歴のown slot/非配列record検証と、13Fの厳密な暦四半期末・隣接性を追加。通常市場の日付条件、財務capture/admission/判定、fixed exporter、公開条件は変更なし。入力の欠損補完・並べ替えによる救済なし。raw継承slotはJSON化で由来が失われるため対照を区別した。
+
+最終Nodeテストを基点で実行すると183中16失敗、修正後および独立コピー183成功。複数銘柄のraw/list/wire順位とqualifiedOnly、解析したCSVの状態/件数を検証（consumer120成功）。対象コンポーネント43成功。全Vitest238 files/3154成功（271.55秒）、backend275、Golden43、13F集計5成功。lint0 errors/既存6 warnings、build成功・実bundle不在でexport skip。独立15,351期間ペア/156疎配列/40通常日付対照成功。ブラウザ6成功（375/1440px明暗、合成のみ、外部遮断）；非四半期末の100→110社も前期比未確認のまま。実retained data/Design gate検証ではない。
+
+次：新market_indicator_history producerと実データ・当時母集団/出典/確認済み算定方法の接続。既存銘柄別13F producerとは区別する。未知値を合格やゼロに補わない。今回remote操作・外部市場データ取得・公開・認証変更なし。検証パッケージは /workspace/history-period-contract-20261013/ に保存。
+
+
+### 2026-10-13 — 保存済み13Fから市場履歴へのオフラインproducer接続
+
+- 検証済み95ba865と元branchを保持し、private/market-history-producer-20261013へ分離。6項目を再監査し、十分な保存入力がある13Fだけ新契約へ接続。市場全体P/C、当時母集団付き高安、2指数正式履歴、手動ベース、確認済み突破/接近は入力/定義不足のまま。外部取得なし。
+- 明示CLI→provenance付きsnapshot→SHA別immutable保存/catalog→未公開ローカルmanifest→市場ページを追加。取得日/対象期/as-of/cutoff/方法/部分母集団を分離し、銘柄別selectorで市場全体件数との混同を避ける。合成CLI経路で同一参照の手動再試行も検証。
+- null/空欄/0など不明な13F件数はnull、既知同数差分は0。逆順・重複・非四半期末・曖昧CUSIP・疎配列を拒否。元マイクロ秒取得文字列を保持し、表示時刻のみ遅い方の入力取得をミリ秒へ切捨てる。生成日時は取得日に流用しない。
+- 保存済み実集計でAAPL/AMD/NVDA/TSMの全8観測と入力SHAをroot/独立reviewが照合。TGLSは2CUSIPで除外。実snapshot6784b430…f73bf。原SEC ZIP/完全OpenFIGI応答がなく再集計未検証、実manifest attachなし。四半期3月/6月末・cutoff8月31日・9月28日取得であり現在保有とはしない。
+- 全Vitest241 files/3256、Node198、redline275、Golden43成功。関連127・独立対照36も成功し、範囲は重複。lint0errors/既存6warnings、build成功/既存chunk警告、static-data不在でexport skip。Node24/Python3.12はCI版と異なる。
+- ブラウザ新規2＋既存6成功、375/1440px・明暗。すべて合成fixture、外部通信遮断。root/UI担当が画像を目視、独立reviewはコード/対照検証のみ。reviewで検出した逆順観測と再試行不足は修正して再確認。最終blockingなし。
+- 財務capture/admission/ルール、固定exporter、publisher pin、認証、公開条件は変更なし。継続収集/workflow未接続。ファイル毎のatomic書込みであり跨file電源断transactionではない。stale lockは自動削除しない。公開済みreceipt付きbundleへのattach拒否を維持。
+- 次：不足5項目の正式入力/定義と実bundle確認、原資料再集計、catalog世代選択・自動更新は別作業。bd未導入。push/PR/merge/Actions/公開なし。差分・証跡・再現用コピーはmarket-history-producer-20261013へ保存し、既存成果物とは別のLibraryパッケージで報告。
+
+
+### 2026-10-13 — 市場履歴producerの報告数上限・曖昧公開マーカー対策
+
+- ac82cffと前回Library versionを保持し、private/market-history-hardening-20261013へ分離。同じexecutorの切断後復旧と差分保持を確認し継続。別環境移行・新provider取得なし。
+- 原集計のselected[accession]→(CIK,period)、reports_selected=len(selected)、manager_count=distinctCIK、filings=distinctaccession集合を確認。count<=reports_selected、provided count<=filings.length、filings.length<=reports_selectedを必要条件として検証。超過はclampせずhistory/provenanceともnull/unknown。accession prefixからCIK推定なし。
+- filingsはadapterの任意項目。欠落時は旧契約で全報告数上限を適用、存在時は非空/dense/unique/nonblank文字列を必須にする。不正配列・不明/0を既知値へ戻さない。これらは必要条件のみで、selected membershipや原ZIP再集計の証明ではない。
+- nested markets.USの既存5markerをrootと同様に拒否し、拒否時のsnapshot/catalog/manifest全file bytes不変を確認。正式bindingは外部publication.json＋manifestSHA/transportで、元から拒否が有効。nested文字列はruntimeが信頼するauthorityではなく、今回の変更は曖昧入力の保守的hardening。正式公開検証の突破を修正したとは主張しない。
+- 修正前producer67中12失敗、store36中7失敗。修正後producer68/store36、全Vitest241 files/3274、Node219、redline275、Golden43、既存13F集計5成功。fullsuiteは最終producer68を含む。lint0errors/既存6warnings、最終変更ファイルlint0。関連テスト数は重複。独立review追加対照も成功。
+- 合成CLI→保存→manifest→browser2成功（375/1440・明暗）、代表2画像をroot目視。実キャッシュ45987観測に両上限超過0/filings不正0。4銘柄8観測sampleを再生成し前回SHA6784b430…f73bfと同一。原SEC ZIP/原OpenFIGI不在なので再集計未検証。実bundle/Design/admission未検証。
+- UI/元集計/財務capture・admission・ルール/固定exporter/publisherpin/認証/公開gateは無変更。buildと旧browser6はac82cff時点の結果を継承し今回再実行とはしない。公開条件・対象scopeを拡張しない。残る5指標producer、継続収集、世代選択UIは前回のまま未完。
+- 証拠と差分はmarket-history-hardening-20261013、同じLibrary項目の次versionとしてpackage更新。前回ZIP/versionは保持。bd未導入、push/PR/merge/Actions/公開なし。
+
+
+### 2026-10-13 — 書籍出典とアプリ条件の表示訂正（判定不変）
+
+- 基点4e9f8efを保存してprivate/book-source-explanations-20261013へ分離。親の原本確認済み要旨に基づきTT25/30の書名・PDF物理頁、オニールのCAGR/各年増益と現行各年25の違い、売上25 OR 3期加速と現行直近25の違いを表示。CAGR/ORの実装は追加しない。
+- 約2–3%のピボット追随/価格損切り/買増し間隔を各書名・頁に対応づけ、口座リスク率/VCP深度/全冊共通条件との混同を避ける。既存警告state/model/label/境界不変。PDF頁は先頭1で、既存Kindle locatorは無断換算しない。非公開Drive情報や原文は追加なし。
+- 全Vitest241 files/3283、独立比較7752、backend275、Golden43成功。226合成fixture×4方式・順位・CSV32組の全bytes・購入位置/条件等を基点と比較。出典detailだけを除外し判定や数値は保持。最小27files×2でも同digest、他26依存byte一致。IBD完全合格/配分ありportfolio未到達は明記。
+- 関連UI184/共通20は重複範囲。初回全体1失敗は新規testの既存年次条件ラベル誤記であり、期待値だけ訂正して全体再実行成功。lint0errors/既存6warnings、build成功/既存chunk警告・実static-dataなしexport skip。
+- 合成browser4成功、375/1440明暗、20画像、UI担当5枚/root3枚目視。初回の非表示モバイル操作はtestだけ実ヘッダーへ修正。保護1974files一致、build24filesに指定privateID混入なし。独立内容/UI/invarianceレビューにblockingなし。
+- このexecutorでPDF再取得/全文精読、実bundle/本番Design/CI検証なし。Node24/Python3.12はCI版と異なる。財務capture/admission、数値ルール、固定exporter、publisher pin、公開条件は維持。push/PR/merge/Actions/公開/provider取得なし。差分・比較再現copy・生ログ・画像を独立Library検証パッケージへ保存。
+
+
+### 2026-10-13 — オニール原典との比較診断（既存判定不変）
+
+- 327bを保持しprivate/oneil-source-diagnostics-20261013へ分離。同じ環境の復旧・作業保存を確認、別環境/制限迂回なし。銘柄詳細にPDF197のCAGR25＋各年増益、PDF66の売上25 OR 3期加速の診断を追加。現行各年EPS25/最新売上25と並列表示し、既存選定・順位・CSV・購入判定に反映しない。
+- 年次4期はcommon validatorを再利用、正の有限EPSだけを既存decimal/BigInt方針で比較。非正/欠損/重複/不明基準は未確認。72h/550日期限の最終有効msと次msを新欄の局所時計で更新し、共有ルールは変更しない。
+- 最新売上は認証済み正規2桁値の>25 pass/<25 fail/=25 unknown。3期加速は既存admitted系列が不足し本番unknownを維持。合成5→10→20等のpure kernelと三値ORは検証し、raw/scalar救済や新admissionは加えない。
+- 最終全Vitest244files/3429（226.39秒）、core122、UI64、独立9556＋940、backend275、Golden43成功。28依存と保護1975files一致。独立可搬copyで再現。関連件数は重複。lint0errors/既存6warnings、build成功/既存chunk警告。旧中断suiteの重複logは最終証拠に使わず別logで再実行。既存fund testのcount対象だけ元7行へ限定しpass/failなしassert維持。
+- browser4成功、375/1440明暗・合成のみ・外部遮断、32画像。UI4枚/root2枚目視。実static-data不在、実series/本番Design/CI未検証。Node24/Python3.12はCI版と異なる。PDF要旨は親確認済みのものを使い原本再取得なし。
+- 財務capture/admission/ルール・固定exporter・publisher pin・公開条件・認証は不変。原典全体再現とはしない。本番加速枝、実データ検証、既存市場履歴の不足producerは残件。bd不在、push/PR/merge/Actions/provider取得/公開なし。成果物はoneil-source-diagnostics-20261013の新Library項目として保存。
+
+
+### 2026-10-19 — PR99の方式切替/D9静的レビュー、未描画EMA生成省略（push前）
+
+- d5a428c基点。取得済み旧run39234087551と現ソースから経路を確認。PC切替735/599/614ms、D9初回85.2/79.3msの未達を保持。新run39286575062のprofile/trace/画像未取得で、原因確定を主張しない。
+- 方式切替は既存rankingsのfilter、表示50行readiness、選択銘柄の詳細/chart更新を含む。D9は207点・論理sizeで同期描画→実CSS size通知を維持。実ブラウザー寄与未確定のためD9コードと基準は変更なし。
+- CandlestickChartが常に捨てるresearch/book用EMA10/20/50だけを生成しない最小変更。通常defaultとmode復元を維持。保存済みLLY/QQQ186本×daily/weeklyで描画対象・通常全出力・入力hash一致、daily未描画点481→0。
+- 他テスト後12対24新Node24.19プロセス、1500回daily変換中央値LLY29.00→21.10ms/QQQ28.41→11.46ms。weeklyは1.017/0.979倍で改善としない。各最初の呼出し・全sample・同時実行中の探索結果も保存。P1/Q1/D9受入れの代用ではない。
+- 対象44/全frontend258files3625成功、lint0errors既存6warnings、build18.11s成功/実static-data export skip。初回新testの週次EMA50長さの誤前提を訂正して再確認。backend redlineはpytest不在で起動不能、Golden含め今回成功とはしない。外部依存取得なし。
+- 財務5ケースの入力・identity/clock/receipt/generation条件と保存証拠棚卸しを完了。実source artifact/manifest/receiptのbytes不足。ログにあるhashやprepared_atをsource更新/承認と扱わない。
+- 自己レビューのみ。候補はローカル保存してpush前に返す。新取得/認証/ネットワーク/admission/時刻改変/欠損補完/閾値緩和/新run/merge/公開なし。詳しい根拠はpr99-local-performanceを既存Library成果物へ保存。
+
+
+### 2026-10-19 — PR99 researchView単独切替の更新漏れを独立回帰で固定（未push）
+
+- 実装候補71c6d86を保持し、productionのCandlestickChart/candlestickDataは変更せず、既存reuse harnessへ独立4ケースを追加。日足/週足×書籍ON/OFF、同一参照の入力で通常→研究→通常。チャート再作成後の価格/出来高/SMA/EMA/RS/EPS、非空の自動注記、帯/購入点/pivot/研究levelsの値・回数を固定。
+- 新chartへの各setData/必要primitive attach/pivot作成は1回、旧chart removeは1回。同じpropsの親rerender3回とhover state更新で追加の系列/注記更新なし。初期の週足選択のみ日足→週足の2設定を明記。chart API mockの結果であり実Canvas描画回数や実ブラウザーループ検証ではない。
+- 正の同一回帰を親d5/EMA省略のみ/依存追加のみ/候補で実行。前2構成は各4失敗（切替後setData期待1回、実際0回）、後2構成は各4成功。実装を上書きせず別名copyで切り分け、比較用7filesはSHA確認後撤去。前回の厳密等価性4失敗は保持し、今回を既存更新漏れの修正として扱う。
+- 非描画EMA省略は計算削減、修正の直接原因はmemoへの両flag依存追加。chartData変更が新chartのデータ・注記effectを再実行する。表示完全不変という説明を訂正。追加の推測最適化なし。
+- 最終対象36成功、全frontend258files/3629成功（224.06s）、lint0errors/既存6warnings、build13.05s成功（実static-data export skip/既存chunk警告）。初回追加testの閉じ括弧不足とlint診断引数だけを訂正し、生log保持。最終testで4構成を再確認。
+- 直前追加検証で公式PyPI→隔離Python3.12.14のruntime+test依存導入成功、Red line275/Golden43成功。今回はbackend無変更なので再実行せず結果を継承。GoldenはRed lineにも含まれる。CIのPython3.11/server依存と同一性は主張しない。
+- 実装・財務鮮度/unknown・品質/閾値・D9基準は無変更。自己レビューのみ。最新Design詳細/実画像、実ブラウザー、fresh財務source、未push候補のexact CIは未確認のまま。GitHub照会/取得/新run/認証・ネットワーク設定変更/push/merge/公開なし。差分・再現source/bundle・raw logsはpr99-transition-regressionとして既存Libraryへ永続保存。

@@ -182,3 +182,36 @@ async def test_root_omits_docs_when_docs_disabled(monkeypatch):
     payload = await main_app.root()
 
     assert "docs" not in payload
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("method,path,payload", [
+    ("GET", "/api/v1/scans", None),
+    ("GET", "/api/v1/scans/auth-test/status", None),
+    ("POST", "/api/v1/scans/auth-test/cancel", None),
+    ("DELETE", "/api/v1/scans/auth-test", None),
+    ("GET", "/api/v1/stocks/AAPL/info", None),
+    ("GET", "/api/v1/stocks/AAPL/chart-data", None),
+    ("POST", "/api/v1/user-watchlists/1/items", {"symbol": "AAPL"}),
+    ("POST", "/api/v1/user-watchlists/1/items/bulk", {"symbols": ["AAPL"]}),
+])
+@pytest.mark.parametrize("headers", [{}, {"X-Server-Auth": "incorrect-test-secret"}])
+async def test_endpoint_contracts_still_reject_unauthenticated_requests(
+    client, server_auth_headers, method, path, payload, headers,
+):
+    response = await client.request(method, path, json=payload, headers=headers)
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Authentication required"
+
+
+@pytest.mark.asyncio
+async def test_server_user_cannot_access_admin_configuration(client, server_auth_headers):
+    status = await client.get("/api/v1/auth/status", headers=server_auth_headers)
+    assert status.json()["authenticated"] is True
+
+    response = await client.get(
+        "/api/v1/config/theme-policies", headers=server_auth_headers,
+    )
+    # The existing admin guard uses 401 for insufficient admin credentials.
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Unauthorized"

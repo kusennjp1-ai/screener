@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 from app.database import SessionLocal
 from app.scripts._runtime import prepare_runtime
+from app.scripts.price_diagnostic_summary import static_ci_context, log_private_trace
 from app.services.daily_price_bundle_service import DailyPriceBundleService
+from app.services.cache.price_history_diagnostics import new_observations
 from app.wiring.bootstrap import get_daily_price_bundle_service
 
 
@@ -32,18 +35,44 @@ def main() -> int:
         action="store_true",
         help="Import a stale GitHub bundle as a baseline before refreshing daily prices.",
     )
+    parser.add_argument("--chart-diagnostics-output-dir", default=None,
+                        help="Add seed stages to the existing chart omission sidecar.")
+    parser.add_argument("--price-diagnostic-run-id", default=None)
     args = parser.parse_args()
 
-    prepare_runtime()
-    service = get_daily_price_bundle_service()
+    # Context selects observations only; it never authorizes a bundle or fetch.
+    context = (static_ci_context(args.market)
+               if not args.chart_diagnostics_output_dir and not args.price_diagnostic_run_id else None)
+    if context is not None:
+        args.chart_diagnostics_output_dir = str(context.root)
+        args.price_diagnostic_run_id = context.run_id
+    observations = (new_observations(args.market, args.price_diagnostic_run_id)
+                    if args.chart_diagnostics_output_dir else None)
+    try:
+        prepare_runtime()
+        service = get_daily_price_bundle_service()
 
-    with SessionLocal() as db:
-        result = service.sync_from_github(
-            db,
-            market=args.market,
-            warm_redis_symbols=args.warm_redis_symbols,
-            allow_stale=args.allow_stale,
-        )
+        with SessionLocal() as db:
+            result = service.sync_from_github(
+                db,
+                market=args.market,
+                warm_redis_symbols=args.warm_redis_symbols,
+                allow_stale=args.allow_stale,
+                **({"observations": observations} if observations is not None else {}),
+            )
+    finally:
+        if observations is not None:
+            try:
+                from app.scripts.export_static_site import _try_write_chart_omission_diagnostics
+
+                _try_write_chart_omission_diagnostics(
+                    Path(args.chart_diagnostics_output_dir), args.market, {},
+                    export_completed=False, pipeline_observations=observations,
+                )
+            except Exception:
+                pass  # Diagnostic setup must not mask the original sync outcome.
+        if context is not None:
+            log_private_trace(context)
 
     print("Daily GitHub price sync result:")
     for key, value in result.items():

@@ -57,6 +57,8 @@ if(correction) Object.assign(manifest,correctionMeta);
 const chartIndex = await read(entry.assets.charts.path);
 const paths = new Map((chartIndex.symbols || []).map(c => [c.symbol, c.path]));
 const breadth = entry.pages?.breadth?.path ? await read(entry.pages.breadth.path) : null;
+let sessionCalendar = null;
+try { sessionCalendar = await read('trading-calendar.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 let benchmark = null, financials = null, entryContext = null, currentFinancials = null, institutional = null;
 try { institutional = await read('institutional-holdings.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 try { currentFinancials = await read('financial-history.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
@@ -82,7 +84,11 @@ for (const row of merged) {
   if (paths.has(row.symbol)) {
     try { chart = await read(paths.get(row.symbol)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   }
-  if (chart) availableCharts.add(row.symbol);
+  if (chart) {
+    availableCharts.add(row.symbol);
+    // Always replace old embedded evidence with this export's independent calendar.
+    chart.session_calendar = sessionCalendar;
+  }
   const audit = auditDailyBars(row, chart, scan.as_of_date);
   row.week_52_high_distance=audit.valid ? -audit.values.belowHigh : null;
   row.week_52_low_distance=audit.valid ? audit.values.aboveLow : null;
@@ -91,8 +97,8 @@ for (const row of merged) {
   if (audit.valid) {
     const comparison = new Map((benchmark?.bars || []).map(b=>[b.date,b.close]));
     chart.rs_line = chart.bars.filter(b=>comparison.get(b.date)>0).map(b=>({time:b.date,value:b.close/comparison.get(b.date)}));
-    await writeFile(resolve(root, paths.get(row.symbol)), JSON.stringify(chart));
   }
+  if (chart) await writeFile(resolve(root, paths.get(row.symbol)), JSON.stringify(chart));
   const recent60 = audit.valid ? chart.bars.slice(-60) : [];
   const range60 = recent60.length === 60 ? (Math.max(...recent60.map(b=>b.high))/Math.min(...recent60.map(b=>b.low))-1)*100 : null;
   row.price_activity = {range60pct:range60,lowRange:range60 != null && range60 < 5};
@@ -137,7 +143,9 @@ const compactRows = new Map();
 const currentDetails=new Set();
 const currentCharts=new Set();
 for (const row of rows.values()) {
-  row.passes_template=row.technical_audit.valid ? assess(row,'minervini',evaluatedAt).qualified : null;
+  const template = row.technical_audit.valid ? assess(row,'minervini',evaluatedAt) : null;
+  // Financial availability excludes qualification without changing the measured trend template.
+  row.passes_template=template ? !template.method_status && template.passed===template.total : null;
   row.method_summary = {version:RULE_SUMMARY_VERSION,evaluated_at:evaluatedAt,next_expiry_at:financialNextExpiry([row],evaluatedAt)};
   for (const method of ['minervini','minervini2','oneil','ibd']) {
     const {rules,...summary} = assess(row,method,evaluatedAt); row.method_summary[method] = summary;
@@ -146,7 +154,8 @@ for (const row of rows.values()) {
 for (const [symbol, row] of rows) {
   let canonicalChart=null;
   if (availableCharts.has(symbol)) {
-    canonicalChart=projectFinancialPayload(overlayFinancialChart(await read(paths.get(symbol)),correction,symbol),{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});
+    canonicalChart=overlayFinancialChart(await read(paths.get(symbol)),correction,symbol);
+    if (!carry) canonicalChart=projectFinancialPayload(canonicalChart,{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});
     Object.assign(canonicalChart,{signal:null,risk_plan:null,sell_plan:null,trend_template:null});
     const hashInput={...canonicalChart,stock_data:{...row,chart_path:undefined,research_detail_path:undefined}};
     const chartHash=createHash('sha256').update(JSON.stringify(hashInput)).digest('hex').slice(0,16);
@@ -176,12 +185,15 @@ const chartIndexPath=`charts-index-${chartIndexHash}.json`;
 await writeFile(resolve(root,chartIndexPath),chartIndexContent);
 entry.assets.charts={...entry.assets.charts,...correctionMeta,path:chartIndexPath};
 scan.charts={...scan.charts,...correctionMeta,path:chartIndexPath};
-const listFields = ([...FINANCIAL_FIELDS,...CORRECTION_METADATA_FIELDS].join(' ')+' name product_name quoteType quote_type cusip isin cik issuer_cik instrument_identity instrument_applicability financial_identity financial_current as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
+const listFields = ([...FINANCIAL_FIELDS,...CORRECTION_METADATA_FIELDS].join(' ')+' name product_name quoteType quote_type cusip isin cik issuer_cik instrument_identity instrument_applicability financial_identity financial_current financial_publication_input as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
 const researchIndex = {...currentEvaluation,summary_storage:'canonical-detail-v1',as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => {
   const summary=Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]]));
-  // Full provenance and detector reasons remain in the content-addressed detail.
+  // Transport retains only the two original scalar inputs used by the five
+  // named exceptions. All other historical provenance remains detail-only.
+  if (Object.hasOwn(row, 'financial_historical')) summary.financial_historical = row.financial_historical;
+  // Full provenance remains in detail; readiness reasons are also CSV inputs.
   if(row.price_quality) summary.price_quality={status:row.price_quality.status,as_of_date:row.price_quality.as_of_date};
-  if(row.setup_recalculation) summary.setup_recalculation={status:row.setup_recalculation.status,as_of_date:row.setup_recalculation.as_of_date,...(row.setup_recalculation.status==='calculated'?{}:{reason:row.setup_recalculation.reason})};
+  if(row.setup_recalculation) summary.setup_recalculation={status:row.setup_recalculation.status,as_of_date:row.setup_recalculation.as_of_date,reason:row.setup_recalculation.reason};
   return summary;
 })};
 // Runtime orders are rebuilt from current inputs at each evaluation epoch.

@@ -5,6 +5,7 @@ import CandidateCharts from './CandidateCharts';
 import { withAuditFixture } from '../testAuditFixture';
 import { fetchStaticChartPayload } from '../chartClient';
 import CandlestickChart from '../../components/Charts/CandlestickChart';
+import { assess } from '../researchEngine';
 
 vi.mock('../chartClient',()=>({staticChartKeys:{payload:(symbol,path)=>[symbol,path]},fetchStaticChartPayload:vi.fn()}));
 vi.mock('../../components/Charts/CandlestickChart',()=>({default:vi.fn(()=> <div data-testid="price-chart"/>)}));
@@ -15,7 +16,7 @@ beforeEach(()=>{
 afterEach(()=>{vi.unstubAllGlobals();vi.clearAllMocks();});
 function mount(audit,lastDate=date) {
   fetchStaticChartPayload.mockResolvedValue({symbol:'CASE',as_of_date:date,bars:[{date:lastDate,close:100}],rs_line:[]});
-  const row={symbol:'CASE',current_price:100,chart_path:'case.json',technical_audit:audit};
+  const row={symbol:'CASE',current_price:100,chart_path:'case.json',technical_audit:{...withAuditFixture({symbol:'CASE',current_price:100},date).technical_audit,...audit}};
   return render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={[{row,plan:{state:'未判定'},assessment:{passed:0,total:9}}]} date={date} method="minervini" market={{}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={vi.fn()} /></QueryClientProvider>);
 }
 it('renders an identity-matched chart when the current daily history is verified',async()=>{
@@ -40,7 +41,7 @@ it('uses the same audited daily volume as the checklist and candidate list',()=>
 });
 it('renders six cards, preserves canonical three-percent levels and changes the shared period together',async()=>{
   fetchStaticChartPayload.mockImplementation(path=>Promise.resolve({symbol:path.split('.')[0],as_of_date:date,bars:[{date,open:100,close:100,high:101,low:99,volume:1000}],rs_line:[]}));
-  const ordered=Array.from({length:7},(_,i)=>({row:{symbol:`CASE${i}`,current_price:100,chart_path:`CASE${i}.json`,technical_audit:{valid:true}},plan:{state:'買いゾーン内',pivot:100,upper:103,stopExample:93,distance:0},assessment:{passed:9,total:9}}));
+  const ordered=Array.from({length:7},(_,i)=>({row:withAuditFixture({symbol:`CASE${i}`,current_price:100,chart_path:`CASE${i}.json`},date),plan:{state:'買いゾーン内',pivot:100,upper:103,stopExample:93,distance:0},assessment:{passed:9,total:9}}));
   const onSelect=vi.fn();
   render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={ordered} date={date} method="minervini2" market={{}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={onSelect}/></QueryClientProvider>);
   await waitFor(()=>expect(screen.getAllByTestId('price-chart')).toHaveLength(6));
@@ -61,25 +62,41 @@ it('reports absent data instead of converting it into a zero or a chart',async()
   fetchStaticChartPayload.mockResolvedValue({symbol:'CASE',as_of_date:date,bars:[],rs_line:[]});
   const row={symbol:'CASE',chart_path:'case.json',technical_audit:{valid:true}};
   render(<QueryClientProvider client={new QueryClient()}><CandidateCharts ordered={[{row,plan:{state:'未判定'},assessment:{passed:0,total:9}}]} date={date} method="minervini" market={{}} onSelect={vi.fn()}/></QueryClientProvider>);
-  expect(await screen.findByRole('alert')).toHaveTextContent('日足データが不足しています');
+  await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('日足データが不足しています'));
   expect(screen.queryByTestId('price-chart')).not.toBeInTheDocument();
   expect(screen.queryByText('$0.00')).not.toBeInTheDocument();
 });
 
-it.each([['minervini2','5/7',103,false],['minervini','6/7',105,true]])('keeps %s application limits and first-book context distinct in chart cards',async(method,score,upper,sourceWarning)=>{
+it.each([['minervini2','5/7',103,false],['minervini','6/7',105,true]])('keeps %s application limits and named pivot-follow source context distinct in chart cards',async(method,score,upper,sourceWarning)=>{
  const {withAuditFixture}=await import('../testAuditFixture');
  const row=withAuditFixture({symbol:'LIMIT',current_price:104,se_pivot_price:100,rs_rating:95,composite_rating:95,eps_rating:90,ibd_group_rank:10,
   chart_path:'LIMIT.json',entry_evidence:{as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:`${date}T21:00:00Z`,valid_until:'2026-09-30T20:00:00Z'},earnings:{date:'2026-10-20',checked_at:`${date}T21:00:00Z`},shape:{candidate:true},volumeRatio:1.5}},date);
- fetchStaticChartPayload.mockResolvedValue({symbol:'LIMIT',as_of_date:date,bars:[{date,close:104}],rs_line:[]});
+ // Coherent synthetic OHLCV is required before reference prices are displayed.
+ fetchStaticChartPayload.mockResolvedValue({symbol:'LIMIT',as_of_date:date,bars:[{date,open:103,high:105,low:102,close:104,volume:1000}],rs_line:[]});
  render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={[{row,assessment:{passed:9,total:9}}]} date={date} method={method} market={{cap:.5,label:'上昇'}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={vi.fn()}/></QueryClientProvider>);
  const card=screen.getByRole('article',{name:'LIMIT 比較チャート'});
+ const legend=within(card).getByLabelText('価格・RS・出来高の凡例');
+ for(const selector of ['.comparison-upper','.comparison-pivot','.comparison-stop'])expect(legend.querySelector(selector)).toHaveTextContent(/^—$/);
+ expect(within(card).queryByTestId('price-chart')).not.toBeInTheDocument();
+ await within(card).findByTestId('price-chart');
  expect(within(card).getByText(`$${upper}.00`)).toBeInTheDocument();
  expect(within(card).getByText(score)).toBeInTheDocument();
  const description=card.querySelector('p.sr-only');
  expect(description).toHaveTextContent('アプリ上限');
- if(sourceWarning){expect(description).toHaveTextContent('書籍の追随目安外');expect(within(card).getByRole('note')).toBeInTheDocument();}
+ if(sourceWarning){expect(description).toHaveTextContent('書籍の追随目安外：『株式トレード 基本と原則』のピボット追随目安（約2〜3%）');expect(within(card).getByRole('note')).toBeInTheDocument();}
  else expect(description).not.toHaveTextContent('書籍の追随目安外');
- await screen.findByTestId('price-chart');
+});
+
+it('keeps reference-price placeholders for incomplete OHLCV after the payload resolves',async()=>{
+ const row=withAuditFixture({symbol:'INCOMPLETE',current_price:104,chart_path:'INCOMPLETE.json'},date);
+ fetchStaticChartPayload.mockResolvedValue({symbol:'INCOMPLETE',as_of_date:date,bars:[{date,close:104}],rs_line:[]});
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><CandidateCharts ordered={[{row,plan:{state:'買いゾーン超過',pivot:100,upper:103,stopExample:96.72,distance:4},assessment:{passed:9,total:9}}]} date={date} method="minervini2" market={{}} now={Date.parse(`${date}T22:00:00Z`)} onSelect={vi.fn()}/></QueryClientProvider>);
+ const card=screen.getByRole('article',{name:'INCOMPLETE 比較チャート'});
+ // The chart is mocked in this suite; its readiness is not valid-OHLCV evidence.
+ await within(card).findByTestId('price-chart');
+ const legend=within(card).getByLabelText('価格・RS・出来高の凡例');
+ for(const selector of ['.comparison-upper','.comparison-pivot','.comparison-stop'])expect(legend.querySelector(selector)).toHaveTextContent(/^—$/);
+ for(const price of ['$103.00','$100.00','$96.72','$0.00'])expect(within(legend).queryByText(price)).not.toBeInTheDocument();
 });
 
 it('keeps an unknown condition, the source warning and price together without a separate warning row',()=>{
@@ -91,4 +108,21 @@ it('keeps an unknown condition, the source warning and price together without a 
  expect(within(line).getByRole('note',{name:/書籍の追随目安外：アプリの範囲内ですが/})).toHaveTextContent('△ 書籍目安2〜3%超');
  expect(card.querySelector('.entry-source-note')).toBeNull();
  expect(within(card).getByRole('button',{name:'UNKNOWN を分析'})).toHaveAccessibleDescription(/購入条件.*未達・未確認/);
+});
+
+it('does not display a legacy raw-valid history as a verified comparison', async () => {
+  mount({ valid: true, version: 'ohlcv-v1', status: undefined });
+  expect(await screen.findByRole('alert')).toHaveTextContent('現行の日足検証が未確認');
+  expect(screen.queryByTestId('price-chart')).not.toBeInTheDocument();
+});
+it('shows the financial exclusion in comparison cards and their accessible description',()=>{
+ const now=Date.parse(`${date}T22:00:00Z`);
+ const row=withAuditFixture({symbol:'NVDA',company_name:'Financial evidence unavailable',market:'US',current_price:102,se_pivot_price:100,rs_rating:95},date);
+ const assessment=assess(row,'minervini',now);
+ expect(assessment).toMatchObject({passed:9,total:9,qualified:false,financial_exclusion:{symbol:'NVDA'}});
+ render(<QueryClientProvider client={new QueryClient()}><CandidateCharts ordered={[{row,assessment}]} date={date} method="minervini" market={{}} now={now} onSelect={vi.fn()}/></QueryClientProvider>);
+ const card=screen.getByRole('article',{name:'NVDA 比較チャート'});
+ expect(card.querySelector('p:not(.sr-only)')).toHaveTextContent('財務未確認・判定対象外');
+ expect(within(card).getByRole('button',{name:'NVDA を分析'})).toHaveAccessibleDescription(/財務未確認・判定対象外/);
+ expect(card.querySelector('p.sr-only')).not.toHaveTextContent('選定 9/9');
 });

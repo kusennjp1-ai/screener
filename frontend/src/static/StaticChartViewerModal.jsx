@@ -5,6 +5,8 @@ import { useFinancialClock } from './useFinancialClock';
 import { requireChartIdentity } from './chartPayloadIdentity';
 import { canonicalPivot } from './researchPresentation';
 import ChartDecisionSummary from './components/ChartDecisionSummary';
+import ChartNumericData from './components/ChartNumericData';
+import EvidenceContext from './components/EvidenceContext';
 import { EntrySourceBadge } from './components/EntrySourceNote';
 import { assess, entryPlan } from './researchEngine';
 import { entryReadiness } from './entryReadiness';
@@ -224,16 +226,17 @@ function StaticChartViewerModal({
     ? entryReadiness(stockData, expectedDate || chartPayload?.as_of_date, market || modelMarket([stockData]), now, method)
     : null;
   const mobileUnknown = mobileReadiness?.rules.filter(rule => rule.state === 'unknown').length || 0;
-  const mobileMissing = mobileReadiness?.rules.filter(rule => rule.state !== 'pass').slice(0, 3) || [];
+  const mobileMissing = mobileReadiness?.rules.filter(rule => ['fail', 'unknown'].includes(rule.state)).slice(0, 3) || [];
+  const mobileNotApplicable = mobileReadiness?.rules.filter(rule => rule.state === 'not_applicable') || [];
   const pivotLabel = '共通ピボット';
   const chartHeight = fittedChartHeight ?? (isMobile ? MOBILE_EXPANDED_CHART_HEIGHT : MIN_EXPANDED_CHART_HEIGHT);
   // Keep the original 12px hint when nested under the metadata's 11px div rule.
   const mobileInteraction = isMobile && <Box ref={mobileInteractionRef} data-testid="mobile-chart-interaction" style={{fontSize:12}}
     onFocusCapture={() => { mobileInteractionFocused.current = true; }}
     onBlurCapture={() => { mobileInteractionFocused.current = false; }}
-    sx={{ px: compactMobileChrome ? 0 : 1.5, display:'flex', alignItems:'center', justifyContent:'space-between', gap:compactMobileChrome ? .5 : 1, minHeight:44, minWidth:0, flex:1, lineHeight:1.5, color:'text.secondary' }}>
-    <span>{panMode ? 'チャートを拡大・移動中' : '左スワイプ：次 ／ 右：前'}</span>
-    <Button size="small" sx={{minHeight:44,flexShrink:0}} aria-label={panMode ? '銘柄スワイプに戻る' : 'チャート操作（拡大・移動）'} aria-pressed={panMode} onClick={() => setPanMode(v => !v)}>{panMode ? '銘柄スワイプに戻る' : '拡大・移動'}</Button>
+    sx={{ px: compactMobileChrome ? 0 : 1.5, display:'flex', alignItems:'center', justifyContent:'space-between', gap:compactMobileChrome ? .5 : 1, minHeight:44, minWidth:compactMobileChrome ? 'max-content' : 0, flex:compactMobileChrome ? '0 0 auto' : 1, lineHeight:1.5, color:'text.secondary' }}>
+    <span className={compactMobileChrome ? 'sr-only' : undefined}>{panMode ? 'チャートを拡大・移動中' : '左スワイプ：次 ／ 右：前'}</span>
+    <Button size="small" sx={{minHeight:44,flexShrink:0}} aria-label={panMode ? '銘柄スワイプに戻る' : 'チャート操作（拡大・移動）'} title={panMode ? 'チャートを拡大・移動中。銘柄スワイプに戻る' : '左スワイプ：次、右：前。チャートを拡大・移動する'} aria-pressed={panMode} onClick={() => setPanMode(v => !v)}>{panMode ? compactMobileChrome ? 'スワイプ' : '銘柄スワイプに戻る' : '拡大・移動'}</Button>
   </Box>;
   // Reflow only the chrome on short phones. The chart instance and selection
   // stay mounted; carry keyboard focus with the relocated pan-mode control.
@@ -267,6 +270,7 @@ function StaticChartViewerModal({
     return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('resize', scheduleFit); };
   }, [open, isMobile, compactMobileChrome, isLoading, isError, currentSymbol, chartSection]);
   const dataUpdatedAtOverride = chartPayload?.generated_at ? Date.parse(chartPayload.generated_at) : null;
+  const detailWarning = rowDetail.isError && <Alert data-testid="expanded-chart-warning" severity="warning" sx={{flexShrink:0,...(compactMobileChrome && {gridColumn:'1 / -1',gridRow:3})}}>詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。</Alert>;
 
   return (
     <Modal
@@ -286,22 +290,27 @@ function StaticChartViewerModal({
             bgcolor: 'background.paper',
             display: 'flex',
             flexDirection: 'column',
+            pb: compactMobileChrome ? 'env(safe-area-inset-bottom, 0px)' : 0,
+            // Preserve 44px targets while reclaiming the toolbar's outer 8px.
+            ...(compactMobileChrome && {'& .research-chart-controls':{padding:'0 4px'}}),
             outline: 'none',
             overflow: 'hidden',
           }}
         >
-          {rowDetail.isError && <Alert severity="warning" sx={{flexShrink:0}}>詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。</Alert>}
+          {!compactMobileChrome && detailWarning}
           <Box data-testid="expanded-chart-header" sx={{display:compactMobileChrome ? 'grid' : 'flex',gridTemplateColumns:'minmax(0, 1fr) auto',flexShrink:0,alignItems:'center',justifyContent:'space-between',px:2,py:compactMobileChrome ? .5 : 1,borderBottom:1,borderColor:'divider'}}>
             <Box sx={{display:compactMobileChrome ? 'contents' : 'block',minWidth:0,flex:1}}>
-              <Box sx={{minWidth:0}}><Typography id="static-chart-viewer-modal" variant="h6">{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
+              <Box sx={{minWidth:0}}><Typography id="static-chart-viewer-modal" variant="h6" sx={compactMobileChrome ? {minHeight:44,display:'flex',alignItems:'center',flexWrap:'wrap',gap:.5,pr:totalCount>1?'100px':0} : undefined}>{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
                 <Typography sx={{fontSize:12,color:'text.secondary'}}>{isMobile ? `${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'} · ${expectedDate || chartPayload?.as_of_date || '時点未確認'} 日次終値` : `${stockData?.company_name || '日次チャート分析'} · ${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）`}</Typography>
               </Box>
               {isMobile && <Box data-testid="mobile-chart-readiness" sx={{gridColumn:compactMobileChrome ? '1 / -1' : '1',gridRow:2,fontSize:12,lineHeight:1.5,mt:.5,overflowWrap:'anywhere'}}>
                 <Box sx={{display:'flex',alignItems:'baseline',flexWrap:'wrap',gap:'0 8px'}}><strong>{mobileReadiness ? `購入条件 ${mobileReadiness.passed}/${mobileReadiness.total}${mobileUnknown ? `（未確認 ${mobileUnknown}）` : ''}` : '購入条件を読み込み中…'}</strong><EntrySourceBadge plan={plan}/></Box>
-                {mobileReadiness && <Box component="span" sx={{display:'block',color:'text.secondary'}}>{mobileMissing.length ? `未達・未確認：${mobileMissing.map(rule=>rule.label).join(' ／ ')}` : '日次条件を確認済み。現在価格は発注時に確認。'}</Box>}
+                {mobileReadiness && <Box component="span" sx={{display:'block',color:'text.secondary'}}>{mobileMissing.length ? `未達・未確認：${mobileMissing.map(rule=>rule.label).join(' ／ ')}` : mobileReadiness.ready ? '日次条件を確認済み。現在価格は発注時に確認。' : null}</Box>}
+                {mobileNotApplicable.length > 0 && <Box component="span" sx={{display:'block',color:'text.secondary'}}>対象外：{mobileNotApplicable.map(rule=>rule.label).join(' ／ ')}</Box>}
               </Box>}
             </Box>
-            <IconButton onClick={onClose} aria-label="チャートを閉じる" sx={{gridColumn:2,gridRow:1,alignSelf:'flex-start'}}><CloseIcon /></IconButton>
+            <IconButton onClick={onClose} aria-label="チャートを閉じる" sx={{gridColumn:2,gridRow:1,alignSelf:'flex-start',...(compactMobileChrome && {width:44,height:44})}}><CloseIcon /></IconButton>
+            {compactMobileChrome && detailWarning}
           </Box>
           <Box
             ref={contentRef}
@@ -325,7 +334,13 @@ function StaticChartViewerModal({
               }}
             >
               {stockData && (researchRows?.length || researchRow?.research_detail_path) ? <Box component="details" sx={{px:2,py:1}}><summary style={{cursor:'pointer',minHeight:44}}>{instrumentApplicabilityLabel(instrumentApplicability(stockData)) || (rowDetail.isFetching ? '詳細根拠を読み込み中…' : `選定条件の詳細（${assess(stockData,method || 'minervini',now).passed}/${assess(stockData,method || 'minervini',now).total}）`)}</summary>
-                {assess(stockData,method || 'minervini',now).rules.map(r=><Typography key={r.label} sx={{fontSize:13,my:1}}>{r.state==='pass'?'✓':r.state==='fail'?'×':r.state==='not_applicable'?'対象外':'?'} {r.label}</Typography>)}
+                <Typography sx={{fontSize:12}}>選出の一次条件です。購入条件とは別に確認します。未確認は通過に数えません。</Typography>
+                <EvidenceContext date={expectedDate} generation={generation} evidence={stockData} label="選出データ"/>
+                <Typography sx={{fontSize:12}}>条件ごとの提供元・対象日は個別の根拠を参照してください。記載がない提供元・対象日は未確認です。</Typography>
+                <Box component="ul" aria-label="選定条件の判定内訳" sx={{pl:2.5}}>{assess(stockData,method || 'minervini',now).rules.map(r=><Typography component="li" key={r.label} sx={{fontSize:13,my:1}}>
+                  {r.label}：{r.state==='pass'?'✓ 通過':r.state==='fail'?'× 未達':r.state==='not_applicable'?'対象外':'? 未確認'}{Number.isFinite(r.value)?` · ${r.value.toLocaleString('ja-JP',{maximumFractionDigits:2})}${r.unit || ''}`:''}
+                  {r.evidence && <Typography component="span" sx={{display:'block',fontSize:12}}>{r.evidence}</Typography>}
+                </Typography>)}</Box>
               </Box> : <><StockMetricsSidebar currentFinancialOnly date={expectedDate} now={now} stockData={stockData} fundamentals={fundamentals} />
               <TrendTemplateScorecard trendTemplate={chartPayload?.trend_template} />
               <TradingViewBridge
@@ -368,7 +383,8 @@ function StaticChartViewerModal({
                     onTouchMoveCapture={event => { if (event.touches.length !== 1) swipeStart.current = null; }} onTouchCancel={() => { swipeStart.current = null; }}
                     sx={{ flex: 1, minHeight: 0, position: 'relative', touchAction: isMobile && !panMode ? 'pan-y' : 'auto' }}>
                     <CandlestickChart smallScreen={isMobile} researchView bookAnnotations interactive={!isMobile || panMode}
-                      researchMetaActions={compactMobileChrome ? mobileInteraction : null}
+                      compactResearchChrome={compactMobileChrome}
+                      researchActions={compactMobileChrome ? mobileInteraction : null}
                       symbol={currentSymbol}
                       period="6mo"
                       height={chartHeight}
@@ -389,6 +405,7 @@ function StaticChartViewerModal({
                       vcpBoxes={chartPayload?.vcp_boxes || null}
                     />
                   </Box>
+                  {chartPayload?.bars?.length > 0 && <ChartNumericData key={JSON.stringify([currentSymbol, expectedDate, generation, currentEntry?.path])} symbol={currentSymbol} bars={chartPayload.bars} asOfDate={expectedDate} generatedAt={chartPayload.generated_at} currency={stockData?.currency} />}
                   {isMobile && <>
                     <Box component="details" data-testid="mobile-chart-legend" sx={{px:1.5,fontSize:12,borderBottom:1,borderColor:'divider'}}>
                       <summary style={{cursor:'pointer',minHeight:44,lineHeight:'24px',padding:'10px 0',boxSizing:'border-box'}}>チャートの凡例（移動平均線・RS）</summary>
@@ -407,21 +424,27 @@ function StaticChartViewerModal({
 
           <Box
             data-testid="expanded-chart-footer"
+            data-placement={compactMobileChrome ? 'header' : 'footer'}
+            data-navigation-count={totalCount > 1 ? 2 : 0}
             sx={{
-              position: 'relative',
+              // Keep the same mounted navigation/focus targets. Short phones
+              // use spare title-row space instead of reserving a bottom row
+              // that would cover the readable 300px chart and its date axis.
+              position: compactMobileChrome ? 'absolute' : 'relative',
+              ...(compactMobileChrome && {top:4,right:64}),
               flexShrink: 0,
               zIndex: 1,
-              pt: 1.5,
-              px: 1.5,
+              pt: compactMobileChrome ? 0 : 1.5,
+              px: compactMobileChrome ? 0 : 1.5,
               // ホームインジケータ（下部セーフエリア）を避ける
-              pb: 'calc(12px + env(safe-area-inset-bottom, 0px))',
-              bgcolor: 'background.paper',
-              borderTop: 1,
+              pb: compactMobileChrome ? 0 : 'calc(12px + env(safe-area-inset-bottom, 0px))',
+              bgcolor: compactMobileChrome ? 'transparent' : 'background.paper',
+              borderTop: compactMobileChrome ? 0 : 1,
               borderColor: 'divider',
-              display: 'flex',
+              display: compactMobileChrome && totalCount <= 1 ? 'none' : 'flex',
               justifyContent: 'center',
               alignItems: 'center',
-              gap: { xs: 1.5, md: 3 },
+              gap: compactMobileChrome ? .5 : { xs: 1.5, md: 3 },
             }}
           >
             {totalCount > 1 ? (
@@ -429,20 +452,22 @@ function StaticChartViewerModal({
                 <Button
                   variant="outlined"
                   size="small"
-                  startIcon={<ArrowBackIosNewIcon sx={{ fontSize: 14 }} />}
+                  startIcon={compactMobileChrome ? undefined : <ArrowBackIosNewIcon sx={{ fontSize: 14 }} />}
+                  aria-label="前の銘柄"
                   onClick={goPrevious}
-                  sx={{ minWidth: 96 }}
+                  sx={{ minWidth: compactMobileChrome ? 44 : 96, ...(compactMobileChrome && {height:44,p:0}) }}
                 >
-                  前の銘柄
+                  {compactMobileChrome ? '前' : '前の銘柄'}
                 </Button>
                 <Button
                   variant="outlined"
                   size="small"
-                  endIcon={<ArrowForwardIosIcon sx={{ fontSize: 14 }} />}
+                  endIcon={compactMobileChrome ? undefined : <ArrowForwardIosIcon sx={{ fontSize: 14 }} />}
+                  aria-label="次の銘柄"
                   onClick={goNext}
-                  sx={{ minWidth: 96 }}
+                  sx={{ minWidth: compactMobileChrome ? 44 : 96, ...(compactMobileChrome && {height:44,p:0}) }}
                 >
-                  次の銘柄
+                  {compactMobileChrome ? '次' : '次の銘柄'}
                 </Button>
               </>
             ) : null}

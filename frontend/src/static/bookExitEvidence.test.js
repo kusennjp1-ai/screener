@@ -1,13 +1,13 @@
+import { tradingDays, calendarAt } from './testMarketCalendarFixture.js';
 import { expect, it } from 'vitest';
 import { buildBookExitEvidence } from './bookExitEvidence';
 function fixture() {
   const bars = [];
-  for (let t = Date.parse('2024-01-01'); bars.length < 280; t += 86400000) {
-    const d = new Date(t); if ([0,6].includes(d.getUTCDay())) continue;
-    bars.push({ date: d.toISOString().slice(0,10), open: 100, high: 102, low: 98, close: 100, volume: 1000 });
+  for (const date of tradingDays('2024-01-01', 280)) {
+    bars.push({ date, open: 100, high: 102, low: 98, close: 100, volume: 1000 });
   }
   const date = bars.at(-1).date;
-  return { row: { symbol: 'AAA', current_price: 100 }, payload: { symbol: 'AAA', as_of_date: date, bars }, date,
+  return { row: { symbol: 'AAA', market: 'US', current_price: 100 }, payload: { symbol: 'AAA', as_of_date: date, bars, session_calendar: calendarAt(date) }, date,
     context: { breakoutDate: bars[260].date, reviewDate: date, source: 'Verified chart', setupConfirmed: true } };
 }
 const run = f => buildBookExitEvidence(f.row, f.payload, f.date, f.context);

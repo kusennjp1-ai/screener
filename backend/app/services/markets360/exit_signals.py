@@ -112,7 +112,9 @@ def detect_climax_run(price_data: Optional[pd.DataFrame]) -> Dict[str, object]:
             score += 30
 
         # Up-day frenzy: 8+ up days in the last 10.
-        rets = close.pct_change()
+        # A daily return needs two adjacent observed closes. Never bridge a
+        # missing bar and count a multi-session move as a one-day climax tell.
+        rets = close.pct_change(fill_method=None)
         up_10 = int((rets.iloc[-10:] > 0).sum()) if len(rets) >= 10 else None
         out["up_days_10"] = up_10
         if extended and up_10 is not None and up_10 >= CLIMAX_UP_DAYS:

@@ -478,3 +478,70 @@ def test_sync_daily_price_bundle_treats_missing_manifest_as_non_fatal(monkeypatc
     stdout = capsys.readouterr().out
     assert "Daily GitHub price sync result:" in stdout
     assert "missing_manifest" in stdout
+
+
+@pytest.mark.parametrize("status,exit_code", [("success", 0), ("missing_manifest", 0), ("error", 1)])
+def test_seed_sync_diagnostics_preserve_result_and_write_existing_sidecar(
+    monkeypatch, tmp_path, capsys, status, exit_code,
+):
+    from app.services.cache.price_history_diagnostics import observe
+
+    monkeypatch.setattr(sync_daily_script, "prepare_runtime", lambda: None)
+    monkeypatch.setattr(sync_daily_script, "SessionLocal", _fake_session)
+    outputs = []
+    observed_calls = []
+
+    def sync(db, **kwargs):
+        observed_calls.append((db, {key: value for key, value in kwargs.items() if key != "observations"}))
+        observe(kwargs.get("observations"), "seed_sync", status=status)
+        return {"status": status, "market": kwargs["market"]}
+
+    monkeypatch.setattr(sync_daily_script, "get_daily_price_bundle_service",
+                        lambda: SimpleNamespace(sync_from_github=sync))
+    for enabled in (False, True):
+        args = ["sync_daily_price_bundle_from_github", "--market", "US"]
+        if enabled:
+            args += ["--chart-diagnostics-output-dir", str(tmp_path),
+                     "--price-diagnostic-run-id", "fixed-run"]
+        monkeypatch.setattr("sys.argv", args)
+        assert sync_daily_script.main() == exit_code
+        outputs.append(capsys.readouterr().out)
+        if not enabled:
+            assert not list(tmp_path.rglob("*.json"))
+
+    assert outputs[0] == outputs[1]
+    assert observed_calls[0] == observed_calls[1]
+    path = tmp_path / "diagnostics/us/cache-only-chart-omissions.json"
+    assert list(tmp_path.rglob("*.json")) == [path]
+    report = json.loads(path.read_text())
+    assert report["schema_version"] == "cache-only-chart-omissions-v1"
+    assert report["export_completed"] is False
+    assert report["omissions"] == {}
+    assert report["pipeline_observations"]["run_id"] == "fixed-run"
+    assert report["pipeline_observations"]["events"] == [{"stage": "seed_sync", "status": status}]
+
+
+def test_seed_sync_exception_survives_diagnostic_writer_failure(monkeypatch, tmp_path):
+    import app.scripts.export_static_site as export_script
+
+    failure = RuntimeError("original sync failure")
+    monkeypatch.setattr(sync_daily_script, "prepare_runtime", lambda: None)
+    monkeypatch.setattr(sync_daily_script, "SessionLocal", _fake_session)
+
+    def sync(*_args, **_kwargs):
+        raise failure
+
+    def failed_writer(*_args, **_kwargs):
+        raise OSError("unavailable diagnostics")
+
+    monkeypatch.setattr(sync_daily_script, "get_daily_price_bundle_service",
+                        lambda: SimpleNamespace(sync_from_github=sync))
+    monkeypatch.setattr(export_script, "_try_write_chart_omission_diagnostics", failed_writer)
+    for enabled in (False, True):
+        args = ["sync_daily_price_bundle_from_github", "--market", "US"]
+        if enabled:
+            args += ["--chart-diagnostics-output-dir", str(tmp_path)]
+        monkeypatch.setattr("sys.argv", args)
+        with pytest.raises(RuntimeError) as raised:
+            sync_daily_script.main()
+        assert raised.value is failure
