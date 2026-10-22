@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import date
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
@@ -15,6 +17,7 @@ from app.models.stock import StockPrice
 from app.models.stock_universe import StockUniverse, UNIVERSE_STATUS_ACTIVE
 from app.services.daily_price_bundle_service import DailyPriceBundleService
 from app.services.price_cache_service import PriceCacheService
+from app.services.cache.price_history_diagnostics import new_observations
 
 
 def _make_session():
@@ -487,3 +490,167 @@ def test_import_daily_price_bundle_skips_redis_warm_for_two_year_bundle(tmp_path
     price_cache._store_batch_in_database.assert_called_once()
     price_cache.store_batch_in_cache.assert_not_called()
     db.close()
+
+
+
+_AUTHENTIC_PRICE_SAMPLES = {
+    "run513_aa": (
+        "e267a190da2856e4e262f34c7e6a1529faf8aa141f4b8952659c0348b49d5032",
+        "5a766e59a2312c1a5cafab19102986f88ec78e23d8e7f1f042420331048c8606",
+        "daily_prices_us:20261021040119",
+    ),
+    "run517_eog_invalid": (
+        "35e4c8ecf97e9346aa7a2cccb5990c9477dbd05a81643b8d5b56f698386fad0f",
+        "d287958656f8a1dd85e0fbf64ec997ebf384d549a21713bc448e017e260fbde7",
+        "daily_prices_us:20261021001336",
+    ),
+}
+
+
+def _authentic_price_sample(name):
+    path = Path(__file__).parents[1] / "fixtures" / f"daily_price_{name}_sample.json"
+    content = path.read_bytes()
+    fixture_sha, source_sha, revision = _AUTHENTIC_PRICE_SAMPLES[name]
+    assert hashlib.sha256(content).hexdigest() == fixture_sha
+    fixture = json.loads(content)
+    assert fixture["provenance"]["source_bundle_sha256"] == source_sha
+    assert fixture["provenance"]["source_as_of_date"] == "2026-10-20"
+    assert fixture["provenance"]["source_revision"] == revision
+    bundle = fixture["bundle"]
+    assert bundle["source_revision"] == revision
+    assert bundle["as_of_date"] == bundle["rows"][0]["prices"][-1]["date"] == "2026-10-20"
+    assert bundle["market"] == "US" and bundle["bar_period"] == "2y"
+    assert bundle["symbol_count"] == len(bundle["rows"]) == 1
+    assert len(bundle["rows"][0]["prices"]) == 3
+    return bundle
+
+
+class _ForbiddenRedis:
+    """No network cache is needed for these real database persistence tests."""
+    def __getattr__(self, name):
+        raise AssertionError(f"Unexpected Redis access: {name}")
+
+
+@pytest.fixture
+def persistence_bundle_database(tmp_path):
+    # File-backed SQLite plus an independent read engine verifies committed
+    # rows, not merely an ORM identity map or a shared in-memory connection.
+    url = f"sqlite:///{tmp_path / 'price-import.sqlite'}"
+    engine = create_engine(url)
+    Base.metadata.create_all(engine, tables=[StockPrice.__table__, AppSetting.__table__])
+    sessions = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+    service = DailyPriceBundleService(price_cache=PriceCacheService(
+        redis_client=_ForbiddenRedis(), session_factory=sessions,
+    ))
+    try:
+        yield url, engine, sessions, service
+    finally:
+        engine.dispose()
+
+
+def _committed_prices(url):
+    reader_engine = create_engine(url)
+    try:
+        with sessionmaker(bind=reader_engine)() as db:
+            rows = db.query(StockPrice).order_by(StockPrice.symbol, StockPrice.date).all()
+            prices = [dict(symbol=row.symbol, date=row.date.isoformat(), open=row.open,
+                           high=row.high, low=row.low, close=row.close,
+                           adj_close=row.adj_close, volume=row.volume) for row in rows]
+            ids = [row.id for row in rows]
+            state = db.query(AppSetting).filter(
+                AppSetting.key == DailyPriceBundleService.sync_state_key("US")
+            ).first()
+            return prices, ids, json.loads(state.value) if state else None
+    finally:
+        reader_engine.dispose()
+
+
+def _import_authentic_sample(tmp_path, sessions, service, name):
+    bundle = _authentic_price_sample(name)
+    before = json.dumps(bundle, sort_keys=True)
+    path = tmp_path / f"{name}.json"
+    path.write_text(before, encoding="utf-8")
+    observations = new_observations("US", run_id="importer-persistence-test")
+    with sessions() as db:
+        result = service.import_daily_price_bundle(
+            db, input_path=path, warm_redis_symbols=0, observations=observations,
+        )
+    assert path.read_text(encoding="utf-8") == before
+    assert json.dumps(_authentic_price_sample(name), sort_keys=True) == before
+    assert observations["input"]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    # The small derived fixture is not the original full downloaded bundle.
+    assert observations["input"]["download_hash_verified"] is False
+    assert observations["input"]["as_of_date"] == bundle["as_of_date"]
+    assert observations["input"]["source_revision"] == bundle["source_revision"]
+    return bundle, result, observations["events"]
+
+
+def test_import_authentic_run513_commits_exact_prices_and_idempotent_upserts(
+    tmp_path, persistence_bundle_database,
+):
+    url, _, sessions, service = persistence_bundle_database
+    bundle, result, events = _import_authentic_sample(tmp_path, sessions, service, "run513_aa")
+    expected = [dict(symbol="AA", **bar) for bar in bundle["rows"][0]["prices"]]
+    actual, row_ids, state = _committed_prices(url)
+    assert actual == expected
+    assert len(row_ids) == len(set(row_ids)) == 3
+    assert state["source_revision"] == bundle["source_revision"]
+    assert state["as_of_date"] == "2026-10-20" and state["bar_period"] == "2y"
+    assert result["redis_warmed_symbols"] == 0
+    assert any(event["stage"] == "db_commit" and event["status"] == "committed"
+               and event["committed_rows"] == 3 and event["insert_rows"] == 3 for event in events)
+
+    _, _, replay_events = _import_authentic_sample(tmp_path, sessions, service, "run513_aa")
+    replayed, replayed_ids, _ = _committed_prices(url)
+    assert replayed == expected and replayed_ids == row_ids
+    assert any(event["stage"] == "db_commit" and event["status"] == "committed"
+               and event["update_rows"] == 3 and event["insert_rows"] == 0 for event in replay_events)
+
+
+def test_import_authentic_invalid_eog_rejects_whole_history_without_partial_rows(
+    tmp_path, persistence_bundle_database,
+):
+    url, _, sessions, service = persistence_bundle_database
+    _import_authentic_sample(tmp_path, sessions, service, "run513_aa")
+    before, before_ids, _ = _committed_prices(url)
+    bundle, _, events = _import_authentic_sample(tmp_path, sessions, service, "run517_eog_invalid")
+    last_bar = bundle["rows"][0]["prices"][-1]
+    assert last_bar["open"] > last_bar["high"]  # Genuine source defect, not an edited price.
+    actual, actual_ids, _ = _committed_prices(url)
+    assert actual == before and actual_ids == before_ids
+    assert not any(row["symbol"] == "EOG" for row in actual)
+    assert any(event["stage"] == "db_prepare" and event["symbol"] == "EOG"
+               and event["status"] == "rejected" and event["rejection"] == "invalid_ohlcv"
+               for event in events)
+    assert any(event["stage"] == "db_commit" and event["status"] == "not_attempted_no_coherent_history"
+               for event in events)
+
+
+def test_import_real_sqlite_failure_rolls_back_preceding_inserts(
+    tmp_path, persistence_bundle_database,
+):
+    url, engine, sessions, service = persistence_bundle_database
+    first = _authentic_price_sample("run513_aa")["rows"][0]["prices"][0]
+    with sessions() as db:
+        db.add(StockPrice(symbol="AA", **{
+            **first, "date": date.fromisoformat(first["date"]),
+        }))
+        db.commit()
+    before, before_ids, _ = _committed_prices(url)
+    # A real database constraint fails on the final authentic row. Earlier
+    # inserts in the same mixed insert/update batch must roll back, while the
+    # previously committed row survives. The writer itself is not mocked.
+    with engine.begin() as connection:
+        connection.exec_driver_sql("""
+            CREATE TRIGGER reject_final_sample_bar BEFORE INSERT ON stock_prices
+            WHEN NEW.symbol = 'AA' AND NEW.date = '2026-10-20'
+            BEGIN SELECT RAISE(ABORT, 'intentional persistence regression test'); END
+        """)
+    _, _, events = _import_authentic_sample(tmp_path, sessions, service, "run513_aa")
+    actual, row_ids, _ = _committed_prices(url)
+    assert actual == before and row_ids == before_ids and len(actual) == 1
+    assert any(event["stage"] == "db_commit" and event["status"] == "failed"
+               and event["exception_type"] == "IntegrityError" for event in events)
+    assert any(event["stage"] == "db_rollback" and event["status"] == "returned" for event in events)
+    # Import counters and sync metadata are not commit evidence: the existing
+    # writer swallows this write failure after rollback. Readback is decisive.

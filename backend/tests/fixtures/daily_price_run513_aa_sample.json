@@ -1,0 +1,59 @@
+{
+  "bundle": {
+    "as_of_date": "2026-10-20",
+    "bar_period": "2y",
+    "generated_at": "2026-10-21T04:01:19Z",
+    "market": "US",
+    "rows": [
+      {
+        "exchange": "XNYS",
+        "prices": [
+          {
+            "adj_close": 41.45000076293945,
+            "close": 41.45000076293945,
+            "date": "2026-10-16",
+            "high": 44.347999572753906,
+            "low": 41.08000183105469,
+            "open": 41.650001525878906,
+            "volume": 13842900
+          },
+          {
+            "adj_close": 41.66999816894531,
+            "close": 41.66999816894531,
+            "date": "2026-10-19",
+            "high": 42.130001068115234,
+            "low": 40.880001068115234,
+            "open": 41.790000915527344,
+            "volume": 6587500
+          },
+          {
+            "adj_close": 40.790000915527344,
+            "close": 40.790000915527344,
+            "date": "2026-10-20",
+            "high": 41.36000061035156,
+            "low": 40.029998779296875,
+            "open": 40.720001220703125,
+            "volume": 5735300
+          }
+        ],
+        "symbol": "AA"
+      }
+    ],
+    "schema_version": "daily-price-bundle-v1",
+    "source_revision": "daily_prices_us:20261021040119",
+    "symbol_count": 1
+  },
+  "provenance": {
+    "artifact_id": 12319449759,
+    "repository": "kusennjp1-ai/screener",
+    "run_attempt": 1,
+    "run_id": 39529309411,
+    "run_number": 513,
+    "sample_description": "Last three AA bars, copied without changing any source value; subset is not a full publication bundle.",
+    "source_as_of_date": "2026-10-20",
+    "source_bundle_asset_name": "daily-price-us-20261020.json.gz",
+    "source_bundle_bytes": 103034515,
+    "source_bundle_sha256": "5a766e59a2312c1a5cafab19102986f88ec78e23d8e7f1f042420331048c8606",
+    "source_revision": "daily_prices_us:20261021040119"
+  }
+}
