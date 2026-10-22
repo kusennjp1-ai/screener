@@ -1,3 +1,6 @@
+import { createHash } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { currentFinancialHistory, mergeFinancialDetail, projectFinancialRow } from '../src/static/financialCurrent.js';
 import { annualAvailabilityText, nativeAnnualHistoryContract } from '../src/static/financialHistory.js';
@@ -205,7 +208,7 @@ async function inspectFinancialRows(panel, expected, check, key) {
   return observed;
 }
 
-export async function verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl }) {
+export async function verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl, output }) {
   if (!financialDesignScreens(viewport, theme).length) return;
   const staticUrl = path => new URL(`static-data/${path}`, currentUrl).href;
   report.financial_cases ||= [];
@@ -348,7 +351,8 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         const stream = await download.createReadStream(), chunks = [];
         requireValue(stream, 'CSV download stream unavailable');
         for await (const chunk of stream) chunks.push(chunk);
-        const exported = parseFinancialCsv(Buffer.concat(chunks).toString('utf8'));
+        const csvBytes = Buffer.concat(chunks);
+        const exported = parseFinancialCsv(csvBytes.toString('utf8'));
         const matches = exported.rows.filter(row => row.symbol === item.symbol);
         requireValue(matches.length === 1, `${item.symbol}: CSV must contain exactly one matching symbol`);
         const csvNow = Date.parse(matches[0].financial_evaluated_at);
@@ -358,7 +362,10 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
         check(JSON.stringify(exported.headers) === JSON.stringify(canonical.headers), `${key}: CSV labels differ from canonical export`);
         check(JSON.stringify(matches[0]) === JSON.stringify(canonical.rows[0]), `${key}: downloaded CSV values/states differ from current source`);
         check(matches[0].annual_eps_rule_state === expected.rows.find(row => row.id === 'annual_eps_growth_3y').state, `${key}: CSV/financial annual state mismatch`);
-        record.csv = { filename: download.suggestedFilename(), headers: exported.headers, row: matches[0], source: 'actual browser download' };
+        const artifact = `financial-${item.symbol}-${viewport.width}-${theme}.csv`;
+        await writeFile(resolve(output, artifact), csvBytes);
+        record.csv = { filename: download.suggestedFilename(), artifact, sha256: createHash('sha256').update(csvBytes).digest('hex'), bytes: csvBytes.length,
+          headers: exported.headers, row: matches[0], source: 'actual browser download' };
         await filters.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
       } catch (error) {
         record.error = error.message;

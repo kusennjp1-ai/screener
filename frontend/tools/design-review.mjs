@@ -202,7 +202,8 @@ async function capture(page, viewport, theme, screen, { target, scope = 'viewpor
   else await page.screenshot({ path: resolve(output, screenshot) });
   const screenshotHash = financialCarrySha256(await readFile(resolve(output, screenshot)));
   const diagnosticChecks = (checks=[]) => checks.map(({id,message,data,relatedNodes})=>({id,message,data,relatedNodes:(relatedNodes||[]).map(node=>({target:node.target}))}));
-  report.screens.push({ key, screenshot, sha256: screenshotHash, ...(carryBinding ? { preview_provenance_sha256: carryBinding.provenance_sha256 } : {}), ...(target || viewportTargets ? { screenshot_scope: scope, screenshot_target: target || null, metrics_scope: 'original-viewport', ...(geometry ? { viewport_geometry: geometry } : {}) } : {}), metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) });
+  const screenEvidence = { key, screenshot, sha256: screenshotHash, ...(carryBinding ? { preview_provenance_sha256: carryBinding.provenance_sha256 } : {}), ...(target || viewportTargets ? { screenshot_scope: scope, screenshot_target: target || null, metrics_scope: 'original-viewport', ...(geometry ? { viewport_geometry: geometry } : {}) } : {}), metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) };
+  report.screens.push(screenEvidence);
   check(axe.violations.length === 0, `${key}: axe ${axe.violations.length} rule violations`);
   check(metrics.smallTargets.length === 0, `${key}: ${metrics.smallTargets.length} undersized hit targets`);
   check(metrics.fontIssues.length === 0, `${key}: ${metrics.fontIssues.length} font-step violations`);
@@ -238,11 +239,13 @@ async function capture(page, viewport, theme, screen, { target, scope = 'viewpor
         const box = node.getBBox(); return box.width > 0 && box.height > 0;
       }).length,
     })));
+    screenEvidence.sparkline_columns = sparklineColumns;
     for (const column of sparklineColumns) check(column.geometry > 0, `${key}: displayed ${column.id} sparkline column has no geometry`);
   }
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.waitForTimeout(50);
-  check((await page.evaluate(objectiveMetrics)).runningAnimations === 0, `${key}: animations remain with reduced motion`);
+  screenEvidence.reduced_motion_running_animations = (await page.evaluate(objectiveMetrics)).runningAnimations;
+  check(screenEvidence.reduced_motion_running_animations === 0, `${key}: animations remain with reduced motion`);
   await page.emulateMedia({ reducedMotion: 'no-preference' });
   console.log(`Captured ${key}; ${report.failures.length} objective failures recorded so far.`);
   try { console.error(`[design-capture-failures] ${JSON.stringify({ key, failures: report.failures })}`); } catch { /* Keep the original report and capture path. */ }
@@ -322,7 +325,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     }
   }
   await verifyChartCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
-  await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
+  await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, output });
   if (carryBinding) await verifyFinancialCarryCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, binding: carryBinding, output });
   await verifyDailyObservationCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
   if (finishCarryUi) await finishCarryUi();

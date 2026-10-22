@@ -3,9 +3,21 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import CandlestickChart from './CandlestickChart';
 import { transformToCandlestickData } from './candlestickData';
+import CandidateCharts from '../../static/components/CandidateCharts';
+import { readFileSync } from 'node:fs';
+import { singleMissingCondition } from '../../static/missingCondition';
+import { fetchStaticChartPayload } from '../../static/chartClient';
 
 const { instances, factory, resizeObservers } = vi.hoisted(() => ({ instances: [], factory: vi.fn(), resizeObservers: [] }));
 vi.mock('./createPriceChartSeries', () => ({ createPriceChartSeries: factory }));
+// The comparison-layout contract uses both real components and the real CSS;
+// business qualification and data retrieval are unrelated fixture boundaries.
+vi.mock('../../static/chartClient',()=>({staticChartKeys:{payload:(symbol,path)=>[symbol,path]},fetchStaticChartPayload:vi.fn()}));
+vi.mock('../../static/instrumentApplicability',()=>({instrumentApplicability:()=>null,instrumentApplicabilityLabel:()=>null}));
+vi.mock('../../static/entryReadiness',()=>({entryReadiness:()=>({passed:0,total:1,ready:false,rules:[]})}));
+vi.mock('../../static/researchEngine',()=>({assess:vi.fn(),entryPlan:vi.fn()}));
+vi.mock('../../static/missingCondition',()=>({singleMissingCondition:vi.fn()}));
+vi.mock('../../static/qualificationAudit',()=>({hasVerifiedDailyBars:()=>true,verifiedVolumeRatio:()=>1}));
 const seriesKeys=['candlestickSeries','volumeSeries','avgVolumeSeries','ema10Series','ema20Series','ema50Series','sma50Series','sma150Series','sma200Series','rsLineSeries','epsLineSeries'];
 const bars=price=>[
   {date:'2026-09-21',open:price,high:price+2,low:price-2,close:price,volume:1000},
@@ -66,6 +78,28 @@ function setup(props={}){
   return {...view,update:next=>view.rerender(wrap(next))};
 }
 describe('validated static chart instance reuse',()=>{
+  it.each([[false,300],[false,360],[false,440],[true,230]])(
+    'keeps RS and volume legends in flow before the plot (compact=%s, height=%s)',(compact,height)=>{
+      const view=setup({compact,height,smallScreen:true,rsRatingValue:88});
+      const plot=view.container.querySelector('[data-chart-symbol]');
+      const legend=screen.getByRole('group',{name:'価格・RS・出来高の凡例'});
+      // Structural regression only: jsdom does not verify rendered pixels.
+      expect(plot.parentElement.previousElementSibling).toBe(legend);
+      expect(plot.parentElement).not.toContainElement(legend);
+      expect(getComputedStyle(legend).position).not.toBe('absolute');
+      expect(legend).toHaveTextContent(compact?'RS':'RS · 対市場の強さ / 推計88');
+      expect(legend).toHaveTextContent(compact?'出来高':'出来高 · 破線は50日平均');
+      if(!compact){
+        fireEvent.click(screen.getByRole('button',{name:'週足'}));
+        expect(legend).toHaveTextContent('出来高 · 破線は10週平均');
+      }
+      view.update({compact,height,smallScreen:true,rsLineData:null});
+      expect(legend).toHaveTextContent(compact?'RS 未配信':'RS · データ未配信');
+      expect(factory).toHaveBeenCalledTimes(1);
+      view.update({compact,height,smallScreen:true,priceData:[],rsLineData:null});
+      expect(screen.queryByRole('group',{name:'価格・RS・出来高の凡例'})).not.toBeInTheDocument();
+    },
+  );
   it.each([['daily',false],['daily',true],['weekly',false],['weekly',true]])(
     'reapplies data once on research-only round trips (%s, book=%s)',async(timeframe,bookAnnotations)=>{
       const priceData=annotatedBars(),line=priceData.map((p,i)=>({time:p.date,value:70+i/100}));
@@ -354,5 +388,162 @@ describe('validated static chart instance reuse',()=>{
     expect(factory).toHaveBeenCalledTimes(2);
     expect(instance.chart.remove).toHaveBeenCalledOnce();
     expect(instances[1].timeScale.setVisibleRange).toHaveBeenCalledExactlyOnceWith(visibleRange);
+  });
+});
+
+describe('comparison parent and loaded plot height contract',()=>{
+  it.each([[1440,220,false],[390,240,false],[1440,220,true],[390,240,true],[390,240,false,1234567.89,'1,234,568.89','1,308,641.96','1,160,493.82']])('reuses the comparison header/footer at width%s with an unchanged %spx plot (near-pass=%s)',async(width,plotHeight,nearOnly,price=100,closeText='101.00',upperText='106.00',stopText='94.00')=>{
+    vi.stubGlobal('matchMedia',query=>({matches:query.includes('max-width:767px')&&width<=767,media:query,
+      addListener:vi.fn(),removeListener:vi.fn(),addEventListener:vi.fn(),removeEventListener:vi.fn()}));
+    vi.stubGlobal('IntersectionObserver',class {constructor(callback){this.callback=callback;}observe(){this.callback([{isIntersecting:true}]);}disconnect(){}});
+    // jsdom does not lay out pixels or evaluate responsive media queries. Use
+    // the actual stylesheet rules selected for this viewport to test its CSS
+    // cascade contract, not a synthetic pixel/height or screenshot assertion.
+    const comparisonCss=readFileSync('src/static/components/comparison.css','utf8');
+    const source=document.createElement('style');source.textContent=comparisonCss;document.head.appendChild(source);
+    const rules=Array.from(source.sheet.cssRules).flatMap(rule=>{
+      if(!rule.conditionText)return [rule.cssText];
+      const match=rule.conditionText.match(/\((min|max)-width:\s*(\d+)px\)/);
+      const applies=match&&(match[1]==='max'?width<=Number(match[2]):width>=Number(match[2]));
+      return applies?Array.from(rule.cssRules,child=>child.cssText):[];
+    });
+    source.remove();
+    const style=document.createElement('style');style.textContent=rules.join('\n');document.head.appendChild(style);
+    try {
+      const date='2026-09-22';
+      singleMissingCondition.mockReturnValue({text:'未確認：RS ≥ 70',csv:'RS ≥ 70'});
+      fetchStaticChartPayload.mockResolvedValue({symbol:'CASE',as_of_date:date,bars:bars(price),rs_line:rs(10)});
+      const row={symbol:'CASE',current_price:999,rs_rating:72,chart_path:'case.json',technical_audit:{valid:true}};
+      const ordered=[{row,plan:{state:'買いゾーン内',pivot:price+1,upper:price*1.06,stopExample:price*.94,sourceContext:{warning:nearOnly}},assessment:{passed:1,total:1}}];
+      const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+      const view=render(<QueryClientProvider client={client}><CandidateCharts ordered={ordered} nearOnly={nearOnly} date={date} method="minervini" market={{}} onSelect={vi.fn()}/></QueryClientProvider>);
+      const finalLegend=await screen.findByTestId('comparison-final-bar-legend');
+      const legend=screen.getByRole('group',{name:'価格・RS・出来高の凡例'});
+      const wrapper=view.container.querySelector('.comparison-canvas');
+      const plot=wrapper.querySelector('[data-chart-symbol]');
+      expect(wrapper).toHaveAttribute('data-active-chart','true');
+      expect(wrapper).not.toContainElement(legend);
+      expect(wrapper.querySelector('[data-testid=chart-pane-legend]')).toBeNull();
+      expect(finalLegend).toHaveTextContent(`終値 $${closeText}`);
+      expect(finalLegend).toHaveAttribute('aria-label',`最終日足 2026-09-22 終値 $${closeText}`);
+      expect(screen.getByTestId('comparison-final-bar-date')).toHaveTextContent('2026-09-22');
+      expect(legend).toHaveTextContent(`ピボット$${closeText}`);
+      expect(legend).toHaveTextContent(`上限$${upperText}`);
+      expect(legend).toHaveTextContent(`損切り例$${stopText}`);
+      expect(legend.children).toHaveLength(5);
+      expect(getComputedStyle(legend).display).toBe('flex');
+      expect(getComputedStyle(legend).flexWrap).toBe('wrap');
+      for(const cell of legend.children){
+        expect(getComputedStyle(cell).minWidth).toBe('max-content');
+        expect(getComputedStyle(cell.querySelector('dd')).whiteSpace).toBe('nowrap');
+      }
+      expect(legend).toHaveTextContent('RS線 / 出来高評72');
+      expect(finalLegend).not.toHaveTextContent('999.00');
+      expect(finalLegend).not.toHaveTextContent('2026-09-22');
+      expect(getComputedStyle(view.container.querySelector('.comparison-company')).height).toBe('24px');
+      if(nearOnly){
+        expect(view.container.querySelector('.comparison-company-label')).toHaveTextContent('未確認：RS ≥ 70');
+        expect(screen.getByRole('note')).toHaveTextContent('△ 書籍目安2〜3%超');
+      }
+      expect(screen.queryByRole('button',{name:'週足'})).not.toBeInTheDocument();
+      expect(getComputedStyle(wrapper).height).toBe(`${plotHeight}px`);
+      expect(getComputedStyle(wrapper).minHeight).toBe(`${plotHeight}px`);
+      expect(getComputedStyle(plot.parentElement).height).toBe(`${plotHeight}px`);
+      expect(factory.mock.lastCall[1].height).toBe(plotHeight);
+      expect(getComputedStyle(legend).position).not.toBe('absolute');
+      // Loading/paused placeholders retain the original fixed-height contract.
+      wrapper.dataset.activeChart='false';
+      expect(getComputedStyle(wrapper).height).toBe(`${plotHeight}px`);
+    } finally { style.remove(); }
+  });
+});
+
+describe('always-visible research price legend',()=>{
+  it('shows exact levels and final selected-data date/close across daily, weekly and historical pan',()=>{
+    const data=[['2026-09-07',80],['2026-09-14',110],['2026-09-21',90],['2026-09-22',100]]
+      .map(([date,close])=>({date,open:close,high:close+10,low:close-10,close,volume:1000}));
+    setup({priceData:data,pivotPrice:31.9,buyCeiling:31.9*1.05,stopPrice:31.9*.95});
+    const legend=screen.getByRole('group',{name:'価格・RS・出来高の凡例'});
+    expect(legend).toHaveTextContent('上限 33.50');
+    expect(legend).toHaveTextContent('ピボット 31.90');
+    expect(legend).toHaveTextContent('損切り例 30.30');
+    expect(screen.getByTestId('chart-final-bar-legend')).toHaveTextContent('最終日足 2026-09-22 終値 100.00');
+    const primitive=Array.from(instances[0].candlestickSeries.primitiveSet).find(item=>item.levels);
+    expect(primitive.priceAxisViews()).toEqual([]);
+    expect(primitive.levels.upper).toBe(31.9*1.05);
+    fireEvent.click(screen.getByRole('button',{name:'週足'}));
+    expect(screen.getByTestId('chart-final-bar-legend')).toHaveTextContent('最終週足 バー日 2026-09-22 終値 100.00');
+    expect(instances[0].candlestickSeries.setData.mock.lastCall[0].at(-1)).toMatchObject({time:'2026-09-22',close:100});
+    act(()=>instances[0].timeScale.setVisibleLogicalRange({from:0,to:1}));
+    expect(screen.getByTestId('chart-final-bar-legend')).toHaveTextContent('最終週足 バー日 2026-09-22 終値 100.00');
+  });
+  it('suppresses guide labels with the existing history warning, but keeps the actual final data close',()=>{
+    const data=bars(100);data[1]={...data[1],open:200,low:199,high:201,close:200};
+    const view=setup({priceData:data});
+    expect(screen.getByRole('alert')).toHaveTextContent('大幅な価格断絶');
+    expect(screen.queryByTestId('chart-level-legend-upper')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chart-level-legend-pivot')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chart-level-legend-stop')).not.toBeInTheDocument();
+    expect(screen.getByTestId('chart-final-bar-legend')).toHaveTextContent('2026-09-22 終値 200.00');
+    view.update({priceData:[]});
+    expect(screen.queryByTestId('chart-pane-legend')).not.toBeInTheDocument();
+  });
+  it('does not invent missing/nonpositive levels and defaults compact charts to their own visible legend',()=>{
+    const view=setup({compact:true,pivotPrice:null,buyCeiling:Infinity,stopPrice:0});
+    expect(screen.getByTestId('chart-final-bar-legend')).toHaveTextContent('101.00');
+    expect(screen.queryByTestId('chart-level-legend-upper')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chart-level-legend-pivot')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('chart-level-legend-stop')).not.toBeInTheDocument();
+    view.update({compact:true,externalResearchLegend:true});
+    expect(screen.queryByTestId('chart-pane-legend')).not.toBeInTheDocument();
+  });
+});
+
+describe('short-phone legend replaces the helper row',()=>{
+  it.each([[53.2,'54.20'],[405.96,'406.96'],[1234567.89,'1,234,568.89']])('keeps full date/prices and300px plot at price%s', (price,closeText)=>{
+    render(<style>{readFileSync('src/components/Charts/researchChartControls.css','utf8')}</style>);
+    const view=setup({smallScreen:true,compactResearchChrome:true,height:300,priceData:bars(price),pivotPrice:price,buyCeiling:price*1.05,stopPrice:price*.95,rsRatingValue:88,researchActions:<button>拡大・移動</button>});
+    const controls=screen.getByRole('group',{name:'チャート操作'});
+    const summary=screen.getByText('移動平均',{selector:'summary'});
+    expect(controls).toContainElement(summary);
+    expect(controls).toContainElement(screen.getByRole('button',{name:'拡大・移動'}));
+    expect(getComputedStyle(summary).minHeight).toBe('44px');
+    expect(getComputedStyle(screen.getByRole('button',{name:'拡大・移動'})).minHeight).toBe('44px');
+    expect(view.container.querySelector('.chart-research-meta')).toBeNull();
+    const legend=screen.getByTestId('chart-pane-legend');
+    expect(getComputedStyle(legend).flexWrap).toBe('wrap');
+    expect(getComputedStyle(legend).overflow).not.toBe('hidden');
+    expect(screen.getByTestId('chart-final-bar-legend')).toHaveTextContent(`最終日足 2026-09-22 終値 ${closeText}`);
+    for(const key of ['upper','pivot','stop'])expect(screen.getByTestId(`chart-level-legend-${key}`)).toBeVisible();
+    const plot=view.container.querySelector('[data-chart-symbol]');
+    expect(plot.parentElement.previousElementSibling).toBe(legend);
+    expect(getComputedStyle(plot.parentElement).height).toBe('300px');
+    // jsdom checks the real responsive DOM/CSS contract, not line wrapping or
+    // viewport geometry. Very long prices may wrap further; CI must measure it.
+    act(()=>{summary.parentElement.open=true;fireEvent(summary.parentElement,new Event('toggle'));summary.focus();});
+    view.update({smallScreen:true,compactResearchChrome:false,height:300});
+    expect(screen.getByLabelText('移動平均線・株価の乖離率')).toHaveFocus();
+    expect(screen.getByLabelText('移動平均線・株価の乖離率').parentElement.open).toBe(true);
+  });
+});
+
+describe('comparison external legend history guards',()=>{
+  it.each(['empty','invalid','stale','discontinuity','missing levels'])('keeps unavailable guides unavailable for %s',async scenario=>{
+    vi.stubGlobal('IntersectionObserver',class{constructor(callback){this.callback=callback;}observe(target){this.callback([{target,isIntersecting:true}]);}disconnect(){}});
+    const date='2026-09-22', data=bars(100);
+    if(scenario==='empty')data.length=0;
+    if(scenario==='invalid')data[1].close=null;
+    if(scenario==='stale')data.pop();
+    if(scenario==='discontinuity')Object.assign(data[1],{open:200,high:201,low:199,close:200});
+    fetchStaticChartPayload.mockResolvedValue({symbol:'GUARD',as_of_date:date,bars:data,rs_line:[]});
+    const plan={state:'買いゾーン内',pivot:scenario==='missing levels'?null:101,upper:scenario==='missing levels'?Infinity:106,stopExample:scenario==='missing levels'?-1:94};
+    const ordered=[{row:{symbol:'GUARD',current_price:999,chart_path:'guard.json'},plan,assessment:{passed:0,total:1}}];
+    const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+    const view=render(<QueryClientProvider client={client}><CandidateCharts ordered={ordered} date={date} method="minervini" market={{}} onSelect={vi.fn()}/></QueryClientProvider>);
+    if(['discontinuity','missing levels'].includes(scenario))expect(await screen.findByTestId('comparison-final-bar-legend')).toHaveTextContent(scenario==='discontinuity'?'200.00':'101.00');
+    else {await screen.findAllByRole('alert');expect(screen.queryByTestId('comparison-final-bar-legend')).not.toBeInTheDocument();}
+    for(const name of ['upper','pivot','stop'])expect(view.container.querySelector(`.comparison-${name}`)).toHaveTextContent('—');
+    expect(screen.getByLabelText('RS線未配信')).toHaveTextContent('RS—');
+    expect(screen.queryByTestId('chart-pane-legend')).not.toBeInTheDocument();
   });
 });

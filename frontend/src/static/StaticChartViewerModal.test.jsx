@@ -20,7 +20,7 @@ const sidebarSpy = vi.fn();
 vi.mock('../components/Charts/CandlestickChart', () => ({
   default: (props) => {
     chartSpy(props);
-    return <><div className="chart-research-meta" data-testid="chart-meta-actions">{props.researchMetaActions}</div><div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div></>;
+    return <><div className="research-chart-controls" data-testid="chart-control-actions">{props.researchActions}</div><div className="chart-research-meta" data-testid="chart-meta-actions">{props.researchMetaActions}</div><div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div></>;
   },
 }));
 
@@ -286,7 +286,10 @@ it.each([false, true])('keeps the complete mobile warning and swipe controls whe
   expect(getComputedStyle(readiness).fontSize).toBe('12px');
   expect(readiness.querySelector('.entry-source-badge')).toHaveTextContent('△ 書籍目安2〜3%超');
   expect(screen.getByText('$104.00 · 2026-10-01 日次終値')).toBeInTheDocument();
-  expect(interaction.closest('[data-testid="chart-meta-actions"]') !== null).toBe(short);
+  expect(interaction.closest('[data-testid="chart-control-actions"]') !== null).toBe(short);
+  expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({compactResearchChrome:short}));
+  expect(getComputedStyle(interaction).minWidth).toBe(short?'max-content':'0px');
+  expect(interaction.querySelector('span').classList.contains('sr-only')).toBe(short);
   expect(interaction).toHaveTextContent('左スワイプ：次 ／ 右：前');
   expect(getComputedStyle(interaction).fontSize).toBe('12px');
   expect(screen.getByRole('button',{name:'チャート操作（拡大・移動）'})).toHaveStyle({minHeight:'44px'});
@@ -316,7 +319,7 @@ it('preserves pan mode and keyboard focus as short-phone controls move between r
     const control = screen.getByRole('button',{name:'銘柄スワイプに戻る'});
     expect(control).toHaveFocus();
     expect(control).toHaveAttribute('aria-pressed','true');
-    expect(control.closest('[data-testid="chart-meta-actions"]') !== null).toBe(short);
+    expect(control.closest('[data-testid="chart-control-actions"]') !== null).toBe(short);
     expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({interactive:true}));
   }
   const close = screen.getByRole('button',{name:'チャートを閉じる'});

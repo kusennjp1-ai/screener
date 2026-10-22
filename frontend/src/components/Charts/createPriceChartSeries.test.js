@@ -46,6 +46,8 @@ describe('research chart pane layout',()=>{
     expect(result.rsLineSeries.priceScale().applyOptions).toHaveBeenCalledExactlyOnceWith({scaleMargins:{top:.18,bottom:.12},visible:false,autoScale:true,mode:0});
     expect(result.volumeSeries.priceScale().applyOptions).toHaveBeenCalledExactlyOnceWith({scaleMargins:{top:.2,bottom:0}});
     expect(charts[0].options.timeScale.lockVisibleTimeRangeOnResize).toBe(true);
+    expect(charts[0].options.rightPriceScale).toMatchObject({mode:1,entireTextOnly:true});
+    expect(result.candlestickSeries.options.lastValueVisible).toBe(false);
   });
   it.each([[false,false],[false,true],[true,false],[true,true]])('excludes every constructed average from research autoscale (bookAnnotations=%s, compact=%s)',(bookAnnotations,compact)=>{
     const result=createPriceChartSeries({}, {...defaults,researchView:true,bookAnnotations,compact});
@@ -72,6 +74,8 @@ describe('research chart pane layout',()=>{
     expect(result.rsLineSeries.priceScale().applyOptions).toHaveBeenCalledExactlyOnceWith({scaleMargins:{top:.66,bottom:.22},visible:false});
     expect(result.volumeSeries.priceScale().applyOptions).toHaveBeenCalledExactlyOnceWith({scaleMargins:{top:.7,bottom:0}});
     expect(charts[0].options.timeScale.lockVisibleTimeRangeOnResize).toBe(false);
+    expect(charts[0].options.rightPriceScale.entireTextOnly).toBeUndefined();
+    expect(result.candlestickSeries.options.lastValueVisible).toBeUndefined();
   });
   it('omits only permanently empty research guides and keeps legacy EMA/EPS handles',()=>{
     const research=createPriceChartSeries({}, {...defaults,researchView:true,bookAnnotations:true});

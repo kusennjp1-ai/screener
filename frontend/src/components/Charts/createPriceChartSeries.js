@@ -34,6 +34,9 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     rightPriceScale: {
       borderColor: palette.line,
       mode: 1, // Logarithmic scale
+      // Omit an edge tick when its text would be cut by a research pane.
+      // This does not change the price range, margins, or logarithmic scale.
+      ...(researchView ? { entireTextOnly: true } : {}),
     },
     timeScale: {
       borderColor: palette.line,
@@ -76,6 +79,9 @@ export function createPriceChartSeries(container, { width, height, isDarkMode, i
     wickUpColor: palette.up,
     wickDownColor: palette.down,
     priceScaleId: 'right',
+    // Research values live in the always-visible legend, leaving ordinary
+    // axis ticks unobscured. The default LastBar price line stays unchanged.
+    ...(researchView ? { lastValueVisible: false } : {}),
   });
   candlestickSeries.priceScale().applyOptions({ scaleMargins: researchView ? { top: 0.12, bottom: 0.12 } : { top: 0.05, bottom: 0.3 } });
   // Buy-point annotations (Buy Alert / Buy Ready / Buy Point / SEPA) attach here.

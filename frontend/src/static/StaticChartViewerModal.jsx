@@ -234,9 +234,9 @@ function StaticChartViewerModal({
   const mobileInteraction = isMobile && <Box ref={mobileInteractionRef} data-testid="mobile-chart-interaction" style={{fontSize:12}}
     onFocusCapture={() => { mobileInteractionFocused.current = true; }}
     onBlurCapture={() => { mobileInteractionFocused.current = false; }}
-    sx={{ px: compactMobileChrome ? 0 : 1.5, display:'flex', alignItems:'center', justifyContent:'space-between', gap:compactMobileChrome ? .5 : 1, minHeight:44, minWidth:0, flex:1, lineHeight:1.5, color:'text.secondary' }}>
-    <span>{panMode ? 'チャートを拡大・移動中' : '左スワイプ：次 ／ 右：前'}</span>
-    <Button size="small" sx={{minHeight:44,flexShrink:0}} aria-label={panMode ? '銘柄スワイプに戻る' : 'チャート操作（拡大・移動）'} aria-pressed={panMode} onClick={() => setPanMode(v => !v)}>{panMode ? '銘柄スワイプに戻る' : '拡大・移動'}</Button>
+    sx={{ px: compactMobileChrome ? 0 : 1.5, display:'flex', alignItems:'center', justifyContent:'space-between', gap:compactMobileChrome ? .5 : 1, minHeight:44, minWidth:compactMobileChrome ? 'max-content' : 0, flex:compactMobileChrome ? '0 0 auto' : 1, lineHeight:1.5, color:'text.secondary' }}>
+    <span className={compactMobileChrome ? 'sr-only' : undefined}>{panMode ? 'チャートを拡大・移動中' : '左スワイプ：次 ／ 右：前'}</span>
+    <Button size="small" sx={{minHeight:44,flexShrink:0}} aria-label={panMode ? '銘柄スワイプに戻る' : 'チャート操作（拡大・移動）'} title={panMode ? 'チャートを拡大・移動中。銘柄スワイプに戻る' : '左スワイプ：次、右：前。チャートを拡大・移動する'} aria-pressed={panMode} onClick={() => setPanMode(v => !v)}>{panMode ? compactMobileChrome ? 'スワイプ' : '銘柄スワイプに戻る' : '拡大・移動'}</Button>
   </Box>;
   // Reflow only the chrome on short phones. The chart instance and selection
   // stay mounted; carry keyboard focus with the relocated pan-mode control.
@@ -383,7 +383,8 @@ function StaticChartViewerModal({
                     onTouchMoveCapture={event => { if (event.touches.length !== 1) swipeStart.current = null; }} onTouchCancel={() => { swipeStart.current = null; }}
                     sx={{ flex: 1, minHeight: 0, position: 'relative', touchAction: isMobile && !panMode ? 'pan-y' : 'auto' }}>
                     <CandlestickChart smallScreen={isMobile} researchView bookAnnotations interactive={!isMobile || panMode}
-                      researchMetaActions={compactMobileChrome ? mobileInteraction : null}
+                      compactResearchChrome={compactMobileChrome}
+                      researchActions={compactMobileChrome ? mobileInteraction : null}
                       symbol={currentSymbol}
                       period="6mo"
                       height={chartHeight}

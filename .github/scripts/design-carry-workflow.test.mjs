@@ -4,6 +4,14 @@ import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
 const workflow=readFileSync(new URL('../workflows/design-acceptance.yml',import.meta.url),'utf8');
 const adapter=readFileSync(new URL('./design-financial-carry.mjs',import.meta.url),'utf8');
+// Step-local structural contracts avoid confusing a neighbouring step's token or
+// condition with this step. These exact guards deliberately fail on broadening.
+const freshCondition="steps.prior.outputs.reuse != 'true'";
+const stepBlocks=workflow.match(/^      - (?:name|uses|run):[^\n]*(?:\n(?!      - )[^\n]*)*/gm)||[];
+const step=header=>{const matches=stepBlocks.filter(value=>value.split('\n')[0]===`      - ${header}`);assert.equal(matches.length,1,header);return matches[0];};
+const condition=body=>{const matches=[...body.matchAll(/^        if: (.*)$/gm)];assert.ok(matches.length<=1,'duplicate step conditions');return matches[0]?.[1]??null;};
+const expectCondition=(header,expected)=>assert.equal(condition(step(header)),expected,header);
+
 test('Design keeps read-only permissions and pins the reviewed receipt-linked baseline',()=>{
   assert.match(workflow,/permissions:\n  contents: read\n  actions: read/);
   const baseline='1e1943e1d5f78a738a05baa69eb9f2e8508e32ac';
@@ -27,21 +35,35 @@ test('baseline fetch requires an exact SHA and fails closed before clone on ambi
   for(const ref of ['main','cd3a6a2','refs/heads/main','--upload-pack=bad','A'.repeat(40),'g'.repeat(40)])assert.throws(()=>run(ref),error=>error.status===1&&!String(error.stdout).includes('FETCH'));
   assert.throws(()=>run(sha,'b'.repeat(40)),error=>error.status===1&&String(error.stdout).includes('FETCH'));
 });
-test('packing step retains read-only token for independent source reauthentication',()=>{assert.match(workflow,/name: Build both production versions[^\n]*\n\s+env:\n\s+GH_TOKEN: \$\{\{ github.token \}\}/);});
+test('packing step retains read-only token and reauthenticates every fresh source',()=>{
+  const build=step('name: Build both production versions without duplicating the large data tree');
+  assert.equal(condition(build),freshCondition);
+  assert.match(build,/^        env:\n          GH_TOKEN: \$\{\{ github.token \}\}/m);
+});
 test('one ordinary dataset is prepared before both UI copies, including all top-level JSON',()=>{const prepare=workflow.indexOf('design-financial-carry.mjs prepare'),copy=workflow.indexOf('cp -a frontend/public/static-data'),build=workflow.indexOf('for target in baseline current');assert.ok(prepare>0&&copy>prepare&&build>copy);for(const file of ['research-daily.json','portfolio-model.json','qualification-audit.json','ibd-reference.json'])assert.ok(workflow.slice(prepare,build).includes(file));assert.match(workflow.slice(prepare,build),/dataInventoryDigest\(process.argv\[1\]\).*dataInventoryDigest\(process.argv\[2\]\)/);});
 test('ordinary build is Vite-only after copy and leaves a real raw baseline',()=>{const build=workflow.slice(workflow.indexOf('for target in baseline current'),workflow.indexOf('Measure all routes'));assert.match(build,/if \[ -n "\$\{FINANCIAL_CANDIDATE_DIR:-\}" \]; then\n\s+# Existing correction comparisons retain their separate baseline.\n\s+\(cd "\$source" && node tools\/export-research.mjs && node tools\/record-candidate-history.mjs\)\n\s+fi/);assert.match(build,/npx vite build/);assert.doesNotMatch(build,/npm run build|ln -s "\$RUNNER_TEMP\/design-\$target-data"/);assert.match(build,/mv "\$RUNNER_TEMP\/design-\$target-data" "\$source\/dist\/static-data"/);});
-test('preview cannot enter seal/candidate output, and failure evidence is retained',()=>{assert.equal((workflow.match(/if: success\(\) && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == ''/g)||[]).length,2);assert.match(workflow,/name: Preserve all results even when a budget fails\n\s+if: always\(\)/);assert.match(workflow,/design-carry-evidence\//);assert.match(workflow,/frontend\/test-results\/design-review\//);assert.doesNotMatch(adapter,/writeFinancialReleaseReceipt|selectOrdinaryCarryAdmission|publisherToolingBoundary|design-seal/);});
+test('preview cannot enter seal/candidate output, and fresh failure evidence is retained',()=>{
+  const guard="(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '') && "+freshCondition;
+  expectCondition('name: Seal the exact tested financial candidate',guard);
+  expectCondition('name: Retain the exact tested financial candidate',guard);
+  expectCondition('name: Preserve all results even when a budget fails','(always()) && '+freshCondition);
+  assert.match(workflow,/design-carry-evidence\//);assert.match(workflow,/frontend\/test-results\/design-review\//);
+  assert.doesNotMatch(adapter,/writeFinancialReleaseReceipt|selectOrdinaryCarryAdmission|publisherToolingBoundary|design-seal/);
+});
 test('adapter uses unchanged carry/history/quality gates and no provider acquisition',()=>{for(const token of ['checkedExport','verifyArchive','livePublication','restorePublishedFinancialSource','prepareHistoryReconciliation','writeHistoryPayloads','commitHistoryCatalogs','restorePackedHistory','prepareCarryHistory','readCarryTargetBase','loadFinancialGenerationCarry','verifyCarriedBundle','verifyReconciledPerformance','check-data-quality.mjs','assessRetainedUniverse'])assert.ok(adapter.includes(token),token);assert.doesNotMatch(adapter,/export-financial-history\.py|yfinance|requests\.get|FINANCIAL_EVALUATED_AT:process.env/);assert.match(adapter,/evaluatedAt:Date.now\(\)/);});
 
 test('real carry replay uses one fixed memory budget without allowing runtime hooks',()=>{assert.match(workflow,/node --max-old-space-size=4096 \.github\/scripts\/design-financial-carry.mjs prepare/);assert.match(workflow,/node --max-old-space-size=4096 \.github\/scripts\/design-transport.mjs/);assert.match(adapter,/process.execArgv.length===1&&process.execArgv\[0\]==='--max-old-space-size=4096'/);assert.match(adapter,/process.env.NODE_OPTIONS\|\|process.env.NODE_PATH/);});
 
 
-test('Design allows a finite 90-minute job without changing runner or acceptance gates',()=>{
-  assert.match(workflow,/runs-on: ubuntu-latest\n(?:\s*#[^\n]*\n)*\s+timeout-minutes: 90\n/);
+test('Design allows a finite 120-minute job without changing runner or acceptance gates',()=>{
+  assert.match(workflow,/runs-on: ubuntu-latest\n(?:\s*#[^\n]*\n)*\s+timeout-minutes: 120\n/);
   assert.equal((workflow.match(/timeout-minutes:/g)||[]).length,1);
   assert.doesNotMatch(workflow,/continue-on-error:/);
-  assert.match(workflow,/name: Require reviewed screenshots and four design scores of at least 8\.0\n\s+if: always\(\)/);
-  assert.match(workflow,/run: node tools\/check-design-review\.mjs/);
+  const image=step('name: Require reviewed screenshots and four design scores of at least 8.0');
+  assert.equal(condition(image),'(always()) && '+freshCondition);
+  assert.match(image,/^        working-directory: frontend$/m);
+  assert.match(image,/^        run: node tools\/check-design-review\.mjs$/m);
+  assert.equal((workflow.match(/run: node tools\/check-design-review\.mjs/g)||[]).length,1);
 });
 test('UTC stage markers bracket preparation, builds, full transport and browser work',()=>{
   const pairs=[['carry-prepare','node --max-old-space-size=4096 .github/scripts/design-financial-carry.mjs prepare'],['vite-$target','(cd "$source" && npx vite build)'],['transport-verify-pack-roundtrip','node --max-old-space-size=4096 .github/scripts/design-transport.mjs'],['radar-build','(cd frontend && node tools/build-radar-benchmark.mjs)'],['browser-measurements','node tools/design-review.mjs']];
@@ -65,7 +87,10 @@ test('browser timing preserves nonzero exit and never logs false completion',()=
 test('Design has one isolated pinned offline calendar runtime before candidate preparation',()=>{
   const setup=workflow.indexOf('      - uses: actions/setup-python@v5'),install=workflow.indexOf('Install isolated offline exchange calendar runtime'),prepare=workflow.indexOf('Prepare the certified financial candidate');
   assert.ok(setup>=0&&install>setup&&prepare>install);
-  assert.doesNotMatch(workflow.slice(setup,install),/\n\s+if:/);
+  expectCondition('uses: actions/setup-python@v5',freshCondition);
+  expectCondition('name: Install isolated offline exchange calendar runtime',freshCondition);
+  expectCondition('name: Prepare the certified financial candidate',freshCondition);
+  assert.equal((workflow.match(/uses: actions\/setup-python@v5/g)||[]).length,1);
   assert.match(workflow,/session-calendar-runtime\/bin\/python.*pip install -r \.github\/scripts\/session-calendar-requirements\.txt/);
   assert.match(workflow,/SESSION_CALENDAR_PYTHON=\$RUNNER_TEMP\/session-calendar-runtime\/bin\/python/);
   const requirements=readFileSync(new URL('./session-calendar-requirements.txt',import.meta.url),'utf8');
@@ -94,4 +119,52 @@ test('non-carry Design derives once before shared input copy and never calls the
   assert.equal((workflow.match(/export-book-benchmark\.py/g)||[]).length,1);
   assert.match(workflow,/env -u GH_TOKEN -u GITHUB_TOKEN \"\$SESSION_CALENDAR_PYTHON\" -I tools\/export-book-benchmark\.py/);
   assert.doesNotMatch(workflow.slice(calendar,copy),/--allow-unavailable/);
+});
+
+test('locked dependencies precede selection and only explicit reuse invokes read-only acceptance',()=>{
+  const install='run: npm ci --no-audit --no-fund',select='name: Select explicit artifact-bound prior-capture review';
+  expectCondition(install,null);expectCondition(select,null);
+  assert.ok(workflow.indexOf('      - '+install)<workflow.indexOf('      - '+select));
+  const accept=step('name: Verify exact historical capture and current committed review');
+  assert.equal(condition(accept),"steps.prior.outputs.reuse == 'true'");
+  assert.match(accept,/^          GH_TOKEN: \$\{\{ github.token \}\}$/m);
+  assert.match(accept,/^        run: node frontend\/tools\/design-capture-lifecycle.mjs accept$/m);
+  assert.match(step(select),/^        run: node frontend\/tools\/design-capture-lifecycle.mjs select$/m);
+  expectCondition('name: Preserve distinct reviewed-prior-capture result',"always() && steps.prior.outputs.reuse == 'true'");
+  assert.match(step('name: Preserve distinct reviewed-prior-capture result'),/reviewed-prior-capture-result\.json/);
+});
+
+test('all17 existing fresh stages preserve their original conditions and exclude reuse',()=>{
+  const request="(hashFiles('.github/financial-release-request.json') != '')";
+  const guards=[
+    ['run: npx playwright install --with-deps chromium',null],['uses: actions/setup-python@v5',null],
+    ['name: Install isolated offline exchange calendar runtime',null],
+    ['name: Install certified offline projection dependencies',request],['name: Verify isolated offline native projection runtime',request],
+    ['name: Prepare the certified financial candidate',null],['name: Restore checked input and record the comparison basis',null],
+    ['name: Build both production versions without duplicating the large data tree',null],['name: Measure all routes, screenshots, accessibility and CPU 4x',null],
+    ['name: Require reviewed screenshots and four design scores of at least 8.0','(always())'],
+    ['name: Package UNAPPROVED financial diagnostics after unsuccessful Design',"((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true')"],
+    ['name: Retain UNAPPROVED financial diagnostics for review only',"((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true' && steps.financial_diagnostic.outcome == 'success')"],
+    ['name: Seal the exact tested financial candidate',"(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')"],
+    ['name: Retain the exact tested financial candidate',"(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')"],
+    ['name: Preserve all results even when a budget fails','(always())'],['name: Stage bounded compact Design evidence','(always())'],
+    ['name: Preserve compact Design review screenshots and report',"(always() && steps.compact.outcome == 'success')"],
+  ];
+  assert.equal(guards.length,17);
+  for(const [header,original]of guards)expectCondition(header,(original?original+' && ':'')+freshCondition);
+});
+
+test('historical packages require completed fresh main measurements but not later financial approval',()=>{
+  const packageHeader='name: Stage immutable reviewable Design capture',uploadHeader='name: Preserve immutable reviewable Design capture';
+  expectCondition(packageHeader,"always() && steps.prior.outputs.reuse != 'true' && steps.measure.outcome == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'");
+  expectCondition(uploadHeader,"always() && steps.capture_package.outcome == 'success' && steps.capture_package.outputs.staged == 'true'");
+  assert.match(step('name: Measure all routes, screenshots, accessibility and CPU 4x'),/^        id: measure$/m);
+  assert.match(step(packageHeader),/^        id: capture_package$/m);
+  assert.match(step(packageHeader),/^        run: node tools\/design-capture-lifecycle.mjs package$/m);
+  assert.ok(workflow.indexOf('name: Require reviewed screenshots')<workflow.indexOf(packageHeader));
+  assert.ok(workflow.indexOf(packageHeader)<workflow.indexOf(uploadHeader));
+  assert.ok(workflow.indexOf(uploadHeader)<workflow.indexOf('name: Seal the exact tested financial candidate'));
+  assert.match(step(uploadHeader),/^          if-no-files-found: error$/m);
+  assert.match(step(uploadHeader),/^          retention-days: 14$/m);
+  assert.doesNotMatch(step(packageHeader),/design-seal|candidate ==|FINANCIAL_CANDIDATE_DIR|financial_admission/);
 });

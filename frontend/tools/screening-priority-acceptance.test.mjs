@@ -16,6 +16,7 @@ import { FINANCIAL_DESIGN_CASES } from './financial-design-cases.mjs';
 import { sealFinancialCarryDesignReport } from './financial-carry-design-cases.mjs';
 import { SCREENING_PRIORITY_POLICY, DESIGN_GROUPS, requiredScreeningCaptures, screeningPriorityBinding, assessScreeningPriority,
   finishScreeningPriority, checkedScreeningPriority, requireWarningReviewImages } from './screening-priority-acceptance.mjs';
+import { SCREENING_IMAGE_REVIEW_POLICY, VISUAL_CHECKS } from './screening-priority-image-review.mjs';
 
 const frontend = fileURLToPath(new URL('..', import.meta.url));
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { cwd: frontend, encoding: 'utf8' }).trim();
@@ -168,7 +169,7 @@ for(const [name,change] of [
   ['changed seal',f=>{const path=join(f.options.output,'financial-carry-evidence.json'),value=JSON.parse(readFileSync(path));value.objective_failures=0;write(path,value);}],
 ]) test('carry completion rejects '+name,async t=>{const f=await filesFixture(t,'carry');finishScreeningPriority({...f.options,before:f.before,completedGroups:DESIGN_GROUPS});change(f);assert.throws(()=>checkedScreeningPriority(f.options));});
 
-function runReview(f, {candidate=false, omitHash=false, lowScore=false, absentReview=false}={}) {
+function runReview(f, {candidate=false, omitHash=false, lowScore=false, absentReview=false,imagePolicy=false,materialFinding=false,unknownFinding=false,missingClassification=false,missingVisibleCheck=false}={}) {
   // Emulate only Git ancestry for the CLI fixture. No review, real pixels,
   // authenticated CI or public source acceptance is produced by this test.
   const bin=join(f.root,'bin');mkdirSync(bin);
@@ -177,6 +178,19 @@ function runReview(f, {candidate=false, omitHash=false, lowScore=false, absentRe
   const directory=join(f.root,'docs/design-review');mkdirSync(directory,{recursive:true});
   if(!absentReview)write(join(directory,'2026-10-21.json'),{observed_commit:commit,reviewer:'synthetic-fixture',evidence_run:'synthetic-fixture',screens:f.options.report.screens.map((screen,index)=>({key:screen.key,screenshot:screen.screenshot,
     ...(!omitHash||index?{sha256:screen.sha256}:{}),scores:Object.fromEntries(['design','usability','originality','content'].map(key=>[key,{value:lowScore?7:8,reason:'synthetic test only'}]))}))});
+  if(imagePolicy&&!absentReview){
+    const path=join(directory,'2026-10-21.json'),review=JSON.parse(readFileSync(path));
+    review.review_policy=SCREENING_IMAGE_REVIEW_POLICY;review.evidence_run='https://github.com/kusennjp1-ai/screener/actions/runs/123';
+    for(const screen of review.screens){
+      screen.visualChecks=Object.fromEntries(VISUAL_CHECKS.map(key=>[key,{status:'pass',reason:'Synthetic visible-only fixture: '+key}]));
+      screen.findings=Object.keys(screen.scores).filter(axis=>screen.scores[axis].value<8).map(axis=>({axis,category:'cosmetic',screeningImpact:'non_screening_aesthetic',reason:'Synthetic cosmetic-only finding'}));
+    }
+    if(materialFinding)review.screens[0].findings.push({axis:'design',category:'clipping',screeningImpact:'screening_material',reason:'Synthetic essential chart tick clipped'});
+    if(unknownFinding)review.screens[0].findings.push({axis:'design',category:'other',screeningImpact:'unknown',reason:'Synthetic ambiguous visible label'});
+    if(missingClassification)delete review.screens[0].findings[0].screeningImpact;
+    if(missingVisibleCheck)delete review.screens[0].visualChecks.text_and_labels;
+    write(path,review);
+  }
   const env={...process.env,...f.options.env,PATH:bin+':'+process.env.PATH,DESIGN_INPUT_BASIS:'same_verified_input'};
   delete env.FINANCIAL_CANDIDATE_DIR;if(candidate)env.FINANCIAL_CANDIDATE_DIR='/certified-fixture';
   return spawnSync(process.execPath,[join(frontend,'tools/check-design-review.mjs')],{cwd:join(f.root,'frontend'),env,encoding:'utf8'});
@@ -192,3 +206,17 @@ test('actual review CLI also requires completion when original failures are empt
   const f=await filesFixture(t);f.options.report.failures=[];write(join(f.options.output,'report.json'),f.options.report);
   const result=runReview(f);assert.notEqual(result.status,0);assert.match(result.stderr,/screening-priority-completion/);
 });
+
+test('actual review CLI accepts scoped cosmetic debt without claiming original scores passed',async t=>{
+  const f=await filesFixture(t,'carry');finishScreeningPriority({...f.options,before:f.before,completedGroups:DESIGN_GROUPS});
+  const result=runReview(f,{imagePolicy:true,lowScore:true});assert.equal(result.status,0,result.stderr);
+  assert.match(result.stdout,/strict_image_result=failed; strict_result=failed; images=deferred_aesthetic_warning/);
+  assert.doesNotMatch(result.stdout,/Design score gate passed/);assert.match(result.stderr,/Deferred non-screening aesthetics/);
+  const record=JSON.parse(readFileSync(join(f.options.output,'screening-priority-image-assessment.json')));
+  assert.equal(record.original_scores.length,162*4);assert(record.original_scores.every(score=>score.value===7));
+});
+for(const [name,options]of [['material finding',{materialFinding:true}],['unknown finding',{unknownFinding:true}],['missing classification',{missingClassification:true}],['missing visible check',{missingVisibleCheck:true}],['candidate scope',{candidate:true}],['missing exact image hash',{omitHash:true}]])test('actual image-policy review CLI blocks '+name,async t=>{
+  const f=await filesFixture(t,'carry');finishScreeningPriority({...f.options,before:f.before,completedGroups:DESIGN_GROUPS});
+  const result=runReview(f,{imagePolicy:true,lowScore:true,...options});assert.notEqual(result.status,0,result.stdout);
+});
+

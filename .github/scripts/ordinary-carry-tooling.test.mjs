@@ -345,6 +345,29 @@ test('CI disabled prepared parent holds all callbacks even after expiry without 
   }}finally{checkoutCi();}
 });
 test('CI absent request preserves unrelated routing and creates no authority',async()=>{const root=mkdtempSync(join(tmpdir(),'ordinary-ci-absent-'));try{assert.equal(readOrdinaryCiRequest(root),null);assert.deepEqual(await routeOrdinaryCi({root,api:()=>assert.fail('Unexpected API')}),{ordinary_hold:false,ordinary_ci:false,ordinary_hold_marker:''});}finally{rmSync(root,{recursive:true,force:true});}});
+test('retired October17 request preserves exact historical bytes outside the active path',()=>{
+  const path='.github/retired-publication-requests/2026-10-17/ordinary-carry-oct17-request.json',raw=readFileSync(join(CI_REPO_ROOT,path));
+  assert.equal(sha(raw),'3016f5139eec6bdb25760a9c0e1ca5ab2666a9d917f471ab1a3a7bd06aa935b3');
+  assert.equal(createHash('sha1').update(Buffer.concat([Buffer.from(`blob ${raw.length}\0`),raw])).digest('hex'),'212cd869de98ee452b0982c2300041db2ea59b7a');
+  assert.deepEqual(validateOrdinaryCiRequest(JSON.parse(raw)),CI_DISABLED);
+  assert.equal(readOrdinaryCiRequest(CI_REPO_ROOT),null,'Historical archive must not reserve the active request path');
+});
+test('archived disabled request permits ordinary routing but cannot revive expired source authority',async()=>{
+  const root=mkdtempSync(join(tmpdir(),'ordinary-ci-retired-')),archive='.github/retired-publication-requests/2026-10-17/ordinary-carry-oct17-request.json';
+  const raw=readFileSync(join(CI_REPO_ROOT,archive)),expired=Date.parse(CI.not_after)+1;
+  try{
+    mkdirSync(join(root,'.github/retired-publication-requests/2026-10-17'),{recursive:true});writeFileSync(join(root,archive),raw);
+    for(const event of [undefined,{workflow_run:{path:'.github/workflows/ci.yml'}},{workflow_run:{path:'.github/workflows/design-acceptance.yml'}},{workflow_run:{path:'.github/workflows/static-site.yml'}}]){
+      assert.deepEqual(await routeOrdinaryCi({root,event,now:expired,api:()=>assert.fail('Archive synthesized API authority')}),{ordinary_hold:false,ordinary_ci:false,ordinary_hold_marker:''});
+    }
+    for(const identity of [LEGACY,RETIRED,OCT11_ORDINARY_CARRY_V3,CI]){
+      assert.throws(()=>selectOrdinaryCarryAdmission(selectionState(identity),expired),identity===CI?/Fresh authenticated ordinary CI admission required/:/no unique active/);
+      assert.throws(()=>assertOrdinaryClock(expired,identity),/window/);
+    }
+    writeFileSync(join(root,CI_REQUEST),raw);
+    assert.deepEqual(await routeOrdinaryCi({root,now:expired,api:()=>assert.fail('Active disabled request reached API')}),{ordinary_hold:true,ordinary_ci:false,ordinary_hold_marker:'Hold disabled ordinary carry v4-ci '+sha(raw)});
+  }finally{rmSync(root,{recursive:true,force:true});}
+});
 for(const [name,mutate]of [
  ['extra key',v=>{v.allow_publish=true;}],['unrecognized plan',v=>{v.plan_id+='-other';}],['wrong schema',v=>{v.schema_version='v2';}],['wrong identity digest',v=>{v.identity_sha256=h;}],['nonboolean enabled',v=>{v.enabled=1;}],['disabled activation',v=>{v.activation={};}],['enabled without activation',v=>{v.enabled=true;}],['unknown activation key',v=>{v.enabled=true;v.activation={reviewed_parent_sha:g,reviewed_parent_tree:g,disabled_request_sha256:h,retry:true};}],['short parent',v=>{v.enabled=true;v.activation={reviewed_parent_sha:'abc',reviewed_parent_tree:g,disabled_request_sha256:h};}]
 ])test('CI strict request rejects '+name,()=>{const v=clone(CI_DISABLED);mutate(v);assert.throws(()=>validateOrdinaryCiRequest(v));});
@@ -524,3 +547,4 @@ test('CI normal newest eligible export wins selection and a source race aborts w
  const chosen=chooseExport({manifest:manifest('2026-10-16'),knownPriceDates:{}},[{artifacts:[older,artifact,companion]}],CI_REPOSITORY.full_name,api,item=>{assert.equal(item.id,companion.id);return {run_id:id,run_attempt:1,source_sha:run.head_sha,artifact_name:artifact.name,manifest_json:raw,manifest_sha256:sha(raw),price_observations:{},price_observations_sha256:sha('{}')};});
  assert.equal(chosen.artifact.id,artifact.id);assert.throws(()=>assertOrdinaryCiSource(chosen),/Newest eligible/);assert(calls.every(e=>e.includes('/'+id+'/')));
 });
+
