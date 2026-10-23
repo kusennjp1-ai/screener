@@ -78,7 +78,7 @@
 /* Mobile actions precede the optional chart; desktop geometry is unchanged. */
 @media (max-width:700px) {
  .research-overview .hero-date { padding-right:0; margin-bottom:2px; }
- .research-overview .hero-copy h1,.research-overview.hero-collapsed .hero-copy h1 { font-size:22px; line-height:1.25; }
+ .research-overview .hero-copy h1,.research-overview.hero-collapsed .hero-copy h1 { font-size:20px; line-height:1.25; }
  .research-overview .hero-actions { position:static; display:flex; gap:4px; margin-top:2px; flex-wrap:nowrap; }
  .research-overview .hero-actions button { flex:1; min-width:44px; min-height:44px; padding:4px; font-size:12px; }
  .research-overview .hero-actions .changes-trigger { position:static; color:var(--text-2); text-align:center; }

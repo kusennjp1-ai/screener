@@ -176,3 +176,10 @@ it('adds safe-area classification to the daily changes drawer',()=>{
  render(<ResearchHero {...props}/>);fireEvent.click(screen.getByRole('button',{name:'候補の日次変化'}));
  expect(screen.getByRole('dialog',{name:'候補の日次変化'})).toHaveClass('research-safe-drawer');
 });
+
+it('uses the established 20px font step for the compact mobile overview heading',()=>{
+ const css=readFileSync('src/static/components/researchOverview.css','utf8');
+ const mobile=css.slice(css.lastIndexOf('@media (max-width:700px)'));
+ expect(mobile).toMatch(/\.research-overview \.hero-copy h1,\.research-overview\.hero-collapsed \.hero-copy h1 \{ font-size:20px; line-height:1\.25;/);
+ expect(mobile).not.toMatch(/font-size:22px/);
+});
