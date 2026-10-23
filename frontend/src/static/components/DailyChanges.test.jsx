@@ -96,3 +96,13 @@ it('labels preserved first-record comparisons under the same policy',()=>{
   expect(screen.getByRole('note')).toHaveTextContent('同じルールで保存した初回判定を比較');
   expect(screen.getByRole('note')).toHaveTextContent('後からの財務更新で、過去の通過・脱落を変更しません');
 });
+
+
+it('keeps the observation dates and event type with each expanded event',()=>{
+  const query=detailQuery([{symbol:'A',state:'new',changes:[{id:'eps',label:'利益成長',before:['unknown',null],after:['pass',true]}]}],{new:1});
+  render(<DailyChanges query={query} method="minervini"/>);
+  fireEvent.click(screen.getByText('変化の内訳を開く'));
+  fireEvent.click(screen.getByText('A · 今回通過 · 1条件が変化'));
+  expect(screen.getByText('日次の選定条件 · 2026-09-29 → 2026-09-30')).toBeVisible();
+  expect(screen.getByText(/前回：未確認/)).toHaveTextContent('今回：通過');
+});

@@ -8,7 +8,7 @@ const row = withAuditFixture({ symbol:'LEAD', company_name:'Chart regression fix
   market_above_50dma:true, market_above_200dma:true },date);
 const bars = Array.from({length:320},(_,i)=>({date:new Date(Date.UTC(2025,10,10+i)).toISOString().slice(0,10),open:85+i*.05,high:86+i*.05,low:84+i*.05,close:85.5+i*.05,volume:1000000+i*1000}));
 
-for (const width of [1440,390]) test(`research navigation and contrast at ${width}px`,async({page},testInfo)=>{
+for (const width of [1440,1280,1024,390]) test(`research navigation and contrast at ${width}px`,async({page},testInfo)=>{
   const pageErrors=[]; page.on('pageerror',error=>pageErrors.push(error.message));
   await page.setViewportSize({width,height:width===390?844:900});
   await page.route('**/static-data/**',async route=>{
@@ -18,12 +18,30 @@ for (const width of [1440,390]) test(`research navigation and contrast at ${widt
     await route.fulfill({json:payload});
   });
   await page.goto('/');
+  const navigation=page.getByRole('navigation',{name:width>700?'メインナビゲーション':'モバイルナビゲーション',exact:true});
+  await expect(navigation).toBeVisible();
+  await expect(navigation.getByRole('link',{name:'本日の判断'})).toHaveAttribute('aria-current','page');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await expect(page.getByRole('button',{name:/^LEAD の分析を表示/})).toBeVisible();
+  if(width>700) await page.getByRole('button',{name:'候補の日次変化',exact:true}).click({trial:true});
   await page.getByRole('button',{name:'候補を絞り込む'}).click();
   await expect(page.getByRole('dialog',{name:'候補を絞り込む'})).toBeVisible();
   await page.getByRole('button',{name:'候補を確認する →'}).click();
   await expect(page.getByRole('region',{name:'対象銘柄',exact:true})).toBeFocused();
   await expect(page.getByRole('dialog',{name:'候補を絞り込む'})).toHaveCount(0);
+  if(width>700) {
+    // Browsing candidates should reserve the header once, not expose the last
+    // few pixels of the preceding overview's actions behind its navigation.
+    await expect.poll(async()=>page.evaluate(()=>{
+      const header=document.querySelector('.leader-header').getBoundingClientRect();
+      const board=document.getElementById('candidate-board').getBoundingClientRect();
+      const changes=document.querySelector('.changes-trigger').getBoundingClientRect();
+      return {
+        boardBelowHeader:board.top>=header.bottom+8 && board.top<=header.bottom+24,
+        changesNotPartiallyObscured:changes.bottom<=header.bottom || changes.top>=header.bottom,
+      };
+    })).toEqual({boardBelowHeader:true,changesNotPartiallyObscured:true});
+  }
   if(width===1440) await expect(page.getByLabel('銘柄・企業名を検索')).not.toBeFocused();
   if(width===390) await page.getByRole('button',{name:/^LEAD の分析を表示/}).click();
   for(const mode of ['dark','light']) {

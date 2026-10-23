@@ -50,3 +50,60 @@ for (const viewport of [{width:1440,height:900},{width:390,height:844}]) {
     expect(expanded.violations).toEqual([]);
   });
 }
+
+// Exercise the real overflow strip, not just a screenshot of its clipped edge.
+// Synthetic presets intentionally use simple RS filters, not investment rules.
+const presetIds=['minervini','minervini_vcp','minervini_usic','canslim','ibd_composite','ibd50','vcp','blue_dot_leaders','vol_break','episodic_pivot','momentum','kell_growth','rs_power','leaders_in_leading_groups','new_highs','pocket_pivot','power_trend','accumulation','se_cup_handle','se_double_bottom','se_high_tight_flag','se_first_pullback','se_three_weeks_tight','se_nr7_inside_day','gainers_4pct','movers_9m','movers_20_weekly','club_97'];
+for(const width of [1440,390]) for(const theme of ['dark','light']) {
+  test(`scan far-right preset remains reachable ${width} ${theme}`,async({page},info)=>{
+    await page.setViewportSize({width,height:width===390?844:900});
+    const presetRows=rows.map((row,index)=>({...row,rs_rating:index===0?95:80}));
+    const presets=presetIds.map((id,index)=>({id,tier:index<10?1:2,name:id,short_name:id,
+      filters:{rsRating:{min:id==='club_97'?90:80,max:null}},sort_by:'rs_rating',sort_order:'desc'}));
+    await page.route('**/static-data/**',async route=>{
+      const file=new URL(route.request().url()).pathname.split('/').pop();
+      const data=file==='manifest.json'?{as_of_date:'2026-09-29',pages:{scan:{path:'scan.json',list_path:'scan.json'}}}
+        :file==='scan.json'?{as_of_date:'2026-09-29',rows_total:presetRows.length,initial_rows:presetRows,embedded_chart_paths:true,default_page_size:50,
+          default_filters:{minVolume:100000000},sort:{field:'rs_rating',order:'desc'},filter_options:{gics_sectors:['Technology']},preset_screens:presets}:{};
+      await route.fulfill({json:data});
+    });
+    await page.goto('/#/scan');
+    await expect(page.getByRole('heading',{name:'詳細スキャン',exact:true})).toBeVisible();
+    if(theme==='light') await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
+    if(width===390) await page.getByRole('button',{name:/条件・使い方/}).click();
+    const allStocks=page.getByRole('button',{name:'全銘柄',exact:true});
+    // ScreenSelector's all-stocks chip is a direct child of its scroll Box.
+    const strip=allStocks.locator('..');
+    const farRight=strip.getByRole('button',{name:'補助 騰落上位3% (1)',exact:true});
+    await expect(farRight).toBeEnabled();
+    expect(await strip.evaluate(el=>getComputedStyle(el).overflowX)).toBe('auto');
+    expect(await strip.evaluate(el=>el.scrollWidth>el.clientWidth)).toBe(true);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await strip.hover();
+    await page.mouse.wheel(10000,0);
+    await expect.poll(()=>strip.evaluate(el=>Math.abs(el.scrollWidth-el.clientWidth-el.scrollLeft))).toBeLessThanOrEqual(1);
+    const expectCompletePreset=async()=>{
+      await expect(farRight).toHaveAccessibleName('補助 騰落上位3% (1)');
+      await expect(farRight).toBeInViewport({ratio:1});
+      await expect.poll(()=>strip.evaluate(el=>{
+        const chips=el.querySelectorAll('[role="button"]'),chip=chips[chips.length-1];
+        const box=chip.getBoundingClientRect(),bounds=el.getBoundingClientRect(),label=chip.querySelector('.MuiChip-label');
+        return box.left>=Math.max(0,bounds.left) && box.right<=Math.min(innerWidth,bounds.right)+1
+          && label.scrollWidth<=label.clientWidth;
+      })).toBe(true);
+    };
+    await expectCompletePreset();
+    const chips=strip.getByRole('button');
+    await chips.nth(await chips.count()-2).focus();
+    await page.keyboard.press('Tab');
+    await expect(farRight).toBeFocused();
+    await expectCompletePreset();
+    await farRight.click();
+    await expect(page).toHaveURL(/#\/scan\?screen=club_97$/);
+    await expect(farRight).toHaveClass(/MuiChip-filled/);
+    if(width===390) await expect(page.getByTestId('mobile-scan-row')).toHaveCount(1);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await expectCompletePreset();
+    await page.screenshot({path:info.outputPath(`scan-presets-end-${width}-${theme}.png`)});
+  });
+}
