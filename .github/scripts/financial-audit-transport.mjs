@@ -91,7 +91,10 @@ export function validateFinancialAuditTransport(value,publication){
   if(!exact(value,['schema_version','root','storage_data_inventory_sha256'])||value.schema_version!==AUDIT_TRANSPORT_SCHEMA
     ||!/^[a-f0-9]{64}$/.test(value.storage_data_inventory_sha256||''))throw Error('Invalid closed financial audit transport descriptor');
   validateExpectedRoot(value.root);
-  if(!publication?.financial_release||!publication.transport||!Object.keys(compressedAuditFiles(publication)).length)throw Error('Financial audit transport requires an approved logical inventory');
+  const preview=publication?.schema==='static-json-transport-preview-v1'&&publication.publication_authority==='none'
+    &&exact(publication,['schema','publication_authority','ui_sha','ui_digest','data_manifest_sha256','transport','financial_audit_files','financial_audit_transport']);
+  if((!publication?.financial_release&&!preview)||!publication.transport||!Object.keys(compressedAuditFiles(publication)).length)throw Error('Financial audit transport requires an approved logical inventory');
+  if(preview&&(!/^[a-f0-9]{64}$/.test(value.root.bindings.financialGeneration||'')||!/^[a-f0-9]{64}$/.test(value.root.bindings.financialLineageSha256||'')))throw Error('Financial audit preview requires verified lineage');
   equal(value.root.bindings,publication.transport.root.bindings,'Financial audit transport generation bindings changed');
   return value;
 }

@@ -8,7 +8,7 @@ import {fileURLToPath} from 'node:url';
 import {prepareDesignTransport} from './design-transport.mjs';
 import {bootstrap,dataInventoryDigest,sha256,validateReceipt} from './publication-state.mjs';
 import {completeInventory} from './financial-release-activation.mjs';
-import {canonicalPublication,verifyTransportPublication} from './static-transport-publication.mjs';
+import {canonicalPublication,verifyTransportPublication,validateTransportPreview} from './static-transport-publication.mjs';
 import {validateDesignCarryPreview,verifyDesignCarryPreview} from './design-financial-carry.mjs';
 
 const frontend=fileURLToPath(new URL('../../frontend',import.meta.url)),H='a'.repeat(64);
@@ -185,4 +185,35 @@ for(const linked of [false,true])test(`transport rejects ${linked?'linked':'dire
   const result=spawnSync(process.execPath,[command,f.dist,f.provenance],{cwd:f.repo,encoding:'utf8',env:{PATH:process.env.PATH,GITHUB_SHA:f.revision,TMPDIR:temporary},timeout:15000});
   assert.equal(result.status,1);assert.match(result.stderr,/scratch must stay outside the checked repository/);
   assert.deepEqual(readdirSync(join(f.repo,'frontend')).filter(name=>name.startsWith('.design-transport-roundtrip-')),[]);
+});
+
+test('ordinary Design reuses audit compression with byte-exact recovery and no publication authority',async t=>{
+  const f=fixture(t),bytes=' {"original":'+JSON.stringify('retained evidence '.repeat(100000))+',"unknown":null,"zero":-0}\n';
+  const hash=sha256(bytes),path=`static-data/financial-corrections/source-projection-${hash}.json`;
+  write(join(f.dist,path),bytes);
+  f.state.live={receipt:{financial_generation:H,financial_lineage_sha256:H,financial_audit_files:{[path]:hash}},financialRelease:{financial_generation:H,lineage_sha256:H}};
+  write(f.provenance,f.state);write(join(f.dist,'static-data/manifest.json'),{as_of_date:'2026-10-02',financial_generation:H});
+  const before=dataInventoryDigest(f.dist);
+  await prepareDesignTransport(f.options);
+  const publication=JSON.parse(readFileSync(join(f.dist,'publication.json')));
+  assert.equal(publication.publication_authority,'none');assert.equal(Object.hasOwn(publication,'financial_release'),false);
+  for(const change of [p=>{p.publication_authority='approved';},p=>{delete p.financial_audit_files;},p=>{delete p.financial_audit_transport;},p=>{p.financial_audit_transport.root.bindings.candidateId='b'.repeat(64);},p=>{p.financial_release={};},p=>{p.transport.root.bindings.financialGeneration=null;p.financial_audit_transport.root.bindings.financialGeneration=null;p.transport.root.bindings.financialLineageSha256=null;p.financial_audit_transport.root.bindings.financialLineageSha256=null;},p=>{p.financial_audit_files={[`static-data/financial-corrections/release-${H}.json`]:H};}]){
+    const changed=structuredClone(publication);change(changed);assert.throws(()=>validateTransportPreview(changed));
+  }
+  assert.throws(()=>validateReceipt(publication));
+  assert.deepEqual(publication.financial_audit_transport.root.bindings,publication.transport.root.bindings);
+  assert.equal(publication.transport.logical_data_inventory_sha256,before);
+  assert.equal(existsSync(join(f.dist,path)),false);
+  const checked=await verifyTransportPublication({root:f.dist,frontendRoot:frontend,publication});
+  assert.ok(checked.physicalBytes<Buffer.byteLength(bytes));assert.ok(checked.physicalBytes<1_000_000_000);
+  const restored=await canonicalPublication({root:f.dist,frontendRoot:frontend,publication,restore:join(f.root,'audit-restored')});
+  assert.equal(dataInventoryDigest(restored),before);assert.deepEqual(readFileSync(join(restored,path)),Buffer.from(bytes));
+});
+
+test('ordinary Design refuses audit bytes absent from the verified source inventory',async t=>{
+ const f=fixture(t),bytes='{"retained":true}',hash=sha256(bytes);
+ write(join(f.dist,`static-data/financial-corrections/source-base-${hash}.json`),bytes);
+ f.state.live={receipt:{financial_generation:H,financial_lineage_sha256:H,financial_audit_files:{}},financialRelease:{financial_generation:H,lineage_sha256:H}};
+ write(f.provenance,f.state);write(join(f.dist,'static-data/manifest.json'),{financial_generation:H});
+ await assert.rejects(()=>prepareDesignTransport(f.options),/differs from verified source/);
 });

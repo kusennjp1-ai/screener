@@ -45,9 +45,11 @@ export function validateTransportDescriptor(value,publication) {
 }
 
 export function validateTransportPreview(value) {
-  exact(value,['schema','publication_authority','ui_sha','ui_digest','data_manifest_sha256','transport'],'preview bootstrap');
+  const audit=Object.hasOwn(value,'financial_audit_transport');
+  exact(value,['schema','publication_authority','ui_sha','ui_digest','data_manifest_sha256','transport',...(audit?['financial_audit_files','financial_audit_transport']:[])],'preview bootstrap');
   if(value.schema!==TRANSPORT_PREVIEW_SCHEMA||value.publication_authority!=='none')throw Error('Transport preview cannot grant publication authority');
   validateTransportDescriptor(value.transport,value);
+  if(audit)validateFinancialAuditTransport(value.financial_audit_transport,value);
   return value;
 }
 

@@ -42,7 +42,13 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
       };
     })).toEqual({boardBelowHeader:true,changesNotPartiallyObscured:true});
   }
-  if(width===1440) await expect(page.getByLabel('銘柄・企業名を検索')).not.toBeFocused();
+  if(width===1440) {
+    // The header and filter/inline controls have separate labelled inputs.
+    // Returning to the board must not move focus into the header search.
+    const headerSearch=page.locator('.header-search').getByRole('textbox',{name:'銘柄・企業名を検索',exact:true});
+    await expect(headerSearch).toBeVisible();
+    await expect(headerSearch).not.toBeFocused();
+  }
   if(width===390) await page.getByRole('button',{name:/^LEAD の分析を表示/}).click();
   for(const mode of ['dark','light']) {
     if(mode==='light') await page.getByRole('button',{name:'ライトモードに切り替え'}).click();

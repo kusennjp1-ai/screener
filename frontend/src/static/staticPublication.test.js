@@ -232,3 +232,30 @@ it.each([false,true])('reads %s packed production metadata with retained financi
   expect(await api.loadStaticManifest()).toEqual(source);
   expect(fetcher).toHaveBeenCalledTimes(2);expect(transport.create).not.toHaveBeenCalled();
 });
+
+function auditPreview() {
+ const source={...manifest(),financial_generation:'3'.repeat(64)},metadata=receipt(source);
+ metadata.transport.root.bindings.financialGeneration=source.financial_generation;
+ metadata.transport.root.bindings.financialLineageSha256='4'.repeat(64);
+ metadata.financial_audit_files={[`static-data/financial-corrections/source-base-${'6'.repeat(64)}.json`]:'6'.repeat(64)};
+ metadata.financial_audit_transport={schema_version:'financial-audit-transport-v1',root:structuredClone(metadata.transport.root),storage_data_inventory_sha256:'7'.repeat(64)};
+ return {source,metadata};
+}
+it('accepts the closed non-authoritative audit preview without decoding or admitting financial evidence',async()=>{
+ const {source,metadata}=auditPreview();serve({'static-data/manifest.json':source,'publication.json':metadata});
+ expect(await api.loadStaticManifest()).toEqual(source);expect(transport.create).not.toHaveBeenCalled();
+});
+it.each([
+ ['authority',p=>{p.publication_authority='approved';}],
+ ['release claim',p=>{p.financial_release={};}],
+ ['missing inventory',p=>{delete p.financial_audit_files;}],
+ ['unpaired inventory',p=>{delete p.financial_audit_transport;}],
+ ['changed binding',p=>{p.financial_audit_transport.root.bindings.candidateId='8'.repeat(64);}],
+ ['release-only map',p=>{p.financial_audit_files={[`static-data/financial-corrections/release-${'6'.repeat(64)}.json`]:'6'.repeat(64)};}],
+ ['missing lineage',p=>{p.transport.root.bindings.financialGeneration=null;p.financial_audit_transport.root.bindings.financialGeneration=null;}],
+ ['bad path',p=>{p.financial_audit_files={'static-data/financial-corrections/source-base-wrong.json':'6'.repeat(64)};}],
+ ['extra descriptor field',p=>{p.financial_audit_transport.approved=true;}],
+])('rejects an audit preview with %s',async(_label,change)=>{
+ const {source,metadata}=auditPreview();change(metadata);serve({'static-data/manifest.json':source,'publication.json':metadata});
+ await expect(api.loadStaticManifest()).rejects.toThrow();
+});

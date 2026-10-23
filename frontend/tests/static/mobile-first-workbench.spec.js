@@ -50,6 +50,22 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  await expect(page.locator('.setup-radar')).toHaveCount(0);
  await expect(first.locator('.candidate-daily-pending')).toHaveText(' · 未確認あり');
  await expect(first.locator('.candidate-daily-check')).not.toHaveAttribute('data-ready','true');
+ // Instrument identity must remain fully readable beside the daily warning.
+ // Company names may truncate independently, but ticker text must not.
+ for(const symbol of ['ALPHALONG','BETA']) {
+  const candidate=page.getByRole('button',{name:new RegExp(`^${symbol} の分析を表示`)});
+  const ticker=candidate.locator('.candidate-name-header > strong');
+  await expect(ticker).toHaveText(symbol);
+  expect(await ticker.evaluate(element=>{
+   const range=document.createRange();range.selectNodeContents(element);
+   const text=range.getBoundingClientRect(),box=element.getBoundingClientRect();
+   const status=element.nextElementSibling.getBoundingClientRect();
+   const name=element.closest('.candidate-name'),company=name.querySelector('small').getBoundingClientRect();
+   return {unclipped:element.scrollWidth<=element.clientWidth+1&&text.width<=box.width+1,
+    separate:text.right<=status.left+1,statusFits:status.right<=name.getBoundingClientRect().right+1,
+    companyBelow:company.top>=Math.max(box.bottom,status.bottom)-1};
+  })).toEqual({unclipped:true,separate:true,statusFits:true,companyBelow:true});
+ }
  // Inspect the untouched initial viewport, before any action scrolls content.
  const geometry=await page.evaluate(()=>{
   const rect=element=>{const {top,bottom,left,right,height,width}=element.getBoundingClientRect();return {top,bottom,left,right,height,width};};
@@ -102,8 +118,11 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  await expect(page.locator('#candidate-board')).toBeFocused();
  await expect.poll(async()=>page.evaluate(()=>{
   const board=document.getElementById('candidate-board'),header=document.querySelector('.leader-header');
-  return {margin:parseFloat(getComputedStyle(board).scrollMarginTop),clearance:Math.round(board.getBoundingClientRect().top-header.getBoundingClientRect().bottom)};
- })).toEqual({margin:0,clearance:0});
+  const clearance=board.getBoundingClientRect().top-header.getBoundingClientRect().bottom;
+  // Fractional browser layout can produce -0 when rounded. Bound the actual
+  // gap/overlap to one CSS pixel, rather than comparing signed zero values.
+  return {margin:parseFloat(getComputedStyle(board).scrollMarginTop),withinOnePixel:clearance>=-1&&clearance<=1};
+ })).toEqual({margin:0,withinOnePixel:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  expect(errors).toEqual([]);
 });
