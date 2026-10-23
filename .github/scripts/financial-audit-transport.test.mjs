@@ -5,7 +5,7 @@ import {dirname,join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {execFileSync} from 'node:child_process';
-import {AUDIT_TRANSPORT_PREFIX,auditInternalPath,financialAuditReader,financialAuditRestoreBudget} from './financial-audit-transport.mjs';
+import {AUDIT_TRANSPORT_PREFIX,auditInternalPath,financialAuditReader,financialAuditRestoreBudget,validateFinancialAuditTransport} from './financial-audit-transport.mjs';
 import {financialAuditInventory,FINANCIAL_AUDIT_MAX_BYTES,FINANCIAL_AUDIT_MAX_FILE_BYTES} from './financial-audit-history.mjs';
 import {canonicalPublication,packPublication,previewPublication,transportDescriptor,verifyCapturedTransportAssets,verifyTransportPublication} from './static-transport-publication.mjs';
 import {dataInventory} from './financial-correction.mjs';
@@ -177,4 +177,9 @@ test('self-consistent rebuilt codec layers cannot authorize extra, missing or du
     await assert.rejects(()=>verifyTransportPublication({root:packedRoot,frontendRoot:frontend,publication}),
       attack==='unknown logical path'?/unknown logical paths/:attack==='missing declared audit'?/logical source hash/:/duplicate raw and compressed/);
   }
+});
+
+test('production audit descriptor still requires its financial release declaration',async t=>{
+ const f=await fixture(t),changed=structuredClone(f.publication);delete changed.financial_release;
+ assert.throws(()=>validateFinancialAuditTransport(changed.financial_audit_transport,changed),/approved logical inventory/);
 });

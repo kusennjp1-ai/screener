@@ -62,7 +62,17 @@ export async function loadStaticManifest() {
     else if (transportDeclared) fail('declared transport descriptor is unavailable');
     if (publication) {
       if (publication.schema === 'static-json-transport-preview-v1') {
-        if (!exact(publication, ['schema', 'publication_authority', 'ui_sha', 'ui_digest', 'data_manifest_sha256', 'transport']) || publication.publication_authority !== 'none') fail('preview identity is invalid');
+        const audit = Object.hasOwn(publication, 'financial_audit_transport');
+        if (!exact(publication, ['schema', 'publication_authority', 'ui_sha', 'ui_digest', 'data_manifest_sha256', 'transport', ...(audit ? ['financial_audit_files', 'financial_audit_transport'] : [])]) || publication.publication_authority !== 'none') fail('preview identity is invalid');
+        if (audit) {
+          const descriptor = publication.financial_audit_transport, files = publication.financial_audit_files;
+          if (!exact(descriptor, ['schema_version', 'root', 'storage_data_inventory_sha256']) || descriptor.schema_version !== 'financial-audit-transport-v1' || !HASH.test(descriptor.storage_data_inventory_sha256) || !plain(files) || !Object.keys(files).length || new TextEncoder().encode(JSON.stringify(files)).byteLength > 1024 * 1024) fail('preview audit identity is invalid');
+          validateExpectedRoot(descriptor.root);
+          const binding = descriptor.root.bindings, outer = publication.transport?.root?.bindings;
+          if (!outer || Object.keys(binding).some(key => binding[key] !== outer[key]) || !HASH.test(binding.financialGeneration) || !HASH.test(binding.financialLineageSha256)) fail('preview audit binding mismatch');
+          if (!Object.keys(files).some(path => /^static-data\/financial-corrections\/(?:source-projection|source-base|carry-projection)-/.test(path))) fail('preview audit has no compressible evidence');
+          for (const [path, hash] of Object.entries(files)) if (typeof hash !== 'string' || /^static-data\/financial-corrections\/(?:source-projection|source-base|carry-projection|release|renewal)-([a-f0-9]{64})\.json$/.exec(path)?.[1] !== hash) fail('preview audit path is invalid');
+        }
       } else if (publication.schema !== 1) fail('schema is unsupported');
       if (Object.hasOwn(publication, 'transport')) {
         validateDescriptor(publication.transport, publication, await digest(source.bytes), manifest);

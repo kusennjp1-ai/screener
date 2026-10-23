@@ -154,3 +154,32 @@ it('does not count legacy raw-valid audits as verified coverage', () => {
  view.rerender(<ResearchHero {...props} rows={[row]} ranked={[{row,assessment:{qualified:false}}]}/>);
  expect(screen.getByText(/^日足検証 0(?:\.0)?%$/)).toBeInTheDocument();
 });
+
+for (const collapsed of [false,true]) it(`starts mobile with optional radar closed and keeps scope/warnings when saved collapse is ${collapsed}`,()=>{
+ vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ localStorage.setItem('research-hero-collapsed',String(collapsed));
+ const onBrowse=vi.fn();
+ const rows=[{symbol:'COMPANY',market:'US',current_price:100,adv_usd:3e7},...registry.records.map(record=>({symbol:record.symbol,company_name:record.name,market:record.market,current_price:100,adv_usd:3e7}))];
+ render(<ResearchHero {...props} rows={rows} onBrowse={onBrowse} freshnessNotice={<div role="alert">古い価格の基準日を確認</div>}/>);
+ expect(screen.queryByRole('region',{name:'セットアップ・レーダー'})).not.toBeInTheDocument();
+ expect(screen.getByText(/確認済みファンド BITU・SBIT・ETHE は対象外/)).toBeInTheDocument();
+ expect(screen.getByRole('alert')).toHaveTextContent('古い価格');
+ fireEvent.click(screen.getByRole('button',{name:'銘柄一覧'}));expect(onBrowse).toHaveBeenCalledOnce();
+ fireEvent.click(screen.getByRole('button',{name:'分布を見る'}));
+ expect(screen.getByRole('region',{name:'セットアップ・レーダー'})).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'分布を閉じる'})).toHaveAttribute('aria-expanded','true');
+ fireEvent.click(screen.getByRole('button',{name:'分布を閉じる'}));
+ expect(screen.queryByRole('region',{name:'セットアップ・レーダー'})).not.toBeInTheDocument();
+ vi.unstubAllGlobals();
+});
+it('adds safe-area classification to the daily changes drawer',()=>{
+ render(<ResearchHero {...props}/>);fireEvent.click(screen.getByRole('button',{name:'候補の日次変化'}));
+ expect(screen.getByRole('dialog',{name:'候補の日次変化'})).toHaveClass('research-safe-drawer');
+});
+
+it('uses the established 20px font step for the compact mobile overview heading',()=>{
+ const css=readFileSync('src/static/components/researchOverview.css','utf8');
+ const mobile=css.slice(css.lastIndexOf('@media (max-width:700px)'));
+ expect(mobile).toMatch(/\.research-overview \.hero-copy h1,\.research-overview\.hero-collapsed \.hero-copy h1 \{ font-size:20px; line-height:1\.25;/);
+ expect(mobile).not.toMatch(/font-size:22px/);
+});

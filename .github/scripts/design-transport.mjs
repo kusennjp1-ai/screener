@@ -6,6 +6,7 @@ import {join,resolve,sep} from 'node:path';
 import {tmpdir} from 'node:os';
 import {pathToFileURL} from 'node:url';
 import {dataInventoryDigest,inventoryDigest,sha256,uiInventory} from './publication-state.mjs';
+import {financialAuditInventory} from './financial-audit-history.mjs';
 import {canonicalPublication,packPublication,previewPublication,transportCapable,validateTransportPreview} from './static-transport-publication.mjs';
 
 const hash=value=>typeof value==='string'&&/^[a-f0-9]{64}$/.test(value);
@@ -79,8 +80,17 @@ export async function prepareDesignTransport({dist,provenancePath,repoRoot=proce
   if(sha256(readFileSync(provenancePath))!==sha256(provenanceBytes)||dataInventoryDigest(dist)!==logicalDigest
     ||sha256(readFileSync(join(dist,'static-data/manifest.json')))!==sha256(manifestBytes))throw Error('Design input changed during verification');
   const publication=previewPublication({uiSha:revision,uiDigest:inventoryDigest(uiInventory(dist)),manifestSha256:sha256(manifestBytes)});
+  // Reuse the existing lossless audit codec without creating a release receipt.
+  // Normal input is pinned to the admitted source inventory; carry input was independently replayed above.
+  const auditFiles=financialAuditInventory(dist);
+  const compressFinancialAudit=Object.keys(auditFiles).some(path=>/\/(source-projection|source-base|carry-projection)-/.test(path));
+  if(compressFinancialAudit){
+    if(!generation||!lineage)throw Error('Design audit codec requires verified financial lineage');
+    if(!verifiedCarry&&JSON.stringify(Object.entries(auditFiles).sort())!==JSON.stringify(Object.entries(liveReceipt?.financial_audit_files||{}).sort()))throw Error('Design financial audit inventory differs from verified source');
+    publication.financial_audit_files=auditFiles;
+  }
   diagnostic('pack','start');
-  await packPublication({root:dist,frontendRoot,publication,bindings:{sourceCommit:revision,appCommit:revision,candidateId:sha256(provenanceBytes),financialGeneration:generation,financialLineageSha256:lineage}});
+  await packPublication({root:dist,frontendRoot,publication,compressFinancialAudit,bindings:{sourceCommit:revision,appCommit:revision,candidateId:sha256(provenanceBytes),financialGeneration:generation,financialLineageSha256:lineage}});
   if(sha256(readFileSync(provenancePath))!==sha256(provenanceBytes))throw Error('Design input provenance changed during packing');
   validateTransportPreview(publication);
   diagnostic('pack','complete');

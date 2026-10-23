@@ -300,3 +300,15 @@ it('retains the watch for this screen and reports denied persistence', async () 
   closeFilters();
   expect(within(candidates()).getAllByRole('button')).toHaveLength(1);
 });
+
+it('offers mobile inline search and distinct filter search while retaining the selected query',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ mount();await screen.findByRole('button',{name:/^LEAD の分析を表示/});
+ const inline=screen.getByRole('textbox',{name:'銘柄・企業名を検索'});
+ fireEvent.change(inline,{target:{value:'LEAD'}});
+ await waitFor(()=>expect(screen.queryByRole('button',{name:/^FAIL の分析を表示/})).not.toBeInTheDocument());
+ const drawer=openFilters();
+ const search=within(drawer).getByRole('textbox',{name:'銘柄・企業名を検索'});
+ expect(search).toHaveValue('LEAD');expect(search.id).not.toBe(inline.id);
+ expect(drawer).toHaveClass('research-safe-drawer');closeFilters();
+});

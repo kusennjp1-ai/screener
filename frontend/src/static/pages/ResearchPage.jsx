@@ -245,7 +245,7 @@ export default function ResearchPage({compareOnly=false}) {
     {compareOnly&&<header className="comparison-page-heading"><div className="comparison-page-title"><h1>{nearOnly?'選定あと1条件を比較':'買い位置を比較する'}</h1><p>{METHODS[method].replace(' / CAN SLIM','').replace('リーダー','')} · {nearOnly?'未合格・購入条件は別判定':'価格位置と購入条件は別判定'}</p></div>{freshnessNotice}<Button onClick={()=>setFiltersOpen(true)}>手法・絞り込み</Button></header>}
     {stale&&<Alert severity="warning">公開データの鮮度を確認してください。選定とチャートは日次データです。</Alert>}
     {detailFreshness&&freshnessNotice}
-    <Drawer anchor="right" open={filtersOpen} onClose={()=>setFiltersOpen(false)} PaperProps={{role:'dialog','aria-modal':true,'aria-labelledby':'research-filter-title',sx:{width:{xs:'100%',sm:420},p:3}}}>
+    <Drawer anchor="right" open={filtersOpen} onClose={()=>setFiltersOpen(false)} PaperProps={{className:'research-safe-drawer',role:'dialog','aria-modal':true,'aria-labelledby':'research-filter-title',sx:{width:{xs:'100%',sm:420},p:3}}}>
       <header className="drawer-title"><h2 id="research-filter-title">候補を絞り込む</h2><Button onClick={()=>setFiltersOpen(false)} aria-label="絞り込みを閉じる">×</Button></header>
       <ResearchSearch key={searchResetKey} value={search} onChange={setSearch}/>
       {methodControls}
@@ -270,7 +270,7 @@ export default function ResearchPage({compareOnly=false}) {
     {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
     <div className="research-grid" data-view={actualView}>
-      <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={methodControls} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
+      <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={<>{methodControls}{smallScreen&&!compareOnly&&<div className="mobile-candidate-search"><ResearchSearch key={searchResetKey} value={search} onChange={setSearch}/></div>}</>} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
       {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     {!compareOnly&&<footer className="research-method-note">

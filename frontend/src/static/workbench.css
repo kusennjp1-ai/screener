@@ -120,3 +120,19 @@ html:has(.research-workbench){scroll-padding-top:72px}
 .research-event-row>.MuiButton-root{justify-content:flex-start;text-align:left}
 .leader-desktop-nav a:focus-visible,.research-event-row>summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(max-width:700px){.research-event-row{padding-inline:16px 4px}.research-event-meta{font-size:12px}}
+
+/* CSS variables allow deterministic inset regression fixtures. Real devices
+   use env() values, without assuming browser chrome or notch dimensions. */
+:root { --research-safe-top:env(safe-area-inset-top,0px); --research-safe-bottom:env(safe-area-inset-bottom,0px); }
+@media(max-width:700px){
+ .leader-header{height:calc(48px + var(--research-safe-top));padding-top:var(--research-safe-top);box-sizing:border-box}
+ .leader-mobile-nav{height:calc(56px + var(--research-safe-bottom));padding-bottom:var(--research-safe-bottom);box-sizing:border-box}
+ .leader-content{padding-bottom:calc(56px + var(--research-safe-bottom))}
+ html:has(.research-workbench){scroll-padding-top:calc(48px + var(--research-safe-top));scroll-padding-bottom:calc(56px + var(--research-safe-bottom))}
+ /* Root scroll padding owns header clearance; do not add it twice. */
+ .research-list,.research-detail{scroll-margin-top:0}
+ .research-safe-drawer.MuiDrawer-paper{padding-top:calc(24px + var(--research-safe-top));padding-bottom:calc(24px + var(--research-safe-bottom))}
+ .portfolio-plan-drawer.MuiDialog-paper{padding-top:var(--research-safe-top);padding-bottom:var(--research-safe-bottom);box-sizing:border-box}
+ .method-tabs{height:50px;margin-bottom:2px}
+ .method-tabs button{min-height:44px}
+}
