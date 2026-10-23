@@ -23,11 +23,25 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
   await expect(navigation.getByRole('link',{name:'本日の判断'})).toHaveAttribute('aria-current','page');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await expect(page.getByRole('button',{name:/^LEAD の分析を表示/})).toBeVisible();
+  if(width>700) await page.getByRole('button',{name:'候補の日次変化',exact:true}).click({trial:true});
   await page.getByRole('button',{name:'候補を絞り込む'}).click();
   await expect(page.getByRole('dialog',{name:'候補を絞り込む'})).toBeVisible();
   await page.getByRole('button',{name:'候補を確認する →'}).click();
   await expect(page.getByRole('region',{name:'対象銘柄',exact:true})).toBeFocused();
   await expect(page.getByRole('dialog',{name:'候補を絞り込む'})).toHaveCount(0);
+  if(width>700) {
+    // Browsing candidates should reserve the header once, not expose the last
+    // few pixels of the preceding overview's actions behind its navigation.
+    await expect.poll(async()=>page.evaluate(()=>{
+      const header=document.querySelector('.leader-header').getBoundingClientRect();
+      const board=document.getElementById('candidate-board').getBoundingClientRect();
+      const changes=document.querySelector('.changes-trigger').getBoundingClientRect();
+      return {
+        boardBelowHeader:board.top>=header.bottom+8 && board.top<=header.bottom+24,
+        changesNotPartiallyObscured:changes.bottom<=header.bottom || changes.top>=header.bottom,
+      };
+    })).toEqual({boardBelowHeader:true,changesNotPartiallyObscured:true});
+  }
   if(width===1440) await expect(page.getByLabel('銘柄・企業名を検索')).not.toBeFocused();
   if(width===390) await page.getByRole('button',{name:/^LEAD の分析を表示/}).click();
   for(const mode of ['dark','light']) {
