@@ -61,9 +61,10 @@ export default function WatchNotifications({ rows = EMPTY, watch = EMPTY, asOf, 
     {!watch.length && <Typography sx={{ fontSize: 13 }}>銘柄の☆からウォッチへ追加すると、次の変化から記録します。</Typography>}
     {watch.length > 0 && !events.length && <Typography sx={{ fontSize: 13 }}>変化はまだありません。初回・未確認データからの状態を通知として作りません。</Typography>}
     <Box component="ol" sx={{ listStyle: 'none', p: 0, m: 0 }}>
-      {events.slice(0, 50).map(event => <Box component="li" key={event.id} sx={{ py: 1, borderBottom: '1px solid', borderColor: 'divider' }}>
+      {events.slice(0, 50).map(event => <Box component="li" key={event.id} className="research-event-row">
+        <span className="research-event-kind">{event.source === 'daily' ? '日次の価格位置' : '接続価格の履歴'}</span>
         <Button disabled={!onSelect || !rowMap.has(event.symbol)} onClick={() => onSelect?.(event.symbol)} sx={{ minHeight: 44, fontSize: 14 }}>{event.symbol} · {event.from} → {event.to}</Button>
-        <Typography sx={{ fontSize: 12, color: 'text.secondary' }}>{METHOD_NAMES[event.method] || '方式未確認'} · {event.source === 'daily' ? `日次 ${event.previous_as_of} → ${event.as_of}` : `接続価格 ${new Date(event.observed_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })} JST · このタブ内のみ`}</Typography>
+        <Typography className="research-event-meta" sx={{ fontSize: 12, color: 'text.secondary' }}>{METHOD_NAMES[event.method] || '方式未確認'} · {event.source === 'daily' ? `日次 ${event.previous_as_of} → ${event.as_of}` : `接続価格 ${new Date(event.observed_at).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' })} JST · このタブ内のみ`}</Typography>
       </Box>)}
     </Box>
     {events.length > 50 && <Typography sx={{ fontSize: 12 }}>最新50件を表示しています。</Typography>}

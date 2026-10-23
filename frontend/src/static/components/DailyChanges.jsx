@@ -23,7 +23,8 @@ export default function DailyChanges({query,method,onSelect,availableSymbols}) {
     <details><summary>変化の内訳を開く</summary>
       {!data.history.previous_as_of&&<p>{data.history.reason}</p>}
       <div className="change-tabs" role="group" aria-label="変化の種類">{Object.entries(CHANGE_LABELS).map(([key,label])=><Button key={key} aria-pressed={kind===key} onClick={()=>{setKind(key);setPage(0);}}>{label} {summary.counts[key]}</Button>)}</div>
-      {items.slice(current*20,current*20+20).map(item=><details className="change-row" key={item.symbol}><summary>{item.symbol} · {CHANGE_LABELS[item.state]}{item.changes.length?` · ${item.changes.length}条件が変化`:''}</summary>
+      {items.slice(current*20,current*20+20).map(item=><details className="change-row research-event-row" key={item.symbol}><summary>{item.symbol} · {CHANGE_LABELS[item.state]}{item.changes.length?` · ${item.changes.length}条件が変化`:''}</summary>
+        <p className="research-event-meta">日次の選定条件 · {data.history.previous_as_of ? `${data.history.previous_as_of} → ${data.as_of}` : `記録開始 ${data.as_of}`}</p>
         {item.reason&&<p>{item.reason}</p>}{item.changes.map(c=><div key={c.id}><strong>{c.label}</strong><p>前回：{display(c.before)}{c.unit}<br/>今回：{display(c.after)}{c.unit}</p></div>)}
         {!item.changes.length&&!item.reason&&<p>条件ごとの通過状態は前回と同じです。</p>}
         <Button disabled={availableSymbols && !availableSymbols.has(item.symbol)} onClick={()=>onSelect(item.symbol)}>{availableSymbols && !availableSymbols.has(item.symbol)?`${item.symbol} の現在データなし`:`現在の ${item.symbol} を分析`}</Button>
