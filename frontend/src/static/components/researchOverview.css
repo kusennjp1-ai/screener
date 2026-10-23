@@ -74,3 +74,17 @@
  .research-overview.hero-collapsed .overview-steps > div { padding:0 8px; border-left:1px solid var(--line); }
  .research-overview.hero-collapsed .overview-steps > div:first-child { border:0; padding-left:0; }
 }
+
+/* Mobile actions precede the optional chart; desktop geometry is unchanged. */
+@media (max-width:700px) {
+ .research-overview .hero-date { padding-right:0; margin-bottom:2px; }
+ .research-overview .hero-copy h1,.research-overview.hero-collapsed .hero-copy h1 { font-size:22px; line-height:1.25; }
+ .research-overview .hero-actions { position:static; display:flex; gap:4px; margin-top:2px; flex-wrap:nowrap; }
+ .research-overview .hero-actions button { flex:1; min-width:44px; min-height:44px; padding:4px; font-size:12px; }
+ .research-overview .hero-actions .changes-trigger { position:static; color:var(--text-2); text-align:center; }
+ .research-overview .hero-actions .mobile-radar-toggle { color:var(--text-2); }
+ .research-overview .overview-steps,.research-overview.hero-collapsed .overview-steps { margin-top:4px; padding-block:4px; }
+ .research-overview .overview-market { margin:2px 0; }
+ .research-overview.hero-collapsed .overview-market { display:flex; }
+ .research-overview .overview-radar { margin-top:8px; }
+}

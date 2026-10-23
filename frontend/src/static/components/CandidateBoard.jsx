@@ -14,6 +14,7 @@ const SORTS={rank:'選定・買い位置',distance:'ピボットに近い順',rs
 const stateOrder=state=>['zone','wait','ext','na','low','acq'].indexOf(stateKey(state));
 const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onSelect,onCompare,onMove,now}) {
  const {row:r,assessment:a,plan:p,readiness,volume}=item,key=stateKey(p.state),[label,glyph,tone]=STATES[key];
+ const dailyPending=readiness?.ready?null:(!readiness||readiness.rules.some(rule=>rule.state==='unknown')?'未確認あり':'未達あり');
  const dailyLabel=readiness?`日次 ${readiness.passed}/${readiness.total}`:'日次 未確認';
  const blockers=readiness?.rules.filter(rule=>rule.state!=='pass');
  // Every current blocker belongs to the same summary. A new selection unknown
@@ -24,7 +25,7 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
   if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();onMove(r.symbol,e.key==='ArrowDown'?1:-1,e.currentTarget);}
   if(e.key==='Enter'&&onCompare){e.preventDefault();onCompare(r.symbol);}
  }}>
-  <span className="candidate-name"><span className="candidate-name-header"><strong className="mono">{r.symbol}</strong><span className="candidate-daily-check" data-ready={readiness?.ready||undefined} title={dailyDetail}>{dailyLabel}{readiness?.ready?' ✓':''}</span></span><small title={r.company_name}>{r.company_name||'企業名未配信'}</small></span>
+  <span className="candidate-name"><span className="candidate-name-header"><strong className="mono">{r.symbol}</strong><span className="candidate-daily-check" data-ready={readiness?.ready||undefined} title={dailyDetail}>{dailyLabel}{readiness?.ready?' ✓':''}{dailyPending&&<span className="candidate-daily-pending"> · {dailyPending}</span>}</span></span><small title={r.company_name}>{r.company_name||'企業名未配信'}</small></span>
   <span className="candidate-position"><PositionMeter plan={p}/><span className={`candidate-state ${['zone','wait','ext'].includes(key)?'ordinary':''}`} style={{color:`var(--${tone})`}}>{glyph} {label}</span></span>
   <span className="candidate-distance mono" style={{color:`var(--${tone})`}}>{signed(p.distance)}</span>
   <span className="candidate-rs mono"><span className="mobile-caption">RS </span>{Number.isFinite(r.rs_rating)?Math.round(r.rs_rating):'—'}</span>

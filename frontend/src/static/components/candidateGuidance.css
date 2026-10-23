@@ -36,3 +36,11 @@
  .candidate-guidance .candidate-position { gap:6px; }
  .candidate-guidance .candidate-guide:has(.candidate-glossary[open]) { padding-bottom:12px; }
 }
+
+.candidate-daily-pending { display:none; }
+@media (max-width:700px) {
+ .candidate-daily-pending { display:inline; }
+ .mobile-candidate-search { padding:0 16px 4px; }
+ .candidate-guidance .candidate-name-header { flex-shrink:1; min-width:0; gap:4px; }
+ .candidate-guidance .candidate-name-header > strong { overflow:hidden; text-overflow:ellipsis; min-width:0; flex-shrink:1; }
+}
