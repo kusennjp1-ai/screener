@@ -59,6 +59,8 @@ describe('self-drawn SVG evidence and controls', () => {
     expect(container.querySelectorAll('image,script,link')).toHaveLength(0);
     expect(screen.getByTestId('svg-canonical-buy-zone')).toHaveAttribute('data-pivot','340');
     expect(screen.getByTestId('svg-canonical-buy-zone')).toHaveAttribute('data-upper','357');
+    expect(screen.getByTestId('svg-stop-example')).toHaveAttribute('data-price','323');
+    expect(screen.getByTestId('svg-stop-example').getAttribute('y1')).toBe(screen.getByTestId('svg-stop-example').getAttribute('y2'));
   });
   it('never substitutes inferred VCP highs for a missing canonical buy level', () => {
     const technicalEvidence={version:BOOK_TECHNICAL_VERSION,valid:true,symbol:fixture.symbol,as_of_date:fixture.as_of_date,vcp:{legs:[{startDate:fixture.bars.at(-4).date,endDate:fixture.as_of_date,peakDate:fixture.bars.at(-4).date,lowDate:fixture.bars.at(-2).date,high:999,low:330,depthPct:66,sessions:3}]}};

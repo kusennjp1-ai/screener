@@ -87,14 +87,18 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
  await expect(detail.getByLabel('価格位置と購入条件')).toContainText('価格位置は購入可否と別です。');
  await expect(detail.getByLabel('価格位置と購入条件')).toContainText(/未達 \d+・未確認 \d+/);
- const controls=detail.getByRole('group',{name:'チャート操作',exact:true});
+ const controls=detail.getByRole('group',{name:'チャートの表示操作',exact:true});
  await controls.scrollIntoViewIfNeeded();
  const controlsFit=()=>controls.evaluate(node=>{
   const bounds=node.getBoundingClientRect();
   return node.scrollWidth<=node.clientWidth && [...node.querySelectorAll('button')].every(button=>{const box=button.getBoundingClientRect();return box.left>=bounds.left && box.right<=bounds.right && box.top>=bounds.top && box.bottom<=bounds.bottom;});
  });
  expect(await controlsFit()).toBe(true);
- await controls.getByRole('button',{name:/^図解 /}).click();expect(await controlsFit()).toBe(true);
+ const annotations=controls.getByRole('button',{name:'VCP注記',exact:true});
+ await expect(annotations).toHaveAttribute('aria-pressed','true');await annotations.click();
+ await expect(annotations).toHaveAttribute('aria-pressed','false');
+ await expect(detail.locator('[data-vcp-leg]')).toHaveCount(0);expect(await controlsFit()).toBe(true);
+ await annotations.click();await expect(annotations).toHaveAttribute('aria-pressed','true');
  await expect(controls.getByRole('button',{name:'リセット',exact:true})).toBeVisible();
  await expect(controls.getByRole('button',{name:'日次チャートを分析',exact:true})).toBeVisible();
  await detail.getByRole('tab',{name:'財務・機関',exact:true}).click();
@@ -129,6 +133,18 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  await expect(detail.locator('.research-chart .leader-evidence-chart svg[role="img"]').first()).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  expect((await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
+ // A responsive move must never duplicate the overview, its IDs or controls.
+ for(const resized of [1440,390,width]){
+  await page.setViewportSize({width:resized,height:resized===390?844:900});
+  await expect(detail.locator('.leader-detail-overview')).toHaveCount(1);
+  await expect(detail.getByRole('group',{name:'5つの関門：既存根拠の分類'})).toHaveCount(1);
+  await expect.poll(()=>detail.evaluate(node=>{
+   const chart=node.querySelector('.research-chart'),overview=node.querySelector('.leader-detail-overview');
+   const chartFirst=Boolean(chart.compareDocumentPosition(overview)&Node.DOCUMENT_POSITION_FOLLOWING);
+   const ids=[...node.querySelectorAll('[id]')].map(n=>n.id);
+   return {chartFirst,uniqueIds:new Set(ids).size===ids.length};
+  })).toEqual({chartFirst:resized>700,uniqueIds:true});
+ }
  const nativeScreenshot=info.outputPath(`native-cad-${width}-${theme}.png`);
  await page.screenshot({path:nativeScreenshot,fullPage:true});
  await info.attach(`native-cad-${width}-${theme}`,{path:nativeScreenshot,contentType:'image/png'});

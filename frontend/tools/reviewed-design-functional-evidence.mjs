@@ -1,3 +1,4 @@
+import { validateSvgChart, SVG_CHART_RENDERER } from './svg-chart-evidence.mjs';
 import { LEADER_FEED_CONTRACT, leaderFeedFailures } from './leader-feed-design-contract.mjs';
 // Completeness/consistency checks for immutable historical browser observations.
 // This is NOT source authentication, current data validation, or image review.
@@ -123,13 +124,16 @@ function chartEvidence(report) {
     assert(object(record.canonical) && ['pivot', 'upper', 'stop'].every(field => record.canonical[field] === null || number(record.canonical[field])), label + ': missing canonical levels');
     assert(Array.isArray(record.views) && [3, 4].includes(record.views.length), label + ': incomplete chart views');
     exactSet(record.views.map(view => view.view), ['inline-default', 'expanded-default', 'expanded-annotations', ...(record.views.length === 4 ? ['expanded-return-navigation'] : [])], label + ' views');
+    if(record.renderer !== undefined) assert(record.renderer === SVG_CHART_RENDERER,label+': unknown chart renderer');
+    const svg=record.renderer === SVG_CHART_RENDERER;
     for (const view of record.views) {
-      assert(view.symbol === record.symbol && view.as_of_date === record.as_of_date && ['simple', 'detail'].includes(view.annotation_mode), label + ': wrong rendered chart identity');
+      if(svg)validateSvgChart(view,record.source_bars,label);
+      assert(view.symbol === record.symbol && view.as_of_date === record.as_of_date && (svg ? ['vcp-on','vcp-off'].includes(view.annotation_mode) : ['simple', 'detail'].includes(view.annotation_mode)), label + ': wrong rendered chart identity');
       for (const field of ['pivot', 'upper', 'stop']) {
         const expected = record.history_warning ? null : record.canonical[field];
         assert(expected === null ? view[field] === '' || view[field] === null : typeof view[field] === 'string' && view[field].trim() !== '' && number(Number(view[field])) && Math.abs(Number(view[field]) - expected) < 1e-8, label + ': canonical level differs');
       }
-      if (width === 390 && view.view === 'inline-default') assert(view.annotation_mode === 'simple', label + ': mobile annotations are not simple');
+      if (!svg && width === 390 && view.view === 'inline-default') assert(view.annotation_mode === 'simple', label + ': mobile annotations are not simple');
     }
     assert(object(record.source_warning) && typeof record.source_warning.expected === 'boolean', label + ': missing warning evidence');
     if (record.source_warning.expected) assert(record.source_warning.inline_visible === true && record.source_warning[width === 390 ? 'mobile_expanded_visible' : 'desktop_expanded_visible'] === true, label + ': source warning hidden');
