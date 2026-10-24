@@ -77,7 +77,7 @@ function screenEvidence(screen, binding, layoutContract, detailContract) {
     if (width === 1440) exactSet(ids, ['rs_trend', 'price_change_1d'], label + ' sparkline columns');
     for (const column of screen.sparkline_columns) assert(count(column.geometry) && column.geometry > 0, label + ': empty sparkline geometry');
   }
-  const scoped = /^(?:carry-)?financial-/.test(name) || ['daily-observations', 'daily-watchlist'].includes(name);
+  const scoped = /^(?:carry-)?financial-/.test(name) || ['daily-observations', 'daily-watchlist'].includes(name) || (detailContract === LEADER_DETAIL_CONTRACT && /^case-[A-Z0-9.-]+-inline(?:-annotations)?$/.test(name) && screen.viewport_geometry !== undefined);
   if (scoped) {
     assert(screen.screenshot_scope === 'scrolled-viewport' && screen.metrics_scope === 'original-viewport' && screen.screenshot_target === null, label + ': missing viewport capture scope');
     const geometry = screen.viewport_geometry;
@@ -127,6 +127,22 @@ export function validateInlineChartEvidence(value,width,height,label='inline cha
   return true;
 }
 
+export function validateInlineCaptureEvidence(record, screens) {
+  const {width,height}=record.viewport;
+  const atCapture={};
+  for(const [state,suffix] of [['default','inline'],['annotations','inline-annotations']]) {
+    const key=`case-${record.symbol}-${suffix}/${width}/${record.theme}`;
+    const matches=screens.filter(screen=>screen.key===key);
+    assert(matches.length===1, key+': missing or duplicate inline capture');
+    const screen=matches[0];
+    assert(screen.screenshot_scope==='scrolled-viewport' && screen.metrics_scope==='original-viewport' && screen.screenshot_target===null, key+': missing inline viewport scope');
+    atCapture[state]=screen.viewport_geometry;
+  }
+  // Validate the independently observed screenshot-time rectangles, not just
+  // pre-capture geometry that a theme operation or asynchronous layout can stale.
+  return validateInlineChartEvidence(atCapture,width,height,'inline screenshot');
+}
+
 function chartEvidence(report) {
   assert(Array.isArray(report.chart_cases), 'Missing chart cases');
   const expected = DESIGN_GROUPS.flatMap(group => CHART_DESIGN_SYMBOLS.map(symbol => symbol + '/' + group));
@@ -138,6 +154,7 @@ function chartEvidence(report) {
     assert(record.history_warning === null || text(record.history_warning), label + ': missing history warning state');
     if(report.detail_contract===LEADER_DETAIL_CONTRACT && record.renderer===SVG_CHART_RENDERER){
       validateInlineChartEvidence(record.inline_geometry,width,mainHeight(width),label);
+      validateInlineCaptureEvidence(record, report.screens);
     }
     assert(object(record.canonical) && ['pivot', 'upper', 'stop'].every(field => record.canonical[field] === null || number(record.canonical[field])), label + ': missing canonical levels');
     assert(Array.isArray(record.views) && [3, 4].includes(record.views.length), label + ': incomplete chart views');

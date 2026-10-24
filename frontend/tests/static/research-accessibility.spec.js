@@ -81,7 +81,14 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
     await expect(svg.locator('[data-pane="price"] g[data-date]')).toHaveCount(15);
     await chart.getByRole('button',{name:'週足',exact:true}).click();
     await expect(chart.getByRole('button',{name:'週足',exact:true})).toHaveAttribute('aria-pressed','true');
-    await expect(chart.locator('.leader-svg-caption').first()).toContainText('週足（10/30/40週線');
+    // The compact caption keeps only actual date/close/range. Verify the
+    // weekly meaning in the real legends and independently grouped OHLCV.
+    for(const period of [10,30,40])await expect(chart.locator('.leader-svg-legend span').filter({hasText:new RegExp(`^SMA${period} `)})).toHaveCount(1);
+    await expect(chart.locator('.leader-svg-legend').first()).toContainText('直前10週平均出来高');
+    const weeks=new Map();
+    for(const bar of bars){const key=Math.floor((Date.parse(bar.date)/86400000+4)/7);if(!weeks.has(key))weeks.set(key,[]);weeks.get(key).push(bar);}
+    const weeklyBars=[...weeks.values()].map(group=>({date:group.at(-1).date,open:group[0].open,high:Math.max(...group.map(b=>b.high)),low:Math.min(...group.map(b=>b.low)),close:group.at(-1).close,volume:group.reduce((sum,b)=>sum+b.volume,0)}));
+    await expectSvgChart(page.locator('.research-detail'),{symbol:'LEAD',bars:weeklyBars,rs:'present'});
     await expect(chart.getByRole('button',{name:'VCP注記',exact:true})).toBeDisabled();
     await expect(svg.locator('[data-vcp-leg]')).toHaveCount(0);
     await chart.getByRole('button',{name:'日足',exact:true}).click();

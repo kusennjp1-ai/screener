@@ -43,7 +43,7 @@
 
 .leader-trend-ring{flex-shrink:0}.leader-detail-fundamentals .leader-detail-trend>summary{justify-content:flex-start;min-height:88px}.leader-detail-trend>summary>span{margin-left:auto;font-size:12px}
 .leader-detail .symbol-identity .symbol-context{flex-wrap:wrap}.leader-detail .symbol-identity .symbol-context .symbol-company{display:block;white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;font-size:16px;color:var(--text)}
-@media(max-width:700px){.leader-detail .research-symbol-head{grid-template-rows:auto auto;gap:8px;padding:12px 0}.leader-detail .symbol-title .readiness-chip{position:static;max-width:none;margin-top:4px}.leader-detail .research-symbol-price{min-height:52px}.leader-detail .symbol-identity{align-self:start}.leader-detail .watch-button{align-self:start}.leader-detail .detail-tabs{flex-wrap:nowrap}.leader-detail .detail-tabs button{flex:0 0 auto;min-width:72px}}
+@media(max-width:700px){.leader-detail .research-symbol-head{grid-template-rows:auto auto;gap:8px;padding:4px 0}.leader-detail .symbol-title .readiness-chip{position:static;max-width:none;margin-top:4px}.leader-detail .research-symbol-price{min-height:52px}.leader-detail .symbol-identity{align-self:start}.leader-detail .watch-button{align-self:start}.leader-detail .detail-tabs{flex-wrap:nowrap}.leader-detail .detail-tabs button{flex:0 0 auto;min-width:72px}}
 
 .leader-detail-trend small{font-size:12px;line-height:1.6}
 
