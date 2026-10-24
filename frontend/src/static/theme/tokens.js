@@ -1,11 +1,11 @@
 // D1: the only color definitions for the static research application.
 export const palettes = {
   dark: {
-    ground:'#07090D', panel:'#0C1016', surface:'#10151E', 'surface-2':'#161D29', line:'#1C2430', 'line-2':'#29333F',
-    text:'#EEF1F6', 'text-2':'#AEB7C7', 'text-3':'#8791A5', accent:'#AFA3FF', 'accent-ink':'#140F2E',
-    zone:'#5FE3B1', wait:'#8DBBFF', ext:'#F4C56A', neg:'#FF8E8E', neutral:'#9CA6B7', up:'#48D6A0', down:'#F0707A',
-    'zone-fill':'rgba(95,227,177,.10)', 'zone-edge':'rgba(95,227,177,.45)', grid:'rgba(255,255,255,.05)',
-    glow:'rgba(95,227,177,.14)', scrim:'rgba(3,5,8,.62)', vol:'rgba(174,183,199,.26)', 'vol-hi':'rgba(95,227,177,.75)',
+    ground:'#000000', panel:'#000000', surface:'#000000', 'surface-2':'#16181c', line:'#2f3336', 'line-2':'#2f3336',
+    text:'#e7e9ea', 'text-2':'#e7e9ea', 'text-3':'#71767b', accent:'#1d9bf0', 'accent-ink':'#000000',
+    zone:'#00ba7c', wait:'#1d9bf0', ext:'#e8b04a', neg:'#e5646e', neutral:'#71767b', up:'#00ba7c', down:'#e5646e',
+    'zone-fill':'rgba(0,186,124,.10)', 'zone-edge':'rgba(0,186,124,.45)', grid:'rgba(255,255,255,.05)',
+    glow:'rgba(0,186,124,.14)', scrim:'rgba(3,5,8,.62)', vol:'rgba(174,183,199,.26)', 'vol-hi':'rgba(0,186,124,.75)',
   },
   light: {
     ground:'#EEF1F5', panel:'#F6F7F9', surface:'#FFFFFF', 'surface-2':'#EDF0F5', line:'#E0E5EC', 'line-2':'#CCD3DE',

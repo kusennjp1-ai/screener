@@ -63,3 +63,27 @@ it('keeps full-pass and one-away toggles exclusive and displays failed versus un
   expect(screen.getByText('未確認：RS ≥ 70')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: /^PASS の分析/ })).not.toBeInTheDocument();
 });
+
+it('applies reversible price-position and RS quick filters without promoting missing RS', () => {
+  const rows = [['ZONE', 90, 102], ['WAIT', 90, 99], ['LOWRS', 60, 102], ['UNKNOWN', null, 102]]
+    .map(([symbol, rs_rating, current_price]) => withAuditFixture({symbol, market:'US', currency:'USD', current_price, se_pivot_price:100, adv_usd:25000000, rs_rating}, '2026-09-29'));
+  data.bundle = prepareResearchBundle([{rows, as_of_date:'2026-09-29'}], '2026-09-29');
+  render(<QueryClientProvider client={client}><MemoryRouter><ResearchPage /></MemoryRouter></QueryClientProvider>);
+  const position=screen.getByRole('button',{name:'買い位置',exact:true});
+  const rs=screen.getByRole('button',{name:'RS 80+',exact:true});
+  fireEvent.click(rs);
+  expect(rs).toHaveAttribute('aria-pressed','true');
+  expect(screen.getByRole('button',{name:/^ZONE の分析/})).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:/^WAIT の分析/})).toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:/^LOWRS の分析/})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:/^UNKNOWN の分析/})).not.toBeInTheDocument();
+  fireEvent.click(position);
+  expect(screen.queryByRole('button',{name:/^WAIT の分析/})).not.toBeInTheDocument();
+  expect(screen.getByRole('button',{name:/^ZONE の分析/})).toBeInTheDocument();
+  fireEvent.click(rs);
+  expect(screen.getByRole('button',{name:/^LOWRS の分析/})).toBeInTheDocument();
+  expect(screen.getByRole('button',{name:/^UNKNOWN の分析/})).toBeInTheDocument();
+  fireEvent.click(position);
+  expect(position).toHaveAttribute('aria-pressed','false');
+  expect(screen.getByRole('button',{name:/^WAIT の分析/})).toBeInTheDocument();
+});

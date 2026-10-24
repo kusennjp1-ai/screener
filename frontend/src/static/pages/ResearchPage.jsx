@@ -16,7 +16,7 @@ import { Alert, Box, Button, CircularProgress, FormControlLabel, Drawer, Stack, 
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
 import StaticChartViewerModal from '../StaticChartViewerModal';
-import { compareReference, finite, quoteStatus, researchCsv, snapshotFreshness } from '../researchEngine';
+import { compareReference, entryPlan, finite, quoteStatus, researchCsv, snapshotFreshness } from '../researchEngine';
 import ResearchDetail from '../components/ResearchDetail';
 import CandidateBoard from '../components/CandidateBoard';
 import ResearchSearch from '../components/ResearchSearch';
@@ -49,6 +49,7 @@ export default function ResearchPage({compareOnly=false}) {
   const [searchResetKey, setSearchResetKey] = useState(0);
   const [strict, setStrict] = useState(false);
   const [nearOnly, setNearOnly] = useState(false);
+  const [positionOnly,setPositionOnly]=useState(false),[rs80Only,setRs80Only]=useState(false);
   const [filtersOpen,setFiltersOpen]=useState(false);
   const [coverage, setCoverage] = useState('all');
   const deferredSearch = useDeferredValue(search);
@@ -77,7 +78,7 @@ export default function ResearchPage({compareOnly=false}) {
   }, retry: false });
   const rows = useMemo(() => bundle.data?.rows || [], [bundle.data]);
   const evaluated = useMemo(() => bundle.data?.rankings?.[method] || [], [method, bundle.data]);
-  const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, nearOnly, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage, sector }), [evaluated, deferredSearch, strict, nearOnly, onlyWatch, watch, liquid, coverage, sector]);
+  const ranked = useMemo(() => filterRanked(evaluated, { search: deferredSearch, qualifiedOnly: strict, nearOnly, watchlist: onlyWatch ? watch : null, liquidOnly: liquid, coverage, sector }).filter(item=>(!positionOnly||entryPlan(item.row,null,method).state==='買いゾーン内')&&(!rs80Only||(Number.isFinite(item.row.rs_rating)&&item.row.rs_rating>=80))), [evaluated, deferredSearch, strict, nearOnly, onlyWatch, watch, liquid, coverage, sector, positionOnly,rs80Only,method]);
   const navigationSymbols = useMemo(() => ranked.map(r => r.row.symbol), [ranked]);
   const radarRanked=useMemo(()=>filterRanked(bundle.data?.rankings?.minervini||[],{liquidOnly:liquid}),[bundle.data,liquid]);
   // Coverage is independent of method; all exported rankings share one universe.
@@ -115,6 +116,7 @@ export default function ResearchPage({compareOnly=false}) {
     setCoverage('all');
     setStrict(false);
     setNearOnly(false);
+    setPositionOnly(false);setRs80Only(false);
     setOnlyWatch(false);
     setMobileView(ticker ? 'detail' : 'list');
     setFiltersOpen(false);
@@ -179,10 +181,12 @@ export default function ResearchPage({compareOnly=false}) {
     try { localStorage.setItem('research-watch', JSON.stringify(next)); } catch { setStorageError(true); }
   }, [watch]);
   function inspectOrder(ticker) {
+    setPositionOnly(false); setRs80Only(false);
     setMethod('minervini'); setSector(''); setView('list'); setSearch(ticker); setStrict(false); setNearOnly(false); setOnlyWatch(false); setSymbol(ticker); setMobileView('detail');
     focusDetail();
   }
   function inspectChanged(ticker) {
+    setPositionOnly(false); setRs80Only(false);
     setSector(''); setView('list'); setSearch(ticker); setStrict(false); setNearOnly(false); setOnlyWatch(false); setCoverage('all'); setLiquid(false); setSymbol(ticker); setMobileView('detail');
     focusDetail();
   }
@@ -220,6 +224,7 @@ export default function ResearchPage({compareOnly=false}) {
     setSearchResetKey(value => value + 1);
     setStrict(false);
     setNearOnly(false);
+    setPositionOnly(false);setRs80Only(false);
     setOnlyWatch(false);
     setSector('');
     setCoverage('all');
@@ -241,6 +246,7 @@ export default function ResearchPage({compareOnly=false}) {
   const methodControls=useMemo(()=><div className="method-tabs" role="group" aria-label="投資手法">{Object.entries(METHODS).map(([key,label])=><button key={key} aria-pressed={method===key} onClick={()=>setMethod(key)}>{label.replace(' / CAN SLIM','').replace('リーダー','')}</button>)}</div>,[method]);
   return <Box component="main" className={`research-workbench${compareOnly?' comparison-page':''}`} data-mobile-view={mobileView}>
     <ConnectionStatus date={bundle.data?.date || entry.as_of_date}/>
+    {!compareOnly&&<div className="leader-feed-controls">{methodControls}<div className="leader-feed-search"><ResearchSearch key={searchResetKey} value={search} onChange={setSearch}/><button onClick={openFilters} aria-label="候補を絞り込む">絞込</button></div><div className="leader-quick-filters" role="group" aria-label="クイック絞り込み"><button title="価格位置のみ。選定・日次条件の通過とは別です" aria-pressed={positionOnly} onClick={()=>setPositionOnly(value=>!value)}>買い位置</button><button aria-pressed={nearOnly} onClick={toggleNear}>あと1条件</button><button aria-pressed={rs80Only} onClick={()=>setRs80Only(value=>!value)}>RS 80+</button></div>{positionOnly&&<p className="leader-filter-scope">買い位置は価格位置のみ。選定・日次条件の通過とは別です。</p>}</div>}
     {!compareOnly&&<ResearchHero freshnessNotice={detailFreshness?null:freshnessNotice} loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
     {compareOnly&&<header className="comparison-page-heading"><div className="comparison-page-title"><h1>{nearOnly?'選定あと1条件を比較':'買い位置を比較する'}</h1><p>{METHODS[method].replace(' / CAN SLIM','').replace('リーダー','')} · {nearOnly?'未合格・購入条件は別判定':'価格位置と購入条件は別判定'}</p></div>{freshnessNotice}<Button onClick={()=>setFiltersOpen(true)}>手法・絞り込み</Button></header>}
     {stale&&<Alert severity="warning">公開データの鮮度を確認してください。選定とチャートは日次データです。</Alert>}
@@ -270,7 +276,7 @@ export default function ResearchPage({compareOnly=false}) {
     {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
     <div className="research-grid" data-view={actualView}>
-      <CandidateBoard ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={<>{methodControls}{smallScreen&&!compareOnly&&<div className="mobile-candidate-search"><ResearchSearch key={searchResetKey} value={search} onChange={setSearch}/></div>}</>} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
+      <CandidateBoard feedControls={!compareOnly} ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={compareOnly?methodControls:null} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
       {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     {!compareOnly&&<footer className="research-method-note">

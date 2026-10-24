@@ -18,6 +18,7 @@ import './research.css';
 import './theme/foundation.css';
 import './theme/motion.css';
 import './workbench.css';
+import './leaderFeed.css';
 const NAV_ITEMS=[{path:'/',label:'本日の判断',Icon:ShowChartIcon},{path:'/compare',label:'比較',Icon:GridViewIcon},{path:'/breadth',label:'市場',Icon:BarChartIcon}];
 export default function StaticLayout({children}) {
  const location=useLocation(),theme=useTheme(),dark=theme.palette.mode==='dark';

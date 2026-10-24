@@ -120,7 +120,7 @@ describe('100 virtual expert task profiles', () => {
         expect(screen.getByRole('tabpanel')).toHaveTextContent(`選定 ${expected} · 未達 0 · 未確認 ${s % 3 === 0 ? 0 : s % 3 === 1 ? 3 : 5}`);
       } else if (t === 1) {
         openFilters();
-        fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: s % 2 ? 'lead' : 'Leader Research' } });
+        fireEvent.change(within(screen.getByRole('dialog', {name:'候補を絞り込む'})).getByLabelText('銘柄・企業名を検索'), { target: { value: s % 2 ? 'lead' : 'Leader Research' } });
         closeFilters();
         await waitFor(()=>expect(within(table).queryByText('FAIL')).not.toBeInTheDocument());
         expect(within(table).getByText('LEAD')).toBeInTheDocument();
@@ -149,7 +149,7 @@ describe('100 virtual expert task profiles', () => {
         expect(screen.getByRole('button', { name: '日次チャートを分析' })).toBeDisabled();
       } else if (t === 6) {
         const filters=openFilters();
-        fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'), { target: { value: 'NOT-A-STOCK' } });
+        fireEvent.change(within(screen.getByRole('dialog', {name:'候補を絞り込む'})).getByLabelText('銘柄・企業名を検索'), { target: { value: 'NOT-A-STOCK' } });
         await waitFor(()=>expect(within(filters).getByRole('button', {name:/CSV保存/})).toBeDisabled());
         closeFilters();
         await screen.findByText(/該当銘柄がありません/);
@@ -212,7 +212,7 @@ it('keeps search focus while narrowing results in the filter drawer', async () =
   mount();
   await screen.findByRole('button', {name:/^LEAD の分析を表示/});
   openFilters();
-  const input=screen.getByLabelText('銘柄・企業名を検索');
+  const input=within(screen.getByRole('dialog', {name:'候補を絞り込む'})).getByLabelText('銘柄・企業名を検索');
   act(()=>input.focus());
   fireEvent.change(input,{target:{value:'FAIL'}});
   expect(input).toHaveFocus();
@@ -231,7 +231,7 @@ it('opens detailed verification from its tab and returns filter focus to the can
   expect(screen.getByRole('tab',{name:'書籍検証'})).toHaveAttribute('aria-selected','true');
   expect(screen.getByRole('tabpanel')).toHaveAccessibleName('書籍検証');
   openFilters();
-  const searchInput=screen.getByLabelText('銘柄・企業名を検索');
+  const searchInput=within(screen.getByRole('dialog', {name:'候補を絞り込む'})).getByLabelText('銘柄・企業名を検索');
   fireEvent.click(screen.getByRole('button',{name:'候補を確認する →'}));
   await waitFor(()=>expect(screen.getByRole('region',{name:'対象銘柄',exact:true})).toHaveFocus());
   expect(searchInput).not.toHaveFocus();
@@ -282,7 +282,7 @@ it('keeps all rows available to CSV and search beyond the first 50 rendered cand
   await act(async()=>{csv=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=reject;reader.readAsText(blob);});});
   expect(csv.trim().split(/\r?\n/)).toHaveLength(59);
   for(let i=0;i<58;i++)expect(csv).toContain(`TEST${String(i).padStart(2,'0')}`);
-  fireEvent.change(screen.getByLabelText('銘柄・企業名を検索'),{target:{value:'TEST57'}});
+  fireEvent.change(within(screen.getByRole('dialog', {name:'候補を絞り込む'})).getByLabelText('銘柄・企業名を検索'),{target:{value:'TEST57'}});
   closeFilters();
   await waitFor(()=>expect(within(candidates()).getAllByRole('button')).toHaveLength(1));
   expect(within(candidates()).getByRole('button',{name:/^TEST57 の分析/})).toBeInTheDocument();

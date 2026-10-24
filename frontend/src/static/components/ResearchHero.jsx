@@ -24,7 +24,8 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
  const toggle=()=>{setCollapsed(!collapsed);try{localStorage.setItem('research-hero-collapsed',String(!collapsed));}catch{/* Default remains usable when storage is disabled. */}};
  const changes=dailyChangePresentation(workbench,method);
  return <section data-testid="home-hero" className={`research-hero research-overview${collapsed?' hero-collapsed':''}${freshnessNotice?' has-freshness':''}`} aria-label="今日の概況">
-  <div className="hero-copy"><p className="hero-date">{date||'取得中'} 終値 · ミネルヴィニ概況</p>
+  <div className="hero-copy"><div className="leader-pinned-title"><span className="leader-pinned-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 3h8l-1 6 4 4H5l4-4-1-6Z"/><path d="M12 13v8"/></svg></span><strong>本日の判断</strong><span>固定 · ミネルヴィニ全候補</span></div><p className="hero-date">{date||'取得中'} 終値 · ミネルヴィニ概況</p>
+   <p className="leader-pinned-summary">選定候補は <strong>{loading?'—':counts.qualified.toLocaleString()}</strong> 銘柄、買い位置は <strong className="zone-text">{loading?'—':counts.zone.toLocaleString()} 銘柄</strong>。日次の購入条件は各銘柄で確認。</p>
    <h1><span className="overview-compact-scope">ミネルヴィニ</span>{loading?'データを読み込み中。':counts.qualified?`選定候補は ${counts.qualified.toLocaleString()} 銘柄。`:'選定候補はありません。'}</h1>
    <p className="hero-subtitle">候補を選び、買い位置と日次の購入条件を確認。</p>
    <div className="hero-kpis overview-steps" aria-label="選定から購入検討までの3段階">

@@ -32,15 +32,15 @@ it('shows price location and daily purchase status separately, with failed and u
  expect(row).toHaveAccessibleName(/選定 9\/9。日次 5\/7。出来高：未達/);
  expect(row).toHaveAccessibleName(/決算予定：未確認/);
  expect(row).toHaveTextContent('● 買いゾーン内');
- expect(row).toHaveTextContent('日次 5/7');
- expect(row).not.toHaveTextContent('✓');
+ expect(row).toHaveTextContent('日次条件 5/7');
+ expect(row.querySelector('.candidate-daily-check')).not.toHaveTextContent('✓'); // Individual passed conditions may still show their own checkmarks.
  fireEvent.click(row);expect(props.onSelect).toHaveBeenLastCalledWith('S0');
 });
 it('keeps selection and freshness blockers together in the visible badge tooltip and accessible summary',()=>{
  const rules=[{id:'selection',state:'unknown',label:'選定条件',detail:'共通の購入モデル：財務根拠が未確認'},{id:'date',state:'unknown',label:'最新の取引日',detail:'取引カレンダー未取得'}];
  entryReadiness.mockReturnValue({...waiting,rules});
  render(<CandidateBoard {...props} ranked={ranked.slice(0,1)}/>);
- const row=screen.getByRole('button',{name:/S0 の分析を表示/}),badge=screen.getByText('日次 5/7');
+ const row=screen.getByRole('button',{name:/S0 の分析を表示/}),badge=row.querySelector('.candidate-daily-check');
  const detail='選定条件：未確認。共通の購入モデル：財務根拠が未確認。最新の取引日：未確認。取引カレンダー未取得';
  expect(badge).toHaveAttribute('title',detail);
  expect(row.getAttribute('aria-label')).toContain(`日次 5/7。${detail}`);
@@ -49,10 +49,10 @@ it('keeps selection and freshness blockers together in the visible badge tooltip
 it('marks daily readiness only when all common checks pass and updates when time changes',()=>{
  entryReadiness.mockReturnValueOnce({ready:true,passed:7,total:7,rules:[]}).mockReturnValue(waiting);
  const {rerender}=render(<CandidateBoard {...props} ranked={ranked.slice(0,1)}/>);
- expect(screen.getByText('日次 7/7 ✓')).toHaveAttribute('data-ready','true');
+ expect(screen.getByText('日次条件 7/7 ✓')).toHaveAttribute('data-ready','true');
  expect(screen.getByRole('button',{name:/S0 の分析を表示/})).toHaveAccessibleName(/発注前に最新価格とリスクを確認/);
  rerender(<CandidateBoard {...props} ranked={ranked.slice(0,1)} now={props.now+1000}/>);
- expect(screen.getByText('日次 5/7')).not.toHaveAttribute('data-ready');
+ expect(screen.getByRole('button',{name:/S0 の分析を表示/}).querySelector('.candidate-daily-check')).not.toHaveAttribute('data-ready');
 });
 it('keeps missing context unconfirmed rather than passing and does no list readiness work in chart mode',()=>{
  const {rerender}=render(<CandidateBoard {...props} date={undefined} ranked={ranked.slice(0,1)}/>);
@@ -89,7 +89,7 @@ it('displays and sorts the audited daily volume without falling back to a confli
  expect(screen.getByRole('button',{name:/^A の分析/})).toHaveAccessibleName(/出来高 1.39×/);
  expect(screen.getByRole('button',{name:/^UNKNOWN の分析/})).toHaveAccessibleName(/出来高 —/);
  fireEvent.click(screen.getByRole('button',{name:'出来高で並べ替え'}));
- expect([...container.querySelectorAll('.candidate-row')].map(row=>row.querySelector('.candidate-name strong').textContent)).toEqual(['B','A','UNKNOWN']);
+ expect([...container.querySelectorAll('.candidate-row')].map(row=>row.querySelector('.leader-post-avatar').textContent)).toEqual(['B','A','UNKNOWN']);
 });
 it('retains the financial exclusion label if an excluded row is supplied to the near-pass view',()=>{
  entryReadiness.mockReturnValue(waiting);

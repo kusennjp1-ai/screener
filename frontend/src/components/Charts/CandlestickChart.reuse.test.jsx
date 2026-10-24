@@ -111,7 +111,7 @@ describe('CI479 readable legends without displacing the detail plot',()=>{
     const color=getComputedStyle(label).color;
     for(const surface of ['surface','panel','ground'])expect(getContrastRatio(color,palettes[mode][surface])).toBeGreaterThanOrEqual(4.5);
     const swatch=label.querySelector('[aria-hidden="true"]');
-    expect(getComputedStyle(swatch).color).toBe(up ? mode==='light'?'rgb(18, 150, 107)':'rgb(72, 214, 160)' : mode==='light'?'rgb(210, 69, 90)':'rgb(240, 112, 122)');
+    expect(getComputedStyle(swatch).color).toBe(up ? mode==='light'?'rgb(18, 150, 107)':'rgb(0, 186, 124)' : mode==='light'?'rgb(210, 69, 90)':'rgb(229, 100, 110)');
     expect(label).toHaveTextContent(`最終日足 2026-09-22 終値 ${up?'101.00':'99.00'}`);
     expect(instances[0].candlestickSeries.setData.mock.lastCall[0].at(-1).close).toBe(up?101:99);
   });
