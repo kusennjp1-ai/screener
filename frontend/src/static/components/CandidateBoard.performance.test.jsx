@@ -55,7 +55,7 @@ it.each([[true,0],[true,.578125],[false,0]])('explicit pagination focuses the fi
  expect(screen.getByRole('button',{name:/^S50 の分析/})).toHaveFocus();
  expect(scroll.scrollTop).toBe(0);expect(onSelect).not.toHaveBeenCalled();
  if(mobile)expect(scrollTo).toHaveBeenLastCalledWith({top:816,behavior:'instant'});
- else expect(scrollTo).not.toHaveBeenCalled();
+ else expect(scrollTo).toHaveBeenLastCalledWith({top:1408,behavior:'instant'});
  fireEvent.click(screen.getByRole('button',{name:'次の50件'}));
  expect(screen.getAllByRole('listitem')).toHaveLength(1);
  expect(screen.getByRole('button',{name:/^S100 の分析/})).toHaveFocus();

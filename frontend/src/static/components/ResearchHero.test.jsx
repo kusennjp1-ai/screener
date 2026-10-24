@@ -160,10 +160,12 @@ for (const collapsed of [false,true]) it(`starts mobile with optional radar clos
  localStorage.setItem('research-hero-collapsed',String(collapsed));
  const onBrowse=vi.fn();
  const rows=[{symbol:'COMPANY',market:'US',current_price:100,adv_usd:3e7},...registry.records.map(record=>({symbol:record.symbol,company_name:record.name,market:record.market,current_price:100,adv_usd:3e7}))];
- render(<ResearchHero {...props} rows={rows} onBrowse={onBrowse} freshnessNotice={<div role="alert">古い価格の基準日を確認</div>}/>);
+ const view=render(<ResearchHero {...props} rows={rows} onBrowse={onBrowse} freshnessNotice={<div role="alert">古い価格の基準日を確認</div>}/>);
  expect(screen.queryByRole('region',{name:'セットアップ・レーダー'})).not.toBeInTheDocument();
  expect(screen.getByText(/確認済みファンド BITU・SBIT・ETHE は対象外/)).toBeInTheDocument();
  expect(screen.getByRole('alert')).toHaveTextContent('古い価格');
+ expect(screen.queryByRole('button',{name:'銘柄一覧'})).not.toBeInTheDocument();
+ view.rerender(<ResearchHero {...props} rows={rows} onBrowse={onBrowse} mobileView="detail" freshnessNotice={<div role="alert">古い価格の基準日を確認</div>}/>);
  fireEvent.click(screen.getByRole('button',{name:'銘柄一覧'}));expect(onBrowse).toHaveBeenCalledOnce();
  fireEvent.click(screen.getByRole('button',{name:'分布を見る'}));
  expect(screen.getByRole('region',{name:'セットアップ・レーダー'})).toBeInTheDocument();
@@ -182,4 +184,15 @@ it('uses the established 20px font step for the compact mobile overview heading'
  const mobile=css.slice(css.lastIndexOf('@media (max-width:700px)'));
  expect(mobile).toMatch(/\.research-overview \.hero-copy h1,\.research-overview\.hero-collapsed \.hero-copy h1 \{ font-size:20px; line-height:1\.25;/);
  expect(mobile).not.toMatch(/font-size:22px/);
+});
+
+it('keeps actual universe counts visible with zero fund exclusions and does not render loading as zero',()=>{
+ const row={symbol:'COMPANY',market:'US',current_price:100,adv_usd:3e7};
+ const view=render(<ResearchHero {...props} rows={[row]}/>);
+ expect(screen.getByText(/価格・流動性対象 1件/)).toHaveTextContent('企業財務判定の対象 1件');
+ expect(screen.queryByText(/確認済みファンド/)).not.toBeInTheDocument();
+ view.rerender(<ResearchHero {...props} rows={[]}/>);
+ expect(screen.getByText(/価格・流動性対象 0件/)).toHaveTextContent('企業財務判定の対象 0件');
+ view.rerender(<ResearchHero {...props} rows={[]} loading/>);
+ expect(screen.queryByText(/価格・流動性対象 0件/)).not.toBeInTheDocument();
 });

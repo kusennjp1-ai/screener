@@ -43,28 +43,34 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  await expect(first).toBeVisible();
  await expect(page.locator('.overview-universe')).toContainText('企業財務判定の対象 3件');
  await expect(page.locator('.overview-universe')).toContainText('BITU・SBIT・ETHE');
- await expect(page.locator('.hero-date')).toContainText(`${date} 終値`);
+ await expect(page.locator('.leader-pinned-title')).toContainText(`${date} 終値`);
  await expect(page.locator('.overview-market-state')).toBeVisible();
  await expect(page.locator('.overview-market-state')).toContainText('市場未確認 · 新規上限 0%');
  expect(await page.evaluate(()=>parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop))).toBe(48+fixture.top);
  await expect(page.locator('.setup-radar')).toHaveCount(0);
- await expect(first.locator('.candidate-daily-pending')).toHaveText(' · 未確認あり');
+ await expect(first.locator('.leader-post-judgment')).toContainText('未確認');
+ await expect(first.locator('.leader-condition-strip [data-state=unknown]')).not.toHaveCount(0);
+ await expect(first.locator('.leader-post-metrics')).toContainText('出来高比');
+ await expect(first.locator('.leader-post-metrics')).toContainText('前日比');
+ await expect(first.locator('.leader-rs-ring')).toContainText('RS');
+ await expect(page.locator('.leader-pinned-title')).toContainText('本日の判断');
+ await expect(page.locator('.leader-feed-controls .method-tabs button')).toHaveCount(4);
  await expect(first.locator('.candidate-daily-check')).not.toHaveAttribute('data-ready','true');
- // Instrument identity must remain fully readable beside the daily warning.
- // Company names may truncate independently, but ticker text must not.
+ // The X feed separates avatar, full ticker/date, company and condition status.
+ // No table-column or two-complete-rows-in-first-fold assumption survives the
+ // approved reference03 information density. Identity must still be unclipped.
  for(const symbol of ['ALPHALONG','BETA']) {
   const candidate=page.getByRole('button',{name:new RegExp(`^${symbol} の分析を表示`)});
-  const ticker=candidate.locator('.candidate-name-header > strong');
-  await expect(ticker).toHaveText(symbol);
-  expect(await ticker.evaluate(element=>{
-   const range=document.createRange();range.selectNodeContents(element);
-   const text=range.getBoundingClientRect(),box=element.getBoundingClientRect();
-   const status=element.nextElementSibling.getBoundingClientRect();
-   const name=element.closest('.candidate-name'),company=name.querySelector('small').getBoundingClientRect();
-   return {unclipped:element.scrollWidth<=element.clientWidth+1&&text.width<=box.width+1,
-    separate:text.right<=status.left+1,statusFits:status.right<=name.getBoundingClientRect().right+1,
-    companyBelow:company.top>=Math.max(box.bottom,status.bottom)-1};
-  })).toEqual({unclipped:true,separate:true,statusFits:true,companyBelow:true});
+  await expect(candidate.locator('.leader-post-avatar')).toHaveText(symbol);
+  const identity=candidate.locator('.leader-post-identity');
+  await expect(identity).toContainText(`@${symbol}`);
+  await expect(identity.locator('strong')).toContainText('Synthetic ordinary company');
+  expect(await identity.evaluate(element=>{
+   const company=element.querySelector('strong'),ticker=element.querySelector(':scope > span');
+   const box=element.getBoundingClientRect(),c=company.getBoundingClientRect(),t=ticker.getBoundingClientRect();
+   return {unclipped:element.scrollWidth<=element.clientWidth+1&&ticker.scrollWidth<=ticker.clientWidth+1,
+    companyFits:c.left>=box.left-1&&c.right<=box.right+1,tickerBelow:t.top>=c.bottom-1};
+  })).toEqual({unclipped:true,companyFits:true,tickerBelow:true});
  }
  // Inspect the untouched initial viewport, before any action scrolls content.
  const geometry=await page.evaluate(()=>{
@@ -73,7 +79,7 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
   return {scrollY,viewport:innerWidth,documentWidth:document.documentElement.scrollWidth,header:rect(header),nav:rect(nav),
    headerTargets:[...header.querySelectorAll('a,button')].filter(node=>node.getBoundingClientRect().height).map(rect),
    navTargets:[...nav.querySelectorAll('a')].map(rect),rows:[...document.querySelectorAll('.candidate-row')].slice(0,2).map(rect),
-   actions:[...document.querySelectorAll('.hero-actions button,.method-tabs button')].filter(node=>node.getBoundingClientRect().height).map(rect)};
+   actions:[...document.querySelectorAll('.hero-actions button,.leader-feed-controls button,.candidate-board-heading select')].filter(node=>node.getBoundingClientRect().height).map(rect)};
  });
  await info.attach('initial-injected-inset-geometry.json',{body:JSON.stringify({fixture,geometry},null,2),contentType:'application/json'});
  expect(geometry.scrollY).toBe(0);
@@ -82,7 +88,10 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  for(const target of geometry.headerTargets)expect(target.top).toBeGreaterThanOrEqual(fixture.top);
  for(const target of geometry.navTargets)expect(target.bottom).toBeLessThanOrEqual(fixture.height-fixture.bottom+1);
  expect(geometry.rows).toHaveLength(2);
- for(const row of geometry.rows){expect(row.top).toBeGreaterThanOrEqual(geometry.header.bottom);expect(row.bottom).toBeLessThanOrEqual(geometry.nav.top);}
+ for(const row of geometry.rows){expect(row.top).toBeGreaterThanOrEqual(geometry.header.bottom);expect(row.height).toBeGreaterThanOrEqual(240);}
+ // At least the first post starts above the bottom navigation; richer posts
+ // scroll rather than hiding indicators to fit two rows in one screen.
+ expect(geometry.rows[0].top).toBeLessThan(geometry.nav.top);
  for(const target of geometry.actions)expect(target.height).toBeGreaterThanOrEqual(44);
  await page.screenshot({path:info.outputPath('initial-mobile-first.png')});
  expect((await new AxeBuilder({page}).include('.research-workbench').withTags(['wcag2a','wcag2aa']).analyze()).violations).toEqual([]);
@@ -90,7 +99,7 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  await expect(page.locator('.setup-radar')).toBeVisible();
  await page.getByRole('button',{name:'分布を閉じる',exact:true}).click();
  await expect(page.locator('.setup-radar')).toHaveCount(0);
- const search=page.locator('.mobile-candidate-search').getByRole('textbox',{name:'銘柄・企業名を検索'});
+ const search=page.locator('.leader-feed-search').getByRole('textbox',{name:'銘柄・企業名を検索'});
  await search.fill('ALPHALONG');
  await expect(list.getByRole('listitem')).toHaveCount(1);
  await page.getByRole('button',{name:'候補を絞り込む',exact:true}).click();
@@ -104,7 +113,33 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  expect(title.y).toBeGreaterThanOrEqual(fixture.top);
  await page.keyboard.press('Escape');
  await expect(drawer).not.toBeVisible();
- await expect(page.getByRole('button',{name:'候補を絞り込む',exact:true})).toBeFocused();
+ const filterTrigger=page.getByRole('button',{name:'候補を絞り込む',exact:true});
+ await expect(filterTrigger).toBeFocused();
+ const expectRestoredTrigger=async()=>{
+  await expect(filterTrigger).toBeFocused();
+  await expect.poll(()=>filterTrigger.evaluate(node=>{
+   const r=node.getBoundingClientRect(),top=document.querySelector('.leader-header').getBoundingClientRect().bottom,bottom=document.querySelector('.leader-mobile-nav').getBoundingClientRect().top;
+   return r.width>=44&&r.height>=44&&r.top>=top&&r.bottom<=bottom&&[.1,.5,.9].every(x=>node.contains(document.elementFromPoint(r.left+r.width*x,r.top+r.height/2)));
+  })).toBe(true);
+ };
+ await expectRestoredTrigger();
+ // Close and Escape both restore a usable trigger after the exit transition.
+ await filterTrigger.press('Enter');await expect(drawer).toBeVisible();
+ await drawer.getByRole('button',{name:'絞り込みを閉じる',exact:true}).click();await expect(drawer).not.toBeVisible();await expectRestoredTrigger();
+ await filterTrigger.press('Enter');await expect(drawer).toBeVisible();
+ await page.keyboard.press('Escape');await expect(drawer).not.toBeVisible();await expectRestoredTrigger();
+ await filterTrigger.press('Enter');await expect(drawer).toBeVisible();
+ await drawer.getByRole('button',{name:'候補を確認する →',exact:true}).click();await expect(drawer).not.toBeVisible();
+ const settled=await page.evaluate(async()=>{
+  const frames=[];for(let frame=0;frame<6;frame++){
+   await new Promise(requestAnimationFrame);
+   const board=document.getElementById('candidate-board'),header=document.querySelector('.leader-header');
+   frames.push({focused:document.activeElement===board,clearance:board.getBoundingClientRect().top-header.getBoundingClientRect().bottom,scrollY,overflow:document.documentElement.scrollWidth>innerWidth});
+  }return frames;
+ });
+ await info.attach('filter-confirm-settled-frames.json',{body:JSON.stringify({fixture,settled}),contentType:'application/json'});
+ expect(settled.every(frame=>frame.focused&&frame.clearance>=-1&&!frame.overflow)).toBe(true);
+ expect(Math.max(...settled.map(frame=>frame.scrollY))-Math.min(...settled.map(frame=>frame.scrollY))).toBeLessThanOrEqual(1);
  await expect(search).toHaveValue('ALPHALONG');
  await first.click();
  await expect(page.getByRole('region',{name:'銘柄詳細',exact:true})).toBeVisible();
@@ -114,7 +149,13 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  await expect(first).toBeVisible();
  await search.fill('');
  await expect(list.getByRole('listitem')).toHaveCount(rows.length);
- await page.getByRole('button',{name:'銘柄一覧',exact:true}).click();
+ // The current-list jump button was removed as redundant. Exercise the
+ // retained detail-to-list browse path by keyboard, including focus/clearance.
+ // Enter intentionally opens comparison; Space keeps the native button
+ // activation that opens this stock's detail, without changing that shortcut.
+ await first.focus();await first.press('Space');
+ await expect(page.getByRole('region',{name:'銘柄詳細',exact:true})).toBeVisible();
+ const back=page.getByRole('button',{name:'← 候補一覧',exact:true});await back.focus();await back.press('Enter');
  await expect(page.locator('#candidate-board')).toBeFocused();
  await expect.poll(async()=>page.evaluate(()=>{
   const board=document.getElementById('candidate-board'),header=document.querySelector('.leader-header');

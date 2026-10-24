@@ -42,7 +42,11 @@ for (const width of [1440, 390]) test(`daily comparison coverage keeps lazy deta
     await page.goto('/');
     const label = mode === 'missing' ? '変化：比較基準未確認' : mode === 'all' ? '変化：全3銘柄が比較不能' : mode === 'partial' ? '変化：比較不能 1 / 3銘柄' : '変化：新たに通過 3 · 再通過 0 · 脱落 0';
     await expect(page.locator('.changes-desktop')).toHaveText(label);
-    await expect(page.getByTestId('home-hero').getByRole('heading', { level: 1 })).toHaveText('ミネルヴィニ選定候補は 3 銘柄。');
+    if(width>700)await expect(page.getByTestId('home-hero').getByRole('heading', { level: 1 })).toHaveText('ミネルヴィニ選定候補は 3 銘柄。');
+    else {
+      await expect(page.locator('.leader-pinned-title')).toContainText('本日の判断');
+      await expect(page.locator('.leader-pinned-summary')).toContainText('選定 3 銘柄');
+    }
     expect(fullRequests).toBe(0);
     await page.evaluate(() => document.fonts.ready);
     const trigger = page.getByRole('button', { name: '候補の日次変化', exact: true });
@@ -51,7 +55,9 @@ for (const width of [1440, 390]) test(`daily comparison coverage keeps lazy deta
     expect(bounds.width).toBeGreaterThanOrEqual(44);
     expect(await trigger.evaluate(element => parseFloat(getComputedStyle(element).scrollMarginTop))).toBeGreaterThanOrEqual(64);
     geometry[mode] = { hero: (await page.getByTestId('home-hero').boundingBox()).height, header: (await page.locator('.leader-header').boundingBox()).height };
-    if (width === 1440) expect(geometry[mode].hero).toBeLessThanOrEqual(320);
+    // Reference03 adds a pinned post rather than a fixed-height compact hero.
+    // Keep the stock entry visible without requiring several full table rows.
+    expect(await page.locator('.candidate-row').first().evaluate(node=>{const r=node.getBoundingClientRect(),nav=document.querySelector('.leader-mobile-nav')?.getBoundingClientRect();return r.top>=document.querySelector('.leader-header').getBoundingClientRect().bottom&&r.top+44<=(nav?.height?nav.top:innerHeight);})).toBe(true);
     if (width === 1440) {
       const marketLink = page.getByRole('link', { name: '業種の追い風を見る →' });
       expect((await marketLink.boundingBox()).height).toBeGreaterThanOrEqual(44);

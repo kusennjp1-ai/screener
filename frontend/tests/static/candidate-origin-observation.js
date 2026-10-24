@@ -1,8 +1,9 @@
 // Passed directly to locator.evaluate: keep all browser helpers inside this function.
 export function observeCandidateOrigin(node) {
   const port=node.querySelector('.candidate-scroll'),list=port.querySelector('[role=list]'),columns=port.querySelector('.candidate-columns'),row=list.querySelector('.candidate-row');
-  const p=port.getBoundingClientRect(),c=columns.getBoundingClientRect(),r=row.getBoundingClientRect();
-  const origin={padding:getComputedStyle(port).paddingTop,listPadding:getComputedStyle(list).paddingTop,portTop:p.top,columnsTop:c.top,columnsBottom:c.bottom,rowTop:r.top,rowHeight:r.height};
+  const p=port.getBoundingClientRect(),c=columns?.getBoundingClientRect(),r=row.getBoundingClientRect();
+  const columnsVisible=Boolean(c?.height&&getComputedStyle(columns).display!=='none');
+  const origin={padding:getComputedStyle(port).paddingTop,listPadding:getComputedStyle(list).paddingTop,portTop:p.top,columnsVisible,columnsTop:columnsVisible?c.top:null,columnsBottom:columnsVisible?c.bottom:null,rowTop:r.top,rowHeight:r.height};
   // Read the original nine hit targets before doing additional style/stack work.
   // A later successful frame must never replace a false in this first sample.
   const points=[.1,.5,.9].flatMap(x=>[.05,.5,.95].map(y=>{

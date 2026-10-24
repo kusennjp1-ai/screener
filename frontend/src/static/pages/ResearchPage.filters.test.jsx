@@ -98,3 +98,17 @@ it('cancels a pending search when reset is clicked before the debounce, even if 
   expect(screen.getByRole('button', { name: /^BANK の分析/ })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /^TECH の分析/ })).toBeInTheDocument();
 });
+
+it.each([false,true])('returns drawer focus once to trigger or candidate board, comparison=%s',async(compareOnly)=>{
+ mount(compareOnly);
+ const trigger=screen.getByRole('button',{name:compareOnly?'手法・絞り込み':'候補を絞り込む'});
+ for(const action of ['close','escape','confirm']){
+  act(()=>trigger.focus());fireEvent.click(trigger);
+  const dialog=screen.getByRole('dialog',{name:'候補を絞り込む'});
+  expect(within(dialog).getByLabelText('銘柄・企業名を検索')).toBeInTheDocument();
+  if(action==='escape')fireEvent.keyDown(dialog,{key:'Escape',code:'Escape'});
+  else fireEvent.click(within(dialog).getByRole('button',{name:action==='close'?'絞り込みを閉じる':'候補を確認する →'}));
+  await waitFor(()=>expect(screen.queryByRole('dialog',{name:'候補を絞り込む'})).not.toBeInTheDocument());
+  await waitFor(()=>expect(action==='confirm'?screen.getByRole('region',{name:'対象銘柄',exact:true}):trigger).toHaveFocus());
+ }
+});

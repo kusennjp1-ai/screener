@@ -50,3 +50,16 @@ export function fixture(scope='carry') {
   if(scope==='carry'){report.financial_carry_cases=[1440,390].flatMap(width=>FINANCIAL_DESIGN_CASES.map(item=>finance(item,width,true)));report.financial_carry_browser_ui=DESIGN_GROUPS.map(group=>{const[w,theme]=group.split('/'),width=Number(w);return{viewport:{width,height:height(width)},theme,provenance_sha256:H,observations:['index.html','assets/synthetic.js'].map(path=>({path,sha256:H,bytes:10,source:'actual browser response'}))};});}
   return {report,binding};
 }
+
+// Synthetic v1 feed observations; never use as actual browser review evidence.
+export function feedFixture(scope='carry') {
+ const f=fixture(scope);f.report.layout_contract='leader-x-feed-v1';
+ for(const screen of f.report.screens){
+  if(!['home','near-pass','compact'].includes(screen.key.split('/')[0]))continue;
+  const m=screen.metrics,w=m.viewport.width;
+  const controls=labels=>labels.map((text,i)=>({text,pressed:i===0?'true':'false',rect:rect(60,70,44,i*75)}));
+  m.firstRow=rect(450,300,300);m.visibleCandidates=w===1440?1:0;
+  m.feed={version:'leader-x-feed-v1',strategies:controls(['ミネルヴィニ','基本と原則','オニール','IBD型']),filters:controls(['買い位置','あと1条件','RS 80+']),pinned:rect(150,300,44),posts:[{symbol:'SYNTHETIC',identity:'@SYNTHETIC · 2026-10-22',company:'Synthetic fixture',daily:'日次条件 0/7',judgment:'未確認',rs:'RS データなし',volume:'出来高比 データなし',change:'前日比 データなし',position:'ピボット比 データなし',chart:'チャート：データなし',evidence:'選定 0/7 未確認7',states:Array.from({length:7},()=>({state:'unknown',glyph:'?',shown:true})),dailyMissing:null,rect:m.firstRow}]};
+ }
+ return f;
+}

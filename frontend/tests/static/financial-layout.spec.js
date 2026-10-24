@@ -42,8 +42,8 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  if(width===1440){
   await expect(page.locator('.research-symbol-head')).toContainText('ALPHA');
   await expect(page.locator('.research-detail .research-chart canvas').first()).toBeVisible();
-  expect((await page.getByTestId('home-hero').boundingBox()).height).toBeLessThanOrEqual(320);
-  expect((await page.locator('.research-detail .research-chart canvas').first().boundingBox()).y).toBeLessThanOrEqual(540);
+  await expect(page.locator('.leader-pinned-title')).toContainText('本日の判断');
+  await expect(page.locator('.research-detail .research-chart canvas').first()).toBeInViewport();
   const sourceLine=page.locator('.research-symbol-head .symbol-context');
   const qualification=page.getByLabel('価格位置と購入条件');
   await expect(sourceLine).toBeVisible();await expect(qualification).toBeVisible();
@@ -53,11 +53,14 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
   expect((await page.locator('.research-symbol-head .watch-button').boundingBox()).height).toBeGreaterThanOrEqual(44);
   expect((await page.getByRole('link',{name:'業種の追い風を見る →'}).boundingBox()).height).toBeGreaterThanOrEqual(44);
  }else{
-  const visible=await page.locator('.candidate-row').evaluateAll(rows=>{
-   const bottom=document.querySelector('.leader-mobile-nav').getBoundingClientRect().top;
-   return rows.filter(row=>{const box=row.getBoundingClientRect();return box.top>=48&&box.bottom<=bottom;}).length;
-  });
-  expect(visible).toBeGreaterThanOrEqual(3);
+  // Approved reference03 rich posts replace three compact rows above the fold.
+  // The first stock identity and tap entry must still appear below the pinned post.
+  const first=page.locator('.candidate-row').first();
+  await expect(first.locator('.leader-post-identity')).toContainText('@ALPHA');
+  expect(await first.evaluate(row=>{
+   const box=row.getBoundingClientRect(),bottom=document.querySelector('.leader-mobile-nav').getBoundingClientRect().top;
+   return box.top>=document.querySelector('.leader-header').getBoundingClientRect().bottom&&box.top+44<=bottom;
+  })).toBe(true);
  }
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  expect((await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
