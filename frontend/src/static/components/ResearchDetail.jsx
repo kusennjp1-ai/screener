@@ -1,7 +1,7 @@
 import { memo, forwardRef, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { buildFinancialEvidencePresentation } from '../financialEvidencePresentation';
-import { Alert, Button } from '@mui/material';
+import { Alert, Button, useMediaQuery } from '@mui/material';
 import { assess, entryPlan, finite } from '../researchEngine';
 import { tradingViewUrl } from '../tradingView';
 import ResearchChart from './ResearchChart';
@@ -37,6 +37,7 @@ const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,
  const checks=selected?assess(selected,method,now):null,plan=selected?entryPlan(selected,usableQuote,method):null,readiness=selected?entryReadiness(selected,date,market,now,method):null;
  const dailyChange=selected&&date&&hasVerifiedDailyBars(selected,date)?auditValues(selected).change:null;
  const trendSource=trendTemplateSourceContext(method);
+ const narrowDetail=useMediaQuery('(max-width:700px)');
  const financialSource=financialSourceContext(method);
  const choose=value=>{setTab(value);if(['financial','book'].includes(value))onVerificationToggle(selected.symbol);};
  const showBookFinancial=()=>{setBookFinancialOpen(true);choose('book');requestAnimationFrame(()=>{const target=document.getElementById('detail-tab-book');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'nearest'});});};
@@ -48,11 +49,12 @@ const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,
     <div className="symbol-identity"><div className="symbol-title"><h2 className="mono">{selected.symbol}</h2><span className="exchange-tag">{selected.exchange||'US'}</span><StateChip state={plan.state}/><button className="readiness-chip" onClick={showConditions}>購入条件 {readiness.passed}/{readiness.total}</button></div><p className="symbol-context"><EntrySourceBadge plan={plan}/><span className="symbol-company" title={selected.company_name}>{selected.company_name||'企業名未配信'} <span>· {selected.ibd_industry_group||'業種未確認'}</span></span></p></div>
     <div className="research-symbol-price"><strong className="mono">{money(plan.price)}</strong><span style={{color:finite(dailyChange)?`var(--${dailyChange>=0?'zone':'neg'})`:'var(--text-3)'}}>{signed(dailyChange)} <em>前日比（日次） · {date||'未確認'} 終値</em></span></div>
     <button className="watch-button" onClick={()=>onWatch(selected.symbol)} aria-label={`${selected.symbol} ${watch.includes(selected.symbol)?'ウォッチ解除':'ウォッチに保存'}`} aria-pressed={watch.includes(selected.symbol)}>{watch.includes(selected.symbol)?'★':'☆'}</button>
-    <p className="symbol-qualification-context" aria-label="価格位置と購入条件">価格位置は購入可否と別です。<span>未達 {readiness.failed}・未確認 {readiness.unknown}{readiness.notApplicable>0?`・対象外 ${readiness.notApplicable}`:''}</span></p>
+    <p className="symbol-qualification-context" aria-label="価格位置と購入条件">価格位置は購入可否と別です。{!narrowDetail&&<span>未達 {readiness.failed}・未確認 {readiness.unknown}{readiness.notApplicable>0?`・対象外 ${readiness.notApplicable}`:''}</span>}</p>
     {checks.financial_exclusion&&<p className="symbol-qualification-context" role="note" data-financial-exclusion={checks.financial_exclusion.policy} data-qualification="excluded">{checks.financial_exclusion.label}。財務履歴・根拠の不足や期限切れがあるため、選定・購入候補・配分から除外します。未達の実測値はそのまま表示します。</p>}
-    <LeaderDetailOverview row={selected} plan={plan} readiness={readiness} date={date} method={method} now={now} onConditions={showConditions}/>
+    {narrowDetail&&<LeaderDetailOverview row={selected} plan={plan} readiness={readiness} date={date} method={method} now={now} onConditions={showConditions}/>}
    </header>
    <ResearchChart method={method} quote={usableQuote} date={date} market={market} now={now} row={selected} rsRating={selected.rs_rating} entry={chartEntry} symbol={selected.symbol} generation={version} onExpand={onExpand}/>
+   {!narrowDetail&&<LeaderDetailOverview row={selected} plan={plan} readiness={readiness} date={date} method={method} now={now} onConditions={showConditions}/>}
    <EntryCard plan={plan} readiness={readiness} onConditions={showConditions} onConnect={()=>{setConnecting(!connecting);choose('conditions');}}/>
    <LeaderDetailFundamentals row={selected} date={date} method={method} now={now} onEvidence={showBookFinancial}/>
    <section className="research-evidence">

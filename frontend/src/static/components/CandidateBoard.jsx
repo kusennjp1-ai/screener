@@ -2,7 +2,7 @@ import { assess } from '../researchEngine';
 import { singleMissingCondition } from '../missingCondition';
 import CandidateCharts from './CandidateCharts';
 import LeaderPost from './LeaderPost';
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, useId } from 'react';
 import { Button, Paper } from '@mui/material';
 import { entryPlan } from '../researchEngine';
 import './nearPass.css';
@@ -28,7 +28,8 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
  </button>;
 });
 export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNearToggle,selectedSymbol,loading,onSelect,view='list',onView,date,generation,market,now,onCompare,paused,toolbar,onFilters,compareOnly=false,feedControls=false}) {
- const [sort,setSort]=useState('rank'),[page,setPage]=useState(0);
+ const [sort,setSort]=useState('rank'),[page,setPage]=useState(0),[guideOpen,setGuideOpen]=useState(false);
+ const guideId=useId();
  const scrollRef=useRef(null),pageStartRef=useRef(null);
  const ordered=useMemo(()=>{
   if(sort==='rank')return ranked;
@@ -60,8 +61,8 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
  const sortBy=useCallback(key=>{setSort(key);setPage(0);},[]);
  const move=useCallback((symbol,direction,element)=>{const index=ordered.findIndex(x=>x.row.symbol===symbol),next=ordered[index+direction];if(next){const scroll=element.closest('.candidate-scroll');onSelect(next.row.symbol);setPage(Math.floor((index+direction)/50));requestAnimationFrame(()=>{scroll?.querySelectorAll('.candidate-row')[(index+direction)%50]?.focus({preventScroll:false});});}},[ordered,onSelect]);
  return <Paper component="section" id="candidate-board" tabIndex={-1} aria-label="対象銘柄" className={`research-panel research-list candidate-guidance${compareOnly?' compare-only':''}`}>
-  {!compareOnly&&<>{toolbar}<div className="candidate-board-heading"><h2>対象銘柄 <small>{loading?'—':ranked.length.toLocaleString()}件</small></h2><label><span className="sr-only">並び順</span><select aria-label="候補の並び順" value={sort} onChange={e=>sortBy(e.target.value)}>{Object.entries(SORTS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>{onNearToggle&&!feedControls&&<button className="near-pass-toggle" aria-pressed={nearOnly} onClick={onNearToggle}>あと1条件</button>}{onFilters&&!feedControls&&<button onClick={onFilters} aria-label="候補を絞り込む">絞込</button>}</div>
-  <div className="candidate-guide"><p>銘柄を選択して、<strong>日次の購入条件</strong>を確認。</p><details className="candidate-glossary"><summary>一覧の見方</summary><dl><div><dt>選定と購入条件</dt><dd>手法の条件通過は候補入り。「日次 n/7」は共通の購入条件の通過数です。買いゾーン内でも、未達・未確認があれば購入条件は通過しません。</dd></div><div><dt>ピボット・買い位置</dt><dd>ピボットは値動きから求める買い位置の基準。帯が買いゾーン、線がピボット、点が日次価格です。許容幅は手法ごとのアプリ設定です。</dd></div><div><dt>RS・出来高</dt><dd>RSは株価の相対的な強さの推計値。出来高は検証済み日足の直前50日平均に対する倍率です。未検証は「—」で表示します。RSはRSIとは異なります。</dd></div><div><dt>日次の購入条件</dt><dd>選定、市場、最新取引日、買い位置、出来高、ベース形状、決算予定を別途検証。アプリ独自の組み合わせ・閾値であり、書籍の原文や発注指示ではありません。</dd></div></dl></details></div></>}
+  {!compareOnly&&<>{toolbar}<div className="candidate-board-heading"><h2>対象銘柄 <small>{loading?'—':ranked.length.toLocaleString()}件</small></h2><label><span className="sr-only">並び順</span><select aria-label="候補の並び順" value={sort} onChange={e=>sortBy(e.target.value)}>{Object.entries(SORTS).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label><button type="button" className="candidate-guide-toggle" aria-expanded={guideOpen} aria-controls={guideId} onClick={()=>setGuideOpen(value=>!value)}>一覧の見方</button>{onNearToggle&&!feedControls&&<button className="near-pass-toggle" aria-pressed={nearOnly} onClick={onNearToggle}>あと1条件</button>}{onFilters&&!feedControls&&<button onClick={onFilters} aria-label="候補を絞り込む">絞込</button>}</div>
+  <div id={guideId} className="candidate-guide" hidden={!guideOpen}><p>銘柄を選択して、<strong>日次の購入条件</strong>を確認。</p><div className="candidate-glossary"><dl><div><dt>選定と購入条件</dt><dd>手法の条件通過は候補入り。「日次 n/7」は共通の購入条件の通過数です。買いゾーン内でも、未達・未確認があれば購入条件は通過しません。</dd></div><div><dt>ピボット・買い位置</dt><dd>ピボットは値動きから求める買い位置の基準。帯が買いゾーン、線がピボット、点が日次価格です。許容幅は手法ごとのアプリ設定です。</dd></div><div><dt>RS・出来高</dt><dd>RSは株価の相対的な強さの推計値。出来高は検証済み日足の直前50日平均に対する倍率です。未検証は「—」で表示します。RSはRSIとは異なります。</dd></div><div><dt>日次の購入条件</dt><dd>選定、市場、最新取引日、買い位置、出来高、ベース形状、決算予定を別途検証。アプリ独自の組み合わせ・閾値であり、書籍の原文や発注指示ではありません。</dd></div></dl></div></div></>}
   {!onFilters&&!compareOnly&&<div className="candidate-view-switch" role="group" aria-label="候補の表示形式"><Button aria-pressed={view==='list'} onClick={()=>onView?.('list')}>一覧</Button><Button aria-pressed={view==='charts'} onClick={()=>onView?.('charts')}>チャート比較</Button></div>}
   {view==='charts'&&!loading&&<CandidateCharts ordered={ordered} {...{method,nearOnly,date,generation,market,now,paused}} onSelect={onCompare||onSelect}/>}
   <div className="candidate-scroll" ref={scrollRef} hidden={view!=='list'}>

@@ -41,8 +41,18 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  const list=page.getByRole('list',{name:'投資手法別の銘柄候補'});
  const first=page.getByRole('button',{name:/^ALPHALONG の分析を表示/});
  await expect(first).toBeVisible();
+ const universeButton=page.getByRole('button',{name:/^対象内訳/});
+ await expect(universeButton).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('.overview-universe')).toBeHidden();
+ const universeSize=await universeButton.boundingBox();expect(universeSize.height).toBeGreaterThanOrEqual(44);expect(universeSize.width).toBeGreaterThanOrEqual(44);
+ await universeButton.click();
+ await expect(universeButton).toHaveAttribute('aria-expanded','true');
+ await expect(page.locator('.overview-universe')).toBeVisible();
  await expect(page.locator('.overview-universe')).toContainText('企業財務判定の対象 3件');
  await expect(page.locator('.overview-universe')).toContainText('BITU・SBIT・ETHE');
+ await universeButton.click();
+ await expect(universeButton).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('.overview-universe')).toBeHidden();
  await expect(page.locator('.leader-pinned-title')).toContainText(`${date} 終値`);
  await expect(page.locator('.overview-market-state')).toBeVisible();
  await expect(page.locator('.overview-market-state')).toContainText('市場未確認 · 新規上限 0%');

@@ -1,3 +1,4 @@
+import { LEADER_DETAIL_CONTRACT, observeLeaderDetail, leaderDetailFailures } from './leader-detail-design-contract.mjs';
 import { LEADER_FEED_CONTRACT, observeLeaderFeed, leaderFeedFailures } from './leader-feed-design-contract.mjs';
 // CI-only production-browser acceptance measurements. Never turn a missing
 // observation into a pass. Artifacts are written before any gate fails.
@@ -44,7 +45,7 @@ if (!['same_verified_input', 'same_prices_repaired_financials'].includes(inputBa
 const comparisonMethod = inputBasis === 'same_verified_input'
   ? 'same-data baseline/current'
   : 'published-financial baseline versus certified-financial candidate; identical verified prices, different financial inputs; not a UI-only speed comparison';
-const report = { layout_contract: LEADER_FEED_CONTRACT, commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
+const report = { layout_contract: LEADER_FEED_CONTRACT, detail_contract: LEADER_DETAIL_CONTRACT, commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
   input_basis: inputBasis,
   method: `Production Chromium. CDP CPU 4x, ${comparisonMethod}, HTTP responses cached in memory after warm-up. No human satisfaction inference.`, screens: [], performance: [], failures: [] };
 if (limitedAssessment) report.assessment_mode = LIMITED_RESEARCH_SCOPE;
@@ -195,6 +196,7 @@ async function capture(page, viewport, theme, screen, { target, scope = 'viewpor
   await page.waitForTimeout(800);
   const metrics = await page.evaluate(objectiveMetrics);
   metrics.feed = await page.evaluate(observeLeaderFeed);
+  metrics.detailEvidence = await page.evaluate(observeLeaderDetail);
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   const screenshot = `${screen}-${viewport.width}x${viewport.height}-${theme}.png`;
   const key = `${screen}/${viewport.width}/${theme}`;
@@ -214,7 +216,7 @@ async function capture(page, viewport, theme, screen, { target, scope = 'viewpor
   check(!metrics.horizontalOverflow, `${key}: horizontal page overflow`);
   if (viewport.width === 390) check(metrics.chromeHeight <= 110, `${key}: fixed chrome ${metrics.chromeHeight}px > 110px`);
   for(const failure of leaderFeedFailures(metrics,screen))check(false,`${key}: ${failure}`);
-  if (screen === 'detail' && viewport.width === 390) check(metrics.chartCard && metrics.detail && metrics.chartCard.top - metrics.detail.top <= 160, `${key}: detail-to-chart ${metrics.chartCard && metrics.detail ? metrics.chartCard.top - metrics.detail.top : 'missing'}px > 160px`);
+  for(const failure of leaderDetailFailures(metrics,screen))check(false,`${key}: ${failure}`);
   if (['comparison', 'comparison-near-pass'].includes(screen) && viewport.width === 1440) {
     check(metrics.pageHeight <= 900, `${key}: page height ${metrics.pageHeight}px > 900px`);
     check(metrics.visibleCompareCards >= 6, `${key}: ${metrics.visibleCompareCards} visible comparison cards < 6`);

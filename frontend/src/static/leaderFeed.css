@@ -50,3 +50,24 @@
  .leader-shell .header-dates{margin-left:auto}
  .leader-shell .leader-header>.MuiIconButton-root{flex-shrink:0}
 }
+
+/* Reference03 density: disclosures remain in normal flow and never cover posts. */
+.leader-shell .candidate-board-heading{display:flex;align-items:center;gap:8px;padding-block:0;min-height:44px;flex-wrap:nowrap}
+.leader-shell .candidate-board-heading h2{flex:1;min-width:0;white-space:nowrap;margin:0}
+.leader-shell .candidate-board-heading label{min-width:0}
+.leader-shell .candidate-board-heading select{max-width:148px;font-size:12px}
+.leader-shell .candidate-guide-toggle{flex-shrink:0;min-height:44px;min-width:44px;padding:4px 6px;background:transparent;border:0;color:var(--accent);font-size:12px}
+.leader-shell .candidate-guide[hidden],.leader-shell .overview-universe[hidden]{display:none!important}
+.leader-shell .candidate-guide:not([hidden]){padding:8px 16px;border-block:1px solid var(--line)}
+.leader-shell .overview-universe-toggle{display:flex;flex-direction:column;justify-content:center;align-items:center;min-height:44px;gap:2px}
+.leader-shell .overview-universe-toggle small{font-size:11px;color:var(--text-2);line-height:1.4}
+@media(max-width:700px){
+ .leader-shell .candidate-board-heading{padding-inline:12px;gap:4px}
+ .leader-shell .candidate-board-heading h2{font-size:12px}
+ .leader-shell .candidate-board-heading select{max-width:124px;padding-inline:4px}
+ .leader-shell .leader-pinned-title{gap:8px;flex-wrap:wrap}
+ .leader-shell .leader-pinned-date{flex:1 1 160px;line-height:1.5}
+ .leader-shell .hero-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px}
+ .leader-shell .hero-actions>button{padding:4px 2px;font-size:12px;min-width:0}
+ .leader-shell .overview-universe{margin:8px 0 0}
+}

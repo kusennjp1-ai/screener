@@ -4,13 +4,16 @@ import {
   Alert,
   Box,
   Card,
+  Button,
+  useMediaQuery,
   CircularProgress,
   Grid,
   Typography,
 } from '@mui/material';
 import { useQuery } from '@tanstack/react-query';
 
-import CandlestickChart from '../components/Charts/CandlestickChart';
+import LeaderEvidenceChart from './components/LeaderEvidenceChart';
+import { requireChartIdentity } from './chartPayloadIdentity';
 import { getGroupRankColor } from '../utils/colorUtils';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
 
@@ -41,10 +44,16 @@ function StatBadge({ value, label, bgcolor }) {
   );
 }
 
-function StaticGroupChartCard({ symbol, entry, isSelected, onSelect, publication }) {
+function StaticGroupChartCard({ symbol, entry, isSelected, onSelect, publication, date }) {
+  const smallScreen = useMediaQuery('(max-width:700px)');
+  const identity = publicationQueryIdentity(publication);
   const { data: payload, isLoading, isError } = useQuery({
-    queryKey: [...staticChartKeys.payload(symbol, entry?.path), ...(publication ? [publicationQueryIdentity(publication)] : [])],
+    queryKey: [...staticChartKeys.payload(symbol, entry?.path), identity, date],
     queryFn: () => fetchStaticChartPayload(entry.path, { publication }),
+    select: value => {
+      if (!date || value?.symbol !== symbol || value?.as_of_date !== date) throw Error('Chart symbol or snapshot date mismatch');
+      return Array.isArray(value.bars) ? requireChartIdentity(value,symbol,date) : value;
+    },
     enabled: Boolean(entry?.path),
     placeholderData: () => undefined,
     staleTime: Infinity,
@@ -55,8 +64,7 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect, publication
   const fundamentals = payload?.fundamentals || null;
   const bars = payload?.bars || null;
   const hasBarsPayload = Array.isArray(bars);
-  const generatedAt = payload?.generated_at ? Date.parse(payload.generated_at) : null;
-  const lastClose = bars && bars.length > 0 ? bars[bars.length - 1].close : null;
+  const lastClose = bars?.length && Number.isFinite(bars.at(-1).close) ? bars.at(-1).close : null;
   const groupRank = stockData?.ibd_group_rank ?? null;
   const adrValue = stockData?.adr_percent ?? fundamentals?.adr_percent ?? null;
   // Derived EPS ratings remain unknown in compact financial contract v1.
@@ -70,30 +78,14 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect, publication
         ? 'warning.main'
         : 'error.main';
 
-  const handleSelect = (e) => {
-    e.stopPropagation();
-    onSelect?.(symbol);
-  };
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      e.stopPropagation();
-      onSelect?.(symbol);
-    }
-  };
 
   return (
     <Card
       variant="outlined"
-      role="button"
-      tabIndex={0}
-      aria-pressed={isSelected}
-      aria-label={`${symbol} chart — ${isSelected ? 'selected, zoom enabled' : 'click to enable zoom'}`}
-      onClick={handleSelect}
-      onKeyDown={handleKeyDown}
+      component="section"
+      aria-label={`${symbol} 業種内チャート`}
       sx={{
         overflow: 'hidden',
-        cursor: 'pointer',
         borderWidth: 2,
         borderColor: isSelected ? 'success.main' : 'divider',
         transition: 'border-color 120ms ease-in-out',
@@ -138,6 +130,7 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect, publication
           <Typography component="span" sx={{fontSize:12,color:'text.secondary'}}>EPS推計 未確認</Typography>
         </Box>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Button type="button" sx={{minHeight:44,minWidth:44}} aria-pressed={isSelected} aria-label={`${symbol} チャートの操作を${isSelected?'閉じる':'開く'}`} onClick={()=>onSelect?.(isSelected?null:symbol)}>{isSelected?'操作を閉じる':'期間・拡大'}</Button>
           {lastClose != null ? (
             <Typography variant="body2" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>
               {lastClose.toFixed(2)}
@@ -163,14 +156,13 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect, publication
           </Alert>
         </Box>
       ) : (
-        <CandlestickChart
-          symbol={symbol}
-          period="6mo"
-          height={CHART_HEIGHT}
-          priceData={bars}
-          dataUpdatedAtOverride={generatedAt}
-          hideTimeframeToggle
-          interactive={isSelected}
+        <LeaderEvidenceChart
+          symbol={symbol} date={date} generation={publication?.generation}
+          chartIdentity={JSON.stringify([symbol,date,identity,entry?.path])}
+          row={stockData} payload={payload} smallScreen={smallScreen}
+          compact={!isSelected} height={CHART_HEIGHT}
+          priceData={bars} rsLineData={payload?.benchmark_symbol ? payload?.rs_line || [] : []}
+          benchmarkSymbol={payload?.benchmark_symbol}
         />
       )}
     </Card>
@@ -178,13 +170,12 @@ function StaticGroupChartCard({ symbol, entry, isSelected, onSelect, publication
 }
 
 /**
- * Vertical list of full-featured candlestick charts for a group's constituent
+ * Vertical list of self-drawn SVG evidence charts for a group's constituent
  * stocks, rendered from pre-generated static chart payloads (no live API).
  *
- * Charts render daily-only (no Daily/Weekly toggle) with EMAs and the OHLC
- * legend. Time-axis pan/zoom is locked unless the card is clicked, at which
- * point its border turns green and interactions are enabled. Clicking another
- * card or the surrounding area deselects.
+ * Unselected charts show compact daily price/volume/RS panes. The separate
+ * selection button exposes SVG daily/weekly, period and zoom controls. Native
+ * buttons handle their own keys; the surrounding card never captures them.
  *
  * @param {Object} props
  * @param {string[]} props.symbols - Constituent ticker symbols
@@ -233,7 +224,7 @@ function StaticGroupChartsGrid({ symbols = [], chartIndex = null, publication })
   const truncated = normalizedSymbols.length > truncatedSymbols.length;
 
   return (
-    <Box onClick={() => setSelectedSymbol(null)}>
+    <Box>
       {truncated && (
         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
           Showing first {truncatedSymbols.length} of {normalizedSymbols.length} stocks.
@@ -274,6 +265,7 @@ function StaticGroupChartsGrid({ symbols = [], chartIndex = null, publication })
                 symbol={sym}
                 entry={entry}
                 publication={publication}
+                date={chartIndex.as_of_date}
                 isSelected={selectedSymbol === sym}
                 onSelect={setSelectedSymbol}
               />

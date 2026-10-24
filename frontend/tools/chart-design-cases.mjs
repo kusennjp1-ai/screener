@@ -1,3 +1,5 @@
+import { financialViewportGeometry, scrollFinancialViewport, checkFinancialViewportGeometry } from './financial-viewport-geometry.mjs';
+import { observeSvgChart, validateSvgChart } from './svg-chart-evidence.mjs';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { entryPlan } from '../src/static/researchEngine.js';
 import { buildBookAnnotations } from '../src/components/Charts/bookAnnotations.js';
@@ -32,12 +34,12 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await page.goto(`${currentUrl}#/?symbol=${encodeURIComponent(symbol)}`);
       await page.reload(); // the same home route must consume the new initial symbol
       const chart = page.locator(`.research-chart [data-chart-symbol="${symbol}"]`);
-      await ready(chart.locator('canvas'));
+      await ready(chart);
       check((await page.locator('.symbol-title h2').textContent())?.trim() === symbol, `${key}: detail symbol mismatch`);
       const record = { symbol, viewport, theme, as_of_date: asOf, bars: payload.bars.length, history_warning: warning || null,
         annotation_candidate: annotations.candidate, annotation_summary: annotations.summary,
         shapes: annotations.boxes.map(({ start, end, label, curve, arrow }) => ({ start, end, label, curve: Boolean(curve), arrow: Boolean(arrow) })),
-        canonical: { pivot: plan.pivot ?? null, upper: plan.upper ?? null, stop: plan.stopExample ?? null }, views: [] };
+        canonical: { pivot: plan.pivot ?? null, upper: plan.upper ?? null, stop: plan.stopExample ?? null }, views: [], renderer:'leader-svg-v1', source_bars:payload.bars.map(({date,open,high,low,close,volume})=>({date,open,high,low,close,volume})) };
       const sourceWarningVisible = async locator => {
         if (await locator.count() !== 1 || !await locator.isVisible()) return false;
         return locator.evaluate(node => {
@@ -48,22 +50,27 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
         });
       };
       const inspect = async (element, view) => {
-        const values = await element.evaluate(node => ({ symbol: node.dataset.chartSymbol, as_of_date: node.dataset.chartAsof, pivot: node.dataset.chartPivot, upper: node.dataset.chartUpper, stop: node.dataset.chartStop, annotation_mode: node.dataset.chartAnnotationMode }));
+        const values = await element.evaluate(observeSvgChart);
+        validateSvgChart(values,record.source_bars,`${key}/${view}`);
         check(values.symbol === symbol && values.as_of_date === asOf, `${key}/${view}: rendered symbol/as-of mismatch`);
         for (const [name, expected] of Object.entries(record.canonical)) check(sameLevel(values[name], warning ? null : expected), `${key}/${view}: ${name} differs from canonical published value`);
         record.views.push({ view, ...values });
       };
       await inspect(chart, 'inline-default');
-      if (viewport.width === 390) check(await chart.getAttribute('data-chart-annotation-mode') === 'simple', `${key}: mobile initial annotations are not simple`);
-      await chart.scrollIntoViewIfNeeded();
+      check(record.views[0].annotation_mode === 'vcp-on', `${key}: initial VCP annotation state missing`);
+      const inlineTargets=['.research-chart .leader-svg-controls','.research-chart svg[data-chart-plot]'];
+      await scrollFinancialViewport(page,inlineTargets);
+      const inspectInlineViewport=async()=>{const geometry=await page.evaluate(financialViewportGeometry,inlineTargets);checkFinancialViewportGeometry(geometry,check,`${key}/inline-controls-and-plot`,viewport);return geometry;};
+      record.inline_geometry={default:await inspectInlineViewport()};
       record.source_warning = { expected: Boolean(plan.sourceContext?.warning) };
       if (record.source_warning.expected) {
         record.source_warning.inline_visible = await sourceWarningVisible(page.locator('.research-symbol-head .entry-source-badge'));
         check(record.source_warning.inline_visible, `${key}: first-book proximity warning is missing from the initial inline viewport`);
       }
       await capture(page, viewport, theme, `case-${symbol}-inline`);
-      const inlineToggle = page.locator('.research-chart').getByRole('button', { name: /^図解/ });
+      const inlineToggle = page.locator('.research-chart').getByRole('button', { name: 'VCP注記', exact:true });
       if (await inlineToggle.getAttribute('aria-pressed') !== 'true') await inlineToggle.click();
+      record.inline_geometry.annotations=await inspectInlineViewport();
       await capture(page, viewport, theme, `case-${symbol}-inline-annotations`);
       const gauge = page.locator('.entry-gauge');
       if (Number.isFinite(plan.pivot)) {
@@ -72,14 +79,14 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       }
       await page.getByRole('button', { name: '日次チャートを分析', exact: true }).click();
       const dialog = page.getByRole('dialog'), expanded = dialog.locator(`[data-chart-symbol="${symbol}"]`);
-      await ready(expanded.locator('canvas'));
+      await ready(expanded);
       await inspect(expanded, 'expanded-default');
       const decisionDetails = dialog.locator('.chart-decision-details');
       check(await decisionDetails.count() === 1 && await dialog.locator('[aria-label="チャートの判断要約"] details').count() === 1, `${key}: chart source/risk/rule context must share one disclosure`);
       if (viewport.width < 900) {
         const legend = dialog.getByTestId('mobile-chart-legend');
         check(await legend.evaluate(node => !node.open && Boolean(node.closest('[role="dialog"]').querySelector('[data-chart-symbol]').compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING)), `${key}: mobile color legend must remain available below the plot on demand`);
-        check(await dialog.locator('summary').filter({ hasText: '移動平均線・株価の乖離率' }).count() === 1, `${key}: measured moving-average disclosure is missing`);
+        check(await dialog.locator('.leader-svg-legend span').filter({hasText:/^SMA(50|150|200) /}).count() === 3, `${key}: measured moving-average values are missing`);
       }
       if (record.source_warning.expected && viewport.width === 390) {
         record.source_warning.mobile_expanded_visible = await sourceWarningVisible(dialog.locator('[data-testid="mobile-chart-readiness"] .entry-source-badge'));
@@ -92,7 +99,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
         record.source_warning.desktop_expanded_visible = await sourceWarningVisible(dialog.locator('[aria-label="チャートの判断要約"] .entry-source-note [role="note"]'));
         check(record.source_warning.desktop_expanded_visible, `${key}: desktop source warning is not visible with the fitted chart`);
       }
-      const expandedToggle = dialog.getByRole('button', { name: /^図解/ });
+      const expandedToggle = dialog.getByRole('button', { name: 'VCP注記', exact:true });
       if (await expandedToggle.getAttribute('aria-pressed') !== 'true') await expandedToggle.click();
       await inspect(expanded, 'expanded-annotations');
       await capture(page, viewport, theme, `case-${symbol}-expanded-annotations`);
@@ -110,8 +117,8 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       await expanded.evaluate(node => {
         const body = node.closest('[role="dialog"]').querySelector('[data-testid="expanded-chart-scroll"]');
-        const axis = node.querySelector('.tv-lightweight-charts > table').rows;
-        const bottom = axis[axis.length - 1].getBoundingClientRect().bottom;
+        const axis = node.querySelector('[data-chart-date-axis]');
+        const bottom = axis.getBoundingClientRect().bottom;
         body.scrollTop += bottom - body.getBoundingClientRect().bottom;
       });
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -123,14 +130,15 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await scroller.evaluate(node => { node.scrollTop = 0; });
       // Fitted height changes must not reset a chosen period. This functional
       // check runs after all required captures, outside performance timing.
-      const rangeLabel = dialog.getByTestId('chart-visible-range');
-      const initialRange = await rangeLabel.textContent();
-      await dialog.getByRole('button', { name: '1か月', exact: true }).click();
+      const rangeLabel = expanded;
+      const initialRange = await rangeLabel.getAttribute('aria-label');
+      if(viewport.width<=700)await dialog.getByRole('combobox',{name:'表示期間',exact:true}).selectOption('21');
+      else await dialog.getByRole('button', { name: '1か月', exact: true }).click();
       await page.waitForFunction(previous => {
-        const text = document.querySelector('[role="dialog"] [data-testid="chart-visible-range"]')?.textContent;
+        const text = document.querySelector('[role="dialog"] svg[data-chart-plot]')?.getAttribute('aria-label');
         return Boolean(text && text !== previous);
       }, initialRange);
-      record.selected_one_month_range = await rangeLabel.textContent();
+      record.selected_one_month_range = await rangeLabel.getAttribute('aria-label');
       const sourceSummary = dialog.locator('.chart-decision-details > summary');
       if (await sourceSummary.count()) {
         for (let repetition = 0; repetition < 2; repetition++) {
@@ -147,10 +155,10 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       // Let the existing100ms visible-range notification settle after resize.
       await page.setViewportSize(shortViewport);
       await page.waitForTimeout(180);
-      check(await rangeLabel.textContent() === record.selected_one_month_range, `${key}: fitted resize reset the selected period`);
+      check(await rangeLabel.getAttribute('aria-label') === record.selected_one_month_range, `${key}: fitted resize reset the selected period`);
       await page.setViewportSize(viewport);
       await page.waitForTimeout(180);
-      check(await rangeLabel.textContent() === record.selected_one_month_range, `${key}: disclosure or restored height reset the selected period`);
+      check(await rangeLabel.getAttribute('aria-label') === record.selected_one_month_range, `${key}: disclosure or restored height reset the selected period`);
       const nextButton = dialog.getByRole('button', { name: '次の銘柄', exact: true });
       if (await nextButton.count()) {
         await nextButton.click();
@@ -158,9 +166,9 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
           const current = document.querySelector('[role="dialog"] [data-chart-symbol]')?.dataset.chartSymbol;
           return current && current !== previous;
         }, symbol);
-        await ready(dialog.locator('[data-chart-symbol] canvas'));
+        await ready(dialog.locator('svg[data-chart-symbol]'));
         await dialog.getByRole('button', { name: '前の銘柄', exact: true }).click();
-        await ready(expanded.locator('canvas'));
+        await ready(expanded);
         await inspect(expanded, 'expanded-return-navigation');
       }
       record.visual_overlap_review = 'Screenshot review required; metadata equality does not prove pixel-level label placement.';
@@ -172,7 +180,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       // Cached reopen has no loading transition: verify that the portal still
       // attaches its size observer and exposes the close button and full chart.
       await opener.click();
-      await ready(expanded.locator('canvas'));
+      await ready(expanded);
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       record.expanded_reopened_geometry = await dialog.evaluate(expandedChartGeometry);
       checkExpandedChartGeometry(record.expanded_reopened_geometry, check, `${key}/expanded-cached-reopen`, { fullChart: viewport.width >= 900 });
