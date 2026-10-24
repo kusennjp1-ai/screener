@@ -98,7 +98,7 @@ html:has(.market-workbench) { scroll-padding-top:72px; }
 .sector-rank-list li[data-highlight="true"] { outline:1px solid var(--accent);outline-offset:-1px; }
 .sector-name { min-width:0;font-size:13px; }
 .sector-name strong { font-weight:700; }
-.sector-name small { font-family:var(--font-mono);font-size:11px;color:var(--text-3);margin-left:4px; }
+.sector-name small { font-family:var(--font-mono);font-size:11px;color:var(--text-2);margin-left:4px; }
 .sector-relative { display:block;height:36px;padding:0 38px; }
 .sector-relative-plot { position:relative;height:100%;display:block; }
 .sector-relative-center { position:absolute;left:50%;top:4px;bottom:4px;border-left:1px solid var(--line-2); }
@@ -107,7 +107,7 @@ html:has(.market-workbench) { scroll-padding-top:72px; }
 .sector-relative-value.positive { transform:translate(7px,-50%); }
 .sector-relative-value.negative { transform:translate(calc(-100% - 7px),-50%); }
 .sector-index-mobile { display:none; }
-.sector-relative-missing { text-align:center;color:var(--text-3);font-size:12px; }
+.sector-relative-missing { text-align:center;color:var(--text-2);font-size:12px; }
 .sector-momentum { font-family:var(--font-mono);font-size:13px;white-space:nowrap; }
 .sector-mobile-momentum { display:none; }
 .sector-strength .positive { color:var(--zone); }
@@ -118,7 +118,7 @@ html:has(.market-workbench) { scroll-padding-top:72px; }
 .sector-rate-top > i { display:block;width:60px;height:6px;background:var(--surface-2);border-radius:4px;overflow:hidden; }
 .sector-rate-top b { display:block;height:100%;background:var(--accent);border-radius:4px; }
 .sector-rate-top strong { font-weight:500; }
-.sector-rate small { display:block;color:var(--text-3);font-size:11px;white-space:nowrap;line-height:16px; }
+.sector-rate small { display:block;color:var(--text-2);font-size:11px;white-space:nowrap;line-height:16px; }
 .sector-readings { border:1px solid var(--line);background:var(--surface);padding:16px;border-radius:16px; }
 .sector-readings h2 { font-size:14px;margin:0 0 12px; }
 .sector-readings dl { margin:0; }
