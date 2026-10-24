@@ -1,3 +1,5 @@
+import { LEADER_DETAIL_CONTRACT, leaderDetailFailures } from './leader-detail-design-contract.mjs';
+import { validateSvgChart, SVG_CHART_RENDERER, SVG_EVIDENCE_CONTRACT } from './svg-chart-evidence.mjs';
 import { LEADER_FEED_CONTRACT, leaderFeedFailures } from './leader-feed-design-contract.mjs';
 // Completeness/consistency checks for immutable historical browser observations.
 // This is NOT source authentication, current data validation, or image review.
@@ -34,7 +36,7 @@ const mainHeight = width => width === 1440 ? 900 : 844;
 const rowIds = ['eps_growth_yy', 'sales_growth_yy', 'annual_eps_growth_3y', 'eps_rating', 'composite_rating', 'roe', 'profit_margin'];
 const tableNames = ['ミネルヴィニ合格 注目銘柄 トップ20の表（横スクロール）', '主導業種グループの主導銘柄の表（横スクロール）', 'テクニカル参考候補 トップ20の表（横スクロール）', '業種グループ トップ10の表（横スクロール）'];
 
-function screenEvidence(screen, binding, layoutContract) {
+function screenEvidence(screen, binding, layoutContract, detailContract) {
   const [name, widthText, theme] = screen.key.split('/'), width = Number(widthText);
   const height = name.endsWith('-expanded-short') ? width === 1440 ? 760 : 568 : mainHeight(width);
   const label = screen.key, metrics = screen.metrics;
@@ -58,7 +60,8 @@ function screenEvidence(screen, binding, layoutContract) {
   if (name === 'compact') assert(metrics.firstRow && metrics.firstRow.top <= 260 && metrics.chart && metrics.chart.top <= 420 && metrics.visibleCandidates >= 12, label + ': compact geometry failed');
   if (['home', 'near-pass'].includes(name) && width === 390) assert(metrics.visibleCandidates >= 3, label + ': insufficient visible candidates');
   }
-  if (name === 'detail' && width === 390) assert(metrics.chartCard && metrics.detail && metrics.chartCard.top - metrics.detail.top <= 160, label + ': detail/chart spacing failed');
+  if(detailContract===LEADER_DETAIL_CONTRACT)assert.deepEqual(leaderDetailFailures(metrics,name),[],label+': detail contract failed');
+  else if (name === 'detail' && width === 390) assert(metrics.chartCard && metrics.detail && metrics.chartCard.top - metrics.detail.top <= 160, label + ': detail/chart spacing failed');
   if (['comparison', 'comparison-near-pass'].includes(name)) {
     if (width === 1440) assert(metrics.pageHeight <= 900 && metrics.visibleCompareCards >= 6 && metrics.comparisonGrid && metrics.comparisonGrid.height <= 700, label + ': comparison geometry failed');
     else assert(metrics.visibleCompareCardFraction >= 1.5, label + ': insufficient visible comparison cards');
@@ -74,7 +77,7 @@ function screenEvidence(screen, binding, layoutContract) {
     if (width === 1440) exactSet(ids, ['rs_trend', 'price_change_1d'], label + ' sparkline columns');
     for (const column of screen.sparkline_columns) assert(count(column.geometry) && column.geometry > 0, label + ': empty sparkline geometry');
   }
-  const scoped = /^(?:carry-)?financial-/.test(name) || ['daily-observations', 'daily-watchlist'].includes(name);
+  const scoped = /^(?:carry-)?financial-/.test(name) || ['daily-observations', 'daily-watchlist'].includes(name) || (detailContract === LEADER_DETAIL_CONTRACT && /^case-[A-Z0-9.-]+-inline(?:-annotations)?$/.test(name) && screen.viewport_geometry !== undefined);
   if (scoped) {
     assert(screen.screenshot_scope === 'scrolled-viewport' && screen.metrics_scope === 'original-viewport' && screen.screenshot_target === null, label + ': missing viewport capture scope');
     const geometry = screen.viewport_geometry;
@@ -111,6 +114,35 @@ function chartGeometry(geometry, width, height, label, fullChart) {
   checkExpandedChartGeometry(geometry, check, label, { fullChart });
 }
 
+export function validateInlineChartEvidence(value,width,height,label='inline chart') {
+      assert(object(value),label+': missing inline controls/plot geometry');
+      for(const state of ['default','annotations']){
+        const geometry=value[state];
+        assert(object(geometry)&&Array.isArray(geometry.targets),label+': missing inline viewport '+state);
+        viewport(geometry.viewport,width,height,label);
+        exactSet(geometry.targets.map(t=>t.selector),['.research-chart .leader-svg-controls','.research-chart svg[data-chart-plot]'],label+' inline targets');
+        for(const target of geometry.targets){rect(target.rect,label);assert(Array.isArray(target.hit_samples)&&target.hit_samples.length>=9&&target.hit_samples.every(hit=>hit===true),label+': incomplete inline hit proof');}
+        checkFinancialViewportGeometry(geometry,check,label+'/'+state,{width,height:height});
+      }
+  return true;
+}
+
+export function validateInlineCaptureEvidence(record, screens) {
+  const {width,height}=record.viewport;
+  const atCapture={};
+  for(const [state,suffix] of [['default','inline'],['annotations','inline-annotations']]) {
+    const key=`case-${record.symbol}-${suffix}/${width}/${record.theme}`;
+    const matches=screens.filter(screen=>screen.key===key);
+    assert(matches.length===1, key+': missing or duplicate inline capture');
+    const screen=matches[0];
+    assert(screen.screenshot_scope==='scrolled-viewport' && screen.metrics_scope==='original-viewport' && screen.screenshot_target===null, key+': missing inline viewport scope');
+    atCapture[state]=screen.viewport_geometry;
+  }
+  // Validate the independently observed screenshot-time rectangles, not just
+  // pre-capture geometry that a theme operation or asynchronous layout can stale.
+  return validateInlineChartEvidence(atCapture,width,height,'inline screenshot');
+}
+
 function chartEvidence(report) {
   assert(Array.isArray(report.chart_cases), 'Missing chart cases');
   const expected = DESIGN_GROUPS.flatMap(group => CHART_DESIGN_SYMBOLS.map(symbol => symbol + '/' + group));
@@ -120,16 +152,24 @@ function chartEvidence(report) {
     viewport(record.viewport, width, mainHeight(width), label);
     assert(!Object.hasOwn(record, 'error') && record.as_of_date === report.data.as_of_date && count(record.bars) && record.bars > 0 && typeof record.annotation_candidate === 'boolean' && text(record.annotation_summary) && Array.isArray(record.shapes), label + ': incomplete chart source');
     assert(record.history_warning === null || text(record.history_warning), label + ': missing history warning state');
+    if(report.detail_contract===LEADER_DETAIL_CONTRACT && record.renderer===SVG_CHART_RENDERER){
+      validateInlineChartEvidence(record.inline_geometry,width,mainHeight(width),label);
+      validateInlineCaptureEvidence(record, report.screens);
+    }
     assert(object(record.canonical) && ['pivot', 'upper', 'stop'].every(field => record.canonical[field] === null || number(record.canonical[field])), label + ': missing canonical levels');
     assert(Array.isArray(record.views) && [3, 4].includes(record.views.length), label + ': incomplete chart views');
     exactSet(record.views.map(view => view.view), ['inline-default', 'expanded-default', 'expanded-annotations', ...(record.views.length === 4 ? ['expanded-return-navigation'] : [])], label + ' views');
+    if(record.renderer !== undefined) assert(record.renderer === SVG_CHART_RENDERER,label+': unknown chart renderer');
+    const svg=record.renderer === SVG_CHART_RENDERER;
     for (const view of record.views) {
-      assert(view.symbol === record.symbol && view.as_of_date === record.as_of_date && ['simple', 'detail'].includes(view.annotation_mode), label + ': wrong rendered chart identity');
+      if(report.svg_evidence_contract!==undefined)assert(report.svg_evidence_contract===SVG_EVIDENCE_CONTRACT&&view.evidence_contract===SVG_EVIDENCE_CONTRACT,label+': missing/unknown SVG provenance contract');
+      if(svg)validateSvgChart(view,record.source_bars,label,record.rs_source);
+      assert(view.symbol === record.symbol && view.as_of_date === record.as_of_date && (svg ? ['vcp-on','vcp-off'].includes(view.annotation_mode) : ['simple', 'detail'].includes(view.annotation_mode)), label + ': wrong rendered chart identity');
       for (const field of ['pivot', 'upper', 'stop']) {
         const expected = record.history_warning ? null : record.canonical[field];
         assert(expected === null ? view[field] === '' || view[field] === null : typeof view[field] === 'string' && view[field].trim() !== '' && number(Number(view[field])) && Math.abs(Number(view[field]) - expected) < 1e-8, label + ': canonical level differs');
       }
-      if (width === 390 && view.view === 'inline-default') assert(view.annotation_mode === 'simple', label + ': mobile annotations are not simple');
+      if (!svg && width === 390 && view.view === 'inline-default') assert(view.annotation_mode === 'simple', label + ': mobile annotations are not simple');
     }
     assert(object(record.source_warning) && typeof record.source_warning.expected === 'boolean', label + ': missing warning evidence');
     if (record.source_warning.expected) assert(record.source_warning.inline_visible === true && record.source_warning[width === 390 ? 'mobile_expanded_visible' : 'desktop_expanded_visible'] === true, label + ': source warning hidden');
@@ -169,6 +209,8 @@ function financialEvidence(report, binding, screens, carry = false) {
       else if (view.screen.endsWith('-selection')) targets = ['#detail-panel-evidence > h3', ...[1,2,3].map(index => `#detail-panel-evidence .research-rules > li:nth-child(${index})`)];
       else if (view.screen.endsWith('-purchase')) targets = ['#detail-panel-conditions > h3', ...[1,2].map(index => `#detail-panel-conditions .condition-rules > li:nth-child(${index})`)];
       else if (view.screen.endsWith('-history')) targets = ['#detail-panel-financial > details.research-disclosure > summary', ...(carry ? ['#detail-panel-financial > details.research-disclosure > p'] : record.history_status === 'unavailable' ? ['#detail-panel-financial > details.research-disclosure > :nth-child(2)'] : ['#detail-panel-financial > details.research-disclosure > div:first-of-type > table.financial-history-table > caption', '#detail-panel-financial > details.research-disclosure > div:first-of-type > table.financial-history-table'])];
+      if(report.detail_contract===LEADER_DETAIL_CONTRACT && view.screen.endsWith('-selection'))targets.unshift('#detail-tab-evidence');
+      if(report.detail_contract===LEADER_DETAIL_CONTRACT && view.screen.endsWith('-purchase'))targets.unshift('#detail-tab-conditions');
       exactSet(view.targets, targets, label + ' actual financial targets');
     }
 
@@ -233,8 +275,9 @@ export function validateFunctionalEvidence(report, binding) {
   assert(Array.isArray(report.screens), 'Missing screenshots');
   exactSet(report.screens.map(screen => screen.key), requiredScreeningCaptures(binding.scope), 'Screen captures');
   assert(new Set(report.screens.map(screen => screen.screenshot)).size === report.screens.length, 'Duplicate screenshot path');
+  assert(report.detail_contract === undefined || report.detail_contract === LEADER_DETAIL_CONTRACT, 'Unknown detail contract');
   assert(report.layout_contract === undefined || report.layout_contract === LEADER_FEED_CONTRACT, 'Unknown layout contract');
-  for (const screen of report.screens) screenEvidence(screen, binding, report.layout_contract);
+  for (const screen of report.screens) screenEvidence(screen, binding, report.layout_contract, report.detail_contract);
   const screens = new Map(report.screens.map(screen => [screen.key, screen]));
   chartEvidence(report); financialEvidence(report, binding, screens); dailyEvidence(report, screens);
   if (binding.scope === 'carry') {

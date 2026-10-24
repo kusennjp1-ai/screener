@@ -4,11 +4,11 @@ import { beforeEach, afterEach, expect, it, vi } from 'vitest';
 import CandidateCharts from './CandidateCharts';
 import { withAuditFixture } from '../testAuditFixture';
 import { fetchStaticChartPayload } from '../chartClient';
-import CandlestickChart from '../../components/Charts/CandlestickChart';
+import CandlestickChart from './LeaderEvidenceChart';
 import { assess } from '../researchEngine';
 
 vi.mock('../chartClient',()=>({staticChartKeys:{payload:(symbol,path)=>[symbol,path]},fetchStaticChartPayload:vi.fn()}));
-vi.mock('../../components/Charts/CandlestickChart',()=>({default:vi.fn(()=> <div data-testid="price-chart"/>)}));
+vi.mock('./LeaderEvidenceChart',()=>({default:vi.fn(()=> <div data-testid="price-chart"/>)}));
 const date='2026-09-29';
 beforeEach(()=>{
   vi.stubGlobal('IntersectionObserver',class {constructor(callback){this.callback=callback;}observe(){this.callback([{isIntersecting:true}]);}disconnect(){}});

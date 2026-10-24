@@ -142,17 +142,24 @@ it('keeps the price and financial universes with all verified exclusions in the 
  expect(scope).toHaveTextContent('確認済みファンド BITU・SBIT・ETHE は対象外');
  expect(scope).toHaveClass('overview-universe');
  expect(scope).not.toHaveClass('hero-subtitle');
- expect(scope.closest('.overview-market')).not.toBeNull();
+ expect(scope).not.toBeVisible();
+ const trigger=screen.getByRole('button',{name:'対象内訳'});
+ expect(trigger).toHaveAttribute('aria-expanded','false');
+ expect(document.getElementById(trigger.getAttribute('aria-controls'))).toBe(scope);
+ expect(trigger).toHaveTextContent('対象外 3');
+ fireEvent.click(trigger);expect(scope).toBeVisible();
+ expect(trigger).toHaveAttribute('aria-expanded','true');
+ fireEvent.click(trigger);expect(scope).not.toBeVisible();
  expect(screen.getByRole('link',{name:'業種の追い風を見る →'})).toBeInTheDocument();
 });
 
 it('does not count legacy raw-valid audits as verified coverage', () => {
  const row = withAuditFixture({symbol:'OLD',current_price:102,se_pivot_price:100},props.date);
  const view = render(<ResearchHero {...props} rows={[row]} ranked={[{row,assessment:{qualified:false}}]}/>);
- expect(screen.getByText(/^日足検証 100(?:\.0)?%$/)).toBeInTheDocument();
+ expect(screen.getByText(/^日足検証 1\/1（100(?:\.0)?%）$/)).toBeInTheDocument();
  row.technical_audit={...row.technical_audit,version:'ohlcv-v1',status:undefined};
  view.rerender(<ResearchHero {...props} rows={[row]} ranked={[{row,assessment:{qualified:false}}]}/>);
- expect(screen.getByText(/^日足検証 0(?:\.0)?%$/)).toBeInTheDocument();
+ expect(screen.getByText(/^日足検証 0\/1（0(?:\.0)?%）$/)).toBeInTheDocument();
 });
 
 for (const collapsed of [false,true]) it(`starts mobile with optional radar closed and keeps scope/warnings when saved collapse is ${collapsed}`,()=>{
@@ -162,7 +169,10 @@ for (const collapsed of [false,true]) it(`starts mobile with optional radar clos
  const rows=[{symbol:'COMPANY',market:'US',current_price:100,adv_usd:3e7},...registry.records.map(record=>({symbol:record.symbol,company_name:record.name,market:record.market,current_price:100,adv_usd:3e7}))];
  const view=render(<ResearchHero {...props} rows={rows} onBrowse={onBrowse} freshnessNotice={<div role="alert">古い価格の基準日を確認</div>}/>);
  expect(screen.queryByRole('region',{name:'セットアップ・レーダー'})).not.toBeInTheDocument();
- expect(screen.getByText(/確認済みファンド BITU・SBIT・ETHE は対象外/)).toBeInTheDocument();
+ expect(screen.getByRole('button',{name:'対象内訳'})).toHaveTextContent('対象外 3');
+ fireEvent.click(screen.getByRole('button',{name:'対象内訳'}));
+ expect(screen.getByText(/確認済みファンド BITU・SBIT・ETHE は対象外/)).toBeVisible();
+ fireEvent.click(screen.getByRole('button',{name:'対象内訳'}));
  expect(screen.getByRole('alert')).toHaveTextContent('古い価格');
  expect(screen.queryByRole('button',{name:'銘柄一覧'})).not.toBeInTheDocument();
  view.rerender(<ResearchHero {...props} rows={rows} onBrowse={onBrowse} mobileView="detail" freshnessNotice={<div role="alert">古い価格の基準日を確認</div>}/>);
@@ -195,4 +205,12 @@ it('keeps actual universe counts visible with zero fund exclusions and does not 
  expect(screen.getByText(/価格・流動性対象 0件/)).toHaveTextContent('企業財務判定の対象 0件');
  view.rerender(<ResearchHero {...props} rows={[]} loading/>);
  expect(screen.queryByText(/価格・流動性対象 0件/)).not.toBeInTheDocument();
+});
+
+it('keeps date, Minervini scope and exact coverage outside the optional universe details',()=>{
+ const row=withAuditFixture({symbol:'A',current_price:102,se_pivot_price:100},props.date);
+ const {container}=render(<ResearchHero {...props} rows={[row]} ranked={[{row,assessment:{qualified:false}}]}/>);
+ expect(container.querySelector('.leader-pinned-date')).toHaveTextContent(`ミネルヴィニ · ${props.date} 終値`);
+ expect(screen.getByText(/^日足検証 1\/1/).closest('[hidden]')).toBeNull();
+ expect(screen.getByRole('button',{name:'対象内訳'})).toHaveTextContent('対象外 0 · 保留 0');
 });

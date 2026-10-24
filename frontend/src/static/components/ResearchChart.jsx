@@ -4,7 +4,7 @@ import { entryPlan } from '../researchEngine';
 import { canonicalPivot } from '../researchPresentation';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Box, Button, CircularProgress, Typography, useMediaQuery } from '@mui/material';
-import CandlestickChart from '../../components/Charts/CandlestickChart';
+import CandlestickChart from './LeaderEvidenceChart';
 import { fetchStaticChartPayload, staticChartKeys } from '../chartClient';
 import ChartNumericData from './ChartNumericData';
 
@@ -31,6 +31,7 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
       : !data?.bars?.length ? <Typography sx={{ p: 4 }}>ローソク足データが不足しています。</Typography> : null}
     {(ready || initialized) && <div hidden={!ready} aria-hidden={!ready}>
       <CandlestickChart smallScreen={small} researchLegendBelow={!small} researchActions={<button type="button" onClick={onExpand} aria-label="日次チャートを分析">拡大 ↗</button>} researchView bookAnnotations symbol={symbol} height={small ? 360 : 440}
+        date={date} generation={generation} row={row || data?.stock_data} payload={ready ? data : null} benchmarkSymbol={data?.benchmark_symbol}
         chartIdentity={JSON.stringify([symbol, date, generation, entry?.path])}
         priceData={ready ? data.bars : EMPTY_BARS} rsLineData={ready ? data.rs_line || null : null} rsRatingValue={ready ? rsRating ?? null : null}
         epsLine={ready ? data.eps_line || null : null} blueDots={ready ? data.blue_dots || null : null}

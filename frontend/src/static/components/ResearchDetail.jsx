@@ -1,7 +1,7 @@
 import { memo, forwardRef, useEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { buildFinancialEvidencePresentation } from '../financialEvidencePresentation';
-import { Alert, Button } from '@mui/material';
+import { Alert, Button, useMediaQuery } from '@mui/material';
 import { assess, entryPlan, finite } from '../researchEngine';
 import { tradingViewUrl } from '../tradingView';
 import ResearchChart from './ResearchChart';
@@ -15,16 +15,18 @@ import EntryCard, { StateChip } from './EntryCard';
 import { EntrySourceBadge } from './EntrySourceNote';
 import './researchSourceWarning.css';
 import { entryReadiness } from '../entryReadiness';
-import { verifiedVolumeRatio } from '../qualificationAudit';
+import { auditValues, hasVerifiedDailyBars, verifiedVolumeRatio } from '../qualificationAudit';
 import { BOOK_SOURCE_PAGE_NOTE, financialSourceContext, trendTemplateSourceContext } from '../bookSourceContext';
 import { money, signed, times } from '../positionGeometry';
+import { LeaderDetailOverview, LeaderDetailFundamentals } from './LeaderDetailOverview';
+import '../leaderDetail.css';
 const TABS={evidence:'判定根拠',conditions:'購入条件',financial:'財務・機関',book:'書籍検証',notes:'メモ'};
 function SymbolNotes({symbol}) {
  const [text,setText]=useState(()=>{try{return localStorage.getItem(`research-note-${symbol}`)||'';}catch{return '';}}),[error,setError]=useState(false);
  return <label className="symbol-notes">{symbol} のメモ（この端末に保存）<textarea value={text} rows={5} onChange={e=>{setText(e.target.value);try{localStorage.setItem(`research-note-${symbol}`,e.target.value);}catch{setError(true);}}}/>{error&&<span>保存できません。この画面を閉じると失われます。</span>}</label>;
 }
 const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,usableQuote,date,market,now,chartEntry,version,onExpand,watch,onWatch,liveStatus,personalKey,personal,onConnect,onDisconnect,onVerificationToggle,detail,onVerified,financialEvidence}, detailRef) {
- const [tab,setTab]=useState('evidence'),[connecting,setConnecting]=useState(false);
+ const [tab,setTab]=useState('evidence'),[connecting,setConnecting]=useState(false),[bookFinancialOpen,setBookFinancialOpen]=useState(false);
  const [mobileHeader,setMobileHeader]=useState(null);
  useEffect(()=>{setMobileHeader(document.getElementById('research-mobile-instrument-context'));},[]);
  // Presentation is needed only when its panel is visible. Keep current-use
@@ -33,28 +35,34 @@ const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,
   ? buildFinancialEvidencePresentation(selected,{method,date,generation:version,now}) : undefined),
  [financialEvidence,tab,selected,method,date,version,now]);
  const checks=selected?assess(selected,method,now):null,plan=selected?entryPlan(selected,usableQuote,method):null,readiness=selected?entryReadiness(selected,date,market,now,method):null;
+ const dailyChange=selected&&date&&hasVerifiedDailyBars(selected,date)?auditValues(selected).change:null;
  const trendSource=trendTemplateSourceContext(method);
+ const narrowDetail=useMediaQuery('(max-width:700px)');
  const financialSource=financialSourceContext(method);
  const choose=value=>{setTab(value);if(['financial','book'].includes(value))onVerificationToggle(selected.symbol);};
+ const showBookFinancial=()=>{setBookFinancialOpen(true);choose('book');requestAnimationFrame(()=>{const target=document.getElementById('detail-tab-book');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'nearest'});});};
  const showConditions=()=>{choose('conditions');requestAnimationFrame(()=>{const target=document.getElementById('detail-tab-conditions');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'nearest'});});};
- return <div role="region" className="research-detail" ref={detailRef} tabIndex={-1} aria-label="銘柄詳細">
+ return <div role="region" className="research-detail leader-detail" ref={detailRef} tabIndex={-1} aria-label="銘柄詳細">
   {selected&&<>
    {mobileHeader && createPortal(<div role="group" aria-label="表示中の銘柄と分析基準日"><strong>{selected.symbol}</strong><span>分析 {date||'未確認'}</span></div>,mobileHeader)}
    <header className="research-symbol-head">
     <div className="symbol-identity"><div className="symbol-title"><h2 className="mono">{selected.symbol}</h2><span className="exchange-tag">{selected.exchange||'US'}</span><StateChip state={plan.state}/><button className="readiness-chip" onClick={showConditions}>購入条件 {readiness.passed}/{readiness.total}</button></div><p className="symbol-context"><EntrySourceBadge plan={plan}/><span className="symbol-company" title={selected.company_name}>{selected.company_name||'企業名未配信'} <span>· {selected.ibd_industry_group||'業種未確認'}</span></span></p></div>
-    <div className="research-symbol-price"><strong className="mono">{money(plan.price)}</strong><span style={{color:finite(selected.price_change_1d)?`var(--${selected.price_change_1d>=0?'zone':'neg'})`:'var(--text-3)'}}>{signed(selected.price_change_1d)} <em>前日比 · {usableQuote?.as_of?new Date(usableQuote.as_of).toLocaleString('ja-JP'):`${date||'未確認'} 終値`}</em></span></div>
+    <div className="research-symbol-price"><strong className="mono">{money(plan.price)}</strong><span style={{color:finite(dailyChange)?`var(--${dailyChange>=0?'zone':'neg'})`:'var(--text-3)'}}>{signed(dailyChange)} <em>前日比（日次） · {date||'未確認'} 終値</em></span></div>
     <button className="watch-button" onClick={()=>onWatch(selected.symbol)} aria-label={`${selected.symbol} ${watch.includes(selected.symbol)?'ウォッチ解除':'ウォッチに保存'}`} aria-pressed={watch.includes(selected.symbol)}>{watch.includes(selected.symbol)?'★':'☆'}</button>
-    <p className="symbol-qualification-context" aria-label="価格位置と購入条件">価格位置は購入可否と別です。<span>未達 {readiness.failed}・未確認 {readiness.unknown}{readiness.notApplicable>0?`・対象外 ${readiness.notApplicable}`:''}</span></p>
+    <p className="symbol-qualification-context" aria-label="価格位置と購入条件">価格位置は購入可否と別です。{!narrowDetail&&<span>未達 {readiness.failed}・未確認 {readiness.unknown}{readiness.notApplicable>0?`・対象外 ${readiness.notApplicable}`:''}</span>}</p>
     {checks.financial_exclusion&&<p className="symbol-qualification-context" role="note" data-financial-exclusion={checks.financial_exclusion.policy} data-qualification="excluded">{checks.financial_exclusion.label}。財務履歴・根拠の不足や期限切れがあるため、選定・購入候補・配分から除外します。未達の実測値はそのまま表示します。</p>}
+    {narrowDetail&&<LeaderDetailOverview row={selected} plan={plan} readiness={readiness} date={date} method={method} now={now} onConditions={showConditions}/>}
    </header>
    <ResearchChart method={method} quote={usableQuote} date={date} market={market} now={now} row={selected} rsRating={selected.rs_rating} entry={chartEntry} symbol={selected.symbol} generation={version} onExpand={onExpand}/>
+   {!narrowDetail&&<LeaderDetailOverview row={selected} plan={plan} readiness={readiness} date={date} method={method} now={now} onConditions={showConditions}/>}
    <EntryCard plan={plan} readiness={readiness} onConditions={showConditions} onConnect={()=>{setConnecting(!connecting);choose('conditions');}}/>
+   <LeaderDetailFundamentals row={selected} date={date} method={method} now={now} onEvidence={showBookFinancial}/>
    <section className="research-evidence">
     <div id="research-detail-tabs" className="detail-tabs" role="tablist" aria-label="銘柄の詳細情報">{Object.entries(TABS).map(([key,label])=><button role="tab" key={key} id={`detail-tab-${key}`} aria-selected={tab===key} aria-controls={`detail-panel-${key}`} tabIndex={tab===key?0:-1} onClick={()=>choose(key)} onKeyDown={e=>{const keys=Object.keys(TABS),index=keys.indexOf(tab);let target;if(e.key==='ArrowRight')target=keys[(index+1)%keys.length];if(e.key==='ArrowLeft')target=keys[(index-1+keys.length)%keys.length];if(e.key==='Home')target=keys[0];if(e.key==='End')target=keys.at(-1);if(target){e.preventDefault();choose(target);document.getElementById(`detail-tab-${target}`)?.focus();}}}>{label}</button>)}</div>
     <div className="detail-panel" role="tabpanel" id={`detail-panel-${tab}`} aria-labelledby={`detail-tab-${tab}`} tabIndex={0}>
      {tab==='evidence'&&<><h3>{checks.applicability_label || `選定 ${checks.passed}/${checks.total} · 未達 ${checks.failed} · 未確認 ${checks.unknown}`}</h3><EvidenceContext date={date} generation={version} evidence={selected} label="選出データ"/>{checks.method_status && <p>価格・テクニカルの測定値は参考として保持しています。株式手法の通過数には含めません。</p>}<ul className="research-rules">{checks.rules.map(r=><li key={r.label}><span>{r.label}{r.evidence&&<small>{r.evidence}</small>}</span><span style={{color:`var(--${r.state==='pass'?'zone':r.state==='fail'?'neg':'text-3'})`}}>{r.state==='pass'?'✓ 通過':r.state==='fail'?'× 未達':r.state==='not_applicable'?'対象外':'? 未確認'}{finite(r.value)?` · ${r.value.toLocaleString('ja-JP',{maximumFractionDigits:2})}${r.unit}`:''}</span></li>)}</ul><p>選定の一次条件です。購入条件とは別に確認します。RS・EPS・Composite・業種順位は独自推計。未確認は合格に数えません。条件ごとの提供元・対象日は個別の根拠を参照してください。記載がない提供元・対象日は未確認です。</p>{trendSource&&<details><summary>トレンド条件の出典とアプリの近似</summary><p>{trendSource}</p><p>{BOOK_SOURCE_PAGE_NOTE}</p></details>}{financialSource&&<details><summary>オニール財務条件の出典とアプリの範囲</summary><p>{financialSource}</p><p>{BOOK_SOURCE_PAGE_NOTE}</p></details>}{checks.templateMismatch&&<Alert severity="warning">元の判定と日足再計算が不一致です。再計算した結果を使っています。</Alert>}<a href={tradingViewUrl(selected.symbol,'US')} target="_blank" rel="noopener noreferrer">TradingViewで確認 ↗</a></>}
-     {tab==='conditions'&&<><h3>購入条件 {readiness.passed}/{readiness.total} · 未達 {readiness.failed} · 未確認 {readiness.unknown} · {liveStatus}</h3><EvidenceContext date={date} generation={version} evidence={selected.entry_evidence} label="購入条件の根拠"/><ul className="research-rules condition-rules">{readiness.rules.map(r=><li key={r.id}><span><b>{r.state==='pass'?'✓':r.state==='fail'?'×':r.state==='not_applicable'?'—':'?'} {r.label}</b><small>{r.detail}</small></span><span>{r.state==='pass'?'通過':r.state==='fail'?'未達':r.state==='not_applicable'?'対象外':'未確認'}</span></li>)}</ul><p>検証済み直前50日平均比 {times(verifiedVolumeRatio(selected,date))} · VCP {selected.vcp_detected==null?'未確認':selected.vcp_detected?'検出':'未検出'}</p><Button onClick={()=>setConnecting(!connecting)} aria-expanded={connecting}>場中価格を接続する</Button>{connecting&&<QuoteConnection connected={Boolean(personalKey)} apiKey={personalKey} symbol={selected.symbol} cusip={selected.institutional_evidence?.cusip} status={personal.status} quote={personal.quote} onConnect={onConnect} onDisconnect={onDisconnect}/>}</>}
-     {['financial','book'].includes(tab)&&<>{detail.isLoading&&<p role="status">詳細資料を読み込み中…</p>}{detail.isError&&<Alert severity="error" action={<Button onClick={()=>detail.refetch()}>再試行</Button>}>詳細資料を取得できません。合格とは扱いません。</Alert>}{(!selected.research_detail_path||detail.isSuccess)&&(tab==='financial'?<><FinancialEvidencePanel row={selected} evidence={panelEvidence} history={selected.financial_history} symbol={selected.symbol} date={date} generation={version} method={method} now={now}/><FinancialHistory row={selected} date={date} now={now}/><InstitutionalEvidence row={selected} date={date}/></>:<QualificationVerification includeFinancial={false} now={now} row={selected} entry={chartEntry} date={date} generation={version} method={method} onVerified={onVerified}/>)}</>}
+     {tab==='conditions'&&<><h3>購入条件 {readiness.passed}/{readiness.total} · 未達 {readiness.failed} · 未確認 {readiness.unknown} · {liveStatus}</h3><EvidenceContext date={date} generation={version} evidence={selected.entry_evidence} label="購入条件の根拠"/><ul className="research-rules condition-rules">{readiness.rules.map(r=><li key={r.id} data-state={r.state} data-glyph={r.state==='pass'?'✓':r.state==='fail'?'×':r.state==='not_applicable'?'—':'?'}><span><b>{r.state==='pass'?'✓':r.state==='fail'?'×':r.state==='not_applicable'?'—':'?'} {r.label}</b><small>{r.detail}</small></span><span>{r.state==='pass'?'通過':r.state==='fail'?'未達':r.state==='not_applicable'?'対象外':'未確認'}</span></li>)}</ul><p>検証済み直前50日平均比 {times(verifiedVolumeRatio(selected,date))} · VCP {selected.vcp_detected==null?'未確認':selected.vcp_detected?'検出':'未検出'}</p><Button onClick={()=>setConnecting(!connecting)} aria-expanded={connecting}>場中価格を接続する</Button>{connecting&&<QuoteConnection connected={Boolean(personalKey)} apiKey={personalKey} symbol={selected.symbol} cusip={selected.institutional_evidence?.cusip} status={personal.status} quote={personal.quote} onConnect={onConnect} onDisconnect={onDisconnect}/>}</>}
+     {['financial','book'].includes(tab)&&<>{detail.isLoading&&<p role="status">詳細資料を読み込み中…</p>}{detail.isError&&<Alert severity="error" action={<Button onClick={()=>detail.refetch()}>再試行</Button>}>詳細資料を取得できません。合格とは扱いません。</Alert>}{(!selected.research_detail_path||detail.isSuccess)&&(tab==='financial'?<><FinancialEvidencePanel row={selected} evidence={panelEvidence} history={selected.financial_history} symbol={selected.symbol} date={date} generation={version} method={method} now={now}/><FinancialHistory row={selected} date={date} now={now}/><InstitutionalEvidence row={selected} date={date}/></>:<QualificationVerification bookFinancialOpen={bookFinancialOpen} includeFinancial={false} now={now} row={selected} entry={chartEntry} date={date} generation={version} method={method} onVerified={onVerified}/>)}</>}
      {tab==='notes'&&<SymbolNotes key={selected.symbol} symbol={selected.symbol}/>}
     </div>
    </section>

@@ -53,3 +53,23 @@ describe('expanded chart browser acceptance checks', () => {
     expect(failuresFor({...compact,close:{...compact.close,top:74,bottom:118}})).toContainEqual(expect.stringContaining('outside the title row'));
   });
 });
+
+
+describe('versioned SVG expanded chart evidence', () => {
+  const svg = { renderer:'leader-svg-v1', date_axis_canvases:0, date_axis_labels:['08-01','09-01','10-02'] };
+  it('accepts the actual SVG date labels without pretending canvases exist', () => {
+    expect(failuresFor(svg)).toEqual([]);
+  });
+  it.each([null, [], [''], ['08-01']])('rejects missing or incomplete SVG date labels %j', labels => {
+    expect(failuresFor({...svg,date_axis_labels:labels})).toContainEqual(expect.stringContaining('date-axis row is missing'));
+  });
+  it('rejects collapsed, off-screen or covered SVG dates', () => {
+    expect(failuresFor({...svg,date_axis:{height:15}})).toContainEqual(expect.stringContaining('date-axis row is missing'));
+    expect(failuresFor({...svg,date_axis_visible:false})).toContainEqual(expect.stringContaining('complete plot/date axis'));
+    expect(failuresFor({...svg,date_axis_hit:false})).toContainEqual(expect.stringContaining('complete plot/date axis'));
+  });
+  it('does not let SVG labels bypass legacy canvas evidence or an unknown renderer', () => {
+    expect(failuresFor({...svg,renderer:undefined})).toContainEqual(expect.stringContaining('date-axis row is missing'));
+    expect(failuresFor({...svg,renderer:'unknown',date_axis_canvases:4})).toContainEqual(expect.stringContaining('unknown chart renderer'));
+  });
+});

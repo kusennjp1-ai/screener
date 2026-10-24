@@ -22,7 +22,7 @@ vi.mock('../../static/instrumentApplicability',()=>({instrumentApplicability:()=
 vi.mock('../../static/entryReadiness',()=>({entryReadiness:()=>({passed:0,total:1,ready:false,rules:[]})}));
 vi.mock('../../static/researchEngine',()=>({assess:vi.fn(),entryPlan:vi.fn()}));
 vi.mock('../../static/missingCondition',()=>({singleMissingCondition:vi.fn()}));
-vi.mock('../../static/qualificationAudit',()=>({hasVerifiedDailyBars:()=>true,verifiedVolumeRatio:()=>1}));
+vi.mock('../../static/qualificationAudit',async importOriginal=>({...await importOriginal(),hasVerifiedDailyBars:()=>true,verifiedVolumeRatio:()=>1}));
 const seriesKeys=['candlestickSeries','volumeSeries','avgVolumeSeries','ema10Series','ema20Series','ema50Series','sma50Series','sma150Series','sma200Series','rsLineSeries','epsLineSeries'];
 const bars=price=>[
   {date:'2026-09-21',open:price,high:price+2,low:price-2,close:price,volume:1000},
@@ -115,30 +115,30 @@ describe('CI479 readable legends without displacing the detail plot',()=>{
     expect(label).toHaveTextContent(`最終日足 2026-09-22 終値 ${up?'101.00':'99.00'}`);
     expect(instances[0].candlestickSeries.setData.mock.lastCall[0].at(-1).close).toBe(up?101:99);
   });
-  it.each([false,true])('keeps desktop detail legends after the plot without moving mobile legends (mobile=%s)',async mobile=>{
+  it.each([false,true])('keeps SVG detail evidence outside the plot and before numeric data (mobile=%s)',async mobile=>{
     vi.stubGlobal('matchMedia',vi.fn(query=>({matches:mobile,media:query,onchange:null,addListener:vi.fn(),removeListener:vi.fn(),addEventListener:vi.fn(),removeEventListener:vi.fn(),dispatchEvent:vi.fn()})));
     const date='2026-09-22',data=bars(100);
     fetchStaticChartPayload.mockResolvedValue({symbol:'DETAIL',as_of_date:date,bars:data,rs_line:rs(10)});
     entryPlan.mockReturnValue({upper:105,stopExample:95});
     const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
     const view=render(<QueryClientProvider client={client}><ResearchChart symbol="DETAIL" date={date} generation="ci479" entry={{path:'detail.json'}} row={{se_pivot_price:100}} onExpand={vi.fn()} rsRating={88}/></QueryClientProvider>);
-    const legend=await screen.findByTestId('chart-pane-legend');
-    const plot=view.container.querySelector('[data-chart-symbol]');
-    expect(mobile ? plot.parentElement.previousElementSibling : plot.parentElement.nextElementSibling).toBe(legend);
-    expect(plot.parentElement).not.toContainElement(legend);
-    expect(getComputedStyle(plot.parentElement).height).toBe(mobile ? '360px' : '440px');
+    const plot=await screen.findByRole('img',{name:/DETAIL 価格・出来高・RS 共通時間軸/});
+    const legend=view.container.querySelector('.leader-svg-legend');
+    expect(plot.nextElementSibling).toBe(legend);
+    expect(plot).not.toContainElement(legend);
+    expect(plot.getAttribute('viewBox').split(' ').at(-1)).toBe(mobile?'390':'440');
     expect(getComputedStyle(legend).position).not.toBe('absolute');
     expect(getComputedStyle(legend).overflow).not.toBe('hidden');
-    expect(legend).toHaveTextContent('最終日足 2026-09-22 終値 101.00');
-    expect(legend).toHaveTextContent('上限 105.00');
-    expect(legend).toHaveTextContent('ピボット 100.00');
+    expect(plot.previousElementSibling).toHaveTextContent('最終バー 2026-09-22 終値 101.00');
+    expect(legend).toHaveTextContent('買い上限 105.00');
+    expect(legend).toHaveTextContent('共通ピボット 100.00');
     expect(legend).toHaveTextContent('損切り例 95.00');
-    expect(legend).toHaveTextContent('出来高 · 破線は50日平均');
+    expect(plot).toHaveTextContent('出来高 · 破線は直前50日平均');
     expect(screen.getByRole('button',{name:'日次チャートを分析'})).toBeVisible();
     expect(legend).toBeVisible();
-    expect(screen.getAllByTestId('chart-pane-legend')).toHaveLength(1);
+    expect(view.container.querySelectorAll('[data-pane]')).toHaveLength(3);
     expect(legend.compareDocumentPosition(view.container.querySelector('.chart-numeric-data')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    // A DOM placement contract, not a jsdom claim about the CI y<=540 budget.
+    // Real DOM placement, exact values and viewBox contract; pixel legibility requires browser CI.
   });
 });
 describe('validated static chart instance reuse',()=>{
@@ -488,7 +488,7 @@ describe('comparison parent and loaded plot height contract',()=>{
       expect(legend.querySelectorAll('dt')).toHaveLength(5);
       expect(legend.querySelectorAll('dd')).toHaveLength(5);
       const wrapper=view.container.querySelector('.comparison-canvas');
-      const plot=wrapper.querySelector('[data-chart-symbol]');
+      const plot=wrapper.querySelector('svg');
       expect(wrapper).toHaveAttribute('data-active-chart','true');
       expect(wrapper).not.toContainElement(legend);
       expect(wrapper.querySelector('[data-testid=chart-pane-legend]')).toBeNull();
@@ -517,7 +517,10 @@ describe('comparison parent and loaded plot height contract',()=>{
       expect(getComputedStyle(wrapper).height).toBe(`${plotHeight}px`);
       expect(getComputedStyle(wrapper).minHeight).toBe(`${plotHeight}px`);
       expect(getComputedStyle(plot.parentElement).height).toBe(`${plotHeight}px`);
-      expect(factory.mock.lastCall[1].height).toBe(plotHeight);
+      expect(getComputedStyle(plot).height).toBe(`${plotHeight}px`);
+      expect(plot.getAttribute('viewBox').split(' ').at(-1)).toBe(String(plotHeight));
+      expect(plot.querySelectorAll('[data-pane]')).toHaveLength(3);
+      expect(wrapper.querySelector('canvas')).toBeNull();
       expect(getComputedStyle(legend).position).not.toBe('absolute');
       // Loading/paused placeholders retain the original fixed-height contract.
       wrapper.dataset.activeChart='false';

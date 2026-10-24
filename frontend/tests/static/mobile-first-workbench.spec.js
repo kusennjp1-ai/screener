@@ -41,8 +41,18 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  const list=page.getByRole('list',{name:'投資手法別の銘柄候補'});
  const first=page.getByRole('button',{name:/^ALPHALONG の分析を表示/});
  await expect(first).toBeVisible();
+ const universeButton=page.getByRole('button',{name:/^対象内訳/});
+ await expect(universeButton).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('.overview-universe')).toBeHidden();
+ const universeSize=await universeButton.boundingBox();expect(universeSize.height).toBeGreaterThanOrEqual(44);expect(universeSize.width).toBeGreaterThanOrEqual(44);
+ await universeButton.click();
+ await expect(universeButton).toHaveAttribute('aria-expanded','true');
+ await expect(page.locator('.overview-universe')).toBeVisible();
  await expect(page.locator('.overview-universe')).toContainText('企業財務判定の対象 3件');
  await expect(page.locator('.overview-universe')).toContainText('BITU・SBIT・ETHE');
+ await universeButton.click();
+ await expect(universeButton).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('.overview-universe')).toBeHidden();
  await expect(page.locator('.leader-pinned-title')).toContainText(`${date} 終値`);
  await expect(page.locator('.overview-market-state')).toBeVisible();
  await expect(page.locator('.overview-market-state')).toContainText('市場未確認 · 新規上限 0%');
@@ -141,8 +151,16 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  expect(settled.every(frame=>frame.focused&&frame.clearance>=-1&&!frame.overflow)).toBe(true);
  expect(Math.max(...settled.map(frame=>frame.scrollY))-Math.min(...settled.map(frame=>frame.scrollY))).toBeLessThanOrEqual(1);
  await expect(search).toHaveValue('ALPHALONG');
+ const expectDetailEntry=async()=>{
+  const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
+  await expect(detail).toBeVisible();await expect(detail).toBeFocused();
+  await expect.poll(()=>detail.evaluate(node=>{const gap=node.getBoundingClientRect().top-document.querySelector('.leader-header').getBoundingClientRect().bottom;return gap>=-1&&gap<=1;})).toBe(true);
+  const back=page.getByRole('button',{name:'← 候補一覧',exact:true});await expect(back).toBeInViewport({ratio:1});
+  const geometry=await back.evaluate(node=>{const r=node.getBoundingClientRect();return {width:r.width,height:r.height,hits:[.1,.5,.9].flatMap(x=>[.1,.5,.9].map(y=>{const hit=document.elementFromPoint(r.left+x*r.width,r.top+y*r.height);return Boolean(hit&&(hit===node||node.contains(hit)));}))};});
+  expect(geometry.width).toBeGreaterThanOrEqual(44);expect(geometry.height).toBeGreaterThanOrEqual(44);expect(geometry.hits).toEqual(Array(9).fill(true));
+ };
  await first.click();
- await expect(page.getByRole('region',{name:'銘柄詳細',exact:true})).toBeVisible();
+ await expectDetailEntry();
  await page.getByRole('button',{name:'← 候補一覧',exact:true}).click();
  await expect(search).toHaveValue('ALPHALONG');
  await expect(page.locator('#candidate-board')).toBeFocused();
@@ -154,7 +172,7 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  // Enter intentionally opens comparison; Space keeps the native button
  // activation that opens this stock's detail, without changing that shortcut.
  await first.focus();await first.press('Space');
- await expect(page.getByRole('region',{name:'銘柄詳細',exact:true})).toBeVisible();
+ await expectDetailEntry();
  const back=page.getByRole('button',{name:'← 候補一覧',exact:true});await back.focus();await back.press('Enter');
  await expect(page.locator('#candidate-board')).toBeFocused();
  await expect.poll(async()=>page.evaluate(()=>{

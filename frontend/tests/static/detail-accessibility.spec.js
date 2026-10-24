@@ -1,3 +1,4 @@
+import { expectSvgChart } from './svg-chart-observation.js';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
@@ -44,7 +45,7 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   await candidate.focus();await page.keyboard.press('Space');
   const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
   if(width===375)await expect(detail).toBeFocused();
-  await expect(detail.locator('canvas').first()).toBeVisible();
+  await expectSvgChart(detail,{symbol:'SYNTH',bars});
   const records=[];
   const visibleFocus=async (locator, label)=>{
     const box=await locator.boundingBox(), header=await page.locator('.leader-header').boundingBox();

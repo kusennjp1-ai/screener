@@ -1,3 +1,4 @@
+import { expectSvgChart } from './svg-chart-observation.js';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
@@ -14,7 +15,7 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
   await page.route('**/static-data/**',async route=>{
     const path=new URL(route.request().url()).pathname.split('/').pop();
     const payload=path==='manifest.json'?{as_of_date:date,generated_at:`${date}T23:00:00Z`,default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'}},pages:{}}}}
-      :path==='research.json'?{as_of_date:date,rows:[row]}:path==='chart.json'?{symbol:'LEAD',as_of_date:date,bars,rs_line:bars.map((bar,i)=>({time:bar.date,value:1+i*.002})),stock_data:row}:{};
+      :path==='research.json'?{as_of_date:date,rows:[row]}:path==='chart.json'?{symbol:'LEAD',as_of_date:date,bars,benchmark_symbol:'SPY',rs_line:bars.map((bar,i)=>({time:bar.date,value:1+i*.002})),stock_data:row}:{};
     await route.fulfill({json:payload});
   });
   await page.goto('/');
@@ -52,7 +53,7 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
   if(width===390) await page.getByRole('button',{name:/^LEAD の分析を表示/}).click();
   for(const mode of ['dark','light']) {
     if(mode==='light') await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
-    await expect(page.locator('.research-detail canvas').first()).toBeVisible();
+    await expectSvgChart(page.locator('.research-detail'),{symbol:'LEAD',bars,rs:'present'});
     const results=await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
     expect(results.violations).toEqual([]);
     const screenshotPath=testInfo.outputPath(`${width}-${mode}.png`);
@@ -61,10 +62,39 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
   }
   expect(pageErrors).toEqual([]);
   if(width===390) {
-    await expect(page.getByTestId('chart-visible-range')).toHaveText(/2026-.*～.*2026-/);
-    const range=await page.getByTestId('chart-visible-range').textContent();
+    const svg=page.locator('.research-detail .leader-evidence-chart svg[role="img"]');
+    await expect(svg).toHaveAttribute('aria-label',/2026-.*〜.*2026-/);
+    const range=await svg.getAttribute('aria-label');
     const dates=range.match(/\d{4}-\d{2}-\d{2}/g);
     expect(dates).toHaveLength(2);
     expect((Date.parse(dates[1])-Date.parse(dates[0]))/86400000).toBeGreaterThanOrEqual(55);
+    const chart=page.locator('.research-detail .leader-evidence-chart');
+    await chart.getByRole('combobox',{name:'表示期間',exact:true}).selectOption('21');
+    await expect(svg.locator('[data-pane="price"] g[data-date]')).toHaveCount(21);
+    await expectSvgChart(page.locator('.research-detail'),{symbol:'LEAD',bars,rs:'present'});
+    const latestRange=await svg.getAttribute('aria-label');
+    await chart.getByRole('button',{name:'過去の期間へ',exact:true}).click();
+    await expect(svg).not.toHaveAttribute('aria-label',latestRange);
+    await chart.getByRole('button',{name:'新しい期間へ',exact:true}).click();
+    await expect(svg).toHaveAttribute('aria-label',latestRange);
+    await chart.getByRole('button',{name:'表示期間を拡大',exact:true}).click();
+    await expect(svg.locator('[data-pane="price"] g[data-date]')).toHaveCount(15);
+    await chart.getByRole('button',{name:'週足',exact:true}).click();
+    await expect(chart.getByRole('button',{name:'週足',exact:true})).toHaveAttribute('aria-pressed','true');
+    // The compact caption keeps only actual date/close/range. Verify the
+    // weekly meaning in the real legends and independently grouped OHLCV.
+    for(const period of [10,30,40])await expect(chart.locator('.leader-svg-legend span').filter({hasText:new RegExp(`^SMA${period} `)})).toHaveCount(1);
+    await expect(chart.locator('.leader-svg-legend').first()).toContainText('直前10週平均出来高');
+    const weeks=new Map();
+    for(const bar of bars){const key=Math.floor((Date.parse(bar.date)/86400000+4)/7);if(!weeks.has(key))weeks.set(key,[]);weeks.get(key).push(bar);}
+    const weeklyBars=[...weeks.values()].map(group=>({date:group.at(-1).date,open:group[0].open,high:Math.max(...group.map(b=>b.high)),low:Math.min(...group.map(b=>b.low)),close:group.at(-1).close,volume:group.reduce((sum,b)=>sum+b.volume,0)}));
+    await expectSvgChart(page.locator('.research-detail'),{symbol:'LEAD',bars:weeklyBars,rs:'present'});
+    await expect(chart.getByRole('button',{name:'VCP注記',exact:true})).toBeDisabled();
+    await expect(svg.locator('[data-vcp-leg]')).toHaveCount(0);
+    await chart.getByRole('button',{name:'日足',exact:true}).click();
+    await chart.getByRole('button',{name:'リセット',exact:true}).click();
+    await expect(svg).toHaveAttribute('aria-label',range);
+    await expectSvgChart(page.locator('.research-detail'),{symbol:'LEAD',bars,rs:'present'});
+
   }
 });
