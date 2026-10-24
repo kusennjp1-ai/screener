@@ -10,3 +10,8 @@
 .leader-vcp-table{font-size:12px;line-height:1.5;padding:8px 12px;overflow-x:auto}.leader-vcp-table table{width:100%;border-collapse:collapse}.leader-vcp-table th,.leader-vcp-table td{padding:8px 4px;border-bottom:1px solid var(--line);text-align:left;white-space:normal}.leader-vcp-table caption{text-align:left}
 .leader-evidence-chart :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 @media(prefers-reduced-motion:reduce){.leader-evidence-chart *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* Keep short-phone plot space without shrinking 44px controls. Every control
+   remains keyboard reachable; horizontal scrolling exposes the remaining ones. */
+.leader-evidence-short .leader-svg-controls{flex-wrap:nowrap;overflow-x:auto}
+.leader-evidence-short .leader-svg-controls>*{flex-shrink:0;white-space:nowrap}

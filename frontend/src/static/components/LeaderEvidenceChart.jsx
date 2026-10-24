@@ -15,7 +15,7 @@ export default function LeaderEvidenceChart(props) {
 }
 function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchmarkSymbol,
   row, payload, technicalEvidence, pivotPrice, buyCeiling, stopPrice, smallScreen = false,
-  compact = false, comparisonSessions, researchActions, onExpand, height = 440 }) {
+  compact = false, expanded = false, compactResearchChrome = false, comparisonSessions, researchActions, onExpand, height = 440 }) {
   const id = useId().replace(/:/g, ''), [timeframe,setTimeframe] = useState('daily');
   const [count,setCount] = useState(comparisonSessions || (smallScreen ? 63 : 126)), [offset,setOffset] = useState(0);
   const [annotations,setAnnotations] = useState(true);
@@ -29,7 +29,8 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   if (model.error) return <div className="leader-svg-warning" role="alert">チャート：データなし。{model.error}</div>;
   const all=model.candlesticks,end=Math.max(1,all.length-Math.min(offset,Math.max(0,all.length-2))),start=Math.max(0,end-count),bars=all.slice(start,end);
   const width=smallScreen?360:compact?440:760,left=8,right=smallScreen?55:62,plotWidth=width-left-right;
-  const chartHeight=compact?height:Math.max(390,Math.min(height,560)),priceTop=26,priceBottom=chartHeight*.55,volumeTop=priceBottom+(compact?22:34),volumeBottom=chartHeight*.75,rsTop=volumeBottom+(compact?22:32),rsBottom=chartHeight-(compact?20:28);
+  const chartHeight=compact||expanded?height:Math.max(390,Math.min(height,560)),dense=compact||(expanded&&height<390);
+  const priceTop=26,priceBottom=chartHeight*(compact?.45:dense?.5:.55),volumeTop=priceBottom+(dense?22:34),volumeBottom=chartHeight*(compact?.66:dense?.72:.75),rsTop=volumeBottom+(dense?22:32),rsBottom=chartHeight-32;
   const x=index=>left+(index+.5)/bars.length*plotWidth,candleWidth=Math.max(.8,Math.min(7,plotWidth/bars.length*.65));
   const visibleDates=new Set(bars.map(bar=>bar.time));
   const shown=points=>points.filter(point=>visibleDates.has(point.time));
@@ -50,7 +51,7 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   const shift=direction=>setOffset(value=>Math.max(0,Math.min(all.length-2,value+direction*Math.max(1,Math.floor(count/3)))));
   const zoom=factor=>setCount(value=>Math.max(5,Math.min(all.length,Math.round(value*factor))));
   const paths=(points,y,color,key,dash)=>seriesPaths(points,bars,x,y).map((points,index)=><polyline key={`${key}-${index}`} data-series={key} points={points} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray={dash} vectorEffect="non-scaling-stroke"/>);
-  return <section style={compact?{height,display:'flex',flexDirection:'column'}:undefined} className="leader-evidence-chart" aria-label={`${symbol} SVG価格・出来高・RSチャート`}>
+  return <section style={compact?{height,display:'flex',flexDirection:'column'}:undefined} className={`leader-evidence-chart${expanded?' leader-evidence-expanded':''}${compactResearchChrome?' leader-evidence-short':''}`} aria-label={`${symbol} SVG価格・出来高・RSチャート`}>
     {!compact&&<div className="leader-svg-controls" role="group" aria-label="チャートの表示操作">
       {['daily','weekly'].map(value=><button key={value} type="button" aria-pressed={timeframe===value} onClick={()=>{setTimeframe(value);setCount(value==='weekly'?52:smallScreen?63:126);setOffset(0);}}>{value==='daily'?'日足':'週足'}</button>)}
       {ranges.map(([label,value])=><button key={label} type="button" onClick={()=>range(value)}>{label}</button>)}
@@ -62,7 +63,7 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
     </div>}
     {!compact&&<p className="leader-svg-caption">{symbol} · {intervalText} · 最終バー {latest.time} 終値 {formatPrice(latest.close)}。期間 {bars[0].time}〜{bars.at(-1).time}</p>}
     {model.warning&&<p role="status" className="leader-svg-warning">{model.warning} 買い帯とVCP注記は保留しています。</p>}
-    <svg style={compact?{height,width:'100%',flex:'1 1 0',minHeight:0}:undefined} preserveAspectRatio={compact?'none':undefined} viewBox={`0 0 ${width} ${chartHeight}`} role="img" aria-label={`${symbol} 価格・出来高・RS 共通時間軸 ${bars[0].time}〜${bars.at(-1).time}`} tabIndex={compact?undefined:0}
+    <svg data-chart-plot data-chart-symbol={symbol} data-chart-asof={date} style={compact?{height,width:'100%',flex:'1 1 0',minHeight:0}:expanded?{height,width:'100%'}:undefined} preserveAspectRatio={compact||expanded?'none':undefined} viewBox={`0 0 ${width} ${chartHeight}`} role="img" aria-label={`${symbol} 価格・出来高・RS 共通時間軸 ${bars[0].time}〜${bars.at(-1).time}`} tabIndex={compact?undefined:0}
       onKeyDown={event=>{if(event.key==='ArrowLeft'){event.preventDefault();shift(1);}if(event.key==='ArrowRight'){event.preventDefault();shift(-1);}if(event.key==='+'){event.preventDefault();zoom(.7);}if(event.key==='-'){event.preventDefault();zoom(1.4);}}}>
       <title>{symbol} 実データのSVGチャート。上から価格、出来高、RS線。買い帯は共通ピボットと方式別上限のみ。</title>
       <defs><clipPath id={`${id}-price`}><rect x={left} y={priceTop} width={plotWidth} height={priceBottom-priceTop}/></clipPath></defs>
@@ -81,7 +82,11 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
       {!means.length&&<text x={left} y={volumeTop+15} fill="var(--text-2)" fontSize="11">平均：データなし</text>}
       <text x={left} y={rsTop-10} fill="var(--text)" fontSize="12">RS線 · {benchmarkSymbol||'比較対象データなし'}（RS順位とは別）</text>
       <g data-pane="rs">{rsScale?paths(model.rs,yRs,'var(--accent)','rs'):<text x={left} y={rsTop+18} fill="var(--text-2)" fontSize="12">データなし</text>}</g>
-      {[0,Math.floor((bars.length-1)/2),bars.length-1].filter((v,i,a)=>a.indexOf(v)===i).map(index=><text key={index} x={x(index)} y={chartHeight-7} textAnchor={index===0?'start':index===bars.length-1?'end':'middle'} fill="var(--text-2)" fontSize="11">{bars[index].time.slice(5)}</text>)}
+      <g data-chart-date-axis>
+        <rect x={0} y={chartHeight-24} width={width} height={24} fill="var(--panel)"/>
+        <line x1={0} x2={width} y1={chartHeight-24} y2={chartHeight-24} stroke="var(--line)"/>
+        {[0,Math.floor((bars.length-1)/2),bars.length-1].filter((v,i,a)=>a.indexOf(v)===i).map(index=><text key={index} x={x(index)} y={chartHeight-7} textAnchor={index===0?'start':index===bars.length-1?'end':'middle'} fill="var(--text-2)" fontSize="11">{bars[index].time.slice(5)}</text>)}
+      </g>
     </svg>
     {!compact&&<><div className="leader-svg-legend"><span>共通ピボット {positive(pivotPrice)&&!model.warning?formatPrice(pivotPrice):'データなし'}</span><span>買い上限 {safeLevels?formatPrice(buyCeiling):'データなし'}</span><span>損切り例 {!model.warning&&positive(stopPrice)?formatPrice(stopPrice):'データなし'}</span><span>直前{timeframe==='weekly'?'10週':'50日'}平均出来高 {quantity(latestMean?.value)}</span></div>
       <div className="leader-svg-legend">{[[50,model.sma50],[150,model.sma150],[200,model.sma200]].map(([period,points])=><span key={period}>SMA{timeframe==='weekly'?period/5:period} {positive(points.at(-1)?.value)?formatPrice(points.at(-1).value):'データなし'}</span>)}</div>

@@ -382,7 +382,7 @@ function StaticChartViewerModal({
                   <Box data-testid="chart-swipe-surface" onTouchStartCapture={startSwipe} onTouchEndCapture={endSwipe}
                     onTouchMoveCapture={event => { if (event.touches.length !== 1) swipeStart.current = null; }} onTouchCancel={() => { swipeStart.current = null; }}
                     sx={{ flex: 1, minHeight: 0, position: 'relative', touchAction: isMobile && !panMode ? 'pan-y' : 'auto' }}>
-                    <CandlestickChart smallScreen={isMobile} researchView bookAnnotations interactive={!isMobile || panMode}
+                    <CandlestickChart expanded smallScreen={isMobile} researchView bookAnnotations interactive={!isMobile || panMode}
                       compactResearchChrome={compactMobileChrome}
                       researchActions={compactMobileChrome ? mobileInteraction : null}
                       symbol={currentSymbol} date={expectedDate} generation={generation} row={stockData} payload={chartPayload} benchmarkSymbol={chartPayload?.benchmark_symbol}

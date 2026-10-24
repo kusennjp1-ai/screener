@@ -1,3 +1,4 @@
+import { expectSvgChart } from './svg-chart-observation.js';
 import { test,expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
@@ -46,12 +47,12 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
   const navigation=page.getByRole('navigation',{name:width===390?'モバイルナビゲーション':'メインナビゲーション'});
   await navigation.getByRole('link',{name:'比較',exact:true}).click();
   await expect(page.getByRole('heading',{name:'買い位置を比較する'})).toBeVisible();
-  await expect(page.getByRole('article',{name:'AMD 比較チャート'}).locator('canvas').first()).toBeVisible();
-  expect(await page.locator('.tv-lightweight-charts').count()).toBeLessThanOrEqual(6);
-  const range=page.getByRole('article',{name:'AMD 比較チャート'}).getByTestId('comparison-visible-range');
-  await expect(range).toContainText('2026-');const before=await range.textContent();
+  await expectSvgChart(page.getByRole('article',{name:'AMD 比較チャート'}),{symbol:'AMD',bars,rs:'present'});
+  expect(await page.locator('.comparison-grid .leader-evidence-chart svg').count()).toBeLessThanOrEqual(6);
+  const range=page.getByRole('article',{name:'AMD 比較チャート'}).locator('.leader-evidence-chart svg[role="img"]');
+  await expect(range).toHaveAttribute('aria-label',/2026-/);const before=await range.getAttribute('aria-label');
   await page.getByRole('combobox',{name:'全チャートの期間',exact:true}).selectOption('126');
-  await expect(range).not.toHaveText(before);
+  await expect(range).not.toHaveAttribute('aria-label',before);await expectSvgChart(page.getByRole('article',{name:'AMD 比較チャート'}),{symbol:'AMD',bars,rs:'present'});
   await page.getByRole('button',{name:'AMD を分析',exact:true}).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(await page.locator('.comparison-canvas[data-active-chart="true"]').count()).toBe(0);

@@ -1,3 +1,4 @@
+import { expectSvgChart } from './svg-chart-observation.js';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { readFile } from 'node:fs/promises';
@@ -41,9 +42,9 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  expect((await scope.boundingBox()).height).toBeGreaterThanOrEqual(11);
  if(width===1440){
   await expect(page.locator('.research-symbol-head')).toContainText('ALPHA');
-  await expect(page.locator('.research-detail .research-chart canvas').first()).toBeVisible();
+  await expectSvgChart(page.locator('.research-detail'),{symbol:'ALPHA',bars});
   await expect(page.locator('.leader-pinned-title')).toContainText('本日の判断');
-  await expect(page.locator('.research-detail .research-chart canvas').first()).toBeInViewport();
+  await expect(page.locator('.research-detail .research-chart .leader-evidence-chart svg[role="img"]').first()).toBeInViewport();
   const sourceLine=page.locator('.research-symbol-head .symbol-context');
   const qualification=page.getByLabel('価格位置と購入条件');
   await expect(sourceLine).toBeVisible();await expect(qualification).toBeVisible();
@@ -125,7 +126,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  if(width===390)await expect(page.locator('.leader-header').getByRole('group',{name:'表示中の銘柄と分析基準日'})).toBeInViewport();
  await expect(detail).toContainText('株式分割・ADR');
  await expect(detail.locator('.research-symbol-price strong')).toHaveText('$104.00');
- await expect(detail.locator('.research-chart canvas').first()).toBeVisible();
+ await expect(detail.locator('.research-chart .leader-evidence-chart svg[role="img"]').first()).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  expect((await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
  const nativeScreenshot=info.outputPath(`native-cad-${width}-${theme}.png`);
@@ -138,7 +139,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  await page.getByRole('button',{name:'絞り込みを閉じる',exact:true}).click();
  const cards=page.locator('.comparison-card');
  await expect(cards).toHaveCount(6);
- await expect(cards.first().locator('canvas').first()).toBeVisible();
+ await expect(cards.first().locator('.leader-evidence-chart svg[role="img"]').first()).toBeVisible();
  for(const card of await cards.all()){
   await expect(card.locator('.comparison-company-label')).toHaveText('未確認：RS ≥ 70');
   await expect(card.locator('.comparison-company').getByRole('note')).toHaveAccessibleName(/書籍の追随目安外/);

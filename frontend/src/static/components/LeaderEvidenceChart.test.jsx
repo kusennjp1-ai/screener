@@ -112,6 +112,22 @@ describe('self-drawn SVG evidence and controls', () => {
     expect(container.querySelectorAll('[data-vcp-leg]')).toHaveLength(0);
     expect(screen.getByRole('status')).toHaveTextContent('価格断絶');
   });
+  it.each([300,360,420])('respects the expanded fitted height %spx on the real SVG and date axis', height => {
+    const {container}=render(<LeaderEvidenceChart {...props} expanded height={height} compactResearchChrome/>);
+    const svg=container.querySelector('svg[data-chart-plot]');
+    expect(svg).toHaveAttribute('data-chart-symbol',fixture.symbol);
+    expect(svg).toHaveAttribute('data-chart-asof',fixture.as_of_date);
+    expect(svg).toHaveStyle({height:`${height}px`});
+    expect(svg.getAttribute('viewBox').split(' ').at(-1)).toBe(String(height));
+    const axis=svg.querySelector('[data-chart-date-axis]');
+    expect(axis.querySelector('rect')).toHaveAttribute('height','24');
+    expect(axis.querySelector('line')).toHaveAttribute('y1',String(height-24));
+    expect(axis.querySelectorAll('text')).toHaveLength(3);
+    for(const text of axis.querySelectorAll('text'))expect(text).toHaveAttribute('font-size','11');
+    const rsPoints=svg.querySelector('[data-series="rs"]').getAttribute('points').split(' ').map(p=>Number(p.split(',')[1]));
+    expect(Math.min(...rsPoints)).toBeGreaterThan(height*.72+22);
+    expect(Math.max(...rsPoints)).toBeLessThan(height-24);
+  });
   it('shows missing RS as data absent without a fake line', () => {
     const {container}=render(<LeaderEvidenceChart {...props} rsLineData={[]}/>);
     expect(container.querySelector('[data-pane="rs"]')).toHaveTextContent('データなし');
