@@ -151,7 +151,9 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  await expect(list.getByRole('listitem')).toHaveCount(rows.length);
  // The current-list jump button was removed as redundant. Exercise the
  // retained detail-to-list browse path by keyboard, including focus/clearance.
- await first.focus();await first.press('Enter');
+ // Enter intentionally opens comparison; Space keeps the native button
+ // activation that opens this stock's detail, without changing that shortcut.
+ await first.focus();await first.press('Space');
  await expect(page.getByRole('region',{name:'銘柄詳細',exact:true})).toBeVisible();
  const back=page.getByRole('button',{name:'← 候補一覧',exact:true});await back.focus();await back.press('Enter');
  await expect(page.locator('#candidate-board')).toBeFocused();
