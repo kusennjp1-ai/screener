@@ -15,7 +15,7 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
   await page.route('**/static-data/**',async route=>{
     const path=new URL(route.request().url()).pathname.split('/').pop();
     const payload=path==='manifest.json'?{as_of_date:date,generated_at:`${date}T23:00:00Z`,default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'}},pages:{}}}}
-      :path==='research.json'?{as_of_date:date,rows:[row]}:path==='chart.json'?{symbol:'LEAD',as_of_date:date,bars,rs_line:bars.map((bar,i)=>({time:bar.date,value:1+i*.002})),stock_data:row}:{};
+      :path==='research.json'?{as_of_date:date,rows:[row]}:path==='chart.json'?{symbol:'LEAD',as_of_date:date,bars,benchmark_symbol:'SPY',rs_line:bars.map((bar,i)=>({time:bar.date,value:1+i*.002})),stock_data:row}:{};
     await route.fulfill({json:payload});
   });
   await page.goto('/');

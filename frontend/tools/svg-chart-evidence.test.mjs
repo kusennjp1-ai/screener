@@ -20,3 +20,26 @@ describe('live SVG evidence contract, synthetic unit fixtures only',()=>{
  it('accepts explicit SVG in complete functional evidence while leaving legacy unchanged',()=>{const f=fixture('ordinary');for(const r of f.report.chart_cases){r.renderer='leader-svg-v1';r.source_bars=bars;r.views=r.views.map(v=>({...v,...observed(r.symbol)}));}expect(validateFunctionalEvidence(f.report,f.binding)).toBe(true);});
  it('rejects corrupted SVG in full evidence and does not infer a renderer for legacy captures',()=>{const f=fixture('ordinary'),r=f.report.chart_cases[0];r.renderer='leader-svg-v1';r.source_bars=bars;r.views=r.views.map(v=>({...v,...observed(r.symbol)}));r.views[0].volumes[0].value=999;expect(()=>validateFunctionalEvidence(f.report,f.binding)).toThrow();delete r.renderer;expect(()=>validateFunctionalEvidence(f.report,f.binding)).toThrow();});
 });
+
+function provenanceView(){return {...observed(),evidence_contract:'leader-svg-provenance-v2',rs_context_label:'RS線の比較対象が未確認（データなし）',vcp_legs:[{number:5,title:'T5 推定 2026-10-20〜2026-10-21 深さ 4%'}],annotation_layout:{pane:{x:10,y:10,width:200,height:150},labels:[{number:5,box:{x:20,y:20,width:60,height:20},leader:'M80 30L150 120',anchor:{x:150,y:120}}]}};}
+describe('versioned source-bound RS and actual VCP label geometry',()=>{
+ it('keeps unknown comparison source unplotted even when caller has numerical RS data',()=>expect(validateSvgChart(provenanceView(),bars,'fixture',{benchmark_symbol:null,rs_line:[{value:20}]})).toBe(true));
+ it('keeps a known comparison label and valid RS path',()=>{const v=provenanceView();v.rs_context_label='RS線 · SPY（RS順位とは別）';v.rs_missing=false;v.rs_paths=['20,120 40,100'];expect(validateSvgChart(v,bars,'fixture',{benchmark_symbol:'SPY'})).toBe(true);});
+ const mutations={
+ 'missing contract source':v=>delete v.rs_context_label,
+ 'unknown benchmark drawn':v=>{v.rs_missing=false;v.rs_paths=['20,120 40,100'];},
+ 'missing annotation pane':v=>delete v.annotation_layout.pane,
+ 'missing label':v=>v.annotation_layout.labels=[],
+ 'label outside pane':v=>v.annotation_layout.labels[0].box.y=155,
+ 'wrong label number':v=>v.annotation_layout.labels[0].number=6,
+ 'label overlap':v=>{v.vcp_legs.push({number:6,title:'T6 推定'});v.annotation_layout.labels.push({...structuredClone(v.annotation_layout.labels[0]),number:6});},
+ 'missing leader':v=>v.annotation_layout.labels[0].leader=null,
+ 'leader misses actual low':v=>v.annotation_layout.labels[0].leader='M80 30L160 120',
+ 'leader detached from label':v=>v.annotation_layout.labels[0].leader='M90 30L150 120',
+ 'unknown evidence version':v=>v.evidence_contract='future',
+ };
+ for(const [name,mutate] of Object.entries(mutations))it('rejects '+name,()=>{const v=provenanceView();mutate(v);expect(()=>validateSvgChart(v,bars,'fixture',{benchmark_symbol:null})).toThrow();});
+ it('rejects missing original source instead of inferring it from displayed label',()=>expect(()=>validateSvgChart(provenanceView(),bars)).toThrow(/source context/));
+ it('requires declared new report captures to retain the observation version',()=>{const f=fixture('ordinary');f.report.svg_evidence_contract='leader-svg-provenance-v2';expect(()=>validateFunctionalEvidence(f.report,f.binding)).toThrow(/provenance contract/);});
+});
+it('validates full versioned provenance capture without inferring missing metadata',()=>{const f=fixture('ordinary');f.report.svg_evidence_contract='leader-svg-provenance-v2';for(const r of f.report.chart_cases){r.renderer='leader-svg-v1';r.source_bars=bars;r.rs_source={benchmark_symbol:null};r.views=r.views.map(v=>({...v,...provenanceView(),symbol:r.symbol,range_label:`${r.symbol} 価格・出来高・RS 共通時間軸 2026-10-20〜2026-10-21`}));}expect(validateFunctionalEvidence(f.report,f.binding)).toBe(true);delete f.report.chart_cases[0].rs_source;expect(()=>validateFunctionalEvidence(f.report,f.binding)).toThrow(/source context/);});
