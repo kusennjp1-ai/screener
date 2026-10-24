@@ -69,6 +69,7 @@ for (const width of [1440, 1024, 320]) test(`readiness guidance, disclosures and
     await expect(detail).toBeFocused();
     const gap=await detail.evaluate(node=>node.getBoundingClientRect().top-document.querySelector('.leader-header').getBoundingClientRect().bottom);
     expect(gap).toBeGreaterThanOrEqual(16);
+    expect(gap).toBeLessThanOrEqual(24); // Only root header clearance, not a second detail margin.
     await expect(detail.locator('.entry-source-badge')).toBeInViewport({ratio:1});
     // The prior hero link can lie at the viewport boundary after this focus
     // jump. It must retain a full target and never collide with sticky nav.

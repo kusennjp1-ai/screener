@@ -151,8 +151,16 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  expect(settled.every(frame=>frame.focused&&frame.clearance>=-1&&!frame.overflow)).toBe(true);
  expect(Math.max(...settled.map(frame=>frame.scrollY))-Math.min(...settled.map(frame=>frame.scrollY))).toBeLessThanOrEqual(1);
  await expect(search).toHaveValue('ALPHALONG');
+ const expectDetailEntry=async()=>{
+  const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
+  await expect(detail).toBeVisible();await expect(detail).toBeFocused();
+  await expect.poll(()=>detail.evaluate(node=>{const gap=node.getBoundingClientRect().top-document.querySelector('.leader-header').getBoundingClientRect().bottom;return gap>=-1&&gap<=1;})).toBe(true);
+  const back=page.getByRole('button',{name:'← 候補一覧',exact:true});await expect(back).toBeInViewport({ratio:1});
+  const geometry=await back.evaluate(node=>{const r=node.getBoundingClientRect();return {width:r.width,height:r.height,hits:[.1,.5,.9].flatMap(x=>[.1,.5,.9].map(y=>{const hit=document.elementFromPoint(r.left+x*r.width,r.top+y*r.height);return Boolean(hit&&(hit===node||node.contains(hit)));}))};});
+  expect(geometry.width).toBeGreaterThanOrEqual(44);expect(geometry.height).toBeGreaterThanOrEqual(44);expect(geometry.hits).toEqual(Array(9).fill(true));
+ };
  await first.click();
- await expect(page.getByRole('region',{name:'銘柄詳細',exact:true})).toBeVisible();
+ await expectDetailEntry();
  await page.getByRole('button',{name:'← 候補一覧',exact:true}).click();
  await expect(search).toHaveValue('ALPHALONG');
  await expect(page.locator('#candidate-board')).toBeFocused();
@@ -164,7 +172,7 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  // Enter intentionally opens comparison; Space keeps the native button
  // activation that opens this stock's detail, without changing that shortcut.
  await first.focus();await first.press('Space');
- await expect(page.getByRole('region',{name:'銘柄詳細',exact:true})).toBeVisible();
+ await expectDetailEntry();
  const back=page.getByRole('button',{name:'← 候補一覧',exact:true});await back.focus();await back.press('Enter');
  await expect(page.locator('#candidate-board')).toBeFocused();
  await expect.poll(async()=>page.evaluate(()=>{

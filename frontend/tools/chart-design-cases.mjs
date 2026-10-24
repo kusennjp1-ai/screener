@@ -35,6 +35,14 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await page.reload(); // the same home route must consume the new initial symbol
       const chart = page.locator(`.research-chart [data-chart-symbol="${symbol}"]`);
       await ready(chart);
+      // A reload resets the theme. Establish the requested real UI state before
+      // positioning or measuring; capture must not invalidate an earlier scroll.
+      if (await page.locator('.leader-shell').getAttribute('data-theme') !== theme) {
+        await page.getByRole('button', { name: theme === 'light' ? 'ライトモードに切り替え' : 'ダークモードに切り替え', exact: true }).click();
+      }
+      await page.evaluate(() => document.fonts.ready);
+      await page.waitForTimeout(800);
+      check(await page.locator('.leader-shell').getAttribute('data-theme') === theme, `${key}: requested theme was not established before chart measurement`);
       check((await page.locator('.symbol-title h2').textContent())?.trim() === symbol, `${key}: detail symbol mismatch`);
       const record = { symbol, viewport, theme, as_of_date: asOf, bars: payload.bars.length, history_warning: warning || null,
         annotation_candidate: annotations.candidate, annotation_summary: annotations.summary,
@@ -67,11 +75,11 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
         record.source_warning.inline_visible = await sourceWarningVisible(page.locator('.research-symbol-head .entry-source-badge'));
         check(record.source_warning.inline_visible, `${key}: first-book proximity warning is missing from the initial inline viewport`);
       }
-      await capture(page, viewport, theme, `case-${symbol}-inline`);
+      await capture(page, viewport, theme, `case-${symbol}-inline`, { scope: 'scrolled-viewport', viewportTargets: inlineTargets });
       const inlineToggle = page.locator('.research-chart').getByRole('button', { name: 'VCP注記', exact:true });
       if (await inlineToggle.getAttribute('aria-pressed') !== 'true') await inlineToggle.click();
       record.inline_geometry.annotations=await inspectInlineViewport();
-      await capture(page, viewport, theme, `case-${symbol}-inline-annotations`);
+      await capture(page, viewport, theme, `case-${symbol}-inline-annotations`, { scope: 'scrolled-viewport', viewportTargets: inlineTargets });
       const gauge = page.locator('.entry-gauge');
       if (Number.isFinite(plan.pivot)) {
         const label = await gauge.getAttribute('aria-label');
