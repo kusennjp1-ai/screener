@@ -42,10 +42,18 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   const min=Math.min(...prices),max=Math.max(...prices),pad=Math.max((Math.log(max)-Math.log(min))*.08,.001);
   const low=Math.log(min)-pad,high=Math.log(max)+pad,yPrice=value=>priceBottom-(Math.log(value)-low)/(high-low)*(priceBottom-priceTop);
   const volume=shown(researchVolumeBars(model.volume,timeframe==='weekly'?10:50,{vol:'var(--text-3)','vol-hi':'var(--zone)'})),means=shown(model.volumeMean),maxVolume=Math.max(1,...volume.map(point=>point.value),...means.map(point=>point.value)),yVolume=value=>volumeBottom-value/maxVolume*(volumeBottom-volumeTop);
-  const rs=shown(model.rs),rsScale=relativeStrengthScale(rs)?.priceRange,yRs=value=>rsBottom-(value-rsScale.minValue)/(rsScale.maxValue-rsScale.minValue)*(rsBottom-rsTop);
+  const benchmarkKnown=typeof benchmarkSymbol==='string'&&benchmarkSymbol.trim().length>0;
+  const rs=benchmarkKnown?shown(model.rs):[],rsScale=relativeStrengthScale(rs)?.priceRange,yRs=value=>rsBottom-(value-rsScale.minValue)/(rsScale.maxValue-rsScale.minValue)*(rsBottom-rsTop);
   const latest=all.at(-1),latestMean=model.volumeMean.at(-1),vcp=evidence?.valid&&!model.warning?evidence.vcp:null;
   const legs=Array.isArray(vcp?.legs)?vcp.legs:[],datedLegs=legs.map((leg,index)=>({...leg,number:index+1})).filter(leg=>finite(leg.depthPct)&&positive(leg.high)&&positive(leg.low)&&leg.startDate&&leg.endDate);
   const visibleLegs=timeframe==='daily'&&annotations?datedLegs.filter(leg=>leg.endDate>=bars[0].time&&leg.startDate<=bars.at(-1).time).slice(-3):[];
+  // Reserve three non-overlapping annotation lanes inside the existing price
+  // pane. Only label geometry moves; each leader ends at its measured low.
+  const anchoredLegs=visibleLegs.map(leg=>({...leg,peak:bars.findIndex(bar=>bar.time===leg.peakDate),bottom:bars.findIndex(bar=>bar.time===leg.lowDate)})).filter(leg=>leg.peak>=0&&leg.bottom>=0);
+  const labelWidth=78,labelHeight=20,labelGap=4,labelBlockHeight=anchoredLegs.length*labelHeight+Math.max(0,anchoredLegs.length-1)*labelGap;
+  const labelTop=Math.max(priceTop+2,Math.min(priceBottom-labelBlockHeight-2,anchoredLegs.reduce((sum,leg)=>sum+yPrice(leg.low),0)/Math.max(1,anchoredLegs.length)-labelBlockHeight/2));
+  const anchorLeft=Math.min(...anchoredLegs.map(leg=>x(leg.bottom))),anchorRight=Math.max(...anchoredLegs.map(leg=>x(leg.bottom)));
+  const labelX=anchorLeft-labelWidth-12>=left+2?anchorLeft-labelWidth-12:anchorRight+12+labelWidth<=width-right-2?anchorRight+12:Math.max(left+2,width-right-labelWidth-2);
   const intervalText=timeframe==='weekly'?'週足（10/30/40週線・直前10週出来高平均）':'日足（50/150/200日線・直前50日出来高平均）';
   const range=countValue=>{setCount(Math.max(2,timeframe==='weekly'?Math.ceil(countValue/5):countValue));setOffset(0);};
   const shift=direction=>setOffset(value=>Math.max(0,Math.min(all.length-2,value+direction*Math.max(1,Math.floor(count/3)))));
@@ -77,12 +85,23 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
         {!model.warning&&positive(stopPrice)&&<line data-testid="svg-stop-example" data-price={stopPrice} x1={left} x2={width-right} y1={yPrice(stopPrice)} y2={yPrice(stopPrice)} stroke="var(--neg)" strokeDasharray="4 3"/>}
         {paths(model.sma50,yPrice,'var(--accent)','sma50')}{paths(model.sma150,yPrice,'var(--text-3)','sma150','5 3')}{paths(model.sma200,yPrice,'var(--wait)','sma200','2 3')}
         {bars.map((bar,index)=>{const up=bar.close>=bar.open,color=up?'var(--zone)':'var(--neg)';return <g key={bar.time} data-date={bar.time} data-close={bar.close}><title>{bar.time} 始値 {bar.open} 高値 {bar.high} 安値 {bar.low} 終値 {bar.close}</title><line x1={x(index)} x2={x(index)} y1={yPrice(bar.high)} y2={yPrice(bar.low)} stroke={color}/><rect x={x(index)-candleWidth/2} y={yPrice(Math.max(bar.open,bar.close))} width={candleWidth} height={Math.max(.8,Math.abs(yPrice(bar.open)-yPrice(bar.close)))} fill={color}/></g>;})}
-        {visibleLegs.map(leg=>{const peak=bars.findIndex(bar=>bar.time===leg.peakDate),bottom=bars.findIndex(bar=>bar.time===leg.lowDate);if(peak<0||bottom<0)return null;return <g key={leg.number} data-vcp-leg={leg.number}><title>{`T${leg.number} 推定 ${leg.startDate}〜${leg.endDate} 深さ ${leg.depthPct}%`}</title><path d={`M${x(peak)} ${yPrice(leg.high)}L${x(bottom)} ${yPrice(leg.low)}`} fill="none" stroke="var(--ext)" strokeDasharray="4 3"/><text x={Math.min(width-right-50,Math.max(left,x(bottom)))} y={Math.min(priceBottom-4,yPrice(leg.low)+13)} fill="var(--text)" fontSize="11">T{leg.number} {leg.depthPct.toFixed(1)}%</text></g>;})}
+        {anchoredLegs.map((leg,index)=>{
+          const labelY=labelTop+index*(labelHeight+labelGap),anchorX=x(leg.bottom),anchorY=yPrice(leg.low);
+          const edgeX=anchorX>=labelX+labelWidth?labelX+labelWidth:labelX,edgeY=labelY+labelHeight/2;
+          return <g key={leg.number} data-vcp-leg={leg.number}>
+            <title>{`T${leg.number} 推定 ${leg.startDate}〜${leg.endDate} 深さ ${leg.depthPct}%`}</title>
+            <path d={`M${x(leg.peak)} ${yPrice(leg.high)}L${anchorX} ${anchorY}`} fill="none" stroke="var(--ext)" strokeDasharray="4 3"/>
+            <path data-vcp-leader={leg.number} d={`M${edgeX} ${edgeY}L${anchorX} ${anchorY}`} fill="none" stroke="var(--text-2)" strokeWidth="1"/>
+            <circle cx={anchorX} cy={anchorY} r="2" fill="var(--ext)"/>
+            <rect data-vcp-label-box={leg.number} x={labelX} y={labelY} width={labelWidth} height={labelHeight} rx="2" fill="var(--panel)" stroke="var(--line)"/>
+            <text x={labelX+4} y={labelY+14} fill="var(--text)" fontSize="11">T{leg.number} {leg.depthPct.toFixed(1)}%</text>
+          </g>;
+        })}
       </g>
       <text x={left} y={volumeTop-10} fill="var(--text)" fontSize="12">出来高 · 破線は直前{timeframe==='weekly'?'10週':'50日'}平均</text>
       <g data-pane="volume">{volume.map((point,index)=><rect key={point.time} data-volume={point.value} x={x(index)-candleWidth/2} y={yVolume(point.value)} width={candleWidth} height={volumeBottom-yVolume(point.value)} fill={point.color}><title>{point.time} 出来高 {quantity(point.value)}</title></rect>)}{paths(model.volumeMean,yVolume,'var(--text)','volume-mean','4 3')}</g>
       {!means.length&&<text x={left} y={volumeTop+15} fill="var(--text-2)" fontSize="11">平均：データなし</text>}
-      <text x={left} y={rsTop-10} fill="var(--text)" fontSize="12">RS線 · {benchmarkSymbol||'比較対象データなし'}（RS順位とは別）</text>
+      <text x={left} y={rsTop-10} fill="var(--text)" fontSize="12">{benchmarkKnown?`RS線 · ${benchmarkSymbol}（RS順位とは別）`:'RS線の比較対象が未確認（データなし）'}</text>
       <g data-pane="rs">{rsScale?paths(model.rs,yRs,'var(--accent)','rs'):<text x={left} y={rsTop+18} fill="var(--text-2)" fontSize="12">データなし</text>}</g>
       <g data-chart-date-axis>
         <rect x={0} y={chartHeight-24} width={width} height={24} fill="var(--panel)"/>

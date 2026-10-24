@@ -27,7 +27,7 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
     if(file==='workbench.json'){fullRequests++;return route.fulfill({body:raw,contentType:'application/json'});}
     const row=rows.find(r=>`${r.symbol}.json`===file);
     const payload=file==='manifest.json'?{generated_at:`${date}T23:00:00Z`,research_generation:'test',as_of_date:date,default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'},workbench:fullRef,workbench_summary:{path:'workbench-summary.json',sha256:summaryHash,snapshot_id:'test'}},pages:{breadth:{path:'breadth.json'}}}}}
-      :file==='research.json'?{as_of_date:date,rows}:file==='breadth.json'?{payload:{current:{date},chart_data:[]}}:row?{symbol:row.symbol,as_of_date:date,bars:row.symbol==='MRNA'?[]:bars,rs_line:bars.map((b,i)=>({time:b.date,value:1+i*.002})),stock_data:row}:{};
+      :file==='research.json'?{as_of_date:date,rows}:file==='breadth.json'?{payload:{current:{date},chart_data:[]}}:row?{symbol:row.symbol,as_of_date:date,bars:row.symbol==='MRNA'?[]:bars,benchmark_symbol:'SPY',rs_line:bars.map((b,i)=>({time:b.date,value:1+i*.002})),stock_data:row}:{};
     await route.fulfill({json:payload});
   });
   await page.goto('/');

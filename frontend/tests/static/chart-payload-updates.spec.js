@@ -36,6 +36,19 @@ async function setup(page,width){
 }
 test.afterEach(async({page},info)=>{await info.attach('browser-errors',{body:JSON.stringify(page.__chartErrors || []),contentType:'application/json'});});
 for(const width of [375,1440]){
+ test(`RS provenance updates retain prices but never plot an unknown benchmark at ${width}px`,async({page})=>{
+  const a=await setup(page,width);
+  a.values.SYNTH.rs_line=bars.map((bar,i)=>({time:bar.date,value:1+i*.002}));await a.refresh();
+  await expectSvgChart(a.detail,{symbol:'SYNTH',bars});
+  await expect(a.detail).toContainText('RS線の比較対象が未確認（データなし）');
+  a.values.SYNTH.benchmark_symbol='SPY';await a.refresh();
+  await expectSvgChart(a.detail,{symbol:'SYNTH',bars,rs:'present'});
+  await expect(a.detail).toContainText('RS線 · SPY（RS順位とは別）');
+  a.values.SYNTH.benchmark_symbol='  ';await a.refresh();
+  await expectSvgChart(a.detail,{symbol:'SYNTH',bars});
+  await expect(a.detail).toContainText('RS線の比較対象が未確認（データなし）');
+  expect(a.errors).toEqual([]);
+ });
  test(`same-identity history updates and empty recovery at ${width}px`,async({page},info)=>{
   const a=await setup(page,width),dates=a.numeric.getByRole('combobox');await dates.selectOption('2026-10-01');
   a.values.SYNTH.bars=[{...bars[0],date:'2025-12-26'},...bars];await a.refresh();await expect(dates.locator('option')).toHaveCount(281);await expect(dates).toHaveValue('2026-10-01');await expect(a.numeric.getByText('終値',{exact:true}).locator('..')).toHaveText('終値103');

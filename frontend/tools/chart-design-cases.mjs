@@ -47,7 +47,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       const record = { symbol, viewport, theme, as_of_date: asOf, bars: payload.bars.length, history_warning: warning || null,
         annotation_candidate: annotations.candidate, annotation_summary: annotations.summary,
         shapes: annotations.boxes.map(({ start, end, label, curve, arrow }) => ({ start, end, label, curve: Boolean(curve), arrow: Boolean(arrow) })),
-        canonical: { pivot: plan.pivot ?? null, upper: plan.upper ?? null, stop: plan.stopExample ?? null }, views: [], renderer:'leader-svg-v1', source_bars:payload.bars.map(({date,open,high,low,close,volume})=>({date,open,high,low,close,volume})) };
+        canonical: { pivot: plan.pivot ?? null, upper: plan.upper ?? null, stop: plan.stopExample ?? null }, views: [], renderer:'leader-svg-v1', rs_source:{benchmark_symbol:payload.benchmark_symbol??null}, source_bars:payload.bars.map(({date,open,high,low,close,volume})=>({date,open,high,low,close,volume})) };
       const sourceWarningVisible = async locator => {
         if (await locator.count() !== 1 || !await locator.isVisible()) return false;
         return locator.evaluate(node => {
@@ -59,7 +59,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       };
       const inspect = async (element, view) => {
         const values = await element.evaluate(observeSvgChart);
-        validateSvgChart(values,record.source_bars,`${key}/${view}`);
+        validateSvgChart(values,record.source_bars,`${key}/${view}`,record.rs_source);
         check(values.symbol === symbol && values.as_of_date === asOf, `${key}/${view}: rendered symbol/as-of mismatch`);
         for (const [name, expected] of Object.entries(record.canonical)) check(sameLevel(values[name], warning ? null : expected), `${key}/${view}: ${name} differs from canonical published value`);
         record.views.push({ view, ...values });

@@ -144,6 +144,45 @@ describe('self-drawn SVG evidence and controls', () => {
     expect(container.textContent).toContain('50/150/200日線・直前50日出来高平均');
     for(const name of ['日足','週足','表示期間を拡大','表示期間を縮小','過去の期間へ','新しい期間へ','リセット','VCP注記'])expect(screen.getByRole('button',{name,exact:true})).toBeInTheDocument();
   });
+  it.each([{compact:true,height:220},{compact:true,height:240},{expanded:true,height:300},{expanded:true,height:420},{height:390}])('separates three crowded VCP labels within the unchanged pane %j', layout => {
+    const legs=Array.from({length:6},(_,index)=>({startDate:fixture.bars.at(-10).date,endDate:fixture.as_of_date,peakDate:fixture.bars.at(-10).date,lowDate:fixture.bars.at(-3+index%3).date,high:fixture.bars.at(-10).high,low:fixture.bars.at(-1).low,depthPct:6.5+index/10,sessions:10}));
+    const evidence={version:BOOK_TECHNICAL_VERSION,valid:true,symbol:fixture.symbol,as_of_date:fixture.as_of_date,vcp:{legs}};
+    const {container}=render(<LeaderEvidenceChart {...props} {...layout} technicalEvidence={evidence}/>);
+    const svg=container.querySelector('svg'),pane=svg.querySelector('clipPath rect');
+    const bounds={x:+pane.getAttribute('x'),y:+pane.getAttribute('y'),width:+pane.getAttribute('width'),height:+pane.getAttribute('height')};
+    const boxes=[...svg.querySelectorAll('[data-vcp-label-box]')].map(node=>Object.fromEntries(['x','y','width','height'].map(key=>[key,+node.getAttribute(key)])));
+    expect(boxes).toHaveLength(3);
+    expect([...svg.querySelectorAll('[data-vcp-leg]')].map(node=>node.dataset.vcpLeg)).toEqual(['4','5','6']);
+    for(const [index,box] of boxes.entries()){
+      expect(box.x).toBeGreaterThanOrEqual(bounds.x);expect(box.x+box.width).toBeLessThanOrEqual(bounds.x+bounds.width);
+      expect(box.y).toBeGreaterThanOrEqual(bounds.y);expect(box.y+box.height).toBeLessThanOrEqual(bounds.y+bounds.height);
+      if(index)expect(box.y).toBeGreaterThanOrEqual(boxes[index-1].y+boxes[index-1].height+4);
+      const group=svg.querySelector(`[data-vcp-leg="${index+4}"]`),point=group.querySelector('circle');
+      expect(group.querySelector('[data-vcp-leader]').getAttribute('d').endsWith(`L${point.getAttribute('cx')} ${point.getAttribute('cy')}`)).toBe(true);
+      expect(group.querySelector('text')).toHaveTextContent(`T${index+4} ${(6.8+index/10).toFixed(1)}%`);
+    }
+    const originalBars=[...svg.querySelectorAll('[data-close]')].map(node=>node.outerHTML),originalAxis=pane.outerHTML;
+    if(!layout.compact){
+      expect(container.querySelectorAll('.leader-vcp-table tbody tr')).toHaveLength(6);
+      fireEvent.click(screen.getByRole('button',{name:'VCP注記'}));
+      expect(svg.querySelectorAll('[data-vcp-label-box]')).toHaveLength(0);
+      expect([...svg.querySelectorAll('[data-close]')].map(node=>node.outerHTML)).toEqual(originalBars);
+      expect(svg.querySelector('clipPath rect').outerHTML).toBe(originalAxis);
+    }
+  });
+  it.each([{}, {expanded:true,height:300}, {compact:true,height:220}])('withholds an unbound RS line in every renderer surface %j without changing prices', layout => {
+    const {container,rerender}=render(<LeaderEvidenceChart {...props} {...layout}/>);
+    const rs=container.querySelector('[data-series="rs"]').getAttribute('points');
+    const bars=[...container.querySelectorAll('[data-close]')].map(node=>node.dataset.close);
+    for(const benchmarkSymbol of [undefined,null,'','   ']){
+      rerender(<LeaderEvidenceChart {...props} {...layout} benchmarkSymbol={benchmarkSymbol}/>);
+      expect(container.querySelector('[data-series="rs"]')).toBeNull();
+      expect(container.textContent).toContain('RS線の比較対象が未確認（データなし）');
+      expect([...container.querySelectorAll('[data-close]')].map(node=>node.dataset.close)).toEqual(bars);
+    }
+    rerender(<LeaderEvidenceChart {...props} {...layout}/>);
+    expect(container.querySelector('[data-series="rs"]').getAttribute('points')).toBe(rs);
+  });
   it('shows missing RS as data absent without a fake line', () => {
     const {container}=render(<LeaderEvidenceChart {...props} rsLineData={[]}/>);
     expect(container.querySelector('[data-pane="rs"]')).toHaveTextContent('データなし');

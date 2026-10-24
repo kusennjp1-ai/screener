@@ -1,5 +1,5 @@
 import { LEADER_DETAIL_CONTRACT, leaderDetailFailures } from './leader-detail-design-contract.mjs';
-import { validateSvgChart, SVG_CHART_RENDERER } from './svg-chart-evidence.mjs';
+import { validateSvgChart, SVG_CHART_RENDERER, SVG_EVIDENCE_CONTRACT } from './svg-chart-evidence.mjs';
 import { LEADER_FEED_CONTRACT, leaderFeedFailures } from './leader-feed-design-contract.mjs';
 // Completeness/consistency checks for immutable historical browser observations.
 // This is NOT source authentication, current data validation, or image review.
@@ -162,7 +162,8 @@ function chartEvidence(report) {
     if(record.renderer !== undefined) assert(record.renderer === SVG_CHART_RENDERER,label+': unknown chart renderer');
     const svg=record.renderer === SVG_CHART_RENDERER;
     for (const view of record.views) {
-      if(svg)validateSvgChart(view,record.source_bars,label);
+      if(report.svg_evidence_contract!==undefined)assert(report.svg_evidence_contract===SVG_EVIDENCE_CONTRACT&&view.evidence_contract===SVG_EVIDENCE_CONTRACT,label+': missing/unknown SVG provenance contract');
+      if(svg)validateSvgChart(view,record.source_bars,label,record.rs_source);
       assert(view.symbol === record.symbol && view.as_of_date === record.as_of_date && (svg ? ['vcp-on','vcp-off'].includes(view.annotation_mode) : ['simple', 'detail'].includes(view.annotation_mode)), label + ': wrong rendered chart identity');
       for (const field of ['pivot', 'upper', 'stop']) {
         const expected = record.history_warning ? null : record.canonical[field];

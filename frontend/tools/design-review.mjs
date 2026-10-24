@@ -1,3 +1,4 @@
+import { SVG_EVIDENCE_CONTRACT } from './svg-chart-evidence.mjs';
 import { LEADER_DETAIL_CONTRACT, observeLeaderDetail, leaderDetailFailures } from './leader-detail-design-contract.mjs';
 import { LEADER_FEED_CONTRACT, observeLeaderFeed, leaderFeedFailures } from './leader-feed-design-contract.mjs';
 // CI-only production-browser acceptance measurements. Never turn a missing
@@ -45,7 +46,7 @@ if (!['same_verified_input', 'same_prices_repaired_financials'].includes(inputBa
 const comparisonMethod = inputBasis === 'same_verified_input'
   ? 'same-data baseline/current'
   : 'published-financial baseline versus certified-financial candidate; identical verified prices, different financial inputs; not a UI-only speed comparison';
-const report = { layout_contract: LEADER_FEED_CONTRACT, detail_contract: LEADER_DETAIL_CONTRACT, commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
+const report = { svg_evidence_contract: SVG_EVIDENCE_CONTRACT, layout_contract: LEADER_FEED_CONTRACT, detail_contract: LEADER_DETAIL_CONTRACT, commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
   input_basis: inputBasis,
   method: `Production Chromium. CDP CPU 4x, ${comparisonMethod}, HTTP responses cached in memory after warm-up. No human satisfaction inference.`, screens: [], performance: [], failures: [] };
 if (limitedAssessment) report.assessment_mode = LIMITED_RESEARCH_SCOPE;
