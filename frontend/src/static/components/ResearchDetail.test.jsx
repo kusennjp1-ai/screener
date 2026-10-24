@@ -293,7 +293,12 @@ it('keeps one overview in matching responsive DOM order without losing selected 
   expect(view.container.querySelectorAll('.leader-detail-overview')).toHaveLength(1);
   expect(view.container.querySelectorAll('#leader-trend-template')).toHaveLength(1);
   expect(view.container.querySelectorAll('#research-detail-tabs')).toHaveLength(1);
-  if(narrow)expect(overview().closest('.research-symbol-head')).not.toBeNull();
+  if(narrow){
+   expect(overview().closest('.research-symbol-head')).not.toBeNull();
+   expect(view.container.querySelector('.symbol-qualification-context')).toHaveTextContent('価格位置は購入可否と別です。');
+   expect(view.container.querySelector('.symbol-qualification-context')).not.toHaveTextContent('未達');
+   expect(overview().querySelector('.leader-detail-verdict')).toHaveTextContent(/未達.*未確認/);
+  }
   else expect(chart().nextElementSibling).toBe(overview());
   expect(screen.getByRole('tab',{name:'メモ'})).toHaveAttribute('aria-selected','true');
   expect(screen.getByRole('textbox')).toHaveValue('responsive evidence note');

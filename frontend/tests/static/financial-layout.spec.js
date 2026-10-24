@@ -34,12 +34,22 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  await page.goto('/');
  await expect(page.locator('.candidate-row').first()).toBeVisible();
  if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
+ const universeButton=page.getByRole('button',{name:/^対象内訳/});
+ await expect(universeButton).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('.overview-universe')).toBeHidden();
+ const universeSize=await universeButton.boundingBox();expect(universeSize.height).toBeGreaterThanOrEqual(44);expect(universeSize.width).toBeGreaterThanOrEqual(44);
+ await universeButton.click();
+ await expect(universeButton).toHaveAttribute('aria-expanded','true');
+ await expect(page.locator('.overview-universe')).toBeVisible();
  const scope=page.locator('.overview-universe');
  await expect(scope).toContainText('価格・流動性対象 10件');
  await expect(scope).toContainText('企業財務判定の対象 7件');
  await expect(scope).toContainText('BITU・SBIT・ETHE');
  await expect(scope).toBeVisible();
  expect((await scope.boundingBox()).height).toBeGreaterThanOrEqual(11);
+ await universeButton.click();
+ await expect(universeButton).toHaveAttribute('aria-expanded','false');
+ await expect(page.locator('.overview-universe')).toBeHidden();
  if(width===1440){
   await expect(page.locator('.research-symbol-head')).toContainText('ALPHA');
   await expectSvgChart(page.locator('.research-detail'),{symbol:'ALPHA',bars});
@@ -86,7 +96,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  if(width===390)await page.getByRole('button',{name:/^ALPHA の分析を表示/}).click();
  const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
  await expect(detail.getByLabel('価格位置と購入条件')).toContainText('価格位置は購入可否と別です。');
- await expect(detail.getByLabel('価格位置と購入条件')).toContainText(/未達 \d+・未確認 \d+/);
+ await expect(width===390?detail.locator('.leader-detail-verdict'):detail.getByLabel('価格位置と購入条件')).toContainText(/未達 \d+・未確認 \d+/);
  const controls=detail.getByRole('group',{name:'チャートの表示操作',exact:true});
  await controls.scrollIntoViewIfNeeded();
  const controlsFit=()=>controls.evaluate(node=>{
@@ -136,6 +146,9 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  // A responsive move must never duplicate the overview, its IDs or controls.
  for(const resized of [1440,390,width]){
   await page.setViewportSize({width:resized,height:resized===390?844:900});
+  // Desktop selection does not opt into the separate mobile detail view. Use
+  // the real post action when entering mobile list mode, not a DOM override.
+  if(resized===390&&await page.locator('.research-workbench').getAttribute('data-mobile-view')==='list')await page.getByRole('button',{name:/^ALPHA の分析を表示/}).click();
   await expect(detail.locator('.leader-detail-overview')).toHaveCount(1);
   await expect(detail.getByRole('group',{name:'5つの関門：既存根拠の分類'})).toHaveCount(1);
   await expect.poll(()=>detail.evaluate(node=>{

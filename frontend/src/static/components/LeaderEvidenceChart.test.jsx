@@ -80,7 +80,7 @@ describe('self-drawn SVG evidence and controls', () => {
   it('supports daily/weekly, ranges, zoom and keyboard period movement', () => {
     const {container}=render(<LeaderEvidenceChart {...props}/>);
     const initial=container.querySelector('svg').getAttribute('aria-label');
-    fireEvent.click(screen.getByRole('button',{name:'1か月',exact:true}));
+    fireEvent.change(screen.getByRole('combobox',{name:'表示期間'}),{target:{value:'21'}});
     expect(container.querySelectorAll('[data-close]')).toHaveLength(21);
     fireEvent.keyDown(container.querySelector('svg'),{key:'ArrowLeft'});
     expect(container.querySelector('svg').getAttribute('aria-label')).not.toBe(initial);
@@ -93,7 +93,7 @@ describe('self-drawn SVG evidence and controls', () => {
   });
   it('clears viewport and old annotation when publication identity changes', () => {
     const {container,rerender}=render(<LeaderEvidenceChart {...props} chartIdentity="one"/>);
-    fireEvent.click(screen.getByRole('button',{name:'1か月',exact:true}));
+    fireEvent.change(screen.getByRole('combobox',{name:'表示期間'}),{target:{value:'21'}});
     expect(container.querySelectorAll('[data-close]')).toHaveLength(21);
     rerender(<LeaderEvidenceChart {...props} chartIdentity="two"/>);
     expect(container.querySelectorAll('[data-close]')).toHaveLength(63);
@@ -129,6 +129,20 @@ describe('self-drawn SVG evidence and controls', () => {
     const rsPoints=svg.querySelector('[data-series="rs"]').getAttribute('points').split(' ').map(p=>Number(p.split(',')[1]));
     expect(Math.min(...rsPoints)).toBeGreaterThan(height*.72+22);
     expect(Math.max(...rsPoints)).toBeLessThan(height-24);
+  });
+  it('packs mobile ranges into one select without losing 44px period and viewport controls', () => {
+    const {container}=render(<LeaderEvidenceChart {...props}/>);
+    const select=screen.getByRole('combobox',{name:'表示期間'});
+    expect([...select.options].map(option=>option.text)).toEqual(['任意期間','1か月','3か月','6か月','1年']);
+    for(const [value,count] of [['21',21],['63',63],['126',126],['252',252]]){
+      fireEvent.change(select,{target:{value}});expect(container.querySelectorAll('[data-close]')).toHaveLength(Math.min(count,fixture.bars.length));
+    }
+    fireEvent.click(screen.getByRole('button',{name:'表示期間を拡大'}));expect(select).toHaveValue('');
+    fireEvent.change(select,{target:{value:'63'}});expect(select).toHaveValue('63');
+    const caption=container.querySelector('.leader-svg-caption-mobile');
+    expect(caption.children).toHaveLength(2);expect(caption).toHaveTextContent(`最終バー ${fixture.as_of_date} 終値`);
+    expect(container.textContent).toContain('50/150/200日線・直前50日出来高平均');
+    for(const name of ['日足','週足','表示期間を拡大','表示期間を縮小','過去の期間へ','新しい期間へ','リセット','VCP注記'])expect(screen.getByRole('button',{name,exact:true})).toBeInTheDocument();
   });
   it('shows missing RS as data absent without a fake line', () => {
     const {container}=render(<LeaderEvidenceChart {...props} rsLineData={[]}/>);

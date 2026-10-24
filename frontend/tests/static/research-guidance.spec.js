@@ -32,14 +32,16 @@ for (const width of [1440, 1024, 320]) test(`readiness guidance, disclosures and
   expect(dailySummary).toContain('共通購入モデルへの適合：未確認');
   expect(await candidate.getAttribute('aria-label')).toContain(dailySummary);
   const glossary = page.locator('.candidate-glossary');
-  await glossary.locator('summary').focus();
+  const guideButton=page.getByRole('button',{name:'一覧の見方',exact:true});
+  await guideButton.focus();
   await page.keyboard.press('Enter');
-  await expect(glossary).toHaveAttribute('open', '');
+  await expect(guideButton).toHaveAttribute('aria-expanded', 'true');
   await expect(glossary.getByText('選定と購入条件', { exact: true })).toBeVisible();
   await page.screenshot({ path: info.outputPath(`guidance-${width}-expanded.png`), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await glossary.locator('summary').press('Enter');
-  await expect(glossary).not.toHaveAttribute('open', '');
+  await guideButton.press('Enter');
+  await expect(guideButton).toHaveAttribute('aria-expanded', 'false');
+  await expect(glossary).toBeHidden();
   await candidate.click();
   await expect(page.locator('.research-symbol-head .entry-source-badge')).toBeInViewport({ ratio: 1 });
   const entry = page.getByRole('region', { name: 'エントリー条件', exact: true });
@@ -47,6 +49,17 @@ for (const width of [1440, 1024, 320]) test(`readiness guidance, disclosures and
   await entry.locator('summary').filter({ hasText: 'アプリ設定と書籍の確認範囲' }).press('Enter');
   await expect(entry).toContainText('『ミネルヴィニの成長株投資法』方式の5%上限はアプリ設定で、この出典の指定値ではありません。');
   await entry.scrollIntoViewIfNeeded();
+  if(width>700){
+    // Inspect this expanded section below fixed chrome, rather than accepting
+    // Playwright's centered position that leaves the preceding gate half cut.
+    await entry.evaluate(node=>window.scrollBy({top:node.getBoundingClientRect().top-document.querySelector('.leader-header').getBoundingClientRect().bottom-16,behavior:'instant'}));
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    await expect(entry).toBeInViewport({ratio:1});
+    await expect(entry.locator('details[open]')).toBeInViewport({ratio:1});
+    const hits=await entry.evaluate(node=>[...node.querySelectorAll('button,summary')].flatMap(target=>{const r=target.getBoundingClientRect();return [.1,.5,.9].flatMap(x=>[.1,.5,.9].map(y=>{const hit=document.elementFromPoint(r.left+r.width*x,r.top+r.height*y);return Boolean(hit&&(hit===target||target.contains(hit)));}));}));
+    expect(hits.length).toBeGreaterThanOrEqual(9);
+    expect(hits.every(Boolean)).toBe(true);
+  }
   await page.screenshot({ path: info.outputPath(`source-warning-${width}.png`), fullPage: true });
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   expect((await new AxeBuilder({ page }).include('#root').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);

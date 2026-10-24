@@ -69,7 +69,7 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
     expect(dates).toHaveLength(2);
     expect((Date.parse(dates[1])-Date.parse(dates[0]))/86400000).toBeGreaterThanOrEqual(55);
     const chart=page.locator('.research-detail .leader-evidence-chart');
-    await chart.getByRole('button',{name:'1か月',exact:true}).click();
+    await chart.getByRole('combobox',{name:'表示期間',exact:true}).selectOption('21');
     await expect(svg.locator('[data-pane="price"] g[data-date]')).toHaveCount(21);
     await expectSvgChart(page.locator('.research-detail'),{symbol:'LEAD',bars,rs:'present'});
     const latestRange=await svg.getAttribute('aria-label');

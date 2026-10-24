@@ -1,3 +1,4 @@
+import { financialViewportGeometry, scrollFinancialViewport, checkFinancialViewportGeometry } from './financial-viewport-geometry.mjs';
 import { observeSvgChart, validateSvgChart } from './svg-chart-evidence.mjs';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { entryPlan } from '../src/static/researchEngine.js';
@@ -57,7 +58,10 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       };
       await inspect(chart, 'inline-default');
       check(record.views[0].annotation_mode === 'vcp-on', `${key}: initial VCP annotation state missing`);
-      await chart.scrollIntoViewIfNeeded();
+      const inlineTargets=['.research-chart .leader-svg-controls','.research-chart svg[data-chart-plot]'];
+      await scrollFinancialViewport(page,inlineTargets);
+      const inspectInlineViewport=async()=>{const geometry=await page.evaluate(financialViewportGeometry,inlineTargets);checkFinancialViewportGeometry(geometry,check,`${key}/inline-controls-and-plot`,viewport);return geometry;};
+      record.inline_geometry={default:await inspectInlineViewport()};
       record.source_warning = { expected: Boolean(plan.sourceContext?.warning) };
       if (record.source_warning.expected) {
         record.source_warning.inline_visible = await sourceWarningVisible(page.locator('.research-symbol-head .entry-source-badge'));
@@ -66,6 +70,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await capture(page, viewport, theme, `case-${symbol}-inline`);
       const inlineToggle = page.locator('.research-chart').getByRole('button', { name: 'VCP注記', exact:true });
       if (await inlineToggle.getAttribute('aria-pressed') !== 'true') await inlineToggle.click();
+      record.inline_geometry.annotations=await inspectInlineViewport();
       await capture(page, viewport, theme, `case-${symbol}-inline-annotations`);
       const gauge = page.locator('.entry-gauge');
       if (Number.isFinite(plan.pivot)) {
@@ -127,7 +132,8 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       // check runs after all required captures, outside performance timing.
       const rangeLabel = expanded;
       const initialRange = await rangeLabel.getAttribute('aria-label');
-      await dialog.getByRole('button', { name: '1か月', exact: true }).click();
+      if(viewport.width<=700)await dialog.getByRole('combobox',{name:'表示期間',exact:true}).selectOption('21');
+      else await dialog.getByRole('button', { name: '1か月', exact: true }).click();
       await page.waitForFunction(previous => {
         const text = document.querySelector('[role="dialog"] svg[data-chart-plot]')?.getAttribute('aria-label');
         return Boolean(text && text !== previous);
