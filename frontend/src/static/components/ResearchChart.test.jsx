@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import ResearchChart from './ResearchChart';
 const fetchPayload = vi.hoisted(() => vi.fn());
 vi.mock('../chartClient', () => ({ fetchStaticChartPayload: fetchPayload, staticChartKeys: { payload: (symbol, path) => ['chart', symbol, path] } }));
-vi.mock('../../components/Charts/CandlestickChart', () => ({ default: ({ symbol, priceData, pivotPrice, buyCeiling, stopPrice, rsLineData, epsLine, vcpBoxes }) => <div data-testid="chart" data-bars={JSON.stringify(priceData)} data-levels={JSON.stringify([pivotPrice,buyCeiling,stopPrice])} data-guides={JSON.stringify([rsLineData,epsLine,vcpBoxes])}>{symbol}:{priceData.length}:{pivotPrice}</div> }));
+vi.mock('./LeaderEvidenceChart', () => ({ default: ({ symbol, priceData, pivotPrice, buyCeiling, stopPrice, rsLineData, epsLine, vcpBoxes }) => <div data-testid="chart" data-bars={JSON.stringify(priceData)} data-levels={JSON.stringify([pivotPrice,buyCeiling,stopPrice])} data-guides={JSON.stringify([rsLineData,epsLine,vcpBoxes])}>{symbol}:{priceData.length}:{pivotPrice}</div> }));
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 function setup(props) {
   props={date:'2026-09-21',...props};

@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render,screen,cleanup,within,fireEvent,waitFor } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
 import { buildFinancialEvidencePresentation, FINANCIAL_PRESENTATION_SCHEMA } from '../financialEvidencePresentation';
@@ -248,4 +249,12 @@ it('builds financial presentation only for the open financial tab and refreshes 
  fireEvent.click(screen.getByRole('tab',{name:'財務・機関'}));
  expect(build).toHaveBeenCalledTimes(5);
  expect(build).toHaveBeenLastCalledWith(latest.selected,{method:latest.method,date:latest.date,generation:latest.version,now:latest.now});
+});
+it('opens full Code33 evidence and moves keyboard focus to the book tab',async()=>{
+ const onVerificationToggle=vi.fn();
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><ResearchDetail {...props} selected={row} onVerificationToggle={onVerificationToggle}/></QueryClientProvider>);
+ fireEvent.click(screen.getByRole('button',{name:'業績の全根拠を見る'}));
+ await waitFor(()=>expect(screen.getByRole('tab',{name:'書籍検証'})).toHaveFocus());
+ expect(onVerificationToggle).toHaveBeenCalledWith(row.symbol);
+ expect(screen.getByText('業績の連続性と利益の質を確認').closest('details')).toHaveAttribute('open');
 });
