@@ -23,8 +23,17 @@ async function openFixture(page,fixtureRows=rows){
  await page.goto('/');
  await expect(page.getByRole('heading',{name:`対象銘柄 ${fixtureRows.length}件`})).toBeVisible();
 }
+async function expectFocusedEntry(row){
+ await expect(row).toBeFocused();
+ expect(await row.evaluate(node=>{
+  const r=node.getBoundingClientRect(),top=document.querySelector('.leader-header').getBoundingClientRect().bottom,nav=document.querySelector('.leader-mobile-nav')?.getBoundingClientRect(),bottom=nav?.height?nav.top:innerHeight;
+  return r.top>=top-1&&r.top+44<=bottom&&[.1,.5,.9].every(x=>node.contains(document.elementFromPoint(r.left+r.width*x,r.top+22)));
+ })).toBe(true);
+}
 async function expectCompletePost(page,row){
- await row.scrollIntoViewIfNeeded();
+ // This inspection deliberately places the whole post in view; navigation
+ // usability is independently asserted before this scroll can change it.
+ await row.evaluate(node=>node.scrollIntoView({block:'center',behavior:'instant'}));
  await expect(row).toBeInViewport({ratio:1});
  const geometry=await row.evaluate(node=>{
   const box=node.getBoundingClientRect(),header=document.querySelector('.leader-header').getBoundingClientRect();
@@ -62,17 +71,18 @@ for(const width of [1440,390])test(`X feed keeps complete posts, focus and full 
  const penultimate=page.getByRole('button',{name:/^PERF048 の分析/});await penultimate.focus();await page.keyboard.press('Tab');
  const last=page.getByRole('button',{name:/^PERF049 の分析/});await expect(last).toBeFocused();
  await expect(last).toHaveCSS('outline-offset','-3px');await expect(last).toHaveCSS('outline-style','solid');
+ await expectFocusedEntry(last);
  const lastBounds=await expectCompletePost(page,last);
  const measure=()=>page.locator('.candidate-scroll').evaluate(node=>({height:node.scrollHeight,width:node.scrollWidth}));
  const before=await measure();await last.focus();const after=await measure();expect(after).toEqual(before);
  expect(lastBounds.height).toBeGreaterThanOrEqual(240);
  if(width===1440){
   await last.press('ArrowDown');const next=page.getByRole('button',{name:/^PERF050 の分析/});
-  await expect(next).toBeFocused();await expectCompletePost(page,next);
-  await next.press('ArrowUp');await expect(last).toBeFocused();await expectCompletePost(page,last);
+  await expectFocusedEntry(next);await expectCompletePost(page,next);
+  await next.press('ArrowUp');await expectFocusedEntry(last);await expectCompletePost(page,last);
  }
  const expectPageStart=async symbol=>{
-  const first=items.first().getByRole('button');await expect(first).toContainText(symbol);await expect(first).toBeFocused();
+  const first=items.first().getByRole('button');await expect(first).toContainText(symbol);await expectFocusedEntry(first);
   await expectCompletePost(page,first);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  };

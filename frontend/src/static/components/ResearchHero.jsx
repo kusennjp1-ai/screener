@@ -14,7 +14,7 @@ function ChangesContents({workbench, ...props}) {
  const query = useWorkbenchDetails(workbench, true);
  return <DailyChanges {...props} query={query}/>;
 }
-export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSelect,onInspect,onInspectChanged=onInspect,onBrowse,workbench,method,availableSymbols,loading=false,freshnessNotice=null}) {
+export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSelect,onInspect,onInspectChanged=onInspect,onBrowse,workbench,method,availableSymbols,loading=false,freshnessNotice=null,mobileView='list'}) {
  const small=useMediaQuery('(max-width:700px)');
  const [collapsed,setCollapsed]=useState(()=>{try{return localStorage.getItem('research-hero-collapsed')==='true';}catch{return false;}});
  const [changesOpen,setChangesOpen]=useState(false);
@@ -24,8 +24,8 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
  const toggle=()=>{setCollapsed(!collapsed);try{localStorage.setItem('research-hero-collapsed',String(!collapsed));}catch{/* Default remains usable when storage is disabled. */}};
  const changes=dailyChangePresentation(workbench,method);
  return <section data-testid="home-hero" className={`research-hero research-overview${collapsed?' hero-collapsed':''}${freshnessNotice?' has-freshness':''}`} aria-label="今日の概況">
-  <div className="hero-copy"><div className="leader-pinned-title"><span className="leader-pinned-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 3h8l-1 6 4 4H5l4-4-1-6Z"/><path d="M12 13v8"/></svg></span><strong>本日の判断</strong><span>固定 · ミネルヴィニ全候補</span></div><p className="hero-date">{date||'取得中'} 終値 · ミネルヴィニ概況</p>
-   <p className="leader-pinned-summary">選定候補は <strong>{loading?'—':counts.qualified.toLocaleString()}</strong> 銘柄、買い位置は <strong className="zone-text">{loading?'—':counts.zone.toLocaleString()} 銘柄</strong>。日次の購入条件は各銘柄で確認。</p>
+  <div className="hero-copy"><div className="leader-pinned-title"><span className="leader-pinned-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8"><path d="M8 3h8l-1 6 4 4H5l4-4-1-6Z"/><path d="M12 13v8"/></svg></span><strong>本日の判断</strong><span className="leader-pinned-scope">固定 · ミネルヴィニ全候補</span><span className="leader-pinned-date">{date||'基準日未確認'}{date?' 終値':''}</span></div><p className="hero-date">{date||'取得中'} 終値 · ミネルヴィニ概況</p>
+   <p className="leader-pinned-summary">選定 <strong>{loading?'—':counts.qualified.toLocaleString()}</strong> 銘柄 · 買い位置 <strong className="zone-text">{loading?'—':counts.zone.toLocaleString()} 銘柄</strong></p>
    <h1><span className="overview-compact-scope">ミネルヴィニ</span>{loading?'データを読み込み中。':counts.qualified?`選定候補は ${counts.qualified.toLocaleString()} 銘柄。`:'選定候補はありません。'}</h1>
    <p className="hero-subtitle">候補を選び、買い位置と日次の購入条件を確認。</p>
    <div className="hero-kpis overview-steps" aria-label="選定から購入検討までの3段階">
@@ -34,11 +34,11 @@ export default function ResearchHero({rows,ranked,date,plan,selectedSymbol,onSel
     <div><small><span className="overview-step-number">3</span> 日次の購入条件</small><strong className="overview-next-check">個別に確認 <span aria-hidden="true">→</span></strong><span className="overview-step-note">市場・出来高・決算など</span></div>
    </div>
    <div className="overview-market"><div className="overview-market-data">
-    <p className="overview-market-state"><span>{plan.market.label.replace('（独自判定）','')} · 新規上限 {loading?'—':Math.round(plan.allocationCap*100)}%</span><span>日足検証 {loading||!ranked.length?'—':`${(counts.verified/ranked.length*100).toFixed(small?0:1)}%`}</span></p>
-    {!loading && universe.verified_fund_exclusions.length > 0 && <p className="overview-universe" data-universe-version={universe.version}>価格・流動性対象 {universe.price_liquidity_count.toLocaleString()}件 · 企業財務判定の対象 {universe.financial_applicable_count.toLocaleString()}件（確認済みファンド {universe.verified_fund_exclusions.map(item=>item.symbol).join("・")} は対象外）</p>}
+    <p className="overview-market-state"><span>{plan.market.label.replace('（独自判定）','')} · 新規上限 {loading?'—':Math.round(plan.allocationCap*100)}%</span><span className="leader-mobile-scope">ミネルヴィニ概況</span><span>日足検証 {loading||!ranked.length?'—':`${(counts.verified/ranked.length*100).toFixed(small?0:1)}%`}</span></p>
+    {!loading && <p className="overview-universe" data-universe-version={universe.version}>価格・流動性対象 {universe.price_liquidity_count.toLocaleString()}件 · 企業財務判定の対象 {universe.financial_applicable_count.toLocaleString()}件{universe.verified_fund_exclusions.length>0&&<>（確認済みファンド {universe.verified_fund_exclusions.map(item=>item.symbol).join("・")} は対象外）</>}{universe.identity_quarantines.length>0&&<>（識別情報不整合 {universe.identity_quarantines.map(item=>item.symbol).join("・")} は財務判定を保留）</>}</p>}
    </div><a href="#/breadth?tab=sectors">業種の追い風を見る →</a></div>
    {collapsed&&!small&&freshnessNotice}
-   <div className="hero-actions">{small&&<button onClick={onBrowse}>銘柄一覧</button>}<PortfolioDecision compact rows={rows} date={date} plan={plan} onInspect={onInspect} onBrowse={onBrowse} renderTrigger={({openPlan,label})=><button onClick={openPlan} aria-haspopup="dialog" aria-label={label}><span className="desktop-plan-label">{label}</span><span className="mobile-plan-label">配分</span></button>}/>
+   <div className="hero-actions">{small&&mobileView!=='list'&&<button onClick={onBrowse}>銘柄一覧</button>}<PortfolioDecision compact rows={rows} date={date} plan={plan} onInspect={onInspect} onBrowse={onBrowse} renderTrigger={({openPlan,label})=><button onClick={openPlan} aria-haspopup="dialog" aria-label={label}><span className="desktop-plan-label">{label}</span><span className="mobile-plan-label">配分</span></button>}/>
    <button className="changes-trigger" aria-label="候補の日次変化" aria-haspopup="dialog" aria-expanded={changesOpen} onClick={()=>setChangesOpen(true)}><span className="changes-desktop">{changes.label}</span><span className="changes-mobile">日次変化</span></button>{small&&<button className="mobile-radar-toggle" aria-expanded={radarOpen} aria-controls="mobile-setup-radar" onClick={()=>setRadarOpen(value=>!value)}>{radarOpen?'分布を閉じる':'分布を見る'}</button>}</div>
   </div>
   {(!collapsed||small)&&freshnessNotice}

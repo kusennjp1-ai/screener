@@ -68,8 +68,27 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
   await page.getByRole('button',{name:'候補を絞り込む'}).click();
   await expect(page.getByRole('combobox',{name:'業種',exact:true})).toHaveValue('Technology');
   await page.getByRole('button',{name:'候補を確認する →'}).click();
+  await expect(page.getByRole('dialog',{name:'候補を絞り込む'})).not.toBeVisible();
+  await expect(page.locator('#candidate-board')).toBeFocused();
+  const stableFocus=await page.evaluate(async()=>{const frames=[];for(let n=0;n<6;n++){await new Promise(requestAnimationFrame);const b=document.getElementById('candidate-board');frames.push({focused:document.activeElement===b,clearance:b.getBoundingClientRect().top-document.querySelector('.leader-header').getBoundingClientRect().bottom,scrollY});}return frames;});
+  await info.attach('filter-confirm-settled-frames',{body:JSON.stringify(stableFocus),contentType:'application/json'});
+  expect(stableFocus.every(frame=>frame.focused&&frame.clearance>=-1)).toBe(true);
+
+  const transitionGeometry=await page.evaluate(()=>({scrollY,boardTop:document.getElementById('candidate-board').getBoundingClientRect().top,headerBottom:document.querySelector('.leader-header').getBoundingClientRect().bottom}));
+  expect(transitionGeometry.boardTop).toBeGreaterThanOrEqual(transitionGeometry.headerBottom-1);
+  await info.attach('filter-confirm-focus-geometry',{body:JSON.stringify(transitionGeometry),contentType:'application/json'});
+
   for(const mode of ['dark','light']){
-    if(mode==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
+    if(mode==='light'){
+      const before=await page.evaluate(()=>scrollY);
+      await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
+      const after=await page.evaluate(()=>scrollY);
+      await info.attach('theme-switch-scroll',{body:JSON.stringify({before,after}),contentType:'application/json'});
+      expect(Math.abs(after-before)).toBeLessThanOrEqual(1);
+    }
+    // Audit the initial viewport, not the arbitrary scroll position left by
+    // the prior drawer/theme click. Other tests cover scrolled focus/hit boxes.
+    await page.evaluate(()=>scrollTo({top:0,behavior:'instant'}));
     const axe=await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();
     expect(axe.violations).toEqual([]);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);

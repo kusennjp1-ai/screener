@@ -45,7 +45,7 @@ for (const width of [1440, 390]) test(`daily comparison coverage keeps lazy deta
     if(width>700)await expect(page.getByTestId('home-hero').getByRole('heading', { level: 1 })).toHaveText('ミネルヴィニ選定候補は 3 銘柄。');
     else {
       await expect(page.locator('.leader-pinned-title')).toContainText('本日の判断');
-      await expect(page.locator('.leader-pinned-summary')).toContainText('選定候補は 3 銘柄');
+      await expect(page.locator('.leader-pinned-summary')).toContainText('選定 3 銘柄');
     }
     expect(fullRequests).toBe(0);
     await page.evaluate(() => document.fonts.ready);

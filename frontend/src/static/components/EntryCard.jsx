@@ -1,6 +1,6 @@
 import { gaugeGeometry, money, signed, STATES, stateKey } from '../positionGeometry';
 import EntrySourceNote from './EntrySourceNote';
-export function StateChip({state}) { const [label,glyph,tone]=STATES[stateKey(state)];return <span className="state-chip" style={{'--state-tone':`var(--${tone})`}}>{glyph} {label}</span>; }
+export function StateChip({state}) { const [label,glyph,tone]=STATES[stateKey(state)];return <span className="state-chip" style={{'--state-tone':`var(--${tone})`,color:tone==='neutral'?'var(--text-2)':undefined}}>{glyph} {label}</span>; }
 export default function EntryCard({plan,readiness,onConditions,onConnect}) {
  const g=gaugeGeometry(plan),tone=STATES[stateKey(plan.state)][2];
  const missing=readiness.rules.filter(r=>r.state!=='pass');

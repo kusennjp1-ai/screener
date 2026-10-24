@@ -61,13 +61,14 @@ export function normalizeSell(sell) {
 
 function Pill({ meta, compact }) {
   const Icon = meta.Icon;
+  const labelColor = meta.color === C.grey ? C.ink : meta.color;
   return (
     <Box sx={{
       display: 'inline-flex', alignItems: 'center', gap: 0.4, px: 0.6, py: '1px',
       borderRadius: 1, bgcolor: `color-mix(in srgb, ${meta.color} 13%, transparent)`, border: `1px solid ${meta.color}`,
     }}>
-      <Icon sx={{ fontSize: compact ? 12 : 13, color: meta.color }} />
-      <Typography sx={{ fontWeight: 800, fontSize: 12, color: meta.color, lineHeight: 1.5 }}>
+      <Icon sx={{ fontSize: compact ? 12 : 13, color: labelColor }} />
+      <Typography sx={{ fontWeight: 800, fontSize: 12, color: labelColor, lineHeight: 1.5 }}>
         {meta.label}
       </Typography>
     </Box>

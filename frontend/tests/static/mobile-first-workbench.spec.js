@@ -43,7 +43,7 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  await expect(first).toBeVisible();
  await expect(page.locator('.overview-universe')).toContainText('企業財務判定の対象 3件');
  await expect(page.locator('.overview-universe')).toContainText('BITU・SBIT・ETHE');
- await expect(page.locator('.hero-date')).toContainText(`${date} 終値`);
+ await expect(page.locator('.leader-pinned-title')).toContainText(`${date} 終値`);
  await expect(page.locator('.overview-market-state')).toBeVisible();
  await expect(page.locator('.overview-market-state')).toContainText('市場未確認 · 新規上限 0%');
  expect(await page.evaluate(()=>parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop))).toBe(48+fixture.top);
@@ -113,7 +113,33 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  expect(title.y).toBeGreaterThanOrEqual(fixture.top);
  await page.keyboard.press('Escape');
  await expect(drawer).not.toBeVisible();
- await expect(page.getByRole('button',{name:'候補を絞り込む',exact:true})).toBeFocused();
+ const filterTrigger=page.getByRole('button',{name:'候補を絞り込む',exact:true});
+ await expect(filterTrigger).toBeFocused();
+ const expectRestoredTrigger=async()=>{
+  await expect(filterTrigger).toBeFocused();
+  await expect.poll(()=>filterTrigger.evaluate(node=>{
+   const r=node.getBoundingClientRect(),top=document.querySelector('.leader-header').getBoundingClientRect().bottom,bottom=document.querySelector('.leader-mobile-nav').getBoundingClientRect().top;
+   return r.width>=44&&r.height>=44&&r.top>=top&&r.bottom<=bottom&&[.1,.5,.9].every(x=>node.contains(document.elementFromPoint(r.left+r.width*x,r.top+r.height/2)));
+  })).toBe(true);
+ };
+ await expectRestoredTrigger();
+ // Close and Escape both restore a usable trigger after the exit transition.
+ await filterTrigger.press('Enter');await expect(drawer).toBeVisible();
+ await drawer.getByRole('button',{name:'絞り込みを閉じる',exact:true}).click();await expect(drawer).not.toBeVisible();await expectRestoredTrigger();
+ await filterTrigger.press('Enter');await expect(drawer).toBeVisible();
+ await page.keyboard.press('Escape');await expect(drawer).not.toBeVisible();await expectRestoredTrigger();
+ await filterTrigger.press('Enter');await expect(drawer).toBeVisible();
+ await drawer.getByRole('button',{name:'候補を確認する →',exact:true}).click();await expect(drawer).not.toBeVisible();
+ const settled=await page.evaluate(async()=>{
+  const frames=[];for(let frame=0;frame<6;frame++){
+   await new Promise(requestAnimationFrame);
+   const board=document.getElementById('candidate-board'),header=document.querySelector('.leader-header');
+   frames.push({focused:document.activeElement===board,clearance:board.getBoundingClientRect().top-header.getBoundingClientRect().bottom,scrollY,overflow:document.documentElement.scrollWidth>innerWidth});
+  }return frames;
+ });
+ await info.attach('filter-confirm-settled-frames.json',{body:JSON.stringify({fixture,settled}),contentType:'application/json'});
+ expect(settled.every(frame=>frame.focused&&frame.clearance>=-1&&!frame.overflow)).toBe(true);
+ expect(Math.max(...settled.map(frame=>frame.scrollY))-Math.min(...settled.map(frame=>frame.scrollY))).toBeLessThanOrEqual(1);
  await expect(search).toHaveValue('ALPHALONG');
  await first.click();
  await expect(page.getByRole('region',{name:'銘柄詳細',exact:true})).toBeVisible();
@@ -123,7 +149,11 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  await expect(first).toBeVisible();
  await search.fill('');
  await expect(list.getByRole('listitem')).toHaveCount(rows.length);
- await page.getByRole('button',{name:'銘柄一覧',exact:true}).click();
+ // The current-list jump button was removed as redundant. Exercise the
+ // retained detail-to-list browse path by keyboard, including focus/clearance.
+ await first.focus();await first.press('Enter');
+ await expect(page.getByRole('region',{name:'銘柄詳細',exact:true})).toBeVisible();
+ const back=page.getByRole('button',{name:'← 候補一覧',exact:true});await back.focus();await back.press('Enter');
  await expect(page.locator('#candidate-board')).toBeFocused();
  await expect.poll(async()=>page.evaluate(()=>{
   const board=document.getElementById('candidate-board'),header=document.querySelector('.leader-header');

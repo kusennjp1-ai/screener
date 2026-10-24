@@ -89,3 +89,9 @@ it('keeps unsupported action and stop-basis codes unconfirmed and inspectable', 
   expect(screen.getByText('stop_basis: future_basis')).not.toBeVisible();
   expect(screen.getByText('実際の保有・注文は未確認')).toBeVisible();
 });
+
+it.each(['hold','no_data'])('uses readable text on the neutral %s pill without changing its model label',action=>{
+ renderWithProviders(<SellTiming sell={{action}}/>);
+ expect(screen.getByText(ACTION_META[action].label)).toHaveStyle({color:'var(--text-2)'});
+ expect(screen.getByTestId('sell-timing')).toHaveAttribute('data-action',action);
+});

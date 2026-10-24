@@ -1,3 +1,4 @@
+import { LEADER_FEED_CONTRACT, leaderFeedFailures } from './leader-feed-design-contract.mjs';
 // Completeness/consistency checks for immutable historical browser observations.
 // This is NOT source authentication, current data validation, or image review.
 // The caller must independently authenticate the capture and run the unchanged
@@ -33,7 +34,7 @@ const mainHeight = width => width === 1440 ? 900 : 844;
 const rowIds = ['eps_growth_yy', 'sales_growth_yy', 'annual_eps_growth_3y', 'eps_rating', 'composite_rating', 'roe', 'profit_margin'];
 const tableNames = ['ミネルヴィニ合格 注目銘柄 トップ20の表（横スクロール）', '主導業種グループの主導銘柄の表（横スクロール）', 'テクニカル参考候補 トップ20の表（横スクロール）', '業種グループ トップ10の表（横スクロール）'];
 
-function screenEvidence(screen, binding) {
+function screenEvidence(screen, binding, layoutContract) {
   const [name, widthText, theme] = screen.key.split('/'), width = Number(widthText);
   const height = name.endsWith('-expanded-short') ? width === 1440 ? 760 : 568 : mainHeight(width);
   const label = screen.key, metrics = screen.metrics;
@@ -51,9 +52,12 @@ function screenEvidence(screen, binding) {
   assert(metrics.chromeHeight === metrics.headerHeight + metrics.bottomNavHeight, label + ': inconsistent chrome metrics');
   assert(screen.reduced_motion_running_animations === 0, label + ': missing/failed reduced-motion observation');
   if (width === 390) assert(metrics.chromeHeight <= 110, label + ': fixed chrome exceeds 110px');
+  if(layoutContract===LEADER_FEED_CONTRACT)assert.deepEqual(leaderFeedFailures(metrics,name),[],label+': feed contract failed');
+  else {
   if (['home', 'near-pass'].includes(name) && width === 1440) assert(metrics.hero && metrics.hero.height <= 320 && metrics.chart && metrics.chart.top <= 540, label + ': home geometry failed');
   if (name === 'compact') assert(metrics.firstRow && metrics.firstRow.top <= 260 && metrics.chart && metrics.chart.top <= 420 && metrics.visibleCandidates >= 12, label + ': compact geometry failed');
   if (['home', 'near-pass'].includes(name) && width === 390) assert(metrics.visibleCandidates >= 3, label + ': insufficient visible candidates');
+  }
   if (name === 'detail' && width === 390) assert(metrics.chartCard && metrics.detail && metrics.chartCard.top - metrics.detail.top <= 160, label + ': detail/chart spacing failed');
   if (['comparison', 'comparison-near-pass'].includes(name)) {
     if (width === 1440) assert(metrics.pageHeight <= 900 && metrics.visibleCompareCards >= 6 && metrics.comparisonGrid && metrics.comparisonGrid.height <= 700, label + ': comparison geometry failed');
@@ -229,7 +233,8 @@ export function validateFunctionalEvidence(report, binding) {
   assert(Array.isArray(report.screens), 'Missing screenshots');
   exactSet(report.screens.map(screen => screen.key), requiredScreeningCaptures(binding.scope), 'Screen captures');
   assert(new Set(report.screens.map(screen => screen.screenshot)).size === report.screens.length, 'Duplicate screenshot path');
-  for (const screen of report.screens) screenEvidence(screen, binding);
+  assert(report.layout_contract === undefined || report.layout_contract === LEADER_FEED_CONTRACT, 'Unknown layout contract');
+  for (const screen of report.screens) screenEvidence(screen, binding, report.layout_contract);
   const screens = new Map(report.screens.map(screen => [screen.key, screen]));
   chartEvidence(report); financialEvidence(report, binding, screens); dailyEvidence(report, screens);
   if (binding.scope === 'carry') {
