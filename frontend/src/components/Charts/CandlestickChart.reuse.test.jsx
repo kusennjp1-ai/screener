@@ -82,6 +82,27 @@ function setup(props={}){
   const view=render(wrap(props));
   return {...view,update:next=>view.rerender(wrap(next))};
 }
+it.each([false,true])('reveals a measured VCP contraction without moving focus (reduced motion: %s)', reducedMotion => {
+  vi.stubGlobal('matchMedia',vi.fn(query=>({matches:query==='(prefers-reduced-motion: reduce)'&&reducedMotion,media:query,addListener:vi.fn(),removeListener:vi.fn(),addEventListener:vi.fn(),removeEventListener:vi.fn()})));
+  const data = annotatedBars();
+  const view = setup({priceData:data,smallScreen:true});
+  const plot=view.container.querySelector('[data-chart-symbol="AAA"]');
+  const scrollIntoView=vi.fn();plot.scrollIntoView=scrollIntoView;
+  const first = screen.getByRole('button', {name:'C1 の収縮区間を表示'});
+  first.focus();
+  fireEvent.click(first);
+  expect(instances[0].timeScale.getVisibleLogicalRange()).toEqual({from:57,to:83});
+  expect(scrollIntoView).toHaveBeenCalledWith({block:'start',inline:'nearest',behavior:reducedMotion?'instant':'smooth'});
+  expect(plot.style.scrollMarginTop).toContain('80px');
+  expect(first).toHaveFocus();
+  expect(screen.getByRole('button', {name:'図解 詳細'})).toHaveAttribute('aria-pressed','true');
+  expect(first).toHaveAttribute('aria-pressed','true');
+  view.update({symbol:'BBB',chartIdentity:'BBB:2',priceData:bars(200),smallScreen:true});
+  expect(screen.queryByRole('region',{name:'AAA のVCP分析'})).not.toBeInTheDocument();
+  expect(screen.queryByRole('button',{name:'C1 の収縮区間を表示'})).not.toBeInTheDocument();
+  expect(screen.getByRole('region',{name:'BBB のVCP分析'})).toHaveTextContent('収縮条件は未確認');
+});
+
 describe('CI479 readable legends without displacing the detail plot',()=>{
   it('preserves native description-list semantics and rejects the former role override',async()=>{
     vi.stubGlobal('IntersectionObserver',class{constructor(callback){this.callback=callback;}observe(target){this.callback([{target,isIntersecting:true}]);}disconnect(){}});
@@ -111,7 +132,9 @@ describe('CI479 readable legends without displacing the detail plot',()=>{
     const color=getComputedStyle(label).color;
     for(const surface of ['surface','panel','ground'])expect(getContrastRatio(color,palettes[mode][surface])).toBeGreaterThanOrEqual(4.5);
     const swatch=label.querySelector('[aria-hidden="true"]');
-    expect(getComputedStyle(swatch).color).toBe(up ? mode==='light'?'rgb(18, 150, 107)':'rgb(0, 186, 124)' : mode==='light'?'rgb(210, 69, 90)':'rgb(229, 100, 110)');
+    const swatchColor = palettes[mode][up ? 'up' : 'down'];
+    const expectedRgb = `rgb(${[1, 3, 5].map(start => parseInt(swatchColor.slice(start, start + 2), 16)).join(', ')})`;
+    expect(getComputedStyle(swatch).color).toBe(expectedRgb);
     expect(label).toHaveTextContent(`最終日足 2026-09-22 終値 ${up?'101.00':'99.00'}`);
     expect(instances[0].candlestickSeries.setData.mock.lastCall[0].at(-1).close).toBe(up?101:99);
   });

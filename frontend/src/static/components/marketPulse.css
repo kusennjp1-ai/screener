@@ -60,3 +60,64 @@
  .breadth-pulse-trend .market-section-head p { font-size:11px; }
  .breadth-pulse-trend .market-range button { min-width:52px; }
 }
+
+/* Workspace presentation: summary first, then observations and their history. */
+.breadth-pulse-summary { padding:24px!important; border-radius:18px!important; background:linear-gradient(120deg,color-mix(in srgb,var(--accent) 5%,var(--surface)),var(--surface))!important; }
+.breadth-pulse-statusline { display:flex; justify-content:space-between; align-items:center; gap:12px; margin-bottom:22px; color:var(--text-3); font-size:11px; }
+.breadth-pulse-status { display:flex; align-items:center; gap:8px; font-size:10px; letter-spacing:.14em; font-weight:700; color:var(--accent); }
+.breadth-pulse-status>span { width:6px; height:6px; border-radius:50%; background:currentColor; }
+.breadth-pulse-conclusion h2 { font-size:30px; letter-spacing:-.04em; }
+.breadth-pulse-ratio { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 22px; min-width:132px; }
+.breadth-pulse-ratio strong { font-size:44px; margin-top:4px; }
+.breadth-pulse-takeaway { font-size:13px; color:var(--text-2); line-height:1.8; margin:14px 0 20px; max-width:640px; }
+.breadth-pulse-daily { margin-top:0; padding-top:18px; }
+.breadth-pulse-daily dl { margin:14px 0; }
+.breadth-pulse-count { gap:12px; }
+.breadth-pulse-count dd { font-size:30px; }
+.breadth-pulse-balance { height:7px; opacity:1; }
+.breadth-pulse-share { font-size:10px; color:var(--text-3); margin:8px 0 0; text-align:right; line-height:1.6; }
+.breadth-pulse .breadth-pulse-trend { margin-top:16px; padding:22px; border-radius:18px!important; }
+.breadth-pulse-chart-footer { display:flex; flex-wrap:wrap; gap:8px 20px; justify-content:space-between; align-items:center; border-top:1px solid var(--line); padding-top:14px; margin-top:10px; }
+.breadth-pulse-chart-footer>span { color:var(--text-3); font-size:10px; }
+.breadth-pulse-context { grid-column:1/-1; min-width:0; }
+.breadth-pulse-context .market-context { margin:8px 0 0; }
+.breadth-overview>.market-disclosure { background:var(--surface); }
+.breadth-overview .market-page-head .research-kicker { display:block; font-size:10px; letter-spacing:.14em; color:var(--accent); font-weight:700; }
+.breadth-overview .market-page-head { padding:10px 0 4px; }
+.breadth-overview>.MuiTabs-root { background:var(--surface); border:1px solid var(--line); padding:4px; border-radius:12px; margin-top:18px; margin-bottom:18px; }
+@media(max-width:700px) {
+ .breadth-pulse-summary { padding:16px!important; }
+ .breadth-pulse-statusline { margin-bottom:16px; font-size:10px; gap:8px; }
+ .breadth-pulse-status { font-size:9px; letter-spacing:.1em; }
+ .breadth-pulse-conclusion h2 { font-size:20px; line-height:1.5; }
+ .breadth-pulse-ratio { padding:10px; min-width:90px; border-radius:12px; }
+ .breadth-pulse-ratio strong { font-size:32px; }
+ .breadth-pulse-conclusion { gap:12px; align-items:start; }
+ .breadth-pulse-conclusion>div:first-child { min-width:0; }
+ .breadth-pulse-takeaway { font-size:12px; margin:14px 0; }
+ .breadth-pulse-count dd { font-size:25px; }
+ .breadth-pulse-count dd small { font-size:10px; }
+ .breadth-pulse-share { text-align:left; }
+ .breadth-pulse .breadth-pulse-trend { padding:16px; }
+ .breadth-overview .market-page-head { gap:12px; }
+ .breadth-overview>.MuiTabs-root .MuiTab-root { min-width:0; padding-inline:12px; font-size:12px; }
+}
+@media(min-width:1100px) {
+ .breadth-pulse { display:grid; grid-template-columns:minmax(0,.95fr) minmax(0,1.15fr); gap:16px; align-items:stretch; }
+ .breadth-pulse-summary { padding:20px!important; }
+ .breadth-pulse .breadth-pulse-trend { margin-top:0; padding:20px; }
+ .breadth-pulse .breadth-pulse-help { grid-column:1/-1; margin-top:0; }
+ .breadth-pulse-conclusion { gap:12px; }
+ .breadth-pulse-conclusion>div:first-child { min-width:0; }
+ .breadth-pulse-conclusion h2 { font-size:24px; }
+ .breadth-pulse-ratio { min-width:96px; padding:12px; }
+ .breadth-pulse-ratio strong { font-size:36px; }
+ .breadth-pulse-count { display:block; }
+ .breadth-pulse-count dd { margin-top:6px; font-size:28px; }
+ .breadth-pulse-share { text-align:left; }
+ .breadth-pulse-trend .market-section-head h2 { font-size:14px; }
+ .breadth-pulse-trend .market-section-head p { font-size:11px; }
+ .breadth-pulse-trend .market-range button { min-width:48px; }
+ .breadth-overview .market-page-head { margin-bottom:8px; }
+ .breadth-overview>.MuiTabs-root { margin-top:10px; margin-bottom:14px; }
+}

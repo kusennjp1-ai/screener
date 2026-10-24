@@ -15,7 +15,7 @@ import { FINANCIAL_DESIGN_CASES, financialDesignScreens } from './financial-desi
 import { financialCarryDesignScreens } from './financial-carry-design-cases.mjs';
 import { dailyObservationDesignScreens } from './daily-observation-design-cases.mjs';
 import { measuredPerformanceFailures } from './limited-research-assessment.mjs';
-import { radarMeasurementFailures } from './radar-benchmark-context.mjs';
+import { radarMeasurementFailures, storedRadarMeasurementFailures } from './radar-benchmark-context.mjs';
 
 export const SCREENING_PRIORITY_POLICY = 'ordinary-carry-screening-priority-2026-10-21-v1';
 export const DESIGN_GROUPS = ['1440/dark', '1440/light', '390/dark', '390/light'];
@@ -102,6 +102,16 @@ export function screeningPriorityBinding({ currentRoot, baselineRoot, commit, in
 }
 
 export function assessScreeningPriority(report, binding, completedGroups) {
+  return assessWithRadarContract(report, binding, completedGroups, radarMeasurementFailures);
+}
+
+// Historical package verification is separate from finish/checked live
+// acceptance: older known contracts cannot satisfy a new capture's gate.
+export function assessHistoricalScreeningPriority(report, binding, completedGroups) {
+  return assessWithRadarContract(report, binding, completedGroups, storedRadarMeasurementFailures);
+}
+
+function assessWithRadarContract(report, binding, completedGroups, radarFailures) {
   assert(binding?.policy === SCREENING_PRIORITY_POLICY && ['ordinary', 'carry'].includes(binding.scope), 'Explicit ordinary/carry policy required');
   assert(report.commit === binding.commit && report.input_basis === 'same_verified_input' && !report.assessment_mode, 'Report scope differs');
   assert(Array.isArray(report.failures) && report.failures.every(failure => typeof failure === 'string'), 'Original Design failures required');
@@ -130,7 +140,7 @@ export function assessScreeningPriority(report, binding, completedGroups) {
     }
     const radar = (report.radar || []).filter(item => item.viewport?.width === width);
     if (radar.length !== 1 || radar[0].runs?.length !== 3 || !radar[0].runs.every(run => finite(run.first_frame_ms))) { blocking.push(`${width}: incomplete D9 measurement`); timingComplete = false; }
-    else for (const [index, run] of radar[0].runs.entries()) for (const failure of radarMeasurementFailures(run, { timing: false })) blocking.push(`${width}: D9 run ${index + 1}: ${failure}`);
+    else for (const [index, run] of radar[0].runs.entries()) for (const failure of radarFailures(run, { timing: false })) blocking.push(`${width}: D9 run ${index + 1}: ${failure}`);
   }
   const measured = measuredPerformanceFailures(report), warnings = original.filter(failure => measured.has(failure));
   for (const failure of measured) if (!original.includes(failure)) { blocking.push(`Measured timing failure missing from original report: ${failure}`); timingComplete = false; }

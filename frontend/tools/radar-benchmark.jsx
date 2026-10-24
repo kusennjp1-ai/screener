@@ -13,6 +13,8 @@ import '../src/static/theme/foundation.css';
 import '../src/static/theme/motion.css';
 import '../src/static/workbench.css';
 import '../src/static/components/researchOverview.css';
+import '../src/static/leaderFeed.css';
+import '../src/static/workspace.css';
 import './radar-benchmark-context.css';
 
 document.documentElement.dataset.theme = 'dark';

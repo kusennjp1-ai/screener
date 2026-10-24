@@ -3,6 +3,7 @@ import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } fr
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
 import { buildBookAnnotations } from './bookAnnotations';
+import ChartSetupEvidence from '../../static/components/ChartSetupEvidence';
 import { VcpBoxPrimitive } from './vcpBoxPrimitive';
 import { TradeLevelsPrimitive } from './tradeLevelsPrimitive';
 import { BandStripPrimitive } from './bandStripPrimitive';
@@ -986,6 +987,9 @@ function CandlestickChart({
         style={{
           width: '100%',
           height: '100%',
+          // Native scrolling also handles the expanded viewer's scroll owner.
+          // Reserve space for its sticky title and the workspace header.
+          scrollMarginTop: 'calc(80px + env(safe-area-inset-top, 0px))',
         }}
       />
 
@@ -1118,6 +1122,25 @@ function CandlestickChart({
       )}
     </Box>
     {researchLegendBelow && researchLegend}
+    {researchView && bookAnnotations && !compact && !showLoading && !showError && !showNoData && <ChartSetupEvidence
+      key={JSON.stringify([symbol, chartIdentity, priceData?.at(-1)?.date])}
+      annotations={annotations} symbol={symbol} date={priceData?.at(-1)?.date} warning={historyWarning}
+      daily={effectiveTimeframe === 'daily'} detailed={showBookAnnotations}
+      onToggle={() => setShowBookAnnotations(value => !value)}
+      onFocus={leg => {
+        setShowBookAnnotations(true);
+        const recovery = annotations.boxes.find(box => box.curve && box.start === leg.start)?.recoveryDate || leg.end;
+        const from = chartData.candlesticks.findIndex(bar => dateKey(bar.time) === leg.start);
+        const to = chartData.candlesticks.findIndex(bar => dateKey(bar.time) === recovery);
+        // Same timeScale API used by setResearchRange; keep the recovery leg in view.
+        if (from >= 0 && to >= from) {
+          chartRef.current?.timeScale().setVisibleLogicalRange({ from: from - 3, to: to + 3 });
+          // Keep keyboard focus on the invoking interval; only reveal its plot.
+          chartContainerRef.current?.scrollIntoView?.({ block: 'start', inline: 'nearest',
+            behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+        }
+      }}
+    />}
     {bookAnnotations && !compact && !showLoading && !showError && !showNoData && <Box sx={{ px: 1.5, py: 1, bgcolor: 'background.paper' }}>
         {!researchView && <Button size="small" onClick={() => setShowBookAnnotations(v => !v)} aria-pressed={showBookAnnotations}>書籍の図解 {showBookAnnotations ? 'ON' : 'OFF'}</Button>}
         {!researchView && <Typography sx={{ fontSize: 12 }} role="status">{effectiveTimeframe !== 'daily' ? '図解は日足で表示します。日足に切り替えてください。' : showBookAnnotations ? `${annotations.boxes[0]?.label ? annotations.boxes[0].label + '。' : ''}${annotations.summary}` : researchView ? '簡易表示：ベース候補の枠と共通ピボット。図解ボタンで収縮区間・過去の上抜けを表示します。' : '自動注記を非表示にしています。'}</Typography>}

@@ -10,6 +10,7 @@ import { fixture } from './reviewed-design-functional-fixture.mjs';
 import { fonts } from '../src/static/theme/tokens.js';
 import { RADAR_HARNESS_VERSION, RADAR_CONTEXT_CLASSES } from './radar-benchmark-context.mjs';
 import { RADAR_VISIBILITY_VERSION } from './radar-visibility.mjs';
+import { storedRadarV3 } from './fixtures/radar-stored-v3.mjs';
 import { SCREENING_PRIORITY_POLICY, DESIGN_GROUPS, assessScreeningPriority } from './screening-priority-acceptance.mjs';
 import { SCREENING_IMAGE_REVIEW_POLICY, REVIEW_AXES, VISUAL_CHECKS } from './screening-priority-image-review.mjs';
 import { BASELINE, CAPTURE_SCHEMA, REPOSITORY, WORKFLOW, REVIEW_PATH, REVIEW_RECORDS, IMAGE_STEP, MEASURE_STEP, PACKAGE_STEP, UPLOAD_STEP,
@@ -77,6 +78,27 @@ function producerFixture(reference = { run_id: 123, run_attempt: 2, head_sha: sh
     artifact: { id: reference.artifact_id, name: `reviewable-design-capture-${reference.checkout_sha}-${reference.run_attempt}`, expired: false, digest: 'sha256:' + reference.artifact_sha256, size_in_bytes: reference.artifact_bytes, workflow_run: { id: reference.run_id, head_sha: reference.head_sha }, created_at: stamp(5) },
     jobs: [{ name: 'Real-data design and performance budgets', run_id: reference.run_id, run_attempt: reference.run_attempt, status: 'completed', conclusion: 'failure', completed_at: stamp(6), steps }] };
 }
+
+test('historical reader preserves literal v3 classification without admitting it as a fresh v4 measurement', t => {
+  const f = packageFixture(t, 'ordinary');
+  const current = verifyStoredMeasurement(f.packageRoot).assessment;
+  for (const group of f.report.radar) group.runs = [1,2,3].map(() => structuredClone(storedRadarV3));
+  const saveReport = () => {
+    write(join(f.packageRoot, 'report.json'), f.report);
+    f.completion.report_sha256 = hash(canonical(f.report));
+    write(join(f.packageRoot, 'screening-priority-completion.json'), f.completion);
+  };
+  saveReport();
+  // Assessment bytes stay unchanged: historical recomputation must retain the
+  // original classification, with all source/hash/image checks still active.
+  assert.deepEqual(verifyStoredMeasurement(f.packageRoot).assessment, current);
+  assert.equal(assessScreeningPriority(f.report, f.completion.binding, DESIGN_GROUPS).policy_exit, 1);
+  f.report.radar[0].runs[0].context.ancestors[0].class_name = 'leader-shell workspace-shell'; saveReport();
+  assert.throws(() => verifyStoredMeasurement(f.packageRoot), /Historical acceptance classification changed/);
+  f.report.radar[0].runs[0] = structuredClone(storedRadarV3);
+  f.report.radar[0].runs[0].context.harness_version = 'unknown-radar-contract'; saveReport();
+  assert.throws(() => verifyStoredMeasurement(f.packageRoot), /Historical acceptance classification changed/);
+});
 
 test('only designated review records preserve the independently computed material inventory', t => { const f = repoFixture(t); assert.equal(materialSourceDigest(f.root, f.current), materialSourceDigest(f.root, f.captured)); assert.equal(readPriorReview(f.root, f.current).eligible, true); assert.equal(selectPriorCapture(f.root, f.env).reuse, true); });
 for (const path of ['frontend/src/App.jsx', 'frontend/tools/design-review.mjs', 'frontend/tools/reviewed-design-capture.mjs', 'frontend/package-lock.json', 'frontend/vite.config.js', 'contracts/input.json', WORKFLOW, '.github/scripts/requirements.txt', 'docs/ordinary.md', 'docs/design-review/2026-10-01.json', 'docs/design-review/unrelated.md']) test('material change requires fresh capture: ' + path, t => { const f = repoFixture(t); write(join(f.root, path), 'Changed synthetic source'); git(f.root, 'add', '.'); git(f.root, 'commit', '-m', 'Synthetic material change'); f.env.GITHUB_SHA = git(f.root, 'rev-parse', 'HEAD'); assert.equal(selectPriorCapture(f.root, f.env).reuse, false); });

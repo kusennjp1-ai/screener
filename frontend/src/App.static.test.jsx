@@ -334,15 +334,10 @@ describe('App static mode', () => {
   ])('renders the static hash route %s without any /api requests', async (hash, heading) => {
     await renderStaticAppAtHash(hash);
 
-    const headingMatcher = (_content, element) => {
-      if (!element) return false;
-      const hasText = (el) => el.textContent?.includes(heading);
-      return hasText(element) && Array.from(element.children).every((child) => !hasText(child));
-    };
     if (['#/','#/themes'].includes(hash)) expect(await screen.findByRole('region', {name:'今日の概況'}, {timeout:10000})).toBeInTheDocument();
-    else expect(await screen.findByText(headingMatcher, {}, { timeout: 10000 })).toBeInTheDocument();
+    else expect(await screen.findByRole('heading', { name: name => name.includes(heading) }, { timeout: 10000 })).toBeInTheDocument();
     const navigation=screen.getByRole('navigation',{name:'メインナビゲーション'});
-    expect(navigation.closest('header')).toHaveTextContent('分析');
+    expect(navigation.closest('aside')).toHaveTextContent('分析');
     expect(within(navigation).getByRole('link',{name:'比較',exact:true})).toHaveAttribute('href','#/compare');
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument();
 
