@@ -274,6 +274,7 @@ export function validateFunctionalEvidence(report, binding) {
   assert(object(report) && object(binding) && ['ordinary', 'carry'].includes(binding.scope) && report.commit === binding.commit && report.input_basis === 'same_verified_input' && !report.assessment_mode, 'Functional evidence scope differs');
   assert(object(report.data) && report.data.as_of_date === binding.as_of_date && report.data.research_generation === binding.research_generation, 'Functional data identity differs');
   assert(Array.isArray(report.screens), 'Missing screenshots');
+  assert(report.mobile_map_contract===undefined||report.mobile_map_contract==='mobile-market-map-v1','Unknown mobile map contract');
   exactSet(report.screens.map(screen => screen.key), requiredScreeningCaptures(binding.scope, report.mobile_map_contract === 'mobile-market-map-v1'), 'Screen captures');
   assert(new Set(report.screens.map(screen => screen.screenshot)).size === report.screens.length, 'Duplicate screenshot path');
   assert(report.detail_contract === undefined || report.detail_contract === LEADER_DETAIL_CONTRACT, 'Unknown detail contract');

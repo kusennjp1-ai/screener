@@ -21,6 +21,20 @@ function aesthetic(f, axis = 'originality') {
   screen.findings.push({ axis, category: 'originality', screeningImpact: 'non_screening_aesthetic', reason: 'Synthetic conventional layout, no material visible defect' });
   return f;
 }
+test('mobile-map captures require both additional reviewed theme images',()=>{
+  const f=fixture('ordinary');f.report.mobile_map_contract='mobile-market-map-v1';
+  for(const theme of ['dark','light']){
+    const screen={key:`market-map/390/${theme}`,screenshot:`market-map-${theme}.png`,sha256:'c'.repeat(64)};
+    f.report.screens.push(screen);f.review.screens.push({...structuredClone(f.review.screens[0]),...screen});
+  }
+  assert.equal(assessScreeningImageReview(f).policy_exit,0);
+  f.review.screens.pop();assert.throws(()=>assessScreeningImageReview(f));
+});
+test('a mobile-map contract cannot reuse the legacy image inventory',()=>{
+  const f=fixture('ordinary');f.report.mobile_map_contract='mobile-market-map-v1';
+  assert.throws(()=>assessScreeningImageReview(f));
+  f.report.mobile_map_contract='unrecognized';assert.throws(()=>assessScreeningImageReview(f));
+});
 for (const scope of ['ordinary', 'carry']) test(scope + ' exact complete image set preserves genuine scores and strict failure', () => {
   const f = aesthetic(fixture(scope)), before = JSON.stringify(f), result = assessScreeningImageReview(f);
   assert.equal(result.policy_exit, 0); assert.equal(result.strict_image_result, 'failed'); assert.equal(result.strict_result, 'failed');

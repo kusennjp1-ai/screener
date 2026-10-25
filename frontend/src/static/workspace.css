@@ -189,3 +189,12 @@
  .workspace-shell .leader-mobile-nav a[aria-current=page] { background:color-mix(in srgb,var(--accent) 7%,var(--panel)); }
  .workspace-shell .research-method-note { padding:16px 4px; }
 }
+
+/* A collapsed overview must size itself to its in-flow controls. */
+@media(min-width:701px){
+ .workspace-shell .research-overview.hero-collapsed { height:auto; min-height:64px; padding:12px 64px 12px 20px; }
+ .workspace-shell .research-overview.hero-collapsed .hero-copy { display:flex; flex-wrap:wrap; height:auto; gap:12px 20px; }
+ .workspace-shell .research-overview.hero-collapsed .hero-copy h1 { font-size:20px; }
+ .workspace-shell .research-overview.hero-collapsed .overview-steps strong { font-size:16px; }
+ .workspace-shell .research-overview.hero-collapsed .leader-pinned-title { display:none; }
+}

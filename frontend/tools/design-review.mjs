@@ -264,6 +264,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     await page.goto(current.url);
     if(viewport.width===390){
       await visible(page.locator('.mobile-market-map'));
+      await visible(page.locator('.mobile-map-candidates button'));
       if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え',exact:true}).click();
       await capture(page,viewport,theme,'market-map');
     }

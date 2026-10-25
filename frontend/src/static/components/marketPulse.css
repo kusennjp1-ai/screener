@@ -67,7 +67,7 @@
 .breadth-pulse-status { display:flex; align-items:center; gap:8px; font-size:11px; letter-spacing:.14em; font-weight:700; color:var(--accent); }
 .breadth-pulse-status>span { width:6px; height:6px; border-radius:50%; background:currentColor; }
 .breadth-pulse-conclusion h2 { font-size:34px; letter-spacing:-.04em; }
-.breadth-pulse-ratio { background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 22px; min-width:132px; }
+.breadth-pulse-ratio { background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:14px 22px; min-width:132px; }
 .breadth-pulse-ratio strong { font-size:42px; margin-top:4px; }
 .breadth-pulse-takeaway { font-size:13px; color:var(--text-2); line-height:1.8; margin:14px 0 20px; max-width:640px; }
 .breadth-pulse-daily { margin-top:0; padding-top:18px; }

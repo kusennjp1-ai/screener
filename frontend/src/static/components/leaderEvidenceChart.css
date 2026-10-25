@@ -32,3 +32,8 @@
  .leader-evidence-chart>svg{scroll-margin-top:8px}
 }
 @media(min-width:701px){.leader-svg-extra-controls>details{display:contents}}
+
+/* The short modal keeps the opened tools in its horizontal toolbar, so the
+   300px plot and date axis remain visible without shrinking touch targets. */
+.leader-evidence-short .leader-svg-extra-controls:has(details[open]){display:flex;flex:0 0 auto;order:0}
+.leader-evidence-short .leader-svg-extra-controls details[open]>*{flex-shrink:0}

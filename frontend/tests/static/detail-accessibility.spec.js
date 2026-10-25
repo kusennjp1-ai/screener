@@ -118,6 +118,8 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();
   if(width===375){
     await page.setViewportSize({width:390,height:568});
+    // Opening the mobile tools must still leave the real date axis visible.
+    await dialog.locator('.leader-svg-extra-controls summary').click();
     let initialGeometry;
     try {
       await expect.poll(async()=>{

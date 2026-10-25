@@ -29,7 +29,9 @@ export function assessScreeningImageReview({ review, report, binding, assessment
     && Array.isArray(assessment.blocking_failures) && assessment.blocking_failures.length === 0, 'Objective screening acceptance is not complete and passing');
   assert(/^[a-f0-9]{40}$/.test(review.observed_commit || '') && meaningful(review.reviewer)
     && /^https:\/\/github\.com\/kusennjp1-ai\/screener\/actions\/runs\/[1-9][0-9]*(?:\/attempts\/[1-9][0-9]*)?$/.test(review.evidence_run || ''), 'Real source and evidence-run review identity required');
-  const expected = binding.scope === 'carry' ? 162 : 134;
+  assert(report.mobile_map_contract===undefined||report.mobile_map_contract==='mobile-market-map-v1','Unknown mobile map contract');
+  const expected = (binding.scope === 'carry' ? 162 : 134)+(report.mobile_map_contract==='mobile-market-map-v1'?2:0);
+  if(report.mobile_map_contract)for(const theme of ['dark','light'])assert(report.screens.some(screen=>screen.key===`market-map/390/${theme}`),'Missing market-map theme');
   assert(Array.isArray(report.screens) && report.screens.length === expected
     && new Set(report.screens.map(screen => screen.key)).size === expected, 'Complete unique scoped captures required');
   assert(Array.isArray(review.screens) && review.screens.length === expected
