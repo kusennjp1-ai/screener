@@ -1,35 +1,33 @@
-# Genuine MAIN capture review, 2026-10-24
+# Mobile research workspace capture review, 2026-10-26
 
-Captured MAIN: e35513d37a1dfcc975c045a8bbfda123c1c8a7fd.
-Producer: https://github.com/kusennjp1-ai/screener/actions/runs/40128473610/attempts/1
-Immutable artifact12573838955,19,743,181bytes; SHA256581828caa7db9a9e06364f2bfec6f5d6a324785f402e49bca76401b4e41c51ff.
+Captured MAIN: a6f440180584c90fe1eb35920985572f36f55d47.
+Producer: https://github.com/kusennjp1-ai/screener/actions/runs/40213800277/attempts/1
+Immutable artifact 12607700565, 19617406 bytes; SHA256 9d8a9d386f18455e3cf09ddf827f1cfe76727429a8c549abd3c4ef93bee374d3.
 
-Official producer and immutable package verification succeeded before this review. All134 actual MAIN screenshot references (118 distinct PNG byte sets) were freshly viewed in20 contact sheets. The MAIN ADI expanded annotations390, desktop market overview, NVDA selection and AAOI financial evidence were additionally inspected at original resolution. This is not a reused PR review, human usability study or native iOS test. Each exact PNG SHA and per-screen four-axis reasons/checks are in the adjacent JSON.
+The official producer, completion, source inventory, all PNG hashes and downloaded CSV evidence were verified before this record was written. All 136 current screenshot references were inspected: 92 references are byte-identical by SHA256 to images already inspected from 3a0f2248bc7227323efdee1b31b69ccb486847fe in 26 contact sheets. All 44 changed current references were freshly inspected in desktop-01 through desktop-09 and mobile-01 through mobile-02. The light/dark collapsed header remains visible and desktop inline chart controls no longer have a redundant disclosure. Financial prose density is retained as a cosmetic follow-up. This is AI pixel inspection, not a native iOS usability study.
 
-## Findings
+This is AI-assisted pixel inspection, not a human usability study or native iOS test. Each exact screenshot hash and four-axis judgement is recorded in the adjacent JSON. Pixels alone do not certify financial truth, freshness, browser interaction or public deployment.
 
-No material visible-screening blocker was observed in this exact MAIN capture. VCP T4/T5/T6 labels are separated with visible connecting lines. Annotation boxes still cover portions of historical candles, but final price candles, axes, visible price/zone legends and the volume pane remain readable; the annotation control is visibly available. Interaction evidence belongs to the authenticated functional capture, not to static pixels.
+## Visible findings
 
-MSM explicitly withholds the RS line when its benchmark is unknown. ADI and TGTX label the SPY RS line separately from RS ranking. Unknown financial conditions remain unknown. Dates and captured evaluation times are preserved, not rewritten to look current.
+The mobile market map, chart-first detail and VCP LAB share a three-destination bottom navigation. The separate previous/save/next row remains visible in detail. Market-map counts and RS medians explicitly identify their population and are not presented as market returns.
 
-The390 initial detail retains price124.09, RS75, volume0.86x, daily2/7 with unmet5/unknown0, seven state glyphs and five gates. Only part of the price pane is visible initially, not all three panes. The feed is closer to reference03, but nested cards and summary density are still a hybrid terminal/feed design rather than a pixel-identical reproduction.
+The collapsed desktop judgment heading is retained without overlapping its actions. The desktop chart uses its measured width, and the redundant desktop disclosure is absent. Short chart captures retain the date axis with the tools open. VCP labels have visible leader lines and separated text; they still cover some historical candle pixels, so the annotation control remains useful.
 
-Market displays the1861 liquid-price cohort separately from the4420/5966 approximate high/low cohort. Distribution-day data is explicitly absent, not zero. Desktop sector cells show counts and unknown hatching; the mobile heatmap is below the first viewport. This aesthetic density limitation is retained, not hidden behind a high score.
+MSM explicitly withholds the unavailable RS benchmark. ADI and TGTX label SPY relative strength separately from rank. Financial evidence that is missing, stale or incomplete stays unknown; selection, purchase conditions and price position are separate. The recorded financial retrieval dates and capture evaluation times are preserved.
 
-## Honest retained assessment
+## Retained limitations
 
-Raw design7.6–7.8, usability8.0, originality7.0, content8.2. Cosmetic/originality shortcomings are declared non-screening aesthetic findings. No score was raised to meet8.0. Strict image acceptance therefore remains failed; the existing scoped policy may classify only the documented aesthetic findings as advisory.
+Financial and historical evidence views remain visually dense (design 7.6 or 7.8), and the familiar UI conventions score originality 7.2. Those findings are recorded as non-screening aesthetic warnings rather than raising scores to meet 8.0. No material visible screening blocker was observed in the inspected regions.
 
-The producer's8 strict performance warnings remain unchanged:
-- 1440: Q1 method switch 1000ms > 480ms
+The original strict performance results remain unchanged; the existing scoped policy classifies the following as deferred warnings:
+- 1440: Q1 method switch 602ms > 480ms
 - 1440: P1 exact limits not met (3500ms / 400ms / 200ms)
-- 390: Q1 method switch 584ms > 480ms
+- 390: Q1 method switch 617ms > 480ms
 - 390: P1 exact limits not met (3500ms / 400ms / 200ms)
-- 1440: D9 first paint opportunity 87.6ms > 50ms
-- 1440: D9 run 1: first frame 87.60000000009313ms (limit 50ms)
-- 390: D9 first paint opportunity 83.5ms > 50ms
-- 390: D9 run 1: first frame 83.5ms (limit 50ms)
+- 1440: D9 first paint opportunity 84.5ms > 50ms
+- 1440: D9 run 1: first frame 84.5ms (limit 50ms)
+- 390: D9 first paint opportunity 83.7ms > 50ms
+- 390: D9 run 1: first frame 83.69999999995343ms (limit 50ms)
 
-Functional evidence was separately verified; pixels alone do not certify numerical truth, financial freshness, browser behavior or public deployment. This historical-image review grants no financial admission, changes no data clock and does not claim a new capture. The final publisher must still validate current data and existing qualification/publication guards.
-
-Only prior-capture-review.json and prior-capture-review.md are changed. They are the two existing regular-file source inventory exclusions; no renderer, metric, threshold, workflow, lock or other source was edited.
+This review grants no financial admission and does not change dates, metrics, performance budgets, qualification rules or source data. The publisher must independently validate current publication and data guards. Only the two existing prior-capture review records change in the review-only commit.
