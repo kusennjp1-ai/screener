@@ -26,7 +26,7 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   const model = useMemo(() => leaderChartModel({bars:priceData,symbol,date,rsLine:rsLineData,timeframe}), [priceData,symbol,date,rsLineData,timeframe]);
   useLayoutEffect(()=>{
     const plot=plotRef.current;
-    if(!smallScreen || !plot)return undefined;
+    if(!plot)return undefined;
     const measure=()=>{const width=plot.getBoundingClientRect().width;if(width>0)setMeasuredWidth(width);};
     measure();
     if(typeof ResizeObserver==='undefined')return undefined;
@@ -41,7 +41,7 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   },[technicalEvidence,row,payload,symbol,date]);
   if (model.error) return <div className="leader-svg-warning" role="alert">チャート：データなし。{model.error}</div>;
   const all=model.candlesticks,end=Math.max(1,all.length-Math.min(offset,Math.max(0,all.length-2))),start=Math.max(0,end-count),bars=all.slice(start,end);
-  const width=smallScreen?(measuredWidth||360):compact?440:760,left=8,right=smallScreen?55:62,plotWidth=width-left-right;
+  const width=measuredWidth||(smallScreen?360:compact?440:760),left=8,right=smallScreen?55:62,plotWidth=width-left-right;
   const chartHeight=compact||expanded?height:Math.max(390,Math.min(height,560)),dense=compact||(expanded&&height<390);
   const priceTop=26,priceBottom=chartHeight*(compact?.45:dense?.5:.55),volumeTop=priceBottom+(dense?22:34),volumeBottom=chartHeight*(compact?.66:dense?.72:.75),rsTop=volumeBottom+(dense?22:32),rsBottom=chartHeight-32;
   const x=index=>left+(index+.5)/bars.length*plotWidth,candleWidth=Math.max(.8,Math.min(7,plotWidth/bars.length*.65));
@@ -92,7 +92,7 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
       </select>:ranges.map(([label,value])=><button key={label} type="button" onClick={()=>range(value)}>{label}</button>)}
       <div className="leader-svg-extra-controls" style={!smallScreen?{display:'contents'}:undefined}>
       <details open={smallScreen?undefined:true}>
-      {smallScreen&&<summary>操作</summary>}
+      <summary hidden={!smallScreen}>操作</summary>
       <button type="button" aria-label="表示期間を拡大" onClick={()=>zoom(.7)}>＋</button><button type="button" aria-label="表示期間を縮小" onClick={()=>zoom(1.4)}>−</button>
       <button type="button" aria-label="過去の期間へ" disabled={start===0} onClick={()=>shift(1)}>←</button><button type="button" aria-label="新しい期間へ" disabled={offset===0} onClick={()=>shift(-1)}>→</button>
       <button type="button" onClick={()=>{setCount(timeframe==='weekly'?52:smallScreen?63:126);setOffset(0);}}>リセット</button>

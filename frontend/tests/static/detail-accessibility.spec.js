@@ -116,6 +116,9 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   const opener=detail.getByRole('button',{name:'日次チャートを分析'});
   await opener.focus();await page.keyboard.press('Enter');
   const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();
+  // SVG text must keep its natural proportions at desktop and mobile widths.
+  await expect.poll(()=>dialog.locator('svg[data-chart-plot]').evaluate(node=>Math.abs(node.viewBox.baseVal.width-node.getBoundingClientRect().width))).toBeLessThan(1);
+  if(width>=900)await expect(dialog.locator('.leader-svg-extra-controls summary')).toBeHidden();
   if(width===375){
     await page.setViewportSize({width:390,height:568});
     // Opening the mobile tools must still leave the real date axis visible.
