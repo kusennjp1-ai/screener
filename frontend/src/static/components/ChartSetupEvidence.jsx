@@ -5,7 +5,7 @@ const number = value => Number.isFinite(value) ? value.toLocaleString('ja-JP', {
 
 // These are the same measured legs used by the chart overlay. This panel does
 // not run another VCP detector or turn retrospective annotations into signals.
-export default function ChartSetupEvidence({ annotations, symbol, date, warning, daily = true, detailed, onToggle, onFocus }) {
+export default function ChartSetupEvidence({ annotations, symbol, date, warning, daily = true, detailed, onToggle, onFocus, measured = false }) {
   const [selected, setSelected] = useState(null);
   const [expanded, setExpanded] = useState(false);
   const usable = !warning && daily;
@@ -19,7 +19,7 @@ export default function ChartSetupEvidence({ annotations, symbol, date, warning,
   const active = legs[activeIndex >= 0 ? activeIndex : legs.length - 1];
   const activeNumber = activeIndex >= 0 ? activeIndex + 1 : legs.length;
   const candidate = usable && annotations.candidate;
-  const label = candidate ? 'VCP候補を検出' : base ? 'ベース候補のみ' : '収縮条件は未確認';
+  const label = candidate ? measured ? '値幅の縮小を確認' : 'VCP候補を検出' : base ? 'ベース候補のみ' : '収縮条件は未確認';
   const maximum = Math.max(1, ...legs.map(leg => leg.depthPct));
   return <section className="chart-setup-evidence" data-collapsed={!expanded} aria-label={`${symbol} のVCP分析`}>
     <header className="chart-setup-head">
@@ -30,8 +30,8 @@ export default function ChartSetupEvidence({ annotations, symbol, date, warning,
     <button type="button" className="mobile-vcp-toggle" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '根拠を閉じる ↓' : 'VCPの根拠を開く ↑'}</button>
     {!usable ? <p className="chart-setup-unavailable">{warning ? '日足の整合性を確認できないため、VCPの図解と数値を表示できません。' : 'VCPの収縮区間は日足で確認できます。日足に切り替えてください。'}</p> : <>
       <div className="chart-setup-metrics">
-        <div><span>収縮区間</span><strong>{legs.length ? <>{legs.length}<small> 回</small></> : '未確認'}</strong><small>{legs.length ? '連続する押しの値幅が縮小' : base ? '連続した縮小を確認できず' : 'ベース候補を確認できず'}</small></div>
-        <div><span>最終区間の値幅</span><strong>{last ? <>{last.depthPct.toFixed(1)}<small> %</small></> : '—'}</strong><small>探索設定：10%以内</small></div>
+        <div><span>収縮区間</span><strong>{legs.length ? <>{legs.length}<small> 回</small></> : '未確認'}</strong><small>{legs.length ? measured ? '日中高値から安値まで実測' : '連続する押しの値幅が縮小' : base ? '連続した縮小を確認できず' : 'ベース候補を確認できず'}</small></div>
+        <div><span>最終区間の値幅</span><strong>{last ? <>{last.depthPct.toFixed(1)}<small> %</small></> : '—'}</strong><small>{measured ? '縮小の成立とは別の測定値' : '探索設定：10%以内'}</small></div>
         <div><span>区間平均出来高</span><strong>{lastVolumeRatio !== null ? <>{Math.round(lastVolumeRatio * 100)}<small> %</small></> : '—'}</strong><small>{volumeKnown ? `C1比 · ${volumeShrinks ? '各区間で減少' : '順次減少は未確認'}` : '収縮区間の比較データなし'}</small></div>
       </div>
       {legs.length > 0 ? <>
@@ -45,7 +45,7 @@ export default function ChartSetupEvidence({ annotations, symbol, date, warning,
         </div>
         <div className="chart-contraction-detail" aria-live="polite"><span>C{activeNumber}</span><p>{active.start} → {active.end}<br /><span>高値 {number(active.high)} / 安値 {number(active.low)} · 区間平均出来高 {number(active.volume)}</span></p></div>
       </> : <p className="chart-setup-unavailable">{annotations.summary} 条件を確認できない区間に収縮線は描きません。</p>}
-      {candidate && <div className="chart-setup-observation"><span>収縮高値 <strong>{number(annotations.pivot)}</strong></span><span>{annotations.breakout ? `${annotations.breakout.date} · ${annotations.breakout.label}` : '収縮高値の上抜けは未確認'}</span></div>}
+      {candidate && !measured && <div className="chart-setup-observation"><span>収縮高値 <strong>{number(annotations.pivot)}</strong></span><span>{annotations.breakout ? `${annotations.breakout.date} · ${annotations.breakout.label}` : '収縮高値の上抜けは未確認'}</span></div>}
     </>}
     <p className="chart-setup-note">過去の日足からの形状候補です。VCPの成立や購入条件の通過を示すものではありません。出来高は区間平均の比較で、最終日の出来高枯渇とは別です。</p>
   </section>;

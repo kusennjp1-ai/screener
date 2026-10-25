@@ -12,7 +12,10 @@ interactive mockup and chart image were shown before implementation.
   reachable through the expand control. Candidates link to the real chart.
 - Market context links to the existing breadth observations. Bottom navigation
   returns to market, chart or watchlist, including from other routes.
-- Charts retain the same verified price payload and detector. Period and zoom
+- Charts use the current main SVG renderer and verified price payload. The VCP
+  lab consumes the same bookTechnicalEvidence intervals as the plotted guides.
+  A measured interval is not a passing VCP: sequential depth contraction and
+  interval-average volume contraction remain distinct observations. Period and zoom
   controls are grouped in a disclosure on mobile. VCP intervals stay accessible;
   measured detail expands below the plot. A selected interval focuses the exact
   plotted dates. Unknown data, weekly mode and identity errors remain explicit.
@@ -36,3 +39,12 @@ zero ratings, qualification counts, rounding and sector-filtered navigation.
 The mobile list regression enters through the new map and checks existing filter,
 keyboard focus and injected safe-area behavior against the 56px header plus 8px
 focus clearance. Injected insets are not a substitute for native iOS testing.
+
+## Main integration
+
+Integrated main at cade2bf. The plot measures its actual mobile width so axis
+labels retain their intended font size. Selecting a VCP interval focuses the
+measured start/end dates with context and highlights the corresponding guide.
+Publication or symbol identity changes reset the selected interval and viewport.
+Weekly mode withholds the daily VCP lab. Financial and qualification details
+follow the chart on mobile, keeping the first view focused on price action.

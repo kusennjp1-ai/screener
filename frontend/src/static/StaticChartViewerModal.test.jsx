@@ -17,7 +17,7 @@ const chartControlsCss = readFileSync(join(dirname(fileURLToPath(import.meta.url
 const chartSpy = vi.fn();
 const sidebarSpy = vi.fn();
 
-vi.mock('../components/Charts/CandlestickChart', () => ({
+vi.mock('./components/LeaderEvidenceChart', () => ({
   default: (props) => {
     chartSpy(props);
     return <><div className="research-chart-controls" data-testid="chart-control-actions">{props.researchActions}</div><div className="chart-research-meta" data-testid="chart-meta-actions">{props.researchMetaActions}</div><div data-testid="static-candlestick-chart" data-chart-symbol={props.symbol} style={{height:props.height}}>{props.symbol}:{props.priceData?.length || 0}</div></>;
@@ -205,7 +205,7 @@ describe('StaticChartViewerModal', () => {
     expect(legend).toHaveTextContent('SMA50日 / 10週');
     expect(screen.getByTestId('static-candlestick-chart').compareDocumentPosition(legend) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.getByTestId('mobile-chart-interaction')).toHaveTextContent('左スワイプ：次 ／ 右：前');
-    expect(screen.getByRole('button', { name: 'チャート操作（拡大・移動）' })).toHaveStyle({ minHeight: '44px' });
+    expect(screen.getByRole('button', { name: '銘柄スワイプを停止' })).toHaveStyle({ minHeight: '44px' });
 
     expect(chartSpy).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -240,11 +240,11 @@ describe('StaticChartViewerModal', () => {
     expect(await screen.findByText('2 / 2 銘柄')).toBeInTheDocument();
     swipe(330, 110);
     expect(await screen.findByText('1 / 2 銘柄')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'チャート操作（拡大・移動）' }));
+    fireEvent.click(screen.getByRole('button', { name: '銘柄スワイプを停止' }));
     swipe(80, 110);
     expect(screen.getByText('1 / 2 銘柄')).toBeInTheDocument();
     expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: true, height: 420 }));
-    expect(screen.getByTestId('mobile-chart-interaction')).toHaveTextContent('チャートを拡大・移動中');
+    expect(screen.getByTestId('mobile-chart-interaction')).toHaveTextContent('銘柄スワイプ停止中');
     fireEvent.click(screen.getByRole('button', { name: '銘柄スワイプに戻る' }));
     expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({ interactive: false }));
   }, 10000);
@@ -292,9 +292,9 @@ it.each([false, true])('keeps the complete mobile warning and swipe controls whe
   expect(interaction.querySelector('span').classList.contains('sr-only')).toBe(short);
   expect(interaction).toHaveTextContent('左スワイプ：次 ／ 右：前');
   expect(getComputedStyle(interaction).fontSize).toBe('12px');
-  expect(screen.getByRole('button',{name:'チャート操作（拡大・移動）'})).toHaveStyle({minHeight:'44px'});
-  fireEvent.click(screen.getByRole('button',{name:'チャート操作（拡大・移動）'}));
-  expect(interaction).toHaveTextContent('チャートを拡大・移動中');
+  expect(screen.getByRole('button',{name:'銘柄スワイプを停止'})).toHaveStyle({minHeight:'44px'});
+  fireEvent.click(screen.getByRole('button',{name:'銘柄スワイプを停止'}));
+  expect(interaction).toHaveTextContent('銘柄スワイプ停止中');
   expect(getComputedStyle(interaction).fontSize).toBe('12px');
   expect(screen.getByRole('button',{name:'銘柄スワイプに戻る'})).toHaveAttribute('aria-pressed','true');
   expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({interactive:true}));
@@ -312,7 +312,7 @@ it('preserves pan mode and keyboard focus as short-phone controls move between r
   const payload = {symbol:'FIT',as_of_date:'2026-10-01',bars:[{date:'2026-10-01',close:104}],stock_data:{symbol:'FIT',current_price:104,se_pivot_price:100}};
   const { unmount } = renderModal(props, payload);
   await screen.findByTestId('static-candlestick-chart');
-  fireEvent.click(screen.getByRole('button',{name:'チャート操作（拡大・移動）'}));
+  fireEvent.click(screen.getByRole('button',{name:'銘柄スワイプを停止'}));
   act(() => screen.getByRole('button',{name:'銘柄スワイプに戻る'}).focus());
   for (const short of [true, false, true]) {
     act(() => { heightQuery.matches = short; heightListeners.forEach(callback => callback()); });

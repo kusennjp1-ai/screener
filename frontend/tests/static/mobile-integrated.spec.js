@@ -1,16 +1,16 @@
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
+import { readFileSync } from 'node:fs';
+const exchangeCalendar = JSON.parse(readFileSync(new URL('../../src/static/__fixtures__/nyse-sessions-2024-2026.json', import.meta.url), 'utf8'));
+const calendarAt = date => ({...exchangeCalendar, as_of_date:date, range_end:date, sessions:exchangeCalendar.sessions.filter(day=>day<=date)});
 import { FINANCIAL_TEST_DATE as date, FINANCIAL_TEST_NOW as now } from '../../src/static/testFinancialFixture.js';
 
 // Synthetic test-only shape from bookAnnotations.test.js, with trading dates
 // and a longer prefix to exercise the real inline/modal chart implementation.
 const points = [[0,50],[60,100],[70,80],[80,98],[88,88],[96,96],[104,91],[110,99]];
-const dates = [], day = new Date(`${date}T00:00:00Z`);
-while (dates.length < 280) {
-  if (![0,6].includes(day.getUTCDay())) dates.unshift(day.toISOString().slice(0,10));
-  day.setUTCDate(day.getUTCDate() - 1);
-}
+const sessionCalendar = calendarAt(date);
+const dates = sessionCalendar.sessions.slice(-280);
 const bars = dates.map((session, index) => {
   const shapeIndex = index - 169;
   let close = 20 + index * 30 / 169;
@@ -32,7 +32,7 @@ for (const width of [320,390]) test(`mobile integrated map, chart, VCP and watch
   const file=new URL(route.request().url()).pathname.split('/').pop();
   const payload=file==='manifest.json'?{as_of_date:date,generated_at:now,research_generation:'integrated-mobile-fixture',assets:{research:{path:'research.json'}}}
    :file==='research.json'?{as_of_date:date,rows:[{...row,gics_sector:'Technology'},{...row,symbol:'SECOND',gics_sector:'Healthcare',chart_path:'SECOND.json'}]}
-   :file.endsWith('.json')&&['VCPTEST.json','SECOND.json'].includes(file)?{symbol:file.replace('.json',''),as_of_date:date,bars,stock_data:row,rs_line:[]}:{};
+   :file.endsWith('.json')&&['VCPTEST.json','SECOND.json'].includes(file)?{symbol:file.replace('.json',''),as_of_date:date,bars,session_calendar:sessionCalendar,stock_data:row,rs_line:[]}:{};
   return route.fulfill({json:payload});
  });
  await page.goto('/');
@@ -40,7 +40,7 @@ for (const width of [320,390]) test(`mobile integrated map, chart, VCP and watch
  await expect(page.getByRole('button',{name:/情報技術.*RS中央値/})).toBeVisible();
  await page.getByRole('button',{name:'VCPTEST のチャートを確認'}).click();
  const panel=page.getByRole('region',{name:'VCPTEST のVCP分析'});
- await expect(panel).toContainText('VCP候補を検出');
+ await expect(panel).toContainText('値幅の縮小を確認');
  await panel.getByRole('button',{name:'VCPの根拠を開く ↑'}).click();
  await expect(panel.locator('.chart-setup-metrics')).toBeVisible();
  await panel.getByRole('button',{name:'C1 の収縮区間を表示'}).click();

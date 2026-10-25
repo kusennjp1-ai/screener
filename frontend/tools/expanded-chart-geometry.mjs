@@ -1,13 +1,14 @@
 // Executed in the browser against the actual expanded chart, including the
-// Lightweight Charts date-axis row. Canvas presence alone cannot prove fit.
+// renderer-specific real date-axis row. Container presence alone cannot prove fit.
 export function expandedChartGeometry(dialog) {
   const plot = dialog.querySelector('[data-chart-symbol]');
   const scroll = dialog.querySelector('[data-testid="expanded-chart-scroll"]');
   const footer = dialog.querySelector('[data-testid="expanded-chart-footer"]');
   const close = dialog.querySelector('button[aria-label="チャートを閉じる"]');
   const warning = dialog.querySelector('[data-testid="expanded-chart-warning"]');
+  const svg = plot?.matches('svg[data-chart-plot]') ? plot : plot?.querySelector('svg[data-chart-plot]');
   const table = plot?.querySelector('.tv-lightweight-charts > table');
-  const dateAxis = table?.rows[table.rows.length - 1];
+  const dateAxis = svg ? svg.querySelector('[data-chart-date-axis]') : table?.rows[table.rows.length - 1];
   const rect = node => {
     if (!node) return null;
     const { top, bottom, left, right, width, height } = node.getBoundingClientRect();
@@ -30,10 +31,12 @@ export function expandedChartGeometry(dialog) {
     return [.15, .5, .85].every(fraction => node.contains(document.elementFromPoint(box.left + box.width * fraction, box.top + box.height / 2)));
   };
   return {
+    renderer: svg ? 'leader-svg-v1' : 'lightweight-canvas',
+    date_axis_labels: svg ? [...(dateAxis?.querySelectorAll('text') || [])].map(node => node.textContent) : null,
     viewport: { width: innerWidth, height: innerHeight },
     plot: rect(plot), date_axis: rect(dateAxis), footer: rect(footer), content: rect(scroll),
     scroll_top: scroll?.scrollTop, scroll_height: scroll?.scrollHeight, content_client_height: scroll?.clientHeight,
-    plot_visible: visible(plot), date_axis_visible: visible(dateAxis), date_axis_hit: hit(dateAxis),
+    plot_visible: visible(plot), date_axis_visible: visible(dateAxis), date_axis_hit: svg ? Boolean(dateAxis && [...dateAxis.querySelectorAll('text')].length >= 2 && [...dateAxis.querySelectorAll('text')].every(hit)) : hit(dateAxis),
     date_axis_canvases: dateAxis?.querySelectorAll('canvas').length || 0,
     footer_visible: visible(footer), footer_hit: hit(footer), footer_position: footer && getComputedStyle(footer).position,
     footer_placement: footer?.dataset.placement || 'footer', navigation_count: Number(footer?.dataset.navigationCount || 0), close: rect(close),
@@ -45,7 +48,10 @@ export function expandedChartGeometry(dialog) {
 
 export function checkExpandedChartGeometry(geometry, check, label, { fullChart = false } = {}) {
   check(Boolean(geometry.plot && geometry.plot.height >= 300), `${label}: expanded price/RS/volume plot is missing or shorter than 300px`);
-  check(geometry.date_axis_canvases >= 1 && geometry.date_axis?.height >= 16, `${label}: real chart date-axis row is missing or collapsed`);
+  const svgAxis = geometry.renderer === 'leader-svg-v1';
+  const axisContent = svgAxis ? Array.isArray(geometry.date_axis_labels) && geometry.date_axis_labels.length >= 2 && geometry.date_axis_labels.every(text => /^\d{2}-\d{2}$/.test(text)) : geometry.date_axis_canvases >= 1;
+  check(axisContent && geometry.date_axis?.height >= 16, `${label}: real chart date-axis row is missing or collapsed`);
+  if (geometry.renderer !== undefined) check(['leader-svg-v1', 'lightweight-canvas'].includes(geometry.renderer), `${label}: unknown chart renderer`);
   const headerNavigation = geometry.footer_placement === 'header';
   const overlaps = (a, b) => a && b && a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
   if (geometry.warning) check(geometry.warning_visible && !overlaps(geometry.warning, geometry.close) && !overlaps(geometry.warning, geometry.footer), `${label}: detail failure warning is clipped or covered by navigation`);

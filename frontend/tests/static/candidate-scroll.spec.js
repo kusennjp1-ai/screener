@@ -48,15 +48,16 @@ async function expectCompletePost(page,row){
  return geometry;
 }
 async function expectGlossary(page,info,label){
- const summary=page.locator('.candidate-glossary > summary');
+ const summary=page.getByRole('button',{name:'一覧の見方',exact:true});
+ const size=await summary.boundingBox();expect(size.width).toBeGreaterThanOrEqual(44);expect(size.height).toBeGreaterThanOrEqual(44);
  await summary.scrollIntoViewIfNeeded();await summary.focus();await expect(summary).toBeFocused();
- await page.keyboard.press('Enter');await expect(page.locator('.candidate-glossary')).toHaveAttribute('open','');
+ await page.keyboard.press('Enter');await expect(summary).toHaveAttribute('aria-expanded','true');
  const definitions=page.locator('.candidate-glossary dl');await expect(definitions).toBeVisible();
  await definitions.scrollIntoViewIfNeeded();
  expect(await definitions.evaluate(node=>node.scrollWidth<=node.clientWidth+1)).toBe(true);
  await page.screenshot({path:info.outputPath(`${label}-glossary-open.png`)});
  await summary.scrollIntoViewIfNeeded();await summary.focus();await page.keyboard.press('Space');
- await expect(page.locator('.candidate-glossary')).not.toHaveAttribute('open');await expect(summary).toBeFocused();
+ await expect(summary).toHaveAttribute('aria-expanded','false');await expect(definitions).toBeHidden();await expect(summary).toBeFocused();
  expect((await new AxeBuilder({page}).include('.research-list').withRules(['target-size']).analyze()).violations).toEqual([]);
 }
 // Reference03 replaces the compact sticky table with full-height posts. Keep

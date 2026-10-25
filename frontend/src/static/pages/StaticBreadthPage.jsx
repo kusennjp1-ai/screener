@@ -1,4 +1,5 @@
 import { publicationQueryIdentity } from '../staticPublication';
+import ConnectedLeaderMarketOverview from '../components/LeaderMarketOverview';
 import ConnectionStatus from '../components/ConnectionStatus';
 import SectorStrength from '../components/SectorStrength';
 import { formatPublished } from '../researchPresentation';
@@ -147,6 +148,7 @@ function StaticBreadthPage() {
         {marketEntry.market==='US' && <Tab label="業種の強さ" sx={{minHeight:44}} />}
       </Tabs>
 
+      {selectedTab===0 && marketEntry.market==='US' && <ConnectedLeaderMarketOverview marketEntry={marketEntry} generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at} breadthEvidence={mismatch?undefined:payload.book_market_evidence}/> }
       {selectedTab !== 2 && unavailable && <Alert data-testid="breadth-unavailable" severity={breadthQuery.isError?'error':'info'} action={<Button onClick={()=>breadthQuery.refetch()}>再試行</Button>}>{breadthQuery.data?.message || '騰落データを取得できません。業種の強さは別タブで確認できます。'}</Alert>}
       {selectedTab === 0 && !unavailable && (
         <>

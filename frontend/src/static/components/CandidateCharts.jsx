@@ -2,7 +2,7 @@ import { instrumentApplicability, instrumentApplicabilityLabel } from '../instru
 import { memo, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Alert, Button, Paper, useMediaQuery } from '@mui/material';
-import CandlestickChart from '../../components/Charts/CandlestickChart';
+import CandlestickChart from './LeaderEvidenceChart';
 import { chartHistoryWarning, invalidChartHistory } from '../../components/Charts/researchChartModel';
 import { fetchStaticChartPayload, staticChartKeys } from '../chartClient';
 import { entryReadiness } from '../entryReadiness';
@@ -45,7 +45,7 @@ const Card = memo(function ComparisonCard({ item, date, generation, method, near
           : !row.chart_path ? <Alert severity="info">チャート未配信。買い形状は確認できません。</Alert>
             : query.isSuccess && !bars?.length ? <Alert severity="info">日足データが不足しています。買い形状は確認できません。</Alert>
         : invalidHistory ? <Alert severity="warning">日足を検証できません：{row.technical_audit?.errors?.[0] || (bars?.length && bars.at(-1).date !== date ? '最終日足が分析日と不一致' : '取引所営業日を含む現行の日足検証が未確認')}。現在の比較チャートには使用しません。</Alert>
-              : visible && !paused && bars?.length ? <CandlestickChart key={row.symbol} symbol={row.symbol} priceData={bars} rsLineData={query.data.rs_line || []} rsRatingValue={row.rs_rating} compact researchView externalResearchLegend comparisonSessions={sessions} interactive={false} pivotPrice={plan.pivot} pivotLabel="共通ピボット" buyCeiling={plan.upper} stopPrice={plan.stopExample} height={smallScreen ? 240 : 220} />
+              : visible && !paused && bars?.length ? <CandlestickChart key={row.symbol} symbol={row.symbol} date={date} generation={generation} row={row} payload={query.data} benchmarkSymbol={query.data.benchmark_symbol} priceData={bars} rsLineData={query.data.rs_line || []} rsRatingValue={row.rs_rating} compact researchView externalResearchLegend comparisonSessions={sessions} interactive={false} pivotPrice={plan.pivot} pivotLabel="共通ピボット" buyCeiling={plan.upper} stopPrice={plan.stopExample} height={smallScreen ? 240 : 220} />
                 : <div className="comparison-skeleton" role="status" aria-label={`${row.symbol} チャートを読み込み中`}><span /><span /><span /></div>}
     </div>
     <dl className="comparison-metrics" aria-label="価格・RS・出来高の凡例"><div><dt><span className="comparison-level-line" aria-hidden="true"/>上限</dt><dd className="comparison-upper">{levelPrice(plan.upper)}</dd></div><div><dt><span className="comparison-level-line" aria-hidden="true"/>ピボット</dt><dd className="comparison-pivot">{levelPrice(plan.pivot)}</dd></div><div><dt><span className="comparison-level-line comparison-level-stop" aria-hidden="true"/>損切り例</dt><dd className="comparison-stop">{levelPrice(plan.stopExample)}</dd></div><div><dt><span className="comparison-rs-key" aria-label={query.data?.rs_line?.length ? 'RS線' : 'RS線未配信'}>{query.data?.rs_line?.length ? 'RS線' : 'RS—'}</span> / 出来高</dt><dd aria-label={`RS評価 ${Number.isFinite(row.rs_rating) ? row.rs_rating.toFixed(0) : '未確認'}、出来高比 ${times(volume)}`}>評{Number.isFinite(row.rs_rating) ? row.rs_rating.toFixed(0) : '—'} · {times(volume)}</dd></div><div><dt>購入条件</dt><dd>{ready.passed}/{ready.total}</dd></div></dl>

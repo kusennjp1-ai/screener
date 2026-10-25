@@ -1,3 +1,4 @@
+import { expectSvgChart } from './svg-chart-observation.js';
 import { test,expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import AxeBuilder from '@axe-core/playwright';
@@ -26,10 +27,11 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
     if(file==='workbench.json'){fullRequests++;return route.fulfill({body:raw,contentType:'application/json'});}
     const row=rows.find(r=>`${r.symbol}.json`===file);
     const payload=file==='manifest.json'?{generated_at:`${date}T23:00:00Z`,research_generation:'test',as_of_date:date,default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'},workbench:fullRef,workbench_summary:{path:'workbench-summary.json',sha256:summaryHash,snapshot_id:'test'}},pages:{breadth:{path:'breadth.json'}}}}}
-      :file==='research.json'?{as_of_date:date,rows}:file==='breadth.json'?{payload:{current:{date},chart_data:[]}}:row?{symbol:row.symbol,as_of_date:date,bars:row.symbol==='MRNA'?[]:bars,rs_line:bars.map((b,i)=>({time:b.date,value:1+i*.002})),stock_data:row}:{};
+      :file==='research.json'?{as_of_date:date,rows}:file==='breadth.json'?{payload:{current:{date},chart_data:[]}}:row?{symbol:row.symbol,as_of_date:date,bars:row.symbol==='MRNA'?[]:bars,benchmark_symbol:'SPY',rs_line:bars.map((b,i)=>({time:b.date,value:1+i*.002})),stock_data:row}:{};
     await route.fulfill({json:payload});
   });
   await page.goto('/');
+  if(width===390)await page.getByRole('button',{name:'一覧・絞り込みで探す →'}).click();
   await expect(page.locator('.changes-desktop')).toContainText('新たに通過 7');
   expect(fullRequests).toBe(0);
   await page.getByRole('button',{name:'候補の日次変化',exact:true}).click();
@@ -46,12 +48,12 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
   const navigation=page.getByRole('navigation',{name:width===390?'モバイルナビゲーション':'メインナビゲーション'});
   await navigation.getByRole('link',{name:'比較',exact:true}).click();
   await expect(page.getByRole('heading',{name:'買い位置を比較する'})).toBeVisible();
-  await expect(page.getByRole('article',{name:'AMD 比較チャート'}).locator('canvas').first()).toBeVisible();
-  expect(await page.locator('.tv-lightweight-charts').count()).toBeLessThanOrEqual(6);
-  const range=page.getByRole('article',{name:'AMD 比較チャート'}).getByTestId('comparison-visible-range');
-  await expect(range).toContainText('2026-');const before=await range.textContent();
+  await expectSvgChart(page.getByRole('article',{name:'AMD 比較チャート'}),{symbol:'AMD',bars,rs:'present'});
+  expect(await page.locator('.comparison-grid .leader-evidence-chart svg').count()).toBeLessThanOrEqual(6);
+  const range=page.getByRole('article',{name:'AMD 比較チャート'}).locator('.leader-evidence-chart svg[role="img"]');
+  await expect(range).toHaveAttribute('aria-label',/2026-/);const before=await range.getAttribute('aria-label');
   await page.getByRole('combobox',{name:'全チャートの期間',exact:true}).selectOption('126');
-  await expect(range).not.toHaveText(before);
+  await expect(range).not.toHaveAttribute('aria-label',before);await expectSvgChart(page.getByRole('article',{name:'AMD 比較チャート'}),{symbol:'AMD',bars,rs:'present'});
   await page.getByRole('button',{name:'AMD を分析',exact:true}).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   expect(await page.locator('.comparison-canvas[data-active-chart="true"]').count()).toBe(0);

@@ -1,3 +1,5 @@
+import { useMediaQuery } from '@mui/material';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render,screen,cleanup,within,fireEvent,waitFor } from '@testing-library/react';
 import { afterEach,expect,it,vi } from 'vitest';
 import { buildFinancialEvidencePresentation, FINANCIAL_PRESENTATION_SCHEMA } from '../financialEvidencePresentation';
@@ -9,9 +11,10 @@ import ResearchDetail from './ResearchDetail';
 import { financialSourceContext, trendTemplateSourceContext } from '../bookSourceContext';
 import { nativeAnnualFixture } from '../../test/fixtures/nativeAnnual';
 import { withFinancialProof } from '../testFinancialFixture';
+vi.mock('@mui/material', async importOriginal => ({...await importOriginal(),useMediaQuery:vi.fn(()=>false)}));
 vi.mock('../financialEvidencePresentation', { spy: true });
 vi.mock('./ResearchChart',()=>({default:()=> <div data-testid="research-chart"/>}));
-afterEach(() => { cleanup(); vi.useRealTimers(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.mocked(useMediaQuery).mockReturnValue(false); });
 const props={method:'minervini',date:'2026-10-01',market:{cap:.5,label:'上昇'},now:Date.parse('2026-10-01T22:00:00Z'),watch:[],detail:{}};
 const row={symbol:'MSM',company_name:'MSC Industrial Direct Co Inc',current_price:103.2,se_pivot_price:100};
 it('labels missing financial evidence for the five-symbol exception and retains unknown purchase exclusion',()=>{
@@ -150,7 +153,8 @@ it('keeps financial evidence inside the existing financial tab and retains the c
  const {container}=render(<ResearchDetail {...props} onVerificationToggle={onVerificationToggle} selected={{...row,eps_growth_yy:999,roe:999}}/>);
  const header=container.querySelector('.research-symbol-head');
  expect(header.nextElementSibling).toBe(screen.getByTestId('research-chart'));
- expect(screen.getByTestId('research-chart').nextElementSibling).toContainElement(screen.getByText('アプリ設定と書籍の確認範囲'));
+ expect(screen.getByTestId('research-chart').nextElementSibling).toHaveClass('leader-detail-overview');
+ expect(screen.getByTestId('research-chart').nextElementSibling.nextElementSibling).toContainElement(screen.getByText('アプリ設定と書籍の確認範囲'));
  expect(screen.queryByRole('region',{name:'財務の判定根拠'})).not.toBeInTheDocument();
  expect(screen.getAllByRole('tab').map(tab=>tab.textContent)).toEqual(['判定根拠','購入条件','財務・機関','書籍検証','メモ']);
  fireEvent.click(screen.getByRole('tab',{name:'財務・機関'}));
@@ -248,4 +252,57 @@ it('builds financial presentation only for the open financial tab and refreshes 
  fireEvent.click(screen.getByRole('tab',{name:'財務・機関'}));
  expect(build).toHaveBeenCalledTimes(5);
  expect(build).toHaveBeenLastCalledWith(latest.selected,{method:latest.method,date:latest.date,generation:latest.version,now:latest.now});
+});
+it('opens full Code33 evidence and moves keyboard focus to the book tab',async()=>{
+ const onVerificationToggle=vi.fn();
+ render(<QueryClientProvider client={new QueryClient({defaultOptions:{queries:{retry:false}}})}><ResearchDetail {...props} selected={row} onVerificationToggle={onVerificationToggle}/></QueryClientProvider>);
+ fireEvent.click(screen.getByRole('button',{name:'業績の全根拠を見る'}));
+ await waitFor(()=>expect(screen.getByRole('tab',{name:'書籍検証'})).toHaveFocus());
+ expect(onVerificationToggle).toHaveBeenCalledWith(row.symbol);
+ expect(screen.getByText('業績の連続性と利益の質を確認').closest('details')).toHaveAttribute('open');
+});
+
+it.each(['VCP・形状候補','出来高','市場'])('keeps the %s gate control reference present before tab mounting and focuses selected conditions', async label => {
+ const {container}=render(<ResearchDetail {...props} selected={row}/>);
+ expect(document.getElementById('detail-panel-conditions')).toBeNull();
+ const gate=screen.getByRole('button',{name:new RegExp(`^${label}：`)});
+ const target=document.getElementById(gate.getAttribute('aria-controls'));
+ expect(target).not.toBeNull();
+ expect(target).toHaveAttribute('role','tablist');
+ expect(target).toContainElement(screen.getByRole('tab',{name:'購入条件',exact:true}));
+ fireEvent.click(gate);
+ const tab=screen.getByRole('tab',{name:'購入条件',exact:true});
+ await waitFor(()=>expect(tab).toHaveFocus());
+ expect(tab).toHaveAttribute('aria-selected','true');
+ expect(document.getElementById('detail-panel-conditions')).toBe(screen.getByRole('tabpanel'));
+ for(const button of container.querySelectorAll('.leader-five-gates button[aria-controls]'))expect(document.getElementById(button.getAttribute('aria-controls'))).not.toBeNull();
+});
+
+it('keeps one overview in matching responsive DOM order without losing selected detail state',()=>{
+ const input={...props,selected:row};
+ const view=render(<ResearchDetail {...input}/>);
+ const overview=()=>view.container.querySelector('.leader-detail-overview');
+ const chart=()=>screen.getByTestId('research-chart');
+ expect(chart().nextElementSibling).toBe(overview());
+ expect(view.container.querySelector('.research-symbol-head')).toHaveTextContent('購入条件');
+ expect(view.container.querySelector('.research-symbol-head')).toHaveTextContent('未達');
+ fireEvent.click(screen.getByRole('tab',{name:'メモ'}));
+ fireEvent.change(screen.getByRole('textbox'),{target:{value:'responsive evidence note'}});
+ for(const [step,narrow] of [true,false,true,false].entries()){
+  vi.mocked(useMediaQuery).mockReturnValue(narrow);view.rerender(<ResearchDetail {...input} now={props.now+step+1}/>);
+  expect(view.container.querySelectorAll('.leader-detail-overview')).toHaveLength(1);
+  expect(view.container.querySelectorAll('#leader-trend-template')).toHaveLength(1);
+  expect(view.container.querySelectorAll('#research-detail-tabs')).toHaveLength(1);
+  if(narrow){
+   expect(chart().nextElementSibling).toBe(overview());
+   expect(view.container.querySelector('.symbol-qualification-context')).toHaveTextContent('価格位置は購入可否と別です。');
+   expect(view.container.querySelector('.symbol-qualification-context')).not.toHaveTextContent('未達');
+   expect(overview().querySelector('.leader-detail-verdict')).toHaveTextContent(/未達.*未確認/);
+  }
+  else expect(chart().nextElementSibling).toBe(overview());
+  expect(screen.getByRole('tab',{name:'メモ'})).toHaveAttribute('aria-selected','true');
+  expect(screen.getByRole('textbox')).toHaveValue('responsive evidence note');
+  expect(overview()).toHaveTextContent('出来高比');expect(overview()).toHaveTextContent('前日比（日次）');
+  expect(overview().querySelectorAll('.leader-condition-strip [data-state]')).toHaveLength(7);
+ }
 });
