@@ -50,6 +50,12 @@ for (const width of [1440, 390]) test(`daily comparison coverage keeps lazy deta
     }
     expect(fullRequests).toBe(0);
     await page.evaluate(() => document.fonts.ready);
+    // Measure settled geometry: the hero's 180ms translate entrance can make
+    // Chromium subtract fractional coordinates as 43.999992px for a 44px box.
+    // Keep the full 44px requirement instead of rounding or relaxing it.
+    await page.locator('.research-overview .hero-copy').evaluate(async element => {
+      await Promise.all(element.getAnimations().map(animation => animation.finished));
+    });
     const trigger = page.getByRole('button', { name: '候補の日次変化', exact: true });
     const bounds = await trigger.boundingBox();
     expect(bounds.height).toBeGreaterThanOrEqual(44);
