@@ -1,3 +1,4 @@
+import { openResearchList } from './research-navigation.js';
 import { test, expect } from '@playwright/test';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 
@@ -41,7 +42,7 @@ for (const width of [1440, 375]) test(`institutional holder missing counts and r
     return route.fulfill({ json });
   });
   const open = async () => {
-    await page.goto('/');
+    await page.goto('/'); await openResearchList(page);
     await expect(page.locator('.candidate-row').first()).toBeVisible();
     if (width === 375) await page.getByRole('button', { name: /^SYNTH の分析を表示/ }).click();
     const detail = page.getByRole('region', { name: '銘柄詳細', exact: true });
@@ -105,7 +106,7 @@ for (const width of [1440, 375]) test(`malformed 13F observations reach detail a
   for (const [name, input] of cases) {
     observations = input;
     await page.goto('about:blank');
-    await page.goto('/');
+    await page.goto('/'); await openResearchList(page);
     await expect(page.locator('.candidate-row').first()).toBeVisible();
     if (width === 375) await page.getByRole('button', { name: /^SYNTH の分析を表示/ }).click();
     const detail = page.getByRole('region', { name: '銘柄詳細', exact: true });

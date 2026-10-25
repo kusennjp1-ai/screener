@@ -44,6 +44,7 @@ function ScreenSelector({ screens, activeScreenId, onSelectScreen, matchCounts }
         alignItems: 'center',
         gap: 0.75,
         overflowX: 'auto',
+        pr: 0.5, // Keep the final chip clear of fractional scroll-edge clipping.
         pb: 0.5,
         mb: 1.5,
         '&::-webkit-scrollbar': { height: 4 },

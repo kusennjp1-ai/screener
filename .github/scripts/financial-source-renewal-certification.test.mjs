@@ -14,6 +14,8 @@ import {resetRenewalFixtureControls} from './fixtures/financial-renewal-policy.m
 import {ORDINARY_CI_IDENTITY,ORDINARY_CI_REQUEST_PATH,ordinaryCiIdentityDigest,readVerifiedOrdinaryCiAdmission} from './ordinary-carry-tooling.mjs';
 import {assertCertificationSourceTrustPreserved,renewalCandidateMembers,restorePriorRenewalSource,retainApprovedRenewalUi,verifyRenewalCertifierController,verifyRenewalCertificationBounds,verifySealedRenewalArchive} from './financial-source-renewal-certification.mjs';
 
+// Disposable repositories must never leave detached maintenance writers alive at cleanup.
+const fixtureGit=(args,options)=>execFileSync('git',['-c','maintenance.auto=false','-c','gc.auto=0',...args],options);
 const here=dirname(fileURLToPath(import.meta.url)),root=join(here,'../..');
 const write=(path,value)=>{mkdirSync(dirname(path),{recursive:true});writeFileSync(path,value);};
 const fixture=()=>mkdtempSync(join(tmpdir(),'renewal-certification-'));
@@ -157,7 +159,7 @@ function automaticFixture(){
   cpSync(here,join(directory,'.github/scripts'),{recursive:true});fixtureContracts(directory);
   cpSync(join(root,'.github/workflows'),join(directory,'.github/workflows'),{recursive:true});
   // Disposable fixtures must not leave detached Git writers racing strict cleanup.
-  const git=(...args)=>execFileSync('git',['-C',directory,'-c','maintenance.auto=false','-c','gc.auto=0',...args],{encoding:'utf8'}).trim();
+  const git=(...args)=>fixtureGit(['-C',directory,'-c','maintenance.auto=false','-c','gc.auto=0',...args],{encoding:'utf8'}).trim();
   const commit=()=>{git('add','.');git('-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Committed automatic fixture');return {head_sha:git('rev-parse','HEAD'),tree:git('rev-parse','HEAD^{tree}')};};
   let registry={...JSON.parse(readFileSync(join(directory,registryPath))),ci_admission:null};
   const request=JSON.stringify({parsed_by:'the existing renewal request validator after admission'});
@@ -186,7 +188,7 @@ function automaticFixture(){
     let match;
     if((match=/\/git\/commits\/([a-f0-9]{40})$/.exec(endpoint)))return {sha:match[1],tree:{sha:git('rev-parse',`${match[1]}^{tree}`)},parents:git('rev-list','--parents','-n','1',match[1]).split(' ').slice(1).map(sha=>({sha}))};
     if((match=/\/git\/trees\/([a-f0-9]{40})\?recursive=1$/.exec(endpoint)))return {sha:match[1],truncated:false,tree:git('ls-tree','-r',match[1]).split('\n').map(line=>{const fields=/^(\d+) (\w+) ([a-f0-9]+)\t(.+)$/.exec(line);return {mode:fields[1],type:fields[2],sha:fields[3],path:fields[4]};})};
-    if((match=/\/contents\/(.+)\?ref=([a-f0-9]{40})$/.exec(endpoint))){const bytes=execFileSync('git',['-C',directory,'show',`${match[2]}:${match[1]}`]);return {type:'file',path:match[1],encoding:'base64',size:bytes.length,sha:createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex'),content:bytes.toString('base64')};}
+    if((match=/\/contents\/(.+)\?ref=([a-f0-9]{40})$/.exec(endpoint))){const bytes=fixtureGit(['-C',directory,'show',`${match[2]}:${match[1]}`]);return {type:'file',path:match[1],encoding:'base64',size:bytes.length,sha:createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex'),content:bytes.toString('base64')};}
     throw Error(`Unexpected automatic fixture endpoint ${endpoint}`);
   };
   return {directory,registryPath,registry,event,eventPath,env,api,executing,caller,trigger,jobs};
@@ -290,7 +292,7 @@ test('sealed archive readback rejects missing, added, replaced and unsafe retain
 });
 
 test('certification controller records the exact successful CI attempt and rejects cross-attempt or cross-commit jobs',()=>{
-  const head=execFileSync('git',['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),base=`repos/${bootstrap.repository}`;
+  const head=fixtureGit(['-C',root,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),base=`repos/${bootstrap.repository}`;
   const run={id:123,run_attempt:2,head_sha:head,path:'.github/workflows/ci.yml',event:'push',head_branch:'main',status:'completed',conclusion:'success',repository:{full_name:bootstrap.repository},head_repository:{full_name:bootstrap.repository}};
   const jobs=contract.required_ci_jobs.map((name,index)=>({name,id:500+index,run_id:123,run_attempt:2,head_sha:head,status:'completed',conclusion:'success'}));
   const api=endpoint=>{
@@ -317,8 +319,8 @@ test('controls resolve committed request before fetching a missing captured UI G
       ui:{sha:s,digest:h,approval_sha256:h},consumer_code_sha256:h,financial_request:{schema_version:'financial-release-request-v1',correction:{schema_version:contract.schema_version,kind:contract.kind,reason:contract.reason,previous_publication_identity:previous,source},source_validation:{guard:'certified_source_artifact_v1',certificate},destination_projection:{projector:'native_annual_destination_v1',policy:'financial-correction-native-annual-v1'}},
       target:{evaluated_at:'2026-10-04T13:30:00.000Z',base_sha256:h,manifest_sha256:h,price_observations_sha256:h,known_price_dates_sha256:h,universe_sha256:h},price_input:{artifact_id:10,artifact_sha256:h,manifest_sha256:h,price_observations_sha256:h,known_price_dates_sha256:h},maximum_new_receipts:1};
     write(join(directory,renewalPolicy.request_path),JSON.stringify(request));
-    for(const args of [['init','--quiet'],['add','.'],['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Commit isolated controls fixture']])execFileSync('git',['-C',directory,...args]);
-    const head=execFileSync('git',['-C',directory,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),script=join(directory,'.github/scripts/financial-source-renewal-certification.mjs');
+    for(const args of [['init','--quiet'],['add','.'],['-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Commit isolated controls fixture']])fixtureGit(['-C',directory,...args]);
+    const head=fixtureGit(['-C',directory,'rev-parse','HEAD'],{encoding:'utf8'}).trim(),script=join(directory,'.github/scripts/financial-source-renewal-certification.mjs');
     const env={...process.env,GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_REF:'refs/heads/main',GITHUB_REPOSITORY:bootstrap.repository,GITHUB_WORKFLOW_REF:`${bootstrap.repository}/${renewalPolicy.workflow}@refs/heads/main`,GITHUB_SHA:head,GITHUB_RUN_ID:'12',GITHUB_RUN_ATTEMPT:'1'};
     const controls=spawnSync(process.execPath,[script,'controls'],{cwd:directory,env,encoding:'utf8'});
     assert.equal(controls.status,0,controls.stderr);assert.equal(JSON.parse(controls.stdout).ui_sha,s);
@@ -329,7 +331,7 @@ test('controls resolve committed request before fetching a missing captured UI G
     // reaches its first awaited read. Reimporting the executing module there
     // exposed the former top-level-await cycle even before financial replay.
     write(join(directory,'frontend/package-lock.json'),'{}');write(join(directory,'backend/app/scripts/export_native_annual_projection.py'),'# Fixture code identity only\n');
-    const commit=()=>{execFileSync('git',['-C',directory,'add','.']);execFileSync('git',['-C',directory,'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Advance committed fixture']);return execFileSync('git',['-C',directory,'rev-parse','HEAD'],{encoding:'utf8'}).trim();};
+    const commit=()=>{fixtureGit(['-C',directory,'add','.']);fixtureGit(['-C',directory,'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Advance committed fixture']);return fixtureGit(['-C',directory,'rev-parse','HEAD'],{encoding:'utf8'}).trim();};
     const captured=commit();request.ui.sha=captured;request.consumer_code_sha256=digest(consumerCodeInventory(protectedCodeInventory(directory,captured)));write(join(directory,renewalPolicy.request_path),JSON.stringify(request));env.GITHUB_SHA=commit();
     const hook=join(directory,'lazy-self-import.mjs');write(hook,`globalThis.fetch=async()=>{await import(${JSON.stringify(script)});throw Error('Reached fully evaluated renewal certifier');};`);
     const surfaces=spawnSync(process.execPath,['--import',hook,script,'verify-surfaces'],{cwd:directory,env,encoding:'utf8'});
@@ -346,8 +348,8 @@ test('surface and seal compatibility preflight authenticates retained origin and
     write(join(directory,'frontend/package-lock.json'),'{}');
     const projector='backend/app/scripts/export_native_annual_projection.py',originalProjector='# Original fixture projector\n';
     write(join(directory,projector),originalProjector);
-    execFileSync('git',['-C',directory,'init','--quiet']);
-    const commit=()=>{execFileSync('git',['-C',directory,'add','.']);execFileSync('git',['-C',directory,'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Commit compatibility fixture']);return execFileSync('git',['-C',directory,'rev-parse','HEAD'],{encoding:'utf8'}).trim();};
+    fixtureGit(['-C',directory,'init','--quiet']);
+    const commit=()=>{fixtureGit(['-C',directory,'add','.']);fixtureGit(['-C',directory,'-c','user.name=Fixture','-c','user.email=fixture@example.invalid','commit','--quiet','-m','Commit compatibility fixture']);return fixtureGit(['-C',directory,'rev-parse','HEAD'],{encoding:'utf8'}).trim();};
     const captured=commit(),h='a'.repeat(64),s='b'.repeat(40),previous=`1/1/${h}/${h}`;
     const originBytes=Buffer.from(JSON.stringify({schema_version:'financial-release-receipt-v1',mode:'activation',ui:{approval:null}}));
     const originHash=sha256(originBytes),ref={schema_version:'financial-release-receipt-v1',path:`static-data/financial-corrections/release-${originHash}.json`,sha256:originHash};
@@ -367,7 +369,7 @@ test('surface and seal compatibility preflight authenticates retained origin and
       calls.push(endpoint);
       const match=new RegExp(`^repos/${bootstrap.repository}/contents/(.+)\\?ref=([a-f0-9]{40})$`).exec(endpoint);
       assert.ok(match,`Preflight unexpectedly reached a later verification phase: ${endpoint}`);
-      const bytes=execFileSync('git',['-C',directory,'show',`${match[2]}:${match[1]}`]);
+      const bytes=fixtureGit(['-C',directory,'show',`${match[2]}:${match[1]}`]);
       return {type:'file',encoding:'base64',size:bytes.length,content:bytes.toString('base64')};
     };
     const options=()=>({root:directory,candidate,request,live:{},producer:{head_sha:head},api});

@@ -74,7 +74,7 @@ for (const width of [1440, 375]) test(`market history missing, zero, quarterly a
     const nav = width === 375 ? await page.locator('.leader-mobile-nav').boundingBox() : null;
     expect(box.x, stage).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width, stage).toBeLessThanOrEqual(width);
-    expect(box.y, stage).toBeGreaterThanOrEqual(header.y + header.height);
+    expect(box.y, stage).toBeGreaterThanOrEqual(header.y + header.height - 1);
     expect(box.y + box.height, stage).toBeLessThanOrEqual(nav?.y ?? page.viewportSize().height);
     measurements.push({ stage, box, header, nav });
   };

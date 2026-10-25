@@ -1,3 +1,4 @@
+import { readyResearchCandidates } from './research-browser-navigation.mjs';
 // Supplemental evidence only: never substitutes for exact-candidate budgets.
 import {createHash} from 'node:crypto';
 import {readFile} from 'node:fs/promises';
@@ -58,7 +59,7 @@ export async function recordProductionBootstrapDiagnostic({browser,url,currentRo
       await page.route(value=>value.origin===target.origin&&value.pathname===target.pathname,async route=>{intercepted++;await route.fulfill({status:200,contentType:'application/json',headers:{'Cache-Control':'no-store'},body});});
       await page.addInitScript(()=>{window.__bootstrapTasks=[];new PerformanceObserver(list=>window.__bootstrapTasks.push(...list.getEntries().map(entry=>entry.duration))).observe({entryTypes:['longtask']});});
       const cdp=await context.newCDPSession(page);await cdp.send('Emulation.setCPUThrottlingRate',{rate:4});
-      const start=Date.now();await page.goto(url);await page.locator(readySelector).first().waitFor({state:'visible',timeout:60000});
+      const start=Date.now();await page.goto(url);await readyResearchCandidates(page,readySelector);
       await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
       const ready_ms=Date.now()-start,longest_task_ms=await page.evaluate(()=>Math.max(0,...window.__bootstrapTasks));
       if(intercepted<1||errors.length)throw Error(`Production-shaped bootstrap was not consumed cleanly: ${intercepted}; ${errors.join('; ')}`);

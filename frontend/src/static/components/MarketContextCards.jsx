@@ -4,7 +4,7 @@ import './marketContextCards.css';
 
 const count = value => Number.isInteger(value) && value >= 0;
 const number = value => count(value) ? value.toLocaleString('ja-JP') : '—';
-const percent = value => finite(value) ? `${value > 0 ? '+' : ''}${value.toFixed(2)}%` : '—';
+const percent = value => finite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toFixed(2)}%` : '—';
 
 // These observations are produced by buildBookMarketEvidence. In particular,
 // their cohort is the published chart set, not the entire listed market.

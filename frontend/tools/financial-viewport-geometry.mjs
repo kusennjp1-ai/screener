@@ -11,9 +11,11 @@ export function financialViewportGeometry(selectors) {
     const box = node.getBoundingClientRect(), style = getComputedStyle(node);
     return box.width > 0 && box.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
   };
-  const header = document.querySelector('.leader-header'), navigation = document.querySelector('.leader-mobile-nav');
-  const chrome = { header: shown(header) ? rect(header) : null, navigation: shown(navigation) ? rect(navigation) : null };
-  const content = { top: Math.max(0, chrome.header?.bottom || 0), bottom: Math.min(innerHeight, chrome.navigation?.top ?? innerHeight), left: 0, right: innerWidth };
+  const header = document.querySelector('.leader-header');
+  const navigation = [...document.querySelectorAll('.mobile-research-nav,.leader-mobile-nav')].find(shown);
+  const actions=document.querySelector('.mobile-chart-actions');
+  const chrome = { header: shown(header) ? rect(header) : null, navigation: shown(navigation) ? rect(navigation) : null, actions:shown(actions)?rect(actions):null };
+  const content = { top: Math.max(0, chrome.header?.bottom || 0), bottom: Math.min(innerHeight, chrome.navigation?.top ?? innerHeight,chrome.actions?.top??innerHeight), left: 0, right: innerWidth };
   const targets = selectors.map(selector => {
     const matches = [...document.querySelectorAll(selector)], node = matches[0];
     if (matches.length !== 1 || !shown(node)) return { selector, count: matches.length, shown: false, rect: null };

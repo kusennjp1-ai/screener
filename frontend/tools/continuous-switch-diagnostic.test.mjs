@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { recordProfileDiagnostic } from './profile-diagnostic.mjs';
 import { recordContinuousSwitchDiagnostic } from './continuous-switch-diagnostic.mjs';
 vi.mock('./profile-diagnostic.mjs', () => ({ recordProfileDiagnostic: vi.fn() }));
+vi.mock('./research-browser-navigation.mjs', () => ({ readyResearchCandidates: vi.fn(async (_page,selector) => calls.push(['visible',selector])) }));
 let calls, frames, page, visible, profileResult;
 beforeEach(() => {
   calls = []; frames = 0;

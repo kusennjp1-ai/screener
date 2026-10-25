@@ -33,12 +33,12 @@ const json = path => JSON.parse(read(path));
 const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
 const write = (path, value) => { const temporary = path + '.new'; writeFileSync(temporary, JSON.stringify(value, null, 2), { flag: 'wx' }); renameSync(temporary, path); };
 
-export function requiredScreeningCaptures(scope) {
+export function requiredScreeningCaptures(scope, mobileMap = false) {
   const result = [];
   for (const group of DESIGN_GROUPS) {
     const [width, theme] = group.split('/'), viewport = { width: Number(width) };
     const names = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan',
-      ...(viewport.width === 1440 ? ['compact'] : []),
+      ...(viewport.width === 1440 ? ['compact'] : mobileMap ? ['market-map'] : []),
       ...CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations', 'expanded-short'].map(view => `case-${symbol}-${view}`)),
       ...financialDesignScreens(viewport, theme), ...(scope === 'carry' ? financialCarryDesignScreens(viewport, theme) : []), ...dailyObservationDesignScreens(viewport, theme)];
     result.push(...names.map(name => `${name}/${group}`));
@@ -120,7 +120,7 @@ function assessWithRadarContract(report, binding, completedGroups, radarFailures
   if (report.performance?.length !== 4) { blocking.push('Exactly four baseline/current performance groups must complete'); timingComplete = false; }
   if (!isDeepStrictEqual(completedGroups, DESIGN_GROUPS)) blocking.push('All route/operation/financial groups must finish');
   if (report.data?.as_of_date !== binding.as_of_date || report.data?.research_generation !== binding.research_generation) blocking.push('Measured data identity differs from bound input');
-  const expected = requiredScreeningCaptures(binding.scope), keys = (report.screens || []).map(screen => screen.key);
+  const expected = requiredScreeningCaptures(binding.scope, report.mobile_map_contract === 'mobile-market-map-v1'), keys = (report.screens || []).map(screen => screen.key);
   if (keys.length !== expected.length || new Set(keys).size !== keys.length || expected.some(key => !keys.includes(key)) || report.screens?.some(screen => !safePath(screen.screenshot) || !hash(screen.sha256))) blocking.push('Every required current screenshot must complete');
   const exactCases = (records, named) => [1440, 390].every(width => named.every(item => records.filter(record => record.symbol === item.symbol && record.viewport?.width === width && record.theme === (width === 1440 ? 'dark' : 'light')
     && !record.error && record.source && record.financial_rows?.length && record.selection && record.purchase && record.csv).length === 1));

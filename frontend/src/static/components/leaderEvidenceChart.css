@@ -25,8 +25,8 @@
 @media(max-width:700px){
  .leader-svg-controls{gap:4px;padding:6px}
  .leader-svg-controls select{min-width:72px;width:76px;padding:6px 2px}
- .leader-svg-controls button{padding:6px;min-height:44px;border-radius:10px}
- .leader-svg-extra-controls summary{padding:6px;display:flex;align-items:center;justify-content:center;border-radius:10px}
+ .leader-svg-controls button{padding:6px;min-height:44px;border-radius:12px}
+ .leader-svg-extra-controls summary{padding:6px;display:flex;align-items:center;justify-content:center;border-radius:12px}
  .leader-svg-extra-controls:has(details[open]){order:9}
  .leader-svg-extra-controls details[open] button{margin:2px}
  .leader-evidence-chart>svg{scroll-margin-top:8px}

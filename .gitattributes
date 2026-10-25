@@ -1,3 +1,10 @@
 
 # Use bd merge for beads JSONL files
 .beads/issues.jsonl merge=beads
+
+# Tooling and workflow fixtures include exact byte hashes and LF boundaries.
+# Keep checkouts identical on Windows and on the Linux publication runners.
+*.mjs text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf

@@ -65,7 +65,7 @@ export default function ResearchPage({compareOnly=false}) {
     return()=>{window.removeEventListener('research:search',searchEvent);window.removeEventListener('research:back',backEvent);};
   },[]);
   const [mobileView, setMobileView] = useState(() => params.get('symbol') ? 'detail' : 'list');
-  const [mobileMap, setMobileMap] = useState(() => !params.get('symbol'));
+  const [mobileMap, setMobileMap] = useState(() => smallScreen && !params.get('symbol'));
   const [liquid, setLiquid] = useState(() => !params.get('symbol'));
   const detailRef = useRef(null);
   const [onlyWatch, setOnlyWatch] = useState(false);
@@ -127,7 +127,7 @@ export default function ResearchPage({compareOnly=false}) {
     setOnlyWatch(mobileDestination === 'watch');
     if (mobileDestination === 'watch') setLiquid(false);
     setMobileView(ticker || mobileDestination === 'chart' ? 'detail' : 'list');
-    setMobileMap(!ticker && !['chart','watch'].includes(mobileDestination));
+    setMobileMap(Boolean(window.matchMedia?.('(max-width:700px)')?.matches) && !ticker && !['chart','watch'].includes(mobileDestination));
     setFiltersOpen(false);
     setChart(null);
     setVerificationSymbol(null);

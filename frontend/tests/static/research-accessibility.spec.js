@@ -1,3 +1,4 @@
+import { openResearchList } from './research-navigation.js';
 import { expectSvgChart } from './svg-chart-observation.js';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -19,9 +20,10 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
     await route.fulfill({json:payload});
   });
   await page.goto('/');
-  const navigation=page.getByRole('navigation',{name:width>700?'メインナビゲーション':'モバイルナビゲーション',exact:true});
+  const navigation=page.getByRole('navigation',{name:width>700?'メインナビゲーション':'リサーチの画面切替',exact:true});
   await expect(navigation).toBeVisible();
-  await expect(navigation.getByRole('link',{name:'本日の判断'})).toHaveAttribute('aria-current','page');
+  await expect(width>700?navigation.getByRole('link',{name:'本日の判断'}):navigation.getByRole('button',{name:'市場',exact:true})).toHaveAttribute('aria-current','page');
+  await openResearchList(page);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
   await expect(page.getByRole('button',{name:/^LEAD の分析を表示/})).toBeVisible();
   if(width>700) await page.getByRole('button',{name:'候補の日次変化',exact:true}).click({trial:true});
@@ -38,7 +40,7 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
       const board=document.getElementById('candidate-board').getBoundingClientRect();
       const changes=document.querySelector('.changes-trigger').getBoundingClientRect();
       return {
-        boardBelowHeader:board.top>=header.bottom+8 && board.top<=header.bottom+24,
+        boardBelowHeader:Math.abs(board.top-header.bottom)<=1,
         changesNotPartiallyObscured:changes.bottom<=header.bottom || changes.top>=header.bottom,
       };
     })).toEqual({boardBelowHeader:true,changesNotPartiallyObscured:true});
@@ -73,6 +75,7 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
     await expect(svg.locator('[data-pane="price"] g[data-date]')).toHaveCount(21);
     await expectSvgChart(page.locator('.research-detail'),{symbol:'LEAD',bars,rs:'present'});
     const latestRange=await svg.getAttribute('aria-label');
+    await chart.locator('summary').filter({hasText:'操作'}).click();
     await chart.getByRole('button',{name:'過去の期間へ',exact:true}).click();
     await expect(svg).not.toHaveAttribute('aria-label',latestRange);
     await chart.getByRole('button',{name:'新しい期間へ',exact:true}).click();

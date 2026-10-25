@@ -1,3 +1,4 @@
+import { openResearchList } from './research-navigation.js';
 import { expectSvgChart } from './svg-chart-observation.js';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -31,7 +32,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
    :file==='research.json'?{as_of_date:date,rows}:row?{symbol:row.symbol,as_of_date:date,bars,rs_line:[],stock_data:row}:{};
   return route.fulfill({json:payload});
  });
- await page.goto('/');
+ await page.goto('/'); await openResearchList(page);
  await expect(page.locator('.candidate-row').first()).toBeVisible();
  if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
  const universeButton=page.getByRole('button',{name:/^対象内訳/});
@@ -69,7 +70,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
   const first=page.locator('.candidate-row').first();
   await expect(first.locator('.leader-post-identity')).toContainText('@ALPHA');
   expect(await first.evaluate(row=>{
-   const box=row.getBoundingClientRect(),bottom=document.querySelector('.leader-mobile-nav').getBoundingClientRect().top;
+   const box=row.getBoundingClientRect(),bottom=document.querySelector('.mobile-research-nav').getBoundingClientRect().top;
    return box.top>=document.querySelector('.leader-header').getBoundingClientRect().bottom&&box.top+44<=bottom;
   })).toBe(true);
  }
@@ -99,6 +100,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  await expect(width===390?detail.locator('.leader-detail-verdict'):detail.getByLabel('価格位置と購入条件')).toContainText(/未達 \d+・未確認 \d+/);
  const controls=detail.getByRole('group',{name:'チャートの表示操作',exact:true});
  await controls.scrollIntoViewIfNeeded();
+ if(width===390) await controls.locator('summary').filter({hasText:'操作'}).click();
  const controlsFit=()=>controls.evaluate(node=>{
   const bounds=node.getBoundingClientRect();
   return node.scrollWidth<=node.clientWidth && [...node.querySelectorAll('button')].every(button=>{const box=button.getBoundingClientRect();return box.left>=bounds.left && box.right<=bounds.right && box.top>=bounds.top && box.bottom<=bounds.bottom;});
@@ -156,7 +158,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
    const chartFirst=Boolean(chart.compareDocumentPosition(overview)&Node.DOCUMENT_POSITION_FOLLOWING);
    const ids=[...node.querySelectorAll('[id]')].map(n=>n.id);
    return {chartFirst,uniqueIds:new Set(ids).size===ids.length};
-  })).toEqual({chartFirst:resized>700,uniqueIds:true});
+  })).toEqual({chartFirst:true,uniqueIds:true});
  }
  const nativeScreenshot=info.outputPath(`native-cad-${width}-${theme}.png`);
  await page.screenshot({path:nativeScreenshot,fullPage:true});

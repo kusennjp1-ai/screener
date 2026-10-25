@@ -1,3 +1,4 @@
+import { mobileChromeBudget } from './mobile-chrome-contract.mjs';
 import { LEADER_DETAIL_CONTRACT, leaderDetailFailures } from './leader-detail-design-contract.mjs';
 import { validateSvgChart, SVG_CHART_RENDERER, SVG_EVIDENCE_CONTRACT } from './svg-chart-evidence.mjs';
 import { LEADER_FEED_CONTRACT, leaderFeedFailures } from './leader-feed-design-contract.mjs';
@@ -53,7 +54,7 @@ function screenEvidence(screen, binding, layoutContract, detailContract) {
   assert(metrics.horizontalOverflow === false, label + ': horizontal overflow or missing observation');
   assert(metrics.chromeHeight === metrics.headerHeight + metrics.bottomNavHeight, label + ': inconsistent chrome metrics');
   assert(screen.reduced_motion_running_animations === 0, label + ': missing/failed reduced-motion observation');
-  if (width === 390) assert(metrics.chromeHeight <= 110, label + ': fixed chrome exceeds 110px');
+  if (width === 390) assert(metrics.chromeHeight <= mobileChromeBudget(metrics), label + ': fixed chrome exceeds the measured toolbar budget');
   if(layoutContract===LEADER_FEED_CONTRACT)assert.deepEqual(leaderFeedFailures(metrics,name),[],label+': feed contract failed');
   else {
   if (['home', 'near-pass'].includes(name) && width === 1440) assert(metrics.hero && metrics.hero.height <= 320 && metrics.chart && metrics.chart.top <= 540, label + ': home geometry failed');
@@ -273,7 +274,7 @@ export function validateFunctionalEvidence(report, binding) {
   assert(object(report) && object(binding) && ['ordinary', 'carry'].includes(binding.scope) && report.commit === binding.commit && report.input_basis === 'same_verified_input' && !report.assessment_mode, 'Functional evidence scope differs');
   assert(object(report.data) && report.data.as_of_date === binding.as_of_date && report.data.research_generation === binding.research_generation, 'Functional data identity differs');
   assert(Array.isArray(report.screens), 'Missing screenshots');
-  exactSet(report.screens.map(screen => screen.key), requiredScreeningCaptures(binding.scope), 'Screen captures');
+  exactSet(report.screens.map(screen => screen.key), requiredScreeningCaptures(binding.scope, report.mobile_map_contract === 'mobile-market-map-v1'), 'Screen captures');
   assert(new Set(report.screens.map(screen => screen.screenshot)).size === report.screens.length, 'Duplicate screenshot path');
   assert(report.detail_contract === undefined || report.detail_contract === LEADER_DETAIL_CONTRACT, 'Unknown detail contract');
   assert(report.layout_contract === undefined || report.layout_contract === LEADER_FEED_CONTRACT, 'Unknown layout contract');

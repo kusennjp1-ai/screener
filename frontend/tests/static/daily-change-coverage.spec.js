@@ -1,3 +1,4 @@
+import { openResearchList } from './research-navigation.js';
 import { test, expect } from '@playwright/test';
 import { createHash } from 'node:crypto';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
@@ -39,7 +40,7 @@ for (const width of [1440, 390]) test(`daily comparison coverage keeps lazy deta
   });
   for (mode of ['comparable', 'all', 'partial', 'missing']) {
     fullRequests = 0;
-    await page.goto('/');
+    await page.goto('/'); await openResearchList(page);
     const label = mode === 'missing' ? '変化：比較基準未確認' : mode === 'all' ? '変化：全3銘柄が比較不能' : mode === 'partial' ? '変化：比較不能 1 / 3銘柄' : '変化：新たに通過 3 · 再通過 0 · 脱落 0';
     await expect(page.locator('.changes-desktop')).toHaveText(label);
     if(width>700)await expect(page.getByTestId('home-hero').getByRole('heading', { level: 1 })).toHaveText('ミネルヴィニ選定候補は 3 銘柄。');

@@ -13,7 +13,7 @@ describe('MarketContextCards', () => {
   it('separates benchmark movement, high/low observations and leader candidates', () => {
     render(<MarketContextCards evidence={evidence()} expectedDate={date} now={now} />);
     const benchmark = within(screen.getByRole('article', { name: '指数の方向' }));
-    expect(benchmark.getByText('-0.43%')).toBeInTheDocument();
+    expect(benchmark.getByText('−0.43%')).toBeInTheDocument();
     expect(benchmark.getByText('+2.11%')).toBeInTheDocument();
     expect(benchmark.getByText(/SPY · 前日比/)).toBeInTheDocument();
     const highs = screen.getByRole('article', { name: '高値と安値の更新' });
