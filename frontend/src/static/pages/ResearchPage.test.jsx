@@ -188,7 +188,7 @@ it('retains one visible date caution when mobile selection replaces the overview
   data.date='2000-01-03';
   mount();
   const row=await screen.findByRole('button',{name:/^LEAD の分析を表示/});
-  expect(screen.getByRole('alert',{name:'分析データの鮮度'}).closest('.research-hero')).not.toBeNull();
+  expect(screen.getByRole('alert',{name:'分析データの鮮度'}).closest('.research-hero')).toBeNull();
   fireEvent.click(row);
   expect(screen.getAllByRole('alert',{name:'分析データの鮮度'})).toHaveLength(1);
   const warning=screen.getByRole('alert',{name:'分析データの鮮度'});

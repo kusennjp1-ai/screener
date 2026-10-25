@@ -7,6 +7,7 @@ const number = value => Number.isFinite(value) ? value.toLocaleString('ja-JP', {
 // not run another VCP detector or turn retrospective annotations into signals.
 export default function ChartSetupEvidence({ annotations, symbol, date, warning, daily = true, detailed, onToggle, onFocus }) {
   const [selected, setSelected] = useState(null);
+  const [expanded, setExpanded] = useState(false);
   const usable = !warning && daily;
   const legs = usable ? annotations.legs || [] : [];
   const base = usable ? annotations.boxes?.find(box => !box.curve && !box.arrow) : null;
@@ -20,12 +21,13 @@ export default function ChartSetupEvidence({ annotations, symbol, date, warning,
   const candidate = usable && annotations.candidate;
   const label = candidate ? 'VCP候補を検出' : base ? 'ベース候補のみ' : '収縮条件は未確認';
   const maximum = Math.max(1, ...legs.map(leg => leg.depthPct));
-  return <section className="chart-setup-evidence" aria-label={`${symbol} のVCP分析`}>
+  return <section className="chart-setup-evidence" data-collapsed={!expanded} aria-label={`${symbol} のVCP分析`}>
     <header className="chart-setup-head">
-      <div><span className="chart-setup-eyebrow">PATTERN INSIGHT</span><h3>値幅の収縮を読み解く</h3></div>
+      <div><span className="chart-setup-eyebrow">VCP LAB</span><h3>値幅の収縮を読み解く</h3></div>
       <span className="chart-setup-status" data-state={candidate ? 'candidate' : 'unknown'}>{candidate ? '◈' : '○'} {label}</span>
     </header>
     <p className="chart-setup-caption">{symbol} · 日足 {date || '基準日未確認'} · 自動検出の参考図解</p>
+    <button type="button" className="mobile-vcp-toggle" aria-expanded={expanded} onClick={() => setExpanded(value => !value)}>{expanded ? '根拠を閉じる ↓' : 'VCPの根拠を開く ↑'}</button>
     {!usable ? <p className="chart-setup-unavailable">{warning ? '日足の整合性を確認できないため、VCPの図解と数値を表示できません。' : 'VCPの収縮区間は日足で確認できます。日足に切り替えてください。'}</p> : <>
       <div className="chart-setup-metrics">
         <div><span>収縮区間</span><strong>{legs.length ? <>{legs.length}<small> 回</small></> : '未確認'}</strong><small>{legs.length ? '連続する押しの値幅が縮小' : base ? '連続した縮小を確認できず' : 'ベース候補を確認できず'}</small></div>

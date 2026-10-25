@@ -39,6 +39,7 @@ for (const width of [390,1440]) test(`VCP evidence reveals measured chart interv
     return route.fulfill({json:payload});
   });
   await page.goto('/#/');
+  if (width === 390) await page.getByRole('button',{name:'一覧・絞り込みで探す →'}).click();
   const candidate=page.getByRole('button',{name:/^VCPTEST の分析を表示/});
   await expect(candidate).toBeVisible();await candidate.click();
   const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});

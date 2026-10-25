@@ -6,6 +6,7 @@ import Brightness7Icon from '@mui/icons-material/Brightness7';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import GridViewIcon from '@mui/icons-material/GridView';
 import BarChartIcon from '@mui/icons-material/BarChart';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
 import { ColorModeContext } from '../contexts/ColorModeContext';
 import { getStaticSupportedMarkets, resolveStaticMarketEntry, useStaticManifest } from './dataClient';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
@@ -21,6 +22,7 @@ import './workbench.css';
 import './leaderFeed.css';
 import './workspace.css';
 const NAV_ITEMS=[{path:'/',label:'本日の判断',Icon:ShowChartIcon},{path:'/compare',label:'比較',Icon:GridViewIcon},{path:'/breadth',label:'市場',Icon:BarChartIcon}];
+const MOBILE_ITEMS=[{path:'/',label:'市場',Icon:GridViewIcon},{path:'/?mobile=chart',label:'チャート',Icon:ShowChartIcon},{path:'/?mobile=watch',label:'ウォッチ',Icon:BookmarkBorderIcon}];
 export default function StaticLayout({children}) {
  const location=useLocation(),theme=useTheme(),dark=theme.palette.mode==='dark';
  const deskTheme=useMemo(()=>createTheme(theme,researchTheme(dark?'dark':'light')),[theme,dark]);
@@ -53,6 +55,6 @@ export default function StaticLayout({children}) {
   </header>
   <LimitedResearchPreviewNotice />
   <div className="leader-content">{children}</div>
-  <nav className="leader-mobile-nav mobile-bottom-nav" aria-label="モバイルナビゲーション">{NAV_ITEMS.map(({path,label,Icon})=><RouterLink key={path} to={path} aria-current={current===path?'page':undefined}><Icon/><span>{label}</span></RouterLink>)}</nav>
+  <nav className="leader-mobile-nav mobile-bottom-nav" aria-label="モバイルナビゲーション">{MOBILE_ITEMS.map(({path,label,Icon})=><RouterLink key={path} to={path} aria-current={current==='/breadth' && path==='/'?'page':undefined}><Icon/><span>{label}</span></RouterLink>)}</nav>
  </Box></ThemeProvider>;
 }
