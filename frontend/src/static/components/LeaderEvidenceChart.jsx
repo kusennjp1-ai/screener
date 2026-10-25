@@ -1,4 +1,5 @@
-import { useId, useMemo, useState } from 'react';
+import { useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import ChartSetupEvidence from './ChartSetupEvidence';
 import { leaderChartModel, seriesPaths } from './leaderChartModel';
 import { relativeStrengthScale, researchVolumeBars } from '../../components/Charts/researchChartModel';
 import { buildBookTechnicalEvidence, BOOK_TECHNICAL_VERSION } from '../bookTechnicalEvidence';
@@ -19,7 +20,19 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   const id = useId().replace(/:/g, ''), [timeframe,setTimeframe] = useState('daily');
   const [count,setCount] = useState(comparisonSessions || (smallScreen ? 63 : 126)), [offset,setOffset] = useState(0);
   const [annotations,setAnnotations] = useState(true);
+  const plotRef = useRef(null);
+  const [measuredWidth, setMeasuredWidth] = useState(null);
+  const [selectedLeg, setSelectedLeg] = useState(null);
   const model = useMemo(() => leaderChartModel({bars:priceData,symbol,date,rsLine:rsLineData,timeframe}), [priceData,symbol,date,rsLineData,timeframe]);
+  useLayoutEffect(()=>{
+    const plot=plotRef.current;
+    if(!smallScreen || !plot)return undefined;
+    const measure=()=>{const width=plot.getBoundingClientRect().width;if(width>0)setMeasuredWidth(width);};
+    measure();
+    if(typeof ResizeObserver==='undefined')return undefined;
+    const observer=new ResizeObserver(measure);observer.observe(plot);
+    return ()=>observer.disconnect();
+  },[smallScreen,model.error]);
   const evidence = useMemo(() => {
     const existing = technicalEvidence || row?.book_technical_evidence;
     if (existing?.version === BOOK_TECHNICAL_VERSION && existing.valid === true && existing.symbol === symbol && existing.as_of_date === date) return existing;
@@ -28,7 +41,7 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   },[technicalEvidence,row,payload,symbol,date]);
   if (model.error) return <div className="leader-svg-warning" role="alert">チャート：データなし。{model.error}</div>;
   const all=model.candlesticks,end=Math.max(1,all.length-Math.min(offset,Math.max(0,all.length-2))),start=Math.max(0,end-count),bars=all.slice(start,end);
-  const width=smallScreen?360:compact?440:760,left=8,right=smallScreen?55:62,plotWidth=width-left-right;
+  const width=smallScreen?(measuredWidth||360):compact?440:760,left=8,right=smallScreen?55:62,plotWidth=width-left-right;
   const chartHeight=compact||expanded?height:Math.max(390,Math.min(height,560)),dense=compact||(expanded&&height<390);
   const priceTop=26,priceBottom=chartHeight*(compact?.45:dense?.5:.55),volumeTop=priceBottom+(dense?22:34),volumeBottom=chartHeight*(compact?.66:dense?.72:.75),rsTop=volumeBottom+(dense?22:32),rsBottom=chartHeight-32;
   const x=index=>left+(index+.5)/bars.length*plotWidth,candleWidth=Math.max(.8,Math.min(7,plotWidth/bars.length*.65));
@@ -46,6 +59,17 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   const rs=benchmarkKnown?shown(model.rs):[],rsScale=relativeStrengthScale(rs)?.priceRange,yRs=value=>rsBottom-(value-rsScale.minValue)/(rsScale.maxValue-rsScale.minValue)*(rsBottom-rsTop);
   const latest=all.at(-1),latestMean=model.volumeMean.at(-1),vcp=evidence?.valid&&!model.warning?evidence.vcp:null;
   const legs=Array.isArray(vcp?.legs)?vcp.legs:[],datedLegs=legs.map((leg,index)=>({...leg,number:index+1})).filter(leg=>finite(leg.depthPct)&&positive(leg.high)&&positive(leg.low)&&leg.startDate&&leg.endDate);
+  // The lab and SVG share the exact measured intervals. No second detector.
+  const labAnnotations = {candidate:vcp?.measurementsValid === true && vcp?.depthsContract === true,
+    legs:datedLegs.map(leg=>({start:leg.startDate,end:leg.endDate,high:leg.high,low:leg.low,depthPct:leg.depthPct,volume:leg.averageVolume})),
+    summary:'有効な測定区間がありません。',boxes:[]};
+  const focusLeg = leg => {
+    const first=all.findIndex(bar=>bar.time===leg.start),last=all.findIndex(bar=>bar.time===leg.end);
+    if(first<0||last<first)return;
+    const from=Math.max(0,first-3),to=Math.min(all.length,last+4);
+    setAnnotations(true);setSelectedLeg(`${leg.start}/${leg.end}`);setCount(to-from);setOffset(all.length-to);
+    plotRef.current?.scrollIntoView?.({block:'start',inline:'nearest',behavior:'instant'});
+  };
   const visibleLegs=timeframe==='daily'&&annotations?datedLegs.filter(leg=>leg.endDate>=bars[0].time&&leg.startDate<=bars.at(-1).time).slice(-3):[];
   // Reserve three non-overlapping annotation lanes inside the existing price
   // pane. Only label geometry moves; each leader ends at its measured low.
@@ -60,20 +84,25 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   const zoom=factor=>setCount(value=>Math.max(5,Math.min(all.length,Math.round(value*factor))));
   const paths=(points,y,color,key,dash)=>seriesPaths(points,bars,x,y).map((points,index)=><polyline key={`${key}-${index}`} data-series={key} points={points} fill="none" stroke={color} strokeWidth="1.5" strokeDasharray={dash} vectorEffect="non-scaling-stroke"/>);
   return <section style={compact?{height,display:'flex',flexDirection:'column'}:undefined} className={`leader-evidence-chart${expanded?' leader-evidence-expanded':''}${compactResearchChrome?' leader-evidence-short':''}`} aria-label={`${symbol} SVG価格・出来高・RSチャート`}>
+    {!compact&&<span className="sr-only" data-testid="chart-visible-range">{bars[0].time} ～ {bars.at(-1).time}</span>}
     {!compact&&<div className="leader-svg-controls" role="group" aria-label="チャートの表示操作">
       {['daily','weekly'].map(value=><button key={value} type="button" aria-pressed={timeframe===value} onClick={()=>{setTimeframe(value);setCount(value==='weekly'?52:smallScreen?63:126);setOffset(0);}}>{value==='daily'?'日足':'週足'}</button>)}
       {smallScreen?<select aria-label="表示期間" value={offset===0?(ranges.find(([,value])=>count===(timeframe==='weekly'?Math.ceil(value/5):value))?.[1]??''):''} onChange={event=>range(Number(event.target.value))}>
         <option value="" disabled>任意期間</option>{ranges.map(([label,value])=><option key={value} value={value}>{label}</option>)}
       </select>:ranges.map(([label,value])=><button key={label} type="button" onClick={()=>range(value)}>{label}</button>)}
+      <div className="leader-svg-extra-controls" style={!smallScreen?{display:'contents'}:undefined}>
+      <details open={smallScreen?undefined:true}>
+      {smallScreen&&<summary>操作</summary>}
       <button type="button" aria-label="表示期間を拡大" onClick={()=>zoom(.7)}>＋</button><button type="button" aria-label="表示期間を縮小" onClick={()=>zoom(1.4)}>−</button>
       <button type="button" aria-label="過去の期間へ" disabled={start===0} onClick={()=>shift(1)}>←</button><button type="button" aria-label="新しい期間へ" disabled={offset===0} onClick={()=>shift(-1)}>→</button>
       <button type="button" onClick={()=>{setCount(timeframe==='weekly'?52:smallScreen?63:126);setOffset(0);}}>リセット</button>
       <button type="button" aria-pressed={annotations} disabled={timeframe!=='daily'} onClick={()=>setAnnotations(value=>!value)}>VCP注記</button>
+      </details></div>
       {researchActions}{onExpand&&<button type="button" onClick={onExpand} aria-label="日次チャートを分析">拡大 ↗</button>}
     </div>}
     {!compact&&<p className={`leader-svg-caption${smallScreen?' leader-svg-caption-mobile':''}`}>{smallScreen?<><span>最終バー {latest.time} 終値 {formatPrice(latest.close)}</span><span>期間 {bars[0].time}〜{bars.at(-1).time}</span></>:<>{symbol} · {intervalText} · 最終バー {latest.time} 終値 {formatPrice(latest.close)}。期間 {bars[0].time}〜{bars.at(-1).time}</>}</p>}
     {model.warning&&<p role="status" className="leader-svg-warning">{model.warning} 買い帯とVCP注記は保留しています。</p>}
-    <svg data-chart-plot data-chart-symbol={symbol} data-chart-asof={date} style={compact?{height,width:'100%',flex:'1 1 0',minHeight:0}:expanded?{height,width:'100%'}:undefined} preserveAspectRatio={compact||expanded?'none':undefined} viewBox={`0 0 ${width} ${chartHeight}`} role="img" aria-label={`${symbol} 価格・出来高・RS 共通時間軸 ${bars[0].time}〜${bars.at(-1).time}`} tabIndex={compact?undefined:0}
+    <svg ref={plotRef} data-chart-plot data-chart-symbol={symbol} data-chart-asof={date} data-chart-annotation-mode={annotations?'detail':'simple'} style={compact?{height,width:'100%',flex:'1 1 0',minHeight:0}:expanded?{height,width:'100%'}:undefined} preserveAspectRatio={compact||expanded?'none':undefined} viewBox={`0 0 ${width} ${chartHeight}`} role="img" aria-label={`${symbol} 価格・出来高・RS 共通時間軸 ${bars[0].time}〜${bars.at(-1).time}`} tabIndex={compact?undefined:0}
       onKeyDown={event=>{if(event.key==='ArrowLeft'){event.preventDefault();shift(1);}if(event.key==='ArrowRight'){event.preventDefault();shift(-1);}if(event.key==='+'){event.preventDefault();zoom(.7);}if(event.key==='-'){event.preventDefault();zoom(1.4);}}}>
       <title>{symbol} 実データのSVGチャート。上から価格、出来高、RS線。買い帯は共通ピボットと方式別上限のみ。</title>
       <defs><clipPath id={`${id}-price`}><rect x={left} y={priceTop} width={plotWidth} height={priceBottom-priceTop}/></clipPath></defs>
@@ -88,13 +117,13 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
         {anchoredLegs.map((leg,index)=>{
           const labelY=labelTop+index*(labelHeight+labelGap),anchorX=x(leg.bottom),anchorY=yPrice(leg.low);
           const edgeX=anchorX>=labelX+labelWidth?labelX+labelWidth:labelX,edgeY=labelY+labelHeight/2;
-          return <g key={leg.number} data-vcp-leg={leg.number}>
-            <title>{`T${leg.number} 推定 ${leg.startDate}〜${leg.endDate} 深さ ${leg.depthPct}%`}</title>
+          return <g key={leg.number} data-vcp-leg={leg.number} data-selected={selectedLeg===`${leg.startDate}/${leg.endDate}`}>
+            <title>{`C${leg.number} 推定 ${leg.startDate}〜${leg.endDate} 深さ ${leg.depthPct}%`}</title>
             <path d={`M${x(leg.peak)} ${yPrice(leg.high)}L${anchorX} ${anchorY}`} fill="none" stroke="var(--ext)" strokeDasharray="4 3"/>
             <path data-vcp-leader={leg.number} d={`M${edgeX} ${edgeY}L${anchorX} ${anchorY}`} fill="none" stroke="var(--text-2)" strokeWidth="1"/>
             <circle cx={anchorX} cy={anchorY} r="2" fill="var(--ext)"/>
             <rect data-vcp-label-box={leg.number} x={labelX} y={labelY} width={labelWidth} height={labelHeight} rx="2" fill="var(--panel)" stroke="var(--line)"/>
-            <text x={labelX+4} y={labelY+14} fill="var(--text)" fontSize="11">T{leg.number} {leg.depthPct.toFixed(1)}%</text>
+            <text x={labelX+4} y={labelY+14} fill="var(--text)" fontSize="11">C{leg.number} {leg.depthPct.toFixed(1)}%</text>
           </g>;
         })}
       </g>
@@ -109,9 +138,12 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
         {[0,Math.floor((bars.length-1)/2),bars.length-1].filter((v,i,a)=>a.indexOf(v)===i).map(index=><text key={index} x={x(index)} y={chartHeight-7} textAnchor={index===0?'start':index===bars.length-1?'end':'middle'} fill="var(--text-2)" fontSize="11">{bars[index].time.slice(5)}</text>)}
       </g>
     </svg>
+    {!compact && <ChartSetupEvidence measured annotations={labAnnotations} symbol={symbol} date={date}
+      warning={model.warning} daily={timeframe==='daily'} detailed={annotations}
+      onToggle={()=>setAnnotations(value=>!value)} onFocus={focusLeg}/>}
     {!compact&&<><div className="leader-svg-legend"><span>共通ピボット {positive(pivotPrice)&&!model.warning?formatPrice(pivotPrice):'データなし'}</span><span>買い上限 {safeLevels?formatPrice(buyCeiling):'データなし'}</span><span>損切り例 {!model.warning&&positive(stopPrice)?formatPrice(stopPrice):'データなし'}</span><span>直前{timeframe==='weekly'?'10週':'50日'}平均出来高 {quantity(latestMean?.value)}</span></div>
       <div className="leader-svg-legend">{[[50,model.sma50],[150,model.sma150],[200,model.sma200]].map(([period,points])=><span key={period}>SMA{timeframe==='weekly'?period/5:period} {positive(points.at(-1)?.value)?formatPrice(points.at(-1).value):'データなし'}</span>)}</div>
       <p className="leader-svg-caption">{intervalText}。VCPは既存アルゴリズムの推定区間で、合格・買い指示ではありません。週足ではVCP注記を表示しません。共通ピボットと収縮高値は別です。方向キー/期間ボタンで移動、＋/−で拡大縮小できます。自由ドラッグ・ピンチ操作は未対応です。</p>
-      <details className="leader-vcp-table"><summary>VCPの期間・深さ・出来高を確認</summary>{datedLegs.length?<table><caption>全収縮区間（推定）。図は表示期間内の直近最大3区間のみ。</caption><thead><tr><th>区間</th><th>期間</th><th>深さ</th><th>最終出来高/直前50日</th></tr></thead><tbody>{datedLegs.map(leg=><tr key={leg.number}><td>T{leg.number}</td><td>{leg.startDate}〜{leg.endDate}<br/>{leg.sessions}営業日</td><td>{leg.depthPct.toFixed(2)}%</td><td>{finite(leg.volumeEvidence?.lastRatio)?`${leg.volumeEvidence.lastRatio.toFixed(2)}倍`:'データなし'}</td></tr>)}</tbody></table>:<p>データなし。収縮区間を作り足しません。</p>}</details></>}
+      <details className="leader-vcp-table"><summary>VCPの期間・深さ・出来高を確認</summary>{datedLegs.length?<table><caption>全収縮区間（推定）。図は表示期間内の直近最大3区間のみ。</caption><thead><tr><th>区間</th><th>期間</th><th>深さ</th><th>最終出来高/直前50日</th></tr></thead><tbody>{datedLegs.map(leg=><tr key={leg.number}><td>C{leg.number}</td><td>{leg.startDate}〜{leg.endDate}<br/>{leg.sessions}営業日</td><td>{leg.depthPct.toFixed(2)}%</td><td>{finite(leg.volumeEvidence?.lastRatio)?`${leg.volumeEvidence.lastRatio.toFixed(2)}倍`:'データなし'}</td></tr>)}</tbody></table>:<p>データなし。収縮区間を作り足しません。</p>}</details></>}
   </section>;
 }

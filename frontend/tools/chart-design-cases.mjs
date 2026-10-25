@@ -68,6 +68,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await inspect(chart, 'inline-default');
       check(record.views[0].annotation_mode === 'vcp-on', `${key}: initial VCP annotation state missing`);
       const inlineTargets=['.research-chart .leader-svg-controls','.research-chart svg[data-chart-plot]'];
+      if(viewport.width===390)await page.locator('.research-chart .leader-svg-extra-controls summary').click();
       await scrollFinancialViewport(page,inlineTargets);
       const inspectInlineViewport=async()=>{const geometry=await page.evaluate(financialViewportGeometry,inlineTargets);checkFinancialViewportGeometry(geometry,check,`${key}/inline-controls-and-plot`,viewport);return geometry;};
       record.inline_geometry={default:await inspectInlineViewport()};
@@ -109,6 +110,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
         check(record.source_warning.desktop_expanded_visible, `${key}: desktop source warning is not visible with the fitted chart`);
       }
       const expandedToggle = dialog.getByRole('button', { name: 'VCP注記', exact:true });
+      if(viewport.width===390)await dialog.locator('.leader-svg-extra-controls summary').click();
       if (await expandedToggle.getAttribute('aria-pressed') !== 'true') await expandedToggle.click();
       await inspect(expanded, 'expanded-annotations');
       await capture(page, viewport, theme, `case-${symbol}-expanded-annotations`);

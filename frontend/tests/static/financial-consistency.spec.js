@@ -1,3 +1,4 @@
+import { openResearchList } from './research-navigation.js';
 import { test, expect } from '@playwright/test';
 import { cases, rows, date, now } from '../../src/test/fixtures/annualConsistency.js';
 import { assess } from '../../src/static/researchEngine.js';
@@ -38,7 +39,7 @@ for (const width of [375, 1440]) for (const item of cases.filter(item => item.sy
     const seen = await setup(page, width), row = rows.find(row => row.symbol === item.symbol);
     const assessment = assess(row, 'oneil', now);
     expect(assessment.rules.find(rule => /3年/.test(rule.label)).state).toBe(item.expected);
-    await page.goto('/#/?method=oneil');
+    await page.goto('/#/?method=oneil'); await openResearchList(page);
     const candidate = page.getByRole('button', { name: new RegExp(`^${item.symbol} の分析を表示`) });
     await expect(candidate).toHaveAttribute('aria-label', new RegExp(`選定 ${assessment.passed}/${assessment.total}`));
     const candidateBefore = await candidate.getAttribute('aria-label');
@@ -99,7 +100,7 @@ for (const width of [375, 1440]) test(`QoQ table/filter labels and separate YoY 
   await expect(page.getByRole('button', { name: 'CADENCE のチャートを開く', exact: true })).toBeVisible();
   await page.getByRole('spinbutton', { name: 'EPS 前四半期比の下限', exact: true }).evaluate(element => element.scrollIntoView({ block: 'center' }));
   await page.screenshot({ path: info.outputPath(`scan-filters-${width}.png`) });
-  await page.goto('/#/?method=oneil');
+  await page.goto('/#/?method=oneil'); await openResearchList(page);
   await page.getByRole('button', { name: /^CADENCE の分析を表示/ }).click();
   const detail = page.getByRole('region', { name: '銘柄詳細', exact: true });
   await detail.getByRole('tab', { name: '財務・機関' }).click();

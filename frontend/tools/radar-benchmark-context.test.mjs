@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { createRadarContext, RADAR_CONTEXT_CLASSES, RADAR_HARNESS_VERSION, radarContextFailures, radarMeasurementFailures } from './radar-benchmark-context.mjs';
+import { createRadarContext, RADAR_CONTEXT_CLASSES, RADAR_HARNESS_VERSION, radarContextFailures, radarMeasurementFailures, storedRadarMeasurementFailures } from './radar-benchmark-context.mjs';
+import { storedRadarV3 } from './fixtures/radar-stored-v3.mjs';
 import { fonts } from '../src/static/theme/tokens.js';
 import { RADAR_VISIBILITY_VERSION } from './radar-visibility.mjs';
 
@@ -29,7 +30,7 @@ describe('isolated Radar production CSS context', () => {
     const layout = readFileSync('src/static/StaticLayout.jsx', 'utf8');
     const page = readFileSync('src/static/pages/ResearchPage.jsx', 'utf8');
     const hero = readFileSync('src/static/components/ResearchHero.jsx', 'utf8');
-    expect(layout).toContain('className="leader-shell"');
+    expect(layout).toContain('className="leader-shell workspace-shell"');
     expect(layout).toContain('className="leader-content"');
     expect(page).toContain('component="main" className={`research-workbench');
     expect(hero).toContain('className={`research-hero research-overview');
@@ -38,8 +39,8 @@ describe('isolated Radar production CSS context', () => {
     expect(hero).not.toContain('market-overview-expanded');
   });
   it('loads production motion and typography without warming React, geometry or glyphs', () => {
-    const entry = readFileSync('tools/radar-benchmark.jsx', 'utf8');
-    for (const path of ['../src/index.css', '../src/static/research.css', '../src/static/theme/foundation.css', '../src/static/theme/motion.css', '../src/static/workbench.css', '../src/static/components/researchOverview.css']) expect(entry).toContain(`import '${path}'`);
+    const entry = readFileSync('tools/radar-benchmark.jsx', 'utf8').replaceAll('\r\n', '\n');
+    for (const path of ['../src/index.css', '../src/static/research.css', '../src/static/theme/foundation.css', '../src/static/theme/motion.css', '../src/static/workbench.css', '../src/static/components/researchOverview.css', '../src/static/leaderFeed.css', '../src/static/workspace.css']) expect(entry).toContain(`import '${path}'`);
     expect(entry).toContain("matchMedia('(max-width:700px)').matches");
     expect(entry).toContain('const start = performance.now();\n  flushSync(() => root.render(');
     const beforeStart = entry.slice(0, entry.indexOf('const start = performance.now()'));
@@ -69,6 +70,30 @@ function measurement() {
       transforms_settled: true, expected_points: 207, painted_point_centers: 207, unobscured_point_centers: 207, readback_error: null } };
 }
 describe('unchanged 50ms and 207-point gate with fail-closed context and visibility evidence', () => {
+  it('reads literal v3 history only through the stored reader while live captures require v4', () => {
+    const old = structuredClone(storedRadarV3);
+    expect(storedRadarMeasurementFailures(old)).toEqual([]);
+    expect(radarMeasurementFailures(old)).toContain('missing production context version');
+    const current = structuredClone(storedRadarV3);
+    current.harness_version = current.context.harness_version = 'workspace-hero-fixed-slot-visible-v4';
+    current.context.ancestors[0].class_name = 'leader-shell workspace-shell';
+    expect(radarMeasurementFailures(current)).toEqual([]);
+    expect(storedRadarMeasurementFailures(current)).toEqual([]);
+    // The declared version cannot be swapped onto the other layout's ancestry.
+    for (const [run, wrongClass] of [[old, 'leader-shell workspace-shell'], [current, 'leader-shell']]) {
+      const crossed = structuredClone(run); crossed.context.ancestors[0].class_name = wrongClass;
+      expect(storedRadarMeasurementFailures(crossed)).toContain('production ancestor context is incomplete');
+      expect(radarMeasurementFailures(crossed).length).toBeGreaterThan(0);
+    }
+    const unknown = structuredClone(old); unknown.harness_version = unknown.context.harness_version = 'invented-v5';
+    expect(storedRadarMeasurementFailures(unknown)).toContain('missing production context version');
+    expect(storedRadarMeasurementFailures({ ...old, harness_version: current.harness_version })).toContain('measurement and context harness versions differ');
+    for (const change of [r => { r.context.canvas.box_sizing = 'content-box'; }, r => { r.context.shell.font_family = 'serif'; },
+      r => { r.visibility.unobscured_point_centers = 206; }, r => { r.context.plot.transform = 'translateY(2px)'; }, r => { r.first_frame_ms = 51; }]) {
+      const invalid = structuredClone(old); change(invalid);
+      expect(storedRadarMeasurementFailures(invalid).length).toBeGreaterThan(0);
+    }
+  });
   it('rejects the former bare-serif context and missing or mixed-theme evidence', () => {
     expect(radarContextFailures(context())).toEqual([]);
     expect(radarContextFailures(null).length).toBeGreaterThan(0);

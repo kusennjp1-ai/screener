@@ -1,3 +1,5 @@
+import { readyResearchCandidates } from './research-browser-navigation.mjs';
+import { mobileChromeBudget } from './mobile-chrome-contract.mjs';
 import { SVG_EVIDENCE_CONTRACT } from './svg-chart-evidence.mjs';
 import { LEADER_DETAIL_CONTRACT, observeLeaderDetail, leaderDetailFailures } from './leader-detail-design-contract.mjs';
 import { LEADER_FEED_CONTRACT, observeLeaderFeed, leaderFeedFailures } from './leader-feed-design-contract.mjs';
@@ -46,7 +48,7 @@ if (!['same_verified_input', 'same_prices_repaired_financials'].includes(inputBa
 const comparisonMethod = inputBasis === 'same_verified_input'
   ? 'same-data baseline/current'
   : 'published-financial baseline versus certified-financial candidate; identical verified prices, different financial inputs; not a UI-only speed comparison';
-const report = { svg_evidence_contract: SVG_EVIDENCE_CONTRACT, layout_contract: LEADER_FEED_CONTRACT, detail_contract: LEADER_DETAIL_CONTRACT, commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
+const report = { mobile_map_contract: 'mobile-market-map-v1', svg_evidence_contract: SVG_EVIDENCE_CONTRACT, layout_contract: LEADER_FEED_CONTRACT, detail_contract: LEADER_DETAIL_CONTRACT, commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
   input_basis: inputBasis,
   method: `Production Chromium. CDP CPU 4x, ${comparisonMethod}, HTTP responses cached in memory after warm-up. No human satisfaction inference.`, screens: [], performance: [], failures: [] };
 if (limitedAssessment) report.assessment_mode = LIMITED_RESEARCH_SCOPE;
@@ -112,6 +114,7 @@ if (baselineRoot) {
 }
 const readySelector = '.candidate-row, .research-list tbody tr';
 const visible = locator => locator.first().waitFor({ state: 'visible', timeout: 60000 });
+const readyCandidates=page=>readyResearchCandidates(page,readySelector);
 
 // Measurements describe effective hit boxes (including associated labels),
 // not a tiny decorative checkbox inside a correctly sized clickable label.
@@ -149,8 +152,10 @@ function objectiveMetrics() {
     return !pill && values.some(value => ![0, 4, 8, 12, 16].some(allowed => Math.abs(value - allowed) < .1)) ? [{ ...describe(element), corners }] : [];
   });
   const rect = selector => { const element = document.querySelector(selector); if (!element || !shown(element)) return null; const box = element.getBoundingClientRect(); return { top: box.top, bottom: box.bottom, height: box.height, width: box.width }; };
-  const header = rect('.leader-header') || rect('header.MuiAppBar-root'), nav = rect('.leader-mobile-nav');
-  const contentTop = header?.bottom || 0, contentBottom = nav?.top ?? innerHeight;
+  const header = rect('.leader-header') || rect('header.MuiAppBar-root');
+  const nav = rect('.mobile-research-nav') || rect('.leader-mobile-nav'), actions = rect('.mobile-chart-actions');
+  const contentTop = header?.bottom || 0, contentBottom = Math.min(nav?.top ?? innerHeight, actions?.top ?? innerHeight);
+  const bottomChrome = innerHeight-contentBottom;
   const completelyVisible = element => {
     const box = element.getBoundingClientRect();
     if (box.top < contentTop - .1 || box.bottom > contentBottom + .1) return false;
@@ -180,7 +185,8 @@ function objectiveMetrics() {
   });
   return { smallTargets, fontIssues, radiusIssues, asciiNegativeValues, heroActionTargets, scrollY, horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
     pageHeight: document.documentElement.scrollHeight, viewport: { width: innerWidth, height: innerHeight },
-    headerHeight: header?.height || 0, bottomNavHeight: nav?.height || 0, chromeHeight: (header?.height || 0) + (nav?.height || 0),
+    headerHeight: header?.height || 0, bottomNavHeight: bottomChrome, chromeHeight: (header?.height || 0) + bottomChrome,
+    mobileActionBar: actions,
     hero: rect('[data-testid="home-hero"], .research-hero'), firstRow: rect('.candidate-row'), chart: rect('.research-detail .research-chart canvas') || rect('.research-detail .research-chart [data-chart-plot]'), chartCard: rect('.research-detail .research-chart'), detail: rect('.research-detail'),
     visibleCandidates: [...document.querySelectorAll('.candidate-row')].filter(shown).filter(completelyVisible).length,
     firstScanCard: rect('[data-testid="mobile-scan-row"]'),
@@ -215,7 +221,7 @@ async function capture(page, viewport, theme, screen, { target, scope = 'viewpor
   check(metrics.radiusIssues.length === 0, `${key}: ${metrics.radiusIssues.length} radius-step violations`);
   check(metrics.asciiNegativeValues.length === 0, `${key}: ${metrics.asciiNegativeValues.length} financial values use ASCII minus`);
   check(!metrics.horizontalOverflow, `${key}: horizontal page overflow`);
-  if (viewport.width === 390) check(metrics.chromeHeight <= 110, `${key}: fixed chrome ${metrics.chromeHeight}px > 110px`);
+  if (viewport.width === 390) check(metrics.chromeHeight <= mobileChromeBudget(metrics), `${key}: fixed chrome ${metrics.chromeHeight}px > ${mobileChromeBudget(metrics)}px`);
   for(const failure of leaderFeedFailures(metrics,screen))check(false,`${key}: ${failure}`);
   for(const failure of leaderDetailFailures(metrics,screen))check(false,`${key}: ${failure}`);
   if (['comparison', 'comparison-near-pass'].includes(screen) && viewport.width === 1440) {
@@ -256,8 +262,14 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   page.on('pageerror', error => report.failures.push(`${key}: ${error.message}`));
   try {
     await page.goto(current.url);
-    await visible(page.locator(readySelector));
-    if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
+    if(viewport.width===390){
+      await visible(page.locator('.mobile-market-map'));
+      await visible(page.locator('.mobile-map-candidates button'));
+      if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え',exact:true}).click();
+      await capture(page,viewport,theme,'market-map');
+    }
+    await readyCandidates(page);
+    if (theme === 'light' && await page.locator('.leader-shell').getAttribute('data-theme')!=='light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
     await page.evaluate(() => window.scrollTo(0, 0));
     await capture(page, viewport, theme, 'home');
     await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
@@ -275,6 +287,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     }
     await page.locator('.candidate-row').first().click();
     await capture(page, viewport, theme, 'detail');
+    if(viewport.width===390)await page.locator('.research-chart .leader-svg-extra-controls summary').click();
     const expand = page.getByRole('button', { name: '日次チャートを分析', exact: true });
     check(await expand.isVisible(), `${key}: chart expansion control is missing`);
     if (await expand.isVisible()) {
@@ -284,7 +297,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
     }
     if (viewport.width === 390) {
       await page.locator('.mobile-header-back:visible, .mobile-back:visible').first().click();
-      await visible(page.locator(readySelector));
+      await readyCandidates(page);
       check(await page.locator('.research-workbench').getAttribute('data-mobile-view') === 'list', `${key}: back control did not restore candidate list`);
     }
   } catch (error) {
@@ -294,7 +307,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
   // Each remaining route is independently loadable. A broken return control
   // above remains a failure, but cannot hide problems on unrelated screens.
   try {
-    await page.goto(current.url); await page.reload(); await visible(page.locator(readySelector));
+    await page.goto(current.url); await page.reload(); await readyCandidates(page);
     if (await page.locator('.leader-shell').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: theme === 'light' ? 'ライトモードに切り替え' : 'ダークモードに切り替え', exact: true }).click();
     const planButton = page.getByRole('button', { name: /条件付きの配分|配分の試算/ }).first();
     await planButton.click(); await visible(page.getByRole('dialog'));
@@ -357,12 +370,12 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
     });
     const runs = [];
     try {
-      await page.goto(server.url); await visible(page.locator(readySelector)); await page.waitForLoadState('networkidle');
+      await page.goto(server.url); await readyCandidates(page); await page.waitForLoadState('networkidle');
       const cdp = await context.newCDPSession(page);
       await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
       for (let repetition = 0; repetition < 3; repetition++) {
         const start = Date.now();
-        await page.goto(server.url); await visible(page.locator(readySelector));
+        await page.goto(server.url); await readyCandidates(page);
         await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
         const candidateMs = Date.now() - start;
         const initialTasks = await page.evaluate(() => ({ longest: Math.max(0, ...window.__reviewTasks.map(item => item.duration)), tasks: window.__reviewTasks }));
@@ -381,7 +394,7 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
           report.profile_diagnostics_attempted = true;
           report.profile_diagnostics ||= [];
           report.profile_diagnostics.push(await recordProfileDiagnostic({ cdp, page, output, name:`diagnostic-initial-${viewport.width}`, action:async () => {
-            await page.goto(server.url); await visible(page.locator(readySelector));
+            await page.goto(server.url); await readyCandidates(page);
             await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
           } }));
           // Keep method switching isolated from initial Worker delivery. These

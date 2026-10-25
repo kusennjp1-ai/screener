@@ -15,7 +15,7 @@ import { FINANCIAL_DESIGN_CASES, financialDesignScreens } from './financial-desi
 import { financialCarryDesignScreens } from './financial-carry-design-cases.mjs';
 import { dailyObservationDesignScreens } from './daily-observation-design-cases.mjs';
 import { measuredPerformanceFailures } from './limited-research-assessment.mjs';
-import { radarMeasurementFailures } from './radar-benchmark-context.mjs';
+import { radarMeasurementFailures, storedRadarMeasurementFailures } from './radar-benchmark-context.mjs';
 
 export const SCREENING_PRIORITY_POLICY = 'ordinary-carry-screening-priority-2026-10-21-v1';
 export const DESIGN_GROUPS = ['1440/dark', '1440/light', '390/dark', '390/light'];
@@ -33,12 +33,12 @@ const json = path => JSON.parse(read(path));
 const git = (...args) => execFileSync('git', ['-C', repo, ...args], { encoding: 'utf8' }).trim();
 const write = (path, value) => { const temporary = path + '.new'; writeFileSync(temporary, JSON.stringify(value, null, 2), { flag: 'wx' }); renameSync(temporary, path); };
 
-export function requiredScreeningCaptures(scope) {
+export function requiredScreeningCaptures(scope, mobileMap = false) {
   const result = [];
   for (const group of DESIGN_GROUPS) {
     const [width, theme] = group.split('/'), viewport = { width: Number(width) };
     const names = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan',
-      ...(viewport.width === 1440 ? ['compact'] : []),
+      ...(viewport.width === 1440 ? ['compact'] : mobileMap ? ['market-map'] : []),
       ...CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations', 'expanded-short'].map(view => `case-${symbol}-${view}`)),
       ...financialDesignScreens(viewport, theme), ...(scope === 'carry' ? financialCarryDesignScreens(viewport, theme) : []), ...dailyObservationDesignScreens(viewport, theme)];
     result.push(...names.map(name => `${name}/${group}`));
@@ -102,6 +102,16 @@ export function screeningPriorityBinding({ currentRoot, baselineRoot, commit, in
 }
 
 export function assessScreeningPriority(report, binding, completedGroups) {
+  return assessWithRadarContract(report, binding, completedGroups, radarMeasurementFailures);
+}
+
+// Historical package verification is separate from finish/checked live
+// acceptance: older known contracts cannot satisfy a new capture's gate.
+export function assessHistoricalScreeningPriority(report, binding, completedGroups) {
+  return assessWithRadarContract(report, binding, completedGroups, storedRadarMeasurementFailures);
+}
+
+function assessWithRadarContract(report, binding, completedGroups, radarFailures) {
   assert(binding?.policy === SCREENING_PRIORITY_POLICY && ['ordinary', 'carry'].includes(binding.scope), 'Explicit ordinary/carry policy required');
   assert(report.commit === binding.commit && report.input_basis === 'same_verified_input' && !report.assessment_mode, 'Report scope differs');
   assert(Array.isArray(report.failures) && report.failures.every(failure => typeof failure === 'string'), 'Original Design failures required');
@@ -110,7 +120,7 @@ export function assessScreeningPriority(report, binding, completedGroups) {
   if (report.performance?.length !== 4) { blocking.push('Exactly four baseline/current performance groups must complete'); timingComplete = false; }
   if (!isDeepStrictEqual(completedGroups, DESIGN_GROUPS)) blocking.push('All route/operation/financial groups must finish');
   if (report.data?.as_of_date !== binding.as_of_date || report.data?.research_generation !== binding.research_generation) blocking.push('Measured data identity differs from bound input');
-  const expected = requiredScreeningCaptures(binding.scope), keys = (report.screens || []).map(screen => screen.key);
+  const expected = requiredScreeningCaptures(binding.scope, report.mobile_map_contract === 'mobile-market-map-v1'), keys = (report.screens || []).map(screen => screen.key);
   if (keys.length !== expected.length || new Set(keys).size !== keys.length || expected.some(key => !keys.includes(key)) || report.screens?.some(screen => !safePath(screen.screenshot) || !hash(screen.sha256))) blocking.push('Every required current screenshot must complete');
   const exactCases = (records, named) => [1440, 390].every(width => named.every(item => records.filter(record => record.symbol === item.symbol && record.viewport?.width === width && record.theme === (width === 1440 ? 'dark' : 'light')
     && !record.error && record.source && record.financial_rows?.length && record.selection && record.purchase && record.csv).length === 1));
@@ -130,7 +140,7 @@ export function assessScreeningPriority(report, binding, completedGroups) {
     }
     const radar = (report.radar || []).filter(item => item.viewport?.width === width);
     if (radar.length !== 1 || radar[0].runs?.length !== 3 || !radar[0].runs.every(run => finite(run.first_frame_ms))) { blocking.push(`${width}: incomplete D9 measurement`); timingComplete = false; }
-    else for (const [index, run] of radar[0].runs.entries()) for (const failure of radarMeasurementFailures(run, { timing: false })) blocking.push(`${width}: D9 run ${index + 1}: ${failure}`);
+    else for (const [index, run] of radar[0].runs.entries()) for (const failure of radarFailures(run, { timing: false })) blocking.push(`${width}: D9 run ${index + 1}: ${failure}`);
   }
   const measured = measuredPerformanceFailures(report), warnings = original.filter(failure => measured.has(failure));
   for (const failure of measured) if (!original.includes(failure)) { blocking.push(`Measured timing failure missing from original report: ${failure}`); timingComplete = false; }

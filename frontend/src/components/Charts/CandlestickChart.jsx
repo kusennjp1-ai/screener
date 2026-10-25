@@ -3,6 +3,7 @@ import { useRef, useEffect, useLayoutEffect, useState, useMemo, useCallback } fr
 import { Box, CircularProgress, Alert, AlertTitle, Button, ToggleButtonGroup, ToggleButton, useTheme, Typography } from '@mui/material';
 import { createPriceChartSeries } from './createPriceChartSeries';
 import { buildBookAnnotations } from './bookAnnotations';
+import ChartSetupEvidence from '../../static/components/ChartSetupEvidence';
 import { VcpBoxPrimitive } from './vcpBoxPrimitive';
 import { TradeLevelsPrimitive } from './tradeLevelsPrimitive';
 import { BandStripPrimitive } from './bandStripPrimitive';
@@ -860,10 +861,13 @@ function CandlestickChart({
     {researchView && historyWarning && <Alert severity="warning">{historyWarning} {invalidHistory ? 'チャートは未表示です。日足の数値で未確認の項目を確認してください。' : '自動図解とピボット線は停止中です。表示中の履歴を購入判断に使わないでください。'}</Alert>}
     {researchView && !compact && keepResearchChrome && <div className="research-chart-controls" role="group" aria-label="チャート操作" aria-hidden={!hasData} style={{display:hasData?'flex':'none','--chart-control-accent':theme.palette.primary.main,'--chart-control-text':theme.palette.text.primary,'--chart-control-muted':theme.palette.text.secondary,'--chart-control-line':theme.palette.divider,'--chart-control-hover':theme.palette.action.hover,'--chart-control-selected':theme.palette.action.selected}}>
       <div className="research-chart-timeframe" role="group" aria-label="足の種類">{[['daily','日足'],['weekly','週足']].map(([value,label])=><button key={value} type="button" aria-pressed={timeframe===value} onClick={()=>{if(timeframe!==value){isFirstDataLoadRef.current=true;setTimeframe(value);}}}>{label}</button>)}</div>
+      <Box component={smallScreen ? 'details' : 'div'} className="research-range-settings" sx={{display:smallScreen ? 'block' : 'contents'}}>
+      {smallScreen && <summary>期間・拡大</summary>}
       {[['1か月',21],['3か月',63],['6か月',126],['1年',252]].map(([label,count]) => <button type="button" key={label} onClick={() => { setResearchRange(chartRef.current,chartData.candlesticks,effectiveTimeframe === "weekly" ? Math.ceil(count/5) : count); }}>{label}</button>)}
       <button type="button" aria-label="チャートを拡大" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)*.7,to:r.to}); }}>＋</button>
       <button type="button" aria-label="チャートを縮小" onClick={() => { const t=chartRef.current?.timeScale(),r=t?.getVisibleLogicalRange(); if(r)t.setVisibleLogicalRange({from:r.to-(r.to-r.from)/.7,to:r.to}); }}>−</button>
       <button type="button" onClick={() => { chartRef.current?.priceScale('right').applyOptions({autoScale:true}); setDefaultVisibleWindow(chartData.candlesticks.length); }}>リセット</button>
+      </Box>
       <button type="button" aria-pressed={showBookAnnotations} onClick={() => setShowBookAnnotations(v=>!v)}>図解 {showBookAnnotations?'詳細':'簡易'}</button>{compactResearchChrome && movingAverageDetails}{researchActions}
     </div>}
     {researchView && !compact && !compactResearchChrome && keepResearchChrome && <Box className="chart-research-meta" hidden={!hasData} style={!hasData ? {display:'none'} : undefined} sx={{px:1.5,py:.5,fontSize:11,color:'text.secondary',...(researchMetaActions && {display:'flex',flexWrap:'wrap',alignItems:'center',gap:1,'& > details':{flexShrink:0},'& > details[open]':{flexBasis:'100%',maxWidth:'100%'}})}}>
@@ -986,6 +990,9 @@ function CandlestickChart({
         style={{
           width: '100%',
           height: '100%',
+          // Native scrolling also handles the expanded viewer's scroll owner.
+          // Reserve space for its sticky title and the workspace header.
+          scrollMarginTop: 'calc(80px + env(safe-area-inset-top, 0px))',
         }}
       />
 
@@ -1118,6 +1125,25 @@ function CandlestickChart({
       )}
     </Box>
     {researchLegendBelow && researchLegend}
+    {researchView && bookAnnotations && !compact && !showLoading && !showError && !showNoData && <ChartSetupEvidence
+      key={JSON.stringify([symbol, chartIdentity, priceData?.at(-1)?.date])}
+      annotations={annotations} symbol={symbol} date={priceData?.at(-1)?.date} warning={historyWarning}
+      daily={effectiveTimeframe === 'daily'} detailed={showBookAnnotations}
+      onToggle={() => setShowBookAnnotations(value => !value)}
+      onFocus={leg => {
+        setShowBookAnnotations(true);
+        const recovery = annotations.boxes.find(box => box.curve && box.start === leg.start)?.recoveryDate || leg.end;
+        const from = chartData.candlesticks.findIndex(bar => dateKey(bar.time) === leg.start);
+        const to = chartData.candlesticks.findIndex(bar => dateKey(bar.time) === recovery);
+        // Same timeScale API used by setResearchRange; keep the recovery leg in view.
+        if (from >= 0 && to >= from) {
+          chartRef.current?.timeScale().setVisibleLogicalRange({ from: from - 3, to: to + 3 });
+          // Keep keyboard focus on the invoking interval; only reveal its plot.
+          chartContainerRef.current?.scrollIntoView?.({ block: 'start', inline: 'nearest',
+            behavior: window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth' });
+        }
+      }}
+    />}
     {bookAnnotations && !compact && !showLoading && !showError && !showNoData && <Box sx={{ px: 1.5, py: 1, bgcolor: 'background.paper' }}>
         {!researchView && <Button size="small" onClick={() => setShowBookAnnotations(v => !v)} aria-pressed={showBookAnnotations}>書籍の図解 {showBookAnnotations ? 'ON' : 'OFF'}</Button>}
         {!researchView && <Typography sx={{ fontSize: 12 }} role="status">{effectiveTimeframe !== 'daily' ? '図解は日足で表示します。日足に切り替えてください。' : showBookAnnotations ? `${annotations.boxes[0]?.label ? annotations.boxes[0].label + '。' : ''}${annotations.summary}` : researchView ? '簡易表示：ベース候補の枠と共通ピボット。図解ボタンで収縮区間・過去の上抜けを表示します。' : '自動注記を非表示にしています。'}</Typography>}

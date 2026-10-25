@@ -1,3 +1,4 @@
+import { openResearchList } from './research-navigation.js';
 import { test, expect } from '@playwright/test';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 
@@ -24,7 +25,7 @@ for (const width of [1440, 375]) for (const theme of ['dark', 'light']) test(`bo
       : name === 'research.json' ? { as_of_date: date, rows: [row] } : {};
     return route.fulfill({ json });
   });
-  await page.goto('/');
+  await page.goto('/'); await openResearchList(page);
   const candidate = page.getByRole('button', { name: /^SOURCE の分析を表示/ });
   await expect(candidate).toBeVisible();
   if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();

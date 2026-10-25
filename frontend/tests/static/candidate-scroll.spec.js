@@ -1,3 +1,4 @@
+import { openResearchList } from './research-navigation.js';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
@@ -20,7 +21,7 @@ async function openFixture(page,fixtureRows=rows){
   const payload=file==='manifest.json'?{generated_at:`${date}T23:00:00Z`,research_generation:'scroll-fixture',as_of_date:date,default_market:'US',supported_markets:['US'],markets:{US:{as_of_date:date,assets:{research:{path:'research.json'}}}}}:file==='research.json'?{as_of_date:date,rows:fixtureRows}:{};
   return route.fulfill({json:payload});
  });
- await page.goto('/');
+ await page.goto('/'); await openResearchList(page);
  await expect(page.getByRole('heading',{name:`対象銘柄 ${fixtureRows.length}件`})).toBeVisible();
 }
 async function expectFocusedEntry(row){

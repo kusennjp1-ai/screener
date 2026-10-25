@@ -1,16 +1,17 @@
+import { readyResearchCandidates } from './research-browser-navigation.mjs';
 import { recordProfileDiagnostic } from './profile-diagnostic.mjs';
 import { summarizeContinuousSwitch } from './continuous-switch-summary.mjs';
 
 // Supplementary evidence only. Start profiling before navigation,
 // then retain the original ready/two-frame/click/two-frame sequence without a
 // profiler restart or deliberate settling interval at the switch boundary.
-export async function recordContinuousSwitchDiagnostic({ cdp, page, output, url, readySelector, visible, width }) {
+export async function recordContinuousSwitchDiagnostic({ cdp, page, output, url, readySelector, width }) {
   const name = `diagnostic-continuous-${width}`;
   let phases;
   try {
     const result = await recordProfileDiagnostic({ cdp, page, output, name, settleMs: 500, action: async () => {
       await page.goto(url);
-      await visible(page.locator(readySelector));
+      await readyResearchCandidates(page,readySelector);
       await page.evaluate(prefix => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(() => {
         const snapshot = phase => {
           const label = `${prefix}:${phase}`;

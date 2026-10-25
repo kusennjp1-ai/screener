@@ -294,7 +294,7 @@ it('keeps one overview in matching responsive DOM order without losing selected 
   expect(view.container.querySelectorAll('#leader-trend-template')).toHaveLength(1);
   expect(view.container.querySelectorAll('#research-detail-tabs')).toHaveLength(1);
   if(narrow){
-   expect(overview().closest('.research-symbol-head')).not.toBeNull();
+   expect(chart().nextElementSibling).toBe(overview());
    expect(view.container.querySelector('.symbol-qualification-context')).toHaveTextContent('価格位置は購入可否と別です。');
    expect(view.container.querySelector('.symbol-qualification-context')).not.toHaveTextContent('未達');
    expect(overview().querySelector('.leader-detail-verdict')).toHaveTextContent(/未達.*未確認/);

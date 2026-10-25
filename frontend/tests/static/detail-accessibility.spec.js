@@ -1,3 +1,4 @@
+import { openResearchList } from './research-navigation.js';
 import { expectSvgChart } from './svg-chart-observation.js';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
@@ -38,7 +39,7 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
       :row?{symbol:row.symbol,as_of_date:date,generated_at:generatedAt,bars,stock_data:row,rs_line:[]}:{};
     return route.fulfill({json:data});
   });
-  await page.goto('/#/?method=oneil');
+  await page.goto('/#/?method=oneil'); await openResearchList(page);
   if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え'}).click();
   const candidate=page.getByRole('button',{name:/^SYNTH の分析を表示/});
   await expect(candidate).toBeVisible();
@@ -117,6 +118,8 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   const dialog=page.getByRole('dialog');await expect(dialog).toBeVisible();
   if(width===375){
     await page.setViewportSize({width:390,height:568});
+    // Opening the mobile tools must still leave the real date axis visible.
+    await dialog.locator('.leader-svg-extra-controls summary').click();
     let initialGeometry;
     try {
       await expect.poll(async()=>{

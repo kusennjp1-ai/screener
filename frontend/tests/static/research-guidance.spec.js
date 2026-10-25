@@ -1,3 +1,4 @@
+import { openResearchList } from './research-navigation.js';
 import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
@@ -22,7 +23,7 @@ for (const width of [1440, 1024, 320]) test(`readiness guidance, disclosures and
       : name === 'research.json' ? { as_of_date: date, rows } : {};
     return route.fulfill({ json: payload });
   });
-  await page.goto('/');
+  await page.goto('/'); await openResearchList(page);
   const candidate = page.getByRole('button', { name: /^EDGE の分析を表示/ });
   await expect(candidate).toBeVisible();
   await expect(candidate).toHaveAccessibleName(/日次 .*最新の取引日：未確認/);
@@ -68,8 +69,7 @@ for (const width of [1440, 1024, 320]) test(`readiness guidance, disclosures and
     const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
     await expect(detail).toBeFocused();
     const gap=await detail.evaluate(node=>node.getBoundingClientRect().top-document.querySelector('.leader-header').getBoundingClientRect().bottom);
-    expect(gap).toBeGreaterThanOrEqual(16);
-    expect(gap).toBeLessThanOrEqual(24); // Only root header clearance, not a second detail margin.
+    expect(Math.abs(gap)).toBeLessThanOrEqual(1); // The workspace reserves its fixed header once.
     await expect(detail.locator('.entry-source-badge')).toBeInViewport({ratio:1});
     // The prior hero link can lie at the viewport boundary after this focus
     // jump. It must retain a full target and never collide with sticky nav.

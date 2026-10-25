@@ -51,10 +51,9 @@ const ResearchDetail = memo(forwardRef(function ResearchDetail({selected,method,
     <button className="watch-button" onClick={()=>onWatch(selected.symbol)} aria-label={`${selected.symbol} ${watch.includes(selected.symbol)?'ウォッチ解除':'ウォッチに保存'}`} aria-pressed={watch.includes(selected.symbol)}>{watch.includes(selected.symbol)?'★':'☆'}</button>
     <p className="symbol-qualification-context" aria-label="価格位置と購入条件">価格位置は購入可否と別です。{!narrowDetail&&<span>未達 {readiness.failed}・未確認 {readiness.unknown}{readiness.notApplicable>0?`・対象外 ${readiness.notApplicable}`:''}</span>}</p>
     {checks.financial_exclusion&&<p className="symbol-qualification-context" role="note" data-financial-exclusion={checks.financial_exclusion.policy} data-qualification="excluded">{checks.financial_exclusion.label}。財務履歴・根拠の不足や期限切れがあるため、選定・購入候補・配分から除外します。未達の実測値はそのまま表示します。</p>}
-    {narrowDetail&&<LeaderDetailOverview row={selected} plan={plan} readiness={readiness} date={date} method={method} now={now} onConditions={showConditions}/>}
    </header>
    <ResearchChart method={method} quote={usableQuote} date={date} market={market} now={now} row={selected} rsRating={selected.rs_rating} entry={chartEntry} symbol={selected.symbol} generation={version} onExpand={onExpand}/>
-   {!narrowDetail&&<LeaderDetailOverview row={selected} plan={plan} readiness={readiness} date={date} method={method} now={now} onConditions={showConditions}/>}
+   <LeaderDetailOverview row={selected} plan={plan} readiness={readiness} date={date} method={method} now={now} onConditions={showConditions}/>
    <EntryCard plan={plan} readiness={readiness} onConditions={showConditions} onConnect={()=>{setConnecting(!connecting);choose('conditions');}}/>
    <LeaderDetailFundamentals row={selected} date={date} method={method} now={now} onEvidence={showBookFinancial}/>
    <section className="research-evidence">

@@ -31,6 +31,7 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
     await route.fulfill({json:payload});
   });
   await page.goto('/');
+  if(width===390)await page.getByRole('button',{name:'一覧・絞り込みで探す →'}).click();
   await expect(page.locator('.changes-desktop')).toContainText('新たに通過 7');
   expect(fullRequests).toBe(0);
   await page.getByRole('button',{name:'候補の日次変化',exact:true}).click();
@@ -45,7 +46,8 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
   expect(fullRequests).toBe(1);
   await page.getByRole('button',{name:'候補の変化を閉じる'}).click();
   const navigation=page.getByRole('navigation',{name:width===390?'モバイルナビゲーション':'メインナビゲーション'});
-  await navigation.getByRole('link',{name:'比較',exact:true}).click();
+  if(width===390)await page.getByRole('link',{name:'チャート比較 ↗',exact:true}).click();
+  else await navigation.getByRole('link',{name:'比較',exact:true}).click();
   await expect(page.getByRole('heading',{name:'買い位置を比較する'})).toBeVisible();
   await expectSvgChart(page.getByRole('article',{name:'AMD 比較チャート'}),{symbol:'AMD',bars,rs:'present'});
   expect(await page.locator('.comparison-grid .leader-evidence-chart svg').count()).toBeLessThanOrEqual(6);
@@ -60,11 +62,13 @@ for(const width of [1440,390])test(`comparison, daily changes, sector navigation
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await expect(page.getByRole('combobox',{name:'全チャートの期間',exact:true})).toHaveValue('126');
   await navigation.getByRole('link',{name:'市場',exact:true}).click();
+  if(width===390)await page.getByRole('link',{name:'市場環境を確認 指数・騰落・市場の広がり'}).click();
   await page.getByRole('tab',{name:'業種の強さ',exact:true}).click();
   await expect(page.getByRole('list',{name:'相対指数順の業種一覧'}).getByRole('link',{name:/金融、相対指数/})).toBeVisible();
   await page.getByRole('button',{name:'表',exact:true}).click();
   await expect(page.getByRole('table',{name:'業種の相対強度一覧'})).toContainText('3 / 3');
   await page.getByRole('link',{name:'情報技術 / XLK',exact:true}).click();
+  if(width===390)await page.getByRole('button',{name:'一覧・絞り込みで探す →'}).click();
   await expect(page.getByRole('heading',{name:'対象銘柄 4件'})).toBeVisible();
   await page.getByRole('button',{name:'候補を絞り込む'}).click();
   await expect(page.getByRole('combobox',{name:'業種',exact:true})).toHaveValue('Technology');

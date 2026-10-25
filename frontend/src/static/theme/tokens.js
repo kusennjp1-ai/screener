@@ -1,15 +1,17 @@
 // D1: the only color definitions for the static research application.
 export const palettes = {
   dark: {
-    ground:'#000000', panel:'#000000', surface:'#000000', 'surface-2':'#16181c', line:'#2f3336', 'line-2':'#2f3336',
-    text:'#e7e9ea', 'text-2':'#e7e9ea', 'text-3':'#71767b', accent:'#1d9bf0', 'accent-ink':'#000000',
-    zone:'#00ba7c', wait:'#1d9bf0', ext:'#e8b04a', neg:'#e5646e', neutral:'#71767b', up:'#00ba7c', down:'#e5646e',
+    ground:'#10121D', panel:'#181B29', surface:'#1D2132', 'surface-2':'#252A3D', line:'#343B51', 'line-2':'#46516B',
+    text:'#F0F2FA', 'text-2':'#CBD1E3', 'text-3':'#A2ADC5', accent:'#B8A4FF', 'accent-ink':'#19152D',
+    rail:'#171329', 'rail-text':'#E4DDF8', 'rail-muted':'#B7AECD', 'rail-active':'#39304F',
+    zone:'#57D5AD', wait:'#93B6FF', ext:'#F0C273', neg:'#FF91A0', neutral:'#A2ADC5', up:'#57D5AD', down:'#FF91A0',
     'zone-fill':'rgba(0,186,124,.10)', 'zone-edge':'rgba(0,186,124,.45)', grid:'rgba(255,255,255,.05)',
     glow:'rgba(0,186,124,.14)', scrim:'rgba(3,5,8,.62)', vol:'rgba(174,183,199,.26)', 'vol-hi':'rgba(0,186,124,.75)',
   },
   light: {
-    ground:'#EEF1F5', panel:'#F6F7F9', surface:'#FFFFFF', 'surface-2':'#EDF0F5', line:'#E0E5EC', 'line-2':'#CCD3DE',
-    text:'#0B0F16', 'text-2':'#434C5E', 'text-3':'#5A6477', accent:'#5543D0', 'accent-ink':'#FFFFFF',
+    ground:'#F3F4F8', panel:'#FFFFFF', surface:'#FFFFFF', 'surface-2':'#F0EEF8', line:'#E0E2ED', 'line-2':'#C6CBDD',
+    text:'#222238', 'text-2':'#50516B', 'text-3':'#676A82', accent:'#6551C8', 'accent-ink':'#FFFFFF',
+    rail:'#29223D', 'rail-text':'#F4EFFD', 'rail-muted':'#C0B7D2', 'rail-active':'#4A3D67',
     zone:'#0B7553', wait:'#1C5CC2', ext:'#865700', neg:'#B0344A', neutral:'#4B5567', up:'#12966B', down:'#D2455A',
     'zone-fill':'rgba(11,117,83,.08)', 'zone-edge':'rgba(11,117,83,.45)', grid:'rgba(12,18,30,.06)',
     glow:'rgba(11,117,83,.10)', scrim:'rgba(20,24,32,.32)', vol:'rgba(67,76,94,.22)', 'vol-hi':'rgba(11,117,83,.70)',

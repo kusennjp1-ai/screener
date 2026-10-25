@@ -19,3 +19,21 @@
 .leader-svg-controls select{max-width:100%;min-width:86px;background:var(--panel)}
 .leader-svg-caption-mobile{padding:4px 8px;line-height:1.5}
 .leader-svg-caption-mobile>span{display:block}
+.leader-svg-extra-controls>details[open]{display:contents}
+.leader-svg-extra-controls:has(details[open]){flex-basis:100%}
+.leader-evidence-chart [data-vcp-leg][data-selected=true] [data-vcp-label-box]{stroke:var(--accent);stroke-width:2}
+@media(max-width:700px){
+ .leader-svg-controls{gap:4px;padding:6px}
+ .leader-svg-controls select{min-width:72px;width:76px;padding:6px 2px}
+ .leader-svg-controls button{padding:6px;min-height:44px;border-radius:12px}
+ .leader-svg-extra-controls summary{padding:6px;display:flex;align-items:center;justify-content:center;border-radius:12px}
+ .leader-svg-extra-controls:has(details[open]){order:9}
+ .leader-svg-extra-controls details[open] button{margin:2px}
+ .leader-evidence-chart>svg{scroll-margin-top:8px}
+}
+@media(min-width:701px){.leader-svg-extra-controls>details{display:contents}}
+
+/* The short modal keeps the opened tools in its horizontal toolbar, so the
+   300px plot and date axis remain visible without shrinking touch targets. */
+.leader-evidence-short .leader-svg-extra-controls:has(details[open]){display:flex;flex:0 0 auto;order:0}
+.leader-evidence-short .leader-svg-extra-controls details[open]>*{flex-shrink:0}

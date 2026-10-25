@@ -1,3 +1,4 @@
+import { openResearchList } from './research-navigation.js';
 import { test, expect } from '@playwright/test';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 import { rankCandidates, entryPlan } from '../../src/static/researchEngine.js';
@@ -14,7 +15,7 @@ test('390px feed combines canonical price/finite RS filters, search, four strate
   const name=new URL(route.request().url()).pathname.split('/').pop();
   return route.fulfill({json:name==='manifest.json'?{as_of_date:date,generated_at:'2026-10-23T01:00:00Z',research_generation:'feed-filter-fixture',assets:{research:{path:'research.json'}}}:name==='research.json'?{as_of_date:date,rows}:{}});
  });
- await page.goto('/');
+ await page.goto('/'); await openResearchList(page);
  const list=page.getByRole('list',{name:'投資手法別の銘柄候補'}),quick=page.getByRole('group',{name:'クイック絞り込み'});
  const position=quick.getByRole('button',{name:'買い位置',exact:true}),rs=quick.getByRole('button',{name:'RS 80+',exact:true}),near=quick.getByRole('button',{name:'あと1条件',exact:true});
  const tabs=page.getByRole('group',{name:'投資手法'}),search=page.locator('.leader-feed-search').getByRole('textbox');

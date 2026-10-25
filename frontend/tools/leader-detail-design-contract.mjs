@@ -14,8 +14,8 @@ export function observeLeaderDetail() {
  // The clip rectangle in defs has no CSS box. Transform its real SVG lengths
  // through the rendered SVG matrix, rather than guessing a pane percentage.
  if(shown(svg)&&clip){const matrix=svg.getScreenCTM();if(matrix){const x=clip.x.baseVal.value,y=clip.y.baseVal.value,w=clip.width.baseVal.value,h=clip.height.baseVal.value;const a=new DOMPoint(x,y).matrixTransform(matrix),b=new DOMPoint(x+w,y+h).matrixTransform(matrix);price={left:a.x,top:a.y,right:b.x,bottom:b.y,width:b.x-a.x,height:b.y-a.y};}}
- const header=box(document.querySelector('.leader-header')),nav=box(document.querySelector('.leader-mobile-nav'));
- const content={left:0,right:innerWidth,top:Math.max(0,header?.bottom||0),bottom:Math.min(innerHeight,nav?.top??innerHeight)};
+ const header=box(document.querySelector('.leader-header')),nav=box(document.querySelector('.mobile-research-nav'))||box(document.querySelector('.leader-mobile-nav')),actions=box(document.querySelector('.mobile-chart-actions'));
+ const content={left:0,right:innerWidth,top:Math.max(0,header?.bottom||0),bottom:Math.min(innerHeight,nav?.top??innerHeight,actions?.top??innerHeight)};
  // Respect actual scroll/clipping ancestors in addition to fixed chrome.
  for(let parent=svg?.parentElement;parent&&parent!==document.body;parent=parent.parentElement){const style=getComputedStyle(parent),r=parent.getBoundingClientRect();if(/(auto|scroll|hidden|clip)/.test(style.overflowY)){content.top=Math.max(content.top,r.top);content.bottom=Math.min(content.bottom,r.bottom);}if(/(auto|scroll|hidden|clip)/.test(style.overflowX)){content.left=Math.max(content.left,r.left);content.right=Math.min(content.right,r.right);}}
  let visible=null,hits=[];

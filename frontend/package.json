@@ -11,6 +11,7 @@
     "preview": "vite preview",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:linux": "node tools/test-linux.mjs",
     "test:smoke": "playwright test"
   },
   "dependencies": {

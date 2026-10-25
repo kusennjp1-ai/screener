@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { assessScreeningPriority } from './screening-priority-acceptance.mjs';
+import { assessHistoricalScreeningPriority } from './screening-priority-acceptance.mjs';
 import { parseFinancialCsv } from './financial-design-cases.mjs';
 import { validateFunctionalEvidence } from './reviewed-design-functional-evidence.mjs';
 import { assessScreeningImageReview } from './screening-priority-image-review.mjs';
@@ -94,7 +94,7 @@ export function verifyStoredMeasurement(root, now = Date.now()) {
   keys(binding, ['policy', 'scope', 'commit', 'tree', 'run_id', 'run_attempt', 'provenance_sha256', 'publication_sha256', 'manifest_sha256', 'ui_digest', 'logical_data_inventory_sha256', 'physical_inventory_sha256', 'current_inventory_sha256', 'baseline_inventory_sha256', 'as_of_date', 'research_generation'], 'Capture binding');
   assert(commit(binding.commit) && commit(binding.tree) && /^[1-9][0-9]*$/.test(binding.run_id) && /^[1-9][0-9]*$/.test(binding.run_attempt), 'Invalid captured source/run identity');
   for (const field of ['provenance_sha256', 'publication_sha256', 'manifest_sha256', 'ui_digest', 'logical_data_inventory_sha256', 'physical_inventory_sha256', 'current_inventory_sha256', 'baseline_inventory_sha256', 'research_generation']) assert(sha(binding[field]), 'Missing captured ' + field);
-  const recomputed = assessScreeningPriority(report, binding, completion.completed_groups);
+  const recomputed = assessHistoricalScreeningPriority(report, binding, completion.completed_groups);
   assert.deepEqual(assessment, recomputed, 'Historical acceptance classification changed');
   assert(assessment.functional_acceptance === 'passed' && assessment.policy_exit === 0 && assessment.blocking_failures.length === 0, 'Incomplete or failed functional measurement');
   validateFunctionalEvidence(report, binding);

@@ -27,6 +27,7 @@ import BreadthChart from '../../components/Charts/BreadthChart';
 import BreadthGroupAttribution from '../components/BreadthGroupAttribution';
 import { GlossaryHeaderCell, useMetricInfoPopover } from '../../components/common/MetricInfoPopover';
 import MarketPulse from '../components/MarketPulse';
+import MarketContextCards from '../components/MarketContextCards';
 import BookMarketEvidence from '../components/BookMarketEvidence';
 import BookBreakoutJournal from '../components/BookBreakoutJournal';
 import { breadthSummary, recentBreadth } from '../breadthSummary';
@@ -151,7 +152,8 @@ function StaticBreadthPage() {
       {selectedTab !== 2 && unavailable && <Alert data-testid="breadth-unavailable" severity={breadthQuery.isError?'error':'info'} action={<Button onClick={()=>breadthQuery.refetch()}>再試行</Button>}>{breadthQuery.data?.message || '騰落データを取得できません。業種の強さは別タブで確認できます。'}</Alert>}
       {selectedTab === 0 && !unavailable && (
         <>
-          <MarketPulse current={mismatch ? { date: current.date } : current} history={filteredChartData} range={timeRange} onRangeChange={setTimeRange} />
+          <MarketPulse current={mismatch ? { date: current.date } : current} history={filteredChartData} range={timeRange} onRangeChange={setTimeRange}
+            context={marketEntry.market === 'US' ? <MarketContextCards evidence={mismatch ? null : payload.book_market_evidence} expectedDate={marketEntry.as_of_date} /> : null} />
           {marketEntry.market === 'US' && <details className="market-disclosure"><summary>市場指標の履歴と未取得項目</summary>
             {historyNotice && <Alert severity={historyQuery.isError || historyReferenceError || mismatch ? 'warning' : 'info'} sx={{ my: 1 }}>{historyNotice}比較可能な履歴は未取得として表示します。</Alert>}
             <MarketIndicatorHistory history={hasHistoryAsset ? historyUnavailable ? undefined : historyQuery.data.history : payload.market_indicator_history}

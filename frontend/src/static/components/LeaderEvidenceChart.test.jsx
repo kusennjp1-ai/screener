@@ -9,6 +9,25 @@ afterEach(cleanup);
 const options = { bars:fixture.bars,symbol:fixture.symbol,date:fixture.as_of_date,rsLine:fixture.rs_line };
 const props = { symbol:fixture.symbol,date:fixture.as_of_date,priceData:fixture.bars,rsLineData:fixture.rs_line,benchmarkSymbol:fixture.benchmark_symbol,row:fixture.row,payload:fixture,smallScreen:true,pivotPrice:340,buyCeiling:357,stopPrice:323 };
 
+it('binds the VCP lab to exactly the same measured intervals as the SVG and resets on identity change',()=>{
+ const measured = buildBookTechnicalEvidence(fixture.row,fixture,fixture.as_of_date);
+ const {container,rerender}=render(<LeaderEvidenceChart {...props} technicalEvidence={measured} chartIdentity="first"/>);
+ const first=measured.vcp.legs[0];
+ const button=screen.getByRole('button',{name:'C1 の収縮区間を表示'});
+ expect(button).toHaveTextContent(first.depthPct.toFixed(1));
+ fireEvent.click(button);
+ expect(button).toHaveAttribute('aria-pressed','true');
+ const dates=[...container.querySelectorAll('[data-close]')].map(node=>node.dataset.date);
+ expect(dates).toContain(first.startDate);expect(dates).toContain(first.endDate);
+ expect(container.querySelector('[data-vcp-leg="1"]')).toHaveAttribute('data-selected','true');
+ expect(container.querySelector('.chart-contraction-detail')).toHaveTextContent(first.startDate);
+ fireEvent.click(screen.getByRole('button',{name:'週足',exact:true}));
+ expect(screen.queryByRole('button',{name:'C1 の収縮区間を表示'})).not.toBeInTheDocument();
+ rerender(<LeaderEvidenceChart {...props} technicalEvidence={measured} chartIdentity="second"/>);
+ expect(container.querySelectorAll('[data-close]')).toHaveLength(63);
+ expect(container.querySelector('[data-vcp-leg][data-selected="true"]')).toBeNull();
+});
+
 describe('unchanged historical chart data and calculation contracts', () => {
   it.each(['daily','weekly'])('reuses exact existing %s OHLC/MA conversion without mutation', timeframe => {
     const before = structuredClone(fixture),actual=leaderChartModel({...options,timeframe});
@@ -86,6 +105,7 @@ describe('self-drawn SVG evidence and controls', () => {
     expect(container.querySelector('svg').getAttribute('aria-label')).not.toBe(initial);
     fireEvent.click(screen.getByRole('button',{name:'週足',exact:true}));
     expect(screen.getByRole('button',{name:'週足',exact:true})).toHaveAttribute('aria-pressed','true');
+    fireEvent.click(screen.getByText('操作',{selector:'summary'}));
     expect(screen.getByRole('button',{name:'VCP注記'})).toBeDisabled();
     expect(container.textContent).toContain('直前10週');
     fireEvent.click(screen.getByRole('button',{name:'日足',exact:true}));
@@ -137,6 +157,7 @@ describe('self-drawn SVG evidence and controls', () => {
     for(const [value,count] of [['21',21],['63',63],['126',126],['252',252]]){
       fireEvent.change(select,{target:{value}});expect(container.querySelectorAll('[data-close]')).toHaveLength(Math.min(count,fixture.bars.length));
     }
+    fireEvent.click(screen.getByText('操作',{selector:'summary'}));
     fireEvent.click(screen.getByRole('button',{name:'表示期間を拡大'}));expect(select).toHaveValue('');
     fireEvent.change(select,{target:{value:'63'}});expect(select).toHaveValue('63');
     const caption=container.querySelector('.leader-svg-caption-mobile');
@@ -159,7 +180,7 @@ describe('self-drawn SVG evidence and controls', () => {
       if(index)expect(box.y).toBeGreaterThanOrEqual(boxes[index-1].y+boxes[index-1].height+4);
       const group=svg.querySelector(`[data-vcp-leg="${index+4}"]`),point=group.querySelector('circle');
       expect(group.querySelector('[data-vcp-leader]').getAttribute('d').endsWith(`L${point.getAttribute('cx')} ${point.getAttribute('cy')}`)).toBe(true);
-      expect(group.querySelector('text')).toHaveTextContent(`T${index+4} ${(6.8+index/10).toFixed(1)}%`);
+      expect(group.querySelector('text')).toHaveTextContent(`C${index+4} ${(6.8+index/10).toFixed(1)}%`);
     }
     const originalBars=[...svg.querySelectorAll('[data-close]')].map(node=>node.outerHTML),originalAxis=pane.outerHTML;
     if(!layout.compact){

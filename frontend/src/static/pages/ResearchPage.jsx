@@ -5,13 +5,18 @@ import ConnectionStatus from '../components/ConnectionStatus';
 import { SECTORS } from '../sectorStrength';
 import { useWorkbench } from '../useWorkbench';
 import ResearchHero from '../components/ResearchHero';
+import MobileMarketMap from '../components/MobileMarketMap';
+import GridViewIcon from '@mui/icons-material/GridView';
+import ShowChartIcon from '@mui/icons-material/ShowChart';
+import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import '../mobileResearch.css';
 import ResearchFreshnessNotice from '../components/ResearchFreshnessNotice';
 import CandidatePerformance from '../components/CandidatePerformance';
 import WatchNotifications from '../components/WatchNotifications';
 import { filterRanked, prepareSessionCurrent, sessionCurrentFromIntervals } from '../researchPresentation';
 import { useCallback, useEffect, useDeferredValue, useMemo, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useLocation } from 'react-router-dom';
+import { Link as RouterLink, useLocation } from 'react-router-dom';
 import { Alert, Box, Button, CircularProgress, FormControlLabel, Drawer, Stack, Switch, Typography, useMediaQuery } from '@mui/material';
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useStaticChartIndex } from '../chartClient';
@@ -60,6 +65,7 @@ export default function ResearchPage({compareOnly=false}) {
     return()=>{window.removeEventListener('research:search',searchEvent);window.removeEventListener('research:back',backEvent);};
   },[]);
   const [mobileView, setMobileView] = useState(() => params.get('symbol') ? 'detail' : 'list');
+  const [mobileMap, setMobileMap] = useState(() => smallScreen && !params.get('symbol'));
   const [liquid, setLiquid] = useState(() => !params.get('symbol'));
   const detailRef = useRef(null);
   const [onlyWatch, setOnlyWatch] = useState(false);
@@ -117,8 +123,11 @@ export default function ResearchPage({compareOnly=false}) {
     setStrict(false);
     setNearOnly(false);
     setPositionOnly(false);setRs80Only(false);
-    setOnlyWatch(false);
-    setMobileView(ticker ? 'detail' : 'list');
+    const mobileDestination = params.get('mobile');
+    setOnlyWatch(mobileDestination === 'watch');
+    if (mobileDestination === 'watch') setLiquid(false);
+    setMobileView(ticker || mobileDestination === 'chart' ? 'detail' : 'list');
+    setMobileMap(Boolean(window.matchMedia?.('(max-width:700px)')?.matches) && !ticker && !['chart','watch'].includes(mobileDestination));
     setFiltersOpen(false);
     setChart(null);
     setVerificationSymbol(null);
@@ -214,7 +223,7 @@ export default function ResearchPage({compareOnly=false}) {
     detailRef.current?.focus?.({ preventScroll: true });
     detailRef.current?.scrollIntoView?.({ block: 'start', behavior: 'auto' });
   }); }
-  const selectSymbol = useCallback(ticker => {setSymbol(ticker);if(window.matchMedia?.('(max-width:700px)')?.matches){setMobileView('detail');requestAnimationFrame(()=>{detailRef.current?.focus?.({preventScroll:true});detailRef.current?.scrollIntoView?.({block:'start'});});}},[]);
+  const selectSymbol = useCallback(ticker => {setSymbol(ticker);setMobileMap(false);if(window.matchMedia?.('(max-width:700px)')?.matches){setMobileView('detail');requestAnimationFrame(()=>{detailRef.current?.focus?.({preventScroll:true});detailRef.current?.scrollIntoView?.({block:'start'});});}},[]);
   const expandChart = useCallback(()=>setChart(selected?.symbol),[selected?.symbol]);
   const disconnect = useCallback(()=>setPersonalKey(''),[]);
   const openFilters = useCallback(()=>setFiltersOpen(true),[]);
@@ -232,7 +241,7 @@ export default function ResearchPage({compareOnly=false}) {
   }
   const toggleNear = useCallback(()=>{setNearOnly(value=>!value);setStrict(false);},[]);
   const detailState = useMemo(()=>({isLoading:detail.isLoading,isError:detail.isError,isSuccess:detail.isSuccess,refetch:detail.refetch}),[detail.isLoading,detail.isError,detail.isSuccess,detail.refetch]);
-  const browse = () => {setMobileView('list'); requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
+  const browse = () => {setMobileMap(false);setMobileView('list'); requestAnimationFrame(()=>{const target=document.getElementById('candidate-board');target?.focus({preventScroll:true});target?.scrollIntoView?.({block:'start'});});};
   function download() {
     const csv = researchCsv(ranked, method, bundle.data?.date, now);
     const url = URL.createObjectURL(new Blob(['\uFEFF', csv], { type: 'text/csv;charset=utf-8' }));
@@ -244,10 +253,13 @@ export default function ResearchPage({compareOnly=false}) {
     : null;
   const detailFreshness=smallScreen&&mobileView==='detail'&&!compareOnly;
   const methodControls=useMemo(()=><div className="method-tabs" role="group" aria-label="投資手法">{Object.entries(METHODS).map(([key,label])=><button key={key} aria-pressed={method===key} onClick={()=>setMethod(key)}>{label.replace(' / CAN SLIM','').replace('リーダー','')}</button>)}</div>,[method]);
-  return <Box component="main" className={`research-workbench${compareOnly?' comparison-page':''}`} data-mobile-view={mobileView}>
+  const mobileIndex = navigationSymbols.indexOf(selected?.symbol);
+  const moveMobile = offset => { const next = navigationSymbols[mobileIndex + offset]; if (next) selectSymbol(next); };
+  return <Box component="main" className={`research-workbench${compareOnly?' comparison-page':''}`} data-mobile-view={mobileView} data-mobile-map={smallScreen && mobileMap && !compareOnly}>
     <ConnectionStatus date={bundle.data?.date || entry.as_of_date}/>
+    {smallScreen && mobileMap && !compareOnly && <>{freshnessNotice}<MobileMarketMap ranked={evaluated} date={bundle.data?.date} sector={sector} onSector={setSector} loading={!bundle.data} methodLabel={METHODS[method]} onSelect={ticker => {resetFilters();setLiquid(false);setView('list');selectSymbol(ticker);}}/><button className="mobile-map-browse mobile-map-open-list" onClick={browse}>一覧・絞り込みで探す →</button></>}
     {!compareOnly&&<div className="leader-feed-controls">{methodControls}<div className="leader-feed-search"><ResearchSearch key={searchResetKey} value={search} onChange={setSearch}/><button onClick={openFilters} aria-label="候補を絞り込む">絞込</button></div><div className="leader-quick-filters" role="group" aria-label="クイック絞り込み"><button title="価格位置のみ。選定・日次条件の通過とは別です" aria-pressed={positionOnly} onClick={()=>setPositionOnly(value=>!value)}>買い位置</button><button aria-pressed={nearOnly} onClick={toggleNear}>あと1条件</button><button aria-pressed={rs80Only} onClick={()=>setRs80Only(value=>!value)}>RS 80+</button></div>{positionOnly&&<p className="leader-filter-scope">買い位置は価格位置のみ。選定・日次条件の通過とは別です。</p>}</div>}
-    {!compareOnly&&<ResearchHero mobileView={mobileView} freshnessNotice={detailFreshness?null:freshnessNotice} loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
+    {!compareOnly&&<ResearchHero mobileView={mobileView} freshnessNotice={detailFreshness || (smallScreen && mobileMap) ? null : freshnessNotice} loading={!bundle.data} rows={rows} ranked={radarRanked} date={bundle.data?.date||entry.as_of_date} plan={portfolioPlan} selectedSymbol={selected?.symbol} onSelect={selectSymbol} onInspect={inspectOrder} onInspectChanged={inspectChanged} onBrowse={browse} workbench={workbench} method={method} availableSymbols={availableSymbols}/>}
     {compareOnly&&<header className="comparison-page-heading"><div className="comparison-page-title"><h1>{nearOnly?'選定あと1条件を比較':'買い位置を比較する'}</h1><p>{METHODS[method].replace(' / CAN SLIM','').replace('リーダー','')} · {nearOnly?'未合格・購入条件は別判定':'価格位置と購入条件は別判定'}</p></div>{freshnessNotice}<Button onClick={()=>setFiltersOpen(true)}>手法・絞り込み</Button></header>}
     {stale&&<Alert severity="warning">公開データの鮮度を確認してください。選定とチャートは日次データです。</Alert>}
     {detailFreshness&&freshnessNotice}
@@ -271,12 +283,13 @@ export default function ResearchPage({compareOnly=false}) {
       <Button variant="contained" onClick={()=>{setFiltersOpen(false);browse();}}>候補を確認する →</Button>
     </Drawer>
     {(manifest.isError || bundle.isError) && <Alert severity="error" sx={{ mb: 2 }} action={<Button onClick={() => { manifest.refetch?.(); if (bundle.isError) bundle.refetch(); }}>再試行</Button>}>データを取得できません。以前の表示値がある場合は最新とは限りません。</Alert>}
-    {(manifest.isLoading || bundle.isLoading) && <Box role="status" sx={{ p: 4 }}><CircularProgress size={24} /> 銘柄と分析根拠を読み込んでいます…</Box>}
+    {(manifest.isLoading || bundle.isLoading) && <Box role="status" sx={{ p: 4 }}><CircularProgress size={24} aria-label="銘柄と分析根拠を読み込み中" /> 銘柄と分析根拠を読み込んでいます…</Box>}
     {storageError && <Alert severity="warning">ウォッチはこの画面のみ保持されます。端末への保存が制限されています。</Alert>}
     {verificationNotice && <Alert severity="info" onClose={() => setVerificationNotice(null)} sx={{ mb: 2 }}>{verificationNotice}</Alert>}
     {!compareOnly&&mobileView==='detail'&&<button className="mobile-back" onClick={browse}>← 候補一覧に戻る</button>}
+    {smallScreen && !mobileMap && mobileView === 'detail' && !selected && bundle.data && <p role="status">表示できる銘柄がありません。市場または候補一覧から選んでください。</p>}
     <div className="research-grid" data-view={actualView}>
-      <CandidateBoard feedControls={!compareOnly} ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={compareOnly?methodControls:null} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
+      <CandidateBoard feedControls={!compareOnly} ranked={ranked} method={method} nearOnly={nearOnly} onNearToggle={toggleNear} selectedSymbol={selected?.symbol} loading={!bundle.data&&!bundle.isError} onSelect={selectSymbol} view={actualView} onView={setView} toolbar={compareOnly?methodControls:smallScreen?<Button component={RouterLink} to={`/compare?method=${method}`} sx={{minHeight:44}}>チャート比較 ↗</Button>:null} onFilters={openFilters} compareOnly={compareOnly} date={bundle.data?.date} generation={version} market={market} now={now} onCompare={setChart} paused={Boolean(chart)} />
       {actualView!=='charts' && <ResearchDetail ref={detailRef} selected={smallScreen && mobileView==='list' ? undefined : selected} method={method} usableQuote={usableQuote} date={bundle.data?.date} market={market} now={now} chartEntry={chartEntry} version={version} onExpand={expandChart} watch={watch} onWatch={toggleWatch} liveStatus={liveStatus} personalKey={personalKey} personal={personal} onConnect={setPersonalKey} onDisconnect={disconnect} verificationSymbol={verificationSymbol} onVerificationToggle={setVerificationSymbol} detail={detailState} onVerified={applyVerification} onBack={browse} />}
     </div>
     {!compareOnly&&<footer className="research-method-note">
@@ -292,5 +305,9 @@ export default function ResearchPage({compareOnly=false}) {
       </details>
     </footer>}
     {chart && <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} publication={entry.publication} chartIndex={index.data} navigationSymbols={navigationSymbols} />}
+    {smallScreen && !compareOnly && <>
+      {!mobileMap && mobileView === 'detail' && selected && <div className="mobile-chart-actions" aria-label="銘柄の移動と保存"><button disabled={mobileIndex <= 0} onClick={() => moveMobile(-1)} aria-label="前の銘柄">← 前</button><button aria-pressed={watch.includes(selected.symbol)} onClick={() => toggleWatch(selected.symbol)}>{watch.includes(selected.symbol) ? '保存済み ★' : 'ウォッチに保存'}</button><button disabled={mobileIndex < 0 || mobileIndex >= navigationSymbols.length - 1} onClick={() => moveMobile(1)} aria-label="次の銘柄">次 →</button></div>}
+      <nav className="mobile-research-nav" aria-label="リサーチの画面切替"><button aria-current={mobileMap ? 'page' : undefined} onClick={() => {setMobileMap(true);setMobileView('list');window.scrollTo({top:0});}}><GridViewIcon/>市場</button><button disabled={!selected} aria-current={!mobileMap && mobileView === 'detail' ? 'page' : undefined} onClick={() => {setView('list');selectSymbol(selected.symbol);}}><ShowChartIcon/>チャート</button><button aria-current={!mobileMap && mobileView === 'list' && onlyWatch ? 'page' : undefined} onClick={() => {resetFilters();setLiquid(false);setOnlyWatch(true);setView('list');browse();}}><BookmarkBorderIcon/>ウォッチ</button></nav>
+    </>}
   </Box>;
 }

@@ -26,6 +26,7 @@ async function setup(page,width){
   return route.fulfill({json:data});
  });
  await page.goto('/#/?method=oneil');await expect.poll(()=>page.evaluate(()=>Boolean(window.__chartTestQueryClient))).toBe(true);
+ if(width===375)await page.getByRole('button',{name:'一覧・絞り込みで探す →'}).click();
  const choose=async symbol=>{const back=page.getByRole('button',{name:'← 候補一覧',exact:true});if(width===375&&await back.isVisible())await back.click();await page.getByRole('button',{name:new RegExp(`^${symbol} の分析を表示`)}).focus();await page.keyboard.press('Space');};
  await choose('SYNTH');const detail=page.getByRole('region',{name:'銘柄詳細',exact:true}),numeric=detail.locator('.chart-numeric-data');
  await expectSvgChart(detail,{symbol:'SYNTH',bars});await numeric.locator('summary').click();
