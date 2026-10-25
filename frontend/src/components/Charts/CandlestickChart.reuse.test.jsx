@@ -147,7 +147,10 @@ describe('CI479 readable legends without displacing the detail plot',()=>{
     const view=render(<QueryClientProvider client={client}><ResearchChart symbol="DETAIL" date={date} generation="ci479" entry={{path:'detail.json'}} row={{se_pivot_price:100}} onExpand={vi.fn()} rsRating={88}/></QueryClientProvider>);
     const plot=await screen.findByRole('img',{name:/DETAIL 価格・出来高・RS 共通時間軸/});
     const legend=view.container.querySelector('.leader-svg-legend');
-    expect(plot.nextElementSibling).toBe(legend);
+    const lab=view.container.querySelector('.chart-setup-evidence');
+    expect(plot.nextElementSibling).toBe(lab);
+    expect(lab.nextElementSibling).toBe(legend);
+    expect(plot).not.toContainElement(lab);
     expect(plot).not.toContainElement(legend);
     expect(plot.getAttribute('viewBox').split(' ').at(-1)).toBe(mobile?'390':'440');
     expect(getComputedStyle(legend).position).not.toBe('absolute');
