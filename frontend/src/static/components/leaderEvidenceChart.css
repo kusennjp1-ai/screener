@@ -20,6 +20,7 @@
 .leader-svg-caption-mobile{padding:4px 8px;line-height:1.5}
 .leader-svg-caption-mobile>span{display:block}
 .leader-svg-extra-controls>details[open]{display:contents}
+.leader-svg-extra-controls summary[hidden]{display:none}
 .leader-svg-extra-controls:has(details[open]){flex-basis:100%}
 .leader-evidence-chart [data-vcp-leg][data-selected=true] [data-vcp-label-box]{stroke:var(--accent);stroke-width:2}
 @media(max-width:700px){

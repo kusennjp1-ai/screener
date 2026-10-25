@@ -53,6 +53,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  await expect(page.locator('.overview-universe')).toBeHidden();
  if(width===1440){
   await expect(page.locator('.research-symbol-head')).toContainText('ALPHA');
+  await expect(page.locator('.research-detail .leader-svg-extra-controls summary')).toBeHidden();
   await expectSvgChart(page.locator('.research-detail'),{symbol:'ALPHA',bars});
   await expect(page.locator('.leader-pinned-title')).toContainText('本日の判断');
   await expect(page.locator('.research-detail .research-chart .leader-evidence-chart svg[role="img"]').first()).toBeInViewport();
@@ -77,6 +78,18 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  expect((await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
  await page.screenshot({path:info.outputPath(`scope-${width}-${theme}.png`)});
+ if(width===1440){
+  await page.getByRole('button',{name:'概況をたたむ',exact:true}).click();
+  await expect(page.locator('.hero-collapsed .leader-pinned-title')).toBeVisible();
+  expect(await page.locator('.hero-collapsed').evaluate(hero=>{
+   const box=hero.getBoundingClientRect();
+   return [...hero.querySelectorAll('.leader-pinned-title,.hero-actions button')].filter(node=>node.getBoundingClientRect().height>0).every(node=>{
+    const r=node.getBoundingClientRect();return r.top>=box.top&&r.bottom<=box.bottom&&r.left>=box.left&&r.right<=box.right;
+   });
+  })).toBe(true);
+  expect((await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
+  await page.getByRole('button',{name:'概況を展開',exact:true}).click();
+ }
  // Keep the existing first-screen geometry untouched, then inspect the native
  // history through the actual compact detail and CSV controls.
  await page.getByRole('button',{name:'候補を絞り込む',exact:true}).click();

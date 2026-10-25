@@ -196,5 +196,5 @@
  .workspace-shell .research-overview.hero-collapsed .hero-copy { display:flex; flex-wrap:wrap; height:auto; gap:12px 20px; }
  .workspace-shell .research-overview.hero-collapsed .hero-copy h1 { font-size:20px; }
  .workspace-shell .research-overview.hero-collapsed .overview-steps strong { font-size:16px; }
- .workspace-shell .research-overview.hero-collapsed .leader-pinned-title { display:none; }
+ .workspace-shell .research-overview.hero-collapsed .leader-pinned-title { display:flex; flex-basis:100%; min-height:20px; }
 }
