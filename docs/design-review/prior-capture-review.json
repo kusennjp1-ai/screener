@@ -4,25 +4,25 @@
     "schema": "reviewed-prior-capture-reference-v1",
     "repository": "kusennjp1-ai/screener",
     "workflow_path": ".github/workflows/design-acceptance.yml",
-    "run_id": 40213800277,
+    "run_id": 40217533336,
     "run_attempt": 1,
-    "head_sha": "a6f440180584c90fe1eb35920985572f36f55d47",
-    "checkout_sha": "a6f440180584c90fe1eb35920985572f36f55d47",
-    "source_inventory_sha256": "6311294b1f1ac8beaaa05888177cc8c04147340753d9614439c73aad438f6ce7",
+    "head_sha": "03747ac9b36f8c01ae51edea4764acbdbb3ad942",
+    "checkout_sha": "03747ac9b36f8c01ae51edea4764acbdbb3ad942",
+    "source_inventory_sha256": "540c15db8607a0b2c94f3568d4d58431760ebab684b4b8a842ba85c5bf5f9017",
     "configuration_sha256": "1a6df6f78ebae1b9d3af193e470bce1beb8dabf44a6cb84a7675cc3496c2dd21",
-    "artifact_id": 12607700565,
-    "artifact_sha256": "9d8a9d386f18455e3cf09ddf827f1cfe76727429a8c549abd3c4ef93bee374d3",
-    "artifact_bytes": 19617406
+    "artifact_id": 12609055068,
+    "artifact_sha256": "b58964f1120807b6f6251bce2faac05fe3ead8cd40edb42056b9814e10acaa5d",
+    "artifact_bytes": 19613407
   },
   "review_policy": "ordinary-carry-image-review-2026-10-22-v1",
-  "observed_commit": "a6f440180584c90fe1eb35920985572f36f55d47",
+  "observed_commit": "03747ac9b36f8c01ae51edea4764acbdbb3ad942",
   "reviewer": "Codex, AI pixel inspection of all 136 exact screenshot references; byte-identical prior images explicitly matched by SHA256 and changed images viewed afresh. Not a human usability study or native iOS test.",
-  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/40213800277/attempts/1",
+  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/40217533336/attempts/1",
   "screens": [
     {
       "key": "home/1440/dark",
       "screenshot": "home-1440x900-dark.png",
-      "sha256": "addf7c34abb5cdd540a62446bc6aa005b843094a2165c40981fb70005e1495a1",
+      "sha256": "795b85fd697e0d60ed01e657978e7417dcab108294ffac5f7758afdadad22632",
       "scores": {
         "design": {
           "value": 8,
@@ -316,7 +316,7 @@
     {
       "key": "comparison/1440/dark",
       "screenshot": "comparison-1440x900-dark.png",
-      "sha256": "f59d1d1ce26d692117a79103b4a48d8ad477153d9d1d451030631899f9ddf29a",
+      "sha256": "7e0a7ed15d4e2c3ac6dee5a0e8b54ab704a3233f73250bd3ca22735dcb081b71",
       "scores": {
         "design": {
           "value": 8,
@@ -365,7 +365,7 @@
     {
       "key": "comparison-near-pass/1440/dark",
       "screenshot": "comparison-near-pass-1440x900-dark.png",
-      "sha256": "1b2e333171b25477860247efcf03641ec57272f4de7e16aa14a8b48b9c8b4530",
+      "sha256": "2066198aa1a78a90b1feb6040118e2c7822b7a02828cb7a0520b537bfaffe03b",
       "scores": {
         "design": {
           "value": 8,
@@ -561,7 +561,7 @@
     {
       "key": "case-MSM-inline/1440/dark",
       "screenshot": "case-MSM-inline-1440x900-dark.png",
-      "sha256": "4272a42f74793edb9e425b9a75fbc0dfe596d299d15d0dc4841af1bc4c357576",
+      "sha256": "5b5b0c050aa2c4bc9311b2a687aad948a71c69a00146520f659136427fd6b7db",
       "scores": {
         "design": {
           "value": 8.2,
@@ -806,7 +806,7 @@
     {
       "key": "case-ADI-inline/1440/dark",
       "screenshot": "case-ADI-inline-1440x900-dark.png",
-      "sha256": "a630288778288033572151e89b00a55acd761e02d711bdbff17709669dc1c3f6",
+      "sha256": "76809682fada5b2a9e74b53b4342d38394401e707ea4b27f291c9124f637a099",
       "scores": {
         "design": {
           "value": 8.2,
@@ -1296,7 +1296,7 @@
     {
       "key": "financial-NVDA-evidence/1440/dark",
       "screenshot": "financial-NVDA-evidence-1440x900-dark.png",
-      "sha256": "e706ebd7a166c471b3ab1c8748d7d70717836a82e3d10cd1c17959ff041253a5",
+      "sha256": "4a7c451830ce50ef190f236ed2d641af6d62236500032b940ce04b5066b9a8c7",
       "scores": {
         "design": {
           "value": 7.6,
@@ -1406,7 +1406,7 @@
     {
       "key": "financial-NVDA-selection/1440/dark",
       "screenshot": "financial-NVDA-selection-1440x900-dark.png",
-      "sha256": "940d88c8f0839e99e1171b3b1f41d382b2206fc3b6df7357bdfc1d2e377e981d",
+      "sha256": "5a01e36685dbe066e1c4052914dbc1703e2bafdc7da4feef11d5619b177e5504",
       "scores": {
         "design": {
           "value": 7.6,
@@ -1461,7 +1461,7 @@
     {
       "key": "financial-NVDA-purchase/1440/dark",
       "screenshot": "financial-NVDA-purchase-1440x900-dark.png",
-      "sha256": "370c69fe99bf4176e4f427bd9357595989ec6329447ddb4371cfe9a9d4199561",
+      "sha256": "a682974b746b5b246a75b9f4afa7d363293c18b00d3dfc83699845d92296be8b",
       "scores": {
         "design": {
           "value": 7.6,
@@ -1516,7 +1516,7 @@
     {
       "key": "financial-FUTU-evidence/1440/dark",
       "screenshot": "financial-FUTU-evidence-1440x900-dark.png",
-      "sha256": "81aa0c9ffa84ba30cfe050a44602965cf2719f776549304d3343a4f69c64d03d",
+      "sha256": "55deaaab0142ce2295260888e2695b11016fa0c5fc6d366607b0686f632df036",
       "scores": {
         "design": {
           "value": 7.6,
@@ -1681,7 +1681,7 @@
     {
       "key": "financial-AAOI-evidence/1440/dark",
       "screenshot": "financial-AAOI-evidence-1440x900-dark.png",
-      "sha256": "d13fca1598e551fd2e57d327f60bace10149ca675cfafab7d2ac5c24b9207567",
+      "sha256": "1e375a569fbcb41d06d7f7fdbd80ef045e0c5025529a64dcdc2eb6feaf030360",
       "scores": {
         "design": {
           "value": 7.6,
@@ -1791,7 +1791,7 @@
     {
       "key": "financial-ALH-evidence/1440/dark",
       "screenshot": "financial-ALH-evidence-1440x900-dark.png",
-      "sha256": "9857868b43b78612eeb92a9b959a2d4d9a0d316f20e0ea5395b7fb01fd29d0a1",
+      "sha256": "4236e2c9bc593404069cc419772a1f0267a4a575bd818a1d40f8d57e89a22394",
       "scores": {
         "design": {
           "value": 7.6,
@@ -1956,7 +1956,7 @@
     {
       "key": "financial-AVT-evidence/1440/dark",
       "screenshot": "financial-AVT-evidence-1440x900-dark.png",
-      "sha256": "0874d65a129f3038aa0ca25c3f9ec39835b9a862886ea640c545b73d78d4dd17",
+      "sha256": "b9296e39beeea7e493c163d5fc2af2ef9450fd6b3be933b07253ced15be7f072",
       "scores": {
         "design": {
           "value": 7.6,
@@ -2066,7 +2066,7 @@
     {
       "key": "daily-observations/1440/dark",
       "screenshot": "daily-observations-1440x900-dark.png",
-      "sha256": "9cfa4104f3769022033c655803887d198b400cfd2954e98901d7cefd53ecb070",
+      "sha256": "3415ab22cc1c00b756b907d8901e43b82ae8baab8c26d50a028492185f9ad58d",
       "scores": {
         "design": {
           "value": 7.8,
@@ -2176,7 +2176,7 @@
     {
       "key": "home/1440/light",
       "screenshot": "home-1440x900-light.png",
-      "sha256": "5669c496a690da73d5b1cf5d72bd59190b1ecbbdd5dbac26b69e9b456be023e8",
+      "sha256": "7507ddcb7b52026d493f4a470443cb9b7724fa28c3ebb020c5d7074c6e4db5f4",
       "scores": {
         "design": {
           "value": 8,
@@ -2470,7 +2470,7 @@
     {
       "key": "comparison/1440/light",
       "screenshot": "comparison-1440x900-light.png",
-      "sha256": "924867cdfc3377b904ee9b4b3e079c2faa6055166e74c59b8f777c31a48e9868",
+      "sha256": "bd4b784d8671626d8c2e3ac86e688bc547373cb3314908ca86078626e846cf59",
       "scores": {
         "design": {
           "value": 8,
@@ -2519,7 +2519,7 @@
     {
       "key": "comparison-near-pass/1440/light",
       "screenshot": "comparison-near-pass-1440x900-light.png",
-      "sha256": "79fae00993e5200b6d9b4f8175d61ce415609ecacdd0574018efd4c89f9cca35",
+      "sha256": "000e305440b1d3647c8af851ec1f5a81a7ff79659e1430f8007ac6bee09b8e86",
       "scores": {
         "design": {
           "value": 8,
@@ -3744,7 +3744,7 @@
     {
       "key": "comparison/390/dark",
       "screenshot": "comparison-390x844-dark.png",
-      "sha256": "da22ad4b27a0ffe9420fad846d1b4fff7b93892e66c020f6d88535cf9bf249dd",
+      "sha256": "76ee5f1c362bc2e4283a38d616e80816faeee069e2faeb9a35898b3f3813b1e9",
       "scores": {
         "design": {
           "value": 8,
@@ -3793,7 +3793,7 @@
     {
       "key": "comparison-near-pass/390/dark",
       "screenshot": "comparison-near-pass-390x844-dark.png",
-      "sha256": "84aa53d4878f53270c6c6e2ae11f4926dc6f17fd19a7909e51be24e09bba0414",
+      "sha256": "32121eada4529c4ee16df67479b5c8ad19f2ec78b6950384ce6141810502b5a2",
       "scores": {
         "design": {
           "value": 8,
@@ -3842,7 +3842,7 @@
     {
       "key": "market/390/dark",
       "screenshot": "market-390x844-dark.png",
-      "sha256": "7333dce4c1e02b7e937406388084fffb902794db2356dd0a48898ce9a04b6b5e",
+      "sha256": "52aa12d76f87b1a855b46f24679dff70c75e0c6fd691b48517976bdd1e18afb2",
       "scores": {
         "design": {
           "value": 8,
@@ -5998,7 +5998,7 @@
     {
       "key": "financial-NVDA-evidence/390/light",
       "screenshot": "financial-NVDA-evidence-390x844-light.png",
-      "sha256": "e08664a0aa20b4aa72afa4b74dfcdde8ae3ed783e4060b446c8aa2e18512a892",
+      "sha256": "4e9b67e3c1f892287e91b373f30ef7501cd240b8930d11a0512605de45554e29",
       "scores": {
         "design": {
           "value": 7.6,
@@ -6108,7 +6108,7 @@
     {
       "key": "financial-NVDA-selection/390/light",
       "screenshot": "financial-NVDA-selection-390x844-light.png",
-      "sha256": "1e9986fb0c2c8e8fc7e24bc30cd6f0c81588f4f9cda306204185ded5de878db9",
+      "sha256": "d525de204853989e0a6a172408d324cddb8f3d31caf3db62e37627b9ad0a7e30",
       "scores": {
         "design": {
           "value": 7.6,
@@ -6163,7 +6163,7 @@
     {
       "key": "financial-NVDA-purchase/390/light",
       "screenshot": "financial-NVDA-purchase-390x844-light.png",
-      "sha256": "6eff6e5778c1eaadebc72cafe3e0e06dfa94c02e3d640c9c99c8adeb75bd287b",
+      "sha256": "29651fabf10244372c7bbf5a6166a5034d21c1d5b50b8230964b17f4b263fd41",
       "scores": {
         "design": {
           "value": 7.6,
@@ -6218,7 +6218,7 @@
     {
       "key": "financial-FUTU-evidence/390/light",
       "screenshot": "financial-FUTU-evidence-390x844-light.png",
-      "sha256": "a9e04e99ebef93bc336fac77b49e172ce37e21c234f75877412049a8ce4c65a9",
+      "sha256": "7a7b86f0cc3ff298e87f18b572dab36a8318e527ffa4cc68b5dcc95cc7c78c9f",
       "scores": {
         "design": {
           "value": 7.6,
@@ -6383,7 +6383,7 @@
     {
       "key": "financial-AAOI-evidence/390/light",
       "screenshot": "financial-AAOI-evidence-390x844-light.png",
-      "sha256": "1a2f4b0e1685eb55a5021427198505d3ead44e1d25b4f1db7fa45af96726f254",
+      "sha256": "9759df450d83cb0901c62a8f52c45face0959c67a0c997eabcc8ee37c4c44876",
       "scores": {
         "design": {
           "value": 7.6,
@@ -6493,7 +6493,7 @@
     {
       "key": "financial-ALH-evidence/390/light",
       "screenshot": "financial-ALH-evidence-390x844-light.png",
-      "sha256": "eae9ffe046cdfc3dc75ee07b4d244e2878841be8a0074f2c053caa7d0e5c8662",
+      "sha256": "e181dc1ec2ed17063d71cc1677dce92cd66c8954ad57dd2e38ece597e07930e8",
       "scores": {
         "design": {
           "value": 7.6,
@@ -6658,7 +6658,7 @@
     {
       "key": "financial-AVT-evidence/390/light",
       "screenshot": "financial-AVT-evidence-390x844-light.png",
-      "sha256": "2e99488c0252e9795bccc084065e14b041d2cb4d933efe0c1e86973b59d9ae96",
+      "sha256": "6c652d12aaaae9ff9af4836ed8fca2d1e904a443d672f5300dfcbb437820addb",
       "scores": {
         "design": {
           "value": 7.6,
@@ -6768,7 +6768,7 @@
     {
       "key": "daily-observations/390/light",
       "screenshot": "daily-observations-390x844-light.png",
-      "sha256": "a6d910f3dda1ce1d62a65686ef476aee1ec1911e2a26f1a8aca00d0360e6a130",
+      "sha256": "fad2867b02a15ece09942fe3aee0babe2f333eae2263871bfccefc66f31ce4fb",
       "scores": {
         "design": {
           "value": 7.8,
