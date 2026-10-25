@@ -106,7 +106,7 @@
  .workspace-shell .research-overview .hero-copy { display:grid; grid-template-columns:minmax(0,1fr) auto; align-content:start; column-gap:12px; }
  .workspace-shell .research-overview .hero-copy> :not(.leader-pinned-title):not(.hero-date) { grid-column:1/-1; }
  .workspace-shell .research-overview .leader-pinned-title { display:flex; grid-column:1; min-height:28px; }
- .workspace-shell .research-hero.research-overview:not(.hero-collapsed) { min-height:0; padding:16px 20px; grid-template-columns:minmax(480px,1.1fr) minmax(0,1fr); }
+ .workspace-shell .research-hero.research-overview:not(.hero-collapsed) { min-height:0; padding:16px 20px; grid-template-columns:minmax(400px,.8fr) minmax(0,1.2fr); }
  .workspace-shell .research-overview .hero-date { grid-column:2; align-self:center; margin:0; font-size:11px; }
  .workspace-shell .research-overview .hero-copy h1 { font-size:26px; margin:0; }
  .workspace-shell .research-overview .hero-subtitle { margin:2px 0 6px; }

@@ -57,7 +57,7 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  await expect(page.locator('.leader-pinned-title')).toContainText(`${date} 終値`);
  await expect(page.locator('.overview-market-state')).toBeVisible();
  await expect(page.locator('.overview-market-state')).toContainText('市場未確認 · 新規上限 0%');
- expect(await page.evaluate(()=>parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop))).toBe(64+fixture.top);
+ expect(await page.evaluate(()=>parseFloat(getComputedStyle(document.documentElement).scrollPaddingTop))).toBe(56+fixture.top);
  await expect(page.locator('.setup-radar')).toHaveCount(0);
  await expect(first.locator('.leader-post-judgment')).toContainText('未確認');
  await expect(first.locator('.leader-condition-strip [data-state=unknown]')).not.toHaveCount(0);

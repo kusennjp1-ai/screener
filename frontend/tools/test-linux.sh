@@ -32,7 +32,8 @@ cleanup() {
 }
 trap cleanup EXIT
 git -c core.autocrlf=false clone --quiet --no-hardlinks "$source_root" "$task_root/repo"
-git -C "$source_root" diff --binary HEAD > "$task_root/current.patch"
+snapshot_head=$(git -C "$task_root/repo" rev-parse HEAD)
+git -C "$source_root" diff --binary "$snapshot_head" > "$task_root/current.patch"
 if [[ -s "$task_root/current.patch" ]]; then
   git -C "$task_root/repo" apply "$task_root/current.patch"
 fi
@@ -40,6 +41,10 @@ while IFS= read -r -d '' path; do
   mkdir -p "$task_root/repo/$(dirname "$path")"
   cp -P -- "$source_root/$path" "$task_root/repo/$path"
 done < <(git -C "$source_root" ls-files --others --exclude-standard -z)
+[[ $(git -C "$source_root" rev-parse HEAD) == "$snapshot_head" ]] || {
+  echo 'Source HEAD changed while copying. Retry after the commit completes.' >&2
+  exit 1
+}
 cd "$task_root/repo/frontend"
 npm ci --no-audit --no-fund
 npm run test:run -- "$@"
