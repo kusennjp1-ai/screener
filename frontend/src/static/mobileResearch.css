@@ -32,13 +32,13 @@
 }
 @media(max-width:700px){
  .mobile-market-map .mobile-eyebrow{display:none}
- .mobile-market-map h1{font-size:24px;margin:4px 0}
+ .mobile-market-map h1{font-size:26px;margin:4px 0}
  .mobile-market-map header p{margin:6px 0 10px}
  .mobile-market-context{padding:10px 12px;min-height:56px;box-sizing:border-box}
  .mobile-map-heading{margin-top:12px}
  .mobile-map-scope{margin-bottom:0}
  .mobile-sector-tiles button{min-height:84px;padding:8px;gap:2px;border-radius:12px}
- .mobile-sector-tiles strong{font-size:24px}
+ .mobile-sector-tiles strong{font-size:20px}
  .mobile-map-browse{margin-top:8px;padding:8px;min-height:44px}
  .workspace-shell .research-symbol-head{grid-template-columns:minmax(0,1fr);gap:4px;padding:8px;min-height:0;margin-bottom:8px}
  .workspace-shell .research-symbol-head>.watch-button{display:none}
@@ -47,6 +47,6 @@
  .workspace-shell .research-symbol-head .symbol-context{margin:0}
  .workspace-shell .research-symbol-head .symbol-company{font-size:13px}
  .workspace-shell .research-symbol-price{min-height:0}
- .workspace-shell .research-symbol-price strong{font-size:30px}
+ .workspace-shell .research-symbol-price strong{font-size:26px}
  .workspace-shell .symbol-qualification-context{margin:2px 0}
 }

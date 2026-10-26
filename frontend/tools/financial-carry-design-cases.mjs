@@ -409,12 +409,14 @@ export async function verifyFinancialCarryCases({ page, viewport, theme, capture
         const purchase = page.locator('#detail-panel-conditions');
         await ready(purchase);
         const readiness = entryReadiness(selected, date, modelMarket(data.rows), now, 'oneil');
-        const purchaseRules = await purchase.locator('.condition-rules > li').allTextContents();
+        const purchaseRuleLabels = await purchase.locator('.condition-rules > li > details > summary b').allTextContents();
+        const purchaseRuleStates = await purchase.locator('.condition-rules > li > details > summary .rule-state').allTextContents();
+        const purchaseRules = purchaseRuleLabels.map((label, index) => `${label} ${purchaseRuleStates[index] || ''}`);
         record.purchase = { heading: await purchase.locator('h3').textContent(), rules: purchaseRules, passed: readiness.passed, total: readiness.total, failed: readiness.failed, unknown: readiness.unknown };
         check(record.purchase.heading.startsWith(`購入条件 ${readiness.passed}/${readiness.total} · 未達 ${readiness.failed} · 未確認 ${readiness.unknown} · `), `${key}: purchase totals differ from separate common purchase model`);
-        check(purchaseRules.length === readiness.rules.length, `${key}: purchase rule count differs`);
-        readiness.rules.forEach((rule, index) => check((purchaseRules[index] || '').includes(rule.label) &&
-          (purchaseRules[index] || '').endsWith(purchaseStateText[rule.state]), `${key}: purchase rule ${rule.id} label/state mismatch`));
+        check(await purchase.locator('.condition-rules > li').count() === readiness.rules.length && purchaseRules.length === readiness.rules.length && purchaseRuleStates.length === readiness.rules.length, `${key}: purchase rule count differs`);
+        readiness.rules.forEach((rule, index) => check((purchaseRuleLabels[index] || '').includes(rule.label) &&
+          purchaseRuleStates[index] === purchaseStateText[rule.state], `${key}: purchase rule ${rule.id} label/state mismatch`));
         await purchase.locator('.condition-rules details > summary').first().click();
         check((await purchase.innerText()).includes('選択中の手法とは別に'), `${key}: purchase model/selected method distinction missing`);
         if (item.decisions) await takeViewport('purchase', ['#detail-tab-conditions', '#detail-panel-conditions > h3', ...[1, 2].map(index => `#detail-panel-conditions .condition-rules > li:nth-child(${index})`)]);
