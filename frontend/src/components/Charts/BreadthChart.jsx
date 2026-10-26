@@ -220,7 +220,7 @@ function BreadthChart({
             )}
 
             <Tooltip content={<CustomTooltip benchmarkLabel={benchmarkLabel} />} />
-            <Legend />
+            <Legend formatter={value => <span style={{color:"var(--text, currentColor)"}}>{value}</span>} />
 
             {/* Stocks Up 4%+ - Green Area */}
             <Area
@@ -271,16 +271,16 @@ function BreadthChart({
           }}
         >
           <Typography variant="caption" color="text.secondary">
-            <span style={{ color: '#4caf50', fontWeight: 600 }}>Green:</span>{' '}
+            <span style={{ color: 'var(--text, currentColor)', fontWeight: 600 }}>Green:</span>{' '}
             Stocks up 4%+ (daily count)
           </Typography>
           <Typography variant="caption" color="text.secondary">
-            <span style={{ color: '#f44336', fontWeight: 600 }}>Red:</span>{' '}
+            <span style={{ color: 'var(--text, currentColor)', fontWeight: 600 }}>Red:</span>{' '}
             Stocks down 4%+ (daily count)
           </Typography>
           {hasBenchmarkOverlay && (
             <Typography variant="caption" color="text.secondary">
-              <span style={{ color: '#2196f3', fontWeight: 600 }}>Blue:</span>{' '}
+              <span style={{ color: 'var(--text, currentColor)', fontWeight: 600 }}>Blue:</span>{' '}
               {benchmarkLabel} price
             </Typography>
           )}

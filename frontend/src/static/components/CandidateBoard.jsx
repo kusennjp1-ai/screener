@@ -27,7 +27,7 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
   <LeaderPost missingCondition={missing} item={item} date={date} generation={generation} method={method} nearOnly={nearOnly}/>
  </button>;
 });
-export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNearToggle,selectedSymbol,loading,onSelect,view='list',onView,date,generation,market,now,onCompare,paused,toolbar,onFilters,compareOnly=false,feedControls=false}) {
+export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNearToggle,selectedSymbol,loading,onSelect,view='list',onView,date,generation,market,now,onCompare,paused,toolbar,onFilters,compareOnly=false,feedControls=false,emptyWatch=false,onExplore}) {
  const [sort,setSort]=useState('rank'),[page,setPage]=useState(0),[guideOpen,setGuideOpen]=useState(false);
  const guideId=useId();
  const scrollRef=useRef(null),pageStartRef=useRef(null);
@@ -69,7 +69,7 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
    <div className="candidate-columns" role="group" aria-label="列の並べ替え">{[['rank','銘柄'],['state','買い位置'],['distance','ピボット比'],['rs','RS'],['volume','出来高']].map(([key,label])=><button key={key} aria-label={`${label}で並べ替え`} aria-pressed={sort===key} onClick={()=>sortBy(key)}>{label}{sort===key?' ↓':''}</button>)}</div>
    <div role="list" aria-label="投資手法別の銘柄候補">{visible.map(item=><div role="listitem" key={item.row.symbol}><CandidateRow now={now} date={date} generation={generation} item={item} method={method} nearOnly={nearOnly} selected={item.row.symbol===selectedSymbol} onSelect={onSelect} onCompare={onCompare} onMove={move}/></div>)}</div>
   </div>
-  {!ranked.length&&!loading&&<p className="candidate-help">該当銘柄がありません。検索や「全条件通過のみ」を解除して確認できます。</p>}
+  {!ranked.length&&!loading&&<div className="candidate-help">{emptyWatch?<><p>ウォッチはまだ空です。銘柄のチャートで「ウォッチに保存」を押すと追加できます。</p><Button onClick={onExplore}>市場から銘柄を探す</Button></>:<p>該当銘柄がありません。検索や「全条件通過のみ」を解除して確認できます。</p>}</div>}
   {view==='list'&&maxPage>0&&<div className="candidate-pagination"><Button disabled={!current} onClick={()=>showPage(current-1)}>前の50件</Button><span>{current+1} / {maxPage+1}</span><Button disabled={current===maxPage} onClick={()=>showPage(current+1)}>次の50件</Button></div>}
  </Paper>;
 });

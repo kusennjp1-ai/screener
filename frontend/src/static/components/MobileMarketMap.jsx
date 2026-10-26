@@ -1,3 +1,4 @@
+import MetricDisclosure from './MetricDisclosure';
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { SECTORS } from '../sectorStrength';
@@ -28,12 +29,12 @@ export default function MobileMarketMap({ ranked, date, sector, onSector, onSele
   return <section className="mobile-market-map" aria-label="市場マップ">
     <header><span className="mobile-eyebrow">MARKET EXPLORER</span><h1>市場から、次の候補へ。</h1><p>{methodLabel} · 分析 {date || '未確認'}</p></header>
     <Link className="mobile-market-context" to="/breadth"><span>市場環境を確認<small>指数・騰落・市場の広がり</small></span><span aria-hidden="true">↗</span></Link>
-    <div className="mobile-map-heading"><h2>業種マップ</h2><button aria-pressed={!sector} onClick={() => onSector('')}>すべて</button></div>
-    <p className="mobile-map-scope">公開対象の選定通過数 · {ranked.length}銘柄内<br/>色はRS中央値の80以上 / 未満 / 未確認。市場全体の騰落率ではありません。</p>
+    <div className="mobile-map-heading"><h2>業種マップ</h2><button aria-pressed={!sector} onClick={() => onSector('')}>絞り込み解除</button></div>
+    <p className="mobile-map-scope">選定通過 / 公開対象 · {ranked.length}銘柄内</p><MetricDisclosure summary="業種マップの見方"><p>色はRS中央値の80以上 / 未満 / 未確認。市場全体の騰落率ではありません。</p></MetricDisclosure>
     {loading ? <p role="status">業種を集計中…</p> : !groups.length ? <p>集計できる銘柄がありません。</p> : <div className="mobile-sector-tiles">{visibleGroups.map(group => <button key={group.key} aria-pressed={sector === group.key} onClick={() => onSector(group.key)} data-strength={group.median === null ? 'unknown' : group.median >= 80 ? 'strong' : 'ordinary'}>
       <span>{group.label}</span><strong>{group.qualified}<small> / {group.count} 銘柄</small></strong><small>RS中央値 {group.median === null ? '未確認' : group.median.toFixed(0)}</small>
     </button>)}</div>}
-    {groups.length > 6 && <button className="mobile-map-browse" aria-expanded={showAll} onClick={() => setShowAll(value => !value)}>{showAll ? '主要6業種に戻す' : `すべての業種を見る (${groups.length})`}</button>}
+    {groups.length > 6 && <button className="mobile-map-browse" aria-expanded={showAll} onClick={() => setShowAll(value => !value)}>{showAll ? '6業種に戻す' : `全業種を表示 (${groups.length})`}</button>}
     <div className="mobile-map-heading"><h2>{sector ? labels[sector] || '分類不明' : '銘柄を確認'}</h2><small>チャートへ →</small></div>
     <div className="mobile-map-candidates">{candidates.map(({ row }) => <button key={row.symbol} onClick={() => onSelect(row.symbol)} aria-label={`${row.symbol} のチャートを確認`}><span><strong>{row.symbol}</strong><small>{row.company_name || '企業名未配信'}</small></span><span>RS {Number.isFinite(row.rs_rating) ? Math.round(row.rs_rating) : '—'} <b aria-hidden="true">›</b></span></button>)}</div>
   </section>;

@@ -1,4 +1,5 @@
 import { gaugeGeometry, money, signed, STATES, stateKey } from '../positionGeometry';
+import MetricDisclosure from './MetricDisclosure';
 import EntrySourceNote from './EntrySourceNote';
 export function StateChip({state}) { const [label,glyph,tone]=STATES[stateKey(state)];return <span className="state-chip" style={{'--state-tone':`var(--${tone})`,color:tone==='neutral'?'var(--text-2)':undefined}}>{glyph} {label}</span>; }
 export default function EntryCard({plan,readiness,onConditions,onConnect}) {
@@ -18,8 +19,8 @@ export default function EntryCard({plan,readiness,onConditions,onConnect}) {
   <div className="readiness-heading"><strong>購入条件 <span className="mono">{readiness.passed}/{readiness.total}</span></strong><button onClick={onConditions}>根拠を見る →</button></div>
   <div className="readiness-bar" role="img" aria-label={`購入条件 ${readiness.passed}/${readiness.total} 通過`}>{readiness.rules.map(r=><span key={r.id} style={{background:`var(--${r.state==='pass'?'zone':r.state==='fail'?'neg':'line-2'})`}}/>)}</div>
   <div className="missing-chips">{missing.map(r=><span key={r.id} title={r.detail}>{r.state==='fail'?'×':'?'} {r.label}</span>)}</div>
-  <p className="entry-note">未達 {readiness.rules.filter(r=>r.state==='fail').length}件・未確認 {readiness.rules.filter(r=>r.state==='unknown').length}件。未達は条件の変化を待ち、未確認は根拠データを確認します。</p>
+  <MetricDisclosure summary="購入条件・価格の計算根拠"><p className="entry-note">未達 {readiness.rules.filter(r=>r.state==='fail').length}件・未確認 {readiness.rules.filter(r=>r.state==='unknown').length}件。未達は条件の変化を待ち、未確認は根拠データを確認します。</p>
   <p className="entry-note">日次の購入条件。価格位置だけで購入を確定しません。損切り例は表示価格の−7%で、注文価格ではありません。</p>
-  <EntrySourceNote plan={plan}/>
+  </MetricDisclosure><EntrySourceNote plan={plan}/>
  </section>;
 }

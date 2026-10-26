@@ -134,7 +134,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  await expect(provenance).not.toHaveAttribute('open');
  await expect(provenance).toContainText(generation);
  await expect(panel.locator('.compact-evidence-context > p:first-child')).toContainText('配信版の対応 一致');
- await expect(panel.locator('.financial-evidence-rows > li').first().locator('.financial-evidence-value')).toBeInViewport();
+ await expect(panel.locator('.financial-evidence-rows > li').first().locator('summary .financial-evidence-value')).toBeInViewport();
  if(width===390){
   const context=page.locator('.leader-header').getByRole('group',{name:'表示中の銘柄と分析基準日'});
   await expect(context).toHaveText(/ALPHA分析 2026-09-29/);await expect(context).toBeInViewport();
@@ -142,6 +142,8 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  await provenance.locator('summary').click();await expect(provenance).toHaveAttribute('open');
  await provenance.locator('summary').click();await expect(provenance).not.toHaveAttribute('open');
  const annual=panel.locator('#financial-evidence-annual_eps_growth_3y');
+ await expect(annual.locator('details')).not.toHaveAttribute('open');
+ await annual.locator('summary').click();
  await annual.scrollIntoViewIfNeeded();
  await expect(annual.locator('.financial-evidence-value strong')).toHaveText('100% → 100% → 100%');
  await expect(annual).toContainText('percent_points（CAD報告希薄化EPSから算出した年次成長率）');

@@ -47,7 +47,10 @@ for (const width of [1440, 375]) test(`institutional holder missing counts and r
     if (width === 375) await page.getByRole('button', { name: /^SYNTH の分析を表示/ }).click();
     const detail = page.getByRole('region', { name: '銘柄詳細', exact: true });
     await detail.getByRole('tab', { name: '財務・機関', exact: true }).click();
-    return detail.getByRole('region', { name: '機関投資家の保有履歴', exact: true });
+    const region=detail.getByRole('region', { name: '機関投資家の保有履歴', exact: true });
+    await expect(region.locator('details')).not.toHaveAttribute('open');
+    await region.locator('summary').click();
+    return region;
   };
   for (const value of [null, '', '0', 0, 100]) {
     count = value;
@@ -112,6 +115,7 @@ for (const width of [1440, 375]) test(`malformed 13F observations reach detail a
     const detail = page.getByRole('region', { name: '銘柄詳細', exact: true });
     await detail.getByRole('tab', { name: '財務・機関', exact: true }).click();
     const region = detail.getByRole('region', { name: '機関投資家の保有履歴', exact: true });
+    await region.locator('summary').click();
     await expect(region).toContainText('比較可能な保有機関数の履歴が未取得');
     await expect(region).toContainText('前期比 未確認');
     if (name === 'null-first') {

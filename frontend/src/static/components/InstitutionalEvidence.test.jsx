@@ -52,7 +52,8 @@ describe('institutional holder history display', () => {
     expect(screen.getAllByText('100社', { exact: true })).toHaveLength(2);
     expect(screen.getByText('2026-06-30', { exact: true })).toBeInTheDocument();
     expect(screen.getByText(/前期比/)).toHaveTextContent('前期比 未確認');
-    expect(screen.getByText(/前期比/)).toHaveTextContent('取得 2026');
+    expect(screen.getByText(/^取得 2026/)).toBeInTheDocument();
+    expect(screen.getByText(/^取得 2026/).closest('details')).not.toHaveAttribute('open');
   });
   it.each([null, undefined, [], 'invalid'].map(input => ({ input })))('renders missing or malformed evidence $input as unavailable', ({ input }) => {
     display(input);

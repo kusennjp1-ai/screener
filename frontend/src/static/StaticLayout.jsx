@@ -35,6 +35,7 @@ export default function StaticLayout({children}) {
  const current=location.pathname==='/compare'?'/compare':['/breadth','/groups','/scan'].includes(location.pathname)?'/breadth':'/';
  const workspaceTitle=current==='/compare'?'チャート比較':current==='/breadth'?'市場環境':'スクリーナー';
  return <ThemeProvider theme={deskTheme}><style>{themeCss}</style><Box className="leader-shell workspace-shell" data-theme={dark?'dark':'light'}>
+  <a className="workspace-skip-link" href="#research-main-content" onClick={event=>{event.preventDefault();document.getElementById('research-main-content')?.focus();}}>メインコンテンツへ</a>
   <aside className="workspace-sidebar" aria-label="リサーチワークスペース">
    <RouterLink to="/" className="workspace-brand" aria-label="LEADER ホーム"><span className="workspace-brand-mark"><ShowChartIcon/></span><span>LEADER<small>RESEARCH WORKSPACE</small></span></RouterLink>
    <div className="workspace-context"><span className="workspace-context-mark" aria-hidden="true">{market.market||'US'}</span><span>{market.market==='US'?'米国株リサーチ':`${market.display_name||market.market||'市場'}リサーチ`}<small>日次スナップショット</small></span></div>
@@ -54,7 +55,7 @@ export default function StaticLayout({children}) {
    <IconButton onClick={colorMode.toggleColorMode} aria-label={dark?'ライトモードに切り替え':'ダークモードに切り替え'}>{dark?<Brightness7Icon fontSize="small"/>:<Brightness4Icon fontSize="small"/>}</IconButton>
   </header>
   <LimitedResearchPreviewNotice />
-  <div className="leader-content">{children}</div>
+  <div id="research-main-content" tabIndex={-1} className="leader-content">{children}</div>
   <nav className="leader-mobile-nav mobile-bottom-nav" aria-label="モバイルナビゲーション">{MOBILE_ITEMS.map(({path,label,Icon})=><RouterLink key={path} to={path} aria-current={current==='/breadth' && path==='/'?'page':undefined}><Icon/><span>{label}</span></RouterLink>)}</nav>
  </Box></ThemeProvider>;
 }

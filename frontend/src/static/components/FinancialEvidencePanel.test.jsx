@@ -81,7 +81,7 @@ it.each([
   expect(current).not.toHaveTextContent('30%');
 });
 
-it('shows actual, threshold, period, source, acquisition time and result without opening disclosures', () => {
+it('keeps actual and result in the summary with threshold and provenance available on demand', () => {
   render(<FinancialEvidencePanel {...props} evidence={evidence}/>);
   const row = screen.getByRole('heading', { name: '四半期 EPS 前年同期比', exact: true }).closest('li');
   expect(row.closest('details')).toBeNull();
@@ -101,10 +101,11 @@ it('never presents a stale positive value as a current pass', () => {
   expect(current).not.toHaveTextContent('30%');
   expect(screen.queryByText('✓ 通過')).not.toBeInTheDocument();
   expect(current.closest('details')).toBeNull();
-  expect(within(current).getByText(/有効期限を過ぎています/).closest('details')).toBeNull();
+  expect(within(current).getByText(/有効期限を過ぎています/).closest('details')).not.toHaveAttribute('open');
+  expect(current.querySelector('summary')).toHaveTextContent('? 未確認');
   const provenance=screen.getByText('配信版・照合情報').closest('details');
   expect(provenance).not.toHaveAttribute('open');
-  expect(current.querySelector('.financial-evidence-metadata').closest('details')).toBeNull();
+  expect(current.querySelector('.financial-evidence-metadata').closest('details')).not.toHaveAttribute('open');
 });
 
 it('keeps absent evidence honest and references out of the pass/fail count', () => {

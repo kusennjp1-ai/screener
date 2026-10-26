@@ -12,7 +12,7 @@ it('shows real adapter values, coverage and explicit unknowns without treating t
  expect(screen.getByRole('article',{name:'50日線上の割合'})).toHaveTextContent('50%');
  expect(screen.getByRole('img',{name:'同日検証済み 8銘柄中、50日線上 4銘柄'}).querySelectorAll('rect')[1]).toHaveAttribute('width','120');
  expect(screen.getByRole('link',{name:/情報技術：確認済み買い位置 2/})).toHaveAttribute('href','#/?sector=Technology&view=charts&method=minervini');
- expect(screen.getByRole('region',{name:'業種別買い位置ヒートマップ'})).toHaveTextContent('未確認 4 / 価格 1');
+ expect(screen.getByRole('region',{name:'業種別買い位置ヒートマップ'})).toHaveTextContent('選定未確認 4 · 位置未確認 1');
  expect(screen.getByRole('article',{name:'新高値と新安値'})).toHaveTextContent('80 / 100');
  expect(screen.getByRole('article',{name:'分配日'})).toHaveTextContent('データなし');
  expect(screen.getByRole('region',{name:'買い位置数の推移'})).toHaveTextContent('データなし');

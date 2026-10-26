@@ -21,7 +21,7 @@ describe('MarketContextCards', () => {
     expect(highs).toHaveTextContent('52週安値8銘柄');
     expect(screen.getByRole('article', { name: '先導株の状態' })).toHaveTextContent('92銘柄');
     expect(screen.getByRole('img', { name: '公開チャート集合の観測率 80.0%' })).toBeInTheDocument();
-    expect(screen.getByText(/市場全体の統計や/)).toBeInTheDocument();
+    expect(screen.getByText(/市場全体・購入可否の判定ではありません/)).toBeInTheDocument();
   });
 
   it.each(['missing', 'wrong-version', 'wrong-date', 'incomplete', 'wrong-latest-date'])('does not turn %s evidence into current observations', kind => {

@@ -331,7 +331,10 @@ export async function verifyFinancialCarryCases({ page, viewport, theme, capture
         verifyFinancialCarryObservation(researchResponse.observation, binding);
         const panel = page.getByRole('region', { name: '財務の判定根拠', exact: true });
         await ready(panel);
+        const clockDisclosure = panel.locator(':scope > details').filter({ has: page.locator('summary', { hasText: '財務の対象日・判定範囲' }) });
+        await clockDisclosure.locator('summary').click();
         const panelText = await panel.innerText();
+        await clockDisclosure.locator('summary').click();
         const evaluatedAt = panelText.match(/財務の確認時刻 (\d{4}-\d{2}-\d{2}T[\d:.]+Z)/)?.[1];
         const now = Date.parse(evaluatedAt), browserNow = await page.evaluate(() => Date.now());
         verifyFinancialCarryClock(evaluatedAt, browserNow, 'Rendered financial');
@@ -367,8 +370,11 @@ export async function verifyFinancialCarryCases({ page, viewport, theme, capture
         // complete financial row below the real page header. Its full row target
         // includes the source metadata and any nonpositive-comparison reason.
         // Annual/history evidence has separate views; all rows are audited above.
+        await panel.locator('#financial-evidence-eps_growth_yy > details > summary').click();
         await takeViewport('evidence', ['#financial-evidence-eps_growth_yy']);
+        await panel.locator('#financial-evidence-eps_growth_yy > details > summary').click();
         const annualSelector = '#financial-evidence-annual_eps_growth_3y';
+        await panel.locator(`${annualSelector} > details > summary`).click();
         await takeViewport('annual-viewport', ['.financial-evidence-heading h4', '.financial-evidence-status', '.financial-evidence-value strong',
           '.financial-evidence-value span', '.financial-evidence-metadata > div:nth-child(1)', '.financial-evidence-metadata > div:nth-child(2)',
           '.financial-evidence-metadata > div:nth-child(3)'].map(selector => `${annualSelector} ${selector}`));
@@ -409,6 +415,7 @@ export async function verifyFinancialCarryCases({ page, viewport, theme, capture
         check(purchaseRules.length === readiness.rules.length, `${key}: purchase rule count differs`);
         readiness.rules.forEach((rule, index) => check((purchaseRules[index] || '').includes(rule.label) &&
           (purchaseRules[index] || '').endsWith(purchaseStateText[rule.state]), `${key}: purchase rule ${rule.id} label/state mismatch`));
+        await purchase.locator('.condition-rules details > summary').first().click();
         check((await purchase.innerText()).includes('選択中の手法とは別に'), `${key}: purchase model/selected method distinction missing`);
         if (item.decisions) await takeViewport('purchase', ['#detail-tab-conditions', '#detail-panel-conditions > h3', ...[1, 2].map(index => `#detail-panel-conditions .condition-rules > li:nth-child(${index})`)]);
         if (viewport.width === 390) await page.locator('.mobile-header-back:visible, .mobile-back:visible').first().click();

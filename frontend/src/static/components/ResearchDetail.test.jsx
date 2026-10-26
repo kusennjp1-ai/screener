@@ -272,7 +272,10 @@ it.each(['VCP・形状候補','出来高','市場'])('keeps the %s gate control 
  expect(target).toContainElement(screen.getByRole('tab',{name:'購入条件',exact:true}));
  fireEvent.click(gate);
  const tab=screen.getByRole('tab',{name:'購入条件',exact:true});
- await waitFor(()=>expect(tab).toHaveFocus());
+ const ruleId={'VCP・形状候補':'shape','出来高':'volume','市場':'market'}[label];
+ const disclosure=document.querySelector(`#condition-rule-${ruleId} details`);
+ await waitFor(()=>expect(disclosure.querySelector('summary')).toHaveFocus());
+ expect(disclosure).toHaveAttribute('open');
  expect(tab).toHaveAttribute('aria-selected','true');
  expect(document.getElementById('detail-panel-conditions')).toBe(screen.getByRole('tabpanel'));
  for(const button of container.querySelectorAll('.leader-five-gates button[aria-controls]'))expect(document.getElementById(button.getAttribute('aria-controls'))).not.toBeNull();
