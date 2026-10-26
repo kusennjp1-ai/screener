@@ -228,6 +228,10 @@ const CI_NOW=Date.parse('2026-10-17T11:00:00.000Z');
 const CI_REQUIRED=['Backend Quality Gates','Frontend','Static Browser Regression','Assistant Compose Smoke','Publish Docker Images'];
 const CI_ROUTE='Route exact renewal CI admission';
 const CI_REPO_ROOT=fileURLToPath(new URL('../../',import.meta.url));
+// The October 17 controller admits only this immutable workflow blob. Current
+// daily export changes must not rewrite historical admission or receipt proof.
+// Keep the original bytes locally so a shallow CI checkout needs no old objects.
+const CI_STATIC_HOLD_FIXTURE=readFileSync(new URL('./fixtures/ordinary-ci-static-site-oct17-v1.yml',import.meta.url));
 const CI_DISABLED={schema_version:'ordinary-carry-ci-request-v1',plan_id:CI.amendment_id,identity_sha256:ordinaryCiIdentityDigest(),enabled:false,activation:null};
 const ciLocalEnv={...process.env,GIT_NO_LAZY_FETCH:'1',GIT_CONFIG_NOSYSTEM:'1',GIT_TERMINAL_PROMPT:'0',GIT_ALLOW_PROTOCOL:'',GIT_AUTHOR_NAME:'Offline ordinary test',GIT_AUTHOR_EMAIL:'offline@example.invalid',GIT_COMMITTER_NAME:'Offline ordinary test',GIT_COMMITTER_EMAIL:'offline@example.invalid',GIT_AUTHOR_DATE:'2026-10-17T10:01:00Z',GIT_COMMITTER_DATE:'2026-10-17T10:01:00Z'};
 function localGit(root,args,input){return execFileSync('git',['-c','protocol.allow=never',...args],{cwd:root,env:ciLocalEnv,input,encoding:'utf8',maxBuffer:40*1024**2,stdio:['pipe','pipe','pipe']}).trim();}
@@ -243,10 +247,12 @@ function gitFixture(){
   const root=mkdtempSync(join(tmpdir(),'ordinary-ci-local-git-'));
   localGit(root,['init','-q']);
   // A fresh Actions checkout is shallow. Construct all P/A trees from current
-  // tracked bytes; never require old local objects or fetch the frozen base.
+  // tracked bytes plus the immutable dated workflow fixture; never require
+  // old local objects or fetch the frozen base.
   // The fixed-base API record below is an explicit synthetic API fixture.
   const tracked=execFileSync('git',['-c','protocol.allow=never','ls-files','-z'],{cwd:CI_REPO_ROOT,env:ciLocalEnv,encoding:'utf8'}).split('\0').filter(Boolean);
   for(const path of tracked.filter(p=>p!==CI_REQUEST)){mkdirSync(dirname(join(root,path)),{recursive:true});copyFileSync(join(CI_REPO_ROOT,path),join(root,path));}
+  writeFileSync(join(root,'.github/workflows/static-site.yml'),CI_STATIC_HOLD_FIXTURE);
   localGit(root,['add','-f','--all']);const baseTree=localGit(root,['write-tree']);
   const disabledRaw=Buffer.from(JSON.stringify(CI_DISABLED,null,2)+'\n');writeFileSync(join(root,CI_REQUEST),disabledRaw);
   localGit(root,['add','--',CI_REQUEST]);const parentTree=localGit(root,['write-tree']);
@@ -318,8 +324,8 @@ function ciAddStaticNoExport(f,{prior=false}={}){
  return {run,selected,marker:selected.steps.at(-1),artifactsEndpoint:endpoint};
 }
 
-test('CI static no-export workflow pins a pure event-derived marker and unchanged authority',()=>{
- const path=join(CI_REPO_ROOT,'.github/workflows/static-site.yml'),raw=readFileSync(path),source=raw.toString();assert.equal(createHash('sha1').update(`blob ${raw.length}\0`).update(raw).digest('hex'),'5496e4c947e728c4c122b69ac8bd8ce03964d72c');
+test('CI static no-export historical workflow pins a pure event-derived marker and unchanged authority',()=>{
+ const raw=CI_STATIC_HOLD_FIXTURE,source=raw.toString();assert.equal(createHash('sha1').update(`blob ${raw.length}\0`).update(raw).digest('hex'),'5496e4c947e728c4c122b69ac8bd8ce03964d72c');
  assert.match(source,/name: "Ordinary no-export CI \$\{\{ github\.event\.workflow_run\.id \}\}\/\$\{\{ github\.event\.workflow_run\.run_attempt \}\}\/\$\{\{ github\.event\.workflow_run\.head_sha \}\}"\n        if: \$\{\{ github\.event_name == 'workflow_run' && steps\.price-route\.outputs\.repair == 'false' && steps\.pick\.outputs\.mode == 'noop' && steps\.pick\.outputs\.markets == '\[\]' \}\}\n        run: ':'/);
 });
 test('CI static no-export callback authenticates its exact parent and grants only a hold',async()=>{const f=ciApiFixture(),s=ciAddStaticNoExport(f),route=await ciRoute(f);assert.equal(route.ordinary_hold,true);assert.equal(route.ordinary_ci,false);assert.equal(route.ordinary_hold_marker,`Hold ordinary carry v4-ci ${readOrdinaryCiRequest(f.root).sha256} ${s.run.id}/1`);assert(f.calls.some(c=>c.endpoint===s.artifactsEndpoint&&c.paginate));await assert.rejects(ciAdmission(f));});
@@ -327,6 +333,20 @@ test('CI static no-export prior hold does not consume the exact CI admission',as
 test('CI static no-export prior hold cannot substitute another authentic CI parent',async()=>{const f=ciApiFixture(),s=ciAddStaticNoExport(f,{prior:true}),other={...clone(f.trigger),id:9101};f.runs.set(other.id,other);s.marker.name=s.marker.name.replace('9100/','9101/');await assert.rejects(ciAdmission(f),/not the admitted parent CI/);});
 test('CI static no-export failed parent remains hold-only and cannot authorize admission',async()=>{const f=ciApiFixture();f.trigger.conclusion='failure';ciAddStaticNoExport(f);assert.equal((await ciRoute(f)).ordinary_hold,true);await assert.rejects(ciAdmission(f));});
 test('CI static no-export rejects a genuinely different workflow even with a matching marker',async()=>{const local=gitFixture();let head;try{checkoutCi(local.parent);const path=join(local.root,'.github/workflows/static-site.yml');writeFileSync(path,readFileSync(path,'utf8').replace("        run: ':'","        run: 'true'"));localGit(local.root,['add','--','.github/workflows/static-site.yml']);const parent=ciCommitTree(localGit(local.root,['write-tree']),[local.parent],'Offline changed static hold workflow');localGit(local.root,['reset','--hard','-q','HEAD']);head=ciEnabledChild(parent);const f=ciApiFixture(head);ciAddStaticNoExport(f);await assert.rejects(ciRoute(f),/marker workflow changed/);}finally{localGit(local.root,['reset','--hard','-q','HEAD']);checkoutCi();}});
+test('CI static no-export historical authority rejects the evolved daily workflow even with its unchanged marker',async()=>{
+ const local=gitFixture(),current=readFileSync(join(CI_REPO_ROOT,'.github/workflows/static-site.yml'));
+ assert.notDeepEqual(current,CI_STATIC_HOLD_FIXTURE);
+ const marker=source=>source.toString().split('\n').find(line=>line.includes('name: "Ordinary no-export CI '));
+ assert(marker(current));assert.equal(marker(current),marker(CI_STATIC_HOLD_FIXTURE));
+ try{
+  checkoutCi(local.parent);writeFileSync(join(local.root,'.github/workflows/static-site.yml'),current);
+  localGit(local.root,['add','--','.github/workflows/static-site.yml']);
+  const parent=ciCommitTree(localGit(local.root,['write-tree']),[local.parent],'Offline evolved daily workflow');
+  localGit(local.root,['reset','--hard','-q','HEAD']);
+  const f=ciApiFixture(ciEnabledChild(parent));ciAddStaticNoExport(f);
+  await assert.rejects(ciRoute(f),/marker workflow changed/);
+ }finally{localGit(local.root,['reset','--hard','-q','HEAD']);checkoutCi();}
+});
 for(const [name,mutate]of [
  ['missing marker',(f,s)=>{s.selected.steps.pop();}],['duplicate marker',(f,s)=>{s.selected.steps.push(clone(s.marker));}],['failed marker',(f,s)=>{s.marker.conclusion='failure';}],['skipped marker',(f,s)=>{s.marker.conclusion='skipped';}],['malformed marker id',(f,s)=>{s.marker.name=s.marker.name.replace('9100/','09100/');}],['wrong parent',(f,s)=>{s.marker.name=s.marker.name.replace('9100/','9101/');}],['marker rerun',(f,s)=>{s.marker.name=s.marker.name.replace('/1/','/2/');}],['wrong marker head',(f,s)=>{s.marker.name=s.marker.name.replace(f.head,g);}],['marker before pick',(f,s)=>{s.marker.started_at='2026-10-17T10:30:04Z';}],['marker after job',(f,s)=>{s.marker.completed_at='2026-10-17T10:30:08Z';}],['foreign parent repository',f=>{f.trigger.repository.id++;}],['parent rerun',f=>{f.trigger.run_attempt=2;}],['parent not push',f=>{f.trigger.event='workflow_dispatch';}],['parent wrong workflow',f=>{f.trigger.workflow_id++;}],['parent wrong head',f=>{f.trigger.head_sha=g;}],['parent incomplete',f=>{f.trigger.status='in_progress';f.trigger.conclusion=null;}],['parent finishes after child',(f,s)=>{f.trigger.updated_at=s.run.created_at.replace('01Z','02Z');}],['static failure',(f,s)=>{s.run.conclusion='failure';}],['static rerun',(f,s)=>{s.run.run_attempt=2;}],['other static head',(f,s)=>{s.run.head_sha=g;}],['wrong static workflow',(f,s)=>{s.run.workflow_id++;}],['missing data job',(f,s)=>{f.jobs.get(s.run.id).pop();}],['duplicate data job',(f,s)=>{f.jobs.get(s.run.id)[4].name='build-market';}],['data job executed',(f,s)=>{f.jobs.get(s.run.id)[1].conclusion='success';}],['data job has steps',(f,s)=>{f.jobs.get(s.run.id)[2].steps=[{name:'Provider'}];}],['foreign job head',(f,s)=>{f.jobs.get(s.run.id)[2].head_sha=g;}],['failed selection',(f,s)=>{s.selected.conclusion='failure';}],['source policy executed',(f,s)=>{s.selected.steps[1].conclusion='success';}],['missing finite route',(f,s)=>{s.selected.steps.shift();}],['unknown extra step',(f,s)=>{s.selected.steps.push({...s.marker,name:'Unexpected provider operation'});}],['any artifact',(f,s)=>{f.overrides.set(s.artifactsEndpoint,[{total_count:1,artifacts:[{id:1}]}]);}],['truncated artifact inventory',(f,s)=>{f.overrides.set(s.artifactsEndpoint,[{total_count:1,artifacts:[]}]);}],['extra artifact page',(f,s)=>{f.overrides.set(s.artifactsEndpoint,[{total_count:0,artifacts:[]},{total_count:0,artifacts:[]}]);}],['missing artifact total',(f,s)=>{f.overrides.set(s.artifactsEndpoint,[{artifacts:[]}]);}]
 ])test('CI static no-export hold rejects '+name,async()=>{const f=ciApiFixture(),s=ciAddStaticNoExport(f);mutate(f,s);f.event.workflow_run=clone(s.run);await assert.rejects(ciRoute(f));});

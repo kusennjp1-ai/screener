@@ -82,10 +82,27 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       if (await inlineToggle.getAttribute('aria-pressed') !== 'true') await inlineToggle.click();
       record.inline_geometry.annotations=await inspectInlineViewport();
       await capture(page, viewport, theme, `case-${symbol}-inline-annotations`, { scope: 'scrolled-viewport', viewportTargets: inlineTargets });
-      const gauge = page.locator('.entry-gauge');
       if (Number.isFinite(plan.pivot)) {
+        // Mobile entry planning is deliberately on the Conditions tab and
+        // collapsed by default. Inspect it through the same controls a user
+        // follows, then restore the chart before testing its expanded view.
+        const mobile = viewport.width <= 700;
+        const chartScroll = await page.evaluate(() => scrollY);
+        if (mobile) {
+          await page.getByRole('tab', { name: '購入条件', exact: true }).click();
+          const disclosure = page.locator('.stock-entry-disclosure');
+          if (!await disclosure.evaluate(node => node.open)) await disclosure.locator(':scope > summary').click();
+        }
+        const gauge = page.locator('.entry-gauge');
+        await ready(gauge);
         const label = await gauge.getAttribute('aria-label');
         for (const price of [plan.price, plan.pivot, plan.upper, plan.stopExample]) check(label?.includes(money(price)), `${key}: entry card canonical level ${money(price)} missing`);
+        if (mobile) {
+          await page.locator('.stock-entry-disclosure > summary').click();
+          await page.getByRole('tab', { name: 'チャート', exact: true }).click();
+          await ready(chart);
+          await page.evaluate(y => window.scrollTo({ top: y, behavior: 'instant' }), chartScroll);
+        }
       }
       await page.getByRole('button', { name: '日次チャートを分析', exact: true }).click();
       const dialog = page.getByRole('dialog'), expanded = dialog.locator(`[data-chart-symbol="${symbol}"]`);
