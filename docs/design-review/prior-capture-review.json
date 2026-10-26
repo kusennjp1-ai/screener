@@ -4,25 +4,25 @@
     "schema": "reviewed-prior-capture-reference-v1",
     "repository": "kusennjp1-ai/screener",
     "workflow_path": ".github/workflows/design-acceptance.yml",
-    "run_id": 40217533336,
+    "run_id": 40251481149,
     "run_attempt": 1,
-    "head_sha": "03747ac9b36f8c01ae51edea4764acbdbb3ad942",
-    "checkout_sha": "03747ac9b36f8c01ae51edea4764acbdbb3ad942",
-    "source_inventory_sha256": "540c15db8607a0b2c94f3568d4d58431760ebab684b4b8a842ba85c5bf5f9017",
+    "head_sha": "7fb5dc5eb0b3c9ccc009ee7b69b30e6c692c4bb0",
+    "checkout_sha": "7fb5dc5eb0b3c9ccc009ee7b69b30e6c692c4bb0",
+    "source_inventory_sha256": "12c575e2cc6762174de21251f746129c5eead66aeae9ba0657567c731cda74b5",
     "configuration_sha256": "1a6df6f78ebae1b9d3af193e470bce1beb8dabf44a6cb84a7675cc3496c2dd21",
-    "artifact_id": 12609055068,
-    "artifact_sha256": "b58964f1120807b6f6251bce2faac05fe3ead8cd40edb42056b9814e10acaa5d",
-    "artifact_bytes": 19613407
+    "artifact_id": 12621715679,
+    "artifact_sha256": "fcee407b8da1e1c3c8d8ea6a09fd896f9d443baf0a0236f097c0b3d7b6f1bad4",
+    "artifact_bytes": 18677264
   },
   "review_policy": "ordinary-carry-image-review-2026-10-22-v1",
-  "observed_commit": "03747ac9b36f8c01ae51edea4764acbdbb3ad942",
+  "observed_commit": "7fb5dc5eb0b3c9ccc009ee7b69b30e6c692c4bb0",
   "reviewer": "Codex, AI pixel inspection of all 136 exact screenshot references; byte-identical prior images explicitly matched by SHA256 and changed images viewed afresh. Not a human usability study or native iOS test.",
-  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/40217533336/attempts/1",
+  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/40251481149/attempts/1",
   "screens": [
     {
       "key": "home/1440/dark",
       "screenshot": "home-1440x900-dark.png",
-      "sha256": "795b85fd697e0d60ed01e657978e7417dcab108294ffac5f7758afdadad22632",
+      "sha256": "addf7c34abb5cdd540a62446bc6aa005b843094a2165c40981fb70005e1495a1",
       "scores": {
         "design": {
           "value": 8,
@@ -316,7 +316,7 @@
     {
       "key": "comparison/1440/dark",
       "screenshot": "comparison-1440x900-dark.png",
-      "sha256": "7e0a7ed15d4e2c3ac6dee5a0e8b54ab704a3233f73250bd3ca22735dcb081b71",
+      "sha256": "f59d1d1ce26d692117a79103b4a48d8ad477153d9d1d451030631899f9ddf29a",
       "scores": {
         "design": {
           "value": 8,
@@ -365,7 +365,7 @@
     {
       "key": "comparison-near-pass/1440/dark",
       "screenshot": "comparison-near-pass-1440x900-dark.png",
-      "sha256": "2066198aa1a78a90b1feb6040118e2c7822b7a02828cb7a0520b537bfaffe03b",
+      "sha256": "7408cb62059705298d7c88ecbfe144101d96c6d9f7545594f36fe5cf63d101e9",
       "scores": {
         "design": {
           "value": 8,
@@ -463,7 +463,7 @@
     {
       "key": "breadth/1440/dark",
       "screenshot": "breadth-1440x900-dark.png",
-      "sha256": "b1443f5bb5aab04c80a3734f1a1e5133690839a68fce7188c0f20d0a93761208",
+      "sha256": "375eb564f03c901c2b6bd83fb38153009f6137125952c109ddde499e692c529f",
       "scores": {
         "design": {
           "value": 8,
@@ -479,7 +479,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "Market context distinguishes the 1,862 liquid-price cohort from the 4,480/5,966 approximate high/low observation set. Above-50-day is 47%, new highs/lows are 123/275, and distribution days are explicitly unavailable. Counts and missing evidence are not presented as market-wide certainty."
+          "reason": "Market context explicitly identifies the1,862 liquid-price cohort and an unconfirmed weak market condition. The above-50-day47% and new-high/low123/275 cards keep explanatory detail closed. The desktop distribution card states no data; its phone continuation is below the captured fold. Counts are not labelled market-wide certainty."
         }
       },
       "visualChecks": {
@@ -497,7 +497,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Market context distinguishes the 1,862 liquid-price cohort from the 4,480/5,966 approximate high/low observation set. Above-50-day is 47%, new highs/lows are 123/275, and distribution days are explicitly unavailable. Counts and missing evidence are not presented as market-wide certainty."
+          "reason": "Market context explicitly identifies the1,862 liquid-price cohort and an unconfirmed weak market condition. The above-50-day47% and new-high/low123/275 cards keep explanatory detail closed. The desktop distribution card states no data; its phone continuation is below the captured fold. Counts are not labelled market-wide certainty."
         }
       },
       "findings": [
@@ -561,7 +561,7 @@
     {
       "key": "case-MSM-inline/1440/dark",
       "screenshot": "case-MSM-inline-1440x900-dark.png",
-      "sha256": "5b5b0c050aa2c4bc9311b2a687aad948a71c69a00146520f659136427fd6b7db",
+      "sha256": "8a5945f3bc076fa40b2f41ea43a1464c6ee95c11da826d774f07e27749f3b7db",
       "scores": {
         "design": {
           "value": 8.2,
@@ -610,7 +610,7 @@
     {
       "key": "case-MSM-inline-annotations/1440/dark",
       "screenshot": "case-MSM-inline-annotations-1440x900-dark.png",
-      "sha256": "9325255283e6294e223078e8a2a81c6f1210c54710f9ec89855e6602c3858212",
+      "sha256": "3aed3bfa7697699f5775d3f76e69753ccf79730c0c6cd50ad1155e10009a356d",
       "scores": {
         "design": {
           "value": 8.2,
@@ -806,7 +806,7 @@
     {
       "key": "case-ADI-inline/1440/dark",
       "screenshot": "case-ADI-inline-1440x900-dark.png",
-      "sha256": "76809682fada5b2a9e74b53b4342d38394401e707ea4b27f291c9124f637a099",
+      "sha256": "e65d4619180e180c35c7351ad534e197d8fb671fe2b6e152936efebb8b8d2fc6",
       "scores": {
         "design": {
           "value": 8.2,
@@ -855,7 +855,7 @@
     {
       "key": "case-ADI-inline-annotations/1440/dark",
       "screenshot": "case-ADI-inline-annotations-1440x900-dark.png",
-      "sha256": "73ee9daa0dafc6d8ab4ab6e216d11080f6f4ce11ed3e91132aa7fb12bdad6223",
+      "sha256": "919f75dfa3183c2b3427a55898ab07b886b1c3cbcbf6be760f824cfb88bcd74a",
       "scores": {
         "design": {
           "value": 8.2,
@@ -1051,7 +1051,7 @@
     {
       "key": "case-TGTX-inline/1440/dark",
       "screenshot": "case-TGTX-inline-1440x900-dark.png",
-      "sha256": "8224ca1ff0fa8a74fb43445663f4e6f2e6ff261516c322b523985b6570fcb32c",
+      "sha256": "16b7f9b5e798649d02320802eee53fd069698bb2c9d4742e954f90c09a6da417",
       "scores": {
         "design": {
           "value": 8.2,
@@ -1100,7 +1100,7 @@
     {
       "key": "case-TGTX-inline-annotations/1440/dark",
       "screenshot": "case-TGTX-inline-annotations-1440x900-dark.png",
-      "sha256": "d64e335d2fd9006061126db4829460d5e2854f4bdc26fc01b3a73228a7e905a3",
+      "sha256": "b3aed7f3eae15bb2d848486e4d8d79313d70129503ebe3601373644411f27226",
       "scores": {
         "design": {
           "value": 8.2,
@@ -1296,11 +1296,11 @@
     {
       "key": "financial-NVDA-evidence/1440/dark",
       "screenshot": "financial-NVDA-evidence-1440x900-dark.png",
-      "sha256": "4a7c451830ce50ef190f236ed2d641af6d62236500032b940ce04b5066b9a8c7",
+      "sha256": "d4797cc06f139d8fd04a4fa4f73cc2d9cbdd2332f3385acbb4097a68ca98c9b3",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1312,7 +1312,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "NVDA shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "NVDA has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "visualChecks": {
@@ -1330,7 +1330,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "NVDA shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "NVDA has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "findings": [
@@ -1338,7 +1338,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1351,11 +1351,11 @@
     {
       "key": "financial-NVDA-annual-viewport/1440/dark",
       "screenshot": "financial-NVDA-annual-viewport-1440x900-dark.png",
-      "sha256": "63a682f39de366effe4cfc4cb55ad3b1427c30d6032fa151a2499e65b3942f02",
+      "sha256": "2c8fa9873c486c038ac1f347021b0827c7b3a88d44d9167145c47c3a8bdb6f96",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1367,7 +1367,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "NVDA shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "NVDA has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "visualChecks": {
@@ -1385,7 +1385,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "NVDA shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "NVDA has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "findings": [
@@ -1393,7 +1393,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1406,11 +1406,11 @@
     {
       "key": "financial-NVDA-selection/1440/dark",
       "screenshot": "financial-NVDA-selection-1440x900-dark.png",
-      "sha256": "5a01e36685dbe066e1c4052914dbc1703e2bafdc7da4feef11d5619b177e5504",
+      "sha256": "409026c80cf1e5f567a355deba227e896def0976c167d0735706b3e84855fa0a",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1448,7 +1448,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1461,11 +1461,11 @@
     {
       "key": "financial-NVDA-purchase/1440/dark",
       "screenshot": "financial-NVDA-purchase-1440x900-dark.png",
-      "sha256": "a682974b746b5b246a75b9f4afa7d363293c18b00d3dfc83699845d92296be8b",
+      "sha256": "c627c8afca106e653c8647eb8095c555637ca2181c68a3e155730738075c8ee3",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1477,7 +1477,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "NVDA purchase is 1/7 with unmet 5 and unknown 1. Only the latest-session row is green; model fit, market, price position, volume and shape are not presented as passing. The earnings buffer remains unknown."
+          "reason": "NVDA purchase is1/7 with unmet5 and unknown1. Only the latest-session row passes; model fit, market, price position, volume and shape do not. The opened model explanation wraps within the panel; other explanations remain closed. The earnings buffer remains unknown."
         }
       },
       "visualChecks": {
@@ -1495,7 +1495,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "NVDA purchase is 1/7 with unmet 5 and unknown 1. Only the latest-session row is green; model fit, market, price position, volume and shape are not presented as passing. The earnings buffer remains unknown."
+          "reason": "NVDA purchase is1/7 with unmet5 and unknown1. Only the latest-session row passes; model fit, market, price position, volume and shape do not. The opened model explanation wraps within the panel; other explanations remain closed. The earnings buffer remains unknown."
         }
       },
       "findings": [
@@ -1503,7 +1503,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1516,11 +1516,11 @@
     {
       "key": "financial-FUTU-evidence/1440/dark",
       "screenshot": "financial-FUTU-evidence-1440x900-dark.png",
-      "sha256": "55deaaab0142ce2295260888e2695b11016fa0c5fc6d366607b0686f632df036",
+      "sha256": "705cc9b87fbb9687d6c749ba940f125397837669cfbdc3981e6a03943855b128",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1532,7 +1532,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "FUTU shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies HKD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "FUTU has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "visualChecks": {
@@ -1550,7 +1550,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "FUTU shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies HKD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "FUTU has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "findings": [
@@ -1558,7 +1558,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1571,11 +1571,11 @@
     {
       "key": "financial-FUTU-annual-viewport/1440/dark",
       "screenshot": "financial-FUTU-annual-viewport-1440x900-dark.png",
-      "sha256": "3291ba05091a68ff5dd0aac811182e6508ad1a324366014094c71e57e72d7a17",
+      "sha256": "2015c14e6dded1c1c62888403b098a12cab7eee4e74f80f2c9c50140b905e34e",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1587,7 +1587,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "FUTU shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies HKD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "FUTU has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andHKD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "visualChecks": {
@@ -1605,7 +1605,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "FUTU shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies HKD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "FUTU has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andHKD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "findings": [
@@ -1613,7 +1613,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1626,11 +1626,11 @@
     {
       "key": "financial-FUTU-history/1440/dark",
       "screenshot": "financial-FUTU-history-1440x900-dark.png",
-      "sha256": "a42fd6f57cda3205bd65255bd2f7494b3f7d943f91fea582ac56a03482a20b9f",
+      "sha256": "784045a433d4f30e00bd725e4fcb36aafb1d34b1afcae7b3d20ca192f8189730",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1642,7 +1642,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "FUTU labels this as historical reference, not current qualification: 371 to 320 reporting managers, minus 51. The table identifies quarters and filing-date ranges and distinguishes manager counts from actual purchases."
+          "reason": "FUTU labels four records as historical reference, excluded from current qualification. The institutional-history disclosure is closed and shows a manager-count delta ofminus51. The detailed table is not visible in this captured closed state."
         }
       },
       "visualChecks": {
@@ -1660,7 +1660,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "FUTU labels this as historical reference, not current qualification: 371 to 320 reporting managers, minus 51. The table identifies quarters and filing-date ranges and distinguishes manager counts from actual purchases."
+          "reason": "FUTU labels four records as historical reference, excluded from current qualification. The institutional-history disclosure is closed and shows a manager-count delta ofminus51. The detailed table is not visible in this captured closed state."
         }
       },
       "findings": [
@@ -1668,7 +1668,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1681,11 +1681,11 @@
     {
       "key": "financial-AAOI-evidence/1440/dark",
       "screenshot": "financial-AAOI-evidence-1440x900-dark.png",
-      "sha256": "1e375a569fbcb41d06d7f7fdbd80ef045e0c5025529a64dcdc2eb6feaf030360",
+      "sha256": "cdafee9536affe059bef39557fbc729b2b2c70fa0a443a8cdc07a422058371eb",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1697,7 +1697,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "AAOI shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AAOI has an opened quarterly EPS explanation with an unknown result andan expired seven-day provider record. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "visualChecks": {
@@ -1715,7 +1715,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AAOI shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AAOI has an opened quarterly EPS explanation with an unknown result andan expired seven-day provider record. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "findings": [
@@ -1723,7 +1723,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1736,11 +1736,11 @@
     {
       "key": "financial-AAOI-annual-viewport/1440/dark",
       "screenshot": "financial-AAOI-annual-viewport-1440x900-dark.png",
-      "sha256": "1446f91a8d2cb87449f124ec2bbdcaf922e67f0bfc0783b391d14d0c0ddcb7d4",
+      "sha256": "3605d34536a1837d4753a32d6b457884dbc8568b148885fc9a3e5d299992d693",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1752,7 +1752,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "AAOI shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AAOI has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "visualChecks": {
@@ -1770,7 +1770,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AAOI shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AAOI has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "findings": [
@@ -1778,7 +1778,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1791,11 +1791,11 @@
     {
       "key": "financial-ALH-evidence/1440/dark",
       "screenshot": "financial-ALH-evidence-1440x900-dark.png",
-      "sha256": "4236e2c9bc593404069cc419772a1f0267a4a575bd818a1d40f8d57e89a22394",
+      "sha256": "d4797cc06f139d8fd04a4fa4f73cc2d9cbdd2332f3385acbb4097a68ca98c9b3",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1807,7 +1807,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "ALH shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "ALH has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "visualChecks": {
@@ -1825,7 +1825,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "ALH shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "ALH has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "findings": [
@@ -1833,7 +1833,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1846,11 +1846,11 @@
     {
       "key": "financial-ALH-annual-viewport/1440/dark",
       "screenshot": "financial-ALH-annual-viewport-1440x900-dark.png",
-      "sha256": "35ba1bf49f47b2ec08380bed090c41a34c3c6e6738d6f01e716319ada7976078",
+      "sha256": "9aea3485dd202651b4b6c01ce4283f891f3f51e7eda57da483eb7ffb6aa175f5",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1862,7 +1862,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "ALH shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "ALH has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "visualChecks": {
@@ -1880,7 +1880,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "ALH shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "ALH has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "findings": [
@@ -1888,7 +1888,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1901,11 +1901,11 @@
     {
       "key": "financial-ALH-history/1440/dark",
       "screenshot": "financial-ALH-history-1440x900-dark.png",
-      "sha256": "e1fe6f1df6015b2bbd9b41d25032d43148d8de24275058627216d688122be184",
+      "sha256": "262bb92e86b3c4c399bfb0049a4fc2ca589de0f9d7af08751339f394c3f5a713",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1917,7 +1917,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "ALH labels this as historical reference, not current qualification: 146 to 166 reporting managers, plus 20. The table identifies quarters and filing-date ranges and distinguishes manager counts from actual purchases."
+          "reason": "ALH labels four records as historical reference, excluded from current qualification. The institutional-history disclosure is closed and shows a manager-count delta ofplus20. The detailed table is not visible in this captured closed state."
         }
       },
       "visualChecks": {
@@ -1935,7 +1935,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "ALH labels this as historical reference, not current qualification: 146 to 166 reporting managers, plus 20. The table identifies quarters and filing-date ranges and distinguishes manager counts from actual purchases."
+          "reason": "ALH labels four records as historical reference, excluded from current qualification. The institutional-history disclosure is closed and shows a manager-count delta ofplus20. The detailed table is not visible in this captured closed state."
         }
       },
       "findings": [
@@ -1943,7 +1943,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -1956,11 +1956,11 @@
     {
       "key": "financial-AVT-evidence/1440/dark",
       "screenshot": "financial-AVT-evidence-1440x900-dark.png",
-      "sha256": "b9296e39beeea7e493c163d5fc2af2ef9450fd6b3be933b07253ced15be7f072",
+      "sha256": "c780afad53bbfd7d80538d43d6ce7a42fe93a0f08b1207aabf78a2adee5e96a6",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -1972,7 +1972,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "AVT shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AVT has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "visualChecks": {
@@ -1990,7 +1990,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AVT shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AVT has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "findings": [
@@ -1998,7 +1998,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -2011,11 +2011,11 @@
     {
       "key": "financial-AVT-annual-viewport/1440/dark",
       "screenshot": "financial-AVT-annual-viewport-1440x900-dark.png",
-      "sha256": "380ec92a5f6c925015ae1e9081da59b096d41098afe0248137977cbe1ef262c9",
+      "sha256": "4af6c89e1a4706c4847eca0084ebcddf8e842fbb097d7548373cadc782c03c7b",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -2027,7 +2027,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "AVT shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AVT has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "visualChecks": {
@@ -2045,7 +2045,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AVT shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AVT has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "findings": [
@@ -2053,7 +2053,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -2066,7 +2066,7 @@
     {
       "key": "daily-observations/1440/dark",
       "screenshot": "daily-observations-1440x900-dark.png",
-      "sha256": "3415ab22cc1c00b756b907d8901e43b82ae8baab8c26d50a028492185f9ad58d",
+      "sha256": "9cfa4104f3769022033c655803887d198b400cfd2954e98901d7cefd53ecb070",
       "scores": {
         "design": {
           "value": 7.8,
@@ -2176,7 +2176,7 @@
     {
       "key": "home/1440/light",
       "screenshot": "home-1440x900-light.png",
-      "sha256": "7507ddcb7b52026d493f4a470443cb9b7724fa28c3ebb020c5d7074c6e4db5f4",
+      "sha256": "38889e144240cfc9dbeb4768d5bc973e1ea025c6f571e1758dc941bd9cd3cfe3",
       "scores": {
         "design": {
           "value": 8,
@@ -2470,7 +2470,7 @@
     {
       "key": "comparison/1440/light",
       "screenshot": "comparison-1440x900-light.png",
-      "sha256": "bd4b784d8671626d8c2e3ac86e688bc547373cb3314908ca86078626e846cf59",
+      "sha256": "cd4c0055a878347e8c61edbcd9c26768865a80be0f6063899ec125de07836276",
       "scores": {
         "design": {
           "value": 8,
@@ -2519,7 +2519,7 @@
     {
       "key": "comparison-near-pass/1440/light",
       "screenshot": "comparison-near-pass-1440x900-light.png",
-      "sha256": "000e305440b1d3647c8af851ec1f5a81a7ff79659e1430f8007ac6bee09b8e86",
+      "sha256": "4df31d0d4fd28e26f5ae9019b566f3c230934b99cca27e77fec9ee27c58fbb09",
       "scores": {
         "design": {
           "value": 8,
@@ -2617,7 +2617,7 @@
     {
       "key": "breadth/1440/light",
       "screenshot": "breadth-1440x900-light.png",
-      "sha256": "674578df739c60dfa98e3e9d3f57de50071e8534ceba699269c77300f293451e",
+      "sha256": "f83d24fb0800c2cd981b543f4f18d01e2381ac2f8cdf34a49e755715e8f0f683",
       "scores": {
         "design": {
           "value": 8,
@@ -2633,7 +2633,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "Market context distinguishes the 1,862 liquid-price cohort from the 4,480/5,966 approximate high/low observation set. Above-50-day is 47%, new highs/lows are 123/275, and distribution days are explicitly unavailable. Counts and missing evidence are not presented as market-wide certainty."
+          "reason": "Market context explicitly identifies the1,862 liquid-price cohort and an unconfirmed weak market condition. The above-50-day47% and new-high/low123/275 cards keep explanatory detail closed. The desktop distribution card states no data; its phone continuation is below the captured fold. Counts are not labelled market-wide certainty."
         }
       },
       "visualChecks": {
@@ -2651,7 +2651,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Market context distinguishes the 1,862 liquid-price cohort from the 4,480/5,966 approximate high/low observation set. Above-50-day is 47%, new highs/lows are 123/275, and distribution days are explicitly unavailable. Counts and missing evidence are not presented as market-wide certainty."
+          "reason": "Market context explicitly identifies the1,862 liquid-price cohort and an unconfirmed weak market condition. The above-50-day47% and new-high/low123/275 cards keep explanatory detail closed. The desktop distribution card states no data; its phone continuation is below the captured fold. Counts are not labelled market-wide certainty."
         }
       },
       "findings": [
@@ -2715,7 +2715,7 @@
     {
       "key": "case-MSM-inline/1440/light",
       "screenshot": "case-MSM-inline-1440x900-light.png",
-      "sha256": "fd84ecd106f8a143b815cad752298f332c33e6734260a3dbb1470e02440aed36",
+      "sha256": "b7c8c4a5955d1220c1a0e34dee1338e1bb641d4bbc9d7cb9713480728811791c",
       "scores": {
         "design": {
           "value": 8.2,
@@ -2764,7 +2764,7 @@
     {
       "key": "case-MSM-inline-annotations/1440/light",
       "screenshot": "case-MSM-inline-annotations-1440x900-light.png",
-      "sha256": "fd84ecd106f8a143b815cad752298f332c33e6734260a3dbb1470e02440aed36",
+      "sha256": "b7c8c4a5955d1220c1a0e34dee1338e1bb641d4bbc9d7cb9713480728811791c",
       "scores": {
         "design": {
           "value": 8.2,
@@ -2960,7 +2960,7 @@
     {
       "key": "case-ADI-inline/1440/light",
       "screenshot": "case-ADI-inline-1440x900-light.png",
-      "sha256": "b0be44f87b45ba0fd4f5e7233bbdc3c0d392adc057438b8bc30f9dda4fdd00e2",
+      "sha256": "28e29aa850d7d8d19aa929abe6a15749b4de09e96560ec6bf92256b4cf9d6390",
       "scores": {
         "design": {
           "value": 8.2,
@@ -3009,7 +3009,7 @@
     {
       "key": "case-ADI-inline-annotations/1440/light",
       "screenshot": "case-ADI-inline-annotations-1440x900-light.png",
-      "sha256": "b0be44f87b45ba0fd4f5e7233bbdc3c0d392adc057438b8bc30f9dda4fdd00e2",
+      "sha256": "28e29aa850d7d8d19aa929abe6a15749b4de09e96560ec6bf92256b4cf9d6390",
       "scores": {
         "design": {
           "value": 8.2,
@@ -3205,7 +3205,7 @@
     {
       "key": "case-TGTX-inline/1440/light",
       "screenshot": "case-TGTX-inline-1440x900-light.png",
-      "sha256": "ebd312f357d3309738db59d3dae49f12d7f575d7e57a015f2a849185cb07f174",
+      "sha256": "08651cd6002a640f6f662ed0fdd3e55ab15d482abae61c4fe0d3c9fe5e832a3e",
       "scores": {
         "design": {
           "value": 8.2,
@@ -3254,7 +3254,7 @@
     {
       "key": "case-TGTX-inline-annotations/1440/light",
       "screenshot": "case-TGTX-inline-annotations-1440x900-light.png",
-      "sha256": "ebd312f357d3309738db59d3dae49f12d7f575d7e57a015f2a849185cb07f174",
+      "sha256": "08651cd6002a640f6f662ed0fdd3e55ab15d482abae61c4fe0d3c9fe5e832a3e",
       "scores": {
         "design": {
           "value": 8.2,
@@ -3450,7 +3450,7 @@
     {
       "key": "market-map/390/dark",
       "screenshot": "market-map-390x844-dark.png",
-      "sha256": "bbfdfa2fc702946d83729337ba907580bcd54d58627e9b726765fbbb09ae8501",
+      "sha256": "1eb513e266a953f8d215135614ce917ba6fe7fe986c9648efe1b2613dc4cf080",
       "scores": {
         "design": {
           "value": 8,
@@ -3466,7 +3466,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "The market map shows 5,966 published symbols, financial 153/1,467 and healthcare 96/1,069, with RS medians 54 and 51. The legend explicitly distinguishes selection counts and RS from market returns; the market-context entry and bottom navigation are separate."
+          "reason": "The market map labels selection/published counts within5,966 symbols: financial153/1,467 and healthcare96/1,069, with RS medians54 and51. The map explanation is closed and has a disclosure indicator. The first EPSN candidate is visible above the390px capture bottom navigation; market context has a separate entry."
         }
       },
       "visualChecks": {
@@ -3484,7 +3484,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "The market map shows 5,966 published symbols, financial 153/1,467 and healthcare 96/1,069, with RS medians 54 and 51. The legend explicitly distinguishes selection counts and RS from market returns; the market-context entry and bottom navigation are separate."
+          "reason": "The market map labels selection/published counts within5,966 symbols: financial153/1,467 and healthcare96/1,069, with RS medians54 and51. The map explanation is closed and has a disclosure indicator. The first EPSN candidate is visible above the390px capture bottom navigation; market context has a separate entry."
         }
       },
       "findings": [
@@ -3597,7 +3597,7 @@
     {
       "key": "detail/390/dark",
       "screenshot": "detail-390x844-dark.png",
-      "sha256": "727086b7355568808f6de55afe7b8194460910b3d24d1c4016ef2d9ce7c548e9",
+      "sha256": "c05eef394b1259992c4cc16c2ae894c06812366b3f37a8545a40e921ae0d8279",
       "scores": {
         "design": {
           "value": 8.2,
@@ -3744,7 +3744,7 @@
     {
       "key": "comparison/390/dark",
       "screenshot": "comparison-390x844-dark.png",
-      "sha256": "76ee5f1c362bc2e4283a38d616e80816faeee069e2faeb9a35898b3f3813b1e9",
+      "sha256": "da22ad4b27a0ffe9420fad846d1b4fff7b93892e66c020f6d88535cf9bf249dd",
       "scores": {
         "design": {
           "value": 8,
@@ -3793,7 +3793,7 @@
     {
       "key": "comparison-near-pass/390/dark",
       "screenshot": "comparison-near-pass-390x844-dark.png",
-      "sha256": "32121eada4529c4ee16df67479b5c8ad19f2ec78b6950384ce6141810502b5a2",
+      "sha256": "84aa53d4878f53270c6c6e2ae11f4926dc6f17fd19a7909e51be24e09bba0414",
       "scores": {
         "design": {
           "value": 8,
@@ -3842,7 +3842,7 @@
     {
       "key": "market/390/dark",
       "screenshot": "market-390x844-dark.png",
-      "sha256": "52aa12d76f87b1a855b46f24679dff70c75e0c6fd691b48517976bdd1e18afb2",
+      "sha256": "7333dce4c1e02b7e937406388084fffb902794db2356dd0a48898ce9a04b6b5e",
       "scores": {
         "design": {
           "value": 8,
@@ -3891,7 +3891,7 @@
     {
       "key": "breadth/390/dark",
       "screenshot": "breadth-390x844-dark.png",
-      "sha256": "0d4e4bfb85578c29eda5a3d874b7e648dc1c61f6cbb0c7c8dae0ab631a32ffdc",
+      "sha256": "95ca69b019dc62203063dbb4a804912e7c8159ec5984cfe3c8445f07074d665b",
       "scores": {
         "design": {
           "value": 8,
@@ -3907,7 +3907,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "Market context distinguishes the 1,862 liquid-price cohort from the 4,480/5,966 approximate high/low observation set. Above-50-day is 47%, new highs/lows are 123/275, and distribution days are explicitly unavailable. Counts and missing evidence are not presented as market-wide certainty."
+          "reason": "Market context explicitly identifies the1,862 liquid-price cohort and an unconfirmed weak market condition. The above-50-day47% and new-high/low123/275 cards keep explanatory detail closed. The desktop distribution card states no data; its phone continuation is below the captured fold. Counts are not labelled market-wide certainty."
         }
       },
       "visualChecks": {
@@ -3925,7 +3925,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Market context distinguishes the 1,862 liquid-price cohort from the 4,480/5,966 approximate high/low observation set. Above-50-day is 47%, new highs/lows are 123/275, and distribution days are explicitly unavailable. Counts and missing evidence are not presented as market-wide certainty."
+          "reason": "Market context explicitly identifies the1,862 liquid-price cohort and an unconfirmed weak market condition. The above-50-day47% and new-high/low123/275 cards keep explanatory detail closed. The desktop distribution card states no data; its phone continuation is below the captured fold. Counts are not labelled market-wide certainty."
         }
       },
       "findings": [
@@ -3989,7 +3989,7 @@
     {
       "key": "case-MSM-inline/390/dark",
       "screenshot": "case-MSM-inline-390x844-dark.png",
-      "sha256": "335814c430373638b67b71bea734398c8cf8404300dc72ec532704115b76dd37",
+      "sha256": "634c6063e3779d8833a4d926889b24c6a9c62e4fbaaff32e3d1f51e1cd997802",
       "scores": {
         "design": {
           "value": 8.2,
@@ -4038,7 +4038,7 @@
     {
       "key": "case-MSM-inline-annotations/390/dark",
       "screenshot": "case-MSM-inline-annotations-390x844-dark.png",
-      "sha256": "335814c430373638b67b71bea734398c8cf8404300dc72ec532704115b76dd37",
+      "sha256": "634c6063e3779d8833a4d926889b24c6a9c62e4fbaaff32e3d1f51e1cd997802",
       "scores": {
         "design": {
           "value": 8.2,
@@ -4087,7 +4087,7 @@
     {
       "key": "case-MSM-expanded/390/dark",
       "screenshot": "case-MSM-expanded-390x844-dark.png",
-      "sha256": "5be1ec01c6580cfa1b6fe7cedc0cfde37abffb2e2c9da161491a75efa7eea396",
+      "sha256": "e6257937356fe8ada9b56149e0c92b2d97ddc06f48a94676c87a7446845d3d2b",
       "scores": {
         "design": {
           "value": 8.2,
@@ -4234,7 +4234,7 @@
     {
       "key": "case-ADI-inline/390/dark",
       "screenshot": "case-ADI-inline-390x844-dark.png",
-      "sha256": "22207ee77640f792ee108db61bdc4466c9e93cc0b4739ac583dd7cbbee3422d8",
+      "sha256": "e3142966c98a1bef5bc73ef69e4ebfc7d3adf97388e10536cf237e81a7c50fc8",
       "scores": {
         "design": {
           "value": 8.2,
@@ -4283,7 +4283,7 @@
     {
       "key": "case-ADI-inline-annotations/390/dark",
       "screenshot": "case-ADI-inline-annotations-390x844-dark.png",
-      "sha256": "22207ee77640f792ee108db61bdc4466c9e93cc0b4739ac583dd7cbbee3422d8",
+      "sha256": "e3142966c98a1bef5bc73ef69e4ebfc7d3adf97388e10536cf237e81a7c50fc8",
       "scores": {
         "design": {
           "value": 8.2,
@@ -4479,7 +4479,7 @@
     {
       "key": "case-TGTX-inline/390/dark",
       "screenshot": "case-TGTX-inline-390x844-dark.png",
-      "sha256": "bed22cf44c61a2b36d5ee942daa91176573ef5bf1208d2279395a1d1bdcbce89",
+      "sha256": "b67b45898e709c0f3d82c1a09b8e3552883c15a64e51ddea75cf3f9ac3d82b71",
       "scores": {
         "design": {
           "value": 8.2,
@@ -4528,7 +4528,7 @@
     {
       "key": "case-TGTX-inline-annotations/390/dark",
       "screenshot": "case-TGTX-inline-annotations-390x844-dark.png",
-      "sha256": "bed22cf44c61a2b36d5ee942daa91176573ef5bf1208d2279395a1d1bdcbce89",
+      "sha256": "b67b45898e709c0f3d82c1a09b8e3552883c15a64e51ddea75cf3f9ac3d82b71",
       "scores": {
         "design": {
           "value": 8.2,
@@ -4577,7 +4577,7 @@
     {
       "key": "case-TGTX-expanded/390/dark",
       "screenshot": "case-TGTX-expanded-390x844-dark.png",
-      "sha256": "87fcf422addffc554b3b5c8a942572c7a5d68e958d134dda71b9cc7847159745",
+      "sha256": "87624a2df39784558bc6adf56a3bd4150659ee6139ab0c3779f994e062b4adfe",
       "scores": {
         "design": {
           "value": 8.2,
@@ -4724,7 +4724,7 @@
     {
       "key": "market-map/390/light",
       "screenshot": "market-map-390x844-light.png",
-      "sha256": "908ec7e7705d3c2d6223508bd0a2ca362b1d6a126d8ee19f7d47e1df12bfc28e",
+      "sha256": "8ca69a24a592a8c13745d37e4c5970a691d0e08a48455286fef154e6cca52b1d",
       "scores": {
         "design": {
           "value": 8,
@@ -4740,7 +4740,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "The market map shows 5,966 published symbols, financial 153/1,467 and healthcare 96/1,069, with RS medians 54 and 51. The legend explicitly distinguishes selection counts and RS from market returns; the market-context entry and bottom navigation are separate."
+          "reason": "The market map labels selection/published counts within5,966 symbols: financial153/1,467 and healthcare96/1,069, with RS medians54 and51. The map explanation is closed and has a disclosure indicator. The first EPSN candidate is visible above the390px capture bottom navigation; market context has a separate entry."
         }
       },
       "visualChecks": {
@@ -4758,7 +4758,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "The market map shows 5,966 published symbols, financial 153/1,467 and healthcare 96/1,069, with RS medians 54 and 51. The legend explicitly distinguishes selection counts and RS from market returns; the market-context entry and bottom navigation are separate."
+          "reason": "The market map labels selection/published counts within5,966 symbols: financial153/1,467 and healthcare96/1,069, with RS medians54 and51. The map explanation is closed and has a disclosure indicator. The first EPSN candidate is visible above the390px capture bottom navigation; market context has a separate entry."
         }
       },
       "findings": [
@@ -4871,7 +4871,7 @@
     {
       "key": "detail/390/light",
       "screenshot": "detail-390x844-light.png",
-      "sha256": "5914fe5053f29e8c67268337fe69287c010648dc8b40ed65682bb4bbcf6ae8a9",
+      "sha256": "9dec7b311f427bfc4c1aef14ea3b4111b4066ca795d5b9295bd7880ba038f0fb",
       "scores": {
         "design": {
           "value": 8.2,
@@ -5165,7 +5165,7 @@
     {
       "key": "breadth/390/light",
       "screenshot": "breadth-390x844-light.png",
-      "sha256": "d829505eaae9e3ce732ed578c5971eef14ed23569035410a90edca6c35cd5ad3",
+      "sha256": "30d876029e6035abd9bfafcb1da86b6d236b1d21a6823b630632eef145448986",
       "scores": {
         "design": {
           "value": 8,
@@ -5181,7 +5181,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "Market context distinguishes the 1,862 liquid-price cohort from the 4,480/5,966 approximate high/low observation set. Above-50-day is 47%, new highs/lows are 123/275, and distribution days are explicitly unavailable. Counts and missing evidence are not presented as market-wide certainty."
+          "reason": "Market context explicitly identifies the1,862 liquid-price cohort and an unconfirmed weak market condition. The above-50-day47% and new-high/low123/275 cards keep explanatory detail closed. The desktop distribution card states no data; its phone continuation is below the captured fold. Counts are not labelled market-wide certainty."
         }
       },
       "visualChecks": {
@@ -5199,7 +5199,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Market context distinguishes the 1,862 liquid-price cohort from the 4,480/5,966 approximate high/low observation set. Above-50-day is 47%, new highs/lows are 123/275, and distribution days are explicitly unavailable. Counts and missing evidence are not presented as market-wide certainty."
+          "reason": "Market context explicitly identifies the1,862 liquid-price cohort and an unconfirmed weak market condition. The above-50-day47% and new-high/low123/275 cards keep explanatory detail closed. The desktop distribution card states no data; its phone continuation is below the captured fold. Counts are not labelled market-wide certainty."
         }
       },
       "findings": [
@@ -5263,7 +5263,7 @@
     {
       "key": "case-MSM-inline/390/light",
       "screenshot": "case-MSM-inline-390x844-light.png",
-      "sha256": "2cc6481192ce37a9344c1e24db0aa3ed7ec9761edb3257243197956e5eace6ce",
+      "sha256": "61caf67f376a1f0f10a240684bedfa27c99f9ac66c372f404e206e50243a087f",
       "scores": {
         "design": {
           "value": 8.2,
@@ -5312,7 +5312,7 @@
     {
       "key": "case-MSM-inline-annotations/390/light",
       "screenshot": "case-MSM-inline-annotations-390x844-light.png",
-      "sha256": "2cc6481192ce37a9344c1e24db0aa3ed7ec9761edb3257243197956e5eace6ce",
+      "sha256": "61caf67f376a1f0f10a240684bedfa27c99f9ac66c372f404e206e50243a087f",
       "scores": {
         "design": {
           "value": 8.2,
@@ -5361,7 +5361,7 @@
     {
       "key": "case-MSM-expanded/390/light",
       "screenshot": "case-MSM-expanded-390x844-light.png",
-      "sha256": "1da546abfa2d7baead88059379d8f10ff97eeb912617fc1e95e821e3fb104763",
+      "sha256": "04d842c136ff07a92833a3b3beae76fea630b196bc2bffb78f93b50d19b17319",
       "scores": {
         "design": {
           "value": 8.2,
@@ -5508,7 +5508,7 @@
     {
       "key": "case-ADI-inline/390/light",
       "screenshot": "case-ADI-inline-390x844-light.png",
-      "sha256": "2826691879230ced68307cdf07ee01d23ed71186930f9a3a78621c7c4d3f6d57",
+      "sha256": "021c2e5e96a5d58a58595a8281f9a08b39f3b9d1a2824bb103dc13232d723a2a",
       "scores": {
         "design": {
           "value": 8.2,
@@ -5557,7 +5557,7 @@
     {
       "key": "case-ADI-inline-annotations/390/light",
       "screenshot": "case-ADI-inline-annotations-390x844-light.png",
-      "sha256": "2826691879230ced68307cdf07ee01d23ed71186930f9a3a78621c7c4d3f6d57",
+      "sha256": "021c2e5e96a5d58a58595a8281f9a08b39f3b9d1a2824bb103dc13232d723a2a",
       "scores": {
         "design": {
           "value": 8.2,
@@ -5753,7 +5753,7 @@
     {
       "key": "case-TGTX-inline/390/light",
       "screenshot": "case-TGTX-inline-390x844-light.png",
-      "sha256": "fe954eb5280d6c559d337ed2c1e6c588846d3dac5aed5bbce85640c676cd82cf",
+      "sha256": "5ddb87d8396e1b3c6c5a425df6adddeac20d0cecddece5d533bbd1064a370981",
       "scores": {
         "design": {
           "value": 8.2,
@@ -5802,7 +5802,7 @@
     {
       "key": "case-TGTX-inline-annotations/390/light",
       "screenshot": "case-TGTX-inline-annotations-390x844-light.png",
-      "sha256": "fe954eb5280d6c559d337ed2c1e6c588846d3dac5aed5bbce85640c676cd82cf",
+      "sha256": "5ddb87d8396e1b3c6c5a425df6adddeac20d0cecddece5d533bbd1064a370981",
       "scores": {
         "design": {
           "value": 8.2,
@@ -5851,7 +5851,7 @@
     {
       "key": "case-TGTX-expanded/390/light",
       "screenshot": "case-TGTX-expanded-390x844-light.png",
-      "sha256": "1e6059cf05a512df55afe5bd29902c5d7a8eac67f02e683895a9ee16c5991b0e",
+      "sha256": "d891841cd3e963266d646c1c0d1af43e1dd0b578faf5e701fc2517d7f225d639",
       "scores": {
         "design": {
           "value": 8.2,
@@ -5998,11 +5998,11 @@
     {
       "key": "financial-NVDA-evidence/390/light",
       "screenshot": "financial-NVDA-evidence-390x844-light.png",
-      "sha256": "4e9b67e3c1f892287e91b373f30ef7501cd240b8930d11a0512605de45554e29",
+      "sha256": "153e0033b65006f80cd4b979b6076227fd421cbaebc6c662e6e39af9f63b6ecb",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6014,7 +6014,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "NVDA shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "NVDA has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "visualChecks": {
@@ -6032,7 +6032,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "NVDA shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "NVDA has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "findings": [
@@ -6040,7 +6040,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6053,11 +6053,11 @@
     {
       "key": "financial-NVDA-annual-viewport/390/light",
       "screenshot": "financial-NVDA-annual-viewport-390x844-light.png",
-      "sha256": "61a312d19edc9850f0bc20e4e65aa7d74b25d4c1717734a94edc4855462ae53c",
+      "sha256": "756903859987340f6bf66eb977f836f0c822701c2bbcd5dd5461586e3ed45011",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6069,7 +6069,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "NVDA shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "NVDA has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "visualChecks": {
@@ -6087,7 +6087,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "NVDA shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "NVDA has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "findings": [
@@ -6095,7 +6095,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6108,11 +6108,11 @@
     {
       "key": "financial-NVDA-selection/390/light",
       "screenshot": "financial-NVDA-selection-390x844-light.png",
-      "sha256": "d525de204853989e0a6a172408d324cddb8f3d31caf3db62e37627b9ad0a7e30",
+      "sha256": "b684dec73875ac3f25c82e7517ee8563e79dd2eaf7cd40b06d5ad5a99c5a9294",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6150,7 +6150,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6163,11 +6163,11 @@
     {
       "key": "financial-NVDA-purchase/390/light",
       "screenshot": "financial-NVDA-purchase-390x844-light.png",
-      "sha256": "29651fabf10244372c7bbf5a6166a5034d21c1d5b50b8230964b17f4b263fd41",
+      "sha256": "2cc1061f2eb06eb104e385c5749c96a5c4c5481ab389a5083926977a81159790",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6179,7 +6179,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "NVDA purchase is 1/7 with unmet 5 and unknown 1. Only the latest-session row is green; model fit, market, price position, volume and shape are not presented as passing. The earnings buffer remains unknown."
+          "reason": "NVDA purchase is1/7 with unmet5 and unknown1. Only the latest-session row passes; model fit, market, price position, volume and shape do not. The opened model explanation wraps within the panel; other explanations remain closed. The earnings buffer remains unknown."
         }
       },
       "visualChecks": {
@@ -6197,7 +6197,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "NVDA purchase is 1/7 with unmet 5 and unknown 1. Only the latest-session row is green; model fit, market, price position, volume and shape are not presented as passing. The earnings buffer remains unknown."
+          "reason": "NVDA purchase is1/7 with unmet5 and unknown1. Only the latest-session row passes; model fit, market, price position, volume and shape do not. The opened model explanation wraps within the panel; other explanations remain closed. The earnings buffer remains unknown."
         }
       },
       "findings": [
@@ -6205,7 +6205,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6218,11 +6218,11 @@
     {
       "key": "financial-FUTU-evidence/390/light",
       "screenshot": "financial-FUTU-evidence-390x844-light.png",
-      "sha256": "7a7b86f0cc3ff298e87f18b572dab36a8318e527ffa4cc68b5dcc95cc7c78c9f",
+      "sha256": "8f38db011f89919cefcdb2282a31b565130e59697d4ff90072efb728bad430ee",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6234,7 +6234,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "FUTU shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies HKD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "FUTU has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "visualChecks": {
@@ -6252,7 +6252,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "FUTU shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies HKD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "FUTU has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "findings": [
@@ -6260,7 +6260,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6273,11 +6273,11 @@
     {
       "key": "financial-FUTU-annual-viewport/390/light",
       "screenshot": "financial-FUTU-annual-viewport-390x844-light.png",
-      "sha256": "c63b58b462d89e48e078f0c36564847a3b85cf9447982b028a2388ceaecdffdf",
+      "sha256": "c60c3a602dcb2382f26e7f80d752c9c588d3d1b995c89dda3ce827287dbef10b",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6289,7 +6289,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "FUTU shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies HKD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "FUTU has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andHKD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "visualChecks": {
@@ -6307,7 +6307,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "FUTU shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies HKD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "FUTU has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andHKD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "findings": [
@@ -6315,7 +6315,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6328,11 +6328,11 @@
     {
       "key": "financial-FUTU-history/390/light",
       "screenshot": "financial-FUTU-history-390x844-light.png",
-      "sha256": "3da94f3dac98d6b7bef37e4c08baff0745aac440b45c1f7763b995b0a297f9ca",
+      "sha256": "ee2bee26da6f65b8a842cd8fea42959eea143b30ca8d2e4d5d0e97d852080f9f",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6344,7 +6344,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "FUTU labels this as historical reference, not current qualification: 371 to 320 reporting managers, minus 51. The table identifies quarters and filing-date ranges and distinguishes manager counts from actual purchases."
+          "reason": "FUTU labels four records as historical reference, excluded from current qualification. The institutional-history disclosure is closed and shows a manager-count delta ofminus51. The detailed table is not visible in this captured closed state."
         }
       },
       "visualChecks": {
@@ -6362,7 +6362,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "FUTU labels this as historical reference, not current qualification: 371 to 320 reporting managers, minus 51. The table identifies quarters and filing-date ranges and distinguishes manager counts from actual purchases."
+          "reason": "FUTU labels four records as historical reference, excluded from current qualification. The institutional-history disclosure is closed and shows a manager-count delta ofminus51. The detailed table is not visible in this captured closed state."
         }
       },
       "findings": [
@@ -6370,7 +6370,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6383,11 +6383,11 @@
     {
       "key": "financial-AAOI-evidence/390/light",
       "screenshot": "financial-AAOI-evidence-390x844-light.png",
-      "sha256": "9759df450d83cb0901c62a8f52c45face0959c67a0c997eabcc8ee37c4c44876",
+      "sha256": "4d32e48a3da0fa9ab5d5a39a37edb40b09271d5f0310f0428724bbb60c4c6ef8",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6399,7 +6399,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "AAOI shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AAOI has an opened quarterly EPS explanation with an unknown result andan expired seven-day provider record. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "visualChecks": {
@@ -6417,7 +6417,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AAOI shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AAOI has an opened quarterly EPS explanation with an unknown result andan expired seven-day provider record. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "findings": [
@@ -6425,7 +6425,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6438,11 +6438,11 @@
     {
       "key": "financial-AAOI-annual-viewport/390/light",
       "screenshot": "financial-AAOI-annual-viewport-390x844-light.png",
-      "sha256": "79959ab4cd5c80a06a5447dd6bbaa5eda13085dffeb11afa36166d737d5b4d20",
+      "sha256": "14909abf58b5cffee57363e6477964d43a04186586f05ce09e85ce5e0300ec74",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6454,7 +6454,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "AAOI shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AAOI has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "visualChecks": {
@@ -6472,7 +6472,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AAOI shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AAOI has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "findings": [
@@ -6480,7 +6480,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6493,11 +6493,11 @@
     {
       "key": "financial-ALH-evidence/390/light",
       "screenshot": "financial-ALH-evidence-390x844-light.png",
-      "sha256": "e181dc1ec2ed17063d71cc1677dce92cd66c8954ad57dd2e38ece597e07930e8",
+      "sha256": "6cfb3fcc95a8540eea8358caf88130c7bdadc92a3e000a60d13ea2c16610241c",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6509,7 +6509,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "ALH shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "ALH has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "visualChecks": {
@@ -6527,7 +6527,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "ALH shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "ALH has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "findings": [
@@ -6535,7 +6535,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6548,11 +6548,11 @@
     {
       "key": "financial-ALH-annual-viewport/390/light",
       "screenshot": "financial-ALH-annual-viewport-390x844-light.png",
-      "sha256": "73a31d6cdb700720906816c4cdcebb01f1752b5069c8556301ff4b5be84c1b1c",
+      "sha256": "f3126dbbaa24564894c0bb4b507cda7eca9ad5c21b3285bbf1b94239e5287131",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6564,7 +6564,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "ALH shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "ALH has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "visualChecks": {
@@ -6582,7 +6582,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "ALH shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "ALH has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "findings": [
@@ -6590,7 +6590,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6603,11 +6603,11 @@
     {
       "key": "financial-ALH-history/390/light",
       "screenshot": "financial-ALH-history-390x844-light.png",
-      "sha256": "d687a8d90717fbefe2123f19d37dfef37d9286c6c86a9d1a4878bb92b5b534df",
+      "sha256": "264b932cdb3001e5bbc38a524821d1a5e39ddd80bd8aef3e4291cbfde79c530e",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6619,7 +6619,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "ALH labels this as historical reference, not current qualification: 146 to 166 reporting managers, plus 20. The table identifies quarters and filing-date ranges and distinguishes manager counts from actual purchases."
+          "reason": "ALH labels four records as historical reference, excluded from current qualification. The institutional-history disclosure is closed and shows a manager-count delta ofplus20. The detailed table is not visible in this captured closed state."
         }
       },
       "visualChecks": {
@@ -6637,7 +6637,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "ALH labels this as historical reference, not current qualification: 146 to 166 reporting managers, plus 20. The table identifies quarters and filing-date ranges and distinguishes manager counts from actual purchases."
+          "reason": "ALH labels four records as historical reference, excluded from current qualification. The institutional-history disclosure is closed and shows a manager-count delta ofplus20. The detailed table is not visible in this captured closed state."
         }
       },
       "findings": [
@@ -6645,7 +6645,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6658,11 +6658,11 @@
     {
       "key": "financial-AVT-evidence/390/light",
       "screenshot": "financial-AVT-evidence-390x844-light.png",
-      "sha256": "6c652d12aaaae9ff9af4836ed8fca2d1e904a443d672f5300dfcbb437820addb",
+      "sha256": "af77ce0b5ebe0df7c352a6c45716d0c9c8e6fa3662e04cbc7f305263bf663c6c",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6674,7 +6674,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "AVT shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AVT has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "visualChecks": {
@@ -6692,7 +6692,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AVT shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AVT has an opened quarterly EPS explanation with an unknown result andno usable finite actual value. The following metrics retain their unknown status while their repeated metadata is closed. The expanded metric displays period/provider/retrieval/metric/basis/unit evidence."
         }
       },
       "findings": [
@@ -6700,7 +6700,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6713,11 +6713,11 @@
     {
       "key": "financial-AVT-annual-viewport/390/light",
       "screenshot": "financial-AVT-annual-viewport-390x844-light.png",
-      "sha256": "5a1cbb1ce6e5982556fcb400949eca459497ad3b254e77a8e8d725bdaa754202",
+      "sha256": "22c2915a05463e4dd2a8f9587d7e01a9c5790b248db067c6b340c117d2c73bed",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         "usability": {
           "value": 8,
@@ -6729,7 +6729,7 @@
         },
         "content": {
           "value": 8.3,
-          "reason": "AVT shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AVT has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "visualChecks": {
@@ -6747,7 +6747,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AVT shows unknown current quarterly EPS, sales and/or annual EPS rather than substituting stale figures. The annual record identifies USD reported diluted EPS and an October 4 retrieval time; missing periods, provenance and provider adjustment limitations remain readable."
+          "reason": "AVT has an opened annual EPS explanation with unknown result, missing valid annual history, an October4 retrieval timestamp andUSD reported diluted EPS basis. The remaining reference metrics show unknown results with closed disclosure indicators. No stale annual figure is substituted as current."
         }
       },
       "findings": [
@@ -6755,7 +6755,7 @@
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "The evidence is readable but long prose, repeated dividers and the desktop empty gutter retain a utilitarian visual density."
+          "reason": "Closed metric summaries reduce repetition, but the expanded provenance and repeated unknown rows remain utilitarian; desktop captures retain a large empty gutter."
         },
         {
           "axis": "originality",
@@ -6768,7 +6768,7 @@
     {
       "key": "daily-observations/390/light",
       "screenshot": "daily-observations-390x844-light.png",
-      "sha256": "fad2867b02a15ece09942fe3aee0babe2f333eae2263871bfccefc66f31ce4fb",
+      "sha256": "a0558ed6b3defe8d65cc8072ff2c6826654d4b3fd0ff03a6b25d2bfceb4e7cbb",
       "scores": {
         "design": {
           "value": 7.8,
