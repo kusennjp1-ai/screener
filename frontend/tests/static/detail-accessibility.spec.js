@@ -50,10 +50,11 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   const records=[];
   const visibleFocus=async (locator, label)=>{
     const box=await locator.boundingBox(), header=await page.locator('.leader-header').boundingBox();
-    const nav=width===375?await page.locator('.leader-mobile-nav').boundingBox():null;
+    const nav=width===375?await page.locator('.stock-section-nav').boundingBox():null;
+    const insideSectionNav=await locator.evaluate(node=>Boolean(node.closest('.stock-section-nav')));
     expect(box.x,label).toBeGreaterThanOrEqual(0);expect(box.x+box.width,label).toBeLessThanOrEqual(width);
     expect(box.y,label).toBeGreaterThanOrEqual(header.y+header.height);
-    expect(box.y+box.height,label).toBeLessThanOrEqual(nav?.y??page.viewportSize().height);
+    expect(box.y+box.height,label).toBeLessThanOrEqual(nav?(insideSectionNav?nav.y+nav.height:nav.y):page.viewportSize().height);
     records.push({label,box,header,nav});
   };
   await detail.locator('.readiness-chip').focus();await page.keyboard.press('Enter');
@@ -107,6 +108,7 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   const annualBounds=await annualTable.evaluate(e=>({client:e.parentElement.clientWidth,scroll:e.parentElement.scrollWidth}));
   expect(annualBounds.scroll).toBeLessThanOrEqual(annualBounds.client+1);
   await page.screenshot({path:info.outputPath(`annual-history-${width}-${theme}.png`)});
+  if(width===375)await detail.getByRole('tab',{name:'チャート',exact:true}).click();
   const numeric=detail.locator('.chart-numeric-data');
   await numeric.locator('summary').focus();await page.keyboard.press('Space');
   await expect(numeric).toHaveAttribute('open');
@@ -184,7 +186,7 @@ for (const width of [375,1440]) for (const theme of ['dark','light']) test(`deta
   await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
   await expect(opener).toBeFocused();await visibleFocus(opener,'expanded-chart-focus-return');
   await financialTab.focus();await page.keyboard.press('End');await expect(detail.getByRole('tab',{name:'メモ'})).toBeFocused();
-  await page.keyboard.press('Home');await expect(detail.getByRole('tab',{name:'判定根拠'})).toBeFocused();
+  await page.keyboard.press('Home');await expect(detail.getByRole('tab',{name:width===375?'チャート':'判定根拠',exact:true})).toBeFocused();
   if(width===375){
     const back=page.getByRole('button',{name:'← 候補一覧',exact:true});
     await back.focus();await page.keyboard.press('Enter');

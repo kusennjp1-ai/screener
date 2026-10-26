@@ -4,6 +4,25 @@
 .leader-svg-controls button[aria-pressed=true]{background:var(--surface-2);color:var(--text)}
 .leader-svg-controls button:disabled{opacity:.45;cursor:default}
 .leader-evidence-chart svg{width:100%;display:block;overflow:visible;background:var(--panel)}
+.leader-chart-surface{min-width:0}
+.leader-chart-surface[hidden]{display:none}
+/* https://developer.mozilla.org/en-US/docs/Web/CSS/touch-action */
+.leader-chart-surface [data-chart-plot]{touch-action:pan-y pinch-zoom;user-select:none;cursor:grab}
+.leader-chart-surface [data-chart-plot]:active{cursor:grabbing}
+.chart-scroll-control{display:flex;align-items:center;gap:8px;padding:0 8px;font-size:11px;color:var(--text-2)}
+.chart-scroll-control span{white-space:nowrap}
+.chart-scroll-control input{flex:1;min-width:44px;min-height:44px;accent-color:var(--accent);cursor:ew-resize}
+.chart-snapshot-metrics{display:grid;grid-template-columns:1fr;gap:4px;padding:0 8px}
+.rs-rating-history{min-width:0}
+.rs-rating-summary{display:flex;justify-content:space-between;align-items:center;gap:8px;width:100%}
+.rs-rating-summary>span{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px}
+.rs-rating-summary strong{font-size:20px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.rs-rating-summary small,.rs-history-date small{font-size:11px;font-weight:400;color:var(--text-2)}
+.rs-rating-history .rs-rating-spark{width:100%;height:64px}
+.rs-history-date{display:flex;align-items:center;gap:6px;font-size:11px}
+.rs-history-date select{min-height:44px;min-width:44px;max-width:140px;border:1px solid var(--line);border-radius:4px;background:var(--panel);color:var(--text);font:inherit;padding:4px}
+.rs-history-date output{margin-left:auto;font-size:16px;font-variant-numeric:tabular-nums}
+.rs-history-basis{margin:0;padding:4px 0;font-size:11px;color:var(--text-2);line-height:1.5}
 .leader-svg-caption,.leader-svg-warning,.leader-svg-legend{margin:0;padding:8px 12px;font-size:12px;line-height:1.6;overflow-wrap:anywhere}
 .leader-svg-warning{color:var(--text);border-left:3px solid var(--ext);background:var(--surface-2)}
 .leader-svg-legend{display:flex;gap:6px 14px;flex-wrap:wrap}.leader-svg-legend span{color:var(--text)}

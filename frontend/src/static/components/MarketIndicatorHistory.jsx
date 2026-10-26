@@ -11,7 +11,7 @@ const number = value => {
     : displayed;
 };
 const text = value => typeof value === 'string' && value.trim() ? value : '未確認';
-export default function MarketIndicatorHistory({ history, market, asOfDate, provenance }) {
+export default function MarketIndicatorHistory({ history, market, asOfDate, provenance, omitMarketGraphs = false }) {
   const data = useMemo(() => marketIndicatorHistory(history, { market, asOfDate }), [history, market, asOfDate]);
   const symbols = [...new Set(data.series.filter(series => series.scope === 'security').map(series => series.instrument))].sort();
   const [selectedSymbol, setSelectedSymbol] = useState('');
@@ -46,7 +46,7 @@ export default function MarketIndicatorHistory({ history, market, asOfDate, prov
       {provenance && <Typography sx={{ fontSize: 12, overflowWrap: 'anywhere' }}>銘柄対応表 OpenFIGI 取得日時（元記録・UTC）：{mapping.length ? mapping.map(item => text(item.retrieved_at)).join(' ／ ') : '未確認'}</Typography>}
     </Box>}
     {data.issues.map(issue => <Alert key={issue} severity="warning" sx={{ my: 1 }}>{issue}</Alert>)}
-    {MARKET_HISTORY_GROUPS.map(group => <section key={group.label} aria-label={group.label}>
+    {MARKET_HISTORY_GROUPS.filter(group => !omitMarketGraphs || !group.metrics.some(metric => ['put_call_ratio','new_highs','new_lows','distribution_sp500','distribution_nasdaq'].includes(metric))).map(group => <section key={group.label} aria-label={group.label}>
       <Typography component="h3" sx={{ mt: 2, fontWeight: 700 }}>{group.label}</Typography>
       <Typography sx={{ fontSize: 12 }}>{group.note}</Typography>
       {group.metrics.filter(metric => !visibleSeries.some(s => s.metric === metric)).map(metric => <Typography key={metric} sx={{ my: 1 }}>{MARKET_HISTORY_METRICS[metric].label}：比較可能な履歴は未取得です。</Typography>)}

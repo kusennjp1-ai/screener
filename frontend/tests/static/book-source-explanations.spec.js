@@ -51,7 +51,12 @@ for (const width of [1440, 375]) for (const theme of ['dark', 'light']) test(`bo
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: info.outputPath(`book-source-${width}-${theme}-${stage}.png`) });
   };
+  await expect(detail.locator('.entry-source-badge')).toHaveAccessibleName(/『株式トレード 基本と原則』のピボット追随目安/);
   const entry = detail.getByText('アプリ設定と書籍の確認範囲', { exact: true }).locator('..');
+  if(width===375){
+    await detail.getByRole('tab',{name:'購入条件',exact:true}).click();
+    await detail.locator('.stock-entry-disclosure > summary').click();
+  }
   await entry.locator('summary').click();
   await expect(entry).toContainText('『株式トレード 基本と原則』PDF 245頁');
   await expect(entry).toContainText('『成長株投資の神』（Zanger）PDF 181頁');
@@ -59,8 +64,9 @@ for (const width of [1440, 375]) for (const theme of ['dark', 'light']) test(`bo
   await expect(entry).toContainText('口座資金に対するリスク率');
   await expect(entry).toContainText('VCPの収縮深度には置き換えません');
   await expect(entry).toContainText('PDFの先頭を1');
-  await expect(detail.locator('.entry-source-badge')).toHaveAccessibleName(/『株式トレード 基本と原則』のピボット追随目安/);
   await inspect(entry, 'entry-uses');
+
+  if(width===375)await detail.getByRole('tab',{name:'判定根拠',exact:true}).click();
 
   const trend = detail.getByText('トレンド条件の出典とアプリの近似', { exact: true }).locator('..');
   await trend.locator('summary').click();

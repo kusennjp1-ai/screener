@@ -17,6 +17,46 @@ vi.mock('./ResearchChart',()=>({default:()=> <div data-testid="research-chart"/>
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.mocked(useMediaQuery).mockReturnValue(false); });
 const props={method:'minervini',date:'2026-10-01',market:{cap:.5,label:'上昇'},now:Date.parse('2026-10-01T22:00:00Z'),watch:[],detail:{}};
 const row={symbol:'MSM',company_name:'MSC Industrial Direct Co Inc',current_price:103.2,se_pivot_price:100};
+it('starts mobile on the chart and replaces rather than appends the other workspaces',()=>{
+ vi.mocked(useMediaQuery).mockReturnValue(true);
+ const {container}=render(<ResearchDetail {...props} selected={row}/>);
+ expect(screen.getByRole('tab',{name:'チャート',exact:true})).toHaveAttribute('aria-selected','true');
+ expect(screen.getByTestId('research-chart').parentElement).not.toHaveAttribute('hidden');
+ expect(container.querySelector('.leader-detail-overview')).toBeNull();
+ expect(container.querySelector('.research-evidence')).toBeNull();
+ fireEvent.click(screen.getByRole('tab',{name:'購入条件',exact:true}));
+ expect(screen.getByTestId('research-chart').parentElement).toHaveAttribute('hidden');
+ expect(container.querySelectorAll('.condition-rules>li')).toHaveLength(7);
+ expect(container.querySelector('.stock-entry-disclosure')).not.toHaveAttribute('open');
+ expect(container.querySelector('.leader-detail-fundamentals')).toBeNull();
+ fireEvent.click(screen.getByRole('tab',{name:'メモ',exact:true}));
+ expect(container.querySelector('.leader-detail-overview')).toBeNull();
+ expect(container.querySelector('.condition-rules')).toBeNull();
+ expect(screen.getByRole('textbox')).toBeInTheDocument();
+});
+it('resets mobile workspace on identity change without carrying open financial content',()=>{
+ vi.mocked(useMediaQuery).mockReturnValue(true);
+ const input={...props,selected:row,onVerificationToggle:vi.fn()};
+ const view=render(<ResearchDetail {...input}/>);
+ fireEvent.click(screen.getByRole('tab',{name:'財務・機関'}));
+ expect(screen.getByRole('region',{name:'財務の判定根拠'})).toBeInTheDocument();
+ view.rerender(<ResearchDetail {...input} selected={{...row,symbol:'NEXT'}}/>);
+ expect(screen.getByRole('tab',{name:'チャート',exact:true})).toHaveAttribute('aria-selected','true');
+ expect(screen.queryByRole('region',{name:'財務の判定根拠'})).toBeNull();
+});
+it('supports mobile section keyboard navigation and keeps chart mounted between sections',()=>{
+ vi.mocked(useMediaQuery).mockReturnValue(true);
+ render(<ResearchDetail {...props} selected={row}/>);
+ const chart=screen.getByTestId('research-chart');
+ fireEvent.keyDown(screen.getByRole('tab',{name:'チャート',exact:true}),{key:'ArrowRight'});
+ expect(screen.getByRole('tab',{name:'VCP',exact:true})).toHaveFocus();
+ fireEvent.keyDown(screen.getByRole('tab',{name:'VCP',exact:true}),{key:'End'});
+ expect(screen.getByRole('tab',{name:'メモ',exact:true})).toHaveFocus();
+ expect(screen.getByTestId('research-chart')).toBe(chart);
+ fireEvent.keyDown(screen.getByRole('tab',{name:'メモ',exact:true}),{key:'Home'});
+ expect(screen.getByRole('tab',{name:'チャート',exact:true})).toHaveFocus();
+ expect(chart.parentElement).not.toHaveAttribute('hidden');
+});
 it('labels missing financial evidence for the five-symbol exception and retains unknown purchase exclusion',()=>{
  const selected={...row,symbol:'NVDA',market:'US',as_of_date:props.date};
  const {container}=render(<ResearchDetail {...props} selected={selected}/>);
@@ -281,7 +321,7 @@ it.each(['VCP・形状候補','出来高','市場'])('keeps the %s gate control 
  for(const button of container.querySelectorAll('.leader-five-gates button[aria-controls]'))expect(document.getElementById(button.getAttribute('aria-controls'))).not.toBeNull();
 });
 
-it('keeps one overview in matching responsive DOM order without losing selected detail state',()=>{
+it('keeps selected notes across responsive layouts while mounting only that mobile workspace',()=>{
  const input={...props,selected:row};
  const view=render(<ResearchDetail {...input}/>);
  const overview=()=>view.container.querySelector('.leader-detail-overview');
@@ -293,19 +333,18 @@ it('keeps one overview in matching responsive DOM order without losing selected 
  fireEvent.change(screen.getByRole('textbox'),{target:{value:'responsive evidence note'}});
  for(const [step,narrow] of [true,false,true,false].entries()){
   vi.mocked(useMediaQuery).mockReturnValue(narrow);view.rerender(<ResearchDetail {...input} now={props.now+step+1}/>);
-  expect(view.container.querySelectorAll('.leader-detail-overview')).toHaveLength(1);
-  expect(view.container.querySelectorAll('#leader-trend-template')).toHaveLength(1);
+  expect(view.container.querySelectorAll('.leader-detail-overview')).toHaveLength(narrow?0:1);
+  expect(view.container.querySelectorAll('#leader-trend-template')).toHaveLength(narrow?0:1);
   expect(view.container.querySelectorAll('#research-detail-tabs')).toHaveLength(1);
   if(narrow){
-   expect(chart().nextElementSibling).toBe(overview());
+   expect(chart().parentElement).toHaveAttribute('hidden');
    expect(view.container.querySelector('.symbol-qualification-context')).toHaveTextContent('価格位置は購入可否と別です。');
    expect(view.container.querySelector('.symbol-qualification-context')).not.toHaveTextContent('未達');
-   expect(overview().querySelector('.leader-detail-verdict')).toHaveTextContent(/未達.*未確認/);
+   expect(view.container.querySelector('.stock-companion')).toBeInTheDocument();
   }
   else expect(chart().nextElementSibling).toBe(overview());
   expect(screen.getByRole('tab',{name:'メモ'})).toHaveAttribute('aria-selected','true');
   expect(screen.getByRole('textbox')).toHaveValue('responsive evidence note');
-  expect(overview()).toHaveTextContent('出来高比');expect(overview()).toHaveTextContent('前日比（日次）');
-  expect(overview().querySelectorAll('.leader-condition-strip [data-state]')).toHaveLength(7);
+  if(!narrow){expect(overview()).toHaveTextContent('出来高比');expect(overview()).toHaveTextContent('前日比（日次）');expect(overview().querySelectorAll('.leader-condition-strip [data-state]')).toHaveLength(7);}
  }
 });

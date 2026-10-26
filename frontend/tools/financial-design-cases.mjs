@@ -332,7 +332,7 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
           const rule = assessment.rules.find(rule => rule.label === financial.condition);
           check(rule?.state === financial.state, `${key}/${financial.id}: selection/financial state mismatch`);
         }
-        if (item.decisions) await takeViewport('selection', ['#detail-tab-evidence', '#detail-panel-evidence > h3', ...[1, 2, 3].map(index => `#detail-panel-evidence .research-rules > li:nth-child(${index})`)]);
+        if (item.decisions) await takeViewport('selection', [...(viewport.width>700?['#detail-tab-evidence']:[]), '#detail-panel-evidence > h3', ...[1, 2, 3].map(index => `#detail-panel-evidence .research-rules > li:nth-child(${index})`)]);
         await page.getByRole('tab', { name: '購入条件', exact: true }).click();
         const purchase = page.locator('#detail-panel-conditions');
         await ready(purchase);
@@ -347,7 +347,7 @@ export async function verifyFinancialCases({ page, viewport, theme, capture, che
           purchaseRuleStates[index] === purchaseStateText[rule.state], `${key}: purchase rule ${rule.id} label/state mismatch`));
         await purchase.locator('.condition-rules details > summary').first().click();
         check((await purchase.innerText()).includes('選択中の手法とは別に'), `${key}: purchase model/selected method distinction missing`);
-        if (item.decisions) await takeViewport('purchase', ['#detail-tab-conditions', '#detail-panel-conditions > h3', ...[1, 2].map(index => `#detail-panel-conditions .condition-rules > li:nth-child(${index})`)]);
+        if (item.decisions) await takeViewport('purchase', [...(viewport.width>700?['#detail-tab-conditions']:[]), '#detail-panel-conditions > h3', ...[1, 2].map(index => `#detail-panel-conditions .condition-rules > li:nth-child(${index})`)]);
         if (viewport.width === 390) await page.locator('.mobile-header-back:visible, .mobile-back:visible').first().click();
         await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
         const filters = page.getByRole('dialog', { name: '候補を絞り込む', exact: true });

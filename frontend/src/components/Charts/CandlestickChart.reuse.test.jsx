@@ -148,14 +148,28 @@ describe('CI479 readable legends without displacing the detail plot',()=>{
     const plot=await screen.findByRole('img',{name:/DETAIL 価格・出来高・RS 共通時間軸/});
     const legend=view.container.querySelector('.leader-svg-legend');
     const lab=view.container.querySelector('.chart-setup-evidence');
-    expect(plot.nextElementSibling).toBe(lab);
+    // The mobile chart now adds an explicit pan control and RS/volume history
+    // before the separate VCP workspace. All remain in normal document flow;
+    // none may overlay or replace the three detailed chart panes.
+    const surface=plot.closest('.leader-chart-surface');
+    const pan=view.container.querySelector('.chart-scroll-control');
+    const metrics=view.container.querySelector('.chart-snapshot-metrics');
+    expect(plot.nextElementSibling).toBe(pan);
+    expect(pan.nextElementSibling).toBe(metrics);
+    expect(surface.nextElementSibling).toBe(lab);
     expect(lab.nextElementSibling).toBe(legend);
     expect(plot).not.toContainElement(lab);
     expect(plot).not.toContainElement(legend);
-    expect(plot.getAttribute('viewBox').split(' ').at(-1)).toBe(mobile?'390':'440');
+    expect(plot.getAttribute('viewBox').split(' ').at(-1)).toBe(mobile?'300':'440');
     expect(getComputedStyle(legend).position).not.toBe('absolute');
     expect(getComputedStyle(legend).overflow).not.toBe('hidden');
-    expect(plot.previousElementSibling).toHaveTextContent('最終バー 2026-09-22 終値 101.00');
+    expect(plot.previousElementSibling).toHaveTextContent('期間 2026-09-21〜2026-09-22');
+    if(mobile){
+      const help=screen.getByText('チャートの操作・線の見方',{selector:'summary'}).closest('details');
+      expect(help).not.toHaveAttribute('open');
+      expect(help).toHaveTextContent('最終バー 2026-09-22 終値 101.00');
+      expect(plot.previousElementSibling).toHaveTextContent('左右スワイプ');
+    }else expect(plot.previousElementSibling).toHaveTextContent('最終バー 2026-09-22 終値 101.00');
     expect(legend).toHaveTextContent('買い上限 105.00');
     expect(legend).toHaveTextContent('共通ピボット 100.00');
     expect(legend).toHaveTextContent('損切り例 95.00');

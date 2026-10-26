@@ -12,7 +12,7 @@ export function financialViewportGeometry(selectors) {
     return box.width > 0 && box.height > 0 && style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
   };
   const header = document.querySelector('.leader-header');
-  const navigation = [...document.querySelectorAll('.mobile-research-nav,.leader-mobile-nav')].find(shown);
+  const navigation = [...document.querySelectorAll('.stock-section-nav,.mobile-research-nav,.leader-mobile-nav')].find(shown);
   const actions=document.querySelector('.mobile-chart-actions');
   const chrome = { header: shown(header) ? rect(header) : null, navigation: shown(navigation) ? rect(navigation) : null, actions:shown(actions)?rect(actions):null };
   const content = { top: Math.max(0, chrome.header?.bottom || 0), bottom: Math.min(innerHeight, chrome.navigation?.top ?? innerHeight,chrome.actions?.top??innerHeight), left: 0, right: innerWidth };
@@ -36,13 +36,19 @@ export function financialViewportGeometry(selectors) {
       })));
     return { selector, count: 1, shown: ancestorsVisible, rect: box, clip, hit_samples: hitSamples, text: node.textContent.trim().slice(0, 220) };
   });
-  return { viewport: { width: innerWidth, height: innerHeight }, scroll_y: scrollY, chrome, content, targets };
+  const sectionNavigation=navigation?.classList.contains('stock-section-nav')?{kind:'stock-sections',tabs:[...navigation.querySelectorAll('[role=tab]')].map(node=>{const r=rect(node),hit=document.elementFromPoint(r.left+r.width/2,r.top+r.height/2);return {id:node.id,selected:node.getAttribute('aria-selected'),rect:r,hit:Boolean(hit&&(hit===node||node.contains(hit)))};})}:null;
+  return { viewport: { width: innerWidth, height: innerHeight }, scroll_y: scrollY, chrome, content, targets,...(sectionNavigation?{section_navigation:sectionNavigation}:{}) };
 }
 
 export function checkFinancialViewportGeometry(geometry, check, key, viewport) {
   check(geometry.viewport.width === viewport.width && geometry.viewport.height === viewport.height, `${key}: viewport proof changed the requested viewport`);
   check(Boolean(geometry.chrome.header), `${key}: viewport proof must retain the visible page header`);
   if (viewport.width === 390) check(Boolean(geometry.chrome.navigation), `${key}: viewport proof must retain the visible mobile navigation`);
+  if(geometry.section_navigation){
+    const tabs=geometry.section_navigation.tabs, ids=['chart','setup','conditions','financial','evidence','notes'].map(key=>`detail-tab-${key}`);
+    check(geometry.section_navigation.kind==='stock-sections'&&tabs?.length===6&&tabs.every((tab,i)=>tab.id===ids[i]&&['true','false'].includes(tab.selected)&&tab.hit===true&&tab.rect?.width>=44&&tab.rect?.height>=44&&tab.rect.left>=0&&tab.rect.right<=viewport.width&&tab.rect.top>=geometry.chrome.navigation.top&&tab.rect.bottom<=geometry.chrome.navigation.bottom),`${key}: stock section navigation is missing, clipped or undersized`);
+    check(tabs?.filter(tab=>tab.selected==='true').length===1,`${key}: exactly one stock section must be selected`);
+  }
   check(geometry.targets.length > 0, `${key}: viewport proof requires named content targets`);
   for (const target of geometry.targets) {
     check(target.count === 1 && target.shown && Boolean(target.rect), `${key}: viewport target missing/hidden/ambiguous: ${target.selector}`);

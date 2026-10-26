@@ -43,22 +43,29 @@ for (const width of [390,1440]) test(`VCP evidence reveals measured chart interv
   const candidate=page.getByRole('button',{name:/^VCPTEST の分析を表示/});
   await expect(candidate).toBeVisible();await candidate.click();
   const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
+  if(width===390)await detail.getByRole('tab',{name:'VCP',exact:true}).click();
   const panel=detail.getByRole('region',{name:'VCPTEST のVCP分析'});
   await expect(panel).toContainText('値幅の縮小を確認');
   const initialRange=await detail.getByTestId('chart-visible-range').textContent();
   const first=panel.getByRole('button',{name:'C1 の収縮区間を表示'});
   await first.click();
-  await expect(first).toHaveAttribute('aria-pressed','true');await expect(first).toBeFocused();
+  if(width===390){
+    await expect(detail.getByRole('tab',{name:'チャート',exact:true})).toHaveAttribute('aria-selected','true');
+  }else {await expect(first).toHaveAttribute('aria-pressed','true');await expect(first).toBeFocused();}
   await expect(detail.getByTestId('chart-visible-range')).not.toHaveText(initialRange);
   await expect(detail.locator('[data-chart-symbol="VCPTEST"]')).toHaveAttribute('data-chart-annotation-mode','detail');
   const plot=detail.locator('[data-chart-symbol="VCPTEST"]');
   await expect.poll(async()=>{const box=await plot.boundingBox(),header=await page.locator('.leader-header').boundingBox();return box.y>=header.y+header.height-1 && box.y<page.viewportSize().height-100;}).toBe(true);
   await page.screenshot({path:info.outputPath(`vcp-inline-focus-${width}.png`)});
   await detail.getByRole('button',{name:'週足',exact:true}).click();
+  if(width===390)await detail.getByRole('tab',{name:'VCP',exact:true}).click();
   await expect(panel).toContainText('日足に切り替えてください');
   await expect(panel.getByRole('button',{name:/の収縮区間を表示/})).toHaveCount(0);
+  if(width===390)await detail.getByRole('tab',{name:'チャート',exact:true}).click();
   await detail.getByRole('button',{name:'日足',exact:true}).click();
+  if(width===390)await detail.getByRole('tab',{name:'VCP',exact:true}).click();
   await expect(panel.getByRole('button',{name:'C1 の収縮区間を表示'})).toBeVisible();
+  if(width===390)await detail.getByRole('tab',{name:'チャート',exact:true}).click();
   await detail.getByRole('button',{name:'日次チャートを分析'}).click();
   const dialog=page.getByRole('dialog'),expanded=dialog.getByRole('region',{name:'VCPTEST のVCP分析'});
   await expect(expanded).toContainText('値幅の縮小を確認');

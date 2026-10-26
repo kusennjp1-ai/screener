@@ -24,6 +24,19 @@ export PATH="$node_home/bin:/usr/local/bin:/usr/bin:/bin"
 export npm_config_cache="$runtime/npm-cache"
 python3 -c 'import sys; assert sys.version_info.major == 3'
 
+# The market-history lifecycle test executes the real Python collector with
+# providers offline. Use the same pinned independent calendar as CI, rather than
+# skipping the end-to-end test or relying on packages in the host interpreter.
+calendar_home="$runtime/session-calendar-runtime"
+calendar_requirements="$source_root/.github/scripts/session-calendar-requirements.txt"
+calendar_digest=$(sha256sum "$calendar_requirements" | cut -d ' ' -f 1)
+if [[ ! -x "$calendar_home/bin/python" || ! -f "$calendar_home/requirements.sha256" || $(cat "$calendar_home/requirements.sha256") != "$calendar_digest" ]]; then
+  python3 -m venv "$calendar_home"
+  "$calendar_home/bin/python" -m pip install -r "$calendar_requirements"
+  printf '%s\n' "$calendar_digest" > "$calendar_home/requirements.sha256"
+fi
+export SESSION_CALENDAR_PYTHON="$calendar_home/bin/python"
+
 # Use a native Linux filesystem: Windows mounts cannot reproduce POSIX modes.
 # Include staged, unstaged and untracked source, so this checks current work.
 task_root=$(mktemp -d /var/tmp/screener-tests.XXXXXXXX)

@@ -65,17 +65,17 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
   expect(pageErrors).toEqual([]);
   if(width===390) {
     const svg=page.locator('.research-detail .leader-evidence-chart svg[role="img"]');
-    await expect(svg).toHaveAttribute('aria-label',/2026-.*〜.*2026-/);
+    await expect(svg).toHaveAttribute('aria-label',new RegExp(`${bars.at(-252).date}.*〜.*${bars.at(-1).date}`));
     const range=await svg.getAttribute('aria-label');
     const dates=range.match(/\d{4}-\d{2}-\d{2}/g);
-    expect(dates).toHaveLength(2);
-    expect((Date.parse(dates[1])-Date.parse(dates[0]))/86400000).toBeGreaterThanOrEqual(55);
+    expect(dates).toEqual([bars.at(-252).date,bars.at(-1).date]);
+    await expect(svg.locator('[data-pane="price"] g[data-date]')).toHaveCount(252);
     const chart=page.locator('.research-detail .leader-evidence-chart');
     await chart.getByRole('combobox',{name:'表示期間',exact:true}).selectOption('21');
     await expect(svg.locator('[data-pane="price"] g[data-date]')).toHaveCount(21);
     await expectSvgChart(page.locator('.research-detail'),{symbol:'LEAD',bars,rs:'present'});
     const latestRange=await svg.getAttribute('aria-label');
-    await chart.locator('summary').filter({hasText:'操作'}).click();
+    await chart.locator('summary').filter({hasText:/^操作$/}).click();
     await chart.getByRole('button',{name:'過去の期間へ',exact:true}).click();
     await expect(svg).not.toHaveAttribute('aria-label',latestRange);
     await chart.getByRole('button',{name:'新しい期間へ',exact:true}).click();
@@ -84,6 +84,9 @@ for (const width of [1440,1280,1024,390]) test(`research navigation and contrast
     await expect(svg.locator('[data-pane="price"] g[data-date]')).toHaveCount(15);
     await chart.getByRole('button',{name:'週足',exact:true}).click();
     await expect(chart.getByRole('button',{name:'週足',exact:true})).toHaveAttribute('aria-pressed','true');
+    const chartHelp=chart.locator('summary').filter({hasText:'チャートの操作・線の見方'});
+    await expect(chartHelp.locator('..')).not.toHaveAttribute('open');
+    await chartHelp.click();
     // The compact caption keeps only actual date/close/range. Verify the
     // weekly meaning in the real legends and independently grouped OHLCV.
     for(const period of [10,30,40])await expect(chart.locator('.leader-svg-legend span').filter({hasText:new RegExp(`^SMA${period} `)})).toHaveCount(1);

@@ -39,6 +39,34 @@ beforeEach(() => {
 afterEach(() => { cleanup(); client.clear(); vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 const mount = () => render(<QueryClientProvider client={client}><HashRouter><ResearchPage /></HashRouter></QueryClientProvider>);
 
+it('gives a loaded empty mobile watch a compact recovery view on direct entry',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ window.history.replaceState(null,'','#/?mobile=watch');
+ mount();
+ expect(screen.getByRole('main')).toHaveAttribute('data-empty-watch','false');
+ await screen.findByRole('button',{name:'市場から銘柄を探す',exact:true});
+ expect(screen.getByRole('main')).toHaveAttribute('data-empty-watch','true');
+ fireEvent.click(screen.getByRole('button',{name:'市場から銘柄を探す',exact:true}));
+ expect(screen.getByRole('main')).toHaveAttribute('data-empty-watch','false');
+});
+it('does not replace a loading failure with the empty-watch recovery state',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ data.fail=true;
+ window.history.replaceState(null,'','#/?mobile=watch');
+ mount();
+ await screen.findByText(/データを取得できません。以前の表示値/);
+ expect(screen.getByRole('main')).toHaveAttribute('data-empty-watch','false');
+ expect(screen.queryByRole('button',{name:'市場から銘柄を探す',exact:true})).toBeNull();
+});
+it('does not label a saved-but-filtered watch as an empty watch',async()=>{
+ vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
+ localStorage.setItem('research-watch',JSON.stringify(['UNAVAILABLE']));
+ window.history.replaceState(null,'','#/?mobile=watch');
+ mount();
+ await screen.findByText(/該当銘柄がありません/);
+ expect(screen.getByRole('main')).toHaveAttribute('data-empty-watch','false');
+});
+
 it('defines physical PDF pages and the limited scope of source verification',async()=>{
  mount();
  await screen.findByRole('button',{name:/^LEAD の分析を表示/});

@@ -47,6 +47,7 @@ for (const width of [320,390]) test(`mobile integrated map, chart, VCP and watch
  await expect(page.getByRole('heading',{name:'市場から、次の候補へ。'})).toBeVisible();
  await expect(page.getByRole('button',{name:/情報技術.*RS中央値/})).toBeVisible();
  await page.getByRole('button',{name:'VCPTEST のチャートを確認'}).click();
+ await page.getByRole('tab',{name:'VCP',exact:true}).click();
  const panel=page.getByRole('region',{name:'VCPTEST のVCP分析'});
  await expect(panel).toContainText('値幅の縮小を確認');
  const metric=panel.locator('.chart-setup-metrics details').nth(1);
@@ -64,8 +65,12 @@ for (const width of [320,390]) test(`mobile integrated map, chart, VCP and watch
  expect(summaryBox.height).toBeGreaterThanOrEqual(44);
  expect(summaryBox.width).toBeGreaterThanOrEqual(44);
  await panel.getByRole('button',{name:'C1 の収縮区間を表示'}).click();
+ await expect(page.getByRole('tab',{name:'チャート',exact:true})).toHaveAttribute('aria-selected','true');
+ await page.getByRole('tab',{name:'VCP',exact:true}).click();
  await expect(panel.getByRole('button',{name:'C1 の収縮区間を表示'})).toHaveAttribute('aria-pressed','true');
+ await page.getByRole('tab',{name:'財務・機関',exact:true}).click();
  await expect(page.locator('.leader-detail-code33')).not.toHaveAttribute('open');
+ await page.getByRole('tab',{name:'購入条件',exact:true}).click();
  await page.getByRole('button',{name:/^出来高：/}).click();
  const volume=page.locator('#condition-rule-volume details');
  await expect(volume).toHaveAttribute('open');
@@ -86,6 +91,7 @@ for (const width of [320,390]) test(`mobile integrated map, chart, VCP and watch
  expect(explanation.text.height).toBeGreaterThan(30);
  await modelRule.locator('summary').click();
  await page.locator('.mobile-chart-actions').getByRole('button',{name:'ウォッチに保存',exact:true}).click();
+ await page.getByRole('button',{name:'← 候補一覧',exact:true}).click();
  await page.getByRole('navigation',{name:'リサーチの画面切替'}).getByRole('button',{name:'ウォッチ',exact:true}).click();
  await expect(page.getByRole('button',{name:/^VCPTEST の分析を表示/})).toBeVisible();
  await expect(page.getByRole('button',{name:/^SECOND の分析を表示/})).toHaveCount(0);
@@ -93,13 +99,16 @@ for (const width of [320,390]) test(`mobile integrated map, chart, VCP and watch
  await page.getByRole('button',{name:'VCPTEST のチャートを確認'}).click();
  await page.getByRole('button',{name:'次の銘柄',exact:true}).click();
  await expect(page.locator('.research-symbol-head h2')).toHaveText('SECOND');
+ await expect(page.getByRole('tab',{name:'チャート',exact:true})).toHaveAttribute('aria-selected','true');
+ await page.getByRole('tab',{name:'VCP',exact:true}).click();
  await expect(page.getByRole('region',{name:'SECOND のVCP分析'})).toBeVisible();
  await expect(page.locator('.chart-setup-metrics details[open]')).toHaveCount(0);
  await expect(page.locator('.condition-rules details[open]')).toHaveCount(0);
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
- const controls=await page.locator('.mobile-research-nav button,.mobile-chart-actions button').evaluateAll(nodes=>nodes.map(n=>({w:n.getBoundingClientRect().width,h:n.getBoundingClientRect().height})));
+ const controls=await page.locator('.stock-section-nav button,.mobile-chart-actions button').evaluateAll(nodes=>nodes.map(n=>({w:n.getBoundingClientRect().width,h:n.getBoundingClientRect().height})));
+ expect(controls).toHaveLength(9);
  expect(controls.every(r=>r.w>=44&&r.h>=44)).toBe(true);
  await info.attach('mobile-integrated',{body:await page.screenshot(),contentType:'image/png'});
- expect((await new AxeBuilder({page}).include('.mobile-research-nav').analyze()).violations).toEqual([]);
+ expect((await new AxeBuilder({page}).include('.stock-section-nav').analyze()).violations).toEqual([]);
  expect(errors).toEqual([]);
 });

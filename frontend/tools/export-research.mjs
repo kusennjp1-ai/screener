@@ -1,4 +1,5 @@
 import { loadFinancialGenerationCarry } from './financial-generation-carry.mjs';
+import { exportMarketTrends } from './export-market-trends.mjs';
 import { orderResearchExportRows } from './research-export-order.mjs';
 import { applicabilityUniverse } from '../src/static/instrumentApplicability.js';
 import { loadFinancialCorrection, correctionMetadata, CORRECTION_METADATA_FIELDS, overlayFinancialCorrection, overlayFinancialChart, rewriteCorrectionChartAliases, writeCorrectionHistory } from './financial-correction-overlay.mjs';
@@ -22,6 +23,7 @@ import { marketLeadership } from '../src/static/marketLeadership.js';
 import { buildBookTechnicalEvidence } from '../src/static/bookTechnicalEvidence.js';
 import { buildBookMarketEvidence } from '../src/static/bookMarketEvidence.js';
 import { auditDailyBars, mergeScanRows, rankVerifiedUniverse, AUDIT_VERSION } from '../src/static/qualificationAudit.js';
+import { buildRsRatingHistories } from './rs-rating-history.mjs';
 
 const root = resolve('public/static-data');
 const evaluatedAt = process.env.FINANCIAL_EVALUATED_AT ? Date.parse(process.env.FINANCIAL_EVALUATED_AT) : Date.now();
@@ -128,11 +130,13 @@ for (const row of merged) {
 await writeCorrectionHistory(root,correction,currentFinancials);
 await rewriteCorrectionChartAliases(root,correction);
 rows = new Map(rankVerifiedUniverse([...rows.values()]).map(row => [row.symbol, row]));
+const rsRatingHistories = buildRsRatingHistories({ rows: [...rows.values()], charts: marketCharts, sessions: sessionCalendar?.sessions, asOfDate: scan.as_of_date });
 currentEvaluation.instrument_applicability_universe=applicabilityUniverse([...rows.values()]);
 if (breadth) {
   if (breadth.payload?.current?.date === scan.as_of_date) {
     breadth.payload.book_leadership = marketLeadership([...rows.values()], scan.as_of_date);
     breadth.payload.book_market_evidence = buildBookMarketEvidence({ charts: marketCharts, asOfDate: scan.as_of_date, benchmark, expectedUniverseSize: rows.size, lookbackSessions: 60 });
+    await exportMarketTrends({root,entry,asOfDate:scan.as_of_date,bookEvidence:breadth.payload.book_market_evidence});
     await writeFile(resolve(root, entry.pages.breadth.path), JSON.stringify(breadth));
   }
 }
@@ -157,6 +161,7 @@ for (const [symbol, row] of rows) {
     canonicalChart=overlayFinancialChart(await read(paths.get(symbol)),correction,symbol);
     if (!carry) canonicalChart=projectFinancialPayload(canonicalChart,{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});
     Object.assign(canonicalChart,{signal:null,risk_plan:null,sell_plan:null,trend_template:null});
+    canonicalChart.rs_rating_history = rsRatingHistories.get(symbol) || null;
     const hashInput={...canonicalChart,stock_data:{...row,chart_path:undefined,research_detail_path:undefined}};
     const chartHash=createHash('sha256').update(JSON.stringify(hashInput)).digest('hex').slice(0,16);
     row.chart_path=`verified-charts/${encodeURIComponent(symbol)}-${chartHash}.json`;

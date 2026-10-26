@@ -48,6 +48,7 @@ for (const width of [1440, 375]) for (const theme of ['dark', 'light']) test(`sy
     const detail = page.getByRole('region', { name: '銘柄詳細', exact: true });
     await expect(detail.getByRole('heading', { name: row.symbol, exact: true })).toBeVisible();
     if (index === 0 && theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
+    if (width === 375) await detail.getByRole('tab', { name: '判定根拠', exact: true }).click();
     const selection = await detail.getByRole('heading', { name: /^選定 / }).innerText();
     await detail.getByRole('tab', { name: '財務・機関', exact: true }).click();
     const panel = detail.getByRole('region', { name: '財務の判定根拠', exact: true });

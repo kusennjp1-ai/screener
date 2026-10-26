@@ -194,6 +194,9 @@ jobs:
           "$RUNNER_TEMP/session-calendar-runtime/bin/python" -m pip install -r .github/scripts/session-calendar-requirements.txt
           SESSION_CALENDAR_PYTHON="$RUNNER_TEMP/session-calendar-runtime/bin/python" node --test --test-concurrency=1 .github/scripts/ordinary-session-calendar.test.mjs
 
+      - name: Offline market trend source parsing contracts
+        run: '"$RUNNER_TEMP/session-calendar-runtime/bin/python" -m unittest discover -s frontend/tools -p test_collect_market_trends.py'
+
       - name: Journal-backed renewal publisher lifecycle
         env:
           NODE_OPTIONS: --max-old-space-size=3072

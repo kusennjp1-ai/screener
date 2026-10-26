@@ -94,6 +94,22 @@ async function fixture({ withBreadth = false, withCalendar = true, setupReports 
   return { directory, frontend, root, rows, bars, histories, sourceCharts, benchmark, run, outputs };
 }
 
+it('publishes dated RS rank history in the canonical chart asset with current-rank parity', async () => {
+  const { directory, run, outputs } = await fixture({ withBreadth: true });
+  try {
+    run();
+    const { index, charts } = await outputs();
+    expect(charts).toHaveLength(101);
+    for (const chart of charts) {
+      const row = index.rows.find(item => item.symbol === chart.symbol);
+      expect(chart.rs_rating_history).toMatchObject({ schema_version: 'published-universe-rs-history-v1', symbol: row.symbol, as_of_date: date, current_universe_size: 101, basis: 'current_verified_publication_universe_recalculated' });
+      expect(chart.rs_rating_history.points).toHaveLength(28);
+      expect(chart.rs_rating_history.points.at(-1)).toEqual({ time: date, value: row.rs_rating, universe_size: 101 });
+      expect(row.chart_path).toMatch(/^verified-charts\//);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 it('keeps whole breadth bytes stable across two exports with order-sensitive cohorts, breakout events and floating reductions', async () => {
   const { directory, root, rows, sourceCharts, benchmark, run } = await fixture({ withBreadth: true });
   try {

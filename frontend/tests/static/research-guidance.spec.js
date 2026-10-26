@@ -45,6 +45,10 @@ for (const width of [1440, 1024, 320]) test(`readiness guidance, disclosures and
   await expect(glossary).toBeHidden();
   await candidate.click();
   await expect(page.locator('.research-symbol-head .entry-source-badge')).toBeInViewport({ ratio: 1 });
+  if(width<=700){
+    await page.getByRole('tab',{name:'購入条件',exact:true}).click();
+    await page.locator('.stock-entry-disclosure > summary').click();
+  }
   const entry = page.getByRole('region', { name: 'エントリー条件', exact: true });
   await expect(entry.getByText('△ 書籍の追随目安外', { exact: true })).toBeVisible();
   await entry.locator('summary').filter({ hasText: 'アプリ設定と書籍の確認範囲' }).press('Enter');

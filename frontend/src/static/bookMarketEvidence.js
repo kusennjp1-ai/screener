@@ -57,7 +57,7 @@ function dailyStock(chart, date) {
   const averageVolume = mean(pre50.map(x => x.volume));
   const volumeRatio = averageVolume > 0 ? last.volume / averageVolume : null;
   return { symbol: chart.symbol, close: last.close, previousClose: prior.close, volume: last.volume,
-    dollarVolume: last.close * last.volume, priceTemplate, momentum, below50: last.close < sma50,
+    dollarVolume: last.close * last.volume, priceTemplate, momentum, below50: last.close < sma50, above50: last.close > sma50,
     return20: change(last.close, b[i - 20].close),
     newHigh: last.high > max(priorYear.map(x => x.high)), newLow: last.low < min(priorYear.map(x => x.low)),
     setupProxy, pivotProxy, baseDepthProxy, volumeRatio,
@@ -119,6 +119,7 @@ export function buildBookMarketEvidence({ charts = [], asOfDate, benchmark = nul
     series.push({ date, coverage: rows.length, expectedUniverseSize, coveragePct: expectedUniverseSize ? rows.length / expectedUniverseSize * 100 : null,
       rsUniverseSize: ranked.count, leaderCount: ranked.count >= 100 ? leaders.length : null,
       newHighs: rows.length ? rows.filter(r => r.newHigh).length : null, newLows: rows.length ? rows.filter(r => r.newLow).length : null,
+      above50: rows.length ? rows.filter(r => r.above50).length : null,
       advancing: rows.length ? up.length : null, declining: rows.length ? down.length : null, unchanged: rows.length ? rows.length - up.length - down.length : null,
       upVolume: sum(up, 'volume'), downVolume: sum(down, 'volume'), upDollarVolume: sum(up, 'dollarVolume'), downDollarVolume: sum(down, 'dollarVolume'),
       setupProxyCount: ranked.count >= 100 ? leaders.filter(r => r.setupProxy).length : null,

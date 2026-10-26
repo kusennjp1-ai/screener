@@ -1,5 +1,6 @@
 import { publicationQueryIdentity } from '../staticPublication';
 import ConnectedLeaderMarketOverview from '../components/LeaderMarketOverview';
+import ConnectedMarketTrendDashboard from '../components/MarketTrendDashboard';
 import ConnectionStatus from '../components/ConnectionStatus';
 import SectorStrength from '../components/SectorStrength';
 import { formatPublished } from '../researchPresentation';
@@ -148,15 +149,16 @@ function StaticBreadthPage() {
         {marketEntry.market==='US' && <Tab label="業種の強さ" sx={{minHeight:44}} />}
       </Tabs>
 
-      {selectedTab===0 && marketEntry.market==='US' && <ConnectedLeaderMarketOverview marketEntry={marketEntry} generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at} breadthEvidence={mismatch?undefined:payload.book_market_evidence}/> }
+      {selectedTab===0 && marketEntry.market==='US' && <ConnectedMarketTrendDashboard marketEntry={marketEntry}/>}
+      {selectedTab===0 && marketEntry.market==='US' && <details className="market-disclosure"><summary>選定対象と業種別の広がり</summary><ConnectedLeaderMarketOverview marketEntry={marketEntry} generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at} breadthEvidence={mismatch?undefined:payload.book_market_evidence}/></details> }
       {selectedTab !== 2 && unavailable && <Alert data-testid="breadth-unavailable" severity={breadthQuery.isError?'error':'info'} action={<Button onClick={()=>breadthQuery.refetch()}>再試行</Button>}>{breadthQuery.data?.message || '騰落データを取得できません。業種の強さは別タブで確認できます。'}</Alert>}
       {selectedTab === 0 && !unavailable && (
         <>
           <MarketPulse current={mismatch ? { date: current.date } : current} history={filteredChartData} range={timeRange} onRangeChange={setTimeRange}
             context={marketEntry.market === 'US' ? <MarketContextCards evidence={mismatch ? null : payload.book_market_evidence} expectedDate={marketEntry.as_of_date} /> : null} />
-          {marketEntry.market === 'US' && <details className="market-disclosure"><summary>市場指標の履歴と未取得項目</summary>
+          {marketEntry.market === 'US' && <details className="market-disclosure"><summary>{marketEntry.assets?.market_trends?'機関・ベース・エントリーの保存履歴':'市場指標の履歴と未取得項目'}</summary>
             {historyNotice && <Alert severity={historyQuery.isError || historyReferenceError || mismatch ? 'warning' : 'info'} sx={{ my: 1 }}>{historyNotice}比較可能な履歴は未取得として表示します。</Alert>}
-            <MarketIndicatorHistory history={hasHistoryAsset ? historyUnavailable ? undefined : historyQuery.data.history : payload.market_indicator_history}
+            <MarketIndicatorHistory omitMarketGraphs={Boolean(marketEntry.assets?.market_trends)} history={hasHistoryAsset ? historyUnavailable ? undefined : historyQuery.data.history : payload.market_indicator_history}
               provenance={hasHistoryAsset && !historyUnavailable ? historyQuery.data.provenance : undefined} market={marketEntry.market} asOfDate={marketEntry.as_of_date} />
           </details>}
           {marketEntry.market === 'US' && payload.book_market_evidence && <details className="market-disclosure"><summary>市場判断の根拠 — 新高値・先導株・出来高</summary><BookMarketEvidence evidence={payload.book_market_evidence} expectedDate={marketEntry.as_of_date} /></details>}

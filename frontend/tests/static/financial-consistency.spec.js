@@ -62,6 +62,7 @@ for (const width of [375, 1440]) for (const item of cases.filter(item => item.sy
     await info.attach('expected-and-rendered', { body: JSON.stringify({ input: row, expected: item.expected,
       candidate: candidateBefore, annual: await annual.innerText(), blockedExternalRequests: seen.external }, null, 2), contentType: 'application/json' });
     if (['EXACT', 'CELL'].includes(item.symbol)) {
+      if (width === 375) await detail.getByRole('tab', { name: 'チャート', exact: true }).click();
       await detail.getByRole('button', { name: '日次チャートを分析' }).click();
       const dialog = page.getByRole('dialog');
       await dialog.locator('summary').filter({ hasText: '選定条件の詳細' }).click();

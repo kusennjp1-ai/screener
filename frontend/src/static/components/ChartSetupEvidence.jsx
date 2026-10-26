@@ -6,8 +6,11 @@ const number = value => Number.isFinite(value) ? value.toLocaleString('ja-JP', {
 
 // These are the same measured legs used by the chart overlay. This panel does
 // not run another VCP detector or turn retrospective annotations into signals.
-export default function ChartSetupEvidence({ annotations, symbol, date, warning, daily = true, detailed, onToggle, onFocus, measured = false }) {
-  const [selected, setSelected] = useState(null);
+export default function ChartSetupEvidence({ annotations, symbol, date, warning, daily = true, detailed, onToggle, onFocus, measured = false, selectedLeg }) {
+  const [localSelected, setSelected] = useState(null);
+  // The tabbed chart owns selection so an unmounted lab can restore the exact
+  // highlighted interval. Standalone/legacy consumers retain local selection.
+  const selected = selectedLeg === undefined ? localSelected : selectedLeg;
   const usable = !warning && daily;
   const legs = usable ? annotations.legs || [] : [];
   const base = usable ? annotations.boxes?.find(box => !box.curve && !box.arrow) : null;

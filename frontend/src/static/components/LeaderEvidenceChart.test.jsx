@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, createEvent, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 import LeaderEvidenceChart from './LeaderEvidenceChart';
 import { leaderChartModel, precedingVolumeMean, seriesPaths } from './leaderChartModel';
@@ -24,7 +24,7 @@ it('binds the VCP lab to exactly the same measured intervals as the SVG and rese
  fireEvent.click(screen.getByRole('button',{name:'週足',exact:true}));
  expect(screen.queryByRole('button',{name:'C1 の収縮区間を表示'})).not.toBeInTheDocument();
  rerender(<LeaderEvidenceChart {...props} technicalEvidence={measured} chartIdentity="second"/>);
- expect(container.querySelectorAll('[data-close]')).toHaveLength(63);
+ expect(container.querySelectorAll('[data-close]')).toHaveLength(252);
  expect(container.querySelector('[data-vcp-leg][data-selected="true"]')).toBeNull();
 });
 
@@ -71,6 +71,72 @@ describe('unchanged historical chart data and calculation contracts', () => {
   });
 });
 describe('self-drawn SVG evidence and controls', () => {
+  it.each(['daily','weekly'])('keeps exact %s numeric legends in the initially closed mobile chart help',timeframe=>{
+    const {container}=render(<LeaderEvidenceChart {...props} view="chart"/>);
+    if(timeframe==='weekly')fireEvent.click(screen.getByRole('button',{name:'週足',exact:true}));
+    const summary=screen.getByText('チャートの操作・線の見方',{selector:'summary'}),help=summary.closest('details');
+    expect(help).not.toHaveAttribute('open');
+    expect(container.querySelectorAll('.leader-svg-legend')).toHaveLength(2);
+    for(const legend of container.querySelectorAll('.leader-svg-legend')){expect(help).toContainElement(legend);expect(legend).not.toBeVisible();}
+    fireEvent.click(summary);
+    expect(help).toHaveAttribute('open');
+    expect(help).toHaveTextContent('共通ピボット 340.00');expect(help).toHaveTextContent('買い上限 357.00');expect(help).toHaveTextContent('損切り例 323.00');
+    const converted=transformToCandlestickData(fixture.bars,timeframe,{includeEMA:false});
+    for(const period of [50,150,200])expect(help).toHaveTextContent(`SMA${timeframe==='weekly'?period/5:period} ${converted[`sma${period}`].at(-1).value.toFixed(2)}`);
+    const span=timeframe==='weekly'?10:50,mean=converted.volume.slice(-span-1,-1).reduce((sum,point)=>sum+point.value,0)/span;
+    expect(help).toHaveTextContent(`直前${timeframe==='weekly'?'10週':'50日'}平均出来高 ${new Intl.NumberFormat('ja-JP',{maximumFractionDigits:2}).format(mean)}`);
+    for(const legend of container.querySelectorAll('.leader-svg-legend'))expect(legend).toBeVisible();
+  });
+  it('defaults to one year, pans a fixed-size window, and resets independently of a previous viewport',()=>{
+    const {container}=render(<LeaderEvidenceChart {...props} view="chart"/>);
+    const svg=container.querySelector('[data-chart-plot]'),range=screen.getByRole('slider',{name:'チャートの表示位置'});
+    expect(screen.getByRole('combobox',{name:'表示期間'})).toHaveValue('252');
+    expect(container.querySelectorAll('[data-close]')).toHaveLength(252);
+    const volume=container.querySelector('.chart-volume-ratio summary').textContent;
+    fireEvent.change(range,{target:{value:'0'}});
+    expect(container.querySelector('[data-close]')).toHaveAttribute('data-date',fixture.bars[0].date);
+    expect(container.querySelectorAll('[data-close]')).toHaveLength(252);
+    fireEvent.keyDown(svg,{key:'ArrowLeft'});
+    expect(container.querySelectorAll('[data-close]')).toHaveLength(252);
+    expect(container.querySelector('.chart-volume-ratio summary')).toHaveTextContent(volume);
+    fireEvent.click(screen.getByText('操作',{selector:'summary'}));fireEvent.click(screen.getByRole('button',{name:'リセット'}));
+    expect(container.querySelectorAll('[data-close]')).toHaveLength(252);
+    expect([...container.querySelectorAll('[data-close]')].at(-1)).toHaveAttribute('data-date',fixture.as_of_date);
+    fireEvent.click(screen.getByRole('button',{name:'週足',exact:true}));
+    expect(container.querySelector('.chart-volume-ratio summary')).toHaveTextContent(volume);
+  });
+  it('drags horizontally but leaves vertical pointer and wheel gestures for page scrolling',()=>{
+    const {container}=render(<LeaderEvidenceChart {...props} view="chart"/>);
+    const svg=container.querySelector('[data-chart-plot]');
+    const pointer=(type,x,y)=>fireEvent(svg,createEvent[type](svg,{pointerId:1,isPrimary:true,button:0,clientX:x,clientY:y}));
+    const initial=screen.getByTestId('chart-visible-range').textContent;
+    pointer('pointerDown',50,50);pointer('pointerMove',53,100);pointer('pointerUp',53,100);
+    expect(screen.getByTestId('chart-visible-range')).toHaveTextContent(initial);
+    pointer('pointerDown',50,50);pointer('pointerMove',100,52);pointer('pointerUp',100,52);
+    expect(screen.getByTestId('chart-visible-range').textContent).not.toBe(initial);
+    expect(container.querySelectorAll('[data-close]')).toHaveLength(252);
+    const panned=screen.getByTestId('chart-visible-range').textContent;
+    const vertical=createEvent.wheel(svg,{deltaY:100,deltaX:0,cancelable:true});fireEvent(svg,vertical);
+    expect(vertical.defaultPrevented).toBe(false);expect(screen.getByTestId('chart-visible-range')).toHaveTextContent(panned);
+    const horizontal=createEvent.wheel(svg,{deltaX:100,deltaY:0,cancelable:true});fireEvent(svg,horizontal);
+    expect(horizontal.defaultPrevented).toBe(true);expect(screen.getByTestId('chart-visible-range').textContent).not.toBe(panned);
+  });
+  it('switches from a separate VCP panel to the chart without losing the selected interval',()=>{
+    const onShowChart=()=>{};
+    const {container,rerender}=render(<LeaderEvidenceChart {...props} view="setup" onShowChart={onShowChart}/>);
+    expect(container.querySelector('[data-chart-plot]')).not.toBeVisible();
+    fireEvent.click(screen.getByRole('button',{name:'C1 の収縮区間を表示'}));
+    const interval=screen.getByTestId('chart-visible-range').textContent;
+    rerender(<LeaderEvidenceChart {...props} view="chart" onShowChart={onShowChart}/>);
+    expect(container.querySelector('[data-chart-plot]')).toBeVisible();
+    expect(screen.queryByRole('region',{name:`${fixture.symbol} のVCP分析`})).toBeNull();
+    expect(screen.getByTestId('chart-visible-range')).toHaveTextContent(interval);
+    rerender(<LeaderEvidenceChart {...props} view="setup" onShowChart={onShowChart}/>);
+    expect(screen.getByRole('button',{name:'C1 の収縮区間を表示'})).toHaveAttribute('aria-pressed','true');
+    expect(screen.getByTestId('chart-visible-range')).toHaveTextContent(interval);
+    rerender(<LeaderEvidenceChart {...props} view="setup" onShowChart={onShowChart} chartIdentity="different-publication"/>);
+    expect(screen.getByRole('button',{name:'C1 の収縮区間を表示'})).toHaveAttribute('aria-pressed','false');
+  });
   it('uses three common-time SVG panes and no canvas or remote assets', () => {
     const {container}=render(<LeaderEvidenceChart {...props}/>);
     expect(container.querySelector('canvas')).toBeNull();expect(container.querySelectorAll('svg')).toHaveLength(1);
@@ -109,14 +175,14 @@ describe('self-drawn SVG evidence and controls', () => {
     expect(screen.getByRole('button',{name:'VCP注記'})).toBeDisabled();
     expect(container.textContent).toContain('直前10週');
     fireEvent.click(screen.getByRole('button',{name:'日足',exact:true}));
-    expect(container.querySelectorAll('[data-close]')).toHaveLength(63);
+    expect(container.querySelectorAll('[data-close]')).toHaveLength(252);
   });
   it('clears viewport and old annotation when publication identity changes', () => {
     const {container,rerender}=render(<LeaderEvidenceChart {...props} chartIdentity="one"/>);
     fireEvent.change(screen.getByRole('combobox',{name:'表示期間'}),{target:{value:'21'}});
     expect(container.querySelectorAll('[data-close]')).toHaveLength(21);
     rerender(<LeaderEvidenceChart {...props} chartIdentity="two"/>);
-    expect(container.querySelectorAll('[data-close]')).toHaveLength(63);
+    expect(container.querySelectorAll('[data-close]')).toHaveLength(252);
   });
   it('updates the shared compact comparison period without stale state', () => {
     const {container,rerender}=render(<LeaderEvidenceChart {...props} compact comparisonSessions={63}/>);
@@ -161,7 +227,7 @@ describe('self-drawn SVG evidence and controls', () => {
     fireEvent.click(screen.getByRole('button',{name:'表示期間を拡大'}));expect(select).toHaveValue('');
     fireEvent.change(select,{target:{value:'63'}});expect(select).toHaveValue('63');
     const caption=container.querySelector('.leader-svg-caption-mobile');
-    expect(caption.children).toHaveLength(2);expect(caption).toHaveTextContent(`最終バー ${fixture.as_of_date} 終値`);
+    expect(caption.children).toHaveLength(1);expect(caption).toHaveTextContent(`〜${fixture.as_of_date} · 左右スワイプ`);
     expect(container.textContent).toContain('50/150/200日線・直前50日出来高平均');
     for(const name of ['日足','週足','表示期間を拡大','表示期間を縮小','過去の期間へ','新しい期間へ','リセット','VCP注記'])expect(screen.getByRole('button',{name,exact:true})).toBeInTheDocument();
   });

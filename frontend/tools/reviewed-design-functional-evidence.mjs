@@ -1,5 +1,5 @@
 import { mobileChromeBudget } from './mobile-chrome-contract.mjs';
-import { LEADER_DETAIL_CONTRACT, leaderDetailFailures } from './leader-detail-design-contract.mjs';
+import { LEADER_DETAIL_CONTRACT, LEGACY_LEADER_DETAIL_CONTRACT, supportedDetailContract, leaderDetailFailures } from './leader-detail-design-contract.mjs';
 import { validateSvgChart, SVG_CHART_RENDERER, SVG_EVIDENCE_CONTRACT } from './svg-chart-evidence.mjs';
 import { LEADER_FEED_CONTRACT, leaderFeedFailures } from './leader-feed-design-contract.mjs';
 // Completeness/consistency checks for immutable historical browser observations.
@@ -61,7 +61,10 @@ function screenEvidence(screen, binding, layoutContract, detailContract) {
   if (name === 'compact') assert(metrics.firstRow && metrics.firstRow.top <= 260 && metrics.chart && metrics.chart.top <= 420 && metrics.visibleCandidates >= 12, label + ': compact geometry failed');
   if (['home', 'near-pass'].includes(name) && width === 390) assert(metrics.visibleCandidates >= 3, label + ': insufficient visible candidates');
   }
-  if(detailContract===LEADER_DETAIL_CONTRACT)assert.deepEqual(leaderDetailFailures(metrics,name),[],label+': detail contract failed');
+  if(supportedDetailContract(detailContract)){
+    if(name==='detail'&&width<=700)assert(metrics.detailEvidence?.version===detailContract,label+': detail observation version differs from report');
+    assert.deepEqual(leaderDetailFailures(metrics,name),[],label+': detail contract failed');
+  }
   else if (name === 'detail' && width === 390) assert(metrics.chartCard && metrics.detail && metrics.chartCard.top - metrics.detail.top <= 160, label + ': detail/chart spacing failed');
   if (['comparison', 'comparison-near-pass'].includes(name)) {
     if (width === 1440) assert(metrics.pageHeight <= 900 && metrics.visibleCompareCards >= 6 && metrics.comparisonGrid && metrics.comparisonGrid.height <= 700, label + ': comparison geometry failed');
@@ -78,7 +81,7 @@ function screenEvidence(screen, binding, layoutContract, detailContract) {
     if (width === 1440) exactSet(ids, ['rs_trend', 'price_change_1d'], label + ' sparkline columns');
     for (const column of screen.sparkline_columns) assert(count(column.geometry) && column.geometry > 0, label + ': empty sparkline geometry');
   }
-  const scoped = /^(?:carry-)?financial-/.test(name) || ['daily-observations', 'daily-watchlist'].includes(name) || (detailContract === LEADER_DETAIL_CONTRACT && /^case-[A-Z0-9.-]+-inline(?:-annotations)?$/.test(name) && screen.viewport_geometry !== undefined);
+  const scoped = /^(?:carry-)?financial-/.test(name) || ['daily-observations', 'daily-watchlist'].includes(name) || (supportedDetailContract(detailContract) && /^case-[A-Z0-9.-]+-inline(?:-annotations)?$/.test(name) && screen.viewport_geometry !== undefined);
   if (scoped) {
     assert(screen.screenshot_scope === 'scrolled-viewport' && screen.metrics_scope === 'original-viewport' && screen.screenshot_target === null, label + ': missing viewport capture scope');
     const geometry = screen.viewport_geometry;
@@ -86,6 +89,11 @@ function screenEvidence(screen, binding, layoutContract, detailContract) {
     viewport(geometry.viewport, width, height, label);
     rect(geometry.chrome.header, label + ' header');
     rect(geometry.chrome.navigation, label + ' navigation', width !== 390);
+    if(detailContract===LEADER_DETAIL_CONTRACT&&width===390&&(/^(?:carry-)?financial-/.test(name)||/^case-[A-Z0-9.-]+-inline(?:-annotations)?$/.test(name))){
+      assert(geometry.section_navigation?.kind==='stock-sections',label+': missing actual stock-section navigation');
+      const section=name.endsWith('-selection')?'evidence':name.endsWith('-purchase')?'conditions':name.startsWith('case-')?'chart':'financial';
+      assert(geometry.section_navigation.tabs?.find(tab=>tab.selected==='true')?.id===`detail-tab-${section}`,label+': captured a different selected section');
+    }
     for (const field of ['top', 'bottom', 'left', 'right']) assert(number(geometry.content[field]), label + ': missing content bound');
     assert(nonnegative(geometry.scroll_y), label + ': missing viewport scroll');
     const selectors = geometry.targets.map(item => item.selector);
@@ -153,7 +161,7 @@ function chartEvidence(report) {
     viewport(record.viewport, width, mainHeight(width), label);
     assert(!Object.hasOwn(record, 'error') && record.as_of_date === report.data.as_of_date && count(record.bars) && record.bars > 0 && typeof record.annotation_candidate === 'boolean' && text(record.annotation_summary) && Array.isArray(record.shapes), label + ': incomplete chart source');
     assert(record.history_warning === null || text(record.history_warning), label + ': missing history warning state');
-    if(report.detail_contract===LEADER_DETAIL_CONTRACT && record.renderer===SVG_CHART_RENDERER){
+    if(supportedDetailContract(report.detail_contract) && record.renderer===SVG_CHART_RENDERER){
       validateInlineChartEvidence(record.inline_geometry,width,mainHeight(width),label);
       validateInlineCaptureEvidence(record, report.screens);
     }
@@ -210,8 +218,8 @@ function financialEvidence(report, binding, screens, carry = false) {
       else if (view.screen.endsWith('-selection')) targets = ['#detail-panel-evidence > h3', ...[1,2,3].map(index => `#detail-panel-evidence .research-rules > li:nth-child(${index})`)];
       else if (view.screen.endsWith('-purchase')) targets = ['#detail-panel-conditions > h3', ...[1,2].map(index => `#detail-panel-conditions .condition-rules > li:nth-child(${index})`)];
       else if (view.screen.endsWith('-history')) targets = ['#detail-panel-financial > details.research-disclosure > summary', ...(carry ? ['#detail-panel-financial > details.research-disclosure > p'] : record.history_status === 'unavailable' ? ['#detail-panel-financial > details.research-disclosure > :nth-child(2)'] : ['#detail-panel-financial > details.research-disclosure > div:first-of-type > table.financial-history-table > caption', '#detail-panel-financial > details.research-disclosure > div:first-of-type > table.financial-history-table'])];
-      if(report.detail_contract===LEADER_DETAIL_CONTRACT && view.screen.endsWith('-selection'))targets.unshift('#detail-tab-evidence');
-      if(report.detail_contract===LEADER_DETAIL_CONTRACT && view.screen.endsWith('-purchase'))targets.unshift('#detail-tab-conditions');
+      if((report.detail_contract===LEGACY_LEADER_DETAIL_CONTRACT || (report.detail_contract===LEADER_DETAIL_CONTRACT && record.viewport.width>700)) && view.screen.endsWith('-selection'))targets.unshift('#detail-tab-evidence');
+      if((report.detail_contract===LEGACY_LEADER_DETAIL_CONTRACT || (report.detail_contract===LEADER_DETAIL_CONTRACT && record.viewport.width>700)) && view.screen.endsWith('-purchase'))targets.unshift('#detail-tab-conditions');
       exactSet(view.targets, targets, label + ' actual financial targets');
     }
 
@@ -277,7 +285,7 @@ export function validateFunctionalEvidence(report, binding) {
   assert(report.mobile_map_contract===undefined||report.mobile_map_contract==='mobile-market-map-v1','Unknown mobile map contract');
   exactSet(report.screens.map(screen => screen.key), requiredScreeningCaptures(binding.scope, report.mobile_map_contract === 'mobile-market-map-v1'), 'Screen captures');
   assert(new Set(report.screens.map(screen => screen.screenshot)).size === report.screens.length, 'Duplicate screenshot path');
-  assert(report.detail_contract === undefined || report.detail_contract === LEADER_DETAIL_CONTRACT, 'Unknown detail contract');
+  assert(report.detail_contract === undefined || supportedDetailContract(report.detail_contract), 'Unknown detail contract');
   assert(report.layout_contract === undefined || report.layout_contract === LEADER_FEED_CONTRACT, 'Unknown layout contract');
   for (const screen of report.screens) screenEvidence(screen, binding, report.layout_contract, report.detail_contract);
   const screens = new Map(report.screens.map(screen => [screen.key, screen]));

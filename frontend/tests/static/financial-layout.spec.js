@@ -110,7 +110,9 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  if(width===390)await page.getByRole('button',{name:/^ALPHA の分析を表示/}).click();
  const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
  await expect(detail.getByLabel('価格位置と購入条件')).toContainText('価格位置は購入可否と別です。');
+ if(width===390)await detail.getByRole('tab',{name:'購入条件',exact:true}).click();
  await expect(width===390?detail.locator('.leader-detail-verdict'):detail.getByLabel('価格位置と購入条件')).toContainText(/未達 \d+・未確認 \d+/);
+ if(width===390)await detail.getByRole('tab',{name:'チャート',exact:true}).click();
  const controls=detail.getByRole('group',{name:'チャートの表示操作',exact:true});
  await controls.scrollIntoViewIfNeeded();
  if(width===390) await controls.locator('summary').filter({hasText:'操作'}).click();
@@ -157,6 +159,10 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  if(width===390)await expect(page.locator('.leader-header').getByRole('group',{name:'表示中の銘柄と分析基準日'})).toBeInViewport();
  await expect(detail).toContainText('株式分割・ADR');
  await expect(detail.locator('.research-symbol-price strong')).toHaveText('$104.00');
+ if(width===390){
+  await expect(detail.locator('.stock-chart-panel')).toBeHidden();
+  await detail.getByRole('tab',{name:'チャート',exact:true}).click();
+ }
  await expect(detail.locator('.research-chart .leader-evidence-chart svg[role="img"]').first()).toBeVisible();
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
  expect((await new AxeBuilder({page}).include('#root').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
@@ -166,6 +172,7 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
   // Desktop selection does not opt into the separate mobile detail view. Use
   // the real post action when entering mobile list mode, not a DOM override.
   if(resized===390&&await page.locator('.research-workbench').getAttribute('data-mobile-view')==='list')await page.getByRole('button',{name:/^ALPHA の分析を表示/}).click();
+  if(resized===390)await detail.getByRole('tab',{name:'購入条件',exact:true}).click();
   await expect(detail.locator('.leader-detail-overview')).toHaveCount(1);
   await expect(detail.getByRole('group',{name:'5つの関門：既存根拠の分類'})).toHaveCount(1);
   await expect.poll(()=>detail.evaluate(node=>{

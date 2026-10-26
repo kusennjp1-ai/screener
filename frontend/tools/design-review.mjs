@@ -1,7 +1,7 @@
 import { readyResearchCandidates } from './research-browser-navigation.mjs';
 import { mobileChromeBudget } from './mobile-chrome-contract.mjs';
 import { SVG_EVIDENCE_CONTRACT } from './svg-chart-evidence.mjs';
-import { LEADER_DETAIL_CONTRACT, observeLeaderDetail, leaderDetailFailures } from './leader-detail-design-contract.mjs';
+import { LEADER_DETAIL_CONTRACT, observeLeaderDetail, observeTabbedDetail, leaderDetailFailures } from './leader-detail-design-contract.mjs';
 import { LEADER_FEED_CONTRACT, observeLeaderFeed, leaderFeedFailures } from './leader-feed-design-contract.mjs';
 // CI-only production-browser acceptance measurements. Never turn a missing
 // observation into a pass. Artifacts are written before any gate fails.
@@ -153,7 +153,7 @@ function objectiveMetrics() {
   });
   const rect = selector => { const element = document.querySelector(selector); if (!element || !shown(element)) return null; const box = element.getBoundingClientRect(); return { top: box.top, bottom: box.bottom, height: box.height, width: box.width }; };
   const header = rect('.leader-header') || rect('header.MuiAppBar-root');
-  const nav = rect('.mobile-research-nav') || rect('.leader-mobile-nav'), actions = rect('.mobile-chart-actions');
+  const nav = rect('.stock-section-nav') || rect('.mobile-research-nav') || rect('.leader-mobile-nav'), actions = rect('.mobile-chart-actions');
   const contentTop = header?.bottom || 0, contentBottom = Math.min(nav?.top ?? innerHeight, actions?.top ?? innerHeight);
   const bottomChrome = innerHeight-contentBottom;
   const completelyVisible = element => {
@@ -203,7 +203,7 @@ async function capture(page, viewport, theme, screen, { target, scope = 'viewpor
   await page.waitForTimeout(800);
   const metrics = await page.evaluate(objectiveMetrics);
   metrics.feed = await page.evaluate(observeLeaderFeed);
-  metrics.detailEvidence = await page.evaluate(observeLeaderDetail);
+  metrics.detailEvidence = screen==='detail' ? await observeTabbedDetail(page) : await page.evaluate(observeLeaderDetail);
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   const screenshot = `${screen}-${viewport.width}x${viewport.height}-${theme}.png`;
   const key = `${screen}/${viewport.width}/${theme}`;

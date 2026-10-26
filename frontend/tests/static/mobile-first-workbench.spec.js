@@ -155,6 +155,7 @@ for(const fixture of cases)test(`mobile first ${fixture.width}x${fixture.height}
  const expectDetailEntry=async()=>{
   const detail=page.getByRole('region',{name:'銘柄詳細',exact:true});
   await expect(detail).toBeVisible();await expect(detail).toBeFocused();
+  await info.attach('detail-entry-geometry.json',{body:JSON.stringify(await detail.evaluate(node=>({top:node.getBoundingClientRect().top,headerBottom:document.querySelector('.leader-header').getBoundingClientRect().bottom,scrollY,documentHeight:document.documentElement.scrollHeight,viewport:innerHeight}))),contentType:'application/json'});
   await expect.poll(()=>detail.evaluate(node=>{const gap=node.getBoundingClientRect().top-document.querySelector('.leader-header').getBoundingClientRect().bottom;return Math.abs(gap-8)<=1;})).toBe(true);
   const back=page.getByRole('button',{name:'← 候補一覧',exact:true});await expect(back).toBeInViewport({ratio:1});
   const geometry=await back.evaluate(node=>{const r=node.getBoundingClientRect();return {width:r.width,height:r.height,hits:[.1,.5,.9].flatMap(x=>[.1,.5,.9].map(y=>{const hit=document.elementFromPoint(r.left+x*r.width,r.top+y*r.height);return Boolean(hit&&(hit===node||node.contains(hit)));}))};});

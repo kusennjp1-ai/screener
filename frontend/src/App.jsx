@@ -1,4 +1,5 @@
-import { useState, useMemo, lazy, Suspense } from 'react';
+import { useMemo, lazy, Suspense } from 'react';
+import useColorModePreference from './contexts/useColorModePreference';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { CssBaseline, ThemeProvider, createTheme, CircularProgress, Box } from '@mui/material';
@@ -210,7 +211,7 @@ const getDesignTokens = (mode) => ({
 });
 
 function App() {
-  const [mode, setMode] = useState('dark');
+  const [mode, setMode] = useColorModePreference();
 
   const colorMode = useMemo(
     () => ({
@@ -219,7 +220,7 @@ function App() {
       },
       mode,
     }),
-    [mode]
+    [mode, setMode]
   );
 
   const theme = useMemo(() => createTheme(getDesignTokens(mode)), [mode]);

@@ -10,7 +10,7 @@ import ChartNumericData from './ChartNumericData';
 
 const EMPTY_BARS = Object.freeze([]);
 
-export default function ResearchChart({ entry, symbol, generation, onExpand, rsRating, row, method, quote, date }) {
+export default function ResearchChart({ entry, symbol, generation, onExpand, rsRating, row, method, quote, date, view = 'all', onShowChart }) {
   const small = useMediaQuery('(max-width: 700px)');
   const query = useQuery({
     queryKey: [...staticChartKeys.payload(symbol, entry?.path), generation],
@@ -30,7 +30,7 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
       : query.isError ? <Alert severity="error" action={<Button onClick={() => query.refetch()}>再試行</Button>}>チャートを取得できません。</Alert>
       : !data?.bars?.length ? <Typography sx={{ p: 4 }}>ローソク足データが不足しています。</Typography> : null}
     {(ready || initialized) && <div hidden={!ready} aria-hidden={!ready}>
-      <CandlestickChart smallScreen={small} researchLegendBelow={!small} researchActions={<button type="button" onClick={onExpand} aria-label="日次チャートを分析">拡大 ↗</button>} researchView bookAnnotations symbol={symbol} height={small ? 360 : 440}
+      <CandlestickChart view={view} onShowChart={onShowChart} smallScreen={small} researchLegendBelow={!small} researchActions={<button type="button" onClick={onExpand} aria-label="日次チャートを分析">拡大 ↗</button>} researchView bookAnnotations symbol={symbol} height={small ? 300 : 440}
         date={date} generation={generation} row={row || data?.stock_data} payload={ready ? data : null} benchmarkSymbol={data?.benchmark_symbol}
         chartIdentity={JSON.stringify([symbol, date, generation, entry?.path])}
         priceData={ready ? data.bars : EMPTY_BARS} rsLineData={ready ? data.rs_line || null : null} rsRatingValue={ready ? rsRating ?? null : null}
@@ -40,7 +40,7 @@ export default function ResearchChart({ entry, symbol, generation, onExpand, rsR
         pivotPrice={ready ? canonicalPivot(row || data.stock_data).price : null}
         buyCeiling={ready ? plan.upper : null} stopPrice={ready ? plan.stopExample : null} pivotLabel="共通ピボット" vcpBoxes={ready ? data.vcp_boxes || null : null} />
     </div>}
-    {ready && <ChartNumericData key={JSON.stringify([symbol, date, generation, entry?.path])} symbol={symbol} bars={data.bars} asOfDate={date} generatedAt={data.generated_at} currency={data.stock_data?.currency} />}
+    {ready && view !== 'setup' && <ChartNumericData key={JSON.stringify([symbol, date, generation, entry?.path])} symbol={symbol} bars={data.bars} asOfDate={date} generatedAt={data.generated_at} currency={data.stock_data?.currency} />}
 
   </Box>;
 }
