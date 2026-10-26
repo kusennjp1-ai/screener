@@ -8,6 +8,7 @@
 .metric-disclosure-body{padding:4px 0 12px;color:var(--text-2);font-size:12px;line-height:1.8}
 .metric-disclosure-body>p:first-child{margin-top:0}
 .research-rules>li:has(>.metric-disclosure){display:block;padding:0}
+.research-rules>li>.metric-disclosure{white-space:normal}
 .leader-detail .condition-rules>li:has(>.metric-disclosure){min-height:0;padding:0}
 .leader-detail .condition-rules>li:has(>.metric-disclosure)::before{display:none}
 .evidence-context{font-size:12px;line-height:1.7;overflow-wrap:anywhere}

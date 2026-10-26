@@ -73,6 +73,18 @@ for (const width of [320,390]) test(`mobile integrated map, chart, VCP and watch
  await expect(page.locator('#condition-rule-market details')).not.toHaveAttribute('open');
  await volume.locator('summary').click();
  await expect(volume).not.toHaveAttribute('open');
+ // The old last-child nowrap rule can clip a disclosure while document overflow
+ // still passes. Measure the long explanation itself, including its text range.
+ const modelRule=page.locator('.condition-rules details').first();
+ await modelRule.locator('summary').click();
+ const explanation=await modelRule.locator('.metric-disclosure-body').evaluate(node=>{
+  const range=document.createRange();range.selectNodeContents(node);
+  return {width:node.clientWidth,scrollWidth:node.scrollWidth,box:node.getBoundingClientRect().toJSON(),text:range.getBoundingClientRect().toJSON()};
+ });
+ expect(explanation.scrollWidth).toBeLessThanOrEqual(explanation.width+1);
+ expect(explanation.text.right).toBeLessThanOrEqual(explanation.box.right+1);
+ expect(explanation.text.height).toBeGreaterThan(30);
+ await modelRule.locator('summary').click();
  await page.locator('.mobile-chart-actions').getByRole('button',{name:'ウォッチに保存',exact:true}).click();
  await page.getByRole('navigation',{name:'リサーチの画面切替'}).getByRole('button',{name:'ウォッチ',exact:true}).click();
  await expect(page.getByRole('button',{name:/^VCPTEST の分析を表示/})).toBeVisible();

@@ -20,6 +20,10 @@ An independent read-only evidence worker inspected updated market and loaded emp
 
 The production capture exposed off-scale heading/value sizes (18,24,30px) and a stale purchase-rule text-order assertion after adding disclosures. Aligned the values to the existing type scale (16,20,26px) without relaxing the font gate. The purchase capture now reads the visible summary label and exact state separately, verifies both counts and the original list count against the canonical model, and retains the existing review-record shape. Hidden explanatory prose no longer changes the state assertion. The failed capture was not approved for publication.
 
+## Loop5 — pixel review → nested text clipping repair
+
+The failed capture's opened purchase explanation visibly extended past its panel. Independent inspection confirmed an inherited legacy last-child nowrap rule: the text was1114px wide inside330px/260px panels, while root overflow hiding masked it from document-level checks. Reset whitespace for the new rule disclosures and added a regression that opens the long common-model explanation, measures its own scroll width and text range, and requires multiple lines at320/390px. This is a concrete defect found by visual review after broad functional checks, not a reason to loosen them.
+
 ## Verification boundaries
 
 Production Vite build passed. ESLint reported no errors (six existing refresh warnings). Full unit/browser and immutable publication gates run separately against the final commit; their final outcomes belong to release evidence, not this pre-release record. Meaningful browser regressions cover default closure,44px summaries, Enter/Space, target focus, symbol-change reset and empty-watch recovery. Existing canonical-value and historical-provenance checks remain intact.
