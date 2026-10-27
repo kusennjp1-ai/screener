@@ -37,7 +37,23 @@ export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}
   return {schema_version:'market-trends-v1',market:'US',as_of_date:asOfDate,source_sha256:sourceMatches?sourceSha256:null,indices,put_call:{population:sourceMatches?source.put_call.population:null,points:putCall},breadth:{approximate:true,population:'現在の公開チャート集合（当時の全上場銘柄集合ではありません）',points:breadth}};
 }
 
-export async function exportMarketTrends({root,entry,asOfDate,bookEvidence}) {
+export async function selectLongHistorySource(directory,asOfDate,evaluatedAt) {
+  if(!isDay(asOfDate)||!Number.isFinite(evaluatedAt)||evaluatedAt>Date.now())throw Error('Invalid long-history evaluation instant');
+  const names=await readdir(directory).catch(error=>{if(error.code==='ENOENT')return [];throw error;});
+  const seeds=names.filter(name=>/^market-history-source-\d{4}-\d{2}-\d{2}\.json$/.test(name)&&name.slice(22,32)<=asOfDate).sort().reverse();
+  for(const name of seeds){
+    const bytes=await readFile(resolve(directory,name)),source=JSON.parse(bytes);
+    const retrievedAt=typeof source?.retrieved_at==='string'?Date.parse(source.retrieved_at):NaN;
+    if(!Number.isFinite(retrievedAt))throw Error('Invalid long-history source retrieval date');
+    // Observation date and availability time are different. A replay may only
+    // select captures already retrieved at its fixed export evaluation instant.
+    if(retrievedAt>evaluatedAt)continue;
+    return {bytes,history:verifyLongHistorySource(bytes,asOfDate)};
+  }
+  return null;
+}
+
+export async function exportMarketTrends({root,entry,asOfDate,bookEvidence,evaluatedAt=Date.now()}) {
   if(!isDay(asOfDate))throw Error('Invalid market trend date');
   // The source is data, not executable UI. A dated committed capture seeds an
   // ordinary carry; the daily producer's exact-date source takes precedence.
@@ -56,11 +72,9 @@ export async function exportMarketTrends({root,entry,asOfDate,bookEvidence}) {
   // Retain the history's own observation date on later publications. Compiler
   // data are already covered by the independent calendar reference hash.
   const directory=resolve(dirname(fileURLToPath(import.meta.url)),'../data');
-  const names=await readdir(directory).catch(error=>{if(error.code==='ENOENT')return [];throw error;});
-  const seeds=names.filter(name=>/^market-history-source-\d{4}-\d{2}-\d{2}\.json$/.test(name)&&name.slice(22,32)<=asOfDate).sort().reverse();
-  if(seeds.length){
-    const historyBytes=await readFile(resolve(directory,seeds[0]));
-    const history=verifyLongHistorySource(historyBytes,asOfDate);
+  const selected=await selectLongHistorySource(directory,asOfDate,evaluatedAt);
+  if(selected){
+    const {bytes:historyBytes,history}=selected;
     payload.long_history={...history,source_sha256:hash(historyBytes)};
     await writeFile(resolve(root,`market-trends/history-source-${hash(historyBytes)}.json`),historyBytes);
   }

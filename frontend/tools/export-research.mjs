@@ -136,7 +136,7 @@ if (breadth) {
   if (breadth.payload?.current?.date === scan.as_of_date) {
     breadth.payload.book_leadership = marketLeadership([...rows.values()], scan.as_of_date);
     breadth.payload.book_market_evidence = buildBookMarketEvidence({ charts: marketCharts, asOfDate: scan.as_of_date, benchmark, expectedUniverseSize: rows.size, lookbackSessions: 60 });
-    await exportMarketTrends({root,entry,asOfDate:scan.as_of_date,bookEvidence:breadth.payload.book_market_evidence});
+    await exportMarketTrends({root,entry,asOfDate:scan.as_of_date,bookEvidence:breadth.payload.book_market_evidence,evaluatedAt});
     await writeFile(resolve(root, entry.pages.breadth.path), JSON.stringify(breadth));
   }
 }

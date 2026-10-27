@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {existsSync,readFileSync,writeFileSync} from 'node:fs';
+import {existsSync,readFileSync,writeFileSync,readdirSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {execFileSync} from 'node:child_process';
 import {lifecycleFixture,read} from './fixtures/financial-release-lifecycle.mjs';
@@ -22,12 +22,20 @@ test('ordinary replay binds the selected dated market seed across different work
     writeFileSync(seedPath,Buffer.concat([seed,Buffer.from('\n')]));
     assert.notEqual(release.command('prepare-carry',{allowFailure:true}).status,0);
     writeFileSync(seedPath,seed);
+    // Even a capture unavailable at this historical clock remains part of the
+    // selected compiler inventory; skipping it cannot bypass source binding.
+    const historyPath=join(release.frontend,'data/market-history-source-2026-10-23.json'),history=readFileSync(historyPath);
+    writeFileSync(historyPath,Buffer.concat([history,Buffer.from('\n')]));
+    assert.notEqual(release.command('prepare-carry',{allowFailure:true}).status,0);
+    writeFileSync(historyPath,history);
     release.command('prepare-carry');
     const root=join(release.frontend,'public'),entry=read(join(root,'static-data/manifest.json')).markets.US;
     assert.ok(entry.assets.market_trends.source_sha256);
     const trends=read(join(root,'static-data',entry.assets.market_trends.path));
     assert.equal(trends.put_call.points.length,63);
     assert.deepEqual(trends.indices.map(index=>index.points.length),[280,280]);
+    assert.equal(Object.hasOwn(trends,'long_history'),false);
+    assert.equal(readdirSync(join(root,'static-data/market-trends')).some(name=>name.startsWith('history-source-')),false);
     const prepared=release.state(),proof=prepared.carry.calendar.proof;
     release.build();release.command('compose');release.command('recheck');
     assert.deepEqual(read(join(release.dist,'publication.json')).ordinary_calendar_derivation,proof);
