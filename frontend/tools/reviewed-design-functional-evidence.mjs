@@ -1,6 +1,6 @@
 import { mobileChromeBudget } from './mobile-chrome-contract.mjs';
 import { LEADER_DETAIL_CONTRACT, LEGACY_LEADER_DETAIL_CONTRACT, supportedDetailContract, leaderDetailFailures } from './leader-detail-design-contract.mjs';
-import { validateSvgChart, SVG_CHART_RENDERER, SVG_EVIDENCE_CONTRACT } from './svg-chart-evidence.mjs';
+import { validateSvgChart, SVG_CHART_RENDERER, SVG_EVIDENCE_CONTRACTS } from './svg-chart-evidence.mjs';
 import { LEADER_FEED_CONTRACT, leaderFeedFailures } from './leader-feed-design-contract.mjs';
 // Completeness/consistency checks for immutable historical browser observations.
 // This is NOT source authentication, current data validation, or image review.
@@ -9,6 +9,8 @@ import { LEADER_FEED_CONTRACT, leaderFeedFailures } from './leader-feed-design-c
 import assert from 'node:assert/strict';
 import { requiredScreeningCaptures, DESIGN_GROUPS } from './screening-priority-acceptance.mjs';
 import { CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
+import { validateRsSelection, validateImmediateTouchClose } from './chart-interaction-evidence.mjs';
+import { validateMarketHistoryEvidence } from './market-history-functional-evidence.mjs';
 import { FINANCIAL_DESIGN_CASES, financialDesignScreens } from './financial-design-cases.mjs';
 import { checkExpandedChartGeometry } from './expanded-chart-geometry.mjs';
 import { checkFinancialViewportGeometry } from './financial-viewport-geometry.mjs';
@@ -171,7 +173,7 @@ function chartEvidence(report) {
     if(record.renderer !== undefined) assert(record.renderer === SVG_CHART_RENDERER,label+': unknown chart renderer');
     const svg=record.renderer === SVG_CHART_RENDERER;
     for (const view of record.views) {
-      if(report.svg_evidence_contract!==undefined)assert(report.svg_evidence_contract===SVG_EVIDENCE_CONTRACT&&view.evidence_contract===SVG_EVIDENCE_CONTRACT,label+': missing/unknown SVG provenance contract');
+      if(report.svg_evidence_contract!==undefined)assert(SVG_EVIDENCE_CONTRACTS.includes(report.svg_evidence_contract)&&view.evidence_contract===report.svg_evidence_contract,label+': missing/unknown SVG provenance contract');
       if(svg)validateSvgChart(view,record.source_bars,label,record.rs_source);
       assert(view.symbol === record.symbol && view.as_of_date === record.as_of_date && (svg ? ['vcp-on','vcp-off'].includes(view.annotation_mode) : ['simple', 'detail'].includes(view.annotation_mode)), label + ': wrong rendered chart identity');
       for (const field of ['pivot', 'upper', 'stop']) {
@@ -188,6 +190,13 @@ function chartEvidence(report) {
     assert(record.expanded_scrolled_geometry.date_axis_visible === true && record.expanded_scrolled_geometry.date_axis_hit === true && record.expanded_scrolled_geometry.scroll_top > 0, label + ': date-axis scrolling incomplete');
     chartGeometry(record.expanded_reopened_geometry, width, mainHeight(width), label + '/reopened', width >= 900);
     assert(text(record.selected_one_month_range) && text(record.visual_overlap_review), label + ': missing range/review evidence');
+    // New captures bind interaction evidence as well as pixel geometry. Old
+    // authenticated v2 archives retain their original exact requirements.
+    if (report.svg_evidence_contract === 'leader-svg-provenance-v3') {
+      validateRsSelection(record.rs_selection, record.as_of_date);
+      for (const field of ['closed', 'route_preserved', 'marker_cleared', 'focus_restored']) assert(record.browser_back?.[field] === true, label + ': browser back evidence missing');
+      if (width <= 700) validateImmediateTouchClose(record.immediate_touch_close);
+    }
   }
 }
 
@@ -290,6 +299,7 @@ export function validateFunctionalEvidence(report, binding) {
   for (const screen of report.screens) screenEvidence(screen, binding, report.layout_contract, report.detail_contract);
   const screens = new Map(report.screens.map(screen => [screen.key, screen]));
   chartEvidence(report); financialEvidence(report, binding, screens); dailyEvidence(report, screens);
+  if (report.svg_evidence_contract === 'leader-svg-provenance-v3') validateMarketHistoryEvidence(report);
   if (binding.scope === 'carry') {
     financialEvidence(report, binding, screens, true);
     assert(Array.isArray(report.financial_carry_browser_ui), 'Missing actual carry UI response groups');

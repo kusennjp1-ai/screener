@@ -2,6 +2,7 @@ import { useResearchBundle } from '../useResearchBundle';
 import { useStaticManifest } from '../dataClient';
 import { sectorStrength } from '../sectorStrength';
 import SectorRotation from './SectorRotation';
+import ConnectedMarketHistoryExplorer from './MarketHistoryExplorer';
 import { useMemo, useState } from 'react';
 import { Alert,useMediaQuery } from '@mui/material';
 import { useWorkbench } from '../useWorkbench';
@@ -27,6 +28,7 @@ function Reading({groups,render}) {return groups.length?groups.slice(0,3).map(re
 export default function SectorStrength({entry}) {
   const query=useWorkbench(entry),[period,setPeriod]=useState('63'),[method,setMethod]=useState('minervini'),[view,setView]=useState('bars');
   const [highlight,setHighlight]=useState(null);
+  const [historyOpen,setHistoryOpen]=useState(false);
   const isMobile=useMediaQuery('(max-width:700px)');
   const manifest=useStaticManifest();
   const bundle=useResearchBundle(entry?.assets?.research?.path,entry?.as_of_date,manifest.data?.research_generation || manifest.data?.generated_at,entry?.publication);
@@ -64,6 +66,7 @@ export default function SectorStrength({entry}) {
         <p className="sector-list-note">未確認は分母に含め、通過には含めません。* 10銘柄未満。棒は80〜120に制限し、実際の指数はそのまま表示。</p>
       </div>
       <aside className="sector-aside" aria-label="業種データの読み方">
+        <details className="market-disclosure sector-history-disclosure" onToggle={event=>setHistoryOpen(event.currentTarget.open)}><summary>セクターRSの1年推移</summary>{historyOpen&&<ConnectedMarketHistoryExplorer marketEntry={entry} sectorOnly/>}</details>
         <SectorRotation groups={groups} period={period} highlight={highlight} onHighlight={setHighlight} compact={isMobile}/>
         <details className="sector-readings" open={!isMobile}><summary>今日の読み方</summary><dl>
           <div><dt className="positive">追い風（指数100超）</dt><dd><Reading groups={readings.tailwind} render={g=>`${g.label}（${sectorNumber(sectorValue(g,period))}）`}/></dd></div>

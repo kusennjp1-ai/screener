@@ -9,6 +9,20 @@ afterEach(cleanup);
 const options = { bars:fixture.bars,symbol:fixture.symbol,date:fixture.as_of_date,rsLine:fixture.rs_line };
 const props = { symbol:fixture.symbol,date:fixture.as_of_date,priceData:fixture.bars,rsLineData:fixture.rs_line,benchmarkSymbol:fixture.benchmark_symbol,row:fixture.row,payload:fixture,smallScreen:true,pivotPrice:340,buyCeiling:357,stopPrice:323 };
 
+it('states the volume snapshot date before opening its formula and keeps the daily basis during panning and weekly views',()=>{
+ const {container}=render(<LeaderEvidenceChart {...props}/>);
+ const disclosure=container.querySelector('.chart-volume-ratio'),summary=disclosure.querySelector('summary');
+ const mean=fixture.bars.slice(-51,-1).reduce((sum,bar)=>sum+bar.volume,0)/50;
+ const ratio=(fixture.bars.at(-1).volume/mean).toFixed(2);
+ expect(disclosure).not.toHaveAttribute('open');expect(summary).toHaveTextContent(fixture.as_of_date);
+ expect(summary).toHaveTextContent('最新配信日足');expect(summary).toHaveTextContent(`${ratio} 倍`);
+ fireEvent.click(screen.getByRole('button',{name:'過去の期間へ'}));
+ expect(summary).toHaveTextContent(`${ratio} 倍`);
+ fireEvent.click(screen.getByRole('button',{name:'週足',exact:true}));
+ expect(summary).toHaveTextContent(fixture.as_of_date);expect(summary).toHaveTextContent(`${ratio} 倍`);
+ fireEvent.click(summary);expect(disclosure).toHaveTextContent('今日のリアルタイム出来高ではありません');
+});
+
 it('binds the VCP lab to exactly the same measured intervals as the SVG and resets on identity change',()=>{
  const measured = buildBookTechnicalEvidence(fixture.row,fixture,fixture.as_of_date);
  const {container,rerender}=render(<LeaderEvidenceChart {...props} technicalEvidence={measured} chartIdentity="first"/>);
@@ -231,30 +245,31 @@ describe('self-drawn SVG evidence and controls', () => {
     expect(container.textContent).toContain('50/150/200日線・直前50日出来高平均');
     for(const name of ['日足','週足','表示期間を拡大','表示期間を縮小','過去の期間へ','新しい期間へ','リセット','VCP注記'])expect(screen.getByRole('button',{name,exact:true})).toBeInTheDocument();
   });
-  it.each([{compact:true,height:220},{compact:true,height:240},{expanded:true,height:300},{expanded:true,height:420},{height:390}])('separates three crowded VCP labels within the unchanged pane %j', layout => {
+  it.each([{compact:true,height:220},{compact:true,height:240},{expanded:true,height:300},{expanded:true,height:420},{height:390}])('keeps crowded VCP labels outside candles and preserves measured endpoints %j', layout => {
     const legs=Array.from({length:6},(_,index)=>({startDate:fixture.bars.at(-10).date,endDate:fixture.as_of_date,peakDate:fixture.bars.at(-10).date,lowDate:fixture.bars.at(-3+index%3).date,high:fixture.bars.at(-10).high,low:fixture.bars.at(-1).low,depthPct:6.5+index/10,sessions:10}));
     const evidence={version:BOOK_TECHNICAL_VERSION,valid:true,symbol:fixture.symbol,as_of_date:fixture.as_of_date,vcp:{legs}};
     const {container}=render(<LeaderEvidenceChart {...props} {...layout} technicalEvidence={evidence}/>);
     const svg=container.querySelector('svg'),pane=svg.querySelector('clipPath rect');
-    const bounds={x:+pane.getAttribute('x'),y:+pane.getAttribute('y'),width:+pane.getAttribute('width'),height:+pane.getAttribute('height')};
-    const boxes=[...svg.querySelectorAll('[data-vcp-label-box]')].map(node=>Object.fromEntries(['x','y','width','height'].map(key=>[key,+node.getAttribute(key)])));
-    expect(boxes).toHaveLength(3);
-    expect([...svg.querySelectorAll('[data-vcp-leg]')].map(node=>node.dataset.vcpLeg)).toEqual(['4','5','6']);
-    for(const [index,box] of boxes.entries()){
-      expect(box.x).toBeGreaterThanOrEqual(bounds.x);expect(box.x+box.width).toBeLessThanOrEqual(bounds.x+bounds.width);
-      expect(box.y).toBeGreaterThanOrEqual(bounds.y);expect(box.y+box.height).toBeLessThanOrEqual(bounds.y+bounds.height);
-      if(index)expect(box.y).toBeGreaterThanOrEqual(boxes[index-1].y+boxes[index-1].height+4);
-      const group=svg.querySelector(`[data-vcp-leg="${index+4}"]`),point=group.querySelector('circle');
-      expect(group.querySelector('[data-vcp-leader]').getAttribute('d').endsWith(`L${point.getAttribute('cx')} ${point.getAttribute('cy')}`)).toBe(true);
-      expect(group.querySelector('text')).toHaveTextContent(`C${index+4} ${(6.8+index/10).toFixed(1)}%`);
-    }
+    expect(svg).toHaveAttribute('data-chart-annotation-mode','simple');
+    expect(svg.querySelectorAll('[data-vcp-leg]')).toHaveLength(0);
+    expect(svg.querySelectorAll('[data-vcp-label-box]')).toHaveLength(0);
     const originalBars=[...svg.querySelectorAll('[data-close]')].map(node=>node.outerHTML),originalAxis=pane.outerHTML;
     if(!layout.compact){
       expect(container.querySelectorAll('.leader-vcp-table tbody tr')).toHaveLength(6);
       fireEvent.click(screen.getByRole('button',{name:'VCP注記'}));
-      expect(svg.querySelectorAll('[data-vcp-label-box]')).toHaveLength(0);
+      expect([...svg.querySelectorAll('[data-vcp-leg]')].map(node=>node.dataset.vcpLeg)).toEqual(['4','5','6']);
+      const chips=[...container.querySelectorAll('[data-vcp-interval]')];expect(chips).toHaveLength(3);
+      for(const [index,chip] of chips.entries()){
+        expect(chip.closest('svg')).toBeNull();expect(chip).toHaveTextContent(`C${index+4} ${(6.8+index/10).toFixed(1)}%`);
+        const group=svg.querySelector(`[data-vcp-leg="${index+4}"]`),point=group.querySelector('circle');
+        expect(group.querySelector('[data-vcp-leader]').getAttribute('d').endsWith(`L${point.getAttribute('cx')} ${point.getAttribute('cy')}`)).toBe(true);
+        expect(group.querySelector('text,rect')).toBeNull();
+      }
       expect([...svg.querySelectorAll('[data-close]')].map(node=>node.outerHTML)).toEqual(originalBars);
       expect(svg.querySelector('clipPath rect').outerHTML).toBe(originalAxis);
+      fireEvent.click(screen.getByRole('button',{name:'VCP注記'}));
+      expect(svg.querySelectorAll('[data-vcp-leg]')).toHaveLength(0);
+      expect(container.querySelectorAll('[data-vcp-interval]')).toHaveLength(0);
     }
   });
   it.each([{}, {expanded:true,height:300}, {compact:true,height:220}])('withholds an unbound RS line in every renderer surface %j without changing prices', layout => {

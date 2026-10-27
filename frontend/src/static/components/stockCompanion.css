@@ -4,9 +4,12 @@
 .stock-companion[data-mood=resting]{color:var(--text-2);--companion-fill:var(--surface)}
 .stock-companion summary{display:flex;align-items:center;gap:6px;min-height:44px;cursor:pointer;list-style:none;border-radius:12px}
 .stock-companion summary::-webkit-details-marker{display:none}.stock-companion summary:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.stock-companion summary svg{flex-shrink:0;overflow:visible}.stock-companion summary span{display:grid;gap:3px;color:var(--text)}
-.stock-companion b{font-size:12px;font-weight:600}.stock-companion small{font-size:11px;color:var(--text-2)}
+.stock-companion-caption{display:grid;gap:3px;color:var(--text)}
+.stock-companion b{font-size:11px;font-weight:600;white-space:nowrap}.stock-companion small{font-size:11px;color:var(--text-2)}
 .stock-companion p{margin:6px 0;font-size:12px;line-height:1.6;color:var(--text-2)}
-.stock-companion-character{transform-origin:38px 58px;animation:companion-hello .32s ease-out both}
+.stock-companion-character{display:block;flex:none;width:56px;height:56px;background-size:200% 200%;background-position:0 0;background-repeat:no-repeat;transform-origin:center bottom;animation:companion-hello .32s ease-out both}
+.stock-companion[data-mood=concerned] .stock-companion-character{background-position:100% 0}
+.stock-companion[data-mood=bright] .stock-companion-character{background-position:0 100%}
+.stock-companion[data-mood=resting] .stock-companion-character{background-position:100% 100%}
 @keyframes companion-hello{from{transform:translateY(3px) rotate(-4deg);opacity:.7}to{transform:none;opacity:1}}
 @media(prefers-reduced-motion:reduce){.stock-companion-character{animation:none}}

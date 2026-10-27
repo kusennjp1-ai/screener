@@ -1,16 +1,18 @@
 import assert from 'node:assert/strict';
 export const SVG_CHART_RENDERER = 'leader-svg-v1';
-export const SVG_EVIDENCE_CONTRACT = 'leader-svg-provenance-v2';
+export const SVG_EVIDENCE_CONTRACT = 'leader-svg-provenance-v3';
+export const SVG_EVIDENCE_CONTRACTS = ['leader-svg-provenance-v2', SVG_EVIDENCE_CONTRACT];
 // Serialized directly inside the browser; no expected values enter the DOM observation.
 export function observeSvgChart(node) {
  const section=node.closest('.leader-evidence-chart'),zone=node.querySelector('[data-testid="svg-canonical-buy-zone"]'),stop=node.querySelector('[data-testid="svg-stop-example"]');
  const numeric=(el,key)=>el?.getAttribute(key)??null;
  const box=el=>{if(!el)return null;const b=el.getBBox();return {x:b.x,y:b.y,width:b.width,height:b.height};};
  const pricePane=node.querySelector('[data-pane="price"]'),clipId=pricePane?.getAttribute('clip-path')?.match(/^url\(#(.+)\)$/)?.[1];
- const annotation_layout={pane:box(clipId?document.getElementById(clipId)?.querySelector('rect'):null),labels:[...node.querySelectorAll('[data-vcp-leg]')].map(leg=>({number:Number(leg.dataset.vcpLeg),box:box(leg.querySelector('[data-vcp-label-box]')),raw_box:leg.querySelector('[data-vcp-label-box]')?Object.fromEntries(['x','y','width','height'].map(key=>[key,Number(leg.querySelector('[data-vcp-label-box]').getAttribute(key))])):null,leader:leg.querySelector('[data-vcp-leader]')?.getAttribute('d')??null,anchor:leg.querySelector('circle')?{x:Number(leg.querySelector('circle').getAttribute('cx')),y:Number(leg.querySelector('circle').getAttribute('cy'))}:null}))};
+ const screenBox=el=>{if(!el)return null;const b=el.getBoundingClientRect();return {x:b.x,y:b.y,width:b.width,height:b.height};};
+ const annotation_layout={mode:'external-chips',pane:box(clipId?document.getElementById(clipId)?.querySelector('rect'):null),plot:screenBox(node),labels:[...node.querySelectorAll('[data-vcp-leg]')].map(leg=>{const chip=section.querySelector(`[data-vcp-interval="${leg.dataset.vcpLeg}"]`);return {number:Number(leg.dataset.vcpLeg),box:screenBox(chip),text:chip?.textContent??null,accessible_label:chip?.getAttribute('aria-label')??null,button:chip?.tagName==='BUTTON',outside_svg:Boolean(chip&&!chip.closest('svg')),obscures_candles:Boolean(leg.querySelector('text,rect')),peak_date:leg.dataset.vcpPeakDate,low_date:leg.dataset.vcpLowDate,high:Number(leg.dataset.vcpHigh),low:Number(leg.dataset.vcpLow),leader:leg.querySelector('[data-vcp-leader]')?.getAttribute('d')??null,anchor:leg.querySelector('circle')?{x:Number(leg.querySelector('circle').getAttribute('cx')),y:Number(leg.querySelector('circle').getAttribute('cy'))}:null};})};
  const rs_context_label=[...node.querySelectorAll('text')].map(el=>el.textContent).find(text=>text.startsWith('RS線'))??null;
  const candles=[...node.querySelectorAll('[data-pane="price"] g[data-date]')].map(el=>({date:el.dataset.date,close:Number(el.dataset.close),title:el.querySelector('title')?.textContent,geometry:[...el.querySelectorAll('line,rect')].map(shape=>Object.fromEntries([...shape.attributes].filter(a=>['x','y','x1','y1','x2','y2','width','height'].includes(a.name)).map(a=>[a.name,Number(a.value)])))}));
- return {evidence_contract:'leader-svg-provenance-v2',annotation_layout,rs_context_label,renderer:'leader-svg-v1',symbol:node.dataset.chartSymbol,as_of_date:node.dataset.chartAsof,pivot:numeric(zone,'data-pivot'),upper:numeric(zone,'data-upper'),stop:numeric(stop,'data-price'),annotation_mode:section.querySelector('button[aria-pressed][disabled]')?.textContent==='VCP注記'?'disabled':[...section.querySelectorAll('button')].find(b=>b.textContent==='VCP注記')?.getAttribute('aria-pressed')==='true'?'vcp-on':'vcp-off',moving_average_labels:[...section.querySelectorAll('.leader-svg-legend span')].map(el=>el.textContent).filter(text=>/^SMA(50|150|200) /.test(text)),panes:[...node.querySelectorAll('[data-pane]')].map(el=>el.dataset.pane),range_label:node.getAttribute('aria-label'),candles,volumes:[...node.querySelectorAll('[data-pane="volume"] rect[data-volume]')].map(el=>({value:Number(el.dataset.volume),title:el.querySelector('title')?.textContent})),rs_missing:node.querySelector('[data-pane="rs"]')?.textContent==='データなし',rs_paths:[...node.querySelectorAll('[data-pane="rs"] polyline')].map(el=>el.getAttribute('points')),date_labels:[...node.querySelectorAll('[data-chart-date-axis] text')].map(el=>el.textContent),vcp_legs:[...node.querySelectorAll('[data-vcp-leg]')].map(el=>({number:Number(el.dataset.vcpLeg),title:el.querySelector('title')?.textContent}))};
+ return {evidence_contract:'leader-svg-provenance-v3',annotation_layout,rs_context_label,renderer:'leader-svg-v1',symbol:node.dataset.chartSymbol,as_of_date:node.dataset.chartAsof,pivot:numeric(zone,'data-pivot'),upper:numeric(zone,'data-upper'),stop:numeric(stop,'data-price'),annotation_mode:section.querySelector('button[aria-pressed][disabled]')?.textContent==='VCP注記'?'disabled':[...section.querySelectorAll('button')].find(b=>b.textContent==='VCP注記')?.getAttribute('aria-pressed')==='true'?'vcp-on':'vcp-off',moving_average_labels:[...section.querySelectorAll('.leader-svg-legend span')].map(el=>el.textContent).filter(text=>/^SMA(50|150|200) /.test(text)),panes:[...node.querySelectorAll('[data-pane]')].map(el=>el.dataset.pane),range_label:node.getAttribute('aria-label'),candles,volumes:[...node.querySelectorAll('[data-pane="volume"] rect[data-volume]')].map(el=>({value:Number(el.dataset.volume),title:el.querySelector('title')?.textContent})),rs_missing:node.querySelector('[data-pane="rs"]')?.textContent==='データなし',rs_paths:[...node.querySelectorAll('[data-pane="rs"] polyline')].map(el=>el.getAttribute('points')),date_labels:[...node.querySelectorAll('[data-chart-date-axis] text')].map(el=>el.textContent),vcp_legs:[...node.querySelectorAll('[data-vcp-leg]')].map(el=>({number:Number(el.dataset.vcpLeg),title:el.querySelector('title')?.textContent}))};
 }
 export function validateSvgChart(view, source, label='SVG', context) {
  assert(view.renderer===SVG_CHART_RENDERER, label+': unknown renderer');
@@ -36,7 +38,7 @@ export function validateSvgChart(view, source, label='SVG', context) {
  assert(Array.isArray(view.vcp_legs)&&view.vcp_legs.every(l=>Number.isInteger(l.number)&&l.number>0&&typeof l.title==='string'&&l.title.includes('推定')),label+': invalid VCP annotation');
  if(view.annotation_mode==='vcp-off')assert(view.vcp_legs.length===0,label+': disabled VCP still drawn');
  if(view.evidence_contract!==undefined) {
-  assert(view.evidence_contract===SVG_EVIDENCE_CONTRACT,label+': unknown SVG evidence contract');
+  assert(SVG_EVIDENCE_CONTRACTS.includes(view.evidence_contract),label+': unknown SVG evidence contract');
   assert(context&&Object.hasOwn(context,'benchmark_symbol'),label+': missing original RS source context');
   const known=typeof context.benchmark_symbol==='string'&&context.benchmark_symbol.trim().length>0;
   assert(view.rs_context_label===(known?`RS線 · ${context.benchmark_symbol}（RS順位とは別）`:'RS線の比較対象が未確認（データなし）'),label+': RS comparison source/reason mismatch');
@@ -45,9 +47,14 @@ export function validateSvgChart(view, source, label='SVG', context) {
   const validBox=b=>b&&['x','y','width','height'].every(k=>Number.isFinite(b[k]))&&b.width>0&&b.height>0;
   assert(validBox(pane)&&Array.isArray(layout.labels),label+': missing measured annotation pane');
   assert.deepEqual(layout.labels.map(l=>l.number),view.vcp_legs.map(l=>l.number),label+': VCP labels do not match actual legs');
+  const external=view.evidence_contract===SVG_EVIDENCE_CONTRACT;
+  if(external)assert(layout.mode==='external-chips'&&validBox(layout.plot),label+': missing external annotation layout');
   for(const [i,item] of layout.labels.entries()) {
    const b=item.box;assert(validBox(b),label+': missing VCP label rectangle');
-   assert(b.x>=pane.x&&b.y>=pane.y&&b.x+b.width<=pane.x+pane.width&&b.y+b.height<=pane.y+pane.height,label+': VCP label outside price pane');
+   if(external){
+    assert(item.button===true&&item.outside_svg===true&&item.obscures_candles===false&&b.width>=44&&b.height>=44,label+': VCP chip is not an unobstructed 44px button');
+    assert(b.y>=layout.plot.y+layout.plot.height&&b.x>=layout.plot.x&&b.x+b.width<=layout.plot.x+layout.plot.width,label+': VCP chip overlaps or overflows the plot');
+   }else assert(b.x>=pane.x&&b.y>=pane.y&&b.x+b.width<=pane.x+pane.width&&b.y+b.height<=pane.y+pane.height,label+': VCP label outside price pane');
    for(const other of layout.labels.slice(0,i)){const a=other.box;assert(b.x>=a.x+a.width||a.x>=b.x+b.width||b.y>=a.y+a.height||a.y>=b.y+b.height,label+': VCP labels overlap');}
    const coordinates=typeof item.leader==='string'?item.leader.match(/^M(-?[\d.]+) (-?[\d.]+)L(-?[\d.]+) (-?[\d.]+)$/):null;
    assert(coordinates&&coordinates.slice(1).every(n=>Number.isFinite(Number(n)))&&item.anchor&&Number.isFinite(item.anchor.x)&&Number.isFinite(item.anchor.y),label+': missing VCP leader/anchor');
@@ -57,7 +64,14 @@ export function validateSvgChart(view, source, label='SVG', context) {
    // containment and label non-intersection above remain exact and unchanged.
    const equivalent=(a,b)=>Math.abs(a-b)<=1e-3;
    assert(equivalent(endX,item.anchor.x)&&equivalent(endY,item.anchor.y),label+': VCP leader misses its actual low');
-   assert((equivalent(x,b.x)||equivalent(x,b.x+b.width))&&y>=b.y-1e-3&&y<=b.y+b.height+1e-3,label+': VCP leader is not attached to label');
+   if(external){
+    const peak=source.find(bar=>bar.date===item.peak_date),low=source.find(bar=>bar.date===item.low_date);
+    const peakWick=view.candles.find(candle=>candle.date===item.peak_date)?.geometry[0],lowWick=view.candles.find(candle=>candle.date===item.low_date)?.geometry[0];
+    assert(peak&&low&&item.peak_date<=item.low_date&&item.high===peak.high&&item.low===low.low,label+': VCP source date/price mismatch');
+    assert(peakWick&&lowWick&&equivalent(x,peakWick.x1)&&equivalent(y,peakWick.y1)&&equivalent(endX,lowWick.x1)&&equivalent(endY,lowWick.y2),label+': VCP line is not attached to actual source candles');
+    const depth=((item.high-item.low)/item.high*100).toFixed(1);
+    assert(item.text===`C${item.number} ${depth}%`&&typeof item.accessible_label==='string'&&item.accessible_label.startsWith(`C${item.number} ${item.peak_date}から`)&&item.accessible_label.includes(`深さ${depth}%`),label+': VCP chip label/source depth mismatch');
+   }else assert((equivalent(x,b.x)||equivalent(x,b.x+b.width))&&y>=b.y-1e-3&&y<=b.y+b.height+1e-3,label+': VCP leader is not attached to label');
   }
  }
  return true;

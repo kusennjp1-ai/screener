@@ -1,6 +1,7 @@
 import { publicationQueryIdentity } from '../staticPublication';
 import ConnectedLeaderMarketOverview from '../components/LeaderMarketOverview';
 import ConnectedMarketTrendDashboard from '../components/MarketTrendDashboard';
+import ConnectedMarketHistoryExplorer from '../components/MarketHistoryExplorer';
 import ConnectionStatus from '../components/ConnectionStatus';
 import SectorStrength from '../components/SectorStrength';
 import { formatPublished } from '../researchPresentation';
@@ -150,7 +151,7 @@ function StaticBreadthPage() {
       </Tabs>
 
       {selectedTab===0 && marketEntry.market==='US' && <ConnectedMarketTrendDashboard marketEntry={marketEntry}/>}
-      {selectedTab===0 && marketEntry.market==='US' && <details className="market-disclosure"><summary>選定対象と業種別の広がり</summary><ConnectedLeaderMarketOverview marketEntry={marketEntry} generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at} breadthEvidence={mismatch?undefined:payload.book_market_evidence}/></details> }
+      {selectedTab===0 && marketEntry.market==='US' && <details className="market-disclosure"><summary>選定対象と業種別の広がり</summary><ConnectedMarketHistoryExplorer marketEntry={marketEntry}/><ConnectedLeaderMarketOverview marketEntry={marketEntry} generation={manifestQuery.data?.research_generation || manifestQuery.data?.generated_at} breadthEvidence={mismatch?undefined:payload.book_market_evidence}/></details> }
       {selectedTab !== 2 && unavailable && <Alert data-testid="breadth-unavailable" severity={breadthQuery.isError?'error':'info'} action={<Button onClick={()=>breadthQuery.refetch()}>再試行</Button>}>{breadthQuery.data?.message || '騰落データを取得できません。業種の強さは別タブで確認できます。'}</Alert>}
       {selectedTab === 0 && !unavailable && (
         <>

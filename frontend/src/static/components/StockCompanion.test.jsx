@@ -23,7 +23,7 @@ it('preserves both failures and unknowns in the expression explanation', () => {
   expect(screen.getByText(/通過 2\/7・未達 1・未確認 4/)).toBeInTheDocument();
   expect(screen.getByText('条件を待とう')).toBeInTheDocument();
   expect(screen.getByLabelText('TEST の状態：条件を待とう。表情の根拠を表示')).toBeInTheDocument();
-  expect(container.querySelector('svg')).toHaveAttribute('aria-hidden','true');
+  expect(container.querySelector('.stock-companion-character')).toHaveAttribute('aria-hidden','true');
 });
 it('does not convert absent evidence to a cheerful zero-state', () => {
   expect(companionState(null,null)).toMatchObject({mood:'curious',title:'まだ確認中'});

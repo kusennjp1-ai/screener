@@ -1,0 +1,13 @@
+import { expect, it } from 'vitest';
+import { validateRsSelection, validateImmediateTouchClose } from './chart-interaction-evidence.mjs';
+const rs = () => ({available:true, source_points:[{time:'2026-10-20',value:35.55,universe_size:4417},{time:'2026-10-23',value:82.48,universe_size:4480}], selected_date:'2026-10-20',headline:'35.5 / 99',population:'比較対象 4,417銘柄',latest:'最新 2026-10-23 · RS 82.5 / 99'});
+const close = () => ({initial:0,maximum:100,background_clicks:0,theme_preserved:true,closed:true,route_preserved:true,marker_cleared:true,focus_restored:true,close_target:{width:44,height:44},intervening_operations:[]});
+it('binds selected RS headline and population to the actual earlier observation',()=>expect(validateRsSelection(rs(),'2026-10-23')).toBe(true));
+it.each(['headline','population','selected_date','latest'])('rejects stale or mislabeled RS %s',key=>{const value=rs();value[key]='wrong';expect(()=>validateRsSelection(value,'2026-10-23')).toThrow();});
+it('does not permit missing source to manufacture a history',()=>{const value=rs();value.available=false;value.unavailable_text='比較可能なRS順位履歴は未配信';expect(()=>validateRsSelection(value,'2026-10-23')).toThrow();});
+it('retains explicit unavailable source without demanding fabricated observations',()=>expect(validateRsSelection({available:false,source_points:[],unavailable_text:'比較可能なRS順位履歴は未配信です。'},'2026-10-23')).toBe(true));
+it('requires actual scrolling and native immediate close/history/focus observations',()=>expect(validateImmediateTouchClose(close())).toBe(true));
+it.each(['closed','route_preserved','marker_cleared','focus_restored'])('rejects missing close %s',key=>{const value=close();delete value[key];expect(()=>validateImmediateTouchClose(value)).toThrow();});
+it('rejects programmatic scrolling or waiting between the native gesture and tap',()=>{const value=close();value.intervening_operations=['scrollTop=500'];expect(()=>validateImmediateTouchClose(value)).toThrow();});
+it('rejects a gesture that did not scroll',()=>{const value=close();value.maximum=0;expect(()=>validateImmediateTouchClose(value)).toThrow();});
+it.each(['background_clicks','theme_preserved'])('rejects an underlying-screen action in %s',key=>{const value=close();value[key]=key==='background_clicks'?1:false;expect(()=>validateImmediateTouchClose(value)).toThrow();});

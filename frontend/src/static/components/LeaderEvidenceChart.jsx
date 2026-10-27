@@ -22,7 +22,7 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   compact = false, expanded = false, compactResearchChrome = false, comparisonSessions, researchActions, onExpand, height = 440, rsRatingValue, view = 'all', onShowChart }) {
   const id = useId().replace(/:/g, ''), [timeframe,setTimeframe] = useState('daily');
   const [count,setCount] = useState(comparisonSessions || 252), [offset,setOffset] = useState(0);
-  const [annotations,setAnnotations] = useState(true);
+  const [annotations,setAnnotations] = useState(false);
   const plotRef = useRef(null);
   const dragRef = useRef(null);
   const [measuredWidth, setMeasuredWidth] = useState(null);
@@ -92,13 +92,9 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
     requestAnimationFrame(()=>plotRef.current?.scrollIntoView?.({block:'nearest',inline:'nearest',behavior:'instant'}));
   };
   const visibleLegs=timeframe==='daily'&&annotations?datedLegs.filter(leg=>leg.endDate>=bars[0].time&&leg.startDate<=bars.at(-1).time).slice(-3):[];
-  // Reserve three non-overlapping annotation lanes inside the existing price
-  // pane. Only label geometry moves; each leader ends at its measured low.
+  // Keep text out of the candles. Detailed mode adds measured lines only;
+  // the corresponding touch targets live below the complete plot/date axis.
   const anchoredLegs=visibleLegs.map(leg=>({...leg,peak:bars.findIndex(bar=>bar.time===leg.peakDate),bottom:bars.findIndex(bar=>bar.time===leg.lowDate)})).filter(leg=>leg.peak>=0&&leg.bottom>=0);
-  const labelWidth=78,labelHeight=20,labelGap=4,labelBlockHeight=anchoredLegs.length*labelHeight+Math.max(0,anchoredLegs.length-1)*labelGap;
-  const labelTop=Math.max(priceTop+2,Math.min(priceBottom-labelBlockHeight-2,anchoredLegs.reduce((sum,leg)=>sum+yPrice(leg.low),0)/Math.max(1,anchoredLegs.length)-labelBlockHeight/2));
-  const anchorLeft=Math.min(...anchoredLegs.map(leg=>x(leg.bottom))),anchorRight=Math.max(...anchoredLegs.map(leg=>x(leg.bottom)));
-  const labelX=anchorLeft-labelWidth-12>=left+2?anchorLeft-labelWidth-12:anchorRight+12+labelWidth<=width-right-2?anchorRight+12:Math.max(left+2,width-right-labelWidth-2);
   const intervalText=timeframe==='weekly'?'週足（10/30/40週線・直前10週出来高平均）':'日足（50/150/200日線・直前50日出来高平均）';
   const range=countValue=>{setCount(Math.max(2,timeframe==='weekly'?Math.ceil(countValue/5):countValue));setOffset(0);setSelectedLeg(null);};
   const shift=direction=>setOffset(value=>Math.max(0,Math.min(maxOffset,Math.min(value,maxOffset)+direction*Math.max(1,Math.floor(count/3)))));
@@ -164,16 +160,12 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
         {!model.warning&&positive(stopPrice)&&<line data-testid="svg-stop-example" data-price={stopPrice} x1={left} x2={width-right} y1={yPrice(stopPrice)} y2={yPrice(stopPrice)} stroke="var(--neg)" strokeDasharray="4 3"/>}
         {paths(model.sma50,yPrice,'var(--accent)','sma50')}{paths(model.sma150,yPrice,'var(--text-3)','sma150','5 3')}{paths(model.sma200,yPrice,'var(--wait)','sma200','2 3')}
         {bars.map((bar,index)=>{const up=bar.close>=bar.open,color=up?'var(--zone)':'var(--neg)';return <g key={bar.time} data-date={bar.time} data-close={bar.close}><title>{bar.time} 始値 {bar.open} 高値 {bar.high} 安値 {bar.low} 終値 {bar.close}</title><line x1={x(index)} x2={x(index)} y1={yPrice(bar.high)} y2={yPrice(bar.low)} stroke={color}/><rect x={x(index)-candleWidth/2} y={yPrice(Math.max(bar.open,bar.close))} width={candleWidth} height={Math.max(.8,Math.abs(yPrice(bar.open)-yPrice(bar.close)))} fill={color}/></g>;})}
-        {anchoredLegs.map((leg,index)=>{
-          const labelY=labelTop+index*(labelHeight+labelGap),anchorX=x(leg.bottom),anchorY=yPrice(leg.low);
-          const edgeX=anchorX>=labelX+labelWidth?labelX+labelWidth:labelX,edgeY=labelY+labelHeight/2;
-          return <g key={leg.number} data-vcp-leg={leg.number} data-selected={selectedLeg===`${leg.startDate}/${leg.endDate}`}>
+        {anchoredLegs.map(leg=>{
+          const anchorX=x(leg.bottom),anchorY=yPrice(leg.low);
+          return <g key={leg.number} data-vcp-leg={leg.number} data-selected={selectedLeg===`${leg.startDate}/${leg.endDate}`} data-vcp-peak-date={leg.peakDate} data-vcp-low-date={leg.lowDate} data-vcp-high={leg.high} data-vcp-low={leg.low}>
             <title>{`C${leg.number} 推定 ${leg.startDate}〜${leg.endDate} 深さ ${leg.depthPct}%`}</title>
-            <path d={`M${x(leg.peak)} ${yPrice(leg.high)}L${anchorX} ${anchorY}`} fill="none" stroke="var(--ext)" strokeDasharray="4 3"/>
-            <path data-vcp-leader={leg.number} d={`M${edgeX} ${edgeY}L${anchorX} ${anchorY}`} fill="none" stroke="var(--text-2)" strokeWidth="1"/>
+            <path data-vcp-leader={leg.number} d={`M${x(leg.peak)} ${yPrice(leg.high)}L${anchorX} ${anchorY}`} fill="none" stroke="var(--ext)" strokeDasharray="4 3"/>
             <circle cx={anchorX} cy={anchorY} r="2" fill="var(--ext)"/>
-            <rect data-vcp-label-box={leg.number} x={labelX} y={labelY} width={labelWidth} height={labelHeight} rx="2" fill="var(--panel)" stroke="var(--line)"/>
-            <text x={labelX+4} y={labelY+14} fill="var(--text)" fontSize="11">C{leg.number} {leg.depthPct.toFixed(1)}%</text>
           </g>;
         })}
       </g>
@@ -189,10 +181,11 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
       </g>
     </svg>
     {!compact&&<>
+      {anchoredLegs.length>0&&<div className="chart-vcp-intervals" aria-label="表示中のVCP推定区間">{anchoredLegs.map(leg=><button key={leg.number} type="button" data-vcp-interval={leg.number} aria-pressed={selectedLeg===`${leg.startDate}/${leg.endDate}`} aria-label={`C${leg.number} ${leg.startDate}から${leg.endDate}、深さ${leg.depthPct.toFixed(1)}%を拡大`} onClick={()=>focusLeg({start:leg.startDate,end:leg.endDate})}>C{leg.number} <strong>{leg.depthPct.toFixed(1)}%</strong></button>)}</div>}
       <div className="chart-scroll-control"><span>← 過去</span><input aria-label="チャートの表示位置" type="range" min="0" max={maxOffset} value={maxOffset-boundedOffset} disabled={!maxOffset} onChange={event=>setOffset(maxOffset-Number(event.target.value))}/><span>最新 →</span></div>
       <div className="chart-snapshot-metrics">
         <RsRatingHistory history={payload?.rs_rating_history} symbol={symbol} date={date} current={row?.rs_rating??rsRatingValue}/>
-        <MetricDisclosure className="chart-volume-ratio" summary={<span className="rs-rating-summary"><span>分析日の出来高 <small>平均の何倍？</small></span><strong>{finite(volumeRatio)?volumeRatio.toFixed(2):'—'}<small> 倍</small></strong></span>}><p>出来高比＝{date}の出来高 ÷ 直前50営業日の平均出来高。当日は平均から除外します。1倍なら平均と同じ、2倍なら2倍の取引量、0.5倍なら半分です。</p><p>当日 {quantity(dailyVolume)}株 ／ 直前50日平均 {quantity(dailyVolumeMean)}株。出来高だけでは上昇・下落や購入可否は決まりません。VCPの「区間平均出来高」は収縮区間同士の比較で、別の比率です。</p></MetricDisclosure>
+        <MetricDisclosure className="chart-volume-ratio" summary={<span className="rs-rating-summary"><span>出来高 / 50日平均 <small>{date} · 最新配信日足</small></span><strong>{finite(volumeRatio)?volumeRatio.toFixed(2):'—'}<small> 倍</small></strong></span>}><p>出来高比＝{date}の出来高 ÷ 直前50営業日の平均出来高。当日は平均から除外します。1倍なら平均と同じ、2倍なら2倍の取引量、0.5倍なら半分です。</p><p>この公開データの分析日 {date} に確定した日足です。今日のリアルタイム出来高ではありません。RSの対象日やチャートの表示期間を変えても、この値の対象日は変わりません。</p><p>当日 {quantity(dailyVolume)}株 ／ 直前50日平均 {quantity(dailyVolumeMean)}株。出来高だけでは上昇・下落や購入可否は決まりません。VCPの「区間平均出来高」は収縮区間同士の比較で、別の比率です。</p></MetricDisclosure>
       </div>
       <MetricDisclosure summary="チャートの操作・線の見方"><p>最終バー {latest.time} 終値 {formatPrice(latest.close)}。左右スワイプ・横スクロール・方向キーで過去と最新へ移動。期間ボタンと＋/−で拡大縮小。1年は252営業日、週足は51本が目安で、配信済みの範囲だけ表示します。</p><p>{intervalText}。RS線は株価÷{benchmarkSymbol||'比較対象未確認'}価格。RS順位とは異なります。VCPは既存アルゴリズムの推定区間で、合格・買い指示ではありません。共通ピボットと収縮高値は別です。</p>{view==='chart'&&detailLegends}</MetricDisclosure>
     </>}

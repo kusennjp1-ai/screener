@@ -57,6 +57,21 @@ const renderModal = (props, cachedPayload = null) => {
   return { ...view, rerenderModal: nextProps => view.rerender(element(nextProps)) };
 };
 
+it('closes on a completed touch tap even when native scrolling suppresses click, but ignores drags and cancellation', async () => {
+ const date='2026-10-23',onClose=vi.fn();
+ renderModal({open:true,onClose,initialSymbol:'TOUCH',date,chartIndex:{symbols:[{symbol:'TOUCH',path:'touch.json'}]}},{symbol:'TOUCH',as_of_date:date,bars:[{date,close:100}]});
+ await waitFor(()=>expect(history.state?.__screenerChartDialog).toBeTruthy());
+ const button=screen.getByRole('button',{name:'チャートを閉じる'});
+ const pointer=(type,x,y)=>fireEvent(button,Object.assign(new Event(type,{bubbles:true,cancelable:true}),{pointerType:'touch',pointerId:7,clientX:x,clientY:y}));
+ expect(pointer('pointerdown',10,10)).toBe(false); // Suppress compatibility mouse focus/click-through.
+ pointer('pointercancel',10,10);
+ pointer('pointerdown',10,10);pointer('pointerup',40,10);expect(onClose).not.toHaveBeenCalled();
+ pointer('pointerdown',10,10);pointer('pointercancel',10,10);pointer('pointerup',10,10);expect(onClose).not.toHaveBeenCalled();
+ pointer('pointerdown',10,10);pointer('pointerup',11,11);
+ await waitFor(()=>expect(onClose).toHaveBeenCalledOnce());
+ fireEvent.click(button);expect(onClose).toHaveBeenCalledOnce();
+});
+
 it('separates expanded selection evidence from purchase readiness and discloses its actual date', async () => {
   const date='2026-10-02', row={symbol:'SYNTH',as_of_date:'2026-10-01',current_price:100};
   const payload={symbol:row.symbol,as_of_date:date,bars:[{date,close:100}],stock_data:row};
@@ -299,7 +314,7 @@ it.each([false, true])('keeps the complete mobile warning and swipe controls whe
   expect(screen.getByRole('button',{name:'銘柄スワイプに戻る'})).toHaveAttribute('aria-pressed','true');
   expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({interactive:true}));
   fireEvent.click(screen.getByRole('button',{name:'チャートを閉じる'}));
-  expect(props.onClose).toHaveBeenCalledOnce();
+  await waitFor(() => expect(props.onClose).toHaveBeenCalledOnce());
   unmount(); vi.unstubAllGlobals();
 });
 
@@ -327,7 +342,7 @@ it('preserves pan mode and keyboard focus as short-phone controls move between r
   act(() => { heightQuery.matches = false; heightListeners.forEach(callback => callback()); });
   expect(close).toHaveFocus();
   fireEvent.keyDown(window,{key:'Escape'});
-  expect(props.onClose).toHaveBeenCalledOnce();
+  await waitFor(() => expect(props.onClose).toHaveBeenCalledOnce());
   unmount(); vi.unstubAllGlobals();
 });
 
@@ -353,7 +368,7 @@ it('uses the same focused 44px navigation targets in short-phone title space wit
   }
   expect(navigation).toHaveAttribute('data-navigation-count','2');
   expect(screen.getByRole('button',{name:'チャートを閉じる'})).toHaveStyle({width:'44px',height:'44px'});
-  fireEvent.keyDown(window,{key:'Escape'});expect(props.onClose).toHaveBeenCalledOnce();
+  fireEvent.keyDown(window,{key:'Escape'});await waitFor(() => expect(props.onClose).toHaveBeenCalledOnce());
   unmount();vi.unstubAllGlobals();
 });
 

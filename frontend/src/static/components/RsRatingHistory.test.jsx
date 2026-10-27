@@ -10,7 +10,12 @@ it('shows current rating, dated history, population and missing-session gaps wit
  expect(container.querySelector('details')).not.toHaveAttribute('open');
  expect(container.querySelectorAll('polyline')).toHaveLength(2);
  fireEvent.change(screen.getByRole('combobox',{name:'RS順位の対象日'}),{target:{value:'2026-10-21'}});
- expect(container.querySelector('output')).toHaveTextContent('75 /100銘柄');
+ expect(container.querySelector('summary')).toHaveTextContent('75 / 99');
+ expect(container.querySelector('summary')).toHaveTextContent('2026-10-21');
+ expect(container.querySelector('output')).toHaveTextContent('比較対象 100銘柄');
+ expect(container.querySelector('.rs-history-current')).toHaveTextContent('最新 2026-10-23 · RS 85 / 99');
+ fireEvent.change(screen.getByRole('combobox',{name:'RS順位の対象日'}),{target:{value:'2026-10-23'}});
+ expect(container.querySelector('summary')).toHaveTextContent('85 / 99');
  expect(container.textContent).toContain('当時公表された順位ではありません');
 });
 it.each(['symbol','date','current','order','future','population','method'])('withholds %s mismatches without substituting the price-ratio line',kind=>{

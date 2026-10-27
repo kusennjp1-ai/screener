@@ -21,6 +21,7 @@ import { verifyFinancialCases, financialDesignScreens } from './financial-design
 import { verifyFinancialCarryCases, financialCarryDesignScreens, financialCarrySha256, prepareFinancialCarryDesignBinding,
   verifyFinancialCarryMeasurementBinding, observeFinancialCarryUi, sealFinancialCarryDesignReport } from './financial-carry-design-cases.mjs';
 import { verifyDailyObservationCases, dailyObservationDesignScreens } from './daily-observation-design-cases.mjs';
+import { verifyMarketHistoryCases } from './market-history-design-cases.mjs';
 import { financialViewportGeometry, checkFinancialViewportGeometry } from './financial-viewport-geometry.mjs';
 import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
 import { recordProductionBootstrapDiagnostic } from './production-bootstrap-diagnostic.mjs';
@@ -333,6 +334,7 @@ for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
       await page.screenshot({ path: resolve(output, `interrupted-${screen}-${viewport.width}-${theme}.png`) }).catch(() => {});
     }
   }
+  await verifyMarketHistoryCases({ page, viewport, theme, report, currentUrl: current.url, currentRoot });
   await verifyChartCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
   await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, output });
   if (carryBinding) await verifyFinancialCarryCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, binding: carryBinding, output });

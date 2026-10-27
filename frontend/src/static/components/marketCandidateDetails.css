@@ -1,0 +1,11 @@
+.market-candidate-status{font-size:12px;color:var(--text-2);line-height:1.65;margin:8px 0}
+.mobile-map-candidates .market-candidate-evidence{display:block;white-space:normal;font-size:11px;line-height:1.5;margin-top:4px;color:var(--text-2)}
+.institutional-ranking{margin:18px 0 8px;font-size:12px;line-height:1.65;color:var(--text)}
+.institutional-ranking summary>span{display:grid;gap:3px}.institutional-ranking small{display:block;color:var(--text-2);font-size:11px}
+.institutional-ranking select{display:block;max-width:100%;min-height:44px;background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:8px}
+.institutional-ranking-order{display:flex;gap:8px}.institutional-ranking-order button{min-height:44px;border:1px solid var(--line);background:var(--panel);color:var(--text);border-radius:8px;padding:6px 12px}
+.institutional-ranking-order button[aria-pressed=true]{border-color:var(--accent);color:var(--accent)}
+.institutional-ranking ol{list-style:none;padding:0;margin:8px 0}.institutional-ranking li{padding:8px 0;border-bottom:1px solid var(--line)}
+.institutional-ranking li button{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:48px;width:100%;border:0;background:none;color:var(--text);font:inherit;text-align:left;padding:0}
+.institutional-ranking li b{font-size:16px}.institutional-count-trend{text-align:right;font-variant-numeric:tabular-nums}.institutional-count-trend strong{display:block;color:var(--accent);font-size:16px}
+.institutional-ranking a{display:inline-flex;align-items:center;min-height:44px}.institutional-ranking-note{color:var(--text-2)}

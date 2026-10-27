@@ -7,7 +7,7 @@ import { compareCurrentObservations, selectionSnapshot } from '../src/static/can
 
 const hash = value => createHash('sha256').update(value).digest('hex');
 export async function workbenchRuleFingerprint() {
-  const engines = ['researchEngine.js', 'qualificationAudit.js', 'financialHistory.js', 'financialCurrent.js', 'instrumentApplicability.js', 'evidenceTime.js', 'institutionalEvidence.js', 'candidateHistory.js'];
+  const engines = ['researchEngine.js', 'qualificationAudit.js', 'financialHistory.js', 'financialCurrent.js', 'instrumentApplicability.js', 'evidenceTime.js', 'institutionalEvidence.js', 'institutionalIdentityEvents.js', 'candidateHistory.js'];
   const files = [...engines.map(file => new URL(`../src/static/${file}`, import.meta.url)),
     ...['static_financial_current_v1.json', 'financial_instrument_applicability_v1.json', 'native_annual_history_v1.json'].map(file => new URL(`../contracts/${file}`, import.meta.url))];
   return hash((await Promise.all(files.map(file => readFile(file, 'utf8')))).map(value => value.replace(/\r\n/g, '\n')).join('\n'));

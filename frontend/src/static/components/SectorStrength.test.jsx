@@ -13,6 +13,7 @@ const groups=[makeGroup('Unknown','分類不明',null,0,4,4),makeGroup('Technolo
 vi.mock('../useWorkbench',()=>({useWorkbench:()=>({data:{sectors:{groups,source:'fixture'}}})}));
 it('puts relative strength, missing data and candidate navigation in compact ranked rows',()=>{
  renderWithProviders(<SectorStrength entry={entry}/>);
+ expect(screen.getByText('セクターRSの1年推移').closest('details')).not.toHaveAttribute('open');
  expect(screen.getByRole('heading',{name:'追い風はエネルギー。'})).toBeInTheDocument();
  const list=screen.getByRole('list',{name:'相対指数順の業種一覧'});
  const links=within(list).getAllByRole('link');expect(links[0]).toHaveAccessibleName(/1位、エネルギー、相対指数 113.0/);

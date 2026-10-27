@@ -39,6 +39,8 @@ import TradingViewBridge from './components/TradingViewBridge';
 import TrendTemplateScorecard from './components/TrendTemplateScorecard';
 import { useStaticMarket } from './StaticMarketContext';
 import { useChartNavigation } from '../hooks/useChartNavigation';
+import useChartDialogHistory from './useChartDialogHistory';
+import { consumeTouchCompatibilityClick } from './consumeTouchCompatibilityClick';
 import { fetchStaticChartPayload, staticChartKeys } from './chartClient';
 import { fetchStaticJson } from './dataClient';
 
@@ -61,6 +63,8 @@ function StaticChartViewerModal({
   method, date, market, now: suppliedNow, quote,
 }) {
   const queryClient = useQueryClient();
+  const closeChart = useChartDialogHistory(open, onClose);
+  const closeTouch = useRef(null);
   const [visibleRange, setVisibleRange] = useState(null);
   const [panMode, setPanMode] = useState(false);
   const swipeStart = useRef(null);
@@ -97,7 +101,7 @@ function StaticChartViewerModal({
   );
 
   function startSwipe(event) {
-    if (!isMobile || panMode || event.touches.length !== 1 || event.target.closest('button,a,input,select,textarea,summary')) { swipeStart.current = null; return; }
+    if (!isMobile || panMode || event.touches.length !== 1 || event.target.closest('button,a,input,select,textarea,summary,[data-chart-plot]')) { swipeStart.current = null; return; }
     swipeStart.current = { x: event.touches[0].clientX, y: event.touches[0].clientY, at: Date.now() };
   }
   function endSwipe(event) {
@@ -180,7 +184,7 @@ function StaticChartViewerModal({
 
     const handleKeyDown = (event) => {
       if (event.key === 'Escape') {
-        onClose();
+        closeChart();
         return;
       }
       if (event.key === ' ' && !event.target.closest('button,input,textarea,select,summary,a')) {
@@ -197,7 +201,7 @@ function StaticChartViewerModal({
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [goNext, goPrevious, onClose, open]);
+  }, [goNext, goPrevious, closeChart, open]);
 
   const researchRow = researchRows?.find(r=>r.symbol === currentSymbol) || chartPayload?.stock_data;
   const rowDetail = useQuery({
@@ -275,7 +279,7 @@ function StaticChartViewerModal({
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={closeChart}
       aria-labelledby="static-chart-viewer-modal"
       closeAfterTransition
     >
@@ -290,6 +294,7 @@ function StaticChartViewerModal({
             bgcolor: 'background.paper',
             display: 'flex',
             flexDirection: 'column',
+            pt: 'env(safe-area-inset-top, 0px)',
             pb: compactMobileChrome ? 'env(safe-area-inset-bottom, 0px)' : 0,
             // Preserve 44px targets while reclaiming the toolbar's outer 8px.
             ...(compactMobileChrome && {'& .research-chart-controls':{padding:'0 4px'}}),
@@ -309,7 +314,25 @@ function StaticChartViewerModal({
                 {mobileNotApplicable.length > 0 && <Box component="span" sx={{display:'block',color:'text.secondary'}}>対象外：{mobileNotApplicable.map(rule=>rule.label).join(' ／ ')}</Box>}
               </Box>}
             </Box>
-            <IconButton onClick={onClose} aria-label="チャートを閉じる" sx={{gridColumn:2,gridRow:1,alignSelf:'flex-start',...(compactMobileChrome && {width:44,height:44})}}><CloseIcon /></IconButton>
+            <IconButton onClick={closeChart}
+              onPointerDown={event=>{
+                closeTouch.current=event.pointerType==='touch'?{id:event.pointerId,x:event.clientX,y:event.clientY}:null;
+                // Suppress compatibility mouse focus after the touch closes
+                // this portal. Otherwise it can steal restored opener focus.
+                if(closeTouch.current)event.preventDefault();
+              }}
+              onPointerCancel={()=>{closeTouch.current=null;}}
+              onPointerUp={event=>{
+                const start=closeTouch.current;closeTouch.current=null;
+                // A native scroll can suppress the synthesized click even on
+                // this fixed header button. Accept its completed touch tap;
+                // the history hook deduplicates any subsequent click/Escape.
+                if(start&&event.pointerType==='touch'&&event.pointerId===start.id&&Math.hypot(event.clientX-start.x,event.clientY-start.y)<10){
+                  consumeTouchCompatibilityClick(event);
+                  closeChart();
+                }
+              }}
+              aria-label="チャートを閉じる" title="元の銘柄画面に戻る" sx={{gridColumn:2,gridRow:1,alignSelf:'flex-start',width:44,height:44,display:'flex',flexDirection:'column',gap:0,p:0,fontSize:10,touchAction:'manipulation'}}><CloseIcon fontSize="small"/><span>戻る</span></IconButton>
             {compactMobileChrome && detailWarning}
           </Box>
           <Box
@@ -382,7 +405,7 @@ function StaticChartViewerModal({
                   <Box data-testid="chart-swipe-surface" onTouchStartCapture={startSwipe} onTouchEndCapture={endSwipe}
                     onTouchMoveCapture={event => { if (event.touches.length !== 1) swipeStart.current = null; }} onTouchCancel={() => { swipeStart.current = null; }}
                     sx={{ flex: 1, minHeight: 0, position: 'relative', touchAction: isMobile && !panMode ? 'pan-y' : 'auto' }}>
-                    <CandlestickChart expanded smallScreen={isMobile} researchView bookAnnotations interactive={!isMobile || panMode}
+                    <CandlestickChart expanded smallScreen={isMobile} view="chart" researchView bookAnnotations interactive={!isMobile || panMode}
                       compactResearchChrome={compactMobileChrome}
                       researchActions={compactMobileChrome ? mobileInteraction : null}
                       symbol={currentSymbol} date={expectedDate} generation={generation} row={stockData} payload={chartPayload} benchmarkSymbol={chartPayload?.benchmark_symbol}
@@ -432,7 +455,7 @@ function StaticChartViewerModal({
               // use spare title-row space instead of reserving a bottom row
               // that would cover the readable 300px chart and its date axis.
               position: compactMobileChrome ? 'absolute' : 'relative',
-              ...(compactMobileChrome && {top:4,right:64}),
+              ...(compactMobileChrome && {top:'calc(4px + env(safe-area-inset-top, 0px))',right:64}),
               flexShrink: 0,
               zIndex: 1,
               pt: compactMobileChrome ? 0 : 1.5,

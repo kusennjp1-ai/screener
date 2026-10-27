@@ -6,6 +6,7 @@ import { buildBookAnnotations } from '../src/components/Charts/bookAnnotations.j
 import { chartHistoryWarning } from '../src/components/Charts/researchChartModel.js';
 import { money } from '../src/static/positionGeometry.js';
 import { expandedChartGeometry, checkExpandedChartGeometry } from './expanded-chart-geometry.mjs';
+import { observeRsSelection, observeImmediateTouchClose, validateImmediateTouchClose } from './chart-interaction-evidence.mjs';
 
 export const CHART_DESIGN_SYMBOLS = ['MSM', 'ADI', 'TGTX'];
 const ready = locator => locator.first().waitFor({ state: 'visible', timeout: 60000 });
@@ -49,6 +50,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
         shapes: annotations.boxes.map(({ start, end, label, curve, arrow }) => ({ start, end, label, curve: Boolean(curve), arrow: Boolean(arrow) })),
         canonical: { pivot: plan.pivot ?? null, upper: plan.upper ?? null, stop: plan.stopExample ?? null }, views: [], renderer:'leader-svg-v1', rs_source:{benchmark_symbol:payload.benchmark_symbol??null}, source_bars:payload.bars.map(({date,open,high,low,close,volume})=>({date,open,high,low,close,volume})) };
       report.chart_cases.push(record); // retain real observations even if validation fails
+      record.rs_selection = await observeRsSelection(page, payload, symbol);
       const sourceWarningVisible = async locator => {
         if (await locator.count() !== 1 || !await locator.isVisible()) return false;
         return locator.evaluate(node => {
@@ -66,7 +68,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
         for (const [name, expected] of Object.entries(record.canonical)) check(sameLevel(values[name], warning ? null : expected), `${key}/${view}: ${name} differs from canonical published value`);
       };
       await inspect(chart, 'inline-default');
-      check(record.views[0].annotation_mode === 'vcp-on', `${key}: initial VCP annotation state missing`);
+      check(record.views[0].annotation_mode === 'vcp-off', `${key}: VCP annotations must start closed`);
       const inlineTargets=['.research-chart .leader-svg-controls','.research-chart svg[data-chart-plot]'];
       if(viewport.width===390)await page.locator('.research-chart .leader-svg-extra-controls summary').click();
       await scrollFinancialViewport(page,inlineTargets);
@@ -80,6 +82,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await capture(page, viewport, theme, `case-${symbol}-inline`, { scope: 'scrolled-viewport', viewportTargets: inlineTargets });
       const inlineToggle = page.locator('.research-chart').getByRole('button', { name: 'VCP注記', exact:true });
       if (await inlineToggle.getAttribute('aria-pressed') !== 'true') await inlineToggle.click();
+      validateSvgChart(await chart.evaluate(observeSvgChart),record.source_bars,`${key}/inline-annotations`,record.rs_source);
       record.inline_geometry.annotations=await inspectInlineViewport();
       await capture(page, viewport, theme, `case-${symbol}-inline-annotations`, { scope: 'scrolled-viewport', viewportTargets: inlineTargets });
       if (Number.isFinite(plan.pivot)) {
@@ -108,6 +111,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       const dialog = page.getByRole('dialog'), expanded = dialog.locator(`[data-chart-symbol="${symbol}"]`);
       await ready(expanded);
       await inspect(expanded, 'expanded-default');
+      check(record.views.at(-1).annotation_mode === 'vcp-off', `${key}: expanded VCP annotations must start closed`);
       const decisionDetails = dialog.locator('.chart-decision-details');
       check(await decisionDetails.count() === 1 && await dialog.locator('[aria-label="チャートの判断要約"] details').count() === 1, `${key}: chart source/risk/rule context must share one disclosure`);
       if (viewport.width < 900) {
@@ -214,6 +218,17 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       await dialog.getByRole('button', { name: 'チャートを閉じる', exact: true }).click();
       await dialog.waitFor({ state: 'hidden', timeout: 10000 });
       check(await opener.evaluate(node => node === document.activeElement), `${key}: close button did not restore focus to its opener`);
+      const routeBeforeBack=page.url();
+      await opener.click();await ready(expanded);
+      await page.waitForFunction(()=>Boolean(history.state?.__screenerChartDialog));
+      await page.goBack();await dialog.waitFor({state:'hidden',timeout:10000});
+      check(page.url()===routeBeforeBack&&!await page.evaluate(()=>Boolean(history.state?.__screenerChartDialog)),`${key}: browser back did not preserve route/clear chart history marker`);
+      check(await opener.evaluate(node=>node===document.activeElement),`${key}: browser back did not restore opener focus`);
+      record.browser_back={closed:true,route_preserved:true,marker_cleared:true,focus_restored:true};
+      if (viewport.width <= 700) {
+        record.immediate_touch_close = await observeImmediateTouchClose(page, dialog, opener);
+        validateImmediateTouchClose(record.immediate_touch_close);
+      }
     } catch (error) {
       const partial=report.chart_cases.find(record=>record.symbol===symbol&&record.viewport.width===viewport.width&&record.theme===theme);
       if(partial)partial.error=error.message;

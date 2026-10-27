@@ -122,10 +122,11 @@ for(const width of [1440,390])for(const theme of ['dark','light'])test(`financia
  });
  expect(await controlsFit()).toBe(true);
  const annotations=controls.getByRole('button',{name:'VCP注記',exact:true});
- await expect(annotations).toHaveAttribute('aria-pressed','true');await annotations.click();
  await expect(annotations).toHaveAttribute('aria-pressed','false');
  await expect(detail.locator('[data-vcp-leg]')).toHaveCount(0);expect(await controlsFit()).toBe(true);
  await annotations.click();await expect(annotations).toHaveAttribute('aria-pressed','true');
+ await annotations.click();await expect(annotations).toHaveAttribute('aria-pressed','false');
+ await expect(detail.locator('[data-vcp-leg]')).toHaveCount(0);
  await expect(controls.getByRole('button',{name:'リセット',exact:true})).toBeVisible();
  await expect(controls.getByRole('button',{name:'日次チャートを分析',exact:true})).toBeVisible();
  await detail.getByRole('tab',{name:'財務・機関',exact:true}).click();

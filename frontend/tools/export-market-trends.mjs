@@ -1,11 +1,18 @@
 import { createHash } from 'node:crypto';
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
 import { dirname,resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { distributionDays } from '../src/static/distributionDays.js';
+import { validateLongHistory } from '../src/static/marketLongHistory.js';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const isDay=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
 const provenance=(value,host,date)=>{try{return Boolean(value&&typeof value.url==='string'&&new URL(value.url).protocol==='https:'&&new URL(value.url).hostname===host&&/^[a-f0-9]{64}$/.test(value.sha256||'')&&Number.isFinite(Date.parse(value.retrieved_at))&&value.retrieved_at.slice(0,10)>=date&&Date.parse(value.retrieved_at)<=Date.now());}catch{return false;}};
+export function verifyLongHistorySource(bytes,asOfDate){
+ const history=validateLongHistory(JSON.parse(bytes),asOfDate);
+ if(hash(JSON.stringify(history.universe.symbols))!==history.universe.sha256)throw Error('Long-history universe hash mismatch');
+ if(history.classification&&hash(JSON.stringify(history.classification.memberships))!==history.classification.memberships_sha256)throw Error('Long-history classification hash mismatch');
+ return history;
+}
 
 export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}) {
   if(!isDay(asOfDate))throw Error('Invalid market trend date');
@@ -46,6 +53,17 @@ export async function exportMarketTrends({root,entry,asOfDate,bookEvidence}) {
   const source=bytes?JSON.parse(bytes):null;
   const payload=buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256:bytes?hash(bytes):null});
   await mkdir(resolve(root,'market-trends'),{recursive:true});
+  // Retain the history's own observation date on later publications. Compiler
+  // data are already covered by the independent calendar reference hash.
+  const directory=resolve(dirname(fileURLToPath(import.meta.url)),'../data');
+  const names=await readdir(directory).catch(error=>{if(error.code==='ENOENT')return [];throw error;});
+  const seeds=names.filter(name=>/^market-history-source-\d{4}-\d{2}-\d{2}\.json$/.test(name)&&name.slice(22,32)<=asOfDate).sort().reverse();
+  if(seeds.length){
+    const historyBytes=await readFile(resolve(directory,seeds[0]));
+    const history=verifyLongHistorySource(historyBytes,asOfDate);
+    payload.long_history={...history,source_sha256:hash(historyBytes)};
+    await writeFile(resolve(root,`market-trends/history-source-${hash(historyBytes)}.json`),historyBytes);
+  }
   if(bytes)await writeFile(resolve(root,`market-trends/source-${hash(bytes)}.json`),bytes);
   const body=JSON.stringify(payload),sha256=hash(body),path=`market-trends/series-${sha256}.json`;
   await writeFile(resolve(root,path),body);

@@ -2,13 +2,15 @@ import { annualHistoryMetadataValid } from './financialHistory.js';
 import { FINANCIAL_PUBLICATION_EXCEPTION } from './financialPublicationExceptionPolicy.js';
 // Versioned wire format. Decision inputs remain lossless; displayed numbers are
 // formatted by the UI, never rounded before a threshold or order calculation.
-import { encodeResearchFloat64, decodeResearchFloat64 } from './researchFloat64.js';
+import { encodeResearchFloat64, decodeResearchFloat64, encodeResearchBytes, decodeResearchBytes } from './researchFloat64.js';
 import { encodeResearchHex, decodeResearchHex } from './researchHex.js';
+import { encodeResearchRecordArrays, decodeResearchRecordArrays } from './researchRecordArrays.js';
 export const RESEARCH_TRANSPORT_VERSION = 'research-table-v2';
 const legacyVersion = 'research-table-v1';
 const sparseEncoding = 'present-values-and-missing-runs-v1';
 const floatEncoding = 'sparse-float64-and-signed-zero-v1';
 const binaryEncoding = 'sparse-binary-and-signed-zero-v1';
+const recordArrayEncoding = 'sparse-record-arrays-and-copy-masks-v1';
 export const RESEARCH_METHODS = ['minervini', 'minervini2', 'oneil', 'ibd'];
 const evaluationFields = ['financial_evaluated_at', 'financial_semantics', 'assessment_version', 'summary_storage', 'financial_generation', 'financial_knowledge_basis', 'financial_point_in_time', 'financial_source_publication_date', 'financial_policy_version', 'instrument_applicability_universe'];
 
@@ -88,6 +90,17 @@ const binaryColumn = (column, encode, prefix) => {
   void values;
   return { ...rest, [`${prefix}_${key}`]: vector };
 };
+const maskedCopy = (column, count) => {
+  if (!Object.hasOwn(column, 'copy')) return null;
+  const absent = new Uint8Array(Math.ceil(count / 8)), nulls = new Uint8Array(absent.length), patch = [];
+  let hasAbsent = false, hasNull = false;
+  for (const entry of column.patch) {
+    if (entry.length === 1) { absent[entry[0] >> 3] |= 1 << (entry[0] & 7); hasAbsent = true; }
+    else if (entry[1] === null) { nulls[entry[0] >> 3] |= 1 << (entry[0] & 7); hasNull = true; }
+    else patch.push(entry);
+  }
+  return hasAbsent || hasNull ? { ...column, patch, ...(hasAbsent ? { absent_bitmap: encodeResearchBytes(absent) } : {}), ...(hasNull ? { null_bitmap: encodeResearchBytes(nulls) } : {}) } : null;
+};
 const negativeZeroPaths = (value, path = [], result = []) => {
   if (Object.is(value, -0)) result.push(path);
   else if (Array.isArray(value)) value.forEach((child, index) => negativeZeroPaths(child, [...path, index], result));
@@ -130,6 +143,13 @@ export function encodeResearchIndex(index, orders, { columnBytes } = {}) {
   }
   const flattened = rows.map(row => new Map(leaves(row).filter(([, v]) => v !== undefined).map(([path, value]) => [JSON.stringify(path), value])));
   const fields = [...new Set(flattened.flatMap(row => [...row.keys()]))];
+  // Put widely populated source columns before sparse echoes of those inputs.
+  // References can then reuse exact canonical cells instead of repeating them
+  // merely because a sparse financial row happened to introduce its path first.
+  if (columnBytes) {
+    const coverage = new Map(fields.map(field => [field, flattened.reduce((count, row) => count + (row.get(field) != null ? 1 : 0), 0)]));
+    fields.sort((a, b) => coverage.get(b) - coverage.get(a));
+  }
   const columns = fields.map(field => {
     // -1 denotes absent, which is distinct from explicit null and false.
     const pool = [], lookup = new Map();
@@ -155,7 +175,7 @@ export function encodeResearchIndex(index, orders, { columnBytes } = {}) {
   // ratio, pivot). Reuse their exact column, with lossless sparse exceptions.
   const values = fields.map(field => flattened.map(row => row.get(field)));
   for (let column = 1; column < columns.length; column++) {
-    let size = JSON.stringify(columns[column]).length;
+    let size = columnBytes ? columnBytes(columns[column]) : JSON.stringify(columns[column]).length;
     for (let previous = 0; previous < column; previous++) for (const factor of [1, -1]) {
       const patch = [];
       for (let row = 0; row < rows.length; row++) {
@@ -166,8 +186,20 @@ export function encodeResearchIndex(index, orders, { columnBytes } = {}) {
       }
       if (patch.length > rows.length * .4) continue;
       const candidate = { copy: previous, ...(factor === -1 ? { factor } : {}), patch };
-      const length = JSON.stringify(candidate).length;
+      const length = columnBytes ? columnBytes(candidate) : JSON.stringify(candidate).length;
       if (length < size) { columns[column] = candidate; size = length; }
+    }
+    // A mostly absent echo can exceed the fast search's patch-count cutoff
+    // while still sharing every real value. Explicit null/absence patches keep
+    // that distinction and can compress better than repeating issuer names.
+    if (columnBytes) {
+      const present = values[column].flatMap((value, row) => value == null ? [] : [[row, value]]);
+      if (present.length && present.length < rows.length * .6) for (let previous = 0; previous < column; previous++) {
+        if (!present.every(([row, value]) => Object.is(value, values[previous][row]))) continue;
+        const patch = values[column].flatMap((value, row) => Object.is(value, values[previous][row]) ? [] : [value === undefined ? [row] : [row, value]]);
+        const candidate = { copy: previous, patch }, length = columnBytes(candidate);
+        if (length < size) { columns[column] = candidate; size = length; }
+      }
     }
   }
   // Publication budgets measure compressed bytes. The Node exporter can price
@@ -184,26 +216,30 @@ export function encodeResearchIndex(index, orders, { columnBytes } = {}) {
     const forms = [columns[column], { pool, refs }, refs.includes(-1)
       ? { present: cells.filter(value => value !== undefined), missing: missingRuns(refs) }
       : { values: cells }];
-    const alternatives = forms.flatMap(form => [form, binaryColumn(form, encodeResearchFloat64, 'f64'), binaryColumn(form, encodeResearchHex, 'hex')].filter(Boolean));
+    const alternatives = forms.flatMap(form => [form, binaryColumn(form, encodeResearchFloat64, 'f64'), binaryColumn(form, encodeResearchHex, 'hex'),
+      binaryColumn(form, values => encodeResearchRecordArrays(values, columnBytes), 'arrays')].filter(Boolean));
     let size = columnBytes(columns[column]);
     for (const candidate of alternatives) {
       const candidateSize = columnBytes(candidate);
       if (candidateSize < size) { columns[column] = candidate; size = candidateSize; }
     }
+    const mask = maskedCopy(columns[column], rows.length);
+    if (mask && columnBytes(mask) < size) columns[column] = mask;
   }
   // Ordinary JSON erases -0, including inside mixed-type and array cells.
   // Preserve those sign bits explicitly; no value is rounded or inferred.
   const negativeZeros = [];
   values.forEach((cells, column) => cells.forEach((value, row) => negativeZeroPaths(value).forEach(path => negativeZeros.push([row, column, path]))));
-  return { schema: RESEARCH_TRANSPORT_VERSION, column_encoding: binaryEncoding, as_of_date: index.as_of_date, ...pick(index, evaluationFields), count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders,
+  const hasRecordArrays = columns.some(column => ['arrays_present', 'arrays_pool', 'arrays_values', 'absent_bitmap', 'null_bitmap'].some(key => Object.hasOwn(column, key)));
+  return { schema: RESEARCH_TRANSPORT_VERSION, column_encoding: hasRecordArrays ? recordArrayEncoding : binaryEncoding, as_of_date: index.as_of_date, ...pick(index, evaluationFields), count: rows.length, fields: fields.map(JSON.parse), columns, paths, orders,
     ...(negativeZeros.length ? { negative_zeros: negativeZeros } : {}), ...(financialProofEncoding ? {financial_proof_encoding:financialProofEncoding} : {}) };
 }
 
 export function decodeResearchIndex(value) {
   if (!value?.schema) return value;
   if (![legacyVersion, RESEARCH_TRANSPORT_VERSION].includes(value.schema) || !Array.isArray(value.fields) || !Array.isArray(value.columns) || value.fields.length !== value.columns.length || !Number.isSafeInteger(value.count) || value.count < 0) throw Error('Unsupported research data format');
-  const sparseEnabled = value.schema === RESEARCH_TRANSPORT_VERSION && [sparseEncoding, floatEncoding, binaryEncoding].includes(value.column_encoding);
-  const floatEnabled = [floatEncoding, binaryEncoding].includes(value.column_encoding);
+  const sparseEnabled = value.schema === RESEARCH_TRANSPORT_VERSION && [sparseEncoding, floatEncoding, binaryEncoding, recordArrayEncoding].includes(value.column_encoding);
+  const floatEnabled = [floatEncoding, binaryEncoding, recordArrayEncoding].includes(value.column_encoding);
   if (value.schema === RESEARCH_TRANSPORT_VERSION ? !sparseEnabled : value.column_encoding !== undefined) throw Error('Unsupported research column encoding');
   const rows = Array.from({ length: value.count }, () => ({}));
   const branches = new WeakSet();
@@ -227,13 +263,17 @@ export function decodeResearchIndex(value) {
     if (seenFields.has(field)) throw Error('Duplicate research field');
     seenFields.add(field);
     let source = value.columns[column];
-    const binaryKeys = ['f64', 'hex'].flatMap(prefix => ['present', 'pool', 'values'].filter(key => Object.hasOwn(source, `${prefix}_${key}`)).map(key => ({ prefix, key })));
+    const hasCopyMasks = Object.hasOwn(source, 'absent_bitmap') || Object.hasOwn(source, 'null_bitmap');
+    if (hasCopyMasks && (value.column_encoding !== recordArrayEncoding || !Object.hasOwn(source, 'copy') ||
+        Object.keys(source).some(key => !['copy', 'factor', 'patch', 'absent_bitmap', 'null_bitmap'].includes(key)))) throw Error('Invalid masked research reference');
+    const binaryKeys = ['f64', 'hex', 'arrays'].flatMap(prefix => ['present', 'pool', 'values'].filter(key => Object.hasOwn(source, `${prefix}_${key}`)).map(key => ({ prefix, key })));
     if (binaryKeys.length) {
       const { prefix, key } = binaryKeys[0], binaryKey = `${prefix}_${key}`;
       const expected = [binaryKey, ...(key === 'present' ? ['missing'] : key === 'pool' ? ['refs'] : [])];
-      if (!(prefix === 'hex' ? value.column_encoding === binaryEncoding : floatEnabled) || binaryKeys.length !== 1 || Object.keys(source).length !== expected.length || expected.some(key => !Object.hasOwn(source, key))) throw Error('Invalid binary research column');
+      const enabled = prefix === 'arrays' ? value.column_encoding === recordArrayEncoding : prefix === 'hex' ? [binaryEncoding, recordArrayEncoding].includes(value.column_encoding) : floatEnabled;
+      if (!enabled || binaryKeys.length !== 1 || Object.keys(source).length !== expected.length || expected.some(key => !Object.hasOwn(source, key))) throw Error('Invalid binary research column');
       const { [binaryKey]: vector, ...rest } = source;
-      source = { ...rest, [key]: (prefix === 'hex' ? decodeResearchHex : decodeResearchFloat64)(vector, value.count) };
+      source = { ...rest, [key]: (prefix === 'arrays' ? decodeResearchRecordArrays : prefix === 'hex' ? decodeResearchHex : decodeResearchFloat64)(vector, value.count) };
     }
     let cells;
     if (source && (Object.hasOwn(source, 'present') || Object.hasOwn(source, 'missing'))) {
@@ -252,9 +292,29 @@ export function decodeResearchIndex(value) {
       }
     } else if (Object.hasOwn(source, 'copy')) {
       if (!Number.isInteger(source.copy) || source.copy < 0 || source.copy >= column || (source.factor !== undefined && source.factor !== -1) || !Array.isArray(source.patch)) throw Error('Invalid research column reference');
+      if (hasCopyMasks && (Reflect.ownKeys(source.patch).length !== source.patch.length + 1 ||
+          Array.from({ length: source.patch.length }, (_, index) => Object.hasOwn(source.patch, index)).some(own => !own))) throw Error('Invalid masked research patches');
       cells = decoded[source.copy].map(item => source.factor === -1 && typeof item === 'number' ? -item : item);
-      for (const [row, item] of source.patch) {
+      const mask = name => {
+        if (!Object.hasOwn(source, name)) return null;
+        const bits = decodeResearchBytes(source[name], Math.ceil(value.count / 8));
+        if (value.count % 8 && bits.at(-1) >> (value.count % 8)) throw Error('Invalid research copy mask padding');
+        return bits;
+      };
+      const absent = hasCopyMasks ? mask('absent_bitmap') : null, nulls = hasCopyMasks ? mask('null_bitmap') : null;
+      if (hasCopyMasks) for (let row = 0; row < value.count; row++) {
+        const missing = absent && (absent[row >> 3] & (1 << (row & 7))), nil = nulls && (nulls[row >> 3] & (1 << (row & 7)));
+        if (missing && nil) throw Error('Overlapping research copy masks');
+        if (missing) cells[row] = undefined;
+        else if (nil) cells[row] = null;
+      }
+      const patched = new Set();
+      for (const entry of source.patch) {
+        if (hasCopyMasks && (!Array.isArray(entry) || ![1, 2].includes(entry.length) || Reflect.ownKeys(entry).length !== entry.length + 1 || !Object.hasOwn(entry, 0) || (entry.length === 2 && !Object.hasOwn(entry, 1)))) throw Error('Invalid masked research patch');
+        const [row, item] = entry;
         if (!Number.isInteger(row) || row < 0 || row >= value.count) throw Error('Invalid research patch');
+        if (hasCopyMasks && (patched.has(row) || (absent && (absent[row >> 3] & (1 << (row & 7)))) || (nulls && (nulls[row >> 3] & (1 << (row & 7)))))) throw Error('Overlapping masked research patch');
+        patched.add(row);
         cells[row] = item;
       }
     } else {

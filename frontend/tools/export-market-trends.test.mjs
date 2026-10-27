@@ -5,8 +5,23 @@ import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
-import { buildMarketTrends,exportMarketTrends } from './export-market-trends.mjs';
+import { buildMarketTrends,exportMarketTrends,verifyLongHistorySource } from './export-market-trends.mjs';
 const source=()=>JSON.parse(readFileSync(resolve('data/market-trend-source-2026-10-23.json'),'utf8'));
+const longSource=()=>JSON.parse(readFileSync(resolve('data/market-history-source-2026-10-23.json'),'utf8'));
+describe('long historical source binding',()=>{
+ it('admits the real five-year response-backed history and preserves the source date on a later publication',()=>{const value=longSource(),out=verifyLongHistorySource(JSON.stringify(value),'2026-10-26');expect(out.as_of_date).toBe('2026-10-23');expect(out.breadth.filter(p=>p.newHighs!==null).length).toBeGreaterThan(1250);expect(out.sectorRotation.frames).toHaveLength(252);expect(out.sectorBreadth).toHaveLength(12);});
+ it.each(['universeDigest','classificationDigest','missingStockProvenance','warmupRatio','missingSession','futureRetrieval','sectorSum'])('rejects altered %s',kind=>{
+  const value=longSource();
+  if(kind==='universeDigest')value.universe.sha256='f'.repeat(64);
+  if(kind==='classificationDigest')value.classification.memberships_sha256='f'.repeat(64);
+  if(kind==='missingStockProvenance')value.provenance=value.provenance.filter(p=>p.symbol!==value.universe.symbols[0]);
+  if(kind==='warmupRatio')value.breadth[0].ratio_10day=1;
+  if(kind==='missingSession')value.breadth.splice(1,1);
+  if(kind==='futureRetrieval')value.provenance[0].retrieved_at='2099-01-01T00:00:00Z';
+  if(kind==='sectorSum')value.sectorBreadth[0].points[0].coverage--;
+  expect(()=>verifyLongHistorySource(JSON.stringify(value),'2026-10-23')).toThrow();
+ });
+});
 describe('market trend source projection',()=>{
  it('projects actual dated separate indices and Cboe numerator/denominator',()=>{const input=source(),out=buildMarketTrends(input,{asOfDate:input.as_of_date});expect(out.indices.map(x=>x.available)).toEqual([true,true]);expect(out.indices[0].points).toHaveLength(280);expect(out.put_call.points).toHaveLength(63);for(const row of out.put_call.points)expect(row.value).toBe(row.puts/row.calls);});
  it('does not use a different date source as current',()=>{const out=buildMarketTrends(source(),{asOfDate:'2026-10-26'});expect(out.indices.every(x=>!x.available)).toBe(true);expect(out.put_call.points).toEqual([]);});

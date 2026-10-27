@@ -1,4 +1,5 @@
 import { validEvidenceDay as validDate } from './evidenceTime.js';
+import { institutionalIdentityEvents } from './institutionalIdentityEvents.js';
 const record = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 // 13F period_end is the calendar reporting quarter, not a filing date or a
 // fiscal quarter. Keep this restriction out of ordinary daily/manual histories.
@@ -13,6 +14,8 @@ export function institutionalGrowth(data, symbol, asOf) {
   if (!Array.isArray(observations) || observations.length !== 2 || ![0, 1].every(index => Object.hasOwn(observations, index) && record(observations[index]))) return result;
   if (observations.some(o => !quarterEnd(o.period) || !validDate(o.filing_date_first) || !validDate(o.filing_date_last) || o.filing_date_first < o.period || o.filing_date_last < o.filing_date_first || o.filing_date_last > data.publication_cutoff || !Number.isSafeInteger(o.manager_count) || o.manager_count <= 0)) return result;
   const [previous,current] = observations;
+  const identityChange = institutionalIdentityEvents.find(event => event.symbol === symbol && previous.period < event.effectiveDate && current.period >= event.effectiveDate);
+  if (identityChange) return {...result, reason:identityChange.reason, identityChange};
   const age = (Date.parse(asOf)-Date.parse(current.period))/86400000;
   if (quarterNumber(current.period) - quarterNumber(previous.period) !== 1 || age < 45 || age > 180) return result;
   const delta = current.manager_count-previous.manager_count;
