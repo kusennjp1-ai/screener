@@ -67,9 +67,27 @@ for (const width of [390,1440]) test(`VCP evidence reveals measured chart interv
   await expect(panel.getByRole('button',{name:'C1 の収縮区間を表示'})).toBeVisible();
   if(width===390)await detail.getByRole('tab',{name:'チャート',exact:true}).click();
   await detail.getByRole('button',{name:'日次チャートを分析'}).click();
-  const dialog=page.getByRole('dialog'),expanded=dialog.getByRole('region',{name:'VCPTEST のVCP分析'});
-  await expect(expanded).toContainText('値幅の縮小を確認');
-  const second=expanded.getByRole('button',{name:'C2 の収縮区間を表示'});
+  const dialog=page.getByRole('dialog'),expanded=dialog.locator('.leader-evidence-chart');
+  const expandedPlot=dialog.locator('[data-chart-symbol="VCPTEST"]');
+  await expect(expandedPlot).toHaveAttribute('data-chart-annotation-mode','simple');
+  await expect(dialog.locator('.chart-vcp-intervals button')).toHaveCount(0);
+  if(width===390){
+    const controls=dialog.locator('.leader-svg-extra-controls details');
+    await expect(controls).not.toHaveAttribute('open');
+    await controls.locator('summary').click();
+    await expect(controls).toHaveAttribute('open');
+  }
+  const annotationToggle=dialog.getByRole('button',{name:'VCP注記',exact:true});
+  await expect(annotationToggle).toHaveAttribute('aria-pressed','false');
+  await annotationToggle.click();
+  await expect(annotationToggle).toHaveAttribute('aria-pressed','true');
+  await expect(expandedPlot).toHaveAttribute('data-chart-annotation-mode','detail');
+  const second=dialog.locator('.chart-vcp-intervals button[data-vcp-interval="2"]');
+  await expect(second).toHaveAccessibleName(/^C2 .*から.*深さ[\d.]+%を拡大$/);
+  const radii=await dialog.locator('.chart-vcp-intervals button').evaluateAll(nodes=>nodes.map(node=>getComputedStyle(node).borderTopLeftRadius));
+  expect(radii.length).toBeGreaterThan(0);expect(radii.every(radius=>['0px','4px','8px','12px','16px'].includes(radius))).toBe(true);
+  const close=dialog.getByRole('button',{name:'チャートを閉じる',exact:true});
+  await expect(close.locator('span',{hasText:'戻る'})).toHaveCSS('font-size','11px');
   const expandedRange=await dialog.getByTestId('chart-visible-range').textContent();
   await second.click();
   await expect(second).toHaveAttribute('aria-pressed','true');await expect(second).toBeFocused();
@@ -78,7 +96,7 @@ for (const width of [390,1440]) test(`VCP evidence reveals measured chart interv
   await page.screenshot({path:info.outputPath(`vcp-expanded-focus-${width}.png`)});
   await expanded.scrollIntoViewIfNeeded();
   expect(await expanded.evaluate(node=>node.scrollWidth<=node.clientWidth)).toBe(true);
-  expect((await new AxeBuilder({page}).include('[role="dialog"] .chart-setup-evidence').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
+  expect((await new AxeBuilder({page}).include('[role="dialog"] .leader-evidence-chart').withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze()).violations).toEqual([]);
   await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);
   await expect(detail.getByRole('button',{name:'日次チャートを分析'})).toBeFocused();
   expect(errors).toEqual([]);

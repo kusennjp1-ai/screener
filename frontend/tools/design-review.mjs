@@ -1,3 +1,4 @@
+import { prepareBaselineRepresentation, representationResponse } from './baseline-representation.mjs';
 import { readyResearchCandidates } from './research-browser-navigation.mjs';
 import { mobileChromeBudget } from './mobile-chrome-contract.mjs';
 import { SVG_EVIDENCE_CONTRACT } from './svg-chart-evidence.mjs';
@@ -76,17 +77,35 @@ if (carryProvenancePath) {
     await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
   }
 }
+let baselineRepresentation;
+if (baselineRoot && inputBasis === 'same_verified_input' && !limitedAssessment) {
+  baselineRepresentation = await prepareBaselineRepresentation({ currentRoot, baselineRoot, output,
+    baselineSha: process.env.BASELINE_REF || '1e1943e1d5f78a738a05baa69eb9f2e8508e32ac' });
+  const { proof, sha256 } = baselineRepresentation;
+  report.baseline_representation = { schema: proof.schema, proof_sha256: sha256, baseline_sha: proof.baseline_sha,
+    canonical_data_inventory_sha256: proof.canonical_data_inventory_sha256, research: proof.research, served: {}, received: {} };
+}
 try {
-  priorityBinding = screeningPriorityBinding({ currentRoot, baselineRoot, commit, inputBasis, limited: limitedAssessment });
+  priorityBinding = screeningPriorityBinding({ currentRoot, baselineRoot, commit, inputBasis, output, limited: limitedAssessment });
 } catch (error) {
   check(false, `Screening acceptance input binding failed: ${error.message}`);
 }
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
-async function serve(root) {
+async function serve(root, representation = null) {
   const server = createServer(async (request, response) => {
     try {
       const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
       const relative = pathname.replace(/^\/screener\//, '').replace(/^\/+/, '') || 'index.html';
+      if (representation) {
+        const bytes = representationResponse(representation, root, relative, baselineRoot);
+        if (bytes) {
+          const identity = representation.proof.files[relative];
+          report.baseline_representation.served[relative] = { ...identity,
+            responses: (report.baseline_representation.served[relative]?.responses || 0) + 1 };
+          response.writeHead(200, { 'Content-Type': mime[extname(relative)] || 'application/octet-stream' });
+          response.end(bytes); return;
+        }
+      }
       let file = resolve(root, relative);
       if (file !== root && !file.startsWith(root + sep)) throw Error('Invalid path');
       if ((await stat(file)).isDirectory()) file = resolve(file, 'index.html');
@@ -98,16 +117,20 @@ async function serve(root) {
   return { url: `http://127.0.0.1:${server.address().port}/screener/`, close: () => new Promise(resolve => server.close(resolve)) };
 }
 const current = await serve(currentRoot);
-const baseline = baselineRoot && await serve(baselineRoot);
+const baseline = baselineRoot && await serve(baselineRoot, baselineRepresentation);
 const radar = radarRoot && await serve(radarRoot);
 const browser = await chromium.launch();
 const manifest = JSON.parse(await readFile(resolve(currentRoot, 'static-data/manifest.json'), 'utf8'));
 report.data = { as_of_date: (manifest.markets?.US || manifest).as_of_date, generated_at: manifest.generated_at, research_generation: manifest.research_generation };
 if (baselineRoot) {
-  const previousManifest = JSON.parse(await readFile(resolve(baselineRoot, 'static-data/manifest.json'), 'utf8'));
+  const previousManifest = JSON.parse(baselineRepresentation
+    ? representationResponse(baselineRepresentation, baselineRoot, 'static-data/manifest.json', baselineRoot)
+    : await readFile(resolve(baselineRoot, 'static-data/manifest.json'), 'utf8'));
   const currentEntry = manifest.markets?.US || manifest, previousEntry = previousManifest.markets?.US || previousManifest;
   const ids = async (root, entry, label) => {
-    const raw = await readFile(resolve(root, 'static-data', entry.assets.research.path));
+    const raw = label === 'baseline' && baselineRepresentation
+      ? representationResponse(baselineRepresentation, root, 'static-data/' + entry.assets.research.path, baselineRoot)
+      : await readFile(resolve(root, 'static-data', entry.assets.research.path));
     (report.transport ||= []).push({ label, as_of_date: entry.as_of_date, raw_bytes: raw.length, gzip_bytes: gzipSync(raw).length });
     return decodeResearchIndex(JSON.parse(raw.toString('utf8'))).rows.map(row => row.symbol).sort().join(',');
   };
@@ -361,7 +384,18 @@ for (const [label, server] of [['baseline', baseline], ['current', current]]) {
     await context.route('**/*', async route => {
       const key = route.request().url();
       try {
-        if (!cache.has(key)) { const response = await route.fetch(); cache.set(key, { status: response.status(), headers: response.headers(), body: await response.body() }); }
+        if (!cache.has(key)) {
+          const response = await route.fetch(), body = await response.body();
+          if (label === 'baseline' && baselineRepresentation) {
+            const path = decodeURIComponent(new URL(key).pathname).replace(/^\/screener\//, '');
+            const expected = baselineRepresentation.proof.files[path];
+            if (expected) {
+              if (response.status() !== 200 || financialCarrySha256(body) !== expected.sha256 || body.length !== expected.bytes) throw Error('Baseline received bytes differ from proof');
+              report.baseline_representation.received[path] = { ...expected, responses: (report.baseline_representation.received[path]?.responses || 0) + 1 };
+            }
+          }
+          cache.set(key, { status: response.status(), headers: response.headers(), body });
+        }
         await route.fulfill(cache.get(key));
       } catch { await route.abort().catch(() => {}); }
     });

@@ -1,9 +1,10 @@
+import { verifyBaselineRepresentation, verifyStoredRepresentation } from './baseline-representation.mjs';
 // User-approved ordinary/carry acceptance policy, 2026-10-21. Original Design
 // failures and timing limits are evidence, never rewritten as performance passes.
 import assert from 'node:assert/strict';
 import { isDeepStrictEqual } from 'node:util';
 import { execFileSync } from 'node:child_process';
-import { lstatSync, readFileSync, writeFileSync, renameSync, appendFileSync } from 'node:fs';
+import { existsSync, lstatSync, readFileSync, writeFileSync, renameSync, appendFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { sha256, inventoryDigest, uiInventory, safePath } from '../../.github/scripts/publication-state.mjs';
@@ -48,7 +49,7 @@ export function requiredScreeningCaptures(scope, mobileMap = false) {
 
 // This context selects a policy; the existing CI/provenance/transport checks
 // remain the authority. It cannot authenticate a candidate or admit new data.
-export function screeningPriorityBinding({ currentRoot, baselineRoot, commit, inputBasis, limited = false, env = process.env }) {
+export function screeningPriorityBinding({ currentRoot, baselineRoot, commit, inputBasis, output = resolve(currentRoot, '../test-results/design-review'), limited = false, env = process.env }) {
   if (limited || env.FINANCIAL_CANDIDATE_DIR || inputBasis !== 'same_verified_input') return null;
   if (env.GITHUB_ACTIONS !== 'true' || env.GITHUB_REPOSITORY !== repository || env.GITHUB_JOB !== 'design-acceptance'
       || env.GITHUB_WORKFLOW_REF !== `${repository}/.github/workflows/design-acceptance.yml@${env.GITHUB_REF}`
@@ -93,7 +94,16 @@ export function screeningPriorityBinding({ currentRoot, baselineRoot, commit, in
       && bindings.financialLineageSha256 === state.live.financialRelease.lineage_sha256, 'Ordinary input lacks its active financial lineage');
   }
   assert(bindings.financialGeneration === generation, 'Design financial generation differs');
-  return { policy: SCREENING_PRIORITY_POLICY, scope, commit, tree: git('rev-parse', 'HEAD^{tree}'), run_id: env.GITHUB_RUN_ID, run_attempt: env.GITHUB_RUN_ATTEMPT,
+  const representationDirectory = resolve(output, 'baseline-representation');
+  let representation;
+  if (existsSync(representationDirectory)) representation = verifyBaselineRepresentation({ directory: representationDirectory,
+    baselineRoot, currentRoot, baselineSha: env.BASELINE_REF || '1e1943e1d5f78a738a05baa69eb9f2e8508e32ac' });
+  else {
+    const baselineManifest = JSON.parse(read(resolve(baselineRoot, 'static-data/manifest.json')));
+    const research = (baselineManifest.markets?.US || baselineManifest).assets?.research;
+    if (research) assert(JSON.parse(read(resolve(baselineRoot, 'static-data', research.path))).column_encoding !== 'sparse-record-arrays-and-copy-masks-v1', 'Baseline representation proof required');
+  }
+  return { ...(representation && { baseline_representation_sha256: representation.sha256 }), policy: SCREENING_PRIORITY_POLICY, scope, commit, tree: git('rev-parse', 'HEAD^{tree}'), run_id: env.GITHUB_RUN_ID, run_attempt: env.GITHUB_RUN_ATTEMPT,
     provenance_sha256: sha256(provenanceBytes), publication_sha256: sha256(publicationBytes), manifest_sha256: sha256(manifestBytes),
     ui_digest: uiDigest, logical_data_inventory_sha256: publication.transport.logical_data_inventory_sha256,
     physical_inventory_sha256: publication.transport.physical_inventory_sha256,
@@ -116,6 +126,15 @@ function assessWithRadarContract(report, binding, completedGroups, radarFailures
   assert(report.commit === binding.commit && report.input_basis === 'same_verified_input' && !report.assessment_mode, 'Report scope differs');
   assert(Array.isArray(report.failures) && report.failures.every(failure => typeof failure === 'string'), 'Original Design failures required');
   const blocking = [], original = [...report.failures];
+  if (binding.baseline_representation_sha256) {
+    const representation = report.baseline_representation;
+    if (!representation || representation.schema !== 'design-baseline-representation-v1' || representation.proof_sha256 !== binding.baseline_representation_sha256
+      || representation.canonical_data_inventory_sha256 !== binding.logical_data_inventory_sha256
+      || !(representation.served?.['static-data/manifest.json']?.responses > 0)
+      || !(representation.served?.['static-data/' + representation.research?.path]?.responses > 0)
+      || !(representation.received?.['static-data/manifest.json']?.responses > 0)
+      || !(representation.received?.['static-data/' + representation.research?.path]?.responses > 0)) blocking.push('Baseline served representation evidence is incomplete');
+  } else if (report.baseline_representation) blocking.push('Unbound baseline representation evidence');
   let timingComplete = true;
   if (report.performance?.length !== 4) { blocking.push('Exactly four baseline/current performance groups must complete'); timingComplete = false; }
   if (!isDeepStrictEqual(completedGroups, DESIGN_GROUPS)) blocking.push('All route/operation/financial groups must finish');
@@ -170,8 +189,9 @@ function carrySealHash(output, binding, report, reportHash) {
 }
 
 export function finishScreeningPriority({ report, output, before, currentRoot, baselineRoot, inputBasis, completedGroups, env = process.env }) {
-  const after = screeningPriorityBinding({ currentRoot, baselineRoot, commit: report.commit, inputBasis, env });
+  const after = screeningPriorityBinding({ currentRoot, baselineRoot, commit: report.commit, inputBasis, output, env });
   assert(isDeepStrictEqual(before, after), 'Design input, UI, run or attempt changed during measurement');
+  if (after.baseline_representation_sha256) verifyRepresentationReport(output, report, after.baseline_representation_sha256);
   const assessment = assessScreeningPriority(report, after, completedGroups), paths = files(output), reportBytes = read(paths.report, 64 * 1024 * 1024);
   assert(isDeepStrictEqual(JSON.parse(reportBytes), report), 'Final report differs from measured report');
   const screenshots = {};
@@ -188,19 +208,19 @@ export function finishScreeningPriority({ report, output, before, currentRoot, b
   write(paths.assessment, assessment);
   // Last write, after all operations, final carry rebind/seal and report. A
   // partial/progress report cannot create this manifest through the harness.
-  write(paths.completion, { schema: 'screening-priority-completion-v1', publication_authority: 'none', financial_admission: false,
+  write(paths.completion, { schema: after.baseline_representation_sha256 ? 'screening-priority-completion-v2' : 'screening-priority-completion-v1', publication_authority: 'none', financial_admission: false,
     binding: after, completed_groups: completedGroups, carry_seal_sha256: carryHash,
     completed_at: completedAt, report_sha256: sha256(reportBytes), assessment_sha256: sha256(read(paths.assessment)), screenshots });
   return assessment;
 }
 
 export function checkedScreeningPriority({ report, output, currentRoot, baselineRoot, inputBasis, env = process.env }) {
-  const binding = screeningPriorityBinding({ currentRoot, baselineRoot, commit: report.commit, inputBasis, limited: Boolean(report.assessment_mode), env });
+  const binding = screeningPriorityBinding({ currentRoot, baselineRoot, commit: report.commit, inputBasis, output, limited: Boolean(report.assessment_mode), env });
   assert(binding, 'Only bound ordinary/carry Design may defer measured timing failures');
   const paths = files(output), completion = json(paths.completion), assessment = json(paths.assessment);
   assert.deepEqual(Object.keys(completion).sort(), ['schema', 'publication_authority', 'financial_admission', 'binding', 'completed_groups', 'carry_seal_sha256', 'completed_at', 'report_sha256', 'assessment_sha256', 'screenshots'].sort());
   assert(completion.publication_authority === 'none' && completion.financial_admission === false, 'Completion cannot grant publication/financial authority');
-  assert(completion.schema === 'screening-priority-completion-v1' && isDeepStrictEqual(completion.binding, binding), 'Final Design manifest belongs to another UI/input/run/attempt');
+  assert(completion.schema === (binding.baseline_representation_sha256 ? 'screening-priority-completion-v2' : 'screening-priority-completion-v1') && isDeepStrictEqual(completion.binding, binding), 'Final Design manifest belongs to another UI/input/run/attempt');
   assert(Number.isFinite(Date.parse(completion.completed_at)) && Date.parse(report.measured_at) <= Date.parse(completion.completed_at) && Date.parse(completion.completed_at) <= Date.now(), 'Design completion clock is invalid');
   assert(completion.report_sha256 === sha256(read(paths.report, 64 * 1024 * 1024)) && completion.assessment_sha256 === sha256(read(paths.assessment)), 'Final Design report or assessment changed');
   const recomputed = assessScreeningPriority(report, binding, completion.completed_groups);
@@ -214,4 +234,20 @@ export function checkedScreeningPriority({ report, output, currentRoot, baseline
 export function requireWarningReviewImages(review, report) {
   const reviewed = new Map(review.screens.map(screen => [screen.key, screen]));
   for (const screen of report.screens) assert(reviewed.get(screen.key)?.sha256 === screen.sha256, 'Deferred timing requires reviewed current screenshot byte hashes; old ancestry alone is insufficient');
+}
+
+export function verifyRepresentationReport(output, report, proofHash) {
+  const verified = verifyStoredRepresentation(resolve(output, 'baseline-representation'), proofHash);
+  const evidence = report.baseline_representation;
+  assert(evidence && evidence.proof_sha256 === verified.sha256 && evidence.baseline_sha === verified.proof.baseline_sha
+    && evidence.canonical_data_inventory_sha256 === verified.proof.canonical_data_inventory_sha256, 'Baseline report proof differs');
+  assert.deepStrictEqual(evidence.research, verified.proof.research);
+  for (const collection of ['served', 'received']) for (const [path, info] of Object.entries(evidence[collection])) {
+    assert(Number.isSafeInteger(info.responses) && info.responses > 0, 'Invalid baseline response count');
+    assert.deepStrictEqual({ sha256: info.sha256, bytes: info.bytes }, verified.proof.files[path], 'Baseline HTTP response differs');
+    assert.deepStrictEqual(Object.keys(info).sort(), ['bytes', 'responses', 'sha256']);
+  }
+  const measured = report.transport?.find(item => item.label === 'baseline');
+  assert(measured?.raw_bytes === verified.proof.research.raw_bytes && measured?.gzip_bytes === verified.proof.research.gzip_bytes, 'Baseline measurement did not use served bytes');
+  return verified;
 }

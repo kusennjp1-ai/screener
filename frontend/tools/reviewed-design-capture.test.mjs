@@ -14,8 +14,8 @@ import { storedRadarV3 } from './fixtures/radar-stored-v3.mjs';
 import { SCREENING_PRIORITY_POLICY, DESIGN_GROUPS, assessScreeningPriority } from './screening-priority-acceptance.mjs';
 import { SCREENING_IMAGE_REVIEW_POLICY, REVIEW_AXES, VISUAL_CHECKS } from './screening-priority-image-review.mjs';
 import { BASELINE, CAPTURE_SCHEMA, REPOSITORY, WORKFLOW, REVIEW_PATH, REVIEW_RECORDS, IMAGE_STEP, MEASURE_STEP, PACKAGE_STEP, UPLOAD_STEP,
-  canonical, hash, materialSourceDigest, readPriorReview, verifyPackage, verifyProducer, verifyStoredMeasurement, historicalReviewResult } from './reviewed-design-capture.mjs';
-import { captureConfigurationDigest, selectPriorCapture, extractReviewableZip, acceptPriorCapture } from './design-capture-lifecycle.mjs';
+  canonical, hash, materialSourceDigest, readPriorReview, verifyPackage, verifyProducer, verifyStoredMeasurement, requireRepresentationContract, historicalReviewResult } from './reviewed-design-capture.mjs';
+import { captureConfigurationDigest, selectPriorCapture, extractReviewableZip, stageCaptureFiles, acceptPriorCapture } from './design-capture-lifecycle.mjs';
 
 // Only synthetic fixtures share an epoch; production measurement clocks are never frozen.
 const fixtureEpoch = Date.now() - 600000;
@@ -120,3 +120,55 @@ for (const [name, mutate] of [
 for (const mode of ['duplicate', 'traversal', 'symlink', 'oversized']) test('ZIP rejects ' + mode + ' before producing usable files', t => { const f = repoFixture(t), zip = join(f.root, 'bad.zip'); execFileSync('python3', ['-c', `import zipfile,stat,sys\np,mode=sys.argv[1:]\nwith zipfile.ZipFile(p,'w',compression=zipfile.ZIP_DEFLATED) as z:\n if mode=='duplicate': z.writestr('same.json','a');z.writestr('same.json','b')\n elif mode=='traversal': z.writestr('../escape','a')\n elif mode=='symlink':\n  i=zipfile.ZipInfo('link');i.external_attr=(stat.S_IFLNK|0o777)<<16;z.writestr(i,'target')\n else: z.writestr('big',bytes(64*1024*1024+1))\n`, zip, mode], { stdio: 'pipe' }); assert.throws(() => extractReviewableZip(zip, join(f.root, 'extracted'))); });
 test('unmodified old capture without new actual measurements cannot be retroactively packaged', t => { const f = packageFixture(t); delete f.report.screens[0].reduced_motion_running_animations; write(join(f.packageRoot, 'report.json'), f.report); f.completion.report_sha256 = hash(canonical(f.report)); write(join(f.packageRoot, 'screening-priority-completion.json'), f.completion); assert.throws(() => verifyStoredMeasurement(f.packageRoot), /reduced-motion/); });
 test('actual acceptance transport authenticates synthetic ZIP, emits distinct result, never captures', async t => { const f = packageFixture(t), zip = join(f.root, 'synthetic.zip'); execFileSync('python3', ['-c', `import pathlib,sys,zipfile\nwith zipfile.ZipFile(sys.argv[2],'w') as z:\n for p in pathlib.Path(sys.argv[1]).iterdir():z.write(p,p.name)\n`, f.packageRoot, zip]); const bytes = readFileSync(zip); f.reference.artifact_sha256 = hash(bytes); f.reference.artifact_bytes = bytes.length; f.current = f.commitReview(); f.env.GITHUB_SHA = f.current; await new Promise(resolve => setTimeout(resolve, 1100)); const auth = producerFixture(f.reference); auth.envelope = f.envelope; auth.completion = f.completion; auth.report = f.report; const api = endpoint => endpoint.endsWith('/jobs?per_page=100') ? [{ jobs: auth.jobs }] : endpoint.includes('/actions/artifacts/') ? auth.artifact : endpoint.includes('/actions/workflows/') ? auth.workflow : auth.run; const result = await acceptPriorCapture(f.root, f.env, { api, download: (_artifact, path) => write(path, bytes) }); assert.equal(result.result_kind, 'reviewed_prior_capture'); assert.equal(result.measured_in_current_run, false); assert.equal(result.consumer.head_sha, f.current); assert.equal(result.capture.checkout_sha, f.captured); assert.equal(JSON.parse(readFileSync(join(f.root, 'reviewed-prior-capture-result.json'))).policy_exit, 0); });
+import { storedFixture as representationFixture } from './fixtures/design-baseline-representation.mjs';
+function v2PackageFixture(t) {
+  const f = packageFixture(t, 'ordinary'), r = representationFixture(join(f.packageRoot, 'baseline-representation'), { canonical_data_inventory_sha256: f.binding.logical_data_inventory_sha256 });
+  f.binding.baseline_representation_sha256 = r.sha256;
+  f.binding.manifest_sha256 = r.proof.current_manifest_sha256;
+  f.report.baseline_representation = { schema: r.proof.schema, proof_sha256: r.sha256, baseline_sha: r.proof.baseline_sha,
+    canonical_data_inventory_sha256: r.proof.canonical_data_inventory_sha256, research: r.proof.research,
+    served: Object.fromEntries(Object.entries(r.proof.files).map(([path, identity]) => [path, { ...identity, responses: 1 }])) };
+  f.report.baseline_representation.received = structuredClone(f.report.baseline_representation.served);
+  f.report.transport = [{ label: 'baseline', raw_bytes: r.proof.research.raw_bytes, gzip_bytes: r.proof.research.gzip_bytes }];
+  f.completion.schema = 'screening-priority-completion-v2';
+  f.assessment = assessScreeningPriority(f.report, f.binding, DESIGN_GROUPS);
+  write(join(f.packageRoot, 'report.json'), f.report); write(join(f.packageRoot, 'screening-priority-assessment.json'), f.assessment);
+  f.completion.report_sha256 = hash(canonical(f.report)); f.completion.assessment_sha256 = hash(canonical(f.assessment));
+  write(join(f.packageRoot, 'screening-priority-completion.json'), f.completion);
+  return { ...f, representation: r };
+}
+test('v2 historical capture includes exact baseline representation bodies while v1 remains closed', t => {
+  const f = v2PackageFixture(t), measured = verifyStoredMeasurement(f.packageRoot);
+  assert(measured.paths.includes('baseline-representation/proof.json')); assert(measured.paths.includes('baseline-representation/served/static-data/manifest.json'));
+  f.completion.schema = 'screening-priority-completion-v1'; write(join(f.packageRoot, 'screening-priority-completion.json'), f.completion);
+  assert.throws(() => verifyStoredMeasurement(f.packageRoot), /fields/);
+});
+for (const [name, mutate] of [
+  ['missing proof', f => rmSync(join(f.packageRoot, 'baseline-representation/proof.json'))],
+  ['missing body', f => rmSync(join(f.packageRoot, 'baseline-representation/served/static-data/manifest.json'))],
+  ['extra override', f => write(join(f.packageRoot, 'baseline-representation/served/static-data/extra.json'), '{}')],
+  ['unbound current manifest', f => { f.binding.manifest_sha256 = 'e'.repeat(64); write(join(f.packageRoot, 'screening-priority-completion.json'), f.completion); }],
+  ['missing responses', f => { f.report.baseline_representation.served = {}; write(join(f.packageRoot, 'report.json'), f.report); f.completion.report_sha256 = hash(canonical(f.report)); write(join(f.packageRoot, 'screening-priority-completion.json'), f.completion); }],
+]) test('v2 historical capture rejects '+name, t => { const f = v2PackageFixture(t); mutate(f); assert.throws(() => verifyStoredMeasurement(f.packageRoot)); });
+
+test('material source with representation adapter cannot downgrade to v1 by removing all proof fields', t => {
+  const f = repoFixture(t);
+  requireRepresentationContract(f.root, f.current, { schema: 'screening-priority-completion-v1' });
+  write(join(f.root, 'frontend/tools/baseline-representation.mjs'), 'Synthetic contract presence'); git(f.root, 'add', '.'); git(f.root, 'commit', '-m', 'Synthetic representation material');
+  const current = git(f.root, 'rev-parse', 'HEAD');
+  assert.throws(() => requireRepresentationContract(f.root, current, { schema: 'screening-priority-completion-v1' }), /requires/);
+  requireRepresentationContract(f.root, current, { schema: 'screening-priority-completion-v2' });
+});
+
+test('v2 nested representation staging and authenticated package ZIP roundtrip retain every byte', t => {
+  const f = v2PackageFixture(t), measured = verifyStoredMeasurement(f.packageRoot), staged = join(f.root, 'staged-v2'); mkdirSync(staged);
+  const files = stageCaptureFiles(f.packageRoot, staged, measured.paths);
+  const provenance = readFileSync(join(f.packageRoot, 'input-provenance.json')); write(join(staged, 'input-provenance.json'), provenance);
+  files['input-provenance.json'] = { sha256: hash(provenance), bytes: provenance.length };
+  const envelope = { ...f.envelope, files }; write(join(staged, 'capture-envelope.json'), envelope);
+  verifyPackage(staged, f.reference, f.root, f.current, f.reference.configuration_sha256);
+  const zip = join(f.root, 'nested-v2.zip'), extracted = join(f.root, 'extracted-v2');
+  execFileSync('python3', ['-c', 'import pathlib,sys,zipfile\nr=pathlib.Path(sys.argv[1])\nwith zipfile.ZipFile(sys.argv[2],"w") as z:\n for p in r.rglob("*"):\n  if p.is_file():z.write(p,p.relative_to(r).as_posix())', staged, zip]);
+  extractReviewableZip(zip, extracted); verifyPackage(extracted, f.reference, f.root, f.current, f.reference.configuration_sha256);
+  assert.throws(() => stageCaptureFiles(f.packageRoot, join(f.root, 'unsafe'), ['other/unknown.json']), /nested/);
+});

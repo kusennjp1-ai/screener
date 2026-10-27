@@ -26,6 +26,8 @@ jobs:
     # Authentic carry preparation plus two independent replays precede browser gates.
     # Keep a finite job cap; this changes runtime headroom, never acceptance budgets.
     timeout-minutes: 120
+    env:
+      BASELINE_REF: ${{ inputs.baseline_ref || '1e1943e1d5f78a738a05baa69eb9f2e8508e32ac' }}
     steps:
       - uses: actions/checkout@v4
         with:

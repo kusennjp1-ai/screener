@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import { lstatSync, readFileSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { assessHistoricalScreeningPriority } from './screening-priority-acceptance.mjs';
+import { assessHistoricalScreeningPriority, verifyRepresentationReport } from './screening-priority-acceptance.mjs';
 import { parseFinancialCsv } from './financial-design-cases.mjs';
 import { validateFunctionalEvidence } from './reviewed-design-functional-evidence.mjs';
 import { assessScreeningImageReview } from './screening-priority-image-review.mjs';
@@ -84,14 +84,22 @@ export function readPriorReview(root, current) {
   return { review, reference, review_sha256: hash(bytes), eligible: materialSourceDigest(root, current) === reference.source_inventory_sha256 };
 }
 
+// Source-aware downgrade boundary: legacy captures remain readable under their
+// old material source, while a producer containing the adapter must retain v2.
+export function requireRepresentationContract(sourceRoot, revision, completion) {
+  if (git(sourceRoot, 'ls-tree', revision, '--', 'frontend/tools/baseline-representation.mjs').trim())
+    assert(completion.schema === 'screening-priority-completion-v2', 'This material source requires the baseline representation capture contract');
+}
+
 export function verifyStoredMeasurement(root, now = Date.now()) {
   const reportBytes = regular(root, 'report.json'), assessmentBytes = regular(root, 'screening-priority-assessment.json');
   const report = JSON.parse(reportBytes), assessment = JSON.parse(assessmentBytes), completion = json(root, 'screening-priority-completion.json'), binding = completion.binding;
   keys(completion, ['schema', 'publication_authority', 'financial_admission', 'binding', 'completed_groups', 'carry_seal_sha256', 'completed_at', 'report_sha256', 'assessment_sha256', 'screenshots'], 'Completion');
-  assert(completion.schema === 'screening-priority-completion-v1' && completion.publication_authority === 'none' && completion.financial_admission === false, 'Completion cannot grant authority');
+  const representation = completion.schema === 'screening-priority-completion-v2';
+  assert((representation || completion.schema === 'screening-priority-completion-v1') && completion.publication_authority === 'none' && completion.financial_admission === false, 'Completion cannot grant authority');
   assert(clock(report.measured_at) && clock(completion.completed_at) && Date.parse(report.measured_at) <= Date.parse(completion.completed_at) && Date.parse(completion.completed_at) <= now, 'Invalid historical measurement clock');
   assert(completion.report_sha256 === hash(reportBytes) && completion.assessment_sha256 === hash(assessmentBytes), 'Stored report/assessment changed');
-  keys(binding, ['policy', 'scope', 'commit', 'tree', 'run_id', 'run_attempt', 'provenance_sha256', 'publication_sha256', 'manifest_sha256', 'ui_digest', 'logical_data_inventory_sha256', 'physical_inventory_sha256', 'current_inventory_sha256', 'baseline_inventory_sha256', 'as_of_date', 'research_generation'], 'Capture binding');
+  keys(binding, [...(representation ? ['baseline_representation_sha256'] : []), 'policy', 'scope', 'commit', 'tree', 'run_id', 'run_attempt', 'provenance_sha256', 'publication_sha256', 'manifest_sha256', 'ui_digest', 'logical_data_inventory_sha256', 'physical_inventory_sha256', 'current_inventory_sha256', 'baseline_inventory_sha256', 'as_of_date', 'research_generation'], 'Capture binding');
   assert(commit(binding.commit) && commit(binding.tree) && /^[1-9][0-9]*$/.test(binding.run_id) && /^[1-9][0-9]*$/.test(binding.run_attempt), 'Invalid captured source/run identity');
   for (const field of ['provenance_sha256', 'publication_sha256', 'manifest_sha256', 'ui_digest', 'logical_data_inventory_sha256', 'physical_inventory_sha256', 'current_inventory_sha256', 'baseline_inventory_sha256', 'research_generation']) assert(sha(binding[field]), 'Missing captured ' + field);
   const recomputed = assessHistoricalScreeningPriority(report, binding, completion.completed_groups);
@@ -100,6 +108,13 @@ export function verifyStoredMeasurement(root, now = Date.now()) {
   validateFunctionalEvidence(report, binding);
   assert.deepEqual(completion.screenshots, Object.fromEntries(report.screens.map(screen => [screen.key, screen.sha256])), 'Captured image inventory changed');
   const paths = ['report.json', 'screening-priority-assessment.json', 'screening-priority-completion.json'];
+  if (representation) {
+    assert(sha(binding.baseline_representation_sha256), 'Missing baseline proof identity');
+    const verified = verifyRepresentationReport(root, report, binding.baseline_representation_sha256);
+    assert(verified.proof.baseline_sha === BASELINE, 'Captured baseline decoder differs');
+    assert(verified.proof.current_manifest_sha256 === binding.manifest_sha256 && verified.proof.canonical_data_inventory_sha256 === binding.logical_data_inventory_sha256, 'Captured representation input differs');
+    paths.push(...verified.paths.map(path => 'baseline-representation/' + path));
+  }
   for (const screen of report.screens) { assert(hash(regular(root, screen.screenshot)) === screen.sha256, 'Captured PNG changed'); paths.push(screen.screenshot); }
   const downloadedCsv = cases => {
     assert(cases.length === 10, 'All ten normal/carry CSV downloads required');
@@ -147,6 +162,7 @@ export function verifyPackage(root, reference, sourceRoot, current, configuratio
   assert(capturedDigest === currentDigest && envelope.source_inventory_sha256 === capturedDigest && reference.source_inventory_sha256 === capturedDigest, 'Renderer/measurement/config/contract source changed');
   assert(producer.tree === git(sourceRoot, 'rev-parse', `${reference.checkout_sha}^{tree}`).trim(), 'Captured source tree changed');
   const measured = verifyStoredMeasurement(root, now);
+  requireRepresentationContract(sourceRoot, current, measured.completion);
   assert(measured.binding.commit === producer.checkout_sha && measured.binding.tree === producer.tree && measured.binding.run_id === String(producer.run_id) && measured.binding.run_attempt === String(producer.run_attempt), 'Measurement belongs to another producer');
   assert(clock(envelope.created_at) && Date.parse(measured.completion.completed_at) <= Date.parse(envelope.created_at) && Date.parse(envelope.created_at) <= now, 'Invalid capture package clock');
   const input = regular(root, 'input-provenance.json');

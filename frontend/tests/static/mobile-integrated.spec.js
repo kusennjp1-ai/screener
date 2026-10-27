@@ -36,7 +36,9 @@ for (const width of [320,390]) test(`mobile integrated map, chart, VCP and watch
   return route.fulfill({json:payload});
  });
  await page.goto('/');
- await expect(page.getByRole('heading',{name:'市場から、次の候補へ。'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'市場',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'銘柄を確認',exact:true})).toBeVisible();
+ await expect(page.getByText('市場から、次の候補へ。',{exact:true})).toHaveCount(0);
  const skip=page.getByRole('link',{name:'メインコンテンツへ',exact:true});
  await skip.focus();await page.keyboard.press('Enter');
  await expect(page.locator('#research-main-content')).toBeFocused();
@@ -44,7 +46,9 @@ for (const width of [320,390]) test(`mobile integrated map, chart, VCP and watch
  const explore=page.getByRole('button',{name:'市場から銘柄を探す',exact:true});
  await expect(explore).toBeInViewport();
  await explore.click();
- await expect(page.getByRole('heading',{name:'市場から、次の候補へ。'})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'市場',exact:true})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'銘柄を確認',exact:true})).toBeVisible();
+ await expect(page.getByText('市場から、次の候補へ。',{exact:true})).toHaveCount(0);
  await expect(page.getByRole('button',{name:/情報技術.*RS中央値/})).toBeVisible();
  await page.getByRole('button',{name:'VCPTEST のチャートを確認'}).click();
  await page.getByRole('tab',{name:'VCP',exact:true}).click();

@@ -332,7 +332,7 @@ function StaticChartViewerModal({
                   closeChart();
                 }
               }}
-              aria-label="チャートを閉じる" title="元の銘柄画面に戻る" sx={{gridColumn:2,gridRow:1,alignSelf:'flex-start',width:44,height:44,display:'flex',flexDirection:'column',gap:0,p:0,fontSize:10,touchAction:'manipulation'}}><CloseIcon fontSize="small"/><span>戻る</span></IconButton>
+              aria-label="チャートを閉じる" title="元の銘柄画面に戻る" sx={{gridColumn:2,gridRow:1,alignSelf:'flex-start',width:44,height:44,display:'flex',flexDirection:'column',gap:0,p:0,fontSize:11,touchAction:'manipulation'}}><CloseIcon fontSize="small"/><span>戻る</span></IconButton>
             {compactMobileChrome && detailWarning}
           </Box>
           <Box

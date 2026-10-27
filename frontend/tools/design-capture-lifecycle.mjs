@@ -2,12 +2,12 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { githubApi } from '../../.github/scripts/publication-gate.mjs';
 import { checkedScreeningPriority, screeningPriorityBinding } from './screening-priority-acceptance.mjs';
-import { BASELINE, CAPTURE_SCHEMA, MAX_PACKAGE, REPOSITORY, WORKFLOW, canonical, hash, regular, materialSourceDigest,
-  readPriorReview, verifyStoredMeasurement, verifyPackage, verifyProducer, historicalReviewResult } from './reviewed-design-capture.mjs';
+import { BASELINE, CAPTURE_SCHEMA, MAX_PACKAGE, safePath, REPOSITORY, WORKFLOW, canonical, hash, regular, materialSourceDigest,
+  readPriorReview, verifyStoredMeasurement, requireRepresentationContract, verifyPackage, verifyProducer, historicalReviewResult } from './reviewed-design-capture.mjs';
 
 const git = (root, ...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
 const root = () => execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
@@ -41,11 +41,11 @@ export function stageReviewableCapture(repo, env = process.env) {
   if (!screeningPriorityBinding({ ...options, commit: report.commit, limited: Boolean(report.assessment_mode) })) { output(env, 'staged', 'false'); return { skipped: 'Strict candidate/limited flow, not an ordinary/carry prior-capture producer' }; }
   checkedScreeningPriority(options);
   const measured = verifyStoredMeasurement(source), provenance = regular(env.RUNNER_TEMP, 'design-input-provenance.json');
+  requireRepresentationContract(repo, consumer.head_sha, measured.completion);
   assert(hash(provenance) === measured.binding.provenance_sha256 && measured.binding.commit === consumer.head_sha, 'Prepared input differs from completed capture');
   const target = join(env.RUNNER_TEMP, 'reviewable-design-capture');
   assert(!existsSync(target), 'Refuse to reuse a capture staging directory'); mkdirSync(target);
-  const files = {};
-  for (const path of measured.paths) { const bytes = regular(source, path); assert(!path.includes('/'), 'Capture package currently requires flat evidence paths'); writeFileSync(join(target, path), bytes, { flag: 'wx' }); files[path] = { sha256: hash(bytes), bytes: bytes.length }; }
+  const files = stageCaptureFiles(source, target, measured.paths);
   writeFileSync(join(target, 'input-provenance.json'), provenance, { flag: 'wx' }); files['input-provenance.json'] = { sha256: hash(provenance), bytes: provenance.length };
   const envelope = { schema: CAPTURE_SCHEMA, publication_authority: 'none', financial_admission: false,
     producer: { repository: REPOSITORY, workflow_path: WORKFLOW, event: 'push', ref: 'refs/heads/main', head_sha: consumer.head_sha, checkout_sha: consumer.head_sha,
@@ -55,6 +55,16 @@ export function stageReviewableCapture(repo, env = process.env) {
   writeFileSync(join(target, 'capture-envelope.json'), canonical(envelope), { flag: 'wx' });
   output(env, 'staged', 'true');
   return { package: target, source_inventory_sha256: envelope.source_inventory_sha256, measured_at: report.measured_at, completed_at: measured.completion.completed_at };
+}
+
+export function stageCaptureFiles(source, target, paths) {
+  const files = {};
+  for (const path of paths) {
+    assert(safePath(path) && (!path.includes('/') || path.startsWith('baseline-representation/')), 'Unsupported nested capture path');
+    const bytes = regular(source, path); mkdirSync(dirname(join(target, path)), { recursive: true });
+    writeFileSync(join(target, path), bytes, { flag: 'wx' }); files[path] = { sha256: hash(bytes), bytes: bytes.length };
+  }
+  return files;
 }
 
 export function extractReviewableZip(archive, target) {
