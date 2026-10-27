@@ -10,7 +10,10 @@ import './leaderEvidenceChart.css';
 
 const finite = Number.isFinite;
 const positive = n => finite(n) && n > 0;
-const quantity = n => finite(n) ? new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 2 }).format(n) : 'データなし';
+// One chart renders hundreds of volume tooltips. Reuse the immutable locale
+// formatter instead of constructing one for every bar and every interaction.
+const quantityFormatter = new Intl.NumberFormat('ja-JP', { maximumFractionDigits: 2 });
+const quantity = n => finite(n) ? quantityFormatter.format(n) : 'データなし';
 const ranges = [['1か月',21],['3か月',63],['6か月',126],['1年',252]];
 const precedingDailyMean = bars => bars.length >= 51 ? bars.slice(-51,-1).reduce((sum,bar)=>sum+bar.volume,0)/50 : null;
 export default function LeaderEvidenceChart(props) {
@@ -93,7 +96,7 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   };
   const visibleLegs=timeframe==='daily'&&annotations?datedLegs.filter(leg=>leg.endDate>=bars[0].time&&leg.startDate<=bars.at(-1).time).slice(-3):[];
   // Keep text out of the candles. Detailed mode adds measured lines only;
-  // the corresponding touch targets live below the complete plot/date axis.
+  // the touch targets sit above the plot, visible before any long-chart scroll.
   const anchoredLegs=visibleLegs.map(leg=>({...leg,peak:bars.findIndex(bar=>bar.time===leg.peakDate),bottom:bars.findIndex(bar=>bar.time===leg.lowDate)})).filter(leg=>leg.peak>=0&&leg.bottom>=0);
   const intervalText=timeframe==='weekly'?'週足（10/30/40週線・直前10週出来高平均）':'日足（50/150/200日線・直前50日出来高平均）';
   const range=countValue=>{setCount(Math.max(2,timeframe==='weekly'?Math.ceil(countValue/5):countValue));setOffset(0);setSelectedLeg(null);};
@@ -146,6 +149,7 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
       {researchActions}{onExpand&&<button type="button" onClick={onExpand} aria-label="日次チャートを分析">拡大 ↗</button>}
     </div>}
     {!compact&&<p className={`leader-svg-caption${smallScreen?' leader-svg-caption-mobile':''}`}>{smallScreen?<span>期間 {bars[0].time}〜{bars.at(-1).time} · 左右スワイプ</span>:<>{symbol} · {intervalText} · 最終バー {latest.time} 終値 {formatPrice(latest.close)}。期間 {bars[0].time}〜{bars.at(-1).time}</>}</p>}
+      {!compact&&anchoredLegs.length>0&&<div className="chart-vcp-intervals" aria-label="表示中のVCP推定区間">{anchoredLegs.map(leg=><button key={leg.number} type="button" data-vcp-interval={leg.number} aria-pressed={selectedLeg===`${leg.startDate}/${leg.endDate}`} aria-label={`C${leg.number} ${leg.startDate}から${leg.endDate}、深さ${leg.depthPct.toFixed(1)}%を拡大`} onClick={()=>focusLeg({start:leg.startDate,end:leg.endDate})}>C{leg.number} <strong>{leg.depthPct.toFixed(1)}%</strong></button>)}</div>}
     {model.warning&&<p role="status" className="leader-svg-warning">{model.warning} 買い帯とVCP注記は保留しています。</p>}
     <svg ref={plotRef} data-chart-plot data-chart-symbol={symbol} data-chart-asof={date} data-chart-annotation-mode={annotations?'detail':'simple'} style={compact?{height,width:'100%',flex:'1 1 0',minHeight:0}:expanded?{height,width:'100%'}:undefined} preserveAspectRatio={compact||expanded?'none':undefined} viewBox={`0 0 ${width} ${chartHeight}`} role="img" aria-label={`${symbol} 価格・出来高・RS 共通時間軸 ${bars[0].time}〜${bars.at(-1).time}`} tabIndex={compact?undefined:0}
       onPointerDown={pointerDown} onPointerMove={pointerMove} onPointerUp={clearDrag} onPointerCancel={clearDrag} onLostPointerCapture={clearDrag}
@@ -181,7 +185,6 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
       </g>
     </svg>
     {!compact&&<>
-      {anchoredLegs.length>0&&<div className="chart-vcp-intervals" aria-label="表示中のVCP推定区間">{anchoredLegs.map(leg=><button key={leg.number} type="button" data-vcp-interval={leg.number} aria-pressed={selectedLeg===`${leg.startDate}/${leg.endDate}`} aria-label={`C${leg.number} ${leg.startDate}から${leg.endDate}、深さ${leg.depthPct.toFixed(1)}%を拡大`} onClick={()=>focusLeg({start:leg.startDate,end:leg.endDate})}>C{leg.number} <strong>{leg.depthPct.toFixed(1)}%</strong></button>)}</div>}
       <div className="chart-scroll-control"><span>← 過去</span><input aria-label="チャートの表示位置" type="range" min="0" max={maxOffset} value={maxOffset-boundedOffset} disabled={!maxOffset} onChange={event=>setOffset(maxOffset-Number(event.target.value))}/><span>最新 →</span></div>
       <div className="chart-snapshot-metrics">
         <RsRatingHistory history={payload?.rs_rating_history} symbol={symbol} date={date} current={row?.rs_rating??rsRatingValue}/>

@@ -1,48 +1,15 @@
 import { useMemo, lazy, Suspense } from 'react';
 import useColorModePreference from './contexts/useColorModePreference';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { CssBaseline, ThemeProvider, createTheme, CircularProgress, Box } from '@mui/material';
 
 import { STATIC_SITE_MODE } from './config/runtimeMode';
 import StaticAppShell from './static/StaticAppShell';
 
-// Eagerly loaded pages (most frequently used)
-import ScanPage from './pages/ScanPage';
-import MarketScanPage from './pages/MarketScanPage';
-import StockDetails from './components/Stock/StockDetails';
-import Layout from './components/Layout/Layout';
-import BootstrapSetupScreen from './components/App/BootstrapSetupScreen';
-import ServerLoginScreen from './components/App/ServerLoginScreen';
-import { AssistantChatProvider } from './contexts/AssistantChatContext';
-import { PipelineProvider } from './contexts/PipelineContext';
-import { RuntimeProvider, useRuntime } from './contexts/RuntimeContext';
-import { StrategyProfileProvider } from './contexts/StrategyProfileContext';
 import { ColorModeContext } from './contexts/ColorModeContext';
 
-// Lazy loaded pages (secondary pages)
-const BreadthPage = lazy(() => import('./pages/BreadthPage'));
-const GroupRankingsPage = lazy(() => import('./pages/GroupRankingsPage'));
-const ValidationPage = lazy(() => import('./pages/ValidationPage'));
-const ThemesPage = lazy(() => import('./pages/ThemesPage'));
-const ChatbotPage = lazy(() => import('./pages/ChatbotPage'));
-const OperationsPage = lazy(() => import('./pages/OperationsPage'));
-const Markets360Page = lazy(() => import('./features/markets360/pages/Markets360Page'));
-const PositionsPage = lazy(() => import('./pages/PositionsPage'));
-
-// Loading fallback component
-const PageLoadingFallback = () => (
-  <Box
-    sx={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '50vh',
-    }}
-  >
-    <CircularProgress />
-  </Box>
-);
+// Backend routes and chart libraries are loaded only for the connected app.
+const ServerApp = lazy(() => import('./ServerApp'));
 
 // Create React Query client with optimized settings
 const queryClient = new QueryClient({
@@ -226,9 +193,9 @@ function App() {
   const theme = useMemo(() => createTheme(getDesignTokens(mode)), [mode]);
 
   const appShell = STATIC_SITE_MODE ? <StaticAppShell /> : (
-    <RuntimeProvider>
-      <AppShell />
-    </RuntimeProvider>
+    <Suspense fallback={<Box role="status" sx={{p:4}}><CircularProgress aria-label="アプリを読み込み中" /></Box>}>
+      <ServerApp />
+    </Suspense>
   );
 
   return (
@@ -241,98 +208,6 @@ function App() {
       </ColorModeContext.Provider>
     </QueryClientProvider>
   );
-}
-
-function AppShell() {
-  const {
-    auth,
-    bootstrapRequired,
-    bootstrapState,
-    enabledMarkets,
-    features,
-    isLoggingIn,
-    isStartingBootstrap,
-    login,
-    marketCatalog,
-    primaryMarket,
-    loginError,
-    runtimeReady,
-    startBootstrap,
-    supportedMarkets,
-    bootstrapError,
-  } = useRuntime();
-
-  if (!runtimeReady) {
-    return <PageLoadingFallback />;
-  }
-
-  if (auth?.required && !auth?.authenticated) {
-    return (
-      <ServerLoginScreen
-        auth={auth}
-        isLoggingIn={isLoggingIn}
-        loginError={loginError}
-        onLogin={login}
-      />
-    );
-  }
-
-  if (bootstrapRequired) {
-    return (
-      <BootstrapSetupScreen
-        primaryMarket={primaryMarket}
-        enabledMarkets={enabledMarkets}
-        supportedMarkets={supportedMarkets}
-        marketCatalog={marketCatalog}
-        bootstrapState={bootstrapState}
-        isStartingBootstrap={isStartingBootstrap}
-        bootstrapError={bootstrapError}
-        onStartBootstrap={startBootstrap}
-      />
-    );
-  }
-
-  const assistantChatbotRoute = (
-    <AssistantChatProvider>
-      <ChatbotPage />
-    </AssistantChatProvider>
-  );
-
-  const appRoutes = (
-    <Router>
-      <Layout>
-        <Suspense fallback={<PageLoadingFallback />}>
-          <Routes>
-            <Route path="/" element={<MarketScanPage />} />
-            <Route path="/scan" element={<ScanPage />} />
-            <Route path="/breadth" element={<BreadthPage />} />
-            <Route path="/groups" element={<GroupRankingsPage />} />
-            <Route path="/validation" element={<ValidationPage />} />
-            {features.themes && <Route path="/themes" element={<ThemesPage />} />}
-            {features.chatbot && <Route path="/chatbot" element={assistantChatbotRoute} />}
-            <Route path="/stocks/:ticker" element={<StockDetails />} />
-            <Route path="/markets360" element={<Markets360Page />} />
-            <Route path="/markets360/:ticker" element={<Markets360Page />} />
-            <Route path="/positions" element={<PositionsPage />} />
-            <Route path="/operations" element={<OperationsPage />} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </Suspense>
-      </Layout>
-    </Router>
-  );
-
-  const routedApp = (
-    <StrategyProfileProvider>
-      {appRoutes}
-    </StrategyProfileProvider>
-  );
-
-  if (features.themes) {
-    return <PipelineProvider>{routedApp}</PipelineProvider>;
-  }
-
-  return routedApp;
 }
 
 export default App;

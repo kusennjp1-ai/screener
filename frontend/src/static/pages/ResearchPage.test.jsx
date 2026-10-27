@@ -108,6 +108,7 @@ it('opens an initial symbol link at the selected detail once its data arrives', 
 it('renders the mobile chart only in detail, preserving row selection and focus on entry',async()=>{
   vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
   mount();
+  fireEvent.click(await screen.findByRole('button',{name:'一覧・絞り込みで探す →'}));
   const leaderRow=await screen.findByRole('button',{name:/^LEAD の分析を表示/});
   expect(screen.queryByRole('button',{name:'日次チャートを分析'})).not.toBeInTheDocument();
   fireEvent.click(leaderRow);
@@ -215,8 +216,10 @@ it('retains one visible date caution when mobile selection replaces the overview
   vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
   data.date='2000-01-03';
   mount();
-  const row=await screen.findByRole('button',{name:/^LEAD の分析を表示/});
+  expect(await screen.findByRole('alert',{name:'分析データの鮮度'})).toBeInTheDocument();
   expect(screen.getByRole('alert',{name:'分析データの鮮度'}).closest('.research-hero')).toBeNull();
+  fireEvent.click(await screen.findByRole('button',{name:'一覧・絞り込みで探す →'}));
+  const row=await screen.findByRole('button',{name:/^LEAD の分析を表示/});
   fireEvent.click(row);
   expect(screen.getAllByRole('alert',{name:'分析データの鮮度'})).toHaveLength(1);
   const warning=screen.getByRole('alert',{name:'分析データの鮮度'});
@@ -331,7 +334,7 @@ it('retains the watch for this screen and reports denied persistence', async () 
 
 it('offers mobile inline search and distinct filter search while retaining the selected query',async()=>{
  vi.stubGlobal('matchMedia',vi.fn(query=>({matches:/max-width:\s*700px/.test(query),media:query,addEventListener:vi.fn(),removeEventListener:vi.fn(),addListener:vi.fn(),removeListener:vi.fn()})));
- mount();await screen.findByRole('button',{name:/^LEAD の分析を表示/});
+ mount();fireEvent.click(await screen.findByRole('button',{name:'一覧・絞り込みで探す →'}));await screen.findByRole('button',{name:/^LEAD の分析を表示/});
  const inline=screen.getByRole('textbox',{name:'銘柄・企業名を検索'});
  fireEvent.change(inline,{target:{value:'LEAD'}});
  await waitFor(()=>expect(screen.queryByRole('button',{name:/^FAIL の分析を表示/})).not.toBeInTheDocument());

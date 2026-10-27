@@ -1,0 +1,14 @@
+.market-update-status{margin:0 0 8px;font-size:12px}
+.market-trends>header{flex-wrap:wrap}
+.market-trends>header>.market-update-status{margin:0;min-width:0;max-width:100%}
+.market-trends>header>div{flex-shrink:0}
+.market-trends>header>.market-update-status:not([open]){flex:1 1 0;max-width:220px}
+.market-trends>header h2{margin-bottom:10px}
+.market-trends>header:has(.market-update-status[open])>.market-update-status{flex-basis:100%}
+.market-update-status>summary{min-height:44px;padding:4px 8px}
+.market-update-status>summary>span:first-child{display:flex;align-items:center;gap:6px;min-width:0}
+.market-update-status [data-update-state=pending]{color:var(--ext)}
+.market-update-status dl{margin:0;display:grid;gap:6px}
+.market-update-status dl>div{display:flex;justify-content:space-between;flex-wrap:wrap;gap:4px 12px}
+.market-update-status dt{color:var(--text-2)}
+.market-update-status dd{margin:0;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}

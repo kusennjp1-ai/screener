@@ -34,8 +34,11 @@
 }
 @media(prefers-reduced-motion:reduce){.leader-post *,.leader-feed-controls *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 
-/* Feed posts are variable-height, not the previous 51px/70px virtual table. */
-.leader-shell .candidate-scroll [role=listitem]{content-visibility:visible;contain-intrinsic-block-size:none}
+/* Keep variable-height posts in the DOM and accessibility tree, but let the
+   browser skip layout/paint well outside the viewport. Remember measured
+   heights so returning to a scrolled list keeps its position.
+   https://developer.mozilla.org/en-US/docs/Web/CSS/content-visibility */
+.leader-shell .candidate-scroll [role=listitem]{content-visibility:auto;contain-intrinsic-block-size:auto 280px}
 .leader-shell .research-grid[data-view=list]>.research-list:not(.compare-only){height:auto;max-height:none;overflow:visible}
 .leader-shell .candidate-scroll{overflow:visible;scroll-padding-top:0}
 .leader-shell .candidate-scroll>[role=list]{padding-top:0}

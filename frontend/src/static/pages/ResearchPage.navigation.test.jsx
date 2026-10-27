@@ -70,6 +70,9 @@ it('restores a symbol-free list and liquidity on Back, and the linked mobile det
   await waitFor(() => expect(container.querySelector('main')).toHaveAttribute('data-mobile-view', 'list'));
   expect(screen.getByRole('button', { name: 'ミネルヴィニ', exact: true })).toHaveAttribute('aria-pressed', 'true');
   expect(screen.queryByRole('button', { name: /^SMALL の分析/ })).not.toBeInTheDocument();
+  // Back restores the mobile market first; hidden list rows are intentionally
+  // deferred until the user opens the list, while filters keep their meaning.
+  fireEvent.click(screen.getByRole('button', { name: '一覧・絞り込みで探す →' }));
   expect(await screen.findByRole('button', { name: /^BANK の分析/ })).toBeInTheDocument();
   expect(screen.getByRole('button', { name: /^TECH の分析/ })).toBeInTheDocument();
   act(() => window.history.forward());

@@ -10,11 +10,13 @@ from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from zoneinfo import ZoneInfo
 
 SECTORS = ['XLB','XLC','XLE','XLF','XLI','XLK','XLP','XLRE','XLU','XLV','XLY']
@@ -26,14 +28,32 @@ def years_before(day,years):
     try:return day.replace(year=day.year-years)
     except ValueError:return day.replace(year=day.year-years,day=28)
 
-def fetch_symbol(symbol, target, start, cache):
+def latest_response_day(record):
+    value = json.loads(record['raw'])['chart']['result'][0]
+    if value['meta']['symbol'].upper() != record['symbol'].upper():
+        raise ValueError('Cached provider symbol mismatch')
+    stamps = value.get('timestamp') or []
+    if not stamps:return None
+    quote=value['indicators']['quote'][0]
+    bar={field:quote[field][-1] for field in FIELDS}
+    if any(type(bar[field]) not in (int,float) or not math.isfinite(bar[field]) or (bar[field] < 0 if field=='volume' else bar[field] <= 0) for field in FIELDS):return None
+    if bar['high']<max(bar['open'],bar['low'],bar['close']) or bar['low']>min(bar['open'],bar['high'],bar['close']):return None
+    return datetime.fromtimestamp(stamps[-1], ZoneInfo('America/New_York')).date().isoformat()
+
+
+def fetch_symbol(symbol, target, start, cache, cache_max_age_minutes=60):
     key = hashlib.sha256(f'{symbol}/{start}/{target}'.encode()).hexdigest()
     path = cache / f'{key}.json'
     if path.exists():
         saved = json.loads(path.read_bytes())
-        if saved['symbol'] == symbol and saved['as_of_date'] == target and digest(saved['raw'].encode()) == saved['provenance']['sha256']:
+        if saved['symbol'] != symbol or saved['as_of_date'] != target or digest(saved['raw'].encode()) != saved['provenance']['sha256']:
+            raise ValueError('Invalid cached history identity/hash')
+        age = (datetime.now(timezone.utc)-datetime.fromisoformat(saved['provenance']['retrieved_at'])).total_seconds()
+        # A response received before the provider exposed the final session must
+        # never poison all later retries for this target. Recheck recent closes
+        # periodically too, so same-day exchange/provider corrections can arrive.
+        if 0 <= age <= cache_max_age_minutes*60 and latest_response_day(saved) == target:
             return saved
-        raise ValueError('Invalid cached history identity/hash')
     first = int(datetime.fromisoformat(start).replace(tzinfo=timezone.utc).timestamp())
     last = int(datetime.fromisoformat(target).replace(tzinfo=timezone.utc).timestamp()) + 86400
     url = f'https://query1.finance.yahoo.com/v8/finance/chart/{urllib.parse.quote(symbol)}?period1={first}&period2={last}&interval=1d'
@@ -44,7 +64,7 @@ def fetch_symbol(symbol, target, start, cache):
             value = json.loads(raw)['chart']['result'][0]
             if value['meta']['symbol'].upper() != symbol.upper(): raise ValueError('Provider symbol mismatch')
             result = {'symbol':symbol,'as_of_date':target,'raw':raw.decode(), 'provenance':{'url':url,'sha256':digest(raw),'retrieved_at':datetime.now(timezone.utc).isoformat()}}
-            path.write_bytes(encode(result))
+            atomic_write(path, encode(result))
             time.sleep(.15)
             return result
         except urllib.error.HTTPError as error:
@@ -178,37 +198,156 @@ def build(records, errors, symbols, sessions, target, classification=None):
         'calendar':{'provider':'pandas_market_calendars:NYSE','sessions':sessions},'breadth':points,'sp500':index,'sectorRotation':{'lookback_sessions':126,'classification':'11 Select Sector SPDR ETF proxies; not official IBD industry groups or ratings','frames':frames},
         'classification':classification,'sectorBreadth':sector_breadth if classification else [],'provenance':provenance+extra_provenance,'errors':{**errors,**parse_errors}}
 
-def main():
+def atomic_write(path, content):
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name('.'+path.name+'.'+uuid.uuid4().hex+'.tmp')
+    try:
+        with temporary.open('xb') as output:
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def published_universe(root):
+    """Read the just-compiled daily audit and its exact chart/classification data.
+
+    The compiler independently checks source bars and the NYSE calendar before
+    setting a valid audit. The six-year collector then refetches and calculates
+    history from original provider responses; it never extrapolates this audit.
+    """
+    root = Path(root).resolve()
+    def read(relative):
+        original = root/relative
+        path = original.resolve()
+        if not path.is_relative_to(root) or original.is_symlink() or any(parent.is_symlink() for parent in original.parents if parent != root):
+            raise ValueError('Unsafe published history input')
+        return json.loads(path.read_bytes())
+    manifest = read('manifest.json')
+    entry = manifest.get('markets', {}).get('US', manifest)
+    target = entry['as_of_date']
+    audit_bytes = (root.parent/'qualification-audit.json').read_bytes()
+    audit = json.loads(audit_bytes)
+    if audit.get('as_of_date') != target or audit.get('version') != 'ohlcv-v2-session-calendar':
+        raise ValueError('Current independently verified chart audit is required')
+    for item in audit['results']:
+        evidence=item.get('audit',{})
+        if evidence.get('symbol')!=item.get('symbol') or evidence.get('as_of_date')!=target or evidence.get('version')!=audit['version']:
+            raise ValueError('Published audit result identity/date mismatch')
+        if evidence.get('valid') is True and (evidence.get('status')!='verified' or evidence.get('errors')!=[]):
+            raise ValueError('Published audit certification is inconsistent')
+    symbols = sorted(item['symbol'] for item in audit['results'] if item.get('audit', {}).get('valid') is True)
+    if len(symbols) < 100 or len(set(symbols)) != len(symbols):
+        raise ValueError('Published verified chart universe is missing or duplicated')
+    index = read(entry['assets']['charts']['path'])
+    chart_paths = {item['symbol']: item['path'] for item in index['symbols']}
+    scan = read(entry['pages']['scan']['path'])
+    sources = [entry['pages']['scan']['path'], *[chunk['path'] for chunk in scan.get('chunks', [])]]
+    row_sectors = {}
+    for relative in sources:
+        document = read(relative)
+        if document.get('as_of_date') != target:
+            raise ValueError('Published classification snapshot date mismatch')
+        for row in document.get('rows', document.get('initial_rows', [])):
+            sector = row.get('gics_sector')
+            if row['symbol'] in row_sectors and row_sectors[row['symbol']] != sector:
+                raise ValueError('Conflicting published sector classification')
+            row_sectors[row['symbol']] = sector
+    memberships = {}
+    for symbol in symbols:
+        chart = read(chart_paths[symbol])
+        if chart.get('symbol') != symbol or chart.get('as_of_date') != target or not chart.get('bars') or chart['bars'][-1]['date'] != target:
+            raise ValueError('Published chart does not match its daily audit')
+        sector = row_sectors.get(symbol)
+        sector = 'Financial' if sector == 'Financial Services' else sector
+        memberships[symbol] = sector if sector in GROUPS else 'Unknown'
+    source_inputs = [{'path': relative, 'sha256': digest((root/relative).read_bytes())} for relative in sources]
+    classification = {'as_of_date': target, 'basis': 'current-published-gics-sector-retrospective',
+                      'source_sha256': digest(encode(source_inputs)), 'source_inputs': source_inputs,
+                      'verified_universe_sha256': digest(audit_bytes), 'memberships_sha256': digest(encode(memberships)), 'memberships': memberships}
+    return target, symbols, classification
+
+
+def require_current(result):
+    """No date-only success: every main timeline needs a real final observation."""
+    target = result['as_of_date']
+    breadth = result['breadth'][-1] if result['breadth'] else {}
+    if breadth.get('date') != target or any(breadth.get(key) is None for key in ('above50', 'newHighs', 'newLows', 'leaderCount')):
+        raise ValueError('Latest completed session fails long-history 90% coverage / 100-stock RS gate')
+    index = result['sp500'][-1] if result['sp500'] else {}
+    if index.get('date') != target or not isinstance(index.get('close'), (int, float)) or not math.isfinite(index['close']) or index['close'] <= 0:
+        raise ValueError('Latest completed S&P 500 close is not available')
+    frames = result['sectorRotation']['frames']
+    if not frames or frames[-1]['date'] != target or len(frames[-1]['ranks']) != len(SECTORS):
+        raise ValueError('Latest completed session lacks all 11 sector ETF ranks')
+    if result.get('sectorBreadth') and any(not group['points'] or group['points'][-1]['date'] != target for group in result['sectorBreadth']):
+        raise ValueError('Sector breadth has not reached the completed session')
+
+
+def collect(target, symbols, classification, cache, output, workers=3, allow_unavailable=False, report=None, cache_max_age_minutes=60):
     import pandas_market_calendars as mcal
-    parser=argparse.ArgumentParser();parser.add_argument('--as-of',required=True);parser.add_argument('--universe-dir',required=True);parser.add_argument('--cache',required=True);parser.add_argument('--output',required=True);parser.add_argument('--workers',type=int,default=3);args=parser.parse_args()
-    target=date.fromisoformat(args.as_of);start=target-timedelta(days=365*6+45)
-    schedule=mcal.get_calendar('NYSE').schedule(start_date=start,end_date=target)
-    if schedule.empty or schedule.index[-1].date()!=target or schedule.iloc[-1].market_close.to_pydatetime()>datetime.now(timezone.utc): raise ValueError('Target must be a completed NYSE session')
+    started=time.monotonic();target_day=date.fromisoformat(target);start=target_day-timedelta(days=365*6+45)
+    schedule=mcal.get_calendar('NYSE').schedule(start_date=start,end_date=target_day)
+    if schedule.empty or schedule.index[-1].date()!=target_day or schedule.iloc[-1].market_close.to_pydatetime()>datetime.now(timezone.utc): raise ValueError('Target must be a completed NYSE session')
     sessions=[str(day.date()) for day in schedule.index]
-    documents=[json.loads(p.read_bytes()) for p in Path(args.universe_dir).glob('*.json')]
-    charts=[document.get('payload') for document in documents if isinstance(document,dict)]
-    symbols=sorted({chart['symbol'] for chart in charts if isinstance(chart,dict) and chart.get('as_of_date')==args.as_of and isinstance(chart.get('bars'),list)})
-    if len(symbols)<100: raise ValueError('Published chart universe is missing or mismatched')
-    del documents,charts
-    cache=Path(args.cache);cache.mkdir(parents=True,exist_ok=True);records={};errors={};total=len(symbols)+13
-    print(json.dumps({'start':start.isoformat(),'end':args.as_of,'symbols':len(symbols),'sessions':len(sessions)}),flush=True)
+    if len(symbols)<100 or len(set(symbols))!=len(symbols):raise ValueError('Published chart universe is missing or duplicated')
+    destination=Path(output)
+    if destination.exists():
+        previous=json.loads(destination.read_bytes())
+        if previous.get('schema_version')!='market-long-history-v1' or previous.get('market')!='US' or previous.get('as_of_date','')>target:raise ValueError('Existing history identity/date is invalid; refusing rollback')
+    cache=Path(cache);cache.mkdir(parents=True,exist_ok=True);records={};errors={};total=len(set([*symbols,'^GSPC','SPY',*SECTORS]))
+    print(json.dumps({'start':start.isoformat(),'end':target,'symbols':len(symbols),'sessions':len(sessions)}),flush=True)
     def one(symbol):
-        try: return symbol,fetch_symbol(symbol,args.as_of,start.isoformat(),cache),None
+        try: return symbol,fetch_symbol(symbol,target,start.isoformat(),cache,cache_max_age_minutes),None
         except Exception as error: return symbol,None,str(error)
-    with ThreadPoolExecutor(max_workers=max(1,min(3,args.workers))) as pool:
-        for i,(symbol,record,error) in enumerate(pool.map(one,['^GSPC','SPY',*SECTORS,*symbols]),1):
+    with ThreadPoolExecutor(max_workers=max(1,min(3,workers))) as pool:
+        for i,(symbol,record,error) in enumerate(pool.map(one,list(dict.fromkeys(['^GSPC','SPY',*SECTORS,*symbols]))),1):
             if record: records[symbol]=record
             else: errors[symbol]=error
             if i%100==0 or i==total: print(json.dumps({'done':i,'total':total,'errors':len(errors)}),flush=True)
-    classification_bytes=(Path(args.universe_dir)/'rows.json').read_bytes()
-    classification_rows=json.loads(classification_bytes)
-    memberships={row['symbol']:('Financial' if row.get('gics_sector')=='Financial Services' else row.get('gics_sector')) for row in classification_rows if row.get('symbol') in symbols}
-    memberships={symbol:memberships.get(symbol) if memberships.get(symbol) in GROUPS else 'Unknown' for symbol in symbols}
-    classification={'as_of_date':args.as_of,'basis':'current-published-gics-sector-retrospective','source_sha256':digest(classification_bytes),'memberships_sha256':digest(encode(memberships)),'memberships':memberships}
-    result=build(records,errors,symbols,sessions,args.as_of,classification)
+    result=build(records,errors,symbols,sessions,target,classification)
     result['calendar']['version']=mcal.__version__
-    path=Path(args.output);path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(encode(result)+b'\n')
     valid=[r for r in result['breadth'] if r['newHighs'] is not None]
-    print(json.dumps({'output':str(path),'symbols':len(symbols),'failures':len(result['errors']),'valid_breadth_sessions':len(valid),'first_valid':valid[0]['date'] if valid else None,'last_valid':valid[-1]['date'] if valid else None,'sector_frames':len(result['sectorRotation']['frames'])}),flush=True)
+    summary={'target':target,'output':str(destination),'symbols':len(symbols),'failures':len(result['errors']),'valid_breadth_sessions':len(valid),'first_valid':valid[0]['date'] if valid else None,'last_valid':valid[-1]['date'] if valid else None,'sector_frames':len(result['sectorRotation']['frames']),'elapsed_seconds':round(time.monotonic()-started,3)}
+    try:require_current(result)
+    except ValueError as error:
+        summary.update({'updated':False,'reason':str(error),'retained_as_of_date':json.loads(destination.read_bytes())['as_of_date'] if destination.exists() else None})
+        if report:atomic_write(report,encode(summary)+b'\n')
+        print(json.dumps(summary),flush=True)
+        if not allow_unavailable:raise
+        return summary
+    atomic_write(destination,encode(result)+b'\n')
+    summary.update({'updated':True,'sha256':digest(destination.read_bytes())})
+    if report:atomic_write(report,encode(summary)+b'\n')
+    print(json.dumps(summary),flush=True)
+    return summary
+
+
+def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--as-of');parser.add_argument('--universe-dir');parser.add_argument('--root')
+    parser.add_argument('--cache',required=True);parser.add_argument('--output',required=True)
+    parser.add_argument('--workers',type=int,default=3);parser.add_argument('--allow-unavailable',action='store_true')
+    parser.add_argument('--report');parser.add_argument('--cache-max-age-minutes',type=int,default=60)
+    args=parser.parse_args()
+    if args.root:
+        if args.universe_dir:parser.error('Choose --root or --universe-dir')
+        target,symbols,classification=published_universe(args.root)
+        if args.as_of and args.as_of!=target:raise ValueError('Requested history date differs from the compiled daily universe')
+    else:
+        if not args.as_of or not args.universe_dir:parser.error('--root or both --as-of and --universe-dir are required')
+        target=args.as_of
+        documents=[json.loads(p.read_bytes()) for p in Path(args.universe_dir).glob('*.json')]
+        charts=[document.get('payload') for document in documents if isinstance(document,dict)]
+        symbols=sorted({chart['symbol'] for chart in charts if isinstance(chart,dict) and chart.get('as_of_date')==target and isinstance(chart.get('bars'),list)})
+        classification_bytes=(Path(args.universe_dir)/'rows.json').read_bytes()
+        classification_rows=json.loads(classification_bytes)
+        memberships={row['symbol']:('Financial' if row.get('gics_sector')=='Financial Services' else row.get('gics_sector')) for row in classification_rows if row.get('symbol') in symbols}
+        memberships={symbol:memberships.get(symbol) if memberships.get(symbol) in GROUPS else 'Unknown' for symbol in symbols}
+        classification={'as_of_date':target,'basis':'current-published-gics-sector-retrospective','source_sha256':digest(classification_bytes),'memberships_sha256':digest(encode(memberships)),'memberships':memberships}
+    collect(target,symbols,classification,args.cache,args.output,args.workers,args.allow_unavailable,args.report,args.cache_max_age_minutes)
 
 if __name__=='__main__':main()

@@ -976,11 +976,33 @@ jobs:
           path: .cache/sec13f
           key: sec13f-v2-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: sec13f-v2-
+      - name: Select exact long-history retry cache date
+        id: history-target
+        if: needs.select-markets.outputs.mode == 'full'
+        run: |
+          python - <<'PY'
+          import json, os
+          from datetime import date
+          manifest=json.load(open('frontend/public/static-data/manifest.json'))
+          target=manifest.get('markets',{}).get('US',manifest)['as_of_date']
+          assert date.fromisoformat(target).isoformat()==target
+          with open(os.environ['GITHUB_OUTPUT'],'a') as output:output.write(f'date={target}\n')
+          PY
+      - name: Restore same-session long-history responses for bounded retries
+        id: history-cache
+        if: needs.select-markets.outputs.mode == 'full'
+        uses: actions/cache/restore@v4
+        with:
+          path: frontend/.cache/market-history
+          # One bounded raw-response cache per target/compiler, not per retry.
+          # Different dates never accumulate in the same restored directory.
+          key: market-long-history-v1-${{ steps.history-target.outputs.date }}-${{ hashFiles('frontend/tools/collect-market-history.py') }}
       - name: Build static frontend
         id: build-frontend
         env:
           GH_TOKEN: ${{ github.token }}
           PRICE_REPAIR: ${{ needs.select-markets.outputs.repair }}
+          MARKET_BUILD_MODE: ${{ needs.select-markets.outputs.mode }}
           SEC_USER_AGENT: ${{ needs.select-markets.outputs.repair != 'true' && secrets.SEC_USER_AGENT || '' }}
           VITE_STATIC_SITE: "true"
           VITE_BASE_PATH: /${{ github.event.repository.name }}/
@@ -994,6 +1016,7 @@ jobs:
             python tools/test_sec_financials.py
             python tools/export-book-benchmark.py --allow-unavailable
             node tools/restore-market-trend-source.mjs
+            node tools/restore-market-history-source.mjs
             python tools/collect-market-trends.py --allow-unavailable
             python tools/restore-candidate-history.py
             python tools/export-sector-prices.py
@@ -1003,10 +1026,36 @@ jobs:
             python tools/export-institutional.py --refresh --mapping-limit 200
             python tools/recalculate-setups.py
             node tools/export-research.mjs
+            if [ "$MARKET_BUILD_MODE" = "full" ]; then
+              python tools/collect-market-history.py --root public/static-data --cache .cache/market-history --output public/static-data/market-history-source.json --allow-unavailable --report "$RUNNER_TEMP/market-history-update.json"
+              if python -c 'import json,os,sys; sys.exit(0 if json.load(open(os.environ["RUNNER_TEMP"]+"/market-history-update.json"))["updated"] else 1)'; then
+                python tools/audit-market-history.py --source public/static-data/market-history-source.json --cache .cache/market-history --output public/static-data/market-history-replay.json
+              else
+                echo '::warning::Long market history remains at its actual prior observation date. The post-close watchdog will retry the missing completed session.'
+              fi
+            fi
             python tools/sec-financials.py --limit 60
             npm run build
             node tools/check-data-quality.mjs
           fi
+
+      - name: Preserve verified raw responses for a failed or delayed-provider retry
+        if: ${{ always() && needs.select-markets.outputs.mode == 'full' && steps.history-cache.outputs.cache-hit != 'true' && steps.history-target.outputs.date != '' && hashFiles('frontend/.cache/market-history/*.json') != '' }}
+        uses: actions/cache/save@v4
+        with:
+          path: frontend/.cache/market-history
+          key: ${{ steps.history-cache.outputs.cache-primary-key }}
+
+      - name: Retain actual long-history freshness and independent replay result
+        if: ${{ always() && needs.select-markets.outputs.mode == 'full' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-history-update-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/market-history-update.json
+            frontend/public/static-data/market-history-replay.json
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Verify finite retained-price repair
         if: needs.select-markets.outputs.repair == 'true'

@@ -50,6 +50,20 @@ def parse_cboe(raw, day):
         raise ValueError('Cboe displayed ratio does not match its numerator/denominator')
     return {'date': day, 'calls': row['call'], 'puts': row['put'], 'reported_ratio': float(ratio[0]['value'])}
 
+
+def reusable_cboe(row, day, now):
+    """Reuse older dated observations, never yesterday's ratio for today."""
+    try:
+        proof=row['provenance'];url=urllib.parse.urlparse(proof['url'])
+        stamp=datetime.fromisoformat(proof['retrieved_at'].replace('Z','+00:00'))
+        return (row['date']==day and type(row['calls']) is int and row['calls']>0 and type(row['puts']) is int and row['puts']>=0
+                and type(row['reported_ratio']) in (int,float) and math.isfinite(row['reported_ratio'])
+                and abs(row['reported_ratio']-row['puts']/row['calls'])<=.0051
+                and url.scheme=='https' and url.netloc=='www.cboe.com' and url.path=='/markets/us/options/market-statistics/daily'
+                and urllib.parse.parse_qs(url.query)=={'dt':[day]} and re.fullmatch('[a-f0-9]{64}',proof['sha256']) is not None
+                and stamp.tzinfo is not None and stamp<=now and stamp.date().isoformat()>=day)
+    except (KeyError,TypeError,ValueError,OverflowError):return False
+
 def collect(as_of, output, allow_unavailable=False):
     import pandas_market_calendars as mcal
     target = date.fromisoformat(as_of)
@@ -66,6 +80,14 @@ def collect(as_of, output, allow_unavailable=False):
     result = {'schema_version': 'market-trend-source-v1', 'market': 'US', 'as_of_date': as_of,
               'calendar': {'provider': 'pandas_market_calendars', 'version': mcal.__version__, 'exchange': 'XNYS', 'sessions': sessions, 'half_days': half_days},
               'indices': [], 'put_call': {'population': 'Cboe SUM OF ALL PRODUCTS (not all US options exchanges)', 'observations': []}}
+    # Publish exchange close clocks separately from observations. The browser can
+    # identify a missed update after the next close even when this whole bundle
+    # is old; a future calendar date never certifies a future price.
+    upcoming=mcal.get_calendar('NYSE').schedule(start_date=target-timedelta(days=7),end_date=target+timedelta(days=45))
+    result['refresh_schedule']={'provider':'pandas_market_calendars:NYSE','version':mcal.__version__,
+                                'generated_at':now.isoformat(timespec='milliseconds').replace('+00:00','Z'),
+                                'valid_until':datetime.combine(target+timedelta(days=46),datetime.min.time(),ZoneInfo('America/New_York')).astimezone(timezone.utc).isoformat().replace('+00:00','Z'),
+                                'sessions':[{'date':str(day.date()),'close_at':row['market_close'].isoformat().replace('+00:00','Z')} for day,row in upcoming.iterrows()]}
     for symbol in ('^GSPC', '^IXIC'):
         start = int(datetime.fromisoformat(sessions[0]).replace(tzinfo=timezone.utc).timestamp())
         end = int(datetime.combine(target+timedelta(days=1), datetime.min.time(), timezone.utc).timestamp())
@@ -98,20 +120,24 @@ def collect(as_of, output, allow_unavailable=False):
                 result['indices'].append({'symbol': symbol, 'bars': [], 'unavailable_reason': str(error)})
     def one(day):
         url = CBOE + '?dt=' + day
+        retained = next((item for item in (previous or {}).get('put_call', {}).get('observations', []) if reusable_cboe(item,day,now)), None)
+        # Refresh three recent sessions for delayed/corrected exchange data.
+        # Earlier verified observations and their original timestamps are kept,
+        # reducing the routine path from 63 Cboe pages to three plus any gaps.
+        if retained and day < sessions[-3]:return retained
         try:
             raw, provenance = fetch(url)
             return {**parse_cboe(raw, day), 'provenance': provenance}
         except Exception as error:
             if not allow_unavailable:
                 raise
-            retained = next((item for item in (previous or {}).get('put_call', {}).get('observations', []) if item.get('date') == day and item.get('provenance') and item.get('calls')), None)
             if retained:
                 return {**retained, 'retained_after_fetch_failure': True}
             return {'date': day, 'calls': None, 'puts': None, 'reported_ratio': None, 'unavailable_reason': str(error)}
     with ThreadPoolExecutor(max_workers=3) as executor:
         refreshed = list(executor.map(one, sessions[-63:]))
     # Retain earlier verified observations as history, without copying their
-    # value to a later date. The recent 63 sessions are refreshed; the retained
+    # value to a later date. The recent three sessions and gaps are refreshed; the retained
     # source can accumulate up to one year (252 actual exchange sessions).
     older = [item for item in (previous or {}).get('put_call', {}).get('observations', [])
              if sessions[-252] <= item.get('date', '') < sessions[-63]]

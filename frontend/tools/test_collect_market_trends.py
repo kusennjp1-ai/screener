@@ -5,6 +5,7 @@ import unittest
 from tempfile import TemporaryDirectory
 from unittest.mock import patch
 from urllib.error import URLError
+from datetime import datetime, timezone
 
 spec = importlib.util.spec_from_file_location('collector', Path(__file__).with_name('collect-market-trends.py'))
 collector = importlib.util.module_from_spec(spec)
@@ -54,6 +55,33 @@ class CollectorTests(unittest.TestCase):
             self.assertEqual(result['put_call']['observations'][-2]['calls'], source['put_call']['observations'][-1]['calls'])
             self.assertIsNone(result['put_call']['observations'][-1]['calls'])
             self.assertIsNone(result['put_call']['observations'][-1]['puts'])
+            self.assertEqual(result['refresh_schedule']['provider'],'pandas_market_calendars:NYSE')
+            closes={row['date']:row['close_at'] for row in result['refresh_schedule']['sessions']}
+            self.assertEqual(closes['2026-10-23'],'2026-10-23T20:00:00Z')
+            self.assertEqual(closes['2026-11-02'],'2026-11-02T21:00:00Z')
+            self.assertEqual(closes['2026-11-27'],'2026-11-27T18:00:00Z')
+            self.assertNotIn('2026-11-26',closes)
+            self.assertGreater(result['refresh_schedule']['valid_until'],closes[max(closes)])
+
+    def test_routine_cboe_refresh_reuses_verified_older_days_and_requests_recent_three(self):
+        source=json.loads((Path(__file__).parent.parent/'data/market-trend-source-2026-10-23.json').read_text(encoding='utf-8'))
+        with TemporaryDirectory(prefix='market-trend-retry-') as directory:
+            output=Path(directory)/'source.json';output.write_text(json.dumps(source),encoding='utf-8')
+            with patch.object(collector,'fetch',side_effect=URLError('offline retry')) as fetched:
+                collector.collect('2026-10-23',output,allow_unavailable=True)
+            self.assertEqual(fetched.call_count,5) # Two indices and three recent Cboe observations.
+            actual=json.loads(output.read_bytes())
+            self.assertEqual(actual['put_call']['observations'][:-3],source['put_call']['observations'][:-3])
+
+    def test_reuse_does_not_accept_unproven_wrong_day_or_inconsistent_cboe_totals(self):
+        row={'date':'2026-10-23','calls':100,'puts':75,'reported_ratio':.75,
+             'provenance':{'url':collector.CBOE+'?dt=2026-10-23','sha256':'a'*64,'retrieved_at':'2026-10-24T00:00:00Z'}}
+        now=datetime(2026,10,25,tzinfo=timezone.utc)
+        self.assertTrue(collector.reusable_cboe(row,'2026-10-23',now))
+        self.assertFalse(collector.reusable_cboe(row,'2026-10-26',now))
+        for changed in ({**row,'reported_ratio':1.8},{**row,'calls':True},{**row,'provenance':{**row['provenance'],'sha256':'bad'}},
+                        {**row,'provenance':{**row['provenance'],'retrieved_at':'2026-10-26T00:00:00Z'}}):
+            self.assertFalse(collector.reusable_cboe(changed,'2026-10-23',now))
 
 if __name__ == '__main__':
     unittest.main()

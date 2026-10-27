@@ -27,7 +27,7 @@ const CandidateRow=memo(function CandidateRow({item,method,nearOnly,selected,onS
   <LeaderPost missingCondition={missing} item={item} date={date} generation={generation} method={method} nearOnly={nearOnly}/>
  </button>;
 });
-export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNearToggle,selectedSymbol,loading,onSelect,view='list',onView,date,generation,market,now,onCompare,paused,toolbar,onFilters,compareOnly=false,feedControls=false,emptyWatch=false,onExplore}) {
+export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNearToggle,selectedSymbol,loading,onSelect,view='list',onView,date,generation,market,now,onCompare,paused,toolbar,onFilters,compareOnly=false,feedControls=false,emptyWatch=false,onExplore,active=true}) {
  const [sort,setSort]=useState('rank'),[page,setPage]=useState(0),[guideOpen,setGuideOpen]=useState(false);
  const guideId=useId();
  const scrollRef=useRef(null),pageStartRef=useRef(null);
@@ -40,7 +40,7 @@ export default memo(function CandidateBoard({ranked,method,nearOnly=false,onNear
  const maxPage=Math.max(0,Math.ceil(ordered.length/50)-1),current=Math.min(page,maxPage);
  // Only the visible list page needs live daily checks. Selection, pagination,
  // and chart mode must not reevaluate the full screening universe.
- const visible=useMemo(()=>view==='list'?ordered.slice(current*50,current*50+50).map(item=>({...item,plan:item.plan||entryPlan(item.row,null,method),volume:verifiedVolumeRatio(item.row,date),readiness:date&&market?entryReadiness(item.row,date,market,now,method):null})):[],[ordered,current,method,date,market,now,view]);
+ const visible=useMemo(()=>active&&view==='list'?ordered.slice(current*50,current*50+50).map(item=>({...item,plan:item.plan||entryPlan(item.row,null,method),volume:verifiedVolumeRatio(item.row,date),readiness:date&&market?entryReadiness(item.row,date,market,now,method):null})):[],[ordered,current,method,date,market,now,view,active]);
  useLayoutEffect(()=>{
   if(pageStartRef.current!==current)return;
   pageStartRef.current=null;

@@ -18,8 +18,8 @@ const CACHE = `screener-static-${VERSION}`;
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    // Full precache (C89b): the build emits precache-manifest.json listing every
-    // hashed asset, so the installed PWA works offline from the FIRST visit — not
+    // Full static-route precache (C89b): the manifest includes each reachable
+    // static page and shared asset, so offline works from the FIRST visit — not
     // just the second. Each entry is added individually (allSettled) so one
     // missing/404 asset can never fail the whole install; the shell is always
     // included so an offline navigation has an entry point. Any gap is still

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, readdir, lstat } from 'node:fs/promises';
 import { dirname,resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { distributionDays } from '../src/static/distributionDays.js';
@@ -17,6 +17,17 @@ export function verifyLongHistorySource(bytes,asOfDate){
 export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}) {
   if(!isDay(asOfDate))throw Error('Invalid market trend date');
   const sourceMatches=source?.schema_version==='market-trend-source-v1'&&source.market==='US'&&source.as_of_date===asOfDate;
+  let refreshSchedule=null;
+  if(sourceMatches&&source.refresh_schedule!==undefined){
+    const schedule=source.refresh_schedule;
+    if(schedule?.provider!=='pandas_market_calendars:NYSE'||typeof schedule.version!=='string'||!schedule.version||
+      !Number.isFinite(Date.parse(schedule.generated_at))||schedule.generated_at.slice(0,10)<asOfDate||Date.parse(schedule.generated_at)>Date.now()||!Number.isFinite(Date.parse(schedule.valid_until))||
+      Date.parse(schedule.valid_until)>Date.parse(asOfDate)+47*86400000||Date.parse(schedule.valid_until)<=Date.parse(asOfDate)||
+      !Array.isArray(schedule.sessions)||!schedule.sessions.length||!schedule.sessions.some(row=>row.date===asOfDate)||
+      schedule.sessions.some((row,i)=>!isDay(row?.date)||!Number.isFinite(Date.parse(row.close_at))||row.close_at.slice(0,10)!==row.date||
+        !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.000)?Z$/.test(row.close_at)||Date.parse(row.close_at)>=Date.parse(schedule.valid_until)||(i>0&&row.date<=schedule.sessions[i-1].date)))throw Error('Invalid independent market refresh calendar');
+    refreshSchedule=schedule;
+  }
   const indices=['^GSPC','^IXIC'].map(symbol=>{
     const input=sourceMatches?source.indices?.find(item=>item.symbol===symbol):null;
     const lastDate=input?.bars?.at(-1)?.date;
@@ -34,7 +45,7 @@ export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}
   if(seen.size!==putCall.length)throw Error('Duplicate put/call observation');
   const validBook=bookEvidence?.as_of_date===asOfDate&&Array.isArray(bookEvidence.series);
   const breadth=validBook?bookEvidence.series.filter(row=>isDay(row.date)&&row.date<=asOfDate).map(row=>({date:row.date,above50:row.above50??null,coverage:row.coverage,universe:row.expectedUniverseSize,above50Percent:row.coverage>0&&Number.isSafeInteger(row.above50)?row.above50/row.coverage*100:null,newHighs:row.newHighs,newLows:row.newLows})):[];
-  return {schema_version:'market-trends-v1',market:'US',as_of_date:asOfDate,source_sha256:sourceMatches?sourceSha256:null,indices,put_call:{population:sourceMatches?source.put_call.population:null,points:putCall},breadth:{approximate:true,population:'現在の公開チャート集合（当時の全上場銘柄集合ではありません）',points:breadth}};
+  return {schema_version:'market-trends-v1',market:'US',as_of_date:asOfDate,source_sha256:sourceMatches?sourceSha256:null,...(refreshSchedule?{refresh_schedule:refreshSchedule}:{}),indices,put_call:{population:sourceMatches?source.put_call.population:null,points:putCall},breadth:{approximate:true,population:'現在の公開チャート集合（当時の全上場銘柄集合ではありません）',points:breadth}};
 }
 
 export async function selectLongHistorySource(directory,asOfDate,evaluatedAt) {
@@ -51,6 +62,24 @@ export async function selectLongHistorySource(directory,asOfDate,evaluatedAt) {
     return {bytes,history:verifyLongHistorySource(bytes,asOfDate)};
   }
   return null;
+}
+
+// Runtime captures are part of the authenticated data artifact, not compiler
+// reference files. Keeping the original bytes lets ordinary release replay use
+// the identical provider observations without network access or a new clock.
+export async function selectRuntimeLongHistorySource(root,asOfDate,evaluatedAt) {
+  if(!isDay(asOfDate)||!Number.isFinite(evaluatedAt)||evaluatedAt>Date.now())throw Error('Invalid long-history evaluation instant');
+  let bytes;
+  try{
+    const path=resolve(root,'market-history-source.json'),stat=await lstat(path);
+    if(!stat.isFile()||stat.isSymbolicLink())throw Error('Long-history runtime source must be a regular file');
+    bytes=await readFile(path);
+  }
+  catch(error){if(error.code==='ENOENT')return null;throw error;}
+  const source=JSON.parse(bytes),retrievedAt=Date.parse(source?.retrieved_at);
+  if(!Number.isFinite(retrievedAt))throw Error('Invalid long-history source retrieval date');
+  if(retrievedAt>evaluatedAt)return null;
+  return {bytes,history:verifyLongHistorySource(bytes,asOfDate)};
 }
 
 export async function exportMarketTrends({root,entry,asOfDate,bookEvidence,evaluatedAt=Date.now()}) {
@@ -72,7 +101,9 @@ export async function exportMarketTrends({root,entry,asOfDate,bookEvidence,evalu
   // Retain the history's own observation date on later publications. Compiler
   // data are already covered by the independent calendar reference hash.
   const directory=resolve(dirname(fileURLToPath(import.meta.url)),'../data');
-  const selected=await selectLongHistorySource(directory,asOfDate,evaluatedAt);
+  const runtime=await selectRuntimeLongHistorySource(root,asOfDate,evaluatedAt);
+  const committed=await selectLongHistorySource(directory,asOfDate,evaluatedAt);
+  const selected=runtime&&(!committed||runtime.history.as_of_date>=committed.history.as_of_date)?runtime:committed;
   if(selected){
     const {bytes:historyBytes,history}=selected;
     payload.long_history={...history,source_sha256:hash(historyBytes)};

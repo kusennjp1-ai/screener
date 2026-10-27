@@ -259,6 +259,9 @@ describe('self-drawn SVG evidence and controls', () => {
       fireEvent.click(screen.getByRole('button',{name:'VCP注記'}));
       expect([...svg.querySelectorAll('[data-vcp-leg]')].map(node=>node.dataset.vcpLeg)).toEqual(['4','5','6']);
       const chips=[...container.querySelectorAll('[data-vcp-interval]')];expect(chips).toHaveLength(3);
+      // The interval controls must precede the plot so an expanded chart does
+      // not require scrolling beyond its date axis to discover them.
+      expect(chips[0].compareDocumentPosition(svg)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       for(const [index,chip] of chips.entries()){
         expect(chip.closest('svg')).toBeNull();expect(chip).toHaveTextContent(`C${index+4} ${(6.8+index/10).toFixed(1)}%`);
         const group=svg.querySelector(`[data-vcp-leg="${index+4}"]`),point=group.querySelector('circle');

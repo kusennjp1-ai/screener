@@ -4,6 +4,7 @@ import { historyWindow } from '../marketLongHistory';
 import { SECTORS } from '../sectorDefinitions';
 import { TrendChart } from './MarketTrendDashboard';
 import { useMarketTrends } from '../useMarketTrends';
+import MarketUpdateStatus from './MarketUpdateStatus';
 import MetricDisclosure from './MetricDisclosure';
 import './marketHistoryExplorer.css';
 const names=Object.fromEntries(SECTORS.map(([,label,symbol])=>[symbol,label]));
@@ -46,5 +47,5 @@ export default function ConnectedMarketHistoryExplorer({marketEntry,sectorOnly=f
  const query=useMarketTrends(marketEntry);
  if(query.loading)return <p role="status">長期履歴を読み込み中…</p>;
  if(query.error)return <p role="alert">長期履歴の整合性を確認できません。</p>;
- return <>{!sectorOnly&&<HistoricalBreadth history={query.data?.long_history}/>}<SectorRankHistory history={query.data?.long_history}/></>;
+ return <><MarketUpdateStatus data={query.data}/>{!sectorOnly&&<HistoricalBreadth history={query.data?.long_history}/>}<SectorRankHistory history={query.data?.long_history}/></>;
 }

@@ -1,12 +1,12 @@
 import { HashRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import StaticLayout from './StaticLayout';
-import StaticHomePage from './pages/StaticHomePage';
+const StaticHomePage = lazy(() => import('./pages/StaticHomePage'));
 import ResearchPage from './pages/ResearchPage';
-import StaticScanPage from './pages/StaticScanPage';
-import StaticBreadthPage from './pages/StaticBreadthPage';
-import StaticGroupsPage from './pages/StaticGroupsPage';
+const StaticScanPage = lazy(() => import('./pages/StaticScanPage'));
+const StaticBreadthPage = lazy(() => import('./pages/StaticBreadthPage'));
+const StaticGroupsPage = lazy(() => import('./pages/StaticGroupsPage'));
 import { StaticMarketProvider } from './StaticMarketContext';
 import { getStaticSupportedMarkets, useStaticManifest } from './dataClient';
 
@@ -29,6 +29,7 @@ function StaticAppContent() {
       defaultMarket={defaultMarket}
     >
       <StaticLayout>
+        <Suspense fallback={<p role="status" style={{padding:16}}>画面を読み込み中…</p>}>
         <Routes>
           <Route path="/" element={<ResearchPage />} />
           <Route path="/compare" element={<ResearchPage compareOnly />} />
@@ -38,6 +39,7 @@ function StaticAppContent() {
           <Route path="/groups" element={<StaticGroupsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
       </StaticLayout>
     </StaticMarketProvider>
   );

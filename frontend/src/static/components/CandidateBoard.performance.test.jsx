@@ -21,6 +21,17 @@ it('calculates only visible rank plans, keeps the full sort universe and reuses 
  expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('S52');
  expect(entryPlan).toHaveBeenCalledTimes(153);
 });
+it('defers hidden mobile rows and preserves page and sort when the list returns',()=>{
+ const ranked=Array.from({length:103},(_,index)=>({row:{symbol:`S${index}`,current_price:102,se_pivot_price:100,rs_rating:index},assessment:{qualified:true,passed:9,total:9}}));
+ const props={ranked,method:'minervini',onSelect:vi.fn()};
+ const {rerender}=render(<CandidateBoard {...props} active={false}/>);
+ expect(entryPlan).not.toHaveBeenCalled();expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+ rerender(<CandidateBoard {...props}/>);fireEvent.click(screen.getByRole('button',{name:'次の50件'}));
+ expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('S50');
+ rerender(<CandidateBoard {...props} active={false}/>);expect(screen.queryAllByRole('listitem')).toHaveLength(0);
+ rerender(<CandidateBoard {...props}/>);expect(screen.getAllByRole('listitem')[0]).toHaveTextContent('S50');
+ expect(screen.getByRole('heading',{name:'対象銘柄 103件'})).toBeInTheDocument();
+});
 it('keeps keyboard focus when crossing both directions at a 50-row boundary in a 501-row universe',()=>{
  const ranked=Array.from({length:501},(_,index)=>({row:{symbol:`S${index}`,current_price:102,se_pivot_price:100,rs_rating:90},assessment:{qualified:true,passed:9,total:9}}));
  const onSelect=vi.fn();let nextFrame;

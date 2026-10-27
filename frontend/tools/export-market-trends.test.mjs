@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
-import { buildMarketTrends,exportMarketTrends,verifyLongHistorySource,selectLongHistorySource } from './export-market-trends.mjs';
+import { buildMarketTrends,exportMarketTrends,verifyLongHistorySource,selectLongHistorySource,selectRuntimeLongHistorySource } from './export-market-trends.mjs';
 const source=()=>JSON.parse(readFileSync(resolve('data/market-trend-source-2026-10-23.json'),'utf8'));
 const longSource=()=>JSON.parse(readFileSync(resolve('data/market-history-source-2026-10-23.json'),'utf8'));
 const historyCapture=(date,retrieved_at)=>{
@@ -52,6 +52,31 @@ describe('history availability at the fixed export clock',()=>{
  });
 });
 describe('long historical source binding',()=>{
+ it('carries a newly acquired runtime capture into export and identical offline replay without a new compiler seed',async()=>{
+  const root=mkdtempSync(resolve(tmpdir(),'history-runtime-')),second=mkdtempSync(resolve(tmpdir(),'history-replay-'));
+  try{
+   const history=historyCapture('2026-10-26','2026-10-27T12:00:00Z'),bytes=Buffer.from(JSON.stringify(history,null,1)+'\n');
+   const evaluatedAt=Date.parse('2026-10-27T12:01:00Z');
+   for(const path of [root,second])writeFileSync(resolve(path,'market-history-source.json'),bytes);
+   const entry={},out=await exportMarketTrends({root,entry,asOfDate:'2026-10-26',evaluatedAt});
+   const replayEntry={},replay=await exportMarketTrends({root:second,entry:replayEntry,asOfDate:'2026-10-26',evaluatedAt});
+   const sha=createHash('sha256').update(bytes).digest('hex');
+   expect(out.long_history).toEqual({...history,source_sha256:sha});expect(replay).toEqual(out);expect(replayEntry).toEqual(entry);
+   expect(readFileSync(resolve(root,`market-trends/history-source-${sha}.json`))).toEqual(bytes);
+   expect(readFileSync(resolve(root,'market-history-source.json'))).toEqual(bytes);
+  }finally{rmSync(root,{recursive:true,force:true});rmSync(second,{recursive:true,force:true});}
+ });
+ it('withholds a runtime capture before its recorded acquisition, and refuses future observation dates and malformed evidence',async()=>{
+  const root=mkdtempSync(resolve(tmpdir(),'history-runtime-clock-'));
+  try{
+   const source=historyCapture('2026-10-26','2026-10-27T12:00:00Z');
+   const file=resolve(root,'market-history-source.json');writeFileSync(file,JSON.stringify(source));
+   expect(await selectRuntimeLongHistorySource(root,'2026-10-26',Date.parse('2026-10-27T11:59:00Z'))).toBeNull();
+   await expect(selectRuntimeLongHistorySource(root,'2026-10-23',Date.parse('2026-10-27T12:00:00Z'))).rejects.toThrow();
+   source.universe.sha256='f'.repeat(64);writeFileSync(file,JSON.stringify(source));
+   await expect(selectRuntimeLongHistorySource(root,'2026-10-26',Date.parse('2026-10-27T12:00:00Z'))).rejects.toThrow(/hash/);
+  }finally{rmSync(root,{recursive:true,force:true});}
+ });
  it('admits the real five-year response-backed history and preserves the source date on a later publication',()=>{const value=longSource(),out=verifyLongHistorySource(JSON.stringify(value),'2026-10-26');expect(out.as_of_date).toBe('2026-10-23');expect(out.breadth.filter(p=>p.newHighs!==null).length).toBeGreaterThan(1250);expect(out.sectorRotation.frames).toHaveLength(252);expect(out.sectorBreadth).toHaveLength(12);});
  it.each(['universeDigest','classificationDigest','missingStockProvenance','warmupRatio','missingSession','futureRetrieval','sectorSum'])('rejects altered %s',kind=>{
   const value=longSource();
@@ -66,6 +91,21 @@ describe('long historical source binding',()=>{
  });
 });
 describe('market trend source projection',()=>{
+ it('carries an independent close schedule without treating a future calendar date as observed market data',()=>{
+  const input=source();input.refresh_schedule={provider:'pandas_market_calendars:NYSE',version:'5.4.0',generated_at:'2026-10-24T00:00:00Z',valid_until:'2026-12-08T05:00:00Z',sessions:[{date:'2026-10-23',close_at:'2026-10-23T20:00:00Z'},{date:'2026-10-26',close_at:'2026-10-26T20:00:00Z'},{date:'2026-11-27',close_at:'2026-11-27T18:00:00Z'}]};
+  const result=buildMarketTrends(input,{asOfDate:'2026-10-23'});
+  expect(result.refresh_schedule).toEqual(input.refresh_schedule);expect(result.as_of_date).toBe('2026-10-23');expect(result.indices[0].points.at(-1).date).toBe('2026-10-23');
+  input.refresh_schedule.sessions[1].date='2026-10-23';expect(()=>buildMarketTrends(input,{asOfDate:'2026-10-23'})).toThrow(/calendar/);
+ });
+ it.each(['expiredBeforeLastClose','unsupportedProvider','wrongSessionDate','invalidTime','unboundedValidity'])('rejects a malformed refresh clock: %s',kind=>{
+  const input=source();input.refresh_schedule={provider:'pandas_market_calendars:NYSE',version:'5.4.0',generated_at:'2026-10-24T00:00:00Z',valid_until:'2026-12-08T05:00:00Z',sessions:[{date:'2026-10-23',close_at:'2026-10-23T20:00:00Z'}]};
+  if(kind==='expiredBeforeLastClose')input.refresh_schedule.valid_until='2026-10-23T19:00:00Z';
+  if(kind==='unsupportedProvider')input.refresh_schedule.provider='weekday-guess';
+  if(kind==='wrongSessionDate')input.refresh_schedule.sessions[0].close_at='2026-10-22T20:00:00Z';
+  if(kind==='invalidTime')input.refresh_schedule.sessions[0].close_at='2026-10-23T25:00:00Z';
+  if(kind==='unboundedValidity')input.refresh_schedule.valid_until='2099-12-08T05:00:00Z';
+  expect(()=>buildMarketTrends(input,{asOfDate:'2026-10-23'})).toThrow(/calendar/);
+ });
  it('projects actual dated separate indices and Cboe numerator/denominator',()=>{const input=source(),out=buildMarketTrends(input,{asOfDate:input.as_of_date});expect(out.indices.map(x=>x.available)).toEqual([true,true]);expect(out.indices[0].points).toHaveLength(280);expect(out.put_call.points).toHaveLength(63);for(const row of out.put_call.points)expect(row.value).toBe(row.puts/row.calls);});
  it('does not use a different date source as current',()=>{const out=buildMarketTrends(source(),{asOfDate:'2026-10-26'});expect(out.indices.every(x=>!x.available)).toBe(true);expect(out.put_call.points).toEqual([]);});
  it('rejects future/different-day Cboe evidence and preserves unknown values',()=>{const input=source();input.put_call.observations=input.put_call.observations.slice(-1);input.put_call.observations[0].provenance.url='https://www.cboe.com/markets/us/options/market-statistics/daily?dt=2026-10-22';const out=buildMarketTrends(input,{asOfDate:input.as_of_date});expect(out.put_call.points[0].value).toBeNull();});

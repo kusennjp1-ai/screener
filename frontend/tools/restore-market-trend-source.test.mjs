@@ -8,6 +8,7 @@ import {existsSync} from 'node:fs';
 import {createHash} from 'node:crypto';
 import {exportMarketTrends,buildMarketTrends} from './export-market-trends.mjs';
 import {restoreMarketTrendSource} from './restore-market-trend-source.mjs';
+import {restoreMarketHistorySource} from './restore-market-history-source.mjs';
 import {pack} from './static-transport/pack.mjs';
 import {inventoryDigest} from '../../.github/scripts/publication-state.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
@@ -30,6 +31,52 @@ async function fixture({withFeature=true,mutateEntry}={}){
  const fetchImpl=async url=>{try{return new Response(await readFile(join(output,new URL(url).pathname.slice('/screener/'.length))));}catch(error){if(error.code==='ENOENT')return new Response(null,{status:404});throw error;}};
  return {directory,entry,output,fresh,fetchImpl,publication,cleanup:()=>rm(directory,{recursive:true,force:true})};
 }
+
+it('restores the bound raw long history for a new daily attempt and replays its real observation date',async()=>{
+ const f=await fixture();try{
+  const result=await restoreMarketHistorySource({root:f.fresh,fetchImpl:f.fetchImpl});
+  expect(result).toMatchObject({restored:true,origin:'verified_publication',as_of_date:date});
+  const bytes=await readFile(join(f.fresh,'market-history-source.json'));
+  expect(hash(bytes)).toBe(result.sha256);
+  const entry={},payload=await exportMarketTrends({root:f.fresh,entry,asOfDate:next});
+  expect(payload.long_history.as_of_date).toBe(date);expect(payload.long_history.source_sha256).toBe(result.sha256);
+  expect(await readFile(join(f.fresh,`market-trends/history-source-${result.sha256}.json`))).toEqual(bytes);
+  expect(await restoreMarketHistorySource({root:f.fresh,fetchImpl:f.fetchImpl})).toMatchObject({restored:false,as_of_date:date});
+  expect(await readFile(join(f.fresh,'market-history-source.json'))).toEqual(bytes);
+ }finally{await f.cleanup();}
+},45000);
+
+it('never replaces a long-history capture when a published raw body is corrupted or unavailable',async()=>{
+ const f=await fixture();try{
+  const original=await readFile(resolve('data/market-history-source-2026-10-23.json'));
+  await writeFile(join(f.fresh,'market-history-source.json'),original);
+  await writeFile(join(f.output,`static-data/market-trends/history-source-${hash(original)}.json`),'{}');
+  await expect(restoreMarketHistorySource({root:f.fresh,fetchImpl:f.fetchImpl})).rejects.toThrow();
+  expect(await readFile(join(f.fresh,'market-history-source.json'))).toEqual(original);
+  await expect(restoreMarketHistorySource({root:f.fresh,fetchImpl:async()=>new Response(null,{status:503})})).rejects.toThrow(/503/);
+ }finally{await f.cleanup();}
+});
+
+it('long-history restore permits a seed only after verifying an actual pre-feature publication',async()=>{
+ const f=await fixture({withFeature:false});try{
+  expect(await restoreMarketHistorySource({root:f.fresh,fetchImpl:f.fetchImpl})).toMatchObject({restored:true,origin:'committed_pre_feature_seed',as_of_date:date});
+ }finally{await f.cleanup();}
+});
+
+it('keeps bulk history acquisition and replay out of the fast price publication route',async()=>{
+ const workflow=await readFile(resolve('../.github/workflows/static-site.yml'),'utf8');
+ const full=workflow.indexOf('if [ "$MARKET_BUILD_MODE" = "full" ]; then');
+ const bulk=workflow.indexOf('python tools/collect-market-history.py --root');
+ const replay=workflow.indexOf('python tools/audit-market-history.py --source');
+ const end=workflow.indexOf('python tools/sec-financials.py --limit 60',full);
+ expect(full).toBeGreaterThan(0);expect(bulk).toBeGreaterThan(full);expect(replay).toBeGreaterThan(bulk);expect(end).toBeGreaterThan(replay);
+ expect(workflow.slice(full,end).trimEnd()).toMatch(/fi\s+fi$/);
+ expect(workflow.match(/python tools\/collect-market-history\.py --root/g)).toHaveLength(1);
+ expect(workflow).toMatch(/id: history-cache\s+if: needs\.select-markets\.outputs\.mode == 'full'/);
+ expect(workflow.indexOf('node tools/restore-market-history-source.mjs')).toBeLessThan(full);
+ expect(workflow.slice(bulk,replay)).toContain('--allow-unavailable');
+ expect(workflow.slice(bulk,replay)).toContain('["updated"]');
+});
 
 it('restores verified packed day N into a fresh daily directory; failed providers retain history and leave day N+1 unknown',async()=>{
  const f=await fixture();try{

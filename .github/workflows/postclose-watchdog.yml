@@ -1,0 +1,53 @@
+name: Post-close Update Watchdog
+
+on:
+  schedule:
+    # First eligible check is close+2 min, including 13:00 ET short sessions.
+    # NYSE calendar admission below skips an unfinished session and holidays.
+    # Off-hour minutes reduce top-of-hour contention; cron remains best effort.
+    - cron: '2,12,22,32,42,52 13-20 * * 1-5'
+      timezone: 'America/New_York'
+    # Catch up after missed schedules, overnight provider delays, and weekends.
+    - cron: '17 0,6,10 * * *'
+      timezone: 'America/New_York'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+concurrency:
+  group: postclose-update-watchdog
+  cancel-in-progress: false
+
+jobs:
+  verify-and-recover:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: .github/scripts/session-calendar-requirements.txt
+      - name: Install exchange clock
+        run: python -m pip install -r .github/scripts/session-calendar-requirements.txt
+      - name: Verify published dates and request missing update
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/postclose-watchdog.mjs --execute --output postclose-watchdog-report.json
+      - name: Retain observed dates and recovery decision
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: postclose-watchdog-${{ github.run_id }}-${{ github.run_attempt }}
+          path: postclose-watchdog-report.json
+          if-no-files-found: warn
+          retention-days: 7

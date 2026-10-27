@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from 'react';
 import { useMarketTrends } from '../useMarketTrends';
 import MetricDisclosure from './MetricDisclosure';
+import MarketUpdateStatus from './MarketUpdateStatus';
 import useSvgViewportWidth from './useSvgViewportWidth';
 import './marketTrendDashboard.css';
 import { historyWindow } from '../marketLongHistory';
@@ -52,7 +53,7 @@ export function MarketTrendDashboard({data,loading=false,error=false}){
  const ranges=section==='highlow'?[[1,'1M'],[3,'3M'],[12,'1年'],[24,'2年'],[60,'5年']]:section==='breadth'?[[1,'1M'],[3,'3M'],[12,'1年'],[24,'2年']]:[[1,'1か月'],[3,'3か月']];
  const choose=value=>{setSection(value);setCursor(null);setRange(value==='putcall'||value==='distribution'?3:Math.min(range,24));};
  return <section className="market-trends" aria-label="市場指標の推移">
-  <header><div><span className="research-kicker">MARKET</span><h2>市場指標</h2></div><span>{data?.as_of_date||'取得待ち'}</span></header>
+  <header><div><span className="research-kicker">MARKET</span><h2>市場指標</h2></div>{data?<MarketUpdateStatus data={data}/>:<span>取得待ち</span>}</header>
   <div className="market-trend-tabs" role="tablist" aria-label="推移を確認する市場指標">{choices.map(([key,icon,label])=><button key={key} type="button" role="tab" aria-selected={section===key} aria-controls="market-trend-panel" id={`market-trend-${key}`} tabIndex={section===key?0:-1} onClick={()=>choose(key)} onKeyDown={event=>{const keys=choices.map(choice=>choice[0]),i=keys.indexOf(section);let next;if(event.key==='ArrowRight')next=keys[(i+1)%keys.length];if(event.key==='ArrowLeft')next=keys[(i+keys.length-1)%keys.length];if(event.key==='Home')next=keys[0];if(event.key==='End')next=keys.at(-1);if(next){event.preventDefault();choose(next);document.getElementById(`market-trend-${next}`)?.focus();}}}><span aria-hidden="true">{icon}</span>{label}</button>)}</div>
   <div id="market-trend-panel" role="tabpanel" aria-labelledby={`market-trend-${section}`}>
    <div className="market-trend-title"><h3>{config.title}</h3><div role="group" aria-label="指標の表示期間">{ranges.map(([value,label])=><button key={value} onClick={()=>{setRange(value);setCursor(null);}} aria-pressed={range===value}>{label}</button>)}</div></div>
