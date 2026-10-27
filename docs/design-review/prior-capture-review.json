@@ -4,25 +4,25 @@
     "schema": "reviewed-prior-capture-reference-v1",
     "repository": "kusennjp1-ai/screener",
     "workflow_path": ".github/workflows/design-acceptance.yml",
-    "run_id": 40416922122,
+    "run_id": 40427894590,
     "run_attempt": 1,
-    "head_sha": "547de7199b6697b418a4d7cc2bf274f2b85a459c",
-    "checkout_sha": "547de7199b6697b418a4d7cc2bf274f2b85a459c",
-    "source_inventory_sha256": "086590b024b314f399f2c2aa1f64d0c7fb5465d4c0ba5067ebecf6024924ca19",
+    "head_sha": "4ca7ab9444beb29c6b6cbcaf7c24fa44c8a2f461",
+    "checkout_sha": "4ca7ab9444beb29c6b6cbcaf7c24fa44c8a2f461",
+    "source_inventory_sha256": "50594728115f77e8ccfa1b92ea48941b9de1cc8a48ca1e1ca2905f95879f80c0",
     "configuration_sha256": "1a6df6f78ebae1b9d3af193e470bce1beb8dabf44a6cb84a7675cc3496c2dd21",
-    "artifact_id": 12697267329,
-    "artifact_sha256": "15d153ee08f3ee8dd9937cf5958eedcb07c636ad2a6a614e0a113706e8f439c5",
-    "artifact_bytes": 19049324
+    "artifact_id": 12701306929,
+    "artifact_sha256": "db320c257ad3ba6cd1397503ff9214c05ead60d494607f04307d4349bac184fd",
+    "artifact_bytes": 19040129
   },
   "review_policy": "ordinary-carry-image-review-2026-10-22-v1",
-  "observed_commit": "547de7199b6697b418a4d7cc2bf274f2b85a459c",
-  "reviewer": "Codex, AI pixel inspection of all 136 exact current screenshot references. All images were freshly viewed from the authenticated archive, with original-size inspection of fine labels. Not a human usability study or native iOS test.",
-  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/40416922122/attempts/1",
+  "observed_commit": "4ca7ab9444beb29c6b6cbcaf7c24fa44c8a2f461",
+  "reviewer": "Codex, AI pixel review of 136 exact current screenshot references: 16 changed images freshly inspected at original pixel dimensions in three desktop and one mobile contact sheets; 120 images inherit actual prior inspection only after exact key and SHA256 equality and byte hashing of both archives. Not all 136 images were freshly viewed in this pass. Not a human usability study or native iOS test.",
+  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/40427894590/attempts/1",
   "screens": [
     {
       "key": "home/1440/dark",
       "screenshot": "home-1440x900-dark.png",
-      "sha256": "84eebfe3bc89ff88f79e5294d80293e9d3ecd176efbba9184074b971e0531d57",
+      "sha256": "f1b02c5b0e6a7908d31966d3df2c7460e9844c828482de0fb16f0c2f1be48cde",
       "scores": {
         "design": {
           "value": 8.2,
@@ -38,7 +38,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "The judgment separates 319 selected stocks, 73 stocks in the price zone and individual daily purchase checks. The EHC candidate shows RS 76, volume 0.86x, change minus 1.5%, daily 1/7, unmet 6 and unknown 0. Market context remains unconfirmed/weak with a zero new-allocation limit. The scatterplot, list and detail occupy distinct regions. The dark surface separates light value text from violet controls."
+          "reason": "The current image still separates 319 selected candidates and 73 price-zone candidates. EHC shows 124.09, RS 76, volume 0.86x, minus 1.5%, and daily purchase 1/7. The zero new-allocation limit and unconfirmed market remain visible. Desktop has a separate scatterplot and candidate/detail columns; mobile keeps the compact judgment above the list and bottom destinations."
         }
       },
       "visualChecks": {
@@ -56,7 +56,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "The judgment separates 319 selected stocks, 73 stocks in the price zone and individual daily purchase checks. The EHC candidate shows RS 76, volume 0.86x, change minus 1.5%, daily 1/7, unmet 6 and unknown 0. Market context remains unconfirmed/weak with a zero new-allocation limit. The scatterplot, list and detail occupy distinct regions. The dark surface separates light value text from violet controls."
+          "reason": "The current image still separates 319 selected candidates and 73 price-zone candidates. EHC shows 124.09, RS 76, volume 0.86x, minus 1.5%, and daily purchase 1/7. The zero new-allocation limit and unconfirmed market remain visible. Desktop has a separate scatterplot and candidate/detail columns; mobile keeps the compact judgment above the list and bottom destinations."
         }
       },
       "findings": [
@@ -316,7 +316,7 @@
     {
       "key": "comparison/1440/dark",
       "screenshot": "comparison-1440x900-dark.png",
-      "sha256": "b1e5a144c098d21f4f95182aa19c62bb9e31dbb858ae3f2c80cf0873f3c10a8f",
+      "sha256": "74083359fca42dc97cf397c6c8356a1dff22a4a1f5b03ad022180cade3b2c19f",
       "scores": {
         "design": {
           "value": 8.2,
@@ -332,7 +332,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "Comparison separates price-zone membership from daily purchase conditions. EHC 124.09 has pivot 123.95, upper 130.15, illustrative stop 115.40 and daily 1/7; GH169.08 has daily 3/7. The small chart panes identify price, volume and SPY relative strength. Six cards form an aligned grid; WEX explicitly withholds an unavailable RS benchmark. The dark surface separates light value text from violet controls."
+          "reason": "The current comparison shows EHC 124.09 with daily 1/7 and GH 169.08 with daily 3/7. Price-zone badges, pivot/upper/illustrative-stop values, price and volume panes, and separately labelled SPY relative strength remain distinguishable. Desktop uses a grid; mobile shows one readable column with the next card continuing below."
         }
       },
       "visualChecks": {
@@ -350,7 +350,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Comparison separates price-zone membership from daily purchase conditions. EHC 124.09 has pivot 123.95, upper 130.15, illustrative stop 115.40 and daily 1/7; GH169.08 has daily 3/7. The small chart panes identify price, volume and SPY relative strength. Six cards form an aligned grid; WEX explicitly withholds an unavailable RS benchmark. The dark surface separates light value text from violet controls."
+          "reason": "The current comparison shows EHC 124.09 with daily 1/7 and GH 169.08 with daily 3/7. Price-zone badges, pivot/upper/illustrative-stop values, price and volume panes, and separately labelled SPY relative strength remain distinguishable. Desktop uses a grid; mobile shows one readable column with the next card continuing below."
         }
       },
       "findings": [
@@ -365,7 +365,7 @@
     {
       "key": "comparison-near-pass/1440/dark",
       "screenshot": "comparison-near-pass-1440x900-dark.png",
-      "sha256": "9570ef7ac1ddf8d5b4ad1db65c3b25ec9cea4de712d426e5302c0d6470a8c20d",
+      "sha256": "88e951b6bb337baf9705388e5cdc46963a67305b594eceeeeca74bb662797545",
       "scores": {
         "design": {
           "value": 8.2,
@@ -381,7 +381,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "The comparison heading marks near-pass stocks as not selected and says purchase qualification is separate. ABCL11.82 has a green price zone but daily 1/7 and an unmet aboveSMA50 check. DELL456.44 remains pivot-waiting. ETON and other cards retain their separate unmet checks, and unavailable RS benchmarks are explicitly marked. The dark surface separates light value text from violet controls."
+          "reason": "The current heading explicitly marks candidates as not selected. ABCL 11.82 is in the price zone but has daily 1/7 and an unmet above-SMA50 condition; DELL 456.44 is waiting for its pivot. The annotation labels and pane headings remain separate. Desktop keeps six cards in a grid; mobile shows ABCL and the following DELL card above the bottom destinations."
         }
       },
       "visualChecks": {
@@ -399,7 +399,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "The comparison heading marks near-pass stocks as not selected and says purchase qualification is separate. ABCL11.82 has a green price zone but daily 1/7 and an unmet aboveSMA50 check. DELL456.44 remains pivot-waiting. ETON and other cards retain their separate unmet checks, and unavailable RS benchmarks are explicitly marked. The dark surface separates light value text from violet controls."
+          "reason": "The current heading explicitly marks candidates as not selected. ABCL 11.82 is in the price zone but has daily 1/7 and an unmet above-SMA50 condition; DELL 456.44 is waiting for its pivot. The annotation labels and pane headings remain separate. Desktop keeps six cards in a grid; mobile shows ABCL and the following DELL card above the bottom destinations."
         }
       },
       "findings": [
@@ -561,7 +561,7 @@
     {
       "key": "case-MSM-inline/1440/dark",
       "screenshot": "case-MSM-inline-1440x900-dark.png",
-      "sha256": "7383d104263a232e88976551d6a51253790941adfb3fe02959cbedbc05f8f197",
+      "sha256": "33136e5be6ede7a55f322c14918b9736246bb3741e5b51ab587f15d9ec6056ef",
       "scores": {
         "design": {
           "value": 8.3,
@@ -577,7 +577,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "MSM 113.86 is identified on the chart. The one-year date range, C4/C5/C6 labels 3.7%, 4.4%, 16.6%, price axis and volume pane are distinguishable. The RS benchmark is explicitly unavailable; the empty RS pane says data unavailable. RS-rank 74.5/99 and its historical line are displayed with an October 23 date selection and 4,480-symbol population. The rank-history note says 57 days from the currently published universe, with no connecting line across missing days. The closed volume explanation retains 3.09x as a visible summary. The dark surface separates light value text from violet controls."
+          "reason": "The current MSM chart identifies 113.86 and a one-year range, with C4/C5/C6 values 3.7%, 4.4%, 16.6%. Its benchmark RS pane explicitly says data unavailable. The separate numerical RS-rank graph shows 74.5/99, October 23, 4,480 symbols and a 57-day current-universe note. The closed volume explanation shows 3.09x. Labels, axes and history slider remain readable."
         }
       },
       "visualChecks": {
@@ -595,7 +595,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "MSM 113.86 is identified on the chart. The one-year date range, C4/C5/C6 labels 3.7%, 4.4%, 16.6%, price axis and volume pane are distinguishable. The RS benchmark is explicitly unavailable; the empty RS pane says data unavailable. RS-rank 74.5/99 and its historical line are displayed with an October 23 date selection and 4,480-symbol population. The rank-history note says 57 days from the currently published universe, with no connecting line across missing days. The closed volume explanation retains 3.09x as a visible summary. The dark surface separates light value text from violet controls."
+          "reason": "The current MSM chart identifies 113.86 and a one-year range, with C4/C5/C6 values 3.7%, 4.4%, 16.6%. Its benchmark RS pane explicitly says data unavailable. The separate numerical RS-rank graph shows 74.5/99, October 23, 4,480 symbols and a 57-day current-universe note. The closed volume explanation shows 3.09x. Labels, axes and history slider remain readable."
         }
       },
       "findings": [
@@ -806,7 +806,7 @@
     {
       "key": "case-ADI-inline/1440/dark",
       "screenshot": "case-ADI-inline-1440x900-dark.png",
-      "sha256": "592a046c355de37b50c3637518617d133a3e7bf618efac4ed511eb82430164e8",
+      "sha256": "513ed4c1402f0fdacb5a4745e513527ab50197ad0e68901aed684b62c124bce2",
       "scores": {
         "design": {
           "value": 8.3,
@@ -822,7 +822,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "ADI 391.07 is identified on the chart. The one-year date range, C4/C5/C6 labels 5.6%, 6.6%, 6.5%, price axis and volume pane are distinguishable. The SPY relative-strength line is labelled separately from RS rank. RS-rank 82.6/99 and its historical line are displayed with an October 23 date selection and 4,480-symbol population. The rank-history note says 57 days from the currently published universe, with no connecting line across missing days. The closed volume explanation retains 0.74x as a visible summary. The dark surface separates light value text from violet controls."
+          "reason": "The current ADI chart identifies 391.07 and a one-year range, with C4/C5/C6 values 5.6%, 6.6%, 6.5%. The SPY relative-strength pane is separate from RS rank 82.6/99 and its history graph. The date selector, 4,480-symbol population, 57-day current-universe note and closed volume summary 0.74x remain legible. The chart and left candidate list occupy separate columns."
         }
       },
       "visualChecks": {
@@ -840,7 +840,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "ADI 391.07 is identified on the chart. The one-year date range, C4/C5/C6 labels 5.6%, 6.6%, 6.5%, price axis and volume pane are distinguishable. The SPY relative-strength line is labelled separately from RS rank. RS-rank 82.6/99 and its historical line are displayed with an October 23 date selection and 4,480-symbol population. The rank-history note says 57 days from the currently published universe, with no connecting line across missing days. The closed volume explanation retains 0.74x as a visible summary. The dark surface separates light value text from violet controls."
+          "reason": "The current ADI chart identifies 391.07 and a one-year range, with C4/C5/C6 values 5.6%, 6.6%, 6.5%. The SPY relative-strength pane is separate from RS rank 82.6/99 and its history graph. The date selector, 4,480-symbol population, 57-day current-universe note and closed volume summary 0.74x remain legible. The chart and left candidate list occupy separate columns."
         }
       },
       "findings": [
@@ -1296,7 +1296,7 @@
     {
       "key": "financial-NVDA-evidence/1440/dark",
       "screenshot": "financial-NVDA-evidence-1440x900-dark.png",
-      "sha256": "3c4dccfc5a776f3eee9f45c8d12a2f7d093d2ef99783a452e25a9506a9f15512",
+      "sha256": "09fe381729f17a40d143122c2f8d0475cea7c897bab14ea3a80b15575180ac5a",
       "scores": {
         "design": {
           "value": 7.3,
@@ -1312,7 +1312,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "NVDA shows an opened quarterly-EPS explanation with unknown status: there is no finite actual value available for this condition. Period, source, retrieval time, metric, basis and unit fields are labelled unknown. Sales and annual EPS summaries remain unknown; their repeated explanation is closed. The evidence panel is legible on the right, although the broad unused left gutter makes this scrolled state visually sparse. The dark surface separates light value text from violet controls."
+          "reason": "NVDA keeps the opened quarterly-EPS condition unknown. The reason states that no finite actual value is available for the condition. Source, retrieval time, metric, basis, unit and target period are explicitly unknown. Sales, annual EPS and reference metrics remain unknown with closed disclosures. The large empty desktop gutter persists, but the visible financial labels do not collide."
         }
       },
       "visualChecks": {
@@ -1330,7 +1330,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "NVDA shows an opened quarterly-EPS explanation with unknown status: there is no finite actual value available for this condition. Period, source, retrieval time, metric, basis and unit fields are labelled unknown. Sales and annual EPS summaries remain unknown; their repeated explanation is closed. The evidence panel is legible on the right, although the broad unused left gutter makes this scrolled state visually sparse. The dark surface separates light value text from violet controls."
+          "reason": "NVDA keeps the opened quarterly-EPS condition unknown. The reason states that no finite actual value is available for the condition. Source, retrieval time, metric, basis, unit and target period are explicitly unknown. Sales, annual EPS and reference metrics remain unknown with closed disclosures. The large empty desktop gutter persists, but the visible financial labels do not collide."
         }
       },
       "findings": [
@@ -1516,7 +1516,7 @@
     {
       "key": "financial-FUTU-evidence/1440/dark",
       "screenshot": "financial-FUTU-evidence-1440x900-dark.png",
-      "sha256": "0115ec710535ce319a4b70e03b1e68f03adaa23a743eeebc51356d041baeb3b3",
+      "sha256": "100f50e933c61e61bba3ef7464088b09c1cd61d91e59619a289a815ed93d01fe",
       "scores": {
         "design": {
           "value": 7.3,
@@ -1532,7 +1532,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "FUTU shows an opened quarterly-EPS explanation with unknown status: there is no finite actual value available for this condition. Period, source, retrieval time, metric, basis and unit fields are labelled unknown. Sales and annual EPS summaries remain unknown; their repeated explanation is closed. The evidence panel is legible on the right, although the broad unused left gutter makes this scrolled state visually sparse. The dark surface separates light value text from violet controls."
+          "reason": "FUTU keeps the opened quarterly-EPS condition unknown. The reason states that no finite actual value is available for the condition. Source, retrieval time, metric, basis, unit and target period are explicitly unknown. Sales, annual EPS and reference metrics remain unknown with closed disclosures. The large empty desktop gutter persists, but the visible financial labels do not collide."
         }
       },
       "visualChecks": {
@@ -1550,7 +1550,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "FUTU shows an opened quarterly-EPS explanation with unknown status: there is no finite actual value available for this condition. Period, source, retrieval time, metric, basis and unit fields are labelled unknown. Sales and annual EPS summaries remain unknown; their repeated explanation is closed. The evidence panel is legible on the right, although the broad unused left gutter makes this scrolled state visually sparse. The dark surface separates light value text from violet controls."
+          "reason": "FUTU keeps the opened quarterly-EPS condition unknown. The reason states that no finite actual value is available for the condition. Source, retrieval time, metric, basis, unit and target period are explicitly unknown. Sales, annual EPS and reference metrics remain unknown with closed disclosures. The large empty desktop gutter persists, but the visible financial labels do not collide."
         }
       },
       "findings": [
@@ -1681,7 +1681,7 @@
     {
       "key": "financial-AAOI-evidence/1440/dark",
       "screenshot": "financial-AAOI-evidence-1440x900-dark.png",
-      "sha256": "a5a768e3067bb438681e23b388c91653c4138300074ed86debe9f3a95524a8f4",
+      "sha256": "9346bfcaaf538430845f9dff7c9336df883e0c68afcd6365538234cfb8cf5c66",
       "scores": {
         "design": {
           "value": 7.3,
@@ -1697,7 +1697,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "AAOI shows an opened quarterly-EPS explanation with unknown status: the provider record is older than seven days. Period, source, retrieval time, metric, basis and unit fields are labelled unknown. Sales and annual EPS summaries remain unknown; their repeated explanation is closed. The evidence panel is legible on the right, although the broad unused left gutter makes this scrolled state visually sparse. The dark surface separates light value text from violet controls."
+          "reason": "AAOI keeps the opened quarterly-EPS condition unknown. The reason states that the provider record is older than seven days. Source, retrieval time, metric, basis, unit and target period are explicitly unknown. Sales, annual EPS and reference metrics remain unknown with closed disclosures. The large empty desktop gutter persists, but the visible financial labels do not collide."
         }
       },
       "visualChecks": {
@@ -1715,7 +1715,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AAOI shows an opened quarterly-EPS explanation with unknown status: the provider record is older than seven days. Period, source, retrieval time, metric, basis and unit fields are labelled unknown. Sales and annual EPS summaries remain unknown; their repeated explanation is closed. The evidence panel is legible on the right, although the broad unused left gutter makes this scrolled state visually sparse. The dark surface separates light value text from violet controls."
+          "reason": "AAOI keeps the opened quarterly-EPS condition unknown. The reason states that the provider record is older than seven days. Source, retrieval time, metric, basis, unit and target period are explicitly unknown. Sales, annual EPS and reference metrics remain unknown with closed disclosures. The large empty desktop gutter persists, but the visible financial labels do not collide."
         }
       },
       "findings": [
@@ -1956,7 +1956,7 @@
     {
       "key": "financial-AVT-evidence/1440/dark",
       "screenshot": "financial-AVT-evidence-1440x900-dark.png",
-      "sha256": "09fe381729f17a40d143122c2f8d0475cea7c897bab14ea3a80b15575180ac5a",
+      "sha256": "3c4dccfc5a776f3eee9f45c8d12a2f7d093d2ef99783a452e25a9506a9f15512",
       "scores": {
         "design": {
           "value": 7.3,
@@ -1972,7 +1972,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "AVT shows an opened quarterly-EPS explanation with unknown status: there is no finite actual value available for this condition. Period, source, retrieval time, metric, basis and unit fields are labelled unknown. Sales and annual EPS summaries remain unknown; their repeated explanation is closed. The evidence panel is legible on the right, although the broad unused left gutter makes this scrolled state visually sparse. The dark surface separates light value text from violet controls."
+          "reason": "AVT keeps the opened quarterly-EPS condition unknown. The reason states that no finite actual value is available for the condition. Source, retrieval time, metric, basis, unit and target period are explicitly unknown. Sales, annual EPS and reference metrics remain unknown with closed disclosures. The large empty desktop gutter persists, but the visible financial labels do not collide."
         }
       },
       "visualChecks": {
@@ -1990,7 +1990,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AVT shows an opened quarterly-EPS explanation with unknown status: there is no finite actual value available for this condition. Period, source, retrieval time, metric, basis and unit fields are labelled unknown. Sales and annual EPS summaries remain unknown; their repeated explanation is closed. The evidence panel is legible on the right, although the broad unused left gutter makes this scrolled state visually sparse. The dark surface separates light value text from violet controls."
+          "reason": "AVT keeps the opened quarterly-EPS condition unknown. The reason states that no finite actual value is available for the condition. Source, retrieval time, metric, basis, unit and target period are explicitly unknown. Sales, annual EPS and reference metrics remain unknown with closed disclosures. The large empty desktop gutter persists, but the visible financial labels do not collide."
         }
       },
       "findings": [
@@ -2176,7 +2176,7 @@
     {
       "key": "home/1440/light",
       "screenshot": "home-1440x900-light.png",
-      "sha256": "f470b65e46596e79159870e0ab85cf786238ee90dd3d207b47e47e37146d004e",
+      "sha256": "619e5d46cd0309484cedc2f571d6634d1e081d17d20650739eb8ff5dbf45b279",
       "scores": {
         "design": {
           "value": 8.2,
@@ -2192,7 +2192,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "The judgment separates 319 selected stocks, 73 stocks in the price zone and individual daily purchase checks. The EHC candidate shows RS 76, volume 0.86x, change minus 1.5%, daily 1/7, unmet 6 and unknown 0. Market context remains unconfirmed/weak with a zero new-allocation limit. The scatterplot, list and detail occupy distinct regions. The light surface keeps the dark value text distinct from purple controls."
+          "reason": "The current image still separates 319 selected candidates and 73 price-zone candidates. EHC shows 124.09, RS 76, volume 0.86x, minus 1.5%, and daily purchase 1/7. The zero new-allocation limit and unconfirmed market remain visible. Desktop has a separate scatterplot and candidate/detail columns; mobile keeps the compact judgment above the list and bottom destinations."
         }
       },
       "visualChecks": {
@@ -2210,7 +2210,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "The judgment separates 319 selected stocks, 73 stocks in the price zone and individual daily purchase checks. The EHC candidate shows RS 76, volume 0.86x, change minus 1.5%, daily 1/7, unmet 6 and unknown 0. Market context remains unconfirmed/weak with a zero new-allocation limit. The scatterplot, list and detail occupy distinct regions. The light surface keeps the dark value text distinct from purple controls."
+          "reason": "The current image still separates 319 selected candidates and 73 price-zone candidates. EHC shows 124.09, RS 76, volume 0.86x, minus 1.5%, and daily purchase 1/7. The zero new-allocation limit and unconfirmed market remain visible. Desktop has a separate scatterplot and candidate/detail columns; mobile keeps the compact judgment above the list and bottom destinations."
         }
       },
       "findings": [
@@ -2519,7 +2519,7 @@
     {
       "key": "comparison-near-pass/1440/light",
       "screenshot": "comparison-near-pass-1440x900-light.png",
-      "sha256": "12ec88ab8f701c5d3b6578de187124dd3fba0beb58885f4c6d792fedb5ac52b0",
+      "sha256": "995b693c1073cfc008f68a9a899ae1ba0b25ca5ffc52a20f906fdf86f7c41e07",
       "scores": {
         "design": {
           "value": 8.2,
@@ -2535,7 +2535,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "The comparison heading marks near-pass stocks as not selected and says purchase qualification is separate. ABCL11.82 has a green price zone but daily 1/7 and an unmet aboveSMA50 check. DELL456.44 remains pivot-waiting. ETON and other cards retain their separate unmet checks, and unavailable RS benchmarks are explicitly marked. The light surface keeps the dark value text distinct from purple controls."
+          "reason": "The current heading explicitly marks candidates as not selected. ABCL 11.82 is in the price zone but has daily 1/7 and an unmet above-SMA50 condition; DELL 456.44 is waiting for its pivot. The annotation labels and pane headings remain separate. Desktop keeps six cards in a grid; mobile shows ABCL and the following DELL card above the bottom destinations."
         }
       },
       "visualChecks": {
@@ -2553,7 +2553,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "The comparison heading marks near-pass stocks as not selected and says purchase qualification is separate. ABCL11.82 has a green price zone but daily 1/7 and an unmet aboveSMA50 check. DELL456.44 remains pivot-waiting. ETON and other cards retain their separate unmet checks, and unavailable RS benchmarks are explicitly marked. The light surface keeps the dark value text distinct from purple controls."
+          "reason": "The current heading explicitly marks candidates as not selected. ABCL 11.82 is in the price zone but has daily 1/7 and an unmet above-SMA50 condition; DELL 456.44 is waiting for its pivot. The annotation labels and pane headings remain separate. Desktop keeps six cards in a grid; mobile shows ABCL and the following DELL card above the bottom destinations."
         }
       },
       "findings": [
@@ -2960,7 +2960,7 @@
     {
       "key": "case-ADI-inline/1440/light",
       "screenshot": "case-ADI-inline-1440x900-light.png",
-      "sha256": "59efa842ee2d7b280237775062b4288d552e6b93b8c22d108eb44a088d6ede8b",
+      "sha256": "679c0c326510f9186b7c4e94b6d91264055f989abfcf090107701a99539dcd43",
       "scores": {
         "design": {
           "value": 8.3,
@@ -2976,7 +2976,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "ADI 391.07 is identified on the chart. The one-year date range, C4/C5/C6 labels 5.6%, 6.6%, 6.5%, price axis and volume pane are distinguishable. The SPY relative-strength line is labelled separately from RS rank. RS-rank 82.6/99 and its historical line are displayed with an October 23 date selection and 4,480-symbol population. The rank-history note says 57 days from the currently published universe, with no connecting line across missing days. The closed volume explanation retains 0.74x as a visible summary. The light surface keeps the dark value text distinct from purple controls."
+          "reason": "The current ADI chart identifies 391.07 and a one-year range, with C4/C5/C6 values 5.6%, 6.6%, 6.5%. The SPY relative-strength pane is separate from RS rank 82.6/99 and its history graph. The date selector, 4,480-symbol population, 57-day current-universe note and closed volume summary 0.74x remain legible. The chart and left candidate list occupy separate columns."
         }
       },
       "visualChecks": {
@@ -2994,7 +2994,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "ADI 391.07 is identified on the chart. The one-year date range, C4/C5/C6 labels 5.6%, 6.6%, 6.5%, price axis and volume pane are distinguishable. The SPY relative-strength line is labelled separately from RS rank. RS-rank 82.6/99 and its historical line are displayed with an October 23 date selection and 4,480-symbol population. The rank-history note says 57 days from the currently published universe, with no connecting line across missing days. The closed volume explanation retains 0.74x as a visible summary. The light surface keeps the dark value text distinct from purple controls."
+          "reason": "The current ADI chart identifies 391.07 and a one-year range, with C4/C5/C6 values 5.6%, 6.6%, 6.5%. The SPY relative-strength pane is separate from RS rank 82.6/99 and its history graph. The date selector, 4,480-symbol population, 57-day current-universe note and closed volume summary 0.74x remain legible. The chart and left candidate list occupy separate columns."
         }
       },
       "findings": [
@@ -3499,7 +3499,7 @@
     {
       "key": "home/390/dark",
       "screenshot": "home-390x844-dark.png",
-      "sha256": "b78a1fe31b140ebc3227c9c39c525cbb258af1f153bf6592c7ca249dcc93067f",
+      "sha256": "c608008ce5714ff6bf766f8519314beb851d4ac79207b2c970a036c63fdc7540",
       "scores": {
         "design": {
           "value": 8.2,
@@ -3515,7 +3515,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "The judgment separates 319 selected stocks, 73 stocks in the price zone and individual daily purchase checks. The EHC candidate shows RS 76, volume 0.86x, change minus 1.5%, daily 1/7, unmet 6 and unknown 0. Market context remains unconfirmed/weak with a zero new-allocation limit. The candidate list follows the compact judgment and filters. The dark surface separates light value text from violet controls."
+          "reason": "The current image still separates 319 selected candidates and 73 price-zone candidates. EHC shows 124.09, RS 76, volume 0.86x, minus 1.5%, and daily purchase 1/7. The zero new-allocation limit and unconfirmed market remain visible. Desktop has a separate scatterplot and candidate/detail columns; mobile keeps the compact judgment above the list and bottom destinations."
         }
       },
       "visualChecks": {
@@ -3533,7 +3533,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "The judgment separates 319 selected stocks, 73 stocks in the price zone and individual daily purchase checks. The EHC candidate shows RS 76, volume 0.86x, change minus 1.5%, daily 1/7, unmet 6 and unknown 0. Market context remains unconfirmed/weak with a zero new-allocation limit. The candidate list follows the compact judgment and filters. The dark surface separates light value text from violet controls."
+          "reason": "The current image still separates 319 selected candidates and 73 price-zone candidates. EHC shows 124.09, RS 76, volume 0.86x, minus 1.5%, and daily purchase 1/7. The zero new-allocation limit and unconfirmed market remain visible. Desktop has a separate scatterplot and candidate/detail columns; mobile keeps the compact judgment above the list and bottom destinations."
         }
       },
       "findings": [
@@ -3744,7 +3744,7 @@
     {
       "key": "comparison/390/dark",
       "screenshot": "comparison-390x844-dark.png",
-      "sha256": "5a8c472aa14e9acf1774a70953222c40be5e0e3cb2aae170611431b7bf31b11f",
+      "sha256": "0255c8f81119e2516a336e08e45535ebfcfade7fd03d7ff2abd3da601b0cff1c",
       "scores": {
         "design": {
           "value": 8.2,
@@ -3760,7 +3760,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "Comparison separates price-zone membership from daily purchase conditions. EHC 124.09 has pivot 123.95, upper 130.15, illustrative stop 115.40 and daily 1/7; GH169.08 has daily 3/7. The small chart panes identify price, volume and SPY relative strength. Cards form a single vertical column with the global navigation below. The dark surface separates light value text from violet controls."
+          "reason": "The current comparison shows EHC 124.09 with daily 1/7 and GH 169.08 with daily 3/7. Price-zone badges, pivot/upper/illustrative-stop values, price and volume panes, and separately labelled SPY relative strength remain distinguishable. Desktop uses a grid; mobile shows one readable column with the next card continuing below."
         }
       },
       "visualChecks": {
@@ -3778,7 +3778,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Comparison separates price-zone membership from daily purchase conditions. EHC 124.09 has pivot 123.95, upper 130.15, illustrative stop 115.40 and daily 1/7; GH169.08 has daily 3/7. The small chart panes identify price, volume and SPY relative strength. Cards form a single vertical column with the global navigation below. The dark surface separates light value text from violet controls."
+          "reason": "The current comparison shows EHC 124.09 with daily 1/7 and GH 169.08 with daily 3/7. Price-zone badges, pivot/upper/illustrative-stop values, price and volume panes, and separately labelled SPY relative strength remain distinguishable. Desktop uses a grid; mobile shows one readable column with the next card continuing below."
         }
       },
       "findings": [
@@ -3793,7 +3793,7 @@
     {
       "key": "comparison-near-pass/390/dark",
       "screenshot": "comparison-near-pass-390x844-dark.png",
-      "sha256": "e4a107203e877c956ae7b7f22c2624c4a2ebe653de6906a6460a7b17adbe0f92",
+      "sha256": "1c388ba7bfde52ac57b38088f6b6fcb21ad2e203b0f9f7da3fafee08555457be",
       "scores": {
         "design": {
           "value": 8.2,
@@ -3809,7 +3809,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "The comparison heading marks near-pass stocks as not selected and says purchase qualification is separate. ABCL11.82 has a green price zone but daily 1/7 and an unmet aboveSMA50 check. DELL456.44 remains pivot-waiting. The top ABCL chart and following DELL card are readable in the single column. The dark surface separates light value text from violet controls."
+          "reason": "The current heading explicitly marks candidates as not selected. ABCL 11.82 is in the price zone but has daily 1/7 and an unmet above-SMA50 condition; DELL 456.44 is waiting for its pivot. The annotation labels and pane headings remain separate. Desktop keeps six cards in a grid; mobile shows ABCL and the following DELL card above the bottom destinations."
         }
       },
       "visualChecks": {
@@ -3827,7 +3827,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "The comparison heading marks near-pass stocks as not selected and says purchase qualification is separate. ABCL11.82 has a green price zone but daily 1/7 and an unmet aboveSMA50 check. DELL456.44 remains pivot-waiting. The top ABCL chart and following DELL card are readable in the single column. The dark surface separates light value text from violet controls."
+          "reason": "The current heading explicitly marks candidates as not selected. ABCL 11.82 is in the price zone but has daily 1/7 and an unmet above-SMA50 condition; DELL 456.44 is waiting for its pivot. The annotation labels and pane headings remain separate. Desktop keeps six cards in a grid; mobile shows ABCL and the following DELL card above the bottom destinations."
         }
       },
       "findings": [
@@ -3842,7 +3842,7 @@
     {
       "key": "market/390/dark",
       "screenshot": "market-390x844-dark.png",
-      "sha256": "52aa12d76f87b1a855b46f24679dff70c75e0c6fd691b48517976bdd1e18afb2",
+      "sha256": "7333dce4c1e02b7e937406388084fffb902794db2356dd0a48898ce9a04b6b5e",
       "scores": {
         "design": {
           "value": 8.2,
@@ -3858,7 +3858,7 @@
         },
         "content": {
           "value": 8.5,
-          "reason": "The sector-strength page identifies energy 115.5 with+11.8% and healthcare 106.7 with+6.5%. The 63-session relative index,21-session change and passing/unknown counts are separate; the market is not presented as a simple buy signal. The narrow rows retain labels and values without a side-clipped result. The dark surface separates light value text from violet controls."
+          "reason": "The current phone sector view shows energy 115.5 with +11.8% and healthcare 106.7 with +6.5%. The selected 63-session period, relative-index column, passing counts and unknown counts remain separate. Sector rows are contained within the phone width and continue below the fixed bottom navigation; this screenshot does not certify unseen rows."
         }
       },
       "visualChecks": {
@@ -3876,7 +3876,7 @@
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "The sector-strength page identifies energy 115.5 with+11.8% and healthcare 106.7 with+6.5%. The 63-session relative index,21-session change and passing/unknown counts are separate; the market is not presented as a simple buy signal. The narrow rows retain labels and values without a side-clipped result. The dark surface separates light value text from violet controls."
+          "reason": "The current phone sector view shows energy 115.5 with +11.8% and healthcare 106.7 with +6.5%. The selected 63-session period, relative-index column, passing counts and unknown counts remain separate. Sector rows are contained within the phone width and continue below the fixed bottom navigation; this screenshot does not certify unseen rows."
         }
       },
       "findings": [
