@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname,resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { distributionDays } from '../src/static/distributionDays.js';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const isDay=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
@@ -30,10 +31,15 @@ export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}
 }
 
 export async function exportMarketTrends({root,entry,asOfDate,bookEvidence}) {
+  if(!isDay(asOfDate))throw Error('Invalid market trend date');
   // The source is data, not executable UI. A dated committed capture seeds an
   // ordinary carry; the daily producer's exact-date source takes precedence.
   let bytes=null;
-  for(const path of [resolve(root,'market-trend-source.json'),resolve('data',`market-trend-source-${asOfDate}.json`)]) {
+  // Independent release replay runs the selected compiler from a fresh working
+  // directory. Its committed seed must remain bound to that compiler, never to
+  // an unrelated cwd/data directory. The calendar proof hashes frontend/data.
+  const seed=resolve(dirname(fileURLToPath(import.meta.url)),'../data',`market-trend-source-${asOfDate}.json`);
+  for(const path of [resolve(root,'market-trend-source.json'),seed]) {
     try { const candidate=await readFile(path);const source=JSON.parse(candidate);if(source.as_of_date===asOfDate){bytes=candidate;break;} }
     catch(error){if(error.code!=='ENOENT')throw error;}
   }

@@ -105,15 +105,21 @@ function files(root){
   }}visit(root);return result;
 }
 function compiler(frontend,expectedSha){
-  const checkout=dirname(frontend),paths=['frontend/src','frontend/tools','frontend/contracts','frontend/package.json','contracts','data/ibd_reference'];
+  const checkout=dirname(frontend),paths=['frontend/src','frontend/tools','frontend/data','frontend/contracts','frontend/package.json','contracts','data/ibd_reference'];
   const git=args=>execFileSync('git',['-C',checkout,...args],{encoding:'utf8'}).trim();
   if(git(['rev-parse','HEAD'])!==expectedSha)throw Error('Ordinary calendar selected checkout differs from approved UI');
   git(['diff','--exit-code','HEAD','--',...paths]);
   if(git(['ls-files','--others','--exclude-standard','--',...paths]))throw Error('Untracked ordinary calendar compiler/reference input');
   const tools=realpathSync(join(frontend,'tools')),src=realpathSync(join(frontend,'src'));
   const references=join(dirname(frontend),'data/ibd_reference'),contracts=resolve(tools,'../../contracts');
+  // Preserve the existing proof schema, while binding every selected-compiler
+  // reference input. Namespaces prevent an IBD path from shadowing a UI seed.
+  // Older selected UIs may have no frontend/data directory.
+  const named=(prefix,values)=>Object.fromEntries(Object.entries(values).map(([path,value])=>[prefix+path,value]));
+  const seeds=join(frontend,'data');
+  const referenceInputs={...named('ibd_reference/',files(references)),...named('frontend_data/',existsSync(seeds)?files(seeds):{})};
   return {audit_version:VERSION,frontend_contracts:inventoryDigest(files(join(frontend,'contracts'))),tools:inventoryDigest(files(tools)),src:inventoryDigest(files(src)),contracts:inventoryDigest(files(contracts)),
-    package:sha256(readFileSync(join(frontend,'package.json'))),references:inventoryDigest(files(references))};
+    package:sha256(readFileSync(join(frontend,'package.json'))),references:inventoryDigest(referenceInputs)};
 }
 function environment(time){const env={...process.env,FINANCIAL_EVALUATED_AT:time};for(const key of Object.keys(env))if(key.startsWith('FINANCIAL_CORRECTION_')||key.startsWith('FINANCIAL_GENERATION_CARRY_')||['GH_TOKEN','GITHUB_TOKEN','NODE_OPTIONS','NODE_PATH','PYTHONPATH','PYTHONHOME'].includes(key))delete env[key];return env;}
 function runtime(time){

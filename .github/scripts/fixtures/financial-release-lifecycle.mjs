@@ -54,19 +54,23 @@ function projection(source) {
 
 // Real provider sessions are independent from the synthetic fixture prices.
 const fixtureCalendar=JSON.parse(readFileSync(new URL('../../../frontend/src/static/__fixtures__/nyse-sessions-2024-2026.json',import.meta.url),'utf8'));
-function calendar(date){
-  const {schema_version,market,exchange,provider,provider_version,range_start}=fixtureCalendar;
-  const sessions=fixtureCalendar.sessions.filter(day=>day<=date);
+function calendar(date,source=fixtureCalendar){
+  const {schema_version,market,exchange,provider,provider_version,range_start}=source;
+  const sessions=source.sessions.filter(day=>day<=date);
   assert.equal(sessions.at(-1),date,'lifecycle price date must be a verified NYSE session');
   return {schema_version,market,exchange,provider,provider_version,range_start,as_of_date:date,range_end:date,sessions};
 }
-function bars(date,price) {
-  const dates=calendar(date).sessions.slice(-260);
+function bars(date,price,source=fixtureCalendar) {
+  const dates=calendar(date,source).sessions.slice(-260);
   assert.equal(dates.length,260,'lifecycle fixture needs complete observed history');
   return dates.map((date,index)=>{const close=price*(0.8+0.2*index/259);return {date,open:close,high:close*1.01,low:close*0.99,close,volume:1000000};});
 }
 
-export function lifecycleFixture({controllerPath=controller,packedTransport=false,omitAcquiredHistory=false,calendarCheckout=false,withoutSeedCalendar=false}={}) {
+export function lifecycleFixture({controllerPath=controller,packedTransport=false,omitAcquiredHistory=false,calendarCheckout=false,withoutSeedCalendar=false,marketTrendBreadth=false}={}) {
+  // The legacy fixture ends October 16. The market-source regression uses the
+  // dated seed's real independently collected calendar, not invented weekdays.
+  const marketCalendar=marketTrendBreadth?read(join(repoRoot,'frontend/data/market-trend-source-2026-10-23.json')).calendar:null;
+  const selectedCalendar=marketCalendar?{...fixtureCalendar,exchange:marketCalendar.exchange,provider:marketCalendar.provider,provider_version:marketCalendar.version,range_start:marketCalendar.sessions[0],sessions:marketCalendar.sessions}:fixtureCalendar;
   const sha=calendarCheckout?execFileSync('git',['-C',repoRoot,'rev-parse','HEAD'],{encoding:'utf8'}).trim():'b'.repeat(40);
   const root=mkdtempSync(join(tmpdir(),'financial-release-lifecycle-')),certificate=certifiedSourceFixture();
   const configPath=join(root,'remote.json'),preload=join(root,'transport.mjs'),bin=join(root,'bin');mkdirSync(bin);
@@ -109,7 +113,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
   function frontendAt(directory){
     if(calendarCheckout){
       execFileSync('git',['clone','--shared','--no-checkout',repoRoot,directory],{stdio:'pipe'});
-      execFileSync('git',['-C',directory,'checkout',sha,'--','frontend/src','frontend/tools','frontend/contracts','frontend/package.json','contracts','data/ibd_reference'],{stdio:'pipe'});
+      execFileSync('git',['-C',directory,'checkout',sha,'--','frontend/src','frontend/tools','frontend/data','frontend/contracts','frontend/package.json','contracts','data/ibd_reference'],{stdio:'pipe'});
       symlinkSync(join(repoRoot,'frontend/node_modules'),join(directory,'frontend/node_modules'),'dir');
     }else{mkdirSync(join(directory,'frontend'),{recursive:true});for(const name of ['src','tools','package.json'])symlinkSync(join(repoRoot,'frontend',name),join(directory,'frontend',name));mkdirSync(join(directory,'data/ibd_reference/ibd50'),{recursive:true});}
     return join(directory,'frontend');
@@ -117,11 +121,15 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
   function exportBundle(directory,date,price,history=null,extra={}){
     const frontend=frontendAt(directory),dataRoot=join(frontend,'public/static-data'),value=row(date,price);
     write(join(dataRoot,'manifest.json'),{as_of_date:date,default_market:'US',supported_markets:['US'],generated_at:now,markets:{US:{market:'US',as_of_date:date,pages:{scan:{path:'scan.json'}},assets:{charts:{path:'charts-index.json'}}}}});
+    if(marketTrendBreadth){
+      const manifest=read(join(dataRoot,'manifest.json'));manifest.markets.US.pages.breadth={path:'breadth.json'};write(join(dataRoot,'manifest.json'),manifest);
+      write(join(dataRoot,'breadth.json'),{as_of_date:date,payload:{current:{date}}});
+    }
     write(join(dataRoot,'scan.json'),{as_of_date:date,initial_rows:[value],preview_rows:[value],chunks:[{path:'chunk.json'}]});
     write(join(dataRoot,'chunk.json'),{as_of_date:date,rows:[value]});
     write(join(dataRoot,'charts-index.json'),{market:'US',symbols:[{symbol:'OWNED',path:'charts/OWNED.json'}]});
-    write(join(dataRoot,'trading-calendar.json'),calendar(date));
-    const chart={symbol:'OWNED',market:'US',as_of_date:date,bars:bars(date,price),stock_data:value,fundamentals:{...value},eps_line:[]};
+    write(join(dataRoot,'trading-calendar.json'),calendar(date,selectedCalendar));
+    const chart={symbol:'OWNED',market:'US',as_of_date:date,bars:bars(date,price,selectedCalendar),stock_data:value,fundamentals:{...value},eps_line:[]};
     write(join(dataRoot,'charts/OWNED.json'),chart);write(join(dataRoot,'raw/OWNED.json'),chart);
     if(!omitAcquiredHistory)write(join(dataRoot,'financial-history.json'),{as_of_date:date,results:{OWNED:{symbol:'OWNED',annual:[],quarterly:[]}}});
     if(history)cpSync(history,join(dataRoot,'candidate-history'),{recursive:true});

@@ -10,6 +10,31 @@ import {canonicalPublication} from './static-transport-publication.mjs';
 
 const time='2026-10-05T22:00:00.000Z';
 const write=(path,value)=>writeFileSync(path,JSON.stringify(value));
+test('ordinary replay binds the selected dated market seed across different working directories',{timeout:180000},async()=>{
+  const fixture=lifecycleFixture({calendarCheckout:true,omitAcquiredHistory:true,marketTrendBreadth:true});
+  try{
+    fixture.seed();write(join(fixture.root,'event.json'),{inputs:{ui_only:true}});
+    const release=fixture.advance({id:40,date:'2026-10-23',price:120,time:'2026-10-26T22:00:00.000Z',withoutCalendar:true});
+    release.command('plan');release.command('restore');
+    const seedPath=join(release.frontend,'data/market-trend-source-2026-10-23.json'),seed=readFileSync(seedPath);
+    // A reference file is part of the selected compiler: changing it must fail
+    // even though it is neither a tool nor an observed price in the input ZIP.
+    writeFileSync(seedPath,Buffer.concat([seed,Buffer.from('\n')]));
+    assert.notEqual(release.command('prepare-carry',{allowFailure:true}).status,0);
+    writeFileSync(seedPath,seed);
+    release.command('prepare-carry');
+    const root=join(release.frontend,'public'),entry=read(join(root,'static-data/manifest.json')).markets.US;
+    assert.ok(entry.assets.market_trends.source_sha256);
+    const trends=read(join(root,'static-data',entry.assets.market_trends.path));
+    assert.equal(trends.put_call.points.length,63);
+    assert.deepEqual(trends.indices.map(index=>index.points.length),[280,280]);
+    const prepared=release.state(),proof=prepared.carry.calendar.proof;
+    release.build();release.command('compose');release.command('recheck');
+    assert.deepEqual(read(join(release.dist,'publication.json')).ordinary_calendar_derivation,proof);
+    const published=read(join(release.dist,'static-data/manifest.json')).markets.US;
+    assert.deepEqual(published.assets.market_trends,entry.assets.market_trends);
+  }finally{fixture.cleanup();}
+});
 for(const packedTransport of [false,true])test(`offline generic carry derives and independently replays complete baseline, packed=${packedTransport}`,{timeout:120000},async()=>{
   const fixture=lifecycleFixture({packedTransport,omitAcquiredHistory:true,calendarCheckout:true});
   try{
