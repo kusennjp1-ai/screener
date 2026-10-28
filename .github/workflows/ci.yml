@@ -199,7 +199,7 @@ jobs:
 
       - name: Post-close clock and recovery contracts
         run: |
-          "$RUNNER_TEMP/session-calendar-runtime/bin/python" -m unittest discover -s .github/scripts -p test_postclose_calendar.py
+          "$RUNNER_TEMP/session-calendar-runtime/bin/python" -m unittest discover -s .github/scripts -p "test_postclose_*.py"
           node --test .github/scripts/postclose-watchdog.test.mjs
 
       - name: Journal-backed renewal publisher lifecycle

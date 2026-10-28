@@ -26,6 +26,13 @@ describe('expanded chart browser acceptance checks', () => {
   it('rejects footer and close controls covered by a higher-stacked chart', () => {
     expect(failuresFor({ footer_hit: false, close_hit: false, footer_controls: [{ text: '次の銘柄', visible: true, hit: false }] })).toHaveLength(3);
   });
+  it('rejects the annotated 390px chart date axis clipped by the navigation footer', () => {
+    const annotated = { viewport:{width:390,height:844},content:{top:97},content_client_height:678,scroll_top:0,
+      plot:{top:484.390625,bottom:784.390625,height:300},footer:{top:775},plot_visible:false,date_axis_visible:false,date_axis_hit:false };
+    expect(failuresFor(annotated)).toEqual(expect.arrayContaining([
+      expect.stringContaining('complete plot/date axis'), expect.stringContaining('extends behind footer'),
+    ]));
+  });
   it('allows intentional small-viewport scrolling, but never a collapsed plot or missing date axis', () => {
     expect(failuresFor({ plot_visible: false, date_axis_visible: false, date_axis_hit: false }, false)).toEqual([]);
     expect(failuresFor({ plot: { height: 0 }, date_axis_canvases: 0 }, false)).toHaveLength(2);

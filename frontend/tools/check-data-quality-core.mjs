@@ -10,6 +10,7 @@ import { summarizeWorkbench, validateWorkbenchSummary, validateWorkbenchDetails 
 import { researchEvaluation, validatePublishedSummaries, validateResearchListSummaries, validateResearchParity } from './research-quality.mjs';
 import {canonicalPivot} from '../src/static/researchPresentation.js';
 import {filterStaticScanRows,sortStaticScanRows} from '../src/static/scanClient.js';
+import {producerHistoryCoverage} from './producer-history-coverage.mjs';
 const read=async path=>JSON.parse(await readFile(`public/static-data/${path}`,'utf8'));
 const manifest=await read('manifest.json');
 const indexPath=(manifest.markets?.US||manifest).assets.research.path;
@@ -51,6 +52,8 @@ for(const row of index.rows) {
   canonicalRows.push(detail);
 }
 validatePublishedSummaries(canonicalRows,evaluatedAt);
+const producerCoverage=await producerHistoryCoverage({root:'public/static-data',entry:market,rows:canonicalRows});
+if(producerCoverage && (quality.total!==producerCoverage.total || quality.verified!==producerCoverage.verified))throw Error('Producer protected coverage denominator changed');
 for(const now of new Set([evaluatedAt,checkedAt])) validateResearchParity(wire,canonicalRows,now);
 console.log(`Research transport gate passed: ${wireRaw.length} raw / ${gzipSync(wireRaw).length} gzip bytes; full canonical rules, CSV, rankings and order plan agree.`);
 // Open real normal, repaired, split and incomplete symbols. All surfaces use

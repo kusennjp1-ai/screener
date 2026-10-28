@@ -24,6 +24,7 @@ import { buildBookTechnicalEvidence } from '../src/static/bookTechnicalEvidence.
 import { buildBookMarketEvidence } from '../src/static/bookMarketEvidence.js';
 import { auditDailyBars, mergeScanRows, rankVerifiedUniverse, AUDIT_VERSION } from '../src/static/qualificationAudit.js';
 import { buildRsRatingHistories } from './rs-rating-history.mjs';
+import { producerHistoryCoverage } from './producer-history-coverage.mjs';
 
 const root = resolve('public/static-data');
 const evaluatedAt = process.env.FINANCIAL_EVALUATED_AT ? Date.parse(process.env.FINANCIAL_EVALUATED_AT) : Date.now();
@@ -284,7 +285,8 @@ console.log(`Daily research exported for ${scan.as_of_date}: ${rows.size} rows.`
 
 const liquid=[...rows.values()].filter(r=>r.current_price>=10&&r.adv_usd>=20000000);
 const failures={};for(const row of liquid)for(const reason of row.technical_audit.errors)failures[reason]=(failures[reason]||0)+1;
-await writeFile(resolve(root,'data-quality.json'),JSON.stringify({as_of_date:scan.as_of_date,total:liquid.length,verified:liquid.filter(r=>r.technical_audit.valid).length,reasons:failures,rs_universe:[...rows.values()][0]?.rs_universe_size,minimum_target:.9}));
+const producerCoverage=await producerHistoryCoverage({root,entry,rows:[...rows.values()]});
+await writeFile(resolve(root,'data-quality.json'),JSON.stringify({as_of_date:scan.as_of_date,total:producerCoverage?.total ?? liquid.length,verified:producerCoverage?.verified ?? liquid.filter(r=>r.technical_audit.valid).length,reasons:producerCoverage?.missing?.reasons ?? failures,rs_universe:[...rows.values()][0]?.rs_universe_size,minimum_target:.9}));
 
 await exportWorkbench({root,rows:[...rows.values()],manifest,entry,researchContent,now:evaluatedAt,financialCorrection:correctionMeta});
 // Publish the manifest pointer only after every referenced asset is complete.

@@ -5,31 +5,7 @@ on:
     workflows: [CI]
     types: [completed]
     branches: [main]
-  schedule:
-    # FAST price publish — minutes after the US close. Refreshes today's prices
-    # and republishes charts/bands/signals against the latest published scan
-    # (prices-only mode; no snapshot rebuild). THREE staggered triggers because
-    # GitHub's scheduler starts cron runs 45-100 minutes late in practice
-    # (measured Jul 2026): the earliest-starting of the three publishes the
-    # close, the later ones are cheap idempotent republishes of the same bar.
-    # Goal: closing prices live by ~6:00-6:15am JST (the user's daily review
-    # window opens at 6am JST; in EST the close itself is 06:00 JST, so the
-    # winter floor is close+~50m ≈ 6:50am JST — scheduler-delay bound).
-    - cron: '4 16 * * 1-5'
-      timezone: 'America/New_York'
-    - cron: '31 16 * * 1-5'
-      timezone: 'America/New_York'
-    - cron: '58 16 * * 1-5'
-      timezone: 'America/New_York'
-    # US group — 4:10pm ET, after US close. Uses the New York
-    # timezone so it tracks DST automatically.
-    - cron: '10 16 * * 1-6'
-      timezone: 'America/New_York'
-    # UTC safety net for best-effort scheduling: 23:30 UTC is after the US
-    # close year-round (20:00 UTC in EDT, 21:00 UTC in EST). This trigger runs
-    # even if the primary fired. It waits for active full builds, including
-    # long backfills; a newer trigger may replace an older pending run.
-    - cron: '30 23 * * 1-6'
+  # Automatic acquisitions are admitted by the serialized post-close watchdog.
   workflow_dispatch:
     inputs:
       market_group:
@@ -41,15 +17,14 @@ on:
           - asia
           - us
       prices_only:
-        description: 'Fast prices-only publish (no scan rebuild)'
+        description: 'Refresh price cache only (public date stays at existing scan)'
         type: boolean
         default: false
 
 concurrency:
-  # Keep full and fast runs independent. A newer run waits for active work
-  # in its group so fetched prices can reach artifact upload. GitHub may
-  # still replace an older pending run; active runs can be canceled manually.
-  group: ${{ github.event_name == 'workflow_run' && format('static-site-oct6-{0}', github.event.workflow_run.head_sha) || format('static-site-{0}{1}', github.ref, (contains('4 16 * * 1-5|31 16 * * 1-5|58 16 * * 1-5', github.event.schedule) && github.event.schedule != '' || github.event.inputs.prices_only == 'true') && '-fast' || '') }}
+  # All acquisitions share one queue so manual maintenance cannot race a full
+  # build. The watchdog admits automatic work only when no producer is active.
+  group: ${{ github.event_name == 'workflow_run' && format('static-site-oct6-{0}', github.event.workflow_run.head_sha) || format('static-site-{0}', github.ref) }}
   cancel-in-progress: false
 
 permissions:
@@ -96,15 +71,11 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write(f"enabled={str(policy['enabled']).lower()}\n")
           PY
-      # Resolve which markets this run builds. The schedule that fired
-      # (github.event.schedule) selects the group; manual dispatch uses the
-      # market_group input. The combine job back-fills every market that is NOT
-      # built here from the last good artifact of a previous run, so a partial
-      # group still publishes a complete site.
+      # Automatic calls arrive from the watchdog as explicit US full dispatches.
+      # Manual groups retain their own requested markets and fallback handling.
       - id: pick
         env:
           EVENT_NAME: ${{ github.event_name }}
-          SCHEDULE: ${{ github.event.schedule }}
           MARKET_GROUP: ${{ github.event.inputs.market_group }}
           PRICES_ONLY: ${{ github.event.inputs.prices_only }}
           PRICE_REPAIR: ${{ steps.price-route.outputs.repair }}
@@ -121,13 +92,6 @@ jobs:
               markets="$US"
               mode="offline_repair"
             fi
-          elif [ "$EVENT_NAME" = "schedule" ]; then
-            markets="$US"   # 4:10pm ET (America/New_York), US-only deployment
-            case "$SCHEDULE" in
-              "4 16 * * 1-5"|"31 16 * * 1-5"|"58 16 * * 1-5")
-                mode="prices_only"   # post-close fast price publish (staggered vs GH delay)
-                ;;
-            esac
           else
             case "$MARKET_GROUP" in
               asia) markets="$ASIA" ;;
@@ -136,7 +100,7 @@ jobs:
             esac
             if [ "$PRICES_ONLY" = "true" ]; then
               mode="prices_only"
-              markets="$US"   # fast path is US-scoped
+              markets="$US"   # manual cache refresh is US-scoped
             fi
           fi
 
@@ -431,7 +395,7 @@ jobs:
           cd backend
           set +e
           if [ "${{ needs.select-markets.outputs.mode }}" = "prices_only" ]; then
-            # Fast post-close publish: today's prices + existing published scan.
+            # Manual cache refresh; chart export remains capped at the existing scan.
             python -m app.scripts.export_static_site \
               --output-dir /tmp/static-data \
               --prices-only \
@@ -553,8 +517,8 @@ jobs:
           gh release upload daily-price-data "$BUNDLE_PATH" --clobber
           gh release upload daily-price-data "$MANIFEST_PATH" --clobber
 
-      # Full builds also publish their feature run so the next fast
-      # prices-only run can re-export yesterday's scan against fresh prices.
+      # Retain the feature run for manual maintenance; prices-only exports
+      # remain capped at this published snapshot date.
       - name: Upload feature run bundle (full mode)
         if: ${{ steps.export-market.outputs.has_artifact == 'true' && needs.select-markets.outputs.mode != 'prices_only' }}
         continue-on-error: true
@@ -662,18 +626,27 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           CURRENT_RUN_ID: ${{ github.run_id }}
           BRANCH_NAME: ${{ github.ref_name }}
+          REQUESTED_MARKETS: ${{ needs.select-markets.outputs.markets }}
         run: |
           python - <<'PY'
           import json
           import os
           import shutil
           import subprocess
+          import sys
           from pathlib import Path
           from urllib.parse import urlencode
 
           repo = os.environ["REPOSITORY"]
           current_run_id = int(os.environ["CURRENT_RUN_ID"])
           branch_name = os.environ["BRANCH_NAME"]
+          expected_markets = {value.strip().upper() for value in os.environ.get("STATIC_SITE_MARKETS", "US").split(",") if value.strip()}
+          requested_markets = json.loads(os.environ.get("REQUESTED_MARKETS", "[]"))
+          if not isinstance(requested_markets, list) or any(not isinstance(value, str) for value in requested_markets):
+              raise ValueError("Invalid requested market set")
+          expected_markets.update(value.upper() for value in requested_markets)
+          if not expected_markets:
+              raise ValueError("Expected market set is empty")
           current_dir = Path("/tmp/static-market-artifacts-current")
           fallback_dir = Path("/tmp/static-market-artifacts-fallback")
           fallback_dir.mkdir(parents=True, exist_ok=True)
@@ -705,9 +678,9 @@ jobs:
 
           def market_from_artifact_name(artifact_name):
               prefix = "static-market-"
-              if not artifact_name.startswith(prefix):
-                  return ""
-              return artifact_name[len(prefix):].upper()
+              market = artifact_name[len(prefix):] if artifact_name.startswith(prefix) else ""
+              # Exact requested-market names exclude diagnostics and unrelated exports.
+              return market if market in expected_markets else ""
 
           def extract_runs(payload):
               if isinstance(payload, dict):
@@ -751,7 +724,7 @@ jobs:
                   except (OSError, json.JSONDecodeError, TypeError) as exc:
                       warn(f"Current artifact metadata at {metadata_path} could not be read ({exc}).")
                       continue
-                  if market:
+                  if market in expected_markets and payload.get("schema_version") == "static-site-v2" and isinstance(payload.get("entry"), dict):
                       current_markets.add(market)
               return current_markets
 
@@ -794,6 +767,12 @@ jobs:
               )
               return json.loads(result.stdout)
 
+          current_markets = collect_current_markets()
+          fallback_markets = set()
+          if expected_markets <= current_markets:
+              print("Current run covers all required/requested markets; no fallback API calls needed.", flush=True)
+              sys.exit(0)
+
           try:
               pages = gh_json(
                   [
@@ -817,8 +796,6 @@ jobs:
               warn(str(exc))
               runs = []
 
-          current_markets = collect_current_markets()
-          fallback_markets = set()
           if current_markets:
               print(
                   f"Current run already has market artifacts: {', '.join(sorted(current_markets))}.",
@@ -826,6 +803,8 @@ jobs:
               )
 
           for run in runs:
+              if expected_markets <= current_markets | fallback_markets:
+                  break
               run_id = run.get("id")
               if run_id == current_run_id:
                   continue
@@ -1021,6 +1000,7 @@ jobs:
             python tools/restore-candidate-history.py
             python tools/export-sector-prices.py
             node tools/repair-price-history.mjs
+            node tools/producer-price-history.mjs
             python tools/test_institutional_holdings.py
             python tools/test_recalculate_setups.py
             python tools/export-institutional.py --refresh --mapping-limit 200

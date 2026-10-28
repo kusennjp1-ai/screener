@@ -14,7 +14,7 @@ import { storedRadarV3 } from './fixtures/radar-stored-v3.mjs';
 import { SCREENING_PRIORITY_POLICY, DESIGN_GROUPS, assessScreeningPriority } from './screening-priority-acceptance.mjs';
 import { SCREENING_IMAGE_REVIEW_POLICY, REVIEW_AXES, VISUAL_CHECKS } from './screening-priority-image-review.mjs';
 import { BASELINE, CAPTURE_SCHEMA, REPOSITORY, WORKFLOW, REVIEW_PATH, REVIEW_RECORDS, IMAGE_STEP, MEASURE_STEP, PACKAGE_STEP, UPLOAD_STEP,
-  canonical, hash, materialSourceDigest, readPriorReview, verifyPackage, verifyProducer, verifyStoredMeasurement, requireRepresentationContract, historicalReviewResult } from './reviewed-design-capture.mjs';
+  canonical, hash, materialSourceDigest, readPriorReview, verifyPackage, verifyProducer, verifyStoredMeasurement, requireRepresentationContract, requireAnnotationGeometryContract, historicalReviewResult } from './reviewed-design-capture.mjs';
 import { captureConfigurationDigest, selectPriorCapture, extractReviewableZip, stageCaptureFiles, acceptPriorCapture } from './design-capture-lifecycle.mjs';
 
 // Only synthetic fixtures share an epoch; production measurement clocks are never frozen.
@@ -78,6 +78,25 @@ function producerFixture(reference = { run_id: 123, run_attempt: 2, head_sha: sh
     artifact: { id: reference.artifact_id, name: `reviewable-design-capture-${reference.checkout_sha}-${reference.run_attempt}`, expired: false, digest: 'sha256:' + reference.artifact_sha256, size_in_bytes: reference.artifact_bytes, workflow_run: { id: reference.run_id, head_sha: reference.head_sha }, created_at: stamp(5) },
     jobs: [{ name: 'Real-data design and performance budgets', run_id: reference.run_id, run_attempt: reference.run_attempt, status: 'completed', conclusion: 'failure', completed_at: stamp(6), steps }] };
 }
+
+test('annotation contract downgrade is decided by immutable producer source, not report omission', t => {
+  const f = repoFixture(t), path = 'frontend/tools/chart-design-cases.mjs';
+  requireAnnotationGeometryContract(f.root, f.captured, {});
+  write(join(f.root, path), 'export function verifyChartCases() {}');
+  git(f.root, 'add', path); git(f.root, 'commit', '-m', 'Synthetic legacy chart producer');
+  const legacy = git(f.root, 'rev-parse', 'HEAD');
+  requireAnnotationGeometryContract(f.root, legacy, {});
+  write(join(f.root, path), "export function verifyChartCases(report) { report.expanded_annotation_geometry_contract = 'full-plot-v1'; }");
+  git(f.root, 'add', path); git(f.root, 'commit', '-m', 'Synthetic annotated chart producer');
+  const current = git(f.root, 'rev-parse', 'HEAD');
+  for (const report of [{}, { expanded_annotation_geometry_contract: 'unknown' }])
+    assert.throws(() => requireAnnotationGeometryContract(f.root, current, report), /requires the expanded annotation/);
+  requireAnnotationGeometryContract(f.root, current, { expanded_annotation_geometry_contract: 'full-plot-v1' });
+  // Checking an older immutable revision must not inspect the newer worktree.
+  requireAnnotationGeometryContract(f.root, legacy, {});
+  write(join(f.root, path), 'export function verifyChartCases() {}');
+  assert.throws(() => requireAnnotationGeometryContract(f.root, current, {}), /requires the expanded annotation/);
+});
 
 test('historical reader preserves literal v3 classification without admitting it as a fresh v4 measurement', t => {
   const f = packageFixture(t, 'ordinary');

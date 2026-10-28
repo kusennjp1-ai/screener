@@ -54,6 +54,10 @@
  .leader-svg-extra-controls summary{padding:6px;display:flex;align-items:center;justify-content:center;border-radius:12px}
  .leader-svg-extra-controls:has(details[open]){order:9}
  .leader-svg-extra-controls details[open] button{margin:2px}
+ /* The expanded toolbar must include padding in its 44px touch targets.
+    Otherwise opened tools consume the date-axis space above navigation. */
+ .leader-evidence-expanded .leader-svg-controls :is(button,select,summary){box-sizing:border-box;height:44px}
+ .leader-evidence-expanded .leader-svg-extra-controls details[open] button{margin-block:0}
  .leader-evidence-chart>svg{scroll-margin-top:8px}
 }
 @media(min-width:701px){.leader-svg-extra-controls>details{display:contents}}

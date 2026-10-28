@@ -61,7 +61,7 @@ def _tracked_ibd_csv_path() -> Path:
     return IBDIndustryService.resolve_tracked_csv_path(settings.ibd_industry_csv_path)
 
 
-def _resolve_latest_completed_trading_date(market: str, *, close_buffer_minutes: int = 30) -> date:
+def _resolve_latest_completed_trading_date(market: str, *, close_buffer_minutes: int | None = None) -> date:
     """Return the latest completed trading session date for ``market``.
 
     Each market has its own calendar (NYSE, HKEX, NSE, …). Using the NYSE
@@ -69,15 +69,18 @@ def _resolve_latest_completed_trading_date(market: str, *, close_buffer_minutes:
     closed but the target exchange traded, or builds their snapshot for a
     stale date when NYSE traded but the target exchange did not.
     """
+    # Match the post-close watchdog's acquisition boundary. This only selects
+    # the target; provider availability and publication quality remain checked.
+    # Other markets retain their existing consolidation interval.
+    if close_buffer_minutes is None:
+        close_buffer_minutes = 2 if market.upper() == "US" else 30
     return get_market_calendar_service().last_completed_trading_day(
         market, close_buffer_minutes=close_buffer_minutes
     )
 
 
-# The fast price-only publish fires minutes after the close, so it counts
-# today's session as completed after a short buffer instead of the default 30
-# minutes (Yahoo's daily bar is final within minutes of the bell; waiting the
-# full consolidation window would defeat the point of the fast path).
+# Manual cache refresh can start after five minutes. Exported charts remain
+# capped at the existing feature-run date; only a full build advances that date.
 PRICES_ONLY_CLOSE_BUFFER_MINUTES = 5
 # Chart-relevant refresh budget for the fast path: STATIC_CHART_LIMIT charts
 # ship by default plus preset/group expansions — 6x covers those expansions
@@ -88,11 +91,9 @@ PRICES_ONLY_REFRESH_SYMBOL_LIMIT = 1200
 def _run_prices_only_refresh(*, market: str, observations=None) -> dict[str, Any]:
     """Refresh today's prices without rebuilding the scan snapshot.
 
-    Used by the fast post-close publish: the subsequent ``service.export``
-    re-serializes charts/bands/signals from the fresh price cache while scan
-    ranks stay pinned to the latest *published* feature run (yesterday's until
-    the full build lands). Fetch failures are tolerated — a partially fresh
-    price set still beats yesterday's everywhere.
+    This manual maintenance path updates the cache, but ``service.export``
+    limits chart observations to the latest published feature run. It cannot
+    advance the public session without a full snapshot rebuild.
     """
     as_of = _resolve_latest_completed_trading_date(
         market, close_buffer_minutes=PRICES_ONLY_CLOSE_BUFFER_MINUTES

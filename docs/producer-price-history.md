@@ -1,0 +1,17 @@
+# Normal producer history preservation
+
+The ordinary Static Site producer runs `frontend/tools/producer-price-history.mjs` after vendor-history repair and before setup recalculation. It is not a publisher, finite recovery admission, current-price fallback, or permission to relax a financial gate.
+
+The producer verifies the current publication using the ordinary publication verifier, then reads predecessor charts through that receipt's immutable transport. It compares actual dated closes, not analysis dates. A regressing chart can retain the predecessor's complete OHLCV history only when symbol, market, currency, exchange and company name match, and any mutually present strong identifiers match. Missing or ambiguous identities fail closed. Missing series remain absent in the existing known-date ledger; this stage does not invent histories for them.
+
+Every retained reference keeps its genuine observation and capture dates. Its chart envelope records the new analysis target separately. Current price, liquidity, RS, setup and purchase claims are cleared; only candidate financial source inputs are preserved. Whole original charts, candidate rows and predecessor provenance are saved in content-addressed snapshots. The raw chart aliases, canonical chart and scan/detail representations are updated together, then the ordinary exporter generates their new content hashes.
+
+The report's `aliases` list records the input paths that were reconciled before compilation. It is audit evidence, not a list of runtime URLs: obsolete generated hash paths are removed by the ordinary exporter. Runtime readers and the final quality validator resolve the current chart index and research-detail references from the newly written manifest.
+
+Before clearing liquidity, the producer freezes the union of the previous required verification cohort and the current eligible cohort. Clearing a price or ADV cannot remove a symbol from that denominator. Both the exporter and core quality worker independently validate retained bars and unknown-current state, and apply the unchanged 90% requirement. Genuine price/liquidity exits require the same complete current observations as the publication controller. The compiler-bound arithmetic is checked against all existing controller coverage tests, including failures and exits.
+
+`producer-history-coverage.mjs` and `publication-coverage.mjs` are offline compiler inputs inside the existing source inventory. They import no GitHub, live-publication, or admission controller. Only the separate acquisition stage contacts the public predecessor. Historical finite repair requests and their admission paths are unchanged.
+
+The producer refuses to retain a bar dated at or after the target as a stale reference. An already-retained predecessor may have the same analysis target on a later attempt, but its observation must still be strictly older. Recalculation excludes marked stale references from the setup and RS input universe even if someone relabels their final bar. Normal compiler, financial, payload, UI and publication checks remain mandatory; successful source generation does not establish deployment or current-session freshness.
+
+This does not add a general artifact-reuse dispatch option. A new ordinary full acquisition uses the reviewed stage. An offline integration replay may use authenticated immutable inputs in an isolated directory, but does not itself produce publication authority or update the public site.

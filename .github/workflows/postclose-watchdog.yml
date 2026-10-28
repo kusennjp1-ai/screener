@@ -10,6 +10,10 @@ on:
     # Catch up after missed schedules, overnight provider delays, and weekends.
     - cron: '17 0,6,10 * * *'
       timezone: 'America/New_York'
+    # Retained full-update deadlines use the same admission/duplicate guard.
+    - cron: '10 16 * * 1-6'
+      timezone: 'America/New_York'
+    - cron: '30 23 * * 1-6'
   workflow_dispatch:
 
 permissions:

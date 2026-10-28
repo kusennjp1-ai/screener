@@ -91,6 +91,17 @@ export function requireRepresentationContract(sourceRoot, revision, completion) 
     assert(completion.schema === 'screening-priority-completion-v2', 'This material source requires the baseline representation capture contract');
 }
 
+// A missing report marker is legacy only when its authenticated producer source
+// predates the opened-annotation measurement. Report fields cannot choose that
+// downgrade themselves; the immutable Git blob determines the required contract.
+export function requireAnnotationGeometryContract(sourceRoot, revision, report) {
+  const path = 'frontend/tools/chart-design-cases.mjs';
+  if (!git(sourceRoot, 'ls-tree', revision, '--', path).trim()) return;
+  const producer = git(sourceRoot, 'show', `${revision}:${path}`);
+  if (producer.includes('expanded_annotation_geometry_contract'))
+    assert(report.expanded_annotation_geometry_contract === 'full-plot-v1', 'This material source requires the expanded annotation geometry capture contract');
+}
+
 export function verifyStoredMeasurement(root, now = Date.now()) {
   const reportBytes = regular(root, 'report.json'), assessmentBytes = regular(root, 'screening-priority-assessment.json');
   const report = JSON.parse(reportBytes), assessment = JSON.parse(assessmentBytes), completion = json(root, 'screening-priority-completion.json'), binding = completion.binding;
@@ -163,6 +174,7 @@ export function verifyPackage(root, reference, sourceRoot, current, configuratio
   assert(producer.tree === git(sourceRoot, 'rev-parse', `${reference.checkout_sha}^{tree}`).trim(), 'Captured source tree changed');
   const measured = verifyStoredMeasurement(root, now);
   requireRepresentationContract(sourceRoot, current, measured.completion);
+  requireAnnotationGeometryContract(sourceRoot, reference.checkout_sha, measured.report);
   assert(measured.binding.commit === producer.checkout_sha && measured.binding.tree === producer.tree && measured.binding.run_id === String(producer.run_id) && measured.binding.run_attempt === String(producer.run_attempt), 'Measurement belongs to another producer');
   assert(clock(envelope.created_at) && Date.parse(measured.completion.completed_at) <= Date.parse(envelope.created_at) && Date.parse(envelope.created_at) <= now, 'Invalid capture package clock');
   const input = regular(root, 'input-provenance.json');

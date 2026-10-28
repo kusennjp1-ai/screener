@@ -2,7 +2,7 @@ import { publicationQueryIdentity } from './staticPublication';
 import { instrumentApplicability, instrumentApplicabilityLabel } from './instrumentApplicability';
 import { projectFinancialRow, mergeFinancialDetail } from './financialCurrent';
 import { useFinancialClock } from './useFinancialClock';
-import { requireChartIdentity } from './chartPayloadIdentity';
+import { requireChartIdentity, retainedChartHistory, retainedChartLabel } from './chartPayloadIdentity';
 import { canonicalPivot } from './researchPresentation';
 import ChartDecisionSummary from './components/ChartDecisionSummary';
 import ChartNumericData from './components/ChartNumericData';
@@ -274,6 +274,7 @@ function StaticChartViewerModal({
     return () => { cancelAnimationFrame(frame); observer.disconnect(); window.removeEventListener('resize', scheduleFit); };
   }, [open, isMobile, compactMobileChrome, isLoading, isError, currentSymbol, chartSection]);
   const dataUpdatedAtOverride = chartPayload?.generated_at ? Date.parse(chartPayload.generated_at) : null;
+  const retainedHistory = retainedChartHistory(chartPayload, expectedDate);
   const detailWarning = rowDetail.isError && <Alert data-testid="expanded-chart-warning" severity="warning" sx={{flexShrink:0,...(compactMobileChrome && {gridColumn:'1 / -1',gridRow:3})}}>詳細根拠の取得に失敗しました。未取得の条件は合格扱いにしていません。</Alert>;
 
   return (
@@ -306,7 +307,7 @@ function StaticChartViewerModal({
           <Box data-testid="expanded-chart-header" sx={{display:compactMobileChrome ? 'grid' : 'flex',gridTemplateColumns:'minmax(0, 1fr) auto',flexShrink:0,alignItems:'center',justifyContent:'space-between',px:2,py:compactMobileChrome ? .5 : 1,borderBottom:1,borderColor:'divider'}}>
             <Box sx={{display:compactMobileChrome ? 'contents' : 'block',minWidth:0,flex:1}}>
               <Box sx={{minWidth:0}}><Typography id="static-chart-viewer-modal" variant="h6" sx={compactMobileChrome ? {minHeight:44,display:'flex',alignItems:'center',flexWrap:'wrap',gap:.5,pr:totalCount>1?'100px':0} : undefined}>{currentSymbol} <Typography component="span" color="text.secondary" sx={{fontSize:13}}>{currentIndex+1} / {totalCount} 銘柄</Typography></Typography>
-                <Typography sx={{fontSize:12,color:'text.secondary'}}>{isMobile ? `${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'} · ${expectedDate || chartPayload?.as_of_date || '時点未確認'} 日次終値` : `${stockData?.company_name || '日次チャート分析'} · ${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）`}</Typography>
+                <Typography sx={{fontSize:12,color:'text.secondary'}}>{retainedHistory ? retainedChartLabel(retainedHistory) : isMobile ? `${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'} · ${expectedDate || chartPayload?.as_of_date || '時点未確認'} 日次終値` : `${stockData?.company_name || '日次チャート分析'} · ${Number.isFinite(stockData?.current_price) ? `$${stockData.current_price.toFixed(2)}` : '価格未確認'}（日次）`}</Typography>
               </Box>
               {isMobile && <Box data-testid="mobile-chart-readiness" sx={{gridColumn:compactMobileChrome ? '1 / -1' : '1',gridRow:2,fontSize:12,lineHeight:1.5,mt:1,overflowWrap:'anywhere'}}>
                 <Box sx={{display:'flex',alignItems:'baseline',flexWrap:'wrap',gap:'0 8px'}}><strong>{mobileReadiness ? `購入条件 ${mobileReadiness.passed}/${mobileReadiness.total}${mobileUnknown ? `（未確認 ${mobileUnknown}）` : ''}` : '購入条件を読み込み中…'}</strong><EntrySourceBadge plan={plan}/></Box>
@@ -399,7 +400,7 @@ function StaticChartViewerModal({
                   {/* Keep warnings/readouts outside the candles. On phones the
                       color key lives below the chart; measured MA values keep
                       their existing accessible disclosure above the plot. */}
-                  {!isMobile && <ChartDecisionSummary row={stockData} date={date || chartPayload?.as_of_date} market={market} method={method} now={now} quote={quote?.symbol === currentSymbol ? quote : null} />}
+                  {!isMobile && <ChartDecisionSummary retainedHistory={retainedHistory} row={stockData} date={date || chartPayload?.as_of_date} market={market} method={method} now={now} quote={quote?.symbol === currentSymbol ? quote : null} />}
                   {!isMobile && <ChartInfoStrip />}
                   {!compactMobileChrome && mobileInteraction}
                   <Box data-testid="chart-swipe-surface" onTouchStartCapture={startSwipe} onTouchEndCapture={endSwipe}
@@ -435,7 +436,7 @@ function StaticChartViewerModal({
                       <summary style={{cursor:'pointer',minHeight:44,lineHeight:'24px',padding:'10px 0',boxSizing:'border-box'}}>チャートの凡例（移動平均線・RS）</summary>
                       <ChartInfoStrip />
                     </Box>
-                    <ChartDecisionSummary row={stockData} date={date || chartPayload?.as_of_date} market={market} method={method} now={now} quote={quote?.symbol === currentSymbol ? quote : null} />
+                    <ChartDecisionSummary retainedHistory={retainedHistory} row={stockData} date={date || chartPayload?.as_of_date} market={market} method={method} now={now} quote={quote?.symbol === currentSymbol ? quote : null} />
                   </>}
                 </Box>
               ) : (

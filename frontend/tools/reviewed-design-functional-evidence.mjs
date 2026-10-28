@@ -185,6 +185,12 @@ function chartEvidence(report) {
     assert(object(record.source_warning) && typeof record.source_warning.expected === 'boolean', label + ': missing warning evidence');
     if (record.source_warning.expected) assert(record.source_warning.inline_visible === true && record.source_warning[width === 390 ? 'mobile_expanded_visible' : 'desktop_expanded_visible'] === true, label + ': source warning hidden');
     chartGeometry(record.expanded_geometry, width, mainHeight(width), label + '/expanded', width >= 900);
+    // Immutable earlier captures retain their original contract. New captures
+    // explicitly bind the opened annotation state, including its real date axis.
+    if (report.expanded_annotation_geometry_contract !== undefined) {
+      assert(report.expanded_annotation_geometry_contract === 'full-plot-v1', label + ': unknown expanded annotation geometry contract');
+      chartGeometry(record.expanded_annotation_geometry, width, mainHeight(width), label + '/expanded-annotations', true);
+    }
     chartGeometry(record.expanded_short_geometry, width, width === 1440 ? 760 : 568, label + '/short', true);
     chartGeometry(record.expanded_scrolled_geometry, width, 480, label + '/scrolled', false);
     assert(record.expanded_scrolled_geometry.date_axis_visible === true && record.expanded_scrolled_geometry.date_axis_hit === true && record.expanded_scrolled_geometry.scroll_top > 0, label + ': date-axis scrolling incomplete');

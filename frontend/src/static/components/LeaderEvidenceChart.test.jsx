@@ -9,6 +9,26 @@ afterEach(cleanup);
 const options = { bars:fixture.bars,symbol:fixture.symbol,date:fixture.as_of_date,rsLine:fixture.rs_line };
 const props = { symbol:fixture.symbol,date:fixture.as_of_date,priceData:fixture.bars,rsLineData:fixture.rs_line,benchmarkSymbol:fixture.benchmark_symbol,row:fixture.row,payload:fixture,smallScreen:true,pivotPrice:340,buyCeiling:357,stopPrice:323 };
 
+it('shows complete retained history with observed dates and navigation, without current VCP or price levels',()=>{
+ const date='2026-10-26',history={status:'stale_reference_only',observation_date:fixture.as_of_date,target_as_of_date:date,original_as_of_date:fixture.as_of_date,original_generated_at:fixture.generated_at,snapshot_sha256:'a'.repeat(64),snapshot_path:`producer-price-history/${'a'.repeat(64)}.json`};
+ const payload={...fixture,as_of_date:date,retained_price_history:history},before=structuredClone(payload);
+ const model=leaderChartModel({...options,date,retainedHistory:history});
+ expect(model.error).toBeNull();expect(model.candlesticks).toHaveLength(fixture.bars.length);expect(model.candlesticks.at(-1).time).toBe(fixture.as_of_date);
+ expect(buildBookTechnicalEvidence(fixture.row,payload,date).valid).toBe(false);
+ const {container}=render(<LeaderEvidenceChart {...props} date={date} payload={payload} technicalEvidence={{...buildBookTechnicalEvidence(fixture.row,fixture,fixture.as_of_date),as_of_date:date}}/>);
+ expect(screen.getByRole('status')).toHaveTextContent('参考履歴 2026-10-23まで · 分析日 2026-10-26の価格未確認');
+ expect(screen.getByRole('button',{name:'VCP注記'})).toBeDisabled();
+ expect(container.querySelectorAll('[data-vcp-leg]')).toHaveLength(0);
+ expect(container.querySelector('.leader-svg-legend')).toHaveTextContent('共通ピボット データなし');
+ const displayed=()=>[...container.querySelectorAll('[data-close]')].map(el=>el.dataset.date);
+ expect(displayed().at(-1)).toBe(fixture.as_of_date);
+ fireEvent.click(screen.getByRole('button',{name:'過去の期間へ'}));expect(displayed()[0]).toBe(fixture.bars[0].date);
+ fireEvent.click(screen.getByRole('button',{name:'週足',exact:true}));expect(screen.getByRole('img')).toBeInTheDocument();
+ fireEvent.click(screen.getByRole('button',{name:'日足',exact:true}));fireEvent.click(screen.getByRole('button',{name:'リセット'}));expect(displayed().at(-1)).toBe(fixture.as_of_date);
+ expect(container.querySelector('.chart-volume-ratio summary')).toHaveTextContent('2026-10-23 · 参考履歴');
+ expect(payload).toEqual(before);
+});
+
 it('states the volume snapshot date before opening its formula and keeps the daily basis during panning and weekly views',()=>{
  const {container}=render(<LeaderEvidenceChart {...props}/>);
  const disclosure=container.querySelector('.chart-volume-ratio'),summary=disclosure.querySelector('summary');

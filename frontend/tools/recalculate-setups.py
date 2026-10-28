@@ -161,6 +161,8 @@ def main():
         try:
             chart = read(paths[symbol])
             if chart['symbol'] != symbol or chart['as_of_date'] != as_of: raise ValueError('Identity mismatch')
+            if chart.get('retained_price_history', {}).get('status') == 'stale_reference_only':
+                raise ValueError('Retained observed history is reference only; current setup and RS unavailable')
             validate(chart['bars'], as_of)
             prices[symbol] = chart['bars']
         except (KeyError, ValueError, OSError) as error:

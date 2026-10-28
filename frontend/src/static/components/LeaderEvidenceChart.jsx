@@ -6,6 +6,7 @@ import { leaderChartModel, seriesPaths } from './leaderChartModel';
 import { relativeStrengthScale, researchVolumeBars } from '../../components/Charts/researchChartModel';
 import { buildBookTechnicalEvidence, BOOK_TECHNICAL_VERSION } from '../bookTechnicalEvidence';
 import { formatPrice } from '../positionGeometry';
+import { retainedChartHistory, retainedChartLabel } from '../chartPayloadIdentity';
 import './leaderEvidenceChart.css';
 
 const finite = Number.isFinite;
@@ -21,8 +22,10 @@ export default function LeaderEvidenceChart(props) {
   return <EvidenceSurface key={`${props.chartIdentity || `${props.symbol}:${props.date}:${props.generation || ''}`}:${props.comparisonSessions || ''}`} {...props}/>;
 }
 function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchmarkSymbol,
-  row, payload, technicalEvidence, pivotPrice, buyCeiling, stopPrice, smallScreen = false,
-  compact = false, expanded = false, compactResearchChrome = false, comparisonSessions, researchActions, onExpand, height = 440, rsRatingValue, view = 'all', onShowChart }) {
+  row, payload, technicalEvidence, pivotPrice: suppliedPivot, buyCeiling: suppliedCeiling, stopPrice: suppliedStop, smallScreen = false,
+  compact = false, expanded = false, compactResearchChrome = false, comparisonSessions, researchActions, onExpand, height = 440, rsRatingValue: suppliedRating, view = 'all', onShowChart }) {
+  const retained = retainedChartHistory(payload, date);
+  const pivotPrice = retained ? null : suppliedPivot, buyCeiling = retained ? null : suppliedCeiling, stopPrice = retained ? null : suppliedStop, rsRatingValue = retained ? null : suppliedRating;
   const id = useId().replace(/:/g, ''), [timeframe,setTimeframe] = useState('daily');
   const [count,setCount] = useState(comparisonSessions || 252), [offset,setOffset] = useState(0);
   const [annotations,setAnnotations] = useState(false);
@@ -30,7 +33,8 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
   const dragRef = useRef(null);
   const [measuredWidth, setMeasuredWidth] = useState(null);
   const [selectedLeg, setSelectedLeg] = useState(null);
-  const model = useMemo(() => leaderChartModel({bars:priceData,symbol,date,rsLine:rsLineData,timeframe}), [priceData,symbol,date,rsLineData,timeframe]);
+  const retainedHistory = payload?.retained_price_history;
+  const model = useMemo(() => leaderChartModel({bars:priceData,symbol,date,rsLine:rsLineData,timeframe,retainedHistory}), [priceData,symbol,date,rsLineData,timeframe,retainedHistory]);
   useLayoutEffect(()=>{
     const plot=plotRef.current;
     if(!plot)return undefined;
@@ -57,11 +61,12 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
     return()=>plot.removeEventListener('wheel',wheel);
   },[compact,count,model,view]);
   const evidence = useMemo(() => {
+    if (retained) return null;
     const existing = technicalEvidence || row?.book_technical_evidence;
     if (existing?.version === BOOK_TECHNICAL_VERSION && existing.valid === true && existing.symbol === symbol && existing.as_of_date === date) return existing;
     if (!payload || !row || row.symbol !== symbol || payload.symbol !== symbol || payload.as_of_date !== date) return null;
     return buildBookTechnicalEvidence(row,payload,date);
-  },[technicalEvidence,row,payload,symbol,date]);
+  },[technicalEvidence,row,payload,symbol,date,retained]);
   if (model.error) return <div className="leader-svg-warning" role="alert">チャート：データなし。{model.error}</div>;
   const all=model.candlesticks,maxOffset=Math.max(0,all.length-count),boundedOffset=Math.min(offset,maxOffset),end=all.length-boundedOffset,start=Math.max(0,end-count),bars=all.slice(start,end);
   const width=measuredWidth||(smallScreen?360:compact?440:760),left=8,right=smallScreen?55:62,plotWidth=width-left-right;
@@ -121,6 +126,7 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
     }
     setOffset(Math.max(0,Math.min(maxOffset,drag.offset+Math.round(dx*bars.length/plotWidth))));
   };
+  const observedDate=retained?.observation_date || date;
   const dailyVolumeMean=precedingDailyMean(priceData);
   const dailyVolume=priceData.at(-1)?.volume;
   const volumeRatio=!model.warning&&dailyVolumeMean>0&&finite(dailyVolume)?dailyVolume/dailyVolumeMean:null;
@@ -144,10 +150,11 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
       <button type="button" aria-label="表示期間を拡大" onClick={()=>zoom(.7)}>＋</button><button type="button" aria-label="表示期間を縮小" onClick={()=>zoom(1.4)}>−</button>
       <button type="button" aria-label="過去の期間へ" disabled={start===0} onClick={()=>shift(1)}>←</button><button type="button" aria-label="新しい期間へ" disabled={boundedOffset===0} onClick={()=>shift(-1)}>→</button>
       <button type="button" onClick={()=>{setCount(timeframe==='weekly'?51:252);setOffset(0);setSelectedLeg(null);}}>リセット</button>
-      <button type="button" aria-pressed={annotations} disabled={timeframe!=='daily'} onClick={()=>setAnnotations(value=>!value)}>VCP注記</button>
+      <button type="button" aria-pressed={annotations} disabled={timeframe!=='daily'||Boolean(retained)} onClick={()=>setAnnotations(value=>!value)}>VCP注記</button>
       </details></div>
       {researchActions}{onExpand&&<button type="button" onClick={onExpand} aria-label="日次チャートを分析">拡大 ↗</button>}
     </div>}
+    {retained && !expanded && <p role="status" className="leader-svg-caption">{retainedChartLabel(retained)}</p>}
     {!compact&&<p className={`leader-svg-caption${smallScreen?' leader-svg-caption-mobile':''}`}>{smallScreen?<span>期間 {bars[0].time}〜{bars.at(-1).time} · 左右スワイプ</span>:<>{symbol} · {intervalText} · 最終バー {latest.time} 終値 {formatPrice(latest.close)}。期間 {bars[0].time}〜{bars.at(-1).time}</>}</p>}
       {!compact&&anchoredLegs.length>0&&<div className="chart-vcp-intervals" aria-label="表示中のVCP推定区間">{anchoredLegs.map(leg=><button key={leg.number} type="button" data-vcp-interval={leg.number} aria-pressed={selectedLeg===`${leg.startDate}/${leg.endDate}`} aria-label={`C${leg.number} ${leg.startDate}から${leg.endDate}、深さ${leg.depthPct.toFixed(1)}%を拡大`} onClick={()=>focusLeg({start:leg.startDate,end:leg.endDate})}>C{leg.number} <strong>{leg.depthPct.toFixed(1)}%</strong></button>)}</div>}
     {model.warning&&<p role="status" className="leader-svg-warning">{model.warning} 買い帯とVCP注記は保留しています。</p>}
@@ -187,8 +194,8 @@ function EvidenceSurface({ symbol, date, priceData = [], rsLineData = [], benchm
     {!compact&&<>
       <div className="chart-scroll-control"><span>← 過去</span><input aria-label="チャートの表示位置" type="range" min="0" max={maxOffset} value={maxOffset-boundedOffset} disabled={!maxOffset} onChange={event=>setOffset(maxOffset-Number(event.target.value))}/><span>最新 →</span></div>
       <div className="chart-snapshot-metrics">
-        <RsRatingHistory history={payload?.rs_rating_history} symbol={symbol} date={date} current={row?.rs_rating??rsRatingValue}/>
-        <MetricDisclosure className="chart-volume-ratio" summary={<span className="rs-rating-summary"><span>出来高 / 50日平均 <small>{date} · 最新配信日足</small></span><strong>{finite(volumeRatio)?volumeRatio.toFixed(2):'—'}<small> 倍</small></strong></span>}><p>出来高比＝{date}の出来高 ÷ 直前50営業日の平均出来高。当日は平均から除外します。1倍なら平均と同じ、2倍なら2倍の取引量、0.5倍なら半分です。</p><p>この公開データの分析日 {date} に確定した日足です。今日のリアルタイム出来高ではありません。RSの対象日やチャートの表示期間を変えても、この値の対象日は変わりません。</p><p>当日 {quantity(dailyVolume)}株 ／ 直前50日平均 {quantity(dailyVolumeMean)}株。出来高だけでは上昇・下落や購入可否は決まりません。VCPの「区間平均出来高」は収縮区間同士の比較で、別の比率です。</p></MetricDisclosure>
+        <RsRatingHistory history={payload?.rs_rating_history} symbol={symbol} date={date} current={retained ? null : row?.rs_rating??rsRatingValue}/>
+        <MetricDisclosure className="chart-volume-ratio" summary={<span className="rs-rating-summary"><span>出来高 / 50日平均 <small>{observedDate} · {retained ? '参考履歴' : '最新配信日足'}</small></span><strong>{finite(volumeRatio)?volumeRatio.toFixed(2):'—'}<small> 倍</small></strong></span>}><p>出来高比＝{observedDate}の出来高 ÷ 直前50営業日の平均出来高。当日は平均から除外します。1倍なら平均と同じ、2倍なら2倍の取引量、0.5倍なら半分です。</p><p>この公開データの観測日 {observedDate} に確定した日足です。今日のリアルタイム出来高ではありません。RSの対象日やチャートの表示期間を変えても、この値の対象日は変わりません。</p><p>当日 {quantity(dailyVolume)}株 ／ 直前50日平均 {quantity(dailyVolumeMean)}株。出来高だけでは上昇・下落や購入可否は決まりません。VCPの「区間平均出来高」は収縮区間同士の比較で、別の比率です。</p></MetricDisclosure>
       </div>
       <MetricDisclosure summary="チャートの操作・線の見方"><p>最終バー {latest.time} 終値 {formatPrice(latest.close)}。左右スワイプ・横スクロール・方向キーで過去と最新へ移動。期間ボタンと＋/−で拡大縮小。1年は252営業日、週足は51本が目安で、配信済みの範囲だけ表示します。</p><p>{intervalText}。RS線は株価÷{benchmarkSymbol||'比較対象未確認'}価格。RS順位とは異なります。VCPは既存アルゴリズムの推定区間で、合格・買い指示ではありません。共通ピボットと収縮高値は別です。</p>{view==='chart'&&detailLegends}</MetricDisclosure>
     </>}

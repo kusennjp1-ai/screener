@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { assessRetainedUniverse, isEligibleForPublication } from '../../.github/scripts/retained-universe.mjs';
+import { assessRetainedUniverse as controllerAssess, isEligibleForPublication as controllerEligible } from '../../.github/scripts/retained-universe.mjs';
+import { assessRetainedUniverse as compilerAssess, isEligibleForPublication as compilerEligible } from './publication-coverage.mjs';
+
+// Every behavioral case below checks the compiler-bound implementation against
+// the unchanged publication controller, including failures and genuine exits.
+function assessRetainedUniverse(input) {
+  const result=controllerAssess(input);expect(compilerAssess(input)).toEqual(result);return result;
+}
+function isEligibleForPublication(input) {
+  const result=controllerEligible(input);expect(compilerEligible(input)).toBe(result);return result;
+}
 
 const date = '2026-10-02';
 const row = (symbol, overrides = {}) => ({

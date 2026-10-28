@@ -57,6 +57,17 @@ const renderModal = (props, cachedPayload = null) => {
   return { ...view, rerenderModal: nextProps => view.rerender(element(nextProps)) };
 };
 
+it('keeps retained observed and analysis dates visible and passes the complete old history to the chart',async()=>{
+ const date='2026-10-27',observation='2026-10-26',history={status:'stale_reference_only',observation_date:observation,target_as_of_date:date,original_as_of_date:observation,original_generated_at:'2026-10-27T01:00:00Z',snapshot_sha256:'a'.repeat(64),snapshot_path:`producer-price-history/${'a'.repeat(64)}.json`};
+ const bars=[{date:'2026-10-23',close:98},{date:observation,close:100}],payload={symbol:'OLD',as_of_date:date,bars,retained_price_history:history,stock_data:{symbol:'OLD',current_price:null}};
+ renderModal({open:true,onClose:vi.fn(),initialSymbol:'OLD',date,chartIndex:{symbols:[{symbol:'OLD',path:'old.json'}]}},payload);
+ await screen.findByTestId('static-candlestick-chart');
+ expect(screen.getByTestId('expanded-chart-header')).toHaveTextContent('参考履歴 2026-10-26まで · 分析日 2026-10-27の価格未確認');
+ expect(screen.getByTestId('expanded-chart-header')).not.toHaveTextContent('2026-10-27 日次終値');
+ expect(screen.queryByText(/2026-10-27 日次終値/)).not.toBeInTheDocument();
+ expect(chartSpy).toHaveBeenLastCalledWith(expect.objectContaining({priceData:bars,payload:expect.objectContaining({retained_price_history:history})}));
+});
+
 it('closes on a completed touch tap even when native scrolling suppresses click, but ignores drags and cancellation', async () => {
  const date='2026-10-23',onClose=vi.fn();
  renderModal({open:true,onClose,initialSymbol:'TOUCH',date,chartIndex:{symbols:[{symbol:'TOUCH',path:'touch.json'}]}},{symbol:'TOUCH',as_of_date:date,bars:[{date,close:100}]});

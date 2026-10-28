@@ -1,6 +1,6 @@
 import { transformToCandlestickData } from '../../components/Charts/candlestickData';
 import { chartHistoryWarning, invalidChartHistory, dateKey } from '../../components/Charts/researchChartModel';
-import { requireChartIdentity } from '../chartPayloadIdentity';
+import { requireChartIdentity, retainedChartHistory } from '../chartPayloadIdentity';
 
 // Same preceding-window algorithm as CandlestickChart's research volume line:
 // the current session is excluded, and incomplete windows are never filled.
@@ -13,8 +13,9 @@ export function precedingVolumeMean(volume, window = 50) {
   }
   return result;
 }
-export function leaderChartModel({ bars, symbol, date, rsLine = [], timeframe = 'daily' }) {
-  try { requireChartIdentity({ symbol, as_of_date: date, bars }, symbol, date); }
+export function leaderChartModel({ bars, symbol, date, rsLine = [], timeframe = 'daily', retainedHistory }) {
+  const payload = { symbol, as_of_date: date, bars, retained_price_history: retainedHistory };
+  try { requireChartIdentity(payload, symbol, date); }
   catch (error) { return { error: error.message }; }
   if (!bars?.length) return { error: '日足データなし' };
   const error = invalidChartHistory(bars);
@@ -23,9 +24,10 @@ export function leaderChartModel({ bars, symbol, date, rsLine = [], timeframe = 
   const dates = new Set(data.candlesticks.map(point => point.time));
   const dailyDates = new Set(bars.map(bar => bar.date));
   // Do not interpolate, forward-fill, sort or normalize the supplied RS series.
+  const observedDate = retainedChartHistory(payload, date)?.observation_date || date;
   const rsValid = Array.isArray(rsLine) && rsLine.length > 0 && rsLine.every((point, index) =>
     Number.isFinite(point?.value) && point.value > 0 && dailyDates.has(dateKey(point.time)) &&
-    (index === 0 || dateKey(point.time) > dateKey(rsLine[index - 1].time))) && dateKey(rsLine.at(-1).time) === date;
+    (index === 0 || dateKey(point.time) > dateKey(rsLine[index - 1].time))) && dateKey(rsLine.at(-1).time) === observedDate;
   return { ...data, volumeMean: precedingVolumeMean(data.volume, timeframe === 'weekly' ? 10 : 50),
     rs: rsValid ? rsLine.filter(point => dates.has(dateKey(point.time))).map(point => ({ time: dateKey(point.time), value: point.value })) : [],
     warning: chartHistoryWarning(bars), error: null };

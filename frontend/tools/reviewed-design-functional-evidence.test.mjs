@@ -4,6 +4,14 @@ import assert from 'node:assert/strict';
 import { validateFunctionalEvidence } from './reviewed-design-functional-evidence.mjs';
 import { fixture } from './reviewed-design-functional-fixture.mjs';
 for(const scope of ['ordinary','carry'])test(scope+' complete synthetic evidence passes without mutation or timing reinterpretation',()=>{const f=fixture(scope),before=JSON.stringify(f);assert.equal(validateFunctionalEvidence(f.report,f.binding),true);assert.equal(JSON.stringify(f),before);});
+function annotatedFixture(){const f=fixture();f.report.expanded_annotation_geometry_contract='full-plot-v1';for(const record of f.report.chart_cases)record.expanded_annotation_geometry=structuredClone(record.expanded_geometry);return f;}
+test('new annotation geometry contract validates every opened plot without altering legacy evidence',()=>{const f=annotatedFixture();assert.equal(validateFunctionalEvidence(f.report,f.binding),true);assert.equal(validateFunctionalEvidence(fixture().report,fixture().binding),true);});
+for(const[name,change]of [
+ ['missing annotation measurement',f=>delete f.report.chart_cases[0].expanded_annotation_geometry],
+ ['unknown annotation contract',f=>f.report.expanded_annotation_geometry_contract='unknown'],
+ ['covered annotated axis',f=>f.report.chart_cases.find(r=>r.viewport.width===390).expanded_annotation_geometry.date_axis_hit=false],
+ ['annotated plot behind footer',f=>{const g=f.report.chart_cases.find(r=>r.viewport.width===390).expanded_annotation_geometry;g.plot.bottom=g.footer.top+9.390625;}],
+])test('reject new annotation evidence: '+name,()=>{const f=annotatedFixture();change(f);assert.throws(()=>validateFunctionalEvidence(f.report,f.binding));});
 const pick=(f,name)=>f.report.screens.find(s=>s.key.startsWith(name+'/'));
 const mutations=[
  ['missing screen',f=>f.report.screens.pop()],['duplicate screen key',f=>f.report.screens[1].key=f.report.screens[0].key],['duplicate PNG path',f=>f.report.screens[1].screenshot=f.report.screens[0].screenshot],['unknown scope',f=>f.binding.scope='candidate'],['unbound commit',f=>f.report.commit='c'.repeat(40)],

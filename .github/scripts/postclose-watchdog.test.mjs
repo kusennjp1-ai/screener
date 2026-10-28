@@ -70,11 +70,11 @@ test('current chart prices with older scan/history request full acquisition', ()
   assert.equal(plan.action, 'acquire'); assert.equal(plan.acquisition_mode, 'full');
   assert.deepEqual(dispatchRequestFor(plan), {workflow: PRODUCER, inputs: {market_group: 'us', prices_only: false}});
 });
-test('first post-close missing chart observations prioritize prices-only acquisition', () => {
+test('first post-close missing chart observations require a full dated snapshot', () => {
   const value = context('2026-10-27T20:02:00Z'); value.observed.charts = {observed: 100, current: 0, ratio: 0}; value.observed.stale = ['scan','chart_coverage','long_history'];
   const plan = planRecovery(value);
-  assert.equal(plan.action, 'acquire'); assert.equal(plan.acquisition_mode, 'prices_only');
-  assert.deepEqual(dispatchRequestFor(plan), {workflow: PRODUCER, inputs: {market_group: 'us', prices_only: true}});
+  assert.equal(plan.action, 'acquire'); assert.equal(plan.acquisition_mode, 'full');
+  assert.deepEqual(dispatchRequestFor(plan), {workflow: PRODUCER, inputs: {market_group: 'us', prices_only: false}});
   assert.deepEqual(value.observed.stale, ['scan','chart_coverage','long_history']);
 });
 test('any prior ordinary attempt makes remaining poor price coverage use full acquisition', () => {
@@ -94,6 +94,7 @@ test('a previously successful fast publication with old scan wrapper still advan
 test('dispatch mapping preserves ordinary publication inputs and rejects invented mode', () => {
   assert.deepEqual(dispatchRequestFor({action: 'publish'}), {workflow: PUBLISHER, inputs: {ui_only: false}});
   assert.throws(() => dispatchRequestFor({action: 'acquire', acquisition_mode: 'skip_quality'}), /Invalid acquisition/);
+  assert.throws(() => dispatchRequestFor({action: 'acquire', acquisition_mode: 'prices_only'}), /Invalid acquisition/);
   assert.throws(() => dispatchRequestFor({action: 'none'}), /Invalid acquisition/);
 });
 test('fresh publication is idempotent; never request more work', () => {
@@ -109,6 +110,19 @@ test('active producer, queued publisher and waiting publisher suppress duplicate
 test('ordinary no-export CI producer does not suppress acquisition', () => {
   const value = context(); value.producerRuns = [run(PRODUCER, {event: 'workflow_run', status: 'in_progress'})];
   assert.equal(planRecovery(value).action, 'acquire');
+});
+
+test('an older in-flight build delays but never consumes the next completed session', () => {
+  const value = context('2026-10-28T20:02:00Z');
+  Object.assign(value.clock, {target_session: '2026-10-28', target_close: '2026-10-28T20:00:00Z', eligible_at: '2026-10-28T20:02:00Z', next_session: '2026-10-29', next_close: '2026-10-29T20:00:00Z', next_eligible_at: '2026-10-29T20:02:00Z'});
+  value.observed = observePublication(fixture(), '2026-10-28');
+  value.producerRuns = [run(PRODUCER, {status: 'in_progress', conclusion: null})];
+  assert.equal(planRecovery(value).reason, 'existing_work_in_flight');
+  value.producerRuns[0].status = 'completed'; value.producerRuns[0].conclusion = 'success';
+  value.producerRuns[0].updated_at = '2026-10-28T20:01:00Z';
+  const plan = planRecovery(value);
+  assert.equal(plan.action, 'acquire'); assert.equal(plan.target_session, '2026-10-28');
+  assert.deepEqual(dispatchRequestFor(plan), {workflow: PRODUCER, inputs: {market_group: 'us', prices_only: false}});
 });
 test('disabled workflow is explicit failure even when dates are fresh', () => {
   const value = context(); value.workflowStates[PRODUCER] = 'disabled_inactivity';
@@ -206,6 +220,11 @@ test('workflow is recoverable, calendar-driven and has no deployment authority',
   const workflow = readFileSync(new URL('../workflows/postclose-watchdog.yml', import.meta.url), 'utf8');
   assert.match(workflow, /2,12,22,32,42,52 13-20 \* \* 1-5/); assert.match(workflow, /17 0,6,10 \* \* \*/); assert.match(workflow, /America\/New_York/);
   assert.match(workflow, /cancel-in-progress: false/); assert.match(workflow, /--execute --output postclose-watchdog-report.json/);
+  assert.match(workflow, /10 16 \* \* 1-6/); assert.match(workflow, /30 23 \* \* 1-6/);
+  const producer = readFileSync(new URL('../workflows/static-site.yml', import.meta.url), 'utf8');
+  assert.doesNotMatch(producer, /^  schedule:/m);
+  assert.doesNotMatch(producer, /github\.event\.schedule|'-fast'/);
+  assert.match(producer, /cancel-in-progress: false/);
   assert.match(workflow, /actions: write/); assert.doesNotMatch(workflow, /pages: write|id-token: write|contents: write|gh issue|gh api.*comments/);
-  const ci = readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'); assert.match(ci, /test_postclose_calendar.py/); assert.match(ci, /postclose-watchdog.test.mjs/);
+  const ci = readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'); assert.match(ci, /test_postclose_\*\.py/); assert.match(ci, /postclose-watchdog.test.mjs/);
 });

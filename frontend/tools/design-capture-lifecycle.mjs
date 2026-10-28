@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 import { githubApi } from '../../.github/scripts/publication-gate.mjs';
 import { checkedScreeningPriority, screeningPriorityBinding } from './screening-priority-acceptance.mjs';
 import { BASELINE, CAPTURE_SCHEMA, MAX_PACKAGE, safePath, REPOSITORY, WORKFLOW, canonical, hash, regular, materialSourceDigest,
-  readPriorReview, verifyStoredMeasurement, requireRepresentationContract, verifyPackage, verifyProducer, historicalReviewResult } from './reviewed-design-capture.mjs';
+  readPriorReview, verifyStoredMeasurement, requireRepresentationContract, requireAnnotationGeometryContract, verifyPackage, verifyProducer, historicalReviewResult } from './reviewed-design-capture.mjs';
 
 const git = (root, ...args) => execFileSync('git', ['-C', root, ...args], { encoding: 'utf8' }).trim();
 const root = () => execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
@@ -42,6 +42,7 @@ export function stageReviewableCapture(repo, env = process.env) {
   checkedScreeningPriority(options);
   const measured = verifyStoredMeasurement(source), provenance = regular(env.RUNNER_TEMP, 'design-input-provenance.json');
   requireRepresentationContract(repo, consumer.head_sha, measured.completion);
+  requireAnnotationGeometryContract(repo, consumer.head_sha, measured.report);
   assert(hash(provenance) === measured.binding.provenance_sha256 && measured.binding.commit === consumer.head_sha, 'Prepared input differs from completed capture');
   const target = join(env.RUNNER_TEMP, 'reviewable-design-capture');
   assert(!existsSync(target), 'Refuse to reuse a capture staging directory'); mkdirSync(target);

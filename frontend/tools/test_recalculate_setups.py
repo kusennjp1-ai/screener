@@ -8,6 +8,34 @@ module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
 
 
 class SetupRecalculationTest(unittest.TestCase):
+    def test_retained_reference_cannot_reenter_setup_or_rs_even_if_bars_are_relabelled(self):
+        import json, tempfile
+        as_of='2026-10-27'
+        bars=self.bars(as_of)
+        class LocalPool:
+            def __init__(self,max_workers,initializer,initargs): initializer(*initargs)
+            def __enter__(self): return self
+            def __exit__(self,*args): pass
+            def map(self,function,tasks,chunksize): return map(function,tasks)
+        row={'symbol':'OWNED','current_price':None,'adv_usd':None,'financial_current':{'unchanged':True},
+             'rs_rating':None,'se_setup_ready':False,'retained_price_history':{'status':'stale_reference_only'}}
+        with tempfile.TemporaryDirectory() as directory:
+            root=Path(directory)
+            files={'manifest.json':{'markets':{'US':{'pages':{'scan':{'path':'scan.json'}},'assets':{'charts':{'path':'charts.json'}}}}},
+                   'scan.json':{'as_of_date':as_of,'initial_rows':[row],'chunks':[]},
+                   'charts.json':{'symbols':[{'symbol':'OWNED','path':'OWNED.json'}]},
+                   'OWNED.json':{'symbol':'OWNED','as_of_date':as_of,'bars':bars,'stock_data':row,'retained_price_history':{'status':'stale_reference_only'}},
+                   'book-benchmark.json':{'schema_version':'book-benchmark-v1','symbol':'SPY','as_of_date':as_of,'bars':bars}}
+            for name,value in files.items():(root/name).write_text(json.dumps(value))
+            with patch.object(module,'ROOT',root),patch.object(module.sys,'argv',['recalculate']),patch.object(module,'ProcessPoolExecutor',LocalPool), \
+                 patch.object(module.SetupEngineScanner,'scan_stock') as scanner,patch.object(module.RelativeStrengthCalculator,'calculate_weighted_performance') as weighted:
+                module.main();scanner.assert_not_called();weighted.assert_not_called()
+            result=json.loads((root/'scan.json').read_text())['initial_rows'][0]
+            self.assertEqual(result['setup_recalculation']['status'],'unavailable')
+            self.assertIn('reference only',result['setup_recalculation']['reason'])
+            self.assertIsNone(result['current_price']);self.assertIsNone(result['rs_rating']);self.assertFalse(result['se_setup_ready'])
+            self.assertEqual(result['financial_current'],row['financial_current'])
+
     def test_numpy_scalars_export_without_losing_false_or_unknown(self):
         import json,numpy as np
         value=json.loads(json.dumps({'ready':np.bool_(False),'pivot':np.float64(100),'unknown':None},default=module.native_scalar))

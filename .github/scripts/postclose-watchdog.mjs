@@ -133,19 +133,17 @@ export function planRecovery({clock, observed, producerRuns, publisherRuns, work
   const cooldown = (attempts.length >= 6 ? 360 : Math.min(60, Math.max(10, attempts.length*10)))*minute;
   if (last && now-Date.parse(last.updated_at) < cooldown) return {...common, action: 'none', reason: 'acquisition_retry_cooldown', retry_after: new Date(Date.parse(last.updated_at)+cooldown).toISOString()};
   if (lastRelease && now-Date.parse(lastRelease.updated_at) < 2*minute) return {...common, action: 'none', reason: 'publication_propagation_grace'};
-  // The first post-close request prioritizes actual chart prices. Its producer
-  // restores retained long history without waiting for the bulk acquisition.
-  // Any later request is full: API run metadata does not expose dispatch inputs,
-  // and a failed price threshold must not trap recovery in a prices-only loop.
-  const acquisitionMode = attempts.length === 0 && observed.charts.ratio < .9 ? 'prices_only' : 'full';
+  // Prices-only charts are capped at the existing feature-run date. A full
+  // snapshot is required to advance the public session under that contract.
+  const acquisitionMode = 'full';
   return {...common, action: 'acquire', acquisition_mode: acquisitionMode,
     reason: attempts.length ? 'published_observations_still_behind' : 'completed_session_not_published'};
 }
 
 export function dispatchRequestFor(plan) {
   if (plan.action === 'publish') return {workflow: PUBLISHER, inputs: {ui_only: false}};
-  check(plan.action === 'acquire' && ['prices_only','full'].includes(plan.acquisition_mode), 'Invalid acquisition dispatch plan');
-  return {workflow: PRODUCER, inputs: {market_group: 'us', prices_only: plan.acquisition_mode === 'prices_only'}};
+  check(plan.action === 'acquire' && plan.acquisition_mode === 'full', 'Invalid acquisition dispatch plan');
+  return {workflow: PRODUCER, inputs: {market_group: 'us', prices_only: false}};
 }
 
 async function boundedGet(url, maxBytes, fetchImpl) {

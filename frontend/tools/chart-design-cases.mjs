@@ -23,6 +23,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
   const manifest = await get('manifest.json'), entry = manifest.markets?.US || manifest;
   const data = decodeResearchIndex(await get(entry.assets.research.path));
   report.chart_cases ||= [];
+  report.expanded_annotation_geometry_contract = 'full-plot-v1';
   for (const symbol of CHART_DESIGN_SYMBOLS) {
     const key = `${symbol}/${viewport.width}/${theme}`;
     try {
@@ -135,6 +136,8 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       if (await expandedToggle.getAttribute('aria-pressed') !== 'true') await expandedToggle.click();
       await inspect(expanded, 'expanded-annotations');
       await capture(page, viewport, theme, `case-${symbol}-expanded-annotations`);
+      record.expanded_annotation_geometry = await dialog.evaluate(expandedChartGeometry);
+      checkExpandedChartGeometry(record.expanded_annotation_geometry, check, `${key}/expanded-annotations`, { fullChart: true });
       // Additional geometry checks never replace the required 900px/844px
       // screenshots or alter performance measurement viewports/budgets.
       const shortViewport = { width: viewport.width, height: viewport.width >= 900 ? 760 : 568 };

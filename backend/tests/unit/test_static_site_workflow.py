@@ -6,6 +6,7 @@ from pathlib import Path
 import shutil
 import stat
 import subprocess
+import sys
 import textwrap
 
 
@@ -13,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 
 def _build_market_job() -> str:
-    content = (ROOT / ".github" / "workflows" / "static-site.yml").read_text()
+    content = (ROOT / ".github" / "workflows" / "static-site.yml").read_text(encoding="utf-8")
     return content.split("  build-market:\n", 1)[1].split(
         "\n  combine-and-build:",
         1,
@@ -21,11 +22,15 @@ def _build_market_job() -> str:
 
 
 def _combine_and_build_job() -> str:
-    content = (ROOT / ".github" / "workflows" / "static-site.yml").read_text()
+    content = (ROOT / ".github" / "workflows" / "static-site.yml").read_text(encoding="utf-8")
     return content.split("  combine-and-build:\n", 1)[1].split(
         "\n  deploy:",
         1,
     )[0]
+
+
+def _market_step(name: str) -> str:
+    return _build_market_job().split(f"      - name: {name}\n", 1)[1].split("\n      - ", 1)[0]
 
 
 def _fallback_download_script() -> str:
@@ -38,11 +43,7 @@ def _fallback_download_script() -> str:
 
 
 def test_static_site_market_build_failures_are_not_marked_continue_on_error() -> None:
-    build_market_job = _build_market_job()
-    export_step = build_market_job.split("      - name: Export market static data bundle\n", 1)[1].split(
-        "\n      - name: Upload market diagnostics",
-        1,
-    )[0]
+    export_step = _market_step("Export market static data bundle")
 
     assert "continue-on-error: true" not in export_step
 
@@ -58,23 +59,11 @@ def test_static_site_daily_price_seed_allows_stale_bootstrap() -> None:
 
 
 def test_static_site_market_export_skips_artifact_steps_for_closed_market() -> None:
-    build_market_job = _build_market_job()
-    export_step = build_market_job.split("      - name: Export market static data bundle\n", 1)[1].split(
-        "\n      - name: Build daily price bundle",
-        1,
-    )[0]
-    build_price_step = build_market_job.split("      - name: Build daily price bundle\n", 1)[1].split(
-        "\n      - name: Upload daily price assets",
-        1,
-    )[0]
-    upload_price_step = build_market_job.split("      - name: Upload daily price assets\n", 1)[1].split(
-        "\n      - name: Upload market artifact",
-        1,
-    )[0]
-    upload_market_step = build_market_job.split("      - name: Upload market artifact\n", 1)[1].split(
-        "\n\n  combine-and-build:",
-        1,
-    )[0]
+    export_step = _market_step("Export market static data bundle")
+    build_price_step = _market_step("Build daily price bundle")
+    upload_price_step = _market_step("Preserve daily source candidate and exact predecessor")
+    non_us_price_step = _market_step("Preserve existing non-US source publication behavior")
+    upload_market_step = _market_step("Upload market artifact")
 
     assert "id: export-market" in export_step
     assert "status=$?" in export_step
@@ -82,6 +71,7 @@ def test_static_site_market_export_skips_artifact_steps_for_closed_market() -> N
     assert "has_artifact=false" in export_step
     assert "has_artifact=true" in export_step
     assert "steps.export-market.outputs.has_artifact == 'true'" in build_price_step
+    assert "steps.export-market.outputs.has_artifact == 'true'" in non_us_price_step
     assert "steps.export-market.outputs.has_artifact == 'true'" in upload_price_step
     assert "steps.export-market.outputs.has_artifact == 'true'" in upload_market_step
 
@@ -150,7 +140,7 @@ def test_static_site_fallback_downloader_only_fetches_missing_current_markets(tm
     current_us_dir = current_dir / "static-market-US" / "markets" / "us"
     current_us_dir.mkdir(parents=True)
     (current_us_dir / "manifest.market.json").write_text(
-        json.dumps({"market": "US"}),
+        json.dumps({"market": "US", "schema_version": "static-site-v2", "entry": {}}),
         encoding="utf-8",
     )
 
@@ -205,12 +195,13 @@ def test_static_site_fallback_downloader_only_fetches_missing_current_markets(tm
             "REPOSITORY": "xang1234/stock-screener",
             "CURRENT_RUN_ID": "999",
             "BRANCH_NAME": "main",
+            "REQUESTED_MARKETS": '["US","HK","TW"]',
         }
     )
 
     try:
         result = subprocess.run(
-            ["python", "-c", _fallback_download_script()],
+            [sys.executable, "-c", _fallback_download_script()],
             check=True,
             capture_output=True,
             text=True,

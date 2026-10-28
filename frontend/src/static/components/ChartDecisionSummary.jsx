@@ -4,9 +4,10 @@ import { entryPlan } from '../researchEngine';
 import { entryReadiness } from '../entryReadiness';
 import { modelMarket } from '../portfolioPlan';
 import EntrySourceNote, { EntrySourceDetails } from './EntrySourceNote';
+import { retainedChartLabel } from '../chartPayloadIdentity';
 
 const money = value => Number.isFinite(value) ? `$${value.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})}` : '未確認';
-export default function ChartDecisionSummary({row, date, market, method = 'minervini', quote = null, now = Date.now()}) {
+export default function ChartDecisionSummary({row, date, market, method = 'minervini', quote = null, now = Date.now(), retainedHistory = null}) {
   if (!row) return null;
   const applicabilityLabel = instrumentApplicabilityLabel(instrumentApplicability(row));
   const plan = entryPlan(row, quote, method);
@@ -20,7 +21,7 @@ export default function ChartDecisionSummary({row, date, market, method = 'miner
       <span>アプリ買い上限 <strong>{money(plan.upper)}</strong> {plan.zone ? `（${plan.zone}%）` : ''}</span>
     </Box>
     <Box sx={{display:'flex',flexWrap:'wrap',alignItems:'baseline',gap:'4px 24px',mt:.5}}>
-      <Typography sx={{fontSize:12,color:'text.secondary'}}>価格時点：{quote?.as_of ? new Date(quote.as_of).toLocaleString('ja-JP') : `${date || '未確認'} 日次終値`} · 購入条件は日次検証</Typography>
+      <Typography sx={{fontSize:12,color:'text.secondary'}}>{retainedHistory ? retainedChartLabel(retainedHistory) : <>価格時点：{quote?.as_of ? new Date(quote.as_of).toLocaleString('ja-JP') : `${date || '未確認'} 日次終値`} · 購入条件は日次検証</>}</Typography>
       <Typography sx={{fontSize:13}}>{applicabilityLabel || (missing.length ? `未達・未確認：${missing.map(rule=>rule.label).join(' ／ ')}` : '日次の購入条件を確認済み。発注時は現在価格と約定条件を確認。')}</Typography>
     </Box>
     {!plan.pivot && <Typography sx={{fontSize:12,mt:.5}}>{plan.pivotSource}</Typography>}
