@@ -10,7 +10,7 @@ class WorkflowPromotionPathTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         root = Path(__file__).resolve().parents[3]
-        cls.workflow = yaml.safe_load((root / '.github/workflows/static-site.yml').read_text())
+        cls.workflow = yaml.safe_load((root / '.github/workflows/static-site.yml').read_text(encoding='utf-8'))
 
     def admits(self, *, candidate_produced, candidate_id, downstream_id='2002', mode='full'):
         # Evaluate this narrowly allowlisted boolean expression from YAML, not
@@ -65,7 +65,8 @@ class WorkflowSchedulingPathTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         root = Path(__file__).resolve().parents[3]
-        cls.workflow = yaml.safe_load((root / '.github/workflows/static-site.yml').read_text())
+        cls.workflow = yaml.safe_load((root / '.github/workflows/static-site.yml').read_text(encoding='utf-8'))
+        cls.watchdog = yaml.safe_load((root / '.github/workflows/postclose-watchdog.yml').read_text(encoding='utf-8'))
 
     def evaluate(self, expression, *, event='schedule', ref='refs/heads/main',
                  default_branch='main', schedule='', prices_only='',
@@ -114,26 +115,31 @@ class WorkflowSchedulingPathTests(unittest.TestCase):
                       lambda match: str(self.evaluate(match.group(1), **context)),
                       self.workflow['concurrency']['group'])
 
-    def test_full_and_fast_schedules_preserve_active_work_in_separate_groups(self):
-        schedules = {
-            '10 16 * * 1-6': 'static-site-refs/heads/main',
-            '30 23 * * 1-6': 'static-site-refs/heads/main',
-            '4 16 * * 1-5': 'static-site-refs/heads/main-fast',
-            '31 16 * * 1-5': 'static-site-refs/heads/main-fast',
-            '58 16 * * 1-5': 'static-site-refs/heads/main-fast',
-        }
-        for schedule, expected in schedules.items():
-            with self.subTest(schedule=schedule):
-                self.assertEqual(self.group(schedule=schedule), expected)
-                self.assertIs(self.workflow['concurrency']['cancel-in-progress'], False)
+    def test_automatic_schedules_share_one_watchdog_admission_queue(self):
+        # PyYAML's YAML 1.1 parser treats the Actions key `on` as True.
+        producer_events = self.workflow.get('on', self.workflow.get(True))
+        watchdog_events = self.watchdog.get('on', self.watchdog.get(True))
+        self.assertNotIn('schedule', producer_events)
+        self.assertIn('workflow_dispatch', producer_events)
+        self.assertEqual(watchdog_events['schedule'], [
+            {'cron': '2,12,22,32,42,52 13-20 * * 1-5', 'timezone': 'America/New_York'},
+            {'cron': '17 0,6,10 * * *', 'timezone': 'America/New_York'},
+            {'cron': '10 16 * * 1-6', 'timezone': 'America/New_York'},
+            {'cron': '30 23 * * 1-6'},
+        ])
+        self.assertEqual(self.watchdog['concurrency'], {
+            'group': 'postclose-update-watchdog', 'cancel-in-progress': False,
+        })
+        steps = self.watchdog['jobs']['verify-and-recover']['steps']
+        admission = [step['run'] for step in steps if 'run' in step and '--execute' in step['run']]
+        self.assertEqual(admission, ['node .github/scripts/postclose-watchdog.mjs --execute --output postclose-watchdog-report.json'])
 
-    def test_manual_runs_keep_mode_and_branch_group_boundaries(self):
+    def test_manual_full_and_cache_refresh_share_branch_queue_without_cancellation(self):
         for ref in ('refs/heads/main', 'refs/heads/topic'):
             for prices_only in ('', 'false', 'true'):
                 with self.subTest(ref=ref, prices_only=prices_only):
-                    suffix = '-fast' if prices_only == 'true' else ''
                     self.assertEqual(self.group(event='workflow_dispatch', ref=ref,
-                                                prices_only=prices_only), f'static-site-{ref}{suffix}')
+                                                prices_only=prices_only), f'static-site-{ref}')
                     self.assertIs(self.workflow['concurrency']['cancel-in-progress'], False)
 
     def test_finite_ci_runs_group_by_source_head_without_cancelling_active_work(self):

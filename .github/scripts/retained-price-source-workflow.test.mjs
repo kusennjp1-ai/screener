@@ -42,19 +42,24 @@ test('disabled CI completion no-ops the entire Static Site acquisition/job graph
   assert.equal(graph.outputs.mode,'noop');assert.equal(graph.outputs.markets,'[]');
   assert.deepEqual(graph.jobs,{'select-markets':'success',ensure_daily_price_release:'skipped','build-market':'skipped','combine-and-build':'skipped','promote-daily-source':'skipped'});
 });
-test('genuine finite route reaches only combine; ordinary scheduled/manual graph remains reachable',t=>{
+test('genuine finite route reaches only combine; ordinary dispatched full/cache graph remains reachable',t=>{
   const finite=actualStaticGraph(t,{eventName:'workflow_run',repair:'true'});assert.equal(finite.outputs.mode,'offline_repair');assert.deepEqual(finite.jobs,{'select-markets':'success',ensure_daily_price_release:'skipped','build-market':'skipped','combine-and-build':'success','promote-daily-source':'skipped'});
-  for(const options of [{eventName:'schedule',schedule:'4 16 * * 1-5'},{eventName:'schedule',schedule:'10 16 * * 1-6'},{eventName:'workflow_dispatch',market:'us'},{eventName:'workflow_dispatch',pricesOnly:'true'}]){
+  for(const options of [{eventName:'workflow_dispatch',market:'us'},{eventName:'workflow_dispatch',pricesOnly:'true'}]){
     const graph=actualStaticGraph(t,options);for(const name of ['select-markets','ensure_daily_price_release','build-market','combine-and-build'])assert.equal(graph.jobs[name],'success',JSON.stringify(options)+'/'+name);
-    assert(['full','prices_only'].includes(graph.outputs.mode));
+    assert.equal(graph.outputs.mode,options.pricesOnly==='true'?'prices_only':'full');
   }
   assert.equal(actualStaticGraph(t,{eventName:'workflow_run',repair:'true',selectFailure:true}).jobs['combine-and-build'],'skipped');
-  assert.equal(actualStaticGraph(t,{eventName:'schedule',schedule:'10 16 * * 1-6',selectFailure:true}).jobs['combine-and-build'],'success','Existing ordinary fallback after an upstream failure remains reachable');
+  assert.equal(actualStaticGraph(t,{eventName:'workflow_dispatch',market:'us',selectFailure:true}).jobs['combine-and-build'],'success','Existing ordinary fallback after an upstream failure remains reachable');
 });
 
-test('automatic finite trigger is exact CI completion and retains original non-CI scheduling',()=>{
+test('finite trigger remains exact CI completion and automatic acquisition uses the watchdog',()=>{
   assert.match(staticWorkflow,/workflow_run:\n\s+workflows: \[CI\]\n\s+types: \[completed\]\n\s+branches: \[main\]/);
-  assert.match(staticWorkflow,/workflow_dispatch:/);assert.match(staticWorkflow,/schedule:/);
+  assert.match(staticWorkflow,/workflow_dispatch:/);assert.doesNotMatch(staticWorkflow,/^  schedule:/m);
+  const watchdog=read('postclose-watchdog.yml');
+  assert.match(watchdog,/^  schedule:/m);assert.match(watchdog,/cron: '10 16 \* \* 1-6'/);assert.match(watchdog,/cron: '30 23 \* \* 1-6'/);
+  assert.match(watchdog,/group: postclose-update-watchdog\n\s+cancel-in-progress: false/);
+  assert.match(watchdog,/node \.github\/scripts\/postclose-watchdog\.mjs --execute/);
+  assert.doesNotMatch(watchdog,/producer-route|stage_daily_price_source|pages: write/);
   const select=job(staticWorkflow,'select-markets');assert.match(select,/producer-route/);assert.match(select,/repair: \$\{\{ steps\.price-route\.outputs\.repair \}\}/);
   assert.match(select,/if \[ "\$EVENT_NAME" = "workflow_run" \]; then[\s\S]*mode="noop"[\s\S]*if \[ "\$PRICE_REPAIR" = "true" \]/);
   assert.match(combine,/github\.event_name == 'workflow_run' && needs\.select-markets\.result == 'success' && needs\.select-markets\.outputs\.repair == 'true'/);
