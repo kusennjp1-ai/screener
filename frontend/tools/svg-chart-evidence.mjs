@@ -53,7 +53,11 @@ export function validateSvgChart(view, source, label='SVG', context) {
    const b=item.box;assert(validBox(b),label+': missing VCP label rectangle');
    if(external){
     assert(item.button===true&&item.outside_svg===true&&item.obscures_candles===false&&b.width>=44&&b.height>=44,label+': VCP chip is not an unobstructed 44px button');
-    assert(b.y>=layout.plot.y+layout.plot.height&&b.x>=layout.plot.x&&b.x+b.width<=layout.plot.x+layout.plot.width,label+': VCP chip overlaps or overflows the plot');
+    // External controls may precede or follow the plot. Either position must
+    // remain vertically disjoint and inside its horizontal bounds; viewport
+    // visibility is measured separately by the inline/expanded capture guards.
+    const outsidePlot=b.y+b.height<=layout.plot.y||b.y>=layout.plot.y+layout.plot.height;
+    assert(outsidePlot&&b.x>=layout.plot.x&&b.x+b.width<=layout.plot.x+layout.plot.width,label+': VCP chip overlaps or overflows the plot');
    }else assert(b.x>=pane.x&&b.y>=pane.y&&b.x+b.width<=pane.x+pane.width&&b.y+b.height<=pane.y+pane.height,label+': VCP label outside price pane');
    for(const other of layout.labels.slice(0,i)){const a=other.box;assert(b.x>=a.x+a.width||a.x>=b.x+b.width||b.y>=a.y+a.height||a.y>=b.y+b.height,label+': VCP labels overlap');}
    const coordinates=typeof item.leader==='string'?item.leader.match(/^M(-?[\d.]+) (-?[\d.]+)L(-?[\d.]+) (-?[\d.]+)$/):null;

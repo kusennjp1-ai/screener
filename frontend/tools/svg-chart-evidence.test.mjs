@@ -52,6 +52,11 @@ it('still rejects sub-millipoint label intersection and pane overflow',()=>{for(
 function chipView(){return {...provenanceView(),evidence_contract:'leader-svg-provenance-v3',annotation_layout:{mode:'external-chips',pane:{x:8,y:26,width:260,height:150},plot:{x:8,y:50,width:300,height:360},labels:[{number:5,box:{x:16,y:414,width:82,height:44},text:'C5 4.8%',accessible_label:'C5 2026-10-20から2026-10-21、深さ4.8%を拡大',button:true,outside_svg:true,obscures_candles:false,peak_date:'2026-10-20',low_date:'2026-10-21',high:105,low:100,leader:'M1 2L1 5',anchor:{x:1,y:5}}]}};}
 describe('v3 external VCP chips and independently bound source candles',()=>{
  it('accepts outside 44px chips whose measured lines exactly bind source high and low candles',()=>expect(validateSvgChart(chipView(),bars,'fixture',{benchmark_symbol:null})).toBe(true));
+ it.each([6,410])('accepts a 44px chip exactly outside the upper or lower plot edge at y=%s',y=>{
+  const v=chipView();v.annotation_layout.labels[0].box.y=y;const before=JSON.stringify(v);
+  expect(validateSvgChart(v,bars,'fixture',{benchmark_symbol:null})).toBe(true);
+  expect(JSON.stringify(v)).toBe(before);
+ });
  const mutations={
   'missing external mode':v=>delete v.annotation_layout.mode,
   'missing plot bounds':v=>delete v.annotation_layout.plot,
@@ -61,6 +66,13 @@ describe('v3 external VCP chips and independently bound source candles',()=>{
   'too short target':v=>v.annotation_layout.labels[0].box.height=43.99,
   'too narrow target':v=>v.annotation_layout.labels[0].box.width=43.99,
   'chip overlaps plot':v=>v.annotation_layout.labels[0].box.y=409.9999,
+  'chip overlaps upper plot edge':v=>v.annotation_layout.labels[0].box.y=6.0001,
+  'chip contained inside plot':v=>v.annotation_layout.labels[0].box.y=100,
+  'above chip overflows left plot edge':v=>{v.annotation_layout.labels[0].box.y=6;v.annotation_layout.labels[0].box.x=7.9999;},
+  'above chip lies offscreen horizontally':v=>{v.annotation_layout.labels[0].box.y=6;v.annotation_layout.labels[0].box.x=-82;},
+  'above chip overflows right plot edge':v=>{v.annotation_layout.labels[0].box.y=6;v.annotation_layout.labels[0].box.x=226.0001;},
+  'above chip has undersized target':v=>{v.annotation_layout.labels[0].box.y=6;v.annotation_layout.labels[0].box.height=43.99;},
+  'above chips overlap each other':v=>{v.annotation_layout.labels[0].box.y=6;v.vcp_legs.push({number:6,title:'C6 推定'});v.annotation_layout.labels.push({...structuredClone(v.annotation_layout.labels[0]),number:6});},
   'chip overflows plot':v=>v.annotation_layout.labels[0].box.x=227,
   'wrong peak date':v=>v.annotation_layout.labels[0].peak_date='2026-10-19',
   'wrong source high':v=>v.annotation_layout.labels[0].high=106,

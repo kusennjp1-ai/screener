@@ -62,3 +62,7 @@
    300px plot and date axis remain visible without shrinking touch targets. */
 .leader-evidence-short .leader-svg-extra-controls:has(details[open]){display:flex;flex:0 0 auto;order:0}
 .leader-evidence-short .leader-svg-extra-controls details[open]>*{flex-shrink:0}
+/* details children otherwise use content-box sizing: padding/borders expand
+   the 44px tools to 58px and clip the date axis on a 568px-high phone. */
+.leader-evidence-short .leader-svg-controls :is(button,select,summary){box-sizing:border-box;height:44px}
+.leader-evidence-short .leader-svg-extra-controls details[open] button{margin-block:0}
