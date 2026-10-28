@@ -41,11 +41,11 @@ export function verifyFinancialCarryIdentity(summary, detail, item, date) {
   requireValue(summary?.symbol === item.symbol && detail?.symbol === item.symbol && summary.as_of_date === date && detail.as_of_date === date,
     'Browser detail/research symbol/date mismatch');
   requireValue(summary.market === 'US' && (!detail.market || detail.market === summary.market), 'Browser financial market mismatch');
-  requireValue(Number.isFinite(summary.financial_current?.t) && same(detail.financial_current, summary.financial_current),
-    'Browser detail and research financial proofs do not match');
-  // Transport reconstructs object keys in shared column order. Compare every
+  // Transport reconstructs proof and history keys in shared column order. Compare every
   // retained value, own field and array position without treating that key order
   // as a data change. Exact detail bytes stay pinned by the asset observer.
+  requireValue(Number.isFinite(summary.financial_current?.t) && isDeepStrictEqual(detail.financial_current, summary.financial_current),
+    'Browser detail and research financial proofs do not match');
   requireValue(summary.financial_history && detail.financial_history &&
     isDeepStrictEqual(researchListRow(summary).financial_history, researchListRow(detail).financial_history), 'Browser detail and research financial history differ');
 }

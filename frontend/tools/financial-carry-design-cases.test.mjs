@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { isDeepStrictEqual } from 'node:util';
+import { gzipSync } from 'node:zlib';
 import { readFileSync } from 'node:fs';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -147,6 +148,56 @@ describe('supplemental carry evidence never replaces fresh acceptance', () => {
       expect(plan.positions).toEqual([]); expect(plan.dailyPositions).toEqual([]);
     }
     expect(JSON.stringify(details)).toBe(before);
+  });
+
+  it('compares all proof fields after the production optimized mixed-universe roundtrip', () => {
+    const details = FINANCIAL_CARRY_DESIGN_CASES.map(value => row(value.symbol));
+    const ordinary = withFinancialProof({ symbol: 'OTHER', market: 'US', as_of_date: date }, prepared, date);
+    for (const value of [ordinary, ...details]) value.financial_current = Object.fromEntries(Object.entries(value.financial_current).sort(([a], [b]) => a.localeCompare(b)));
+    // The actual carry index has envelope keys a,m,r,s,t,v,p while the source
+    // proof has a,m,p,r,s,t,v: sparse tuples sort after populated envelope fields.
+    // Use the exporter's real compression-cost option with an empty-proof row.
+    const before = JSON.stringify(details);
+    const wire = JSON.parse(JSON.stringify(encodeResearchIndex({ as_of_date: date, rows: [ordinary, ...details] }, undefined, {
+      columnBytes: column => gzipSync(JSON.stringify(column)).length,
+    })));
+    const summaries = decodeResearchIndex(wire).rows.slice(1);
+    for (const [index, detail] of details.entries()) {
+      const summary = summaries[index];
+      expect(Object.keys(detail.financial_current)).toEqual(['a', 'm', 'p', 'r', 's', 't', 'v']);
+      expect(Object.keys(summary.financial_current)).toEqual(['a', 'm', 'r', 's', 't', 'v', 'p']);
+      expect(JSON.stringify(summary.financial_current)).not.toBe(JSON.stringify(detail.financial_current));
+      expect(isDeepStrictEqual(summary.financial_current, detail.financial_current)).toBe(true);
+      expect(() => verifyFinancialCarryIdentity(summary, detail, item(detail.symbol), date)).not.toThrow();
+      for (const method of RESEARCH_METHODS) {
+        expect(assess(summary, method, now)).toEqual(assess(detail, method, now));
+        expect(assess(summary, method, now)).toMatchObject({ qualified: false, financial_exclusion: { status: 'excluded_unknown' } });
+      }
+    }
+    expect(JSON.stringify(details)).toBe(before);
+  });
+
+  it.each([
+    ['version', proof => { proof.v += 1; }],
+    ['clock', proof => { proof.t += 1; }],
+    ['identity', proof => { proof.s = 'FUTU'; }],
+    ['market', proof => { proof.m = 'JP'; }],
+    ['date', proof => { proof.a = '2026-10-01'; }],
+    ['reason', proof => { proof.r = '0'.repeat(proof.r.length); }],
+    ['value', proof => { proof.p['1'][0] += .0000000000001; }],
+    ['source', proof => { proof.p['1'][1] = '0'; }],
+    ['period order', proof => { proof.p['1'][3].reverse(); }],
+    ['deadline', proof => { proof.p['1'][5] += 1; }],
+    ['tuple omission', proof => { delete proof.p['1'][0]; }],
+    ['own field presence', proof => { proof.extra = undefined; }],
+    ['signed zero', proof => { proof.p['1'][0] = -0; }],
+  ])('rejects changed proof %s despite reordered object keys', (_, mutate) => {
+    const detail = row();
+    detail.financial_current.p['1'][0] = 0;
+    const summary = structuredClone(detail);
+    summary.financial_current = Object.fromEntries(Object.entries(summary.financial_current).reverse());
+    mutate(summary.financial_current);
+    expect(() => verifyFinancialCarryIdentity(summary, detail, item('NVDA'), date)).toThrow('proofs do not match');
   });
 
   it.each([
