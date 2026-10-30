@@ -4,20 +4,20 @@
     "schema": "reviewed-prior-capture-reference-v1",
     "repository": "kusennjp1-ai/screener",
     "workflow_path": ".github/workflows/design-acceptance.yml",
-    "run_id": 40788999651,
+    "run_id": 40806177513,
     "run_attempt": 1,
-    "head_sha": "23a276219d42b7e841b2fa091715ed5d1a8dd32e",
-    "checkout_sha": "23a276219d42b7e841b2fa091715ed5d1a8dd32e",
-    "source_inventory_sha256": "b43f5e03d03e9b1bb4b1396e34470f9a5dcaa857334b04a7ab81f5b8de112aba",
+    "head_sha": "3bea15d181ac897ebb71a6ff26e5b6681247d093",
+    "checkout_sha": "3bea15d181ac897ebb71a6ff26e5b6681247d093",
+    "source_inventory_sha256": "acc3ea7c888b0407373e0d20e0d5209bcdcefb84b6e1daaa875874192ac0a460",
     "configuration_sha256": "1a6df6f78ebae1b9d3af193e470bce1beb8dabf44a6cb84a7675cc3496c2dd21",
-    "artifact_id": 12862121696,
-    "artifact_sha256": "df4c1026470c4a1d5b1330e760e8d108abe9251a191711f538b81d6bd3edda8d",
-    "artifact_bytes": 22523797
+    "artifact_id": 12868749725,
+    "artifact_sha256": "39d350fb180bb2c98477ba51d84e6a60f3ea2f224fe6dbbb2f42d11b63c16a5f",
+    "artifact_bytes": 22531905
   },
   "review_policy": "ordinary-carry-image-review-2026-10-22-v1",
-  "observed_commit": "23a276219d42b7e841b2fa091715ed5d1a8dd32e",
-  "reviewer": "Two independent pixel reviewers individually viewed all136 current original PNGs (68mobile and68desktop); no image inherits earlier inspection. Root additionally viewed critical annotated mobile and desktop images. Every original score/finding is preserved.",
-  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/40788999651/attempts/1",
+  "observed_commit": "3bea15d181ac897ebb71a6ff26e5b6681247d093",
+  "reviewer": "All136 current PNGs were independently rehashed against the immutable capture. One reviewer individually viewed all13 changed originals (12desktop and1mobile); root additionally viewed mobile watchlist light and desktop near-pass light. The other123 exact key/hash matches inherit the documented actual23a pixel inspections, with explicit per-image lineage; they are not claimed as freshly viewed. Scores and findings are preserved exactly.",
+  "evidence_run": "https://github.com/kusennjp1-ai/screener/actions/runs/40806177513/attempts/1",
   "screens": [
     {
       "key": "home/1440/dark",
@@ -328,41 +328,41 @@
     {
       "key": "comparison/1440/dark",
       "screenshot": "comparison-1440x900-dark.png",
-      "sha256": "dbf61a1bdf0ffc39b4ffade662ee966bb1d0dee008fe6065edf53920effbf1e3",
+      "sha256": "e965612b416779adbb05a7af268e71d1a01428e6ffdb70e5cdee46cd06f91e01",
       "scores": {
         "design": {
           "value": 8.2,
-          "reason": "Comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR with separate price-volume-RS panels and bottom dates; 1–6/1806 and next control visible. Numbers fit within each card. The spacing and hierarchy separate the visible groups."
+          "reason": "Dark comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR in six complete panels;1–6/1806 and October27 basis visible. All dates and footer metrics fit within cards, volume/SPY-RS separated. Six panels and small multiple-metric footers create visual density."
         },
         "usability": {
           "value": 8.2,
-          "reason": "Visible controls and labels remain distinguishable. Comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR with separate price-volume-RS panels and bottom dates; 1–6/1806 and next control visible. Numbers fit within each card."
+          "reason": "Visible controls and text distinguishable. Dark comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR in six complete panels;1–6/1806 and October27 basis visible. All dates and footer metrics fit within cards, volume/SPY-RS separated."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
           "value": 8.4,
-          "reason": "Visible-state consistency only: Comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR with separate price-volume-RS panels and bottom dates; 1–6/1806 and next control visible. Numbers fit within each card. No financial truth or interaction result inferred."
+          "reason": "Visible-state consistency only: Dark comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR in six complete panels;1–6/1806 and October27 basis visible. All dates and footer metrics fit within cards, volume/SPY-RS separated. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. Comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR with separate price-volume-RS panels and bottom dates; 1–6/1806 and next control visible. Numbers fit within each card."
+          "reason": "Visible labels readable at original size. Dark comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR in six complete panels;1–6/1806 and October27 basis visible. All dates and footer metrics fit within cards, volume/SPY-RS separated."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. Comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR with separate price-volume-RS panels and bottom dates; 1–6/1806 and next control visible. Numbers fit within each card."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. Dark comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR in six complete panels;1–6/1806 and October27 basis visible. All dates and footer metrics fit within cards, volume/SPY-RS separated."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR with separate price-volume-RS panels and bottom dates; 1–6/1806 and next control visible. Numbers fit within each card. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "Dark comparison displays CRGY/PAGP/NTRA/SIGI/HST/XMTR in six complete panels;1–6/1806 and October27 basis visible. All dates and footer metrics fit within cards, volume/SPY-RS separated. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -370,48 +370,54 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
+        },
+        {
+          "axis": "design",
+          "category": "cosmetic",
+          "screeningImpact": "non_screening_aesthetic",
+          "reason": "Six panels and small multiple-metric footers create visual density."
         }
       ]
     },
     {
       "key": "comparison-near-pass/1440/dark",
       "screenshot": "comparison-near-pass-1440x900-dark.png",
-      "sha256": "4834b4e2365003c6c8426bc45b387e917dd5130014f1573a345201d5a1e97004",
+      "sha256": "bd73e2b7fc8abe02d9d1e9a1b666122eb148188a8468f66d29a63d9f458f966f",
       "scores": {
         "design": {
           "value": 8,
-          "reason": "Single-original reinspection confirms SLS purchase1/7 fully visible with whitespace. Six near-pass cards TWST/SLS/DELL/FTON/PENG/MRVL, 1–6/182; SLS missing RS data explicit, all bottom metric values readable. Six-card layout and ellipsized unmet-condition summaries are dense."
+          "reason": "Dark near-pass comparison shows182 and TWST/SLS/DELL/FTON/PENG/MRVL; SLS explicitly has unavailable RS comparison. Buy-zone exceeded, unknown and pivot-wait labels distinct; chart axes readable. Unmet-condition summaries are ellipsized and compact footer metrics make the six-card grid dense."
         },
         "usability": {
           "value": 8.1,
-          "reason": "Visible controls and labels remain distinguishable. Single-original reinspection confirms SLS purchase1/7 fully visible with whitespace. Six near-pass cards TWST/SLS/DELL/FTON/PENG/MRVL, 1–6/182; SLS missing RS data explicit, all bottom metric values readable."
+          "reason": "Visible controls and text distinguishable. Dark near-pass comparison shows182 and TWST/SLS/DELL/FTON/PENG/MRVL; SLS explicitly has unavailable RS comparison. Buy-zone exceeded, unknown and pivot-wait labels distinct; chart axes readable."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
           "value": 8.5,
-          "reason": "Visible-state consistency only: Single-original reinspection confirms SLS purchase1/7 fully visible with whitespace. Six near-pass cards TWST/SLS/DELL/FTON/PENG/MRVL, 1–6/182; SLS missing RS data explicit, all bottom metric values readable. No financial truth or interaction result inferred."
+          "reason": "Visible-state consistency only: Dark near-pass comparison shows182 and TWST/SLS/DELL/FTON/PENG/MRVL; SLS explicitly has unavailable RS comparison. Buy-zone exceeded, unknown and pivot-wait labels distinct; chart axes readable. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. Single-original reinspection confirms SLS purchase1/7 fully visible with whitespace. Six near-pass cards TWST/SLS/DELL/FTON/PENG/MRVL, 1–6/182; SLS missing RS data explicit, all bottom metric values readable."
+          "reason": "Visible labels readable at original size. Dark near-pass comparison shows182 and TWST/SLS/DELL/FTON/PENG/MRVL; SLS explicitly has unavailable RS comparison. Buy-zone exceeded, unknown and pivot-wait labels distinct; chart axes readable."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. Single-original reinspection confirms SLS purchase1/7 fully visible with whitespace. Six near-pass cards TWST/SLS/DELL/FTON/PENG/MRVL, 1–6/182; SLS missing RS data explicit, all bottom metric values readable."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. Dark near-pass comparison shows182 and TWST/SLS/DELL/FTON/PENG/MRVL; SLS explicitly has unavailable RS comparison. Buy-zone exceeded, unknown and pivot-wait labels distinct; chart axes readable."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Single-original reinspection confirms SLS purchase1/7 fully visible with whitespace. Six near-pass cards TWST/SLS/DELL/FTON/PENG/MRVL, 1–6/182; SLS missing RS data explicit, all bottom metric values readable. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "Dark near-pass comparison shows182 and TWST/SLS/DELL/FTON/PENG/MRVL; SLS explicitly has unavailable RS comparison. Buy-zone exceeded, unknown and pivot-wait labels distinct; chart axes readable. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -419,13 +425,13 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         {
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Six-card layout and ellipsized unmet-condition summaries are dense."
+          "reason": "Unmet-condition summaries are ellipsized and compact footer metrics make the six-card grid dense."
         }
       ]
     },
@@ -848,41 +854,41 @@
     {
       "key": "case-ADI-inline/1440/dark",
       "screenshot": "case-ADI-inline-1440x900-dark.png",
-      "sha256": "df0996de31276f9f5f73a8dcc2432690528075e9db3cb89120ca2d2567682902",
+      "sha256": "3f5c68f904de540ce1642e78258f8ffe4ef74c98c7660df1d8fd9736569b413d",
       "scores": {
         "design": {
           "value": 8.3,
-          "reason": "ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Price/volume/SPY-RS/date axis and estimatedRS90/99 separated; nearby CNQ/AAMI cards remain identifiable. The spacing and hierarchy separate the visible groups."
+          "reason": "Dark ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Volume, SPY-RS, three date labels and slider separated; estimatedRS90/99 and4355 comparison names visible. Hierarchy and spacing separate visible groups."
         },
         "usability": {
           "value": 8.3,
-          "reason": "Visible controls and labels remain distinguishable. ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Price/volume/SPY-RS/date axis and estimatedRS90/99 separated; nearby CNQ/AAMI cards remain identifiable."
+          "reason": "Visible controls and text distinguishable. Dark ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Volume, SPY-RS, three date labels and slider separated; estimatedRS90/99 and4355 comparison names visible."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
-          "value": 8.4,
-          "reason": "Visible-state consistency only: ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Price/volume/SPY-RS/date axis and estimatedRS90/99 separated; nearby CNQ/AAMI cards remain identifiable. No financial truth or interaction result inferred."
+          "value": 8.5,
+          "reason": "Visible-state consistency only: Dark ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Volume, SPY-RS, three date labels and slider separated; estimatedRS90/99 and4355 comparison names visible. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Price/volume/SPY-RS/date axis and estimatedRS90/99 separated; nearby CNQ/AAMI cards remain identifiable."
+          "reason": "Visible labels readable at original size. Dark ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Volume, SPY-RS, three date labels and slider separated; estimatedRS90/99 and4355 comparison names visible."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Price/volume/SPY-RS/date axis and estimatedRS90/99 separated; nearby CNQ/AAMI cards remain identifiable."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. Dark ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Volume, SPY-RS, three date labels and slider separated; estimatedRS90/99 and4355 comparison names visible."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Price/volume/SPY-RS/date axis and estimatedRS90/99 separated; nearby CNQ/AAMI cards remain identifiable. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "Dark ADI inline close425.35 and price ticks471.25/315.67/211.45 readable. Volume, SPY-RS, three date labels and slider separated; estimatedRS90/99 and4355 comparison names visible. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -890,7 +896,7 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         }
       ]
     },
@@ -1099,41 +1105,41 @@
     {
       "key": "case-TGTX-inline/1440/dark",
       "screenshot": "case-TGTX-inline-1440x900-dark.png",
-      "sha256": "c78701bb3378e2c1bb339a13fe1224cec8f8f60e4a5b356ff394cb45759cad71",
+      "sha256": "a50060d78966182c74867abcfffc4263f954aebf1602e7b13b8d0d7f306840bc",
       "scores": {
         "design": {
           "value": 8.2,
-          "reason": "TGTX inline October27 close56.44, price ticks64.00/40.07/25.09 and full date axis readable. RS comparison unavailable explicitly separated from estimatedRS93.2/99. Large blank left area follows the sole candidate."
+          "reason": "Dark TGTX inline close56.44 and64.00/40.07/25.09 price scale clear. RS comparison unavailable distinct from estimatedRS93.2/99; all date ticks and slider readable. Single candidate leaves large empty left column below its card."
         },
         "usability": {
           "value": 8.3,
-          "reason": "Visible controls and labels remain distinguishable. TGTX inline October27 close56.44, price ticks64.00/40.07/25.09 and full date axis readable. RS comparison unavailable explicitly separated from estimatedRS93.2/99."
+          "reason": "Visible controls and text distinguishable. Dark TGTX inline close56.44 and64.00/40.07/25.09 price scale clear. RS comparison unavailable distinct from estimatedRS93.2/99; all date ticks and slider readable."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
           "value": 8.5,
-          "reason": "Visible-state consistency only: TGTX inline October27 close56.44, price ticks64.00/40.07/25.09 and full date axis readable. RS comparison unavailable explicitly separated from estimatedRS93.2/99. No financial truth or interaction result inferred."
+          "reason": "Visible-state consistency only: Dark TGTX inline close56.44 and64.00/40.07/25.09 price scale clear. RS comparison unavailable distinct from estimatedRS93.2/99; all date ticks and slider readable. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. TGTX inline October27 close56.44, price ticks64.00/40.07/25.09 and full date axis readable. RS comparison unavailable explicitly separated from estimatedRS93.2/99."
+          "reason": "Visible labels readable at original size. Dark TGTX inline close56.44 and64.00/40.07/25.09 price scale clear. RS comparison unavailable distinct from estimatedRS93.2/99; all date ticks and slider readable."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. TGTX inline October27 close56.44, price ticks64.00/40.07/25.09 and full date axis readable. RS comparison unavailable explicitly separated from estimatedRS93.2/99."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. Dark TGTX inline close56.44 and64.00/40.07/25.09 price scale clear. RS comparison unavailable distinct from estimatedRS93.2/99; all date ticks and slider readable."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "TGTX inline October27 close56.44, price ticks64.00/40.07/25.09 and full date axis readable. RS comparison unavailable explicitly separated from estimatedRS93.2/99. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "Dark TGTX inline close56.44 and64.00/40.07/25.09 price scale clear. RS comparison unavailable distinct from estimatedRS93.2/99; all date ticks and slider readable. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -1141,13 +1147,13 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         {
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Large blank left area follows the sole candidate."
+          "reason": "Single candidate leaves large empty left column below its card."
         }
       ]
     },
@@ -1576,41 +1582,41 @@
     {
       "key": "financial-FUTU-evidence/1440/dark",
       "screenshot": "financial-FUTU-evidence-1440x900-dark.png",
-      "sha256": "78c5feca442b71c63d007e4a6e79f7efc0d72e3dade00bd3ef9cd456660f9eca",
+      "sha256": "bb80d4e447beac18a57573a14d03bb63797c16df7fa0838137cad7f269bdbea8",
       "scores": {
         "design": {
           "value": 7.8,
-          "reason": "FUTU evidence-key shows seven financial fields unconfirmed; quarterlyEPS explains unavailable finite data and unknown metadata. Adjacent SGLY list card explicitly has no RS/price/chart data and selection0/8. Repeated unknown fields and empty left space create a monotonous panel."
+          "reason": "FUTU evidence-key capture shows quarterlyEPS no finite usable value and all provenance fields unknown; sales, annualEPS, estimatedEPS/composite, ROE, margin unconfirmed. Adjacent SGLY card explicitly has no RS/price/chart data. Repeated unconfirmed rows and unused left area are visually monotonous."
         },
         "usability": {
           "value": 8,
-          "reason": "Visible controls and labels remain distinguishable. FUTU evidence-key shows seven financial fields unconfirmed; quarterlyEPS explains unavailable finite data and unknown metadata. Adjacent SGLY list card explicitly has no RS/price/chart data and selection0/8."
+          "reason": "Visible controls and text distinguishable. FUTU evidence-key capture shows quarterlyEPS no finite usable value and all provenance fields unknown; sales, annualEPS, estimatedEPS/composite, ROE, margin unconfirmed. Adjacent SGLY card explicitly has no RS/price/chart data."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
           "value": 8.5,
-          "reason": "Visible-state consistency only: FUTU evidence-key shows seven financial fields unconfirmed; quarterlyEPS explains unavailable finite data and unknown metadata. Adjacent SGLY list card explicitly has no RS/price/chart data and selection0/8. No financial truth or interaction result inferred."
+          "reason": "Visible-state consistency only: FUTU evidence-key capture shows quarterlyEPS no finite usable value and all provenance fields unknown; sales, annualEPS, estimatedEPS/composite, ROE, margin unconfirmed. Adjacent SGLY card explicitly has no RS/price/chart data. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. FUTU evidence-key shows seven financial fields unconfirmed; quarterlyEPS explains unavailable finite data and unknown metadata. Adjacent SGLY list card explicitly has no RS/price/chart data and selection0/8."
+          "reason": "Visible labels readable at original size. FUTU evidence-key capture shows quarterlyEPS no finite usable value and all provenance fields unknown; sales, annualEPS, estimatedEPS/composite, ROE, margin unconfirmed. Adjacent SGLY card explicitly has no RS/price/chart data."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. FUTU evidence-key shows seven financial fields unconfirmed; quarterlyEPS explains unavailable finite data and unknown metadata. Adjacent SGLY list card explicitly has no RS/price/chart data and selection0/8."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. FUTU evidence-key capture shows quarterlyEPS no finite usable value and all provenance fields unknown; sales, annualEPS, estimatedEPS/composite, ROE, margin unconfirmed. Adjacent SGLY card explicitly has no RS/price/chart data."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "FUTU evidence-key shows seven financial fields unconfirmed; quarterlyEPS explains unavailable finite data and unknown metadata. Adjacent SGLY list card explicitly has no RS/price/chart data and selection0/8. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "FUTU evidence-key capture shows quarterlyEPS no finite usable value and all provenance fields unknown; sales, annualEPS, estimatedEPS/composite, ROE, margin unconfirmed. Adjacent SGLY card explicitly has no RS/price/chart data. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -1618,13 +1624,13 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         {
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Repeated unknown fields and empty left space create a monotonous panel."
+          "reason": "Repeated unconfirmed rows and unused left area are visually monotonous."
         }
       ]
     },
@@ -1851,41 +1857,41 @@
     {
       "key": "financial-ALH-evidence/1440/dark",
       "screenshot": "financial-ALH-evidence-1440x900-dark.png",
-      "sha256": "0639a43be86729a502e2b793af838c325c725c965a19ba81b2bc838b5d374aad",
+      "sha256": "2d6861f8b7f60c9ab4b66a8645600cd36ad01f631294e5505d81be3f02724fb3",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "ALH evidence-key quarterlyEPS says no finite usable value and all provenance fields unknown; sales/annualEPS/estimatedEPS/composite/ROE/margin all unconfirmed. Disclosure affordances distinct. Evidence column uses only the right half and repeats unknown rows."
+          "reason": "ALH evidence-key original inspected individually: open quarterlyEPS says no finite usable value, metadata unknown. Sales, annualEPS, estimatedEPS/composite, ROE and margin marked unconfirmed; disclosure controls readable. Long repetitive unknown-state column occupies only right half of desktop."
         },
         "usability": {
           "value": 8,
-          "reason": "Visible controls and labels remain distinguishable. ALH evidence-key quarterlyEPS says no finite usable value and all provenance fields unknown; sales/annualEPS/estimatedEPS/composite/ROE/margin all unconfirmed. Disclosure affordances distinct."
+          "reason": "Visible controls and text distinguishable. ALH evidence-key original inspected individually: open quarterlyEPS says no finite usable value, metadata unknown. Sales, annualEPS, estimatedEPS/composite, ROE and margin marked unconfirmed; disclosure controls readable."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
           "value": 8.5,
-          "reason": "Visible-state consistency only: ALH evidence-key quarterlyEPS says no finite usable value and all provenance fields unknown; sales/annualEPS/estimatedEPS/composite/ROE/margin all unconfirmed. Disclosure affordances distinct. No financial truth or interaction result inferred."
+          "reason": "Visible-state consistency only: ALH evidence-key original inspected individually: open quarterlyEPS says no finite usable value, metadata unknown. Sales, annualEPS, estimatedEPS/composite, ROE and margin marked unconfirmed; disclosure controls readable. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. ALH evidence-key quarterlyEPS says no finite usable value and all provenance fields unknown; sales/annualEPS/estimatedEPS/composite/ROE/margin all unconfirmed. Disclosure affordances distinct."
+          "reason": "Visible labels readable at original size. ALH evidence-key original inspected individually: open quarterlyEPS says no finite usable value, metadata unknown. Sales, annualEPS, estimatedEPS/composite, ROE and margin marked unconfirmed; disclosure controls readable."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. ALH evidence-key quarterlyEPS says no finite usable value and all provenance fields unknown; sales/annualEPS/estimatedEPS/composite/ROE/margin all unconfirmed. Disclosure affordances distinct."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. ALH evidence-key original inspected individually: open quarterlyEPS says no finite usable value, metadata unknown. Sales, annualEPS, estimatedEPS/composite, ROE and margin marked unconfirmed; disclosure controls readable."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "ALH evidence-key quarterlyEPS says no finite usable value and all provenance fields unknown; sales/annualEPS/estimatedEPS/composite/ROE/margin all unconfirmed. Disclosure affordances distinct. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "ALH evidence-key original inspected individually: open quarterlyEPS says no finite usable value, metadata unknown. Sales, annualEPS, estimatedEPS/composite, ROE and margin marked unconfirmed; disclosure controls readable. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -1893,13 +1899,13 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         {
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Evidence column uses only the right half and repeats unknown rows."
+          "reason": "Long repetitive unknown-state column occupies only right half of desktop."
         }
       ]
     },
@@ -2016,41 +2022,41 @@
     {
       "key": "financial-AVT-evidence/1440/dark",
       "screenshot": "financial-AVT-evidence-1440x900-dark.png",
-      "sha256": "0639a43be86729a502e2b793af838c325c725c965a19ba81b2bc838b5d374aad",
+      "sha256": "25616a02662da2beaa5a6f9e5c1bea480929339d333938e54980c21ad7daec89",
       "scores": {
         "design": {
           "value": 7.6,
-          "reason": "AVT evidence-key quarterlyEPS has no finite usable value and unknown metadata. All seven financial measures are marked unconfirmed, with required/reference tags and disclosure icons legible. Long repeated unconfirmed rows and unused left space are visually monotonous."
+          "reason": "AVT evidence-key shows quarterlyEPS threshold25% with no finite usable data; period/source/retrieval/basis/metric/unit unknown. Remaining financial measures unconfirmed, required/reference tags legible. Large unused left space and repeated unconfirmed rows reduce visual balance."
         },
         "usability": {
           "value": 8,
-          "reason": "Visible controls and labels remain distinguishable. AVT evidence-key quarterlyEPS has no finite usable value and unknown metadata. All seven financial measures are marked unconfirmed, with required/reference tags and disclosure icons legible."
+          "reason": "Visible controls and text distinguishable. AVT evidence-key shows quarterlyEPS threshold25% with no finite usable data; period/source/retrieval/basis/metric/unit unknown. Remaining financial measures unconfirmed, required/reference tags legible."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
           "value": 8.5,
-          "reason": "Visible-state consistency only: AVT evidence-key quarterlyEPS has no finite usable value and unknown metadata. All seven financial measures are marked unconfirmed, with required/reference tags and disclosure icons legible. No financial truth or interaction result inferred."
+          "reason": "Visible-state consistency only: AVT evidence-key shows quarterlyEPS threshold25% with no finite usable data; period/source/retrieval/basis/metric/unit unknown. Remaining financial measures unconfirmed, required/reference tags legible. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. AVT evidence-key quarterlyEPS has no finite usable value and unknown metadata. All seven financial measures are marked unconfirmed, with required/reference tags and disclosure icons legible."
+          "reason": "Visible labels readable at original size. AVT evidence-key shows quarterlyEPS threshold25% with no finite usable data; period/source/retrieval/basis/metric/unit unknown. Remaining financial measures unconfirmed, required/reference tags legible."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. AVT evidence-key quarterlyEPS has no finite usable value and unknown metadata. All seven financial measures are marked unconfirmed, with required/reference tags and disclosure icons legible."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. AVT evidence-key shows quarterlyEPS threshold25% with no finite usable data; period/source/retrieval/basis/metric/unit unknown. Remaining financial measures unconfirmed, required/reference tags legible."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "AVT evidence-key quarterlyEPS has no finite usable value and unknown metadata. All seven financial measures are marked unconfirmed, with required/reference tags and disclosure icons legible. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "AVT evidence-key shows quarterlyEPS threshold25% with no finite usable data; period/source/retrieval/basis/metric/unit unknown. Remaining financial measures unconfirmed, required/reference tags legible. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -2058,13 +2064,13 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         {
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Long repeated unconfirmed rows and unused left space are visually monotonous."
+          "reason": "Large unused left space and repeated unconfirmed rows reduce visual balance."
         }
       ]
     },
@@ -2181,41 +2187,41 @@
     {
       "key": "daily-watchlist/1440/dark",
       "screenshot": "daily-watchlist-1440x900-dark.png",
-      "sha256": "ce7acb7347c95867fc1fed21088f6857655ec31b42331fa5a01b45eb5ca81bc8",
+      "sha256": "aa14fe819908c4d2654e39b7f90490beeb9a59f89356cb1816931076331c5e9b",
       "scores": {
         "design": {
           "value": 7.8,
-          "reason": "Daily watchlist RRC star is selected; sell-model reference47.00 and actual holdings/orders unknown explicit. Technical observations8413, October27 and old model not current purchase pass disclaimer readable. Duplicated watch/observation RRC summaries add visual repetition."
+          "reason": "Dark watchlist shows starredRRC, model stop47.00, holdings/orders unknown, technical observations8413 with October27 baseline. RRC56.38 versus43.50 +29.6%, purchase unjudged and latest trading day unknown explicit. Duplicated RRC watch and observation summaries plus long explanatory paragraphs create density and repetition."
         },
         "usability": {
           "value": 8.2,
-          "reason": "Visible controls and labels remain distinguishable. Daily watchlist RRC star is selected; sell-model reference47.00 and actual holdings/orders unknown explicit. Technical observations8413, October27 and old model not current purchase pass disclaimer readable."
+          "reason": "Visible controls and text distinguishable. Dark watchlist shows starredRRC, model stop47.00, holdings/orders unknown, technical observations8413 with October27 baseline. RRC56.38 versus43.50 +29.6%, purchase unjudged and latest trading day unknown explicit."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
           "value": 8.6,
-          "reason": "Visible-state consistency only: Daily watchlist RRC star is selected; sell-model reference47.00 and actual holdings/orders unknown explicit. Technical observations8413, October27 and old model not current purchase pass disclaimer readable. No financial truth or interaction result inferred."
+          "reason": "Visible-state consistency only: Dark watchlist shows starredRRC, model stop47.00, holdings/orders unknown, technical observations8413 with October27 baseline. RRC56.38 versus43.50 +29.6%, purchase unjudged and latest trading day unknown explicit. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. Daily watchlist RRC star is selected; sell-model reference47.00 and actual holdings/orders unknown explicit. Technical observations8413, October27 and old model not current purchase pass disclaimer readable."
+          "reason": "Visible labels readable at original size. Dark watchlist shows starredRRC, model stop47.00, holdings/orders unknown, technical observations8413 with October27 baseline. RRC56.38 versus43.50 +29.6%, purchase unjudged and latest trading day unknown explicit."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. Daily watchlist RRC star is selected; sell-model reference47.00 and actual holdings/orders unknown explicit. Technical observations8413, October27 and old model not current purchase pass disclaimer readable."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. Dark watchlist shows starredRRC, model stop47.00, holdings/orders unknown, technical observations8413 with October27 baseline. RRC56.38 versus43.50 +29.6%, purchase unjudged and latest trading day unknown explicit."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Daily watchlist RRC star is selected; sell-model reference47.00 and actual holdings/orders unknown explicit. Technical observations8413, October27 and old model not current purchase pass disclaimer readable. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "Dark watchlist shows starredRRC, model stop47.00, holdings/orders unknown, technical observations8413 with October27 baseline. RRC56.38 versus43.50 +29.6%, purchase unjudged and latest trading day unknown explicit. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -2223,54 +2229,54 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         {
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Duplicated watch/observation RRC summaries add visual repetition."
+          "reason": "Duplicated RRC watch and observation summaries plus long explanatory paragraphs create density and repetition."
         }
       ]
     },
     {
       "key": "home/1440/light",
       "screenshot": "home-1440x900-light.png",
-      "sha256": "f51906fac49bd9109583c6078ab3b8ce805e07833bc5fce43fd97a92b366d926",
+      "sha256": "c9dcb205d6beea6165b5d0f24dcbb4ef6d9bff7d419630738d4346f41cdbf37f",
       "scores": {
         "design": {
           "value": 8.4,
-          "reason": "Light home345/1806, buy-zone91, CRGY13.69 purchase3/7; radar axes, tooltipCRGY RS90, primary navigation and October27 analysis/October29 publication dates readable. The spacing and hierarchy separate the visible groups."
+          "reason": "Light home345/1806 selected,91 buy-zone, CRGY13.69 purchase3/7. Radar axes and tooltipCRGY RS90 legible; October27 analysis distinct from October29 publication, chart continues below viewport. Small candidate ticker badge wraps CRGY across two lines while full company/main ticker remain clear."
         },
         "usability": {
           "value": 8.3,
-          "reason": "Visible controls and labels remain distinguishable. Light home345/1806, buy-zone91, CRGY13.69 purchase3/7; radar axes, tooltipCRGY RS90, primary navigation and October27 analysis/October29 publication dates readable."
+          "reason": "Visible controls and text distinguishable. Light home345/1806 selected,91 buy-zone, CRGY13.69 purchase3/7. Radar axes and tooltipCRGY RS90 legible; October27 analysis distinct from October29 publication, chart continues below viewport."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
           "value": 8.5,
-          "reason": "Visible-state consistency only: Light home345/1806, buy-zone91, CRGY13.69 purchase3/7; radar axes, tooltipCRGY RS90, primary navigation and October27 analysis/October29 publication dates readable. No financial truth or interaction result inferred."
+          "reason": "Visible-state consistency only: Light home345/1806 selected,91 buy-zone, CRGY13.69 purchase3/7. Radar axes and tooltipCRGY RS90 legible; October27 analysis distinct from October29 publication, chart continues below viewport. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. Light home345/1806, buy-zone91, CRGY13.69 purchase3/7; radar axes, tooltipCRGY RS90, primary navigation and October27 analysis/October29 publication dates readable."
+          "reason": "Visible labels readable at original size. Light home345/1806 selected,91 buy-zone, CRGY13.69 purchase3/7. Radar axes and tooltipCRGY RS90 legible; October27 analysis distinct from October29 publication, chart continues below viewport."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. Light home345/1806, buy-zone91, CRGY13.69 purchase3/7; radar axes, tooltipCRGY RS90, primary navigation and October27 analysis/October29 publication dates readable."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. Light home345/1806 selected,91 buy-zone, CRGY13.69 purchase3/7. Radar axes and tooltipCRGY RS90 legible; October27 analysis distinct from October29 publication, chart continues below viewport."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Light home345/1806, buy-zone91, CRGY13.69 purchase3/7; radar axes, tooltipCRGY RS90, primary navigation and October27 analysis/October29 publication dates readable. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "Light home345/1806 selected,91 buy-zone, CRGY13.69 purchase3/7. Radar axes and tooltipCRGY RS90 legible; October27 analysis distinct from October29 publication, chart continues below viewport. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -2278,7 +2284,13 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
+        },
+        {
+          "axis": "design",
+          "category": "cosmetic",
+          "screeningImpact": "non_screening_aesthetic",
+          "reason": "Small candidate ticker badge wraps CRGY across two lines while full company/main ticker remain clear."
         }
       ]
     },
@@ -2542,41 +2554,41 @@
     {
       "key": "comparison/1440/light",
       "screenshot": "comparison-1440x900-light.png",
-      "sha256": "bca75215afdbea84a0cf42710b7cb89221348401f08a99014cd3e70ddff2ece1",
+      "sha256": "d725d11dc218e57bc0af57f69590824b65fa92aa29e819ba7562fe66ca369ce9",
       "scores": {
         "design": {
           "value": 8.3,
-          "reason": "Light comparison six cards CRGY/PAGP/NTRA/SIGI/HST/XMTR show axes, dates, volume, RS and complete purchase fractions; 1–6/1806, next and period controls clear. The spacing and hierarchy separate the visible groups."
+          "reason": "Light comparison shows CRGY/PAGP/NTRA/SIGI/HST/XMTR,1–6/1806 with next/period controls. Candles, volumes, RS and all date labels distinct; complete purchase fractions3/7,2/7,4/7,2/7,2/7,2/7 readable. Dense footer metrics and six small charts require close reading."
         },
         "usability": {
           "value": 8.3,
-          "reason": "Visible controls and labels remain distinguishable. Light comparison six cards CRGY/PAGP/NTRA/SIGI/HST/XMTR show axes, dates, volume, RS and complete purchase fractions; 1–6/1806, next and period controls clear."
+          "reason": "Visible controls and text distinguishable. Light comparison shows CRGY/PAGP/NTRA/SIGI/HST/XMTR,1–6/1806 with next/period controls. Candles, volumes, RS and all date labels distinct; complete purchase fractions3/7,2/7,4/7,2/7,2/7,2/7 readable."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
-          "value": 8.4,
-          "reason": "Visible-state consistency only: Light comparison six cards CRGY/PAGP/NTRA/SIGI/HST/XMTR show axes, dates, volume, RS and complete purchase fractions; 1–6/1806, next and period controls clear. No financial truth or interaction result inferred."
+          "value": 8.5,
+          "reason": "Visible-state consistency only: Light comparison shows CRGY/PAGP/NTRA/SIGI/HST/XMTR,1–6/1806 with next/period controls. Candles, volumes, RS and all date labels distinct; complete purchase fractions3/7,2/7,4/7,2/7,2/7,2/7 readable. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. Light comparison six cards CRGY/PAGP/NTRA/SIGI/HST/XMTR show axes, dates, volume, RS and complete purchase fractions; 1–6/1806, next and period controls clear."
+          "reason": "Visible labels readable at original size. Light comparison shows CRGY/PAGP/NTRA/SIGI/HST/XMTR,1–6/1806 with next/period controls. Candles, volumes, RS and all date labels distinct; complete purchase fractions3/7,2/7,4/7,2/7,2/7,2/7 readable."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. Light comparison six cards CRGY/PAGP/NTRA/SIGI/HST/XMTR show axes, dates, volume, RS and complete purchase fractions; 1–6/1806, next and period controls clear."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. Light comparison shows CRGY/PAGP/NTRA/SIGI/HST/XMTR,1–6/1806 with next/period controls. Candles, volumes, RS and all date labels distinct; complete purchase fractions3/7,2/7,4/7,2/7,2/7,2/7 readable."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Light comparison six cards CRGY/PAGP/NTRA/SIGI/HST/XMTR show axes, dates, volume, RS and complete purchase fractions; 1–6/1806, next and period controls clear. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "Light comparison shows CRGY/PAGP/NTRA/SIGI/HST/XMTR,1–6/1806 with next/period controls. Candles, volumes, RS and all date labels distinct; complete purchase fractions3/7,2/7,4/7,2/7,2/7,2/7 readable. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -2584,48 +2596,54 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
+        },
+        {
+          "axis": "design",
+          "category": "cosmetic",
+          "screeningImpact": "non_screening_aesthetic",
+          "reason": "Dense footer metrics and six small charts require close reading."
         }
       ]
     },
     {
       "key": "comparison-near-pass/1440/light",
       "screenshot": "comparison-near-pass-1440x900-light.png",
-      "sha256": "fc161ac4adc603492016b8542e49ec2092de312d2536357e66b9d18d2ba5fb9e",
+      "sha256": "08e4d143196bf8dea9e6f1fe9d2232dca26dfc06be58c1897118fdc7ac196e4f",
       "scores": {
         "design": {
           "value": 8.1,
-          "reason": "Light near-pass six cards show distinct exceeded/pivot-wait/unknown states and182 count. SLS absent RS explicitly labeled, bottom purchase1/7 readable, no material overlap observed. Small multi-metric footers and ellipsized unmet-condition summaries make this view dense."
+          "reason": "Light near-pass shows182 names, TWST/SLS/DELL/FTON/PENG/MRVL; SLS12.17 unknown buy-position and unavailableRS explicit. Metric footers and date axes remain within cards; exceeded/pivot-wait statuses distinct. Ellipsized condition text and compact footers make the comparison view dense."
         },
         "usability": {
           "value": 8.2,
-          "reason": "Visible controls and labels remain distinguishable. Light near-pass six cards show distinct exceeded/pivot-wait/unknown states and182 count. SLS absent RS explicitly labeled, bottom purchase1/7 readable, no material overlap observed."
+          "reason": "Visible controls and text distinguishable. Light near-pass shows182 names, TWST/SLS/DELL/FTON/PENG/MRVL; SLS12.17 unknown buy-position and unavailableRS explicit. Metric footers and date axes remain within cards; exceeded/pivot-wait statuses distinct."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
           "value": 8.5,
-          "reason": "Visible-state consistency only: Light near-pass six cards show distinct exceeded/pivot-wait/unknown states and182 count. SLS absent RS explicitly labeled, bottom purchase1/7 readable, no material overlap observed. No financial truth or interaction result inferred."
+          "reason": "Visible-state consistency only: Light near-pass shows182 names, TWST/SLS/DELL/FTON/PENG/MRVL; SLS12.17 unknown buy-position and unavailableRS explicit. Metric footers and date axes remain within cards; exceeded/pivot-wait statuses distinct. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. Light near-pass six cards show distinct exceeded/pivot-wait/unknown states and182 count. SLS absent RS explicitly labeled, bottom purchase1/7 readable, no material overlap observed."
+          "reason": "Visible labels readable at original size. Light near-pass shows182 names, TWST/SLS/DELL/FTON/PENG/MRVL; SLS12.17 unknown buy-position and unavailableRS explicit. Metric footers and date axes remain within cards; exceeded/pivot-wait statuses distinct."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. Light near-pass six cards show distinct exceeded/pivot-wait/unknown states and182 count. SLS absent RS explicitly labeled, bottom purchase1/7 readable, no material overlap observed."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. Light near-pass shows182 names, TWST/SLS/DELL/FTON/PENG/MRVL; SLS12.17 unknown buy-position and unavailableRS explicit. Metric footers and date axes remain within cards; exceeded/pivot-wait statuses distinct."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Light near-pass six cards show distinct exceeded/pivot-wait/unknown states and182 count. SLS absent RS explicitly labeled, bottom purchase1/7 readable, no material overlap observed. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "Light near-pass shows182 names, TWST/SLS/DELL/FTON/PENG/MRVL; SLS12.17 unknown buy-position and unavailableRS explicit. Metric footers and date axes remain within cards; exceeded/pivot-wait statuses distinct. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -2633,13 +2651,13 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         {
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Small multi-metric footers and ellipsized unmet-condition summaries make this view dense."
+          "reason": "Ellipsized condition text and compact footers make the comparison view dense."
         }
       ]
     },
@@ -3062,41 +3080,41 @@
     {
       "key": "case-ADI-inline/1440/light",
       "screenshot": "case-ADI-inline-1440x900-light.png",
-      "sha256": "d0c1483d82dc769a2d55de4b80ab45ec40d8ad3095c2944e4f2d4d0fbbc525e3",
+      "sha256": "ec83e8a8adea78640c77bdb13b4f5c3d55c49f5d33535b4cd6e619fca171dad5",
       "scores": {
         "design": {
           "value": 8.4,
-          "reason": "Light ADI inline425.35 shows price ticks471.25/315.67/211.45, separate volume/SPY-RS and full dates; estimatedRS90/99 below slider is clear alongside candidate cards. The spacing and hierarchy separate the visible groups."
+          "reason": "Light ADI inline425.35 with471.25/315.67/211.45 scale, full date ticks, volume and SPY-RS panel readable. EstimatedRS90/99 separate below slider; CNQ/AAMI adjacent list identities and purchase states clear. Hierarchy and spacing separate visible groups."
         },
         "usability": {
           "value": 8.3,
-          "reason": "Visible controls and labels remain distinguishable. Light ADI inline425.35 shows price ticks471.25/315.67/211.45, separate volume/SPY-RS and full dates; estimatedRS90/99 below slider is clear alongside candidate cards."
+          "reason": "Visible controls and text distinguishable. Light ADI inline425.35 with471.25/315.67/211.45 scale, full date ticks, volume and SPY-RS panel readable. EstimatedRS90/99 separate below slider; CNQ/AAMI adjacent list identities and purchase states clear."
         },
         "originality": {
           "value": 7.4,
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
           "value": 8.5,
-          "reason": "Visible-state consistency only: Light ADI inline425.35 shows price ticks471.25/315.67/211.45, separate volume/SPY-RS and full dates; estimatedRS90/99 below slider is clear alongside candidate cards. No financial truth or interaction result inferred."
+          "reason": "Visible-state consistency only: Light ADI inline425.35 with471.25/315.67/211.45 scale, full date ticks, volume and SPY-RS panel readable. EstimatedRS90/99 separate below slider; CNQ/AAMI adjacent list identities and purchase states clear. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Original-size visible labels are readable. Light ADI inline425.35 shows price ticks471.25/315.67/211.45, separate volume/SPY-RS and full dates; estimatedRS90/99 below slider is clear alongside candidate cards."
+          "reason": "Visible labels readable at original size. Light ADI inline425.35 with471.25/315.67/211.45 scale, full date ticks, volume and SPY-RS panel readable. EstimatedRS90/99 separate below slider; CNQ/AAMI adjacent list identities and purchase states clear."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material clipping or occlusion within the captured visible content; scroll-edge continuation is not a hidden-content certification. Light ADI inline425.35 shows price ticks471.25/315.67/211.45, separate volume/SPY-RS and full dates; estimatedRS90/99 below slider is clear alongside candidate cards."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. Light ADI inline425.35 with471.25/315.67/211.45 scale, full date ticks, volume and SPY-RS panel readable. EstimatedRS90/99 separate below slider; CNQ/AAMI adjacent list identities and purchase states clear."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible navigation/control labels and control boundaries are distinguishable; this does not certify execution."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Light ADI inline425.35 shows price ticks471.25/315.67/211.45, separate volume/SPY-RS and full dates; estimatedRS90/99 below slider is clear alongside candidate cards. Observed dates and explicit unavailable states are not represented as independently verified current financial data."
+          "reason": "Light ADI inline425.35 with471.25/315.67/211.45 scale, full date ticks, volume and SPY-RS panel readable. EstimatedRS90/99 separate below slider; CNQ/AAMI adjacent list identities and purchase states clear. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -3104,7 +3122,7 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Rounded cards, violet accents and conventional financial dashboard/chart grammar are coherent but familiar."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         }
       ]
     },
@@ -7009,41 +7027,41 @@
     {
       "key": "daily-watchlist/390/light",
       "screenshot": "daily-watchlist-390x844-light.png",
-      "sha256": "ce7404b5de7f2a36ca9c177b0bf6d1954f98232f11b218d03e4586d407d76f21",
+      "sha256": "190cfc0a9d59300e59b646a0c538d880ae815126e81bc005b3a062b5b5ff5fa1",
       "scores": {
         "design": {
-          "value": 7.8,
-          "reason": "Daily watchlist RRC starred card explicitly says actual holdings/orders unconfirmed and latest trading day unconfirmed. Technical observations8413 names,baseline2026-10-27,one-calendar-day age and non-purchase-admission prose readable; lower RRC record repeats with focused star. Bottom navigation clear. Layout and hierarchy judged from original pixels."
+          "value": 7.7,
+          "reason": "390px light watchlist RRC star and model stop47.00 visible, actual holdings/orders unknown. Technical records8413 with October27 basis; long prose explicitly separates old-model reference from current purchase judgment. RRC56.38 versus43.50 +29.6% card begins above fixed market/chart/watch bottom navigation; lower card continues beyond viewport. Technical-record explanation is dense and repetitive on narrow width, while visible card links and bottom navigation remain distinguishable."
         },
         "usability": {
-          "value": 8.1,
-          "reason": "Daily watchlist RRC starred card explicitly says actual holdings/orders unconfirmed and latest trading day unconfirmed. Technical observations8413 names,baseline2026-10-27,one-calendar-day age and non-purchase-admission prose readable; lower RRC record repeats with focused star. Bottom navigation clear. Visible affordances only; execution not inferred."
+          "value": 8,
+          "reason": "Visible controls and text distinguishable. 390px light watchlist RRC star and model stop47.00 visible, actual holdings/orders unknown. Technical records8413 with October27 basis; long prose explicitly separates old-model reference from current purchase judgment. RRC56.38 versus43.50 +29.6% card begins above fixed market/chart/watch bottom navigation; lower card continues beyond viewport."
         },
         "originality": {
-          "value": 7.3,
-          "reason": "Familiar rounded financial dashboard panels, violet accents and standard chart grammar; coherent but limited visual originality."
+          "value": 7.4,
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         "content": {
-          "value": 8.7,
-          "reason": "Daily watchlist RRC starred card explicitly says actual holdings/orders unconfirmed and latest trading day unconfirmed. Technical observations8413 names,baseline2026-10-27,one-calendar-day age and non-purchase-admission prose readable; lower RRC record repeats with focused star. Bottom navigation clear. Visible consistency only; financial validity and freshness not inferred."
+          "value": 8.6,
+          "reason": "Visible-state consistency only: 390px light watchlist RRC star and model stop47.00 visible, actual holdings/orders unknown. Technical records8413 with October27 basis; long prose explicitly separates old-model reference from current purchase judgment. RRC56.38 versus43.50 +29.6% card begins above fixed market/chart/watch bottom navigation; lower card continues beyond viewport. Financial truth and interactions not inferred."
         }
       },
       "visualChecks": {
         "text_and_labels": {
           "status": "pass",
-          "reason": "Visible text readable. Daily watchlist RRC starred card explicitly says actual holdings/orders unconfirmed and latest trading day unconfirmed. Technical observations8413 names,baseline2026-10-27,one-calendar-day age and non-purchase-admission prose readable; lower RRC record repeats with focused star. Bottom navigation clear."
+          "reason": "Visible labels readable at original size. 390px light watchlist RRC star and model stop47.00 visible, actual holdings/orders unknown. Technical records8413 with October27 basis; long prose explicitly separates old-model reference from current purchase judgment. RRC56.38 versus43.50 +29.6% card begins above fixed market/chart/watch bottom navigation; lower card continues beyond viewport."
         },
         "clipping_and_occlusion": {
           "status": "pass",
-          "reason": "No material occlusion of essential visible labels; scroll-edge continuation is outside this visible assessment. Daily watchlist RRC starred card explicitly says actual holdings/orders unconfirmed and latest trading day unconfirmed. Technical observations8413 names,baseline2026-10-27,one-calendar-day age and non-purchase-admission prose readable; lower RRC record repeats with focused star. Bottom navigation clear."
+          "reason": "No material clipping or occlusion observed in visible captured content; scroll-edge continuation not certified. 390px light watchlist RRC star and model stop47.00 visible, actual holdings/orders unknown. Technical records8413 with October27 basis; long prose explicitly separates old-model reference from current purchase judgment. RRC56.38 versus43.50 +29.6% card begins above fixed market/chart/watch bottom navigation; lower card continues beyond viewport."
         },
         "visible_navigation_affordances": {
           "status": "pass",
-          "reason": "Visible section, back, close or navigation affordances distinguishable; execution not certified. Daily watchlist RRC starred card explicitly says actual holdings/orders unconfirmed and latest trading day unconfirmed. Technical observations8413 names,baseline2026-10-27,one-calendar-day age and non-purchase-admission prose readable; lower RRC record repeats with focused star. Bottom navigation clear."
+          "reason": "Visible section/navigation/control labels distinguishable; execution not inferred."
         },
         "visible_content_consistency": {
           "status": "pass",
-          "reason": "Visible labels are consistent; unseen, unknown or expired data states are not certified. Daily watchlist RRC starred card explicitly says actual holdings/orders unconfirmed and latest trading day unconfirmed. Technical observations8413 names,baseline2026-10-27,one-calendar-day age and non-purchase-admission prose readable; lower RRC record repeats with focused star. Bottom navigation clear."
+          "reason": "390px light watchlist RRC star and model stop47.00 visible, actual holdings/orders unknown. Technical records8413 with October27 basis; long prose explicitly separates old-model reference from current purchase judgment. RRC56.38 versus43.50 +29.6% card begins above fixed market/chart/watch bottom navigation; lower card continues beyond viewport. Explicit dates/unknown states do not imply independently verified current financial data."
         }
       },
       "findings": [
@@ -7051,13 +7069,13 @@
           "axis": "originality",
           "category": "originality",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Familiar rounded financial dashboard panels, violet accents and standard chart grammar; coherent but limited visual originality."
+          "reason": "Rounded cards, violet accents and conventional financial-dashboard/chart grammar are coherent but familiar."
         },
         {
           "axis": "design",
           "category": "cosmetic",
           "screeningImpact": "non_screening_aesthetic",
-          "reason": "Repeated RRC content and lengthy explanation between cards make the page visually dense."
+          "reason": "Technical-record explanation is dense and repetitive on narrow width, while visible card links and bottom navigation remain distinguishable."
         }
       ]
     }
