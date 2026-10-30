@@ -70,12 +70,22 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
       };
       await inspect(chart, 'inline-default');
       check(record.views[0].annotation_mode === 'vcp-off', `${key}: VCP annotations must start closed`);
-      const inlineTargets=['.research-chart .leader-svg-controls','.research-chart svg[data-chart-plot]'];
+      record.source_warning = { expected: Boolean(plan.sourceContext?.warning) };
+      // Position the real warning together with the chart. Scrolling only to
+      // controls can hide a valid caution above the viewport before measuring
+      // it. Keep the complete desktop identity header and all original chart
+      // targets; warning/data expectations and visibility checks stay intact.
+      const inlineTargets=[
+        ...(record.source_warning.expected ? [
+          ...(viewport.width >= 900 ? ['.research-symbol-head'] : []),
+          '.research-symbol-head .entry-source-badge',
+        ] : []),
+        '.research-chart .leader-svg-controls','.research-chart svg[data-chart-plot]',
+      ];
       if(viewport.width===390)await page.locator('.research-chart .leader-svg-extra-controls summary').click();
       await scrollFinancialViewport(page,inlineTargets);
       const inspectInlineViewport=async()=>{const geometry=await page.evaluate(financialViewportGeometry,inlineTargets);checkFinancialViewportGeometry(geometry,check,`${key}/inline-controls-and-plot`,viewport);return geometry;};
       record.inline_geometry={default:await inspectInlineViewport()};
-      record.source_warning = { expected: Boolean(plan.sourceContext?.warning) };
       if (record.source_warning.expected) {
         record.source_warning.inline_visible = await sourceWarningVisible(page.locator('.research-symbol-head .entry-source-badge'));
         check(record.source_warning.inline_visible, `${key}: first-book proximity warning is missing from the initial inline viewport`);
