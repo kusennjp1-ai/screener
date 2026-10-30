@@ -100,6 +100,8 @@ export function requireAnnotationGeometryContract(sourceRoot, revision, report) 
   const producer = git(sourceRoot, 'show', `${revision}:${path}`);
   if (producer.includes('expanded_annotation_geometry_contract'))
     assert(report.expanded_annotation_geometry_contract === 'full-plot-v1', 'This material source requires the expanded annotation geometry capture contract');
+  if (producer.includes('inline_warning_geometry_contract'))
+    assert(report.inline_warning_geometry_contract === 'source-warning-v1', 'This material source requires the inline warning geometry capture contract');
 }
 
 export function verifyStoredMeasurement(root, now = Date.now()) {

@@ -49,3 +49,55 @@ test('chart capture establishes requested real theme before positioning and rech
 
 test('authenticated v1 captures retain the original simultaneous evidence contract',()=>{const m=fixture();m.detailEvidence.version=LEGACY_LEADER_DETAIL_CONTRACT;delete m.detailEvidence.conditionsObservation;delete m.detailEvidence.sections;expect(leaderDetailFailures(m,'detail')).toEqual([]);m.detailEvidence.states[0].shown=false;expect(leaderDetailFailures(m,'detail')).toContain('missing exact seven daily states');});
 for(const [name,mutate] of [['missing condition observation',d=>delete d.conditionsObservation],['different instrument',d=>d.conditionsObservation.identity='OTHER'],['wrong initial section',d=>d.section='conditions'],['wrong measured section',d=>d.conditionsObservation.section='evidence'],['missing tab',d=>d.sections.pop()],['undersized tab',d=>d.sections[0].rect=rect(0,788,43,44)],['wrong selected tab',d=>d.sections[0].selected='false']])test('tabbed contract rejects '+name,()=>{const m=fixture();mutate(m.detailEvidence);expect(leaderDetailFailures(m,'detail').length).toBeGreaterThan(0);});
+
+// Synthetic geometry only; source authentication is tested separately below
+// the Git-bound capture contract. These are not authored image observations.
+function warningInline(width=390,expected=true){
+ const height=width===390?844:900, geometry=inlineFixture();
+ for(const state of ['default','annotations']){
+  const g=geometry[state];g.viewport={width,height};g.chrome.header=rect(0,0,width,48);g.chrome.navigation=width===390?rect(0,788,width,56):null;
+  const selectors=[...(expected?[...(width>=900?['.research-symbol-head']:[]),'.research-symbol-head .entry-source-badge']:[]),'.research-chart .leader-svg-controls','.research-chart svg[data-chart-plot]'];
+  g.targets=selectors.map(selector=>({selector,count:1,shown:true,rect:selector==='.research-symbol-head'?rect(16,60,width-32,65):selector.endsWith('.entry-source-badge')?rect(24,85,200,20):selector.endsWith('.leader-svg-controls')?rect(16,140,width-32,100):rect(16,260,width-32,390),clip:{left:0,right:width,top:48,bottom:width===390?788:900},hit_samples:Array(9).fill(true)}));
+ }
+ const record={symbol:'ADI',viewport:{width,height},theme:'dark',source_warning:{expected}};
+ const screens=[['default','inline'],['annotations','inline-annotations']].map(([state,suffix])=>({key:`case-ADI-${suffix}/${width}/dark`,screenshot_scope:'scrolled-viewport',metrics_scope:'original-viewport',screenshot_target:null,viewport_geometry:structuredClone(geometry[state])}));
+ return {geometry,record,screens,context:{contract:'source-warning-v1',sourceWarning:record.source_warning}};
+}
+for(const width of [390,1440])for(const expected of [true,false])test(`source warning contract validates exact conditional targets ${width}/${expected}`,()=>{
+ const f=warningInline(width,expected);
+ expect(validateInlineChartEvidence(f.geometry,width,f.record.viewport.height,'synthetic',f.context)).toBe(true);
+ expect(validateInlineCaptureEvidence(f.record,f.screens,f.context.contract)).toBe(true);
+});
+test('legacy warning captures retain exactly two original targets',()=>{
+ const f=inlineScreens();f.record.source_warning={expected:true};
+ expect(validateInlineCaptureEvidence(f.record,f.screens)).toBe(true);
+ expect(()=>validateInlineCaptureEvidence(f.record,f.screens,'source-warning-v1')).toThrow(/inline targets/);
+});
+for(const contract of ['unknown',null])test(`inline warning contract rejects ${contract}`,()=>{const f=warningInline();expect(()=>validateInlineChartEvidence(f.geometry,390,844,'synthetic',{...f.context,contract})).toThrow(/unknown inline warning/);});
+test('new warning contract requires a boolean source expectation',()=>{const f=warningInline();expect(()=>validateInlineChartEvidence(f.geometry,390,844,'synthetic',{contract:f.context.contract})).toThrow(/warning expectation/);});
+const warningMutations=[
+ ['missing warning',g=>g.targets=g.targets.filter(t=>!t.selector.endsWith('.entry-source-badge'))],
+ ['duplicate warning',g=>g.targets.push(structuredClone(g.targets.find(t=>t.selector.endsWith('.entry-source-badge'))))],
+ ['unexpected extra',g=>g.targets.push({...structuredClone(g.targets[0]),selector:'.unrelated'})],
+ ['offscreen warning',g=>g.targets.find(t=>t.selector.endsWith('.entry-source-badge')).rect=rect(24,20,200,20)],
+ ['overlapped warning',g=>g.targets.find(t=>t.selector.endsWith('.entry-source-badge')).hit_samples[0]=false],
+ ['hidden warning',g=>g.targets.find(t=>t.selector.endsWith('.entry-source-badge')).shown=false],
+ ['missing plot',g=>g.targets=g.targets.filter(t=>!t.selector.endsWith('svg[data-chart-plot]'))],
+ ['clipped plot',g=>g.targets.find(t=>t.selector.endsWith('svg[data-chart-plot]')).rect=rect(16,700,358,390)],
+ ['missing controls',g=>g.targets=g.targets.filter(t=>!t.selector.endsWith('.leader-svg-controls'))],
+ ['incomplete hit proof',g=>g.targets.find(t=>t.selector.endsWith('.entry-source-badge')).hit_samples=[]],
+];
+for(const width of [390,1440])for(const state of ['default','annotations'])for(const [label,mutate] of warningMutations)test(`warning geometry rejects ${label} ${width}/${state} at both observation times`,()=>{
+ const f=warningInline(width);mutate(f.geometry[state]);expect(()=>validateInlineChartEvidence(f.geometry,width,f.record.viewport.height,'synthetic',f.context)).toThrow();
+ const atCapture=warningInline(width);mutate(atCapture.screens[state==='default'?0:1].viewport_geometry);expect(()=>validateInlineCaptureEvidence(atCapture.record,atCapture.screens,atCapture.context.contract)).toThrow();
+});
+for(const state of ['default','annotations'])test(`desktop warning requires full symbol header ${state} at both observation times`,()=>{
+ const remove=g=>g.targets=g.targets.filter(t=>t.selector!=='.research-symbol-head'), f=warningInline(1440);
+ remove(f.geometry[state]);expect(()=>validateInlineChartEvidence(f.geometry,1440,900,'synthetic',f.context)).toThrow(/inline targets/);
+ const capture=warningInline(1440);remove(capture.screens[state==='default'?0:1].viewport_geometry);expect(()=>validateInlineCaptureEvidence(capture.record,capture.screens,capture.context.contract)).toThrow(/inline targets/);
+});
+test('no-warning contract cannot smuggle warning targets or claim false expectation',()=>{
+ const f=warningInline();f.record.source_warning.expected=false;
+ expect(()=>validateInlineCaptureEvidence(f.record,f.screens,'source-warning-v1')).toThrow(/inline targets/);
+});
+test('full report rejects unknown inline warning contract before accepting cases',()=>{const f=feedFixture();f.report.inline_warning_geometry_contract='future';expect(()=>validateFunctionalEvidence(f.report,f.binding)).toThrow(/Unknown inline warning/);});

@@ -191,3 +191,19 @@ test('v2 nested representation staging and authenticated package ZIP roundtrip r
   extractReviewableZip(zip, extracted); verifyPackage(extracted, f.reference, f.root, f.current, f.reference.configuration_sha256);
   assert.throws(() => stageCaptureFiles(f.packageRoot, join(f.root, 'unsafe'), ['other/unknown.json']), /nested/);
 });
+
+test('inline warning contract cannot be removed from current producer or imposed on old archives', t => {
+  const f=repoFixture(t), path='frontend/tools/chart-design-cases.mjs';
+  write(join(f.root,path),'export function verifyChartCases() {}');
+  git(f.root,'add',path);git(f.root,'commit','-m','Synthetic legacy inline producer');
+  const legacy=git(f.root,'rev-parse','HEAD');
+  requireAnnotationGeometryContract(f.root,legacy,{});
+  write(join(f.root,path),"export function verifyChartCases(report) { report.inline_warning_geometry_contract = 'source-warning-v1'; }");
+  git(f.root,'add',path);git(f.root,'commit','-m','Synthetic warning-aware inline producer');
+  const current=git(f.root,'rev-parse','HEAD');
+  for(const report of [{},{inline_warning_geometry_contract:'future'},{inline_warning_geometry_contract:null}])assert.throws(()=>requireAnnotationGeometryContract(f.root,current,report),/requires the inline warning/);
+  requireAnnotationGeometryContract(f.root,current,{inline_warning_geometry_contract:'source-warning-v1'});
+  requireAnnotationGeometryContract(f.root,legacy,{});
+  write(join(f.root,path),'export function verifyChartCases() {}');
+  assert.throws(()=>requireAnnotationGeometryContract(f.root,current,{}),/requires the inline warning/);
+});

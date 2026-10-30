@@ -51,7 +51,7 @@ export default function StaticLayout({children}) {
    <div id="research-mobile-instrument-context" className="mobile-instrument-context"/>
    <div className="header-search">{['/','/compare'].includes(location.pathname)&&<ResearchSearch value={search} onChange={changeSearch}/>}</div>
    {!['/','/compare'].includes(location.pathname)&&markets.length>1&&<select className="header-market" aria-label="市場切替" value={market.market} onChange={e=>setSelectedMarket(e.target.value)}>{markets.map(key=><option value={key} key={key}>{manifest.data?.markets?.[key]?.display_name||key}</option>)}</select>}
-   <div className="header-dates"><span>分析 {market.as_of_date||'取得中'}</span><span>公開 {formatPublished(manifest.data?.generated_at)}</span></div>
+   <div className="header-dates"><span>分析 {market.as_of_date||'取得中'}</span><span>データ出力 {formatPublished(manifest.data?.generated_at)}</span></div>
    <IconButton onClick={colorMode.toggleColorMode} aria-label={dark?'ライトモードに切り替え':'ダークモードに切り替え'}>{dark?<Brightness7Icon fontSize="small"/>:<Brightness4Icon fontSize="small"/>}</IconButton>
   </header>
   <LimitedResearchPreviewNotice />

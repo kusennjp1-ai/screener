@@ -24,6 +24,7 @@ export async function verifyChartCases({ page, viewport, theme, capture, check, 
   const data = decodeResearchIndex(await get(entry.assets.research.path));
   report.chart_cases ||= [];
   report.expanded_annotation_geometry_contract = 'full-plot-v1';
+  report.inline_warning_geometry_contract = 'source-warning-v1';
   for (const symbol of CHART_DESIGN_SYMBOLS) {
     const key = `${symbol}/${viewport.width}/${theme}`;
     try {

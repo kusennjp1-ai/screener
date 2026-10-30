@@ -125,20 +125,29 @@ function chartGeometry(geometry, width, height, label, fullChart) {
   checkExpandedChartGeometry(geometry, check, label, { fullChart });
 }
 
-export function validateInlineChartEvidence(value,width,height,label='inline chart') {
+export function validateInlineChartEvidence(value,width,height,label='inline chart',context={}) {
+      // Earlier immutable captures have exactly the original two targets. New
+      // captures bind the conditional warning to the same measured viewport;
+      // arbitrary additional selectors are never accepted in either contract.
+      const targets=['.research-chart .leader-svg-controls','.research-chart svg[data-chart-plot]'];
+      if(context.contract!==undefined){
+        assert(context.contract==='source-warning-v1',label+': unknown inline warning geometry contract');
+        assert(object(context.sourceWarning)&&typeof context.sourceWarning.expected==='boolean',label+': missing inline warning expectation');
+        if(context.sourceWarning.expected)targets.unshift(...(width>=900?['.research-symbol-head']:[]),'.research-symbol-head .entry-source-badge');
+      }
       assert(object(value),label+': missing inline controls/plot geometry');
       for(const state of ['default','annotations']){
         const geometry=value[state];
         assert(object(geometry)&&Array.isArray(geometry.targets),label+': missing inline viewport '+state);
         viewport(geometry.viewport,width,height,label);
-        exactSet(geometry.targets.map(t=>t.selector),['.research-chart .leader-svg-controls','.research-chart svg[data-chart-plot]'],label+' inline targets');
+        exactSet(geometry.targets.map(t=>t.selector),targets,label+' inline targets');
         for(const target of geometry.targets){rect(target.rect,label);assert(Array.isArray(target.hit_samples)&&target.hit_samples.length>=9&&target.hit_samples.every(hit=>hit===true),label+': incomplete inline hit proof');}
         checkFinancialViewportGeometry(geometry,check,label+'/'+state,{width,height:height});
       }
   return true;
 }
 
-export function validateInlineCaptureEvidence(record, screens) {
+export function validateInlineCaptureEvidence(record, screens, contract) {
   const {width,height}=record.viewport;
   const atCapture={};
   for(const [state,suffix] of [['default','inline'],['annotations','inline-annotations']]) {
@@ -151,11 +160,13 @@ export function validateInlineCaptureEvidence(record, screens) {
   }
   // Validate the independently observed screenshot-time rectangles, not just
   // pre-capture geometry that a theme operation or asynchronous layout can stale.
-  return validateInlineChartEvidence(atCapture,width,height,'inline screenshot');
+  return validateInlineChartEvidence(atCapture,width,height,'inline screenshot',{contract,sourceWarning:record.source_warning});
 }
 
 function chartEvidence(report) {
   assert(Array.isArray(report.chart_cases), 'Missing chart cases');
+  const inlineContract=report.inline_warning_geometry_contract;
+  assert(inlineContract===undefined||inlineContract==='source-warning-v1','Unknown inline warning geometry contract');
   const expected = DESIGN_GROUPS.flatMap(group => CHART_DESIGN_SYMBOLS.map(symbol => symbol + '/' + group));
   exactSet(report.chart_cases.map(record => `${record.symbol}/${record.viewport?.width}/${record.theme}`), expected, 'Chart cases');
   for (const record of report.chart_cases) {
@@ -163,9 +174,10 @@ function chartEvidence(report) {
     viewport(record.viewport, width, mainHeight(width), label);
     assert(!Object.hasOwn(record, 'error') && record.as_of_date === report.data.as_of_date && count(record.bars) && record.bars > 0 && typeof record.annotation_candidate === 'boolean' && text(record.annotation_summary) && Array.isArray(record.shapes), label + ': incomplete chart source');
     assert(record.history_warning === null || text(record.history_warning), label + ': missing history warning state');
+    if(inlineContract!==undefined)assert(supportedDetailContract(report.detail_contract)&&record.renderer===SVG_CHART_RENDERER,label+': inline warning contract requires measured SVG detail');
     if(supportedDetailContract(report.detail_contract) && record.renderer===SVG_CHART_RENDERER){
-      validateInlineChartEvidence(record.inline_geometry,width,mainHeight(width),label);
-      validateInlineCaptureEvidence(record, report.screens);
+      validateInlineChartEvidence(record.inline_geometry,width,mainHeight(width),label,{contract:inlineContract,sourceWarning:record.source_warning});
+      validateInlineCaptureEvidence(record, report.screens,inlineContract);
     }
     assert(object(record.canonical) && ['pivot', 'upper', 'stop'].every(field => record.canonical[field] === null || number(record.canonical[field])), label + ': missing canonical levels');
     assert(Array.isArray(record.views) && [3, 4].includes(record.views.length), label + ': incomplete chart views');
