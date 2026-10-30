@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {BASE_URL, PRODUCER, PUBLISHER, REPOSITORY, observePublication, planRecovery, dispatchRequestFor, readPublicObservations, recentWorkflowRuns, validateClock, main} from './postclose-watchdog.mjs';
+import {completionRequest, waitForProducer, COMPLETION_TIMEOUT_MS, EVENT_GRACE_MS} from './postclose-completion.mjs';
 
 const target = '2026-10-27', before = '2026-10-26';
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -227,4 +228,115 @@ test('workflow is recoverable, calendar-driven and has no deployment authority',
   assert.match(producer, /cancel-in-progress: false/);
   assert.match(workflow, /actions: write/); assert.doesNotMatch(workflow, /pages: write|id-token: write|contents: write|gh issue|gh api.*comments/);
   const ci = readFileSync(new URL('../workflows/ci.yml', import.meta.url), 'utf8'); assert.match(ci, /test_postclose_\*\.py/); assert.match(ci, /postclose-watchdog.test.mjs/);
+});
+
+function completionFixture(overrides = {}) {
+  return run(PRODUCER, {run_attempt: 2, head_sha: 'a'.repeat(40), ...overrides});
+}
+const completion = completionRequest('200', '2');
+
+test('completion relay rejects malformed, partial and unsafe identity inputs', () => {
+  for (const values of [['', '2'], ['200', ''], ['0', '2'], ['200', '-1'], ['200', '2;echo'], ['200/attempts/1','2'], ['9007199254740992','2'], ['200','1.1']]) {
+    assert.throws(() => completionRequest(...values), /Invalid/);
+  }
+});
+
+test('completion relay waits for exact terminal attempt plus existing delivery grace', async () => {
+  let now = Date.parse('2026-10-27T21:00:00Z'); const start = now, paths = [];
+  const report = await waitForProducer(completion, {
+    now: () => now, sleep: async ms => { now += ms; },
+    api: async path => {
+      paths.push(path);
+      return completionFixture(now < start + 20_000 ? {status: 'in_progress', conclusion: null} : {updated_at: new Date(start + 20_000).toISOString()});
+    },
+  });
+  assert.equal(report.waited_ms, 20_000 + EVENT_GRACE_MS);
+  assert.equal(report.status, 'completed_with_event_grace');
+  assert(paths.every(path => path === `repos/${REPOSITORY}/actions/runs/200`));
+  const ctx = context(new Date(now).toISOString()); ctx.producerRuns = [completionFixture({updated_at: new Date(start + 20_000).toISOString()})];
+  assert.equal(planRecovery(ctx).reason, 'producer_completed_without_publisher');
+});
+
+test('old completed source needs no sleep and already current public data causes no dispatch', async () => {
+  const report = await waitForProducer(completion, {now: () => Date.parse('2026-10-27T22:30:00Z'), sleep: () => assert.fail('Unnecessary sleep'), api: async () => completionFixture()});
+  assert.equal(report.waited_ms, 0);
+  const ctx = context(); ctx.observed = observePublication(fixture(), target); ctx.producerRuns = [completionFixture()];
+  assert.equal(planRecovery(ctx).action, 'none'); assert.equal(planRecovery(ctx).reason, 'published_observations_current');
+});
+
+test('active publisher still blocks a relay-triggered duplicate publication', async () => {
+  await waitForProducer(completion, {now: () => Date.parse('2026-10-27T22:30:00Z'), api: async () => completionFixture()});
+  const ctx = context(); ctx.producerRuns = [completionFixture()]; ctx.publisherRuns = [run(PUBLISHER, {status: 'in_progress', conclusion: null})];
+  assert.equal(planRecovery(ctx).action, 'none'); assert.equal(planRecovery(ctx).reason, 'existing_work_in_flight');
+});
+
+test('completion relay rejects foreign identity, wrong attempt, failed source and future clock without waiting', async () => {
+  const changes = [{id: 201}, {run_attempt: 3}, {repository: {full_name: 'foreign/repo'}}, {head_repository: {full_name: 'foreign/repo'}}, {head_branch: 'feature'}, {path: '.github/workflows/other.yml'}, {event: 'workflow_run'}, {head_sha: 'bad'}, {conclusion: 'failure'}, {conclusion: 'cancelled'}, {updated_at: '2026-10-28T00:00:00Z'}, {status: 'unknown'}];
+  for (const change of changes) await assert.rejects(waitForProducer(completion, {now: () => Date.parse('2026-10-27T22:30:00Z'), api: async () => completionFixture(change), sleep: () => assert.fail('Invalid identity must not wait')}));
+});
+
+test('rerun starting while relay waits cannot be mistaken for original completion', async () => {
+  let now = Date.parse('2026-10-27T21:00:00Z'), reads = 0;
+  await assert.rejects(waitForProducer(completion, {now: () => now, sleep: async ms => {now += ms;}, api: async () => completionFixture(++reads === 1 ? {status: 'in_progress', conclusion: null} : {run_attempt: 3})}), /attempt changed/);
+  assert.equal(reads, 2);
+});
+
+test('completion and event grace share a finite timeout', async () => {
+  for (const ongoing of [true, false]) {
+    let now = Date.parse('2026-10-27T21:00:00Z'); const start = now;
+    await assert.rejects(waitForProducer(completion, {now: () => now, sleep: async ms => {now += ms;}, api: async () => completionFixture(ongoing ? {status: 'in_progress', conclusion: null} : {updated_at: new Date(now).toISOString()})}), /timeout; no recovery requested/);
+    assert.equal(now - start, COMPLETION_TIMEOUT_MS);
+  }
+});
+
+test('transient completion observations retry within the same bound without losing the wakeup', async () => {
+  let now = Date.parse('2026-10-27T22:30:00Z'), calls = 0; const started = now;
+  const report = await waitForProducer(completion, {now: () => now, sleep: async ms => {now += ms;}, api: async () => {
+    if (++calls <= 2) throw Error('Transient API unavailable');
+    return completionFixture();
+  }});
+  assert.equal(report.failed_observations, 2); assert.equal(report.observations, 3);
+  assert.equal(now - started, 20_000);
+});
+
+test('persistent observation outage stops at the shared deadline without recovery', async () => {
+  let now = Date.parse('2026-10-27T22:30:00Z'), calls = 0; const started = now;
+  await assert.rejects(waitForProducer(completion, {now: () => now, sleep: async ms => {now += ms;}, api: async () => {calls++; throw Error('API unavailable');}}), error => {
+    assert.match(error.message, /timeout; no recovery requested/); assert.equal(error.failedObservations, calls); return true;
+  });
+  assert.equal(now - started, COMPLETION_TIMEOUT_MS); assert.equal(calls, 30);
+});
+
+test('an invalid identity after a transient read is fatal without additional retries', async () => {
+  let now = Date.parse('2026-10-27T22:30:00Z'), calls = 0, waits = 0;
+  await assert.rejects(waitForProducer(completion, {now: () => now, sleep: async ms => {now += ms; waits++;}, api: async () => {
+    if (++calls === 1) throw Error('Transient failure');
+    return completionFixture({run_attempt: 3});
+  }}), /attempt changed/);
+  assert.equal(calls, 2); assert.equal(waits, 1);
+});
+
+test('late API requests receive only remaining deadline budget and cannot return late success', async () => {
+  let now = Date.parse('2026-10-27T22:30:00Z'); const start = now, limits = [];
+  await assert.rejects(waitForProducer(completion, {now: () => now, sleep: async ms => {now += ms;}, api: async (_path, {timeoutMs}) => {
+    limits.push(timeoutMs);
+    if (limits.length === 1) {now = start + COMPLETION_TIMEOUT_MS - 15_000; throw Error('Slow observation');}
+    now += timeoutMs;
+    return completionFixture();
+  }}), /timeout; no recovery requested/);
+  assert.deepEqual(limits, [30_000, 5_000]);
+});
+
+test('workflow wakeup is success-only ordinary full US and default checks keep existing planner', () => {
+  const producer = readFileSync(new URL('../workflows/static-site.yml', import.meta.url), 'utf8');
+  const relay = producer.split('  wake-postclose-watchdog:')[1].split('  promote-daily-source:')[0];
+  assert.match(relay, /continue-on-error: true/);
+  assert.match(relay, /needs: \[select-markets, build-market, combine-and-build, promote-daily-source\]/);
+  for (const guard of ["github.event_name == 'workflow_dispatch'", "github.ref == 'refs/heads/main'", "needs.select-markets.outputs.repair != 'true'", "needs.select-markets.outputs.mode == 'full'", "'US'", "needs.build-market.result == 'success'", "needs.combine-and-build.result == 'success'", "needs.promote-daily-source.result == 'success'", "needs.promote-daily-source.result == 'skipped'"]) assert(relay.includes(guard));
+  assert.match(relay, /producer_run_id="\$GITHUB_RUN_ID" -f producer_run_attempt="\$GITHUB_RUN_ATTEMPT"/);
+  assert.match(relay, /for relay_try in 1 2 3; do/); assert.match(relay, /if \[ "\$relay_try" -lt 3 \]; then sleep 5; fi/);
+  const workflow = readFileSync(new URL('../workflows/postclose-watchdog.yml', import.meta.url), 'utf8');
+  assert.match(workflow, /if: inputs.producer_run_id != '' \|\| inputs.producer_run_attempt != ''/);
+  assert(workflow.indexOf('postclose-completion.mjs') < workflow.indexOf('postclose-watchdog.mjs --execute'));
+  assert.doesNotMatch(workflow, /continue-on-error: true/);
 });

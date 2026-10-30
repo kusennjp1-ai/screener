@@ -1116,6 +1116,36 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  wake-postclose-watchdog:
+    # Dispatch while this last job finishes; the receiver waits for this exact
+    # run/attempt to become terminal before invoking the unchanged watchdog.
+    # Do not rely only on delivery of a workflow_run completion event.
+    # A failed auxiliary wakeup must not invalidate already verified exports;
+    # workflow_run delivery and scheduled recovery remain available.
+    continue-on-error: true
+    needs: [select-markets, build-market, combine-and-build, promote-daily-source]
+    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && needs.select-markets.result == 'success' && needs.select-markets.outputs.repair != 'true' && needs.select-markets.outputs.mode == 'full' && contains(fromJSON(needs.select-markets.outputs.markets || '[]'), 'US') && needs.build-market.result == 'success' && needs.combine-and-build.result == 'success' && (needs.promote-daily-source.result == 'success' || needs.promote-daily-source.result == 'skipped') }}
+    permissions:
+      contents: read
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Request exact-source completion check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A lost dispatch response may queue more than one watchdog. Its
+          # existing serialized planner prevents duplicate recovery work.
+          for relay_try in 1 2 3; do
+            if gh workflow run postclose-watchdog.yml --repo "$GITHUB_REPOSITORY" --ref main -f producer_run_id="$GITHUB_RUN_ID" -f producer_run_attempt="$GITHUB_RUN_ATTEMPT"; then
+              exit 0
+            fi
+            echo "::warning::Completion wakeup attempt $relay_try failed; scheduled recovery remains active."
+            if [ "$relay_try" -lt 3 ]; then sleep 5; fi
+          done
+          exit 1
+
   promote-daily-source:
     needs: [select-markets, build-market, combine-and-build]
     if: ${{ needs.select-markets.outputs.source_promotion == 'true' && contains(fromJSON(needs.select-markets.outputs.markets), 'US') && needs.select-markets.outputs.mode == 'full' && needs.build-market.result == 'success' && needs.build-market.outputs.produced_candidate == 'true' && needs.build-market.outputs.source_candidate_id != '' && needs.combine-and-build.result == 'success' && needs.combine-and-build.outputs.downstream_artifact_id != '' }}

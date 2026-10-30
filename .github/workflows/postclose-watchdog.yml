@@ -15,6 +15,15 @@ on:
       timezone: 'America/New_York'
     - cron: '30 23 * * 1-6'
   workflow_dispatch:
+    inputs:
+      producer_run_id:
+        description: 'Optional exact completed-source wakeup run ID'
+        type: string
+        default: ''
+      producer_run_attempt:
+        description: 'Exact source attempt, required with a wakeup run ID'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -28,7 +37,7 @@ jobs:
   verify-and-recover:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    timeout-minutes: 8
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
         with:
@@ -43,6 +52,13 @@ jobs:
           cache-dependency-path: .github/scripts/session-calendar-requirements.txt
       - name: Install exchange clock
         run: python -m pip install -r .github/scripts/session-calendar-requirements.txt
+      - name: Wait for exact producer completion and event grace
+        if: inputs.producer_run_id != '' || inputs.producer_run_attempt != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN: ${{ inputs.producer_run_id }}
+          SOURCE_ATTEMPT: ${{ inputs.producer_run_attempt }}
+        run: node .github/scripts/postclose-completion.mjs "$SOURCE_RUN" "$SOURCE_ATTEMPT"
       - name: Verify published dates and request missing update
         env:
           GH_TOKEN: ${{ github.token }}
@@ -52,6 +68,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: postclose-watchdog-${{ github.run_id }}-${{ github.run_attempt }}
-          path: postclose-watchdog-report.json
+          path: |
+            postclose-watchdog-report.json
+            postclose-completion-report.json
           if-no-files-found: warn
           retention-days: 7
