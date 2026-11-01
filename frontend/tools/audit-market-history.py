@@ -20,7 +20,8 @@ def main():
     if source.get('sectorBreadth'):
         series=source['sectorBreadth'][0]['points']
         sample=sorted({*sample,series[0]['date'],series[len(series)//2]['date']})
-    wanted=sorted({calendar[j] for day in sample for j in range(positions[day]-9,positions[day]+1)})
+    LOOKBACK=20  # LEADER_LOOKBACK_SESSIONS in collect-market-history.py
+    wanted=sorted({calendar[j] for day in sample for j in [*range(positions[day]-9,positions[day]+1),positions[day]-LOOKBACK]})
     observations={day:[] for day in wanted};expected={day:len(universe) for day in wanted};sector_prices={};checked=0
     cache_by_hash={}
     for path in Path(args.cache).glob('*.json'):
@@ -58,7 +59,9 @@ def main():
             momentum=sum((c/closes[-1-lag]-1)*weight for lag,weight in [(63,.4),(126,.2),(189,.2),(252,.2)])
             observations[day].append({'symbol':symbol,'momentum':momentum,'above50':c>ma50,'newHighs':bars[-1]['high']>max(row['high'] for row in bars[-252:-1]),'newLows':bars[-1]['low']<min(row['low'] for row in bars[-252:-1]),
               'stocks_up_4pct':c/closes[-2]-1>=.04,'stocks_down_4pct':c/closes[-2]-1<=-.04,
-              'template':c>ma150 and c>ma200 and ma150>ma200 and ma200>avg(200,21) and ma50>ma150 and ma50>ma200 and c>ma50 and c/min(row['low'] for row in year)>=1.25 and c/max(row['high'] for row in year)>=.75})
+              'above150':c>ma150,'above200':c>ma200,
+              'template':c>ma150 and c>ma200 and ma150>ma200 and ma200>avg(200,21) and ma50>ma150 and ma50>ma200 and c>ma50 and c/min(row['low'] for row in year)>=1.25 and c/max(row['high'] for row in year)>=.75,
+              'template30':c>ma150 and c>ma200 and ma150>ma200 and ma200>avg(200,21) and ma50>ma150 and ma50>ma200 and c>ma50 and c/min(row['low'] for row in year)>=1.30 and c/max(row['high'] for row in year)>=.75})
         checked+=1
     result={}
     for day in wanted:
@@ -67,10 +70,24 @@ def main():
         for key in ('above50','newHighs','newLows','stocks_up_4pct','stocks_down_4pct'):aggregate[key]=sum(row[key] for row in rows) if valid else None
         values=sorted(row['momentum'] for row in rows);ranks={}
         for i,value in enumerate(values):ranks.setdefault(value,[]).append(i)
-        aggregate['leaderCount']=sum(row['template'] and 1+98*(sum(ranks[row['momentum']])/len(ranks[row['momentum']]))/(len(rows)-1)>=70 for row in rows) if valid else None
-        result[day]=aggregate
+        rs=lambda row:1+98*(sum(ranks[row['momentum']])/len(ranks[row['momentum']]))/(len(rows)-1)
+        aggregate['leaderCount']=sum(row['template'] and rs(row)>=70 for row in rows) if valid else None
+        # Market-environment fields added later are replayed whenever the source carries them.
+        extended={'trendTemplateCount':sum(row['template30'] and rs(row)>=70 for row in rows) if valid else None,
+                  'rs90TemplateCount':sum(row['template30'] and rs(row)>=90 for row in rows) if valid else None,
+                  'above150':sum(row['above150'] for row in rows) if valid else None,'above200':sum(row['above200'] for row in rows) if valid else None}
+        result[day]={**aggregate,**extended,'_valid':valid,'_template':{row['symbol'] for row in rows if row['template30'] and rs(row)>=70} if valid else set(),'_above50':{row['symbol'] for row in rows if row['above50']},'_observed':{row['symbol'] for row in rows}}
         if day in points:
             for key,value in aggregate.items():assert points[day][key]==value,(day,key,points[day][key],value)
+            for key,value in extended.items():
+                if key in points[day]:assert points[day][key]==value,(day,key,points[day][key],value)
+    for day in sample:
+        if 'leaderCohort' not in points[day]:continue
+        now,before=result[day],result[calendar[positions[day]-LOOKBACK]]
+        known=now['_valid'] and before['_valid']
+        members=before['_template'] & now['_observed']
+        assert points[day]['leaderCohort']==(len(members) if known else None),(day,'leaderCohort')
+        assert points[day]['leaderCohortAbove50']==(len(members & now['_above50']) if known else None),(day,'leaderCohortAbove50')
     for day in sample:
         window=[result[calendar[j]] for j in range(positions[day]-9,positions[day]+1)]
         available=all(row['stocks_up_4pct'] is not None and row['stocks_down_4pct'] is not None for row in window)
@@ -101,7 +118,7 @@ def main():
                 for i,value in enumerate(all_values):rankmap.setdefault(value,[]).append(i)
                 assert point['leaderCount']==sum(row['template'] and 1+98*(sum(rankmap[row['momentum']])/len(rankmap[row['momentum']]))/(len(all_values)-1)>=70 for row in observed)
             group_checks+=1
-    report={'source_sha256':hashlib.sha256(source_bytes).hexdigest(),'independent_scalar_replay':True,'independent_calendar':mcal.__version__,'checked_stock_response_hashes':checked,'sample_dates':sample,'verified_stock_aggregate_dates':len(wanted),'verified_sector_values_and_ranks':sector_checks,'verified_sector_breadth_samples':group_checks,'results':{day:result[day] for day in sample}}
+    report={'source_sha256':hashlib.sha256(source_bytes).hexdigest(),'independent_scalar_replay':True,'independent_calendar':mcal.__version__,'checked_stock_response_hashes':checked,'sample_dates':sample,'verified_stock_aggregate_dates':len(wanted),'verified_sector_values_and_ranks':sector_checks,'verified_sector_breadth_samples':group_checks,'results':{day:{key:value for key,value in result[day].items() if not key.startswith('_')} for day in sample}}
     Path(args.output).write_text(json.dumps(report,indent=2),encoding='utf-8');print(json.dumps(report),flush=True)
 
 if __name__=='__main__':main()
