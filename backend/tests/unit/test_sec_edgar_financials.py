@@ -382,3 +382,65 @@ def test_revenue_annual_derivation_rejects_noncontiguous_quarters():
     entries.append(_q("2024-01-01", "2024-12-31", 460, 2024, "FY", "2025-02-15"))
     dated = quarterly_series_dated(facts, REVENUE_TAGS, is_eps=False)
     assert "2024-12-31" not in {r[0] for r in dated}
+
+
+# --- SecEdgarClient resilience (no network) ---------------------------------
+import pytest as _pytest
+
+from app.services.sec_edgar_financials import SecEdgarClient as _Client
+
+
+class _Response:
+    def __init__(self, status, payload=None, headers=None):
+        self.status_code = status
+        self._payload = payload
+        self.headers = headers or {}
+
+    def json(self):
+        return self._payload
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import requests
+            raise requests.HTTPError(f"{self.status_code}")
+
+
+@_pytest.fixture(autouse=False)
+def _fresh_ticker_map(monkeypatch):
+    monkeypatch.setattr(_Client, "_shared_cik_map", None)
+
+
+def test_client_reads_the_user_agent_from_the_environment(monkeypatch, _fresh_ticker_map):
+    monkeypatch.setenv("SEC_USER_AGENT", "Research Bot ops@example.org")
+    assert _Client()._ua == "Research Bot ops@example.org"
+    monkeypatch.setenv("SEC_USER_AGENT", "  ")
+    assert _Client()._ua == _Client.DEFAULT_USER_AGENT
+    assert _Client(user_agent="explicit")._ua == "explicit"
+
+
+def test_client_retries_transient_statuses_then_succeeds(monkeypatch, _fresh_ticker_map):
+    import requests
+    calls, sleeps = [], []
+    replies = [_Response(503), _Response(429, headers={"Retry-After": "2"}), _Response(200, {"ok": True})]
+    monkeypatch.setattr(requests, "get", lambda url, **kw: (calls.append(url), replies.pop(0))[1])
+    client = _Client(user_agent="t", min_interval=0, sleep=sleeps.append)
+    assert client._get_json("https://data.sec.gov/x") == {"ok": True}
+    assert len(calls) == 3 and sleeps == [1, 2.0]
+
+
+def test_client_gives_up_after_the_last_attempt(monkeypatch, _fresh_ticker_map):
+    import requests
+    monkeypatch.setattr(requests, "get", lambda url, **kw: _Response(503))
+    client = _Client(user_agent="t", min_interval=0, sleep=lambda s: None)
+    with _pytest.raises(requests.HTTPError):
+        client._get_json("https://data.sec.gov/x")
+
+
+def test_ticker_map_is_shared_and_dot_share_classes_resolve(monkeypatch, _fresh_ticker_map):
+    import requests
+    fetched = []
+    payload = {"0": {"ticker": "BRK-B", "cik_str": 1067983}, "1": {"ticker": "AAPL", "cik_str": 320193}}
+    monkeypatch.setattr(requests, "get", lambda url, **kw: (fetched.append(url), _Response(200, payload))[1])
+    assert _Client(user_agent="t", min_interval=0).cik_for("BRK.B") == 1067983
+    assert _Client(user_agent="t", min_interval=0).cik_for("aapl") == 320193
+    assert len(fetched) == 1

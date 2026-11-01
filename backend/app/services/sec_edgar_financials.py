@@ -17,6 +17,7 @@ from CI, where outbound access to data.sec.gov is available).
 """
 from __future__ import annotations
 
+import os
 import time
 import math
 from datetime import date, timedelta
@@ -392,11 +393,20 @@ class SecEdgarClient:
 
     TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
     FACTS_URL = "https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"
+    DEFAULT_USER_AGENT = "screener-research code33 (contact: research@example.com)"
+    RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
+    MAX_ATTEMPTS = 3
+    # One ticker map per process: every client in a build shares it instead of
+    # downloading company_tickers.json again.
+    _shared_cik_map: dict[str, int] | None = None
 
-    def __init__(self, user_agent: str = "screener-research code33 (contact: research@example.com)", min_interval: float = 0.12):
-        self._ua = user_agent
+    def __init__(self, user_agent: Optional[str] = None, min_interval: float = 0.12, sleep=time.sleep):
+        # SEC asks for a contactable User-Agent; the repository secret is passed
+        # to CI steps as SEC_USER_AGENT. The placeholder only applies locally.
+        self._ua = user_agent or os.environ.get("SEC_USER_AGENT", "").strip() or self.DEFAULT_USER_AGENT
         self._min_interval = min_interval
         self._last = 0.0
+        self._sleep = sleep
         self._cik_map: dict[str, int] | None = None
 
     def _throttle(self) -> None:
@@ -408,19 +418,35 @@ class SecEdgarClient:
     def _get_json(self, url: str) -> Any:
         import requests
 
-        self._throttle()
-        resp = requests.get(url, headers={"User-Agent": self._ua, "Accept-Encoding": "gzip, deflate"}, timeout=30)
-        resp.raise_for_status()
-        return resp.json()
+        for attempt in range(1, self.MAX_ATTEMPTS + 1):
+            self._throttle()
+            try:
+                resp = requests.get(url, headers={"User-Agent": self._ua, "Accept-Encoding": "gzip, deflate"}, timeout=30)
+            except (requests.ConnectionError, requests.Timeout):
+                if attempt == self.MAX_ATTEMPTS:
+                    raise
+                self._sleep(2 ** (attempt - 1))
+                continue
+            if resp.status_code in self.RETRY_STATUS and attempt < self.MAX_ATTEMPTS:
+                retry_after = resp.headers.get("Retry-After", "")
+                self._sleep(min(30.0, float(retry_after)) if retry_after.isdigit() else 2 ** (attempt - 1))
+                continue
+            resp.raise_for_status()
+            return resp.json()
+        raise RuntimeError("unreachable")  # pragma: no cover
 
     def cik_for(self, ticker: str) -> Optional[int]:
         if self._cik_map is None:
-            data = self._get_json(self.TICKERS_URL)
-            self._cik_map = {
-                str(row["ticker"]).upper(): int(row["cik_str"])
-                for row in data.values()
-            }
-        return self._cik_map.get(ticker.upper())
+            if SecEdgarClient._shared_cik_map is None:
+                data = self._get_json(self.TICKERS_URL)
+                SecEdgarClient._shared_cik_map = {
+                    str(row["ticker"]).upper(): int(row["cik_str"])
+                    for row in data.values()
+                }
+            self._cik_map = SecEdgarClient._shared_cik_map
+        symbol = ticker.upper()
+        # SEC lists share classes with a dash (BRK-B); some sources use a dot.
+        return self._cik_map.get(symbol) or self._cik_map.get(symbol.replace(".", "-"))
 
     def company_facts(self, ticker: str) -> Optional[dict[str, Any]]:
         cik = self.cik_for(ticker)

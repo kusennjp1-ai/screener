@@ -1,4 +1,10 @@
 export const BOOK_QUARTER_MAX_AGE_DAYS = 180;
+// sec-financials.py may recover a revenue or net-income Q4 that is only reported
+// as a fiscal-year total (annual minus three reported quarters of one concept).
+// EPS is never derived; derived points must name their four source filings.
+export const DERIVED_Q4 = 'fiscal-year-minus-three-quarters';
+const DERIVABLE = new Set(['revenue', 'netIncome']);
+const acceptedOrigin = (p, allowDerived) => p.derived === false || (allowDerived && p.derived === DERIVED_Q4 && Array.isArray(p.components) && p.components.length === 4 && p.components.every(c => typeof c === 'string' && c.length > 0));
 
 const finite = n => typeof n === 'number' && Number.isFinite(n);
 const stamp = s => {
@@ -7,8 +13,8 @@ const stamp = s => {
 };
 const days = (a, b) => (stamp(a) - stamp(b)) / 86400000;
 const state = value => value == null ? 'unknown' : value ? 'pass' : 'fail';
-function safeSeries(points, date, kind = 'quarter', unit = null) {
-  if (!Array.isArray(points) || points.some((p, i) => !p || !finite(p.value) || !finite(stamp(p.end)) || !finite(stamp(p.filed)) || p.filed > date || p.end > p.filed || (i && p.end <= points[i - 1].end) || p.derived !== false)) return [];
+function safeSeries(points, date, kind = 'quarter', unit = null, allowDerived = false) {
+  if (!Array.isArray(points) || points.some((p, i) => !p || !finite(p.value) || !finite(stamp(p.end)) || !finite(stamp(p.filed)) || p.filed > date || p.end > p.filed || (i && p.end <= points[i - 1].end) || !acceptedOrigin(p, allowDerived))) return [];
   if (points.some((p, i) => {
     if (unit && p.unit && p.unit !== unit) return true;
     if (kind === 'instant') return false;
@@ -32,12 +38,13 @@ export function bookFinancialEvidence(data, symbol, date) {
   const result = { valid: false, date, rows: [], annual: [], unknowns: ['調整後EPS・一時利益の除外', '発表前の予想値とサプライズ', '時点付きの予想上方修正', '会社開示による新製品等の材料'], code33: 'unknown' };
   if (!data || data.symbol !== symbol || data.as_of_date !== date || !finite(stamp(date)) || !data.quarterly || !['available', 'partial'].includes(data.status)) return result;
   const q = Object.fromEntries(['eps', 'revenue', 'netIncome', 'inventory', 'receivables'].map(key => [key,
-    safeSeries(data.quarterly[key], date, ['inventory', 'receivables'].includes(key) ? 'instant' : 'quarter', key === 'eps' ? 'USD/shares' : 'USD')]));
+    safeSeries(data.quarterly[key], date, ['inventory', 'receivables'].includes(key) ? 'instant' : 'quarter', key === 'eps' ? 'USD/shares' : 'USD', DERIVABLE.has(key))]));
   const ends = [...new Set([...q.eps, ...q.revenue].map(p => p.end))].sort();
   result.rows = ends.slice(-8).map(end => {
     const eps = q.eps.find(p => p.end === end), revenue = q.revenue.find(p => p.end === end), income = q.netIncome.find(p => p.end === end);
     const margin = revenue?.value > 0 && income && income.start === revenue.start ? income.value / revenue.value * 100 : null;
-    return { end, eps: eps?.value ?? null, revenue: revenue?.value ?? null, margin, epsYoY: yoy(q.eps, end), salesYoY: yoy(q.revenue, end), filed: [eps?.filed, revenue?.filed, income?.filed].filter(Boolean).sort().at(-1), accession: eps?.accession ?? revenue?.accession, inventoryYoY: yoy(q.inventory, end, true), receivablesYoY: yoy(q.receivables, end, true) };
+    const derived = [revenue, income].some(p => p?.derived === DERIVED_Q4);
+    return { end, derived, eps: eps?.value ?? null, revenue: revenue?.value ?? null, margin, epsYoY: yoy(q.eps, end), salesYoY: yoy(q.revenue, end), filed: [eps?.filed, revenue?.filed, income?.filed].filter(Boolean).sort().at(-1), accession: eps?.accession ?? revenue?.accession, inventoryYoY: yoy(q.inventory, end, true), receivablesYoY: yoy(q.receivables, end, true) };
   });
   result.valid = result.rows.length > 0;
   result.stale = !result.rows.length || days(date, result.rows.at(-1).end) > BOOK_QUARTER_MAX_AGE_DAYS;

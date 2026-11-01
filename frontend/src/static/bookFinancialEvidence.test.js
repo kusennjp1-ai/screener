@@ -66,3 +66,21 @@ it('does not misclassify an exact EPS20% floor due to binary floating point', ()
   [6, 7].forEach(i => { f.quarterly.eps[i].value = .15; });
   expect(audit(f).epsFloor[2].at20).toBe('pass');
 });
+
+it('accepts a documented derived Q4 for revenue and net income but never for EPS', async () => {
+  const { DERIVED_Q4 } = await import('./bookFinancialEvidence');
+  const base = audit(fixture());
+  const f = fixture();
+  const derive = p => Object.assign(p, { derived: DERIVED_Q4, components: ['fy', 'q1', 'q2', 'q3'] });
+  derive(f.quarterly.revenue.at(-1)); derive(f.quarterly.netIncome.at(-1));
+  const report = audit(f);
+  expect(report.salesAcceleration).toBe(base.salesAcceleration);
+  expect(report.code33).toBe(base.code33);
+  expect(report.rows.at(-1).derived).toBe(true);
+  const missingSources = fixture();
+  Object.assign(missingSources.quarterly.revenue.at(-1), { derived: DERIVED_Q4, components: ['fy'] });
+  expect(audit(missingSources).salesAcceleration).toBe('unknown');
+  const eps = fixture();
+  derive(eps.quarterly.eps.at(-1));
+  expect(audit(eps).epsAcceleration).toBe('unknown');
+});
