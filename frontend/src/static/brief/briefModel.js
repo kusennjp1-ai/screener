@@ -209,15 +209,15 @@ export function sellSignals(bars, rules = SELL_RULES) {
     let up = start + 1, down = start + 1, week = null;
     for (let i = start + 1; i < n; i++) { if (change(i) > change(up)) up = i; if (change(i) < change(down)) down = i; }
     for (let j = start + 5; j < n; j++) { const v = (list[j].close / list[j - 5].close - 1) * 100; if (!week || v > week.v) week = { j, v }; }
-    strength.push({ key: 'day-up', label: '起点以来で最大の1日の上昇', state: up >= recent && change(up) > 0 ? 'hit' : 'clear', detail: `最大は ${list[up].date} の ${signed(change(up))}` });
-    strength.push(week ? { key: 'week-up', label: '起点以来で最大の5営業日の上昇', state: week.j >= recent && week.v > 0 ? 'hit' : 'clear', detail: `最大は ${list[week.j].date} までの ${signed(week.v)}` } : na('week-up', '起点以来で最大の5営業日の上昇'));
+    strength.push({ key: 'day-up', label: '起点以来で最大の1日の上昇', date: list[up].date, state: up >= recent && change(up) > 0 ? 'hit' : 'clear', detail: `最大は ${list[up].date} の ${signed(change(up))}` });
+    strength.push(week ? { key: 'week-up', label: '起点以来で最大の5営業日の上昇', date: list[week.j].date, state: week.j >= recent && week.v > 0 ? 'hit' : 'clear', detail: `最大は ${list[week.j].date} までの ${signed(week.v)}` } : na('week-up', '起点以来で最大の5営業日の上昇'));
     const span = Array.from({ length: rules.upDaysWindow }, (_, k) => n - rules.upDaysWindow + k).filter(i => i > 0);
     const ups = span.filter(i => change(i) > 0).length;
-    strength.push({ key: 'up-days', label: `直近${rules.upDaysWindow}営業日のうち${rules.upDaysMin}日以上が上昇`, state: ups >= rules.upDaysMin ? 'hit' : 'clear', detail: `上昇 ${ups}日 / ${span.length}日` });
+    strength.push({ key: 'up-days', label: `直近${rules.upDaysWindow}営業日のうち${rules.upDaysMin}日以上が上昇`, date: last.date, state: ups >= rules.upDaysMin ? 'hit' : 'clear', detail: `上昇 ${ups}日 / ${span.length}日` });
     const base = Math.min(...list.slice(Math.max(start, n - 1 - rules.climaxSessions), n - 1).map(b => b.close));
     const run = (last.close / base - 1) * 100;
-    strength.push({ key: 'climax', label: `${rules.climaxSessions}営業日以内に +${rules.climaxPercent}%以上の急騰`, state: run >= rules.climaxPercent ? 'hit' : 'clear', detail: `直近${rules.climaxSessions}営業日の最安終値から ${signed(run)}` });
-    weakness.push({ key: 'day-down', label: '起点以来で最大の1日の下落', state: down >= recent && change(down) < 0 ? 'hit' : 'clear', detail: `最大は ${list[down].date} の ${signed(change(down))}` });
+    strength.push({ key: 'climax', label: `${rules.climaxSessions}営業日以内に +${rules.climaxPercent}%以上の急騰`, date: last.date, state: run >= rules.climaxPercent ? 'hit' : 'clear', detail: `直近${rules.climaxSessions}営業日の最安終値から ${signed(run)}` });
+    weakness.push({ key: 'day-down', label: '起点以来で最大の1日の下落', date: list[down].date, state: down >= recent && change(down) < 0 ? 'hit' : 'clear', detail: `最大は ${list[down].date} の ${signed(change(down))}` });
   } else {
     for (const [key, label] of [['day-up', '起点以来で最大の1日の上昇'], ['week-up', '起点以来で最大の5営業日の上昇'], ['up-days', `直近${rules.upDaysWindow}営業日のうち${rules.upDaysMin}日以上が上昇`], ['climax', `${rules.climaxSessions}営業日以内に +${rules.climaxPercent}%以上の急騰`]]) strength.push(na(key, label));
     weakness.push(na('day-down', '起点以来で最大の1日の下落'));
@@ -237,7 +237,7 @@ export function sellSignals(bars, rules = SELL_RULES) {
       if (ratio >= rules.breakVolumeRatio) found = { date: list[i].date, ratio };
     }
     const position = (last.close / sma(n - 1) - 1) * 100;
-    weakness.push(found ? { key: 'ma50', label: breakLabel, state: 'hit', detail: `${found.date} 出来高 ${times(found.ratio)}` }
+    weakness.push(found ? { key: 'ma50', label: breakLabel, date: found.date, state: 'hit', detail: `${found.date} 出来高 ${times(found.ratio)}` }
       : { key: 'ma50', label: breakLabel, state: missing ? 'unknown' : 'clear', detail: missing ? '割れた日の出来高が未取得' : `終値は50日線から ${signed(position)}` });
   }
   return { advance: inAdvance ? advance : null, strength, weakness, hits: [...strength, ...weakness].filter(c => c.state === 'hit').length };
@@ -254,7 +254,7 @@ export function bookWarningCheck(diagnostics) {
   if (!w) return { key: 'book', label, state: 'unknown', detail: '検証済みの日足による書籍診断が未取得' };
   const parts = [`20日線${w.below20 ? '割れ' : 'の上'}`, `安値切り下げ ${w.threeLowerLows ? '3日連続' : 'なし'}`, `出来高 ${finite(w.currentVolumeRatio) ? times(w.currentVolumeRatio) : '未確認'}`];
   if (w.combinedWarning === true && w.recoveryInUpperHalf) parts.push('引けは値幅の上半分（買い支えを確認）');
-  return { key: 'book', label, state: w.combinedWarning === true ? 'hit' : w.combinedWarning === false ? 'clear' : 'unknown', detail: parts.join('・') };
+  return { key: 'book', label, date: diagnostics.as_of_date, state: w.combinedWarning === true ? 'hit' : w.combinedWarning === false ? 'clear' : 'unknown', detail: parts.join('・') };
 }
 
 /** Sell checks plus the book's combined warning; null stays null. */
@@ -278,4 +278,14 @@ export function leadingGroups(ranked, limit = 3) {
   for (const row of qualified) { const name = typeof row[field] === 'string' ? row[field].trim() : ''; if (name) counts.set(name, (counts.get(name) || 0) + 1); }
   const groups = [...counts].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit).map(([name, count]) => ({ name, count }));
   return { kind: field === 'ibd_industry_group' ? '業種' : 'セクター', groups, total: qualified.length, unnamed: qualified.length - named(field) };
+}
+
+/** Dates with a sell signal, for chart marks: 'strength' (climax) or 'weakness' (breakdown). */
+export function sellMarks(sells) {
+  if (!sells) return [];
+  const marks = new Map();
+  for (const [kind, checks] of [['strength', sells.strength], ['weakness', sells.weakness]]) {
+    for (const check of checks) if (check.state === 'hit' && typeof check.date === 'string' && !marks.has(check.date)) marks.set(check.date, kind);
+  }
+  return [...marks].map(([date, kind]) => ({ date, kind })).sort((a, b) => a.date.localeCompare(b.date));
 }

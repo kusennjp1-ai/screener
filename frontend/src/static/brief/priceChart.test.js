@@ -53,6 +53,26 @@ describe('brief price chart', () => {
     expect(plain.querySelectorAll('.bc-up, .bc-down').length).toBe(120);
   });
 
+  it('marks sell-signal days inside the period and names them in the label', () => {
+    const el = container();
+    const inside = bars.at(-3).date, outside = bars[0].date;
+    renderPriceChart(el, { ...model, sellMarks: [{ date: outside, kind: 'strength' }, { date: inside, kind: 'weakness' }] }, { period: 60, animate: false });
+    expect(el.querySelectorAll('.bc-sell')).toHaveLength(1);
+    expect(el.querySelector('.bc-sell-weak')).not.toBeNull();
+    expect(el.getAttribute('aria-label')).toContain(`売りのサインの日 ${inside}`);
+  });
+
+  it('draws heavy volume on a lower close in the warning colour', () => {
+    const heavyDown = bars.map((b, i) => (i === bars.length - 1 ? { ...b, close: bars[i - 1].close - 2, volume: 5000 } : b));
+    const el = container();
+    renderPriceChart(el, { ...model, bars: heavyDown }, { period: 60, animate: false });
+    expect(el.querySelectorAll('.bc-volhi-down')).toHaveLength(1);
+    const up = container();
+    renderPriceChart(up, { ...model, bars: bars.map((b, i) => (i === bars.length - 1 ? { ...b, volume: 5000 } : b)) }, { period: 60, animate: false });
+    expect(up.querySelectorAll('.bc-volhi-down')).toHaveLength(0);
+    expect(up.querySelectorAll('.bc-volhi')).toHaveLength(1);
+  });
+
   it('says so instead of drawing when there are no bars', () => {
     const el = container();
     expect(renderPriceChart(el, { ...model, bars: [] }, { animate: false })).toBeNull();

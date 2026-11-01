@@ -126,7 +126,9 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const vmax = Math.max(...bars.map(b => b.volume), 1), vw = Math.max(1, bw * 0.7), dry = model.dryUpLeg ? { a: firstOnOrAfter(model.dryUpLeg.startDate), b: lastOnOrBefore(model.dryUpLeg.endDate) } : null;
   bars.forEach((b, i) => {
     const h = b.volume / vmax * (volH - 2), heavy = vavg[i] && b.volume >= vavg[i] * 1.4 && i >= n - 5, dried = dry && i >= dry.a && i <= dry.b;
-    M.push(`<rect x="${(x(i) - vw / 2).toFixed(1)}" y="${(volTop + volH - h).toFixed(1)}" width="${vw.toFixed(1)}" height="${h.toFixed(1)}" class="${heavy ? 'bc-volhi' : dried ? 'bc-voldry' : 'bc-vol'}"/>`);
+    // Heavy volume on a lower close is distribution, not a breakout: draw it in the warning colour.
+    const down = heavy && b.close < (i ? bars[i - 1].close : all[from - 1]?.close ?? b.open);
+    M.push(`<rect x="${(x(i) - vw / 2).toFixed(1)}" y="${(volTop + volH - h).toFixed(1)}" width="${vw.toFixed(1)}" height="${h.toFixed(1)}" class="${down ? 'bc-volhi bc-volhi-down' : heavy ? 'bc-volhi' : dried ? 'bc-voldry' : 'bc-vol'}"/>`);
   });
   M.push(`<path d="${vavg.map((v, i) => v == null ? '' : `${vavg[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)},${(volTop + volH - v / vmax * (volH - 2)).toFixed(1)}`).join('')}" class="bc-vavg" fill="none"/>`);
 
@@ -146,6 +148,14 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   if (Number.isFinite(model.pivot)) F.push(tag(model.pivot, 'bc-pivottag'));
   const lastX = x(n - 1), lastY = y(bars[n - 1].close);
   F.push(`<g class="bc-last"><circle cx="${lastX}" cy="${lastY}" r="9" class="bc-pulse"/><circle cx="${lastX}" cy="${lastY}" r="3.6" class="bc-lastdot"/></g>`);
+  const markIndex = new Map(bars.map((b, i) => [b.date, i]));
+  for (const mark of model.sellMarks || []) {
+    const i = markIndex.get(mark.date); if (i === undefined) continue;
+    const mx = x(i), top = Math.max(padT + 2, y(bars[i].high) - 14), bottom = Math.min(padT + ph - 2, y(bars[i].low) + 14);
+    F.push(mark.kind === 'weakness'
+      ? `<path d="M${mx - 5},${bottom}h10l-5,-8z" class="bc-sell bc-sell-weak"/>`
+      : `<path d="M${mx - 5},${top}h10l-5,8z" class="bc-sell bc-sell-strong"/>`);
+  }
   if (model.rsNewHigh && rsLast != null) F.push(`<g class="bc-rshigh"><circle cx="${lastX}" cy="${rsLast}" r="4" class="bc-rsdot"/><text x="${lastX - 8}" y="${rsLast + 4}" text-anchor="end" class="bc-rstext" font-size="11" font-weight="700">新高値</text></g>`);
   [0, Math.round(n / 2), n - 1].forEach((i, j) => F.push(`<text x="${x(i)}" y="${H - 4}" text-anchor="${['start', 'middle', 'end'][j]}" class="bc-axis" font-size="11" ${mono}>${bars[i].date.slice(5).replace('-', '/')}</text>`));
   F.push(`<g class="bc-scrub" opacity="0"><line class="bc-cross" y1="${padT}" y2="${volTop + volH}"/><circle r="4" class="bc-crossdot"/></g><rect class="bc-hit" x="0" y="0" width="${pw}" height="${volTop + volH}" fill="transparent"/>`);
@@ -153,7 +163,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const box = `viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false"`;
   const depths = (model.legs || []).map(leg => `${Math.round(leg.depthPct)}%`).join('→');
   el.setAttribute('role', 'img');
-  el.setAttribute('aria-label', `${model.symbol} の日足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${Number.isFinite(model.pivot) ? `、ピボット ${fmt(model.pivot)}` : ''}${Number.isFinite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : ''}。`);
+  el.setAttribute('aria-label', `${model.symbol} の日足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${Number.isFinite(model.pivot) ? `、ピボット ${fmt(model.pivot)}` : ''}${Number.isFinite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : ''}${(model.sellMarks || []).some(m => markIndex.has(m.date)) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => markIndex.has(m.date)).map(m => m.date).join('・')}` : ''}。`);
   el.innerHTML = `<svg class="bc-layer" ${box}>${B.join('')}</svg><div class="bc-reveal"><svg class="bc-layer" ${box}>${M.join('')}</svg></div><svg class="bc-layer" ${box}>${F.join('')}</svg><div class="bc-tip" hidden></div>`;
   const [back, reveal, front] = el.children, mid = reveal.firstChild;
 
@@ -219,6 +229,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   fade(all$(front, '.bc-stop'), 360 * k, after + 160 * k);
   fade(all$(front, '.bc-note'), 380 * k, legStart + legGroups.length * legGap + 200 * k, 4);
   fade(all$(front, '.bc-rshigh'), 380 * k, after + 420 * k);
+  fade(all$(front, '.bc-sell'), 300 * k, after + 480 * k);
   fade(all$(front, '.bc-last'), 300 * k, after + 340 * k).then(() => front.classList.add('bc-pulsing'));
   return controller;
 }

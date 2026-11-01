@@ -99,6 +99,9 @@ describe('sell signals', () => {
     expect(result.weakness.map(c => c.state)).toEqual(['clear', 'clear']);
     expect(result.hits).toBe(4);
     expect(result.advance.gainPct).toBeGreaterThan(30);
+    const { sellMarks } = await import('./briefModel');
+    expect(sellMarks(result)).toEqual([{ date: result.strength[0].date, kind: 'strength' }]);
+    expect(sellMarks(null)).toEqual([]);
   });
 
   it('flags a heavy-volume break of the 50-day line, and leaves it unknown without volume', async () => {

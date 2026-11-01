@@ -42,6 +42,8 @@ How the checks are judged:
 - The strength checks run only when the close is at least 30% above that low and 20 or more sessions have passed. Otherwise they show 対象外.
 - A missing volume on a break day leaves that check 未確認.
 
+The chart marks each day with a signal (▼ above the bar for a climax, ▲ below it for a breakdown). Heavy volume on a lower close is drawn in the warning colour, not the breakout colour.
+
 The watchlist (today's 3rd block and the ウォッチ tab) shows ▲ 売りのサイン n件 for watched stocks. It uses the same chart queries as the stock screen, and only the first 12 watched stocks are fetched.
 
 The ideas follow Minervini's sell rules. The combined warning cites 『株式トレード 基本と原則』, and its 1.4× volume is the app's proxy. Every other number is this app's own threshold, and the screen labels them 独自判定. The stock screen also shows パワープレー候補（機械的探索） when `diagnoseBookChart` finds its mechanical power-play match.
