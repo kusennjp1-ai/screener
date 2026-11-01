@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom';
 import { bifurcation, environmentPoint } from '../marketLongHistory';
+import { environmentWarnings } from './briefModel';
 
 const finite = Number.isFinite;
 const num = (value, digits = 0) => finite(value) ? value.toLocaleString('ja-JP', { minimumFractionDigits: digits, maximumFractionDigits: digits }) : '未確認';
@@ -46,6 +47,7 @@ export default function MarketCard({ market, trends }) {
   const last = rows.at(-1) || null, monthAgo = rows.at(-22) || null, recent = rows.slice(-126);
   const hasEnvironment = Boolean(last && 'trendTemplateCount' in last);
   const split = bifurcation(history);
+  const warnings = environmentWarnings(rows);
   const spx = trends?.data?.indices?.find(item => item.symbol === '^GSPC'), ndx = trends?.data?.indices?.find(item => item.symbol === '^IXIC');
   const dist = item => finite(item?.latest?.value) ? item.latest.value : null;
   const stages = hasEnvironment ? [1, 2, 3, 4].map(k => ({ k, share: last[`stage${k}Percent`] })) : [];
@@ -69,6 +71,7 @@ export default function MarketCard({ market, trends }) {
       <div className="brief-stagelegend" aria-hidden="true">{stages.map(s => <span key={s.k}><i className={`stage-${s.k}`} />ステージ{s.k} {num(s.share, 0)}%</span>)}</div>
       <div className="brief-trend"><span>トレンドテンプレート達成数（6か月）</span><Sparkline points={recent} field="trendTemplateCount" /></div>
     </div>}
+    {warnings.length > 0 && <ul className="brief-warnings" aria-label="地合いの悪化サイン（独自判定）">{warnings.map(w => <li key={w.key}><span aria-hidden="true">▲</span> {w.text}（独自判定）</li>)}</ul>}
     {split?.warning && <p className="brief-alert" role="note">▲ 指数は1年高値から{Math.abs(split.fromHigh).toFixed(1)}%以内ですが、200日線より上の銘柄は{num(split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
     <p className="brief-note">分配日・ステージ・トレンドテンプレート数は公開日足からの独自集計で、IBDの公式値ではありません。</p>
   </section>;

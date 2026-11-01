@@ -56,3 +56,17 @@ describe('RS line new high', async () => {
     expect(rsLineNewHigh(line.slice(-100), bars)).toBeNull();
   });
 });
+
+describe('market deterioration notes', async () => {
+  const { environmentWarnings } = await import('./briefModel');
+  const row = over => ({ trendTemplateCount: 100, stage2Percent: 40, stage4Percent: 20, breakoutHoldPercent: 60, ...over });
+  it('flags a 20% drop in ten sessions, stage 4 above stage 2 and weak follow-through, and nothing when unknown', () => {
+    const rows = Array.from({ length: 11 }, () => row());
+    expect(environmentWarnings(rows)).toEqual([]);
+    rows[10] = row({ trendTemplateCount: 79, stage2Percent: 25, stage4Percent: 30, breakoutHoldPercent: 35 });
+    expect(environmentWarnings(rows).map(n => n.key)).toEqual(['template', 'stage', 'breakout']);
+    rows[10] = row({ trendTemplateCount: null, stage2Percent: null, breakoutHoldPercent: null });
+    expect(environmentWarnings(rows)).toEqual([]);
+    expect(environmentWarnings([])).toEqual([]);
+  });
+});

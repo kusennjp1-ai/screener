@@ -112,6 +112,22 @@ export function positionPlan(view, { stopPercent = STOP_DEFAULT_PERCENT, account
     cost: shares === null ? null : shares * entry, weight: shares === null ? null : shares * entry / account * 100 };
 }
 
+/**
+ * Deterioration notes from the derived long-history points (environmentPoint rows).
+ * Thresholds are this app's own (labelled 独自判定 on screen); unknown inputs yield no note.
+ */
+export function environmentWarnings(rows) {
+  const last = rows?.at(-1), before = rows?.at(-11), notes = [];
+  if (!last) return notes;
+  if (finite(last.trendTemplateCount) && finite(before?.trendTemplateCount) && before.trendTemplateCount >= 20) {
+    const change = (last.trendTemplateCount / before.trendTemplateCount - 1) * 100;
+    if (change <= -20) notes.push({ key: 'template', text: `トレンドテンプレート達成数が10営業日で${Math.abs(change).toFixed(0)}%減少` });
+  }
+  if (finite(last.stage4Percent) && finite(last.stage2Percent) && last.stage4Percent > last.stage2Percent) notes.push({ key: 'stage', text: `ステージ4（${last.stage4Percent.toFixed(0)}%）がステージ2（${last.stage2Percent.toFixed(0)}%）を上回る` });
+  if (finite(last.breakoutHoldPercent) && last.breakoutHoldPercent < 40) notes.push({ key: 'breakout', text: `ブレイクアウトの成功率が${last.breakoutHoldPercent.toFixed(0)}%に低下` });
+  return notes;
+}
+
 /** RS line (price ÷ S&P 500) at or above its high of the prior 251 sessions; null when the history is too short. */
 export function rsLineNewHigh(rsLine, bars) {
   const dates = new Set((bars || []).map(b => b.date));
