@@ -1,28 +1,8 @@
-import { flushSync } from 'react-dom';
-import { useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { signed, times } from '../positionGeometry';
 import { trendTemplate } from './briefModel';
+import { meterPercent } from './briefNav';
 
 const finite = Number.isFinite;
-export const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-/** Navigate inside a View Transition (when the browser has one), with a direction for the CSS. */
-export function useTransitionNavigate() {
-  const navigate = useNavigate();
-  return useCallback((to, { kind = 'tab', state, replace = false, before } = {}) => {
-    const run = () => { flushSync(() => navigate(to, { state, replace })); if (!matchMedia?.('(min-width: 1024px)').matches) window.scrollTo(0, 0); };
-    if (typeof document.startViewTransition !== 'function' || reducedMotion()) { run(); return; }
-    before?.();
-    document.documentElement.dataset.briefNav = kind;
-    const transition = document.startViewTransition(run);
-    transition.ready?.catch(() => {});
-    transition.finished?.catch(() => {}).finally(() => { delete document.documentElement.dataset.briefNav; });
-  }, [navigate]);
-}
-
-export const meterPercent = value => (Math.max(-10, Math.min(10, value)) + 10) * 5;
-
 export function MiniMeter({ distance, animate }) {
   if (!finite(distance)) return <span className="brief-minimeter is-unknown" aria-hidden="true"><span className="brief-minimeter-value">未確認</span></span>;
   return <span className="brief-minimeter" aria-hidden="true">

@@ -10,7 +10,8 @@ import { useBriefData, useStockData, useWatchlist } from './useBriefData';
 import { candidateView, focusCandidates, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
 import MarketCard from './MarketCard';
 import StockView from './StockView';
-import { CandidateRow, Toast, useTransitionNavigate } from './BriefParts';
+import { CandidateRow, Toast } from './BriefParts';
+import { useTransitionNavigate } from './briefNav';
 
 const ICON = {
   today: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>,

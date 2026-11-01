@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { money, signed, times } from '../positionGeometry';
 import PriceChart from './PriceChart';
 import { footprint, positionPlan, rsLineNewHigh, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
-import { meterPercent } from './BriefParts';
+import { meterPercent } from './briefNav';
 
 const finite = Number.isFinite;
 const price = value => finite(value) ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
