@@ -1773,7 +1773,7 @@ def test_official_us_bundle_refreshes_equities_without_finviz_or_stale_leaks(mon
     coverage = published["coverage"]
     assert coverage["equity_fundamentals_coverage"] == 1.0
     assert coverage["fund_reference_symbols"] == 2
-    assert coverage["universe_source"]["source"] == "nasdaq_trader_symbol_directory"
+    assert coverage["universe_source"]["source"] == "nasdaqtrader_symdir"
     assert coverage["universe_source"]["removal"]["deactivated"] == 1
     assert published["publish"] is True
     assert summary["bundle"].name.startswith("weekly-reference-us-20261101-")

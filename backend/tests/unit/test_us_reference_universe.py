@@ -122,7 +122,7 @@ def test_fund_reference_payload_has_identity_and_no_fundamentals():
     payload = fund_reference_payload(symbol="SPY", name="SPDR S&P 500 ETF Trust", sector="Financial", industry="")
 
     assert payload == {"symbol": "SPY", "company_name": "SPDR S&P 500 ETF Trust", "sector": "Financial", "industry": None,
-                       "is_etf": True, "fundamentals_applicable": False, "reference_source": "nasdaq_trader_symbol_directory"}
+                       "is_etf": True, "fundamentals_applicable": False, "reference_source": "nasdaqtrader_symdir"}
 
 
 def test_only_immutable_facts_carry_from_the_prior_bundle():

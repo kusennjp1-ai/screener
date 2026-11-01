@@ -103,3 +103,35 @@ def test_us_router_keeps_finviz_sources_on_the_finviz_adapter():
     assert official.canonical_rows[0].mic == "XNYS"
     with pytest.raises(ValueError, match="Unapproved US official listing source"):
         us_official_universe_ingestion_adapter.canonicalize_rows([], source_name="finviz", snapshot_id="x")
+
+
+def _assert_strings_fit_their_columns(db):
+    """SQLite ignores VARCHAR lengths; PostgreSQL rejects overlong values."""
+    from sqlalchemy import String
+
+    from app.models.stock_universe import StockUniverseReconciliationRun, StockUniverseStatusEvent
+
+    for model in (StockUniverse, StockUniverseStatusEvent, StockUniverseReconciliationRun):
+        for column in model.__table__.columns:
+            if isinstance(column.type, String) and column.type.length:
+                for (value,) in db.query(getattr(model, column.key)).all():
+                    assert value is None or len(value) <= column.type.length, (model.__name__, column.key, value)
+
+
+def test_official_ingest_writes_values_that_fit_postgres_columns(db):
+    service = StockUniverseService()
+    plan = _plan(db)
+
+    assert len(US_OFFICIAL_SOURCE_NAME) <= StockUniverse.__table__.c.source.type.length
+    service.ingest_us_official_snapshot_rows(
+        db,
+        rows=[row.as_ingest_row() for row in plan.rows],
+        snapshot_id="nasdaqtrader-symdir-202610301801",
+        snapshot_as_of="2026-10-30",
+        source_metadata={"file_created_at": plan.report["file_created_at"]},
+    )
+    service.deactivate_us_symbols_missing_from_official(db, symbols=plan.removed, prior_active_count=100,
+                                                        snapshot_id="nasdaqtrader-symdir-202610301801")
+
+    assert {row.source for row in db.query(StockUniverse).all()} == {US_OFFICIAL_SOURCE_NAME}
+    _assert_strings_fit_their_columns(db)

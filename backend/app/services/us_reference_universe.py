@@ -23,7 +23,7 @@ from dataclasses import dataclass
 import re
 from typing import Any, Mapping
 
-from .us_listing_directory import EQUITY_EXCHANGES, UsListingDirectory
+from .us_listing_directory import EQUITY_EXCHANGES, US_OFFICIAL_SOURCE_NAME, UsListingDirectory
 
 CORE_EXCHANGE_MICS = {"NYSE": "XNYS", "NASDAQ": "XNAS", "AMEX": "XASE"}
 _MIC_ALIASES = {**CORE_EXCHANGE_MICS, **{mic: mic for mic in CORE_EXCHANGE_MICS.values()}}
@@ -153,7 +153,7 @@ def plan_us_universe(
     removed.extend(sorted(unresolvable_prior))
     added = [row for row in rows if row.change == "added"]
     report = {
-        "source": "nasdaq_trader_symbol_directory",
+        "source": US_OFFICIAL_SOURCE_NAME,
         "file_created_at": dict(directory.file_created_at),
         "prior_active": len(prior_rows),
         "planned_active": len(rows),
@@ -219,7 +219,7 @@ def fund_reference_payload(*, symbol: str, name: str, sector: str, industry: str
         "industry": industry or None,
         "is_etf": True,
         "fundamentals_applicable": False,
-        "reference_source": "nasdaq_trader_symbol_directory",
+        "reference_source": US_OFFICIAL_SOURCE_NAME,
     }
 
 

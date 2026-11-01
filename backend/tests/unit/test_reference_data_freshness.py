@@ -77,7 +77,7 @@ def test_load_reference_data_reads_the_published_pointer_and_active_sources():
     db.add_all([
         StockUniverse(symbol="AAPL", market="US", exchange="XNAS", status=UNIVERSE_STATUS_ACTIVE, is_active=True, source="finviz"),
         StockUniverse(symbol="APMD", market="US", exchange="XNAS", status=UNIVERSE_STATUS_ACTIVE, is_active=True,
-                      source="nasdaq_trader_symbol_directory"),
+                      source="nasdaqtrader_symdir"),
         StockUniverse(symbol="GONE", market="US", exchange="XNAS", status=UNIVERSE_STATUS_INACTIVE_MISSING_SOURCE,
                       is_active=False, source="finviz"),
         StockUniverse(symbol="0700.HK", market="HK", exchange="XHKG", status=UNIVERSE_STATUS_ACTIVE, is_active=True, source="hkex"),
@@ -87,7 +87,7 @@ def test_load_reference_data_reads_the_published_pointer_and_active_sources():
     status = load_reference_data(db, market="US", snapshot_key="fundamentals_v1_us", scan_as_of=date(2026, 10, 30), max_age_days=8)
 
     assert status["as_of_date"] == "2026-06-13" and status["stale"] is True
-    assert status["universe_sources"] == {"finviz": 1, "nasdaq_trader_symbol_directory": 1}
+    assert status["universe_sources"] == {"finviz": 1, "nasdaqtrader_symdir": 1}
     db.close()
     engine.dispose()
 

@@ -54,6 +54,10 @@ OTHER_LISTED_EXCHANGES = {
 # The equity universe has always been NYSE, NASDAQ and NYSE American.
 EQUITY_EXCHANGES = frozenset({"NYSE", "NASDAQ", "AMEX"})
 
+# Source identifier stored on universe rows. stock_universe.source is
+# VARCHAR(20), so keep it short (enforced by a test against the column).
+US_OFFICIAL_SOURCE_NAME = "nasdaqtrader_symdir"
+
 _TRAILER_RE = re.compile(r"^File Creation Time:\s*(\d{2})(\d{2})(\d{4})(\d{2}):(\d{2})")
 _CANONICAL_SYMBOL_RE = re.compile(r"^[A-Z][A-Z0-9]{0,14}(?:-[A-Z0-9]{1,4})?$")
 _SPECIAL_SYMBOL_CHARS = frozenset("$^=+#*!/")

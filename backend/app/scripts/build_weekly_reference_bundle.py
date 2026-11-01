@@ -508,6 +508,7 @@ def _build_us_official_bundle(
     this run. Nothing time-varying is inherited from the prior bundle.
     """
     from app.config import settings
+    from app.services.us_listing_directory import US_OFFICIAL_SOURCE_NAME
     from app.services.us_reference_universe import (
         carry_immutable_fields,
         fund_reference_payload,
@@ -629,7 +630,7 @@ def _build_us_official_bundle(
         "partial_run": bool(deadline_hit),
         "classification_filled_from_fundamentals": classification_filled,
         "universe_source": {
-            "source": "nasdaq_trader_symbol_directory",
+            "source": US_OFFICIAL_SOURCE_NAME,
             "file_created_at": fetch_metadata.get("file_created_at"),
             "sha256": fetch_metadata.get("sha256"),
             "plan": {key: plan.report[key] for key in (
