@@ -31,6 +31,10 @@ _APPROVED_FINVIZ_SOURCES: frozenset[str] = frozenset(
 class FinvizUniverseIngestionAdapter:
     """Normalize Finviz screener rows into canonical US universe rows."""
 
+    SOURCE_LABEL = "Finviz"
+    STATUS_REASON = "Present in Finviz universe sync"
+    UNAPPROVED_SOURCE_HINT = "Use a finviz-prefixed source identifier."
+
     @staticmethod
     def normalize_source_name(source_name: str) -> str:
         normalized = (source_name or "").strip().lower().replace("-", "_")
@@ -98,8 +102,8 @@ class FinvizUniverseIngestionAdapter:
         normalized_source_name = self.normalize_source_name(source_name)
         if not self.is_approved_source(normalized_source_name):
             raise ValueError(
-                f"Unapproved Finviz source '{source_name}'. "
-                "Use a finviz-prefixed source identifier."
+                f"Unapproved {type(self).SOURCE_LABEL} source '{source_name}'. "
+                f"{self.UNAPPROVED_SOURCE_HINT}"
             )
 
         normalized_snapshot_id = (snapshot_id or "").strip()
@@ -189,7 +193,7 @@ class FinvizUniverseIngestionAdapter:
                         industry=row_industry,
                         market_cap=row_market_cap,
                         lifecycle=UniverseLifecycleMetadata(
-                            status_reason="Present in Finviz universe sync",
+                            status_reason=self.STATUS_REASON,
                         ),
                         provenance=UniverseSourceProvenance(
                             source_name=normalized_source_name,
