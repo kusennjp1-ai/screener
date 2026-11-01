@@ -14,8 +14,15 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     const abort = new AbortController();
     const animate = introduced.current !== key;
     controller.current = renderPriceChart(element.current, { ...model, stop: stopRef.current }, { period, animate, fast: animate && introducedOnce, signal: abort.signal });
-    if (animate) { introduced.current = key; introducedOnce = true; }
-    return () => abort.abort();
+    let painted = false;
+    const frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => { painted = true; if (animate) introducedOnce = true; }) : null;
+    if (animate) introduced.current = key;
+    return () => {
+      abort.abort();
+      if (frame !== null) cancelAnimationFrame(frame);
+      // A remount before the first frame (React's development double effect) must replay the intro.
+      if (animate && !painted) introduced.current = null;
+    };
     // The stop moves through the controller; only identity changes redraw.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, period]);
