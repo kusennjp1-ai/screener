@@ -194,7 +194,7 @@ export default function StockView({ data, header = null }) {
       <Meter distance={view.distance} />
       <div className="brief-kgrid">
         <div><small>買いの範囲</small><b className="numeric">{price(view.pivot)}</b><em>〜{price(view.upper)}</em></div>
-        <div><small>損切り（−{plan ? plan.stopPercent.toFixed(1) : '—'}%）</small><b className="numeric">{price(plan?.stop)}</b><em>買値 {price(plan?.entry)}</em></div>
+        <div><small>{plan ? `損切り（−${plan.stopPercent.toFixed(1)}%）` : '損切り'}</small><b className="numeric">{price(plan?.stop)}</b><em>買値 {price(plan?.entry)}</em></div>
         <div><small>利益目標 2R</small><b className="numeric">{price(plan?.r2)}</b><em>3R {price(plan?.r3)}</em></div>
       </div>
       <div className="brief-tags">{chips.map(([text, t]) => <span key={text} className={`brief-chip${t ? ` tone-${t}` : ''}`}>{text}</span>)}</div>

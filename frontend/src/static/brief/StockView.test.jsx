@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
 
 const DATE = '2026-10-02';
@@ -25,12 +25,19 @@ describe('brief stock view', () => {
     expect(screen.queryByText(/チャートから算出する判定は未確認/)).toBeNull();
   });
 
+  it('labels the stop without a percentage when there is no plan', () => {
+    render(<StockView data={{ ...data(true), view: { ...view, pivot: null, price: null } }} />);
+    expect(within(screen.getByTestId('brief-conclusion')).getByText('損切り')).toBeInTheDocument();
+    expect(screen.queryByText(/−—%/)).toBeNull();
+  });
+
   it('keeps everything computed from uncertified or lagging bars unknown and says why', () => {
     render(<StockView data={data(false, '2026-10-01')} />);
     expect(screen.queryByText(/^売りのサイン [0-9]+件$/)).toBeNull();
     expect(screen.getByTestId('brief-sell')).toHaveTextContent('売りのサインは未確認です（最終日足が分析日と不一致）');
     expect(screen.getByText('ステージ 未確認')).toBeInTheDocument();
     expect(screen.getByText(/日足は 2026-10-01 までです（分析基準日 2026-10-02 の日足は未取得）/)).toBeInTheDocument();
+    expect(screen.getByText('損切り（−7.0%）')).toBeInTheDocument();
     const updown = screen.getByText('上げ下げ出来高比（50日）').nextSibling;
     expect(updown).toHaveTextContent('未確認');
   });
