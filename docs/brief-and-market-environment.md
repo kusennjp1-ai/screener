@@ -72,7 +72,10 @@ Every full build recomputes five years of these values from per-symbol daily bar
 | `above150`, `above200` (+ `%`) | Close above the 150- and 200-day SMA | Standard |
 | `stage1`…`stage4` | Weinstein stage per session, using the scanner's rules in `stage_analysis.py`. The swing-pattern exception is not replayed. | Scanner rules (parity-tested) |
 | `breakouts`, `breakoutsJudged`, `breakoutsHeld` | Breakout: close above the prior 251-session high on ≥1.4× the 50-day volume while the price template holds. Held: no low within the next 10 sessions reaches 7% below the breakout close. | Volume threshold and 7% loss limit as used elsewhere in this app. The 10-session window is this app's own. |
+| `leaderCohort`, `leaderCohortAbove50` | Stocks that met the trend template 20 sessions earlier and are still observed, and how many of them close above their 50-day SMA today. The share is shown when the cohort has at least 10 stocks. | This app (the idea that leaders break down before the index follows Minervini) |
 | `leaderCount` | Earlier variant with the low at 25% | Existing |
+
+The brief warns, labelled 独自判定, when fewer than 50% of that cohort are above the 50-day line.
 
 The brief and the 市場 page also show a bifurcation note: the index is within 5% of its one-year high while fewer than 50% of stocks are above the 200-day line. This follows Minervini's description of a bifurcated market, but both thresholds are this app's own and are labelled 独自判定.
 

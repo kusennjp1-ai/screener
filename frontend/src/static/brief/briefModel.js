@@ -126,6 +126,7 @@ export function environmentWarnings(rows) {
     if (change <= -20) notes.push({ key: 'template', text: `トレンドテンプレート達成数が10営業日で${Math.abs(change).toFixed(0)}%減少` });
   }
   if (finite(last.stage4Percent) && finite(last.stage2Percent) && last.stage4Percent > last.stage2Percent) notes.push({ key: 'stage', text: `ステージ4（${last.stage4Percent.toFixed(0)}%）がステージ2（${last.stage2Percent.toFixed(0)}%）を上回る` });
+  if (finite(last.leaderHealthPercent) && last.leaderHealthPercent < 50) notes.push({ key: 'leaders', text: `20営業日前のTT達成銘柄のうち、50日線より上は${last.leaderHealthPercent.toFixed(0)}%` });
   if (finite(last.breakoutHoldPercent) && last.breakoutHoldPercent < 40) notes.push({ key: 'breakout', text: `ブレイクアウトの成功率が${last.breakoutHoldPercent.toFixed(0)}%に低下` });
   return notes;
 }
