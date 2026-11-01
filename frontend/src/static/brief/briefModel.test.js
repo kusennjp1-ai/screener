@@ -80,3 +80,48 @@ describe('stage from daily bars', () => {
     expect(stageFromBars(series(() => 50).slice(0, 100))).toBeNull();
   });
 });
+
+describe('sell signals', () => {
+  const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
+  const make = closes => closes.map((close, i) => ({ date: day(i), open: close, high: close * 1.005, low: close * 0.995, close, volume: 10000 }));
+  const rising = (count, rate = 0.003) => Array.from({ length: count }, (_, i) => 50 * (1 + rate) ** i);
+
+  it('flags a climax run after an advance and reports each check with its evidence', async () => {
+    const { sellSignals } = await import('./briefModel');
+    const closes = rising(200);
+    for (let k = 0; k < 9; k++) closes.push(closes.at(-1) * 1.03);
+    closes.push(closes.at(-1) * 1.05);
+    const result = sellSignals(make(closes));
+    const state = Object.fromEntries(result.strength.map(c => [c.key, c.state]));
+    expect(state).toEqual({ 'day-up': 'hit', 'week-up': 'hit', 'up-days': 'hit', climax: 'hit' });
+    expect(result.weakness.map(c => c.state)).toEqual(['clear', 'clear']);
+    expect(result.hits).toBe(4);
+    expect(result.advance.gainPct).toBeGreaterThan(30);
+  });
+
+  it('flags a heavy-volume break of the 50-day line, and leaves it unknown without volume', async () => {
+    const { sellSignals } = await import('./briefModel');
+    const closes = rising(200);
+    closes.push(closes.at(-1) * 0.9);
+    const bars = make(closes);
+    bars.at(-1).volume = 20000;
+    const result = sellSignals(bars);
+    expect(result.weakness.map(c => [c.key, c.state])).toEqual([['day-down', 'hit'], ['ma50', 'hit']]);
+    expect(result.weakness[1].detail).toContain('2.00×');
+    bars.at(-1).volume = 13000;
+    expect(sellSignals(bars).weakness[1].state).toBe('clear');
+    bars.at(-1).volume = undefined;
+    expect(sellSignals(bars).weakness[1].state).toBe('unknown');
+  });
+
+  it('does not judge strength without an advance and refuses short or broken bars', async () => {
+    const { sellSignals } = await import('./briefModel');
+    const flat = make(Array.from({ length: 200 }, (_, i) => 100 + Math.sin(i / 4)));
+    const result = sellSignals(flat);
+    expect(result.advance).toBeNull();
+    expect(result.strength.every(c => c.state === 'na')).toBe(true);
+    expect(sellSignals(make(rising(59)))).toBeNull();
+    const broken = make(rising(120)); broken[50].close = null;
+    expect(sellSignals(broken)).toBeNull();
+  });
+});

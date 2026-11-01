@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { money, signed, times } from '../positionGeometry';
 import PriceChart from './PriceChart';
-import { footprint, positionPlan, rsLineNewHigh, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
+import { footprint, positionPlan, rsLineNewHigh, sellSignals, SELL_RULES, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
 import { meterPercent } from './briefNav';
 
 const finite = Number.isFinite;
@@ -100,6 +100,30 @@ function InstitutionalCard({ institutional }) {
   </section>;
 }
 
+const SELL_STATE = { hit: ['!', 'サインあり'], clear: ['·', 'サインなし'], unknown: ['?', '未確認'], na: ['–', '対象外'] };
+
+function SellChecks({ title, checks }) {
+  return <>
+    <h3 className="brief-subhead">{title}</h3>
+    <ul className="brief-checks brief-sellchecks">{checks.map(check => <li key={check.key}>
+      <span className={`brief-check is-sell-${check.state}`} aria-hidden="true">{SELL_STATE[check.state][0]}</span>
+      <span>{check.label}<span className="sr-only">（{SELL_STATE[check.state][1]}）</span><em>{check.detail}</em></span>
+    </li>)}</ul>
+  </>;
+}
+
+function SellCard({ sells }) {
+  return <section className="brief-card in" style={{ '--i': 8 }} aria-labelledby="brief-sell-title" data-testid="brief-sell">
+    <h2 id="brief-sell-title">売りのサイン（直近{SELL_RULES.recentSessions}営業日）</h2>
+    {sells ? <>
+      <p className="brief-note">{sells.advance ? `起点（直近1年の安値）${sells.advance.startDate} の ${price(sells.advance.low)} から ${signed(sells.advance.gainPct)}・${sells.advance.sessions}営業日。` : `直近1年の安値から +${SELL_RULES.advanceMinPercent}%以上の上昇局面ではないため、上昇の加速による売りは判定しません。`}{sells.hits ? ` ${sells.hits}件のサインが出ています。` : [...sells.strength, ...sells.weakness].some(c => c.state === 'unknown') ? ' 出ているサインはありませんが、未確認の項目があります。' : ' いま出ているサインはありません。'}</p>
+      <SellChecks title="上昇の加速（強気での売り）" checks={sells.strength} />
+      <SellChecks title="崩れ（弱気での売り）" checks={sells.weakness} />
+    </> : <p className="brief-note">日足が60本未満か欠けているため、売りのサインは未確認です。</p>}
+    <p className="brief-note">保有中の判断材料です。しきい値はこのアプリ独自（独自判定）で、売買の推奨ではありません。</p>
+  </section>;
+}
+
 function PlanCard({ view, plan, settings, onChange, earnings }) {
   if (!plan) return null;
   const input = (key, label, step, extra = {}) => <label>{label}<input type="number" inputMode="decimal" step={step} value={settings[key]} onChange={e => onChange(key, Number(e.target.value))} {...extra} /></label>;
@@ -131,6 +155,7 @@ export default function StockView({ data, header = null }) {
   const plan = useMemo(() => view ? positionPlan(view, settings) : null, [view, settings]);
   const legs = technical?.vcp?.measurementsValid ? technical.vcp.legs : [];
   const stage = useMemo(() => Number.isInteger(row?.stage) ? { value: row.stage, computed: false } : (() => { const value = stageFromBars(bars); return value ? { value, computed: true } : null; })(), [row?.stage, bars]);
+  const sells = useMemo(() => bars ? sellSignals(bars) : null, [bars]);
   const rsHigh = useMemo(() => view?.rsLineHigh || rsLineNewHigh(data.chart.data?.rs_line, bars) === true, [view?.rsLineHigh, data.chart.data, bars]);
   const model = useMemo(() => bars && view ? { symbol: view.symbol, bars, rsLine: data.chart.data?.rs_line || [], legs, pivot: view.pivot, upper: view.upper, stop: plan?.stop ?? null, rsNewHigh: rsHigh, dryUpLeg: legs.at(-1) || null } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -154,6 +179,7 @@ export default function StockView({ data, header = null }) {
     ...(rsHigh ? [['RS線 新高値', 'zone']] : []),
     [`Code 33 ${code33 === 'pass' ? '達成' : code33 === 'fail' ? '未達' : '未確認'}${financial?.code33?.source === 'yahoo' ? '（参考）' : ''}`, code33 === 'pass' ? 'zone' : ''],
     ...(Number.isInteger(row?.ibd_group_rank) ? [[`業種 ${row.ibd_group_rank}位（推計）`, row.ibd_group_rank <= 40 ? 'zone' : '']] : []),
+    ...(sells?.hits ? [[`売りのサイン ${sells.hits}件`, 'ext']] : []),
     [view.earnings ? `決算まで ${view.earnings.days}日` : '決算日 未確認', view.earnings && view.earnings.days <= 10 ? 'ext' : ''],
   ];
   return <div className="brief-stock">
@@ -179,6 +205,7 @@ export default function StockView({ data, header = null }) {
       <FundamentalsCard financial={financial} />
       <InstitutionalCard institutional={institutional} />
       <PlanCard view={view} plan={plan} settings={settings} onChange={update} earnings={view.earnings} />
+      {bars ? <SellCard sells={sells} /> : null}
     </div>
     <p className="brief-note brief-pad">候補は購入推奨ではありません。数値は分析基準日の公開データに基づきます。</p>
   </div>;

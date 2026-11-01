@@ -10,7 +10,7 @@ market-environment series behind them. For vocabulary, see `CONTEXT.md`.
 | `#/brief` | 1 Market (verdict, S&P 500 with active distribution days, trend-template count, stage mix, share above the 200-day line, breakout follow-through, bifurcation note) · 2 Top five qualified candidates in the buy zone or within −5% of the pivot · 3 Watchlist changes |
 | `#/brief/list` | Qualified candidates. Filters: buy zone, near pivot, all qualified, one condition short. Search box and four sort orders. |
 | `#/brief/watch` | The shared `research-watch` watchlist |
-| `#/brief/stock/:symbol` | Conclusion card (status, position meter, buy range, stop, 2R) → large daily chart → eight trend-template rules → VCP footprint → quarterly growth with layered Code 33 → 13F counts → position plan |
+| `#/brief/stock/:symbol` | Conclusion card (status, position meter, buy range, stop, 2R) → large daily chart → eight trend-template rules → VCP footprint → quarterly growth with layered Code 33 → 13F counts → position plan → sell checks |
 
 - **Shell:** the screens have their own shell (48 px top bar, 56 px bottom tabs, light/dark toggle from the existing colour-mode preference).
 - **Desktop (≥1024 px):** two panes, list on the left and the selected stock on the right.
@@ -28,6 +28,21 @@ All judgements come from the shared rule functions, so the brief and the researc
 - `code33Layered`
 
 Unknown inputs stay 未確認 or 未取得. They are never counted as a pass.
+
+### Sell checks (`sellSignals` in `briefModel.js`)
+
+The stock screen also lists checks for the last five sessions, in two groups:
+
+- **Selling into strength** (climax): the largest one-day gain since the start of the advance, the largest five-session gain since the start, at least 8 up days in the last 10, and +25% or more within 15 sessions.
+- **Selling into weakness:** the largest one-day loss since the start of the advance, and a close that crosses below the 50-day SMA on at least 1.4× the prior 50-day average volume.
+
+How the checks are judged:
+
+- The start of the advance is the lowest low of the last 252 sessions.
+- The strength checks run only when the close is at least 30% above that low and 20 or more sessions have passed. Otherwise they show 対象外.
+- A missing volume on a break day leaves that check 未確認.
+
+The ideas follow Minervini's sell rules. Every number is this app's own threshold, and the screen labels them 独自判定.
 
 ### Motion
 

@@ -2,7 +2,7 @@
 // published research rows and the existing rule functions; unknown stays unknown.
 import { assess, entryPlan, finite } from '../researchEngine';
 import { canonicalPivot } from '../researchPresentation';
-import { stateKey, STATES } from '../positionGeometry';
+import { signed, stateKey, STATES, times } from '../positionGeometry';
 import { verifiedVolumeRatio } from '../qualificationAudit';
 
 export const STOP_DEFAULT_PERCENT = 7;
@@ -172,3 +172,72 @@ export function footprint(evidence, bars) {
     text: `VCP ${weeks}週 ${Math.round(legs[0].depthPct)}/${Math.round(legs.at(-1).depthPct)} ${legs.length}T`,
     contracting: evidence.vcp.depthsContract, volumeContracting: evidence.vcp.volumeContracts };
 }
+
+// Sell-side checks after an advance. The ideas (selling into strength on a climax run,
+// selling into weakness on a heavy-volume 50-day break) follow Minervini's sell rules;
+// every number below is this app's own threshold and is labelled 独自判定 on screen.
+export const SELL_RULES = {
+  recentSessions: 5,
+  advanceMinPercent: 30,
+  advanceMinSessions: 20,
+  upDaysWindow: 10,
+  upDaysMin: 8,
+  climaxPercent: 25,
+  climaxSessions: 15,
+  breakVolumeRatio: BREAKOUT_VOLUME_RATIO,
+};
+
+/**
+ * Sell checks for the latest bars. Each check is 'hit', 'clear', 'unknown' (an input is
+ * missing) or 'na' (no advance to judge). Returns null when the bars cannot be judged.
+ */
+export function sellSignals(bars, rules = SELL_RULES) {
+  const list = (bars || []).slice(-252);
+  if (list.length < 60 || list.some(b => !finite(b?.close) || !finite(b?.low) || b.close <= 0 || b.low <= 0)) return null;
+  const n = list.length, recent = n - rules.recentSessions, last = list[n - 1];
+  let start = 0;
+  for (let i = 1; i < n; i++) if (list[i].low < list[start].low) start = i;
+  const advance = { startDate: list[start].date, low: list[start].low, gainPct: (last.close / list[start].low - 1) * 100, sessions: n - 1 - start };
+  const inAdvance = advance.gainPct >= rules.advanceMinPercent && advance.sessions >= rules.advanceMinSessions;
+  const change = i => (list[i].close / list[i - 1].close - 1) * 100;
+  const na = (key, label) => ({ key, label, state: 'na', detail: `起点（直近1年の安値）から +${rules.advanceMinPercent}%・${rules.advanceMinSessions}営業日以上の上昇局面でのみ判定` });
+  const strength = [], weakness = [];
+
+  if (inAdvance) {
+    let up = start + 1, down = start + 1, week = null;
+    for (let i = start + 1; i < n; i++) { if (change(i) > change(up)) up = i; if (change(i) < change(down)) down = i; }
+    for (let j = start + 5; j < n; j++) { const v = (list[j].close / list[j - 5].close - 1) * 100; if (!week || v > week.v) week = { j, v }; }
+    strength.push({ key: 'day-up', label: '起点以来で最大の1日の上昇', state: up >= recent && change(up) > 0 ? 'hit' : 'clear', detail: `最大は ${list[up].date} の ${signed(change(up))}` });
+    strength.push(week ? { key: 'week-up', label: '起点以来で最大の5営業日の上昇', state: week.j >= recent && week.v > 0 ? 'hit' : 'clear', detail: `最大は ${list[week.j].date} までの ${signed(week.v)}` } : na('week-up', '起点以来で最大の5営業日の上昇'));
+    const span = Array.from({ length: rules.upDaysWindow }, (_, k) => n - rules.upDaysWindow + k).filter(i => i > 0);
+    const ups = span.filter(i => change(i) > 0).length;
+    strength.push({ key: 'up-days', label: `直近${rules.upDaysWindow}営業日のうち${rules.upDaysMin}日以上が上昇`, state: ups >= rules.upDaysMin ? 'hit' : 'clear', detail: `上昇 ${ups}日 / ${span.length}日` });
+    const base = Math.min(...list.slice(Math.max(start, n - 1 - rules.climaxSessions), n - 1).map(b => b.close));
+    const run = (last.close / base - 1) * 100;
+    strength.push({ key: 'climax', label: `${rules.climaxSessions}営業日以内に +${rules.climaxPercent}%以上の急騰`, state: run >= rules.climaxPercent ? 'hit' : 'clear', detail: `直近${rules.climaxSessions}営業日の最安終値から ${signed(run)}` });
+    weakness.push({ key: 'day-down', label: '起点以来で最大の1日の下落', state: down >= recent && change(down) < 0 ? 'hit' : 'clear', detail: `最大は ${list[down].date} の ${signed(change(down))}` });
+  } else {
+    for (const [key, label] of [['day-up', '起点以来で最大の1日の上昇'], ['week-up', '起点以来で最大の5営業日の上昇'], ['up-days', `直近${rules.upDaysWindow}営業日のうち${rules.upDaysMin}日以上が上昇`], ['climax', `${rules.climaxSessions}営業日以内に +${rules.climaxPercent}%以上の急騰`]]) strength.push(na(key, label));
+    weakness.push(na('day-down', '起点以来で最大の1日の下落'));
+  }
+
+  // A close that crosses below the 50-day SMA on at least 1.4x the prior 50-day average volume.
+  const sma = i => { let s = 0; for (let k = i - 49; k <= i; k++) s += list[k].close; return s / 50; };
+  const breakLabel = `出来高を伴う50日線割れ（${times(rules.breakVolumeRatio)}以上）`;
+  if (n < 101) weakness.push({ key: 'ma50', label: breakLabel, state: 'unknown', detail: '50日線と出来高平均に必要な日足が不足' });
+  else {
+    let found = null, missing = false;
+    for (let i = Math.max(recent, 100); i < n; i++) {
+      if (!(list[i].close < sma(i) && list[i - 1].close >= sma(i - 1))) continue;
+      const prior = list.slice(i - 50, i).map(b => b.volume);
+      if (!finite(list[i].volume) || prior.some(v => !finite(v))) { missing = true; continue; }
+      const ratio = list[i].volume / (prior.reduce((a, b) => a + b, 0) / 50);
+      if (ratio >= rules.breakVolumeRatio) found = { date: list[i].date, ratio };
+    }
+    const position = (last.close / sma(n - 1) - 1) * 100;
+    weakness.push(found ? { key: 'ma50', label: breakLabel, state: 'hit', detail: `${found.date} 出来高 ${times(found.ratio)}` }
+      : { key: 'ma50', label: breakLabel, state: missing ? 'unknown' : 'clear', detail: missing ? '割れた日の出来高が未取得' : `終値は50日線から ${signed(position)}` });
+  }
+  return { advance: inAdvance ? advance : null, strength, weakness, hits: [...strength, ...weakness].filter(c => c.state === 'hit').length };
+}
+
