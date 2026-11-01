@@ -93,7 +93,7 @@ class EnvironmentSeriesTests(unittest.TestCase):
         lag = module.LEADER_LOOKBACK_SESSIONS
         checked = 0
         for i, row in enumerate(rows):
-            if row['leaderCohort'] is None:
+            if row['leaderCohort'] is None or i < lag:
                 continue
             earlier = rows[i - lag]
             self.assertIsNotNone(earlier['trendTemplateCount'])
