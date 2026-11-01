@@ -125,3 +125,21 @@ describe('sell signals', () => {
     expect(sellSignals(broken)).toBeNull();
   });
 });
+
+describe('book combined warning', () => {
+  it('maps the shared diagnostics to a check and never turns a missing input into clear', async () => {
+    const { bookWarningCheck, withBookWarning } = await import('./briefModel');
+    const warn = over => ({ valid: true, priceWarnings: { below20: true, threeLowerLows: true, currentVolumeRatio: 1.6, combinedWarning: true, recoveryInUpperHalf: false, ...over } });
+    expect(bookWarningCheck(warn()).state).toBe('hit');
+    expect(bookWarningCheck(warn()).detail).toBe('20日線割れ・安値切り下げ 3日連続・出来高 1.60×');
+    expect(bookWarningCheck(warn({ recoveryInUpperHalf: true })).detail).toContain('買い支え');
+    expect(bookWarningCheck(warn({ combinedWarning: false, threeLowerLows: false })).state).toBe('clear');
+    expect(bookWarningCheck(warn({ combinedWarning: null, currentVolumeRatio: null })).state).toBe('unknown');
+    expect(bookWarningCheck({ valid: false }).state).toBe('unknown');
+    expect(bookWarningCheck(null).state).toBe('unknown');
+    const merged = withBookWarning({ strength: [], weakness: [{ key: 'ma50', state: 'clear' }], hits: 0 }, warn());
+    expect(merged.weakness.map(c => c.key)).toEqual(['ma50', 'book']);
+    expect(merged.hits).toBe(1);
+    expect(withBookWarning(null, warn())).toBeNull();
+  });
+});

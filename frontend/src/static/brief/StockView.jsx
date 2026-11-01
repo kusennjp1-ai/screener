@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { money, signed, times } from '../positionGeometry';
 import PriceChart from './PriceChart';
-import { footprint, positionPlan, rsLineNewHigh, sellSignals, SELL_RULES, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
+import { footprint, positionPlan, rsLineNewHigh, sellSignals, SELL_RULES, withBookWarning, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
 import { meterPercent } from './briefNav';
 
 const finite = Number.isFinite;
@@ -120,7 +120,7 @@ function SellCard({ sells }) {
       <SellChecks title="上昇の加速（強気での売り）" checks={sells.strength} />
       <SellChecks title="崩れ（弱気での売り）" checks={sells.weakness} />
     </> : <p className="brief-note">日足が60本未満か欠けているため、売りのサインは未確認です。</p>}
-    <p className="brief-note">保有中の判断材料です。しきい値はこのアプリ独自（独自判定）で、売買の推奨ではありません。</p>
+    <p className="brief-note">保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。</p>
   </section>;
 }
 
@@ -148,14 +148,14 @@ function PlanCard({ view, plan, settings, onChange, earnings }) {
 }
 
 export default function StockView({ data, header = null }) {
-  const { view, template, technical, financial, institutional, bars, row } = data;
+  const { view, template, technical, diagnostics, financial, institutional, bars, row } = data;
   const [period, setPeriod] = useState(130);
   const [settings, setSettings] = useState(readPlan);
   const chartRef = useRef(null);
   const plan = useMemo(() => view ? positionPlan(view, settings) : null, [view, settings]);
   const legs = technical?.vcp?.measurementsValid ? technical.vcp.legs : [];
   const stage = useMemo(() => Number.isInteger(row?.stage) ? { value: row.stage, computed: false } : (() => { const value = stageFromBars(bars); return value ? { value, computed: true } : null; })(), [row?.stage, bars]);
-  const sells = useMemo(() => bars ? sellSignals(bars) : null, [bars]);
+  const sells = useMemo(() => bars ? withBookWarning(sellSignals(bars), diagnostics) : null, [bars, diagnostics]);
   const rsHigh = useMemo(() => view?.rsLineHigh || rsLineNewHigh(data.chart.data?.rs_line, bars) === true, [view?.rsLineHigh, data.chart.data, bars]);
   const model = useMemo(() => bars && view ? { symbol: view.symbol, bars, rsLine: data.chart.data?.rs_line || [], legs, pivot: view.pivot, upper: view.upper, stop: plan?.stop ?? null, rsNewHigh: rsHigh, dryUpLeg: legs.at(-1) || null } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -180,6 +180,7 @@ export default function StockView({ data, header = null }) {
     [`Code 33 ${code33 === 'pass' ? '達成' : code33 === 'fail' ? '未達' : '未確認'}${financial?.code33?.source === 'yahoo' ? '（参考）' : ''}`, code33 === 'pass' ? 'zone' : ''],
     ...(Number.isInteger(row?.ibd_group_rank) ? [[`業種 ${row.ibd_group_rank}位（推計）`, row.ibd_group_rank <= 40 ? 'zone' : '']] : []),
     ...(sells?.hits ? [[`売りのサイン ${sells.hits}件`, 'ext']] : []),
+    ...(diagnostics?.valid && diagnostics.powerPlay?.mechanicalMatch ? [['パワープレー候補（機械的探索）', 'wait']] : []),
     [view.earnings ? `決算まで ${view.earnings.days}日` : '決算日 未確認', view.earnings && view.earnings.days <= 10 ? 'ext' : ''],
   ];
   return <div className="brief-stock">

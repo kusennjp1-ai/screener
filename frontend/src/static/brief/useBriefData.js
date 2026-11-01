@@ -15,7 +15,8 @@ import { bookFinancialCurrent } from '../bookFinancialCurrent';
 import { financialHistory } from '../financialHistory';
 import { institutionalGrowth } from '../institutionalEvidence';
 import { code33Layered } from '../code33Reference';
-import { candidateView, sellSignals, trendTemplate } from './briefModel';
+import { diagnoseBookChart } from '../bookChartDiagnostics';
+import { candidateView, sellSignals, trendTemplate, withBookWarning } from './briefModel';
 
 export const WATCH_KEY = 'research-watch';
 
@@ -92,8 +93,13 @@ export function useStockData(symbol, brief) {
     const report = book?.current ? book.report : null;
     return { report, history, code33: code33Layered(report, history, date) };
   }, [row, date, financialNow]);
+  const diagnostics = useMemo(() => {
+    if (row?.book_diagnostics?.valid && row.book_diagnostics.as_of_date === date) return row.book_diagnostics;
+    if (!row || !bars) return null;
+    try { return diagnoseBookChart(row, chart.data, date); } catch { return null; }
+  }, [row, bars, chart.data, date]);
   const institutional = useMemo(() => row ? { growth: institutionalGrowth(row.institutional_evidence, row.symbol, date), observations: Array.isArray(row.institutional_evidence?.observations) ? row.institutional_evidence.observations : [] } : null, [row, date]);
-  return { item, row, view, template, technical, financial, institutional, bars, chart, detail, loading: bundle.isLoading || (Boolean(chartPath) && chart.isLoading) };
+  return { item, row, view, template, technical, diagnostics, financial, institutional, bars, chart, detail, loading: bundle.isLoading || (Boolean(chartPath) && chart.isLoading) };
 }
 
 export const SELL_WATCH_LIMIT = 12;
@@ -116,7 +122,13 @@ export function useWatchSellChecks(views, brief) {
   const key = results.map(r => r.dataUpdatedAt).join('|');
   return useMemo(() => {
     const out = {};
-    targets.forEach((view, i) => { const bars = results[i]?.data?.bars; if (bars?.length) out[view.symbol] = sellSignals(bars); });
+    targets.forEach((view, i) => {
+      const payload = results[i]?.data, bars = payload?.bars;
+      if (!bars?.length) return;
+      let diagnostics = null;
+      try { diagnostics = diagnoseBookChart(view.row, payload, date); } catch { diagnostics = null; }
+      out[view.symbol] = withBookWarning(sellSignals(bars), diagnostics);
+    });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, targets.map(v => v.symbol).join('|')]);

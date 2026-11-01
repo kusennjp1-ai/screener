@@ -241,3 +241,23 @@ export function sellSignals(bars, rules = SELL_RULES) {
   return { advance: inAdvance ? advance : null, strength, weakness, hits: [...strength, ...weakness].filter(c => c.state === 'hit').length };
 }
 
+
+/**
+ * The book's combined warning (diagnoseBookChart.priceWarnings: below the 20-day line, three
+ * lower lows and heavy volume) as one more weakness check, so both screens judge it the same way.
+ */
+export function bookWarningCheck(diagnostics) {
+  const label = '20日線割れ・3日連続の安値切り下げ・大商い（書籍の複合警告）';
+  const w = diagnostics?.valid ? diagnostics.priceWarnings : null;
+  if (!w) return { key: 'book', label, state: 'unknown', detail: '検証済みの日足による書籍診断が未取得' };
+  const parts = [`20日線${w.below20 ? '割れ' : 'の上'}`, `安値切り下げ ${w.threeLowerLows ? '3日連続' : 'なし'}`, `出来高 ${finite(w.currentVolumeRatio) ? times(w.currentVolumeRatio) : '未確認'}`];
+  if (w.combinedWarning === true && w.recoveryInUpperHalf) parts.push('引けは値幅の上半分（買い支えを確認）');
+  return { key: 'book', label, state: w.combinedWarning === true ? 'hit' : w.combinedWarning === false ? 'clear' : 'unknown', detail: parts.join('・') };
+}
+
+/** Sell checks plus the book's combined warning; null stays null. */
+export function withBookWarning(sells, diagnostics) {
+  if (!sells) return null;
+  const weakness = [...sells.weakness, bookWarningCheck(diagnostics)];
+  return { ...sells, weakness, hits: [...sells.strength, ...weakness].filter(c => c.state === 'hit').length };
+}

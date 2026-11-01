@@ -34,7 +34,7 @@ Unknown inputs stay 未確認 or 未取得. They are never counted as a pass.
 The stock screen also lists checks for the last five sessions, in two groups:
 
 - **Selling into strength** (climax): the largest one-day gain since the start of the advance, the largest five-session gain since the start, at least 8 up days in the last 10, and +25% or more within 15 sessions.
-- **Selling into weakness:** the largest one-day loss since the start of the advance, and a close that crosses below the 50-day SMA on at least 1.4× the prior 50-day average volume.
+- **Selling into weakness:** the largest one-day loss since the start of the advance, a close that crosses below the 50-day SMA on at least 1.4× the prior 50-day average volume, and the book's combined warning from `diagnoseBookChart`: below the 20-day line, three lower lows and heavy volume. The research screen shows the same combined warning.
 
 How the checks are judged:
 
@@ -44,7 +44,7 @@ How the checks are judged:
 
 The watchlist (today's 3rd block and the ウォッチ tab) shows ▲ 売りのサイン n件 for watched stocks. It uses the same chart queries as the stock screen, and only the first 12 watched stocks are fetched.
 
-The ideas follow Minervini's sell rules. Every number is this app's own threshold, and the screen labels them 独自判定.
+The ideas follow Minervini's sell rules. The combined warning cites 『株式トレード 基本と原則』, and its 1.4× volume is the app's proxy. Every other number is this app's own threshold, and the screen labels them 独自判定. The stock screen also shows パワープレー候補（機械的探索） when `diagnoseBookChart` finds its mechanical power-play match.
 
 ### Motion
 

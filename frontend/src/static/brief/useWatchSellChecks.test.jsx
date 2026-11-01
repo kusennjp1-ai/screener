@@ -24,8 +24,9 @@ describe('watch sell checks', () => {
     const views = [view('AAA'), view('BBB'), view('BAD'), { symbol: 'NOC', row: {} }];
     const { result } = renderHook(() => useWatchSellChecks(views, { version: 'v1', date: DATE }), { wrapper });
     await waitFor(() => expect(Object.keys(result.current).sort()).toEqual(['AAA', 'BBB']));
-    expect(result.current.AAA.weakness.map(c => c.state)).toEqual(['hit', 'hit']);
-    expect(result.current.BBB.weakness.map(c => c.state)).toEqual(['clear', 'clear']);
+    expect(result.current.AAA.weakness.map(c => c.state)).toEqual(['hit', 'hit', 'unknown']);
+    expect(result.current.BBB.weakness.map(c => c.state)).toEqual(['clear', 'clear', 'unknown']);
+    expect(result.current.AAA.weakness[2].key).toBe('book');
     expect(result.current.BAD).toBeUndefined();
     expect(result.current.NOC).toBeUndefined();
     expect(client.getQueryCache().findAll({ queryKey: ['staticChartsPayload'] })).toHaveLength(3);
