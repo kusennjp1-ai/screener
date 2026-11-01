@@ -301,13 +301,16 @@ def test_export_writes_serializable_manifest_and_page_bundles(
     assert manifest["markets"]["US"]["assets"]["groups_rrg"]["path"] == "markets/us/groups_rrg.json"
     assert "themes" not in manifest["features"]
     assert "themes" not in manifest["pages"]
-    assert manifest["warnings"] == []
+    # The fixture has no published weekly reference snapshot: that is unknown, never current.
+    assert manifest["warnings"] == ["US weekly reference data is unavailable; universe membership and reference fundamentals are not current."]
+    assert manifest["markets"]["US"]["reference_data"]["available"] is False
+    assert manifest["markets"]["US"]["reference_data"]["stale"] is True
     assert scan["charts"]["path"] == "charts/index.json"
     assert breadth["payload"]["current"]["date"] == "2026-03-31"
     assert groups["payload"]["rankings"]["rankings"][0]["industry_group"] == "Semiconductors"
     assert not (output_dir / "themes").exists()
     assert result.manifest == manifest
-    assert result.warnings == ()
+    assert result.warnings == ("US weekly reference data is unavailable; universe membership and reference fundamentals are not current.",)
 
 
 def test_export_writes_india_market_bundle_and_root_manifest(
@@ -483,7 +486,10 @@ def test_export_can_write_single_market_artifact_without_root_manifest(
     assert metadata["entry"]["pages"]["scan"]["path"] == "markets/hk/scan/manifest.json"
     assert metadata["entry"]["assets"]["charts"]["path"] == "markets/hk/charts/index.json"
     assert metadata["entry"]["assets"]["groups_rrg"]["path"] == "markets/hk/groups_rrg.json"
-    assert metadata["warnings"] == []
+    assert metadata["warnings"] == [
+        "HK weekly reference data is unavailable; universe membership and reference fundamentals are not current."
+    ]
+    assert metadata["entry"]["reference_data"]["snapshot_key"] == "fundamentals_v1_hk"
 
 
 def test_export_scan_bundle_chunks_large_result_sets(service_and_session_factory, monkeypatch, tmp_path):
@@ -1384,8 +1390,9 @@ def test_export_marks_optional_sections_unavailable_without_aborting(
     assert manifest["features"]["groups"] is False
     assert manifest["markets"]["US"]["features"]["breadth"] is False
     assert manifest["markets"]["US"]["features"]["groups"] is False
-    assert len(manifest["warnings"]) == 3
+    assert len(manifest["warnings"]) == 4
     assert any("Static US rrg data unavailable" in warning for warning in manifest["warnings"])
+    assert any(warning.startswith("US weekly reference data is unavailable") for warning in manifest["warnings"])
     assert breadth["available"] is False
     assert breadth["expected_as_of_date"] == "2026-04-02"
     assert "No breadth snapshot is available" in breadth["message"]
