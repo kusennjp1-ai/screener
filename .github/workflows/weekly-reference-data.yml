@@ -60,7 +60,8 @@ on:
           - enable
 
 concurrency:
-  group: weekly-reference-data
+  # Ref-scoped so a branch preview never cancels the default-branch publisher.
+  group: weekly-reference-data-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -83,7 +84,9 @@ jobs:
             --notes "Automated weekly market-scoped reference bundles for static-site builds."
 
   publish:
-    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    # The default branch publishes to the release. Any other ref is a preview:
+    # it builds from the same seed and inputs but never uploads release assets.
+    if: ${{ !cancelled() && (needs.ensure_release.result == 'success' || (needs.ensure_release.result == 'skipped' && github.ref != format('refs/heads/{0}', github.event.repository.default_branch))) }}
     needs: ensure_release
     runs-on: ubuntu-latest
     # GitHub Actions hard-caps a job at 360 minutes. Setting an explicit ceiling
@@ -255,7 +258,29 @@ jobs:
             ${{ steps.build_inputs.outputs.resume_flag }} \
             ${{ steps.build_inputs.outputs.partial_flag }}
 
+      - name: Preview weekly reference outputs (non-default branch, no release upload)
+        if: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+        run: |
+          MARKET_LOWER="$(echo "${{ matrix.market }}" | tr '[:upper:]' '[:lower:]')"
+          MANIFEST_PATH="/tmp/weekly-reference/weekly-reference-latest-${MARKET_LOWER}.json"
+          ls -la /tmp/weekly-reference
+          {
+            echo "## Weekly reference preview (${{ matrix.market }}, not published)"
+            echo '```json'
+            cat "$MANIFEST_PATH"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          cat "$MANIFEST_PATH"
+
+      - uses: actions/upload-artifact@v4
+        if: ${{ github.ref != format('refs/heads/{0}', github.event.repository.default_branch) }}
+        with:
+          name: weekly-reference-preview-${{ matrix.market }}-${{ github.run_id }}
+          path: /tmp/weekly-reference/
+          retention-days: 3
+
       - name: Upload weekly reference assets
+        if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

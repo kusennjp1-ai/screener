@@ -514,6 +514,7 @@ def _build_us_official_bundle(
         is_fund,
         plan_us_universe,
         prior_rows_from_universe,
+        universe_sector_label,
         us_snapshot_coverage,
     )
 
@@ -599,7 +600,7 @@ def _build_us_official_bundle(
             payload = carry_immutable_fields(payload, prior_payloads.get(row.symbol))
             payload.setdefault("company_name", row.name)
             if not row.sector and payload.get("sector"):
-                row.sector = payload["sector"]
+                row.sector = universe_sector_label(payload["sector"])
                 classification_filled += 1
             if not row.industry and payload.get("industry"):
                 row.industry = payload["industry"]

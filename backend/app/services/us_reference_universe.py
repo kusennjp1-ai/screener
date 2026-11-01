@@ -196,6 +196,16 @@ FUND_CLASSES = frozenset({"etf", "etn"})
 IMMUTABLE_CARRY_FIELDS = ("ipo_date", "first_trade_date")
 
 
+# Yahoo labels financials "Financial Services"; the universe (and the
+# frontend's sectorDefinitions.js) use the Finviz-era "Financial".
+_UNIVERSE_SECTOR_ALIASES = {"Financial Services": "Financial"}
+
+
+def universe_sector_label(sector: Any) -> str:
+    label = str(sector or "").strip()
+    return _UNIVERSE_SECTOR_ALIASES.get(label, label)
+
+
 def is_fund(row: PlannedUniverseRow | None) -> bool:
     return row is not None and (row.is_etf or row.security_class in FUND_CLASSES)
 

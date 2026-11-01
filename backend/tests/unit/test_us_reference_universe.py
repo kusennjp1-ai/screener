@@ -148,3 +148,11 @@ def test_fund_rows_cannot_mask_missing_equity_fundamentals():
     # 98.0% of all symbols are covered, yet only 96.67% of operating companies: blocked.
     assert bad_stats["covered_active_symbols"] == 980 and not bad
     assert bad_warnings == ["Equity fundamentals coverage 96.67% below minimum 98.00%"]
+
+
+def test_universe_sector_label_matches_finviz_era_vocabulary():
+    from app.services.us_reference_universe import universe_sector_label
+
+    assert universe_sector_label("Financial Services") == "Financial"
+    assert universe_sector_label(" Healthcare ") == "Healthcare"
+    assert universe_sector_label(None) == ""
