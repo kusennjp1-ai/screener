@@ -21,6 +21,7 @@ from app.interfaces.tasks.feature_store_tasks import (
     FEATURE_SNAPSHOT_TOTAL_MAX_RETRIES,
     _bootstrap_coverage_total,
     _create_auto_scan_for_published_run,
+    _enrich_feature_run_with_composite_rating,
     _enrich_feature_run_with_ibd_metadata,
     _fail_stale_feature_runs,
     _repair_current_us_group_metadata,
@@ -1136,6 +1137,130 @@ def test_enrich_feature_run_with_ibd_metadata_updates_details_json():
     assert msft.details_json["ibd_industry_group"] == "Software"
     assert msft.details_json["ibd_group_rank"] is None
 
+    engine.dispose()
+
+
+def _composite_rating_session_factory():
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(
+        engine,
+        tables=[FeatureRun.__table__, StockFeatureDaily.__table__],
+    )
+    return engine, sessionmaker(bind=engine, autocommit=False, autoflush=False)
+
+
+def _add_composite_rating_run(session_factory, *, run_id, details_by_symbol):
+    with session_factory() as db:
+        db.add(
+            FeatureRun(
+                id=run_id,
+                as_of_date=date(2026, 10, 30),
+                run_type="daily_snapshot",
+                status="published",
+            )
+        )
+        db.add_all(
+            [
+                StockFeatureDaily(
+                    run_id=run_id,
+                    symbol=symbol,
+                    as_of_date=date(2026, 10, 30),
+                    composite_score=80.0,
+                    overall_rating=4,
+                    passes_count=3,
+                    details_json=details,
+                )
+                for symbol, details in details_by_symbol.items()
+            ]
+        )
+        db.commit()
+
+
+def _composite_details(session_factory, run_id):
+    with session_factory() as db:
+        return {
+            row.symbol: row.details_json
+            for row in db.query(StockFeatureDaily).filter_by(run_id=run_id).all()
+        }
+
+
+def test_enrich_feature_run_with_composite_rating_returns_counts_after_commit():
+    engine, session_factory = _composite_rating_session_factory()
+    _add_composite_rating_run(
+        session_factory,
+        run_id=31,
+        details_by_symbol={
+            "LEAD": {"symbol": "LEAD", "rs_rating": 95, "eps_rating": 90},
+            "LAG": {"symbol": "LAG", "rs_rating": 40, "eps_rating": 35},
+            # No usable component: must stay unknown, never become a rating.
+            "NODATA": {"symbol": "NODATA"},
+        },
+    )
+    commits = []
+    event.listen(session_factory, "after_commit", lambda session: commits.append(session))
+    rollbacks = []
+    event.listen(session_factory, "after_rollback", lambda session: rollbacks.append(session))
+
+    stats = _enrich_feature_run_with_composite_rating(
+        feature_run_id=31,
+        session_factory=session_factory,
+    )
+
+    assert len(commits) == 1
+    assert rollbacks == []
+    assert stats == {"run_id": 31, "total_rows": 3, "updated_rows": 2, "rated_rows": 2}
+    details = _composite_details(session_factory, 31)
+    assert details["LEAD"]["composite_rating"] > details["LAG"]["composite_rating"]
+    assert isinstance(details["LEAD"]["composite_rating_score"], float)
+    assert "composite_rating" not in details["NODATA"]
+    assert "composite_rating_score" not in details["NODATA"]
+
+    rerun = _enrich_feature_run_with_composite_rating(
+        feature_run_id=31,
+        session_factory=session_factory,
+    )
+    assert rerun == {"run_id": 31, "total_rows": 3, "updated_rows": 0, "rated_rows": 2}
+    assert _composite_details(session_factory, 31) == details
+    engine.dispose()
+
+
+def test_enrich_feature_run_with_composite_rating_clears_rating_without_components():
+    engine, session_factory = _composite_rating_session_factory()
+    _add_composite_rating_run(
+        session_factory,
+        run_id=32,
+        details_by_symbol={
+            "KEPT": {"symbol": "KEPT", "rs_rating": 80},
+            "LOST": {
+                "symbol": "LOST",
+                "composite_rating": 77,
+                "composite_rating_score": 70.5,
+            },
+        },
+    )
+
+    stats = _enrich_feature_run_with_composite_rating(
+        feature_run_id=32,
+        session_factory=session_factory,
+    )
+
+    assert stats == {"run_id": 32, "total_rows": 2, "updated_rows": 2, "rated_rows": 1}
+    details = _composite_details(session_factory, 32)
+    assert details["KEPT"]["composite_rating"] is not None
+    assert details["LOST"]["composite_rating"] is None
+    assert details["LOST"]["composite_rating_score"] is None
+    engine.dispose()
+
+
+def test_enrich_feature_run_with_composite_rating_empty_run_reports_zero_counts():
+    engine, session_factory = _composite_rating_session_factory()
+
+    stats = _enrich_feature_run_with_composite_rating(
+        feature_run_id=33,
+        session_factory=session_factory,
+    )
+
+    assert stats == {"run_id": 33, "total_rows": 0, "updated_rows": 0, "rated_rows": 0}
     engine.dispose()
 
 
