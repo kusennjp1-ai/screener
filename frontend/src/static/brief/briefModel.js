@@ -1,6 +1,6 @@
 // Pure view model for the daily-brief screens. Every value comes from the
 // published research rows and the existing rule functions; unknown stays unknown.
-import { assess, entryPlan, finite } from '../researchEngine';
+import { assess, entryPlan, finite, highDistance } from '../researchEngine';
 import { canonicalPivot } from '../researchPresentation';
 import { signed, stateKey, STATES, times } from '../positionGeometry';
 import { verifiedVolumeRatio } from '../qualificationAudit';
@@ -51,6 +51,7 @@ export function candidateView(item, date) {
     stateGlyph: STATES[key]?.[1] || '?',
     volumeRatio: finite(volume) ? volume : null,
     rs: finite(row.rs_rating) ? row.rs_rating : null,
+    fromHigh: finite(highDistance(row)) ? highDistance(row) : null,
     rsLineHigh: row.se_rs_line_new_high === true,
     qualified: Boolean(item?.assessment?.qualified),
     passed: item?.assessment?.passed ?? null,
@@ -88,6 +89,7 @@ export const LIST_SORTS = {
   rs: { label: 'RS推計', compare: (a, b) => (b.rs ?? -1) - (a.rs ?? -1) || briefOrder(a, b) },
   pivot: { label: 'ピボットに近い順', compare: (a, b) => (finite(a.distance) ? Math.abs(a.distance) : 99) - (finite(b.distance) ? Math.abs(b.distance) : 99) || briefOrder(a, b) },
   volume: { label: '出来高比', compare: (a, b) => (b.volumeRatio ?? -1) - (a.volumeRatio ?? -1) || briefOrder(a, b) },
+  high: { label: '52週高値に近い順', compare: (a, b) => (a.fromHigh ?? 999) - (b.fromHigh ?? 999) || briefOrder(a, b) },
 };
 
 /** What changed for a watched stock, in the order a trader acts on it. */

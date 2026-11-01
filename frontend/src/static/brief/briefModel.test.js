@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { briefOrder, environmentWarnings, footprint, matchesSearch, positionPlan, rsLineNewHigh, watchEvent, LIST_FILTERS, STOP_MAX_PERCENT } from './briefModel';
+import { briefOrder, environmentWarnings, footprint, matchesSearch, positionPlan, rsLineNewHigh, watchEvent, LIST_FILTERS, LIST_SORTS, STOP_MAX_PERCENT } from './briefModel';
 
 const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, ...over });
 
@@ -14,6 +14,8 @@ describe('brief model', () => {
     expect(LIST_FILTERS.one.test(view({ qualified: false, failed: 1, unknown: 1 }))).toBe(false);
     expect(matchesSearch(view({ symbol: 'NVLX', name: 'Novalux' }), 'nova')).toBe(true);
     expect(matchesSearch(view({ symbol: 'NVLX', name: 'Novalux' }), 'zz')).toBe(false);
+    const byHigh = [view({ symbol: 'UNK', fromHigh: null }), view({ symbol: 'FAR', fromHigh: 18 }), view({ symbol: 'TOP', fromHigh: 0 })].sort(LIST_SORTS.high.compare);
+    expect(byHigh.map(v => v.symbol)).toEqual(['TOP', 'FAR', 'UNK']);
   });
 
   it('describes watch changes and needs 1.4x volume to call a breakout', () => {
