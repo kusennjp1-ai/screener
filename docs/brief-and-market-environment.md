@@ -62,3 +62,18 @@ The brief and the 市場 page also show a bifurcation note: the index is within 
 3. **Otherwise 未確認.**
 
 SEC access reads the `SEC_USER_AGENT` secret and retries 429/5xx responses with backoff.
+
+## Making `#/brief` the default screen (not done yet)
+
+Only `StaticAppShell.jsx` routes the brief, so changing the default is a small change in code. The large part is updating the gates that pin the current home screen. The following reference the current `#/` layout (region 今日の概況, `.candidate-row`, `.leader-pinned-title`, the six `detail-tab-*` tabs):
+
+- `frontend/src/App.static.test.jsx`
+- `frontend/tests/static/` specs: mobile-first workbench, candidate scroll, financial layout, institutional history, daily-change coverage, and the leader-feed filters
+- `frontend/tools/design-review.mjs` and its scripted clicks
+- `frontend/tools/leader-feed-design-contract.mjs` and `leader-detail-design-contract.mjs`
+- `frontend/tools/research-browser-navigation.mjs` and `continuous-switch-diagnostic.mjs`
+
+Suggested order:
+1. Add the brief screens to `design-review.mjs`, and review them through the normal record.
+2. Point `/` at the brief and keep the research workspace at a named route.
+3. Move those specs and contracts to the new route, keeping their objective budgets: axe, hit targets, type and radius scales, performance.
