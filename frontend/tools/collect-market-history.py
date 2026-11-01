@@ -100,6 +100,40 @@ def parse_series(record, sessions):
     frame.loc[ambiguous, :] = np.nan
     return frame, {**value['meta'],'excluded_extreme_dates':list(frame.index[ambiguous])}
 
+STAGE_MA_TREND_SESSIONS = 20
+STAGE_MA_FLAT_PERCENT = 1.0
+STAGE_PRICE_TREND_SESSIONS = 60
+STAGE_PRICE_TREND_DAILY_PERCENT = 0.05
+BREAKOUT_VOLUME_RATIO = 1.4
+BREAKOUT_HOLD_SESSIONS = 10
+BREAKOUT_FAILURE_DRAWDOWN = 0.07
+BREAKOUT_WINDOW_SESSIONS = 20
+INDICATOR_POLICY = {
+    'trend_template': 'Eight conditions: close above 150/200-day SMA, 150 above 200, 200-day SMA above its value 21 sessions earlier, 50 above 150 and 200, close above 50, close at least 30% above the 252-session low, within 25% of the 252-session high, same-day proprietary RS >= 70 (not IBD RS). leaderCount keeps the earlier 25%-above-low variant.',
+    'stage': 'Weinstein stage replayed per session with the scanner rules in backend/app/scanners/criteria/stage_analysis.py: 200-day SMA change over 20 sessions (flat within +/-1%), 60-session least-squares close slope (+/-0.05% per day) and close versus the 200-day SMA. The swing-pattern exception that can move a stock below a falling 200-day SMA into Stage 1 is not replayed; such sessions count as Stage 4.',
+    'breakout': 'A session closing above the prior 251-session high on at least 1.4x the prior 50-session average volume while the 30% price template holds. Judged after 10 later sessions: failed if any low in them is at least 7% below the breakout close. Reported for breakouts dated 10 to 29 sessions before each date.',
+}
+
+def classify_stages(close, ma200, weights, sxx):
+    """Vectorised replay of WeinsteinStageAnalyzer._classify_stage; 0 means not classifiable."""
+    import numpy as np
+    values=close.to_numpy(dtype=float); ma=ma200.to_numpy(dtype=float)
+    past=ma200.shift(STAGE_MA_TREND_SESSIONS-1).to_numpy(dtype=float)
+    change=(ma-past)/past*100
+    rising=change>=STAGE_MA_FLAT_PERCENT; falling=change<=-STAGE_MA_FLAT_PERCENT; flat=np.abs(change)<STAGE_MA_FLAT_PERCENT
+    n=STAGE_PRICE_TREND_SESSIONS
+    total=close.rolling(n,min_periods=n).sum().to_numpy(dtype=float)
+    weighted=np.convolve(values,weights)[:len(values)]
+    slope=(weighted-(n-1)/2*total)/sxx
+    daily=slope/(total/n)*100
+    up=daily>STAGE_PRICE_TREND_DAILY_PERCENT; down=daily<-STAGE_PRICE_TREND_DAILY_PERCENT
+    above=values>ma
+    known=np.isfinite(change)&np.isfinite(daily)&np.isfinite(values)&np.isfinite(ma)
+    stage=np.select(
+        [above&rising&up, ~above&falling&down, above&(flat|falling), above&rising, flat, ~above&(flat|rising)],
+        [2,4,3,3,1,1], default=np.where(above,3,4))
+    return np.where(known,stage,0)
+
 def build(records, errors, symbols, sessions, target, classification=None):
     import numpy as np
     import pandas as pd
@@ -110,6 +144,14 @@ def build(records, errors, symbols, sessions, target, classification=None):
     ups = above.copy(); downs = above.copy()
     momentum = np.full((count,len(symbols)), np.nan)
     template = np.zeros((count,len(symbols)), dtype=bool)
+    # Minervini's published threshold is 30% above the 52-week low; `template`
+    # keeps the existing 25% variant behind leaderCount unchanged.
+    template30 = np.zeros((count,len(symbols)), dtype=bool)
+    above150 = np.zeros(count, dtype=int); above200 = above150.copy()
+    stages = {stage:np.zeros(count, dtype=int) for stage in (1,2,3,4)}
+    breakouts_new = np.zeros(count, dtype=int); breakouts_matured = breakouts_new.copy(); breakouts_held = breakouts_new.copy()
+    slope_weights = np.arange(STAGE_PRICE_TREND_SESSIONS-1,-1,-1,dtype=float)
+    slope_x = np.arange(STAGE_PRICE_TREND_SESSIONS,dtype=float); slope_sxx = float(((slope_x-slope_x.mean())**2).sum())
     memberships=(classification or {}).get('memberships',{})
     group_columns={group:[i for i,symbol in enumerate(symbols) if memberships.get(symbol,'Unknown')==group] for group in GROUPS}
     group_data={group:{'coverage':np.zeros(count,dtype=int),'eligibleUniverse':np.full(count,len(columns),dtype=int),'above50':np.zeros(count,dtype=int)} for group,columns in group_columns.items()}
@@ -143,13 +185,36 @@ def build(records, errors, symbols, sessions, target, classification=None):
             change=c/c.shift(1)-1
             ups += good & (change>=.04).to_numpy(); downs += good & (change<=-.04).to_numpy()
             momentum[:,column]=sum((c/c.shift(lag)-1)*weight for lag,weight in [(63,.4),(126,.2),(189,.2),(252,.2)]).where(good).to_numpy()
-            template[:,column]=(good & ((c>ma150)&(c>ma200)&(ma150>ma200)&(ma200>sma(200,21))&(ma50>ma150)&(ma50>ma200)&(c>ma50)&(c/low>=1.25)&(c/high>=.75)).to_numpy())
+            price_trend_ok=(c>ma150)&(c>ma200)&(ma150>ma200)&(ma200>sma(200,21))&(ma50>ma150)&(ma50>ma200)&(c>ma50)&(c/high>=.75)
+            template[:,column]=(good & (price_trend_ok&(c/low>=1.25)).to_numpy())
+            template30[:,column]=(good & (price_trend_ok&(c/low>=1.30)).to_numpy())
+            above150 += good & (c>ma150).to_numpy(); above200 += good & (c>ma200).to_numpy()
+            stage=classify_stages(c, ma200, slope_weights, slope_sxx)
+            for value,counts in stages.items():counts += good & (stage==value)
+            # Breakout: close above the prior 251-session high on >=1.4x the prior
+            # 50-session average volume while the 30% price template holds. It is
+            # judged only once ten later sessions exist: held unless a low within
+            # those sessions reaches 7% below the breakout close.
+            volume=f.volume
+            prior_high=f.high.shift(1).rolling(251,min_periods=251).max()
+            prior_volume=volume.shift(1).rolling(50,min_periods=50).mean()
+            breakout=good & template30[:,column] & (c>prior_high).to_numpy() & (volume>=BREAKOUT_VOLUME_RATIO*prior_volume).to_numpy()
+            later_low=f.low.iloc[::-1].rolling(BREAKOUT_HOLD_SESSIONS,min_periods=BREAKOUT_HOLD_SESSIONS).min().iloc[::-1].shift(-1)
+            matured=breakout & later_low.notna().to_numpy()
+            breakouts_new += breakout; breakouts_matured += matured
+            breakouts_held += matured & (later_low > c*(1-BREAKOUT_FAILURE_DRAWDOWN)).to_numpy()
             provenance.append({'symbol':symbol,'first_trade_date':meta.get('firstTradeDate'),'valid_bars':int(c.count()),'excluded_extreme_dates':meta['excluded_extreme_dates'], **record['provenance']})
         except Exception as error: parse_errors[symbol]=str(error)
     ranks=pd.DataFrame(momentum).rank(axis=1,method='average',ascending=True)
     eligible_rs=np.isfinite(momentum).sum(axis=1)
     rs=1+98*(ranks.to_numpy()-1)/np.maximum(eligible_rs[:,None]-1,1)
     leaders=(template & (rs>=70)).sum(axis=1)
+    trend_template=(template30 & (rs>=70)).sum(axis=1)
+    strong_leaders=(template30 & (rs>=90)).sum(axis=1)
+    # Breakouts dated 10..29 sessions earlier: every one has its full ten-session
+    # follow-through window on or before the reported date (no look-ahead).
+    window=lambda array:pd.Series(array,dtype=float).rolling(BREAKOUT_WINDOW_SESSIONS,min_periods=BREAKOUT_WINDOW_SESSIONS).sum().shift(BREAKOUT_HOLD_SESSIONS).to_numpy()
+    matured_window=window(breakouts_matured); held_window=window(breakouts_held)
     for group,columns in group_columns.items():group_data[group]['leaderCount']=(template[:,columns] & (rs[:,columns]>=70)).sum(axis=1)
     sufficient=(expected>0)&(covered/np.maximum(expected,1)>=.9)&(eligible_rs>=100)
     up10=pd.Series(np.where(sufficient,ups,np.nan)).rolling(10,min_periods=10).sum().to_numpy()
@@ -163,6 +228,11 @@ def build(records, errors, symbols, sessions, target, classification=None):
         valid=bool(sufficient[i]); val=lambda array:int(array[i]) if valid else None
         points.append({'date':day,'coverage':int(covered[i]),'universe':len(symbols),'eligibleUniverse':int(expected[i]),'coveragePercent':round(float(covered[i]/max(expected[i],1)*100),3),
             'above50':val(above),'above50Percent':float(above[i]/covered[i]*100) if valid else None,'newHighs':val(highs),'newLows':val(lows),'leaderCount':val(leaders),
+            'trendTemplateCount':val(trend_template),'trendTemplatePercent':float(trend_template[i]/covered[i]*100) if valid else None,'rs90TemplateCount':val(strong_leaders),
+            'above150':val(above150),'above150Percent':float(above150[i]/covered[i]*100) if valid else None,'above200':val(above200),'above200Percent':float(above200[i]/covered[i]*100) if valid else None,
+            'stage1':val(stages[1]),'stage2':val(stages[2]),'stage3':val(stages[3]),'stage4':val(stages[4]),
+            'breakouts':val(breakouts_new),'breakoutsJudged':int(matured_window[i]) if valid and np.isfinite(matured_window[i]) and bool(sufficient[max(0,i-BREAKOUT_HOLD_SESSIONS-BREAKOUT_WINDOW_SESSIONS+1):i+1].all()) else None,
+            'breakoutsHeld':int(held_window[i]) if valid and np.isfinite(held_window[i]) and bool(sufficient[max(0,i-BREAKOUT_HOLD_SESSIONS-BREAKOUT_WINDOW_SESSIONS+1):i+1].all()) else None,
             'stocks_up_4pct':val(ups),'stocks_down_4pct':val(downs),'ratio_10day':float(up10[i]/down10[i]) if len(points)>=9 and np.isfinite(up10[i]) and np.isfinite(down10[i]) and down10[i]>0 else None,
             'reason':None if valid else '独立カレンダーに沿う253日足の観測率90%またはRS母集団100銘柄を満たしません。'})
     index=[]; sector_series={}; extra_provenance=[]
@@ -193,7 +263,7 @@ def build(records, errors, symbols, sessions, target, classification=None):
             series.append({'date':day,'coverage':observed,'eligibleUniverse':eligible,'above50':above50,'above50Percent':above50/observed*100 if valid else None,'leaderCount':int(arrays['leaderCount'][i]) if valid else None})
         sector_breadth.append({'sector':group,'universe':len(group_columns[group]),'points':series})
     return {'schema_version':'market-long-history-v1','market':'US','as_of_date':target,'retrieved_at':datetime.now(timezone.utc).isoformat(),
-        'price_policy':{'basis':'split-adjusted-close-no-dividend','ambiguous_daily_ratio_at_least':1.8,'ambiguous_daily_ratio_at_most':.55,'rolling_sessions':253,'minimum_coverage':.9,'unknown_inception':'retained in expected denominator','extreme_move_limitation':'A real extreme move can also be excluded; no split/corporate-action certification is claimed.'},
+        'indicator_policy':INDICATOR_POLICY,'price_policy':{'basis':'split-adjusted-close-no-dividend','ambiguous_daily_ratio_at_least':1.8,'ambiguous_daily_ratio_at_most':.55,'rolling_sessions':253,'minimum_coverage':.9,'unknown_inception':'retained in expected denominator','extreme_move_limitation':'A real extreme move can also be excluded; no split/corporate-action certification is claimed.'},
         'universe':{'basis':'current-published-universe-retrospective','symbols':symbols,'sha256':digest(encode(symbols)),'historical_membership_verified':False,'historical_fundamentals_verified':False},
         'calendar':{'provider':'pandas_market_calendars:NYSE','sessions':sessions},'breadth':points,'sp500':index,'sectorRotation':{'lookback_sessions':126,'classification':'11 Select Sector SPDR ETF proxies; not official IBD industry groups or ratings','frames':frames},
         'classification':classification,'sectorBreadth':sector_breadth if classification else [],'provenance':provenance+extra_provenance,'errors':{**errors,**parse_errors}}

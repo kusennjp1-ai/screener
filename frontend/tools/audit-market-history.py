@@ -58,7 +58,9 @@ def main():
             momentum=sum((c/closes[-1-lag]-1)*weight for lag,weight in [(63,.4),(126,.2),(189,.2),(252,.2)])
             observations[day].append({'symbol':symbol,'momentum':momentum,'above50':c>ma50,'newHighs':bars[-1]['high']>max(row['high'] for row in bars[-252:-1]),'newLows':bars[-1]['low']<min(row['low'] for row in bars[-252:-1]),
               'stocks_up_4pct':c/closes[-2]-1>=.04,'stocks_down_4pct':c/closes[-2]-1<=-.04,
-              'template':c>ma150 and c>ma200 and ma150>ma200 and ma200>avg(200,21) and ma50>ma150 and ma50>ma200 and c>ma50 and c/min(row['low'] for row in year)>=1.25 and c/max(row['high'] for row in year)>=.75})
+              'above150':c>ma150,'above200':c>ma200,
+              'template':c>ma150 and c>ma200 and ma150>ma200 and ma200>avg(200,21) and ma50>ma150 and ma50>ma200 and c>ma50 and c/min(row['low'] for row in year)>=1.25 and c/max(row['high'] for row in year)>=.75,
+              'template30':c>ma150 and c>ma200 and ma150>ma200 and ma200>avg(200,21) and ma50>ma150 and ma50>ma200 and c>ma50 and c/min(row['low'] for row in year)>=1.30 and c/max(row['high'] for row in year)>=.75})
         checked+=1
     result={}
     for day in wanted:
@@ -67,10 +69,17 @@ def main():
         for key in ('above50','newHighs','newLows','stocks_up_4pct','stocks_down_4pct'):aggregate[key]=sum(row[key] for row in rows) if valid else None
         values=sorted(row['momentum'] for row in rows);ranks={}
         for i,value in enumerate(values):ranks.setdefault(value,[]).append(i)
-        aggregate['leaderCount']=sum(row['template'] and 1+98*(sum(ranks[row['momentum']])/len(ranks[row['momentum']]))/(len(rows)-1)>=70 for row in rows) if valid else None
-        result[day]=aggregate
+        rs=lambda row:1+98*(sum(ranks[row['momentum']])/len(ranks[row['momentum']]))/(len(rows)-1)
+        aggregate['leaderCount']=sum(row['template'] and rs(row)>=70 for row in rows) if valid else None
+        # Market-environment fields added later are replayed whenever the source carries them.
+        extended={'trendTemplateCount':sum(row['template30'] and rs(row)>=70 for row in rows) if valid else None,
+                  'rs90TemplateCount':sum(row['template30'] and rs(row)>=90 for row in rows) if valid else None,
+                  'above150':sum(row['above150'] for row in rows) if valid else None,'above200':sum(row['above200'] for row in rows) if valid else None}
+        result[day]={**aggregate,**extended}
         if day in points:
             for key,value in aggregate.items():assert points[day][key]==value,(day,key,points[day][key],value)
+            for key,value in extended.items():
+                if key in points[day]:assert points[day][key]==value,(day,key,points[day][key],value)
     for day in sample:
         window=[result[calendar[j]] for j in range(positions[day]-9,positions[day]+1)]
         available=all(row['stocks_up_4pct'] is not None and row['stocks_down_4pct'] is not None for row in window)

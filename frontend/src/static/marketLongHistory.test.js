@@ -4,6 +4,16 @@ const make=()=>({schema_version:'market-long-history-v1',market:'US',as_of_date:
 const stockProofs=value=>{value.provenance.push(...value.universe.symbols.map(symbol=>({symbol,url:`https://query1.finance.yahoo.com/v8/finance/chart/${symbol}`,sha256:'c'.repeat(64),retrieved_at:'2026-10-24T00:00:00Z'})));return value;};
 describe('long history admission',()=>{
  it('retains an older observation without redating it',()=>{const value=stockProofs(make());expect(validateLongHistory(value,'2026-10-26').as_of_date).toBe('2026-10-23');});
+ it('accepts consistent market-environment fields and rejects a broken stage partition or breakout count',()=>{
+  const env=value=>{const row=value.breadth[0],c=row.coverage;Object.assign(row,{trendTemplateCount:20,trendTemplatePercent:100*20/c,rs90TemplateCount:5,above150:40,above150Percent:100*40/c,above200:30,above200Percent:100*30/c,stage1:c-60,stage2:30,stage3:20,stage4:10,breakouts:2,breakoutsJudged:6,breakoutsHeld:4});return value;};
+  expect(()=>validateLongHistory(env(stockProofs(make())),'2026-10-23')).not.toThrow();
+  const broken=env(stockProofs(make()));broken.breadth[0].stage4+=1;
+  expect(()=>validateLongHistory(broken,'2026-10-23')).toThrow(/stage partition/);
+  const held=env(stockProofs(make()));held.breadth[0].breakoutsHeld=9;
+  expect(()=>validateLongHistory(held,'2026-10-23')).toThrow(/breakout/);
+  const rs=env(stockProofs(make()));rs.breadth[0].rs90TemplateCount=21;
+  expect(()=>validateLongHistory(rs,'2026-10-23')).toThrow(/RS90/);
+ });
  it.each(['future','forgedHost','symbolSubstitution','missingIndexProof','duplicateDay','populationClaim','underCoverage','badPercentage','invalidRank'] )('rejects %s source evidence',kind=>{
   const value=stockProofs(make());
   if(kind==='future')value.as_of_date='2026-10-27';
