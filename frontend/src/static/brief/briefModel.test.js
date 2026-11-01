@@ -44,3 +44,15 @@ describe('brief model', () => {
     expect(footprint({ vcp: { legs: legs.slice(0, 1), measurementsValid: true } }, [])).toBeNull();
   });
 });
+
+describe('RS line new high', async () => {
+  const { rsLineNewHigh } = await import('./briefModel');
+  const bars = Array.from({ length: 260 }, (_, i) => ({ date: `d${i}` }));
+  it('needs 252 aligned sessions and compares with the prior 251', () => {
+    const line = bars.map((b, i) => ({ time: b.date, value: 100 + Math.sin(i / 9) }));
+    expect(rsLineNewHigh(line, bars)).toBe(false);
+    line[259].value = 102;
+    expect(rsLineNewHigh(line, bars)).toBe(true);
+    expect(rsLineNewHigh(line.slice(-100), bars)).toBeNull();
+  });
+});

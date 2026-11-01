@@ -112,6 +112,15 @@ export function positionPlan(view, { stopPercent = STOP_DEFAULT_PERCENT, account
     cost: shares === null ? null : shares * entry, weight: shares === null ? null : shares * entry / account * 100 };
 }
 
+/** RS line (price ÷ S&P 500) at or above its high of the prior 251 sessions; null when the history is too short. */
+export function rsLineNewHigh(rsLine, bars) {
+  const dates = new Set((bars || []).map(b => b.date));
+  const values = (rsLine || []).filter(p => dates.has(p.time || p.date) && finite(p.value)).map(p => p.value);
+  if (values.length < 252) return null;
+  const last = values.at(-1), prior = values.slice(-252, -1);
+  return last >= Math.max(...prior);
+}
+
 /** VCP footprint text from measured legs, e.g. "VCP 14週 24/3 4T". */
 export function footprint(evidence, bars) {
   const legs = evidence?.vcp?.legs || [];

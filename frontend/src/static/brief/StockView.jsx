@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { money, signed, times } from '../positionGeometry';
 import PriceChart from './PriceChart';
-import { footprint, positionPlan, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
+import { footprint, positionPlan, rsLineNewHigh, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
 import { meterPercent } from './BriefParts';
 
 const finite = Number.isFinite;
@@ -130,9 +130,10 @@ export default function StockView({ data, header = null }) {
   const chartRef = useRef(null);
   const plan = useMemo(() => view ? positionPlan(view, settings) : null, [view, settings]);
   const legs = technical?.vcp?.measurementsValid ? technical.vcp.legs : [];
-  const model = useMemo(() => bars && view ? { symbol: view.symbol, bars, rsLine: data.chart.data?.rs_line || [], legs, pivot: view.pivot, upper: view.upper, stop: plan?.stop ?? null, rsNewHigh: view.rsLineHigh, dryUpLeg: legs.at(-1) || null } : null,
+  const rsHigh = useMemo(() => view?.rsLineHigh || rsLineNewHigh(data.chart.data?.rs_line, bars) === true, [view?.rsLineHigh, data.chart.data, bars]);
+  const model = useMemo(() => bars && view ? { symbol: view.symbol, bars, rsLine: data.chart.data?.rs_line || [], legs, pivot: view.pivot, upper: view.upper, stop: plan?.stop ?? null, rsNewHigh: rsHigh, dryUpLeg: legs.at(-1) || null } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [bars, view?.symbol, view?.pivot, view?.upper, legs, data.chart.data]);
+    [bars, view?.symbol, view?.pivot, view?.upper, legs, data.chart.data, rsHigh]);
   if (!view) return <p className="brief-note brief-pad" role="status">銘柄データを読み込み中…</p>;
   const update = (key, value) => {
     if (!finite(value)) return;
@@ -149,7 +150,7 @@ export default function StockView({ data, header = null }) {
     [Number.isInteger(row?.stage) ? `ステージ${row.stage}` : 'ステージ 未確認', row?.stage === 2 ? 'zone' : row?.stage ? 'ext' : ''],
     [print ? print.text : 'VCP 未確認', ''],
     [`RS推計 ${finite(view.rs) ? view.rs : '未確認'}`, finite(view.rs) && view.rs >= 70 ? 'zone' : ''],
-    ...(view.rsLineHigh ? [['RS線 新高値', 'zone']] : []),
+    ...(rsHigh ? [['RS線 新高値', 'zone']] : []),
     [`Code 33 ${code33 === 'pass' ? '達成' : code33 === 'fail' ? '未達' : '未確認'}${financial?.code33?.source === 'yahoo' ? '（参考）' : ''}`, code33 === 'pass' ? 'zone' : ''],
     ...(Number.isInteger(row?.ibd_group_rank) ? [[`業種 ${row.ibd_group_rank}位（推計）`, row.ibd_group_rank <= 40 ? 'zone' : '']] : []),
     [view.earnings ? `決算まで ${view.earnings.days}日` : '決算日 未確認', view.earnings && view.earnings.days <= 10 ? 'ext' : ''],
