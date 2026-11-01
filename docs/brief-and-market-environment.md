@@ -15,7 +15,8 @@ market-environment series behind them. For vocabulary, see `CONTEXT.md`.
 - **Shell:** the screens have their own shell (48 px top bar, 56 px bottom tabs, light/dark toggle from the existing colour-mode preference).
 - **Desktop (≥1024 px):** two panes, list on the left and the selected stock on the right.
 - **Isolation:** the existing routes and their design contracts are unchanged.
-- **Making it the default:** switch the `/` route in `StaticAppShell.jsx` and update the design contracts that pin the current home screen.
+- **Start screen:** each viewer can tick 「アプリを開いたらこの画面を表示」 at the end of 今日. The choice is stored in this browser only (`screener:start-screen`). Opening the app at its root then lands on `#/brief` once per page load. The 従来の画面 link and deep links such as `#/scan` are kept. The app's default for everyone else is unchanged, so the design contracts that pin `#/` still apply.
+- **Making it the default for everyone:** switch the `/` route in `StaticAppShell.jsx` and update the design contracts that pin the current home screen (see below).
 
 All judgements come from the shared rule functions, so the brief and the research screens never disagree:
 

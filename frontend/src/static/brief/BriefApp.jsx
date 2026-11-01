@@ -7,6 +7,7 @@ import { money, signed } from '../positionGeometry';
 import '../theme/foundation.css';
 import './brief.css';
 import { useBriefData, useStockData, useWatchlist, useWatchSellChecks } from './useBriefData';
+import { readStartScreen, writeStartScreen } from './startScreen';
 import { candidateView, focusCandidates, leadingGroups, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
 import MarketCard from './MarketCard';
 import StockView from './StockView';
@@ -65,7 +66,19 @@ function TodayView({ brief, watch, open, now, animate }) {
         </button></li>; })}</ul>
         : <p className="brief-note">銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。</p>}
     </section>
+    <StartScreenChoice />
   </>;
+}
+
+/** Per-viewer opt-in: open the app on this screen instead of the research workspace. */
+function StartScreenChoice() {
+  const [start, setStart] = useState(readStartScreen);
+  const [failed, setFailed] = useState(false);
+  return <label className="brief-start in" style={{ '--i': 4 }}>
+    <input type="checkbox" checked={start === 'brief'} onChange={event => { const next = event.target.checked ? 'brief' : 'research'; const ok = writeStartScreen(next); setFailed(!ok); if (ok) setStart(next); }} />
+    <span className="brief-start-box" aria-hidden="true">{start === 'brief' ? '✓' : ''}</span>
+    <span>アプリを開いたらこの画面を表示<small>{failed ? 'このブラウザでは設定を保存できません。' : 'この端末のこのブラウザだけの設定です。従来の画面へは上の「従来の画面」から移れます。'}</small></span>
+  </label>;
 }
 
 /** Every view a list screen can show, before its filter. */
