@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { briefOrder, footprint, matchesSearch, positionPlan, watchEvent, LIST_FILTERS, STOP_MAX_PERCENT } from './briefModel';
+import { briefOrder, environmentWarnings, footprint, matchesSearch, positionPlan, rsLineNewHigh, watchEvent, LIST_FILTERS, STOP_MAX_PERCENT } from './briefModel';
 
 const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, ...over });
 
@@ -45,8 +45,7 @@ describe('brief model', () => {
   });
 });
 
-describe('RS line new high', async () => {
-  const { rsLineNewHigh } = await import('./briefModel');
+describe('RS line new high', () => {
   const bars = Array.from({ length: 260 }, (_, i) => ({ date: `d${i}` }));
   it('needs 252 aligned sessions and compares with the prior 251', () => {
     const line = bars.map((b, i) => ({ time: b.date, value: 100 + Math.sin(i / 9) }));
@@ -57,8 +56,7 @@ describe('RS line new high', async () => {
   });
 });
 
-describe('market deterioration notes', async () => {
-  const { environmentWarnings } = await import('./briefModel');
+describe('market deterioration notes', () => {
   const row = over => ({ trendTemplateCount: 100, stage2Percent: 40, stage4Percent: 20, breakoutHoldPercent: 60, ...over });
   it('flags a 20% drop in ten sessions, stage 4 above stage 2 and weak follow-through, and nothing when unknown', () => {
     const rows = Array.from({ length: 11 }, () => row());
