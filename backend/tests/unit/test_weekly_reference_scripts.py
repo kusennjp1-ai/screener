@@ -106,6 +106,8 @@ def test_build_weekly_reference_bundle_runs_us_publish_and_export(monkeypatch, t
             "build_weekly_reference_bundle",
             "--market",
             "US",
+            "--us-source",
+            "finviz",
             "--output-dir",
             str(tmp_path),
         ],
@@ -174,6 +176,8 @@ def test_build_weekly_reference_bundle_writes_summary_when_us_publish_is_blocked
             "build_weekly_reference_bundle",
             "--market",
             "US",
+            "--us-source",
+            "finviz",
             "--output-dir",
             str(tmp_path),
         ],
@@ -1622,3 +1626,172 @@ def test_load_ibd_industry_groups_script_uses_csv_path(monkeypatch, tmp_path, ca
     assert load_ibd_script.main() == 0
     assert load_calls == [str(csv_path)]
     assert "IBD industry group load complete:" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------------------
+# Official-source US weekly bundle (NASDAQ Trader directory + Yahoo).
+# ---------------------------------------------------------------------------
+
+_US_NASDAQ = """Symbol|Security Name|Market Category|Test Issue|Financial Status|Round Lot Size|ETF|NextShares
+AAPL|Apple Inc. - Common Stock|Q|N|N|100|N|N
+APMD|Apnimed, Inc. - Common Stock|G|N|N|100|N|N
+FAILCO|Fail Co - Common Stock|G|N|N|100|N|N
+QQQ|Invesco QQQ Trust, Series 1|G|N|N|100|Y|N
+File Creation Time: 1030202618:01|||||||
+"""
+_US_OTHER = """ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|Test Issue|NASDAQ Symbol
+SPY|SPDR S&P 500 ETF Trust|P|SPY|Y|100|N|SPY
+IBM|International Business Machines Corporation Common Stock|N|IBM|N|100|N|IBM
+File Creation Time: 1030202618:01||||||
+"""
+
+
+def _official_us_fixture(monkeypatch, tmp_path, *, failing=frozenset({"FAILCO"})):
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+
+    from app.database import Base
+    from app.domain.universe.ingestion import UniverseReconciliationPolicy
+    from app.models.provider_snapshot import ProviderSnapshotPointer, ProviderSnapshotRow, ProviderSnapshotRun
+    from app.models.stock import StockFundamental
+    from app.models.stock_universe import StockUniverse, UNIVERSE_STATUS_ACTIVE
+    from app.services.stock_universe_service import StockUniverseService
+    from app.services.us_listing_directory import parse_directory
+
+    engine = create_engine("sqlite:///:memory:")
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine, autocommit=False, autoflush=False)()
+    seeded = [
+        ("AAPL", "XNAS", "Apple Inc", "Technology", "Consumer Electronics"),
+        ("IBM", "XNYS", "IBM", "Technology", "IT Services"),
+        ("FAILCO", "XNAS", "Fail Co", "Industrials", "Tools"),
+        ("SPY", "XNYS", "SPDR S&P 500 ETF Trust", "Financial", "Exchange Traded Fund"),
+        ("QQQ", "XNAS", "Invesco QQQ Trust", "Financial", "Exchange Traded Fund"),
+        ("GONE", "XNYS", "Delisted Co", "Energy", "Oil & Gas"),
+    ]
+    db.add_all([StockUniverse(symbol=s, market="US", exchange=e, name=n, sector=sec, industry=ind,
+                              status=UNIVERSE_STATUS_ACTIVE, is_active=True, source="finviz") for s, e, n, sec, ind in seeded])
+    run = ProviderSnapshotRun(snapshot_key="fundamentals_v1_us", run_mode="publish", status="published",
+                              source_revision="fundamentals_v1_us:20260613143433", published_at=datetime(2026, 6, 13, 14, 34))
+    db.add(run)
+    db.flush()
+    db.add(ProviderSnapshotPointer(snapshot_key="fundamentals_v1_us", run_id=run.id))
+    db.add(ProviderSnapshotRow(run_id=run.id, symbol="AAPL", exchange="XNAS", row_hash="h",
+                               normalized_payload_json=json.dumps({"ipo_date": "1980-12-12", "market_cap": 1.0,
+                                                                   "institutional_ownership": 99.0})))
+    # A seeded prior-bundle fundamentals row that must not leak into the fresh snapshot.
+    db.add(StockFundamental(symbol="AAPL", market_cap=1.0))
+    db.commit()
+
+    service = StockUniverseService()
+    policy = UniverseReconciliationPolicy(name="test_us_official", min_count=3, max_removed_percent=25.0,
+                                          apply_destructive_enabled=True)
+    monkeypatch.setattr(service, "_us_official_reconciliation_policy", lambda: policy)
+    monkeypatch.setattr(service, "populate_universe", lambda *a, **k: pytest.fail("Finviz must not be called"))
+
+    store: dict[str, dict] = {}
+    fetched_batches: list[list[str]] = []
+
+    class FakeCache:
+        def get_many(self, symbols, **kwargs):
+            return {symbol: store.get(symbol) for symbol in symbols}
+
+        def invalidate_cache(self, symbol, market=None):
+            store.pop(symbol, None)
+
+    class FakeHybrid:
+        def fetch_fundamentals_batch(self, symbols, **kwargs):
+            assert kwargs["include_finviz"] is False
+            fetched_batches.append(list(symbols))
+            return {s: ({} if s in failing else {"symbol": s, "market_cap": 2e9, "sector": "Healthcare", "industry": "Biotech"})
+                    for s in symbols}
+
+        def store_all_caches(self, data, cache, **kwargs):
+            for symbol, payload in data.items():
+                if payload:
+                    store[symbol] = payload
+            return {"persisted_symbols": sum(1 for payload in data.values() if payload), "failed": sum(1 for p in data.values() if not p)}
+
+    published: dict[str, object] = {}
+
+    class FakeSnapshots:
+        def get_published_run(self, db_, snapshot_key):
+            return db_.query(ProviderSnapshotRun).filter_by(snapshot_key=snapshot_key).order_by(ProviderSnapshotRun.id.desc()).first()
+
+        def build_market_snapshot_row(self, *, market, symbol, exchange, normalized_payload, raw_payload=None):
+            return {"symbol": symbol, "exchange": exchange, "normalized_payload": normalized_payload}
+
+        def publish_market_snapshot_run(self, db_, *, rows, coverage_stats, warnings, publish, **kwargs):
+            published.update(rows=rows, coverage=coverage_stats, warnings=warnings, publish=publish)
+            if publish:
+                db_.add(ProviderSnapshotRun(snapshot_key="fundamentals_v1_us", run_mode="publish", status="published",
+                                            source_revision=kwargs["source_revision"], published_at=datetime(2026, 11, 1, 3)))
+                db_.commit()
+            return {"published": publish, "coverage": coverage_stats, "warnings": warnings, "market": "US",
+                    "coverage_thresholds": {"market": "US", "active_coverage": 1.0, "min_active_coverage": 0.98,
+                                            "missing_ratio": 0.0, "max_missing_ratio": 0.005}}
+
+        def export_weekly_reference_bundle(self, db_, **kwargs):
+            kwargs["output_path"].write_bytes(b"bundle")
+            kwargs["latest_manifest_path"].write_text("{}", encoding="utf-8")
+            return {"bundle_path": str(kwargs["output_path"])}
+
+    directory = parse_directory(nasdaq_listed=_US_NASDAQ, other_listed=_US_OTHER)
+    kwargs = dict(
+        provider_snapshot_service=FakeSnapshots(),
+        stock_universe_service=service,
+        output_dir=tmp_path,
+        bundle_name=None,
+        latest_manifest_name="weekly-reference-latest-us.json",
+        fetch_directory=lambda: (directory, {"file_created_at": directory.file_created_at, "sha256": {"nasdaqlisted.txt": "a"}}),
+        fundamentals_cache=FakeCache(),
+        hybrid_service=FakeHybrid(),
+    )
+    return db, kwargs, store, fetched_batches, published, StockUniverse, StockFundamental
+
+
+def test_official_us_bundle_refreshes_equities_without_finviz_or_stale_leaks(monkeypatch, tmp_path):
+    db, kwargs, store, fetched, published, StockUniverse, StockFundamental = _official_us_fixture(
+        monkeypatch, tmp_path, failing=frozenset())
+
+    summary = build_script._build_us_official_bundle(db, **kwargs)
+
+    universe = {row.symbol: row for row in db.query(StockUniverse).all()}
+    assert universe["APMD"].is_active and universe["APMD"].exchange == "XNAS"
+    assert not universe["GONE"].is_active
+    assert universe["SPY"].exchange == "XNYS"
+    # Funds are never sent to the fundamentals fetch.
+    assert sorted(symbol for batch in fetched for symbol in batch) == ["AAPL", "APMD", "FAILCO", "IBM"]
+    rows = {row["symbol"]: row["normalized_payload"] for row in published["rows"]}
+    assert rows["SPY"]["fundamentals_applicable"] is False and rows["SPY"]["industry"] == "Exchange Traded Fund"
+    assert rows["AAPL"]["market_cap"] == 2e9
+    assert rows["AAPL"]["ipo_date"] == "1980-12-12"
+    assert "institutional_ownership" not in rows["AAPL"]
+    assert db.query(StockFundamental).filter_by(symbol="AAPL").count() == 0
+    # A new listing gets its classification from the fresh fetch.
+    assert universe["APMD"].sector == "Healthcare"
+    coverage = published["coverage"]
+    assert coverage["equity_fundamentals_coverage"] == 1.0
+    assert coverage["fund_reference_symbols"] == 2
+    assert coverage["universe_source"]["source"] == "nasdaqtrader_symdir"
+    assert coverage["universe_source"]["removal"]["deactivated"] == 1
+    assert published["publish"] is True
+    assert summary["bundle"].name.startswith("weekly-reference-us-20261101-")
+    db.close()
+
+
+def test_official_us_bundle_blocks_when_operating_company_coverage_is_short(monkeypatch, tmp_path):
+    db, kwargs, store, fetched, published, *_ = _official_us_fixture(monkeypatch, tmp_path)
+
+    with pytest.raises(RuntimeError, match="did not publish"):
+        build_script._build_us_official_bundle(db, **kwargs)
+
+    assert published["publish"] is False
+    assert published["coverage"]["fresh_equity_symbols"] == 3
+    assert published["warnings"][0] == "Equity fundamentals coverage 75.00% below minimum 98.00%"
+    db.close()
+
+
+def test_directory_bytes_decode_utf8_and_fall_back_to_latin1():
+    assert build_script._decode_directory_bytes("Société Générale".encode("utf-8")) == ("Société Générale", "utf-8")
+    assert build_script._decode_directory_bytes("Société".encode("latin-1")) == ("Société", "latin-1")

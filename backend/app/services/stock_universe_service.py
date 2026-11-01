@@ -50,6 +50,7 @@ from .ca_universe_ingestion_adapter import ca_universe_ingestion_adapter
 from .cn_universe_ingestion_adapter import cn_universe_ingestion_adapter
 from .de_universe_ingestion_adapter import de_universe_ingestion_adapter
 from .finviz_universe_ingestion_adapter import finviz_universe_ingestion_adapter
+from .us_official_universe_ingestion_adapter import US_OFFICIAL_SOURCE_NAME, us_universe_canonicalizer
 from .hk_universe_ingestion_adapter import hk_universe_ingestion_adapter
 from .jp_universe_ingestion_adapter import jp_universe_ingestion_adapter
 from .kr_universe_ingestion_adapter import kr_universe_ingestion_adapter
@@ -98,7 +99,7 @@ class StockUniverseService:
         self._tw_ingestion = tw_universe_ingestion_adapter
         self._universe_ingestion_pipeline = UniverseIngestionPipeline(
             canonicalizers={
-                "US": self._finviz_ingestion,
+                "US": us_universe_canonicalizer,
                 "AU": self._au_ingestion,
                 "HK": FlatUniverseCanonicalizerAdapter(self._hk_ingestion),
                 "JP": FlatUniverseCanonicalizerAdapter(self._jp_ingestion),
@@ -1174,6 +1175,42 @@ class StockUniverseService:
                 default=True,
             ),
             removal_mics=(exchange_mic,) if exchange_mic else (),
+        )
+
+    def _us_official_reconciliation_policy(self) -> UniverseReconciliationPolicy:
+        """Removal safety for the official US directory.
+
+        Mirrors the full Finviz sync bounds (minimum active count, maximum
+        removed share, quarantine) so changing the source does not widen what
+        a single weekly run may deactivate.
+        """
+        return UniverseReconciliationPolicy(
+            name="us_official_full",
+            min_count=self._safety_int_setting(
+                field_name="finviz_reconciliation_min_count_full",
+                env_name="FINVIZ_RECONCILIATION_MIN_COUNT_FULL",
+                default=8000,
+            ),
+            max_removed_percent=self._safety_float_setting(
+                field_name="finviz_reconciliation_max_removed_percent",
+                env_name="FINVIZ_RECONCILIATION_MAX_REMOVED_PERCENT",
+                default=10.0,
+            ),
+            anomaly_percent=self._safety_float_setting(
+                field_name="finviz_reconciliation_anomaly_percent",
+                env_name="FINVIZ_RECONCILIATION_ANOMALY_PERCENT",
+                default=100.0,
+            ),
+            apply_destructive_enabled=self._safety_bool_setting(
+                field_name="finviz_universe_apply_destructive_enabled",
+                env_name="FINVIZ_UNIVERSE_APPLY_DESTRUCTIVE_ENABLED",
+                default=True,
+            ),
+            quarantine_enforced=self._safety_bool_setting(
+                field_name="finviz_reconciliation_quarantine_enforced",
+                env_name="FINVIZ_RECONCILIATION_QUARANTINE_ENFORCED",
+                default=True,
+            ),
         )
 
     def _evaluate_reconciliation_safety(
@@ -2371,6 +2408,92 @@ class StockUniverseService:
         # For now, default to NASDAQ (most tech stocks) unless we can determine otherwise
         # This is a limitation - may need enhancement
         return row.get('Exchange', 'NASDAQ').upper()
+
+    def ingest_us_official_snapshot_rows(
+        self,
+        db: Session,
+        *,
+        rows: Iterable[dict[str, Any]],
+        snapshot_id: str,
+        snapshot_as_of: str | None = None,
+        source_metadata: Optional[dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Ingest planned NASDAQ Trader directory rows as the US universe."""
+        stats = self._ingest_snapshot_rows_via_pipeline(
+            db,
+            market="US",
+            rows=rows,
+            source_name=US_OFFICIAL_SOURCE_NAME,
+            snapshot_id=snapshot_id,
+            snapshot_as_of=snapshot_as_of,
+            source_metadata=source_metadata,
+            strict=True,
+            ingestion_context=UniverseIngestionContext(
+                trigger_source="us_official_sync",
+                row_source=US_OFFICIAL_SOURCE_NAME,
+                reconciliation_policy=self._us_official_reconciliation_policy(),
+            ),
+        )
+        safety = (stats.get("reconciliation") or {}).get("safety") or {}
+        stats["deactivated"] = int(safety.get("deactivated_count") or 0)
+        return stats
+
+    def deactivate_us_symbols_missing_from_official(
+        self,
+        db: Session,
+        *,
+        symbols: Iterable[str],
+        prior_active_count: int,
+        snapshot_id: str,
+    ) -> Dict[str, Any]:
+        """Deactivate prior US symbols the official directory no longer lists.
+
+        Weekly builds start from a fresh database seeded with the prior bundle,
+        so the pipeline has no same-source baseline and never removes anything
+        by itself. The planner supplies the explicit removal list; the same
+        bounds as a full sync apply, and exceeding them fails closed instead
+        of publishing a universe whose shrinkage was not reviewed.
+        """
+        requested = sorted({str(symbol) for symbol in symbols if symbol})
+        policy = self._us_official_reconciliation_policy()
+        removed_percent = (len(requested) / prior_active_count * 100.0) if prior_active_count > 0 else 0.0
+        summary: Dict[str, Any] = {
+            "requested": len(requested),
+            "prior_active": int(prior_active_count),
+            "removed_percent": round(removed_percent, 3),
+            "max_removed_percent": policy.max_removed_percent,
+            "policy": policy.name,
+        }
+        if not requested:
+            return {**summary, "applied": True, "deactivated": 0}
+        if not policy.apply_destructive_enabled:
+            raise RuntimeError(f"US official removals are disabled by policy {policy.name}: {summary}")
+        if removed_percent > policy.max_removed_percent:
+            raise RuntimeError(f"US official removals exceed the reviewed bound: {summary}")
+
+        now = datetime.utcnow()
+        rows = (
+            db.query(StockUniverse)
+            .filter(
+                StockUniverse.market == "US",
+                StockUniverse.symbol.in_(requested),
+                StockUniverse.active_filter(),
+            )
+            .all()
+        )
+        for row in rows:
+            self._apply_status_transition(
+                db,
+                row,
+                new_status=UNIVERSE_STATUS_INACTIVE_MISSING_SOURCE,
+                trigger_source="us_official_sync",
+                reason="Absent from NASDAQ Trader symbol directory",
+                now=now,
+                payload={"snapshot_id": snapshot_id},
+                source=US_OFFICIAL_SOURCE_NAME,
+            )
+        db.commit()
+        return {**summary, "applied": True, "deactivated": len(rows)}
 
     def populate_universe(self, db: Session, exchange_filter: Optional[str] = None) -> Dict:
         """

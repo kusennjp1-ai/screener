@@ -19,12 +19,14 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from app.analysis.patterns.legacy_vcp_detection import VCPDetector
 from app.analysis.patterns.rs_line import blue_dot_series, compute_rs_line
+from app.config import settings
 from app.domain.common.query import FilterSpec, SortOrder, SortSpec
 from app.domain.markets.catalog import get_market_catalog
 from app.domain.markets.key_markets import key_market_instruments
 from app.infra.db.models.feature_store import FeatureRun, FeatureRunPointer
 from app.infra.db.repositories.feature_store_repo import SqlFeatureStoreRepository
 from app.services.static_financial_evidence import add_static_financial_metadata, subset_static_financial_current
+from app.services.reference_data_freshness import load_reference_data, snapshot_key_for, stale_reference_warning
 from app.services.cache.price_history_diagnostics import observe, scoped
 from app.models.stock import StockPrice
 from app.schemas.groups import (
@@ -435,6 +437,17 @@ class StaticSiteExportService:
             self._write_json(output_dir / groups_rrg_path, rrg_payload)
             assets["groups_rrg"] = {"path": groups_rrg_path.as_posix()}
 
+        reference_data = load_reference_data(
+            db,
+            market=market,
+            snapshot_key=snapshot_key_for(market),
+            scan_as_of=latest_run.as_of_date,
+            max_age_days=int(settings.github_weekly_reference_max_age_days or 0),
+        )
+        reference_warning = stale_reference_warning(reference_data)
+        if reference_warning:
+            warnings.append(reference_warning)
+
         return {
             "market": market,
             "display_name": STATIC_MARKET_DISPLAY.get(market, market),
@@ -454,6 +467,7 @@ class StaticSiteExportService:
             },
             "assets": assets,
             "freshness": home_payload.get("freshness", {}),
+            "reference_data": reference_data,
         }
 
     @staticmethod
