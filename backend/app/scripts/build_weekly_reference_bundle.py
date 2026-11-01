@@ -407,6 +407,281 @@ def _run_chunked_fundamentals_refresh(
     return stats, attempted_symbols, deadline_hit
 
 
+_US_DIRECTORY_FETCH_ATTEMPTS = 3
+
+
+def _fetch_us_listing_directory() -> tuple[Any, dict[str, Any]]:
+    """Download both NASDAQ Trader files and parse them (fails closed)."""
+    import hashlib
+
+    import requests
+
+    from app.config import settings
+    from app.services.us_listing_directory import parse_directory
+
+    texts: dict[str, str] = {}
+    metadata: dict[str, Any] = {"source_urls": [], "sha256": {}, "fetched_at": datetime.utcnow().isoformat() + "Z"}
+    for name, url in (("nasdaqlisted.txt", settings.us_nasdaq_listed_url), ("otherlisted.txt", settings.us_other_listed_url)):
+        last_error: Exception | None = None
+        for attempt in range(1, _US_DIRECTORY_FETCH_ATTEMPTS + 1):
+            try:
+                response = requests.get(
+                    url,
+                    headers={"User-Agent": settings.universe_source_user_agent},
+                    timeout=settings.universe_source_timeout_seconds,
+                )
+                response.raise_for_status()
+                texts[name] = response.content.decode("utf-8", errors="strict")
+                metadata["source_urls"].append(url)
+                metadata["sha256"][name] = hashlib.sha256(response.content).hexdigest()
+                break
+            except (requests.RequestException, UnicodeDecodeError) as exc:
+                last_error = exc
+                if attempt < _US_DIRECTORY_FETCH_ATTEMPTS:
+                    time.sleep(5 * attempt)
+        else:
+            raise RuntimeError(f"Unable to download {name} from {url}: {last_error}")
+    directory = parse_directory(nasdaq_listed=texts["nasdaqlisted.txt"], other_listed=texts["otherlisted.txt"])
+    metadata["file_created_at"] = dict(directory.file_created_at)
+    return directory, metadata
+
+
+def _prior_snapshot_payloads(db, provider_snapshot_service, snapshot_key: str) -> dict[str, dict[str, Any]]:
+    """Normalized payloads of the seeded prior bundle, read only for immutable facts."""
+    from app.models.provider_snapshot import ProviderSnapshotRow
+
+    run = provider_snapshot_service.get_published_run(db, snapshot_key=snapshot_key)
+    if run is None:
+        return {}
+    payloads: dict[str, dict[str, Any]] = {}
+    for row in db.query(ProviderSnapshotRow).filter(ProviderSnapshotRow.run_id == run.id).all():
+        try:
+            payloads[row.symbol] = json.loads(row.normalized_payload_json)
+        except (TypeError, ValueError):
+            continue
+    return payloads
+
+
+def _purge_market_fundamentals(db, fundamentals_cache, *, market: str, symbols: list[str]) -> int:
+    """Remove seeded fundamentals so fields this run cannot fetch stay unknown.
+
+    The fundamentals store only overwrites fields present in a new payload, so
+    a seeded prior-bundle row would otherwise leak old values (market cap,
+    growth, ownership) into a freshly dated snapshot.
+    """
+    from app.models.stock import StockFundamental
+
+    removed = 0
+    for start in range(0, len(symbols), 500):
+        chunk = symbols[start : start + 500]
+        removed += (
+            db.query(StockFundamental)
+            .filter(StockFundamental.symbol.in_(chunk))
+            .delete(synchronize_session=False)
+        )
+        for symbol in chunk:
+            fundamentals_cache.invalidate_cache(symbol, market=market)
+    db.commit()
+    return removed
+
+
+def _build_us_official_bundle(
+    db,
+    *,
+    provider_snapshot_service,
+    stock_universe_service,
+    output_dir: Path,
+    bundle_name: str | None,
+    latest_manifest_name: str,
+    max_runtime_seconds: float = 0.0,
+    fetch_chunk_size: int = _DEFAULT_FETCH_CHUNK_SIZE,
+    fetch_directory=_fetch_us_listing_directory,
+    fundamentals_cache=None,
+    hybrid_service=None,
+) -> dict[str, Any]:
+    """Build the US bundle from the official listing directory and Yahoo fundamentals.
+
+    No Finviz request is made. The universe is the NASDAQ Trader directory
+    merged with the seeded prior universe for identity continuity, removals
+    are explicit and bounded, funds carry reference-only rows, and operating
+    companies must meet the US coverage minimum on fundamentals fetched in
+    this run. Nothing time-varying is inherited from the prior bundle.
+    """
+    from app.config import settings
+    from app.services.us_reference_universe import (
+        carry_immutable_fields,
+        fund_reference_payload,
+        is_fund,
+        plan_us_universe,
+        prior_rows_from_universe,
+        us_snapshot_coverage,
+    )
+
+    market = "US"
+    snapshot_key = ProviderSnapshotService.snapshot_key_for_market(market)
+    fundamentals_cache = fundamentals_cache or get_fundamentals_cache()
+    hybrid_service = hybrid_service or get_hybrid_fundamentals_service()
+
+    print("Fetching the NASDAQ Trader symbol directory...", flush=True)
+    directory, fetch_metadata = fetch_directory()
+    prior_universe = (
+        db.query(StockUniverse)
+        .filter(StockUniverse.active_filter(), StockUniverse.market == market)
+        .all()
+    )
+    prior_rows = prior_rows_from_universe(prior_universe)
+    prior_payloads = _prior_snapshot_payloads(db, provider_snapshot_service, snapshot_key)
+    plan = plan_us_universe(directory, prior_rows)
+    print(f"Universe plan: {json.dumps(plan.report, sort_keys=True, default=str)}", flush=True)
+
+    policy = stock_universe_service._us_official_reconciliation_policy()
+    if len(plan.rows) < policy.min_count:
+        raise RuntimeError(
+            f"Official US universe plan has {len(plan.rows)} rows, below the reviewed minimum {policy.min_count}"
+        )
+
+    created_at = directory.file_created_at.get("nasdaqlisted.txt") or ""
+    snapshot_as_of = created_at[:10] or None
+    snapshot_id = f"nasdaqtrader-symdir-{created_at.replace('-', '').replace(':', '')}"
+    universe_stats = stock_universe_service.ingest_us_official_snapshot_rows(
+        db,
+        rows=[row.as_ingest_row() for row in plan.rows],
+        snapshot_id=snapshot_id,
+        snapshot_as_of=snapshot_as_of,
+        source_metadata=fetch_metadata,
+    )
+    removal_stats = stock_universe_service.deactivate_us_symbols_missing_from_official(
+        db,
+        symbols=plan.removed,
+        prior_active_count=len(prior_rows),
+        snapshot_id=snapshot_id,
+    )
+    print(f"Universe ingest: {universe_stats.get('added')} added, removals {removal_stats}", flush=True)
+
+    active_rows = (
+        db.query(StockUniverse)
+        .filter(StockUniverse.active_filter(), StockUniverse.market == market)
+        .order_by(StockUniverse.symbol.asc())
+        .all()
+    )
+    planned = {row.symbol: row for row in plan.rows}
+    fund_symbols = {row.symbol for row in active_rows if is_fund(planned.get(row.symbol))}
+    equity_symbols = [row.symbol for row in active_rows if row.symbol not in fund_symbols]
+
+    purged = _purge_market_fundamentals(db, fundamentals_cache, market=market, symbols=[row.symbol for row in active_rows])
+    print(f"Purged {purged} seeded US fundamentals rows before the fresh fetch", flush=True)
+
+    print(f"Starting Yahoo fundamentals refresh for {len(equity_symbols)} US operating companies...", flush=True)
+    fundamentals_stats, attempted_symbols, deadline_hit = _run_chunked_fundamentals_refresh(
+        hybrid_service=hybrid_service,
+        fundamentals_cache=fundamentals_cache,
+        market=market,
+        symbols=equity_symbols,
+        market_by_symbol={symbol: market for symbol in equity_symbols},
+        chunk_size=fetch_chunk_size,
+        max_runtime_seconds=max_runtime_seconds,
+    )
+    print(f"Fundamentals refresh complete: {fundamentals_stats}", flush=True)
+
+    fresh = fundamentals_cache.get_many(equity_symbols) if equity_symbols else {}
+    snapshot_rows = []
+    fresh_equities = 0
+    classification_filled = 0
+    for row in active_rows:
+        if row.symbol in fund_symbols:
+            payload = fund_reference_payload(symbol=row.symbol, name=row.name or "", sector=row.sector or "",
+                                             industry=row.industry or "")
+        else:
+            payload = dict(fresh.get(row.symbol) or {})
+            if not payload:
+                continue
+            fresh_equities += 1
+            payload = carry_immutable_fields(payload, prior_payloads.get(row.symbol))
+            payload.setdefault("company_name", row.name)
+            if not row.sector and payload.get("sector"):
+                row.sector = payload["sector"]
+                classification_filled += 1
+            if not row.industry and payload.get("industry"):
+                row.industry = payload["industry"]
+            payload.setdefault("sector", row.sector)
+            payload.setdefault("industry", row.industry)
+        snapshot_rows.append(
+            provider_snapshot_service.build_market_snapshot_row(
+                market=market,
+                symbol=row.symbol,
+                exchange=row.exchange,
+                normalized_payload=payload,
+                raw_payload=None,
+            )
+        )
+    db.commit()
+
+    coverage_stats, warnings, equity_ok = us_snapshot_coverage(
+        active_symbols=len(active_rows),
+        fund_symbols=len(fund_symbols),
+        fresh_equity_symbols=fresh_equities,
+        min_equity_coverage=float(settings.provider_snapshot_min_active_coverage_us),
+    )
+    coverage_stats.update({
+        "attempted_symbols": len(attempted_symbols),
+        "skipped_due_to_deadline": len(equity_symbols) - len(attempted_symbols) if deadline_hit else 0,
+        "partial_run": bool(deadline_hit),
+        "classification_filled_from_fundamentals": classification_filled,
+        "universe_source": {
+            "source": "nasdaq_trader_symbol_directory",
+            "file_created_at": fetch_metadata.get("file_created_at"),
+            "sha256": fetch_metadata.get("sha256"),
+            "plan": {key: plan.report[key] for key in (
+                "prior_active", "planned_active", "kept", "added", "removed", "added_by_class",
+                "kept_prior_identity_on_unmodelled_venue", "skipped_new_listings")},
+            "removal": removal_stats,
+        },
+        "fundamentals_source": "yfinance",
+    })
+    if deadline_hit:
+        warnings.append("Weekly US fetch deadline reached; partial US snapshots are never published.")
+    if fundamentals_stats.get("failed"):
+        warnings.append(f"{fundamentals_stats['failed']} US symbols failed during the Yahoo fundamentals refresh")
+
+    source_revision = f"{snapshot_key}:{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+    snapshot_stats = provider_snapshot_service.publish_market_snapshot_run(
+        db,
+        snapshot_key=snapshot_key,
+        market=market,
+        source_revision=source_revision,
+        rows=snapshot_rows,
+        coverage_stats=coverage_stats,
+        warnings=warnings,
+        publish=equity_ok and not deadline_hit,
+    )
+    summary = {
+        "output_dir": output_dir,
+        "universe_refresh": {**universe_stats, "removal": removal_stats},
+        "fundamentals_refresh": fundamentals_stats,
+        "snapshot_publish": snapshot_stats,
+    }
+    if not snapshot_stats.get("published"):
+        _raise_publish_blocked(market=market, summary=summary, snapshot_stats=snapshot_stats)
+    _print_snapshot_publish_summary(snapshot_stats)
+
+    published_run = provider_snapshot_service.get_published_run(db, snapshot_key=snapshot_key)
+    if published_run is None:
+        raise RuntimeError("Published weekly fundamentals snapshot for US was not found")
+    resolved_bundle_name = bundle_name or _default_bundle_name(market, published_run)
+    bundle_path = output_dir / resolved_bundle_name
+    latest_manifest_path = output_dir / latest_manifest_name
+    export_stats = provider_snapshot_service.export_weekly_reference_bundle(
+        db,
+        output_path=bundle_path,
+        bundle_asset_name=resolved_bundle_name,
+        latest_manifest_path=latest_manifest_path,
+        snapshot_key=snapshot_key,
+        market=market,
+    )
+    summary.update({"bundle": bundle_path, "latest_manifest": latest_manifest_path, "export": export_stats})
+    return summary
+
+
 def _build_asia_bundle(
     db,
     *,
@@ -701,6 +976,16 @@ def main() -> int:
             "remaining symbols. Intended for initial CN bootstrap continuation."
         ),
     )
+    parser.add_argument(
+        "--us-source",
+        choices=("official", "finviz"),
+        default="official",
+        help=(
+            "US universe source. 'official' (default) uses the NASDAQ Trader symbol "
+            "directory and Yahoo fundamentals; 'finviz' is the legacy screener path, "
+            "blocked from GitHub-hosted runners since October 2026."
+        ),
+    )
     args = parser.parse_args()
 
     prepare_runtime()
@@ -713,7 +998,18 @@ def main() -> int:
     latest_manifest_name = args.latest_manifest_name or _default_latest_manifest_name(market)
 
     with SessionLocal() as db:
-        if market == "US":
+        if market == "US" and args.us_source == "official":
+            summary = _build_us_official_bundle(
+                db,
+                provider_snapshot_service=provider_snapshot_service,
+                stock_universe_service=stock_universe_service,
+                output_dir=output_dir,
+                bundle_name=args.bundle_name,
+                latest_manifest_name=latest_manifest_name,
+                max_runtime_seconds=max(0.0, float(args.max_runtime_minutes)) * 60.0,
+                fetch_chunk_size=max(1, int(args.fetch_chunk_size)),
+            )
+        elif market == "US":
             summary = _build_us_bundle(
                 db,
                 provider_snapshot_service=provider_snapshot_service,

@@ -252,6 +252,10 @@ class Settings(BaseSettings):
     # ASX public listed-company CSV. Live fetch is enabled by default because ASX
     # publishes a stable CSV link from its official site; the repo CSV is fallback.
     au_universe_source_url: str = "https://www.asx.com.au/asx/research/ASXListedCompanies.csv"
+    # Official US listing directory (NASDAQ Trader). Replaces the Finviz
+    # screener as the weekly US universe source; see us_listing_directory.py.
+    us_nasdaq_listed_url: str = "https://www.nasdaqtrader.com/dynamic/SymDir/nasdaqlisted.txt"
+    us_other_listed_url: str = "https://www.nasdaqtrader.com/dynamic/SymDir/otherlisted.txt"
     au_universe_fallback_csv_path: str = str(
         _PROJECT_ROOT / "data" / "au_asx_listed_companies.csv"
     )

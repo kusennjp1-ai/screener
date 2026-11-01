@@ -114,3 +114,37 @@ def test_prior_rows_index_orm_objects_and_dicts():
 )
 def test_clean_listing_name(raw, expected):
     assert clean_listing_name(raw) == expected
+
+
+def test_fund_reference_payload_has_identity_and_no_fundamentals():
+    from app.services.us_reference_universe import fund_reference_payload
+
+    payload = fund_reference_payload(symbol="SPY", name="SPDR S&P 500 ETF Trust", sector="Financial", industry="")
+
+    assert payload == {"symbol": "SPY", "company_name": "SPDR S&P 500 ETF Trust", "sector": "Financial", "industry": None,
+                       "is_etf": True, "fundamentals_applicable": False, "reference_source": "nasdaq_trader_symbol_directory"}
+
+
+def test_only_immutable_facts_carry_from_the_prior_bundle():
+    from app.services.us_reference_universe import carry_immutable_fields
+
+    prior = {"ipo_date": "2020-12-10", "first_trade_date": "2020-12-10", "market_cap": 1e9, "eps_growth_qq": 50.0}
+    carried = carry_immutable_fields({"market_cap": 2e9, "eps_growth_qq": None, "ipo_date": None}, prior)
+
+    assert carried == {"market_cap": 2e9, "eps_growth_qq": None, "ipo_date": "2020-12-10", "first_trade_date": "2020-12-10",
+                       "carried_immutable_fields": ["ipo_date", "first_trade_date"]}
+    assert carry_immutable_fields({"ipo_date": "2021-01-01"}, prior) == {"ipo_date": "2021-01-01", "first_trade_date": "2020-12-10",
+                                                                          "carried_immutable_fields": ["first_trade_date"]}
+    assert carry_immutable_fields({"x": 1}, None) == {"x": 1}
+
+
+def test_fund_rows_cannot_mask_missing_equity_fundamentals():
+    from app.services.us_reference_universe import us_snapshot_coverage
+
+    ok_stats, ok_warnings, ok = us_snapshot_coverage(active_symbols=1000, fund_symbols=400, fresh_equity_symbols=590, min_equity_coverage=0.98)
+    bad_stats, bad_warnings, bad = us_snapshot_coverage(active_symbols=1000, fund_symbols=400, fresh_equity_symbols=580, min_equity_coverage=0.98)
+
+    assert ok and ok_warnings == [] and ok_stats["covered_active_symbols"] == 990 and ok_stats["missing_active_symbols"] == 10
+    # 98.0% of all symbols are covered, yet only 96.67% of operating companies: blocked.
+    assert bad_stats["covered_active_symbols"] == 980 and not bad
+    assert bad_warnings == ["Equity fundamentals coverage 96.67% below minimum 98.00%"]

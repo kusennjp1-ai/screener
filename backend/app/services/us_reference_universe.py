@@ -184,3 +184,79 @@ def prior_rows_from_universe(rows) -> dict[str, dict[str, Any]]:
             indexed[symbol] = {key: get(key) for key in ("exchange", "name", "sector", "industry", "market_cap")}
     return indexed
 
+
+
+# ---------------------------------------------------------------------------
+# Weekly snapshot assembly for the official US universe.
+# ---------------------------------------------------------------------------
+
+FUND_CLASSES = frozenset({"etf", "etn"})
+# Facts that do not go stale. Everything else must come from this run's fetch
+# or stay unknown; time-varying values are never carried from a prior bundle.
+IMMUTABLE_CARRY_FIELDS = ("ipo_date", "first_trade_date")
+
+
+def is_fund(row: PlannedUniverseRow | None) -> bool:
+    return row is not None and (row.is_etf or row.security_class in FUND_CLASSES)
+
+
+def fund_reference_payload(*, symbol: str, name: str, sector: str, industry: str) -> dict[str, Any]:
+    """Reference-only row for a fund: identity and classification, no fundamentals."""
+    return {
+        "symbol": symbol,
+        "company_name": name,
+        "sector": sector or None,
+        "industry": industry or None,
+        "is_etf": True,
+        "fundamentals_applicable": False,
+        "reference_source": "nasdaq_trader_symbol_directory",
+    }
+
+
+def carry_immutable_fields(fresh: Mapping[str, Any], prior: Mapping[str, Any] | None) -> dict[str, Any]:
+    payload = dict(fresh)
+    carried = []
+    for field in IMMUTABLE_CARRY_FIELDS:
+        if payload.get(field) in (None, "") and prior and prior.get(field) not in (None, ""):
+            payload[field] = prior[field]
+            carried.append(field)
+    if carried:
+        payload["carried_immutable_fields"] = carried
+    return payload
+
+
+def us_snapshot_coverage(
+    *,
+    active_symbols: int,
+    fund_symbols: int,
+    fresh_equity_symbols: int,
+    min_equity_coverage: float,
+) -> tuple[dict[str, Any], list[str], bool]:
+    """Coverage stats for the unchanged all-symbol gate plus a stricter equity gate.
+
+    Funds carry reference rows, so they always count as covered. Without a
+    separate equity check that would let fund rows mask missing company
+    fundamentals, so operating companies must independently meet the same
+    minimum coverage.
+    """
+    equities = max(active_symbols - fund_symbols, 0)
+    covered = fresh_equity_symbols + fund_symbols
+    equity_coverage = (fresh_equity_symbols / equities) if equities else 1.0
+    stats = {
+        "active_symbols": active_symbols,
+        "snapshot_symbols": covered,
+        "covered_active_symbols": covered,
+        "missing_active_symbols": max(active_symbols - covered, 0),
+        "fund_reference_symbols": fund_symbols,
+        "equity_symbols": equities,
+        "fresh_equity_symbols": fresh_equity_symbols,
+        "equity_fundamentals_coverage": round(equity_coverage, 6),
+        "min_equity_fundamentals_coverage": min_equity_coverage,
+    }
+    warnings: list[str] = []
+    equity_ok = equity_coverage >= min_equity_coverage
+    if not equity_ok:
+        warnings.append(
+            f"Equity fundamentals coverage {equity_coverage:.2%} below minimum {min_equity_coverage:.2%}"
+        )
+    return stats, warnings, equity_ok
