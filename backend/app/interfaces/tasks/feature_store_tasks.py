@@ -456,7 +456,12 @@ def _enrich_feature_run_with_composite_rating(
             .all()
         )
         if not rows:
-            return {"run_id": feature_run_id, "total_rows": 0, "updated_rows": 0}
+            return {
+                "run_id": feature_run_id,
+                "total_rows": 0,
+                "updated_rows": 0,
+                "rated_rows": 0,
+            }
 
         components: dict[str, dict[str, float | None]] = {}
         for row in rows:
@@ -493,7 +498,9 @@ def _enrich_feature_run_with_composite_rating(
             "run_id": feature_run_id,
             "total_rows": len(rows),
             "updated_rows": updated_rows,
-            "rated_rows": len(ratings),
+            # Symbols with no usable component are omitted by the service and
+            # stay unknown, so they are not counted as rated.
+            "rated_rows": len(scored),
         }
     except Exception:
         db.rollback()

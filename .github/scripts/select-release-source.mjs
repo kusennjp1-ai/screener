@@ -7,7 +7,7 @@ import {renewalCiLocalContext} from './financial-renewal-ci-admission.mjs';
 import {enforceRenewalQuota} from './financial-renewal-quota.mjs';
 import {isPerformanceException, isPackedCandidate, selectExceptionVersion, readExceptionPin, readExceptionReleaseIntent, selectExceptionActivation, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, statfsSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { applyPendingCorrectionHold, readPendingCorrection } from './pending-financial-correction.mjs';
@@ -29,6 +29,38 @@ const statePath = () => join(scratch(), 'state.json');
 const repository = () => process.env.GITHUB_REPOSITORY || bootstrap.repository;
 const artifactDirectory = artifact => join(scratch(), `artifact-${artifact.id}`);
 export const advancesPublishedData = (candidate, published) => compareData(candidate, published) === 'advance';
+
+// Place an already-verified temporary restore without a second full copy.
+// The canonical restore is a freshly decoded tree that is deleted right
+// after placement, so copying it held two full logical trees at peak (ENOSPC
+// in run 41164274878). A rename keeps the identical verified bytes, like the
+// restore's own staging rename; only a cross-device destination falls back
+// to the previous copy-then-delete behaviour.
+export function placeRestored(from, to, { rename = renameSync, copy = cpSync, remove = rmSync } = {}) {
+  try { rename(from, to); }
+  catch (error) {
+    if (error?.code !== 'EXDEV') throw error;
+    copy(from, to, { recursive: true });
+    remove(from, { recursive: true, force: true });
+  }
+}
+
+const GIB = 1024 ** 3;
+// One du invocation counts each hard-linked inode once, so later trees report
+// only the bytes they add beyond the trees listed before them.
+const directoryBytes = paths => execFileSync('du', ['-sb', '--', ...paths], { encoding: 'utf8' }).trim().split('\n').map(line => Number(line.split('\t')[0]));
+const freeBytes = path => { const disk = statfsSync(path); return disk.bavail * disk.bsize; };
+// Observational only: record free space and the large restore trees at each
+// stage so disk headroom is measured instead of inferred. Never fails a step.
+export function diskReport(label, paths = {}, { free = freeBytes, size = directoryBytes, log = console.log, root = process.env.RUNNER_TEMP || '/tmp' } = {}) {
+  try {
+    const present = Object.entries(paths).filter(([, path]) => existsSync(path));
+    const bytes = present.length ? size(present.map(([, path]) => path)) : [];
+    if (bytes.length !== present.length || bytes.some(value => !Number.isSafeInteger(value) || value < 0)) throw Error('unexpected du output');
+    const sizes = present.map(([name], index) => `${name}=${(bytes[index] / GIB).toFixed(2)}GiB`);
+    log(`[disk] ${label} free=${(free(root) / GIB).toFixed(2)}GiB${sizes.length ? ` ${sizes.join(' ')}` : ''}`);
+  } catch (error) { log(`[disk] ${label} unavailable: ${error.message}`); }
+}
 
 export function checkedExport(artifact, pages, repo, api = githubApi, load = loadExportManifest) {
   const match = /^static-site-data-(\d+)-(\d+)$/.exec(artifact.name || '');
@@ -147,9 +179,11 @@ export async function materialize(source, destination, migration = false,fronten
     try{
       execFileSync('tar',['-xf',archive,'-C',physical],{stdio:'pipe'});
       await canonicalPublication({root:physical,frontendRoot,publication:source.publication,restore:logical});
-      cpSync(join(logical,'static-data'),join(destination,'static-data'),{recursive:true});
-      for(const file of dataFiles)cpSync(join(logical,file),join(destination,file));
+      diskReport('materialize:canonical',{artifact:directory,packed:physical,logical});
+      placeRestored(join(logical,'static-data'),join(destination,'static-data'));
+      for(const file of dataFiles)placeRestored(join(logical,file),join(destination,file));
     }finally{rmSync(physical,{recursive:true,force:true});rmSync(logical,{recursive:true,force:true});}
+    diskReport('materialize:placed',{artifact:directory,destination:join(destination,'static-data')});
   }else{
     execFileSync('tar', ['-xf', archive, '-C', destination, './static-data'], { stdio: 'pipe' });
     assertTransportDeclaration(destination,source.publication);
@@ -362,6 +396,7 @@ async function recheck() {
   const ordinaryReceiptBefore=state.ordinaryCarryTooling?sha256(readFileSync(join(physical,'publication.json'))):null;
   const canonical=join(scratch(),'recheck-logical');rmSync(canonical,{recursive:true,force:true});
   const logical=await canonicalPublication({root:physical,frontendRoot:resolve('release/frontend'),publication:receipt,restore:canonical});
+  diskReport('recheck:canonical',{scratch:scratch(),dist:physical});
   try {
   if (state.historyPredecessor) {
     const history = state.historyReconciliation;
@@ -859,7 +894,7 @@ async function runCommand(command) {
   }
   if (command === 'plan') await plan(false,ordinaryCiProof);
   else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
-  else if (command === 'restore') { const state = readState(); if(state.limited){const {restoreLimited}=await import('./limited-research-publisher.mjs');await restoreLimited(state);writeFileSync(statePath(),JSON.stringify(state));}else if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); const restoredState=readState(); const calendarSource=await captureOrdinaryCalendarSource({state:restoredState,frontend:resolve('release/frontend'),root:resolve('release/frontend/public')}); if(calendarSource){restoredState.ordinaryCalendarSource=calendarSource;writeFileSync(statePath(),JSON.stringify(restoredState));output({offline_session_calendar:true});} await restoreSelectedHistory(readState()); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);const sealed=readState();if(sealed.ordinaryCarryAdmission?.ci_admission)await ordinaryContext(sealed);sealOrdinaryCalendarSource({state:sealed,root:resolve('release/frontend/public')});writeFileSync(statePath(),JSON.stringify(sealed));}} }
+  else if (command === 'restore') { const state = readState(); if(state.limited){const {restoreLimited}=await import('./limited-research-publisher.mjs');await restoreLimited(state);writeFileSync(statePath(),JSON.stringify(state));}else if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); diskReport('restore:source',{scratch:scratch(),selected:resolve('release/frontend/public/static-data')}); const restoredState=readState(); const calendarSource=await captureOrdinaryCalendarSource({state:restoredState,frontend:resolve('release/frontend'),root:resolve('release/frontend/public')}); if(calendarSource){restoredState.ordinaryCalendarSource=calendarSource;writeFileSync(statePath(),JSON.stringify(restoredState));output({offline_session_calendar:true});} await restoreSelectedHistory(readState()); diskReport('restore:history',{scratch:scratch(),predecessor:join(scratch(),'history-predecessor')}); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);const sealed=readState();if(sealed.ordinaryCarryAdmission?.ci_admission)await ordinaryContext(sealed);sealOrdinaryCalendarSource({state:sealed,root:resolve('release/frontend/public')});writeFileSync(statePath(),JSON.stringify(sealed));}} }
   else if(command==='prepare-carry')await prepareCarry();
   else if(command==='ordinary-carry-build'){if(process.argv.length!==3)throw Error('Ordinary build accepts no caller arguments');await buildOrdinaryCarry();}
   else if(['publisher-build-before','publisher-build-after'].includes(command)){
