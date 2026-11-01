@@ -62,14 +62,15 @@ export default function MarketCard({ market, trends }) {
     <div className="brief-facts">
       <div className="brief-fact"><small>分配日（25日）</small><b className={(dist(spx) ?? 0) >= 5 || (dist(ndx) ?? 0) >= 5 ? 'is-warn' : ''}>{dist(spx) == null && dist(ndx) == null ? '未確認' : `${num(dist(spx))}・${num(dist(ndx))}`}</b><em>S&amp;P・NAS</em></div>
       <div className="brief-fact"><small>TT達成数</small><b>{hasEnvironment ? `${num(last.trendTemplateCount)}銘柄` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.trendTemplateCount) ? `1か月で ${delta(last.trendTemplateCount - monthAgo.trendTemplateCount)}` : '8条件すべて達成'}</em></div>
-      <div className="brief-fact"><small>200日線より上</small><b>{hasEnvironment ? `${num(last.above200Percent, 1)}%` : '未取得'}</b><em>{hasEnvironment && finite(last.breakoutHoldPercent) ? `ブレイク成功 ${num(last.breakoutHoldPercent)}%` : 'ブレイク成功 未確認'}</em></div>
+      <div className="brief-fact"><small>200日線より上</small><b>{hasEnvironment ? `${num(last.above200Percent, 1)}%` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.above200Percent) ? `1か月前 ${num(monthAgo.above200Percent, 1)}%` : '全銘柄に占める割合'}</em></div>
+      <div className="brief-fact"><small>ブレイクアウト成功率</small><b>{hasEnvironment && finite(last.breakoutHoldPercent) ? `${num(last.breakoutHoldPercent)}%` : '未確認'}</b><em>{hasEnvironment && Number.isInteger(last.breakoutsJudged) ? `直近${last.breakoutsJudged}件・10日で−7%未満` : '判定数が不足'}</em></div>
     </div>
     {hasEnvironment && <div className="brief-environment">
       <div className="brief-stagebar" role="img" aria-label={`ステージ構成 ${stages.map(s => `ステージ${s.k} ${num(s.share, 1)}%`).join('、')}`}>
         {stages.map((s, i) => <span key={s.k} className={`stage-${s.k}`} style={{ flexGrow: finite(s.share) ? s.share : 0, '--i': i }} />)}
       </div>
       <div className="brief-stagelegend" aria-hidden="true">{stages.map(s => <span key={s.k}><i className={`stage-${s.k}`} />ステージ{s.k} {num(s.share, 0)}%</span>)}</div>
-      <div className="brief-trend"><span>トレンドテンプレート達成数（6か月）</span><Sparkline points={recent} field="trendTemplateCount" /></div>
+      <div className="brief-trend"><span>TT達成数の推移（6か月）</span><Sparkline points={recent} field="trendTemplateCount" /></div>
     </div>}
     {warnings.length > 0 && <ul className="brief-warnings" aria-label="地合いの悪化サイン（独自判定）">{warnings.map(w => <li key={w.key}><span aria-hidden="true">▲</span> {w.text}（独自判定）</li>)}</ul>}
     {split?.warning && <p className="brief-alert" role="note">▲ 指数は1年高値から{Math.abs(split.fromHigh).toFixed(1)}%以内ですが、200日線より上の銘柄は{num(split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
