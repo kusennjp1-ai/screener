@@ -7,6 +7,8 @@ import { meterPercent } from './briefNav';
 const finite = Number.isFinite;
 const price = value => finite(value) ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 const PLAN_KEY = 'brief-plan';
+// Chart ranges: [bars shown, interval, label]. The weekly view uses 10/30/40-week averages.
+const RANGES = { '3m': [65, 'day', '3か月'], '6m': [130, 'day', '6か月'], '1y': [250, 'day', '1年'], '2yw': [104, 'week', '週足2年'] };
 const readPlan = () => { try { const v = JSON.parse(localStorage.getItem(PLAN_KEY) || '{}'); return { stopPercent: finite(v.stopPercent) ? v.stopPercent : STOP_DEFAULT_PERCENT, account: finite(v.account) ? v.account : 50000, riskPercent: finite(v.riskPercent) ? v.riskPercent : 1.25 }; } catch { return { stopPercent: STOP_DEFAULT_PERCENT, account: 50000, riskPercent: 1.25 }; } };
 
 const CALL = {
@@ -152,7 +154,8 @@ export default function StockView({ data, header = null }) {
   const { view, template, technical, diagnostics, financial, institutional, bars, row, certification } = data;
   // Values computed here from bars are shown only for bars certified for the analysis date.
   const judged = certification?.certified ? bars : null;
-  const [period, setPeriod] = useState(130);
+  const [range, setRange] = useState('6m');
+  const [period, interval] = RANGES[range];
   const [settings, setSettings] = useState(readPlan);
   const chartRef = useRef(null);
   const plan = useMemo(() => view ? positionPlan(view, settings) : null, [view, settings]);
@@ -160,9 +163,9 @@ export default function StockView({ data, header = null }) {
   const stage = useMemo(() => Number.isInteger(row?.stage) ? { value: row.stage, computed: false } : (() => { const value = stageFromBars(judged); return value ? { value, computed: true } : null; })(), [row?.stage, judged]);
   const sells = useMemo(() => judged ? withBookWarning(sellSignals(judged), diagnostics) : null, [judged, diagnostics]);
   const rsHigh = useMemo(() => view?.rsLineHigh || (judged ? rsLineNewHigh(data.chart.data?.rs_line, judged) === true : false), [view?.rsLineHigh, data.chart.data, judged]);
-  const model = useMemo(() => bars && view ? { symbol: view.symbol, bars, rsLine: data.chart.data?.rs_line || [], legs, pivot: view.pivot, upper: view.upper, stop: plan?.stop ?? null, rsNewHigh: rsHigh, dryUpLeg: legs.at(-1) || null, sellMarks: sellMarks(sells) } : null,
+  const model = useMemo(() => bars && view ? { symbol: view.symbol, bars, rsLine: data.chart.data?.rs_line || [], legs, pivot: view.pivot, upper: view.upper, stop: plan?.stop ?? null, rsNewHigh: rsHigh, dryUpLeg: legs.at(-1) || null, sellMarks: sellMarks(sells), interval } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [bars, view?.symbol, view?.pivot, view?.upper, legs, data.chart.data, rsHigh, sells]);
+    [bars, view?.symbol, view?.pivot, view?.upper, legs, data.chart.data, rsHigh, sells, interval]);
   if (!view) return <p className="brief-note brief-pad" role="status">銘柄データを読み込み中…</p>;
   const update = (key, value) => {
     if (!finite(value)) return;
@@ -199,11 +202,11 @@ export default function StockView({ data, header = null }) {
       </div>
       <div className="brief-tags">{chips.map(([text, t]) => <span key={text} className={`brief-chip${t ? ` tone-${t}` : ''}`}>{text}</span>)}</div>
     </section>
-    <section className="brief-card brief-chartcard in" style={{ '--i': 1 }} aria-label="日足チャート">
+    <section className="brief-card brief-chartcard in" style={{ '--i': 1 }} aria-label="株価チャート">
       {model ? <PriceChart ref={chartRef} model={model} period={period} /> : <p className="brief-note brief-chart-placeholder" role="status">{data.chart.isError ? '日足チャートを取得できません。' : row?.chart_path ? '日足チャートを読み込み中…' : 'この銘柄の日足チャートは未配信です。'}</p>}
       {bars && data.date && bars.at(-1)?.date !== data.date ? <p className="brief-note brief-asof" role="note">日足は {bars.at(-1)?.date} までです（分析基準日 {data.date} の日足は未取得）。チャートから算出する判定は未確認にしています。</p> : null}
-      <div className="brief-periods" role="group" aria-label="表示期間">{[[65, '3か月'], [130, '6か月'], [250, '1年']].map(([n, label]) => <button key={n} type="button" aria-pressed={period === n} onClick={() => setPeriod(n)}>{label}</button>)}<span className="brief-note">なぞると日足の値</span></div>
-      <div className="brief-legend" aria-hidden="true"><span><i className="lg-ma50" />50日線</span><span><i className="lg-ma150" />150・200日線</span><span><i className="lg-pivot" />ピボット</span><span><i className="lg-stop" />損切り</span><span><i className="lg-rs" />RS線（株価÷S&amp;P 500。RS推計とは別）</span><span>枠＝値幅の収縮</span>{model?.sellMarks?.length ? <span><i className="lg-sell" />売りのサイン（▼上昇の加速・▲崩れ）</span> : null}</div>
+      <div className="brief-periods" role="group" aria-label="表示期間">{Object.entries(RANGES).map(([key, [, , label]]) => <button key={key} type="button" aria-pressed={range === key} onClick={() => setRange(key)}>{label}</button>)}<span className="brief-note">なぞると{interval === 'week' ? '週足' : '日足'}の値</span></div>
+      <div className="brief-legend" aria-hidden="true"><span><i className="lg-ma50" />{interval === 'week' ? '10週線' : '50日線'}</span><span><i className="lg-ma150" />{interval === 'week' ? '30・40週線' : '150・200日線'}</span><span><i className="lg-pivot" />ピボット</span><span><i className="lg-stop" />損切り</span><span><i className="lg-rs" />RS線（株価÷S&amp;P 500。RS推計とは別）</span><span>枠＝値幅の収縮</span>{model?.sellMarks?.length ? <span><i className="lg-sell" />売りのサイン（▼上昇の加速・▲崩れ）</span> : null}</div>
     </section>
     <div className="brief-grid">
       <TemplateCard template={template} />

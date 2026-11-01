@@ -45,6 +45,28 @@ function niceStep(lo, hi, count) {
   for (const m of [1, 2, 2.5, 5, 10]) if (raw <= m * power) return m * power;
   return 10 * power;
 }
+/**
+ * Weekly bars from daily bars (Monday-based weeks). Each week keeps its first and last session
+ * dates; a week with any non-finite OHLCV value is dropped rather than averaged over a gap, and a
+ * first week that does not start on a Monday is dropped as partial.
+ */
+export function weeklyBars(daily) {
+  const weeks = [];
+  for (const bar of daily || []) {
+    const stamp = Date.parse(`${bar?.date}T00:00:00Z`);
+    if (!Number.isFinite(stamp)) continue;
+    const monday = new Date(stamp - ((new Date(stamp).getUTCDay() + 6) % 7) * DAY).toISOString().slice(0, 10);
+    const week = weeks.at(-1);
+    if (!week || week.key !== monday) weeks.push({ key: monday, start: bar.date, date: bar.date, open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: bar.volume, ok: [bar.open, bar.high, bar.low, bar.close, bar.volume].every(Number.isFinite) });
+    else {
+      Object.assign(week, { date: bar.date, high: Math.max(week.high, bar.high), low: Math.min(week.low, bar.low), close: bar.close, volume: week.volume + bar.volume });
+      week.ok = week.ok && [bar.open, bar.high, bar.low, bar.close, bar.volume].every(Number.isFinite);
+    }
+  }
+  // The first week is usually cut by the start of the data: keep it only when it starts on a Monday.
+  if (weeks.length && new Date(`${weeks[0].start}T00:00:00Z`).getUTCDay() !== 1) weeks.shift();
+  return weeks.filter(week => week.ok).map(({ start, date, open, high, low, close, volume }) => ({ start, date, open, high, low, close, volume }));
+}
 const tagText = value => value >= 1000 ? fmt(value, 0) : fmt(value, 2);
 
 /**
@@ -56,12 +78,15 @@ const tagText = value => value >= 1000 ? fmt(value, 0) : fmt(value, 2);
 export function renderPriceChart(el, model, { period = 130, animate = true, fast = false, signal } = {}) {
   const k = fast ? 0.5 : 1;
   const W = Math.max(240, Math.round(el.clientWidth)), H = Math.max(240, Math.round(el.clientHeight));
-  const all = model.bars || [];
+  // Weekly mode: 10/30/40-week averages stand in for the 50/150/200-day lines (same colours).
+  const weekly = model.interval === 'week', unit = weekly ? '週' : '日';
+  const all = weekly ? weeklyBars(model.bars) : model.bars || [];
   const n = Math.min(period, all.length), from = all.length - n, bars = all.slice(from);
   if (!n) { el.innerHTML = '<p class="brief-chart-empty">日足データが不足しています。</p>'; return null; }
   const closes = all.map(b => b.close), volumes = all.map(b => b.volume);
-  const ma = { 50: sma(closes, 50).slice(from), 150: sma(closes, 150).slice(from), 200: sma(closes, 200).slice(from) };
-  const volume50 = sma(volumes, 50), vavg = volume50.map((_, i) => (i ? volume50[i - 1] : null)).slice(from); // prior 50 sessions, excluding the day itself
+  const [maShort, maMiddle, maLong] = weekly ? [10, 30, 40] : [50, 150, 200], volumeLength = weekly ? 10 : 50;
+  const ma = { 50: sma(closes, maShort).slice(from), 150: sma(closes, maMiddle).slice(from), 200: sma(closes, maLong).slice(from) };
+  const volumeAverage = sma(volumes, volumeLength), vavg = volumeAverage.map((_, i) => (i ? volumeAverage[i - 1] : null)).slice(from); // prior sessions, excluding the bar itself
   const right = 62, pw = W - right - 2, padT = 10, axisB = 18, volH = Math.round(H * 0.15), rsH = Math.round(H * 0.11), gap = 8;
   const ph = H - padT - axisB - volH - rsH - gap * 2, rsTop = padT + ph + gap, volTop = rsTop + rsH + gap;
   const levels = [model.pivot, model.upper, model.stop].filter(Number.isFinite);
@@ -89,7 +114,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   }
   // A contraction that began before the visible period is drawn from the period's first bar.
   const firstOnOrAfter = day => { const i = bars.findIndex(b => b.date >= day); return i < 0 ? null : i; };
-  const lastOnOrBefore = day => { for (let i = n - 1; i >= 0; i--) if (bars[i].date <= day) return i; return null; };
+  const lastOnOrBefore = day => { for (let i = n - 1; i >= 0; i--) if ((bars[i].start || bars[i].date) <= day) return i; return null; };
   const legs = (model.legs || []).map(leg => ({ ...leg, a: firstOnOrAfter(leg.startDate), b: lastOnOrBefore(leg.endDate) })).filter(leg => Number.isInteger(leg.a) && Number.isInteger(leg.b) && leg.b >= leg.a);
   B.push(`<g class="bc-legs" clip-path="url(#${uid})">`);
   for (const leg of legs) {
@@ -125,7 +150,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   }
   const vmax = Math.max(...bars.map(b => b.volume), 1), vw = Math.max(1, bw * 0.7), dry = model.dryUpLeg ? { a: firstOnOrAfter(model.dryUpLeg.startDate), b: lastOnOrBefore(model.dryUpLeg.endDate) } : null;
   bars.forEach((b, i) => {
-    const h = b.volume / vmax * (volH - 2), heavy = vavg[i] && b.volume >= vavg[i] * 1.4 && i >= n - 5, dried = dry && i >= dry.a && i <= dry.b;
+    const h = b.volume / vmax * (volH - 2), heavy = vavg[i] && b.volume >= vavg[i] * 1.4 && i >= n - (weekly ? 2 : 5), dried = dry && i >= dry.a && i <= dry.b;
     // Heavy volume on a lower close is distribution, not a breakout: draw it in the warning colour.
     const down = heavy && b.close < (i ? bars[i - 1].close : all[from - 1]?.close ?? b.open);
     M.push(`<rect x="${(x(i) - vw / 2).toFixed(1)}" y="${(volTop + volH - h).toFixed(1)}" width="${vw.toFixed(1)}" height="${h.toFixed(1)}" class="${down ? 'bc-volhi bc-volhi-down' : heavy ? 'bc-volhi' : dried ? 'bc-voldry' : 'bc-vol'}"/>`);
@@ -137,7 +162,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2, yl = y(leg.low);
     if (x1 - x0 > 22) F.push(`<text x="${(x0 + x1) / 2}" y="${yl + 14 > padT + ph - 2 ? yl - 5 : yl + 14}" text-anchor="middle" class="bc-legtext" font-size="11" font-weight="700" ${mono} data-depth="${leg.depthPct}" data-i="${i}">−${Math.round(leg.depthPct)}%</text>`);
   }
-  F.push(`<text x="4" y="${rsTop + 12}" class="bc-caption" font-size="11">RS線（株価÷S&amp;P 500）</text><text x="4" y="${volTop + 12}" class="bc-caption" font-size="11">出来高・50日平均</text>`);
+  F.push(`<text x="4" y="${rsTop + 12}" class="bc-caption" font-size="11">RS線（株価÷S&amp;P 500）</text><text x="4" y="${volTop + 12}" class="bc-caption" font-size="11">出来高・${volumeLength}${unit}平均</text>`);
   if (dry && Number.isInteger(dry.a) && Number.isInteger(dry.b) && dry.b - dry.a > 3) {
     const xa = Math.max(0, x(dry.a) - bw / 2), xb = x(dry.b) + bw / 2;
     F.push(`<g class="bc-note"><path d="M${xa},${volTop - 1}v-4H${xb}v4" class="bc-bracket" fill="none"/><text x="${(xa + xb) / 2}" y="${volTop - 8}" text-anchor="middle" class="bc-notetext" font-size="11" font-weight="700">出来高の枯渇</text></g>`);
@@ -149,8 +174,9 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const lastX = x(n - 1), lastY = y(bars[n - 1].close);
   F.push(`<g class="bc-last"><circle cx="${lastX}" cy="${lastY}" r="9" class="bc-pulse"/><circle cx="${lastX}" cy="${lastY}" r="3.6" class="bc-lastdot"/></g>`);
   const markIndex = new Map(bars.map((b, i) => [b.date, i]));
+  const barOf = day => { if (!weekly) return markIndex.get(day); const i = bars.findIndex(b => b.start <= day && day <= b.date); return i < 0 ? undefined : i; };
   for (const mark of model.sellMarks || []) {
-    const i = markIndex.get(mark.date); if (i === undefined) continue;
+    const i = barOf(mark.date); if (i === undefined) continue;
     const mx = x(i), top = Math.max(padT + 2, y(bars[i].high) - 14), bottom = Math.min(padT + ph - 2, y(bars[i].low) + 14);
     F.push(mark.kind === 'weakness'
       ? `<path d="M${mx - 5},${bottom}h10l-5,-8z" class="bc-sell bc-sell-weak"/>`
@@ -163,7 +189,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const box = `viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false"`;
   const depths = (model.legs || []).map(leg => `${Math.round(leg.depthPct)}%`).join('→');
   el.setAttribute('role', 'img');
-  el.setAttribute('aria-label', `${model.symbol} の日足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${Number.isFinite(model.pivot) ? `、ピボット ${fmt(model.pivot)}` : ''}${Number.isFinite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : ''}${(model.sellMarks || []).some(m => markIndex.has(m.date)) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => markIndex.has(m.date)).map(m => m.date).join('・')}` : ''}。`);
+  el.setAttribute('aria-label', `${model.symbol} の${unit}足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${Number.isFinite(model.pivot) ? `、ピボット ${fmt(model.pivot)}` : ''}${Number.isFinite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : ''}${(model.sellMarks || []).some(m => barOf(m.date) !== undefined) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => barOf(m.date) !== undefined).map(m => m.date).join('・')}` : ''}。`);
   el.innerHTML = `<svg class="bc-layer" ${box}>${B.join('')}</svg><div class="bc-reveal"><svg class="bc-layer" ${box}>${M.join('')}</svg></div><svg class="bc-layer" ${box}>${F.join('')}</svg><div class="bc-tip" hidden></div>`;
   const [back, reveal, front] = el.children, mid = reveal.firstChild;
 
@@ -175,7 +201,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     const i = Math.max(0, Math.min(n - 1, Math.floor(px / bw))), b = bars[i], prev = bars[i - 1] || b;
     cross.setAttribute('x1', x(i)); cross.setAttribute('x2', x(i)); dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(b.close)); scrub.setAttribute('opacity', '1');
     const change = (b.close / prev.close - 1) * 100, ratio = vavg[i] ? b.volume / vavg[i] : null;
-    tip.innerHTML = `<b>${b.date}</b><span>終値 <em>${fmt(b.close)}</em> <i class="${change >= 0 ? 'up' : 'down'}">${signed(change)}</i></span><span>高 ${fmt(b.high)}・安 ${fmt(b.low)}</span><span>出来高 ${ratio == null ? '—' : `${ratio.toFixed(2)}×`}（50日平均比）</span>`;
+    tip.innerHTML = `<b>${weekly ? `${b.start}〜${b.date.slice(5)}` : b.date}</b><span>終値 <em>${fmt(b.close)}</em> <i class="${change >= 0 ? 'up' : 'down'}">${signed(change)}</i></span><span>高 ${fmt(b.high)}・安 ${fmt(b.low)}</span><span>出来高 ${ratio == null ? '—' : `${ratio.toFixed(2)}×`}（${volumeLength}${unit}平均比）</span>`;
     tip.hidden = false;
     const left = x(i) / W * rect.width;
     tip.style.transform = `translateX(${Math.round(left > rect.width / 2 ? left - tip.offsetWidth - 14 : left + 14)}px)`;

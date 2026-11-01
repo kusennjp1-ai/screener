@@ -7,7 +7,7 @@ let introducedOnce = false;
 const PriceChart = forwardRef(function PriceChart({ model, period, className = '' }, ref) {
   const element = useRef(null), controller = useRef(null), introduced = useRef(null), stopRef = useRef(model?.stop);
   stopRef.current = model?.stop;
-  const key = model ? `${model.symbol}|${period}|${model.bars?.length}|${model.bars?.at(-1)?.date}` : null;
+  const key = model ? `${model.symbol}|${model.interval || 'day'}|${period}|${model.bars?.length}|${model.bars?.at(-1)?.date}` : null;
   // Levels and overlays can arrive after the bars (detail merge); they redraw without replaying the intro.
   const content = model ? `${key}|${model.pivot}|${model.upper}|${model.rsNewHigh}|${model.rsLine?.length}|${model.legs?.length}|${model.dryUpLeg?.startDate}|${(model.sellMarks || []).map(m => m.date).join(',')}` : null;
   useImperativeHandle(ref, () => ({ moveStop: value => controller.current?.moveStop(value) }), []);

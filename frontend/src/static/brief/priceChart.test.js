@@ -73,6 +73,23 @@ describe('brief price chart', () => {
     expect(up.querySelectorAll('.bc-volhi')).toHaveLength(1);
   });
 
+  it('builds Monday-based weeks and draws a weekly chart with week averages', async () => {
+    const { weeklyBars } = await import('./priceChart');
+    const days = ['2026-09-21', '2026-09-22', '2026-09-25', '2026-09-28', '2026-10-02'].map((date, i) => ({ date, open: 10 + i, high: 12 + i, low: 9 + i, close: 11 + i, volume: 100 }));
+    const weeks = weeklyBars(days);
+    expect(weeks).toEqual([
+      { start: '2026-09-21', date: '2026-09-25', open: 10, high: 14, low: 9, close: 13, volume: 300 },
+      { start: '2026-09-28', date: '2026-10-02', open: 13, high: 16, low: 12, close: 15, volume: 200 },
+    ]);
+    expect(weeklyBars([...days.slice(0, 2), { ...days[2], volume: null }])).toEqual([]);
+    expect(weeklyBars(days.slice(1)).map(w => w.start)).toEqual(['2026-09-28']);
+    const el = container();
+    renderPriceChart(el, { ...model, interval: 'week' }, { period: 104, animate: false });
+    expect(el.getAttribute('aria-label')).toContain('週足チャート');
+    expect(el.querySelectorAll('.bc-up, .bc-down').length).toBe(weeklyBars(bars).length * 2);
+    expect(el.textContent).toContain('出来高・10週平均');
+  });
+
   it('says so instead of drawing when there are no bars', () => {
     const el = container();
     expect(renderPriceChart(el, { ...model, bars: [] }, { animate: false })).toBeNull();
