@@ -67,6 +67,8 @@ export default function MarketCard({ market, trends, date }) {
       <div className="brief-fact"><small>TT達成数</small><b>{hasEnvironment ? `${num(last.trendTemplateCount)}銘柄` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.trendTemplateCount) ? `1か月で ${delta(last.trendTemplateCount - monthAgo.trendTemplateCount)}` : '8条件すべて達成'}</em></div>
       <div className="brief-fact"><small>200日線より上</small><b>{hasEnvironment ? `${num(last.above200Percent, 1)}%` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.above200Percent) ? `1か月前 ${num(monthAgo.above200Percent, 1)}%` : '全銘柄に占める割合'}</em></div>
       <div className="brief-fact"><small>ブレイクアウト成功率</small><b>{hasEnvironment && finite(last.breakoutHoldPercent) ? `${num(last.breakoutHoldPercent)}%` : '未確認'}</b><em>{hasEnvironment && Number.isInteger(last.breakoutsJudged) ? `直近${last.breakoutsJudged}件・10日で−7%未満` : '判定数が不足'}</em></div>
+      <div className="brief-fact"><small>52週の新高値・新安値</small><b className={finite(last?.newHighs) && finite(last?.newLows) && last.newLows > last.newHighs ? 'is-warn' : ''}>{finite(last?.newHighs) && finite(last?.newLows) ? `${num(last.newHighs)}・${num(last.newLows)}` : '未確認'}</b><em>{finite(last?.newHighs) && finite(last?.newLows) ? `差 ${delta(last.newHighs - last.newLows) || '±0'}` : '日足から集計'}</em></div>
+      <div className="brief-fact"><small>RS90以上のTT達成</small><b>{hasEnvironment && finite(last.rs90TemplateCount) ? `${num(last.rs90TemplateCount)}銘柄` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.rs90TemplateCount) ? `1か月で ${delta(last.rs90TemplateCount - monthAgo.rs90TemplateCount)}` : '強いリーダーの数'}</em></div>
     </div>
     {lagging.length > 0 && <p className="brief-note brief-asof" role="note">{lagging.join('・')}（分析基準日 {date} の再集計待ち）</p>}
     {hasEnvironment && <div className="brief-environment">
@@ -77,7 +79,7 @@ export default function MarketCard({ market, trends, date }) {
       <div className="brief-trend"><span>TT達成数の推移（6か月）</span><Sparkline points={recent} field="trendTemplateCount" /></div>
     </div>}
     {warnings.length > 0 && <ul className="brief-warnings" aria-label="地合いの悪化サイン（独自判定）">{warnings.map(w => <li key={w.key}><span aria-hidden="true">▲</span> {w.text}（独自判定）</li>)}</ul>}
-    {split?.warning && <p className="brief-alert" role="note">▲ 指数は1年高値から{Math.abs(split.fromHigh).toFixed(1)}%以内ですが、200日線より上の銘柄は{num(split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
+    {split?.warning && <p className="brief-alert" role="note">▲ {split.fromHigh > -0.05 ? '指数は1年高値の水準にありますが' : `指数は1年高値まであと${Math.abs(split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{num(split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
     <p className="brief-note">分配日・ステージ・トレンドテンプレート数は公開日足からの独自集計で、IBDの公式値ではありません。</p>
   </section>;
 }
