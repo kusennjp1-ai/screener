@@ -389,8 +389,9 @@ jobs:
           # Compute Code 33 (relaxed Minervini earnings acceleration) live from
           # SEC EDGAR XBRL for US passes_template candidates. EDGAR is US-only
           # and needs outbound data.sec.gov access, available here. Non-US
-          # markets ignore this flag.
+          # markets ignore this flag. SEC asks for a contactable User-Agent.
           STATIC_SITE_CODE33: "1"
+          SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
         run: |
           cd backend
           set +e
@@ -1014,7 +1015,7 @@ jobs:
                 echo '::warning::Long market history remains at its actual prior observation date. The post-close watchdog will retry the missing completed session.'
               fi
             fi
-            python tools/sec-financials.py --limit 60
+            python tools/sec-financials.py --limit 150
             npm run build
             node tools/check-data-quality.mjs
           fi

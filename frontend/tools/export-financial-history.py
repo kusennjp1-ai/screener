@@ -52,7 +52,7 @@ def main():
     audit = json.loads(Path('public/qualification-audit.json').read_text(encoding='utf-8'))
     as_of = audit['as_of_date']
     eligible = [r['symbol'] for r in audit['results'] if needs_history(r)]
-    symbols = eligible[:max(0, min(args.limit, 300))]
+    symbols = eligible[:max(0, min(args.limit, 500))]
     results = {}
 
     def fetch(symbol):

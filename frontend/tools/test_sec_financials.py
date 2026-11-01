@@ -33,5 +33,92 @@ class PointInTimeFacts(unittest.TestCase):
         with self.assertRaises(ValueError):
             sec.normalize(facts([entry()]), "TEST", 2, "2026-03-01")
 
+def flow(tag, rows):
+    return {"cik": 1, "facts": {"us-gaap": {tag: {"units": {"USD": rows}}}}}
+
+def quarter(start, end, val, filed, form="10-Q", accn=None):
+    return {"start": start, "end": end, "val": val, "filed": filed, "form": form, "accn": accn or f"q-{end}"}
+
+FY = [quarter("2025-01-01", "2025-03-31", 100, "2025-05-01"), quarter("2025-04-01", "2025-06-30", 110, "2025-08-01"),
+      quarter("2025-07-01", "2025-09-30", 120, "2025-11-01"), quarter("2025-01-01", "2025-12-31", 470, "2026-02-15", form="10-K", accn="fy-2025")]
+
+class DerivedFourthQuarter(unittest.TestCase):
+    def test_revenue_q4_is_the_fiscal_year_minus_three_reported_quarters(self):
+        result = sec.normalize(dict(flow("Revenues", FY), cik=1), "T", 1, "2026-03-01")["quarterly"]["revenue"]
+        q4 = result[-1]
+        self.assertEqual((q4["start"], q4["end"], q4["value"]), ("2025-10-01", "2025-12-31", 140))
+        self.assertEqual(q4["derived"], sec.DERIVED_Q4)
+        self.assertEqual(q4["components"][0], "fy-2025")
+        self.assertEqual(q4["filed"], "2026-02-15")
+
+    def test_no_derivation_with_a_gap_a_mixed_concept_or_before_the_10k_is_filed(self):
+        gap = [FY[0], FY[2], FY[3]]
+        self.assertFalse(any(p["derived"] for p in sec.normalize(dict(flow("Revenues", gap), cik=1), "T", 1, "2026-03-01")["quarterly"]["revenue"]))
+        early = sec.normalize(dict(flow("Revenues", FY), cik=1), "T", 1, "2026-01-15")["quarterly"]["revenue"]
+        self.assertFalse(any(p["derived"] for p in early))
+        mixed = {"cik": 1, "facts": {"us-gaap": {"Revenues": {"units": {"USD": FY[:3]}}, "SalesRevenueNet": {"units": {"USD": FY[3:]}}}}}
+        self.assertFalse(any(p["derived"] for p in sec.normalize(mixed, "T", 1, "2026-03-01")["quarterly"]["revenue"]))
+
+    def test_no_derivation_when_a_source_filing_is_unnamed(self):
+        rows = [dict(q) for q in FY]; rows[1]["accn"] = None
+        self.assertFalse(any(p["derived"] for p in sec.normalize(dict(flow("Revenues", rows), cik=1), "T", 1, "2026-03-01")["quarterly"]["revenue"]))
+
+    def test_eps_is_never_derived_from_the_annual_value(self):
+        eps = [dict(q, val=q["val"] / 100) for q in FY]
+        f = {"cik": 1, "facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": eps}}}}}
+        self.assertEqual([p["end"] for p in sec.normalize(f, "T", 1, "2026-03-01")["quarterly"]["eps"]], ["2025-03-31", "2025-06-30", "2025-09-30"])
+
+class SecAccess(unittest.TestCase):
+    def test_user_agent_comes_from_the_environment(self):
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"SEC_USER_AGENT": "Ops ops@example.org"}):
+            self.assertEqual(sec.user_agent(), "Ops ops@example.org")
+        with patch.dict(os.environ, {"SEC_USER_AGENT": ""}):
+            self.assertEqual(sec.user_agent(), sec.DEFAULT_USER_AGENT)
+
+    def test_transient_errors_are_retried_and_permanent_ones_are_not(self):
+        import io
+        from urllib.error import HTTPError
+        calls, waits = [], []
+        def opener(statuses):
+            def call(req, timeout):
+                calls.append(req.full_url)
+                status = statuses.pop(0)
+                if status != 200:
+                    raise HTTPError(req.full_url, status, "x", {}, None)
+                return io.BytesIO(b'{"ok": true}')
+            return call
+        self.assertEqual(sec.get_json("https://data.sec.gov/a", sleep=waits.append, opener=opener([503, 429, 200])), {"ok": True})
+        self.assertEqual((len(calls), waits), (3, [1, 2]))
+        with self.assertRaises(HTTPError):
+            sec.get_json("https://data.sec.gov/b", sleep=waits.append, opener=opener([404]))
+
+    def test_failed_symbols_get_one_more_pass_and_stay_unknown_when_it_fails_again(self):
+        from urllib.error import URLError
+        facts = lambda cik: {"cik": cik, "facts": {"us-gaap": {}}}
+        attempts = {}
+        def get(url):
+            if url.endswith("company_tickers.json"):
+                attempts["map"] = attempts.get("map", 0) + 1
+                if attempts["map"] == 1:
+                    raise URLError("down")
+                return {"0": {"ticker": "AAA", "cik_str": 1}, "1": {"ticker": "BBB", "cik_str": 2}, "2": {"ticker": "CCC", "cik_str": 3}}
+            cik = int(url.rsplit("CIK", 1)[1].split(".")[0])
+            attempts[cik] = attempts.get(cik, 0) + 1
+            if cik == 2 and attempts[cik] == 1 or cik == 3:
+                raise URLError("reset")
+            return facts(cik)
+        waits = []
+        out = sec.collect(["AAA", "BBB", "CCC", "ZZZ"], "2026-10-02", get=get, sleep=waits.append, pause=0)
+        self.assertEqual(attempts["map"], 2)
+        self.assertEqual(out["results"]["BBB"]["status"], "partial")
+        self.assertEqual(out["results"]["CCC"]["status"], "unavailable")
+        self.assertEqual(out["results"]["ZZZ"]["error"], "SEC識別子未取得")
+        self.assertEqual(out["second_pass"], {"retried": 2, "recovered": 1})
+        self.assertEqual((attempts[1], attempts[2], attempts[3]), (1, 2, 2))
+        self.assertIn(sec.SECOND_PASS_DELAY_SECONDS, waits)
+        self.assertEqual(out["errors"], [])
+
 if __name__ == "__main__":
     unittest.main()
