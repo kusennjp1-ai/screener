@@ -48,6 +48,7 @@ OTHER_LISTED_EXCHANGES = {
     "P": "NYSEARCA",
     "Z": "BATS",
     "V": "IEX",
+    "TXSE": "TXSE",  # Texas Stock Exchange, listed in the directory since 2026.
 }
 
 # The equity universe has always been NYSE, NASDAQ and NYSE American.
@@ -242,10 +243,14 @@ def parse_other_listed(text: str) -> tuple[list[UsListing], str]:
     listings = []
     for row in rows:
         raw = row["ACT Symbol"]
-        exchange = OTHER_LISTED_EXCHANGES.get(row["Exchange"])
-        if exchange is None:
-            raise ValueError(f"Unknown otherlisted.txt exchange code {row['Exchange']!r} for {raw!r}")
+        code = row["Exchange"]
+        exchange = OTHER_LISTED_EXCHANGES.get(code)
         symbol, exclusion = _canonicalize_act_symbol(raw)
+        if exchange is None:
+            # A new venue must not silently join the equity universe, and must
+            # not abort the whole directory either: keep it visible and counted.
+            exchange = f"UNKNOWN:{code}"
+            exclusion = exclusion or ("unknown_exchange", f"unknown otherlisted.txt exchange code {code!r}")
         listings.append(
             _listing(
                 raw_symbol=raw,

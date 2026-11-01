@@ -115,11 +115,17 @@ def test_format_changes_fail_closed(text, message):
         parse_nasdaq_listed(text)
 
 
-def test_unknown_other_listed_exchange_code_fails_closed():
-    changed = OTHER_LISTED.replace("Common Stock|A|IMO|", "Common Stock|Q|IMO|", 1)
-    assert changed != OTHER_LISTED
-    with pytest.raises(ValueError, match="Unknown otherlisted.txt exchange code 'Q'"):
-        parse_other_listed(changed)
+def test_unknown_other_listed_exchange_is_counted_but_never_an_equity_candidate():
+    changed = OTHER_LISTED.replace("Common Stock|A|IMO|", "Common Stock|Q|IMO|", 1).replace(
+        "IBM|International Business Machines Corporation Common Stock|N|",
+        "IBM|International Business Machines Corporation Common Stock|TXSE|", 1)
+    listings, _ = parse_other_listed(changed)
+    by_symbol = {listing.symbol: listing for listing in listings}
+
+    assert by_symbol["IMO"].exchange == "UNKNOWN:Q"
+    assert by_symbol["IMO"].security_class == "unknown_exchange"
+    assert by_symbol["IBM"].exchange == "TXSE" and by_symbol["IBM"].security_class == "common"
+    assert not by_symbol["IMO"].is_equity_candidate and not by_symbol["IBM"].is_equity_candidate
 
 
 def test_reference_comparison_reports_membership_exchange_and_cohort_changes(tmp_path):
