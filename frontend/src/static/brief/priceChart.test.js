@@ -41,6 +41,18 @@ describe('brief price chart', () => {
     expect(Number(el.querySelector('.bc-stop').getAttribute('y1'))).toBeLessThan(before);
   });
 
+  it('keeps averages after a missing value and draws a flat range without hanging', () => {
+    const gappy = bars.map((b, i) => (i === 20 ? { ...b, volume: undefined } : b));
+    const el = container();
+    renderPriceChart(el, { ...model, bars: gappy }, { period: 130, animate: false });
+    expect(el.querySelector('.bc-ma50').getAttribute('d')).not.toContain('NaN');
+    expect(el.querySelector('.bc-vavg').getAttribute('d')).not.toContain('NaN');
+    const flat = bars.map(b => ({ ...b, open: 10, high: 10, low: 10, close: 10 }));
+    const plain = container();
+    renderPriceChart(plain, { ...model, bars: flat, pivot: null, upper: null, stop: null, legs: [] }, { period: 60, animate: false });
+    expect(plain.querySelectorAll('.bc-up, .bc-down').length).toBe(120);
+  });
+
   it('says so instead of drawing when there are no bars', () => {
     const el = container();
     expect(renderPriceChart(el, { ...model, bars: [] }, { animate: false })).toBeNull();

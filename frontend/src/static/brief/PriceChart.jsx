@@ -8,6 +8,8 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
   const element = useRef(null), controller = useRef(null), introduced = useRef(null), stopRef = useRef(model?.stop);
   stopRef.current = model?.stop;
   const key = model ? `${model.symbol}|${period}|${model.bars?.length}|${model.bars?.at(-1)?.date}` : null;
+  // Levels and overlays can arrive after the bars (detail merge); they redraw without replaying the intro.
+  const content = model ? `${key}|${model.pivot}|${model.upper}|${model.rsNewHigh}|${model.rsLine?.length}|${model.legs?.length}|${model.dryUpLeg?.startDate}` : null;
   useImperativeHandle(ref, () => ({ moveStop: value => controller.current?.moveStop(value) }), []);
   useLayoutEffect(() => {
     if (!element.current || !model?.bars?.length) return undefined;
@@ -23,9 +25,9 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
       // A remount before the first frame (React's development double effect) must replay the intro.
       if (animate && !painted) introduced.current = null;
     };
-    // The stop moves through the controller; only identity changes redraw.
+    // The stop moves through the controller; content changes redraw, identity changes animate.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, period]);
+  }, [content, period]);
   useEffect(() => {
     const target = element.current;
     if (!target || typeof ResizeObserver !== 'function' || !model?.bars?.length) return undefined;
@@ -38,7 +40,7 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     observer.observe(target);
     return () => { clearTimeout(timer); observer.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, period]);
+  }, [content, period]);
   return <div ref={element} className={`brief-chart ${className}`} data-testid="brief-price-chart" />;
 });
 

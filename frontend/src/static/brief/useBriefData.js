@@ -42,15 +42,12 @@ export function useWatchlist() {
     return () => window.removeEventListener('storage', sync);
   }, []);
   const toggle = useCallback(symbol => {
-    let added = false;
-    setWatch(current => {
-      added = !current.includes(symbol);
-      const next = added ? [...current, symbol] : current.filter(s => s !== symbol);
-      try { localStorage.setItem(WATCH_KEY, JSON.stringify(next)); setStorageError(false); } catch { setStorageError(true); }
-      return next;
-    });
+    const added = !watch.includes(symbol);
+    const next = added ? [...watch, symbol] : watch.filter(s => s !== symbol);
+    setWatch(next);
+    try { localStorage.setItem(WATCH_KEY, JSON.stringify(next)); setStorageError(false); } catch { setStorageError(true); }
     return added;
-  }, []);
+  }, [watch]);
   return { watch, toggle, storageError };
 }
 

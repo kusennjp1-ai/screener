@@ -27,13 +27,21 @@ export function tween(ms, step, { delay = 0, easing = easeOut, signal } = {}) {
   });
 }
 
+// A window containing any non-finite value has no average; later windows recover.
 function sma(values, length) {
-  const out = new Array(values.length).fill(null); let sum = 0;
-  for (let i = 0; i < values.length; i++) { sum += values[i]; if (i >= length) sum -= values[i - length]; if (i >= length - 1) out[i] = sum / length; }
+  const out = new Array(values.length).fill(null); let sum = 0, bad = 0;
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    if (Number.isFinite(v)) sum += v; else bad++;
+    if (i >= length) { const old = values[i - length]; if (Number.isFinite(old)) sum -= old; else bad--; }
+    if (i >= length - 1 && bad === 0) out[i] = sum / length;
+  }
   return out;
 }
 function niceStep(lo, hi, count) {
-  const raw = (hi - lo) / count, power = Math.pow(10, Math.floor(Math.log10(raw)));
+  const raw = (hi - lo) / count;
+  if (!(raw > 0) || !Number.isFinite(raw)) return 1;
+  const power = Math.pow(10, Math.floor(Math.log10(raw)));
   for (const m of [1, 2, 2.5, 5, 10]) if (raw <= m * power) return m * power;
   return 10 * power;
 }
@@ -58,7 +66,9 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const ph = H - padT - axisB - volH - rsH - gap * 2, rsTop = padT + ph + gap, volTop = rsTop + rsH + gap;
   const levels = [model.pivot, model.upper, model.stop].filter(Number.isFinite);
   const values = bars.flatMap(b => [b.high, b.low]).concat(levels);
-  const lo = Math.min(...values), hi = Math.max(...values), L = Math.log;
+  let lo = Math.min(...values), hi = Math.max(...values);
+  if (!(hi > lo)) { lo *= 0.99; hi *= 1.01; } // a flat range still gets a scale
+  const L = Math.log;
   const tlo = L(lo) - (L(hi) - L(lo)) * 0.05, thi = L(hi) + (L(hi) - L(lo)) * 0.05;
   const bw = pw / n, x = i => (i + 0.5) * bw, y = v => padT + (thi - L(v)) * ph / (thi - tlo);
   const uid = `brief-chart-${++sequence}`;

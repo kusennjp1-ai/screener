@@ -55,7 +55,7 @@ function TodayView({ brief, watch, open, now, animate }) {
     <section className="brief-card in" style={{ '--i': 3 }} aria-labelledby="brief-watch-title">
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">3</span><h2 id="brief-watch-title">ウォッチの変化</h2></div>
       {watched.length ? <ul className="brief-rows">{watched.map((view, i) => { const event = watchEvent(view); return <li key={view.symbol} className={animate ? 'in' : ''} style={{ '--i': i }}>
-        <button type="button" className="brief-event" onClick={e => open(view.symbol, e.currentTarget, 'today')}>
+        <button type="button" className="brief-event" onClick={e => open(view.symbol, e.currentTarget, 'watch')}>
           <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{event.kind === 'breakout' ? '↗' : event.kind === 'ext' ? '▲' : event.kind === 'near' ? '◔' : event.kind === 'zone' ? '●' : '≈'}</span>
           <span><b>{view.symbol}</b> {event.title}<small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
           <span className="brief-chevron" aria-hidden="true">{ICON.next}</span>
@@ -65,21 +65,30 @@ function TodayView({ brief, watch, open, now, animate }) {
   </>;
 }
 
-function ListView({ brief, kind, watch, open, now, animate }) {
-  const [filter, setFilter] = useState('zone'), [sort, setSort] = useState('priority'), [limit, setLimit] = useState(50), [query, setQuery] = useState('');
-  const views = useMemo(() => {
-    const source = kind === 'watch' ? (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol))
-      : brief.ranked.filter(item => item.assessment?.qualified || (item.assessment?.failed === 1 && item.assessment?.unknown === 0));
-    return source.map(item => candidateView(item, brief.date));
-  }, [brief.bundle.data, brief.ranked, brief.date, kind, watch]);
+/** Every view a list screen can show, before its filter. */
+function listSource(brief, kind, watch) {
+  const source = kind === 'watch' ? (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol))
+    : brief.ranked.filter(item => item.assessment?.qualified || (item.assessment?.failed === 1 && item.assessment?.unknown === 0));
+  return source.map(item => candidateView(item, brief.date));
+}
+/** Exactly the rows a list screen shows, in its order; prev/next and swipe follow the same sequence. */
+function listShown(views, kind, { filter, sort, query }) {
+  return views.filter(kind === 'watch' ? () => true : LIST_FILTERS[filter].test).filter(view => matchesSearch(view, query)).sort(LIST_SORTS[sort].compare);
+}
+
+function ListView({ brief, kind, watch, open, now, animate, listState, setListState }) {
+  const { filter, sort, query } = listState, [limit, setLimit] = useState(50);
+  const update = patch => setListState(state => ({ ...state, ...patch }));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const views = useMemo(() => listSource(brief, kind, watch), [brief.bundle.data, brief.ranked, brief.date, kind, watch]);
   const counts = useMemo(() => Object.fromEntries(Object.entries(LIST_FILTERS).map(([key, value]) => [key, views.filter(value.test).length])), [views]);
-  const shown = useMemo(() => views.filter(kind === 'watch' ? () => true : LIST_FILTERS[filter].test).filter(view => matchesSearch(view, query)).sort(LIST_SORTS[sort].compare), [views, filter, sort, kind, query]);
+  const shown = useMemo(() => listShown(views, kind, listState), [views, kind, listState]);
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
     {kind !== 'watch' && <div className="brief-filters">
-      <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { setFilter(key); setLimit(50); }}>{value.label}<span className="numeric">{counts[key]}</span></button>)}</div>
-      <label className="brief-search"><span className="sr-only">銘柄を検索</span><input type="search" inputMode="search" placeholder="ティッカー・社名" value={query} onChange={e => { setQuery(e.target.value); setLimit(50); }} /></label>
-      <label className="brief-sort">並び順<select value={sort} onChange={e => setSort(e.target.value)}>{Object.entries(LIST_SORTS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
+      <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { update({ filter: key }); setLimit(50); }}>{value.label}<span className="numeric">{counts[key]}</span></button>)}</div>
+      <label className="brief-search"><span className="sr-only">銘柄を検索</span><input type="search" inputMode="search" placeholder="ティッカー・社名" value={query} onChange={e => { update({ query: e.target.value }); setLimit(50); }} /></label>
+      <label className="brief-sort">並び順<select value={sort} onChange={e => update({ sort: e.target.value })}>{Object.entries(LIST_SORTS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
     </div>}
     <section className="brief-card in" style={{ '--i': 1 }} aria-label={kind === 'watch' ? 'ウォッチ中の銘柄' : '選定銘柄の一覧'}>
       {shown.length ? <ol className="brief-rows">{shown.slice(0, limit).map((view, i) => <CandidateRow key={view.symbol} view={view} rank={kind === 'watch' ? null : i + 1} index={Math.min(i, 12)} onOpen={open} now={now} animate={animate} />)}</ol>
@@ -124,12 +133,10 @@ export default function BriefApp() {
   const view = symbol ? 'stock' : from;
   const now = brief.bundle.evaluatedNow ?? Date.now();
   useEffect(() => { setAnimateKey(k => k + 1); }, [view]);
-  const sequence = useMemo(() => {
-    const ranked = from === 'watch' ? (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)) : from === 'list' ? brief.ranked.filter(item => item.assessment?.qualified) : brief.ranked.filter(item => item.assessment?.qualified);
-    const views = ranked.map(item => candidateView(item, brief.date));
-    const ordered = from === 'today' ? views.filter(v => v.state === 'zone' || (v.state === 'wait' && finite(v.distance) && v.distance >= -5)).sort(briefOrder) : views.sort(briefOrder);
-    return ordered.map(v => v.symbol);
-  }, [from, brief.bundle.data, brief.ranked, brief.date, watch]);
+  const [listState, setListState] = useState({ filter: 'zone', sort: 'priority', query: '' });
+  const sequence = useMemo(() => (from === 'today' ? focusCandidates(brief.ranked, brief.date) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [from, brief.bundle.data, brief.ranked, brief.date, watch, listState]);
   const selected = symbol || (wide ? sequence[0] || null : null);
   const open = useCallback((ticker, trigger, origin = from) => {
     document.querySelectorAll('.brief-row-title b').forEach(element => { element.style.viewTransitionName = ''; });
@@ -138,7 +145,7 @@ export default function BriefApp() {
   }, [go, from, wide]);
   const step = useCallback(direction => {
     if (!sequence.length || !selected) return;
-    const at = sequence.indexOf(selected), next = sequence[(at + direction + sequence.length) % sequence.length];
+    const at = sequence.indexOf(selected), next = at < 0 ? sequence[direction > 0 ? 0 : sequence.length - 1] : sequence[(at + direction + sequence.length) % sequence.length];
     if (next && next !== selected) go(`/brief/stock/${encodeURIComponent(next)}`, { kind: direction > 0 ? 'next' : 'prev', state: { from }, replace: true });
   }, [sequence, selected, go, from]);
   const toggleWatch = useCallback((ticker, button) => {
@@ -171,7 +178,7 @@ export default function BriefApp() {
   };
   const animate = animateKey > 0;
   const barView = useMemo(() => { const item = symbol && (brief.bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol); return item ? candidateView(item, brief.date) : null; }, [symbol, brief.bundle.data, brief.date]);
-  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} /> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} />;
+  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} /> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} />;
   const watching = symbol && watch.includes(symbol);
   return <div className="leader-shell brief" data-theme={dark ? 'dark' : 'light'}>
     <style>{themeCss}</style>

@@ -1,5 +1,4 @@
 import { signed, times } from '../positionGeometry';
-import { trendTemplate } from './briefModel';
 import { meterPercent } from './briefNav';
 
 const finite = Number.isFinite;
@@ -18,9 +17,9 @@ export function StateChip({ view }) {
 }
 
 export function Reasons({ view, now }) {
-  const template = view.qualified ? null : trendTemplate(view.row, now);
+  void now;
   const chips = [<StateChip key="state" view={view} />];
-  chips.push(<span key="tt" className={`brief-chip${view.qualified ? ' tone-zone' : ''}`}>{view.qualified ? 'TT 8/8' : `TT ${template.passed}/8${template.unknown ? `・未確認${template.unknown}` : ''}`}</span>);
+  chips.push(<span key="tt" className={`brief-chip${view.qualified ? ' tone-zone' : ''}`}>{view.qualified ? 'TT 8/8' : Number.isInteger(view.failed) ? `あと${view.failed}条件${view.unknown ? `・未確認${view.unknown}` : ''}` : '条件 未確認'}</span>);
   if (finite(view.volumeRatio) && view.volumeRatio >= 1.4) chips.push(<span key="vol" className="brief-chip tone-zone">出来高 {times(view.volumeRatio)}</span>);
   chips.push(<span key="rs" className="brief-chip">RS推計 {finite(view.rs) ? view.rs : '未確認'}</span>);
   if (view.rsLineHigh) chips.push(<span key="rsl" className="brief-chip tone-zone">RS線 新高値</span>);
