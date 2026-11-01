@@ -109,7 +109,7 @@ export default function BriefApp() {
   const brief = useBriefData();
   const { watch, toggle, storageError } = useWatchlist();
   const location = useLocation();
-  const wide = useMediaQuery('(min-width:1024px)');
+  const wide = useMediaQuery('(min-width:1024px)', { noSsr: true });
   const go = useTransitionNavigate();
   const dark = useTheme().palette.mode === 'dark';
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; }, [dark]);
