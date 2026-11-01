@@ -60,7 +60,7 @@ function TodayView({ brief, watch, open, now, animate }) {
       {watched.length ? <ul className="brief-rows">{watched.map((view, i) => { const event = watchEvent(view); return <li key={view.symbol} className={animate ? 'in' : ''} style={{ '--i': i }}>
         <button type="button" className="brief-event" onClick={e => open(view.symbol, e.currentTarget, 'watch')}>
           <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{event.kind === 'breakout' ? '↗' : event.kind === 'ext' ? '▲' : event.kind === 'near' ? '◔' : event.kind === 'zone' ? '●' : '≈'}</span>
-          <span><b>{view.symbol}</b> {event.title}{sells[view.symbol]?.hits ? <span className="brief-chip tone-ext brief-sellchip">▲ 売りのサイン {sells[view.symbol].hits}件</span> : null}<small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
+          <span><b>{view.symbol}</b> {event.title}{sells[view.symbol]?.hits ? <span className="brief-chip tone-ext brief-sellchip">▲ 売りのサイン {sells[view.symbol].hits}件</span> : sells[view.symbol]?.unknown ? <span className="brief-chip brief-sellchip" title={sells[view.symbol].reason || undefined}>売りのサイン 未確認</span> : null}<small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
           <span className="brief-chevron" aria-hidden="true">{ICON.next}</span>
         </button></li>; })}</ul>
         : <p className="brief-note">銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。</p>}

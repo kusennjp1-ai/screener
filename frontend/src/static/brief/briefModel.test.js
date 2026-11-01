@@ -121,6 +121,16 @@ describe('sell signals', () => {
     expect(sellSignals(bars).weakness[1].state).toBe('unknown');
   });
 
+  it('judges a heavy-volume 50-day break on short histories too', async () => {
+    const { sellSignals } = await import('./briefModel');
+    const closes = rising(98);
+    closes.push(closes.at(-1) * 0.9, closes.at(-1) * 0.9, closes.at(-1) * 0.9);
+    const bars = make(closes);
+    bars.at(-3).volume = 30000;
+    expect(bars).toHaveLength(101);
+    expect(sellSignals(bars).weakness.find(c => c.key === 'ma50').state).toBe('hit');
+  });
+
   it('does not judge strength without an advance and refuses short or broken bars', async () => {
     const { sellSignals } = await import('./briefModel');
     const flat = make(Array.from({ length: 200 }, (_, i) => 100 + Math.sin(i / 4)));
@@ -138,7 +148,7 @@ describe('book combined warning', () => {
     const { bookWarningCheck, withBookWarning } = await import('./briefModel');
     const warn = over => ({ valid: true, priceWarnings: { below20: true, threeLowerLows: true, currentVolumeRatio: 1.6, combinedWarning: true, recoveryInUpperHalf: false, ...over } });
     expect(bookWarningCheck(warn()).state).toBe('hit');
-    expect(bookWarningCheck(warn()).detail).toBe('20日線割れ・安値切り下げ 3日連続・出来高 1.60×');
+    expect(bookWarningCheck(warn()).detail).toBe('20日線割れ・3日連続の安値切り下げ あり・出来高 1.60×');
     expect(bookWarningCheck(warn({ recoveryInUpperHalf: true })).detail).toContain('買い支え');
     expect(bookWarningCheck(warn({ combinedWarning: false, threeLowerLows: false })).state).toBe('clear');
     expect(bookWarningCheck(warn({ combinedWarning: null, currentVolumeRatio: null })).state).toBe('unknown');

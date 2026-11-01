@@ -16,6 +16,7 @@ import { financialHistory } from '../financialHistory';
 import { institutionalGrowth } from '../institutionalEvidence';
 import { code33Layered } from '../code33Reference';
 import { diagnoseBookChart } from '../bookChartDiagnostics';
+import { auditDailyBars } from '../qualificationAudit';
 import { candidateView, sellSignals, trendTemplate, withBookWarning } from './briefModel';
 
 export const WATCH_KEY = 'research-watch';
@@ -53,6 +54,19 @@ export function useWatchlist() {
 }
 
 /** Everything the stock screen shows for one symbol. Missing pieces stay null/unknown. */
+/**
+ * Bars that may be judged as of the analysis date: the publisher certified this row's daily bars
+ * (technical_audit) and this payload passes the same audit now (last bar on the analysis date,
+ * every exchange session present, price matching the row). Anything else stays unknown.
+ */
+export function certifyBars(row, payload, date) {
+  if (!row || !payload) return { certified: false, reason: '日足データ未配信' };
+  if (row.technical_audit?.valid !== true) return { certified: false, reason: '公開時の日足検証を通過していません' };
+  let audit;
+  try { audit = auditDailyBars(row, payload, date); } catch { return { certified: false, reason: '日足を検証できません' }; }
+  return audit.valid ? { certified: true, reason: null } : { certified: false, reason: audit.errors[0] || '日足を検証できません' };
+}
+
 export function useStockData(symbol, brief) {
   const { bundle, version, entry, date } = brief;
   const item = useMemo(() => (bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol) || null, [bundle.data, symbol]);
@@ -81,11 +95,12 @@ export function useStockData(symbol, brief) {
   const bars = chart.data?.bars?.length ? chart.data.bars : null;
   const view = useMemo(() => row ? candidateView({ row, assessment: item?.assessment }, date) : null, [row, item, date]);
   const template = useMemo(() => row ? trendTemplate(row, financialNow) : null, [row, financialNow]);
+  const certification = useMemo(() => (row && chart.data ? certifyBars(row, chart.data, date) : { certified: false, reason: null }), [row, chart.data, date]);
   const technical = useMemo(() => {
     if (row?.book_technical_evidence?.vcp) return row.book_technical_evidence;
-    if (!row || !bars) return null;
+    if (!row || !bars || !certification.certified) return null;
     try { return buildBookTechnicalEvidence(row, chart.data, date); } catch { return null; }
-  }, [row, bars, chart.data, date]);
+  }, [row, bars, chart.data, date, certification.certified]);
   const financial = useMemo(() => {
     if (!row) return null;
     const book = row.book_financials ? bookFinancialCurrent(row.book_financials, row.symbol, date, financialNow, row) : null;
@@ -93,24 +108,28 @@ export function useStockData(symbol, brief) {
     const report = book?.current ? book.report : null;
     return { report, history, code33: code33Layered(report, history, date) };
   }, [row, date, financialNow]);
+  // The publisher's diagnostics win, including an invalid verdict; the client recomputes only certified bars.
   const diagnostics = useMemo(() => {
-    if (row?.book_diagnostics?.valid && row.book_diagnostics.as_of_date === date) return row.book_diagnostics;
-    if (!row || !bars) return null;
+    if (row?.book_diagnostics && row.book_diagnostics.as_of_date === date) return row.book_diagnostics;
+    if (!row || !bars || !certification.certified) return null;
     try { return diagnoseBookChart(row, chart.data, date); } catch { return null; }
-  }, [row, bars, chart.data, date]);
+  }, [row, bars, chart.data, date, certification.certified]);
   const institutional = useMemo(() => row ? { growth: institutionalGrowth(row.institutional_evidence, row.symbol, date), observations: Array.isArray(row.institutional_evidence?.observations) ? row.institutional_evidence.observations : [] } : null, [row, date]);
-  return { item, row, view, template, technical, diagnostics, financial, institutional, bars, chart, detail, loading: bundle.isLoading || (Boolean(chartPath) && chart.isLoading) };
+  return { item, row, view, template, technical, diagnostics, financial, institutional, bars, certification, date, chart, detail, loading: bundle.isLoading || (Boolean(chartPath) && chart.isLoading) };
 }
 
 export const SELL_WATCH_LIMIT = 12;
 
 /**
  * Sell checks for watched stocks, from the same chart queries the stock screen uses (shared cache).
- * Only the first SELL_WATCH_LIMIT symbols are fetched; others, and failed or loading charts, stay undefined (unknown).
+ * Returns { [symbol]: result } where a checked stock carries the sellSignals result and any other
+ * stock (beyond SELL_WATCH_LIMIT, failed chart, or bars not certified for the analysis date) carries
+ * { unknown: true, reason }. Stocks whose chart is still loading are absent.
  */
 export function useWatchSellChecks(views, brief) {
   const { version, date } = brief;
-  const targets = (views || []).filter(view => view.row?.chart_path).slice(0, SELL_WATCH_LIMIT);
+  const all = views || [];
+  const targets = all.filter(view => view.row?.chart_path).slice(0, SELL_WATCH_LIMIT);
   const results = useQueries({
     queries: targets.map(view => ({
       queryKey: [...staticChartKeys.payload(view.symbol, view.row.chart_path), version],
@@ -119,17 +138,25 @@ export function useWatchSellChecks(views, brief) {
       select: payload => requireChartIdentity(payload, view.symbol, date),
     })),
   });
-  const key = results.map(r => r.dataUpdatedAt).join('|');
+  const key = results.map(r => `${r.dataUpdatedAt}:${r.isError}`).join('|');
   return useMemo(() => {
     const out = {};
+    const checked = new Set(targets.map(view => view.symbol));
+    for (const view of all) {
+      if (!checked.has(view.symbol)) out[view.symbol] = { unknown: true, reason: view.row?.chart_path ? `確認は先頭${SELL_WATCH_LIMIT}銘柄まで` : '日足チャート未配信' };
+    }
     targets.forEach((view, i) => {
-      const payload = results[i]?.data, bars = payload?.bars;
-      if (!bars?.length) return;
+      const result = results[i];
+      if (result?.isError) { out[view.symbol] = { unknown: true, reason: '日足を取得できません' }; return; }
+      const payload = result?.data;
+      if (!payload) return;
+      const { certified, reason } = certifyBars(view.row, payload, date);
+      if (!certified) { out[view.symbol] = { unknown: true, reason }; return; }
       let diagnostics = null;
       try { diagnostics = diagnoseBookChart(view.row, payload, date); } catch { diagnostics = null; }
-      out[view.symbol] = withBookWarning(sellSignals(bars), diagnostics);
+      out[view.symbol] = withBookWarning(sellSignals(payload.bars), diagnostics) || { unknown: true, reason: '日足が不足' };
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key, targets.map(v => v.symbol).join('|')]);
+  }, [key, all.map(v => v.symbol).join('|'), date]);
 }

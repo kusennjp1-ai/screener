@@ -228,20 +228,18 @@ export function sellSignals(bars, rules = SELL_RULES) {
   // A close that crosses below the 50-day SMA on at least 1.4x the prior 50-day average volume.
   const sma = i => { let s = 0; for (let k = i - 49; k <= i; k++) s += list[k].close; return s / 50; };
   const breakLabel = `出来高を伴う50日線割れ（${times(rules.breakVolumeRatio)}以上）`;
-  if (n < 101) weakness.push({ key: 'ma50', label: breakLabel, state: 'unknown', detail: '50日線と出来高平均に必要な日足が不足' });
-  else {
-    let found = null, missing = false;
-    for (let i = Math.max(recent, 100); i < n; i++) {
-      if (!(list[i].close < sma(i) && list[i - 1].close >= sma(i - 1))) continue;
-      const prior = list.slice(i - 50, i).map(b => b.volume);
-      if (!finite(list[i].volume) || prior.some(v => !finite(v))) { missing = true; continue; }
-      const ratio = list[i].volume / (prior.reduce((a, b) => a + b, 0) / 50);
-      if (ratio >= rules.breakVolumeRatio) found = { date: list[i].date, ratio };
-    }
-    const position = (last.close / sma(n - 1) - 1) * 100;
-    weakness.push(found ? { key: 'ma50', label: breakLabel, date: found.date, state: 'hit', detail: `${found.date} 出来高 ${times(found.ratio)}` }
-      : { key: 'ma50', label: breakLabel, state: missing ? 'unknown' : 'clear', detail: missing ? '割れた日の出来高が未取得' : `終値は50日線から ${signed(position)}` });
+  // n >= 60, so every recent session has 50 prior sessions for both averages.
+  let found = null, missing = false;
+  for (let i = Math.max(recent, 50); i < n; i++) {
+    if (!(list[i].close < sma(i) && list[i - 1].close >= sma(i - 1))) continue;
+    const prior = list.slice(i - 50, i).map(b => b.volume);
+    if (!finite(list[i].volume) || prior.some(v => !finite(v))) { missing = true; continue; }
+    const ratio = list[i].volume / (prior.reduce((a, b) => a + b, 0) / 50);
+    if (ratio >= rules.breakVolumeRatio) found = { date: list[i].date, ratio };
   }
+  const position = (last.close / sma(n - 1) - 1) * 100;
+  weakness.push(found ? { key: 'ma50', label: breakLabel, date: found.date, state: 'hit', detail: `${found.date} 出来高 ${times(found.ratio)}` }
+    : { key: 'ma50', label: breakLabel, state: missing ? 'unknown' : 'clear', detail: missing ? '割れた日の出来高が未取得' : `終値は50日線から ${signed(position)}` });
   return { advance: inAdvance ? advance : null, strength, weakness, hits: [...strength, ...weakness].filter(c => c.state === 'hit').length };
 }
 
@@ -254,7 +252,7 @@ export function bookWarningCheck(diagnostics) {
   const label = '20日線割れ・3日連続の安値切り下げ・大商い（書籍の複合警告）';
   const w = diagnostics?.valid ? diagnostics.priceWarnings : null;
   if (!w) return { key: 'book', label, state: 'unknown', detail: '検証済みの日足による書籍診断が未取得' };
-  const parts = [`20日線${w.below20 ? '割れ' : 'の上'}`, `安値切り下げ ${w.threeLowerLows ? '3日連続' : 'なし'}`, `出来高 ${finite(w.currentVolumeRatio) ? times(w.currentVolumeRatio) : '未確認'}`];
+  const parts = [`20日線${w.below20 ? '割れ' : 'の上'}`, `3日連続の安値切り下げ ${w.threeLowerLows ? 'あり' : 'なし'}`, `出来高 ${finite(w.currentVolumeRatio) ? times(w.currentVolumeRatio) : '未確認'}`];
   if (w.combinedWarning === true && w.recoveryInUpperHalf) parts.push('引けは値幅の上半分（買い支えを確認）');
   return { key: 'book', label, date: diagnostics.as_of_date, state: w.combinedWarning === true ? 'hit' : w.combinedWarning === false ? 'clear' : 'unknown', detail: parts.join('・') };
 }

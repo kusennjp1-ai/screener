@@ -41,7 +41,7 @@ function TemplateCard({ template }) {
   </section>;
 }
 
-function VcpCard({ technical, bars, view }) {
+function VcpCard({ technical, bars, judged, view }) {
   const print = footprint(technical, bars), legs = technical?.vcp?.legs || [];
   const dry = legs.at(-1)?.volumeEvidence?.intervalRatio;
   return <section className="brief-card in" style={{ '--i': 4 }} aria-labelledby="brief-vcp-title">
@@ -53,7 +53,7 @@ function VcpCard({ technical, bars, view }) {
     </> : <p className="brief-note">測定できる収縮が2回以上ないため、VCPは未確認です。</p>}
     <dl className="brief-dl">
       <div><dt>最後の収縮の出来高</dt><dd>{finite(dry) ? `${times(dry)}（直前50日平均比）` : '未確認'}</dd></div>
-      <div><dt>上げ下げ出来高比（50日）</dt><dd>{(() => { const v = upDownVolume(bars); return v ? `${v.ratio.toFixed(2)}（上げた日の出来高 ÷ 下げた日の出来高。1超は買いが優勢）` : '未確認'; })()}</dd></div>
+      <div><dt>上げ下げ出来高比（50日）</dt><dd>{(() => { const v = upDownVolume(judged); return v ? `${v.ratio.toFixed(2)}（上げた日の出来高 ÷ 下げた日の出来高。1超は買いが優勢）` : '未確認'; })()}</dd></div>
       <div><dt>当日の出来高</dt><dd>{finite(view?.volumeRatio) ? `${times(view.volumeRatio)}（上抜けの目安 1.40×以上）` : '未確認'}</dd></div>
       <div><dt>ピボット</dt><dd>{finite(view?.pivot) ? `${money(view.pivot)}（${view.pivotSource}）` : '未確認'}</dd></div>
     </dl>
@@ -113,14 +113,14 @@ function SellChecks({ title, checks }) {
   </>;
 }
 
-function SellCard({ sells }) {
+function SellCard({ sells, reason }) {
   return <section className="brief-card in" style={{ '--i': 8 }} aria-labelledby="brief-sell-title" data-testid="brief-sell">
     <h2 id="brief-sell-title">売りのサイン（直近{SELL_RULES.recentSessions}営業日）</h2>
     {sells ? <>
-      <p className="brief-note">{sells.advance ? `起点（直近1年の安値）${sells.advance.startDate} の ${price(sells.advance.low)} から ${signed(sells.advance.gainPct)}・${sells.advance.sessions}営業日。` : `直近1年の安値から +${SELL_RULES.advanceMinPercent}%以上の上昇局面ではないため、上昇の加速による売りは判定しません。`}{sells.hits ? ` ${sells.hits}件のサインが出ています。` : [...sells.strength, ...sells.weakness].some(c => c.state === 'unknown') ? ' 出ているサインはありませんが、未確認の項目があります。' : ' いま出ているサインはありません。'}</p>
+      <p className="brief-note">{sells.advance ? `起点（直近1年の安値）${sells.advance.startDate} の ${price(sells.advance.low)} から ${signed(sells.advance.gainPct)}・${sells.advance.sessions}営業日。` : `起点（直近1年の安値）から +${SELL_RULES.advanceMinPercent}%以上・${SELL_RULES.advanceMinSessions}営業日以上の上昇局面ではないため、上昇の加速と起点以来の下落は判定しません。`}{sells.hits ? ` ${sells.hits}件のサインが出ています。` : [...sells.strength, ...sells.weakness].some(c => c.state === 'unknown') ? ' 出ているサインはありませんが、未確認の項目があります。' : ' いま出ているサインはありません。'}</p>
       <SellChecks title="上昇の加速（強気での売り）" checks={sells.strength} />
       <SellChecks title="崩れ（弱気での売り）" checks={sells.weakness} />
-    </> : <p className="brief-note">日足が60本未満か欠けているため、売りのサインは未確認です。</p>}
+    </> : <p className="brief-note">{reason ? `日足を分析基準日の値として検証できないため、売りのサインは未確認です（${reason}）。` : '日足が60本未満のため、売りのサインは未確認です。'}</p>}
     <p className="brief-note">保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。</p>
   </section>;
 }
@@ -149,15 +149,17 @@ function PlanCard({ view, plan, settings, onChange, earnings }) {
 }
 
 export default function StockView({ data, header = null }) {
-  const { view, template, technical, diagnostics, financial, institutional, bars, row } = data;
+  const { view, template, technical, diagnostics, financial, institutional, bars, row, certification } = data;
+  // Values computed here from bars are shown only for bars certified for the analysis date.
+  const judged = certification?.certified ? bars : null;
   const [period, setPeriod] = useState(130);
   const [settings, setSettings] = useState(readPlan);
   const chartRef = useRef(null);
   const plan = useMemo(() => view ? positionPlan(view, settings) : null, [view, settings]);
   const legs = technical?.vcp?.measurementsValid ? technical.vcp.legs : [];
-  const stage = useMemo(() => Number.isInteger(row?.stage) ? { value: row.stage, computed: false } : (() => { const value = stageFromBars(bars); return value ? { value, computed: true } : null; })(), [row?.stage, bars]);
-  const sells = useMemo(() => bars ? withBookWarning(sellSignals(bars), diagnostics) : null, [bars, diagnostics]);
-  const rsHigh = useMemo(() => view?.rsLineHigh || rsLineNewHigh(data.chart.data?.rs_line, bars) === true, [view?.rsLineHigh, data.chart.data, bars]);
+  const stage = useMemo(() => Number.isInteger(row?.stage) ? { value: row.stage, computed: false } : (() => { const value = stageFromBars(judged); return value ? { value, computed: true } : null; })(), [row?.stage, judged]);
+  const sells = useMemo(() => judged ? withBookWarning(sellSignals(judged), diagnostics) : null, [judged, diagnostics]);
+  const rsHigh = useMemo(() => view?.rsLineHigh || (judged ? rsLineNewHigh(data.chart.data?.rs_line, judged) === true : false), [view?.rsLineHigh, data.chart.data, judged]);
   const model = useMemo(() => bars && view ? { symbol: view.symbol, bars, rsLine: data.chart.data?.rs_line || [], legs, pivot: view.pivot, upper: view.upper, stop: plan?.stop ?? null, rsNewHigh: rsHigh, dryUpLeg: legs.at(-1) || null, sellMarks: sellMarks(sells) } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [bars, view?.symbol, view?.pivot, view?.upper, legs, data.chart.data, rsHigh, sells]);
@@ -198,16 +200,17 @@ export default function StockView({ data, header = null }) {
     </section>
     <section className="brief-card brief-chartcard in" style={{ '--i': 1 }} aria-label="日足チャート">
       {model ? <PriceChart ref={chartRef} model={model} period={period} /> : <p className="brief-note brief-chart-placeholder" role="status">{data.chart.isError ? '日足チャートを取得できません。' : row?.chart_path ? '日足チャートを読み込み中…' : 'この銘柄の日足チャートは未配信です。'}</p>}
+      {bars && data.date && bars.at(-1)?.date !== data.date ? <p className="brief-note brief-asof" role="note">日足は {bars.at(-1)?.date} までです（分析基準日 {data.date} の日足は未取得）。チャートから算出する判定は未確認にしています。</p> : null}
       <div className="brief-periods" role="group" aria-label="表示期間">{[[65, '3か月'], [130, '6か月'], [250, '1年']].map(([n, label]) => <button key={n} type="button" aria-pressed={period === n} onClick={() => setPeriod(n)}>{label}</button>)}<span className="brief-note">なぞると日足の値</span></div>
       <div className="brief-legend" aria-hidden="true"><span><i className="lg-ma50" />50日線</span><span><i className="lg-ma150" />150・200日線</span><span><i className="lg-pivot" />ピボット</span><span><i className="lg-stop" />損切り</span><span><i className="lg-rs" />RS線（株価÷S&amp;P 500。RS推計とは別）</span><span>枠＝値幅の収縮</span>{model?.sellMarks?.length ? <span><i className="lg-sell" />売りのサイン（▼上昇の加速・▲崩れ）</span> : null}</div>
     </section>
     <div className="brief-grid">
       <TemplateCard template={template} />
-      <VcpCard technical={technical} bars={bars} view={view} />
+      <VcpCard technical={technical} bars={bars} judged={judged} view={view} />
       <FundamentalsCard financial={financial} />
       <InstitutionalCard institutional={institutional} />
       <PlanCard view={view} plan={plan} settings={settings} onChange={update} earnings={view.earnings} />
-      {bars ? <SellCard sells={sells} /> : null}
+      {bars ? <SellCard sells={sells} reason={certification?.certified ? null : certification?.reason} /> : null}
     </div>
     <p className="brief-note brief-pad">候補は購入推奨ではありません。数値は分析基準日の公開データに基づきます。</p>
   </div>;

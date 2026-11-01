@@ -20,6 +20,7 @@ export function Reasons({ view, now, sell }) {
   void now;
   const chips = [<StateChip key="state" view={view} />];
   if (sell?.hits) chips.push(<span key="sell" className="brief-chip tone-ext">▲ 売りのサイン {sell.hits}件</span>);
+  else if (sell?.unknown) chips.push(<span key="sell" className="brief-chip" title={sell.reason || undefined}>売りのサイン 未確認</span>);
   chips.push(<span key="tt" className={`brief-chip${view.qualified ? ' tone-zone' : ''}`}>{view.qualified ? 'TT 8/8' : Number.isInteger(view.failed) ? `あと${view.failed}条件${view.unknown ? `・未確認${view.unknown}` : ''}` : '条件 未確認'}</span>);
   if (finite(view.volumeRatio) && view.volumeRatio >= 1.4) chips.push(<span key="vol" className="brief-chip tone-zone">出来高 {times(view.volumeRatio)}</span>);
   chips.push(<span key="rs" className="brief-chip">RS推計 {finite(view.rs) ? view.rs : '未確認'}</span>);
@@ -31,7 +32,7 @@ export function Reasons({ view, now, sell }) {
 export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morph = false, sell = null }) {
   return <li className={animate ? 'in' : ''} style={{ '--i': index }}>
     <button type="button" className="brief-row" data-symbol={view.symbol} data-testid="brief-candidate" onClick={event => onOpen(view.symbol, event.currentTarget)}
-      aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${view.stateLabel}${finite(view.distance) ? ` ${signed(view.distance)}` : ''}、RS推計 ${finite(view.rs) ? view.rs : '未確認'}${sell?.hits ? `、売りのサイン ${sell.hits}件` : ''}`}>
+      aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${view.stateLabel}${finite(view.distance) ? ` ${signed(view.distance)}` : ''}、RS推計 ${finite(view.rs) ? view.rs : '未確認'}${sell?.hits ? `、売りのサイン ${sell.hits}件` : sell?.unknown ? '、売りのサイン 未確認' : ''}`}>
       <span className="brief-rank" aria-hidden="true">{rank || ''}</span>
       <span className="brief-row-main">
         <span className="brief-row-title"><b style={morph ? { viewTransitionName: 'brief-ticker' } : undefined}>{view.symbol}</b><span>{view.name}{view.sector ? `・${view.sector}` : ''}</span></span>
