@@ -1,0 +1,64 @@
+# Daily brief and market-environment indicators
+
+This note covers the `#/brief` screens of the static app and the daily
+market-environment series behind them. For vocabulary, see `CONTEXT.md`.
+
+## Screens (`frontend/src/static/brief/`)
+
+| Route | Content |
+|---|---|
+| `#/brief` | 1 Market (verdict, S&P 500 with active distribution days, trend-template count, stage mix, share above the 200-day line, breakout follow-through, bifurcation note) · 2 Top five qualified candidates in the buy zone or within −5% of the pivot · 3 Watchlist changes |
+| `#/brief/list` | Qualified candidates. Filters: buy zone, near pivot, all qualified, one condition short. Search box and four sort orders. |
+| `#/brief/watch` | The shared `research-watch` watchlist |
+| `#/brief/stock/:symbol` | Conclusion card (status, position meter, buy range, stop, 2R) → large daily chart → eight trend-template rules → VCP footprint → quarterly growth with layered Code 33 → 13F counts → position plan |
+
+- **Shell:** the screens have their own shell (48 px top bar, 56 px bottom tabs, light/dark toggle from the existing colour-mode preference).
+- **Desktop (≥1024 px):** two panes, list on the left and the selected stock on the right.
+- **Isolation:** the existing routes and their design contracts are unchanged.
+- **Making it the default:** switch the `/` route in `StaticAppShell.jsx` and update the design contracts that pin the current home screen.
+
+All judgements come from the shared rule functions, so the brief and the research screens never disagree:
+
+- `assess`
+- `entryPlan`
+- `buildBookTechnicalEvidence`
+- `bookFinancialCurrent`
+- `financialHistory`
+- `institutionalGrowth`
+- `code33Layered`
+
+Unknown inputs stay 未確認 or 未取得. They are never counted as a pass.
+
+### Motion
+
+Motion is used only where it explains something:
+
+- screen changes (View Transitions, with the ticker morphing from list to header)
+- the chart intro: candles sweep in on a compositor-only layer, then the contractions drop one by one, then the rising lows and the pivot draw
+- the position meter and the trend-template ring
+- the stop slider, which moves the chart's stop line
+
+Under `prefers-reduced-motion` the final state appears at once (`theme/foundation.css`).
+
+## Market-environment series (`frontend/tools/collect-market-history.py`)
+
+Every full build recomputes five years of these values from per-symbol daily bars. A missed day is therefore backfilled rather than lost, and the previous capture is retained if a refresh fails. `audit-market-history.py` replays the counts independently, and `validateLongHistory` checks them in the browser.
+
+| Field | Definition | Threshold source |
+|---|---|---|
+| `trendTemplateCount`, `trendTemplatePercent` | All eight Trend Template conditions (30% above the 52-week low), with same-day proprietary RS ≥ 70 | Minervini's published template. RS is this app's estimate, not IBD's. |
+| `rs90TemplateCount` | The subset with RS ≥ 90 | This app |
+| `above150`, `above200` (+ `%`) | Close above the 150- and 200-day SMA | Standard |
+| `stage1`…`stage4` | Weinstein stage per session, using the scanner's rules in `stage_analysis.py`. The swing-pattern exception is not replayed. | Scanner rules (parity-tested) |
+| `breakouts`, `breakoutsJudged`, `breakoutsHeld` | Breakout: close above the prior 251-session high on ≥1.4× the 50-day volume while the price template holds. Held: no low within the next 10 sessions reaches 7% below the breakout close. | Volume threshold and 7% loss limit as used elsewhere in this app. The 10-session window is this app's own. |
+| `leaderCount` | Earlier variant with the low at 25% | Existing |
+
+The brief and the 市場 page also show a bifurcation note: the index is within 5% of its one-year high while fewer than 50% of stocks are above the 200-day line. This follows Minervini's description of a bifurcated market, but both thresholds are this app's own and are labelled 独自判定.
+
+## Fundamentals layering (Code 33)
+
+1. **Dated SEC evidence** (`tools/sec-financials.py` → `book_financials`). EPS uses directly reported quarters only. A Q4 for revenue or net income that is reported only as a fiscal-year total is recovered as the annual value minus three quarters of the same concept, with its four source filings recorded.
+2. **Reference from the current Yahoo quarterly statements** (`financial_history`), used only when the SEC result is unknown. It applies the same rule and is labelled 「参考：Yahoo四半期値」.
+3. **Otherwise 未確認.**
+
+SEC access reads the `SEC_USER_AGENT` secret and retries 429/5xx responses with backoff.
