@@ -353,6 +353,17 @@ describe('App static mode', () => {
     expect(requestedUrls.every((url) => isStaticSource(url) && !url.includes('/api'))).toBe(true);
   }, 30000);
 
+  it('renders the daily brief with its own tabs and theme toggle, from static sources only', async () => {
+    await renderStaticAppAtHash('#/brief');
+    expect(await screen.findByRole('heading', { level: 1, name: name => name.includes('の判断') }, { timeout: 10000 })).toBeInTheDocument();
+    expect(screen.getByRole('navigation', { name: 'ブリーフの画面' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: '地合い' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /モードに切り替え/ })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: '従来の画面' })).toHaveAttribute('href', '#/');
+    const requestedUrls = globalThis.fetch.mock.calls.map(([url]) => String(url));
+    expect(requestedUrls.every(url => !url.includes('/api'))).toBe(true);
+  }, 30000);
+
   it('keeps scan controls read-only in the static route', async () => {
     await renderStaticAppAtHash('#/scan');
 
