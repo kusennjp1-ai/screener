@@ -42,6 +42,8 @@ describe('brief model', () => {
     const print = footprint({ vcp: { legs, measurementsValid: true, depthsContract: true } }, [{ date: '2026-10-02' }]);
     expect(print.text).toBe('VCP 18週 24/5 3T');
     expect(print.contracting).toBe(true);
+    expect(footprint({ vcp: { legs, measurementsValid: true, depthsContract: false } }, [{ date: '2026-10-02' }]).text).toBe('収縮 18週 24/5 3T（縮小途切れ）');
+    expect(footprint({ vcp: { legs, measurementsValid: true } }, [{ date: '2026-10-02' }]).text).toBe('収縮 18週 24/5 3T（縮小は未確認）');
     expect(footprint({ vcp: { legs, measurementsValid: false } }, [])).toBeNull();
     expect(footprint({ vcp: { legs: legs.slice(0, 1), measurementsValid: true } }, [])).toBeNull();
   });
@@ -160,5 +162,16 @@ describe('leading groups', () => {
     expect(leadingGroups(sectors).groups[0]).toEqual({ name: 'Tech', count: 5 });
     expect(leadingGroups([item(null, null)])).toBeNull();
     expect(leadingGroups([])).toBeNull();
+  });
+});
+
+describe('up/down volume', () => {
+  it('divides up-day volume by down-day volume and stays unknown on gaps', async () => {
+    const { upDownVolume } = await import('./briefModel');
+    const bars = Array.from({ length: 51 }, (_, i) => ({ close: 100 + (i % 2 ? 1 : 0), volume: i % 2 ? 300 : 100 }));
+    expect(upDownVolume(bars).ratio).toBeCloseTo(300 * 25 / (100 * 25));
+    expect(upDownVolume(bars.slice(1))).toBeNull();
+    const gap = bars.map((b, i) => (i === 30 ? { ...b, volume: null } : b));
+    expect(upDownVolume(gap)).toBeNull();
   });
 });

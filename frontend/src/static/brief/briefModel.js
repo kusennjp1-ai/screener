@@ -171,7 +171,8 @@ export function footprint(evidence, bars) {
   const first = legs[0].startDate, last = bars?.at?.(-1)?.date || legs.at(-1).endDate;
   const weeks = Math.max(1, Math.round((Date.parse(last) - Date.parse(first)) / DAY / 7));
   return { weeks, deepest: legs[0].depthPct, shallowest: legs.at(-1).depthPct, count: legs.length,
-    text: `VCP ${weeks}週 ${Math.round(legs[0].depthPct)}/${Math.round(legs.at(-1).depthPct)} ${legs.length}T`,
+    // Only progressively shallower contractions are called a VCP; otherwise say what was measured.
+    text: `${evidence.vcp.depthsContract === true ? 'VCP' : '収縮'} ${weeks}週 ${Math.round(legs[0].depthPct)}/${Math.round(legs.at(-1).depthPct)} ${legs.length}T${evidence.vcp.depthsContract === false ? '（縮小途切れ）' : evidence.vcp.depthsContract === true ? '' : '（縮小は未確認）'}`,
     contracting: evidence.vcp.depthsContract, volumeContracting: evidence.vcp.volumeContracts };
 }
 
@@ -288,4 +289,21 @@ export function sellMarks(sells) {
     for (const check of checks) if (check.state === 'hit' && typeof check.date === 'string' && !marks.has(check.date)) marks.set(check.date, kind);
   }
   return [...marks].map(([date, kind]) => ({ date, kind })).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Volume on up closes divided by volume on down closes over the last `sessions` bars
+ * (an accumulation/distribution reading). Unchanged closes are skipped; any missing
+ * close or volume in the window makes it unknown.
+ */
+export function upDownVolume(bars, sessions = 50) {
+  const list = bars || [];
+  if (list.length < sessions + 1) return null;
+  let up = 0, down = 0;
+  for (let i = list.length - sessions; i < list.length; i++) {
+    const a = list[i - 1], b = list[i];
+    if (!finite(a?.close) || !finite(b?.close) || !finite(b?.volume) || b.volume < 0) return null;
+    if (b.close > a.close) up += b.volume; else if (b.close < a.close) down += b.volume;
+  }
+  return down > 0 ? { ratio: up / down, sessions } : null;
 }

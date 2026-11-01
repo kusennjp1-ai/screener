@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { money, signed, times } from '../positionGeometry';
 import PriceChart from './PriceChart';
-import { footprint, positionPlan, rsLineNewHigh, sellMarks, sellSignals, SELL_RULES, withBookWarning, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
+import { footprint, positionPlan, rsLineNewHigh, sellMarks, upDownVolume, sellSignals, SELL_RULES, withBookWarning, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
 import { meterPercent } from './briefNav';
 
 const finite = Number.isFinite;
@@ -53,6 +53,7 @@ function VcpCard({ technical, bars, view }) {
     </> : <p className="brief-note">測定できる収縮が2回以上ないため、VCPは未確認です。</p>}
     <dl className="brief-dl">
       <div><dt>最後の収縮の出来高</dt><dd>{finite(dry) ? `${times(dry)}（直前50日平均比）` : '未確認'}</dd></div>
+      <div><dt>上げ下げ出来高比（50日）</dt><dd>{(() => { const v = upDownVolume(bars); return v ? `${v.ratio.toFixed(2)}（上げた日の出来高 ÷ 下げた日の出来高。1超は買いが優勢）` : '未確認'; })()}</dd></div>
       <div><dt>当日の出来高</dt><dd>{finite(view?.volumeRatio) ? `${times(view.volumeRatio)}（上抜けの目安 1.40×以上）` : '未確認'}</dd></div>
       <div><dt>ピボット</dt><dd>{finite(view?.pivot) ? `${money(view.pivot)}（${view.pivotSource}）` : '未確認'}</dd></div>
     </dl>
@@ -174,7 +175,7 @@ export default function StockView({ data, header = null }) {
   const code33 = financial?.code33?.state;
   const chips = [
     [stage ? `ステージ${stage.value}${stage.computed ? '（日足から算出）' : ''}` : 'ステージ 未確認', stage?.value === 2 ? 'zone' : stage ? 'ext' : ''],
-    [print ? print.text : 'VCP 未確認', ''],
+    [print ? print.text : 'VCP 未確認', print?.contracting === true ? 'zone' : ''],
     [`RS推計 ${finite(view.rs) ? view.rs : '未確認'}`, finite(view.rs) && view.rs >= 70 ? 'zone' : ''],
     ...(rsHigh ? [['RS線 新高値', 'zone']] : []),
     [`Code 33 ${code33 === 'pass' ? '達成' : code33 === 'fail' ? '未達' : '未確認'}${financial?.code33?.source === 'yahoo' ? '（参考）' : ''}`, code33 === 'pass' ? 'zone' : ''],
