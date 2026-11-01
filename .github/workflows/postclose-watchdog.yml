@@ -10,6 +10,12 @@ on:
     # Catch up after missed schedules, overnight provider delays, and weekends.
     - cron: '17 0,6,10 * * *'
       timezone: 'America/New_York'
+    # Two-hour catch-up between those slots. GitHub runs schedules best effort:
+    # on 2026-10-30 only 3 of ~30 post-close weekday slots ran, and a release
+    # that failed at 23:27 ET waited ~7 h for the next watchdog (#115). The
+    # planner's own cooldowns and once-only publication retry still bound work.
+    - cron: '47 1-23/2 * * *'
+      timezone: 'America/New_York'
     # Retained full-update deadlines use the same admission/duplicate guard.
     - cron: '10 16 * * 1-6'
       timezone: 'America/New_York'

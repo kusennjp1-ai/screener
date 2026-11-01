@@ -219,7 +219,7 @@ test('execution cannot be requested by an ordinary local process', async () => {
 });
 test('workflow is recoverable, calendar-driven and has no deployment authority', () => {
   const workflow = readFileSync(new URL('../workflows/postclose-watchdog.yml', import.meta.url), 'utf8');
-  assert.match(workflow, /2,12,22,32,42,52 13-20 \* \* 1-5/); assert.match(workflow, /17 0,6,10 \* \* \*/); assert.match(workflow, /America\/New_York/);
+  assert.match(workflow, /2,12,22,32,42,52 13-20 \* \* 1-5/); assert.match(workflow, /17 0,6,10 \* \* \*/); assert.match(workflow, /47 1-23\/2 \* \* \*/); assert.match(workflow, /America\/New_York/);
   assert.match(workflow, /cancel-in-progress: false/); assert.match(workflow, /--execute --output postclose-watchdog-report.json/);
   assert.match(workflow, /10 16 \* \* 1-6/); assert.match(workflow, /30 23 \* \* 1-6/);
   const producer = readFileSync(new URL('../workflows/static-site.yml', import.meta.url), 'utf8');
