@@ -94,5 +94,31 @@ class SecAccess(unittest.TestCase):
         with self.assertRaises(HTTPError):
             sec.get_json("https://data.sec.gov/b", sleep=waits.append, opener=opener([404]))
 
+    def test_failed_symbols_get_one_more_pass_and_stay_unknown_when_it_fails_again(self):
+        from urllib.error import URLError
+        facts = lambda cik: {"cik": cik, "facts": {"us-gaap": {}}}
+        attempts = {}
+        def get(url):
+            if url.endswith("company_tickers.json"):
+                attempts["map"] = attempts.get("map", 0) + 1
+                if attempts["map"] == 1:
+                    raise URLError("down")
+                return {"0": {"ticker": "AAA", "cik_str": 1}, "1": {"ticker": "BBB", "cik_str": 2}, "2": {"ticker": "CCC", "cik_str": 3}}
+            cik = int(url.rsplit("CIK", 1)[1].split(".")[0])
+            attempts[cik] = attempts.get(cik, 0) + 1
+            if cik == 2 and attempts[cik] == 1 or cik == 3:
+                raise URLError("reset")
+            return facts(cik)
+        waits = []
+        out = sec.collect(["AAA", "BBB", "CCC", "ZZZ"], "2026-10-02", get=get, sleep=waits.append, pause=0)
+        self.assertEqual(attempts["map"], 2)
+        self.assertEqual(out["results"]["BBB"]["status"], "partial")
+        self.assertEqual(out["results"]["CCC"]["status"], "unavailable")
+        self.assertEqual(out["results"]["ZZZ"]["error"], "SEC識別子未取得")
+        self.assertEqual(out["second_pass"], {"retried": 2, "recovered": 1})
+        self.assertEqual((attempts[1], attempts[2], attempts[3]), (1, 2, 2))
+        self.assertIn(sec.SECOND_PASS_DELAY_SECONDS, waits)
+        self.assertEqual(out["errors"], [])
+
 if __name__ == "__main__":
     unittest.main()

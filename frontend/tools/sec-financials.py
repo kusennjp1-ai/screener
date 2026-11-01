@@ -129,6 +129,50 @@ def get_json(url, attempts=3, sleep=time.sleep, opener=urlopen):
                 raise
             sleep(2 ** (attempt - 1))
 
+SECOND_PASS_DELAY_SECONDS = 20
+TRANSIENT_ERROR = "SEC取得不可"
+
+def fetch_symbol(symbol, tickers, as_of, get=None, sleep=time.sleep, pause=0.3):
+    get = get or get_json
+    cik = tickers.get(symbol.replace(".", "-")) or tickers.get(symbol)
+    if not cik:
+        return {"symbol": symbol, "as_of_date": as_of, "status": "unavailable", "error": "SEC識別子未取得"}
+    sleep(pause)
+    try:
+        return normalize(get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json"), symbol, cik, as_of)
+    except Exception as e:
+        return {"symbol": symbol, "as_of_date": as_of, "status": "unavailable", "error": f"{TRANSIENT_ERROR}: {type(e).__name__}"}
+
+def collect(symbols, as_of, get=None, sleep=time.sleep, pause=0.3):
+    """Fetch every symbol, then give the ones that failed after per-request retries one more pass.
+    A symbol that still fails stays unavailable (unknown); nothing from an earlier run is reused."""
+    get = get or get_json
+    output = {"schema_version": 1, "as_of_date": as_of, "retrieved_at": datetime.now(timezone.utc).isoformat(), "results": {}, "errors": []}
+    tickers = {}
+    for attempt in range(2):
+        try:
+            mapping = get("https://www.sec.gov/files/company_tickers.json")
+            tickers = {r["ticker"].upper(): int(r["cik_str"]) for r in mapping.values()}
+            break
+        except Exception as e:
+            if attempt:
+                output["errors"].append(f"SEC ticker map unavailable: {type(e).__name__}")
+            else:
+                sleep(SECOND_PASS_DELAY_SECONDS)
+    for symbol in symbols:
+        output["results"][symbol] = fetch_symbol(symbol, tickers, as_of, get, sleep, pause)
+    failed = [s for s, r in output["results"].items() if str(r.get("error", "")).startswith(TRANSIENT_ERROR)]
+    recovered = 0
+    if failed:
+        sleep(SECOND_PASS_DELAY_SECONDS)
+        for symbol in failed:
+            result = fetch_symbol(symbol, tickers, as_of, get, sleep, pause)
+            if result.get("status") in ("available", "partial"):
+                recovered += 1
+            output["results"][symbol] = result
+    output["second_pass"] = {"retried": len(failed), "recovered": recovered}
+    return output
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=60)
@@ -138,25 +182,8 @@ def main():
     as_of = daily["as_of_date"]
     ordered = list(dict.fromkeys(r["symbol"] for method in ("minervini2", "minervini", "ibd", "oneil") for r in daily["candidates"].get(method, [])))
     symbols = ordered[:max(0, min(args.limit, MAX_SYMBOLS))]
-    output = {"schema_version": 1, "as_of_date": as_of, "retrieved_at": datetime.now(timezone.utc).isoformat(), "results": {}, "errors": []}
-    try:
-        mapping = get_json("https://www.sec.gov/files/company_tickers.json")
-        tickers = {r["ticker"].upper(): int(r["cik_str"]) for r in mapping.values()}
-    except Exception as e:
-        tickers = {}
-        output["errors"].append(f"SEC ticker map unavailable: {type(e).__name__}")
-    for symbol in symbols:
-        cik = tickers.get(symbol.replace(".", "-")) or tickers.get(symbol)
-        if not cik:
-            output["results"][symbol] = {"symbol": symbol, "as_of_date": as_of, "status": "unavailable", "error": "SEC識別子未取得"}
-            continue
-        time.sleep(.3)
-        try:
-            facts = get_json(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json")
-            output["results"][symbol] = normalize(facts, symbol, cik, as_of)
-        except Exception as e:
-            output["results"][symbol] = {"symbol": symbol, "as_of_date": as_of, "status": "unavailable", "error": f"SEC取得不可: {type(e).__name__}"}
-    output["coverage"] = coverage(output["results"], len(ordered), len(symbols))
+    output = collect(symbols, as_of)
+    output["coverage"] = {**coverage(output["results"], len(ordered), len(symbols)), "second_pass": output.pop("second_pass")}
     (root / "book-financials.json").write_text(json.dumps(output, ensure_ascii=False, allow_nan=False), encoding="utf-8")
     print(f"SEC evidence {as_of}: " + json.dumps(output["coverage"], ensure_ascii=False) + "; missing remains unknown", flush=True)
 
