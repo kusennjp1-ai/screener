@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, truncateSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, truncateSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -188,4 +188,73 @@ test('carry Design provenance cannot serve as an activation, renewal or financia
   assert.throws(()=>validateCandidateRecord(previewRecord));
   assert.throws(()=>validateRenewalCandidate(previewRecord));
   assert.throws(()=>validateFinancialReleaseReceipt(previewRecord));
+});
+
+// Restore placement must not duplicate the verified canonical tree (run
+// 41164274878 hit ENOSPC copying history-predecessor/static-data).
+const restoreTree = root => {
+  mkdirSync(join(root, 'static-data/financial-corrections'), { recursive: true });
+  writeFileSync(join(root, 'static-data/manifest.json'), '{"as_of":"2026-10-30"}');
+  writeFileSync(join(root, 'static-data/financial-corrections/release.json'), '{"kept":true}');
+  writeFileSync(join(root, 'research-daily.json'), '{"daily":true}');
+};
+const treeBytes = root => Object.fromEntries(['static-data/manifest.json', 'static-data/financial-corrections/release.json']
+  .map(path => [path, readFileSync(join(root, path), 'utf8')]));
+
+test('restored canonical data is placed by rename, keeping shared inodes instead of copying', async t => {
+  const { placeRestored } = await import('./select-release-source.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'release-place-'));t.after(() => rmSync(root, { recursive: true, force: true }));
+  const packed = join(root, 'packed'), logical = join(root, 'logical'), destination = join(root, 'destination');
+  restoreTree(logical);mkdirSync(packed);mkdirSync(destination);
+  // A second link to the same inode proves the bytes were moved, not copied.
+  linkSync(join(logical, 'static-data/manifest.json'), join(packed, 'manifest.json'));
+  const before = treeBytes(logical), inode = statSync(join(packed, 'manifest.json')).ino;
+  placeRestored(join(logical, 'static-data'), join(destination, 'static-data'));
+  writeFileSync(join(destination, 'research-daily.json'), '{"stale":true}');
+  placeRestored(join(logical, 'research-daily.json'), join(destination, 'research-daily.json'));
+  assert.deepEqual(treeBytes(destination), before);
+  assert.equal(readFileSync(join(destination, 'research-daily.json'), 'utf8'), '{"daily":true}');
+  assert.equal(statSync(join(destination, 'static-data/manifest.json')).ino, inode, 'placement must not create a second copy');
+  assert.equal(existsSync(join(logical, 'static-data')), false);
+});
+
+test('cross-device restore placement falls back to copy-then-delete with identical bytes', async t => {
+  const { placeRestored } = await import('./select-release-source.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'release-place-exdev-'));t.after(() => rmSync(root, { recursive: true, force: true }));
+  const logical = join(root, 'logical'), destination = join(root, 'destination');
+  restoreTree(logical);mkdirSync(destination);
+  const before = treeBytes(logical);
+  const rename = () => { throw Object.assign(Error('cross-device link not permitted'), { code: 'EXDEV' }); };
+  placeRestored(join(logical, 'static-data'), join(destination, 'static-data'), { rename });
+  assert.deepEqual(treeBytes(destination), before);
+  assert.equal(existsSync(join(logical, 'static-data')), false);
+});
+
+test('other restore placement failures propagate and leave both trees untouched', async t => {
+  const { placeRestored } = await import('./select-release-source.mjs');
+  const root = mkdtempSync(join(tmpdir(), 'release-place-fail-'));t.after(() => rmSync(root, { recursive: true, force: true }));
+  const logical = join(root, 'logical'), destination = join(root, 'destination');
+  restoreTree(logical);mkdirSync(join(destination, 'static-data'), { recursive: true });
+  writeFileSync(join(destination, 'static-data/occupied.json'), '{}');
+  const before = treeBytes(logical);
+  let copied = false;
+  assert.throws(() => placeRestored(join(logical, 'static-data'), join(destination, 'static-data'), { copy: () => { copied = true; } }), error => error.code !== 'EXDEV');
+  assert.equal(copied, false);
+  assert.deepEqual(treeBytes(logical), before);
+  assert.equal(readFileSync(join(destination, 'static-data/occupied.json'), 'utf8'), '{}');
+});
+
+test('disk report records free space and existing trees but never fails a publication step', async () => {
+  const { diskReport } = await import('./select-release-source.mjs');
+  const lines = [], measured = [];
+  const scratch = join(tmpdir(), '.'), missing = join(tmpdir(), 'release-disk-missing-path');
+  // One measurement covers every present tree, in order, so shared inodes are counted once.
+  diskReport('restore:history', { scratch, missing, predecessor: tmpdir() },
+    { free: () => 3 * 1024 ** 3, size: paths => { measured.push(paths); return [1024 ** 3, 1024 ** 3 / 2]; }, log: line => lines.push(line) });
+  assert.deepEqual(measured, [[scratch, tmpdir()]]);
+  assert.deepEqual(lines, ['[disk] restore:history free=3.00GiB scratch=1.00GiB predecessor=0.50GiB']);
+  diskReport('recheck:canonical', { dist: tmpdir() }, { free: () => { throw Error('statfs unavailable'); }, size: () => [0], log: line => lines.push(line) });
+  assert.equal(lines[1], '[disk] recheck:canonical unavailable: statfs unavailable');
+  diskReport('materialize:canonical', { packed: tmpdir() }, { free: () => 0, size: () => [], log: line => lines.push(line) });
+  assert.equal(lines[2], '[disk] materialize:canonical unavailable: unexpected du output');
 });
