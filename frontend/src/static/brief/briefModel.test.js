@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { briefOrder, footprint, positionPlan, watchEvent, LIST_FILTERS, STOP_MAX_PERCENT } from './briefModel';
+import { briefOrder, footprint, matchesSearch, positionPlan, watchEvent, LIST_FILTERS, STOP_MAX_PERCENT } from './briefModel';
 
 const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, ...over });
 
@@ -7,8 +7,13 @@ describe('brief model', () => {
   it('orders the buy zone first, then within 5% below the pivot, then further below, then extended', () => {
     const items = [view({ symbol: 'EXT', state: 'ext', distance: 7 }), view({ symbol: 'FAR', state: 'wait', distance: -9 }), view({ symbol: 'NEAR', state: 'wait', distance: -2 }), view({ symbol: 'ZONE' })];
     expect(items.sort(briefOrder).map(v => v.symbol)).toEqual(['ZONE', 'NEAR', 'FAR', 'EXT']);
-    expect(LIST_FILTERS.near.test(view({ state: 'wait', distance: -4.9 }))).toBe(true);
-    expect(LIST_FILTERS.near.test(view({ state: 'wait', distance: null }))).toBe(false);
+    expect(LIST_FILTERS.near.test(view({ qualified: true, state: 'wait', distance: -4.9 }))).toBe(true);
+    expect(LIST_FILTERS.near.test(view({ qualified: true, state: 'wait', distance: null }))).toBe(false);
+    expect(LIST_FILTERS.near.test(view({ qualified: false, state: 'wait', distance: -1 }))).toBe(false);
+    expect(LIST_FILTERS.one.test(view({ qualified: false, failed: 1, unknown: 0 }))).toBe(true);
+    expect(LIST_FILTERS.one.test(view({ qualified: false, failed: 1, unknown: 1 }))).toBe(false);
+    expect(matchesSearch(view({ symbol: 'NVLX', name: 'Novalux' }), 'nova')).toBe(true);
+    expect(matchesSearch(view({ symbol: 'NVLX', name: 'Novalux' }), 'zz')).toBe(false);
   });
 
   it('describes watch changes and needs 1.4x volume to call a breakout', () => {

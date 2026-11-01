@@ -54,6 +54,8 @@ export function candidateView(item, date) {
     rsLineHigh: row.se_rs_line_new_high === true,
     qualified: Boolean(item?.assessment?.qualified),
     passed: item?.assessment?.passed ?? null,
+    failed: item?.assessment?.failed ?? null,
+    unknown: item?.assessment?.unknown ?? null,
     earnings: earningsDays(row, date),
     pivotSource: canonicalPivot(row).reason,
     row,
@@ -74,10 +76,13 @@ export function focusCandidates(ranked, date, limit = 5) {
 }
 
 export const LIST_FILTERS = {
-  zone: { label: '買いゾーン', test: view => view.state === 'zone' },
-  near: { label: 'ピボット接近', test: view => view.state === 'wait' && finite(view.distance) && view.distance >= -5 },
-  all: { label: 'すべて', test: () => true },
+  zone: { label: '買いゾーン', test: view => view.qualified && view.state === 'zone' },
+  near: { label: 'ピボット接近', test: view => view.qualified && view.state === 'wait' && finite(view.distance) && view.distance >= -5 },
+  all: { label: '選定すべて', test: view => view.qualified },
+  one: { label: 'あと1条件', test: view => !view.qualified && view.failed === 1 && view.unknown === 0 },
 };
+/** Case-insensitive ticker or company-name match. */
+export const matchesSearch = (view, query) => !query || `${view.symbol} ${view.name}`.toUpperCase().includes(query.trim().toUpperCase());
 export const LIST_SORTS = {
   priority: { label: '優先度', compare: briefOrder },
   rs: { label: 'RS推計', compare: (a, b) => (b.rs ?? -1) - (a.rs ?? -1) || briefOrder(a, b) },

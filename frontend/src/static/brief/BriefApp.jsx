@@ -7,7 +7,7 @@ import { money, signed } from '../positionGeometry';
 import '../theme/foundation.css';
 import './brief.css';
 import { useBriefData, useStockData, useWatchlist } from './useBriefData';
-import { candidateView, focusCandidates, LIST_FILTERS, LIST_SORTS, briefOrder, watchEvent } from './briefModel';
+import { candidateView, focusCandidates, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
 import MarketCard from './MarketCard';
 import StockView from './StockView';
 import { CandidateRow, Toast, useTransitionNavigate } from './BriefParts';
@@ -65,24 +65,26 @@ function TodayView({ brief, watch, open, now, animate }) {
 }
 
 function ListView({ brief, kind, watch, open, now, animate }) {
-  const [filter, setFilter] = useState('zone'), [sort, setSort] = useState('priority'), [limit, setLimit] = useState(50);
+  const [filter, setFilter] = useState('zone'), [sort, setSort] = useState('priority'), [limit, setLimit] = useState(50), [query, setQuery] = useState('');
   const views = useMemo(() => {
-    const source = kind === 'watch' ? (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)) : brief.ranked.filter(item => item.assessment?.qualified);
+    const source = kind === 'watch' ? (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol))
+      : brief.ranked.filter(item => item.assessment?.qualified || (item.assessment?.failed === 1 && item.assessment?.unknown === 0));
     return source.map(item => candidateView(item, brief.date));
   }, [brief.bundle.data, brief.ranked, brief.date, kind, watch]);
   const counts = useMemo(() => Object.fromEntries(Object.entries(LIST_FILTERS).map(([key, value]) => [key, views.filter(value.test).length])), [views]);
-  const shown = useMemo(() => views.filter(kind === 'watch' ? () => true : LIST_FILTERS[filter].test).sort(LIST_SORTS[sort].compare), [views, filter, sort, kind]);
+  const shown = useMemo(() => views.filter(kind === 'watch' ? () => true : LIST_FILTERS[filter].test).filter(view => matchesSearch(view, query)).sort(LIST_SORTS[sort].compare), [views, filter, sort, kind, query]);
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
     {kind !== 'watch' && <div className="brief-filters">
       <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { setFilter(key); setLimit(50); }}>{value.label}<span className="numeric">{counts[key]}</span></button>)}</div>
+      <label className="brief-search"><span className="sr-only">銘柄を検索</span><input type="search" inputMode="search" placeholder="ティッカー・社名" value={query} onChange={e => { setQuery(e.target.value); setLimit(50); }} /></label>
       <label className="brief-sort">並び順<select value={sort} onChange={e => setSort(e.target.value)}>{Object.entries(LIST_SORTS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
     </div>}
     <section className="brief-card in" style={{ '--i': 1 }} aria-label={kind === 'watch' ? 'ウォッチ中の銘柄' : '選定銘柄の一覧'}>
       {shown.length ? <ol className="brief-rows">{shown.slice(0, limit).map((view, i) => <CandidateRow key={view.symbol} view={view} rank={kind === 'watch' ? null : i + 1} index={Math.min(i, 12)} onOpen={open} now={now} animate={animate} />)}</ol>
         : <p className="brief-note">{brief.bundle.isLoading ? '候補を読み込み中…' : kind === 'watch' ? '銘柄の画面で ☆ を押すと、ここに並びます。' : 'この条件の選定銘柄はありません。'}</p>}
       {shown.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + 50)}>さらに表示（残り {shown.length - limit}件）</button>}
-      {kind !== 'watch' && <p className="brief-note">選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄（流動性：株価$10以上・売買代金$2,000万以上）。</p>}
+      {kind !== 'watch' && <p className="brief-note">選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄。あと1条件＝未達が1つだけで未確認がない銘柄（流動性：株価$10以上・売買代金$2,000万以上）。</p>}
     </section>
   </>;
 }
