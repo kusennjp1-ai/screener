@@ -76,7 +76,7 @@ def main():
         extended={'trendTemplateCount':sum(row['template30'] and rs(row)>=70 for row in rows) if valid else None,
                   'rs90TemplateCount':sum(row['template30'] and rs(row)>=90 for row in rows) if valid else None,
                   'above150':sum(row['above150'] for row in rows) if valid else None,'above200':sum(row['above200'] for row in rows) if valid else None}
-        result[day]={**aggregate,**extended,'_valid':valid,'_template':{row['symbol'] for row in rows if row['template30'] and rs(row)>=70},'_above50':{row['symbol'] for row in rows if row['above50']},'_observed':{row['symbol'] for row in rows}}
+        result[day]={**aggregate,**extended,'_valid':valid,'_template':{row['symbol'] for row in rows if row['template30'] and rs(row)>=70} if valid else set(),'_above50':{row['symbol'] for row in rows if row['above50']},'_observed':{row['symbol'] for row in rows}}
         if day in points:
             for key,value in aggregate.items():assert points[day][key]==value,(day,key,points[day][key],value)
             for key,value in extended.items():
