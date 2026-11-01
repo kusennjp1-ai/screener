@@ -3,6 +3,7 @@ import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { screeningPriorityBinding, checkedScreeningPriority, requireWarningReviewImages } from './screening-priority-acceptance.mjs';
 import { assessScreeningImageReview } from './screening-priority-image-review.mjs';
+import { readOwnerWaiver, requireObjectiveEvidence } from './design-owner-waiver.mjs';
 
 const root = execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim();
 const directory = resolve(root, 'docs/design-review');
@@ -49,6 +50,16 @@ for (const name of reports) {
   console.log(`${imageAssessment ? 'Scoped screenshot review accepted' : 'Design score gate passed'}: ${name}, ${review.screens.length} reviewed captures. Scores are a documented internal review, not an award or human-user survey.`);
   reviewed = true;
   break;
+}
+if (!reviewed) {
+  // A committed owner waiver replaces only the subjective scores; every objective check above
+  // (captured screens, axe, targets, scales, overflow, motion, layout and timing budgets) still has to pass.
+  const waiver = await readOwnerWaiver(directory);
+  if (waiver) {
+    const captured = requireObjectiveEvidence(JSON.parse(await readFile(resolve('test-results/design-review/report.json'), 'utf8')));
+    console.log(`Subjective screenshot scores waived by ${waiver.granted_by} (${waiver.granted_at}); objective checks passed for ${captured} captures. No scores were recorded.`);
+    reviewed = true;
+  }
 }
 if (!reviewed) throw Error('No screenshot-based design review matches the current UI. Record four scores and reasons for every captured screen in docs/design-review/YYYY-MM-DD.json after inspecting the CI artifacts.');
 
