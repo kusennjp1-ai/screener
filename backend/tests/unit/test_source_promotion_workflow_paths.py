@@ -124,6 +124,8 @@ class WorkflowSchedulingPathTests(unittest.TestCase):
         self.assertEqual(watchdog_events['schedule'], [
             {'cron': '2,12,22,32,42,52 13-20 * * 1-5', 'timezone': 'America/New_York'},
             {'cron': '17 0,6,10 * * *', 'timezone': 'America/New_York'},
+            # Two-hour catch-up for missed best-effort schedules (#115).
+            {'cron': '47 1-23/2 * * *', 'timezone': 'America/New_York'},
             {'cron': '10 16 * * 1-6', 'timezone': 'America/New_York'},
             {'cron': '30 23 * * 1-6'},
         ])
