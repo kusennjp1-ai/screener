@@ -364,6 +364,14 @@ describe('App static mode', () => {
     expect(requestedUrls.every(url => !url.includes('/api'))).toBe(true);
   }, 30000);
 
+  it('opens on the daily brief for a viewer who chose it, and keeps the research workspace at #/ otherwise', async () => {
+    window.localStorage.setItem('screener:start-screen', 'brief');
+    await renderStaticAppAtHash('#/');
+    expect(await screen.findByRole('heading', { level: 1, name: name => name.includes('の判断') }, { timeout: 10000 })).toBeInTheDocument();
+    expect(window.location.hash).toBe('#/brief');
+    expect(screen.getByRole('checkbox', { name: /アプリを開いたらこの画面を表示/ })).toBeChecked();
+  }, 30000);
+
   it('keeps scan controls read-only in the static route', async () => {
     await renderStaticAppAtHash('#/scan');
 

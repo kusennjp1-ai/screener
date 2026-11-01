@@ -1,5 +1,5 @@
 import { HashRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
-import { lazy, Suspense, useEffect } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import StaticLayout from './StaticLayout';
 const StaticHomePage = lazy(() => import('./pages/StaticHomePage'));
@@ -9,6 +9,7 @@ const StaticBreadthPage = lazy(() => import('./pages/StaticBreadthPage'));
 const StaticGroupsPage = lazy(() => import('./pages/StaticGroupsPage'));
 // The phone-first daily brief has its own shell (top bar, bottom tabs, light/dark toggle).
 const BriefApp = lazy(() => import('./brief/BriefApp'));
+import { landOnChosenStartScreen } from './brief/startScreen';
 import { StaticMarketProvider } from './StaticMarketContext';
 import { getStaticSupportedMarkets, useStaticManifest } from './dataClient';
 
@@ -51,6 +52,8 @@ function StaticAppContent() {
 }
 
 function StaticAppShell() {
+  // Runs before the router reads the location, once per page load.
+  useState(landOnChosenStartScreen);
   return (
     <Router>
       <StaticAppContent />
