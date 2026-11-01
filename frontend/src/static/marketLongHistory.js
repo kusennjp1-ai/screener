@@ -7,14 +7,18 @@ const STAGES=['stage1','stage2','stage3','stage4'];
 const ENVIRONMENT_COUNTS=['trendTemplateCount','rs90TemplateCount','above150','above200',...STAGES,'breakouts'];
 // Minimum judged breakouts before a hold rate is shown; smaller samples stay unknown.
 export const BREAKOUT_MIN_SAMPLE=5;
+// Minimum size of the trend-template cohort of 20 sessions earlier before its health is shown.
+export const LEADER_MIN_COHORT=10;
 /** Derived market-environment values for one long-history point; every unknown input stays null. */
 export function environmentPoint(row){
  if(!row)return null;
  const cover=count(row.coverage)&&row.coverage>0?row.coverage:null;
  const share=key=>cover&&count(row[key])?100*row[key]/cover:null;
  const judged=count(row.breakoutsJudged)?row.breakoutsJudged:null;
+ const cohort=count(row.leaderCohort)?row.leaderCohort:null;
  return {...row,stage1Percent:share('stage1'),stage2Percent:share('stage2'),stage3Percent:share('stage3'),stage4Percent:share('stage4'),
-  breakoutHoldPercent:judged!==null&&judged>=BREAKOUT_MIN_SAMPLE&&count(row.breakoutsHeld)?100*row.breakoutsHeld/judged:null};
+  breakoutHoldPercent:judged!==null&&judged>=BREAKOUT_MIN_SAMPLE&&count(row.breakoutsHeld)?100*row.breakoutsHeld/judged:null,
+  leaderHealthPercent:cohort!==null&&cohort>=LEADER_MIN_COHORT&&count(row.leaderCohortAbove50)?100*row.leaderCohortAbove50/cohort:null};
 }
 /**
  * Index near its high while few stocks are above their 200-day line: the "bifurcated market" Minervini has described.
@@ -70,6 +74,8 @@ export function validateLongHistory(source,asOfDate){
   for(const [key,base] of [['trendTemplatePercent','trendTemplateCount'],['above150Percent','above150'],['above200Percent','above200']])if(key in row)assert(row[key]===null||(row[base]!==null&&number(row[key])&&Math.abs(row[key]-100*row[base]/row.coverage)<1e-7),`${key} denominator`);
   if('rs90TemplateCount' in row&&'trendTemplateCount' in row)assert(row.rs90TemplateCount===null||(row.trendTemplateCount!==null&&row.rs90TemplateCount<=row.trendTemplateCount),'RS90 subset of trend template');
   if(STAGES.every(key=>key in row)&&STAGES.every(key=>row[key]!==null))assert(STAGES.reduce((sum,key)=>sum+row[key],0)===row.coverage,'stage partition');
+  if('leaderCohort' in row)assert(row.leaderCohort===null||(sufficient&&count(row.leaderCohort)&&row.leaderCohort<=row.coverage),'leader cohort count/coverage gate');
+  if('leaderCohortAbove50' in row)assert(row.leaderCohortAbove50===null||(count(row.leaderCohortAbove50)&&count(row.leaderCohort)&&row.leaderCohortAbove50<=row.leaderCohort),'leader cohort subset');
   if('breakoutsHeld' in row)assert(row.breakoutsHeld===null||(count(row.breakoutsHeld)&&count(row.breakoutsJudged)&&row.breakoutsHeld<=row.breakoutsJudged),'breakout follow-through');
   assert(number(row.coveragePercent)&&Math.abs(row.coveragePercent-100*row.coverage/Math.max(row.eligibleUniverse,1))<.001,'coverage percent');
   assert(i>=9||row.ratio_10day===null,'ratio warmup');

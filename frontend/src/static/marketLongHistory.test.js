@@ -13,6 +13,12 @@ describe('long history admission',()=>{
   expect(()=>validateLongHistory(held,'2026-10-23')).toThrow(/breakout/);
   const rs=env(stockProofs(make()));rs.breadth[0].rs90TemplateCount=21;
   expect(()=>validateLongHistory(rs,'2026-10-23')).toThrow(/RS90/);
+  const cohort=env(stockProofs(make()));Object.assign(cohort.breadth[0],{leaderCohort:12,leaderCohortAbove50:9});
+  expect(()=>validateLongHistory(cohort,'2026-10-23')).not.toThrow();
+  cohort.breadth[0].leaderCohortAbove50=13;
+  expect(()=>validateLongHistory(cohort,'2026-10-23')).toThrow(/leader cohort subset/);
+  const orphan=env(stockProofs(make()));Object.assign(orphan.breadth[0],{leaderCohort:null,leaderCohortAbove50:3});
+  expect(()=>validateLongHistory(orphan,'2026-10-23')).toThrow(/leader cohort/);
  });
  it.each(['future','forgedHost','symbolSubstitution','missingIndexProof','duplicateDay','populationClaim','underCoverage','badPercentage','invalidRank'] )('rejects %s source evidence',kind=>{
   const value=stockProofs(make());
