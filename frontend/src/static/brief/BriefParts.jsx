@@ -1,0 +1,68 @@
+import { flushSync } from 'react-dom';
+import { useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { signed, times } from '../positionGeometry';
+import { trendTemplate } from './briefModel';
+
+const finite = Number.isFinite;
+export const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/** Navigate inside a View Transition (when the browser has one), with a direction for the CSS. */
+export function useTransitionNavigate() {
+  const navigate = useNavigate();
+  return useCallback((to, { kind = 'tab', state, replace = false, before } = {}) => {
+    const run = () => { flushSync(() => navigate(to, { state, replace })); if (!matchMedia?.('(min-width: 1024px)').matches) window.scrollTo(0, 0); };
+    if (typeof document.startViewTransition !== 'function' || reducedMotion()) { run(); return; }
+    before?.();
+    document.documentElement.dataset.briefNav = kind;
+    const transition = document.startViewTransition(run);
+    transition.ready?.catch(() => {});
+    transition.finished?.catch(() => {}).finally(() => { delete document.documentElement.dataset.briefNav; });
+  }, [navigate]);
+}
+
+export const meterPercent = value => (Math.max(-10, Math.min(10, value)) + 10) * 5;
+
+export function MiniMeter({ distance, animate }) {
+  if (!finite(distance)) return <span className="brief-minimeter is-unknown" aria-hidden="true"><span className="brief-minimeter-value">未確認</span></span>;
+  return <span className="brief-minimeter" aria-hidden="true">
+    <span className="brief-minimeter-track" /><span className="brief-minimeter-zone" /><span className="brief-minimeter-pivot" />
+    <span className={`brief-marker${animate ? ' is-entering' : ''}`} style={{ '--p': meterPercent(distance) }} />
+    <span className="brief-minimeter-value">{signed(distance)}</span>
+  </span>;
+}
+
+export function StateChip({ view }) {
+  const tone = view.state === 'zone' ? 'zone' : view.state === 'wait' ? 'wait' : view.state === 'ext' ? 'ext' : 'neutral';
+  return <span className={`brief-chip tone-${tone}${view.state === 'zone' ? ' is-strong' : ''}`}><span aria-hidden="true">{view.stateGlyph}</span> {view.stateLabel}{finite(view.distance) ? ` ${signed(view.distance)}` : ''}</span>;
+}
+
+export function Reasons({ view, now }) {
+  const template = view.qualified ? null : trendTemplate(view.row, now);
+  const chips = [<StateChip key="state" view={view} />];
+  chips.push(<span key="tt" className={`brief-chip${view.qualified ? ' tone-zone' : ''}`}>{view.qualified ? 'TT 8/8' : `TT ${template.passed}/8${template.unknown ? `・未確認${template.unknown}` : ''}`}</span>);
+  if (finite(view.volumeRatio) && view.volumeRatio >= 1.4) chips.push(<span key="vol" className="brief-chip tone-zone">出来高 {times(view.volumeRatio)}</span>);
+  chips.push(<span key="rs" className="brief-chip">RS推計 {finite(view.rs) ? view.rs : '未確認'}</span>);
+  if (view.rsLineHigh) chips.push(<span key="rsl" className="brief-chip tone-zone">RS線 新高値</span>);
+  if (view.earnings && view.earnings.days <= 10) chips.push(<span key="earn" className="brief-chip tone-ext">▲ 決算 {view.earnings.days}日後</span>);
+  return <span className="brief-reasons">{chips}</span>;
+}
+
+export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morph = false }) {
+  return <li className={animate ? 'in' : ''} style={{ '--i': index }}>
+    <button type="button" className="brief-row" data-symbol={view.symbol} data-testid="brief-candidate" onClick={event => onOpen(view.symbol, event.currentTarget)}
+      aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${view.stateLabel}${finite(view.distance) ? ` ${signed(view.distance)}` : ''}、RS推計 ${finite(view.rs) ? view.rs : '未確認'}`}>
+      <span className="brief-rank" aria-hidden="true">{rank || ''}</span>
+      <span className="brief-row-main">
+        <span className="brief-row-title"><b style={morph ? { viewTransitionName: 'brief-ticker' } : undefined}>{view.symbol}</b><span>{view.name}{view.sector ? `・${view.sector}` : ''}</span></span>
+        <Reasons view={view} now={now} />
+      </span>
+      <MiniMeter distance={view.distance} animate={animate} />
+    </button>
+  </li>;
+}
+
+export function Toast({ toast, onUndo }) {
+  if (!toast) return null;
+  return <div className="brief-toast" role="status" key={toast.id}><span>{toast.text}</span>{onUndo && <button type="button" onClick={onUndo}>元に戻す</button>}</div>;
+}

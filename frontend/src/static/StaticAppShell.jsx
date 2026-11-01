@@ -7,6 +7,8 @@ import ResearchPage from './pages/ResearchPage';
 const StaticScanPage = lazy(() => import('./pages/StaticScanPage'));
 const StaticBreadthPage = lazy(() => import('./pages/StaticBreadthPage'));
 const StaticGroupsPage = lazy(() => import('./pages/StaticGroupsPage'));
+// The phone-first daily brief has its own shell (top bar, bottom tabs, light/dark toggle).
+const BriefApp = lazy(() => import('./brief/BriefApp'));
 import { StaticMarketProvider } from './StaticMarketContext';
 import { getStaticSupportedMarkets, useStaticManifest } from './dataClient';
 
@@ -28,7 +30,9 @@ function StaticAppContent() {
       supportedMarkets={supportedMarkets}
       defaultMarket={defaultMarket}
     >
-      <StaticLayout>
+      <Routes>
+        <Route path="/brief/*" element={<Suspense fallback={<p role="status" style={{padding:16}}>画面を読み込み中…</p>}><BriefApp /></Suspense>} />
+        <Route path="/*" element={<StaticLayout>
         <Suspense fallback={<p role="status" style={{padding:16}}>画面を読み込み中…</p>}>
         <Routes>
           <Route path="/" element={<ResearchPage />} />
@@ -40,7 +44,8 @@ function StaticAppContent() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </Suspense>
-      </StaticLayout>
+      </StaticLayout>} />
+      </Routes>
     </StaticMarketProvider>
   );
 }

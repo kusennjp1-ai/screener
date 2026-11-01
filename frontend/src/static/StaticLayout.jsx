@@ -41,7 +41,7 @@ export default function StaticLayout({children}) {
    <div className="workspace-context"><span className="workspace-context-mark" aria-hidden="true">{market.market||'US'}</span><span>{market.market==='US'?'米国株リサーチ':`${market.display_name||market.market||'市場'}リサーチ`}<small>日次スナップショット</small></span></div>
    <span className="workspace-nav-caption">WORKSPACE</span>
    <nav className="leader-desktop-nav" aria-label="メインナビゲーション">{NAV_ITEMS.map(({path,label,Icon})=><RouterLink key={path} to={path} aria-current={current===path?'page':undefined}><Icon aria-hidden="true"/><span>{label}</span><span className="workspace-nav-arrow" aria-hidden="true">›</span></RouterLink>)}</nav>
-   <div className="workspace-sidebar-links"><span className="workspace-nav-caption">DISCOVER</span><RouterLink to="/breadth?tab=sectors">業種の強さ <span aria-hidden="true">↗</span></RouterLink><RouterLink to="/scan">詳細スキャン <span aria-hidden="true">↗</span></RouterLink></div>
+   <div className="workspace-sidebar-links"><span className="workspace-nav-caption">DISCOVER</span><RouterLink to="/brief">新しいデイリー画面 <span aria-hidden="true">↗</span></RouterLink><RouterLink to="/breadth?tab=sectors">業種の強さ <span aria-hidden="true">↗</span></RouterLink><RouterLink to="/scan">詳細スキャン <span aria-hidden="true">↗</span></RouterLink></div>
    <div className="workspace-sidebar-note"><span className="workspace-note-icon" aria-hidden="true">◎</span><strong>根拠から、判断する。</strong><p>選定・買い位置・購入条件を<br/>それぞれ確認。</p><span>分析 {market.as_of_date||'未確認'}</span></div>
   </aside>
   <header className="leader-header">
