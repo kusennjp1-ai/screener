@@ -28,7 +28,7 @@ export function HistoricalBreadth({history}){
  if(!history)return <p>長期の公開データを確認できません。</p>;
  return <section className="market-history-explorer" aria-label="選定対象の価格条件と先導株の長期推移">
   <header><h3>広がりと先導株</h3><span>価格条件による遡及集計</span></header>
-  {split?.warning&&<p className="history-bifurcation" role="note">▲ 指数は1年高値から{Math.abs(split.fromHigh).toFixed(1)}%以内ですが、200日線より上の銘柄は{split.above200Percent.toFixed(1)}%です。指数と個別株の乖離（独自判定）。</p>}
+  {split?.warning&&<p className="history-bifurcation" role="note">▲ {split.fromHigh>-0.05?'指数は1年高値の水準にありますが':`指数は1年高値まであと${Math.abs(split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{split.above200Percent.toFixed(1)}%です。指数と個別株の乖離（独自判定）。</p>}
   <div className="history-metric-picker" role="group" aria-label="長期推移の指標">{available.map(([key,value])=><button key={key} aria-pressed={metric===key} onClick={()=>{setMetric(key);setCursor(null);if(value.globalOnly)setGroup('all');}}>{value.label}</button>)}</div>
   {history.sectorBreadth?.length>0&&<label className="history-sector-picker">対象 <select aria-label="業種別推移の対象" value={group} disabled={Boolean(config.globalOnly)} onChange={event=>{setGroup(event.target.value);setCursor(null);}}><option value="all">全体</option>{history.sectorBreadth.map(item=><option key={item.sector} value={item.sector}>{groupNames[item.sector]||item.sector}（現在分類）</option>)}</select></label>}
   <div className="history-range" role="group" aria-label="先導株と広がりの表示期間">{[[1,'1M'],[3,'3M'],[6,'6M'],[12,'1年'],[24,'2年']].map(([months,label])=><button key={months} aria-pressed={range===months} onClick={()=>{setRange(months);setCursor(null);}}>{label}</button>)}</div>
