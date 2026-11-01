@@ -17,6 +17,9 @@ describe('market environment history', () => {
     expect(value.breakoutHoldPercent).toBeNull();
     expect(environmentPoint(point('2026-10-23')).breakoutHoldPercent).toBe(75);
     expect(environmentPoint({ date: '2026-10-23', coverage: 0, stage2: null }).stage2Percent).toBeNull();
+    expect(environmentPoint(point('2026-10-23', { leaderCohort: 20, leaderCohortAbove50: 13 })).leaderHealthPercent).toBe(65);
+    expect(environmentPoint(point('2026-10-23', { leaderCohort: 9, leaderCohortAbove50: 9 })).leaderHealthPercent).toBeNull();
+    expect(environmentPoint(point('2026-10-23')).leaderHealthPercent).toBeNull();
   });
 
   it('flags an index near its high while few stocks are above the 200-day line', () => {

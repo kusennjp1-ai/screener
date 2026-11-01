@@ -108,9 +108,11 @@ BREAKOUT_VOLUME_RATIO = 1.4
 BREAKOUT_HOLD_SESSIONS = 10
 BREAKOUT_FAILURE_DRAWDOWN = 0.07
 BREAKOUT_WINDOW_SESSIONS = 20
+LEADER_LOOKBACK_SESSIONS = 20
 INDICATOR_POLICY = {
     'trend_template': 'Eight conditions: close above 150/200-day SMA, 150 above 200, 200-day SMA above its value 21 sessions earlier, 50 above 150 and 200, close above 50, close at least 30% above the 252-session low, within 25% of the 252-session high, same-day proprietary RS >= 70 (not IBD RS). leaderCount keeps the earlier 25%-above-low variant.',
     'stage': 'Weinstein stage replayed per session with the scanner rules in backend/app/scanners/criteria/stage_analysis.py: 200-day SMA change over 20 sessions (flat within +/-1%), 60-session least-squares close slope (+/-0.05% per day) and close versus the 200-day SMA. The swing-pattern exception that can move a stock below a falling 200-day SMA into Stage 1 is not replayed; such sessions count as Stage 4.',
+    'leader_health': 'Of the stocks that met the trend template (30% variant, RS >= 70) 20 sessions earlier and are still observed, how many close above their 50-day SMA today. Unknown unless both sessions meet the coverage gate.',
     'breakout': 'A session closing above the prior 251-session high on at least 1.4x the prior 50-session average volume while the 30% price template holds. Judged after 10 later sessions: failed if any low in them is at least 7% below the breakout close. Reported for breakouts dated 10 to 29 sessions before each date.',
 }
 
@@ -147,6 +149,7 @@ def build(records, errors, symbols, sessions, target, classification=None):
     # Minervini's published threshold is 30% above the 52-week low; `template`
     # keeps the existing 25% variant behind leaderCount unchanged.
     template30 = np.zeros((count,len(symbols)), dtype=bool)
+    observed = np.zeros((count,len(symbols)), dtype=bool); over50 = observed.copy()
     above150 = np.zeros(count, dtype=int); above200 = above150.copy()
     stages = {stage:np.zeros(count, dtype=int) for stage in (1,2,3,4)}
     breakouts_new = np.zeros(count, dtype=int); breakouts_matured = breakouts_new.copy(); breakouts_held = breakouts_new.copy()
@@ -176,6 +179,7 @@ def build(records, errors, symbols, sessions, target, classification=None):
             ma50,ma150,ma200=sma(50),sma(150),sma(200)
             covered += good
             above += good & (c>ma50).to_numpy()
+            observed[:,column]=good; over50[:,column]=good & (c>ma50).to_numpy()
             group=group_data[memberships.get(symbol,'Unknown')]
             group['eligibleUniverse']-=(~eligible_history).astype(int)
             group['coverage']+=good
@@ -211,6 +215,10 @@ def build(records, errors, symbols, sessions, target, classification=None):
     leaders=(template & (rs>=70)).sum(axis=1)
     trend_template=(template30 & (rs>=70)).sum(axis=1)
     strong_leaders=(template30 & (rs>=90)).sum(axis=1)
+    # Leader health: the trend-template members of LEADER_LOOKBACK_SESSIONS earlier, as observed today.
+    cohort_members=np.zeros_like(template30)
+    cohort_members[LEADER_LOOKBACK_SESSIONS:]=(template30 & (rs>=70))[:-LEADER_LOOKBACK_SESSIONS]
+    cohort=(cohort_members & observed).sum(axis=1); cohort_above50=(cohort_members & observed & over50).sum(axis=1)
     # Breakouts dated 10..29 sessions earlier: every one has its full ten-session
     # follow-through window on or before the reported date (no look-ahead).
     window=lambda array:pd.Series(array,dtype=float).rolling(BREAKOUT_WINDOW_SESSIONS,min_periods=BREAKOUT_WINDOW_SESSIONS).sum().shift(BREAKOUT_HOLD_SESSIONS).to_numpy()
@@ -233,6 +241,8 @@ def build(records, errors, symbols, sessions, target, classification=None):
             'stage1':val(stages[1]),'stage2':val(stages[2]),'stage3':val(stages[3]),'stage4':val(stages[4]),
             'breakouts':val(breakouts_new),'breakoutsJudged':int(matured_window[i]) if valid and np.isfinite(matured_window[i]) and bool(sufficient[max(0,i-BREAKOUT_HOLD_SESSIONS-BREAKOUT_WINDOW_SESSIONS+1):i+1].all()) else None,
             'breakoutsHeld':int(held_window[i]) if valid and np.isfinite(held_window[i]) and bool(sufficient[max(0,i-BREAKOUT_HOLD_SESSIONS-BREAKOUT_WINDOW_SESSIONS+1):i+1].all()) else None,
+            'leaderCohort':int(cohort[i]) if valid and i>=LEADER_LOOKBACK_SESSIONS and bool(sufficient[i-LEADER_LOOKBACK_SESSIONS]) else None,
+            'leaderCohortAbove50':int(cohort_above50[i]) if valid and i>=LEADER_LOOKBACK_SESSIONS and bool(sufficient[i-LEADER_LOOKBACK_SESSIONS]) else None,
             'stocks_up_4pct':val(ups),'stocks_down_4pct':val(downs),'ratio_10day':float(up10[i]/down10[i]) if len(points)>=9 and np.isfinite(up10[i]) and np.isfinite(down10[i]) and down10[i]>0 else None,
             'reason':None if valid else '独立カレンダーに沿う253日足の観測率90%またはRS母集団100銘柄を満たしません。'})
     index=[]; sector_series={}; extra_provenance=[]

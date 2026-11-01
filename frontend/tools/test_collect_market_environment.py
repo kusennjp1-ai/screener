@@ -87,12 +87,28 @@ class EnvironmentSeriesTests(unittest.TestCase):
             self.assertAlmostEqual(row['trendTemplatePercent'], 100 * row['trendTemplateCount'] / row['coverage'])
             self.assertLessEqual(row['above200'], row['coverage'])
 
+    def test_leader_cohort_is_the_template_of_twenty_sessions_earlier(self):
+        symbols, records = self.universe()
+        rows = module.build(records, {}, symbols, self.days, self.days[-1])['breadth']
+        lag = module.LEADER_LOOKBACK_SESSIONS
+        checked = 0
+        for i, row in enumerate(rows):
+            if row['leaderCohort'] is None:
+                continue
+            earlier = rows[i - lag]
+            self.assertIsNotNone(earlier['trendTemplateCount'])
+            self.assertLessEqual(row['leaderCohort'], earlier['trendTemplateCount'])
+            self.assertLessEqual(row['leaderCohortAbove50'], row['leaderCohort'])
+            checked += 1
+        self.assertGreater(checked, 50)
+        self.assertIn('leader_health', module.build(records, {}, symbols, self.days, self.days[-1])['indicator_policy'])
+
     def test_unknown_coverage_reports_unknown_not_zero(self):
         symbols, records = self.universe(120)
         for symbol in symbols[100:]:
             del records[symbol]
         last = module.build(records, {}, symbols, self.days, self.days[-1])['breadth'][-1]
-        for key in ('trendTemplateCount', 'stage2', 'above200Percent', 'breakoutsJudged', 'breakoutsHeld'):
+        for key in ('trendTemplateCount', 'stage2', 'above200Percent', 'breakoutsJudged', 'breakoutsHeld', 'leaderCohort', 'leaderCohortAbove50'):
             self.assertIsNone(last[key], key)
 
     def test_breakout_is_judged_only_after_ten_later_sessions(self):
