@@ -396,9 +396,12 @@ class SecEdgarClient:
     DEFAULT_USER_AGENT = "screener-research code33 (contact: research@example.com)"
     RETRY_STATUS = frozenset({429, 500, 502, 503, 504})
     MAX_ATTEMPTS = 3
-    # One ticker map per process: every client in a build shares it instead of
-    # downloading company_tickers.json again.
+    # One ticker map shared by every client in a process for a few hours, so a
+    # build does not download company_tickers.json repeatedly while long-lived
+    # workers still pick up new listings and symbol changes.
     _shared_cik_map: dict[str, int] | None = None
+    _shared_cik_map_at: float = 0.0
+    CIK_MAP_TTL_SECONDS = 6 * 3600
 
     def __init__(self, user_agent: Optional[str] = None, min_interval: float = 0.12, sleep=time.sleep):
         # SEC asks for a contactable User-Agent; the repository secret is passed
@@ -437,12 +440,14 @@ class SecEdgarClient:
 
     def cik_for(self, ticker: str) -> Optional[int]:
         if self._cik_map is None:
-            if SecEdgarClient._shared_cik_map is None:
+            stale = time.monotonic() - SecEdgarClient._shared_cik_map_at > self.CIK_MAP_TTL_SECONDS
+            if SecEdgarClient._shared_cik_map is None or stale:
                 data = self._get_json(self.TICKERS_URL)
                 SecEdgarClient._shared_cik_map = {
                     str(row["ticker"]).upper(): int(row["cik_str"])
                     for row in data.values()
                 }
+                SecEdgarClient._shared_cik_map_at = time.monotonic()
             self._cik_map = SecEdgarClient._shared_cik_map
         symbol = ticker.upper()
         # SEC lists share classes with a dash (BRK-B); some sources use a dot.

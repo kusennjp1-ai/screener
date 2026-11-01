@@ -84,7 +84,8 @@ def derive_fourth_quarters(quarters, annual):
                 break
             chain.append(following[0])
             cursor = (date.fromisoformat(following[0]["end"]) + timedelta(days=1)).isoformat()
-        if len(chain) != 3:
+        # Every source filing must be identifiable; otherwise the browser rejects the series.
+        if len(chain) != 3 or not all(isinstance(p.get("accession"), str) and p["accession"] for p in [year, *chain]):
             continue
         duration = (date.fromisoformat(year["end"]) - date.fromisoformat(cursor)).days + 1
         if not 70 <= duration <= 105:
