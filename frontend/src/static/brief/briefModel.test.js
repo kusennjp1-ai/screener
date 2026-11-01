@@ -68,3 +68,15 @@ describe('market deterioration notes', () => {
     expect(environmentWarnings([])).toEqual([]);
   });
 });
+
+describe('stage from daily bars', () => {
+  const series = fn => Array.from({ length: 300 }, (_, i) => ({ close: fn(i) }));
+  it('follows the scanner rules for advancing, declining, flat and topping series', async () => {
+    const { stageFromBars } = await import('./briefModel');
+    expect(stageFromBars(series(i => 50 * 1.004 ** i))).toBe(2);
+    expect(stageFromBars(series(i => 200 * 0.996 ** i))).toBe(4);
+    expect(stageFromBars(series(i => 100 + Math.sin(i / 5)))).toBe(1);
+    expect(stageFromBars(series(i => (i < 200 ? 50 * 1.004 ** i : 50 * 1.004 ** 200 * (1 - (i - 200) * 0.0005))))).toBe(3);
+    expect(stageFromBars(series(() => 50).slice(0, 100))).toBeNull();
+  });
+});

@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { money, signed, times } from '../positionGeometry';
 import PriceChart from './PriceChart';
-import { footprint, positionPlan, rsLineNewHigh, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
+import { footprint, positionPlan, rsLineNewHigh, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
 import { meterPercent } from './BriefParts';
 
 const finite = Number.isFinite;
@@ -130,6 +130,7 @@ export default function StockView({ data, header = null }) {
   const chartRef = useRef(null);
   const plan = useMemo(() => view ? positionPlan(view, settings) : null, [view, settings]);
   const legs = technical?.vcp?.measurementsValid ? technical.vcp.legs : [];
+  const stage = useMemo(() => Number.isInteger(row?.stage) ? { value: row.stage, computed: false } : (() => { const value = stageFromBars(bars); return value ? { value, computed: true } : null; })(), [row?.stage, bars]);
   const rsHigh = useMemo(() => view?.rsLineHigh || rsLineNewHigh(data.chart.data?.rs_line, bars) === true, [view?.rsLineHigh, data.chart.data, bars]);
   const model = useMemo(() => bars && view ? { symbol: view.symbol, bars, rsLine: data.chart.data?.rs_line || [], legs, pivot: view.pivot, upper: view.upper, stop: plan?.stop ?? null, rsNewHigh: rsHigh, dryUpLeg: legs.at(-1) || null } : null,
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -147,7 +148,7 @@ export default function StockView({ data, header = null }) {
   const print = footprint(technical, bars);
   const code33 = financial?.code33?.state;
   const chips = [
-    [Number.isInteger(row?.stage) ? `ステージ${row.stage}` : 'ステージ 未確認', row?.stage === 2 ? 'zone' : row?.stage ? 'ext' : ''],
+    [stage ? `ステージ${stage.value}${stage.computed ? '（日足から算出）' : ''}` : 'ステージ 未確認', stage?.value === 2 ? 'zone' : stage ? 'ext' : ''],
     [print ? print.text : 'VCP 未確認', ''],
     [`RS推計 ${finite(view.rs) ? view.rs : '未確認'}`, finite(view.rs) && view.rs >= 70 ? 'zone' : ''],
     ...(rsHigh ? [['RS線 新高値', 'zone']] : []),

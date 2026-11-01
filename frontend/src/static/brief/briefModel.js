@@ -128,6 +128,31 @@ export function environmentWarnings(rows) {
   return notes;
 }
 
+/**
+ * Weinstein stage for the latest bar with the scanner's rules (backend stage_analysis.py):
+ * 200-day SMA change over 20 bars (flat within ±1%), 60-bar least-squares close slope
+ * (±0.05% per day) and close versus the 200-day SMA. The swing-pattern exception
+ * (below a falling 200-day SMA without a downtrend) is not replayed and counts as 4.
+ */
+export function stageFromBars(bars) {
+  const closes = (bars || []).map(b => b?.close).filter(finite);
+  if (closes.length < 219 || closes.length !== (bars || []).length) return null;
+  const mean = (from, to) => { let s = 0; for (let i = from; i < to; i++) s += closes[i]; return s / (to - from); };
+  const n = closes.length, ma = mean(n - 200, n), past = mean(n - 219, n - 19);
+  const change = (ma - past) / past * 100;
+  const rising = change >= 1, falling = change <= -1, flat = Math.abs(change) < 1;
+  const window = closes.slice(-60), xm = 29.5, ym = window.reduce((a, b) => a + b, 0) / 60;
+  let sxy = 0, sxx = 0;
+  window.forEach((y, x) => { sxy += (x - xm) * (y - ym); sxx += (x - xm) ** 2; });
+  const daily = sxy / sxx / ym * 100, up = daily > 0.05, down = daily < -0.05, above = closes.at(-1) > ma;
+  if (above && rising && up) return 2;
+  if (!above && falling && down) return 4;
+  if (above && (flat || falling)) return 3;
+  if (above && rising) return 3;
+  if (flat || (!above && rising)) return 1;
+  return above ? 3 : 4;
+}
+
 /** RS line (price ÷ S&P 500) at or above its high of the prior 251 sessions; null when the history is too short. */
 export function rsLineNewHigh(rsLine, bars) {
   const dates = new Set((bars || []).map(b => b.date));
