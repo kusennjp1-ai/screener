@@ -410,6 +410,18 @@ def _run_chunked_fundamentals_refresh(
 _US_DIRECTORY_FETCH_ATTEMPTS = 3
 
 
+def _decode_directory_bytes(content: bytes) -> tuple[str, str]:
+    """Decode a directory file; symbols are ASCII, names may not be UTF-8.
+
+    Latin-1 maps every byte, so a stray non-UTF-8 issuer name never aborts
+    the weekly build, and the encoding actually used is recorded.
+    """
+    try:
+        return content.decode("utf-8"), "utf-8"
+    except UnicodeDecodeError:
+        return content.decode("latin-1"), "latin-1"
+
+
 def _fetch_us_listing_directory() -> tuple[Any, dict[str, Any]]:
     """Download both NASDAQ Trader files and parse them (fails closed)."""
     import hashlib
@@ -431,11 +443,11 @@ def _fetch_us_listing_directory() -> tuple[Any, dict[str, Any]]:
                     timeout=settings.universe_source_timeout_seconds,
                 )
                 response.raise_for_status()
-                texts[name] = response.content.decode("utf-8", errors="strict")
+                texts[name], metadata.setdefault("encoding", {})[name] = _decode_directory_bytes(response.content)
                 metadata["source_urls"].append(url)
                 metadata["sha256"][name] = hashlib.sha256(response.content).hexdigest()
                 break
-            except (requests.RequestException, UnicodeDecodeError) as exc:
+            except requests.RequestException as exc:
                 last_error = exc
                 if attempt < _US_DIRECTORY_FETCH_ATTEMPTS:
                     time.sleep(5 * attempt)

@@ -1790,3 +1790,8 @@ def test_official_us_bundle_blocks_when_operating_company_coverage_is_short(monk
     assert published["coverage"]["fresh_equity_symbols"] == 3
     assert published["warnings"][0] == "Equity fundamentals coverage 75.00% below minimum 98.00%"
     db.close()
+
+
+def test_directory_bytes_decode_utf8_and_fall_back_to_latin1():
+    assert build_script._decode_directory_bytes("Société Générale".encode("utf-8")) == ("Société Générale", "utf-8")
+    assert build_script._decode_directory_bytes("Société".encode("latin-1")) == ("Société", "latin-1")
