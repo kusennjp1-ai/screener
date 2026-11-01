@@ -263,3 +263,19 @@ export function withBookWarning(sells, diagnostics) {
   const weakness = [...sells.weakness, bookWarningCheck(diagnostics)];
   return { ...sells, weakness, hits: [...sells.strength, ...weakness].filter(c => c.state === 'hit').length };
 }
+
+/**
+ * Where today's qualified candidates cluster. Uses the industry group when most rows carry one,
+ * otherwise the GICS sector, and says which. Groups need at least two qualified stocks.
+ */
+export function leadingGroups(ranked, limit = 3) {
+  const qualified = (ranked || []).filter(item => item?.assessment?.qualified).map(item => item.row || {});
+  if (!qualified.length) return null;
+  const named = key => qualified.filter(row => typeof row[key] === 'string' && row[key].trim()).length;
+  const field = named('ibd_industry_group') * 2 >= qualified.length ? 'ibd_industry_group' : named('gics_sector') * 2 >= qualified.length ? 'gics_sector' : null;
+  if (!field) return null;
+  const counts = new Map();
+  for (const row of qualified) { const name = typeof row[field] === 'string' ? row[field].trim() : ''; if (name) counts.set(name, (counts.get(name) || 0) + 1); }
+  const groups = [...counts].filter(([, count]) => count >= 2).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, limit).map(([name, count]) => ({ name, count }));
+  return { kind: field === 'ibd_industry_group' ? '業種' : 'セクター', groups, total: qualified.length, unnamed: qualified.length - named(field) };
+}

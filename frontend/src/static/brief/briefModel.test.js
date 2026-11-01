@@ -145,3 +145,17 @@ describe('book combined warning', () => {
     expect(withBookWarning(null, warn())).toBeNull();
   });
 });
+
+describe('leading groups', () => {
+  it('counts qualified stocks per industry group, falls back to sector, and needs two per group', async () => {
+    const { leadingGroups } = await import('./briefModel');
+    const item = (group, sector, qualified = true) => ({ row: { ibd_industry_group: group, gics_sector: sector }, assessment: { qualified } });
+    const ranked = [item('Semis', 'Tech'), item('Semis', 'Tech'), item('Semis', 'Tech'), item('Software', 'Tech'), item('Software', 'Tech'), item('Banks', 'Fin'), item('Semis', 'Tech', false)];
+    expect(leadingGroups(ranked)).toEqual({ kind: '業種', groups: [{ name: 'Semis', count: 3 }, { name: 'Software', count: 2 }], total: 6, unnamed: 0 });
+    const sectors = ranked.map(i => ({ ...i, row: { gics_sector: i.row.gics_sector } }));
+    expect(leadingGroups(sectors).kind).toBe('セクター');
+    expect(leadingGroups(sectors).groups[0]).toEqual({ name: 'Tech', count: 5 });
+    expect(leadingGroups([item(null, null)])).toBeNull();
+    expect(leadingGroups([])).toBeNull();
+  });
+});

@@ -7,7 +7,7 @@ import { money, signed } from '../positionGeometry';
 import '../theme/foundation.css';
 import './brief.css';
 import { useBriefData, useStockData, useWatchlist, useWatchSellChecks } from './useBriefData';
-import { candidateView, focusCandidates, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
+import { candidateView, focusCandidates, leadingGroups, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
 import MarketCard from './MarketCard';
 import StockView from './StockView';
 import { CandidateRow, Toast } from './BriefParts';
@@ -42,6 +42,7 @@ function Tabs({ current, watchCount, go }) {
 
 function TodayView({ brief, watch, open, now, animate }) {
   const focus = useMemo(() => focusCandidates(brief.ranked, brief.date), [brief.ranked, brief.date]);
+  const groups = useMemo(() => leadingGroups(brief.ranked), [brief.ranked]);
   const watched = useMemo(() => (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)).map(item => candidateView(item, brief.date)).sort(briefOrder), [brief.bundle.data, watch, brief.date]);
   const sells = useWatchSellChecks(watched, brief);
   return <>
@@ -51,6 +52,7 @@ function TodayView({ brief, watch, open, now, animate }) {
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">2</span><h2 id="brief-focus-title">注目候補</h2><Link className="brief-more" to="/brief/list">すべての候補 <span aria-hidden="true">›</span></Link></div>
       {focus.length ? <ol className="brief-rows">{focus.map((view, i) => <CandidateRow key={view.symbol} view={view} rank={i + 1} index={i} onOpen={open} now={now} animate={animate} />)}</ol>
         : <p className="brief-note">{brief.bundle.isLoading ? '候補を読み込み中…' : '買いゾーンまたはピボット接近（−5%以内）の選定銘柄はありません。'}</p>}
+      {groups?.groups.length > 0 && <p className="brief-groups" data-testid="brief-groups"><span>選定銘柄の多い{groups.kind}</span>{groups.groups.map(g => <span key={g.name} className="brief-chip">{g.name}：<b className="numeric">{g.count}</b>銘柄</span>)}<span className="brief-note">（選定 {groups.total}銘柄中{groups.unnamed ? `・${groups.kind}未確認 ${groups.unnamed}` : ''}）</span></p>}
       <p className="brief-note">並び順：買いゾーン → ピボット接近（−5%以内）。同じ位置なら判定の達成数、RS推計の順。</p>
     </section>
     <section className="brief-card in" style={{ '--i': 3 }} aria-labelledby="brief-watch-title">

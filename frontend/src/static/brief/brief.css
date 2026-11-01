@@ -95,6 +95,8 @@
 .brief-chip.tone-zone.is-strong { font-weight: 700; }
 .brief-chip.tone-wait { color: var(--wait); border-color: var(--wait); background: none; }
 .brief-chip.tone-ext { color: var(--ext); border-color: var(--ext); background: none; font-weight: 700; }
+.brief-groups { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 12px; color: var(--text-2); }
+.brief-groups .brief-note { margin: 0; }
 .brief-sellchip { margin-left: 8px; vertical-align: 1px; }
 .brief-minimeter { position: relative; height: 28px; container-type: inline-size; }
 .brief-minimeter-track { position: absolute; left: 0; right: 0; top: 11px; height: 4px; border-radius: 999px; background: var(--line); }
