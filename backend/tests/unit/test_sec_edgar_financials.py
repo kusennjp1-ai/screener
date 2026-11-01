@@ -436,6 +436,17 @@ def test_client_gives_up_after_the_last_attempt(monkeypatch, _fresh_ticker_map):
         client._get_json("https://data.sec.gov/x")
 
 
+def test_shared_ticker_map_refreshes_after_its_ttl(monkeypatch, _fresh_ticker_map):
+    import requests
+    fetched = []
+    payloads = [{"0": {"ticker": "OLD", "cik_str": 1}}, {"0": {"ticker": "NEW", "cik_str": 2}}]
+    monkeypatch.setattr(requests, "get", lambda url, **kw: (fetched.append(url), _Response(200, payloads[len(fetched) - 1]))[1])
+    assert _Client(user_agent="t", min_interval=0).cik_for("NEW") is None
+    monkeypatch.setattr(_Client, "_shared_cik_map_at", _Client._shared_cik_map_at - _Client.CIK_MAP_TTL_SECONDS - 1)
+    assert _Client(user_agent="t", min_interval=0).cik_for("NEW") == 2
+    assert len(fetched) == 2
+
+
 def test_ticker_map_is_shared_and_dot_share_classes_resolve(monkeypatch, _fresh_ticker_map):
     import requests
     fetched = []

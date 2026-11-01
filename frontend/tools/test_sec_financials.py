@@ -59,6 +59,10 @@ class DerivedFourthQuarter(unittest.TestCase):
         mixed = {"cik": 1, "facts": {"us-gaap": {"Revenues": {"units": {"USD": FY[:3]}}, "SalesRevenueNet": {"units": {"USD": FY[3:]}}}}}
         self.assertFalse(any(p["derived"] for p in sec.normalize(mixed, "T", 1, "2026-03-01")["quarterly"]["revenue"]))
 
+    def test_no_derivation_when_a_source_filing_is_unnamed(self):
+        rows = [dict(q) for q in FY]; rows[1]["accn"] = None
+        self.assertFalse(any(p["derived"] for p in sec.normalize(dict(flow("Revenues", rows), cik=1), "T", 1, "2026-03-01")["quarterly"]["revenue"]))
+
     def test_eps_is_never_derived_from_the_annual_value(self):
         eps = [dict(q, val=q["val"] / 100) for q in FY]
         f = {"cik": 1, "facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": eps}}}}}
