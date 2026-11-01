@@ -1,7 +1,7 @@
 // Data for the daily-brief screens. Uses the same queries (and therefore the same
 // caches and publication pinning) as the existing research screens.
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQueries, useQuery } from '@tanstack/react-query';
 import { fetchStaticJson, resolveStaticMarketEntry, useStaticManifest } from '../dataClient';
 import { useResearchBundle } from '../useResearchBundle';
 import { useMarketTrends } from '../useMarketTrends';
@@ -15,7 +15,7 @@ import { bookFinancialCurrent } from '../bookFinancialCurrent';
 import { financialHistory } from '../financialHistory';
 import { institutionalGrowth } from '../institutionalEvidence';
 import { code33Layered } from '../code33Reference';
-import { candidateView, trendTemplate } from './briefModel';
+import { candidateView, sellSignals, trendTemplate } from './briefModel';
 
 export const WATCH_KEY = 'research-watch';
 
@@ -94,4 +94,30 @@ export function useStockData(symbol, brief) {
   }, [row, date, financialNow]);
   const institutional = useMemo(() => row ? { growth: institutionalGrowth(row.institutional_evidence, row.symbol, date), observations: Array.isArray(row.institutional_evidence?.observations) ? row.institutional_evidence.observations : [] } : null, [row, date]);
   return { item, row, view, template, technical, financial, institutional, bars, chart, detail, loading: bundle.isLoading || (Boolean(chartPath) && chart.isLoading) };
+}
+
+export const SELL_WATCH_LIMIT = 12;
+
+/**
+ * Sell checks for watched stocks, from the same chart queries the stock screen uses (shared cache).
+ * Only the first SELL_WATCH_LIMIT symbols are fetched; others, and failed or loading charts, stay undefined (unknown).
+ */
+export function useWatchSellChecks(views, brief) {
+  const { version, date } = brief;
+  const targets = (views || []).filter(view => view.row?.chart_path).slice(0, SELL_WATCH_LIMIT);
+  const results = useQueries({
+    queries: targets.map(view => ({
+      queryKey: [...staticChartKeys.payload(view.symbol, view.row.chart_path), version],
+      queryFn: () => fetchStaticChartPayload(view.row.chart_path, { generation: version }),
+      staleTime: 60000,
+      select: payload => requireChartIdentity(payload, view.symbol, date),
+    })),
+  });
+  const key = results.map(r => r.dataUpdatedAt).join('|');
+  return useMemo(() => {
+    const out = {};
+    targets.forEach((view, i) => { const bars = results[i]?.data?.bars; if (bars?.length) out[view.symbol] = sellSignals(bars); });
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key, targets.map(v => v.symbol).join('|')]);
 }

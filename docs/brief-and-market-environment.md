@@ -7,7 +7,7 @@ market-environment series behind them. For vocabulary, see `CONTEXT.md`.
 
 | Route | Content |
 |---|---|
-| `#/brief` | 1 Market (verdict, S&P 500 with active distribution days, trend-template count, stage mix, share above the 200-day line, breakout follow-through, bifurcation note) · 2 Top five qualified candidates in the buy zone or within −5% of the pivot · 3 Watchlist changes |
+| `#/brief` | 1 Market (verdict, S&P 500 with active distribution days, trend-template count, RS90 leaders, stage mix, share above the 200-day line, 52-week new highs and lows, breakout follow-through, bifurcation note) · 2 Top five qualified candidates in the buy zone or within −5% of the pivot · 3 Watchlist changes |
 | `#/brief/list` | Qualified candidates. Filters: buy zone, near pivot, all qualified, one condition short. Search box and four sort orders. |
 | `#/brief/watch` | The shared `research-watch` watchlist |
 | `#/brief/stock/:symbol` | Conclusion card (status, position meter, buy range, stop, 2R) → large daily chart → eight trend-template rules → VCP footprint → quarterly growth with layered Code 33 → 13F counts → position plan → sell checks |
@@ -41,6 +41,8 @@ How the checks are judged:
 - The start of the advance is the lowest low of the last 252 sessions.
 - The strength checks run only when the close is at least 30% above that low and 20 or more sessions have passed. Otherwise they show 対象外.
 - A missing volume on a break day leaves that check 未確認.
+
+The watchlist (today's 3rd block and the ウォッチ tab) shows ▲ 売りのサイン n件 for watched stocks. It uses the same chart queries as the stock screen, and only the first 12 watched stocks are fetched.
 
 The ideas follow Minervini's sell rules. Every number is this app's own threshold, and the screen labels them 独自判定.
 

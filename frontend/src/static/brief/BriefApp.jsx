@@ -6,7 +6,7 @@ import { themeCss } from '../theme/tokens';
 import { money, signed } from '../positionGeometry';
 import '../theme/foundation.css';
 import './brief.css';
-import { useBriefData, useStockData, useWatchlist } from './useBriefData';
+import { useBriefData, useStockData, useWatchlist, useWatchSellChecks } from './useBriefData';
 import { candidateView, focusCandidates, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
 import MarketCard from './MarketCard';
 import StockView from './StockView';
@@ -43,6 +43,7 @@ function Tabs({ current, watchCount, go }) {
 function TodayView({ brief, watch, open, now, animate }) {
   const focus = useMemo(() => focusCandidates(brief.ranked, brief.date), [brief.ranked, brief.date]);
   const watched = useMemo(() => (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)).map(item => candidateView(item, brief.date)).sort(briefOrder), [brief.bundle.data, watch, brief.date]);
+  const sells = useWatchSellChecks(watched, brief);
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
     <MarketCard market={brief.market} trends={brief.trends} date={brief.date} />
@@ -57,7 +58,7 @@ function TodayView({ brief, watch, open, now, animate }) {
       {watched.length ? <ul className="brief-rows">{watched.map((view, i) => { const event = watchEvent(view); return <li key={view.symbol} className={animate ? 'in' : ''} style={{ '--i': i }}>
         <button type="button" className="brief-event" onClick={e => open(view.symbol, e.currentTarget, 'watch')}>
           <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{event.kind === 'breakout' ? '↗' : event.kind === 'ext' ? '▲' : event.kind === 'near' ? '◔' : event.kind === 'zone' ? '●' : '≈'}</span>
-          <span><b>{view.symbol}</b> {event.title}<small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
+          <span><b>{view.symbol}</b> {event.title}{sells[view.symbol]?.hits ? <span className="brief-chip tone-ext brief-sellchip">▲ 売りのサイン {sells[view.symbol].hits}件</span> : null}<small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
           <span className="brief-chevron" aria-hidden="true">{ICON.next}</span>
         </button></li>; })}</ul>
         : <p className="brief-note">銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。</p>}
@@ -83,6 +84,7 @@ function ListView({ brief, kind, watch, open, now, animate, listState, setListSt
   const views = useMemo(() => listSource(brief, kind, watch), [brief.bundle.data, brief.ranked, brief.date, kind, watch]);
   const counts = useMemo(() => Object.fromEntries(Object.entries(LIST_FILTERS).map(([key, value]) => [key, views.filter(value.test).length])), [views]);
   const shown = useMemo(() => listShown(views, kind, listState), [views, kind, listState]);
+  const sells = useWatchSellChecks(kind === 'watch' ? shown : null, brief);
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
     {kind !== 'watch' && <div className="brief-filters">
@@ -91,7 +93,7 @@ function ListView({ brief, kind, watch, open, now, animate, listState, setListSt
       <label className="brief-sort">並び順<select value={sort} onChange={e => update({ sort: e.target.value })}>{Object.entries(LIST_SORTS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
     </div>}
     <section className="brief-card in" style={{ '--i': 1 }} aria-label={kind === 'watch' ? 'ウォッチ中の銘柄' : '選定銘柄の一覧'}>
-      {shown.length ? <ol className="brief-rows">{shown.slice(0, limit).map((view, i) => <CandidateRow key={view.symbol} view={view} rank={kind === 'watch' ? null : i + 1} index={Math.min(i, 12)} onOpen={open} now={now} animate={animate} />)}</ol>
+      {shown.length ? <ol className="brief-rows">{shown.slice(0, limit).map((view, i) => <CandidateRow key={view.symbol} view={view} rank={kind === 'watch' ? null : i + 1} index={Math.min(i, 12)} onOpen={open} now={now} animate={animate} sell={sells[view.symbol]} />)}</ol>
         : <p className="brief-note">{brief.bundle.isLoading ? '候補を読み込み中…' : kind === 'watch' ? '銘柄の画面で ☆ を押すと、ここに並びます。' : 'この条件の選定銘柄はありません。'}</p>}
       {shown.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + 50)}>さらに表示（残り {shown.length - limit}件）</button>}
       {kind !== 'watch' && <p className="brief-note">選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄。あと1条件＝未達が1つだけで未確認がない銘柄（流動性：株価$10以上・売買代金$2,000万以上）。</p>}
