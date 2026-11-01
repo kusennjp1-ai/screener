@@ -45,7 +45,7 @@ function TodayView({ brief, watch, open, now, animate }) {
   const watched = useMemo(() => (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)).map(item => candidateView(item, brief.date)).sort(briefOrder), [brief.bundle.data, watch, brief.date]);
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
-    <MarketCard market={brief.market} trends={brief.trends} />
+    <MarketCard market={brief.market} trends={brief.trends} date={brief.date} />
     <section className="brief-card in" style={{ '--i': 2 }} aria-labelledby="brief-focus-title">
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">2</span><h2 id="brief-focus-title">注目候補</h2><Link className="brief-more" to="/brief/list">すべての候補 <span aria-hidden="true">›</span></Link></div>
       {focus.length ? <ol className="brief-rows">{focus.map((view, i) => <CandidateRow key={view.symbol} view={view} rank={i + 1} index={i} onOpen={open} now={now} animate={animate} />)}</ol>

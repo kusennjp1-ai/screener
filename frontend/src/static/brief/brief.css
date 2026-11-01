@@ -76,6 +76,7 @@
 .brief-spark path { fill: none; stroke: var(--zone); stroke-width: 1.6; stroke-dasharray: 1; vector-effect: non-scaling-stroke; animation: brief-draw 1s var(--e-out) .6s both; }
 .brief-warnings { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .brief-warnings li { padding: 8px 12px; border: 1px solid var(--ext); border-radius: 8px; color: var(--ext); font-size: 13px; line-height: 1.6; }
+.brief-asof { color: var(--ext); }
 .brief-alert { margin: 0; padding: 8px 12px; border: 1px solid var(--ext); border-radius: 8px; color: var(--ext); font-size: 13px; line-height: 1.6; }
 
 /* rows */

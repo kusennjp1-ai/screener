@@ -41,7 +41,7 @@ function Sparkline({ points, field }) {
   return <svg className="brief-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true"><path d={d} pathLength="1" /></svg>;
 }
 
-export default function MarketCard({ market, trends }) {
+export default function MarketCard({ market, trends, date }) {
   const history = trends?.data?.long_history || null;
   const rows = (history?.breadth || []).map(environmentPoint);
   const last = rows.at(-1) || null, monthAgo = rows.at(-22) || null, recent = rows.slice(-126);
@@ -52,6 +52,9 @@ export default function MarketCard({ market, trends }) {
   const dist = item => finite(item?.latest?.value) ? item.latest.value : null;
   const stages = hasEnvironment ? [1, 2, 3, 4].map(k => ({ k, share: last[`stage${k}Percent`] })) : [];
   const verdictTone = tone(market);
+  // Never present an older observation as today's: say which session each block describes.
+  const historyDate = last?.date || null, indexDate = spx?.latest?.date || null;
+  const lagging = [historyDate && date && historyDate < date ? `長期集計は ${historyDate} 時点` : null, indexDate && date && indexDate < date ? `分配日は ${indexDate} 時点` : null].filter(Boolean);
   return <section className="brief-card brief-market in" style={{ '--i': 1 }} aria-labelledby="brief-market-title">
     <div className="brief-step"><span className="brief-step-no" aria-hidden="true">1</span><h2 id="brief-market-title">地合い</h2><Link className="brief-more" to="/breadth">市場の詳細 <span aria-hidden="true">›</span></Link></div>
     <div className={`brief-verdict tone-${verdictTone}`} data-testid="brief-regime">
@@ -65,6 +68,7 @@ export default function MarketCard({ market, trends }) {
       <div className="brief-fact"><small>200日線より上</small><b>{hasEnvironment ? `${num(last.above200Percent, 1)}%` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.above200Percent) ? `1か月前 ${num(monthAgo.above200Percent, 1)}%` : '全銘柄に占める割合'}</em></div>
       <div className="brief-fact"><small>ブレイクアウト成功率</small><b>{hasEnvironment && finite(last.breakoutHoldPercent) ? `${num(last.breakoutHoldPercent)}%` : '未確認'}</b><em>{hasEnvironment && Number.isInteger(last.breakoutsJudged) ? `直近${last.breakoutsJudged}件・10日で−7%未満` : '判定数が不足'}</em></div>
     </div>
+    {lagging.length > 0 && <p className="brief-note brief-asof" role="note">{lagging.join('・')}（分析基準日 {date} の再集計待ち）</p>}
     {hasEnvironment && <div className="brief-environment">
       <div className="brief-stagebar" role="img" aria-label={`ステージ構成 ${stages.map(s => `ステージ${s.k} ${num(s.share, 1)}%`).join('、')}`}>
         {stages.map((s, i) => <span key={s.k} className={`stage-${s.k}`} style={{ flexGrow: finite(s.share) ? s.share : 0, '--i': i }} />)}
