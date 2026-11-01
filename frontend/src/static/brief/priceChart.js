@@ -61,7 +61,6 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const lo = Math.min(...values), hi = Math.max(...values), L = Math.log;
   const tlo = L(lo) - (L(hi) - L(lo)) * 0.05, thi = L(hi) + (L(hi) - L(lo)) * 0.05;
   const bw = pw / n, x = i => (i + 0.5) * bw, y = v => padT + (thi - L(v)) * ph / (thi - tlo);
-  const index = new Map(bars.map((b, i) => [b.date, i]));
   const uid = `brief-chart-${++sequence}`;
   const B = [], M = [], F = [];
 
@@ -78,7 +77,10 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     const top = y(model.upper), height = Math.max(2, y(model.pivot) - top);
     B.push(`<g class="bc-zone" clip-path="url(#${uid})"><rect x="0" y="${top}" width="${pw}" height="${height}" class="bc-zonefill"/>${height > 14 ? `<text x="6" y="${top + Math.min(height - 4, 14)}" class="bc-zonetext" font-size="11" font-weight="700">買いゾーン</text>` : ''}</g>`);
   }
-  const legs = (model.legs || []).map(leg => ({ ...leg, a: index.get(leg.startDate), b: index.get(leg.endDate) })).filter(leg => Number.isInteger(leg.a) && Number.isInteger(leg.b));
+  // A contraction that began before the visible period is drawn from the period's first bar.
+  const firstOnOrAfter = day => { const i = bars.findIndex(b => b.date >= day); return i < 0 ? null : i; };
+  const lastOnOrBefore = day => { for (let i = n - 1; i >= 0; i--) if (bars[i].date <= day) return i; return null; };
+  const legs = (model.legs || []).map(leg => ({ ...leg, a: firstOnOrAfter(leg.startDate), b: lastOnOrBefore(leg.endDate) })).filter(leg => Number.isInteger(leg.a) && Number.isInteger(leg.b) && leg.b >= leg.a);
   B.push(`<g class="bc-legs" clip-path="url(#${uid})">`);
   for (const leg of legs) {
     const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2, top = y(leg.high), height = Math.max(1, y(leg.low) - top);
@@ -111,7 +113,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     M.push(`<path d="${rs.map((v, i) => v == null ? '' : `${rs[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)},${ry(v).toFixed(1)}`).join('')}" class="bc-rs" fill="none"/>`);
     if (rs.at(-1) != null) rsLast = ry(rs.at(-1));
   }
-  const vmax = Math.max(...bars.map(b => b.volume), 1), vw = Math.max(1, bw * 0.7), dry = model.dryUpLeg ? { a: index.get(model.dryUpLeg.startDate), b: index.get(model.dryUpLeg.endDate) } : null;
+  const vmax = Math.max(...bars.map(b => b.volume), 1), vw = Math.max(1, bw * 0.7), dry = model.dryUpLeg ? { a: firstOnOrAfter(model.dryUpLeg.startDate), b: lastOnOrBefore(model.dryUpLeg.endDate) } : null;
   bars.forEach((b, i) => {
     const h = b.volume / vmax * (volH - 2), heavy = vavg[i] && b.volume >= vavg[i] * 1.4 && i >= n - 5, dried = dry && i >= dry.a && i <= dry.b;
     M.push(`<rect x="${(x(i) - vw / 2).toFixed(1)}" y="${(volTop + volH - h).toFixed(1)}" width="${vw.toFixed(1)}" height="${h.toFixed(1)}" class="${heavy ? 'bc-volhi' : dried ? 'bc-voldry' : 'bc-vol'}"/>`);
