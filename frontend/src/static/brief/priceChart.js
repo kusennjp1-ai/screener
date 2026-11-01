@@ -158,9 +158,11 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   M.push(`<path d="${vavg.map((v, i) => v == null ? '' : `${vavg[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)},${(volTop + volH - v / vmax * (volH - 2)).toFixed(1)}`).join('')}" class="bc-vavg" fill="none"/>`);
 
   // Front layer
+  // A depth label is skipped when it would collide with the previous one (narrow legs, weekly view).
+  let lastLabel = -Infinity;
   for (const [i, leg] of legs.entries()) {
-    const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2, yl = y(leg.low);
-    if (x1 - x0 > 22) F.push(`<text x="${(x0 + x1) / 2}" y="${yl + 14 > padT + ph - 2 ? yl - 5 : yl + 14}" text-anchor="middle" class="bc-legtext" font-size="11" font-weight="700" ${mono} data-depth="${leg.depthPct}" data-i="${i}">−${Math.round(leg.depthPct)}%</text>`);
+    const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2, yl = y(leg.low), cx = (x0 + x1) / 2;
+    if (x1 - x0 > 22 && cx - lastLabel >= 34) { lastLabel = cx; F.push(`<text x="${(x0 + x1) / 2}" y="${yl + 14 > padT + ph - 2 ? yl - 5 : yl + 14}" text-anchor="middle" class="bc-legtext" font-size="11" font-weight="700" ${mono} data-depth="${leg.depthPct}" data-i="${i}">−${Math.round(leg.depthPct)}%</text>`); }
   }
   F.push(`<text x="4" y="${rsTop + 12}" class="bc-caption" font-size="11">RS線（株価÷S&amp;P 500）</text><text x="4" y="${volTop + 12}" class="bc-caption" font-size="11">出来高・${volumeLength}${unit}平均</text>`);
   if (dry && Number.isInteger(dry.a) && Number.isInteger(dry.b) && dry.b - dry.a > 3) {
