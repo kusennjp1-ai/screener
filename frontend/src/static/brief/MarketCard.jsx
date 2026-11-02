@@ -1,17 +1,11 @@
 import { Link } from 'react-router-dom';
 import { bifurcation, environmentPoint } from '../marketLongHistory';
-import { environmentWarnings } from './briefModel';
+import { environmentWarnings, marketTone } from './briefModel';
 
 const finite = Number.isFinite;
 const num = (value, digits = 0) => finite(value) ? value.toLocaleString('ja-JP', { minimumFractionDigits: digits, maximumFractionDigits: digits }) : '未確認';
 const delta = value => finite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.abs(value).toLocaleString('ja-JP')}` : '';
 
-function tone(market) {
-  if (!market || market.state === 'unknown') return 'neutral';
-  if (/上昇トレンド/.test(market.label)) return 'zone';
-  if (/圧力/.test(market.label)) return 'ext';
-  return 'neg';
-}
 
 function IndexChart({ sp500, distribution }) {
   const points = (sp500 || []).filter(p => finite(p.close)).slice(-130);
@@ -51,7 +45,7 @@ export default function MarketCard({ market, trends, date }) {
   const spx = trends?.data?.indices?.find(item => item.symbol === '^GSPC'), ndx = trends?.data?.indices?.find(item => item.symbol === '^IXIC');
   const dist = item => finite(item?.latest?.value) ? item.latest.value : null;
   const stages = hasEnvironment ? [1, 2, 3, 4].map(k => ({ k, share: last[`stage${k}Percent`] })) : [];
-  const verdictTone = tone(market);
+  const verdictTone = marketTone(market);
   // Never present an older observation as today's: say which session each block describes.
   const historyDate = last?.date || null, indexDate = spx?.latest?.date || null;
   const lagging = [historyDate && date && historyDate < date ? `長期集計は ${historyDate} 時点` : null, indexDate && date && indexDate < date ? `分配日は ${indexDate} 時点` : null].filter(Boolean);

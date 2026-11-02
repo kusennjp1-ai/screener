@@ -8,7 +8,7 @@ import '../theme/foundation.css';
 import './brief.css';
 import { useBriefData, useStockData, useWatchlist, useWatchSellChecks } from './useBriefData';
 import { readStartScreen, writeStartScreen } from './startScreen';
-import { candidateView, focusCandidates, leadingGroups, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
+import { candidateView, focusCandidates, leadingGroups, marketTone, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
 import MarketCard from './MarketCard';
 import StockView from './StockView';
 import { CandidateRow, Toast } from './BriefParts';
@@ -48,6 +48,7 @@ function TodayView({ brief, watch, open, now, animate }) {
   const sells = useWatchSellChecks(watched, brief);
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
+    <TodaySummary market={brief.market} focus={focus} watched={watched} sells={sells} loading={brief.bundle.isLoading} />
     <MarketCard market={brief.market} trends={brief.trends} date={brief.date} />
     <section className="brief-card in" style={{ '--i': 2 }} aria-labelledby="brief-focus-title">
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">2</span><h2 id="brief-focus-title">注目候補</h2><Link className="brief-more" to="/brief/list">すべての候補 <span aria-hidden="true">›</span></Link></div>
@@ -68,6 +69,23 @@ function TodayView({ brief, watch, open, now, animate }) {
     </section>
     <StartScreenChoice />
   </>;
+}
+
+/** Three answers first: can I buy, how many setups, does anything I watch need selling. */
+function TodaySummary({ market, focus, watched, sells, loading }) {
+  const tone = marketTone(market);
+  const verdict = market?.label ? market.label.replace(/（独自判定）$/, '') : '市場未確認';
+  const zone = focus.filter(view => view.state === 'zone').length;
+  const results = watched.map(view => sells[view.symbol]).filter(Boolean);
+  const hits = results.reduce((sum, result) => sum + (result.hits || 0), 0);
+  const unchecked = watched.length - results.filter(result => !result.unknown).length;
+  const watchValue = !watched.length ? '未登録' : hits ? `${hits}件` : unchecked === watched.length ? '未確認' : '0件';
+  const watchNote = !watched.length ? '☆で追加' : unchecked && unchecked < watched.length ? `未確認 ${unchecked}銘柄` : `${watched.length}銘柄を確認`;
+  return <ul className="brief-summary in" style={{ '--i': 0 }} aria-label="今日の要点" data-testid="brief-summary">
+    <li className={`tone-${tone}`}><small>地合い</small><b>{verdict}</b><em>{market?.cap > 0 ? `買い可・最大${Math.round(market.cap * 100)}%` : market?.state === 'unknown' || !market ? '買いは見送り' : '買いは控える'}</em></li>
+    <li className={focus.length ? 'tone-zone' : ''}><small>注目候補</small><b>{loading ? '読込中' : `${focus.length}銘柄`}</b><em>{loading ? '' : `ゾーン${zone}・接近${focus.length - zone}`}</em></li>
+    <li className={hits ? 'tone-ext' : ''}><small>ウォッチの売り</small><b>{watchValue}</b><em>{watchNote}</em></li>
+  </ul>;
 }
 
 /** Per-viewer opt-in: open the app on this screen instead of the research workspace. */
