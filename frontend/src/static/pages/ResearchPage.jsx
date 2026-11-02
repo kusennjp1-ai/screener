@@ -9,6 +9,7 @@ import MobileMarketMap from '../components/MobileMarketMap';
 import GridViewIcon from '@mui/icons-material/GridView';
 import ShowChartIcon from '@mui/icons-material/ShowChart';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import '../mobileResearch.css';
 import ResearchFreshnessNotice from '../components/ResearchFreshnessNotice';
 import CandidatePerformance from '../components/CandidatePerformance';
@@ -308,7 +309,7 @@ export default function ResearchPage({compareOnly=false}) {
     {chart && <StaticChartViewerModal method={method} date={bundle.data?.date} market={market} now={now} quote={usableQuote} open onClose={() => setChart(null)} initialSymbol={chart} researchRows={rows} generation={version} publication={entry.publication} chartIndex={index.data} navigationSymbols={navigationSymbols} />}
     {smallScreen && !compareOnly && <>
       {!mobileMap && mobileView === 'detail' && selected && <div className="mobile-chart-actions" aria-label="銘柄の移動と保存"><button disabled={mobileIndex <= 0} onClick={() => moveMobile(-1)} aria-label="前の銘柄">← 前</button><button aria-pressed={watch.includes(selected.symbol)} onClick={() => toggleWatch(selected.symbol)}>{watch.includes(selected.symbol) ? '保存済み ★' : 'ウォッチに保存'}</button><button disabled={mobileIndex < 0 || mobileIndex >= navigationSymbols.length - 1} onClick={() => moveMobile(1)} aria-label="次の銘柄">次 →</button></div>}
-      <nav className="mobile-research-nav" aria-label="リサーチの画面切替"><button aria-current={mobileMap ? 'page' : undefined} onClick={() => {setMobileMap(true);setMobileView('list');window.scrollTo({top:0});}}><GridViewIcon/>市場</button><button disabled={!selected} aria-current={!mobileMap && mobileView === 'detail' ? 'page' : undefined} onClick={() => {setView('list');selectSymbol(selected.symbol);}}><ShowChartIcon/>チャート</button><button aria-current={!mobileMap && mobileView === 'list' && onlyWatch ? 'page' : undefined} onClick={() => {resetFilters();setLiquid(false);setOnlyWatch(true);setView('list');browse();}}><BookmarkBorderIcon/>ウォッチ</button></nav>
+      <nav className="mobile-research-nav" aria-label="リサーチの画面切替"><button aria-current={mobileMap ? 'page' : undefined} onClick={() => {setMobileMap(true);setMobileView('list');window.scrollTo({top:0});}}><GridViewIcon/>市場</button><button disabled={!selected} aria-current={!mobileMap && mobileView === 'detail' ? 'page' : undefined} onClick={() => {setView('list');selectSymbol(selected.symbol);}}><ShowChartIcon/>チャート</button><button aria-current={!mobileMap && mobileView === 'list' && onlyWatch ? 'page' : undefined} onClick={() => {resetFilters();setLiquid(false);setOnlyWatch(true);setView('list');browse();}}><BookmarkBorderIcon/>ウォッチ</button><RouterLink to="/brief"><TodayOutlinedIcon/>デイリー</RouterLink></nav>
     </>}
   </Box>;
 }

@@ -7,6 +7,7 @@ import ShowChartIcon from '@mui/icons-material/ShowChart';
 import GridViewIcon from '@mui/icons-material/GridView';
 import BarChartIcon from '@mui/icons-material/BarChart';
 import BookmarkBorderIcon from '@mui/icons-material/BookmarkBorder';
+import TodayOutlinedIcon from '@mui/icons-material/TodayOutlined';
 import { ColorModeContext } from '../contexts/ColorModeContext';
 import { getStaticSupportedMarkets, resolveStaticMarketEntry, useStaticManifest } from './dataClient';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
@@ -22,7 +23,7 @@ import './workbench.css';
 import './leaderFeed.css';
 import './workspace.css';
 const NAV_ITEMS=[{path:'/',label:'本日の判断',Icon:ShowChartIcon},{path:'/compare',label:'比較',Icon:GridViewIcon},{path:'/breadth',label:'市場',Icon:BarChartIcon}];
-const MOBILE_ITEMS=[{path:'/',label:'市場',Icon:GridViewIcon},{path:'/?mobile=chart',label:'チャート',Icon:ShowChartIcon},{path:'/?mobile=watch',label:'ウォッチ',Icon:BookmarkBorderIcon}];
+const MOBILE_ITEMS=[{path:'/',label:'市場',Icon:GridViewIcon},{path:'/?mobile=chart',label:'チャート',Icon:ShowChartIcon},{path:'/?mobile=watch',label:'ウォッチ',Icon:BookmarkBorderIcon},{path:'/brief',label:'デイリー',Icon:TodayOutlinedIcon}];
 export default function StaticLayout({children}) {
  const location=useLocation(),theme=useTheme(),dark=theme.palette.mode==='dark';
  const deskTheme=useMemo(()=>createTheme(theme,researchTheme(dark?'dark':'light')),[theme,dark]);
