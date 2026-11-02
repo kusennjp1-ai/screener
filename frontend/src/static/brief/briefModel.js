@@ -306,3 +306,11 @@ export function upDownVolume(bars, sessions = 50) {
   }
   return down > 0 ? { ratio: up / down, sessions } : null;
 }
+
+/** Verdict tone shared by the market card and today's summary. */
+export function marketTone(market) {
+  if (!market || market.state === 'unknown') return 'neutral';
+  if (/上昇トレンド/.test(market.label)) return 'zone';
+  if (/圧力/.test(market.label)) return 'ext';
+  return 'neg';
+}

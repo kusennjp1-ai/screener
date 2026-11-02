@@ -358,6 +358,7 @@ describe('App static mode', () => {
     expect(await screen.findByRole('heading', { level: 1, name: name => name.includes('の判断') }, { timeout: 10000 })).toBeInTheDocument();
     expect(screen.getByRole('navigation', { name: 'ブリーフの画面' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: '地合い' })).toBeInTheDocument();
+    expect(screen.getByRole('list', { name: '今日の要点' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /モードに切り替え/ })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: '従来の画面' })).toHaveAttribute('href', '#/');
     const requestedUrls = globalThis.fetch.mock.calls.map(([url]) => String(url));

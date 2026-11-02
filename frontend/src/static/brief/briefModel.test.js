@@ -185,3 +185,14 @@ describe('up/down volume', () => {
     expect(upDownVolume(gap)).toBeNull();
   });
 });
+
+describe('market tone', () => {
+  it('maps the shared verdict to a tone and keeps unknown neutral', async () => {
+    const { marketTone } = await import('./briefModel');
+    expect(marketTone(null)).toBe('neutral');
+    expect(marketTone({ state: 'unknown', label: '市場未確認' })).toBe('neutral');
+    expect(marketTone({ label: '上昇トレンド（独自判定）' })).toBe('zone');
+    expect(marketTone({ label: '上昇トレンド・圧力（独自判定）' })).toBe('zone');
+    expect(marketTone({ label: '調整局面' })).toBe('neg');
+  });
+});
