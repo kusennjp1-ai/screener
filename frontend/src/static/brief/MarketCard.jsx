@@ -35,7 +35,7 @@ function Sparkline({ points, field }) {
   return <svg className="brief-spark" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" aria-hidden="true"><path d={d} pathLength="1" /></svg>;
 }
 
-export default function MarketCard({ market, trends, date }) {
+export default function MarketCard({ market, trends, date, detail = false }) {
   const history = trends?.data?.long_history || null;
   const rows = (history?.breadth || []).map(environmentPoint);
   const last = rows.at(-1) || null, monthAgo = rows.at(-22) || null, recent = rows.slice(-126);
@@ -50,7 +50,7 @@ export default function MarketCard({ market, trends, date }) {
   const historyDate = last?.date || null, indexDate = spx?.latest?.date || null;
   const lagging = [historyDate && date && historyDate < date ? `長期集計は ${historyDate} 時点` : null, indexDate && date && indexDate < date ? `分配日は ${indexDate} 時点` : null].filter(Boolean);
   return <section className="brief-card brief-market in" style={{ '--i': 1 }} aria-labelledby="brief-market-title">
-    <div className="brief-step"><span className="brief-step-no" aria-hidden="true">1</span><h2 id="brief-market-title">地合い</h2><Link className="brief-more" to="/breadth">市場の詳細 <span aria-hidden="true">›</span></Link></div>
+    <div className="brief-step">{!detail && <span className="brief-step-no" aria-hidden="true">1</span>}<h2 id="brief-market-title">地合い</h2>{!detail && <Link className="brief-more" to="/brief/market">市場の詳細 <span aria-hidden="true">›</span></Link>}</div>
     <div className={`brief-verdict tone-${verdictTone}`} data-testid="brief-regime">
       <span className="brief-verdict-mark" aria-hidden="true">{verdictTone === 'zone' ? '●' : verdictTone === 'ext' ? '▲' : verdictTone === 'neg' ? '⊘' : '?'}</span>
       <div><strong>{market?.label || '市場未確認'}</strong><p>{market?.cap > 0 ? `新規の買いを検討できる地合い。エクスポージャーの目安は最大 ${Math.round(market.cap * 100)}%（独自判定）。` : market?.state === 'unknown' ? '市場の状態を確認できません。新規の買いは見送ります。' : '新規の買いは控えます（独自判定）。'}</p></div>

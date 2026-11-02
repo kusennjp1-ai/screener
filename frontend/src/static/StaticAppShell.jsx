@@ -1,17 +1,29 @@
-import { HashRouter as Router, Navigate, Route, Routes } from 'react-router-dom';
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { HashRouter as Router, Navigate, Route, Routes, useLocation } from 'react-router-dom';
+import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import StaticLayout from './StaticLayout';
-const StaticHomePage = lazy(() => import('./pages/StaticHomePage'));
-import ResearchPage from './pages/ResearchPage';
-const StaticScanPage = lazy(() => import('./pages/StaticScanPage'));
-const StaticBreadthPage = lazy(() => import('./pages/StaticBreadthPage'));
-const StaticGroupsPage = lazy(() => import('./pages/StaticGroupsPage'));
-// The phone-first daily brief has its own shell (top bar, bottom tabs, light/dark toggle).
-const BriefApp = lazy(() => import('./brief/BriefApp'));
-import { landOnChosenStartScreen } from './brief/startScreen';
+// The daily brief is the whole static app: today, candidates, watch, market and one stock.
+import BriefApp from './brief/BriefApp';
 import { StaticMarketProvider } from './StaticMarketContext';
 import { getStaticSupportedMarkets, useStaticManifest } from './dataClient';
+
+const SYMBOL = /^[A-Za-z0-9.^-]{1,15}$/;
+
+/**
+ * Addresses of the retired screens (bookmarks, the installed app's start URL, older
+ * notifications) open the matching brief screen instead of an empty page.
+ */
+export function legacyTarget(pathname = '/', search = '') {
+  const symbol = new URLSearchParams(search).get('symbol');
+  if (symbol && SYMBOL.test(symbol)) return `/brief/stock/${encodeURIComponent(symbol.toUpperCase())}`;
+  if (/^\/(breadth|groups|themes)(\/|$)/.test(pathname)) return '/brief/market';
+  if (/^\/(compare|scan)(\/|$)/.test(pathname)) return '/brief/list';
+  return '/brief';
+}
+
+function LegacyRedirect() {
+  const { pathname, search } = useLocation();
+  return <Navigate to={legacyTarget(pathname, search)} replace />;
+}
 
 function StaticAppContent() {
   const manifestQuery = useStaticManifest();
@@ -32,28 +44,14 @@ function StaticAppContent() {
       defaultMarket={defaultMarket}
     >
       <Routes>
-        <Route path="/brief/*" element={<Suspense fallback={<p role="status" style={{padding:16}}>画面を読み込み中…</p>}><BriefApp /></Suspense>} />
-        <Route path="/*" element={<StaticLayout>
-        <Suspense fallback={<p role="status" style={{padding:16}}>画面を読み込み中…</p>}>
-        <Routes>
-          <Route path="/" element={<ResearchPage />} />
-          <Route path="/compare" element={<ResearchPage compareOnly />} />
-          <Route path="/daily" element={<StaticHomePage />} />
-          <Route path="/scan" element={<StaticScanPage />} />
-          <Route path="/breadth" element={<StaticBreadthPage />} />
-          <Route path="/groups" element={<StaticGroupsPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-        </Suspense>
-      </StaticLayout>} />
+        <Route path="/brief/*" element={<BriefApp />} />
+        <Route path="*" element={<LegacyRedirect />} />
       </Routes>
     </StaticMarketProvider>
   );
 }
 
 function StaticAppShell() {
-  // Runs before the router reads the location, once per page load.
-  useState(landOnChosenStartScreen);
   return (
     <Router>
       <StaticAppContent />
