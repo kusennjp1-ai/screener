@@ -36,6 +36,10 @@ def needs_history(row):
     methods = row.get('methods', {})
     if any((methods.get(method) or {}).get('qualified') for method in ['minervini', 'minervini2', 'ibd']):
         return True
+    # The daily brief also lists trend-template rows one condition short with nothing unknown.
+    minervini = methods.get('minervini') or {}
+    if minervini.get('failed') == 1 and minervini.get('unknown') == 0:
+        return True
     # Do not require IBD qualification before acquiring the history required
     # for that very qualification. Include rows missing only this evidence.
     rules = (methods.get('ibd') or {}).get('rules', [])

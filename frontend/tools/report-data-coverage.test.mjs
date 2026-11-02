@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
-import { environmentCoverage, fundamentalsCoverage } from './report-data-coverage.mjs';
+import { briefRows, environmentCoverage, fundamentalsCoverage } from './report-data-coverage.mjs';
 
 describe('data coverage report', () => {
   it('counts same-day SEC evidence and history, and never treats stale or missing inputs as known', () => {
@@ -12,6 +12,17 @@ describe('data coverage report', () => {
     expect(report.sec.missing).toBe(3);
     expect(report.code33).toEqual({ sec: 0, yahoo: 0, unknown: 3 });
     expect(report.unknown_symbols).toEqual(['AAA', 'BBB', 'CCC']);
+  });
+
+  it('adds the brief rows from a same-day audit and ignores a stale one', () => {
+    const row = (symbol, minervini) => ({ symbol, methods: { minervini } });
+    const audit = { as_of_date: '2026-10-30', results: [row('NEAR', { qualified: false, failed: 1, unknown: 0 }), row('QUAL', { qualified: true, failed: 0, unknown: 0 }),
+      row('OPEN', { qualified: false, failed: 1, unknown: 2 }), row('FAR', { qualified: false, failed: 3, unknown: 0 })] };
+    expect(briefRows(audit, '2026-10-30')).toEqual(['QUAL', 'NEAR']);
+    expect(briefRows(audit, '2026-10-31')).toEqual([]);
+    const coverage = fundamentalsCoverage({ daily: { as_of_date: '2026-10-30', candidates: { minervini: [{ symbol: 'QUAL' }] } }, sec: null, history: null, audit });
+    expect(coverage.candidates).toBe(2);
+    expect(coverage.code33.unknown).toBe(2);
   });
 
   it('reports how many recent sessions carry each environment field', () => {

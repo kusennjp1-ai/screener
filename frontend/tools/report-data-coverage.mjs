@@ -8,9 +8,17 @@ import { code33Layered } from '../src/static/code33Reference.js';
 
 const read = async path => { try { return JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } };
 
-export function fundamentalsCoverage({ daily, sec, history, now = Date.now() }) {
+/** Trend-template rows the brief lists: qualified, then one condition short with nothing unknown. */
+export function briefRows(audit, date) {
+  if (!audit || audit.as_of_date !== date) return [];
+  const method = row => row.methods?.minervini || {};
+  const rows = audit.results || [];
+  return [...rows.filter(row => method(row).qualified), ...rows.filter(row => !method(row).qualified && method(row).failed === 1 && method(row).unknown === 0)].map(row => row.symbol);
+}
+
+export function fundamentalsCoverage({ daily, sec, history, audit = null, now = Date.now() }) {
   const date = daily?.as_of_date;
-  const symbols = [...new Set(['minervini', 'minervini2'].flatMap(method => (daily?.candidates?.[method] || []).map(row => row.symbol)))];
+  const symbols = [...new Set([...['minervini', 'minervini2'].flatMap(method => (daily?.candidates?.[method] || []).map(row => row.symbol)), ...briefRows(audit, date)])];
   const out = { as_of_date: date, candidates: symbols.length, sec: { same_day: sec?.as_of_date === date, available: 0, partial: 0, unavailable: 0, missing: 0 },
     history: { same_day: history?.as_of_date === date, available: 0, missing: 0 }, code33: { sec: 0, yahoo: 0, unknown: 0 }, unknown_symbols: [] };
   for (const symbol of symbols) {
@@ -35,8 +43,8 @@ export function environmentCoverage(history, sessions = 20) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [daily, sec, history, market] = await Promise.all([read('public/research-daily.json'), read('public/static-data/book-financials.json'),
-    read('public/static-data/financial-history.json'), read('public/static-data/market-history-source.json')]);
-  console.log('Data coverage (fundamentals): ' + JSON.stringify(fundamentalsCoverage({ daily, sec, history })));
+  const [daily, sec, history, market, audit] = await Promise.all([read('public/research-daily.json'), read('public/static-data/book-financials.json'),
+    read('public/static-data/financial-history.json'), read('public/static-data/market-history-source.json'), read('public/qualification-audit.json')]);
+  console.log('Data coverage (fundamentals): ' + JSON.stringify(fundamentalsCoverage({ daily, sec, history, audit })));
   console.log('Data coverage (market environment, last 20 sessions): ' + JSON.stringify(environmentCoverage(market)));
 }
