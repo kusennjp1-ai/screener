@@ -73,7 +73,7 @@ export default function MarketCard({ market, trends, date, detail = false }) {
       <div className="brief-trend"><span>TT達成数の推移（6か月）</span><Sparkline points={recent} field="trendTemplateCount" /></div>
     </div>}
     {warnings.length > 0 && <ul className="brief-warnings" aria-label="地合いの悪化サイン（独自判定）">{warnings.map(w => <li key={w.key}><span aria-hidden="true">▲</span> {w.text}（独自判定）</li>)}</ul>}
-    {split?.warning && <p className="brief-alert" role="note">▲ {split.fromHigh > -0.05 ? '指数は1年高値の水準にありますが' : `指数は1年高値まであと${Math.abs(split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{num(split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
+    {split?.warning && !detail && <p className="brief-alert" role="note">▲ {split.fromHigh > -0.05 ? '指数は1年高値の水準にありますが' : `指数は1年高値まであと${Math.abs(split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{num(split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
     <p className="brief-note">分配日・ステージ・トレンドテンプレート数は公開日足からの独自集計で、IBDの公式値ではありません。</p>
   </section>;
 }
