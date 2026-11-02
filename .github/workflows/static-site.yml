@@ -1016,6 +1016,11 @@ jobs:
               fi
             fi
             python tools/sec-financials.py --limit 150
+            python tools/export-financial-history.py --limit 300
+            # Re-export so this session's SEC evidence and reported financial
+            # history reach the rows (both tools read the first export's lists).
+            node tools/export-research.mjs
+            node tools/report-data-coverage.mjs || echo '::warning::Data coverage report unavailable'
             npm run build
             node tools/check-data-quality.mjs
           fi
