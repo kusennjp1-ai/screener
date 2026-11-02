@@ -32,6 +32,11 @@ describe('owner waiver for subjective design scores', () => {
     expect(() => requireObjectiveEvidence({ screens: [], failures: [] })).toThrow(/captured screens/);
     expect(() => requireObjectiveEvidence({ screens: [{ key: 'a' }] })).toThrow(/failure list/);
     expect(() => requireObjectiveEvidence({ screens: [{ key: 'a' }], failures: ['axe: color-contrast'] })).toThrow(/Objective/);
+    const timing = '1440: Q1 method switch 571ms > 480ms';
+    expect(requireObjectiveEvidence({ screens: [{ key: 'a' }], failures: [timing] }, { blocking_failures: [], warnings: [timing] })).toBe(1);
+    expect(() => requireObjectiveEvidence({ screens: [{ key: 'a' }], failures: [timing, 'home/390/dark: horizontal page overflow'] }, { blocking_failures: [], warnings: [timing] })).toThrow(/Objective/);
+    expect(() => requireObjectiveEvidence({ screens: [{ key: 'a' }], failures: [timing] }, { blocking_failures: ['All route/operation/financial groups must finish'], warnings: [timing] })).toThrow(/functional/);
+    expect(() => requireObjectiveEvidence({ screens: [{ key: 'a' }], failures: [] }, { blocking_failures: [] })).toThrow(/complete screening-priority/);
   });
 
   it('passes the gate with a waiver and clean objective results, and nowhere else', () => {

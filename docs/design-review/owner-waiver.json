@@ -5,6 +5,8 @@
   "granted_by": "repository owner (kusennjp1-ai)",
   "granted_at": "2026-11-01T23:00:00Z",
   "instruction": "スクリーンショットの確認記録も通信設定の変更も不要。点数はつけなくていいから、自律的に公開までお願いします。",
-  "effect": "check-design-review.mjs accepts a Design run with no scored review only when that run captured its screens and reports no objective failures. No scores are recorded or implied.",
-  "revoke": "Delete this file to require scored screenshot reviews again."
+  "effect": "check-design-review.mjs accepts a Design run with no scored review only when that run captured its screens and has no objective failures other than the measured timing overruns that the bound 2026-10-21 screening-priority policy classifies as deferred warnings; those are printed as warnings and strict_result stays failed. No scores are recorded or implied.",
+  "revoke": "Delete this file to require scored screenshot reviews again.",
+  "timing_instruction": "速度の基準超過も保留にして公開してよい",
+  "timing_granted_at": "2026-11-02T05:10:00Z"
 }

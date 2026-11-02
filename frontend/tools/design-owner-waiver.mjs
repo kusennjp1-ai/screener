@@ -1,6 +1,6 @@
 // Owner waiver for the subjective screenshot scores in check-design-review.mjs.
-// It never covers objective checks: the captured run must exist and report no
-// design, accessibility, layout or performance failures. Delete the file to
+// It never covers functional, accessibility or layout checks. Measured timing overruns pass only
+// when the bound screening-priority policy classifies them as deferred warnings. Delete the file to
 // require scored screenshot reviews again.
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -27,10 +27,23 @@ export async function readOwnerWaiver(directory) {
   return validateOwnerWaiver(JSON.parse(text));
 }
 
-/** Objective evidence the waiver still requires from this Design run's report. */
-export function requireObjectiveEvidence(report) {
+/**
+ * Objective evidence the waiver still requires from this Design run's report.
+ * With a bound screening-priority assessment, only its measured timing warnings may remain
+ * (the 2026-10-21 policy defers those; the owner approved deferring them without an image
+ * review). Any blocking failure stops the gate. Without an assessment, the report must have
+ * no failures at all.
+ */
+export function requireObjectiveEvidence(report, assessment = null) {
   if (!Array.isArray(report?.screens) || !report.screens.length) throw Error('The owner waiver still requires the captured screens of this run');
   if (!Array.isArray(report.failures)) throw Error('The owner waiver requires the objective failure list of this run');
+  if (assessment) {
+    if (!Array.isArray(assessment.blocking_failures) || !Array.isArray(assessment.warnings)) throw Error('The owner waiver requires a complete screening-priority assessment');
+    if (assessment.blocking_failures.length) throw Error('Objective functional/design failures remain; the owner waiver covers subjective scores and measured timing only: ' + assessment.blocking_failures.join('; '));
+    const deferred = new Set(assessment.warnings);
+    if (report.failures.some(failure => !deferred.has(failure))) throw Error('Objective design/performance failures remain; the owner waiver covers subjective scores and measured timing only');
+    return report.screens.length;
+  }
   if (report.failures.length) throw Error('Objective design/performance failures remain; the owner waiver covers subjective scores only');
   return report.screens.length;
 }

@@ -56,8 +56,17 @@ if (!reviewed) {
   // (captured screens, axe, targets, scales, overflow, motion, layout and timing budgets) still has to pass.
   const waiver = await readOwnerWaiver(directory);
   if (waiver) {
-    const captured = requireObjectiveEvidence(JSON.parse(await readFile(resolve('test-results/design-review/report.json'), 'utf8')));
-    console.log(`Subjective screenshot scores waived by ${waiver.granted_by} (${waiver.granted_at}); objective checks passed for ${captured} captures. No scores were recorded.`);
+    const actual = JSON.parse(await readFile(resolve('test-results/design-review/report.json'), 'utf8'));
+    const policyOptions = { report: actual, output: resolve('test-results/design-review'), currentRoot: resolve('dist'),
+      baselineRoot: resolve(process.env.RUNNER_TEMP || '.', 'design-baseline/frontend/dist'), inputBasis: process.env.DESIGN_INPUT_BASIS || actual.input_basis };
+    const binding = screeningPriorityBinding({ ...policyOptions, commit: actual.commit, limited: Boolean(actual.assessment_mode) });
+    // Under the bound screening-priority policy, measured timing overruns are deferred warnings
+    // (the owner approved deferring them without an image review) and every other failure still
+    // blocks. Without that binding, any failure blocks.
+    const assessment = binding ? checkedScreeningPriority(policyOptions) : null;
+    const captured = requireObjectiveEvidence(actual, assessment);
+    for (const warning of assessment?.warnings || []) console.warn(`::warning title=Deferred measured timing under the owner waiver::${warning}`);
+    console.log(`Subjective screenshot scores waived by ${waiver.granted_by} (${waiver.granted_at}); objective checks passed for ${captured} captures${assessment?.warnings.length ? ` with ${assessment.warnings.length} deferred timing warnings (strict_result=${assessment.strict_result})` : ''}. No scores were recorded.`);
     reviewed = true;
   }
 }
