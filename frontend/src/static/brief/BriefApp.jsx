@@ -1,8 +1,8 @@
-import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import useMediaQuery from '../useMediaQuery';
 import { ColorModeContext } from '../../contexts/ColorModeContext';
-import { themeCss } from '../theme/tokens';
+import { palettes, themeCss } from '../theme/tokens';
 import { money, signed } from '../positionGeometry';
 import '../theme/foundation.css';
 import './brief.css';
@@ -124,7 +124,8 @@ function ListView({ brief, kind, watch, open, now, animate, listState, setListSt
   </>;
 }
 
-function StockScreen({ brief, symbol, watch, onToggleWatch, step, wide }) {
+/** Memoized: a desktop tab switch must not re-render the stock pane when its stock is unchanged. */
+const StockScreen = memo(function StockScreen({ brief, symbol, watch, onToggleWatch, step, wide }) {
   const data = useStockData(symbol, brief);
   if (!brief.bundle.data) return <p className="brief-note brief-pad" role="status">候補を読み込み中…</p>;
   if (!data.item) return <p className="brief-note brief-pad">{symbol} は分析対象に含まれていません。</p>;
@@ -138,7 +139,7 @@ function StockScreen({ brief, symbol, watch, onToggleWatch, step, wide }) {
       <button type="button" className="brief-iconbutton" aria-label="前の候補" onClick={() => step(-1)}>{ICON.back}</button><button type="button" className="brief-iconbutton" aria-label="次の候補" onClick={() => step(1)}>{ICON.next}</button></span>
   </div> : null;
   return <StockView key={symbol} data={data} header={header} />;
-}
+});
 
 export default function BriefApp() {
   const brief = useBriefData();
@@ -147,7 +148,12 @@ export default function BriefApp() {
   const wide = useMediaQuery('(min-width:1024px)');
   const go = useTransitionNavigate();
   const dark = useContext(ColorModeContext).mode === 'dark';
-  useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; }, [dark]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    // The phone's browser bar and status area take the top bar's colour instead of a fixed blue.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', palettes[dark ? 'dark' : 'light'].ground);
+  }, [dark]);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const [animateKey, setAnimateKey] = useState(0);
@@ -177,6 +183,13 @@ export default function BriefApp() {
     const at = sequence.indexOf(selected), next = at < 0 ? sequence[direction > 0 ? 0 : sequence.length - 1] : sequence[(at + direction + sequence.length) % sequence.length];
     if (next && next !== selected) go(`/brief/stock/${encodeURIComponent(next)}`, { kind: direction > 0 ? 'next' : 'prev', state: { from }, replace: true });
   }, [sequence, selected, go, from]);
+  // Stable identities for the memoized stock pane: the step handler reads the latest sequence
+  // through a ref, and the pane's brief changes only with the inputs the pane reads.
+  const stepRef = useRef(step);
+  useEffect(() => { stepRef.current = step; }, [step]);
+  const paneStep = useCallback(direction => stepRef.current(direction), []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const paneBrief = useMemo(() => brief, [brief.manifest.data, brief.bundle.data, brief.bundle.evaluatedNow, brief.version, brief.date]);
   const toggleWatch = useCallback((ticker, button) => {
     const added = toggle(ticker);
     button?.classList.remove('is-popping'); void button?.offsetWidth; button?.classList.add('is-popping');
@@ -227,7 +240,7 @@ export default function BriefApp() {
       <div className="brief-left"><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
     </main> : <main id="brief-main" tabIndex={-1} className="brief-desk">
       <div className="brief-left"><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
-      <div className="brief-right" aria-label="選択中の銘柄">{selected ? <StockScreen brief={brief} symbol={selected} watch={watch} onToggleWatch={toggleWatch} step={step} wide /> : <p className="brief-note brief-pad">銘柄を選ぶと、ここに結論とチャートを表示します。</p>}</div>
+      <div className="brief-right" aria-label="選択中の銘柄">{selected ? <StockScreen brief={paneBrief} symbol={selected} watch={watch} onToggleWatch={toggleWatch} step={paneStep} wide /> : <p className="brief-note brief-pad">銘柄を選ぶと、ここに結論とチャートを表示します。</p>}</div>
     </main> : <main id="brief-main" tabIndex={-1} className="brief-main" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
       <div className="brief-stack">{view === 'stock' ? <StockScreen brief={brief} symbol={symbol} watch={watch} onToggleWatch={toggleWatch} step={step} /> : left}</div>
     </main>}

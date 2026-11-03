@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { briefOrder, environmentWarnings, ruleEvidence, footprint, matchesSearch, positionPlan, rsLineNewHigh, watchEvent, LIST_FILTERS, LIST_SORTS, STOP_MAX_PERCENT } from './briefModel';
+import { briefOrder, code33Parts, environmentWarnings, ruleEvidence, footprint, matchesSearch, positionPlan, rsLineNewHigh, watchEvent, LIST_FILTERS, LIST_SORTS, STOP_MAX_PERCENT } from './briefModel';
 
 const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, ...over });
 
 describe('brief model', () => {
+  it('lists the three Code 33 conditions and names a missing fiscal-Q4 EPS without estimating it', () => {
+    const rows = [{ end: '2025-12-31', derived: false, epsYoY: 10 }, { end: '2026-03-31', derived: false, epsYoY: 12 }, { end: '2026-06-30', derived: false, epsYoY: 15 }, { end: '2026-09-30', derived: true, epsYoY: null }];
+    const value = code33Parts({ valid: true, rows, epsAcceleration: 'unknown', salesAcceleration: 'pass', marginImprovement: 'fail' });
+    expect(value.parts).toEqual([['EPS の加速', 'unknown'], ['売上の加速', 'pass'], ['純利益率の上昇', 'fail']]);
+    expect(value.q4Eps).toBe(true);
+    expect(code33Parts({ valid: true, rows: rows.map(row => ({ ...row, derived: false })), epsAcceleration: 'unknown', salesAcceleration: 'pass', marginImprovement: 'pass' }).q4Eps).toBe(false);
+    expect(code33Parts(null)).toBeNull();
+    expect(code33Parts({ valid: false })).toBeNull();
+  });
+
   it('shows the 52-week distances behind the trend-template rules and keeps unknowns blank', () => {
     expect(ruleEvidence({ label: '52週安値から ≥ 30%（日中安値）', value: 45.24, unit: '%' })).toBe('52週安値から +45.2%');
     expect(ruleEvidence({ label: '52週高値からの距離 ≤ 25%（日中高値）', value: 8.31, unit: '%' })).toBe('52週高値から −8.3%');

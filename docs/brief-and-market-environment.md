@@ -1,7 +1,7 @@
 # Daily brief and market-environment indicators
 
-This note covers the `#/brief` screens of the static app and the daily
-market-environment series behind them. For vocabulary, see `CONTEXT.md`.
+This note covers the `#/brief` screens, which are the whole static app since #127,
+and the daily market-environment series behind them. For vocabulary, see `CONTEXT.md`.
 
 ## Screens (`frontend/src/static/brief/`)
 
@@ -10,15 +10,16 @@ market-environment series behind them. For vocabulary, see `CONTEXT.md`.
 | `#/brief` | A three-item summary first (地合い with the exposure cap, number of focus candidates, sell signals on the watchlist), then 1 Market (verdict, S&P 500 with active distribution days, trend-template count, RS90 leaders, stage mix, share above the 200-day line, 52-week new highs and lows, breakout follow-through, bifurcation note) · 2 Top five qualified candidates in the buy zone or within −5% of the pivot, and the industry groups (or sectors, when most rows lack a group) with the most qualified stocks · 3 Watchlist changes |
 | `#/brief/list` | Qualified candidates. Filters: buy zone, near pivot, all qualified, one condition short. Search box and five sort orders (priority, RS, distance to the pivot, volume, distance to the 52-week high). |
 | `#/brief/watch` | The shared `research-watch` watchlist |
+| `#/brief/market` | 地合い with every figure and the stage mix, then the long-run explorer (trend-template count and RS90, stage mix, share above the 50- and 200-day lines, leader health, breakout success) and sector ETF ranks. Each block keeps its own as-of date. |
 | `#/brief/stock/:symbol` | Conclusion card (status, position meter, buy range, stop, 2R) → large daily chart (3 months, 6 months, 1 year, or a 2-year weekly view with 10/30/40-week averages) → eight trend-template rules → VCP footprint → quarterly growth with layered Code 33 → 13F counts → position plan → sell checks |
 
 - **Shell:** the screens have their own shell (48 px top bar, 56 px bottom tabs, light/dark toggle from the existing colour-mode preference).
 - **Desktop (≥1024 px):** two panes, list on the left and the selected stock on the right.
-- **Isolation:** the existing routes and their design contracts are unchanged.
-- **Start screen:** each viewer can tick 「アプリを開いたらこの画面を表示」 at the end of 今日. The choice is stored in this browser only (`screener:start-screen`). Opening the app at its root then lands on `#/brief` once per page load. The 従来の画面 link and deep links such as `#/scan` are kept. The app's default for everyone else is unchanged, so the design contracts that pin `#/` still apply.
-- **Making it the default for everyone:** switch the `/` route in `StaticAppShell.jsx` and update the design contracts that pin the current home screen (see below).
+- **Retired screens:** the research workspace, comparison, scan, breadth and group pages were removed in #127. Their addresses open the matching brief screen (`frontend/src/static/legacyRoutes.js`): `#/` and `#/daily` → `#/brief`, `#/compare` and `#/scan` → `#/brief/list`, `#/breadth`, `#/groups` and `#/themes` → `#/brief/market`, `#/?symbol=X` → `#/brief/stock/X`.
+- **Today vs market tab:** Today keeps the buy-or-wait facts (distribution days, TT count, share above the 200-day line, new highs and lows); the breakout rate, RS90 count, stage mix and trend sparkline are on the market tab.
+- **Gates:** Design Acceptance measures these screens (`docs/DESIGN_ACCEPTANCE_POLICY.md`); Static Browser Regression runs `frontend/tests/static/brief-*.spec.js`.
 
-All judgements come from the shared rule functions, so the brief and the research screens never disagree:
+All judgements come from the shared rule functions, so the brief and the exporters never disagree:
 
 - `assess`
 - `entryPlan`
@@ -89,17 +90,7 @@ The brief and the 市場 page also show a bifurcation note: the index is within 
 
 SEC access reads the `SEC_USER_AGENT` secret and retries 429/5xx responses with backoff.
 
-## Making `#/brief` the default screen (not done yet)
+### Coverage of the brief's rows
 
-Only `StaticAppShell.jsx` routes the brief, so changing the default is a small change in code. The large part is updating the gates that pin the current home screen. The following reference the current `#/` layout (region 今日の概況, `.candidate-row`, `.leader-pinned-title`, the six `detail-tab-*` tabs):
+The daily build fetches SEC evidence, reported financial history and earnings dates for every row the brief can list: the ranked top-50 lists, then all trend-template qualifiers and the rows one condition short with nothing unknown, from the same-day qualification audit (up to 400 symbols; a stale audit never widens the list). They run before the final research export, so the rows carry this session's evidence. The build log prints `Data coverage (fundamentals)` and `Data coverage (market environment, last 20 sessions)` (`frontend/tools/report-data-coverage.mjs`); missing values stay unknown.
 
-- `frontend/src/App.static.test.jsx`
-- `frontend/tests/static/` specs: mobile-first workbench, candidate scroll, financial layout, institutional history, daily-change coverage, and the leader-feed filters
-- `frontend/tools/design-review.mjs` and its scripted clicks
-- `frontend/tools/leader-feed-design-contract.mjs` and `leader-detail-design-contract.mjs`
-- `frontend/tools/research-browser-navigation.mjs` and `continuous-switch-diagnostic.mjs`
-
-Suggested order:
-1. Add the brief screens to `design-review.mjs`, and review them through the normal record.
-2. Point `/` at the brief and keep the research workspace at a named route.
-3. Move those specs and contracts to the new route, keeping their objective budgets: axe, hit targets, type and radius scales, performance.

@@ -20,7 +20,9 @@ export function fundamentalsCoverage({ daily, sec, history, audit = null, now = 
   const date = daily?.as_of_date;
   const symbols = [...new Set([...['minervini', 'minervini2'].flatMap(method => (daily?.candidates?.[method] || []).map(row => row.symbol)), ...briefRows(audit, date)])];
   const out = { as_of_date: date, candidates: symbols.length, sec: { same_day: sec?.as_of_date === date, available: 0, partial: 0, unavailable: 0, missing: 0 },
-    history: { same_day: history?.as_of_date === date, available: 0, missing: 0 }, code33: { sec: 0, yahoo: 0, unknown: 0 }, unknown_symbols: [] };
+    history: { same_day: history?.as_of_date === date, available: 0, missing: 0 }, code33: { sec: 0, yahoo: 0, unknown: 0 },
+    // Each SEC condition separately: a fiscal-Q4 EPS reported only annually leaves EPS (and so Code 33) unknown.
+    sec_conditions: { eps: { pass: 0, fail: 0, unknown: 0 }, sales: { pass: 0, fail: 0, unknown: 0 }, margin: { pass: 0, fail: 0, unknown: 0 }, q4_eps_missing: 0 }, unknown_symbols: [] };
   for (const symbol of symbols) {
     const evidence = sec?.as_of_date === date ? sec.results?.[symbol] : null;
     if (!evidence) out.sec.missing++; else out.sec[evidence.status] = (out.sec[evidence.status] || 0) + 1;
@@ -28,7 +30,13 @@ export function fundamentalsCoverage({ daily, sec, history, audit = null, now = 
     if (raw?.status === 'available') out.history.available++; else out.history.missing++;
     const book = evidence ? bookFinancialCurrent(evidence, symbol, date, now, { symbol }) : null;
     const series = raw ? financialHistory(raw, symbol, date, now) : null;
-    const layered = code33Layered(book?.current ? book.report : null, series, date);
+    const report = book?.current ? book.report : null;
+    if (report?.valid) {
+      const c = out.sec_conditions;
+      c.eps[report.epsAcceleration]++; c.sales[report.salesAcceleration]++; c.margin[report.marginImprovement]++;
+      if (report.epsAcceleration === 'unknown' && report.rows.slice(-4).some(row => row.derived && !Number.isFinite(row.epsYoY))) c.q4_eps_missing++;
+    }
+    const layered = code33Layered(report, series, date);
     if (layered.state === 'unknown') { out.code33.unknown++; if (out.unknown_symbols.length < 25) out.unknown_symbols.push(symbol); }
     else out.code33[layered.source === 'yahoo' ? 'yahoo' : 'sec']++;
   }

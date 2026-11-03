@@ -9,7 +9,9 @@ export function useTransitionNavigate() {
   const navigate = useNavigate();
   return useCallback((to, { kind = 'tab', state, replace = false, before } = {}) => {
     const run = () => { flushSync(() => navigate(to, { state, replace })); if (!matchMedia?.('(min-width: 1024px)').matches) window.scrollTo(0, 0); };
-    if (typeof document.startViewTransition !== 'function' || reducedMotion()) { run(); return; }
+    // Desktop tab switches change only the left column; a whole-page transition would only delay it.
+    const wideTab = kind === 'tab' && typeof matchMedia === 'function' && matchMedia('(min-width: 1024px)').matches;
+    if (typeof document.startViewTransition !== 'function' || reducedMotion() || wideTab) { run(); return; }
     before?.();
     document.documentElement.dataset.briefNav = kind;
     const transition = document.startViewTransition(run);
