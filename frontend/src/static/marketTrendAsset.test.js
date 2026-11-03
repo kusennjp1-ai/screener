@@ -33,6 +33,21 @@ describe('market trend reader: optional follow-through and last observed count',
   expect(followThrough.available).toBe(false);expect(originalFollowThrough.available).toBe(true);
   expect(rest).toEqual(expected);
  });
+ it('withdraws a follow-through not dated on its own index\'s last session, or on an index without bars',()=>{
+  // ^IXIC ends three sessions early: a historical index whose judgement is dated 10-20 like its counts.
+  const source=structuredClone(trendSource);source.indices.find(index=>index.symbol==='^IXIC').bars.splice(-3);
+  const historical=buildMarketTrends(source,{asOfDate:date});
+  expect(historical.indices[1]).toMatchObject({historical:true,latest:null,lastObserved:{date:'2026-10-20'},followThrough:{available:true,asOf:'2026-10-20'}});
+  expect(readMarketTrends(structuredClone(historical),entry).indices[1].followThrough).toEqual(historical.indices[1].followThrough);
+  // Relabelled as today's: every inner date still precedes it, but it is not its index's session.
+  const relabelled=structuredClone(historical);relabelled.indices[1].followThrough.asOf=date;
+  expect(readMarketTrends(relabelled,entry).indices[1].followThrough).toEqual({available:false,method:expect.any(String),reason:'フォロースルー判定の形式を確認できません。'});
+  // A judgement copied onto an index that has no bars at all.
+  const value=payload(),copied=value.indices[0].followThrough;
+  value.indices[0]={symbol:'^GSPC',available:false,points:[],events:[],reason:'同じ基準日の出典付き指数履歴は未取得です。',lastObserved:null,followThrough:copied};
+  const out=readMarketTrends(value,entry).indices[0];
+  expect(out.followThrough.available).toBe(false);expect(out.reason).toBe('同じ基準日の出典付き指数履歴は未取得です。');
+ });
  it('keeps a valid record of each state shape, including ftd_failed with its failure date',()=>{
   const value=payload(),ft=value.indices[0].followThrough;
   Object.assign(ft,{state:'ftd_failed',failedDate:'2026-10-20'});

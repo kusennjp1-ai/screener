@@ -24,11 +24,13 @@ function followThroughValid(value,asOfDate){
  return Array.isArray(value.events)&&value.events.every((event,i)=>plain(event)&&FOLLOW_THROUGH_EVENTS.includes(event.type)&&on(event.date)&&(!i||event.date>=value.events[i-1].date));
 }
 // A malformed optional field is withdrawn with a reason; it never blanks the distribution count beside it.
+// Like lastObserved, a judgement belongs to its own index: computed on the same bars, so dated on their last point.
 function readIndex(index,asOfDate){
- const out={...index};
- if('followThrough' in index&&!followThroughValid(index.followThrough,asOfDate))out.followThrough={available:false,method:typeof index.followThrough?.method==='string'?index.followThrough.method:null,reason:'フォロースルー判定の形式を確認できません。'};
+ const out={...index},points=Array.isArray(index.points)?index.points:[];
+ const ownBars=value=>value?.available!==true||(points.length>0&&points.at(-1)?.date===value.asOf);
+ if('followThrough' in index&&!(followThroughValid(index.followThrough,asOfDate)&&ownBars(index.followThrough)))out.followThrough={available:false,method:typeof index.followThrough?.method==='string'?index.followThrough.method:null,reason:'フォロースルー判定の形式を確認できません。'};
  if('lastObserved' in index&&index.lastObserved!==null){
-  const last=(index.points||[]).filter(point=>count(point?.value)).at(-1),observed=index.lastObserved;
+  const last=points.filter(point=>count(point?.value)).at(-1),observed=index.lastObserved;
   if(!(plain(observed)&&validDay(observed.date)&&observed.date<=asOfDate&&count(observed.value)&&last?.date===observed.date&&last.value===observed.value))delete out.lastObserved;
  }
  return out;
