@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { legacyTarget } from './StaticAppShell';
+import { legacyTarget } from './legacyRoutes';
 
 describe('legacyTarget', () => {
   it.each([
