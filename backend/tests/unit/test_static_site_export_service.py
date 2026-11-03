@@ -72,42 +72,6 @@ class _FakePriceCache:
         return self.get_many_cached_only([symbol], period=period).get(symbol.upper())
 
 
-def _static_rrg_payload(market: str, as_of_date: str) -> dict:
-    return {
-        "schema_version": STATIC_SITE_SCHEMA_VERSION,
-        "generated_at": f"{as_of_date}T22:00:00Z",
-        "available": True,
-        "market": market,
-        "as_of_date": as_of_date,
-        "available_scopes": ["groups"],
-        "payload": {
-            "groups": {
-                "date": as_of_date,
-                "market": market,
-                "scope": "groups",
-                "groups": [
-                    {
-                        "industry_group": "Semiconductors",
-                        "rank": 1,
-                        "num_stocks": 14,
-                        "avg_rs_rating": 92.5,
-                        "quadrant": "Leading",
-                        "is_provisional": False,
-                        "current": {"date": as_of_date, "x": 104.0, "y": 103.0},
-                        "tail": [{"date": as_of_date, "x": 104.0, "y": 103.0}],
-                    }
-                ],
-            },
-            "sectors": {
-                "date": as_of_date,
-                "market": market,
-                "scope": "sectors",
-                "groups": [],
-            },
-        },
-    }
-
-
 def test_get_latest_published_run_prefers_latest_published_pointer(service_and_session_factory):
     service, session_factory = service_and_session_factory
     _insert_runs(
@@ -277,7 +241,6 @@ def test_export_writes_serializable_manifest_and_page_bundles(
     monkeypatch.setattr(service, "_export_chart_bundle", lambda **_kwargs: chart_manifest)
     monkeypatch.setattr(service, "_build_breadth_payload", lambda **_kwargs: breadth_payload)
     monkeypatch.setattr(service, "_build_groups_payload", lambda **_kwargs: groups_payload)
-    monkeypatch.setattr(service, "_build_groups_rrg_payload", lambda **_kwargs: _static_rrg_payload("US", "2026-03-31"))
     monkeypatch.setattr(service, "_build_home_payload", lambda **_kwargs: home_payload)
 
     output_dir = tmp_path / "static-data"
@@ -303,7 +266,8 @@ def test_export_writes_serializable_manifest_and_page_bundles(
         assert "groups" not in entry["pages"]
         assert "groups_rrg" not in entry["assets"]
     assert manifest["markets"]["US"]["features"]["groups"] is True
-    assert manifest["markets"]["US"]["features"]["rrg"] is True
+    assert "rrg" not in manifest["markets"]["US"]["features"]
+    assert "rrg" not in manifest["features"]
     assert "themes" not in manifest["features"]
     assert "themes" not in manifest["pages"]
     # The fixture has no published weekly reference snapshot: that is unknown, never current.
@@ -382,7 +346,6 @@ def test_export_writes_india_market_bundle_and_root_manifest(
     monkeypatch.setattr(service, "_export_chart_bundle", lambda **_kwargs: chart_manifest)
     monkeypatch.setattr(service, "_build_breadth_payload", lambda **_kwargs: breadth_payload)
     monkeypatch.setattr(service, "_build_groups_payload", lambda **_kwargs: groups_payload)
-    monkeypatch.setattr(service, "_build_groups_rrg_payload", lambda **_kwargs: _static_rrg_payload("HK", "2026-03-31"))
     monkeypatch.setattr(service, "_build_home_payload", lambda **_kwargs: home_payload)
 
     output_dir = tmp_path / "static-data"
@@ -477,7 +440,6 @@ def test_export_can_write_single_market_artifact_without_root_manifest(
     monkeypatch.setattr(service, "_export_chart_bundle", lambda **_kwargs: chart_manifest)
     monkeypatch.setattr(service, "_build_breadth_payload", lambda **_kwargs: breadth_payload)
     monkeypatch.setattr(service, "_build_groups_payload", lambda **_kwargs: groups_payload)
-    monkeypatch.setattr(service, "_build_groups_rrg_payload", lambda **_kwargs: _static_rrg_payload("HK", "2026-03-31"))
     monkeypatch.setattr(service, "_build_home_payload", lambda **_kwargs: home_payload)
 
     output_dir = tmp_path / "market-artifact"
@@ -494,7 +456,7 @@ def test_export_can_write_single_market_artifact_without_root_manifest(
     assert metadata["entry"]["assets"]["charts"]["path"] == "markets/hk/charts/index.json"
     assert "groups_rrg" not in metadata["entry"]["assets"]
     assert "groups" not in metadata["entry"]["pages"]
-    assert metadata["entry"]["features"]["rrg"] is True
+    assert "rrg" not in metadata["entry"]["features"]
     assert not (output_dir / "markets" / "hk" / "groups_rrg.json").exists()
     assert not (output_dir / "markets" / "hk" / "groups.json").exists()
     assert metadata["warnings"] == [
@@ -1400,8 +1362,9 @@ def test_export_marks_optional_sections_unavailable_without_aborting(
     assert manifest["features"]["groups"] is False
     assert manifest["markets"]["US"]["features"]["breadth"] is False
     assert manifest["markets"]["US"]["features"]["groups"] is False
-    assert len(manifest["warnings"]) == 4
-    assert any("Static US rrg data unavailable" in warning for warning in manifest["warnings"])
+    # Breadth, groups and the weekly reference: the export builds no RRG payload.
+    assert len(manifest["warnings"]) == 3
+    assert not any("rrg" in warning.lower() for warning in manifest["warnings"])
     assert any(warning.startswith("US weekly reference data is unavailable") for warning in manifest["warnings"])
     assert breadth["available"] is False
     assert breadth["expected_as_of_date"] == "2026-04-02"
@@ -1462,19 +1425,26 @@ def test_export_keeps_group_freshness_without_publishing_group_files(
     monkeypatch.setattr(service, "_export_chart_bundle", lambda **_kwargs: chart_manifest)
     monkeypatch.setattr(service, "_build_breadth_payload", lambda **_kwargs: breadth_payload)
     monkeypatch.setattr(service, "_build_groups_payload", lambda **_kwargs: groups_payload)
-    monkeypatch.setattr(service, "_build_groups_rrg_payload", lambda **_kwargs: _static_rrg_payload("US", "2026-03-31"))
+
+    def _rrg_must_not_run(*_args, **_kwargs):
+        raise SQLAlchemyError("the static export must not build RRG")
+
+    # An RRG database error can no longer stop the market export.
+    monkeypatch.setattr(rrg_export_module.StaticGroupsRRGPayloadBuilder, "from_runtime_services", _rrg_must_not_run)
 
     output_dir = tmp_path / "static-data"
-    service.export(output_dir)
+    result = service.export(output_dir)
 
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     home = json.loads((output_dir / "markets" / "us" / "home.json").read_text(encoding="utf-8"))
     market = manifest["markets"]["US"]
+    assert not any("rrg" in warning.lower() for warning in result.warnings)
     assert market["freshness"]["groups_latest_date"] == "2026-03-31"
     assert market["freshness"]["breadth_latest_date"] == "2026-03-31"
     assert home["freshness"]["groups_latest_date"] == "2026-03-31"
     assert home["top_groups"] == [{"industry_group": "Semiconductors", "rank": 1}]
     assert market["features"]["groups"] is True
+    assert set(market["features"]) == {"scan", "breadth", "groups", "charts"}
     assert set(market["pages"]) == {"home", "scan", "breadth"}
     assert set(market["assets"]) == {"charts"}
     assert not (output_dir / "markets" / "us" / "groups.json").exists()
@@ -2031,31 +2001,6 @@ def test_static_groups_rrg_builder_propagates_sql_errors_after_preflight(
 
     with session_factory() as db, pytest.raises(SQLAlchemyError, match="feature_runs"):
         builder.build(
-            db=db,
-            generated_at="2026-04-18T22:00:00Z",
-            expected_as_of_date=date(2026, 4, 18),
-            market="HK",
-        )
-
-
-def test_build_groups_rrg_payload_propagates_non_missing_table_sql_errors(
-    service_and_session_factory,
-    monkeypatch,
-):
-    service, session_factory = service_and_session_factory
-
-    class _FakeBuilder:
-        @classmethod
-        def from_runtime_services(cls, *, schema_version):  # noqa: ARG003
-            return cls()
-
-        def build(self, **kwargs):  # noqa: ANN003
-            raise SQLAlchemyError("connection failed")
-
-    monkeypatch.setattr(export_module, "StaticGroupsRRGPayloadBuilder", _FakeBuilder)
-
-    with session_factory() as db, pytest.raises(SQLAlchemyError, match="connection failed"):
-        service._build_groups_rrg_payload(  # noqa: SLF001
             db=db,
             generated_at="2026-04-18T22:00:00Z",
             expected_as_of_date=date(2026, 4, 18),
