@@ -72,42 +72,6 @@ class _FakePriceCache:
         return self.get_many_cached_only([symbol], period=period).get(symbol.upper())
 
 
-def _static_rrg_payload(market: str, as_of_date: str) -> dict:
-    return {
-        "schema_version": STATIC_SITE_SCHEMA_VERSION,
-        "generated_at": f"{as_of_date}T22:00:00Z",
-        "available": True,
-        "market": market,
-        "as_of_date": as_of_date,
-        "available_scopes": ["groups"],
-        "payload": {
-            "groups": {
-                "date": as_of_date,
-                "market": market,
-                "scope": "groups",
-                "groups": [
-                    {
-                        "industry_group": "Semiconductors",
-                        "rank": 1,
-                        "num_stocks": 14,
-                        "avg_rs_rating": 92.5,
-                        "quadrant": "Leading",
-                        "is_provisional": False,
-                        "current": {"date": as_of_date, "x": 104.0, "y": 103.0},
-                        "tail": [{"date": as_of_date, "x": 104.0, "y": 103.0}],
-                    }
-                ],
-            },
-            "sectors": {
-                "date": as_of_date,
-                "market": market,
-                "scope": "sectors",
-                "groups": [],
-            },
-        },
-    }
-
-
 def test_get_latest_published_run_prefers_latest_published_pointer(service_and_session_factory):
     service, session_factory = service_and_session_factory
     _insert_runs(
@@ -277,7 +241,6 @@ def test_export_writes_serializable_manifest_and_page_bundles(
     monkeypatch.setattr(service, "_export_chart_bundle", lambda **_kwargs: chart_manifest)
     monkeypatch.setattr(service, "_build_breadth_payload", lambda **_kwargs: breadth_payload)
     monkeypatch.setattr(service, "_build_groups_payload", lambda **_kwargs: groups_payload)
-    monkeypatch.setattr(service, "_build_groups_rrg_payload", lambda **_kwargs: _static_rrg_payload("US", "2026-03-31"))
     monkeypatch.setattr(service, "_build_home_payload", lambda **_kwargs: home_payload)
 
     output_dir = tmp_path / "static-data"
@@ -286,7 +249,6 @@ def test_export_writes_serializable_manifest_and_page_bundles(
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     scan = json.loads((output_dir / "markets" / "us" / "scan" / "manifest.json").read_text(encoding="utf-8"))
     breadth = json.loads((output_dir / "markets" / "us" / "breadth.json").read_text(encoding="utf-8"))
-    groups = json.loads((output_dir / "markets" / "us" / "groups.json").read_text(encoding="utf-8"))
     home = json.loads((output_dir / "markets" / "us" / "home.json").read_text(encoding="utf-8"))
 
     assert manifest["schema_version"] == STATIC_SITE_SCHEMA_VERSION
@@ -295,10 +257,17 @@ def test_export_writes_serializable_manifest_and_page_bundles(
     assert manifest["features"]["charts"] is True
     assert manifest["pages"]["scan"]["path"] == "markets/us/scan/manifest.json"
     assert manifest["assets"]["charts"]["path"] == "charts/index.json"
-    assert manifest["assets"]["groups_rrg"]["path"] == "markets/us/groups_rrg.json"
     assert manifest["markets"]["US"]["pages"]["scan"]["path"] == "markets/us/scan/manifest.json"
     assert manifest["markets"]["US"]["assets"]["charts"]["path"] == "charts/index.json"
-    assert manifest["markets"]["US"]["assets"]["groups_rrg"]["path"] == "markets/us/groups_rrg.json"
+    # Group rankings and RRG stay in memory: no file, page or asset pointer.
+    assert not (output_dir / "markets" / "us" / "groups.json").exists()
+    assert not (output_dir / "markets" / "us" / "groups_rrg.json").exists()
+    for entry in (manifest, manifest["markets"]["US"]):
+        assert "groups" not in entry["pages"]
+        assert "groups_rrg" not in entry["assets"]
+    assert manifest["markets"]["US"]["features"]["groups"] is True
+    assert "rrg" not in manifest["markets"]["US"]["features"]
+    assert "rrg" not in manifest["features"]
     assert "themes" not in manifest["features"]
     assert "themes" not in manifest["pages"]
     # The fixture has no published weekly reference snapshot: that is unknown, never current.
@@ -307,7 +276,7 @@ def test_export_writes_serializable_manifest_and_page_bundles(
     assert manifest["markets"]["US"]["reference_data"]["stale"] is True
     assert scan["charts"]["path"] == "charts/index.json"
     assert breadth["payload"]["current"]["date"] == "2026-03-31"
-    assert groups["payload"]["rankings"]["rankings"][0]["industry_group"] == "Semiconductors"
+    assert home["top_groups"][0]["industry_group"] == "Semiconductors"
     assert not (output_dir / "themes").exists()
     assert result.manifest == manifest
     assert result.warnings == ("US weekly reference data is unavailable; universe membership and reference fundamentals are not current.",)
@@ -377,7 +346,6 @@ def test_export_writes_india_market_bundle_and_root_manifest(
     monkeypatch.setattr(service, "_export_chart_bundle", lambda **_kwargs: chart_manifest)
     monkeypatch.setattr(service, "_build_breadth_payload", lambda **_kwargs: breadth_payload)
     monkeypatch.setattr(service, "_build_groups_payload", lambda **_kwargs: groups_payload)
-    monkeypatch.setattr(service, "_build_groups_rrg_payload", lambda **_kwargs: _static_rrg_payload("HK", "2026-03-31"))
     monkeypatch.setattr(service, "_build_home_payload", lambda **_kwargs: home_payload)
 
     output_dir = tmp_path / "static-data"
@@ -389,7 +357,6 @@ def test_export_writes_india_market_bundle_and_root_manifest(
     )
     scan = json.loads((output_dir / "markets" / "in" / "scan" / "manifest.json").read_text(encoding="utf-8"))
     breadth = json.loads((output_dir / "markets" / "in" / "breadth.json").read_text(encoding="utf-8"))
-    groups = json.loads((output_dir / "markets" / "in" / "groups.json").read_text(encoding="utf-8"))
     home = json.loads((output_dir / "markets" / "in" / "home.json").read_text(encoding="utf-8"))
 
     assert result.manifest == manifest
@@ -402,7 +369,10 @@ def test_export_writes_india_market_bundle_and_root_manifest(
     assert metadata["entry"]["display_name"] == "India"
     assert scan["preview_rows"][0]["symbol"] == "RELIANCE.NS"
     assert breadth["payload"]["current"]["date"] == "2026-04-04"
-    assert groups["payload"]["rankings"]["date"] == "2026-04-04"
+    assert not (output_dir / "markets" / "in" / "groups.json").exists()
+    assert not (output_dir / "markets" / "in" / "groups_rrg.json").exists()
+    assert "groups" not in manifest["markets"]["IN"]["pages"]
+    assert "groups_rrg" not in manifest["markets"]["IN"]["assets"]
     assert home["key_markets"][0]["symbol"] == "^NSEI"
 
 
@@ -470,7 +440,6 @@ def test_export_can_write_single_market_artifact_without_root_manifest(
     monkeypatch.setattr(service, "_export_chart_bundle", lambda **_kwargs: chart_manifest)
     monkeypatch.setattr(service, "_build_breadth_payload", lambda **_kwargs: breadth_payload)
     monkeypatch.setattr(service, "_build_groups_payload", lambda **_kwargs: groups_payload)
-    monkeypatch.setattr(service, "_build_groups_rrg_payload", lambda **_kwargs: _static_rrg_payload("HK", "2026-03-31"))
     monkeypatch.setattr(service, "_build_home_payload", lambda **_kwargs: home_payload)
 
     output_dir = tmp_path / "market-artifact"
@@ -485,7 +454,11 @@ def test_export_can_write_single_market_artifact_without_root_manifest(
     assert metadata["market"] == "HK"
     assert metadata["entry"]["pages"]["scan"]["path"] == "markets/hk/scan/manifest.json"
     assert metadata["entry"]["assets"]["charts"]["path"] == "markets/hk/charts/index.json"
-    assert metadata["entry"]["assets"]["groups_rrg"]["path"] == "markets/hk/groups_rrg.json"
+    assert "groups_rrg" not in metadata["entry"]["assets"]
+    assert "groups" not in metadata["entry"]["pages"]
+    assert "rrg" not in metadata["entry"]["features"]
+    assert not (output_dir / "markets" / "hk" / "groups_rrg.json").exists()
+    assert not (output_dir / "markets" / "hk" / "groups.json").exists()
     assert metadata["warnings"] == [
         "HK weekly reference data is unavailable; universe membership and reference fundamentals are not current."
     ]
@@ -1382,7 +1355,6 @@ def test_export_marks_optional_sections_unavailable_without_aborting(
 
     manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
     breadth = json.loads((output_dir / "markets" / "us" / "breadth.json").read_text(encoding="utf-8"))
-    groups = json.loads((output_dir / "markets" / "us" / "groups.json").read_text(encoding="utf-8"))
     home = json.loads((output_dir / "markets" / "us" / "home.json").read_text(encoding="utf-8"))
 
     assert result.manifest == manifest
@@ -1390,20 +1362,93 @@ def test_export_marks_optional_sections_unavailable_without_aborting(
     assert manifest["features"]["groups"] is False
     assert manifest["markets"]["US"]["features"]["breadth"] is False
     assert manifest["markets"]["US"]["features"]["groups"] is False
-    assert len(manifest["warnings"]) == 4
-    assert any("Static US rrg data unavailable" in warning for warning in manifest["warnings"])
+    # Breadth, groups and the weekly reference: the export builds no RRG payload.
+    assert len(manifest["warnings"]) == 3
+    assert not any("rrg" in warning.lower() for warning in manifest["warnings"])
     assert any(warning.startswith("US weekly reference data is unavailable") for warning in manifest["warnings"])
     assert breadth["available"] is False
     assert breadth["expected_as_of_date"] == "2026-04-02"
     assert "No breadth snapshot is available" in breadth["message"]
     assert breadth["payload"] == {}
-    assert groups["available"] is False
-    assert groups["expected_as_of_date"] == "2026-04-02"
-    assert "No group rankings are available" in groups["message"]
-    assert groups["payload"] == {}
+    assert not (output_dir / "markets" / "us" / "groups.json").exists()
+    assert any("No group rankings are available" in warning for warning in manifest["warnings"])
     assert home["freshness"]["breadth_latest_date"] is None
     assert home["freshness"]["groups_latest_date"] is None
     assert home["top_groups"] == []
+
+
+def test_export_keeps_group_freshness_without_publishing_group_files(
+    service_and_session_factory,
+    monkeypatch,
+    tmp_path,
+):
+    """groups.json and groups_rrg.json are not written, but the rankings still
+    feed home.json and the manifest freshness the publication checks compare."""
+    service, session_factory = service_and_session_factory
+    _insert_runs(
+        session_factory,
+        FeatureRun(
+            id=13,
+            as_of_date=date(2026, 3, 31),
+            run_type="daily_snapshot",
+            status="published",
+            published_at=datetime(2026, 3, 31, 21, 30, 0),
+            config_json={"universe": {"market": "US"}},
+        ),
+        pointer_run_id=13,
+    )
+    scan_manifest = {
+        "schema_version": "static-scan-v1",
+        "generated_at": "2026-03-31T22:00:00Z",
+        "as_of_date": "2026-03-31",
+        "run_id": 13,
+        "rows_total": 1,
+        "default_filtered_rows_total": 1,
+        "chunks": [{"path": "scan/chunks/chunk-0001.json", "count": 1}],
+        "preview_rows": [{"symbol": "NVDA", "composite_score": 97.5}],
+    }
+    chart_manifest = {"path": "charts/index.json", "limit": 200, "symbols_total": 1, "available": True, "skipped_symbols": []}
+    groups_payload = {
+        "schema_version": STATIC_SITE_SCHEMA_VERSION,
+        "generated_at": "2026-03-31T22:00:00Z",
+        "available": True,
+        "payload": {"rankings": {"date": "2026-03-31", "rankings": [{"industry_group": "Semiconductors", "rank": 1}]}},
+    }
+    breadth_payload = {
+        "schema_version": STATIC_SITE_SCHEMA_VERSION,
+        "generated_at": "2026-03-31T22:00:00Z",
+        "available": True,
+        "payload": {"current": {"date": "2026-03-31"}},
+    }
+    monkeypatch.setattr(service, "_load_scan_export_source", lambda *_args, **_kwargs: ([], SimpleNamespace()))
+    monkeypatch.setattr(service, "_export_scan_bundle", lambda **_kwargs: (scan_manifest, []))
+    monkeypatch.setattr(service, "_export_chart_bundle", lambda **_kwargs: chart_manifest)
+    monkeypatch.setattr(service, "_build_breadth_payload", lambda **_kwargs: breadth_payload)
+    monkeypatch.setattr(service, "_build_groups_payload", lambda **_kwargs: groups_payload)
+
+    def _rrg_must_not_run(*_args, **_kwargs):
+        raise SQLAlchemyError("the static export must not build RRG")
+
+    # An RRG database error can no longer stop the market export.
+    monkeypatch.setattr(rrg_export_module.StaticGroupsRRGPayloadBuilder, "from_runtime_services", _rrg_must_not_run)
+
+    output_dir = tmp_path / "static-data"
+    result = service.export(output_dir)
+
+    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    home = json.loads((output_dir / "markets" / "us" / "home.json").read_text(encoding="utf-8"))
+    market = manifest["markets"]["US"]
+    assert not any("rrg" in warning.lower() for warning in result.warnings)
+    assert market["freshness"]["groups_latest_date"] == "2026-03-31"
+    assert market["freshness"]["breadth_latest_date"] == "2026-03-31"
+    assert home["freshness"]["groups_latest_date"] == "2026-03-31"
+    assert home["top_groups"] == [{"industry_group": "Semiconductors", "rank": 1}]
+    assert market["features"]["groups"] is True
+    assert set(market["features"]) == {"scan", "breadth", "groups", "charts"}
+    assert set(market["pages"]) == {"home", "scan", "breadth"}
+    assert set(market["assets"]) == {"charts"}
+    assert not (output_dir / "markets" / "us" / "groups.json").exists()
+    assert not (output_dir / "markets" / "us" / "groups_rrg.json").exists()
 
 
 def test_build_breadth_payload_requires_target_date(service_and_session_factory, monkeypatch):
@@ -1956,31 +2001,6 @@ def test_static_groups_rrg_builder_propagates_sql_errors_after_preflight(
 
     with session_factory() as db, pytest.raises(SQLAlchemyError, match="feature_runs"):
         builder.build(
-            db=db,
-            generated_at="2026-04-18T22:00:00Z",
-            expected_as_of_date=date(2026, 4, 18),
-            market="HK",
-        )
-
-
-def test_build_groups_rrg_payload_propagates_non_missing_table_sql_errors(
-    service_and_session_factory,
-    monkeypatch,
-):
-    service, session_factory = service_and_session_factory
-
-    class _FakeBuilder:
-        @classmethod
-        def from_runtime_services(cls, *, schema_version):  # noqa: ARG003
-            return cls()
-
-        def build(self, **kwargs):  # noqa: ANN003
-            raise SQLAlchemyError("connection failed")
-
-    monkeypatch.setattr(export_module, "StaticGroupsRRGPayloadBuilder", _FakeBuilder)
-
-    with session_factory() as db, pytest.raises(SQLAlchemyError, match="connection failed"):
-        service._build_groups_rrg_payload(  # noqa: SLF001
             db=db,
             generated_at="2026-04-18T22:00:00Z",
             expected_as_of_date=date(2026, 4, 18),

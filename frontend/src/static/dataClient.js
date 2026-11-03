@@ -3,12 +3,12 @@ import { useQuery } from '@tanstack/react-query';
 import { STATIC_DEFAULT_MARKET } from './StaticMarketContext';
 import { runDataWorker } from './researchWorkerClient';
 import { summarizeWorkbench } from './workbenchSummary';
-import { loadStaticManifest, publicationForManifest, publicationQueryIdentity, readStaticPayload, resolveStaticPublication } from './staticPublication';
+import { loadStaticManifest, publicationForManifest, readStaticPayload, resolveStaticPublication } from './staticPublication';
 
 export const fetchStaticJson = async (relativePath, { sha256, worker = false, now, asOfDate, market, publication, generation, signal } = {}) => {
   if (relativePath === 'manifest.json') return loadStaticManifest();
   const pinned = await resolveStaticPublication({ publication, generation });
-  const currentAsset = /(?:^|\/)(?:research-details\/|verified-charts\/|charts\/|scan\/|scan-list\/|groups\.json$|home\.json$)/.test(relativePath);
+  const currentAsset = /(?:^|\/)(?:research-details\/|verified-charts\/|charts\/|scan\/|scan-list\/|home\.json$)/.test(relativePath);
   const project = value => currentAsset ? projectFinancialPayload(value,{now:now === undefined?Date.now():now,asOfDate,market}) : value;
   const useWorker = worker && typeof Worker !== 'undefined';
   const value = useWorker
@@ -29,18 +29,6 @@ export const useStaticManifest = () => useQuery({ ...staticManifestQuery, refetc
 
 /** Start the manifest request before the first render instead of after it (same query, same checks). */
 export const prefetchStaticManifest = queryClient => queryClient.prefetchQuery(staticManifestQuery);
-
-export const useStaticGroupsRRG = (marketEntry) => {
-  const path = marketEntry?.assets?.groups_rrg?.path;
-  return useQuery({
-    queryKey: ['staticGroupsRRG', path, publicationQueryIdentity(marketEntry?.publication)],
-    placeholderData: () => undefined,
-    queryFn: () => fetchStaticJson(path, { publication: marketEntry.publication }),
-    enabled: Boolean(path),
-    staleTime: Infinity,
-    gcTime: Infinity,
-  });
-};
 
 export const getStaticSupportedMarkets = (manifest) => {
   if (Array.isArray(manifest?.supported_markets) && manifest.supported_markets.length > 0) {

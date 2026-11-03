@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { candidatePerformance } from '../src/static/candidatePerformance.js';
 import { auditDailyBars } from '../src/static/qualificationAudit.js';
 import { freezeObservation, preservedObservation, readPerformanceArchive, retainObservation, writePerformanceArchive } from './candidate-performance-archive.mjs';
+import { removeSupersededOutputs } from './superseded-export.mjs';
 
 export function performanceBenchmarkInputs(prices, asOf) {
   const current = prices?.as_of_date === asOf && prices?.calendar === 'NYSE' && prices?.adjustment === 'split-adjusted-close-no-dividend';
@@ -54,7 +55,10 @@ export async function exportCandidatePerformance({ root, snapshots, rows, prices
   data.observation_archive = { path: 'candidate-performance-history/index.json', completed_observations: archiveRefs.reduce((sum, ref) => sum + ref.observations, 0), newly_frozen: frozen.size, reused: reused.size };
   data.definition = '公開時に保存した通過銘柄の終値からの騰落率。売買実績ではありません。選定銘柄は公開時の記録で固定。満期を検証して保存した観測は、その時点の価格・SPY・NYSE営業日一覧と出典を固定し、後日の配信欠落で消しません。未保存の観測は現在の検証済み履歴で計測します。最大下落率は期間内終値の高値から安値への最大下落。配当込み総合リターン・費用は含みません。';
   const raw = JSON.stringify(data), sha256 = createHash('sha256').update(raw).digest('hex'), path = `candidate-performance-${sha256.slice(0, 16)}.json`;
+  const previous = entry.assets?.candidate_performance?.path;
   await writeFile(resolve(root, path), raw);
   entry.assets.candidate_performance = { path, sha256, as_of_date: entry.as_of_date };
+  // Replace the input manifest's report instead of accumulating one per export.
+  await removeSupersededOutputs({ root, references: [manifest, entry], replacements: [{ family: 'candidate_performance', previous, current: path }] });
   return data;
 }

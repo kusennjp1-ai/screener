@@ -339,6 +339,15 @@ jobs:
           path: release/frontend/dist
           retention-days: 90
           if-no-files-found: error
+      # Diagnostic only: exact bytes per logical family of the final tree, read
+      # through both transport layers. It runs from this controller checkout
+      # (release/ may hold an older approved UI), never writes to the dist, and
+      # also reports a run whose compose payload check already failed.
+      - name: Report final Pages bytes per logical family (diagnostic only)
+        if: ${{ !cancelled() && steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true' }}
+        continue-on-error: true
+        timeout-minutes: 10
+        run: node frontend/tools/site-size-breakdown.mjs release/frontend/dist 60 || echo '::warning::Final Pages size breakdown unavailable'
       - name: Enforce final GitHub Pages payload and TAR limits
         if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.correction != 'true'
         run: python3 .github/scripts/check-pages-payload.py release/frontend/dist
