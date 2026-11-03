@@ -68,7 +68,7 @@ it('keeps bulk history acquisition and replay out of the fast price publication 
  const full=workflow.indexOf('if [ "$MARKET_BUILD_MODE" = "full" ]; then');
  const bulk=workflow.indexOf('python tools/collect-market-history.py --root');
  const replay=workflow.indexOf('python tools/audit-market-history.py --source');
- const end=workflow.indexOf('python tools/sec-financials.py --limit 150',full);
+ const end=workflow.indexOf('python tools/sec-financials.py --limit 400',full);
  expect(full).toBeGreaterThan(0);expect(bulk).toBeGreaterThan(full);expect(replay).toBeGreaterThan(bulk);expect(end).toBeGreaterThan(replay);
  expect(workflow.slice(full,end).trimEnd()).toMatch(/fi\s+fi$/);
  expect(workflow.match(/python tools\/collect-market-history\.py --root/g)).toHaveLength(1);

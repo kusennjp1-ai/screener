@@ -120,5 +120,14 @@ class SecAccess(unittest.TestCase):
         self.assertIn(sec.SECOND_PASS_DELAY_SECONDS, waits)
         self.assertEqual(out["errors"], [])
 
+    def test_targets_cover_every_brief_row_after_the_ranked_lists(self):
+        daily = {"as_of_date": "2026-10-30", "candidates": {"minervini": [{"symbol": "AAA"}], "ibd": [{"symbol": "BBB"}, {"symbol": "AAA"}]}}
+        row = lambda symbol, **minervini: {"symbol": symbol, "methods": {"minervini": minervini}}
+        audit = {"as_of_date": "2026-10-30", "results": [row("CCC", qualified=False, failed=1, unknown=0), row("AAA", qualified=True, failed=0, unknown=0),
+                 row("DDD", qualified=True, failed=0, unknown=0), row("EEE", qualified=False, failed=1, unknown=1), row("FFF", qualified=False, failed=2, unknown=0)]}
+        self.assertEqual(sec.target_symbols(daily, audit), ["AAA", "BBB", "DDD", "CCC"])
+        self.assertEqual(sec.target_symbols(daily, {**audit, "as_of_date": "2026-10-29"}), ["AAA", "BBB"])
+        self.assertEqual(sec.target_symbols(daily, None), ["AAA", "BBB"])
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,537 +1,542 @@
-import { prepareBaselineRepresentation, representationResponse } from './baseline-representation.mjs';
-import { readyResearchCandidates } from './research-browser-navigation.mjs';
-import { mobileChromeBudget } from './mobile-chrome-contract.mjs';
-import { SVG_EVIDENCE_CONTRACT } from './svg-chart-evidence.mjs';
-import { LEADER_DETAIL_CONTRACT, observeLeaderDetail, observeTabbedDetail, leaderDetailFailures } from './leader-detail-design-contract.mjs';
-import { LEADER_FEED_CONTRACT, observeLeaderFeed, leaderFeedFailures } from './leader-feed-design-contract.mjs';
-// CI-only production-browser acceptance measurements. Never turn a missing
-// observation into a pass. Artifacts are written before any gate fails.
+// Design Acceptance for the daily brief (the whole static app). Production
+// Chromium drives the built site with its published data and records objective,
+// blocking checks per screen, functional checks and CPU-4x timing. A missing
+// observation is a failure, never a pass. Timing overruns are deferred warnings
+// (the owner approved deferring them); they never enter `failures`.
+// No subjective score is produced here.
 import { chromium } from '@playwright/test';
-import AxeBuilder from '@axe-core/playwright';
-import { readFile, mkdir, writeFile, stat } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { createServer } from 'node:http';
-import { resolve, extname, sep } from 'node:path';
+import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { gzipSync } from 'node:zlib';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { extname, resolve, sep } from 'node:path';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
-import { verifyChartCases, CHART_DESIGN_SYMBOLS } from './chart-design-cases.mjs';
-import { recordProfileDiagnostic } from './profile-diagnostic.mjs';
-import { recordContinuousSwitchDiagnostic } from './continuous-switch-diagnostic.mjs';
-import { retainProfileSources } from './retain-profile-sources.mjs';
-import { verifyFinancialCases, financialDesignScreens } from './financial-design-cases.mjs';
-import { verifyFinancialCarryCases, financialCarryDesignScreens, financialCarrySha256, prepareFinancialCarryDesignBinding,
-  verifyFinancialCarryMeasurementBinding, observeFinancialCarryUi, sealFinancialCarryDesignReport } from './financial-carry-design-cases.mjs';
-import { verifyDailyObservationCases, dailyObservationDesignScreens } from './daily-observation-design-cases.mjs';
-import { verifyMarketHistoryCases } from './market-history-design-cases.mjs';
-import { financialViewportGeometry, checkFinancialViewportGeometry } from './financial-viewport-geometry.mjs';
-import { RADAR_HARNESS_VERSION, radarMeasurementFailures } from './radar-benchmark-context.mjs';
-import { recordProductionBootstrapDiagnostic } from './production-bootstrap-diagnostic.mjs';
+import { COLOR_MODE_STORAGE_KEY } from '../src/contexts/useColorModePreference.js';
+import { createDesignAssetObserver } from './design-static-assets.mjs';
+import {
+  AXE_TAGS, CAPTURES, DESIGN_GROUPS, FONT_SIZES, LEGACY_REDIRECTS, MIN_CANDLES, MOBILE_CHROME_BUDGET, RADII,
+  REDUCED_MOTION_SETTLE_MS, REPORT_SCHEMA, TIMING, captureKey, minimumTarget, requiredCaptureKeys, summarizeTiming,
+} from './brief-design-contract.mjs';
 
-import { buildLimitedResearchAssessment, LIMITED_RESEARCH_SCOPE } from './limited-research-assessment.mjs';
-import { screeningPriorityBinding, finishScreeningPriority } from './screening-priority-acceptance.mjs';
-
-const limitedAssessment = process.argv.includes('--limited-research-preview');
-const limitationArguments = process.argv.slice(2).filter(value => value.startsWith('--limited-performance-limitations='));
-if (limitationArguments.length > 1 || (!limitedAssessment && limitationArguments.length)) throw Error('Performance limitation input requires one explicit limited assessment mode');
-const approvedLimitations = limitationArguments.length
-  ? JSON.parse(await readFile(resolve(limitationArguments[0].slice('--limited-performance-limitations='.length)), 'utf8')) : [];
-if (!Array.isArray(approvedLimitations) || approvedLimitations.some(value => typeof value !== 'string')) throw Error('Expected exact performance limitation strings');
-
-if (!process.env.CI) throw Error('Run this browser harness in GitHub Actions, not on the desktop host.');
-const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || (limitedAssessment ? 'test-results/limited-research-preview' : 'test-results/design-review'));
-await mkdir(output, { recursive: true });
-const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-const viewportSizes = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
+if (process.argv.length > 2) throw Error('The brief Design harness takes no arguments');
+const output = resolve(process.env.DESIGN_REVIEW_OUTPUT || 'test-results/design-review');
 const currentRoot = resolve(process.env.CURRENT_BUILD || 'dist');
-const baselineRoot = process.env.BASELINE_BUILD && resolve(process.env.BASELINE_BUILD);
-const radarRoot = process.env.RADAR_BUILD && resolve(process.env.RADAR_BUILD);
-const inputBasis = process.env.DESIGN_INPUT_BASIS || 'same_verified_input';
-if (!['same_verified_input', 'same_prices_repaired_financials'].includes(inputBasis)) throw Error('Unknown Design input comparison basis');
-const comparisonMethod = inputBasis === 'same_verified_input'
-  ? 'same-data baseline/current'
-  : 'published-financial baseline versus certified-financial candidate; identical verified prices, different financial inputs; not a UI-only speed comparison';
-const report = { mobile_map_contract: 'mobile-market-map-v1', svg_evidence_contract: SVG_EVIDENCE_CONTRACT, layout_contract: LEADER_FEED_CONTRACT, detail_contract: LEADER_DETAIL_CONTRACT, commit, measured_at: new Date().toISOString(), source_run: process.env.SOURCE_RUN || null, clock: 'actual browser Date.now; no historical date override', data: null,
-  input_basis: inputBasis,
-  method: `Production Chromium. CDP CPU 4x, ${comparisonMethod}, HTTP responses cached in memory after warm-up. No human satisfaction inference.`, screens: [], performance: [], failures: [] };
-if (limitedAssessment) report.assessment_mode = LIMITED_RESEARCH_SCOPE;
-const check = (condition, detail) => {
-  if (!condition) {
-    report.failures.push(detail);
-    try { console.error(`[design-failure ${report.failures.length}] ${JSON.stringify(detail)}`); } catch { /* Logging cannot change the gate. */ }
-  }
+await mkdir(output, { recursive: true });
+// Only this run's evidence may sit next to its report.
+for (const name of await readdir(output)) if (name === 'report.json' || name.endsWith('.png')) await rm(resolve(output, name), { force: true });
+
+const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
+const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+const AXE_SOURCE = await readFile(createRequire(import.meta.url).resolve('axe-core/axe.min.js'), 'utf8');
+const report = {
+  schema: REPORT_SCHEMA, commit, measured_at: new Date().toISOString(),
+  input_basis: process.env.DESIGN_INPUT_BASIS || 'unbound-local',
+  input: { current_build: process.env.CURRENT_BUILD || 'dist', provenance_sha256: null, provenance_schema: null, carry_preview: Boolean(process.env.DESIGN_CARRY_PREVIEW_PROVENANCE), packed: null },
+  data: null,
+  method: 'Production Chromium serving CURRENT_BUILD at /screener/ from 127.0.0.1; every other request is aborted and recorded. Actual browser clock. Service workers blocked. Objective checks per capture; timing under CDP CPU 4x, median of 3 runs. No subjective scores.',
+  contract: { groups: DESIGN_GROUPS.map(group => group.key), captures: CAPTURES.map(({ screen, path, how }) => ({ screen, path, how })), font_sizes: FONT_SIZES, radii: RADII,
+    axe_tags: AXE_TAGS, mobile_chrome_budget: MOBILE_CHROME_BUDGET, min_candles: MIN_CANDLES, reduced_motion_settle_ms: REDUCED_MOTION_SETTLE_MS, legacy_redirects: LEGACY_REDIRECTS, timing: TIMING },
+  groups: [], screens: [], functional: [], reduced_motion: [], failures: [], timing: [], timing_warnings: [],
 };
-const carryProvenancePath = process.env.DESIGN_CARRY_PREVIEW_PROVENANCE;
-let carryBinding;
-let priorityBinding;
-const completedGroups = [];
-if (carryProvenancePath) {
+const save = () => writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
+const fail = (detail, ...lists) => {
+  report.failures.push(detail);
+  for (const list of lists) list?.push(detail);
+  try { console.error(`[design-failure ${report.failures.length}] ${detail}`); } catch { /* Logging never changes the gate. */ }
+};
+
+// A financial correction changes the financial display. The brief has no verified
+// financial-display contract yet, so such a candidate cannot pass this harness.
+if (process.env.FINANCIAL_CANDIDATE_DIR) {
+  fail('A financial correction candidate is prepared (FINANCIAL_CANDIDATE_DIR), but the brief Design harness has no verified financial-display contract; it fails closed.');
+  await save();
+  process.exit(1);
+}
+if (process.env.DESIGN_INPUT_PROVENANCE) {
   try {
-    check(inputBasis === 'same_verified_input', 'Carry previews require identical logical baseline/current data');
-    carryBinding = await prepareFinancialCarryDesignBinding({ provenancePath: resolve(carryProvenancePath), currentRoot, baselineRoot, commit });
-    const { logical_files, physical_files, ...bindingReport } = carryBinding;
-    void logical_files; void physical_files;
-    report.financial_carry_preview = bindingReport;
-  } catch (error) {
-    report.financial_carry_preview = { status: 'binding-failed', publication_authority: 'none', financial_admission: false };
-    check(false, `Carry preview evidence binding failed: ${error.message}`);
-    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
-  }
+    const bytes = await readFile(resolve(process.env.DESIGN_INPUT_PROVENANCE));
+    const value = JSON.parse(bytes.toString('utf8'));
+    report.input.provenance_sha256 = sha256(bytes);
+    report.input.provenance_schema = value.schema ?? (value.decision?.mode ? `release-source:${value.decision.mode}` : 'unknown');
+  } catch (error) { fail(`Design input provenance is unreadable: ${error.message}`); }
 }
-let baselineRepresentation;
-if (baselineRoot && inputBasis === 'same_verified_input' && !limitedAssessment) {
-  baselineRepresentation = await prepareBaselineRepresentation({ currentRoot, baselineRoot, output,
-    baselineSha: process.env.BASELINE_REF || '1e1943e1d5f78a738a05baa69eb9f2e8508e32ac' });
-  const { proof, sha256 } = baselineRepresentation;
-  report.baseline_representation = { schema: proof.schema, proof_sha256: sha256, baseline_sha: proof.baseline_sha,
-    canonical_data_inventory_sha256: proof.canonical_data_inventory_sha256, research: proof.research, served: {}, received: {} };
-}
-try {
-  priorityBinding = screeningPriorityBinding({ currentRoot, baselineRoot, commit, inputBasis, output, limited: limitedAssessment });
-} catch (error) {
-  check(false, `Screening acceptance input binding failed: ${error.message}`);
-}
-const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
-async function serve(root, representation = null) {
+
+const mime = { '.html': 'text/html', '.js': 'application/javascript', '.mjs': 'application/javascript', '.css': 'text/css', '.json': 'application/json', '.webmanifest': 'application/manifest+json',
+  '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.ico': 'image/x-icon', '.txt': 'text/plain', '.wasm': 'application/wasm' };
+async function serve(root) {
   const server = createServer(async (request, response) => {
     try {
       const pathname = decodeURIComponent(new URL(request.url, 'http://localhost').pathname);
-      const relative = pathname.replace(/^\/screener\//, '').replace(/^\/+/, '') || 'index.html';
-      if (representation) {
-        const bytes = representationResponse(representation, root, relative, baselineRoot);
-        if (bytes) {
-          const identity = representation.proof.files[relative];
-          report.baseline_representation.served[relative] = { ...identity,
-            responses: (report.baseline_representation.served[relative]?.responses || 0) + 1 };
-          response.writeHead(200, { 'Content-Type': mime[extname(relative)] || 'application/octet-stream' });
-          response.end(bytes); return;
-        }
-      }
-      let file = resolve(root, relative);
+      if (!pathname.startsWith('/screener/')) throw Error('Outside the base path');
+      let file = resolve(root, pathname.slice('/screener/'.length) || 'index.html');
       if (file !== root && !file.startsWith(root + sep)) throw Error('Invalid path');
       if ((await stat(file)).isDirectory()) file = resolve(file, 'index.html');
-      response.writeHead(200, { 'Content-Type': mime[extname(file)] || 'application/octet-stream' });
-      response.end(await readFile(file));
+      const body = await readFile(file);
+      response.writeHead(200, { 'Content-Type': mime[extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-store' });
+      response.end(body);
     } catch { response.writeHead(404); response.end('Not found'); }
   });
-  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
-  return { url: `http://127.0.0.1:${server.address().port}/screener/`, close: () => new Promise(resolve => server.close(resolve)) };
-}
-const current = await serve(currentRoot);
-const baseline = baselineRoot && await serve(baselineRoot, baselineRepresentation);
-const radar = radarRoot && await serve(radarRoot);
-const browser = await chromium.launch();
-const manifest = JSON.parse(await readFile(resolve(currentRoot, 'static-data/manifest.json'), 'utf8'));
-report.data = { as_of_date: (manifest.markets?.US || manifest).as_of_date, generated_at: manifest.generated_at, research_generation: manifest.research_generation };
-if (baselineRoot) {
-  const previousManifest = JSON.parse(baselineRepresentation
-    ? representationResponse(baselineRepresentation, baselineRoot, 'static-data/manifest.json', baselineRoot)
-    : await readFile(resolve(baselineRoot, 'static-data/manifest.json'), 'utf8'));
-  const currentEntry = manifest.markets?.US || manifest, previousEntry = previousManifest.markets?.US || previousManifest;
-  const ids = async (root, entry, label) => {
-    const raw = label === 'baseline' && baselineRepresentation
-      ? representationResponse(baselineRepresentation, root, 'static-data/' + entry.assets.research.path, baselineRoot)
-      : await readFile(resolve(root, 'static-data', entry.assets.research.path));
-    (report.transport ||= []).push({ label, as_of_date: entry.as_of_date, raw_bytes: raw.length, gzip_bytes: gzipSync(raw).length });
-    return decodeResearchIndex(JSON.parse(raw.toString('utf8'))).rows.map(row => row.symbol).sort().join(',');
-  };
-  check(currentEntry.as_of_date === previousEntry.as_of_date && await ids(currentRoot, currentEntry, 'current') === await ids(baselineRoot, previousEntry, 'baseline'), 'Baseline/current snapshots have different dates or symbols; performance comparison is invalid');
-}
-const readySelector = '.candidate-row, .research-list tbody tr';
-const visible = locator => locator.first().waitFor({ state: 'visible', timeout: 60000 });
-const readyCandidates=page=>readyResearchCandidates(page,readySelector);
-
-// Measurements describe effective hit boxes (including associated labels),
-// not a tiny decorative checkbox inside a correctly sized clickable label.
-function objectiveMetrics() {
-  const allowedFonts = [11, 12, 13, 14, 16, 20, 26, 34, 42];
-  const describe = element => ({ tag: element.tagName.toLowerCase(), text: (element.getAttribute('aria-label') || element.textContent || '').trim().slice(0, 100), class: typeof element.className === 'string' ? element.className.slice(0, 100) : '' });
-  const shown = element => {
-    const box = element.getBoundingClientRect(), style = getComputedStyle(element);
-    return box.width > 0 && box.height > 0 && style.visibility !== 'hidden' && style.display !== 'none' && style.opacity !== '0' && !element.closest('[hidden],[aria-hidden="true"]');
-  };
-  const chartInternal = element => element.closest('.tv-lightweight-charts, [data-chart-internal], canvas');
-  const elements = [...document.querySelectorAll('body *')].filter(shown);
-  const smallTargets = [...document.querySelectorAll('button,a,[role="button"],summary,select,input')].filter(element => shown(element) && !element.closest('p') && !element.disabled).flatMap(element => {
-    // Checkbox/radio labels enlarge their target. A floating text-field label
-    // is only a caption: measure the editable field itself, not that caption.
-    const target = element.matches('input[type=checkbox],input[type=radio]') ? element.labels?.[0] || element.closest('label') || element : element;
-    const box = target.getBoundingClientRect(), minimum = innerWidth < 768 ? 44 : 24;
-    return box.width + .1 < minimum || box.height + .1 < minimum ? [{ ...describe(element), width: box.width, height: box.height }] : [];
-  });
-  const fontIssues = elements.filter(element => !chartInternal(element) && [...element.childNodes].some(node => node.nodeType === Node.TEXT_NODE && node.textContent.trim())).flatMap(element => {
-    const size = Number.parseFloat(getComputedStyle(element).fontSize);
-    return !allowedFonts.some(value => Math.abs(value - size) < .1) ? [{ ...describe(element), size }] : [];
-  });
-  const asciiNegativeValues = elements.flatMap(element => {
-    const ownText = [...element.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join(' ');
-    // Standalone signed numeric values only. Dates, URLs, ticker symbols and
-    // ordinary hyphenated text have no qualifying numeric-token boundary.
-    return /(?:^|[\s(（:：$])-(?:\$)?\d/.test(ownText) ? [{ ...describe(element), value: ownText.trim().slice(0, 140) }] : [];
-  });
-  const radiusIssues = elements.filter(element => !chartInternal(element)).flatMap(element => {
-    const style = getComputedStyle(element), box = element.getBoundingClientRect();
-    const corners = [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomLeftRadius, style.borderBottomRightRadius];
-    const values = corners.map(Number.parseFloat);
-    const pill = corners.every(value => value.includes('%') && Number.parseFloat(value) >= 50) || values.every(value => value >= Math.min(box.width, box.height) / 2 - .1);
-    return !pill && values.some(value => ![0, 4, 8, 12, 16].some(allowed => Math.abs(value - allowed) < .1)) ? [{ ...describe(element), corners }] : [];
-  });
-  const rect = selector => { const element = document.querySelector(selector); if (!element || !shown(element)) return null; const box = element.getBoundingClientRect(); return { top: box.top, bottom: box.bottom, height: box.height, width: box.width }; };
-  const header = rect('.leader-header') || rect('header.MuiAppBar-root');
-  const nav = rect('.stock-section-nav') || rect('.mobile-research-nav') || rect('.leader-mobile-nav'), actions = rect('.mobile-chart-actions');
-  const contentTop = header?.bottom || 0, contentBottom = Math.min(nav?.top ?? innerHeight, actions?.top ?? innerHeight);
-  const bottomChrome = innerHeight-contentBottom;
-  const completelyVisible = element => {
-    const box = element.getBoundingClientRect();
-    if (box.top < contentTop - .1 || box.bottom > contentBottom + .1) return false;
-    for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
-      if (/(auto|scroll|hidden)/.test(getComputedStyle(parent).overflowY)) {
-        const clip = parent.getBoundingClientRect();
-        if (box.top < clip.top - .1 || box.bottom > clip.bottom + .1) return false;
-      }
-    }
-    return true;
-  };
-  const visibleFraction = element => {
-    const box = element.getBoundingClientRect();
-    let top = Math.max(box.top, contentTop), bottom = Math.min(box.bottom, contentBottom);
-    for (let parent = element.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
-      if (/(auto|scroll|hidden)/.test(getComputedStyle(parent).overflowY)) {
-        const clip = parent.getBoundingClientRect(); top = Math.max(top, clip.top); bottom = Math.min(bottom, clip.bottom);
-      }
-    }
-    return box.height ? Math.max(0, bottom - top) / box.height : 0;
-  };
-  const animations = document.getAnimations().filter(animation => animation.playState === 'running' && (!animation.effect?.getTiming().iterations || animation.effect.getTiming().iterations === Infinity || animation.effect.getTiming().duration > 1));
-  const heroActionTargets = [...document.querySelectorAll('.hero-actions button')].map(element => {
-    const box=element.getBoundingClientRect(), style=getComputedStyle(element);
-    return {...describe(element), rect:{top:box.top,bottom:box.bottom,left:box.left,right:box.right,width:box.width,height:box.height},
-      minHeight:style.minHeight,margin:style.margin,lineHeight:style.lineHeight,display:style.display,position:style.position};
-  });
-  return { smallTargets, fontIssues, radiusIssues, asciiNegativeValues, heroActionTargets, scrollY, horizontalOverflow: document.documentElement.scrollWidth > innerWidth,
-    pageHeight: document.documentElement.scrollHeight, viewport: { width: innerWidth, height: innerHeight },
-    headerHeight: header?.height || 0, bottomNavHeight: bottomChrome, chromeHeight: (header?.height || 0) + bottomChrome,
-    mobileActionBar: actions,
-    hero: rect('[data-testid="home-hero"], .research-hero'), firstRow: rect('.candidate-row'), chart: rect('.research-detail .research-chart canvas') || rect('.research-detail .research-chart [data-chart-plot]'), chartCard: rect('.research-detail .research-chart'), detail: rect('.research-detail'),
-    visibleCandidates: [...document.querySelectorAll('.candidate-row')].filter(shown).filter(completelyVisible).length,
-    firstScanCard: rect('[data-testid="mobile-scan-row"]'),
-    visibleScanCards: [...document.querySelectorAll('[data-testid="mobile-scan-row"]')].filter(shown).filter(completelyVisible).length,
-    visibleCompareCards: [...document.querySelectorAll('.comparison-grid article, .comparison-card')].filter(shown).filter(completelyVisible).length,
-    visibleCompareCardFraction: [...document.querySelectorAll('.comparison-grid article, .comparison-card')].filter(shown).reduce((sum, card) => sum + visibleFraction(card), 0),
-    comparisonGrid: rect('.comparison-grid'),
-    runningAnimations: animations.length };
+  await new Promise(done => server.listen(0, '127.0.0.1', done));
+  const origin = `http://127.0.0.1:${server.address().port}`;
+  return { origin, url: `${origin}/screener/`, close: () => new Promise(done => server.close(done)) };
 }
 
-async function capture(page, viewport, theme, screen, { target, scope = 'viewport', viewportTargets } = {}) {
-  if (await page.locator('.leader-shell').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: theme === 'light' ? 'ライトモードに切り替え' : 'ダークモードに切り替え', exact: true }).click();
-  await page.evaluate(() => document.fonts.ready);
-  await page.waitForTimeout(800);
-  const metrics = await page.evaluate(objectiveMetrics);
-  metrics.feed = await page.evaluate(observeLeaderFeed);
-  metrics.detailEvidence = screen==='detail' ? await observeTabbedDetail(page) : await page.evaluate(observeLeaderDetail);
-  const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
-  const screenshot = `${screen}-${viewport.width}x${viewport.height}-${theme}.png`;
-  const key = `${screen}/${viewport.width}/${theme}`;
-  const geometry = viewportTargets ? await page.evaluate(financialViewportGeometry, viewportTargets) : null;
-  if (geometry) checkFinancialViewportGeometry(geometry, check, key, viewport);
-  if (target) await page.locator(target).screenshot({ path: resolve(output, screenshot) });
-  else await page.screenshot({ path: resolve(output, screenshot) });
-  const screenshotHash = financialCarrySha256(await readFile(resolve(output, screenshot)));
-  const diagnosticChecks = (checks=[]) => checks.map(({id,message,data,relatedNodes})=>({id,message,data,relatedNodes:(relatedNodes||[]).map(node=>({target:node.target}))}));
-  const screenEvidence = { key, screenshot, sha256: screenshotHash, ...(carryBinding ? { preview_provenance_sha256: carryBinding.provenance_sha256 } : {}), ...(target || viewportTargets ? { screenshot_scope: scope, screenshot_target: target || null, metrics_scope: 'original-viewport', ...(geometry ? { viewport_geometry: geometry } : {}) } : {}), metrics, axe: axe.violations.map(({ id, impact, description, nodes }) => ({ id, impact, description, nodes: nodes.map(node => ({ target: node.target, failureSummary: node.failureSummary, any:diagnosticChecks(node.any), all:diagnosticChecks(node.all), none:diagnosticChecks(node.none) })) })) };
-  report.screens.push(screenEvidence);
-  check(axe.violations.length === 0, `${key}: axe ${axe.violations.length} rule violations`);
-  check(metrics.smallTargets.length === 0, `${key}: ${metrics.smallTargets.length} undersized hit targets`);
-  check(metrics.fontIssues.length === 0, `${key}: ${metrics.fontIssues.length} font-step violations`);
-  check(metrics.radiusIssues.length === 0, `${key}: ${metrics.radiusIssues.length} radius-step violations`);
-  check(metrics.asciiNegativeValues.length === 0, `${key}: ${metrics.asciiNegativeValues.length} financial values use ASCII minus`);
-  check(!metrics.horizontalOverflow, `${key}: horizontal page overflow`);
-  if (viewport.width === 390) check(metrics.chromeHeight <= mobileChromeBudget(metrics), `${key}: fixed chrome ${metrics.chromeHeight}px > ${mobileChromeBudget(metrics)}px`);
-  for(const failure of leaderFeedFailures(metrics,screen))check(false,`${key}: ${failure}`);
-  for(const failure of leaderDetailFailures(metrics,screen))check(false,`${key}: ${failure}`);
-  if (['comparison', 'comparison-near-pass'].includes(screen) && viewport.width === 1440) {
-    check(metrics.pageHeight <= 900, `${key}: page height ${metrics.pageHeight}px > 900px`);
-    check(metrics.visibleCompareCards >= 6, `${key}: ${metrics.visibleCompareCards} visible comparison cards < 6`);
-    check(metrics.comparisonGrid?.height <= 700, `${key}: comparison grid height ${metrics.comparisonGrid?.height}px > 700px or missing`);
-  }
-  if (['comparison', 'comparison-near-pass'].includes(screen) && viewport.width === 390) check(metrics.visibleCompareCardFraction >= 1.5, `${key}: ${metrics.visibleCompareCardFraction.toFixed(3)} visible cards < 1.5`);
-  if (screen === 'market') check(metrics.pageHeight <= (viewport.width === 390 ? 1600 : 1000), `${key}: market page height ${metrics.pageHeight}px exceeds budget`);
-  if (screen === 'scan') {
-    if (viewport.width === 390) check(metrics.pageHeight <= 3000, `${key}: scan page height ${metrics.pageHeight}px > 3000px`);
-    // Body cells do not duplicate header data-column attributes. Resolve their
-    // actual column indices; RS uses bars whereas price uses an area path.
-    const sparklineColumns = await page.locator('th[data-column="rs_trend"], th[data-column="price_change_1d"]').evaluateAll(headers => headers.map(header => ({
-      id: header.dataset.column,
-      geometry: [...header.closest('table').querySelectorAll('tbody tr')].flatMap(row => [...(row.cells[header.cellIndex]?.querySelectorAll('svg path,svg rect,svg polyline') || [])]).filter(node => {
-        const box = node.getBBox(); return box.width > 0 && box.height > 0;
-      }).length,
-    })));
-    screenEvidence.sparkline_columns = sparklineColumns;
-    for (const column of sparklineColumns) check(column.geometry > 0, `${key}: displayed ${column.id} sparkline column has no geometry`);
-  }
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  await page.waitForTimeout(50);
-  screenEvidence.reduced_motion_running_animations = (await page.evaluate(objectiveMetrics)).runningAnimations;
-  check(screenEvidence.reduced_motion_running_animations === 0, `${key}: animations remain with reduced motion`);
-  await page.emulateMedia({ reducedMotion: 'no-preference' });
-  console.log(`Captured ${key}; ${report.failures.length} objective failures recorded so far.`);
-  try { console.error(`[design-capture-failures] ${JSON.stringify({ key, failures: report.failures })}`); } catch { /* Keep the original report and capture path. */ }
-  await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
-}
+const server = await serve(currentRoot);
+const publicationPresent = await stat(resolve(currentRoot, 'publication.json')).then(info => info.isFile(), () => false);
+// The app probes publication.json; an unpacked build legitimately answers 404 there.
+const optionalProbe = (url, status) => !publicationPresent && status === 404 && new URL(url).pathname === '/screener/publication.json';
+const isLocal = url => { try { const parsed = new URL(url); return parsed.origin === server.origin || ['data:', 'blob:', 'about:'].includes(parsed.protocol); } catch { return false; } };
 
-for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
-  const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
+// The published as-of date, read through the same transport the browser uses.
+let expectedDate = null, fallbackSymbol = null;
+try {
+  const observer = await createDesignAssetObserver({ baseURL: server.url });
+  const manifest = observer.manifest, entry = manifest.markets?.US || manifest;
+  const researchPath = entry.assets?.research?.path || entry.pages?.scan?.path;
+  if (!researchPath) throw Error('The manifest names no research asset');
+  const research = decodeResearchIndex(await observer.readJson(researchPath));
+  observer.dispose();
+  const manifestDate = entry.as_of_date || manifest.as_of_date || null, researchDate = research?.as_of_date ?? research?.date ?? null;
+  report.input.packed = observer.packed;
+  report.data = { as_of_date: manifestDate, research_as_of_date: researchDate, generated_at: manifest.generated_at ?? null,
+    research_generation: manifest.research_generation ?? null, research_rows: Array.isArray(research?.rows) ? research.rows.length : null };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(manifestDate || '')) fail(`Published manifest as-of date is missing or invalid: ${manifestDate}`);
+  else if (researchDate !== manifestDate) fail(`Published research as-of date ${researchDate} differs from the manifest as-of date ${manifestDate}`);
+  else expectedDate = manifestDate;
+  fallbackSymbol = research?.rows?.find(row => /^[A-Z0-9.^-]{1,15}$/.test(row?.symbol || ''))?.symbol || null;
+} catch (error) {
+  fail(`Published data could not be read through its transport: ${error.message}`);
+}
+await save();
+
+const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {});
+const ROWS = '[data-testid="brief-candidate"]';
+const CANDLES = '[data-testid="brief-price-chart"] rect.bc-up, [data-testid="brief-price-chart"] rect.bc-down';
+const LOADING = /読み込み中|読込中|取得中/;
+
+/** A browser context with the group's device, theme, network fence and error capture. */
+async function openSession(group, { reducedMotion = 'no-preference', label = group.key, extraInit } = {}) {
+  const context = await browser.newContext({
+    viewport: { width: group.width, height: group.height }, deviceScaleFactor: group.mobile ? 2 : 1, isMobile: group.mobile, hasTouch: group.mobile,
+    locale: 'ja-JP', colorScheme: group.theme, reducedMotion, serviceWorkers: 'block',
+  });
+  await context.addInitScript(([key, mode]) => { try { localStorage.setItem(key, mode); } catch { /* opaque origins */ } }, [COLOR_MODE_STORAGE_KEY, group.theme]);
+  if (extraInit) await context.addInitScript(extraInit);
+  const session = { context, step: 'start', pending: [], blocked: new Set() };
+  const record = detail => fail(`${label} [${session.step}]: ${detail}`, session.pending);
+  const blockedRequest = url => { if (!session.blocked.has(url)) { session.blocked.add(url); record(`non-local request aborted: ${url}`); } };
+  await context.route('**/*', route => {
+    const url = route.request().url();
+    if (isLocal(url)) return route.continue();
+    blockedRequest(url);
+    return route.abort('blockedbyclient');
+  });
+  context.on('request', request => { if (!isLocal(request.url())) blockedRequest(request.url()); });
+  context.on('response', response => {
+    if (response.status() >= 400 && isLocal(response.url()) && !optionalProbe(response.url(), response.status())) record(`HTTP ${response.status()} ${new URL(response.url()).pathname}`);
+  });
   const page = await context.newPage();
-  const key = `${viewport.width}/${theme}`;
-  const finishCarryUi = carryBinding && observeFinancialCarryUi({ page, currentUrl: current.url, binding: carryBinding, check, report, viewport, theme });
-  page.on('pageerror', error => report.failures.push(`${key}: ${error.message}`));
-  try {
-    await page.goto(current.url);
-    if(viewport.width===390){
-      await visible(page.locator('.mobile-market-map'));
-      await visible(page.locator('.mobile-map-candidates button'));
-      if(theme==='light')await page.getByRole('button',{name:'ライトモードに切り替え',exact:true}).click();
-      await capture(page,viewport,theme,'market-map');
-    }
-    await readyCandidates(page);
-    if (theme === 'light' && await page.locator('.leader-shell').getAttribute('data-theme')!=='light') await page.getByRole('button', { name: 'ライトモードに切り替え', exact: true }).click();
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await capture(page, viewport, theme, 'home');
-    await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
-    await page.getByLabel('あと1条件', { exact: true }).check();
-    await page.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
-    await capture(page, viewport, theme, 'near-pass');
-    await page.getByRole('button', { name: '候補を絞り込む', exact: true }).click();
-    await page.getByLabel('あと1条件', { exact: true }).uncheck();
-    await page.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
-    if (viewport.width === 1440) {
-      await page.getByRole('button', { name: '概況をたたむ', exact: true }).click();
-      await page.evaluate(() => window.scrollTo(0, 0));
-      await capture(page, viewport, theme, 'compact');
-      await page.getByRole('button', { name: '概況を展開', exact: true }).click();
-    }
-    await page.locator('.candidate-row').first().click();
-    await capture(page, viewport, theme, 'detail');
-    if(viewport.width===390)await page.locator('.research-chart .leader-svg-extra-controls summary').click();
-    const expand = page.getByRole('button', { name: '日次チャートを分析', exact: true });
-    check(await expand.isVisible(), `${key}: chart expansion control is missing`);
-    if (await expand.isVisible()) {
-      await expand.click(); await visible(page.getByRole('dialog'));
-      await capture(page, viewport, theme, 'chart');
-      await page.keyboard.press('Escape');
-    }
-    if (viewport.width === 390) {
-      await page.locator('.mobile-header-back:visible, .mobile-back:visible').first().click();
-      await readyCandidates(page);
-      check(await page.locator('.research-workbench').getAttribute('data-mobile-view') === 'list', `${key}: back control did not restore candidate list`);
-    }
-  } catch (error) {
-    report.failures.push(`${key}: home/detail verification interrupted: ${error.message}`);
-    await page.screenshot({ path: resolve(output, `interrupted-home-${viewport.width}-${theme}.png`) }).catch(() => {});
-  }
-  // Each remaining route is independently loadable. A broken return control
-  // above remains a failure, but cannot hide problems on unrelated screens.
-  try {
-    await page.goto(current.url); await page.reload(); await readyCandidates(page);
-    if (await page.locator('.leader-shell').getAttribute('data-theme') !== theme) await page.getByRole('button', { name: theme === 'light' ? 'ライトモードに切り替え' : 'ダークモードに切り替え', exact: true }).click();
-    const planButton = page.getByRole('button', { name: /条件付きの配分|配分の試算/ }).first();
-    await planButton.click(); await visible(page.getByRole('dialog'));
-    await capture(page, viewport, theme, 'portfolio');
-    await page.keyboard.press('Escape');
-  } catch (error) {
-    report.failures.push(`${key}: portfolio verification interrupted: ${error.message}`);
-  }
-  for (const [screen, route, selector] of [['comparison', '#/compare', '.comparison-grid'], ['market', '#/breadth?tab=sectors', '.sector-strength'], ['breadth', '#/breadth', '.market-trend, [data-testid="breadth-unavailable"]'], ['scan', '#/scan', 'h1']]) {
-    try {
-      await page.goto(`${current.url}${route}`); await visible(page.locator(selector));
-      if (screen === 'comparison') await visible(page.locator('.comparison-grid canvas, .comparison-grid svg'));
-      if (screen === 'scan') await visible(page.locator('[data-testid="mobile-scan-row"], tbody tr'));
-      await capture(page, viewport, theme, screen);
-      if (screen === 'comparison') {
-        await page.getByRole('button', { name: '手法・絞り込み', exact: true }).click();
-        await page.getByLabel('あと1条件', { exact: true }).check();
-        await page.getByRole('button', { name: '絞り込みを閉じる', exact: true }).click();
-        await capture(page, viewport, theme, 'comparison-near-pass');
-      }
-    } catch (error) {
-      report.failures.push(`${key}: ${screen} verification interrupted: ${error.message}`);
-      await page.screenshot({ path: resolve(output, `interrupted-${screen}-${viewport.width}-${theme}.png`) }).catch(() => {});
-    }
-  }
-  await verifyMarketHistoryCases({ page, viewport, theme, report, currentUrl: current.url, currentRoot });
-  await verifyChartCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
-  await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, output });
-  if (carryBinding) await verifyFinancialCarryCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, binding: carryBinding, output });
-  await verifyDailyObservationCases({ page, viewport, theme, capture, check, report, currentUrl: current.url });
-  if (finishCarryUi) await finishCarryUi();
-  await context.close();
-  completedGroups.push(`${viewport.width}/${theme}`);
+  page.on('pageerror', error => record(`page error: ${error.message}`));
+  page.on('console', message => {
+    if (message.type() !== 'error') return;
+    const where = message.location()?.url || '';
+    // Failed loads are already recorded from the response or the network fence.
+    if (/^Failed to load resource/.test(message.text()) && where && (!isLocal(where) || optionalProbe(where, 404) || /status of [45]\d\d/.test(message.text()))) return;
+    record(`console error: ${message.text().slice(0, 300)}`);
+  });
+  session.page = page;
+  return session;
 }
-for (const viewport of viewportSizes) for (const theme of ['dark', 'light']) {
-  const chartScreens = CHART_DESIGN_SYMBOLS.flatMap(symbol => ['inline', 'inline-annotations', 'expanded', 'expanded-annotations'].map(view => `case-${symbol}-${view}`));
-  const screens = ['home', 'near-pass', 'detail', 'chart', 'portfolio', 'comparison', 'comparison-near-pass', 'market', 'breadth', 'scan', ...(viewport.width === 1440 ? ['compact'] : []), ...chartScreens, ...financialDesignScreens(viewport, theme), ...(carryProvenancePath ? financialCarryDesignScreens(viewport, theme) : []), ...dailyObservationDesignScreens(viewport, theme)];
-  for (const screen of screens) {
-    const key = `${screen}/${viewport.width}/${theme}`;
-    check(report.screens.some(result => result.key === key), `${key}: required capture was not completed`);
+
+const go = (page, hash) => page.goto(`${server.url}${hash}`);
+const frames = page => page.evaluate(() => new Promise(done => requestAnimationFrame(() => requestAnimationFrame(done))));
+const hashIs = (page, hash, timeout = 15000) => page.waitForFunction(target => location.hash === target, hash, { timeout });
+
+/** Wait until the brief root exists and no loading text remains; a stuck screen is a failure. */
+async function briefReady(page, onFail) {
+  await page.locator('.brief[data-theme]').waitFor({ state: 'attached', timeout: 60000 });
+  try {
+    await page.waitForFunction(source => !new RegExp(source).test(document.querySelector('.brief')?.innerText || ''), LOADING.source, { timeout: 60000 });
+  } catch {
+    const text = await page.evaluate(source => (document.querySelector('.brief')?.innerText.match(new RegExp(`.{0,30}(${source}).{0,10}`)) || [''])[0], LOADING.source);
+    onFail(`still loading after 60s: “${text.trim()}”`);
   }
 }
 
-const median = values => [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)];
-for (const [label, server] of [['baseline', baseline], ['current', current]]) {
-  if (!server) continue;
-  for (const viewport of viewportSizes) {
-    const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
-    const cache = new Map();
-    await context.route('**/*', async route => {
-      const key = route.request().url();
-      try {
-        if (!cache.has(key)) {
-          const response = await route.fetch(), body = await response.body();
-          if (label === 'baseline' && baselineRepresentation) {
-            const path = decodeURIComponent(new URL(key).pathname).replace(/^\/screener\//, '');
-            const expected = baselineRepresentation.proof.files[path];
-            if (expected) {
-              if (response.status() !== 200 || financialCarrySha256(body) !== expected.sha256 || body.length !== expected.bytes) throw Error('Baseline received bytes differ from proof');
-              report.baseline_representation.received[path] = { ...expected, responses: (report.baseline_representation.received[path]?.responses || 0) + 1 };
-            }
-          }
-          cache.set(key, { status: response.status(), headers: response.headers(), body });
-        }
-        await route.fulfill(cache.get(key));
-      } catch { await route.abort().catch(() => {}); }
-    });
-    const page = await context.newPage();
-    await page.addInitScript(() => {
-      window.__reviewTasks = [];
-      new PerformanceObserver(list => window.__reviewTasks.push(...list.getEntries().map(item => ({ start: item.startTime, duration: item.duration })))).observe({ type: 'longtask', buffered: true });
-    });
-    const runs = [];
-    try {
-      await page.goto(server.url); await readyCandidates(page); await page.waitForLoadState('networkidle');
-      const cdp = await context.newCDPSession(page);
-      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-      for (let repetition = 0; repetition < 3; repetition++) {
-        const start = Date.now();
-        await page.goto(server.url); await readyCandidates(page);
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        const candidateMs = Date.now() - start;
-        const initialTasks = await page.evaluate(() => ({ longest: Math.max(0, ...window.__reviewTasks.map(item => item.duration)), tasks: window.__reviewTasks }));
-        const method = page.getByRole('button', { name: /^オニール/, exact: false });
-        const switchStart = Date.now(); await method.click();
-        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-        const switchMs = Date.now() - switchStart;
-        runs.push({ candidate_ms: candidateMs, method_switch_ms: switchMs, longest_initial_task_ms: initialTasks.longest, initial_tasks: initialTasks.tasks,
-          memory: await page.evaluate(() => performance.memory ? { usedJSHeapSize: performance.memory.usedJSHeapSize, totalJSHeapSize: performance.memory.totalJSHeapSize } : null) });
-        console.log(`CPU4 ${label}/${viewport.width} run ${repetition + 1}: ready ${candidateMs}ms, switch ${switchMs}ms, long task ${initialTasks.longest}ms.`);
-      }
-      if (label === 'current' && runs.some(run => run.candidate_ms > 3500 || run.method_switch_ms > 400 || run.longest_initial_task_ms > 200)) {
-        // Diagnostic recording is a separate fourth run and cannot influence
-        // any of the three budget measurements above.
-        try {
-          report.profile_diagnostics_attempted = true;
-          report.profile_diagnostics ||= [];
-          report.profile_diagnostics.push(await recordProfileDiagnostic({ cdp, page, output, name:`diagnostic-initial-${viewport.width}`, action:async () => {
-            await page.goto(server.url); await readyCandidates(page);
-            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-          } }));
-          // Keep method switching isolated from initial Worker delivery. These
-          // diagnostic phases never replace any of the three measured runs.
-          report.profile_diagnostics.push(await recordProfileDiagnostic({ cdp, page, output, name:`diagnostic-method-${viewport.width}`, settleMs:500, action:async () => {
-            await page.getByRole('button', { name: /^オニール/ }).click();
-            await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-          } }));
-          report.profile_diagnostics.push(await recordContinuousSwitchDiagnostic({ cdp, page, output, url:server.url, readySelector, visible, width:viewport.width }));
-        } catch (error) { report.failures.push(`Diagnostic profile unavailable: ${error.message}`); }
-      }
-      await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
-    } catch (error) { report.failures.push(`${label}/${viewport.width}: performance interrupted: ${error.message}`); }
-    const metrics = { label, viewport, runs, candidate_median_ms: runs.length === 3 ? median(runs.map(run => run.candidate_ms)) : null,
-      maximum_switch_ms: runs.length ? Math.max(...runs.map(run => run.method_switch_ms)) : null,
-      longest_initial_task_ms: runs.length ? Math.max(...runs.map(run => run.longest_initial_task_ms)) : null, cached_response_count: cache.size };
-    report.performance.push(metrics);
-    if (label === 'current') {
-      check(runs.length === 3, `${viewport.width}: performance requires all 3 runs`);
-      check(metrics.candidate_median_ms !== null && metrics.candidate_median_ms <= 4200, `${viewport.width}: Q1 candidate median ${metrics.candidate_median_ms}ms > 4200ms`);
-      check(metrics.maximum_switch_ms !== null && metrics.maximum_switch_ms <= 480, `${viewport.width}: Q1 method switch ${metrics.maximum_switch_ms}ms > 480ms`);
-      // Report P1 exact acceptance separately; Q1's 20% CI allowance never
-      // converts a miss of P1's original limits into a P1 pass.
-      metrics.p1_pass = runs.length === 3 && metrics.candidate_median_ms <= 3500 && metrics.maximum_switch_ms <= 400 && metrics.longest_initial_task_ms <= 200;
-      check(metrics.p1_pass, `${viewport.width}: P1 exact limits not met (3500ms / 400ms / 200ms)`);
+/** Let fonts load and finite animations (CSS, WAAPI and the chart intro) finish before measuring. */
+async function settle(page) {
+  await page.evaluate(() => document.fonts.ready.then(() => true));
+  await page.waitForFunction(() => !document.getAnimations().some(animation => animation.playState === 'running' && Number.isFinite(animation.effect?.getComputedTiming?.().endTime ?? Infinity)), null, { timeout: 8000 }).catch(() => {});
+  // The chart's scripted intro marks its end with .bc-pulsing; reduced motion never starts it.
+  await page.waitForFunction(() => [...document.querySelectorAll('[data-testid="brief-price-chart"]')].every(chart => !chart.querySelector('svg') || chart.querySelector('.bc-pulsing') || matchMedia('(prefers-reduced-motion: reduce)').matches), null, { timeout: 6000 }).catch(() => {});
+  await page.waitForTimeout(300);
+}
+
+// Runs in the page. Hit boxes are effective boxes; inline links inside sentences
+// use WCAG's inline exception. Text checks read visible text nodes only.
+function briefMetrics({ minTarget, fontSizes, radii }) {
+  const root = document.querySelector('.brief');
+  if (!root) return { missingRoot: true };
+  const path = element => {
+    const parts = [];
+    for (let node = element; node && node !== document.body && parts.length < 4; node = node.parentElement) {
+      const className = typeof node.className === 'string' ? node.className : node.className?.baseVal || '';
+      parts.unshift(`${node.tagName.toLowerCase()}${node.id ? `#${node.id}` : ''}${className.trim() ? `.${className.trim().split(/\s+/).slice(0, 2).join('.')}` : ''}`);
+      if (node.id) break;
     }
-    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
-    await context.close();
+    return parts.join(' > ');
+  };
+  const label = element => (element.getAttribute('aria-label') || element.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 60);
+  const shown = element => {
+    const box = element.getBoundingClientRect();
+    return box.width > 1 && box.height > 1 && box.right > 0 && box.bottom + scrollY > 0
+      && element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+  };
+  const elements = [root, ...root.querySelectorAll('*')].filter(shown);
+  const interactive = [...root.querySelectorAll('button, a[href], [role="button"], summary, select, textarea, input:not([type="hidden"])')]
+    .filter(element => !element.disabled && element.type !== 'range' && !element.closest('[aria-hidden="true"]') && !(element.matches('a') && element.closest('p')));
+  const smallTargets = interactive.flatMap(element => {
+    const target = element.matches('input[type=checkbox], input[type=radio]') ? element.labels?.[0] || element.closest('label') || element : element;
+    if (!shown(target)) return [];
+    const box = target.getBoundingClientRect();
+    return box.width + 0.1 < minTarget || box.height + 0.1 < minTarget ? [{ selector: path(element), text: label(element), width: Math.round(box.width * 10) / 10, height: Math.round(box.height * 10) / 10 }] : [];
+  });
+  const ownText = (element, glue) => [...element.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join(glue);
+  const texted = elements.filter(element => ownText(element, '').trim());
+  const fontIssues = texted.flatMap(element => {
+    const size = Number.parseFloat(getComputedStyle(element).fontSize);
+    return fontSizes.some(value => Math.abs(value - size) < 0.1) ? [] : [{ selector: path(element), text: ownText(element, '').trim().slice(0, 40), size }];
+  });
+  // A standalone signed number written with the ASCII hyphen (dates and tickers never match).
+  const asciiMinus = texted.flatMap(element => /(?:^|[\s(（:：$＄=＝~〜、,])-\$?\d/.test(ownText(element, '')) ? [{ selector: path(element), text: ownText(element, '').trim().slice(0, 60) }] : []);
+  const forbidden = /\bNaN\b|\bundefined\b|\bnull\b|(?:^|[^A-Za-z])[-−+$]?Infinity(?=\s*(?:$|[^A-Za-z\s]))/;
+  const invalidValues = texted.flatMap(element => forbidden.test(ownText(element, ' ')) ? [{ selector: path(element), text: ownText(element, ' ').trim().slice(0, 60) }] : []);
+  const radiusIssues = elements.flatMap(element => {
+    const style = getComputedStyle(element), box = element.getBoundingClientRect(), half = Math.min(box.width, box.height) / 2;
+    const corners = [style.borderTopLeftRadius, style.borderTopRightRadius, style.borderBottomRightRadius, style.borderBottomLeftRadius];
+    const allowed = corner => {
+      const value = Number.parseFloat(corner);
+      if (!value) return true;
+      if (corner.includes('%')) return value >= 50;
+      return radii.some(step => Math.abs(step - value) < 0.1) || value >= half - 0.5;
+    };
+    return corners.every(allowed) ? [] : [{ selector: path(element), corners: corners.join(' '), width: Math.round(box.width), height: Math.round(box.height) }];
+  });
+  const height = selector => { const element = [...document.querySelectorAll(selector)].find(shown); return element ? element.getBoundingClientRect().height : 0; };
+  const fixedDock = [...document.querySelectorAll('.brief-dock')].find(element => shown(element) && getComputedStyle(element).position === 'fixed');
+  const bar = height('.brief-bar'), dock = fixedDock ? fixedDock.getBoundingClientRect().height : 0;
+  const barText = document.querySelector('.brief-bar')?.innerText || '';
+  return {
+    theme: root.dataset.theme, documentTheme: document.documentElement.dataset.theme || null,
+    smallTargets, fontIssues, radiusIssues, asciiMinus, invalidValues,
+    horizontalOverflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > innerWidth,
+    scrollWidth: document.documentElement.scrollWidth, viewport: { width: innerWidth, height: innerHeight }, pageHeight: document.documentElement.scrollHeight,
+    chrome: { bar: Math.round(bar * 10) / 10, dock: Math.round(dock * 10) / 10, total: Math.round((bar + dock) * 10) / 10 },
+    analysisDate: barText.match(/分析基準日\s*(\S+)/)?.[1] || null,
+    rows: root.querySelectorAll('[data-testid="brief-candidate"]').length,
+    candles: root.querySelectorAll('[data-testid="brief-price-chart"] rect.bc-up, [data-testid="brief-price-chart"] rect.bc-down').length,
+  };
+}
+
+async function runAxe(page) {
+  if (!await page.evaluate(() => typeof window.axe?.run === 'function')) await page.addScriptTag({ content: AXE_SOURCE });
+  return page.evaluate(async tags => {
+    const result = await window.axe.run(document.querySelector('.brief'), { runOnly: { type: 'tag', values: tags }, resultTypes: ['violations'] });
+    return result.violations.map(violation => ({ id: violation.id, impact: violation.impact, help: violation.help, count: violation.nodes.length,
+      nodes: violation.nodes.slice(0, 8).map(node => ({ target: node.target, summary: node.failureSummary })) }));
+  }, AXE_TAGS);
+}
+
+/** Capture one screen: settle, measure, axe, screenshot; every objective finding blocks. */
+async function capture(session, group, screen, path, { requireDate = true } = {}) {
+  const { page } = session;
+  const key = captureKey(screen, group), screenshot = `${screen}-${group.width}-${group.theme}.png`;
+  const entry = { key, path, viewport: { width: group.width, height: group.height, mobile: group.mobile }, theme: group.theme, screenshot, failures: [], metrics: null };
+  report.screens.push(entry);
+  const flag = detail => fail(`${key}: ${detail}`, entry.failures);
+  for (const detail of session.pending.splice(0)) entry.failures.push(detail);
+  await briefReady(page, flag);
+  await settle(page);
+  const metrics = await page.evaluate(briefMetrics, { minTarget: minimumTarget(group.width), fontSizes: FONT_SIZES, radii: RADII });
+  if (metrics.missingRoot) { flag('the .brief root is missing'); await page.screenshot({ path: resolve(output, screenshot) }); await save(); return entry; }
+  const axe = await runAxe(page);
+  await page.screenshot({ path: resolve(output, screenshot) });
+  entry.sha256 = sha256(await readFile(resolve(output, screenshot)));
+  entry.metrics = { ...metrics, axe };
+  if (metrics.theme !== group.theme || metrics.documentTheme !== group.theme) flag(`.brief[data-theme] is ${metrics.theme} (document ${metrics.documentTheme}), expected ${group.theme}`);
+  if (axe.length) flag(`axe ${axe.length} rule violations: ${axe.map(item => `${item.id}×${item.count} ${item.nodes[0]?.target?.join(' ') || ''}`).join('; ')}`);
+  const sample = (items, describe) => items.slice(0, 6).map(describe).join('; ');
+  if (metrics.smallTargets.length) flag(`${metrics.smallTargets.length} hit targets below ${minimumTarget(group.width)}px: ${sample(metrics.smallTargets, item => `${item.selector} “${item.text}” ${item.width}×${item.height}`)}`);
+  if (metrics.fontIssues.length) flag(`${metrics.fontIssues.length} font sizes outside [${FONT_SIZES.join(',')}]: ${sample(metrics.fontIssues, item => `${item.selector} ${item.size}px “${item.text}”`)}`);
+  if (metrics.radiusIssues.length) flag(`${metrics.radiusIssues.length} corner radii outside [${RADII.join(',')}] or pill: ${sample(metrics.radiusIssues, item => `${item.selector} ${item.corners} (${item.width}×${item.height})`)}`);
+  if (metrics.asciiMinus.length) flag(`${metrics.asciiMinus.length} values use the ASCII hyphen as a minus: ${sample(metrics.asciiMinus, item => `${item.selector} “${item.text}”`)}`);
+  if (metrics.invalidValues.length) flag(`${metrics.invalidValues.length} visible NaN/undefined/null/Infinity: ${sample(metrics.invalidValues, item => `${item.selector} “${item.text}”`)}`);
+  if (metrics.horizontalOverflow) flag(`horizontal page overflow (scrollWidth ${metrics.scrollWidth}px > ${metrics.viewport.width}px)`);
+  if (group.width < 768 && metrics.chrome.total > MOBILE_CHROME_BUDGET) flag(`fixed chrome ${metrics.chrome.total}px (bar ${metrics.chrome.bar} + dock ${metrics.chrome.dock}) > ${MOBILE_CHROME_BUDGET}px`);
+  if (requireDate) {
+    if (!expectedDate) flag('the published as-of date is unknown, so 分析基準日 cannot be verified');
+    else if (metrics.analysisDate !== expectedDate) flag(`bar shows 分析基準日 ${metrics.analysisDate ?? '(missing)'}, published as-of date is ${expectedDate}`);
   }
+  console.log(`Captured ${key}; ${entry.failures.length} findings.`);
+  await save();
+  return entry;
 }
-report.radar = [];
-if (!radar) check(false, 'D9: the isolated production radar benchmark build is required');
-if (radar) for (const viewport of viewportSizes) {
-  const context = await browser.newContext({ viewport, serviceWorkers: 'block' });
-  const page = await context.newPage(), runs = [];
-  try {
-    await page.goto(radar.url); await page.waitForFunction(() => typeof window.measureRadar === 'function');
-    const cdp = await context.newCDPSession(page); await cdp.send('Emulation.setCPUThrottlingRate', { rate: 4 });
-    for (let index = 0; index < 3; index++) runs.push(await page.evaluate(() => window.measureRadar()));
-    check(runs.every(run => run.point_count === 207), `${viewport.width}: D9 needs exactly 207 actual historical points`);
-    check(runs.every(run => run.final_point_count === 207 && run.pixel_alignment?.matches === true), `${viewport.width}: D9 must finish all 207 points at actual CSS size and DPR by the first-frame boundary`);
-    check(runs.length === 3 && runs.every(run => run.first_frame_ms <= 50), `${viewport.width}: D9 first paint opportunity ${Math.max(...runs.map(run => run.first_frame_ms)).toFixed(1)}ms > 50ms`);
-    for (const [index, run] of runs.entries()) for (const failure of radarMeasurementFailures(run)) check(false, `${viewport.width}: D9 run ${index + 1}: ${failure}`);
-  } catch (error) { report.failures.push(`${viewport.width}: D9 benchmark interrupted: ${error.message}`); }
-  report.radar.push({ viewport, cpu_rate: 4, harness_version: RADAR_HARNESS_VERSION, method: 'actual SetupRadar in production CSS ancestry and original fixed component slot; 207 canonical real 2026-09-29 observations; cold initial mount, synchronous layout and next animation frame with same-task pixel/CSS/transform visibility evidence; no prerender or glyph warmup; not comparable to former bare-div harness', runs });
-  await context.close();
+
+const functional = (group, check, passed, detail = '') => {
+  report.functional.push({ group: group.key, check, passed, detail });
+  if (!passed) fail(`${group.key}: functional ${check}: ${detail}`);
+};
+
+/** Find a screen with candidate rows: today first, then each list filter. */
+async function findCandidates(page) {
+  await go(page, '#/brief');
+  await briefReady(page, () => {});
+  if (await page.locator(ROWS).count()) return { origin: '#/brief', filter: null };
+  await go(page, '#/brief/list');
+  await briefReady(page, () => {});
+  for (const filter of ['買いゾーン', 'ピボット接近', '選定すべて', 'あと1条件']) {
+    await page.locator('.brief-seg button', { hasText: filter }).click();
+    if (await page.locator(ROWS).count()) return { origin: '#/brief/list', filter };
+  }
+  return null;
 }
-// A preview descriptor is smaller than the production price-ledger receipt.
-// Retain the primary exact-candidate trials above and expose that extra cost
-// in separate, explicitly synthetic metadata trials using the actual app.
-try{report.production_bootstrap_diagnostic=await recordProductionBootstrapDiagnostic({browser,url:current.url,currentRoot,viewports:viewportSizes,readySelector,
-  onProgress:async diagnostic=>{report.production_bootstrap_diagnostic=diagnostic;await writeFile(resolve(output,'report.json'),JSON.stringify(report,null,2));}});}
-catch(error){if(report.production_bootstrap_diagnostic)report.production_bootstrap_diagnostic.status='interrupted';report.failures.push(`Production-shaped bootstrap diagnostic unavailable: ${error.message}`);}
-await browser.close(); await current.close(); if (baseline) await baseline.close(); if (radar) await radar.close();
-if (report.profile_diagnostics_attempted) {
-  try {
-    report.profile_sources = await retainProfileSources({ root:currentRoot, output,
-      quoteUrl:process.env.FINANCIAL_CANDIDATE_DIR ? process.env.DESIGN_RESEARCH_QUOTE_URL || '' : undefined });
-  } catch (error) { report.failures.push(`Diagnostic source maps unavailable: ${error.message}`); }
+async function returnTo(page, found) {
+  await go(page, found.origin);
+  await briefReady(page, () => {});
+  if (found.filter) await page.locator('.brief-seg button', { hasText: found.filter }).click();
+  await page.locator(ROWS).first().waitFor({ state: 'visible', timeout: 30000 });
 }
-if (radar && report.failures.some(failure => failure.includes('D9'))) {
-  // The existing focused harness records a separate cold CPU/timeline trace.
-  // It runs after all acceptance measurements and cannot turn their failures
-  // into passes or move work out of the timed render boundary.
-  try {
-    execFileSync(process.execPath, ['tools/radar-diagnostic.mjs'], {
-      env: {...process.env,RADAR_DIAGNOSTIC_OUTPUT:resolve(output,'radar-diagnostic')}, stdio:'inherit',
+const candleCount = page => page.locator(CANDLES).count();
+async function waitForCandles(page, minimum, timeout = 30000) {
+  await page.waitForFunction(([selector, count]) => document.querySelectorAll(selector).length >= count, [CANDLES, minimum], { timeout }).catch(() => {});
+  return candleCount(page);
+}
+/** Click a row and wait for its stock screen; returns the symbol and the candles drawn. */
+async function openRow(page, row) {
+  const symbol = await row.getAttribute('data-symbol');
+  await row.click();
+  await hashIs(page, `#/brief/stock/${encodeURIComponent(symbol)}`);
+  await page.locator('[data-testid="brief-conclusion"]').first().waitFor({ state: 'visible', timeout: 30000 });
+  return { symbol, candles: await waitForCandles(page, MIN_CANDLES) };
+}
+
+async function interrupted(session, group, step, error) {
+  fail(`${group.key} [${step}]: interrupted: ${error.message.split('\n')[0]}`);
+  await session.page.screenshot({ path: resolve(output, `interrupted-${group.width}-${group.theme}-${step}.png`) }).catch(() => {});
+}
+async function step(session, group, name, action) {
+  session.step = name;
+  try { await action(); } catch (error) { await interrupted(session, group, name, error); }
+}
+
+const found = {};
+try {
+  for (const group of DESIGN_GROUPS) {
+    const groupEntry = { key: group.key, width: group.width, height: group.height, theme: group.theme, mobile: group.mobile, completed: false, symbol: null, origin: null };
+    report.groups.push(groupEntry);
+    const session = await openSession(group);
+    const { page } = session;
+    await step(session, group, 'today', async () => {
+      await go(page, '#/brief');
+      await capture(session, group, 'today', '#/brief');
     });
-  } catch (error) {
-    console.log(`Focused radar diagnostic exited ${error.status ?? 'with an error'}; retain its artifacts alongside the original acceptance failure.`);
+    await step(session, group, 'list', async () => {
+      await go(page, '#/brief/list');
+      await capture(session, group, 'list', '#/brief/list');
+    });
+    await step(session, group, 'list-near', async () => {
+      const near = page.locator('.brief-seg button', { hasText: 'あと1条件' });
+      await near.click();
+      functional(group, 'list-near-filter-pressed', await near.getAttribute('aria-pressed') === 'true', 'the 「あと1条件」 filter is not pressed after clicking it');
+      await capture(session, group, 'list-near', '#/brief/list');
+    });
+    await step(session, group, 'market', async () => {
+      await go(page, '#/brief/market');
+      await briefReady(page, detail => fail(`${group.key} [market]: ${detail}`));
+      const verdict = page.getByRole('region', { name: '地合い', exact: true });
+      const history = page.getByRole('region', { name: '市場環境の推移', exact: true });
+      functional(group, 'market-regime-region', await verdict.isVisible(), 'the 「地合い」 region is not visible on #/brief/market');
+      functional(group, 'market-history-section', await history.isVisible(), 'the 「市場環境の推移」 section is not visible on #/brief/market');
+      const alert = history.locator('[role="alert"]');
+      const alerts = await alert.count(), alertText = alerts ? await alert.first().innerText() : '';
+      functional(group, 'market-history-loaded', !alerts, `the 「市場環境の推移」 section shows an error: ${alertText}`);
+      await capture(session, group, 'market', '#/brief/market');
+    });
+    await step(session, group, 'stock', async () => {
+      const candidates = await findCandidates(page);
+      if (!candidates) {
+        fail(`${group.key}: the published data has no candidate rows on #/brief or in any #/brief/list filter; stock, stock-weekly and watch cannot be captured`);
+        return;
+      }
+      groupEntry.origin = candidates.origin + (candidates.filter ? ` (${candidates.filter})` : '');
+      found[group.width] ||= candidates;
+      const { symbol, candles } = await openRow(page, page.locator(ROWS).first());
+      groupEntry.symbol = symbol;
+      functional(group, 'row-opens-stock', candles >= MIN_CANDLES, `#/brief/stock/${symbol} draws ${candles} candles, needs at least ${MIN_CANDLES}`);
+      await capture(session, group, 'stock', `#/brief/stock/${symbol}`, { requireDate: !group.mobile });
+      session.step = 'stock-weekly';
+      const weekly = page.locator('.brief-periods button', { hasText: '週足2年' });
+      if (!await weekly.count()) fail(`${group.key}: the chart has no 週足2年 range control; stock-weekly cannot be captured`);
+      else {
+        await weekly.first().click();
+        functional(group, 'weekly-range-pressed', await weekly.first().getAttribute('aria-pressed') === 'true', 'the 週足2年 range is not pressed after clicking it');
+        await page.locator('.brief-legend', { hasText: '10週線' }).first().waitFor({ state: 'attached', timeout: 15000 });
+        const weeklyCandles = await waitForCandles(page, 1);
+        functional(group, 'weekly-chart-drawn', weeklyCandles > 0, `the weekly chart draws ${weeklyCandles} candles`);
+        await capture(session, group, 'stock-weekly', `#/brief/stock/${symbol}`, { requireDate: !group.mobile });
+      }
+      session.step = 'watch';
+      await page.getByRole('button', { name: 'ウォッチに追加', exact: true }).first().click();
+      const added = page.getByRole('button', { name: 'ウォッチから外す', exact: true }).first();
+      await added.waitFor({ state: 'visible', timeout: 10000 });
+      functional(group, 'watch-star-pressed', await added.getAttribute('aria-pressed') === 'true', `☆ for ${symbol} is not pressed after adding`);
+      const toast = page.locator('.brief-toast');
+      await toast.waitFor({ state: 'visible', timeout: 5000 });
+      // Measure the toast at rest, not while its entrance scales it.
+      await toast.evaluate(element => Promise.all(element.getAnimations({ subtree: true }).map(animation => animation.finished.catch(() => null))));
+      functional(group, 'watch-toast', (await toast.innerText()).includes(`${symbol} をウォッチに追加しました`), `the toast reads “${await toast.innerText()}”`);
+      const undo = await toast.getByRole('button', { name: '元に戻す' }).boundingBox();
+      functional(group, 'watch-toast-undo-target', Boolean(undo) && Math.min(undo.width, undo.height) + 0.1 >= minimumTarget(group.width), `元に戻す is ${undo ? `${Math.round(undo.width)}×${Math.round(undo.height)}` : 'missing'}`);
+      await go(page, '#/brief/watch');
+      await page.locator(`${ROWS}[data-symbol="${symbol}"]`).waitFor({ state: 'visible', timeout: 15000 });
+      await toast.waitFor({ state: 'hidden', timeout: 10000 });
+      await capture(session, group, 'watch', '#/brief/watch');
+    });
+    await step(session, group, 'back', async () => {
+      const candidates = found[group.width];
+      if (!candidates) { fail(`${group.key}: back cannot be checked without a candidate row`); return; }
+      await returnTo(page, candidates);
+      const { symbol } = await openRow(page, page.locator(ROWS).first());
+      if (group.mobile) await page.getByRole('button', { name: '戻る', exact: true }).click();
+      else await page.goBack();
+      await hashIs(page, candidates.origin).catch(() => {});
+      const back = await page.evaluate(() => location.hash);
+      const rows = await page.locator(ROWS).first().isVisible().catch(() => false);
+      functional(group, 'back-returns', back === candidates.origin && rows, `after opening ${symbol}, back led to ${back} with rows ${rows ? 'visible' : 'missing'}; expected ${candidates.origin}`);
+    });
+    await step(session, group, 'theme-toggle', async () => {
+      const other = group.theme === 'dark' ? 'light' : 'dark';
+      const name = theme => (theme === 'dark' ? 'ライトモードに切り替え' : 'ダークモードに切り替え');
+      await page.getByRole('button', { name: name(group.theme), exact: true }).click();
+      const flipped = await page.waitForFunction(theme => document.querySelector('.brief')?.dataset.theme === theme && document.documentElement.dataset.theme === theme, other, { timeout: 5000 }).then(() => true, () => false);
+      functional(group, 'theme-toggle-flips', flipped, `data-theme did not change to ${other}`);
+      await page.getByRole('button', { name: name(other), exact: true }).click();
+      const restored = await page.waitForFunction(theme => document.querySelector('.brief')?.dataset.theme === theme, group.theme, { timeout: 5000 }).then(() => true, () => false);
+      functional(group, 'theme-toggle-restores', restored, `data-theme did not return to ${group.theme}`);
+    });
+    await step(session, group, 'legacy-redirects', async () => {
+      const symbol = groupEntry.symbol || fallbackSymbol;
+      for (const [legacy, target] of LEGACY_REDIRECTS) {
+        if (legacy.includes('X') && !symbol) { functional(group, `redirect ${legacy}`, false, 'no published symbol to test the symbol redirect'); continue; }
+        const from = legacy.replace('X', symbol), to = target.replace('X', encodeURIComponent(symbol));
+        await page.goto('about:blank');
+        await page.goto(`${server.url}${from}`);
+        const landed = await hashIs(page, to).then(() => true, () => false);
+        functional(group, `redirect ${legacy}`, landed, `${from} landed on ${await page.evaluate(() => location.hash)}, expected ${to}`);
+      }
+    });
+    session.step = 'end';
+    await session.context.close();
+    groupEntry.completed = true;
+    await save();
   }
-}
-await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
-if (carryBinding) {
-  try {
-    const finalBinding = await prepareFinancialCarryDesignBinding({ provenancePath: resolve(carryProvenancePath), currentRoot, baselineRoot, commit });
-    verifyFinancialCarryMeasurementBinding(carryBinding, finalBinding);
-    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
-    await sealFinancialCarryDesignReport({ report, output, binding: carryBinding });
-  } catch (error) {
-    check(false, `Carry preview evidence finalization failed: ${error.message}`);
-    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
+
+  // Reduced motion: once per width, nothing may still run shortly after opening a stock.
+  for (const width of TIMING.widths) {
+    const group = DESIGN_GROUPS.find(item => item.width === width && item.theme === 'dark');
+    const session = await openSession(group, { reducedMotion: 'reduce', label: `${width}/reduced-motion` });
+    const entry = { width, settle_ms: REDUCED_MOTION_SETTLE_MS, symbol: null, running: null };
+    report.reduced_motion.push(entry);
+    try {
+      const candidates = found[width];
+      if (!candidates) fail(`${width}/reduced-motion: no candidate row to open, so reduced motion cannot be verified`);
+      else {
+        await returnTo(session.page, candidates);
+        const { symbol } = await openRow(session.page, session.page.locator(ROWS).first());
+        entry.symbol = symbol;
+        await session.page.waitForTimeout(REDUCED_MOTION_SETTLE_MS);
+        entry.running = await session.page.evaluate(() => document.getAnimations().filter(animation => animation.playState === 'running').map(animation => {
+          const target = animation.effect?.target;
+          return `${animation.animationName || animation.transitionProperty || animation.id || 'animation'} on ${target?.tagName?.toLowerCase() || 'pseudo'}${typeof target?.className === 'string' && target.className ? `.${target.className.split(' ')[0]}` : ''}`;
+        }));
+        if (entry.running.length) fail(`${width}/reduced-motion: ${entry.running.length} animations still running ${REDUCED_MOTION_SETTLE_MS}ms after opening ${symbol}: ${entry.running.slice(0, 6).join('; ')}`);
+      }
+    } catch (error) { fail(`${width}/reduced-motion: interrupted: ${error.message.split('\n')[0]}`); }
+    await session.context.close();
+    await save();
   }
-}
-await writeFile(resolve(output, 'summary.md'), `# Design and performance acceptance\n\nCommit: ${commit}\n\nData: ${report.data.as_of_date} / ${report.data.research_generation}\n\n${report.screens.length} screenshots; ${report.failures.length} failures.\n\n${report.failures.map(item => `- ${item}`).join('\n')}\n\n## Performance\n\n${report.performance.map(item => `- ${item.label}, ${item.viewport.width}px: candidate median ${item.candidate_median_ms}ms, switch maximum ${item.maximum_switch_ms}ms, longest task ${item.longest_initial_task_ms}ms`).join('\n')}\n\nSubjective design scores require an explicit review of these screenshots. This script does not invent them.\n`);
-console.log(JSON.stringify({ commit, screens: report.screens.length, performance: report.performance.map(({ runs, ...item }) => { void runs; return item; }), failures: report.failures }, null, 2));
-if (limitedAssessment) {
-  const assessment = buildLimitedResearchAssessment(report, approvedLimitations);
-  await writeFile(resolve(output, 'limited-assessment.json'), JSON.stringify(assessment, null, 2));
-  // Local classification is never a Design pass or publication permission.
-  if (assessment.blocking_failures.length) process.exitCode = 1;
-}
-if (priorityBinding) {
-  try {
-    const assessment = finishScreeningPriority({ report, output, before: priorityBinding, currentRoot, baselineRoot, inputBasis, completedGroups });
-    for (const warning of assessment.warnings) console.warn(`::warning title=Deferred timing under ${assessment.policy}::${warning}`);
-    console.log(JSON.stringify({ policy: assessment.policy, strict_result: assessment.strict_result, performance_acceptance: assessment.performance_acceptance, functional_acceptance: assessment.functional_acceptance, policy_exit: assessment.policy_exit }));
-    process.exitCode = assessment.policy_exit;
-  } catch (error) {
-    check(false, `Screening acceptance finalization failed: ${error.message}`);
-    await writeFile(resolve(output, 'report.json'), JSON.stringify(report, null, 2));
-    process.exitCode = 1;
+
+  // CPU 4x timing. Overruns are deferred warnings; a run that cannot be measured is a warning too.
+  for (const width of TIMING.widths) {
+    const group = DESIGN_GROUPS.find(item => item.width === width && item.theme === 'dark');
+    const session = await openSession(group, { label: `${width}/timing`, extraInit: () => {
+      window.__briefLongTasks = [];
+      try { new PerformanceObserver(list => { for (const item of list.getEntries()) window.__briefLongTasks.push(item.duration); }).observe({ type: 'longtask', buffered: true }); } catch { /* unsupported */ }
+    } });
+    const { page } = session, runs = [], notes = [];
+    try {
+      if (found[width]?.origin !== '#/brief') notes.push('no candidate rows on #/brief in this data; the first-candidate and stock-open timings cannot be measured');
+      else {
+        await go(page, '#/brief');
+        await page.locator(ROWS).first().waitFor({ state: 'visible', timeout: 60000 });
+        const cdp = await session.context.newCDPSession(page);
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: TIMING.cpu_rate });
+        for (let index = 0; index < TIMING.runs; index++) {
+          session.step = `run ${index + 1}`;
+          const run = {};
+          await page.goto('about:blank');
+          let start = Date.now();
+          await go(page, '#/brief');
+          await page.locator(ROWS).first().waitFor({ state: 'visible', timeout: 60000 });
+          await frames(page);
+          run.first_candidate_ms = Date.now() - start;
+          run.longest_initial_task_ms = await page.evaluate(() => Math.max(0, ...(window.__briefLongTasks || [])));
+          start = Date.now();
+          await page.locator('nav.brief-tabs a', { hasText: '候補' }).click();
+          await page.waitForFunction(() => location.hash === '#/brief/list' && [...document.querySelectorAll('.brief-stack h1')].some(heading => heading.textContent.trim() === '候補'), null, { timeout: 30000 });
+          await frames(page);
+          run.tab_switch_ms = Date.now() - start;
+          await page.locator('nav.brief-tabs a', { hasText: '今日' }).click();
+          await page.locator(ROWS).first().waitFor({ state: 'visible', timeout: 30000 });
+          await settle(page);
+          const rows = page.locator(ROWS), row = !group.mobile && await rows.count() > 1 ? rows.nth(1) : rows.first();
+          const symbol = await row.getAttribute('data-symbol');
+          start = Date.now();
+          await row.click();
+          await page.waitForFunction(([ticker, selector]) => location.hash === `#/brief/stock/${encodeURIComponent(ticker)}`
+            && [...document.querySelectorAll('.brief-stockhead h2 span:first-child, .brief-bar-title b span')].some(element => element.textContent.trim() === ticker)
+            && document.querySelector('[data-testid="brief-conclusion"]') && document.querySelectorAll(selector).length > 0, [symbol, CANDLES], { timeout: 30000 });
+          await frames(page);
+          run.stock_open_ms = Date.now() - start;
+          run.symbol = symbol;
+          runs.push(run);
+          console.log(`CPU${TIMING.cpu_rate} ${width} run ${index + 1}: first candidate ${run.first_candidate_ms}ms, tab ${run.tab_switch_ms}ms, stock ${run.stock_open_ms}ms (${symbol}), long task ${Math.round(run.longest_initial_task_ms)}ms.`);
+        }
+        await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
+      }
+    } catch (error) { notes.push(`timing interrupted: ${error.message.split('\n')[0]}`); }
+    const { medians, warnings } = summarizeTiming(width, runs);
+    report.timing.push({ width, theme: group.theme, cpu_rate: TIMING.cpu_rate, budgets_ms: TIMING.budgets_ms, runs, medians, notes });
+    report.timing_warnings.push(...notes.map(note => `${width}: ${note}`), ...warnings);
+    await session.context.close();
+    await save();
   }
-} else if (report.failures.length) process.exitCode = 1;
+} finally {
+  await browser.close().catch(() => {});
+  await server.close();
+}
+
+// Completeness: every group finished and every required capture exists with a non-empty PNG.
+for (const key of requiredCaptureKeys()) {
+  const screens = report.screens.filter(screen => screen.key === key);
+  if (screens.length !== 1) { fail(`${key}: ${screens.length ? 'captured more than once' : 'required capture was not completed'}`); continue; }
+  const size = await stat(resolve(output, screens[0].screenshot)).then(info => info.size, () => 0);
+  if (!size) fail(`${key}: screenshot ${screens[0].screenshot} is missing or empty`);
+}
+for (const group of DESIGN_GROUPS) if (!report.groups.find(item => item.key === group.key)?.completed) fail(`${group.key}: group did not complete`);
+await save();
+for (const warning of report.timing_warnings) console.log(`::warning title=Deferred measured timing::${warning}`);
+console.log(JSON.stringify({ schema: REPORT_SCHEMA, commit, screens: report.screens.length, functional: `${report.functional.filter(item => item.passed).length}/${report.functional.length}`,
+  failures: report.failures.length, timing: report.timing.map(({ width, medians }) => ({ width, ...medians })), timing_warnings: report.timing_warnings.length }, null, 2));
+if (report.failures.length) process.exitCode = 1;

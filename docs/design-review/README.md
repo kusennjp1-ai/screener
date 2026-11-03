@@ -1,10 +1,79 @@
 # デザイン検証の証跡
 
-`Design Acceptance` ワークフローは公開済みの実データを一度復元し、変更前・変更後を同じ入力からビルドする。日付は書き換えない。1440×900 / 390×844 × ダーク / ライトで画面を撮影し、axeの4タグ、操作対象、文字・角丸の段階、横スクロール、reduced-motion、画面別の配置予算を記録する。結果は失敗時も `design-acceptance-<commit>` 成果物に残る。
+静的サイトは「今日のブリーフ」だけになった（`#/brief`・`#/brief/list`・`#/brief/watch`・`#/brief/market`・`#/brief/stock/:SYMBOL`）。`Design Acceptance` ワークフロー（ジョブ名 `Real-data design and performance budgets`）は、この新しい画面だけを測る。旧画面（`#/`・`#/compare`・`#/scan`・`#/breadth` など）は撮影しない。
 
-CPU4倍はCDPで指定し、ウォームアップ時の応答をメモリから返す。各幅で3回測る。Q1のCI許容値（4.2秒 / 480ms）とP1の合格値（3.5秒 / 400ms / 最長200ms）を区別し、P1を満たさない場合も失敗として残す。メモリ値は同じブラウザ条件での参考観測であり、GCの影響がある。
+GitHub Pages への新しいUIの公開には、同じコミットで `CI` と `Design Acceptance` の両方が成功していることが必要（`.github/scripts/publication-gate.mjs`）。
 
-画面を実際に確認した後、日付付きMarkdownに4項目の点数と理由を記録する。同じ内容を日付付きJSONにも保存する。形式:
+## 実行の流れ
+
+1. 公開済みの実データを一度だけ復元する（`select-release-source.mjs design`）。財務引継ぎの準備（`design-financial-carry.mjs prepare`）、`check-design-data`、引継ぎ検証用の比較データ（同一データの生コピー）をそろえる。比較用の旧UIはビルドしない。
+2. 現在のUIを Vite でビルドし、データを戻してから公開時と同じ圧縮転送に変換・往復検証する（`design-transport.mjs`）。
+3. `frontend/tools/design-review.mjs` が本番 Chromium でブラウザ検査を行う。
+4. `frontend/tools/check-design-review.mjs` が結果を判定する。
+5. 結果は失敗時も `design-acceptance-<commit>` 成果物に残る（`report.json` とスクリーンショット）。
+
+財務訂正の候補（`FINANCIAL_CANDIDATE_DIR`）が準備された場合は、ブリーフ側に財務表示を検証する契約がまだないため、測定の前に失敗させる（fail closed）。候補は「UNAPPROVED」の診断成果物としてだけ残り、封印（`design-seal`）には進まない。
+
+## ブラウザ検査（brief-design-review-v1）
+
+共通の契約（画面の組み合わせ、必須の撮影キー、予算、文字サイズ `[11,12,13,14,16,20,26,34,42]`、角丸 `[4,8,12,16]`）は `frontend/tools/brief-design-contract.mjs` にまとめ、検査側と判定側が同じものを読む。文字サイズと角丸の値は `src/static/theme/tokens.js` から読む。
+
+- ビルド（`CURRENT_BUILD`、既定 `dist`）を `/screener/` 配下で `127.0.0.1` から配信する。それ以外へのリクエストはすべて中断し、失敗として記録する。Service Worker は使わない。日付は書き換えない（実際のブラウザ時計）。
+- 組み合わせは 390/ダーク → 390/ライト → 1440/ダーク → 1440/ライト の順（スマホ優先）。390 はタッチ端末・画素比2で再現する。テーマはアプリが保存する `localStorage` の `screener:color-mode` で指定し、`.brief[data-theme]` が一致することを確かめる。
+- 各組み合わせで7画面を撮影する（計28枚、PNG）。
+  - `today`：`#/brief`
+  - `list`：`#/brief/list`
+  - `list-near`：「あと1条件」の絞り込みを押した状態
+  - `market`：`#/brief/market`
+  - `stock`：最初の候補の行をクリックして開いた銘柄（URLで直接は開かない）
+  - `stock-weekly`：チャートの表示期間を「週足2年」に切り替えた状態
+  - `watch`：開いた銘柄を ☆ で追加したあとの `#/brief/watch`
+  - 候補が1件もない場合は、撮影を省略せず失敗として記録する。
+- 撮影ごとの客観検査（1件でも違反があれば停止）：
+  - axe-core（wcag2a / wcag2aa / wcag21aa / wcag22aa）の違反 0 件（`.brief` が対象）
+  - 操作対象の大きさ：390 で 44px 以上、1440 で 24px 以上（range 入力と文中のリンクは除く）
+  - 文字サイズと角丸が上記の段階に収まること（高さの半分以上の角丸は丸型として許可）
+  - 数値の前のマイナスに ASCII のハイフンを使っていないこと
+  - 横スクロールが出ないこと
+  - 390 で固定表示（上のバー＋下のドック）の高さが 110px 以下
+  - ページのエラー、コンソールのエラー、HTTP エラーがないこと
+  - 画面に `NaN`・`undefined`・`null`・`Infinity` が出ていないこと
+  - バーの「分析基準日 YYYY-MM-DD」が、公開されたマニフェストと研究データの基準日と一致すること（両者が食い違う場合も失敗）
+  - 読み込み中の表示が60秒以内に消えること
+- 機能の検査（停止条件）：
+  - 行のクリックで `#/brief/stock/SYM` が開き、チャートにローソク足が60本以上あること。戻る操作で元の画面に戻ること
+  - テーマ切替で `data-theme` が反転し、元に戻せること
+  - 市場画面に「地合い」と「市場環境の推移」があり、後者がエラー表示になっていないこと
+  - 旧アドレス（`#/`→`#/brief`、`#/compare`・`#/scan`→`#/brief/list`、`#/breadth`・`#/groups`・`#/themes`→`#/brief/market`、`#/?symbol=X`→`#/brief/stock/X`）がそれぞれ転送されること
+  - 動きを減らす設定（reduced motion）で、銘柄を開いて400ms後に動いているアニメーションがないこと（幅ごとに1回）
+  - ☆ を押すとボタンが押下状態になり、通知と「元に戻す」が表示されること
+- 速度（CDP で CPU 4倍、390 と 1440 で各3回、中央値）：
+  - 遷移後に最初の候補行が見えるまで：3500ms
+  - 「候補」タブへの切替：400ms
+  - 行のクリックから銘柄が開くまで：1000ms
+  - 初回読み込み中の最長タスク：200ms
+  - 3500ms・400ms・200ms は旧検査の P1 の値をそのまま使う。銘柄を開く操作は旧検査に相当するものがないため、1000ms とした。
+  - 超過は `report.timing_warnings` にだけ記録し、`failures` には入れない（所有者の指示による保留。下記）。測れなかった場合も警告として残す。
+- `DESIGN_REVIEW_OUTPUT/report.json` には `schema`・`commit`・`measured_at`・`input_basis`・`groups`・`screens`（`key`・`path`・`viewport`・`theme`・`screenshot`・`failures`・`metrics`）・`functional`・`failures`・`timing`・`timing_warnings` を書く。`failures` が1件でもあれば終了コードは0以外。
+
+## 判定（check-design-review.mjs）
+
+まず客観的な証跡を確かめる。どの経路でも省略しない。
+
+- `schema` が `brief-design-review-v1` であること
+- 4つの組み合わせがすべて完了し、必須の28キーがそれぞれ1回ずつ、空でないPNG付きで撮影されていること
+- `failures` が空であること
+
+そのうえで、主観的な点数について次のどちらかが必要。
+
+- 現在のUIと一致する日付付きレビュー（下記の形式）。撮影した全キーについて4項目すべて8.0以上と理由があること。
+- 所有者による採点の免除（`owner-waiver.json`）。
+
+速度の超過（`timing_warnings`）は、`owner-waiver.json` に所有者の速度に関する指示（`timing_instruction`・`timing_granted_at`）が記録されている場合に限り、`::warning title=Deferred measured timing under the owner waiver::…` として表示したうえで通す。記録がなければ停止する。
+
+### 日付付きレビューの形式
+
+画面を実際に確認した後、日付付きMarkdownに4項目の点数と理由を記録し、同じ内容を日付付きJSONにも保存する。
 
 ```json
 {
@@ -12,8 +81,8 @@ CPU4倍はCDPで指定し、ウォームアップ時の応答をメモリから�
   "reviewer": "レビュー担当と、内部評価であること",
   "evidence_run": "GitHub Actions実行のURL",
   "screens": [{
-    "key": "home/1440/dark",
-    "screenshot": "home-1440x900-dark.png",
+    "key": "today/390/dark",
+    "screenshot": "today-390-dark.png",
     "scores": {
       "design": {"value": 0, "reason": "画像を見てから採点する"},
       "usability": {"value": 0, "reason": "同上"},
@@ -24,44 +93,18 @@ CPU4倍はCDPで指定し、ウォームアップ時の応答をメモリから�
 }
 ```
 
-上の0点は形式例であり合格記録ではない。採点前の8点入力、未撮影の画面の採点、客観検査の失敗を点数で相殺することはしない。`check-design-review.mjs` は原則として4項目すべて8.0以上、全撮影条件の記録、および採点後にUIコードが変わっていないことを検証する。UIが変われば再撮影・再採点が必要。
+上の0点は形式例であり合格記録ではない。採点前の8点入力、未撮影の画面の採点、客観検査の失敗を点数で相殺することはしない。採点後に `frontend/src`・`frontend/index.html`・`frontend/vite.config.js` が変われば、再撮影・再採点が必要。
 
-各タスクの証跡には、共有部品・依存タスクを含む最終画面を確認したことを明記する。タスク単独の旧状態を撮影していない場合は、そのように記す。
-
-## スクリーニング優先の限定的な画像レビュー
-
-2026-10-22 の公開更新と、スクリーニングに直接関係しない要素を後回しにする依頼に対応する。点数を引き上げたり、全軸の基準を一括して下げたりしない。従来の厳格判定と元の点数・理由をそのまま保持する。
-
-`review_policy: "ordinary-carry-image-review-2026-10-22-v1"` を明示したレビューだけが対象となる。既存の `ordinary-carry-screening-priority-2026-10-21-v1` に結び付いた通常・財務引継ぎ比較に限り、認証済み入力、完了記録、画像の実バイト、操作・アクセシビリティ・CSV・財務 unknown の客観検査をすべて先に検証する。候補財務訂正、限定プレビュー、未結合の測定には適用しない。新しいデータ・財務認可・公開権限は付与しない。
-
-全 134 画面（通常）または 162 画面（財務引継ぎ）について、従来の4点数・理由に加え、実画像と一致する `sha256`、次の `visualChecks`、および `findings` 配列が必要。レビュー対象のコミット、実行URL、担当者も必須。
-
-- `text_and_labels`: 撮影範囲の必須文字・ラベルの判読性。
-- `clipping_and_occlusion`: 必須内容の欠け、重なり、隠れ。
-- `visible_navigation_affordances`: 撮影された操作手掛かりの見え方。
-- `visible_content_consistency`: 撮影範囲内の表示内容・ラベル間の整合性。
-
-各項目は `{ "status": "pass" | "fail" | "unknown", "reason": "画像を確認した具体的な理由" }`。画像から実際の遷移、アクセシビリティ計測、財務情報の正しさを推定しない。それらは既存の別検査で確認する。画面外の未撮影事項を新たな画像検査項目にしない。
-
-各 finding は `axis`（design/usability/originality/content）、`category`、`screeningImpact`、具体的な `reason` の4項目を持つ。8点未満の各軸には最低1件の対応 finding が必要。高得点でも実害のある finding を省略しない。
-
-- category: `cosmetic` / `originality` / `readability` / `clipping` / `navigation` / `incorrect_content` / `accessibility` / `other`。
-- screeningImpact: `non_screening_aesthetic` / `screening_material` / `unknown`。
-- `cosmetic` または `originality` かつ `non_screening_aesthetic` と具体的に確認できた finding だけを、明記した保留警告にできる。
-- 判読性、欠け・重なり、操作手掛かり、内容不整合等の実害は停止条件。数値が8以上でも停止する。分類欠落、曖昧・不明な分類、unknown の影響、必須 visualCheck の fail/unknown は停止する。
-
-結果は `test-results/design-review/screening-priority-image-assessment.json` に別記録として保存する。元の全点数・理由、`strict_image_result`、`strict_result`、警告と停止理由を残す。保留を認めても「全項目8点以上」や厳格基準合格とは表示しない。レビュー自体は金融データの更新認可ではなく、期限切れ・未確認の必須条件を適格に変えない。
-
-画像ハッシュの一致条件は緩めない。レビューだけのコミットでも、再撮影した時刻表示や入力が変われば旧画像の採点は使えない。この分類ポリシーは過去の撮影成果物を新しい実行で再利用する仕組みを追加していない。
+このフォルダにある 2026-10 の日付付きレビューと `prior-capture-review.*`・`reviewed-prior-capture.md` は旧画面の記録で、現在のUIには一致しない。過去の撮影を再利用する仕組み（prior-capture）と、スクリーニング優先の画像レビュー（`review_policy`）は旧画面とともに廃止した。
 
 ## 所有者による採点の免除（owner-waiver.json）
 
 2026-11-01、リポジトリ所有者から「点数はつけなくていいから、自律的に公開まで」との指示があった。これを受けて `docs/design-review/owner-waiver.json` を置いている。
 
 - 免除するのは主観的な4項目の点数と理由だけ。点数は記録しないし、8点以上だったことにもしない。
-- 機能・アクセシビリティ・表示の客観検査は免除しない。同じ実行で画面が撮影されていることが必要。axe、操作対象、文字・角丸の段階、横スクロール、reduced-motion、画面別の配置予算などの失敗が1件でもあれば、従来どおり停止する。
-- 2026-11-02、所有者から「速度の基準超過も保留にして公開してよい」との指示があった。時間予算（CPU4倍の Q1・P1・D9）の超過は、2026-10-21 のスクリーニング優先ポリシーが「保留警告」と分類したものに限り、警告として表示したうえで通す。これまでは画像レビューを条件にこの保留を認めていたが、所有者の指示によりその条件を外す。保留できるのは同ポリシーにひもづいた通常・財務引継ぎの Design だけ。ひもづかない実行では、時間予算の超過も停止条件のまま。厳格判定（`strict_result`）は「failed」のまま記録する。
-- この時間予算の超過は、2026-11-01 時点の main でも同程度に出ていた（例：390px の Q1 切替 527ms、D9 初回描画 81.6ms）。
+- 機能・アクセシビリティ・表示の客観検査は免除しない。必須の28画面が同じ実行で撮影されていること、`failures` が空であることが必要。
+- 2026-11-02、所有者から「速度の基準超過も保留にして公開してよい」との指示があった（`timing_instruction`）。このため速度の超過は警告として表示し、公開を止めない。速度以外の検査は保留しない。
 - 日付付きのレビュー記録が現在のUIに一致する場合は、その記録の検査が優先される。
 - ファイルが壊れている・必須項目が欠けている場合は通さない。
-- 免除をやめるときは、このファイルを削除する。
+- 免除をやめるときは、このファイルを削除する。速度の保留だけをやめるときは `timing_instruction` と `timing_granted_at` を削除する。
+- ファイル内の `effect` の説明文は旧画面の検査（2026-10-21 のスクリーニング優先ポリシー）に基づいて書かれている。判定はこのファイルの必須項目だけを読み、`effect` の文面は使わない。

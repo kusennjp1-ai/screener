@@ -18,6 +18,15 @@ def normalize_earnings(raw, today):
     return dates[0] if today <= parsed <= today + timedelta(days=180) else None
 
 
+def target_symbols(audit):
+    """Qualified rows first, then the trend-template rows the daily brief lists as one
+    condition short with nothing unknown (they also show days to earnings)."""
+    rows = audit.get('results', [])
+    qualified = [r['symbol'] for r in rows if any((r.get('methods', {}).get(method) or {}).get('qualified') for method in ['minervini', 'minervini2', 'ibd'])]
+    near = [r['symbol'] for r in rows if (lambda m: not m.get('qualified') and m.get('failed') == 1 and m.get('unknown') == 0)(r.get('methods', {}).get('minervini') or {})]
+    return list(dict.fromkeys(qualified + near))
+
+
 def main():
     import yfinance as yf
     import pandas_market_calendars as mcal
@@ -33,9 +42,7 @@ def main():
     calendar = {'source':'NYSE / pandas_market_calendars','evaluated_at':now.isoformat(),
         'latest_completed_session':str(completed.index[-1].date()),'valid_until':upcoming.iloc[0]['market_close'].isoformat()}
     audit = json.loads(Path('public/qualification-audit.json').read_text(encoding='utf-8'))
-    symbols = [r['symbol'] for r in audit['results'] if any(
-        (r.get('methods', {}).get(method) or {}).get('qualified')
-        for method in ['minervini', 'minervini2', 'ibd'])][:300]
+    symbols = target_symbols(audit)[:400]
     def fetch(symbol):
         try:
             raw = yf.Ticker(symbol).get_calendar()
