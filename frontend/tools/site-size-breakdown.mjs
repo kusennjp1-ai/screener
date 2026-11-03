@@ -40,6 +40,24 @@ export async function breakdown(root) {
   return { total, files, groups: [...groups.values()].sort((a, b) => b.bytes - a.bytes) };
 }
 
+// Raw JSON bytes per top-level key across every file in one directory.
+export async function fieldBreakdown(dir) {
+  const fields = new Map();
+  let files = 0;
+  for await (const path of walk(dir)) {
+    if (!path.endsWith('.json')) continue;
+    let value;
+    try { value = JSON.parse(await readFile(join(dir, path), 'utf8')); } catch { continue; }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    files += 1;
+    for (const [key, item] of Object.entries(value)) {
+      const bytes = Buffer.byteLength(JSON.stringify(item) ?? '') + Buffer.byteLength(key) + 4;
+      fields.set(key, (fields.get(key) || 0) + bytes);
+    }
+  }
+  return { files, fields: [...fields].map(([key, bytes]) => ({ key, bytes })).sort((a, b) => b.bytes - a.bytes) };
+}
+
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
   const [root, top = '30'] = process.argv.slice(2);
   if (!root) throw new Error('Usage: node tools/site-size-breakdown.mjs DIST [TOP]');
@@ -48,5 +66,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   console.log(`Site size estimate: ${mb(result.total)} MB in ${result.files} files (budget ${MAX_SITE_BYTES / 1e6} MB; packed files as gzip, others raw)`);
   for (const group of result.groups.slice(0, Number(top))) {
     console.log(`${mb(group.bytes)} MB ${String(group.files).padStart(6)} files ${group.packed ? 'gzip' : 'raw '} ${group.group}`);
+  }
+  for (const dir of ['static-data/verified-charts', 'static-data/markets/us/charts']) {
+    let fields;
+    try { fields = await fieldBreakdown(join(resolve(root), dir)); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
+    console.log(`Raw bytes per field in ${dir} (${fields.files} files):`);
+    for (const field of fields.fields.slice(0, 25)) console.log(`${mb(field.bytes)} MB ${field.key}`);
   }
 }

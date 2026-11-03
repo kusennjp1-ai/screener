@@ -2,7 +2,7 @@ import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { breakdown, groupOf } from './site-size-breakdown.mjs';
+import { breakdown, fieldBreakdown, groupOf } from './site-size-breakdown.mjs';
 
 let root;
 afterEach(async () => { if (root) await rm(root, { recursive: true, force: true }); });
@@ -31,5 +31,17 @@ describe('site size breakdown', () => {
     expect(raw.bytes).toBe(repetitive.length);
     expect(result.files).toBe(2);
     expect(result.groups[0]).toBe(raw);
+  });
+
+  it('sums raw bytes per top-level field and skips files that are not JSON objects', async () => {
+    root = await mkdtemp(join(tmpdir(), 'site-fields-'));
+    await writeFile(join(root, 'A-1.json'), JSON.stringify({ bars: [1, 2, 3], symbol: 'A' }));
+    await writeFile(join(root, 'B-1.json'), JSON.stringify({ bars: [4, 5, 6, 7], symbol: 'B' }));
+    await writeFile(join(root, 'list.json'), '[1,2]');
+    await writeFile(join(root, 'broken.json'), '{');
+    const result = await fieldBreakdown(root);
+    expect(result.files).toBe(2);
+    expect(result.fields.map(field => field.key)).toEqual(['bars', 'symbol']);
+    expect(result.fields[0].bytes).toBe('[1,2,3]'.length + '[4,5,6,7]'.length + 2 * ('bars'.length + 4));
   });
 });
