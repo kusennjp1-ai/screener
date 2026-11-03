@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 
 DEFAULT_USER_AGENT = "screener-research https://github.com/kusennjp1-ai/screener"
 RETRY_STATUS = {429, 500, 502, 503, 504}
-MAX_SYMBOLS = 300
+MAX_SYMBOLS = 500
 # Revenue and net income are additive over a fiscal year, so a fourth quarter the
 # filer only reports inside its 10-K can be recovered exactly as the annual value
 # minus the three reported quarters of the same concept and fiscal year. EPS is
@@ -173,6 +173,21 @@ def collect(symbols, as_of, get=None, sleep=time.sleep, pause=0.3):
     output["second_pass"] = {"retried": len(failed), "recovered": recovered}
     return output
 
+def brief_targets(audit):
+    """Every symbol the daily brief can list for the trend template: qualified first, then
+    the ones one condition short with nothing unknown. The ranked top-50 lists come first."""
+    rows = (audit or {}).get("results", [])
+    method = lambda row: (row.get("methods") or {}).get("minervini") or {}
+    qualified = [row["symbol"] for row in rows if method(row).get("qualified")]
+    near = [row["symbol"] for row in rows if not method(row).get("qualified") and method(row).get("failed") == 1 and method(row).get("unknown") == 0]
+    return qualified + near
+
+def target_symbols(daily, audit):
+    ranked = [r["symbol"] for method in ("minervini2", "minervini", "ibd", "oneil") for r in daily["candidates"].get(method, [])]
+    # A stale audit (another analysis date) never widens today's list.
+    extra = brief_targets(audit) if audit and audit.get("as_of_date") == daily["as_of_date"] else []
+    return list(dict.fromkeys(ranked + extra))
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=60)
@@ -180,7 +195,9 @@ def main():
     root = Path("public/static-data")
     daily = json.loads(Path("public/research-daily.json").read_text(encoding="utf-8"))
     as_of = daily["as_of_date"]
-    ordered = list(dict.fromkeys(r["symbol"] for method in ("minervini2", "minervini", "ibd", "oneil") for r in daily["candidates"].get(method, [])))
+    audit_path = Path("public/qualification-audit.json")
+    audit = json.loads(audit_path.read_text(encoding="utf-8")) if audit_path.exists() else None
+    ordered = target_symbols(daily, audit)
     symbols = ordered[:max(0, min(args.limit, MAX_SYMBOLS))]
     output = collect(symbols, as_of)
     output["coverage"] = {**coverage(output["results"], len(ordered), len(symbols)), "second_pass": output.pop("second_pass")}
