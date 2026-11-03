@@ -410,9 +410,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   const dist = resolve(root);
   const mb = value => (value / 1e6).toFixed(1).padStart(8);
   if (await isPackedDist(dist)) {
+    // Warnings are part of the report (printed as ::warning:: lines); only a
+    // thrown error means the breakdown itself is unavailable.
     const result = await packedBreakdown(dist);
     for (const line of formatPacked(result, Number(top))) console.log(line);
-    if (result.warnings.length) process.exitCode = 1;
   } else {
     const result = await breakdown(dist);
     console.log(`Site size estimate: ${mb(result.total)} MB in ${result.files} files (budget ${MAX_SITE_BYTES / 1e6} MB; packed files as gzip, others raw)`);

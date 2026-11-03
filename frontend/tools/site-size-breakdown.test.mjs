@@ -270,4 +270,20 @@ describe('site size breakdown', () => {
     expect(output).toMatch(/Financial audit generations \(3 release receipts/);
     expect(output).toMatch(/Raw bytes per field in static-data\/verified-charts/);
   });
+
+  it('prints a partial report with warnings and still exits 0, so the release does not call it unavailable', async () => {
+    const { dist } = await packedFixture();
+    await rm(join(dist, 'static-data/workbench-summary-cccccccccccccccc.json'));
+    // execFileSync throws on any non-zero exit status.
+    const output = execFileSync(process.execPath, [tool, dist, '60'], { encoding: 'utf8' });
+    expect(output).toMatch(/^Final Pages payload \(packed transport/);
+    expect(output).toMatch(/::warning::Export families left unclassified: Missing referenced export file: workbench-summary-cccccccccccccccc\.json/);
+    expect(output).toMatch(/::warning::Transport names a file absent from the tree: static-data\/workbench-summary-cccccccccccccccc\.json/);
+  });
+
+  it('exits non-zero only when the breakdown itself fails', async () => {
+    const { dist } = await packedFixture();
+    await rm(join(dist, 'publication.json'));
+    expect(() => execFileSync(process.execPath, [tool, dist, '60'], { encoding: 'utf8', stdio: 'pipe' })).toThrow(/publication\.json transport descriptor/);
+  });
 });
