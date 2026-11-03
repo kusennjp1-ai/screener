@@ -31,7 +31,9 @@ export function useBriefData() {
   const bundle = useResearchBundle(researchPath, entry.as_of_date, version, entry.publication, BRIEF_METHODS);
   const marketTrends = useMarketTrends(entry);
   // Before the manifest arrives there is no asset reference yet: that is loading, not "not published".
-  const trends = manifest.isLoading && !marketTrends.data && !marketTrends.error ? { ...marketTrends, loading: true } : marketTrends;
+  // A manifest that failed leaves it unknown whether market data was published: an error, never 未配信.
+  const trends = manifest.isLoading && !marketTrends.data && !marketTrends.error ? { ...marketTrends, loading: true }
+    : manifest.isError && !manifest.data ? { ...marketTrends, loading: false, error: true, failureKind: 'manifest' } : marketTrends;
   const ranked = useMemo(() => filterRanked(bundle.data?.rankings?.minervini || [], { liquidOnly: true }), [bundle.data]);
   const date = bundle.data?.date || entry.as_of_date || null;
   const market = bundle.data?.prepared?.market || null;

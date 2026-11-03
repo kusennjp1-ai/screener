@@ -75,6 +75,15 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     expect(errors).toEqual([]);
   });
 
+  test('a manifest that fails leaves publication unknown, never 未配信', async ({ page }) => {
+    await openBrief(page, '#/brief/market', { fail: 'manifest' });
+    const market = page.getByRole('region', { name: '地合い' });
+    await expect(market.getByRole('alert')).toHaveText('市場推移データを取得できません（公開情報を読み込めません）。数値は表示しません。');
+    await expect(market.locator('.brief-ftd .brief-ftd-row')).toHaveText(['S&P取得できません公開情報エラー', 'NAS取得できません公開情報エラー']);
+    await expect(market).not.toContainText(/未配信|含まれていません/);
+    expect(await horizontalOverflow(page)).toBe(0);
+  });
+
   test(`a long history that ends before the analysis date shows its as-of session`, async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { historyEnd: STALE });
     // The stocks are current; only the market series are older and say so.

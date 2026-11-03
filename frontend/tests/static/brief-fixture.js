@@ -124,7 +124,7 @@ export function marketTrends({ historyEnd = date } = {}) {
 }
 
 /** Serve the synthetic publication for every static-data request; abort everything that is not 127.0.0.1. */
-/** `fail: 'series'` answers the market series with a 404. */
+/** `fail` names one file to answer with an HTTP error: 'series' (404 for the market series) or 'manifest' (503). */
 export async function routeBrief(page, { historyEnd = date, fail } = {}) {
   const trends = marketTrends({ historyEnd });
   const external = [];
@@ -135,6 +135,7 @@ export async function routeBrief(page, { historyEnd = date, fail } = {}) {
   });
   await page.route('**/static-data/**', route => {
     const file = new URL(route.request().url()).pathname.split('/').pop();
+    if (file === 'manifest.json' && fail === 'manifest') return route.fulfill({ status: 503, json: {} });
     if (file === trends.file && fail === 'series') return route.fulfill({ status: 404, json: {} });
     if (file === 'manifest.json') return route.fulfill({ json: { as_of_date: date, generated_at: new Date(now).toISOString(), research_generation: 'brief-browser-fixture',
       default_market: 'US', supported_markets: ['US'], markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' }, market_trends: trends.ref }, pages: {} } } } });

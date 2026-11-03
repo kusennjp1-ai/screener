@@ -354,11 +354,12 @@ export const sentence = text => /[。．.]$/.test(String(text)) ? String(text) :
 export const bare = text => String(text).replace(/[。．.]+$/, '');
 
 /**
- * Why the market-trends asset failed, in short Japanese: kind fetch (network, HTTP),
+ * Why the market-trends asset failed, in short Japanese: kind fetch (network, HTTP, the manifest itself),
  * integrity (hash, transport or reference mismatch) or reader (readMarketTrends' own sentence).
  * A raw English message, path or hash is never shown; tile is the two-word form for a tile.
  */
 export function trendsFailure(trends) {
+  if (trends?.failureKind === 'manifest') return { kind: 'fetch', reason: '公開情報を読み込めません', tile: '公開情報エラー' };
   const error = trends?.failureReason, message = typeof error?.message === 'string' ? error.message : '';
   if (!error) return { kind: 'integrity', reason: '公開データの参照情報が一致しません', tile: '整合性エラー' };
   const status = /^Failed to load static data: .* \((\d{3})\)$/.exec(message)?.[1] || /^Transport HTTP failure: (\d{3})$/.exec(message)?.[1];

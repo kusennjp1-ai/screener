@@ -162,6 +162,13 @@ describe('brief market card', () => {
     expect(document.body.textContent).not.toMatch(/整合性|Failed/);
   });
 
+  it('says the publication could not be read when the manifest failed, never 未配信', () => {
+    show({ loading: false, error: true, data: undefined, failureKind: 'manifest' });
+    expect(screen.getByRole('alert')).toHaveTextContent('市場推移データを取得できません（公開情報を読み込めません）。');
+    for (const element of tiles()) expect(element).toHaveTextContent(/取得できません(公開情報エラー)?$/);
+    expect(document.body.textContent).not.toMatch(/未配信|含まれていません/);
+  });
+
   it('keeps distribution days and follow-through usable when only the long history fails', () => {
     const value = trends({ history: false });
     // The sentence readMarketTrends sets when validateLongHistory rejects only the long history.

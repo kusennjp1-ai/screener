@@ -276,6 +276,8 @@ describe('market tab helpers', () => {
       expect(trendsAlert(value)).toBe(alert);
       expect(trendsAlert(value)).not.toMatch(/[A-Za-z]{3}|[a-f0-9]{16}|。）/);
     }
+    // A failed manifest is a fetch failure: whether market data was published is unknown.
+    expect(trendsStatus({ error: true, failureKind: 'manifest' })).toMatchObject({ state: 'error', kind: 'fetch', reason: '公開情報を読み込めません' });
     expect(trendsAlert(trendsStatus({ error: true }))).toBe('市場推移データの整合性を確認できません（公開データの参照情報が一致しません）。');
     expect(bare('一致しません。')).toBe('一致しません');
     expect(sentence('長期市場履歴: universe')).toBe('長期市場履歴: universe。');
