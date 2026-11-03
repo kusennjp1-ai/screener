@@ -60,12 +60,12 @@ export default function MarketCard({ market, trends, date, detail = false }) {
       <div className="brief-fact"><small>分配日（25日）</small><b className={(dist(spx) ?? 0) >= 5 || (dist(ndx) ?? 0) >= 5 ? 'is-warn' : ''}>{dist(spx) == null && dist(ndx) == null ? '未確認' : `${num(dist(spx))}・${num(dist(ndx))}`}</b><em>S&amp;P・NAS</em></div>
       <div className="brief-fact"><small>TT達成数</small><b>{hasEnvironment ? `${num(last.trendTemplateCount)}銘柄` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.trendTemplateCount) ? `1か月で ${delta(last.trendTemplateCount - monthAgo.trendTemplateCount)}` : '8条件すべて達成'}</em></div>
       <div className="brief-fact"><small>200日線より上</small><b>{hasEnvironment ? `${num(last.above200Percent, 1)}%` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.above200Percent) ? `1か月前 ${num(monthAgo.above200Percent, 1)}%` : '全銘柄に占める割合'}</em></div>
-      <div className="brief-fact"><small>ブレイクアウト成功率</small><b>{hasEnvironment && finite(last.breakoutHoldPercent) ? `${num(last.breakoutHoldPercent)}%` : '未確認'}</b><em>{hasEnvironment && Number.isInteger(last.breakoutsJudged) ? `直近${last.breakoutsJudged}件・10日で−7%未満` : '判定数が不足'}</em></div>
+      {detail && <div className="brief-fact"><small>ブレイクアウト成功率</small><b>{hasEnvironment && finite(last.breakoutHoldPercent) ? `${num(last.breakoutHoldPercent)}%` : '未確認'}</b><em>{hasEnvironment && Number.isInteger(last.breakoutsJudged) ? `直近${last.breakoutsJudged}件・10日で−7%未満` : '判定数が不足'}</em></div>}
       <div className="brief-fact"><small>52週の新高値・新安値</small><b className={finite(last?.newHighs) && finite(last?.newLows) && last.newLows > last.newHighs ? 'is-warn' : ''}>{finite(last?.newHighs) && finite(last?.newLows) ? `${num(last.newHighs)}・${num(last.newLows)}` : '未確認'}</b><em>{finite(last?.newHighs) && finite(last?.newLows) ? `差 ${delta(last.newHighs - last.newLows) || '±0'}` : '日足から集計'}</em></div>
-      <div className="brief-fact"><small>RS90以上のTT達成</small><b>{hasEnvironment && finite(last.rs90TemplateCount) ? `${num(last.rs90TemplateCount)}銘柄` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.rs90TemplateCount) ? `1か月で ${delta(last.rs90TemplateCount - monthAgo.rs90TemplateCount)}` : '強いリーダーの数'}</em></div>
+      {detail && <div className="brief-fact"><small>RS90以上のTT達成</small><b>{hasEnvironment && finite(last.rs90TemplateCount) ? `${num(last.rs90TemplateCount)}銘柄` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.rs90TemplateCount) ? `1か月で ${delta(last.rs90TemplateCount - monthAgo.rs90TemplateCount)}` : '強いリーダーの数'}</em></div>}
     </div>
     {lagging.length > 0 && <p className="brief-note brief-asof" role="note">{lagging.join('・')}（分析基準日 {date} の再集計待ち）</p>}
-    {hasEnvironment && <div className="brief-environment">
+    {hasEnvironment && detail && <div className="brief-environment">
       <div className="brief-stagebar" role="img" aria-label={`ステージ構成 ${stages.map(s => `ステージ${s.k} ${num(s.share, 1)}%`).join('、')}`}>
         {stages.map((s, i) => <span key={s.k} className={`stage-${s.k}`} style={{ flexGrow: finite(s.share) ? s.share : 0, '--i': i }} />)}
       </div>

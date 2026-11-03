@@ -6,7 +6,7 @@ import MarketCard from './MarketCard';
 const point = (date, over = {}) => ({ date, coverage: 200, eligibleUniverse: 200, trendTemplateCount: 30, rs90TemplateCount: 8, above200: 90, above200Percent: 45, stage1: 50, stage2: 70, stage3: 40, stage4: 40, breakoutsJudged: 8, breakoutsHeld: 6, newHighs: 40, newLows: 12, ...over });
 const trends = asOf => ({ data: { indices: [{ symbol: '^GSPC', latest: { date: asOf, value: 3 }, events: [] }, { symbol: '^IXIC', latest: { date: asOf, value: 4 }, events: [] }],
   long_history: { as_of_date: asOf, breadth: [point('2026-09-30'), point(asOf)], sp500: [] } } });
-const show = (asOf, date) => render(<MemoryRouter><MarketCard market={{ label: '上昇トレンド（独自判定）', cap: 0.5 }} trends={trends(asOf)} date={date} /></MemoryRouter>);
+const show = (asOf, date, detail = true) => render(<MemoryRouter><MarketCard market={{ label: '上昇トレンド（独自判定）', cap: 0.5 }} trends={trends(asOf)} date={date} detail={detail} /></MemoryRouter>);
 
 describe('brief market card', () => {
   it('shows the environment counts for the analysis date without an as-of note', () => {
@@ -19,6 +19,23 @@ describe('brief market card', () => {
     expect(screen.getByText('8銘柄')).toBeInTheDocument();
     expect(screen.queryByRole('note', { name: '' })).toBeNull();
     expect(screen.queryByText(/時点（分析基準日/)).toBeNull();
+  });
+
+  it('keeps the four buy-or-wait facts on Today and links to the market tab for the rest', () => {
+    show('2026-10-02', '2026-10-02', false);
+    expect(screen.getByText('30銘柄')).toBeInTheDocument();
+    expect(screen.getByText('3・4')).toBeInTheDocument();
+    expect(screen.getByText('40・12')).toBeInTheDocument();
+    expect(screen.queryByText('75%')).toBeNull();
+    expect(screen.queryByText('8銘柄')).toBeNull();
+    expect(screen.queryByRole('img', { name: /ステージ構成/ })).toBeNull();
+    expect(screen.getByRole('link', { name: /市場の詳細/ })).toHaveAttribute('href', '/brief/market');
+  });
+
+  it('shows the stage mix on the market tab without a link to itself', () => {
+    show('2026-10-02', '2026-10-02');
+    expect(screen.getByRole('img', { name: /ステージ構成/ })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /市場の詳細/ })).toBeNull();
   });
 
   it('labels an older long history and index observation with its own date', () => {
