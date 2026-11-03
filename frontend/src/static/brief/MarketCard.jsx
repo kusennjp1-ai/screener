@@ -131,7 +131,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
     {status.state === 'loading' ? <p className="brief-note" role="status">市場推移を読み込み中…</p>
       : status.state === 'error' ? <p className="brief-alert" role="alert">市場推移データの整合性を確認できません（{status.reason}）。数値は表示しません。</p>
         : status.state === 'none' ? <p className="brief-note">市場推移データはこの公開に含まれていません。</p>
-          : longError ? <p className="brief-alert" role="alert">{sentence(longError)}{detail ? '分配日・フォロースルーデー' : '分配日'}は指数データから表示しています。</p> : null}
+          : longError ? <p className="brief-alert" role="alert" data-check={trends.data.long_history_error_key || undefined}>{sentence(longError)}{detail ? '分配日・フォロースルーデー' : '分配日'}は指数データから表示しています。</p> : null}
     <div className="brief-facts">
       {detail && <div className="brief-fact is-wide brief-ftd"><small><Label text="フォロースルーデー（独自判定）" /></small>
         {follow.map(row => <div key={row.name} className="brief-ftd-row"><span className="brief-ftd-index">{row.name}</span><b className={row.tone === 'ext' ? 'is-warn' : ''}>{row.b}<AsOf value={row.asOf} /></b>{row.em ? <em><Parts text={row.em} /></em> : null}</div>)}

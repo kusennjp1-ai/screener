@@ -3,7 +3,7 @@ import { describe,it,expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildMarketTrends } from '../../tools/export-market-trends.mjs';
-import { readMarketTrends } from './marketTrendAsset';
+import { readMarketTrends, longHistoryCheck } from './marketTrendAsset';
 import { validateLongHistory } from './marketLongHistory';
 const date='2026-10-23',entry={as_of_date:date};
 const trendSource=JSON.parse(readFileSync(resolve('data/market-trend-source-2026-10-23.json'),'utf8'));
@@ -69,16 +69,33 @@ describe('market trend reader: optional follow-through and last observed count',
 });
 
 describe('market trend reader: long history isolation',()=>{
+ it('names every validator check with a Japanese category, never the English key',()=>{
+  const code=readFileSync(resolve('src/static/marketLongHistory.js'),'utf8');
+  const keys=[...code.matchAll(/,\s*[`']([^`']+)[`']\);/g)].map(match=>match[1]).filter(key=>/[a-z]/.test(key));
+  expect(keys.length).toBeGreaterThan(40);
+  for(const key of [...keys,'invalid provenance URL']){
+   const check=longHistoryCheck(Error(`長期市場履歴: ${key}`));
+   expect(check.key).toBe(key);expect(check.label).toMatch(/^[^A-Za-z]+$/);
+  }
+  // Anything that is not a validator check (a TypeError on a malformed structure) is a format fault.
+  expect(longHistoryCheck(TypeError("Cannot read properties of undefined (reading 'entries')"))).toEqual({key:"Cannot read properties of undefined (reading 'entries')",label:'データ形式'});
+ });
  it('keeps a valid long history and sets no error',()=>{const out=readMarketTrends(payload({history:true}),entry);expect(out.long_history.as_of_date).toBe(date);expect(Object.hasOwn(out,'long_history_error')).toBe(false);});
  it.each([
-  ['RS90 subset',value=>{const row=value.long_history.breadth.at(-1);row.rs90TemplateCount=5;row.trendTemplateCount=4;}],
-  ['warmup ratio',value=>{value.long_history.breadth[0].ratio_10day=1;}],
-  ['missing session',value=>{value.long_history.breadth.splice(1,1);}],
- ])('drops only the long history on a %s fault and keeps distribution days and follow-through',(_,mutate)=>{
+  ['RS90 subset',value=>{const row=value.long_history.breadth.at(-1);row.rs90TemplateCount=5;row.trendTemplateCount=4;},'集計値の整合','RS90 subset of trend template'],
+  ['warmup ratio',value=>{value.long_history.breadth[0].ratio_10day=1;},'集計値の整合','ratio warmup'],
+  ['missing session',value=>{value.long_history.breadth.splice(1,1);},'取引カレンダー','breadth missing calendar session'],
+  ['coverage',value=>{value.long_history.breadth.at(-1).coverage=1000;},'観測範囲','count/coverage gate'],
+  ['retrieval date',value=>{value.long_history.retrieved_at='2026-10-22T23:00:00+00:00';},'取得日時','source retrieval date'],
+  ['acquisition record',value=>{const symbol=value.long_history.universe.symbols[0];value.long_history.provenance=value.long_history.provenance.filter(row=>row.symbol!==symbol);delete value.long_history.errors?.[symbol];},'取得元の記録','stock response provenance or explicit acquisition error'],
+ ])('drops only the long history on a %s fault and keeps distribution days and follow-through',(_,mutate,label,key)=>{
   const value=payload({history:true});mutate(value);
   const out=readMarketTrends(value,entry);
   expect(Object.hasOwn(out,'long_history')).toBe(false);
-  expect(out.long_history_error).toMatch(/^長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: .+）。$/);
+  // A reader sees a Japanese category; the validator's English key is kept only for diagnosis.
+  expect(out.long_history_error).toBe(`長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: ${label}）。`);
+  expect(out.long_history_error).not.toMatch(/[A-Za-z]/);
+  expect(out.long_history_error_key).toBe(key);
   expect(out.indices).toEqual(payload().indices);
   expect(out.indices.map(index=>index.latest.value)).toEqual([5,3]);
  });

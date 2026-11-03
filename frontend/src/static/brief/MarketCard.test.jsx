@@ -147,9 +147,13 @@ describe('brief market card', () => {
   it('keeps distribution days and follow-through usable when only the long history fails', () => {
     const value = trends({ history: false });
     // The sentence readMarketTrends sets when validateLongHistory rejects only the long history.
-    value.data.long_history_error = '長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: source retrieval date）。';
+    value.data.long_history_error = '長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: 取得日時）。';
+    value.data.long_history_error_key = 'source retrieval date';
     show(value);
-    expect(screen.getByRole('alert')).toHaveTextContent(/^長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: source retrieval date）。分配日・フォロースルーデーは指数データから表示しています。$/);
+    // The English validator key is kept for diagnosis only, never in the visible sentence.
+    expect(screen.getByRole('alert')).toHaveAttribute('data-check', 'source retrieval date');
+    expect(screen.getByRole('alert').textContent).not.toMatch(/[A-Za-z]/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/^長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: 取得日時）。分配日・フォロースルーデーは指数データから表示しています。$/);
     expect(screen.getByText('指数の履歴は長期集計の整合性を確認できないため表示しません。')).toBeInTheDocument();
     expect(tile('分配日（25日）')).toHaveTextContent('3・4');
     expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('確認 8/7');

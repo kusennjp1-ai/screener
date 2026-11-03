@@ -23,6 +23,15 @@ function followThroughValid(value,asOfDate){
  if(['rally_attempt','attempt_expired'].includes(value.state)&&!attempt)return false;
  return Array.isArray(value.events)&&value.events.every((event,i)=>plain(event)&&FOLLOW_THROUGH_EVENTS.includes(event.type)&&on(event.date)&&(!i||event.date>=value.events[i-1].date));
 }
+// The validator's English check keys are diagnostics; a reader sees a short Japanese category (first match wins).
+const CHECK_LABELS=[[/retrieval date/,'取得日時'],[/identity\/date/,'出典・基準日'],[/provenance|acquisition error/,'取得元の記録'],[/sector|classification/,'セクター集計'],
+ [/population|universe/,'対象銘柄集合'],[/calendar|session/,'取引カレンダー'],[/coverage/,'観測範囲']];
+export function longHistoryCheck(error){
+ const message=String(error?.message||error);
+ if(!message.startsWith('長期市場履歴: '))return {key:message,label:'データ形式'};
+ const key=message.slice('長期市場履歴: '.length);
+ return {key,label:CHECK_LABELS.find(([pattern])=>pattern.test(key))?.[1]||'集計値の整合'};
+}
 // A malformed optional field is withdrawn with a reason; it never blanks the distribution count beside it.
 // Like lastObserved, a judgement belongs to its own index: computed on the same bars, so dated on their last point.
 function readIndex(index,asOfDate){
@@ -50,8 +59,11 @@ export function readMarketTrends(value,entry){
   try{validateLongHistory(value.long_history,entry.as_of_date,Infinity);}
   catch(error){
    // Only the long history is withdrawn; distribution days and follow-through stay usable.
+   // The English key stays available for diagnosis (long_history_error_key), never in the sentence.
+   const check=longHistoryCheck(error);
    delete result.long_history;
-   result.long_history_error=`長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: ${String(error?.message||error).replace(/^長期市場履歴: /,'')}）。`;
+   result.long_history_error=`長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: ${check.label}）。`;
+   result.long_history_error_key=check.key;
   }
  }
  return result;
