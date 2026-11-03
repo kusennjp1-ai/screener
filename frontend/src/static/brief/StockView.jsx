@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { money, signed, times } from '../positionGeometry';
 import PriceChart from './PriceChart';
-import { footprint, ruleEvidence, positionPlan, rsLineNewHigh, sellMarks, upDownVolume, sellSignals, SELL_RULES, withBookWarning, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
+import { code33Parts, footprint, ruleEvidence, positionPlan, rsLineNewHigh, sellMarks, upDownVolume, sellSignals, SELL_RULES, withBookWarning, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
 import { meterPercent } from './briefNav';
 
 const finite = Number.isFinite;
@@ -75,6 +75,16 @@ function QuarterBars({ rows }) {
   </svg>;
 }
 
+function Code33Parts({ report }) {
+  const value = code33Parts(report);
+  if (!value) return null;
+  const label = { pass: ['zone', '達成'], fail: ['ext', '未達'] };
+  return <>
+    <ul className="brief-code33-parts" aria-label="Code 33 の3条件">{value.parts.map(([name, state]) => <li key={name} className={`tone-${label[state]?.[0] || 'neutral'}`}><span>{name}</span><b>{label[state]?.[1] || '未確認'}</b></li>)}</ul>
+    {value.q4Eps && <p className="brief-note">第4四半期の EPS は年次報告（10-K）にしか無いため、EPS の加速は未確認です（年間値から差し引いて推計はしません）。</p>}
+  </>;
+}
+
 function FundamentalsCard({ financial }) {
   const report = financial?.report, code33 = financial?.code33;
   const rows = report?.rows?.slice(-8) || [];
@@ -89,6 +99,7 @@ function FundamentalsCard({ financial }) {
     </div>
     {rows.length ? <QuarterBars rows={rows} /> : <p className="brief-note">SEC提出書類の四半期データは未取得です。</p>}
     <div className={`brief-code33 tone-${c33[0]}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>Code 33 {c33[1]}</strong><p>{code33?.state === 'unknown' || !code33 ? '判定に必要な四半期データ（EPS・売上・利益率）がそろっていません。' : code33.source === 'sec' ? '直近3四半期の EPS 成長・売上成長の加速と利益率の拡大を SEC 提出書類で判定。' : `${code33.label}。SEC提出書類で判定できないため、提供元の四半期値で同じ規則を当てはめた参考判定です。`}</p></div></div>
+    {code33?.source !== 'yahoo' && <Code33Parts report={report} />}
     <p className="brief-note">EPS は報告値（希薄化）で調整後EPSとは異なります。Q4 の売上・純利益が年度値でしか報告されていない場合は、年度値から3四半期を差し引いて算出し「Q4算出」と表示します。</p>
   </section>;
 }

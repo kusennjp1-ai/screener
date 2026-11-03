@@ -324,3 +324,12 @@ export function marketTone(market) {
   if (/圧力/.test(market.label)) return 'ext';
   return 'neg';
 }
+
+/** The three Code 33 conditions from the SEC rows, so a partly known Code 33 still shows what is known. */
+export function code33Parts(report) {
+  if (!report?.valid) return null;
+  const last = report.rows.slice(-4);
+  // A fiscal Q4 whose EPS is only in the annual report leaves EPS growth unknown; it is never estimated.
+  const q4Eps = report.epsAcceleration === 'unknown' && last.some(row => row.derived && !finite(row.epsYoY));
+  return { q4Eps, parts: [['EPS の加速', report.epsAcceleration], ['売上の加速', report.salesAcceleration], ['純利益率の上昇', report.marginImprovement]] };
+}
