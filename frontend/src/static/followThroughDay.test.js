@@ -96,6 +96,27 @@ describe('follow-through state machine',()=>{
   expect(fresh).toMatchObject({state:'rally_attempt',attempt:{startDate:dates(14)[13],day:1},ftd:null,failedDate:null});
   expect(types(fresh).slice(-2)).toEqual(['ftd_failed','rally_attempt']);
  });
+ it('after a failure from a higher post-FTD peak, needs a 6% decline from that peak before a new correction or attempt',()=>{
+  // 101, 103.5 (a close above the 103 leg peak), then 99.2 under the FTD low (99.30): only 4.2% under 103.5.
+  const failed=run([...FTD,101,103.5,99.2]);
+  expect(failed).toMatchObject({state:'ftd_failed',failedDate:dates(15)[14],peak:{date:dates(14)[13],close:103.5},low:{date:dates(15)[14]}});
+  expect(failed.declinePct).toBeLessThan(6);
+  // No rally attempt and no second follow-through off a sub-6% dip.
+  const second=run([...FTD,101,103.5,99.2,99.5,99.6,99.7,[101,{volume:1100}]]);
+  expect(second.state).toBe('ftd_failed');
+  expect(types(second).filter(type=>type==='ftd')).toHaveLength(1);
+  expect(types(second).slice(types(second).indexOf('ftd_failed'))).toEqual(['ftd_failed']);
+  // An undercut still under 6% moves the low but is not a correction.
+  const shallow=run([...FTD,101,103.5,99.2,[99.3,{low:98.9}]]);
+  expect(shallow).toMatchObject({state:'ftd_failed',low:{low:98.9}});
+  expect(types(shallow).at(-1)).toBe('ftd_failed');
+  // Once the low caps a 6% decline from 103.5, the correction and a fresh attempt follow.
+  const deep=run([...FTD,101,103.5,99.2,[97,{low:96.9}],97.5]);
+  expect(deep).toMatchObject({state:'rally_attempt',peak:{close:103.5},low:{low:96.9},attempt:{day:1},ftd:null,failedDate:null});
+  expect(types(deep).slice(-3)).toEqual(['ftd_failed','low_undercut','rally_attempt']);
+  // A close back above the post-FTD peak ends the failed leg.
+  expect(run([...FTD,101,103.5,99.2,104]).state).toBe('no_correction');
+ });
  it('recovers to no_correction on a close above the peak without a follow-through',()=>{
   const result=run([...CORRECTION,...Array.from({length:8},(_,i)=>95*1.011**(i+1))]);
   expect(result.state).toBe('no_correction');

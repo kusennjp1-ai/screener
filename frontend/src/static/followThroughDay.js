@@ -34,7 +34,9 @@ export function followThroughDay({ symbol, bars, asOfDate, distributionEvents } 
   for (let index=1; index<input.length; index++) {
     const bar=input[index], previous=input[index-1];
     if (state==='confirmed') {
-      // Backend circuit breaker: any later close under the FTD session's low.
+      // Backend circuit breaker: any later close under the FTD session's low. Tracking resumes from the
+      // leg's running peak (the corrected leg's own peak, or a higher close set after the FTD); either way
+      // a new correction or rally attempt needs the 6% decline from that peak again.
       if (bar.close<input[ftd.index].low) {
         if (input[peak].close<=input[leg.peak].close) peak=leg.peak;
         low=lowest(peak+1,index);state='ftd_failed';failed=index;leg=null;
@@ -49,7 +51,11 @@ export function followThroughDay({ symbol, bars, asOfDate, distributionEvents } 
     // correction / rally_attempt / attempt_expired / ftd_failed: the leg's low is the rally low.
     if (bar.low<input[low].low) {
       if (attempt) events.push({type:'attempt_failed',date:bar.date,startDate:at(attempt.start),day:index-attempt.start+1});
-      else if (state==='ftd_failed') events.push({type:'low_undercut',date:bar.date});
+      else if (state==='ftd_failed') {
+        // A dip under 6% from a higher post-FTD peak is not a correction: the low moves, the failure stands.
+        low=index;if (decline()<FTD_MIN_DECLINE) continue;
+        events.push({type:'low_undercut',date:bar.date});
+      }
       low=index;attempt=null;ftd=null;failed=null;state='correction';
       continue;
     }
@@ -67,8 +73,9 @@ export function followThroughDay({ symbol, bars, asOfDate, distributionEvents } 
       state='no_correction';peak=index;low=null;attempt=null;ftd=null;failed=null;
       continue;
     }
-    // Day 1 is the first up close after the rally low; a low set by the failing session itself can start a new attempt.
-    if ((state==='correction' || (state==='ftd_failed'&&low===failed)) && bar.close>previous.close) {
+    // Day 1 is the first up close after the rally low; a low set by the failing session itself can start a new
+    // attempt, but only when that low caps a 6% decline from the running peak.
+    if ((state==='correction' || (state==='ftd_failed'&&low===failed&&decline()>=FTD_MIN_DECLINE)) && bar.close>previous.close) {
       state='rally_attempt';attempt={start:index};ftd=null;failed=null;
       events.push({type:'rally_attempt',date:bar.date,lowDate:at(low)});
       continue;
