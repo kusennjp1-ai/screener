@@ -6,6 +6,8 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 import { buildMarketTrends,exportMarketTrends,verifyLongHistorySource,selectLongHistorySource,selectRuntimeLongHistorySource } from './export-market-trends.mjs';
+import { FOLLOW_THROUGH_METHOD } from '../src/static/followThroughDay.js';
+import { readMarketTrends } from '../src/static/marketTrendAsset.js';
 const source=()=>JSON.parse(readFileSync(resolve('data/market-trend-source-2026-10-23.json'),'utf8'));
 const longSource=()=>JSON.parse(readFileSync(resolve('data/market-history-source-2026-10-23.json'),'utf8'));
 const historyCapture=(date,retrieved_at)=>{
@@ -111,6 +113,34 @@ describe('market trend source projection',()=>{
  it('rejects future/different-day Cboe evidence and preserves unknown values',()=>{const input=source();input.put_call.observations=input.put_call.observations.slice(-1);input.put_call.observations[0].provenance.url='https://www.cboe.com/markets/us/options/market-statistics/daily?dt=2026-10-22';const out=buildMarketTrends(input,{asOfDate:input.as_of_date});expect(out.put_call.points[0].value).toBeNull();});
  it('keeps the public chart universe and denominator for above50 instead of merging with liquid-stock current count',()=>{const input=source(),out=buildMarketTrends(input,{asOfDate:input.as_of_date,bookEvidence:{as_of_date:input.as_of_date,series:[{date:input.as_of_date,above50:3,coverage:4,expectedUniverseSize:7,newHighs:1,newLows:0}]}});expect(out.breadth.points[0]).toMatchObject({above50Percent:75,coverage:4,universe:7,newLows:0});expect(out.breadth.approximate).toBe(true);});
  it('retains known index history without carrying its past count into today',()=>{const input=source();input.indices[0].bars.pop();const out=buildMarketTrends(input,{asOfDate:input.as_of_date});expect(out.indices[0]).toMatchObject({available:false,historical:true,latest:null});expect(out.indices[0].points.at(-1).date).toBe('2026-10-22');expect(out.indices[0].points.at(-1).value).toEqual(expect.any(Number));});
+ it('adds the follow-through state and the dated last count from the same validated index bars',()=>{
+  const input=source(),out=buildMarketTrends(input,{asOfDate:input.as_of_date}),[sp,nasdaq]=out.indices;
+  expect(sp.followThrough).toMatchObject({available:true,method:FOLLOW_THROUGH_METHOD,asOf:'2026-10-23',state:'confirmed',ftd:{date:'2026-04-08',attemptDay:6}});
+  expect(sp.followThrough.ftd.distributionSince).toBe(sp.events.filter(event=>event.state==='active'&&event.date>'2026-04-08').length);
+  expect(nasdaq.followThrough).toMatchObject({available:true,asOf:'2026-10-23',state:'no_correction',ftd:null});
+  expect(nasdaq.followThrough.events.filter(event=>event.type==='ftd').map(event=>event.date)).toEqual(['2026-04-14']);
+  for(const index of out.indices)expect(index.lastObserved).toEqual({date:index.latest.date,value:index.latest.value});
+  expect(readMarketTrends(out,{as_of_date:input.as_of_date}).indices.map(index=>index.followThrough.state)).toEqual(['confirmed','no_correction']);
+ });
+ it('dates a historical index count and follow-through to its own last session while latest stays null',()=>{
+  const input=source();input.indices[0].bars.pop();
+  const out=buildMarketTrends(input,{asOfDate:input.as_of_date}),[sp,nasdaq]=out.indices;
+  expect(sp).toMatchObject({available:false,historical:true,latest:null,lastObserved:{date:'2026-10-22',value:sp.points.at(-1).value}});
+  expect(sp.lastObserved.value).toEqual(expect.any(Number));
+  expect(sp.followThrough).toMatchObject({available:true,asOf:'2026-10-22',state:'confirmed'});
+  expect(nasdaq.followThrough.asOf).toBe('2026-10-23');
+  expect(readMarketTrends(out,{as_of_date:input.as_of_date}).indices[0].lastObserved).toEqual(sp.lastObserved);
+ });
+ it('marks follow-through unavailable with the index reason when bars are missing or invalid, never as a state',()=>{
+  for(const index of buildMarketTrends(source(),{asOfDate:'2026-10-26'}).indices){
+   expect(index.followThrough).toEqual({available:false,method:FOLLOW_THROUGH_METHOD,reason:index.reason});
+   expect(index.lastObserved).toBeNull();
+  }
+  const input=source();input.indices[1].bars[100].volume=0;
+  const broken=buildMarketTrends(input,{asOfDate:input.as_of_date}).indices[1];
+  expect(broken).toMatchObject({available:false,lastObserved:null,followThrough:{available:false,method:FOLLOW_THROUGH_METHOD,reason:broken.reason}});
+  expect(broken.reason).toMatch(/ゼロ件とは扱いません/);
+ });
  it('writes raw and derived data with exact content hashes and binds the manifest reference',async()=>{
   const root=mkdtempSync(resolve(tmpdir(),'market-trends-'));
   try{

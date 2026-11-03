@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir, readdir, lstat } from 'node:fs/promises';
 import { dirname,resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { distributionDays } from '../src/static/distributionDays.js';
+import { followThroughDay, FOLLOW_THROUGH_METHOD } from '../src/static/followThroughDay.js';
 import { validateLongHistory } from '../src/static/marketLongHistory.js';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const isDay=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
@@ -31,9 +32,16 @@ export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}
   const indices=['^GSPC','^IXIC'].map(symbol=>{
     const input=sourceMatches?source.indices?.find(item=>item.symbol===symbol):null;
     const lastDate=input?.bars?.at(-1)?.date;
-    if(!input?.bars?.length || !isDay(lastDate)||lastDate>asOfDate||!provenance(input.provenance,'query1.finance.yahoo.com',lastDate))return {symbol,available:false,points:[],events:[],reason:input?.unavailable_reason||'同じ基準日の出典付き指数履歴は未取得です。'};
+    if(!input?.bars?.length || !isDay(lastDate)||lastDate>asOfDate||!provenance(input.provenance,'query1.finance.yahoo.com',lastDate)){
+      const reason=input?.unavailable_reason||'同じ基準日の出典付き指数履歴は未取得です。';
+      return {symbol,available:false,points:[],events:[],reason,lastObserved:null,followThrough:{available:false,method:FOLLOW_THROUGH_METHOD,reason}};
+    }
     const calculated=distributionDays({symbol,bars:input.bars,sessions:input.calendar_sessions||source.calendar?.sessions,halfDays:source.calendar?.half_days,asOfDate:lastDate});
-    return {...calculated,...(lastDate<asOfDate?{available:false,historical:true,latest:null,reason:`${asOfDate}は未取得。${lastDate}までの過去記録を表示しています。`}:{}),source:input.source,volumeBasis:input.volume_basis,provenance:input.provenance};
+    // Same validated bars and last date as the distribution count; a historical index keeps its own asOf.
+    const followThrough=calculated.available?followThroughDay({symbol,bars:input.bars,asOfDate:lastDate,distributionEvents:calculated.events}):{available:false,method:FOLLOW_THROUGH_METHOD,reason:calculated.reason};
+    // The last observed count always carries its own date; latest stays null for a historical index.
+    const observed=calculated.points.filter(point=>Number.isSafeInteger(point.value)).at(-1);
+    return {...calculated,...(lastDate<asOfDate?{available:false,historical:true,latest:null,reason:`${asOfDate}は未取得。${lastDate}までの過去記録を表示しています。`}:{}),lastObserved:observed?{date:observed.date,value:observed.value}:null,followThrough,source:input.source,volumeBasis:input.volume_basis,provenance:input.provenance};
   });
   const observations=sourceMatches?source.put_call?.observations:[];
   const seen=new Set();
