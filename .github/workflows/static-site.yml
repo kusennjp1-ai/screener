@@ -1025,6 +1025,11 @@ jobs:
             node tools/export-research.mjs
             node tools/report-data-coverage.mjs || echo '::warning::Data coverage report unavailable'
             npm run build
+            # Each export above wrote new hash-named workbench, summary,
+            # performance, market-trend and snapshot files. Keep only what the
+            # manifest, workbench and catalog reference; any missing reference
+            # fails the build. The quality gate then checks the pruned tree.
+            node tools/prune-superseded-exports.mjs public/static-data dist/static-data
             node tools/check-data-quality.mjs
           fi
 
