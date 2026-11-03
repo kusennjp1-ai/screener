@@ -212,5 +212,64 @@ describe('market tone', () => {
     expect(marketTone({ label: '上昇トレンド（独自判定）' })).toBe('zone');
     expect(marketTone({ label: '上昇トレンド・圧力（独自判定）' })).toBe('zone');
     expect(marketTone({ label: '調整局面' })).toBe('neg');
+    expect(marketTone({ label: '50日線割れ（弱含み・独自判定）', cap: 0 })).toBe('neg');
+    expect(marketTone({ label: '市場条件未確認', cap: 0, state: 'unknown' })).toBe('neutral');
+  });
+});
+
+describe('market tab helpers', () => {
+  it('finds the newest finite value with its own session and never a missing one', async () => {
+    const { latestKnown } = await import('./briefModel');
+    const rows = [{ date: '2026-09-29', a: 1, b: 2 }, { date: '2026-09-30', a: 3, b: null }, { date: '2026-10-01', a: null, b: null }];
+    expect(latestKnown(rows, 'a')).toMatchObject({ value: 3, date: '2026-09-30', index: 1 });
+    expect(latestKnown(rows, ['a', 'b'])).toMatchObject({ value: { a: 1, b: 2 }, date: '2026-09-29', index: 0 });
+    expect(latestKnown(rows, 'missing')).toBeNull();
+    expect(latestKnown(null, 'a')).toBeNull();
+    expect(latestKnown([{ date: '2026-10-01', a: NaN }], 'a')).toBeNull();
+  });
+
+  it('writes short dates with the year only when it differs', async () => {
+    const { shortDate } = await import('./briefModel');
+    expect(shortDate('2026-10-01', '2026-10-02')).toBe('10/1');
+    expect(shortDate('2025-12-31', '2026-01-02')).toBe('2025/12/31');
+    expect(shortDate(null, '2026-10-02')).toBe('日付未確認');
+  });
+
+  it('takes the distribution count from latest, then lastObserved, then the last finite point', async () => {
+    const { distributionCount } = await import('./briefModel');
+    expect(distributionCount({ latest: { date: '2026-10-02', value: 3 }, lastObserved: { date: '2026-10-02', value: 3 } })).toEqual({ date: '2026-10-02', value: 3 });
+    expect(distributionCount({ latest: null, historical: true, lastObserved: { date: '2026-10-01', value: 4 } })).toEqual({ date: '2026-10-01', value: 4 });
+    expect(distributionCount({ latest: null, historical: true, points: [{ date: '2026-09-30', value: 2 }, { date: '2026-10-01', value: null }] })).toEqual({ date: '2026-09-30', value: 2 });
+    expect(distributionCount({ available: false, points: [], reason: 'x' })).toBeNull();
+    expect(distributionCount(undefined)).toBeNull();
+  });
+
+  it('tells loading, an integrity failure and an unpublished asset apart', async () => {
+    const { trendsStatus } = await import('./briefModel');
+    expect(trendsStatus({ loading: true })).toEqual({ state: 'loading', reason: null });
+    expect(trendsStatus({ error: true, failureReason: new Error('SHA-256 が一致しません') })).toEqual({ state: 'error', reason: 'SHA-256 が一致しません' });
+    expect(trendsStatus({ error: true }).reason).toBe('公開データの参照情報が一致しません');
+    expect(trendsStatus({ data: undefined }).state).toBe('none');
+    expect(trendsStatus(undefined).state).toBe('none');
+    expect(trendsStatus({ data: { indices: [] } }).state).toBe('ready');
+  });
+
+  it('words every follow-through state compactly and dates an older judgement', async () => {
+    const { followThroughView } = await import('./briefModel');
+    const base = { available: true, method: 'rally-attempt-gain1.2-day4-15-decline6-v1', asOf: '2026-10-02', peak: { date: '2026-09-10', close: 100 }, low: { date: '2026-09-29', low: 90 }, declinePct: 7.24, attempt: { startDate: '2026-09-30', day: 3 }, ftd: null, failedDate: null, events: [] };
+    const view = (over, date = '2026-10-02') => followThroughView({ ...base, ...over }, date);
+    expect(view({ state: 'confirmed', ftd: { date: '2026-08-07', attemptDay: 4, gainPct: 1.43, volumeRatio: 1.2, sessionsSince: 40, distributionSince: 2 } })).toMatchObject({ b: '確認 8/7', em: '+1.4%・反発4日目・その後の分配日2', asOf: null });
+    expect(view({ state: 'rally_attempt' })).toMatchObject({ b: '反発3日目', em: '安値9/29・4日目以降の+1.2%上昇待ち' });
+    expect(view({ state: 'correction', attempt: null })).toMatchObject({ b: '調整中', em: '高値9/10から−7.2%' });
+    expect(view({ state: 'attempt_expired', attempt: { startDate: '2026-09-01', day: 17 } })).toMatchObject({ b: '15日以内のFTDなし', em: '安値9/29を維持・反発17日目' });
+    expect(view({ state: 'ftd_failed', failedDate: '2026-10-01', ftd: { date: '2026-09-25', attemptDay: 5, gainPct: 1.6 } })).toMatchObject({ b: 'FTD失敗 10/1', em: '9/25のFTD当日の安値を終値で下回る' });
+    expect(view({ state: 'no_correction', declinePct: 3.42, low: null, attempt: null })).toMatchObject({ b: '不要', em: '高値から−3.4%（6%未満）' });
+    expect(view({ state: 'confirmed', asOf: '2026-10-01', ftd: { date: '2026-08-07' } })).toMatchObject({ b: '確認 8/7', asOf: '10/1' });
+    expect(followThroughView({ available: false, method: 'x', reason: '指数OHLCVに欠測・重複・不正値があります。' }, '2026-10-02')).toMatchObject({ b: '算出不可', em: '指数OHLCVに欠測・重複・不正値があります。' });
+    expect(followThroughView(undefined, '2026-10-02')).toMatchObject({ b: '未集計', em: '旧形式の公開データ' });
+    for (const state of ['confirmed', 'rally_attempt', 'correction', 'attempt_expired', 'ftd_failed', 'no_correction']) {
+      const text = Object.values(view({ state, ftd: null, low: null, peak: null, attempt: null, declinePct: null, failedDate: null })).join(' ');
+      expect(text).not.toMatch(/未確認|undefined|null|NaN/);
+    }
   });
 });

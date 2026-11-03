@@ -12,14 +12,14 @@ export default function MarketScreen({ brief }) {
   const history = trends?.data?.long_history || null;
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>市場</h1></header>
-    <MarketCard market={brief.market} trends={trends} date={brief.date} detail />
+    <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={trends} date={brief.date} detail />
     <section className="brief-card brief-history in" style={{ '--i': 2 }} aria-labelledby="brief-history-title">
       <div className="brief-step"><h2 id="brief-history-title">市場環境の推移</h2></div>
       {trends?.loading ? <p className="brief-note" role="status">長期履歴を読み込み中…</p>
         : trends?.error ? <p className="brief-alert" role="alert">長期履歴の整合性を確認できません。</p>
           : <>
             <MarketUpdateStatus data={trends?.data} />
-            <HistoricalBreadth history={history} />
+            {!history && typeof trends?.data?.long_history_error === 'string' ? <p className="brief-alert" role="alert">長期履歴の整合性を確認できません（{trends.data.long_history_error}）。</p> : <HistoricalBreadth history={history} />}
             <SectorRankHistory history={history} />
           </>}
     </section>
