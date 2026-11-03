@@ -252,6 +252,9 @@ describe('market tab helpers', () => {
     expect(trendsStatus({ data: undefined }).state).toBe('none');
     expect(trendsStatus(undefined).state).toBe('none');
     expect(trendsStatus({ data: { indices: [] } }).state).toBe('ready');
+    const { sentence } = await import('./briefModel');
+    expect(sentence('長期市場履歴を表示しません（検証項目: universe）。')).toBe('長期市場履歴を表示しません（検証項目: universe）。');
+    expect(sentence('長期市場履歴: universe')).toBe('長期市場履歴: universe。');
   });
 
   it('words every follow-through state compactly and dates an older judgement', async () => {

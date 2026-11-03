@@ -347,6 +347,9 @@ export function latestKnown(rows, field) {
   return null;
 }
 
+/** A reader's reason is already a sentence (useMarketTrends' long_history_error); only add the full stop when it lacks one. */
+export const sentence = text => /[。．.]$/.test(String(text)) ? String(text) : `${text}。`;
+
 /** State of the market-trends asset: loading | error (with its reason) | none (not published) | ready. */
 export function trendsStatus(trends) {
   if (trends?.loading) return { state: 'loading', reason: null };

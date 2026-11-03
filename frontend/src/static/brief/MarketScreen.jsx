@@ -1,6 +1,7 @@
 import MarketCard from './MarketCard';
 import { HistoricalBreadth, SectorRankHistory } from '../components/MarketHistoryExplorer';
 import MarketUpdateStatus from '../components/MarketUpdateStatus';
+import { sentence } from './briefModel';
 
 /**
  * The market tab: today's verdict and environment, then the long-run series (trend-template
@@ -19,7 +20,7 @@ export default function MarketScreen({ brief }) {
         : trends?.error ? <p className="brief-alert" role="alert">長期履歴の整合性を確認できません。</p>
           : <>
             <MarketUpdateStatus data={trends?.data} />
-            {!history && typeof trends?.data?.long_history_error === 'string' ? <p className="brief-alert" role="alert">長期履歴の整合性を確認できません（{trends.data.long_history_error}）。</p> : <HistoricalBreadth history={history} />}
+            {!history && typeof trends?.data?.long_history_error === 'string' ? <p className="brief-alert" role="alert">{sentence(trends.data.long_history_error)}</p> : <HistoricalBreadth history={history} />}
             <SectorRankHistory history={history} />
           </>}
     </section>
