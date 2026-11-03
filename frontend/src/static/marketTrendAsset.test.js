@@ -24,6 +24,7 @@ describe('market trend reader: optional follow-through and last observed count',
   ['confirmed without an FTD',index=>{index.followThrough.ftd=null;}],
   ['negative post-FTD distribution count',index=>{index.followThrough.ftd.distributionSince=-1;}],
   ['unavailable without a reason',index=>{index.followThrough={available:false,method:'x'};}],
+  ['non-boolean window-start flag',index=>{index.followThrough.peakAtWindowStart='no';}],
  ])('withdraws a malformed follow-through record (%s) without touching the distribution count',(_,mutate)=>{
   const value=payload(),original=structuredClone(value.indices[0]);mutate(value.indices[0]);
   const out=readMarketTrends(value,entry).indices[0];

@@ -14,6 +14,7 @@ function followThroughValid(value,asOfDate){
  if(peak!==null&&!(plain(peak)&&on(peak.date)&&finite(peak.close)&&peak.close>0))return false;
  if(low!==null&&!(plain(low)&&on(low.date)&&finite(low.low)&&low.low>0))return false;
  if(value.declinePct!==null&&!(finite(value.declinePct)&&value.declinePct>=0))return false;
+ if('peakAtWindowStart' in value&&typeof value.peakAtWindowStart!=='boolean')return false;
  if(attempt!==null&&!(plain(attempt)&&on(attempt.startDate)&&Number.isSafeInteger(attempt.day)&&attempt.day>0))return false;
  if(ftd!==null&&!(plain(ftd)&&on(ftd.date)&&Number.isSafeInteger(ftd.attemptDay)&&ftd.attemptDay>0&&finite(ftd.gainPct)&&finite(ftd.volumeRatio)&&ftd.volumeRatio>0&&count(ftd.sessionsSince)&&(ftd.distributionSince===null||count(ftd.distributionSince))))return false;
  if(value.failedDate!==null&&!on(value.failedDate))return false;

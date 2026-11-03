@@ -86,8 +86,9 @@ export function followThroughDay({ symbol, bars, asOfDate, distributionEvents } 
     }
   }
   const last=input.length-1, ftdDate=ftd?at(ftd.index):null;
+  // A peak on the window's first bar may sit under an older, unseen high: no_correction is then unconfirmed.
   return {available:true, method:FOLLOW_THROUGH_METHOD, asOf:asOfDate, state,
-    peak:{date:at(peak),close:input[peak].close},
+    peak:{date:at(peak),close:input[peak].close}, peakAtWindowStart:peak===0,
     low:low===null?null:{date:at(low),low:input[low].low},
     declinePct:low===null?null:100*decline(),
     attempt:attempt?{startDate:at(attempt.start),day:last-attempt.start+1}:null,

@@ -25,6 +25,14 @@ describe('follow-through state machine',()=>{
   const result=run([100,101,102,103]);
   expect(result).toMatchObject({state:'no_correction',peak:{date:dates(4)[3],close:103},low:null,declinePct:null});
  });
+ it('flags a peak on the window\'s first bar, where an older high may be unseen',()=>{
+  // The window opens mid-decline: 4.5% under bar 0 is no proof that no 6% correction is underway.
+  expect(run([100,99,98,97,96,95.5])).toMatchObject({state:'no_correction',peak:{date:dates(1)[0],close:100},peakAtWindowStart:true});
+  // A 6% fall from bar 0 is a correction whatever came before (the true peak is at least as high).
+  expect(run([100,98,96,93.5])).toMatchObject({state:'correction',peakAtWindowStart:true});
+  expect(run(CORRECTION).peakAtWindowStart).toBe(false);
+  expect(run([100,99,98,101,100]).peakAtWindowStart).toBe(false);
+ });
  it('enters correction at the first lowest-low session whose close is at least 6% under the peak',()=>{
   const result=run(CORRECTION);
   expect(result).toMatchObject({state:'correction',peak:{close:103},low:{date:dates(8)[7],low:95*.998},attempt:null,ftd:null});

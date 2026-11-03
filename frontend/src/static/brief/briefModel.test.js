@@ -272,6 +272,9 @@ describe('market tab helpers', () => {
     expect(view({ state: 'no_correction', declinePct: 5.9599, low: null, attempt: null })).toMatchObject({ em: '高値から−5.96%（6%未満）' });
     expect(view({ state: 'no_correction', declinePct: 5.999, low: null, attempt: null })).toMatchObject({ em: '高値から−5.99%（6%未満）' });
     expect(view({ state: 'correction', declinePct: 6.04 }).em).toMatch(/−6\.0%$/);
+    // A peak on the window's first bar never reads as "no FTD needed".
+    expect(view({ state: 'no_correction', declinePct: 4.5, attempt: null, peakAtWindowStart: true })).toMatchObject({ b: '判定保留', em: '集計期間の初日が高値・それ以前は期間外' });
+    expect(view({ state: 'no_correction', declinePct: 4.5, attempt: null, peakAtWindowStart: false }).b).toBe('不要');
     expect(view({ state: 'confirmed', asOf: '2026-10-01', ftd: { date: '2026-08-07' } })).toMatchObject({ b: '確認 8/7', asOf: '10/1' });
     expect(followThroughView({ available: false, method: 'x', reason: '指数OHLCVに欠測・重複・不正値があります。' }, '2026-10-02')).toMatchObject({ b: '算出不可', em: '指数OHLCVに欠測・重複・不正値があります。' });
     expect(followThroughView(undefined, '2026-10-02')).toMatchObject({ b: '未集計', em: '旧形式の公開データ' });

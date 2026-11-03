@@ -397,7 +397,9 @@ export function followThroughView(ft, date) {
     case 'correction': return { b: '調整中', asOf, em: fall ? `高値${isoDay(peak?.date) ? at(peak.date) : ''}から${fall}` : `${FTD_TEXT.decline}以上の下落` };
     case 'attempt_expired': return { b: `${FTD_TEXT.maxDay}日以内のFTDなし`, asOf, em: join([isoDay(low?.date) ? `安値${at(low.date)}を維持` : null, whole(attempt?.day) ? `反発${attempt.day}日目` : null]) };
     case 'ftd_failed': return { b: isoDay(ft.failedDate) ? `FTD失敗 ${at(ft.failedDate)}` : 'FTD失敗', asOf, tone: 'ext', em: isoDay(ftd?.date) ? `${at(ftd.date)}のFTD当日の安値を終値で下回る` : 'FTD当日の安値を終値で下回る' };
-    case 'no_correction': return { b: '不要', asOf, em: fall ? `高値から${fall}（${FTD_TEXT.decline}未満）` : `${FTD_TEXT.decline}以上の調整なし` };
+    // The window opens on the peak: an older high is unseen, so "no FTD needed" is not established.
+    case 'no_correction': if (ft.peakAtWindowStart === true) return { b: '判定保留', asOf, em: '集計期間の初日が高値・それ以前は期間外' };
+      return { b: '不要', asOf, em: fall ? `高値から${fall}（${FTD_TEXT.decline}未満）` : `${FTD_TEXT.decline}以上の調整なし` };
     default: return { b: '判定不明', em: `未対応の状態（${String(ft.state)}）`, asOf };
   }
 }
