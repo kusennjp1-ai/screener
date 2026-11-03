@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchStaticJson } from './dataClient';
 import { publicationQueryIdentity } from './staticPublication';
 import { readMarketTrends } from './marketTrendAsset';
+/** {data, loading, error}. A long history that fails validation is withdrawn alone (data.long_history_error); index counts and follow-through stay usable. */
 export function useMarketTrends(marketEntry){
  const ref=marketEntry.assets?.market_trends;
  const valid=ref?.schema_version==='market-trends-v1'&&ref.market==='US'&&ref.as_of_date===marketEntry.as_of_date&&/^[a-f0-9]{64}$/.test(ref.sha256||'')&&ref.path===`market-trends/series-${ref.sha256}.json`;
