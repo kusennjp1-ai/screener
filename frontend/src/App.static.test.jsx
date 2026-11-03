@@ -61,7 +61,6 @@ const staticPayloads = {
       home: { path: 'markets/us/home.json' },
       scan: { path: 'markets/us/scan/manifest.json' },
       breadth: { path: 'markets/us/breadth.json' },
-      groups: { path: 'markets/us/groups.json' },
     },
     markets: {
       US: {
@@ -70,7 +69,6 @@ const staticPayloads = {
           home: { path: 'markets/us/home.json' },
           scan: { path: 'markets/us/scan/manifest.json' },
           breadth: { path: 'markets/us/breadth.json' },
-          groups: { path: 'markets/us/groups.json' },
         },
         assets: {
           charts: { path: 'markets/us/charts/index.json' },
@@ -82,7 +80,6 @@ const staticPayloads = {
           home: { path: 'markets/hk/home.json' },
           scan: { path: 'markets/hk/scan/manifest.json' },
           breadth: { path: 'markets/hk/breadth.json' },
-          groups: { path: 'markets/hk/groups.json' },
         },
         assets: {
           charts: { path: 'markets/hk/charts/index.json' },
@@ -246,34 +243,6 @@ const staticPayloads = {
       chart_data: [],
       spy_overlay: [],
       history_90d: [{ date: '2026-03-31', stocks_up_4pct: 54, stocks_down_4pct: 12, ratio_5day: 2.1, ratio_10day: 2.4 }],
-    },
-  },
-  'markets/us/groups.json': {
-    available: true,
-    payload: {
-      movers_period: '1w',
-      rankings: {
-        date: '2026-03-31',
-        rankings: [{ industry_group: 'Semiconductors', rank: 1, avg_rs_rating: 92.5, num_stocks: 14, rank_change_1w: 2, rank_change_1m: 4, rank_change_3m: 7 }],
-      },
-      movers: {
-        gainers: [{ industry_group: 'Semiconductors', rank: 1, rank_change_1w: 3 }],
-        losers: [{ industry_group: 'Retail', rank: 197, rank_change_1w: -5 }],
-      },
-    },
-  },
-  'markets/hk/groups.json': {
-    available: true,
-    payload: {
-      movers_period: '1w',
-      rankings: {
-        date: '2026-03-31',
-        rankings: [{ industry_group: 'Internet', rank: 1, avg_rs_rating: 88.1, num_stocks: 9, rank_change_1w: 1, rank_change_1m: 3, rank_change_3m: 5 }],
-      },
-      movers: {
-        gainers: [{ industry_group: 'Internet', rank: 1, rank_change_1w: 2 }],
-        losers: [{ industry_group: 'Property', rank: 44, rank_change_1w: -4 }],
-      },
     },
   },
 };

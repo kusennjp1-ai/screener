@@ -66,7 +66,7 @@ async function packedFixture() {
   const chart = symbol => ({ symbol, bars: Array.from({ length: 300 }, (_, i) => [i, i + 1, i + 2]) });
   for (const symbol of ['AAA', 'BBB', 'CCC']) await s(`markets/us/charts/${symbol}.json`, chart(symbol));
   await s('markets/us/charts/index.json', { symbols: [] });
-  await s('markets/us/groups.json', { available: true });
+  await s('markets/us/home.json', { top_groups: [] });
   await s('markets/us/scan/chunks/chunk-0001.json', { as_of_date: '2026-11-02', rows: [{ symbol: 'AAA', big: randomBytes(1000).toString('hex'), n: 1 }, { symbol: 'BBB', n: 2 }] });
   await s('verified-charts/AAA-0123456789abcdef.json', { symbol: 'AAA', bars: [[1, 2]], rs_line: [1] });
   await s(`verified-charts/${'L'.repeat(90)}-0123456789abcdef.json`, { symbol: 'LONG' });
@@ -134,7 +134,7 @@ describe('site size breakdown', () => {
   it('labels a group by all of its files, not by the first one', async () => {
     root = await mkdtemp(join(tmpdir(), 'site-mixed-'));
     await put(root, 'static-data/markets/us/charts/AAA.json', { bars: [1] });
-    await put(root, 'static-data/markets/us/groups.json', { groups: [1] });
+    await put(root, 'static-data/markets/us/home.json', { top_groups: [1] });
     const result = await breakdown(root);
     expect(result.groups).toHaveLength(1);
     expect(result.groups[0]).toMatchObject({ group: 'static-data/markets/us/', files: 2, packedFiles: 1, encoding: 'mixed', packed: false });
@@ -194,7 +194,7 @@ describe('site size breakdown', () => {
     expect(family('static-data/markets/us/charts/ (still indexed)').decodedBytes).toBeGreaterThan(family('static-data/markets/us/charts/ (still indexed)').bytes);
     expect(family('static-data/markets/us/scan/chunks/')).toMatchObject({ files: 1, encoding: 'gzip' });
     expect(family('static-data/research-details/')).toMatchObject({ files: 1, encoding: 'gzip' });
-    expect(family('static-data/markets/us/groups.json')).toMatchObject({ files: 1, encoding: 'raw' });
+    expect(family('static-data/markets/us/home.json')).toMatchObject({ files: 1, encoding: 'raw' });
     expect(family('static-data/financial-corrections/carry-projection (active)')).toMatchObject({ files: 1, encoding: 'gzip' });
     expect(family('static-data/financial-corrections/carry-projection (earlier generations)')).toMatchObject({ files: 1, encoding: 'gzip' });
     expect(family('static-data/financial-corrections/source-projection')).toMatchObject({ files: 1, encoding: 'gzip' });
