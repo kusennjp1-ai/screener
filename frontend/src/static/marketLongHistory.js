@@ -38,7 +38,10 @@ export function historyWindow(points,months,asOfDate){
  const from=cutoff.toISOString().slice(0,10);
  return (points||[]).filter(point=>day(point.date)&&point.date>=from&&point.date<=asOfDate);
 }
-/** notAfter bounds the capture's retrieval instant: the build keeps its own clock (default); a reader may pass a publication-derived bound. */
+/**
+ * notAfter bounds the capture's retrieval instant: the build keeps its own clock (default). The browser reader has no
+ * publication instant and passes Infinity, so it checks only the lower bound (retrieved on or after as_of_date).
+ */
 export function validateLongHistory(source,asOfDate,notAfter=Date.now()){
  assert(source?.schema_version==='market-long-history-v1'&&source.market==='US'&&day(source.as_of_date)&&source.as_of_date<=asOfDate,'source identity/date');
  assert(Number.isFinite(Date.parse(source.retrieved_at))&&source.retrieved_at.slice(0,10)>=source.as_of_date&&Date.parse(source.retrieved_at)<=notAfter,'source retrieval date');

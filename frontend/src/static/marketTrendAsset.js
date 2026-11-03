@@ -35,7 +35,7 @@ function readIndex(index,asOfDate){
  }
  return out;
 }
-export function readMarketTrends(value,entry,{now=Date.now()}={}){
+export function readMarketTrends(value,entry){
  if(value?.schema_version!=='market-trends-v1'||value.market!=='US'||value.as_of_date!==entry.as_of_date)throw Error('市場推移の基準日が一致しません。');
  for(const points of [value.breadth?.points,value.put_call?.points,...(value.indices||[]).map(index=>index.points)]){
   if(!Array.isArray(points)||points.some((point,i)=>!validDay(point?.date)||point.date>entry.as_of_date||(i>0&&point.date<=points[i-1].date)))throw Error('市場推移の取引日を確認できません。');
@@ -43,10 +43,11 @@ export function readMarketTrends(value,entry,{now=Date.now()}={}){
  if(value.indices?.length!==2||value.indices[0]?.symbol!=='^GSPC'||value.indices[1]?.symbol!=='^IXIC')throw Error('指数を識別できません。');
  const result={...value,indices:value.indices.map(index=>readIndex(index,entry.as_of_date))};
  if(value.long_history){
-  // The series is hash-pinned to a publication whose build already bounded retrieved_at by its own clock;
-  // a device clock that is behind must not reject it here.
-  const retrieved=Date.parse(value.long_history.retrieved_at),notAfter=Number.isFinite(retrieved)?Math.max(now,retrieved):now;
-  try{validateLongHistory(value.long_history,entry.as_of_date,notAfter);}
+  // No upper bound on retrieved_at here, deliberately: the series carries no publication instant (its bytes are
+  // clock-independent so a replay is identical) and a device clock is not one. The build bounds retrieved_at by
+  // its evaluation instant (selectRuntimeLongHistorySource, verifyLongHistorySource) and the series is hash-pinned.
+  // Every other check runs, including the lower bound: never retrieved before the capture's own observation date.
+  try{validateLongHistory(value.long_history,entry.as_of_date,Infinity);}
   catch(error){
    // Only the long history is withdrawn; distribution days and follow-through stay usable.
    delete result.long_history;

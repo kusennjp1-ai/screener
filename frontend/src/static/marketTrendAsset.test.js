@@ -82,14 +82,24 @@ describe('market trend reader: long history isolation',()=>{
   expect(out.indices).toEqual(payload().indices);
   expect(out.indices.map(index=>index.latest.value)).toEqual([5,3]);
  });
- it('does not reject a published capture because the device clock is behind, while the build clock stays strict',()=>{
+ it('checks no upper bound on retrieved_at in the browser (the build does), and still refuses a retrieval before the observation date',()=>{
   const value=payload({history:true}),retrievedAt=Date.parse(value.long_history.retrieved_at),behind=retrievedAt-2*86400000;
+  // The build's own clock stays strict.
   expect(()=>validateLongHistory(value.long_history,date,behind)).toThrow(/source retrieval date/);
   expect(()=>validateLongHistory(value.long_history,date)).not.toThrow();
-  const out=readMarketTrends(value,entry,{now:behind});
-  expect(out.long_history.retrieved_at).toBe(value.long_history.retrieved_at);expect(Object.hasOwn(out,'long_history_error')).toBe(false);
-  // The relaxed bound concerns only the clock; a retrieval before the observation date is still refused.
-  const early=payload({history:true});early.long_history.retrieved_at='2026-10-22T23:00:00+00:00';
-  expect(readMarketTrends(early,entry,{now:behind}).long_history_error).toMatch(/source retrieval date/);
+  const future=payload({history:true});future.long_history.retrieved_at='2099-01-01T00:00:00+00:00';
+  expect(()=>validateLongHistory(future.long_history,date)).toThrow(/source retrieval date/);
+  // The reader has no publication instant: neither a device clock that is behind nor a far-future instant is judged.
+  const realNow=Date.now;
+  try{
+   Date.now=()=>behind;
+   const out=readMarketTrends(value,entry);
+   expect(out.long_history.retrieved_at).toBe(value.long_history.retrieved_at);expect(Object.hasOwn(out,'long_history_error')).toBe(false);
+   expect(readMarketTrends(future,entry).long_history.retrieved_at).toBe('2099-01-01T00:00:00+00:00');
+   // The lower bound is checked: a retrieval before the capture's own date is refused.
+   const early=payload({history:true});early.long_history.retrieved_at='2026-10-22T23:00:00+00:00';
+   expect(readMarketTrends(early,entry).long_history_error).toMatch(/^長期市場履歴の整合性を確認できないため/);
+   expect(Object.hasOwn(readMarketTrends(early,entry),'long_history')).toBe(false);
+  }finally{Date.now=realNow;}
  });
 });
