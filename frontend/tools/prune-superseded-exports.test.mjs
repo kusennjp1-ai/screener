@@ -172,18 +172,22 @@ describe('prune superseded exports', () => {
     await write('sector-prices.json', { as_of_date: date, series: {} });
     const run = (script, at = now, args = []) => execFileSync(process.execPath, [tool(script), ...args], { cwd: frontend,
       env: { ...process.env, FINANCIAL_EVALUATED_AT: new Date(at).toISOString() }, encoding: 'utf8', stdio: 'pipe' });
-    // Static Site exports more than once per session; each run leaves its files.
+    // Static Site exports more than once per session. Each export replaces the
+    // workbench, summary and performance files its input referenced
+    // (superseded-export.mjs), but every run still leaves its candidate snapshot.
     run('./export-research.mjs', now - 2000); run('./record-candidate-history.mjs', now - 2000);
     run('./export-research.mjs', now - 1000);
     run('./export-research.mjs'); run('./record-candidate-history.mjs');
     const top = async () => (await files(data)).filter(path => /^(?:workbench|workbench-summary|candidate-performance)-[a-f0-9]{16}\.json$|^candidate-history\/.*\.gz$/.test(path));
     const before = await top();
-    expect(before.filter(path => path.startsWith('workbench-summary-'))).toHaveLength(3);
+    for (const name of ['workbench-', 'workbench-summary-', 'candidate-performance-']) {
+      expect(before.filter(path => path.startsWith(name) && !path.slice(name.length).includes('-'))).toHaveLength(1);
+    }
     expect(before.filter(path => path.startsWith('candidate-history/'))).toHaveLength(3);
     await cp(data, dist, { recursive: true });
     const output = run('./prune-superseded-exports.mjs', now, ['public/static-data', 'dist/static-data']);
-    expect(output).toMatch(/Pruned 6 superseded export files .* from .*public\/static-data: candidate_history 1, candidate_performance 1, workbench 2, workbench_summary 2\n/);
-    expect(output).toMatch(/Pruned 6 superseded export files .* from .*dist\/static-data: candidate_history 1, candidate_performance 1, workbench 2, workbench_summary 2\n/);
+    expect(output).toMatch(/Pruned 1 superseded export files .* from .*public\/static-data: candidate_history 1\n/);
+    expect(output).toMatch(/Pruned 1 superseded export files .* from .*dist\/static-data: candidate_history 1\n/);
     const manifest = JSON.parse(await readFile(join(data, 'manifest.json'), 'utf8')), assets = manifest.markets.US.assets;
     const catalog = JSON.parse(await readFile(join(data, 'candidate-history/index.json'), 'utf8'));
     const workbench = JSON.parse(await readFile(join(data, assets.workbench.path), 'utf8'));
