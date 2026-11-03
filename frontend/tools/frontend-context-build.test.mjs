@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { expect, it } from 'vitest';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,7 +35,16 @@ it('builds the static app and hashes its financial contract using only the front
     expect(build.error).toBeUndefined();
     expect(build.status, build.stderr || build.stdout).toBe(0);
     expect(readFileSync(join(context, 'dist/index.html'), 'utf8')).toContain('/screener/assets/');
-    expect(JSON.parse(readFileSync(join(context, 'dist/precache-manifest.json'), 'utf8'))).toContain('/screener/index.html');
+    const precached = JSON.parse(readFileSync(join(context, 'dist/precache-manifest.json'), 'utf8'));
+    expect(precached).toContain('/screener/index.html');
+    // The Pages build boots only the brief: neither the connected app nor the
+    // vendor code only it uses may be emitted or precached.
+    const assets = readdirSync(join(context, 'dist/assets'));
+    expect(assets.filter(name => /^(?:App|ServerApp)-/.test(name))).toEqual([]);
+    for (const name of assets.filter(name => /^(?:mui|charts)-vendor-.*\.js$/.test(name))) {
+      expect(statSync(join(context, 'dist/assets', name)).size).toBeLessThan(256);
+    }
+    expect(precached.filter(path => /\/assets\/(?:App|ServerApp|mui-vendor|charts-vendor)-/.test(path))).toEqual([]);
 
     // A data-free image build skips the workbench export. Exercise its runtime
     // source hash here as well, inside the same frontend-only context.

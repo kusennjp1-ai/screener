@@ -5,10 +5,14 @@ import { STATIC_SITE_MODE } from './config/runtimeMode';
 import StaticRoot from './StaticRoot';
 
 // The static site (GitHub Pages) boots without Material UI; the connected app keeps it.
-const App = React.lazy(() => import('./App'));
+// Vite inlines VITE_STATIC_SITE, so a Pages build folds this literal comparison
+// and Rollup drops the connected app's lazy import and every chunk only it reaches.
+// STATIC_SITE_MODE still decides any other spelling, so the choice is unchanged.
+const STATIC_BUILD = import.meta.env.VITE_STATIC_SITE === 'true' || STATIC_SITE_MODE;
+const App = STATIC_BUILD ? null : React.lazy(() => import('./App'));
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    {STATIC_SITE_MODE ? <StaticRoot /> : <React.Suspense fallback={null}><App /></React.Suspense>}
+    {STATIC_BUILD ? <StaticRoot /> : <React.Suspense fallback={null}><App /></React.Suspense>}
   </React.StrictMode>
 );
 

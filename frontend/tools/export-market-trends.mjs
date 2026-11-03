@@ -4,6 +4,7 @@ import { dirname,resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { distributionDays } from '../src/static/distributionDays.js';
 import { validateLongHistory } from '../src/static/marketLongHistory.js';
+import { isGeneratedOutput, removeSupersededOutputs } from './superseded-export.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const isDay=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
 const provenance=(value,host,date)=>{try{return Boolean(value&&typeof value.url==='string'&&new URL(value.url).protocol==='https:'&&new URL(value.url).hostname===host&&/^[a-f0-9]{64}$/.test(value.sha256||'')&&Number.isFinite(Date.parse(value.retrieved_at))&&value.retrieved_at.slice(0,10)>=date&&Date.parse(value.retrieved_at)<=Date.now());}catch{return false;}};
@@ -98,6 +99,18 @@ export async function exportMarketTrends({root,entry,asOfDate,bookEvidence,evalu
   const source=bytes?JSON.parse(bytes):null;
   const payload=buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256:bytes?hash(bytes):null});
   await mkdir(resolve(root,'market-trends'),{recursive:true});
+  // The input manifest's series is replaced below together with the source and
+  // long-history capture it names. Read that binding before any write.
+  const previous=entry.assets?.market_trends;
+  let previousHistory=null;
+  if(isGeneratedOutput('market_trends_series',previous?.path)){
+    let prior;
+    try{prior=await readFile(resolve(root,previous.path));}
+    catch(error){if(error.code==='ENOENT')throw Error(`Input manifest references a missing market-trends series: ${previous.path}`);throw error;}
+    if(`market-trends/series-${hash(prior)}.json`!==previous.path)throw Error('Input market-trends series content address mismatch');
+    const priorSha=JSON.parse(prior).long_history?.source_sha256;
+    if(priorSha!==undefined){if(!/^[a-f0-9]{64}$/.test(priorSha||''))throw Error('Input market-trends series names an invalid long-history source');previousHistory=`market-trends/history-source-${priorSha}.json`;}
+  }
   // Retain the history's own observation date on later publications. Compiler
   // data are already covered by the independent calendar reference hash.
   const directory=resolve(dirname(fileURLToPath(import.meta.url)),'../data');
@@ -113,5 +126,10 @@ export async function exportMarketTrends({root,entry,asOfDate,bookEvidence,evalu
   const body=JSON.stringify(payload),sha256=hash(body),path=`market-trends/series-${sha256}.json`;
   await writeFile(resolve(root,path),body);
   entry.assets={...entry.assets,market_trends:{path,sha256,schema_version:payload.schema_version,market:'US',as_of_date:asOfDate,source_path:bytes?`market-trends/source-${hash(bytes)}.json`:null,source_sha256:bytes?hash(bytes):null}};
+  // A retained input series keeps the source and capture it names.
+  if((await removeSupersededOutputs({root,references:entry,replacements:[{family:'market_trends_series',previous:previous?.path,current:path}]})).length)
+    await removeSupersededOutputs({root,references:entry,replacements:[
+      {family:'market_trends_source',previous:previous.source_path,current:entry.assets.market_trends.source_path},
+      {family:'market_trends_history_source',previous:previousHistory,current:payload.long_history?`market-trends/history-source-${payload.long_history.source_sha256}.json`:null}]});
   return payload;
 }
