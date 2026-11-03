@@ -415,12 +415,16 @@ class StaticSiteExportService:
             )
 
         breadth_path = path_prefix / "breadth.json"
-        groups_path = path_prefix / "groups.json"
-        groups_rrg_path = path_prefix / "groups_rrg.json"
         home_path = path_prefix / "home.json"
         rrg_available = bool(rrg_payload.get("available", False))
         self._write_json(output_dir / breadth_path, breadth_payload)
-        self._write_json(output_dir / groups_path, groups_payload)
+        # The group rankings and RRG payloads stay in memory only. The chart
+        # bundle uses the rankings for its top-group coverage, and home.json
+        # carries top_groups plus freshness.groups_latest_date, which the
+        # publication checks compare across releases. No published screen or
+        # gate reads the full groups.json or groups_rrg.json, and groups.json
+        # alone was 17 MB of the Pages budget, so neither file is written and
+        # the manifest names neither (no pages.groups, no assets.groups_rrg).
         self._write_json(output_dir / home_path, home_payload)
 
         assets: dict[str, Any] = {
@@ -430,12 +434,6 @@ class StaticSiteExportService:
                 "symbols_total": chart_manifest["symbols_total"],
             },
         }
-        # Only publish the RRG asset/file for markets that actually have it, so
-        # the static page hides the RRG toggle (gated on assets.groups_rrg.path)
-        # instead of offering an empty view that triggers a wasted fetch.
-        if rrg_available:
-            self._write_json(output_dir / groups_rrg_path, rrg_payload)
-            assets["groups_rrg"] = {"path": groups_rrg_path.as_posix()}
 
         reference_data = load_reference_data(
             db,
@@ -463,7 +461,6 @@ class StaticSiteExportService:
                 "home": {"path": home_path.as_posix()},
                 "scan": {"path": (path_prefix / "scan" / "manifest.json").as_posix()},
                 "breadth": {"path": breadth_path.as_posix()},
-                "groups": {"path": groups_path.as_posix()},
             },
             "assets": assets,
             "freshness": home_payload.get("freshness", {}),
