@@ -12,6 +12,7 @@ import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { scanListRow } from './scan-list-payload.mjs';
 import { setupEvidence } from './setup-evidence.mjs';
 import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
+import { admitBookFinancials } from '../src/static/bookFinancialAdmission.js';
 // Daily, reproducible candidate snapshots use the exact same rules as the UI.
 import { readFile, writeFile, readdir, mkdir, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -126,7 +127,8 @@ for (const row of merged) {
     volumeRatio:averageVolume > 0 ? chart.bars.at(-1).volume / averageVolume : null };
   rows.set(row.symbol, projectFinancialRow(overlayFinancialCorrection({ ...row, as_of_date:scan.as_of_date, chart_path:paths.get(row.symbol) || null, entry_evidence:entryEvidence, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
     financial_history: currentFinancials?.as_of_date === scan.as_of_date ? currentFinancials.results?.[row.symbol] || null : null,
-    book_financials: financials?.as_of_date === scan.as_of_date ? financials.results?.[row.symbol] || null : null }, correction), {now:evaluatedAt,asOfDate:scan.as_of_date}));
+    // Only an exact same-day SEC record for this symbol reaches the row (also without a correction or carry).
+    book_financials: financials?.as_of_date === scan.as_of_date ? admitBookFinancials(financials.results?.[row.symbol], {symbol:row.symbol,asOfDate:scan.as_of_date,evaluatedAt,row}) : null }, correction), {now:evaluatedAt,asOfDate:scan.as_of_date}));
 }
 await writeCorrectionHistory(root,correction,currentFinancials);
 await rewriteCorrectionChartAliases(root,correction);

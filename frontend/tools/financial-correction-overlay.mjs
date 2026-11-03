@@ -20,6 +20,7 @@ import { validatePublishedSummaries, validateResearchListSummaries, validateRese
 import { verifyWorkbenchComparison } from './workbench-comparison.mjs';
 import { observedFinancialCarryScope } from './financial-generation-carry.mjs';
 import { captureFinancialPublicationInput } from '../src/static/financialPublicationInput.js';
+import { admitBookFinancials } from '../src/static/bookFinancialAdmission.js';
 
 export const FINANCIAL_CORRECTION_SCHEMA = 'financial-statement-projection-v1';
 export const CORRECTION_FIELDS = Object.freeze([...FINANCIAL_FIELDS, 'eps_growth_quarterly', 'eps_growth_annual', 'recent_quarter_date', 'previous_quarter_date', 'growth_comparable_period_date', 'growth_reporting_cadence', 'growth_metric_basis', 'growth_reference_gap_days']);
@@ -165,7 +166,10 @@ export function overlayFinancialCorrection(row, projection, inheritedScope = {})
   if ((row.market !== undefined && row.market !== item.market) || (row.as_of_date !== undefined && row.as_of_date !== item.as_of_date)) fail(`row identity mismatch ${row.symbol}`);
   const out = {...row, ...structuredClone(item.financial_values), ...correctionMetadata(projection),
     market: item.market, as_of_date: item.as_of_date, financial_source_evidence: structuredClone(item.financial_source_evidence),
-    financial_current: structuredClone(item.financial_current), financial_history: structuredClone(item.financial_history), book_financials: null,
+    financial_current: structuredClone(item.financial_current), financial_history: structuredClone(item.financial_history),
+    // Scalars and history stay exclusively owned by the projection. Only an exact
+    // same-day SEC filing record for this symbol may remain beside them.
+    book_financials: admitBookFinancials(row.book_financials, {symbol: row.symbol, asOfDate: item.as_of_date, evaluatedAt: clock(projection.financial_evaluated_at), row}) ?? null,
     financial_historical: historicalSnapshot(row),
     financial_source_diagnostics: structuredClone(item.source_diagnostics), financial_history_source_diagnostics: structuredClone(item.history_source_diagnostics)};
   const observedContexts = !corporateFinancialsAllowed(row) ? instrumentIdentityEvidence(row) : null;
@@ -281,9 +285,16 @@ export async function verifyFinancialProjectionCompatibility({root, projection, 
   if(manifest.research_generation!==researchHash) fail('research content generation mismatch');
   const index = decodeResearchIndex(wire);
   checkMetadata(index, 'research index');
-  const canonicalRows = [], bySymbol = new Map(), counts = {cohort: Object.keys(projection.symbols).length, universe: index.rows.length, details: 0, scan_rows: 0, charts: 0};
+  const canonicalRows = [], bySymbol = new Map(), counts = {cohort: Object.keys(projection.symbols).length, universe: index.rows.length, details: 0, scan_rows: 0, charts: 0, sec_admitted: 0};
   const checkNestedScanners=(row,expected,name)=>{
     for(const key of ['screener_results','screener_details','screeners']) if(object(row[key])) for(const [scanner,value] of Object.entries(row[key])) if(/^(minervini|canslim|ipo|custom)$/i.test(scanner)) equal(value,expected[key]?.[scanner],`${name}/${row.symbol}/${key}/${scanner} retained unverified scanner output`);
+  };
+  // Explicit, independent of the overlay: a detail carries only null or an admitted
+  // same-day SEC record (same symbol/date, filed <= as-of, named 10-K/10-Q, CIK-bound URL).
+  const checkBookFinancials = (row, name) => {
+    if (row.book_financials == null) return;
+    if (admitBookFinancials(row.book_financials, {symbol: row.symbol, asOfDate: index.as_of_date, evaluatedAt: builtAt, row}) !== row.book_financials) fail(`${name}/${row.symbol}/book_financials is not admitted same-day SEC evidence`);
+    counts.sec_admitted++;
   };
   const checkRow = (row, name, full = false, compareCanonical = false) => {
     const canonicalRow=bySymbol.get(row?.symbol);
@@ -295,6 +306,7 @@ export async function verifyFinancialProjectionCompatibility({root, projection, 
       checkNestedScanners(row,safe,name);
       equal(row.financial_current,safe.financial_current,`${name}/${row.symbol}/proof was not preserved`);
       if(full || Object.hasOwn(row,'financial_current_state')) equal(row.financial_current_state,safe.financial_current_state,`${name}/${row.symbol}/state mismatch`);
+      if(full) checkBookFinancials(row,name);
       return;
     }
     const expected = projectFinancialRow(overlayFinancialCorrection({...row, symbol: row.symbol, market: item.market, as_of_date: item.as_of_date}, projection), {now: builtAt});
@@ -307,6 +319,7 @@ export async function verifyFinancialProjectionCompatibility({root, projection, 
     if (full) {
       for (const field of CORRECTION_FIELDS.slice(FINANCIAL_FIELDS.length + 2)) equal(row[field], expected[field], `${name}/${row.symbol}/${field} mismatch`);
       for (const field of ['financial_source_evidence', 'financial_history', 'book_financials', 'financial_source_diagnostics', 'financial_history_source_diagnostics','instrument_applicability','financial_identity']) equal(row[field], expected[field], `${name}/${row.symbol}/${field} mismatch`);
+      checkBookFinancials(row,name);
     }
     if(currentFinancialHistory(row.financial_history,row.symbol,item.as_of_date,builtAt).valid && !currentFinancialHistory(row.financial_history,row.symbol,item.as_of_date,checkedAt).valid) fail(`current history expired or invalid ${row.symbol}`);
     const current = projectFinancialRow(row, {now: checkedAt});

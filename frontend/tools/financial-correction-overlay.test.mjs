@@ -10,6 +10,7 @@ import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload } from '../src/static/financialCurrent.js';
 import { instrumentApplicability } from '../src/static/instrumentApplicability.js';
 import { withFinancialProof } from '../src/static/testFinancialFixture.js';
+import { secRecord } from '../src/test/fixtures/secRecord.js';
 import { FINANCIAL_CORRECTION_SCHEMA, CORRECTION_FIELDS, loadFinancialCorrection, validateCorrectionProjection, overlayFinancialCorrection, overlayFinancialChart, verifyCorrectionCompatibility } from './financial-correction-overlay.mjs';
 const now=Date.parse('2026-10-04T12:00:00Z'), date='2026-10-02', identity=`1/1/${'a'.repeat(64)}/${'b'.repeat(64)}`;
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -42,6 +43,24 @@ it('is strictly opt-in and explicit null ownership preserves independent prices'
   const changed=projectFinancialRow(overlayFinancialCorrection({...input,financial_history:{annual:[{end:'2025-12-31',eps:999}]},book_financials:{source:'old'}},projection()),{now});
   expect(changed).toMatchObject({current_price:100,rs_rating:88,eps_growth_yy:null,annual_eps_growth_3y:null,eps_rating:null,code33:null,code33_pass:null,canslim_score:null,book_financials:null});
   expect(changed.financial_history.annual).toEqual([]);expect(input.eps_growth_yy).toBe(99);
+});
+
+it('keeps only an admitted same-day SEC record beside the projected scalars and history',()=>{
+  const input=rows()[0],record=secRecord({symbol:'AVAILABLE',asOfDate:date,retrievedAt:'2026-10-03T10:00:00.000Z'});
+  const changed=projectFinancialRow(overlayFinancialCorrection({...input,financial_history:{annual:[{end:'2025-12-31',eps:999}]},book_financials:record},projection()),{now});
+  expect(changed.book_financials).toBe(record);
+  expect(changed).toMatchObject({eps_growth_qq:30,eps_growth_yy:40,annual_eps_growth_3y:null,eps_rating:null,code33:null,code33_pass:null,canslim_score:null});
+  expect(changed.financial_history).toEqual(projection().symbols.AVAILABLE.financial_history);
+  for(const value of [secRecord({symbol:'EMPTY',asOfDate:date,retrievedAt:'2026-10-03T10:00:00.000Z'}),secRecord({symbol:'AVAILABLE',asOfDate:'2026-10-01',retrievedAt:'2026-10-03T10:00:00.000Z'}),
+    secRecord({symbol:'AVAILABLE',asOfDate:date,retrievedAt:'2026-10-04T12:00:00.001Z'}),{...record,schema_version:1}]) {
+    expect(projectFinancialRow(overlayFinancialCorrection({...input,book_financials:value},projection()),{now}).book_financials).toBeNull();
+  }
+  const future=structuredClone(record);future.quarterly.eps.at(-1).filed='2026-10-03';
+  expect(overlayFinancialCorrection({...input,book_financials:future},projection()).book_financials).toBeNull();
+  const chart={symbol:'AVAILABLE',market:'US',as_of_date:date,bars:[],stock_data:input,fundamentals:{...input,symbol:undefined}};
+  // Chart aliases never carry the record, so they keep their explicit null exactly as before.
+  const aliased=overlayFinancialChart(chart,projection());
+  expect([aliased.stock_data.book_financials,aliased.fundamentals.book_financials]).toEqual([null,null]);expect(aliased).not.toHaveProperty('book_financials');
 });
 
 it('rejects incomplete ownership, tampered artifact, target mismatch, clocks and partial opt-in',async()=>{
