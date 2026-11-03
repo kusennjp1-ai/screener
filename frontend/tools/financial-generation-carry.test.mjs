@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -299,7 +300,7 @@ async function exportFixture(options = inputs(), { withPrior = false, chartForRo
   if (book) {
     // As in the release: the first export precedes the SEC fetch, whose file the later exports read.
     execFileSync(process.execPath, [exporter], { cwd: frontend, env: ordinaryEnv, encoding: 'utf8' });
-    await write(join(root, 'book-financials.json'), { schema_version: 1, as_of_date: date, results: book });
+    await writeFile(join(root, 'book-financials.json.gz'), gzipSync(JSON.stringify({ schema_version: 2, as_of_date: date, results: book })));
   }
   execFileSync(process.execPath, [exporter], { cwd: frontend, env: ordinaryEnv, encoding: 'utf8' });
   const baselineRoot = join(directory, 'before-public'); await cp(join(frontend, 'public'), baselineRoot, { recursive: true });

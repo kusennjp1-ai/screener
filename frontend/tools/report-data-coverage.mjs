@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import { bookFinancialCurrent } from '../src/static/bookFinancialCurrent.js';
 import { financialHistory } from '../src/static/financialHistory.js';
 import { code33Layered } from '../src/static/code33Reference.js';
+import { readBookFinancials } from './book-financials-input.mjs';
 
 const read = async path => { try { return JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } };
 
@@ -51,7 +52,7 @@ export function environmentCoverage(history, sessions = 20) {
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
-  const [daily, sec, history, market, audit] = await Promise.all([read('public/research-daily.json'), read('public/static-data/book-financials.json'),
+  const [daily, sec, history, market, audit] = await Promise.all([read('public/research-daily.json'), readBookFinancials('public/static-data'),
     read('public/static-data/financial-history.json'), read('public/static-data/market-history-source.json'), read('public/qualification-audit.json')]);
   console.log('Data coverage (fundamentals): ' + JSON.stringify(fundamentalsCoverage({ daily, sec, history, audit })));
   console.log('Data coverage (market environment, last 20 sessions): ' + JSON.stringify(environmentCoverage(market)));
