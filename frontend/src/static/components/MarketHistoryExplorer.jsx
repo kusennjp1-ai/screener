@@ -18,8 +18,10 @@ const metrics={
  above50Percent:{label:'50日線上',unit:'%'},leaderCount:{label:'先導株数（価格条件）',unit:'銘柄'},ratio_10day:{label:'4%騰落・10日レシオ',unit:'倍',globalOnly:true}};
 const linesFor=(key,config)=>config.lines||[{key,label:config.label,color:'var(--zone)'}];
 const fmt=value=>Number.isFinite(value)?value.toLocaleString('ja-JP',{maximumFractionDigits:2}):'未確認';
+// A relative index (100 = moved with SPY) as its change against SPY.
+const relative=value=>Number.isFinite(value)?`${value>100?'+':value<100?'−':'±'}${Math.abs(value-100).toFixed(1)}%`:'未確認';
 
-export function HistoricalBreadth({history}){
+export function HistoricalBreadth({history,showSplit=true}){
  const hasEnvironment=history?.breadth?.some(row=>'trendTemplateCount' in row);
  const [metric,setMetric]=useState(hasEnvironment?'trendTemplateCount':'leaderCount'),[range,setRange]=useState(12),[cursor,setCursor]=useState(null),[group,setGroup]=useState('all');
  const available=Object.entries(metrics).filter(([,value])=>hasEnvironment||!value.lines);
@@ -28,10 +30,10 @@ export function HistoricalBreadth({history}){
  const points=historyWindow(rows,range,history?.as_of_date),selected=cursor===null?points.length-1:Math.min(cursor,points.length-1),current=points[selected],config=metrics[metric];
  if(!history)return <p>長期の公開データを確認できません。</p>;
  return <section className="market-history-explorer" aria-label="選定対象の価格条件と先導株の長期推移">
-  <header><h3>広がりと先導株</h3><span>価格条件による遡及集計</span></header>
-  {split?.warning&&<p className="history-bifurcation" role="note">▲ {split.fromHigh>-0.05?'指数は1年高値の水準にありますが':`指数は1年高値まであと${Math.abs(split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{split.above200Percent.toFixed(1)}%です。指数と個別株の乖離（独自判定）。</p>}
+  <header><h3>広がりと先導株</h3><span>株価条件だけで過去にさかのぼった集計</span></header>
+  {showSplit&&split?.warning&&<p className="history-bifurcation" role="note">▲ {split.fromHigh>-0.05?'指数は1年高値の水準にありますが':`指数は1年高値まであと${Math.abs(split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{split.above200Percent.toFixed(1)}%です。指数と個別株の乖離（独自判定）。</p>}
   <div className="history-metric-picker" role="group" aria-label="長期推移の指標">{available.map(([key,value])=><button key={key} aria-pressed={metric===key} onClick={()=>{setMetric(key);setCursor(null);if(value.globalOnly)setGroup('all');}}>{value.label}</button>)}</div>
-  {history.sectorBreadth?.length>0&&<label className="history-sector-picker">対象 <select aria-label="業種別推移の対象" value={group} disabled={Boolean(config.globalOnly)} onChange={event=>{setGroup(event.target.value);setCursor(null);}}><option value="all">全体</option>{history.sectorBreadth.map(item=><option key={item.sector} value={item.sector}>{groupNames[item.sector]||item.sector}（現在分類）</option>)}</select></label>}
+  {history.sectorBreadth?.length>0&&!config.globalOnly&&<label className="history-sector-picker">対象 <select aria-label="業種別推移の対象" value={group} onChange={event=>{setGroup(event.target.value);setCursor(null);}}><option value="all">全体</option>{history.sectorBreadth.map(item=><option key={item.sector} value={item.sector}>{groupNames[item.sector]||item.sector}（現在分類）</option>)}</select></label>}
   <div className="history-range" role="group" aria-label="先導株と広がりの表示期間">{[[1,'1M'],[3,'3M'],[6,'6M'],[12,'1年'],[24,'2年']].map(([months,label])=><button key={months} aria-pressed={range===months} onClick={()=>{setRange(months);setCursor(null);}}>{label}</button>)}</div>
   <TrendChart points={points} lines={linesFor(metric,config)} unit={config.unit} label={`${config.label}の長期推移`} selected={Math.max(0,selected)} onSelect={setCursor}/>
   <p className="history-scope">{group==='all'?'現在の公開集合':`${groupNames[group]||group}・現在分類を遡及適用`} · 観測 {fmt(current?.coverage)} / 上場後253営業日経過の対象 {fmt(current?.eligibleUniverse)}。{current?.reason||''}</p>
@@ -41,6 +43,8 @@ export function HistoricalBreadth({history}){
 export function SectorRankHistory({history}){
  const frames=history?.sectorRotation?.frames||[],[cursor,setCursor]=useState(null),[playing,setPlaying]=useState(false);
  const reduced=useMediaQuery('(prefers-reduced-motion: reduce)'),selected=cursor===null?Math.max(0,frames.length-1):Math.min(cursor,Math.max(0,frames.length-1)),current=frames[selected];
+ const spread=Math.max(1,...(current?.ranks||[]).map(row=>Math.abs(row.relativeIndex-100)).filter(Number.isFinite));
+ const earlier=selected>=21?frames[selected-21]:null,before=earlier?.ranks?.length===11?Object.fromEntries(earlier.ranks.map(row=>[row.symbol,row.rank])):null;
  useEffect(()=>{if(!playing)return;const timer=setInterval(()=>setCursor(previous=>{const next=(previous??0)+1;if(next>=frames.length){setPlaying(false);return Math.max(0,frames.length-1);}return next;}),reduced?900:350);return()=>clearInterval(timer);},[playing,frames.length,reduced]);
  useEffect(()=>{if(reduced)setPlaying(false);},[reduced]);
  if(!history)return null;
@@ -48,9 +52,10 @@ export function SectorRankHistory({history}){
   <header><div><h3>セクターETF RS</h3><p>公開価格から独自算出 · 11セクター</p></div><time>{current?.date||'未取得'}</time></header>
   <div className="sector-rank-controls"><button disabled={!frames.length} aria-pressed={playing} onClick={()=>{if(!playing&&(cursor===null||selected===frames.length-1))setCursor(0);setPlaying(!playing);}}>{playing?'Ⅱ 一時停止':'▶ 再生'}</button><label><span>日付</span><input type="range" aria-label="セクター順位の対象日" min="0" max={Math.max(0,frames.length-1)} value={selected} aria-valuetext={current?.date} onPointerDown={()=>setPlaying(false)} onKeyDown={()=>setPlaying(false)} onChange={event=>{setPlaying(false);setCursor(Number(event.target.value));}}/></label></div>
   <div className="sector-rank-stage" role="list" aria-label={`${current?.date||'未取得'}のセクター順位。126営業日の対SPY相対価格。`}>
-   {current?.ranks?.length===11?current.ranks.map((row,position)=><div className="history-sector-rank-row" role="listitem" aria-label={`${row.rank}位 ${names[row.symbol]} ${row.symbol} 相対価格指数 ${fmt(row.relativeIndex)}`} key={row.symbol} style={{transform:`translateY(${position*36}px)`}}><b className="sector-rank-number">{row.rank}</b><span className="sector-rank-name">{names[row.symbol]}<small>{row.symbol}</small></span><span className="sector-rank-track" aria-hidden="true"><i style={{width:`${Math.max(5,100-(row.rank-1)*8)}%`}}/></span><strong>{fmt(row.relativeIndex)}</strong></div>):<p>この日の11セクターすべてを確認できません。</p>}
+   {current?.ranks?.length===11?current.ranks.map((row,position)=>{const width=Number.isFinite(row.relativeIndex)?Math.abs(row.relativeIndex-100)/spread*50:0,move=Number.isSafeInteger(before?.[row.symbol])?before[row.symbol]-row.rank:null;
+    return <div className="history-sector-rank-row" role="listitem" aria-label={`${row.rank}位 ${names[row.symbol]} ${row.symbol} 相対価格指数 ${fmt(row.relativeIndex)}${move===null?'':move>0?`、1か月で${move}位上昇`:move<0?`、1か月で${-move}位下降`:'、1か月で順位変わらず'}`} key={row.symbol} style={{transform:`translateY(${position*36}px)`}}><b className="sector-rank-number">{row.rank}</b><span className="sector-rank-name">{names[row.symbol]}<small>{row.symbol}</small></span><span className="sector-rank-track is-diverging" aria-hidden="true"><i className={row.relativeIndex>=100?'is-up':'is-down'} style={{width:`${width.toFixed(1)}%`}}/></span><strong>{relative(row.relativeIndex)}</strong><span className="sector-rank-move" aria-hidden="true">{move===null?'':move>0?`↑${move}`:move<0?`↓${-move}`:'→'}</span></div>;}):<p>この日の11セクターすべてを確認できません。</p>}
   </div>
-  <p className="history-scope">{frames[0]?.date}〜{frames.at(-1)?.date} · 数値100＝SPYと同じ騰落。棒の長さは順位を表します。</p>
+  <p className="history-scope">{frames[0]?.date}〜{frames.at(-1)?.date} · 数値は126営業日のSPY比（±0%＝SPYと同じ騰落）。棒は中央より右がSPYより強く、左が弱い。矢印は1か月（21営業日）前からの順位の変化です。</p>
   <MetricDisclosure summary="独自RSの計算方法・出典"><p>126営業日前を100として、（ETF終値 ÷ SPY終値）の変化を計算。高い順に1〜11位、同値は同順位です。欠測日は順位を作りません。価格は分割調整済み・配当再投資なし。11のSelect Sector SPDR ETFの比較で、IBDの業種グループ分類・公式RSとは異なります。</p><p>自動再生は初期状態では停止。日付バーを動かすと停止します。OSの動きを減らす設定では移動アニメーションを無効にします。</p><a href="https://www.ssga.com/us/en/individual/capabilities/equities/sector-investing/select-sector-etfs" target="_blank" rel="noreferrer">State StreetのセクターETF一覧 ↗</a></MetricDisclosure>
  </section>;
 }

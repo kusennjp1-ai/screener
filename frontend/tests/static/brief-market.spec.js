@@ -24,7 +24,10 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.getByTestId('brief-regime')).toContainText('上昇トレンド（独自判定）');
     await expect(market.getByRole('link', { name: /市場の詳細/ })).toHaveCount(0);
-    await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', 'TT達成数', '200日線より上', '50日線より上', 'ブレイクアウト成功率', 'RS90以上のTT達成', '52週の新高値・新安値']);
+    // Verdict first, then the evidence grouped in decision order: index trend, participation, leaders.
+    await expect(market.getByRole('heading', { level: 3 })).toHaveText(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
+    await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', '200日線より上', '50日線より上', '52週の新高値・新安値', 'TT達成数', 'RS90以上のTT達成', 'ブレイクアウト成功率', 'リーダーの健全度', 'ステージ構成']);
+    await expect(market.getByRole('group', { name: '注意サイン（独自判定）' })).toBeVisible();
     const follow = market.locator('.brief-ftd');
     await expect(follow.locator('.brief-ftd-row')).toHaveCount(2);
     await expect(follow.locator('.brief-ftd-row').first()).toContainText(/S&P確認 \d+\/\d+\+1\.6%・反発5日目・FTD後の有効な分配日3/);
@@ -100,7 +103,10 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(page).toHaveURL(/#\/brief\/market$/);
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.getByRole('note').filter({ hasText: '時点' })).toHaveText(note);
-    await expect(market.locator('.brief-ftd .brief-ftd-row')).toHaveText([new RegExp(`^S&P確認 .*（${STALE_MD}時点）`), new RegExp(`^NAS反発3日目（${STALE_MD}時点）`)]);
+    // Each group whose values all describe the older session says so once; its rows carry no date of their own.
+    for (const name of ['指数のトレンド', '市場の参加度', 'リーダーの健全性']) await expect(market.getByRole('group', { name: `${name} ${STALE_MD}時点の値` })).toBeVisible();
+    await expect(market.locator('.brief-ftd .brief-ftd-row')).toHaveText([/^S&P確認 /, /^NAS反発3日目/]);
+    await expect(market.locator('.brief-fact-asof')).toHaveCount(0);
     const history = page.getByRole('region', { name: '市場環境の推移' });
     await expect(history.locator('[data-update-state]')).toHaveAttribute('data-update-state', 'pending');
     await expect(history.locator('[data-update-state]')).toHaveText(/10\/02 履歴更新待ち/);

@@ -19,6 +19,16 @@ describe('brief market screen', () => {
     expect(history.querySelector('summary')).not.toHaveTextContent(/未取得|未確認|履歴更新待ち/);
   });
 
+  it('opens the long history with what it says today: the count a year earlier, its range and the leading sectors', () => {
+    const days = Array.from({ length: 260 }, (_, i) => new Date(Date.UTC(2025, 9, 1) + i * 86400000).toISOString().slice(0, 10));
+    const breadth = days.map((date, i) => ({ date, coverage: 100, eligibleUniverse: 100, leaderCount: 10 + (i % 50) }));
+    const ranks = ['XLB', 'XLC', 'XLE', 'XLF', 'XLI', 'XLK', 'XLP', 'XLRE', 'XLU', 'XLV', 'XLY'].map((symbol, j) => ({ symbol, rank: j + 1, relativeIndex: 110 - j }));
+    show({ loading: false, error: false, data: { as_of_date: '2026-10-02', indices: [index('^GSPC'), index('^IXIC')],
+      long_history: { as_of_date: days.at(-1), retrieved_at: `${days.at(-1)}T21:00:00Z`, universe: { symbols: ['A'] }, breadth, sp500: [], sectorRotation: { frames: [{ date: days.at(-1), ranks }] } } } });
+    const history = screen.getByRole('region', { name: '市場環境の推移' });
+    expect(within(history).getByText('先導株数（価格条件）は1年前の18から19銘柄（1年の範囲 10〜59）。セクターの上位は素材・通信サービス・エネルギー。')).toBeInTheDocument();
+  });
+
   it('names a fetch failure of the series in the history section by its cause', () => {
     show({ loading: false, error: true, data: undefined, failureReason: new TypeError('Failed to fetch') });
     const history = screen.getByRole('region', { name: '市場環境の推移' });

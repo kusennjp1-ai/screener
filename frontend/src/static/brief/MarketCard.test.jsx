@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MarketCard from './MarketCard';
 
@@ -27,17 +27,19 @@ const show = (value, { date = '2026-10-02', detail = true, market = UP, marketLo
 const tiles = () => [...document.querySelectorAll('.brief-fact')];
 const tile = label => tiles().find(element => element.querySelector('small').textContent === label) || null;
 const bare = /未取得|未確認|NaN|undefined|null/;
+const group = name => screen.getByRole('group', { name: new RegExp(`^${name}`) });
 
 describe('brief market card', () => {
   it('shows every environment metric for the analysis date without an as-of note', () => {
     show(trends({ rows: breadth('2026-10-02', i => (i === 8 ? { trendTemplateCount: 25, rs90TemplateCount: 10, above200: 80, above200Percent: 40 } : {})) }));
-    expect(tile('分配日（25日）')).toHaveTextContent('3・4S&P・NAS');
+    // On the market tab each index's count sits beside its own name.
+    expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日');
     expect(tile('TT達成数')).toHaveTextContent('30銘柄1か月で +5');
     expect(tile('200日線より上')).toHaveTextContent('45.0%観測200中90銘柄・1か月前 40.0%');
     expect(tile('50日線より上')).toHaveTextContent('43.0%観測200中86銘柄');
-    expect(tile('ブレイクアウト成功率')).toHaveTextContent('75%10〜29営業日前の8件・10日で−7%未満');
+    expect(tile('ブレイクアウト成功率')).toHaveTextContent('75%10〜29営業日前の上抜け8件のうち6件が10日間で−7%に届かず');
     expect(tile('RS90以上のTT達成（独自RS）')).toHaveTextContent('8銘柄1か月で −2');
-    expect(tile('52週の新高値・新安値')).toHaveTextContent('40・12差 +28');
+    expect(tile('52週の新高値・新安値')).toHaveTextContent('新高値40新安値12差 +28');
     const [spx, ndx] = tile('フォロースルーデー（独自判定）').querySelectorAll('.brief-ftd-row');
     expect(spx).toHaveTextContent('S&P確認 8/7+1.4%・反発4日目・FTD後の有効な分配日2');
     expect(ndx).toHaveTextContent('NAS反発3日目安値9/29・4日目以降の+1.2%上昇待ち');
@@ -45,6 +47,30 @@ describe('brief market card', () => {
     expect(document.querySelector('.brief-fact-asof')).toBeNull();
     expect(screen.queryByText(/時点（分析基準日/)).toBeNull();
     expect(screen.getByText(/独自集計で、IBDの公式値ではありません/)).toBeInTheDocument();
+    // Verdict first: the exposure guide and the basis of the verdict, then three titled groups.
+    expect(screen.getByTestId('brief-regime')).toHaveTextContent('上昇トレンド（独自判定）新規の買いを検討できます。エクスポージャーの目安最大 50%');
+    expect(screen.getByTestId('brief-regime')).toHaveTextContent('判定の根拠 スキャン時にベンチマーク指数が50日線と200日線の上');
+    expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
+    expect(within(group('指数のトレンド')).getByText(/^S&Pは8\/7のFTDで上昇を確認、NASは反発3日目でFTD待ち。分配日はS&P 3日・NAS 4日で、いずれも5日未満。$/)).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '注意サイン（独自判定）' })).toHaveTextContent('注意サインなし');
+    expect(document.querySelector('.brief-flag')).toBeNull();
+  });
+
+  it('names each fired warning beside its value and counts them under the verdict', () => {
+    // 6 distribution days on the S&P, more new lows than highs, stage 4 above stage 2, breakouts failing.
+    const value = trends({ rows: breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30, stage1: 40, stage2: 40, stage4: 80, breakoutsJudged: 10, breakoutsHeld: 3 } : {})) });
+    value.data.indices[0] = index('^GSPC', '2026-10-02', 6, '2026-10-02', confirmed('2026-10-02'));
+    show(value);
+    const signals = screen.getByRole('group', { name: '注意サイン（独自判定）' });
+    expect(signals).toHaveTextContent('注意サイン 4件');
+    expect(within(signals).getAllByRole('listitem').map(li => li.textContent)).toEqual(['S&Pの分配日 6日', '新安値＞新高値', 'ステージ4＞ステージ2', 'ブレイクアウト成功率 30%']);
+    expect(tile('分配日（25日）')).toHaveTextContent('S&P6日▲注意：5日以上NAS4日');
+    expect(tile('52週の新高値・新安値')).toHaveTextContent('新安値30▲注意：新高値より多い');
+    expect(tile('ブレイクアウト成功率')).toHaveTextContent('30%');
+    expect(tile('ブレイクアウト成功率')).toHaveTextContent('▲注意：40%未満');
+    expect(within(group('市場の参加度')).getByText(/^新安値（30）が新高値（10）を上回る。/)).toBeInTheDocument();
+    expect(group('リーダーの健全性')).toHaveTextContent('▲ 注意 2');
+    expect(within(group('リーダーの健全性')).getByText(/^ステージ4（40%）がステージ2（20%）を上回る。ブレイクアウトの成功率が30%に低下（独自判定）。$/)).toBeInTheDocument();
   });
 
   it('keeps the four buy-or-wait facts on Today and links to the market tab for the rest', () => {
@@ -58,6 +84,28 @@ describe('brief market card', () => {
     expect(screen.getByRole('link', { name: /市場の詳細/ })).toHaveAttribute('href', '/brief/market');
   });
 
+  it('marks a warning on Today with ▲ and a word, and offers the price-only leader count for an older schema', () => {
+    const rows = breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 5, newLows: 9 } : {})).map(row => Object.fromEntries(Object.entries(row).filter(([key]) => !ENVIRONMENT.includes(key))));
+    const value = trends({ rows, legacy: true });
+    value.data.indices[0] = index('^GSPC', '2026-10-02', 5, '2026-10-02', undefined, true);
+    show(value, { detail: false });
+    expect(tile('分配日（25日）')).toHaveTextContent('▲注意 5・4');
+    expect(tile('52週の新高値・新安値')).toHaveTextContent('▲注意 5・9');
+    expect(tile('TT達成数')).toHaveTextContent('未収録旧形式の長期集計 10/2・先導株数（価格条件）20銘柄');
+  });
+
+  it('jumps from the phone navigation to a group heading and moves focus there', () => {
+    const scroll = vi.fn();
+    Element.prototype.scrollIntoView = scroll;
+    show(trends());
+    const nav = screen.getByRole('navigation', { name: '市場タブ内の移動' });
+    expect(within(nav).getAllByRole('button').map(button => button.textContent)).toEqual(['指数', '参加度', 'リーダー', '推移']);
+    fireEvent.click(within(nav).getByRole('button', { name: '参加度' }));
+    expect(scroll).toHaveBeenCalledTimes(1);
+    expect(document.activeElement).toHaveTextContent('市場の参加度');
+    delete Element.prototype.scrollIntoView;
+  });
+
   it('shows the stage mix on the market tab without a link to itself', () => {
     show(trends());
     expect(screen.getByRole('img', { name: /^ステージ構成 ステージ1 25\.0%、ステージ2 35\.0%/ })).toBeInTheDocument();
@@ -68,10 +116,13 @@ describe('brief market card', () => {
   it('labels an older long history and index observation with their own dates, never as today\'s', () => {
     show(trends({ asOf: '2026-10-01', date: '2026-10-02' }));
     expect(screen.getByRole('note')).toHaveTextContent('長期集計は 2026-10-01 時点・分配日は 2026-10-01 時点（分析基準日 2026-10-02 の再集計待ち）');
-    // The exporter withholds latest for an index that ends early; the card shows lastObserved with its date.
-    expect(tile('分配日（25日）')).toHaveTextContent('3・4（10/1時点）');
-    expect(tile('TT達成数')).toHaveTextContent('30銘柄（10/1時点）');
-    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('確認 8/7（10/1時点）');
+    // Every value of a group describes 10/1: the group says so once, and its rows carry no date of their own.
+    for (const name of ['指数のトレンド', '市場の参加度', 'リーダーの健全性']) expect(screen.getByRole('group', { name: `${name} 10/1時点の値` })).toBeInTheDocument();
+    expect(document.querySelector('.brief-fact-asof')).toBeNull();
+    // The exporter withholds latest for an index that ends early; the card shows lastObserved.
+    expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日');
+    expect(tile('TT達成数')).toHaveTextContent('30銘柄');
+    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('確認 8/7');
     expect(screen.getByRole('img', { name: /ステージ構成 .*（10\/1時点）$/ })).toBeInTheDocument();
   });
 
@@ -79,7 +130,9 @@ describe('brief market card', () => {
     const value = trends();
     value.data.indices[1] = index('^IXIC', '2026-10-01', 4, '2026-10-02', attempt('2026-10-01'));
     show(value);
-    expect(tile('分配日（25日）')).toHaveTextContent('3・4（NAS 10/1時点）');
+    // The two indices disagree, so the group has no single date and the older index is dated alone.
+    expect(screen.getByRole('group', { name: '指数のトレンド' })).toBeInTheDocument();
+    expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日（10/1時点）');
     expect(screen.getByRole('note')).toHaveTextContent('分配日は NAS 2026-10-01 時点（分析基準日 2026-10-02 の再集計待ち）');
     expect(screen.getByRole('note')).not.toHaveTextContent('長期集計は');
     expect(tile('フォロースルーデー（独自判定）').querySelectorAll('.brief-fact-asof')).toHaveLength(1);
@@ -87,7 +140,8 @@ describe('brief market card', () => {
 
   it('dates an older distribution count from an older publication that has no lastObserved', () => {
     show(trends({ asOf: '2026-10-01', date: '2026-10-02', legacy: true }));
-    expect(tile('分配日（25日）')).toHaveTextContent('3・4（10/1時点）');
+    expect(screen.getByRole('group', { name: '指数のトレンド 10/1時点の値' })).toBeInTheDocument();
+    expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日');
     expect(screen.getByRole('note')).toHaveTextContent('分配日は 2026-10-01 時点');
     const ftd = tile('フォロースルーデー（独自判定）');
     expect(ftd).toHaveTextContent('未集計旧形式の公開データ');
@@ -108,11 +162,14 @@ describe('brief market card', () => {
   it('names an older long history without environment fields instead of a bare unknown', () => {
     const rows = breadth('2026-10-02').map(row => Object.fromEntries(Object.entries(row).filter(([key]) => !ENVIRONMENT.includes(key))));
     show(trends({ rows, legacy: true }));
-    for (const label of ['TT達成数', '200日線より上', 'ブレイクアウト成功率', 'RS90以上のTT達成（独自RS）']) expect(tile(label)).toHaveTextContent('未収録旧形式の長期集計 10/2');
-    // 50日線 exists in every schema.
+    for (const label of ['TT達成数', '200日線より上', 'ブレイクアウト成功率', 'RS90以上のTT達成（独自RS）', 'リーダーの健全度', 'ステージ構成']) expect(tile(label)).toBeNull();
+    expect(screen.getByTestId('brief-missing-breadth')).toHaveTextContent(/^旧形式の長期集計（10\/2）には未収録：200日線より上・TT達成数$/);
+    expect(screen.getByTestId('brief-missing-leaders')).toHaveTextContent(/^旧形式の長期集計（10\/2）には未収録：RS90以上のTT達成（独自RS）・ブレイクアウト成功率・リーダーの健全度・ステージ構成$/);
+    // 50日線 and the price-only leader count exist in every schema.
     expect(tile('50日線より上')).toHaveTextContent('43.0%観測200中86銘柄');
-    expect(tile('52週の新高値・新安値')).toHaveTextContent('40・12');
-    expect(screen.getByTestId('brief-stage-missing')).toHaveTextContent('ステージ構成は未収録（旧形式の長期集計 10/2）');
+    expect(tile('先導株数（価格条件）')).toHaveTextContent('20銘柄');
+    expect(tile('52週の新高値・新安値')).toHaveTextContent('新高値40新安値12');
+    expect(screen.getByRole('group', { name: '注意サイン（独自判定）' })).toHaveTextContent('旧形式の長期集計に未収録の項目は判定していません。');
     for (const element of tiles()) expect(element.textContent).not.toMatch(bare);
   });
 
@@ -133,7 +190,8 @@ describe('brief market card', () => {
     expect(screen.queryByText(/新規の買いは控えます/)).toBeNull();
     expect(screen.getByRole('status')).toHaveTextContent('市場推移を読み込み中…');
     for (const element of tiles()) expect(element).toHaveTextContent('読み込み中…');
-    expect(screen.getByText('ステージ構成は読み込み中…')).toBeInTheDocument();
+    expect(tile('ステージ構成')).toHaveTextContent('読み込み中…');
+    expect(screen.queryByRole('group', { name: '注意サイン（独自判定）' })).toBeNull();
     expect(document.body.textContent).not.toMatch(/未取得|未確認/);
   });
 
@@ -180,17 +238,17 @@ describe('brief market card', () => {
     expect(screen.getByRole('alert').textContent).not.toMatch(/[A-Za-z]/);
     expect(screen.getByRole('alert')).toHaveTextContent(/^長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: 取得日時）。分配日・フォロースルーデーは指数データから表示しています。$/);
     expect(screen.getByText('指数の履歴は長期集計の整合性を確認できないため表示しません。')).toBeInTheDocument();
-    expect(tile('分配日（25日）')).toHaveTextContent('3・4');
+    expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日');
     expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('確認 8/7');
     expect(tile('TT達成数')).toHaveTextContent('確認できません長期集計の整合性エラー');
+    expect(screen.getByRole('group', { name: '注意サイン（独自判定）' })).toHaveTextContent('長期集計がないため、分配日とFTDだけを判定しています。');
   });
 
   it('shows the reason for an unavailable index instead of a bare unknown', () => {
     const value = trends();
     value.data.indices[1] = { symbol: '^IXIC', available: false, points: [], events: [], reason: '同じ基準日の出典付き指数履歴は未取得です。', followThrough: { available: false, method: 'rally-attempt-gain1.2-day4-15-decline6-v1', reason: '同じ基準日の出典付き指数履歴は未取得です。' } };
     show(value);
-    expect(tile('分配日（25日）')).toHaveTextContent('3・算出不可');
-    expect(screen.getByText('NASの分配日：同じ基準日の出典付き指数履歴は未取得です。')).toBeInTheDocument();
+    expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS算出不可同じ基準日の出典付き指数履歴は未取得です。');
     expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('算出不可同じ基準日の出典付き指数履歴は未取得です。');
   });
 

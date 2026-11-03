@@ -32,15 +32,23 @@ describe('long market history controls',()=>{
   render(<SectorRankHistory history={{...history,sectorRotation:{frames:[{date:'2026-10-23',ranks:[]}]}}}/>);
   expect(screen.getByText('この日の11セクターすべてを確認できません。')).toBeInTheDocument();
  });
- it('uses the same bar length for tied ranks',()=>{
+ it('draws each sector bar from its value against SPY, the same for equal values',()=>{
   render(<SectorRankHistory history={{...history,sectorRotation:{frames:[{date:'2026-10-23',ranks:symbols.map(symbol=>({symbol,rank:1,relativeIndex:100}))}]}}}/>);
-  expect([...document.querySelectorAll('.sector-rank-track i')].map(node=>node.style.width)).toEqual(Array(11).fill('100%'));
+  expect([...document.querySelectorAll('.sector-rank-track i')].map(node=>node.style.width)).toEqual(Array(11).fill('0%'));
+  expect(screen.getAllByText('±0.0%')).toHaveLength(11);
+  cleanup();
+  render(<SectorRankHistory history={history}/>);
+  // 109 (XLB) is the farthest from 100 in the newest frame: a full half bar to the right.
+  expect(document.querySelector('.sector-rank-track i').style.width).toBe('50%');
+  expect(screen.getAllByText('+9.0%')).toHaveLength(1);
  });
  it('switches two-year industry breadth without replacing a missing industry observation with zero',()=>{
   render(<HistoricalBreadth history={{...history,sectorBreadth:[{sector:'Technology',points:history.breadth.map(row=>({...row,leaderCount:row.date==='2024-10-23'?null:8}))}]}}/>);
   fireEvent.click(screen.getByRole('button',{name:'2年'}));fireEvent.change(screen.getByRole('combobox'),{target:{value:'Technology'}});
   fireEvent.change(screen.getByRole('slider'),{target:{value:'0'}});
   expect(screen.getByText('未確認',{selector:'b'})).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button',{name:'4%騰落・10日レシオ'}));expect(screen.getByRole('combobox')).toHaveValue('all');
+  // A metric that has no industry series hides the industry choice (never a disabled control) and resets it.
+  fireEvent.click(screen.getByRole('button',{name:'4%騰落・10日レシオ'}));expect(screen.queryByRole('combobox')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'先導株数（価格条件）'}));expect(screen.getByRole('combobox')).toHaveValue('all');
  });
 });
