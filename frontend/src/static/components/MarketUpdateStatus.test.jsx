@@ -44,6 +44,17 @@ describe('market update disclosure source clocks',()=>{
   expect(current.container.querySelector('[data-update-state]')).toHaveAttribute('data-update-state','current');
   expect(screen.queryByText('長期履歴の形式')).not.toBeInTheDocument();
  });
+ it('names a long history the reader withdrew as excluded by validation, never 未取得 or 未確認',()=>{
+  const input={...data(),long_history_error:'長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: 観測範囲）。',
+   refresh_schedule:{provider:'pandas_market_calendars:NYSE',valid_until:'2026-11-05T05:00:00Z',sessions:[{date:'2026-10-29',close_at:'2026-10-29T20:00:00Z'}]}};
+  delete input.long_history;
+  const {container}=view(input);
+  expect(container.querySelector('[data-update-state]')).toHaveAttribute('data-update-state','withdrawn');
+  expect(container.querySelector('summary')).toHaveTextContent('10/29 · 長期履歴は検証で除外');
+  expect(within(screen.getByText('長期履歴の最終日',{selector:'dt'}).parentElement).getByText('検証で除外')).toBeInTheDocument();
+  expect(within(acquisitionRow()).getByText('検証で除外')).toBeInTheDocument();
+  expect(container).not.toHaveTextContent(/未取得|未確認|履歴更新待ち/);
+ });
  it('keeps missing long history unknown despite a populated obsolete global clock',()=>{
   const input=data();delete input.long_history;view(input);
   expect(within(acquisitionRow()).getByText('未確認')).toBeInTheDocument();
