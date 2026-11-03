@@ -247,13 +247,37 @@ describe('market tab helpers', () => {
   it('tells loading, an integrity failure and an unpublished asset apart', async () => {
     const { trendsStatus } = await import('./briefModel');
     expect(trendsStatus({ loading: true })).toEqual({ state: 'loading', reason: null });
-    expect(trendsStatus({ error: true, failureReason: new Error('SHA-256 が一致しません') })).toEqual({ state: 'error', reason: 'SHA-256 が一致しません' });
-    expect(trendsStatus({ error: true }).reason).toBe('公開データの参照情報が一致しません');
+    expect(trendsStatus({ error: true, failureReason: new Error('SHA-256 が一致しません') })).toEqual({ state: 'error', kind: 'reader', reason: 'SHA-256 が一致しません', tile: '整合性エラー' });
+    expect(trendsStatus({ error: true })).toMatchObject({ kind: 'integrity', reason: '公開データの参照情報が一致しません' });
     expect(trendsStatus({ data: undefined }).state).toBe('none');
     expect(trendsStatus(undefined).state).toBe('none');
     expect(trendsStatus({ data: { indices: [] } }).state).toBe('ready');
     const { sentence } = await import('./briefModel');
     expect(sentence('長期市場履歴を表示しません（検証項目: universe）。')).toBe('長期市場履歴を表示しません（検証項目: universe）。');
+  });
+
+  it('names why the market series failed in Japanese, never with a raw message, path or hash', async () => {
+    const { trendsStatus, trendsAlert, bare, sentence } = await import('./briefModel');
+    const hex = 'a'.repeat(64), status = reason => trendsStatus({ error: true, failureReason: reason });
+    const cases = [
+      [new Error(`Failed to load static data: market-trends/series-${hex}.json (404)`), 'fetch', '配信エラー', '市場推移データを取得できません（配信ファイルが見つかりません）。'],
+      [new Error('Transport HTTP failure: 503'), 'fetch', '配信エラー', '市場推移データを取得できません（配信サーバーの応答 503）。'],
+      [new TypeError('Failed to fetch'), 'fetch', '通信エラー', '市場推移データを取得できません（通信エラー）。'],
+      [new TypeError('NetworkError when attempting to fetch resource.'), 'fetch', '通信エラー', '市場推移データを取得できません（通信エラー）。'],
+      [new TypeError('Load failed'), 'fetch', '通信エラー', '市場推移データを取得できません（通信エラー）。'],
+      [new Error('Static asset integrity mismatch'), 'integrity', '整合性エラー', '市場推移データの整合性を確認できません。'],
+      [new Error('Transport decoded SHA-256 mismatch'), 'integrity', '整合性エラー', '市場推移データの整合性を確認できません。'],
+      // A reader sentence is shown as it is, never as 「（…。）。」.
+      [new Error('市場推移の基準日が一致しません。'), 'reader', '整合性エラー', '市場推移の基準日が一致しません。'],
+    ];
+    for (const [reason, kind, tile, alert] of cases) {
+      const value = status(reason);
+      expect(value).toMatchObject({ state: 'error', kind, tile });
+      expect(trendsAlert(value)).toBe(alert);
+      expect(trendsAlert(value)).not.toMatch(/[A-Za-z]{3}|[a-f0-9]{16}|。）/);
+    }
+    expect(trendsAlert(trendsStatus({ error: true }))).toBe('市場推移データの整合性を確認できません（公開データの参照情報が一致しません）。');
+    expect(bare('一致しません。')).toBe('一致しません');
     expect(sentence('長期市場履歴: universe')).toBe('長期市場履歴: universe。');
   });
 

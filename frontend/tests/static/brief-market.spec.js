@@ -59,6 +59,22 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     expect(external).toEqual([]);
   });
 
+  test('a market series that cannot be fetched is named a delivery failure, without its path, and keeps the layout', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { fail: 'series' });
+    const today = page.getByRole('region', { name: '地合い' });
+    await expect(today.getByRole('alert')).toHaveText('市場推移データを取得できません（配信ファイルが見つかりません）。数値は表示しません。');
+    await expect(today.locator('.brief-fact').filter({ hasText: 'TT達成数' })).toContainText('取得できません配信エラー');
+    expect(await horizontalOverflow(page)).toBe(0);
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
+    const market = page.getByRole('region', { name: '地合い' });
+    await expect(market.getByRole('alert')).toHaveText('市場推移データを取得できません（配信ファイルが見つかりません）。数値は表示しません。');
+    await expect(market.locator('.brief-ftd .brief-ftd-row')).toHaveText(['S&P取得できません配信エラー', 'NAS取得できません配信エラー']);
+    await expect(page.getByRole('region', { name: '市場環境の推移' }).getByRole('alert')).toHaveText('長期履歴を取得できません（配信ファイルが見つかりません）。');
+    await expect(page.locator('main')).not.toContainText(/series-|[a-f0-9]{16}|整合性/);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
   test(`a long history that ends before the analysis date shows its as-of session`, async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { historyEnd: STALE });
     // The stocks are current; only the market series are older and say so.

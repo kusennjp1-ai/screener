@@ -1,7 +1,7 @@
 import MarketCard from './MarketCard';
 import { HistoricalBreadth, SectorRankHistory } from '../components/MarketHistoryExplorer';
 import MarketUpdateStatus from '../components/MarketUpdateStatus';
-import { sentence } from './briefModel';
+import { bare, sentence, trendsStatus } from './briefModel';
 
 /**
  * The market tab: today's verdict and environment, then the long-run series (trend-template
@@ -10,14 +10,17 @@ import { sentence } from './briefModel';
  */
 export default function MarketScreen({ brief }) {
   const trends = brief.trends;
-  const history = trends?.data?.long_history || null;
+  const history = trends?.data?.long_history || null, status = trendsStatus(trends);
+  // Same failure kinds as the 地合い card: a fetch failure is never called an integrity failure.
+  const failure = status.state !== 'error' ? null : status.kind === 'fetch' ? `長期履歴を取得できません（${bare(status.reason)}）。`
+    : status.kind === 'reader' ? `長期履歴を表示できません（${bare(status.reason)}）。` : '長期履歴の整合性を確認できません。';
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>市場</h1></header>
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={trends} date={brief.date} detail />
     <section className="brief-card brief-history in" style={{ '--i': 2 }} aria-labelledby="brief-history-title">
       <div className="brief-step"><h2 id="brief-history-title">市場環境の推移</h2></div>
-      {trends?.loading ? <p className="brief-note" role="status">長期履歴を読み込み中…</p>
-        : trends?.error ? <p className="brief-alert" role="alert">長期履歴の整合性を確認できません。</p>
+      {status.state === 'loading' ? <p className="brief-note" role="status">長期履歴を読み込み中…</p>
+        : failure ? <p className="brief-alert" role="alert">{failure}</p>
           : <>
             <MarketUpdateStatus data={trends?.data} />
             {!history && typeof trends?.data?.long_history_error === 'string' ? <p className="brief-alert" role="alert" data-check={trends.data.long_history_error_key || undefined}>{sentence(trends.data.long_history_error)}</p> : <HistoricalBreadth history={history} />}

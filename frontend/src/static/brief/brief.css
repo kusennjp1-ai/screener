@@ -94,7 +94,7 @@
 .brief-warnings { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .brief-warnings li { padding: 8px 12px; border: 1px solid var(--ext); border-radius: 8px; color: var(--ext); font-size: 13px; line-height: 1.6; }
 .brief-asof { color: var(--ext); }
-.brief-alert { margin: 0; padding: 8px 12px; border: 1px solid var(--ext); border-radius: 8px; color: var(--ext); font-size: 13px; line-height: 1.6; }
+.brief-alert { margin: 0; padding: 8px 12px; border: 1px solid var(--ext); border-radius: 8px; color: var(--ext); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 
 /* rows */
 .brief-rows { list-style: none; margin: 0; padding: 0; display: grid; }

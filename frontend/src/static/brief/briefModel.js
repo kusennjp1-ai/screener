@@ -350,12 +350,38 @@ export function latestKnown(rows, field) {
 /** A reader's reason is already a sentence (useMarketTrends' long_history_error); only add the full stop when it lacks one. */
 export const sentence = text => /[。．.]$/.test(String(text)) ? String(text) : `${text}。`;
 
-/** State of the market-trends asset: loading | error (with its reason) | none (not published) | ready. */
+/** A reason wrapped in （…） loses its own full stop, so it never reads 「（…。）」. */
+export const bare = text => String(text).replace(/[。．.]+$/, '');
+
+/**
+ * Why the market-trends asset failed, in short Japanese: kind fetch (network, HTTP),
+ * integrity (hash, transport or reference mismatch) or reader (readMarketTrends' own sentence).
+ * A raw English message, path or hash is never shown; tile is the two-word form for a tile.
+ */
+export function trendsFailure(trends) {
+  const error = trends?.failureReason, message = typeof error?.message === 'string' ? error.message : '';
+  if (!error) return { kind: 'integrity', reason: '公開データの参照情報が一致しません', tile: '整合性エラー' };
+  const status = /^Failed to load static data: .* \((\d{3})\)$/.exec(message)?.[1] || /^Transport HTTP failure: (\d{3})$/.exec(message)?.[1];
+  if (status) return { kind: 'fetch', reason: status === '404' ? '配信ファイルが見つかりません' : `配信サーバーの応答 ${status}`, tile: '配信エラー' };
+  if (error.name === 'AbortError' || (error.name === 'TypeError' && /fetch|network|load failed/i.test(message))) return { kind: 'fetch', reason: '通信エラー', tile: '通信エラー' };
+  if (/^Unsupported transport/.test(message)) return { kind: 'fetch', reason: 'このブラウザでは読み込めません', tile: '非対応ブラウザ' };
+  if (/[\u3040-\u30ff\u3400-\u9fff]/.test(message)) return { kind: 'reader', reason: message, tile: '整合性エラー' };
+  return { kind: 'integrity', reason: null, tile: '整合性エラー' };
+}
+
+/** State of the market-trends asset: loading | error (with trendsFailure's kind, reason and tile) | none (not published) | ready. */
 export function trendsStatus(trends) {
   if (trends?.loading) return { state: 'loading', reason: null };
-  if (trends?.error) return { state: 'error', reason: (typeof trends.failureReason?.message === 'string' && trends.failureReason.message) || '公開データの参照情報が一致しません' };
+  if (trends?.error) return { state: 'error', ...trendsFailure(trends) };
   if (!trends?.data) return { state: 'none', reason: null };
   return { state: 'ready', reason: null };
+}
+
+/** The error sentence for the market-trends asset (status from trendsStatus). */
+export function trendsAlert(status) {
+  if (status.kind === 'reader') return sentence(status.reason);
+  if (status.kind === 'fetch') return `市場推移データを取得できません（${bare(status.reason)}）。`;
+  return `市場推移データの整合性を確認できません${status.reason ? `（${bare(status.reason)}）` : ''}。`;
 }
 
 /**

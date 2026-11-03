@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { bifurcation, environmentPoint, BREAKOUT_MIN_SAMPLE } from '../marketLongHistory';
-import { distributionCount, environmentWarnings, followThroughView, latestKnown, marketTone, sentence, shortDate, trendsStatus } from './briefModel';
+import { distributionCount, environmentWarnings, followThroughView, latestKnown, marketTone, sentence, shortDate, trendsAlert, trendsStatus } from './briefModel';
 
 const finite = Number.isFinite;
 // Only ever called with a finite number: a unit is never appended to an unknown value.
@@ -10,7 +10,7 @@ const STAGE_FIELDS = ['stage1Percent', 'stage2Percent', 'stage3Percent', 'stage4
 
 function IndexChart({ sp500, distribution, status }) {
   const points = (sp500 || []).filter(p => finite(p.close)).slice(-130);
-  if (points.length < 60) return <p className="brief-note">{status === 'loading' ? '指数の履歴を読み込み中…' : status === 'error' ? '指数の履歴は整合性を確認できないため表示しません。' : status === 'history-error' ? '指数の履歴は長期集計の整合性を確認できないため表示しません。' : sp500?.length ? '指数の履歴が60営業日に満たないため表示しません。' : '指数の履歴は公開データに含まれていません。'}</p>;
+  if (points.length < 60) return <p className="brief-note">{status === 'loading' ? '指数の履歴を読み込み中…' : status === 'error' ? '指数の履歴は整合性を確認できないため表示しません。' : status === 'fetch-error' ? '指数の履歴は取得できないため表示しません。' : status === 'history-error' ? '指数の履歴は長期集計の整合性を確認できないため表示しません。' : sp500?.length ? '指数の履歴が60営業日に満たないため表示しません。' : '指数の履歴は公開データに含まれていません。'}</p>;
   const all = (sp500 || []).filter(p => finite(p.close)), offset = all.length - points.length;
   const ma = points.map((_, i) => { const at = offset + i; if (at < 49) return null; let s = 0; for (let j = at - 49; j <= at; j++) s += all[j].close; return s / 50; });
   const values = [...points.map(p => p.close), ...ma.filter(finite)], lo = Math.min(...values), hi = Math.max(...values);
@@ -61,9 +61,10 @@ export default function MarketCard({ market, marketLoading = false, trends, date
   const historyDate = last?.date || null;
   const older = value => value && ((historyDate && value < historyDate) || (date && value < date)) ? shortDate(value, date) : null;
   const known = field => latestKnown(rows, field);
-  // Why a long-history tile has no value, most specific first.
+  // Why a long-history tile has no value, most specific first. A fetch failure is not an integrity failure.
+  const failed = status.state === 'error' ? { b: status.kind === 'fetch' ? '取得できません' : '確認できません', em: status.tile } : null;
   const absent = key => status.state === 'loading' ? { b: '読み込み中…', em: '' }
-    : status.state === 'error' ? { b: '確認できません', em: '整合性エラー' }
+    : status.state === 'error' ? failed
       : status.state === 'none' ? { b: '未配信', em: '市場推移データなし' }
         : !history ? (longError ? { b: '確認できません', em: '長期集計の整合性エラー' } : { b: '未配信', em: '長期集計なし' })
           : !rows.length ? { b: '未算出', em: '長期集計に観測日なし' }
@@ -107,7 +108,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
     { ...extremes, wide: detail },
   ].filter(Boolean);
 
-  const follow = [['S&P', spx], ['NAS', ndx]].map(([name, item]) => ({ name, ...(status.state === 'loading' ? { b: '読み込み中…', em: '' } : status.state === 'error' ? { b: '確認できません', em: '整合性エラー' } : status.state === 'none' ? { b: '未配信', em: '市場推移データなし' } : followThroughView(item?.followThrough, date)) }));
+  const follow = [['S&P', spx], ['NAS', ndx]].map(([name, item]) => ({ name, ...(status.state === 'loading' ? { b: '読み込み中…', em: '' } : status.state === 'error' ? failed : status.state === 'none' ? { b: '未配信', em: '市場推移データなし' } : followThroughView(item?.followThrough, date)) }));
 
   const stageHit = detail ? known(STAGE_FIELDS) : null;
   const stages = stageHit ? STAGE_FIELDS.map((key, i) => ({ k: i + 1, share: stageHit.value[key] })) : [];
@@ -126,10 +127,10 @@ export default function MarketCard({ market, marketLoading = false, trends, date
       <span className="brief-verdict-mark" aria-hidden="true">{pending ? '…' : verdictTone === 'zone' ? '●' : verdictTone === 'ext' ? '▲' : verdictTone === 'neg' ? '⊘' : '?'}</span>
       <div><strong>{market?.label || (pending ? '判定を読み込み中…' : '市場未確認')}</strong><p>{market?.cap > 0 ? `新規の買いを検討できる地合い。エクスポージャーの目安は最大 ${Math.round(market.cap * 100)}%（独自判定）。` : market?.state === 'unknown' ? '市場の状態を確認できません。新規の買いは見送ります。' : market ? '新規の買いは控えます（独自判定）。' : pending ? '市場の判定を読み込み中です。' : '市場の判定を読み込めません。新規の買いは見送ります。'}</p></div>
     </div>
-    <IndexChart sp500={history?.sp500} distribution={spx} status={longError ? 'history-error' : status.state} />
+    <IndexChart sp500={history?.sp500} distribution={spx} status={longError ? 'history-error' : status.state === 'error' && status.kind === 'fetch' ? 'fetch-error' : status.state} />
     {(history?.sp500 || []).filter(p => finite(p.close)).length >= 60 && <p className="brief-index-legend" aria-hidden="true"><span className="is-close">S&amp;P 500 終値（半年）</span><span className="is-ma">50日線</span><span className="is-dist">▲ 分配日</span></p>}
     {status.state === 'loading' ? <p className="brief-note" role="status">市場推移を読み込み中…</p>
-      : status.state === 'error' ? <p className="brief-alert" role="alert">市場推移データの整合性を確認できません（{status.reason}）。数値は表示しません。</p>
+      : status.state === 'error' ? <p className="brief-alert" role="alert" data-failure={status.kind}>{trendsAlert(status)}数値は表示しません。</p>
         : status.state === 'none' ? <p className="brief-note">市場推移データはこの公開に含まれていません。</p>
           : longError ? <p className="brief-alert" role="alert" data-check={trends.data.long_history_error_key || undefined}>{sentence(longError)}{detail ? '分配日・フォロースルーデー' : '分配日'}は指数データから表示しています。</p> : null}
     <div className="brief-facts">

@@ -137,11 +137,29 @@ describe('brief market card', () => {
     expect(document.body.textContent).not.toMatch(/未取得|未確認/);
   });
 
-  it('reports an integrity failure with its reason instead of unknown values', () => {
+  it('reports a reader failure with its own sentence instead of unknown values', () => {
     show({ loading: false, error: true, data: undefined, failureReason: new Error('市場推移の基準日が一致しません。') }, { detail: false });
-    expect(screen.getByRole('alert')).toHaveTextContent('市場推移データの整合性を確認できません（市場推移の基準日が一致しません。）');
+    expect(screen.getByRole('alert')).toHaveTextContent(/^市場推移の基準日が一致しません。数値は表示しません。$/);
     for (const element of tiles()) expect(element).toHaveTextContent('確認できません整合性エラー');
-    expect(document.body.textContent).not.toMatch(/未取得|0・0/);
+    expect(document.body.textContent).not.toMatch(/未取得|0・0|。）/);
+  });
+
+  it('calls a missing series file a delivery failure, without its path or hash', () => {
+    const hex = '9ec644adcb9a10278d3cb10e893f3cf01ac8161a58df769c9466965cecc85046';
+    show({ loading: false, error: true, data: undefined, failureReason: new Error(`Failed to load static data: market-trends/series-${hex}.json (404)`) });
+    expect(screen.getByRole('alert')).toHaveTextContent(/^市場推移データを取得できません（配信ファイルが見つかりません）。数値は表示しません。$/);
+    expect(screen.getByRole('alert')).toHaveAttribute('data-failure', 'fetch');
+    for (const element of tiles()) expect(element).toHaveTextContent(/取得できません(配信エラー)?$/);
+    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('S&P取得できません配信エラーNAS取得できません配信エラー');
+    expect(screen.getByText('指数の履歴は取得できないため表示しません。')).toBeInTheDocument();
+    expect(document.body.textContent).not.toMatch(/整合性|series-|[a-f0-9]{16}|Failed/);
+  });
+
+  it('calls an offline phone a network failure, not an integrity failure', () => {
+    show({ loading: false, error: true, data: undefined, failureReason: new TypeError('Failed to fetch') });
+    expect(screen.getByRole('alert')).toHaveTextContent('市場推移データを取得できません（通信エラー）。');
+    expect(tile('TT達成数')).toHaveTextContent('取得できません通信エラー');
+    expect(document.body.textContent).not.toMatch(/整合性|Failed/);
   });
 
   it('keeps distribution days and follow-through usable when only the long history fails', () => {
