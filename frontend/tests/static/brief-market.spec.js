@@ -27,7 +27,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', 'TT達成数', '200日線より上', '50日線より上', 'ブレイクアウト成功率', 'RS90以上のTT達成', '52週の新高値・新安値']);
     const follow = market.locator('.brief-ftd');
     await expect(follow.locator('.brief-ftd-row')).toHaveCount(2);
-    await expect(follow.locator('.brief-ftd-row').first()).toContainText(/S&P確認 \d+\/\d+\+1\.6%・反発5日目・その後の分配日3/);
+    await expect(follow.locator('.brief-ftd-row').first()).toContainText(/S&P確認 \d+\/\d+\+1\.6%・反発5日目・FTD後の有効な分配日3/);
     await expect(follow.locator('.brief-ftd-row').last()).toContainText(/NAS反発3日目安値\d+\/\d+・4日目以降/);
     await expect(market.locator('.brief-fact').filter({ hasText: '50日線より上' })).toContainText('50.0%観測100中50銘柄');
     // With a complete publication no market-tab tile is left unknown, and nothing is dated as older.

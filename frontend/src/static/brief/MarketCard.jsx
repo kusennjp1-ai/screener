@@ -150,6 +150,6 @@ export default function MarketCard({ market, marketLoading = false, trends, date
     {stageMissing && <p className="brief-note" data-testid="brief-stage-missing">{stageMissing}</p>}
     {warnings.length > 0 && <ul className="brief-warnings" aria-label="地合いの悪化サイン（独自判定）">{warnings.map(w => <li key={w.key}><span aria-hidden="true">▲</span> {w.text}（独自判定）</li>)}</ul>}
     {split?.warning && !detail && <p className="brief-alert" role="note">▲ {split.fromHigh > -0.05 ? '指数は1年高値の水準にありますが' : `指数は1年高値まであと${Math.abs(split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{num(split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
-    <p className="brief-note">分配日・{detail ? 'フォロースルーデー・' : ''}ステージ・トレンドテンプレート数・RSは公開日足からの独自集計で、IBDの公式値ではありません。{detail ? 'フォロースルーデーは6%以上の下落後、反発4〜15日目に出来高増を伴う+1.2%以上の上昇。50日線・200日線より上の割合は、観測できた銘柄に占める割合です。' : ''}</p>
+    <p className="brief-note">分配日・{detail ? 'フォロースルーデー・' : ''}ステージ・トレンドテンプレート数・RSは公開日足からの独自集計で、IBDの公式値ではありません。{detail ? 'フォロースルーデーは6%以上の下落（高値の終値から安値日の終値まで）後、反発4〜15日目に出来高増を伴う+1.2%以上の上昇。50日線・200日線より上の割合は、観測できた銘柄に占める割合です。' : ''}</p>
   </section>;
 }

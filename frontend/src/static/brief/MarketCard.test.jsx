@@ -39,7 +39,7 @@ describe('brief market card', () => {
     expect(tile('RS90以上のTT達成（独自RS）')).toHaveTextContent('8銘柄1か月で −2');
     expect(tile('52週の新高値・新安値')).toHaveTextContent('40・12差 +28');
     const [spx, ndx] = tile('フォロースルーデー（独自判定）').querySelectorAll('.brief-ftd-row');
-    expect(spx).toHaveTextContent('S&P確認 8/7+1.4%・反発4日目・その後の分配日2');
+    expect(spx).toHaveTextContent('S&P確認 8/7+1.4%・反発4日目・FTD後の有効な分配日2');
     expect(ndx).toHaveTextContent('NAS反発3日目安値9/29・4日目以降の+1.2%上昇待ち');
     for (const element of tiles()) expect(element.textContent).not.toMatch(bare);
     expect(document.querySelector('.brief-fact-asof')).toBeNull();

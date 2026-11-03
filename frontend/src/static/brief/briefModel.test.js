@@ -261,17 +261,24 @@ describe('market tab helpers', () => {
     const { followThroughView } = await import('./briefModel');
     const base = { available: true, method: 'rally-attempt-gain1.2-day4-15-decline6-v1', asOf: '2026-10-02', peak: { date: '2026-09-10', close: 100 }, low: { date: '2026-09-29', low: 90 }, declinePct: 7.24, attempt: { startDate: '2026-09-30', day: 3 }, ftd: null, failedDate: null, events: [] };
     const view = (over, date = '2026-10-02') => followThroughView({ ...base, ...over }, date);
-    expect(view({ state: 'confirmed', ftd: { date: '2026-08-07', attemptDay: 4, gainPct: 1.43, volumeRatio: 1.2, sessionsSince: 40, distributionSince: 2 } })).toMatchObject({ b: '確認 8/7', em: '+1.4%・反発4日目・その後の分配日2', asOf: null });
+    expect(view({ state: 'confirmed', ftd: { date: '2026-08-07', attemptDay: 4, gainPct: 1.43, volumeRatio: 1.2, sessionsSince: 40, distributionSince: 2 } })).toMatchObject({ b: '確認 8/7', em: '+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
     expect(view({ state: 'rally_attempt' })).toMatchObject({ b: '反発3日目', em: '安値9/29・4日目以降の+1.2%上昇待ち' });
     expect(view({ state: 'correction', attempt: null })).toMatchObject({ b: '調整中', em: '高値9/10から−7.2%' });
     expect(view({ state: 'attempt_expired', attempt: { startDate: '2026-09-01', day: 17 } })).toMatchObject({ b: '15日以内のFTDなし', em: '安値9/29を維持・反発17日目' });
     expect(view({ state: 'ftd_failed', failedDate: '2026-10-01', ftd: { date: '2026-09-25', attemptDay: 5, gainPct: 1.6 } })).toMatchObject({ b: 'FTD失敗 10/1', em: '9/25のFTD当日の安値を終値で下回る' });
-    expect(view({ state: 'no_correction', declinePct: 3.42, low: null, attempt: null })).toMatchObject({ b: '不要', em: '高値から−3.4%（6%未満）' });
+    expect(view({ state: 'no_correction', declinePct: 3.42, low: null, attempt: null })).toMatchObject({ b: '不要', em: '安値日の終値で高値から−3.4%（6%未満）' });
     // 5.96% (^IXIC on the 10-23 seed) must not read −6.0% beside 「6%未満」.
-    expect(view({ state: 'no_correction', declinePct: 5.96, low: null, attempt: null })).toMatchObject({ em: '高値から−5.96%（6%未満）' });
-    expect(view({ state: 'no_correction', declinePct: 5.9599, low: null, attempt: null })).toMatchObject({ em: '高値から−5.96%（6%未満）' });
-    expect(view({ state: 'no_correction', declinePct: 5.999, low: null, attempt: null })).toMatchObject({ em: '高値から−5.99%（6%未満）' });
+    expect(view({ state: 'no_correction', declinePct: 5.96, low: null, attempt: null })).toMatchObject({ em: '安値日の終値で高値から−5.96%（6%未満）' });
+    expect(view({ state: 'no_correction', declinePct: 5.9599, low: null, attempt: null })).toMatchObject({ em: '安値日の終値で高値から−5.96%（6%未満）' });
+    expect(view({ state: 'no_correction', declinePct: 5.999, low: null, attempt: null })).toMatchObject({ em: '安値日の終値で高値から−5.99%（6%未満）' });
     expect(view({ state: 'correction', declinePct: 6.04 }).em).toMatch(/−6\.0%$/);
+    // Backend formula: the lowest-low session closes 5.8% under 103 while the latest close is 6.8% under it.
+    // The tile names that basis instead of claiming today's close is within 6%.
+    const { followThroughDay } = await import('../followThroughDay');
+    const bars = [100, 101, 102, 103, [97, 95.5], [96, 95.8]].map((step, i) => { const [close, low = close * 0.998] = [].concat(step); return { date: `2026-01-0${i + 1}`, open: close, high: close * 1.002, low, close, volume: 1000 }; });
+    const parity = followThroughDay({ symbol: '^GSPC', bars, asOfDate: '2026-01-06' });
+    expect(parity).toMatchObject({ state: 'no_correction', declinePct: expect.closeTo(100 * 6 / 103, 9) });
+    expect(followThroughView(parity, '2026-01-06')).toMatchObject({ b: '不要', em: '安値日の終値で高値から−5.8%（6%未満）' });
     // A peak on the window's first bar never reads as "no FTD needed".
     expect(view({ state: 'no_correction', declinePct: 4.5, attempt: null, peakAtWindowStart: true })).toMatchObject({ b: '判定保留', em: '集計期間の初日が高値・それ以前は期間外' });
     expect(view({ state: 'no_correction', declinePct: 4.5, attempt: null, peakAtWindowStart: false }).b).toBe('不要');

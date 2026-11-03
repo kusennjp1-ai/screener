@@ -372,6 +372,8 @@ export function distributionCount(index) {
 }
 
 // Wording only; the rule itself is computed by the exporter (parity with backend market_regime.py FTD_* constants).
+// The decline is the backend's: peak close to the close of the lowest-low session, which the tile names, since a
+// later close can sit lower. The post-FTD count is the distribution days still active (25-session window).
 const FTD_TEXT = { minDay: 4, maxDay: 15, gain: '+1.2%', decline: '6%' };
 /**
  * Compact tile text for one index's follow-through state (this app's own judgement):
@@ -391,7 +393,7 @@ export function followThroughView(ft, date) {
   const { ftd, attempt, low, peak } = ft;
   switch (ft.state) {
     case 'confirmed': return { b: isoDay(ftd?.date) ? `確認 ${at(ftd.date)}` : '確認', asOf, tone: 'zone',
-      em: join([finite(ftd?.gainPct) ? `+${ftd.gainPct.toFixed(1)}%` : null, whole(ftd?.attemptDay) ? `反発${ftd.attemptDay}日目` : null, whole(ftd?.distributionSince) ? `その後の分配日${ftd.distributionSince}` : null]) };
+      em: join([finite(ftd?.gainPct) ? `+${ftd.gainPct.toFixed(1)}%` : null, whole(ftd?.attemptDay) ? `反発${ftd.attemptDay}日目` : null, whole(ftd?.distributionSince) ? `FTD後の有効な分配日${ftd.distributionSince}` : null]) };
     case 'rally_attempt': return { b: whole(attempt?.day) ? `反発${attempt.day}日目` : '反発中', asOf,
       em: join([isoDay(low?.date) ? `安値${at(low.date)}` : null, `${FTD_TEXT.minDay}日目以降の${FTD_TEXT.gain}上昇待ち`]) };
     case 'correction': return { b: '調整中', asOf, em: fall ? `高値${isoDay(peak?.date) ? at(peak.date) : ''}から${fall}` : `${FTD_TEXT.decline}以上の下落` };
@@ -399,7 +401,7 @@ export function followThroughView(ft, date) {
     case 'ftd_failed': return { b: isoDay(ft.failedDate) ? `FTD失敗 ${at(ft.failedDate)}` : 'FTD失敗', asOf, tone: 'ext', em: isoDay(ftd?.date) ? `${at(ftd.date)}のFTD当日の安値を終値で下回る` : 'FTD当日の安値を終値で下回る' };
     // The window opens on the peak: an older high is unseen, so "no FTD needed" is not established.
     case 'no_correction': if (ft.peakAtWindowStart === true) return { b: '判定保留', asOf, em: '集計期間の初日が高値・それ以前は期間外' };
-      return { b: '不要', asOf, em: fall ? `高値から${fall}（${FTD_TEXT.decline}未満）` : `${FTD_TEXT.decline}以上の調整なし` };
+      return { b: '不要', asOf, em: fall ? `安値日の終値で高値から${fall}（${FTD_TEXT.decline}未満）` : `${FTD_TEXT.decline}以上の調整なし` };
     default: return { b: '判定不明', em: `未対応の状態（${String(ft.state)}）`, asOf };
   }
 }
