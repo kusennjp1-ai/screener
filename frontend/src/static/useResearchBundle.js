@@ -5,13 +5,14 @@ import { loadResearchBundle, refreshResearchBundle } from './researchWorkerClien
 import { researchBundleCurrent, validResearchEvaluation } from './researchPreprocess';
 import { useFinancialDeadlineClock } from './useFinancialClock';
 
-export function useResearchBundle(path, date, version, publication) {
+/** `methods` limits the worker to the rankings the screen shows (all methods when omitted). */
+export function useResearchBundle(path, date, version, publication, methods) {
   const client = useQueryClient();
   const epoch = useRef(0);
   const query = useQuery({
-    queryKey: ['researchRows', path, version], enabled: Boolean(path),
+    queryKey: ['researchRows', path, version, methods?.join() || 'all'], enabled: Boolean(path),
     placeholderData: () => undefined, staleTime: Infinity, structuralSharing: false,
-    queryFn: ({ signal }) => loadResearchBundle(path, date, fetchStaticJson, signal, { now:Date.now(), generation:version ?? null, evaluationEpoch:++epoch.current, publication }),
+    queryFn: ({ signal }) => loadResearchBundle(path, date, fetchStaticJson, signal, { now:Date.now(), generation:version ?? null, evaluationEpoch:++epoch.current, publication, methods }),
   });
   // Worker completion binds this validated deadline to the requested snapshot,
   // generation and evaluation epoch. Re-scanning its cloned rows here would
@@ -29,7 +30,7 @@ export function useResearchBundle(path, date, version, publication) {
   }, [now, rollbackEpoch]);
   useEffect(() => {
     if (!query.data || current) return;
-    const key = ['researchRows', path, version];
+    const key = ['researchRows', path, version, methods?.join() || 'all'];
     if (date != null && query.data.date !== date) {
       // The same path/generation must never make a different snapshot's cached
       // rows eligible. Fetch that date instead of preparing the previous rows.
@@ -41,11 +42,11 @@ export function useResearchBundle(path, date, version, publication) {
     // Sample once when this source needs evaluation. Typing/quotes/forward
     // focus renders must not repeatedly cancel the same pending worker; a
     // genuine clock rollback still starts a new evaluation epoch.
-    refreshResearchBundle(previous.rows, date ?? previous.date, { now:Date.now(), generation:version ?? null, evaluationEpoch, signal:controller.signal }).then(next => {
+    refreshResearchBundle(previous.rows, date ?? previous.date, { now:Date.now(), generation:version ?? null, evaluationEpoch, signal:controller.signal, methods }).then(next => {
       if (!controller.signal.aborted && evaluationEpoch === epoch.current && client.getQueryData(key) === previous) client.setQueryData(key, next);
     }).catch(error => { if (error.name !== 'AbortError' && !controller.signal.aborted) client.invalidateQueries({queryKey:key,exact:true}); });
     return () => controller.abort();
-  }, [query.data, current, path, date, version, rollbackEpoch, client]);
+  }, [query.data, current, path, date, version, rollbackEpoch, client, methods]);
   // Expired decisions are withheld together while the next worker epoch builds.
   return { ...query, data: current ? query.data : undefined, isLoading:query.isLoading || Boolean(query.data && !current), evaluating:Boolean(query.data && !current), evaluatedNow:now };
 }

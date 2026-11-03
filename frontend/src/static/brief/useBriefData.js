@@ -20,13 +20,15 @@ import { auditDailyBars } from '../qualificationAudit';
 import { candidateView, sellSignals, trendTemplate, withBookWarning } from './briefModel';
 
 export const WATCH_KEY = 'research-watch';
+// The brief ranks only the trend template; the worker skips the other methods' rankings.
+const BRIEF_METHODS = ['minervini'];
 
 export function useBriefData() {
   const manifest = useStaticManifest();
   const entry = resolveStaticMarketEntry(manifest.data, 'US');
   const researchPath = entry.assets?.research?.path || entry.pages?.scan?.path;
   const version = manifest.data?.research_generation || manifest.data?.generated_at;
-  const bundle = useResearchBundle(researchPath, entry.as_of_date, version, entry.publication);
+  const bundle = useResearchBundle(researchPath, entry.as_of_date, version, entry.publication, BRIEF_METHODS);
   const trends = useMarketTrends(entry);
   const ranked = useMemo(() => filterRanked(bundle.data?.rankings?.minervini || [], { liquidOnly: true }), [bundle.data]);
   const date = bundle.data?.date || entry.as_of_date || null;
