@@ -162,7 +162,11 @@ export default function BriefApp() {
   const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [from, brief.bundle.data, brief.ranked, brief.date, watch, listState]);
-  const selected = symbol || (wide && view !== 'market' ? sequence[0] || null : null);
+  // Desktop keeps the stock pane on the same stock across tab switches while that stock is in
+  // the new list, so switching tabs does not redraw a different chart.
+  const [kept, setKept] = useState(null);
+  const selected = symbol || (wide && view !== 'market' ? (kept && sequence.includes(kept) ? kept : sequence[0] || null) : null);
+  useEffect(() => { if (selected) setKept(selected); }, [selected]);
   const open = useCallback((ticker, trigger, origin = from) => {
     document.querySelectorAll('.brief-row-title b').forEach(element => { element.style.viewTransitionName = ''; });
     const title = trigger?.querySelector?.('.brief-row-title b');
