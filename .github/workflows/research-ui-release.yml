@@ -239,9 +239,9 @@ jobs:
           python tools/recalculate-setups.py
           node tools/export-research.mjs
           python tools/test_export_entry_context.py
-          python tools/sec-financials.py --limit 400
+          python tools/sec-financials.py --limit 50
           python tools/test_export_financial_history.py
-          python tools/export-financial-history.py --limit 400
+          python tools/export-financial-history.py --limit 300
           # Earnings dates must exist before the final export, or the rows never carry them.
           python tools/export-entry-context.py
           node tools/export-research.mjs

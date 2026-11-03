@@ -1015,8 +1015,8 @@ jobs:
                 echo '::warning::Long market history remains at its actual prior observation date. The post-close watchdog will retry the missing completed session.'
               fi
             fi
-            python tools/sec-financials.py --limit 400
-            python tools/export-financial-history.py --limit 400
+            python tools/sec-financials.py --limit 50
+            python tools/export-financial-history.py --limit 300
             python tools/test_export_entry_context.py
             # Earnings dates and the session clock; a failed calendar leaves dates unknown.
             python tools/export-entry-context.py || echo '::warning::Earnings calendar unavailable; earnings dates stay unknown'
