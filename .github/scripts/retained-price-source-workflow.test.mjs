@@ -141,7 +141,7 @@ test('only independently verified restore skips enrichment while ordinary carry 
   assert.match(publish,/check-pages-payload/);
 });
 test('required focused tests execute in the explicit exact-main CI script list',()=>{
-  const ci=read('ci.yml');for(const name of ['retained-price-ci-admission.test.mjs','retained-price-source-admission.test.mjs','retained-price-source-driver.test.mjs','retained-price-source-baseline.test.mjs','retained-price-source-browser.test.mjs','retained-price-source-readers.test.mjs','retained-price-source-workflow.test.mjs','retained-price-publisher-tooling.test.mjs','test_run_retained_price_source.py'])assert(ci.includes(name),name);
+  const ci=read('ci.yml');for(const name of ['retained-price-ci-admission.test.mjs','retained-price-source-admission.test.mjs','retained-price-source-driver.test.mjs','retained-price-source-baseline.test.mjs','retained-price-source-browser.test.mjs','retained-price-source-readers.test.mjs','retained-price-source-workflow.test.mjs','retained-price-publisher-tooling.test.mjs','materialize-retained-price-graph.test.mjs','test_run_retained_price_source.py'])assert(ci.includes(name),name);
   assert(ci.includes('financial-renewal-ci-admission.test.mjs'));assert(ci.includes('financial-renewal-ci-routing.test.mjs'));
 });
 
