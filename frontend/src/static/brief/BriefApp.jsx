@@ -2,7 +2,7 @@ import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'r
 import { Link, useLocation } from 'react-router-dom';
 import useMediaQuery from '../useMediaQuery';
 import { ColorModeContext } from '../../contexts/ColorModeContext';
-import { themeCss } from '../theme/tokens';
+import { palettes, themeCss } from '../theme/tokens';
 import { money, signed } from '../positionGeometry';
 import '../theme/foundation.css';
 import './brief.css';
@@ -147,7 +147,12 @@ export default function BriefApp() {
   const wide = useMediaQuery('(min-width:1024px)');
   const go = useTransitionNavigate();
   const dark = useContext(ColorModeContext).mode === 'dark';
-  useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; }, [dark]);
+  useEffect(() => {
+    document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+    // The phone's browser bar and status area take the top bar's colour instead of a fixed blue.
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', palettes[dark ? 'dark' : 'light'].ground);
+  }, [dark]);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
   const [animateKey, setAnimateKey] = useState(0);
