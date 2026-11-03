@@ -1,39 +1,54 @@
-# Ordinary/carry Design acceptance
+# Design acceptance (daily brief)
 
-`ordinary-carry-screening-priority-2026-10-21-v1` makes completed, measured
-timing overruns advisory for ordinary and carry Design. It changes the
-acceptance criteria used by the existing CI/Design publication approval path.
-It does not rewrite previous runs or grant authority through its JSON files.
+Since the daily brief became the whole static app, Design Acceptance
+(`.github/workflows/design-acceptance.yml`) measures only the brief. A new UI
+reaches GitHub Pages only when both `ci.yml` and `design-acceptance.yml`
+succeed on the push to `main` for that exact commit
+(`.github/scripts/publication-gate.mjs`).
 
-The original report retains every failure, timing value, threshold and P1
-boolean. A separate assessment reports `strict_result: failed`,
-`performance_acceptance: deferred_warning`, the functional result and the actual
-policy exit. GitHub warnings and the summary retain the overrun values. There
-is no fabricated raw-process exit or performance-pass claim.
+## What is measured
 
-Only exact timing failures reconstructed from all baseline/current trials and
-D9 observations can be deferred. Missing or inconsistent measurements, missing
-route/operation completion, financial/CSV/unknown discrepancies, required
-screenshots, and D9 point count, alignment, production context or pixel
-visibility remain blocking. The complete capture inventory includes the short
-expanded charts: 134 ordinary captures or 162 with carry coverage.
+`frontend/tools/design-review.mjs` writes report schema `brief-design-review-v1`.
+The shared contract is `frontend/tools/brief-design-contract.mjs`. The harness
+runs at 390 px and 1440 px, in dark and light, with 7 captures per combination
+(28 in total): today, list, list one condition short, market, stock, weekly
+stock, and watch. It uses the real published input that the workflow verified
+(`select-release-source.mjs design`).
 
-The final completion manifest binds the current Design run/attempt, checkout
-tree, input provenance, UI, complete current/baseline inventories, final report,
-assessment and screenshot hashes. Carry also binds the final existing seal and
-downloaded CSV bytes. Progress reports cannot replace final completion. The
-review step recomputes the assessment, retains all four reviewed scores and
-requires current image byte hashes when timing is deferred. An ancestor UI
-commit alone cannot stand in for the reviewed images.
+These checks block:
 
-Certified financial candidates, repaired-financial comparisons, limited
-previews and unrecognized scope retain strict failure semantics. Existing
-authentication, historical workflow pins, same-job candidate step/seal checks,
-daily verification at 90%, financial freshness, three-valued decisions and
-unknown exclusions remain in force. This policy adds no provider, permission,
-dependency, secret or artifact destination.
+- axe (WCAG 2.2 AA) violations;
+- tap targets under 44 px on phones or 24 px on desktop;
+- font sizes or radii outside the scales in `theme/tokens.js`;
+- an ASCII hyphen used as a minus sign;
+- horizontal overflow;
+- fixed chrome over 110 px on phones;
+- page or console errors, and requests outside the site;
+- visible `NaN`, `undefined`, `null` or `Infinity`;
+- an analysis date that differs from the published date;
+- broken legacy redirects, theme toggle, back navigation or chart candles;
+- animations still running under reduced motion.
 
-Full inventory reads occur outside browser timing boundaries. Their additional
-job duration has not yet been measured on the production-sized CI input; the
-existing job timeout remains unchanged. Local synthetic contract tests do not
-constitute current UI, pixel, profile or publication verification.
+## Timing
+
+CPU-4x timings are measured: first candidate row, stock open, tab switch and
+longest initial task. An overrun is recorded in `timing_warnings`. It counts as
+a deferred warning only while `docs/design-review/owner-waiver.json` carries
+the owner's timing approval (`timing_instruction`, `timing_granted_at`).
+Without that approval, an overrun blocks.
+
+## Scores
+
+`frontend/tools/check-design-review.mjs` first requires every capture (a
+non-empty PNG) and no objective failure. Then it requires either a dated
+screenshot review covering every capture (four scores of at least 8.0, each
+with a reason) or the owner's waiver of subjective scores. No score is ever
+recorded on the owner's behalf.
+
+## Fail-closed paths
+
+- A prepared financial correction candidate fails Design: the brief has no
+  verified financial-display contract yet. The candidate is kept only as an
+  UNAPPROVED diagnostic and is never sealed.
+- Performance-exception tooling still expects the retired report format and
+  fails closed. Limited-research previews are retired.
