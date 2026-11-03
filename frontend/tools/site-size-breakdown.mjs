@@ -217,7 +217,8 @@ export function logicalFamily(path, ctx = {}) {
   if (exportFamily) {
     const status = ctx.references ? exportStatus(ctx.references, rest) : 'unclassified';
     if (exportFamily === 'candidate_history') {
-      const which = status === 'referenced' ? (ctx.references.catalogSnapshots.has(rest) ? 'in catalog' : 'current, not in catalog') : status;
+      const which = status === 'referenced' ? (ctx.references.catalogSnapshots.has(rest) ? 'in catalog' : 'current, not in catalog')
+        : status === 'lineage' ? 'performance lineage, not in catalog' : status;
       return `static-data/candidate-history/ snapshots (${which})`;
     }
     if (exportFamily === 'market_trends') return `static-data/${rest.replace(/-[a-f0-9]{64}\.json$/, '-*.json')} (${status})`;
@@ -372,7 +373,7 @@ export function formatPacked(result, top = 60) {
     lines.push(`${column(rest.reduce((s, r) => s + r.bytes, 0), 13)} ${column(rest.reduce((s, r) => s + r.tarBytes, 0), 13)} ${''.padStart(13)} ${column(rest.reduce((s, r) => s + r.files, 0), 6)}       (${rest.length} smaller families)`);
   }
   const supersededBytes = result.superseded.reduce((sum, row) => sum + row.bytes, 0), supersededTar = result.superseded.reduce((sum, row) => sum + row.tarBytes, 0);
-  lines.push(`Superseded export files no manifest, workbench or catalog references: ${result.superseded.length} files, ${int(supersededBytes)} bytes, ${int(supersededTar)} TAR bytes`);
+  lines.push(`Superseded export files no manifest, workbench, catalog or performance cohort references: ${result.superseded.length} files, ${int(supersededBytes)} bytes, ${int(supersededTar)} TAR bytes`);
   for (const row of result.superseded) lines.push(`${column(row.bytes, 13)} ${column(row.tarBytes, 13)} ${row.path}`);
   if (result.audit.length) {
     lines.push(`Financial audit generations (${result.audit.length} release receipts, oldest first): evaluated_at | mode | generation | evaluation projection hosted bytes | receipt bytes`);

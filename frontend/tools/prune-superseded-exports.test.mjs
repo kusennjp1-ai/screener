@@ -33,6 +33,8 @@ async function files(base, directory = '') {
   return out.sort();
 }
 
+const AGED_SNAPSHOT = 'candidate-history/2026-04-01-4444444444444444.json.gz';
+
 // One static-data root with a current and a superseded copy of every family.
 async function staticData(base, { performance = true } = {}) {
   const s = (path, value) => put(base, path, value);
@@ -63,7 +65,14 @@ async function staticData(base, { performance = true } = {}) {
   await s('candidate-performance-ffffffffffffffff.json', { performance: 0 });
   // Unrelated hash-named files stay: other cleanups own them.
   await s('research-index-0000000000000000.json', {});
-  await s('candidate-performance-history/index.json', { cohorts: [] });
+  // A completed performance cohort whose selection left the 126-session
+  // catalog: only the cohort archive still names its snapshot (lineage).
+  const aged = await s(AGED_SNAPSHOT, gzipSync('{"as_of":"2026-04-01"}'));
+  const archive = gzipSync(JSON.stringify({ schema_version: 1, calculator_version: 'published-close-returns-v1',
+    cohort: { as_of: '2026-04-01', path: AGED_SNAPSHOT, sha256: aged.sha256 }, observations: [{ symbol: 'AAA', horizon: 60 }] }));
+  const archivePath = `candidate-performance-history/2026-04-01-${aged.sha256.slice(0, 16)}-${sha(archive).slice(0, 16)}.json.gz`;
+  await s(archivePath, archive);
+  await s('candidate-performance-history/index.json', { schema_version: 1, cohorts: [{ as_of: '2026-04-01', cohort_sha256: aged.sha256, path: archivePath, sha256: sha(archive), observations: 1 }] });
   await s('scan-list/chunk-0000000000000000.json', {});
   const assets = {
     workbench: { path: 'workbench-aaaaaaaaaaaaaaaa.json', sha256: workbench.sha256 },
@@ -72,7 +81,7 @@ async function staticData(base, { performance = true } = {}) {
   };
   if (performance) assets.candidate_performance = { path: 'candidate-performance-eeeeeeeeeeeeeeee.json', sha256: cp.sha256 };
   await s('manifest.json', { markets: { US: { as_of_date: '2026-10-02', assets } } });
-  return { historySha, sourceSha, seriesSha };
+  return { historySha, sourceSha, seriesSha, archivePath };
 }
 
 const SUPERSEDED = [
@@ -96,13 +105,37 @@ describe('prune superseded exports', () => {
     expect(plan.unchanged).toEqual([]);
     const after = await files(data);
     expect(after).toEqual(before.filter(path => !SUPERSEDED.includes(path)));
-    for (const kept of ['market-history-source.json', 'market-trend-source.json', 'candidate-history/index.json',
+    for (const kept of ['market-history-source.json', 'market-trend-source.json', 'candidate-history/index.json', AGED_SNAPSHOT,
       'candidate-history/2026-09-30-3333333333333333.json.gz', 'candidate-history/2026-10-01-0123456789abcdef.json.gz',
       'candidate-history/2026-10-02-1111111111111111.json.gz', 'research-index-0000000000000000.json', 'scan-list/chunk-0000000000000000.json']) {
       expect(after).toContain(kept);
     }
     // A second run finds nothing more to remove.
     expect((await pruneSupersededExports([data]))[0].remove).toEqual([]);
+  });
+
+  it('keeps a snapshot that only a completed performance cohort names, and never reports it superseded', async () => {
+    root = await mkdtemp(join(tmpdir(), 'prune-'));
+    const data = join(root, 'static-data');
+    await staticData(data);
+    const plan = await planPrune(data);
+    expect(plan.lineage).toEqual([AGED_SNAPSHOT]);
+    expect(plan.keep.find(item => item.path === AGED_SNAPSHOT)).toMatchObject({ family: 'candidate_history', status: 'lineage' });
+    expect(plan.remove.map(item => item.path)).not.toContain(AGED_SNAPSHOT);
+    await pruneSupersededExports([data]);
+    expect(await files(data)).toContain(AGED_SNAPSHOT);
+  });
+
+  it('accepts an aged-out cohort snapshot that the tree never restored', async () => {
+    // Static Site restores only the catalog's snapshots, so an aged-out
+    // cohort's selection is absent there; the release brings it from live.
+    root = await mkdtemp(join(tmpdir(), 'prune-'));
+    const data = join(root, 'static-data');
+    await staticData(data);
+    await rm(join(data, AGED_SNAPSHOT));
+    const [plan] = await pruneSupersededExports([data]);
+    expect(plan.lineage).toEqual([]);
+    expect(plan.remove.map(item => item.path)).toEqual(SUPERSEDED);
   });
 
   it('leaves a family alone when the manifest references none of its files', async () => {
@@ -133,6 +166,10 @@ describe('prune superseded exports', () => {
     ['the current snapshot is missing', data => rm(join(data, 'candidate-history/2026-10-02-1111111111111111.json.gz')), /Missing referenced export file: candidate-history\/2026-10-02-1111/],
     ['the catalog is missing', data => rm(join(data, 'candidate-history/index.json')), /Missing candidate history catalog/],
     ['the manifest is missing', data => rm(join(data, 'manifest.json')), /Missing static-data manifest/],
+    ['a performance archive is missing', async (data, refs) => rm(join(data, refs.archivePath)), /Missing referenced export file: candidate-performance-history\//],
+    ['a performance archive changed', async (data, refs) => writeFile(join(data, refs.archivePath), gzipSync('{}')), /Referenced export changed: candidate-performance-history\//],
+    ['a cohort lineage snapshot changed', data => writeFile(join(data, AGED_SNAPSHOT), gzipSync('{"as_of":"2026-04-01","n":9}')), /Referenced export changed: candidate-history\/2026-04-01/],
+    ['performance archives lost their catalog', data => rm(join(data, 'candidate-performance-history/index.json')), /Performance archives exist without candidate-performance-history\/index\.json/],
   ])('fails closed before removing anything in any root when %s', async (_name, breakIt, message) => {
     root = await mkdtemp(join(tmpdir(), 'prune-'));
     const good = join(root, 'public/static-data'), bad = join(root, 'dist/static-data');

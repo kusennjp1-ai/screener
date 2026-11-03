@@ -8,7 +8,9 @@
 // Kept: the manifest's workbench, summary, candidate-performance and
 // market-trends series, its source_path and history-source-<long_history.
 // source_sha256>, every catalog snapshot and the workbench's current snapshot,
-// and any file of these families that a referenced document names. A family
+// every snapshot a completed candidate-performance-history cohort was measured
+// from (the release's history reconciliation re-reads it after it leaves the
+// catalog), and any file of these families that a referenced document names. A family
 // the manifest does not reference at all is left unchanged. Every root must
 // resolve all of its references before anything is removed; a missing or
 // changed referenced file fails the run. Nothing outside these five families
@@ -43,7 +45,7 @@ export async function planPrune(root) {
   for (const [family, referenced] of Object.entries(references.families)) {
     for (const path of referenced || []) if (!keep.some(item => item.path === path)) throw Error(`Referenced ${family} file is not listed: ${path}`);
   }
-  return { root, remove, keep, unchanged: [...unchanged].sort() };
+  return { root, remove, keep, unchanged: [...unchanged].sort(), lineage: [...references.lineageSnapshots].sort() };
 }
 
 /**
@@ -59,8 +61,10 @@ export async function pruneSupersededExports(roots, { dryRun = false } = {}) {
   if (dryRun) return plans;
   for (const plan of plans) {
     for (const item of plan.remove) await unlink(join(plan.root, item.path));
-    // The pruned tree must still resolve every reference.
-    await referencedExports(plan.root);
+    // The pruned tree must still resolve every reference and keep every
+    // performance lineage snapshot it had.
+    const after = await referencedExports(plan.root);
+    for (const path of plan.lineage) if (!after.lineageSnapshots.has(path)) throw Error(`Prune lost a performance lineage snapshot: ${path}`);
   }
   return plans;
 }

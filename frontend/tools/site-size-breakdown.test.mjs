@@ -56,6 +56,12 @@ async function packedFixture() {
   const currentSnapshot = await s('candidate-history/2026-11-02-1111111111111111.json.gz', gzipSync('{"as_of":"2026-11-02","n":1}'));
   await s('candidate-history/2026-11-02-2222222222222222.json.gz', gzipSync('{"as_of":"2026-11-02","n":2}'));
   await s('candidate-history/index.json', { schema_version: 1, snapshots: [{ path: 'candidate-history/2026-10-30-0123456789abcdef.json.gz', sha256: catalogSnapshot.sha256, as_of: '2026-10-30' }] });
+  // A completed cohort whose selection aged out of the catalog keeps its snapshot.
+  const aged = await s('candidate-history/2026-04-01-3333333333333333.json.gz', gzipSync('{"as_of":"2026-04-01"}'));
+  const archive = gzipSync(JSON.stringify({ schema_version: 1, cohort: { as_of: '2026-04-01', path: 'candidate-history/2026-04-01-3333333333333333.json.gz', sha256: aged.sha256 }, observations: [{}] }));
+  const archivePath = `candidate-performance-history/2026-04-01-${aged.sha256.slice(0, 16)}-${sha(archive).slice(0, 16)}.json.gz`;
+  await s(archivePath, archive);
+  await s('candidate-performance-history/index.json', { schema_version: 1, cohorts: [{ as_of: '2026-04-01', cohort_sha256: aged.sha256, path: archivePath, sha256: sha(archive), observations: 1 }] });
   const workbench = await s('workbench-aaaaaaaaaaaaaaaa.json', { snapshot_id: 'x', current_snapshot: { path: 'candidate-history/2026-11-02-1111111111111111.json.gz', sha256: currentSnapshot.sha256, as_of: '2026-11-02' } });
   await s('workbench-bbbbbbbbbbbbbbbb.json', { snapshot_id: 'old' });
   const summary = await s('workbench-summary-cccccccccccccccc.json', { summary: 1 });
@@ -188,6 +194,8 @@ describe('site size breakdown', () => {
     expect(files('static-data/candidate-history/ snapshots (in catalog)')).toBe(1);
     expect(files('static-data/candidate-history/ snapshots (current, not in catalog)')).toBe(1);
     expect(files('static-data/candidate-history/ snapshots (superseded)')).toBe(1);
+    expect(files('static-data/candidate-history/ snapshots (performance lineage, not in catalog)')).toBe(1);
+    expect(files('static-data/candidate-performance-history/')).toBe(2);
     expect(family('static-data/markets/us/charts/ (still indexed)')).toMatchObject({ files: 1, encoding: 'gzip' });
     expect(family('static-data/markets/us/charts/ (superseded by verified-charts)')).toMatchObject({ files: 1, encoding: 'gzip' });
     expect(files('static-data/markets/us/charts/ (not indexed)')).toBe(1);
