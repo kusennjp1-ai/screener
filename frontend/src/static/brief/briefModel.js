@@ -384,7 +384,9 @@ export function followThroughView(ft, date) {
   if (ft.available !== true) return { b: '算出不可', em: typeof ft.reason === 'string' && ft.reason ? ft.reason : '指数データを確認できません', asOf: null };
   const asOf = isoDay(ft.asOf) && isoDay(date) && ft.asOf < date ? shortDate(ft.asOf, date) : null;
   const at = value => shortDate(value, date), whole = value => Number.isSafeInteger(value) && value >= 0;
-  const fall = finite(ft.declinePct) ? `−${Math.abs(ft.declinePct).toFixed(1)}%` : null;
+  // A decline under the 6% line is never rounded up onto it (5.96% reads −5.96%, not −6.0% beside 「6%未満」).
+  const under6 = value => Number(value.toFixed(2)) < 6 ? value.toFixed(2) : (Math.floor(value * 100) / 100).toFixed(2);
+  const fall = finite(ft.declinePct) ? (value => `−${ft.state === 'no_correction' && Number(value.toFixed(1)) >= 6 ? under6(value) : value.toFixed(1)}%`)(Math.abs(ft.declinePct)) : null;
   const join = parts => parts.filter(Boolean).join('・');
   const { ftd, attempt, low, peak } = ft;
   switch (ft.state) {

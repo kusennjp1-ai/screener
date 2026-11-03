@@ -267,6 +267,11 @@ describe('market tab helpers', () => {
     expect(view({ state: 'attempt_expired', attempt: { startDate: '2026-09-01', day: 17 } })).toMatchObject({ b: '15日以内のFTDなし', em: '安値9/29を維持・反発17日目' });
     expect(view({ state: 'ftd_failed', failedDate: '2026-10-01', ftd: { date: '2026-09-25', attemptDay: 5, gainPct: 1.6 } })).toMatchObject({ b: 'FTD失敗 10/1', em: '9/25のFTD当日の安値を終値で下回る' });
     expect(view({ state: 'no_correction', declinePct: 3.42, low: null, attempt: null })).toMatchObject({ b: '不要', em: '高値から−3.4%（6%未満）' });
+    // 5.96% (^IXIC on the 10-23 seed) must not read −6.0% beside 「6%未満」.
+    expect(view({ state: 'no_correction', declinePct: 5.96, low: null, attempt: null })).toMatchObject({ em: '高値から−5.96%（6%未満）' });
+    expect(view({ state: 'no_correction', declinePct: 5.9599, low: null, attempt: null })).toMatchObject({ em: '高値から−5.96%（6%未満）' });
+    expect(view({ state: 'no_correction', declinePct: 5.999, low: null, attempt: null })).toMatchObject({ em: '高値から−5.99%（6%未満）' });
+    expect(view({ state: 'correction', declinePct: 6.04 }).em).toMatch(/−6\.0%$/);
     expect(view({ state: 'confirmed', asOf: '2026-10-01', ftd: { date: '2026-08-07' } })).toMatchObject({ b: '確認 8/7', asOf: '10/1' });
     expect(followThroughView({ available: false, method: 'x', reason: '指数OHLCVに欠測・重複・不正値があります。' }, '2026-10-02')).toMatchObject({ b: '算出不可', em: '指数OHLCVに欠測・重複・不正値があります。' });
     expect(followThroughView(undefined, '2026-10-02')).toMatchObject({ b: '未集計', em: '旧形式の公開データ' });
