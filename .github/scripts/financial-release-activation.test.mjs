@@ -171,16 +171,25 @@ test('active source restoration uses exact live immutable bytes without an expir
   await restorePublishedFinancialSource(live,out,fetcher);assert.equal(calls.length,3);assert.equal(readFileSync(join(out,f.result.receipt.source_projection.path),'utf8'),readFileSync(join(f.root,f.result.receipt.source_projection.path),'utf8'));
   await assert.rejects(()=>restorePublishedFinancialSource(live,out,async()=>({ok:true,arrayBuffer:async()=>Buffer.from('changed')})),/disagree/);
 }finally{f.cleanup();rmSync(out,{recursive:true,force:true});}});
-test('workflow measures corrected dist directly and seals only after both unchanged design checks',()=>{
+test('workflow refuses a candidate the brief cannot verify and seals only after both design checks',()=>{
   const text=readFileSync(new URL('../workflows/design-acceptance.yml',import.meta.url),'utf8');
-  assert.match(text,/ln -s "\$FINANCIAL_CANDIDATE_DIR\/corrected" "\$source\/dist"/);
-  assert.ok(text.indexOf('name: Seal the exact tested financial candidate')>text.indexOf('name: Require reviewed screenshots and four design scores of at least 8.0'));
+  // The brief harness has no financial-display contract: a prepared candidate fails
+  // closed before measurement and can never reach the success-only seal below.
+  const refusal=text.split('      - name: ').slice(1).filter(block=>block.split('\n')[0]==='Refuse a financial candidate without a brief financial-display contract');
+  assert.equal(refusal.length,1);
+  assert.match(refusal[0],/^        if: steps.financial.outputs.candidate == 'true'$/m);
+  assert.match(refusal[0],/exit 1/);
+  assert.ok(text.indexOf('name: Prepare the certified financial candidate')<text.indexOf('name: Refuse a financial candidate'));
+  assert.ok(text.indexOf('name: Refuse a financial candidate')<text.indexOf('name: Measure the brief screens'));
+  assert.doesNotMatch(text,/FINANCIAL_CANDIDATE_DIR\/corrected/);
+  assert.match(readFileSync(new URL('../../frontend/tools/design-review.mjs',import.meta.url),'utf8'),/if \(process.env.FINANCIAL_CANDIDATE_DIR\) \{/);
+  assert.ok(text.indexOf('name: Seal the exact tested financial candidate')>text.indexOf('name: Require every capture, no objective failure, and reviewed scores or the owner waiver'));
   for(const name of ['Seal the exact tested financial candidate','Retain the exact tested financial candidate']){
     const blocks=text.split('      - name: ').slice(1).filter(block=>block.split('\n')[0]===name);
     assert.equal(blocks.length,1,name);
     const conditions=[...blocks[0].matchAll(/^        if: (.*)$/gm)];
     assert.equal(conditions.length,1,name);
-    assert.equal(conditions[0][1],"(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '') && steps.prior.outputs.reuse != 'true'");
+    assert.equal(conditions[0][1],"(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')");
     assert.doesNotMatch(blocks[0],/continue-on-error/);
   }
   assert.match(text,/permissions:\n  contents: read\n  actions: read/);

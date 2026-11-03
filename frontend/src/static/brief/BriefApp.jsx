@@ -1,15 +1,15 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useMediaQuery, useTheme } from '@mui/material';
+import useMediaQuery from '../useMediaQuery';
 import { ColorModeContext } from '../../contexts/ColorModeContext';
 import { themeCss } from '../theme/tokens';
 import { money, signed } from '../positionGeometry';
 import '../theme/foundation.css';
 import './brief.css';
 import { useBriefData, useStockData, useWatchlist, useWatchSellChecks } from './useBriefData';
-import { readStartScreen, writeStartScreen } from './startScreen';
 import { candidateView, focusCandidates, leadingGroups, marketTone, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
 import MarketCard from './MarketCard';
+import MarketScreen from './MarketScreen';
 import StockView from './StockView';
 import { CandidateRow, Toast } from './BriefParts';
 import { useTransitionNavigate } from './briefNav';
@@ -19,6 +19,7 @@ const ICON = {
   list: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" /></svg>,
   star: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="m12 3.6 2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" /></svg>,
   starOn: <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="m12 3.6 2.6 5.3 5.8.8-4.2 4.1 1 5.8L12 16.9l-5.2 2.7 1-5.8-4.2-4.1 5.8-.8z" /></svg>,
+  market: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 19h16" /><path d="m5 15 4.5-5 3.5 3 6-7" /></svg>,
   back: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m15 5-7 7 7 7" /></svg>,
   next: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m9 5 7 7-7 7" /></svg>,
   sun: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" /></svg>,
@@ -28,7 +29,7 @@ const finite = Number.isFinite;
 const DATE_JA = iso => { const d = new Date(`${iso}T12:00:00Z`); return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）` : '日付未確認'; };
 
 function ThemeToggle() {
-  const dark = useTheme().palette.mode === 'dark', colorMode = useContext(ColorModeContext);
+  const colorMode = useContext(ColorModeContext), dark = colorMode.mode === 'dark';
   return <button type="button" className="brief-iconbutton" onClick={colorMode.toggleColorMode} aria-label={dark ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}>{dark ? ICON.sun : ICON.moon}</button>;
 }
 
@@ -38,6 +39,7 @@ function Tabs({ current, watchCount, go }) {
   return <nav className="brief-dock brief-tabs" aria-label="ブリーフの画面">
     {tab('today', '/brief', ICON.today, '今日')}{tab('list', '/brief/list', ICON.list, '候補')}
     {tab('watch', '/brief/watch', ICON.star, 'ウォッチ', watchCount ? <span className="brief-count" aria-label={`${watchCount}件`}>{watchCount}</span> : null)}
+    {tab('market', '/brief/market', ICON.market, '市場')}
   </nav>;
 }
 
@@ -67,7 +69,6 @@ function TodayView({ brief, watch, open, now, animate }) {
         </button></li>; })}</ul>
         : <p className="brief-note">銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。</p>}
     </section>
-    <StartScreenChoice />
   </>;
 }
 
@@ -86,17 +87,6 @@ function TodaySummary({ market, focus, watched, sells, loading }) {
     <li className={focus.length ? 'tone-zone' : ''}><small>注目候補</small><b>{loading ? '読込中' : `${focus.length}銘柄`}</b><em>{loading ? '' : `ゾーン${zone}・接近${focus.length - zone}`}</em></li>
     <li className={hits ? 'tone-ext' : ''}><small>ウォッチの売り</small><b>{watchValue}</b><em>{watchNote}</em></li>
   </ul>;
-}
-
-/** Per-viewer opt-in: open the app on this screen instead of the research workspace. */
-function StartScreenChoice() {
-  const [start, setStart] = useState(readStartScreen);
-  const [failed, setFailed] = useState(false);
-  return <label className="brief-start in" style={{ '--i': 4 }}>
-    <input type="checkbox" checked={start === 'brief'} onChange={event => { const next = event.target.checked ? 'brief' : 'research'; const ok = writeStartScreen(next); setFailed(!ok); if (ok) setStart(next); }} />
-    <span className="brief-start-box" aria-hidden="true">{start === 'brief' ? '✓' : ''}</span>
-    <span>アプリを開いたらこの画面を表示<small>{failed ? 'このブラウザでは設定を保存できません。' : 'この端末のこのブラウザだけの設定です。従来の画面へは上の「従来の画面」から移れます。'}</small></span>
-  </label>;
 }
 
 /** Every view a list screen can show, before its filter. */
@@ -154,9 +144,9 @@ export default function BriefApp() {
   const brief = useBriefData();
   const { watch, toggle, storageError } = useWatchlist();
   const location = useLocation();
-  const wide = useMediaQuery('(min-width:1024px)', { noSsr: true });
+  const wide = useMediaQuery('(min-width:1024px)');
   const go = useTransitionNavigate();
-  const dark = useTheme().palette.mode === 'dark';
+  const dark = useContext(ColorModeContext).mode === 'dark';
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; }, [dark]);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
@@ -164,15 +154,19 @@ export default function BriefApp() {
   const path = location.pathname.replace(/\/+$/, '');
   const stockMatch = path.match(/^\/brief\/stock\/([^/]+)$/);
   const symbol = stockMatch ? decodeURIComponent(stockMatch[1]).toUpperCase() : null;
-  const from = location.state?.from || (path === '/brief/list' ? 'list' : path === '/brief/watch' ? 'watch' : 'today');
+  const from = location.state?.from || (path === '/brief/list' ? 'list' : path === '/brief/watch' ? 'watch' : path === '/brief/market' ? 'market' : 'today');
   const view = symbol ? 'stock' : from;
   const now = brief.bundle.evaluatedNow ?? Date.now();
   useEffect(() => { setAnimateKey(k => k + 1); }, [view]);
   const [listState, setListState] = useState({ filter: 'zone', sort: 'priority', query: '' });
-  const sequence = useMemo(() => (from === 'today' ? focusCandidates(brief.ranked, brief.date) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
+  const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [from, brief.bundle.data, brief.ranked, brief.date, watch, listState]);
-  const selected = symbol || (wide ? sequence[0] || null : null);
+  // Desktop keeps the stock pane on the same stock across tab switches while that stock is in
+  // the new list, so switching tabs does not redraw a different chart.
+  const [kept, setKept] = useState(null);
+  const selected = symbol || (wide && view !== 'market' ? (kept && sequence.includes(kept) ? kept : sequence[0] || null) : null);
+  useEffect(() => { if (selected) setKept(selected); }, [selected]);
   const open = useCallback((ticker, trigger, origin = from) => {
     document.querySelectorAll('.brief-row-title b').forEach(element => { element.style.viewTransitionName = ''; });
     const title = trigger?.querySelector?.('.brief-row-title b');
@@ -213,7 +207,7 @@ export default function BriefApp() {
   };
   const animate = animateKey > 0;
   const barView = useMemo(() => { const item = symbol && (brief.bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol); return item ? candidateView(item, brief.date) : null; }, [symbol, brief.bundle.data, brief.date]);
-  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} /> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} />;
+  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} /> : from === 'market' ? <MarketScreen brief={brief} /> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} />;
   const watching = symbol && watch.includes(symbol);
   return <div className="leader-shell brief" data-theme={dark ? 'dark' : 'light'}>
     <style>{themeCss}</style>
@@ -225,12 +219,13 @@ export default function BriefApp() {
         <button type="button" className={`brief-iconbutton${watching ? ' is-on' : ''}`} aria-pressed={Boolean(watching)} aria-label={watching ? 'ウォッチから外す' : 'ウォッチに追加'} onClick={event => toggleWatch(symbol, event.currentTarget)}>{watching ? ICON.starOn : ICON.star}</button>
       </> : <>
         <div className="brief-bar-title"><b>米国株スクリーナー</b><span className="numeric">分析基準日 {brief.date || '取得中'}</span></div>
-        <Link className="brief-classic" to="/">従来の画面</Link>
       </>}
       <ThemeToggle />
     </header>
     {storageError && <p className="brief-alert brief-pad" role="alert">ウォッチを端末に保存できません。ブラウザの保存設定を確認してください。</p>}
-    {wide ? <main id="brief-main" tabIndex={-1} className="brief-desk">
+    {wide ? view === 'market' ? <main id="brief-main" tabIndex={-1} className="brief-desk is-market">
+      <div className="brief-left"><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
+    </main> : <main id="brief-main" tabIndex={-1} className="brief-desk">
       <div className="brief-left"><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
       <div className="brief-right" aria-label="選択中の銘柄">{selected ? <StockScreen brief={brief} symbol={selected} watch={watch} onToggleWatch={toggleWatch} step={step} wide /> : <p className="brief-note brief-pad">銘柄を選ぶと、ここに結論とチャートを表示します。</p>}</div>
     </main> : <main id="brief-main" tabIndex={-1} className="brief-main" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>

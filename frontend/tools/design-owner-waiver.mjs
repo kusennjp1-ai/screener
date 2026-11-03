@@ -1,9 +1,12 @@
 // Owner waiver for the subjective screenshot scores in check-design-review.mjs.
-// It never covers functional, accessibility or layout checks. Measured timing overruns pass only
-// when the bound screening-priority policy classifies them as deferred warnings. Delete the file to
-// require scored screenshot reviews again.
+// It never covers functional, accessibility or layout checks: the brief report must
+// still hold every required capture and no objective failure. Measured timing
+// overruns (report.timing_warnings) pass only as deferred warnings when the owner's
+// timing approval is recorded in the same file. Delete the file to require scored
+// screenshot reviews again.
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { verifyBriefReport } from './brief-design-contract.mjs';
 
 export const OWNER_WAIVER_FILE = 'owner-waiver.json';
 export const OWNER_WAIVER_SCHEMA = 'owner-design-waiver-v1';
@@ -17,6 +20,10 @@ export function validateOwnerWaiver(value) {
   if (typeof value.granted_by !== 'string' || !value.granted_by.trim()) fail('granted_by is required');
   if (typeof value.instruction !== 'string' || !value.instruction.trim()) fail("the owner's instruction is required");
   if (typeof value.granted_at !== 'string' || !Number.isFinite(Date.parse(value.granted_at))) fail('granted_at must be a timestamp');
+  if (value.timing_instruction !== undefined || value.timing_granted_at !== undefined) {
+    if (typeof value.timing_instruction !== 'string' || !value.timing_instruction.trim()) fail('timing_instruction must be the owner\'s instruction');
+    if (typeof value.timing_granted_at !== 'string' || !Number.isFinite(Date.parse(value.timing_granted_at))) fail('timing_granted_at must be a timestamp');
+  }
   return value;
 }
 
@@ -27,23 +34,18 @@ export async function readOwnerWaiver(directory) {
   return validateOwnerWaiver(JSON.parse(text));
 }
 
+/** True only when the owner's approval to defer measured timing overruns is recorded. */
+export const timingDeferralApproved = waiver => Boolean(waiver?.timing_instruction?.trim() && Number.isFinite(Date.parse(waiver?.timing_granted_at)));
+
 /**
- * Objective evidence the waiver still requires from this Design run's report.
- * With a bound screening-priority assessment, only its measured timing warnings may remain
- * (the 2026-10-21 policy defers those; the owner approved deferring them without an image
- * review). Any blocking failure stops the gate. Without an assessment, the report must have
- * no failures at all.
+ * Objective evidence every gate still requires from this Design run (see
+ * verifyBriefReport). Timing warnings are allowed only under a recorded owner
+ * timing approval. Returns the capture count and the deferred timing warnings.
  */
-export function requireObjectiveEvidence(report, assessment = null) {
-  if (!Array.isArray(report?.screens) || !report.screens.length) throw Error('The owner waiver still requires the captured screens of this run');
-  if (!Array.isArray(report.failures)) throw Error('The owner waiver requires the objective failure list of this run');
-  if (assessment) {
-    if (!Array.isArray(assessment.blocking_failures) || !Array.isArray(assessment.warnings)) throw Error('The owner waiver requires a complete screening-priority assessment');
-    if (assessment.blocking_failures.length) throw Error('Objective functional/design failures remain; the owner waiver covers subjective scores and measured timing only: ' + assessment.blocking_failures.join('; '));
-    const deferred = new Set(assessment.warnings);
-    if (report.failures.some(failure => !deferred.has(failure))) throw Error('Objective design/performance failures remain; the owner waiver covers subjective scores and measured timing only');
-    return report.screens.length;
+export async function requireObjectiveEvidence(report, output, waiver = null) {
+  const warnings = await verifyBriefReport(report, output);
+  if (warnings.length && !timingDeferralApproved(waiver)) {
+    throw Error(`Measured timing overruns are deferred only under the owner's recorded timing approval: ${warnings.join('; ')}`);
   }
-  if (report.failures.length) throw Error('Objective design/performance failures remain; the owner waiver covers subjective scores only');
-  return report.screens.length;
+  return { captures: report.screens.length, warnings };
 }

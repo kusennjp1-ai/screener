@@ -17,14 +17,18 @@ export const fetchStaticJson = async (relativePath, { sha256, worker = false, no
   return !useWorker && worker === 'workbench-summary' ? summarizeWorkbench(value) : project(value);
 };
 
-export const useStaticManifest = () => useQuery({
+const staticManifestQuery = {
   queryKey: ['staticManifest'],
   structuralSharing: false,
   queryFn: () => fetchStaticJson('manifest.json'),
   staleTime: 60000,
-  refetchInterval: 60000,
   gcTime: Infinity,
-});
+};
+
+export const useStaticManifest = () => useQuery({ ...staticManifestQuery, refetchInterval: 60000 });
+
+/** Start the manifest request before the first render instead of after it (same query, same checks). */
+export const prefetchStaticManifest = queryClient => queryClient.prefetchQuery(staticManifestQuery);
 
 export const useStaticGroupsRRG = (marketEntry) => {
   const path = marketEntry?.assets?.groups_rrg?.path;

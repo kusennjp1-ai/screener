@@ -6,7 +6,6 @@ const workflow=readFileSync(new URL('../workflows/design-acceptance.yml',import.
 const adapter=readFileSync(new URL('./design-financial-carry.mjs',import.meta.url),'utf8');
 // Step-local structural contracts avoid confusing a neighbouring step's token or
 // condition with this step. These exact guards deliberately fail on broadening.
-const freshCondition="steps.prior.outputs.reuse != 'true'";
 const stepBlocks=workflow.match(/^      - (?:name|uses|run):[^\n]*(?:\n(?!      - )[^\n]*)*/gm)||[];
 const step=header=>{const matches=stepBlocks.filter(value=>value.split('\n')[0]===`      - ${header}`);assert.equal(matches.length,1,header);return matches[0];};
 const condition=body=>{const matches=[...body.matchAll(/^        if: (.*)$/gm)];assert.ok(matches.length<=1,'duplicate step conditions');return matches[0]?.[1]??null;};
@@ -36,18 +35,19 @@ test('baseline fetch requires an exact SHA and fails closed before clone on ambi
   assert.throws(()=>run(sha,'b'.repeat(40)),error=>error.status===1&&String(error.stdout).includes('FETCH'));
 });
 test('packing step retains read-only token and reauthenticates every fresh source',()=>{
-  const build=step('name: Build both production versions without duplicating the large data tree');
-  assert.equal(condition(build),freshCondition);
+  const build=step('name: Build the current UI and verify its packed transport');
+  assert.equal(condition(build),null);
   assert.match(build,/^        env:\n          GH_TOKEN: \$\{\{ github.token \}\}/m);
 });
-test('one ordinary dataset is prepared before both UI copies, including all top-level JSON',()=>{const prepare=workflow.indexOf('design-financial-carry.mjs prepare'),copy=workflow.indexOf('cp -a frontend/public/static-data'),build=workflow.indexOf('for target in baseline current');assert.ok(prepare>0&&copy>prepare&&build>copy);for(const file of ['research-daily.json','portfolio-model.json','qualification-audit.json','ibd-reference.json'])assert.ok(workflow.slice(prepare,build).includes(file));assert.match(workflow.slice(prepare,build),/dataInventoryDigest\(process.argv\[1\]\).*dataInventoryDigest\(process.argv\[2\]\)/);});
-test('ordinary build is Vite-only after copy and leaves a real raw baseline',()=>{const build=workflow.slice(workflow.indexOf('for target in baseline current'),workflow.indexOf('Measure all routes'));assert.match(build,/if \[ -n "\$\{FINANCIAL_CANDIDATE_DIR:-\}" \]; then\n\s+# Existing correction comparisons retain their separate baseline.\n\s+\(cd "\$source" && node tools\/export-research.mjs && node tools\/record-candidate-history.mjs\)\n\s+fi/);assert.match(build,/npx vite build/);assert.doesNotMatch(build,/npm run build|ln -s "\$RUNNER_TEMP\/design-\$target-data"/);assert.match(build,/mv "\$RUNNER_TEMP\/design-\$target-data" "\$source\/dist\/static-data"/);});
-test('preview cannot enter seal/candidate output, and fresh failure evidence is retained',()=>{
-  const guard="(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '') && "+freshCondition;
+test('one ordinary dataset is prepared before the comparison copy and the build, including all top-level JSON',()=>{const prepare=workflow.indexOf('design-financial-carry.mjs prepare'),copy=workflow.indexOf('cp -a frontend/public/static-data "$comparison/static-data"'),build=workflow.indexOf('(cd "$source" && npx vite build)');assert.ok(prepare>0&&copy>prepare&&build>copy);for(const file of ['research-daily.json','portfolio-model.json','qualification-audit.json','ibd-reference.json'])assert.ok(workflow.slice(prepare,build).includes(file));assert.match(workflow.slice(prepare,build),/dataInventoryDigest\(process.argv\[1\]\).*dataInventoryDigest\(process.argv\[2\]\)/);assert.ok(workflow.includes('comparison="$RUNNER_TEMP/design-baseline/frontend/dist"'));});
+test('the current build is Vite-only after the checked input and keeps the data tree out of the build',()=>{const build=step('name: Build the current UI and verify its packed transport');assert.match(build,/mv "\$source\/public\/static-data" "\$RUNNER_TEMP\/design-current-data"/);assert.match(build,/npx vite build/);assert.doesNotMatch(build,/npm run build|export-research|record-candidate-history/);assert.match(build,/mv "\$RUNNER_TEMP\/design-current-data" "\$source\/dist\/static-data"/);assert.equal((workflow.match(/npx vite build/g)||[]).length,1);});
+test('preview cannot enter seal/candidate output, and failure evidence is retained',()=>{
+  const guard="(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')";
   expectCondition('name: Seal the exact tested financial candidate',guard);
   expectCondition('name: Retain the exact tested financial candidate',guard);
-  expectCondition('name: Preserve all results even when a budget fails','(always()) && '+freshCondition);
+  expectCondition('name: Preserve all results even when a budget fails','(always())');
   assert.match(workflow,/design-carry-evidence\//);assert.match(workflow,/frontend\/test-results\/design-review\//);
+  assert.match(step('name: Preserve all results even when a budget fails'),/name: design-acceptance-\$\{\{ github.sha \}\}/);
   assert.doesNotMatch(adapter,/writeFinancialReleaseReceipt|selectOrdinaryCarryAdmission|publisherToolingBoundary|design-seal/);
 });
 test('adapter uses unchanged carry/history/quality gates and no provider acquisition',()=>{for(const token of ['checkedExport','verifyArchive','livePublication','restorePublishedFinancialSource','prepareHistoryReconciliation','writeHistoryPayloads','commitHistoryCatalogs','restorePackedHistory','prepareCarryHistory','readCarryTargetBase','loadFinancialGenerationCarry','verifyCarriedBundle','verifyReconciledPerformance','check-data-quality.mjs','assessRetainedUniverse'])assert.ok(adapter.includes(token),token);assert.doesNotMatch(adapter,/export-financial-history\.py|yfinance|requests\.get|FINANCIAL_EVALUATED_AT:process.env/);assert.match(adapter,/evaluatedAt:Date.now\(\)/);});
@@ -59,21 +59,23 @@ test('Design allows a finite 120-minute job without changing runner or acceptanc
   assert.match(workflow,/runs-on: ubuntu-latest\n(?:\s*#[^\n]*\n)*\s+timeout-minutes: 120\n/);
   assert.equal((workflow.match(/timeout-minutes:/g)||[]).length,1);
   assert.doesNotMatch(workflow,/continue-on-error:/);
-  const image=step('name: Require reviewed screenshots and four design scores of at least 8.0');
-  assert.equal(condition(image),'(always()) && '+freshCondition);
-  assert.match(image,/^        working-directory: frontend$/m);
-  assert.match(image,/^        run: node tools\/check-design-review\.mjs$/m);
+  const gate=step('name: Require every capture, no objective failure, and reviewed scores or the owner waiver');
+  assert.equal(condition(gate),'(always())');
+  assert.match(gate,/^        working-directory: frontend$/m);
+  assert.match(gate,/^        run: node tools\/check-design-review\.mjs$/m);
   assert.equal((workflow.match(/run: node tools\/check-design-review\.mjs/g)||[]).length,1);
+  assert.match(workflow,/\n    name: Real-data design and performance budgets\n/);
+  assert.match(workflow,/\njobs:\n  design-acceptance:\n/);
 });
-test('UTC stage markers bracket preparation, builds, full transport and browser work',()=>{
-  const pairs=[['carry-prepare','node --max-old-space-size=4096 .github/scripts/design-financial-carry.mjs prepare'],['vite-$target','(cd "$source" && npx vite build)'],['transport-verify-pack-roundtrip','node --max-old-space-size=4096 .github/scripts/design-transport.mjs'],['radar-build','(cd frontend && node tools/build-radar-benchmark.mjs)'],['browser-measurements','node tools/design-review.mjs']];
+test('UTC stage markers bracket preparation, the build, full transport and browser work',()=>{
+  const pairs=[['carry-prepare','node --max-old-space-size=4096 .github/scripts/design-financial-carry.mjs prepare'],['vite-current','(cd "$source" && npx vite build)'],['transport-verify-pack-roundtrip','node --max-old-space-size=4096 .github/scripts/design-transport.mjs'],['browser-measurements','node tools/design-review.mjs']];
   for(const [stage,command]of pairs){
     const start=workflow.indexOf(`echo "Design stage: $(date -u +%FT%TZ) ${stage} start"`),run=workflow.indexOf(command,start),complete=workflow.indexOf(`echo "Design stage: $(date -u +%FT%TZ) ${stage} complete"`);
     assert.ok(start>=0&&run>start&&complete>run,stage);
   }
 });
 test('browser timing preserves nonzero exit and never logs false completion',()=>{
-  const start=workflow.indexOf('      - name: Measure all routes'),end=workflow.indexOf('      - name: Require reviewed screenshots',start);
+  const start=workflow.indexOf('      - name: Measure the brief screens'),end=workflow.indexOf('      - name: Require every capture',start);
   assert.ok(start>=0&&end>start);
   const step=workflow.slice(start,end);assert.match(step,/shell: bash\n\s+run: \|\n\s+set -euo pipefail/);
   const script=step.slice(step.indexOf('          set -euo pipefail')).replace(/^          /gm,'');
@@ -87,9 +89,9 @@ test('browser timing preserves nonzero exit and never logs false completion',()=
 test('Design has one isolated pinned offline calendar runtime before candidate preparation',()=>{
   const setup=workflow.indexOf('      - uses: actions/setup-python@v5'),install=workflow.indexOf('Install isolated offline exchange calendar runtime'),prepare=workflow.indexOf('Prepare the certified financial candidate');
   assert.ok(setup>=0&&install>setup&&prepare>install);
-  expectCondition('uses: actions/setup-python@v5',freshCondition);
-  expectCondition('name: Install isolated offline exchange calendar runtime',freshCondition);
-  expectCondition('name: Prepare the certified financial candidate',freshCondition);
+  expectCondition('uses: actions/setup-python@v5',null);
+  expectCondition('name: Install isolated offline exchange calendar runtime',null);
+  expectCondition('name: Prepare the certified financial candidate',null);
   assert.equal((workflow.match(/uses: actions\/setup-python@v5/g)||[]).length,1);
   assert.match(workflow,/session-calendar-runtime\/bin\/python.*pip install -r \.github\/scripts\/session-calendar-requirements\.txt/);
   assert.match(workflow,/SESSION_CALENDAR_PYTHON=\$RUNNER_TEMP\/session-calendar-runtime\/bin\/python/);
@@ -121,50 +123,37 @@ test('non-carry Design derives once before shared input copy and never calls the
   assert.doesNotMatch(workflow.slice(calendar,copy),/--allow-unavailable/);
 });
 
-test('locked dependencies precede selection and only explicit reuse invokes read-only acceptance',()=>{
-  const install='run: npm ci --no-audit --no-fund',select='name: Select explicit artifact-bound prior-capture review';
-  expectCondition(install,null);expectCondition(select,null);
-  assert.ok(workflow.indexOf('      - '+install)<workflow.indexOf('      - '+select));
-  const accept=step('name: Verify exact historical capture and current committed review');
-  assert.equal(condition(accept),"steps.prior.outputs.reuse == 'true'");
-  assert.match(accept,/^          GH_TOKEN: \$\{\{ github.token \}\}$/m);
-  assert.match(accept,/^        run: node frontend\/tools\/design-capture-lifecycle.mjs accept$/m);
-  assert.match(step(select),/^        run: node frontend\/tools\/design-capture-lifecycle.mjs select$/m);
-  expectCondition('name: Preserve distinct reviewed-prior-capture result',"always() && steps.prior.outputs.reuse == 'true'");
-  assert.match(step('name: Preserve distinct reviewed-prior-capture result'),/reviewed-prior-capture-result\.json/);
+test('the retired screens leave no prior-capture reuse, baseline UI build, radar benchmark or compact package',()=>{
+  for(const retired of ['design-capture-lifecycle','build-radar-benchmark','prepare-compact-design','BASELINE_BUILD','RADAR_BUILD','steps.prior','reviewable-design-capture','limited-research'])assert.ok(!workflow.includes(retired),retired);
+  assert.match(step('name: Measure the brief screens, accessibility and CPU 4x'),/^        id: measure$/m);
+  assert.match(step('name: Measure the brief screens, accessibility and CPU 4x'),/^          DESIGN_INPUT_PROVENANCE: \$\{\{ runner.temp \}\}\/design-input-provenance.json$/m);
+  assert.ok(workflow.indexOf('run: npm ci --no-audit --no-fund')<workflow.indexOf('name: Prepare the certified financial candidate'));
 });
-
-test('all17 existing fresh stages preserve their original conditions and exclude reuse',()=>{
+test('every stage keeps its exact condition',()=>{
   const request="(hashFiles('.github/financial-release-request.json') != '')";
   const guards=[
     ['run: npx playwright install --with-deps chromium',null],['uses: actions/setup-python@v5',null],
     ['name: Install isolated offline exchange calendar runtime',null],
     ['name: Install certified offline projection dependencies',request],['name: Verify isolated offline native projection runtime',request],
-    ['name: Prepare the certified financial candidate',null],['name: Restore checked input and record the comparison basis',null],
-    ['name: Build both production versions without duplicating the large data tree',null],['name: Measure all routes, screenshots, accessibility and CPU 4x',null],
-    ['name: Require reviewed screenshots and four design scores of at least 8.0','(always())'],
+    ['name: Prepare the certified financial candidate',null],['name: Refuse a financial candidate without a brief financial-display contract',"steps.financial.outputs.candidate == 'true'"],
+    ['name: Restore checked input and prepare the carry comparison data',null],
+    ['name: Build the current UI and verify its packed transport',null],['name: Measure the brief screens, accessibility and CPU 4x',null],
+    ['name: Require every capture, no objective failure, and reviewed scores or the owner waiver','(always())'],
     ['name: Package UNAPPROVED financial diagnostics after unsuccessful Design',"((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true')"],
     ['name: Retain UNAPPROVED financial diagnostics for review only',"((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true' && steps.financial_diagnostic.outcome == 'success')"],
     ['name: Seal the exact tested financial candidate',"(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')"],
     ['name: Retain the exact tested financial candidate',"(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')"],
-    ['name: Preserve all results even when a budget fails','(always())'],['name: Stage bounded compact Design evidence','(always())'],
-    ['name: Preserve compact Design review screenshots and report',"(always() && steps.compact.outcome == 'success')"],
+    ['name: Preserve all results even when a budget fails','(always())'],
   ];
-  assert.equal(guards.length,17);
-  for(const [header,original]of guards)expectCondition(header,(original?original+' && ':'')+freshCondition);
+  assert.equal(guards.length,16);
+  for(const [header,expected]of guards)expectCondition(header,expected);
+  assert.equal(stepBlocks.filter(block=>/^      - name: /.test(block)).length,guards.length-2);
 });
-
-test('historical packages require completed fresh main measurements but not later financial approval',()=>{
-  const packageHeader='name: Stage immutable reviewable Design capture',uploadHeader='name: Preserve immutable reviewable Design capture';
-  expectCondition(packageHeader,"always() && steps.prior.outputs.reuse != 'true' && steps.measure.outcome == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'");
-  expectCondition(uploadHeader,"always() && steps.capture_package.outcome == 'success' && steps.capture_package.outputs.staged == 'true'");
-  assert.match(step('name: Measure all routes, screenshots, accessibility and CPU 4x'),/^        id: measure$/m);
-  assert.match(step(packageHeader),/^        id: capture_package$/m);
-  assert.match(step(packageHeader),/^        run: node tools\/design-capture-lifecycle.mjs package$/m);
-  assert.ok(workflow.indexOf('name: Require reviewed screenshots')<workflow.indexOf(packageHeader));
-  assert.ok(workflow.indexOf(packageHeader)<workflow.indexOf(uploadHeader));
-  assert.ok(workflow.indexOf(uploadHeader)<workflow.indexOf('name: Seal the exact tested financial candidate'));
-  assert.match(step(uploadHeader),/^          if-no-files-found: error$/m);
-  assert.match(step(uploadHeader),/^          retention-days: 14$/m);
-  assert.doesNotMatch(step(packageHeader),/design-seal|candidate ==|FINANCIAL_CANDIDATE_DIR|financial_admission/);
+test('a financial candidate fails closed before input restore and measurement',()=>{
+  const refusal=step('name: Refuse a financial candidate without a brief financial-display contract');
+  assert.match(refusal,/exit 1/);
+  assert.ok(workflow.indexOf('name: Prepare the certified financial candidate')<workflow.indexOf('name: Refuse a financial candidate'));
+  assert.ok(workflow.indexOf('name: Refuse a financial candidate')<workflow.indexOf('name: Restore checked input'));
+  assert.doesNotMatch(step('name: Restore checked input and prepare the carry comparison data'),/FINANCIAL_CANDIDATE_DIR|same_prices_repaired_financials/);
+  assert.match(step('name: Restore checked input and prepare the carry comparison data'),/echo "DESIGN_INPUT_BASIS=same_verified_input" >> "\$GITHUB_ENV"/);
 });

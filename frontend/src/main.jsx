@@ -1,12 +1,14 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
 import './index.css';
 import { STATIC_SITE_MODE } from './config/runtimeMode';
+import StaticRoot from './StaticRoot';
 
+// The static site (GitHub Pages) boots without Material UI; the connected app keeps it.
+const App = React.lazy(() => import('./App'));
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <App />
+    {STATIC_SITE_MODE ? <StaticRoot /> : <React.Suspense fallback={null}><App /></React.Suspense>}
   </React.StrictMode>
 );
 

@@ -324,91 +324,45 @@ describe('App static mode', () => {
   });
 
   it.each([
-    ['#/', '今日の投資判断'],
-    ['#/daily', 'United States スナップショット'],
-    ['#/compare', '買い位置を比較する'],
-    ['#/scan', '詳細スキャン'],
-    ['#/breadth', '市場環境'],
-    ['#/groups', 'United States 業種グループランキング'],
-    ['#/themes', '今日の投資判断'],
-  ])('renders the static hash route %s without any /api requests', async (hash, heading) => {
+    ['#/', '#/brief', name => name.includes('の判断')],
+    ['#/daily', '#/brief', name => name.includes('の判断')],
+    ['#/themes', '#/brief/market', name => name === '市場'],
+    ['#/breadth?tab=sectors', '#/brief/market', name => name === '市場'],
+    ['#/groups', '#/brief/market', name => name === '市場'],
+    ['#/compare', '#/brief/list', name => name === '候補'],
+    ['#/scan', '#/brief/list', name => name === '候補'],
+    ['#/no-such-screen', '#/brief', name => name.includes('の判断')],
+  ])('opens the retired address %s on the brief screen %s, from static sources only', async (hash, target, heading) => {
     await renderStaticAppAtHash(hash);
-
-    if (['#/','#/themes'].includes(hash)) expect(await screen.findByRole('region', {name:'今日の概況'}, {timeout:10000})).toBeInTheDocument();
-    else expect(await screen.findByRole('heading', { name: name => name.includes(heading) }, { timeout: 10000 })).toBeInTheDocument();
-    const navigation=screen.getByRole('navigation',{name:'メインナビゲーション'});
-    expect(navigation.closest('aside')).toHaveTextContent('分析');
-    expect(within(navigation).getByRole('link',{name:'比較',exact:true})).toHaveAttribute('href','#/compare');
+    expect(await screen.findByRole('heading', { level: 1, name: heading }, { timeout: 10000 })).toBeInTheDocument();
+    expect(window.location.hash).toBe(target);
+    expect(screen.getByRole('navigation', { name: 'ブリーフの画面' })).toBeInTheDocument();
+    expect(screen.queryByRole('navigation', { name: 'メインナビゲーション' })).not.toBeInTheDocument();
     expect(screen.queryByText('Sign out')).not.toBeInTheDocument();
-
-    await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenCalled();
-    });
-
+    await waitFor(() => expect(globalThis.fetch).toHaveBeenCalled());
     const requestedUrls = globalThis.fetch.mock.calls.map(([url]) => String(url));
-    expect(requestedUrls.length).toBeGreaterThan(0);
-    // Every static-mode request must be a supported static source, never /api
-    // or the retired historical performance asset.
     const isStaticSource = (url) => url.includes('/static-data/') || url.endsWith('/publication.json') || url.includes('ibd-reference.json');
     expect(requestedUrls.every((url) => isStaticSource(url) && !url.includes('/api'))).toBe(true);
   }, 30000);
 
-  it('renders the daily brief with its own tabs and theme toggle, from static sources only', async () => {
+  it('opens an old symbol link on that stock in the brief', async () => {
+    await renderStaticAppAtHash('#/?method=oneil&symbol=nvda');
+    await waitFor(() => expect(window.location.hash).toBe('#/brief/stock/NVDA'), { timeout: 10000 });
+  }, 30000);
+
+  it('renders the daily brief with four tabs and the theme toggle, and no link to retired screens', async () => {
     await renderStaticAppAtHash('#/brief');
     expect(await screen.findByRole('heading', { level: 1, name: name => name.includes('の判断') }, { timeout: 10000 })).toBeInTheDocument();
-    expect(screen.getByRole('navigation', { name: 'ブリーフの画面' })).toBeInTheDocument();
+    const tabs = screen.getByRole('navigation', { name: 'ブリーフの画面' });
+    expect(within(tabs).getAllByRole('link').map(link => link.textContent)).toEqual(['今日', '候補', 'ウォッチ', '市場']);
+    expect(within(tabs).getByRole('link', { name: '市場' })).toHaveAttribute('href', '#/brief/market');
     expect(screen.getByRole('region', { name: '地合い' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /市場の詳細/ })).toHaveAttribute('href', '#/brief/market');
     expect(screen.getByRole('list', { name: '今日の要点' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /モードに切り替え/ })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '従来の画面' })).toHaveAttribute('href', '#/');
+    expect(screen.queryByRole('link', { name: '従来の画面' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: /アプリを開いたらこの画面を表示/ })).not.toBeInTheDocument();
     const requestedUrls = globalThis.fetch.mock.calls.map(([url]) => String(url));
     expect(requestedUrls.every(url => !url.includes('/api'))).toBe(true);
   }, 30000);
-
-  it('opens on the daily brief for a viewer who chose it, and keeps the research workspace at #/ otherwise', async () => {
-    window.localStorage.setItem('screener:start-screen', 'brief');
-    await renderStaticAppAtHash('#/');
-    expect(await screen.findByRole('heading', { level: 1, name: name => name.includes('の判断') }, { timeout: 10000 })).toBeInTheDocument();
-    expect(window.location.hash).toBe('#/brief');
-    expect(screen.getByRole('checkbox', { name: /アプリを開いたらこの画面を表示/ })).toBeChecked();
-  }, 30000);
-
-  it('keeps scan controls read-only in the static route', async () => {
-    await renderStaticAppAtHash('#/scan');
-
-    expect(await screen.findByRole('heading', { name: '詳細スキャン' })).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getByTestId('static-filter-panel')).toHaveTextContent('presets-disabled');
-      expect(screen.getByTestId('static-results-table')).toHaveTextContent('actions-visible:2');
-    });
-  }, 10000);
-
-  it('offers 1M and 3M ranges on the breadth page in the static route', async () => {
-    await renderStaticAppAtHash('#/breadth');
-
-    expect(await screen.findByRole('heading', { name: '市場環境' })).toBeInTheDocument();
-    expect(screen.getByTestId('breadth-chart-ranges')).toHaveTextContent('1M');
-    expect(screen.getByTestId('breadth-chart-ranges')).toHaveTextContent('3M');
-  }, 10000);
-
-  it('honors the market query parameter and loads market-scoped breadth assets', async () => {
-    await renderStaticAppAtHash('#/breadth?market=HK');
-
-    expect(await screen.findByRole('heading', { name: '市場環境' })).toBeInTheDocument();
-    expect(window.location.hash).toContain('#/breadth');
-    expect(window.location.hash).toContain('market=HK');
-    expect(window.localStorage.getItem('static-site:selected-market')).toBe('HK');
-
-    const requestedUrls = globalThis.fetch.mock.calls.map(([url]) => String(url));
-    expect(requestedUrls.some((url) => url.includes('/static-data/markets/hk/breadth.json'))).toBe(true);
-  }, 10000);
-
-  it('uses the persisted market selection when no query parameter is present', async () => {
-    window.localStorage.setItem('static-site:selected-market', 'HK');
-
-    await renderStaticAppAtHash('#/groups');
-
-    expect(await screen.findByRole('heading', { name: 'Hong Kong 業種グループランキング' })).toBeInTheDocument();
-    expect(screen.getByRole('combobox', { name: '市場切替' })).toHaveTextContent('Hong Kong');
-  }, 10000);
 });

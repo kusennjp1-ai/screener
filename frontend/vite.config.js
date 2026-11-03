@@ -68,15 +68,18 @@ export default defineConfig(({ mode }) => {
       // Manual chunks for better caching and smaller initial bundle
       rollupOptions: {
         output: {
-          manualChunks: {
-            // Core React ecosystem
-            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-            // MUI components (large library)
-            'mui-vendor': ['@mui/material', '@mui/icons-material'],
-            // Data visualization
-            'charts-vendor': ['recharts', 'lightweight-charts'],
-            // React Query for data fetching
-            'query-vendor': ['@tanstack/react-query', '@tanstack/react-virtual'],
+          // Long-lived vendor chunks for caching. The JSX runtime and scheduler belong to React:
+          // left in the Material UI chunk, every static page would preload Material UI.
+          manualChunks(id) {
+            // Rollup's CommonJS helpers are needed by React itself; elsewhere they drag a vendor chunk in.
+            if (id.includes('commonjsHelpers')) return 'react-vendor';
+            const name = id.match(/node_modules\/((?:@[^/]+\/)?[^/]+)\//)?.[1];
+            if (!name) return undefined;
+            if (['react', 'react-dom', 'scheduler', 'react-router', 'react-router-dom', '@remix-run/router'].includes(name)) return 'react-vendor';
+            if (/^@(mui|emotion|popperjs)\//.test(name) || ['react-transition-group', 'stylis'].includes(name)) return 'mui-vendor';
+            if (/^d3-/.test(name) || ['recharts', 'recharts-scale', 'react-smooth', 'victory-vendor', 'lightweight-charts', 'fancy-canvas', 'internmap', 'decimal.js-light'].includes(name)) return 'charts-vendor';
+            if (name.startsWith('@tanstack/')) return 'query-vendor';
+            return undefined;
           },
         },
       },

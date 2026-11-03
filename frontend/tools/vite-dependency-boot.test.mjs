@@ -32,13 +32,11 @@ describe('cold Vite dependency initialization', () => {
   // Only direct entrypoints still imported by the app are expected in Vite
   // discovery. Tooltip and Chip now use the @mui/material barrel; the app no
   // longer imports their standalone entries. Check Chip on that actual entry.
+  // Box, Link and Typography direct entries left with the retired static screens.
   it.each([
-    '@mui/material/Box',
     '@mui/material',
     '@mui/material/styles',
     '@mui/material/CircularProgress',
-    '@mui/material/Link',
-    '@mui/material/Typography',
     '@mui/icons-material/InfoOutlined',
   ])('can load %s before other MUI entries', (id) => {
     expect(optimized[id], `Expected Vite to discover ${id}`).toBeDefined();

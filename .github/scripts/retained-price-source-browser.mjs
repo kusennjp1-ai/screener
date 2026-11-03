@@ -1,5 +1,7 @@
 // Finite real-data acceptance for the authenticated Oct6 source after ordinary
-// carry/composition. No fixtures, browser clock overrides, or publication writes.
+// carry/composition, observed on the approved daily brief's stock screen
+// (#/brief/stock/SYMBOL). No fixtures, browser clock overrides, or publication writes.
+// An approved UI without that screen (the retired research workspace) fails closed.
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {createServer} from 'node:http';
@@ -10,8 +12,8 @@ import {createRequire} from 'node:module';
 import {execFileSync} from 'node:child_process';
 import {publisherToolingBoundary,publisherToolingReceipt,verifyPublisherToolingCheckout,consumePublisherToolingBrowserProof} from './retained-price-publisher-tooling.mjs';
 
-export const BROWSER_LIMITS=Object.freeze({milliseconds:360000,csvBytes:8*1024**2,reportBytes:8*1024**2,screenshotBytes:8*1024**2,fileBytes:64*1024**2,servedBytes:512*1024**2,requests:4000});
-const TARGET='2026-10-06',BASE='/screener/',METHOD='oneil';
+export const BROWSER_LIMITS=Object.freeze({milliseconds:360000,reportBytes:8*1024**2,screenshotBytes:8*1024**2,fileBytes:64*1024**2,servedBytes:512*1024**2,requests:4000});
+const TARGET='2026-10-06',BASE='/screener/';
 const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
 const equal=(a,b,message)=>assert.deepEqual(a,b,message);
 function bytes(path,cap=BROWSER_LIMITS.fileBytes){const stat=lstatSync(path);assert(stat.isFile()&&!stat.isSymbolicLink()&&realpathSync(path)===resolve(path)&&stat.size<=cap,'Unsafe or oversized proof input: '+path);return readFileSync(path);}
@@ -112,7 +114,60 @@ export function createBrowserNetworkGate({origin,getPage,denials,symbol}){
   };
   return {evidence,route,routeWebSocket,attach,assertClean,observeHttpResponse,observeWebSocketCreated,observeWebSocketHandshake};
 }
-export const FALLBACK_FONT_SELECTORS=Object.freeze(['.symbol-title h2','.research-symbol-price strong','#research-detail-tabs button[aria-selected="true"]']);
+// The brief stock screen at desktop width: symbol, price and the selected chart period.
+export const BRIEF_SYMBOL_SELECTOR='.brief-stockhead h2 > span:first-child',BRIEF_PRICE_SELECTOR='.brief-stockhead h2 > span:nth-child(2)';
+export const FALLBACK_FONT_SELECTORS=Object.freeze([BRIEF_SYMBOL_SELECTOR,BRIEF_PRICE_SELECTOR,'.brief-periods button[aria-pressed="true"]']);
+
+// Source markers (in the git-verified approved checkout) of the one screen this proof drives.
+// Every marker is present in both brief-carrying approved UIs (c5d1884 and the brief-only app).
+export const BRIEF_UI_MARKERS=Object.freeze([
+  ['src/static/StaticAppShell.jsx','path="/brief/*"'],
+  ['src/static/brief/BriefApp.jsx',String.raw`/^\/brief\/stock\/([^/]+)$/`],
+  ['src/static/brief/BriefApp.jsx','className="brief-stockhead"'],
+  ['src/static/brief/PriceChart.jsx','data-testid="brief-price-chart"'],
+  ['src/static/brief/priceChart.js','足チャート（${bars[0].date}〜${bars[n - 1].date}）'],
+  ['src/static/brief/StockView.jsx','brief-chartcard'],
+  ['src/static/brief/StockView.jsx','の日足は未取得'],
+  ['tools/design-static-assets.mjs','export async function createDesignAssetObserver'],
+].map(Object.freeze));
+const RESEARCH_WORKSPACE_PAGE='src/static/pages/ResearchPage.jsx';
+/** `read(path)` returns the approved checkout's text for a frontend-relative path, or null when absent. */
+export function detectApprovedUi(read){
+  const missing=BRIEF_UI_MARKERS.filter(([path,marker])=>{const text=read(path);return typeof text!=='string'||!text.includes(marker);}).map(([path,marker])=>`${path}: ${marker}`);
+  const workspace=typeof read(RESEARCH_WORKSPACE_PAGE)==='string';
+  return {kind:missing.length?(workspace?'research-workspace':'unknown'):'brief',retired_workspace_present:workspace,missing};
+}
+export function requireBriefUi(detection,sha){
+  if(detection?.kind==='brief'&&Array.isArray(detection.missing)&&detection.missing.length===0)return detection;
+  const what=detection?.kind==='research-workspace'?'the retired research workspace':'not a recognised daily brief';
+  throw Error(`Approved UI ${sha} is ${what} (missing ${(detection?.missing||['detection']).join('; ')}). The finite price browser proof verifies only the brief stock screen #/brief/stock/SYMBOL and never guesses another UI's selectors; approve a daily-brief UI before publishing a finite price repair.`);
+}
+export const briefStockUrl=(pageUrl,symbol)=>`${pageUrl}#/brief/stock/${encodeURIComponent(symbol)}`;
+// The stock screen opens on its 6-month daily range (130 sessions).
+export const BRIEF_CHART_SESSIONS=130;
+const BRIEF_CHART_LABEL=/^(\S+) の(日|週)足チャート（(\d{4}-\d{2}-\d{2})〜(\d{4}-\d{2}-\d{2})）。/;
+export function parseBriefChartLabel(label){
+  const match=typeof label==='string'&&label.length<=4096?label.match(BRIEF_CHART_LABEL):null;
+  return match?{symbol:match[1],interval:match[2]==='日'?'day':'week',first:match[3],last:match[4]}:null;
+}
+/**
+ * The rendered chart against the chart payload the browser actually received: same symbol, the
+ * daily range's first and last sessions, one candle per shown session. A repaired row's last candle
+ * is the repaired session; retained older history must end before it.
+ */
+export function requireBriefChart({label,candles},{symbol,bars,target,retained=false}){
+  const parsed=parseBriefChartLabel(label);assert(parsed,'Brief price chart has no readable label');
+  assert.equal(parsed.symbol,symbol,'Brief chart shows another symbol');assert.equal(parsed.interval,'day','Brief chart is not the daily chart');
+  assert(Array.isArray(bars)&&bars.length>0&&bars.every(bar=>/^\d{4}-\d\d-\d\d$/.test(bar?.date)),'Served chart has no dated bars');
+  const shown=Math.min(BRIEF_CHART_SESSIONS,bars.length);
+  assert.equal(parsed.last,bars.at(-1).date,'Brief chart last candle differs from the served chart');
+  assert.equal(parsed.first,bars.at(-shown).date,'Brief chart range differs from the served chart');
+  assert.equal(candles,shown,'Brief chart candles differ from the served sessions');
+  if(retained)assert(parsed.last<target,'Older retained history was presented as the repaired session');
+  else assert.equal(parsed.last,target,'Brief chart last candle is not the repaired session');
+  return {...parsed,candles};
+}
+export const retainedHistoryNote=(final,target)=>`日足は ${final} までです（分析基準日 ${target} の日足は未取得）`;
 export function requireFallbackFontSample(sample){
   assert(sample&&typeof sample.selector==='string'&&sample.selector.length<=128,'Missing scoped font sample');
   const box=sample.geometry;
@@ -137,7 +192,7 @@ export async function captureFallbackTypography(page,session){
     const {fonts}=await session.send('CSS.getPlatformFontsForNode',{nodeId});
     samples.push(requireFallbackFontSample({selector,...visual,platform_fonts:fonts.map(({familyName,isCustomFont,glyphCount})=>({familyName,isCustomFont,glyphCount}))}));
   }
-  return {scope:'Three existing symbol/price/selected-tab text nodes; actual Chromium-selected platform fonts and horizontal fit only, not Design acceptance',selection_source:'CDP CSS.getPlatformFontsForNode; computed font-family is requested CSS, not selection proof',samples};
+  return {scope:'Three brief stock-screen text nodes (symbol, price, selected chart period); actual Chromium-selected platform fonts and horizontal fit only, not Design acceptance',selection_source:'CDP CSS.getPlatformFontsForNode; computed font-family is requested CSS, not selection proof',samples};
 }
 
 export function requireActualClock(value,browserNow,hostNow=Date.now()){
@@ -204,13 +259,6 @@ export function requireCarryBinding(publication,state,carryRaw){
   assert.equal(carry.source_financial_generation,original.financial_generation,'Original source generation changed');
   return {financial_generation:carry.financial_generation,source_financial_generation:carry.source_financial_generation,previous_financial_generation:previous.financial_generation};
 }
-export function compareDownloadedCsv(downloaded,canonical,symbol,{unknownPrice=false}={}){
-  equal(downloaded.headers,canonical.headers,'Downloaded CSV schema changed');const found=downloaded.rows.filter(r=>r.symbol===symbol);
-  assert.equal(found.length,1,'CSV must contain exactly one selected symbol');assert.equal(canonical.rows.length,1);equal(found[0],canonical.rows[0],'Downloaded CSV differs from actual-current approved projection');
-  if(unknownPrice){assert.equal(found[0].daily_price,'','CSV revived a quarantined price');assert.equal(found[0].pivot,'','CSV revived a quarantined pivot');assert.equal(found[0].qualified,'false','CSV qualified an unverified price row');}
-  return found[0];
-}
-
 export async function startReleaseServer(root){
   regularRoot(root);let requests=0,servedBytes=0;const failures=[];
   const server=createServer((request,response)=>{
@@ -230,35 +278,27 @@ export async function startReleaseServer(root){
   await new Promise((ok,bad)=>{server.once('error',bad);server.listen(0,'127.0.0.1',ok);});
   return {origin:`http://127.0.0.1:${server.address().port}`,stats:()=>({requests,served_bytes:servedBytes,failures}),close:()=>new Promise((ok,bad)=>{server.close(error=>error?bad(error):ok());server.closeAllConnections();})};
 }
-async function loadApprovedFrontend(frontend,expected){
+async function loadApprovedFrontend(frontend,expected,onDetect){
   regularRoot(frontend);const repository=dirname(frontend),git=(...args)=>execFileSync('git',['-C',repository,...args],{encoding:'utf8',maxBuffer:16*1024**2}).trim();
   assert.equal(git('rev-parse','HEAD'),expected.sha,'Consumer checkout is not exact approved UI');assert.equal(git('rev-parse','HEAD:frontend'),expected.frontend_tree,'Approved frontend tree changed');
   verifyPublisherToolingCheckout(frontend,{amended:true});
+  // Decide which UI this is from its own sources before importing or driving anything.
+  const detection=detectApprovedUi(path=>{const file=join(frontend,path);return existsSync(file)?bytes(file,4*1024**2).toString('utf8'):null;});
+  onDetect(detection);const ui=requireBriefUi(detection,expected.sha);
   const load=path=>import(pathToFileURL(join(frontend,path)).href);
-  const [observer,financial,history,presentation,engine,cases,position,transport]=await Promise.all(['tools/design-static-assets.mjs','src/static/financialCurrent.js','src/static/financialHistory.js','src/static/financialEvidencePresentation.js','src/static/researchEngine.js','tools/financial-design-cases.mjs','src/static/positionGeometry.js','src/static/researchTransport.js'].map(load));
-  const require=createRequire(join(frontend,'package.json'));return {...observer,...financial,...history,...presentation,...engine,...cases,...position,...transport,chromium:require('playwright').chromium};
+  const [observer,financial,history,position,transport]=await Promise.all(['tools/design-static-assets.mjs','src/static/financialCurrent.js','src/static/financialHistory.js','src/static/positionGeometry.js','src/static/researchTransport.js'].map(load));
+  const require=createRequire(join(frontend,'package.json'));return {...observer,...financial,...history,...position,...transport,ui,chromium:require('playwright').chromium};
 }
-async function inspectRows(panel,expected){
-  const result=[];
-  for(const row of expected.rows){const element=panel.locator('#financial-evidence-'+row.id);await element.waitFor({state:'visible'});
-    const actual=await element.evaluate(node=>({id:node.id.replace('financial-evidence-',''),state:node.dataset.state,actual:node.querySelector('.financial-evidence-value strong')?.textContent,condition:node.querySelector('.financial-evidence-value span')?.textContent,reason:node.querySelector('.financial-evidence-reason')?.textContent||null}));
-    equal(actual,{id:row.id,state:row.state,actual:row.actual,condition:row.condition,reason:row.explanation||null},'Rendered financial evidence differs from approved current model');result.push(actual);
-  }return result;
-}
-async function actualCsv(page,model,item){
-  await page.getByRole('button',{name:'候補を絞り込む',exact:true}).click();const filters=page.getByRole('dialog',{name:'候補を絞り込む',exact:true});
-  assert.equal(await filters.getByRole('button',{name:'オニール',exact:true}).getAttribute('aria-pressed'),'true');
-  const [download]=await Promise.all([page.waitForEvent('download'),filters.getByRole('button',{name:'全検索結果をCSV保存 ↓',exact:true}).click()]);
-  const stream=await download.createReadStream();assert(stream,'CSV stream unavailable');const chunks=[];let length=0;for await(const chunk of stream){length+=chunk.length;assert(length<=BROWSER_LIMITS.csvBytes,'CSV exceeds bound');chunks.push(chunk);}
-  const raw=Buffer.concat(chunks),parsed=model.parseFinancialCsv(raw.toString('utf8')),match=parsed.rows.find(r=>r.symbol===item.symbol);assert(match,'Selected symbol missing from downloaded CSV');
-  const now=requireActualClock(match.financial_evaluated_at,await page.evaluate(()=>Date.now()));
-  const canonical=model.parseFinancialCsv(model.researchCsv([{row:item.summary}],METHOD,TARGET,now));
-  const row=compareDownloadedCsv(parsed,canonical,item.symbol,{unknownPrice:['retained-older-history','undated-quarantine'].includes(item.category)});
-  await filters.getByRole('button',{name:'絞り込みを閉じる',exact:true}).click();
-  return {filename:download.suggestedFilename(),bytes:raw.length,sha256:sha(raw),row,source:'actual browser download'};
-}
-async function inspectCase({browser,server,assets,model,item,generation,output,network,networkCases}){
-  const context=await browser.newContext({viewport:{width:1440,height:1000},locale:'ja-JP',serviceWorkers:'block',acceptDownloads:true});
+// Waits until the brief's chart card settles: a labelled chart, or a final placeholder.
+const settledChart=page=>page.waitForFunction(()=>{
+  const card=document.querySelector('.brief-right .brief-chartcard');if(!card)return null;
+  const chart=card.querySelector('[data-testid="brief-price-chart"][aria-label]');
+  if(chart)return {state:'chart',label:chart.getAttribute('aria-label'),candles:chart.querySelectorAll('svg rect.bc-up, svg rect.bc-down').length,note:card.querySelector('.brief-asof')?.textContent||null};
+  const text=card.querySelector('.brief-chart-placeholder')?.textContent||'';
+  return /取得できません|未配信/.test(text)?{state:'placeholder',text,note:card.querySelector('.brief-asof')?.textContent||null}:null;
+}).then(handle=>handle.jsonValue());
+export async function inspectCase({browser,server,assets,model,item,generation,output,network,networkCases}){
+  const context=await browser.newContext({viewport:{width:1440,height:1000},locale:'ja-JP',serviceWorkers:'block'});
   let page,closed=false;const gate=createBrowserNetworkGate({origin:server.origin,getPage:()=>page,denials:network,symbol:item.symbol});networkCases.push(gate.evidence);
   let session;const errors=[];
   try{
@@ -266,45 +306,40 @@ async function inspectCase({browser,server,assets,model,item,generation,output,n
     page=await context.newPage();session=await gate.attach(context,page);page.setDefaultTimeout(45000);page.on('pageerror',error=>errors.push(error.message));
     const currentUrl=server.origin+BASE,staticUrl=path=>new URL('static-data/'+path,currentUrl).href;
     const bootstrap=Promise.all([page.waitForResponse(r=>r.url()===staticUrl('manifest.json')),page.waitForResponse(r=>r.url()===new URL('publication.json',currentUrl).href)]);
-    const go=()=>page.goto(`${currentUrl}#/?method=${METHOD}&symbol=${encodeURIComponent(item.symbol)}`);
-    let retainedChart=null;
-    if(item.category==='retained-older-history'){assert(item.summary.chart_path,'Retained chart path unavailable');retainedChart=await assets.observeJson(page,item.summary.chart_path,go);}else await go();
+    const go=()=>page.goto(briefStockUrl(currentUrl,item.symbol));
+    const result={symbol:item.symbol,category:item.category,as_of_date:TARGET,screen:'#/brief/stock/'+item.symbol};
+    // The chart and detail the brief actually received, decoded through the publication's own transport.
+    let chartAsset=null,detailAsset=null;
+    if(item.category==='undated-quarantine')await go();
+    else if(item.category==='retained-older-history'){assert(item.summary.chart_path,'Retained chart path unavailable');chartAsset=await assets.observeJson(page,item.summary.chart_path,go);}
+    else{assert(item.summary.chart_path,item.symbol+': repaired chart path unavailable');chartAsset=await assets.observeJson(page,item.summary.chart_path,async()=>{detailAsset=await assets.observeJson(page,item.summary.research_detail_path,go);});}
     const [manifestResponse,publicationResponse]=await bootstrap;await assets.assertBrowserBootstrap(manifestResponse,publicationResponse);
-    await page.waitForFunction(symbol=>document.querySelector('.symbol-title h2')?.textContent.trim()===symbol,item.symbol);
-    const result={symbol:item.symbol,category:item.category,as_of_date:TARGET};
+    await page.waitForFunction(([selector,symbol])=>document.querySelector(selector)?.textContent.trim()===symbol,[BRIEF_SYMBOL_SELECTOR,item.symbol]);
+    const price=(await page.locator(BRIEF_PRICE_SELECTOR).textContent()).trim(),chart=await settledChart(page);
     if(item.category==='retained-older-history'||item.category==='undated-quarantine'){
-      requireUnknownPrice(item.summary);assert.equal(await page.locator('.research-symbol-price strong').textContent(),model.money(null),'UI revived quarantined price');
-      const chart=page.getByRole('region',{name:item.symbol+' の日次チャート',exact:true});
-      if(retainedChart){const {verifyRetainedChart}=await import('./oct6-retained-price-rehearsal.mjs');verifyRetainedChart(retainedChart.value,item.patch,TARGET);
-        assert(retainedChart.value.bars.at(-1).date<TARGET,'Retained history was relabeled current');await chart.getByText('チャートを取得できません。',{exact:true}).waitFor();
-        assert.equal(await chart.locator('canvas:visible').count(),0,'Older bars shown as a current chart');result.retained_history={observation:retainedChart.observation,final_bar:retainedChart.value.bars.at(-1).date,current_chart_rejected:true};
-      }else{assert.equal(item.summary.chart_path,null,'Undated row gained a chart');await chart.getByText('この銘柄のチャートは未配信です。',{exact:true}).waitFor();result.undated={current_price:null,chart_path:null};}
+      requireUnknownPrice(item.summary);assert.equal(price,model.money(null),'UI revived quarantined price');
+      if(chartAsset){const {verifyRetainedChart}=await import('./oct6-retained-price-rehearsal.mjs');verifyRetainedChart(chartAsset.value,item.patch,TARGET);
+        const final=chartAsset.value.bars.at(-1).date;assert(final<TARGET,'Retained history was relabeled current');
+        // Older bars may be drawn only with their own last session and an explicit as-of note, or refused.
+        if(chart.state==='chart'){result.retained_history={observation:chartAsset.observation,final_bar:final,shown_as:'labelled-older-history',chart:requireBriefChart(chart,{symbol:item.symbol,bars:chartAsset.value.bars,target:TARGET,retained:true})};
+          assert(chart.note?.includes(retainedHistoryNote(final,TARGET)),'Older bars shown without their as-of session');}
+        else{assert.match(chart.text,/日足チャートを取得できません/,'Retained chart neither labelled nor refused');result.retained_history={observation:chartAsset.observation,final_bar:final,shown_as:'refused',current_chart_rejected:true};}
+      }else{assert.equal(item.summary.chart_path,null,'Undated row gained a chart');assert.equal(chart.state,'placeholder','Undated row shows a chart');assert.match(chart.text,/この銘柄の日足チャートは未配信です。/,'Undated chart placeholder missing');result.undated={current_price:null,chart_path:null};}
     }else{
       assert(Number.isFinite(item.summary.current_price)&&item.summary.technical_audit?.as_of_date===TARGET,'Ordinary case lacks Oct6 price evidence');
-      const loaded=await assets.observeJson(page,item.summary.research_detail_path,()=>page.getByRole('tab',{name:'財務・機関',exact:true}).click());
+      const served=chartAsset.value;assert(served.symbol===item.symbol&&served.as_of_date===TARGET&&!served.retained_price_history,'Served chart is not the repaired session');
+      assert.equal(chart.state,'chart','Repaired chart not drawn');assert.equal(chart.note,null,'Repaired session labelled as older history');
+      result.chart={...requireBriefChart(chart,{symbol:item.symbol,bars:served.bars,target:TARGET}),observation:chartAsset.observation};
+      assert.equal(price,model.money(item.summary.current_price),'Brief price differs from the repaired row');result.price=price;
+      const loaded=detailAsset;
       assert(loaded.value.symbol===item.symbol&&loaded.value.as_of_date===TARGET&&loaded.value.financial_current?.t===item.summary.financial_current?.t,'Browser detail/list generation mismatch');
-      const panel=page.getByRole('region',{name:'財務の判定根拠',exact:true});await panel.waitFor({state:'visible'});
-      const text=await panel.innerText(),clock=text.match(/財務の確認時刻 (\d{4}-\d{2}-\d{2}T[\d:.]+Z)/)?.[1];const now=requireActualClock(clock,await page.evaluate(()=>Date.now()));
+      const browserNow=await page.evaluate(()=>Date.now()),now=requireActualClock(browserNow,browserNow);
       const merged=model.mergeFinancialDetail(item.summary,loaded.value,{now,asOfDate:TARGET,generation,detailGeneration:generation,expectedDetailPath:item.summary.research_detail_path,detailPath:item.summary.research_detail_path});
       result.source=requireFinancialCategory(merged,item.category,model.nativeAnnualHistoryContract);result.expiry=inspectHistoryExpiry(merged,now,model.financialHistoryDeadlines,model.currentFinancialHistory,model.NATIVE_ANNUAL_SCHEMA);
-      const evidence=model.buildFinancialEvidencePresentation(merged,{method:METHOD,date:TARGET,generation,now});
-      const expected=model.financialEvidencePresentation({evidence,history:merged.financial_history,symbol:item.symbol,date:TARGET,generation,method:METHOD,now});
-      result.financial_rows=await inspectRows(panel,expected);if(result.expiry.components.annual.expired)assert.equal(result.financial_rows.find(r=>r.id==='annual_eps_growth_3y')?.state,'unknown','Expired annual history must remain unknown');
-      assert(text.includes('基準日当時に公表済みだったことの証明ではありません'),'Financial observation/publication distinction missing');
-      const disclosure=page.locator('details').filter({has:page.locator('summary',{hasText:'取得した財務履歴 — 年次EPS・四半期業績'})});await disclosure.locator('summary').click();
-      const current=model.currentFinancialHistory(merged.financial_history,item.symbol,TARGET,now,merged);
-      if(!current.valid){assert((await disclosure.innerText()).includes('取得から72時間を超えています'),'Unavailable history warning missing');assert.equal(await disclosure.locator('table').count(),0,'Unavailable history rendered as current');}
-      else {
-        const annual=disclosure.getByRole('table',{name:'年次の希薄化EPS',exact:true}),quarterly=disclosure.getByRole('table',{name:'四半期の報告業績',exact:true});
-        assert.equal(await annual.count(),current.annual.length?1:0,'Annual visibility differs from its independent current clock');assert.equal(await quarterly.count(),current.quarterly.length?1:0,'Quarterly visibility differs from its independent current clock');
-        if(current.annual.length){equal(await annual.locator('tbody tr').evaluateAll(rows=>rows.map(row=>[...row.cells].map(cell=>cell.textContent))),current.annual.map(({end,eps})=>[end,model.financialHistoryCell(eps)]),'Current annual EPS cells differ from source');assert((await annual.locator('thead').innerText()).includes(`EPS（${result.source.currency} / 提供元の株式単位）`),'Current annual native currency missing');}
-        if(current.quarterly.length)assert.equal(await quarterly.locator('tbody tr').count(),current.quarterly.length,'Current quarterly periods disappeared');
-      }
       result.detail=loaded.observation;
     }
-    result.csv=await actualCsv(page,model,item);
     result.typography=await captureFallbackTypography(page,session);
-    const screen=await page.screenshot({fullPage:false});assert(screen.length<=BROWSER_LIMITS.screenshotBytes,'Screenshot exceeds bound');writeFileSync(join(output,item.symbol+'.png'),screen,{flag:'wx'});result.screenshot={path:item.symbol+'.png',bytes:screen.length,sha256:sha(screen),scope:'one viewport; DOM and CSV assertions cover additional fields'};
+    const screen=await page.screenshot({fullPage:false});assert(screen.length<=BROWSER_LIMITS.screenshotBytes,'Screenshot exceeds bound');writeFileSync(join(output,item.symbol+'.png'),screen,{flag:'wx'});result.screenshot={path:item.symbol+'.png',bytes:screen.length,sha256:sha(screen),scope:'one viewport; DOM and served-chart assertions cover additional fields'};
     await context.close();closed=true;assert.equal(errors.length,0,'Browser runtime error: '+errors.join('; '));gate.assertClean();return result;
   }finally{if(!closed)await context.close();}
 }
@@ -327,11 +362,11 @@ export async function runBrowserProof(){
   const carryIdentity=requireCarryBinding(publication,state,bytes(state.carry.projectionPath,128*1024**2));
   const preparedRaw=bytes(join(proof.replayRoot,'prepared.json'));equal({bytes:preparedRaw.length,sha256:sha(preparedRaw)},request.repair.prepared,'Replay preparation changed');
   const output=join(scratch,'finite-source-browser');assert(!existsSync(output),'Browser report directory must be new');mkdirSync(output);let server,browser,assets,timer,removeInterrupts;
-  const report={schema_version:'retained-price-source-browser-v1',status:'running',scope:'finite actual composed data/DOM/CSV gate; not Design screenshot acceptance',publication_sha256:sha(publicationRaw),approved_ui:request.approved_ui,ui_digest:publication.ui_digest,source_artifact:state.source.artifact.id,financial_lineage:publication.financial_lineage_sha256,carry:carryIdentity,publisher_tooling:publication.publisher_tooling,started_at:new Date().toISOString(),clock:'actual browser and host time; no overrides',cases:[],network_denials:[],network_contract:BROWSER_NETWORK_CONTRACT,network_cases:[]};
+  const report={schema_version:'retained-price-source-browser-v1',status:'running',scope:'finite actual composed data/DOM gate on the approved daily brief stock screen; not Design screenshot acceptance',publication_sha256:sha(publicationRaw),approved_ui:request.approved_ui,ui_digest:publication.ui_digest,source_artifact:state.source.artifact.id,financial_lineage:publication.financial_lineage_sha256,carry:carryIdentity,publisher_tooling:publication.publisher_tooling,started_at:new Date().toISOString(),clock:'actual browser and host time; no overrides',cases:[],network_denials:[],network_contract:BROWSER_NETWORK_CONTRACT,network_cases:[]};
   const save=()=>{const raw=JSON.stringify(report,null,2)+'\n';assert(Buffer.byteLength(raw)<=BROWSER_LIMITS.reportBytes,'Browser report exceeds bound');writeFileSync(join(output,'report.json'),raw);};save();
   try{
     const run=async()=>{
-      const model=await loadApprovedFrontend(frontend,request.approved_ui);server=await startReleaseServer(dist);
+      const model=await loadApprovedFrontend(frontend,request.approved_ui,ui=>{report.ui=ui;save();});server=await startReleaseServer(dist);
       assets=await model.createDesignAssetObserver({baseURL:server.origin+BASE,fetchImpl:(url,options)=>{assert(localBrowserUrl(url,server.origin),'Observer attempted nonlocal network');return fetch(url,{...options,signal:AbortSignal.timeout(45000)});}});
       assert.equal(assets.manifest.markets?.US?.as_of_date,TARGET,'Composed manifest is not Oct6');assert.equal(assets.manifest.financial_generation,publication.financial_generation,'Browser manifest lost actual carry generation');assert(assets.packed,'Finite composed release must retain packed transport');
       assert.equal(sha(bytes(join(dist,'static-data/manifest.json'))),publication.data_manifest_sha256,'Composed manifest changed');

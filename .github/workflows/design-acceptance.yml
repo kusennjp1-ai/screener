@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       baseline_ref:
-        description: 'Reviewed full baseline commit SHA; both builds use exactly the same checked input bundle'
+        description: 'Reviewed full commit SHA checked out only as the carry adapter comparison checkout (no UI build)'
         default: '1e1943e1d5f78a738a05baa69eb9f2e8508e32ac'
         type: string
   push:
@@ -23,7 +23,7 @@ jobs:
   design-acceptance:
     name: Real-data design and performance budgets
     runs-on: ubuntu-latest
-    # Authentic carry preparation plus two independent replays precede browser gates.
+    # Authentic carry preparation and its replays precede the brief browser gates.
     # Keep a finite job cap; this changes runtime headroom, never acceptance budgets.
     timeout-minutes: 120
     env:
@@ -37,69 +37,47 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      # Read-only acceptance imports the existing React-backed observation contract.
-      # Install the locked dependencies before either lane, but not the browser.
       - run: npm ci --no-audit --no-fund
         working-directory: frontend
-      - name: Select explicit artifact-bound prior-capture review
-        id: prior
-        env:
-          BASELINE_REF: ${{ inputs.baseline_ref || '1e1943e1d5f78a738a05baa69eb9f2e8508e32ac' }}
-          DESIGN_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
-        run: node frontend/tools/design-capture-lifecycle.mjs select
-      - name: Verify exact historical capture and current committed review
-        if: steps.prior.outputs.reuse == 'true'
-        env:
-          GH_TOKEN: ${{ github.token }}
-          BASELINE_REF: ${{ inputs.baseline_ref || '1e1943e1d5f78a738a05baa69eb9f2e8508e32ac' }}
-          DESIGN_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
-        run: node frontend/tools/design-capture-lifecycle.mjs accept
-      - name: Preserve distinct reviewed-prior-capture result
-        if: always() && steps.prior.outputs.reuse == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: reviewed-prior-capture-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/reviewed-prior-capture-result.json
-          retention-days: 90
-          if-no-files-found: warn
       - run: npx playwright install --with-deps chromium
-        if: steps.prior.outputs.reuse != 'true'
         working-directory: frontend
       - uses: actions/setup-python@v5
-        if: steps.prior.outputs.reuse != 'true'
         with:
           python-version: '3.11'
       - name: Install isolated offline exchange calendar runtime
-        if: steps.prior.outputs.reuse != 'true'
         run: |
           python -m venv "$RUNNER_TEMP/session-calendar-runtime"
           "$RUNNER_TEMP/session-calendar-runtime/bin/python" -m pip install -r .github/scripts/session-calendar-requirements.txt
           echo "SESSION_CALENDAR_PYTHON=$RUNNER_TEMP/session-calendar-runtime/bin/python" >> "$GITHUB_ENV"
       - name: Install certified offline projection dependencies
-        if: (hashFiles('.github/financial-release-request.json') != '') && steps.prior.outputs.reuse != 'true'
+        if: (hashFiles('.github/financial-release-request.json') != '')
         run: |
           python -m venv "$RUNNER_TEMP/financial-replay-runtime"
           "$RUNNER_TEMP/financial-replay-runtime/bin/python" -m pip install -r .github/scripts/financial-release-projection-requirements.txt
           echo "$RUNNER_TEMP/financial-replay-runtime/bin" >> "$GITHUB_PATH"
           echo "FINANCIAL_REPLAY_PYTHON=$RUNNER_TEMP/financial-replay-runtime/bin/python" >> "$GITHUB_ENV"
       - name: Verify isolated offline native projection runtime
-        if: (hashFiles('.github/financial-release-request.json') != '') && steps.prior.outputs.reuse != 'true'
+        if: (hashFiles('.github/financial-release-request.json') != '')
         env:
           PYTHONPATH: backend
           LITELLM_LOCAL_MODEL_COST_MAP: 'true'
         run: python -m unittest tests.unit.test_native_annual_projection.TestNativeAnnualProjection.test_new_policy_binds_source_without_changing_originals_or_quarterly_scalars
       - name: Prepare the certified financial candidate
-        if: steps.prior.outputs.reuse != 'true'
         id: financial
         env:
           GH_TOKEN: ${{ github.token }}
           VITE_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
         run: node .github/scripts/financial-release-activation.mjs design-prepare
-      # Transport-capable candidates are already packed and verified by
-      # design-prepare. The browser, diagnostic archive and seal all use that
-      # same corrected directory. The old baseline remains its raw format.
-      - name: Restore checked input and record the comparison basis
-        if: steps.prior.outputs.reuse != 'true'
+      # The brief has no verified financial-display contract yet. A prepared
+      # correction candidate therefore fails closed here; its bytes are kept
+      # for review by the UNAPPROVED diagnostic steps below and never sealed.
+      - name: Refuse a financial candidate without a brief financial-display contract
+        if: steps.financial.outputs.candidate == 'true'
+        shell: bash
+        run: |
+          echo "::error title=No brief financial-display contract::A financial correction candidate was prepared, but the brief Design harness cannot verify its financial display. Design fails closed; the candidate is retained only as an UNAPPROVED diagnostic."
+          exit 1
+      - name: Restore checked input and prepare the carry comparison data
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -108,21 +86,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # Normal runs share checked input. A financial correction preserves
-          # every price byte while explicitly changing financial evidence.
-          if [ -n "${FINANCIAL_CANDIDATE_DIR:-}" ]; then
-            # The comparison baseline uses the verified predecessor evidence.
-            # Current dist is the corrected candidate; its financial difference
-            # is explicit in the sealed preview receipt and semantic proofs.
-            cp "$FINANCIAL_CANDIDATE_DIR/preview-receipt.json" "$RUNNER_TEMP/design-input-provenance.json"
-            echo "DESIGN_INPUT_BASIS=same_prices_repaired_financials" >> "$GITHUB_ENV"
-          else
-            node .github/scripts/select-release-source.mjs design
-            cp "$RUNNER_TEMP/verified-publication/state.json" "$RUNNER_TEMP/design-input-provenance.json"
-            echo "DESIGN_INPUT_BASIS=same_verified_input" >> "$GITHUB_ENV"
-          fi
-          # Explicitly reviewed receipt-linked UI; cd3a6a2 predates research-table-v2.
-          # No historical performance exception is reused for this comparison.
+          node .github/scripts/select-release-source.mjs design
+          cp "$RUNNER_TEMP/verified-publication/state.json" "$RUNNER_TEMP/design-input-provenance.json"
+          echo "DESIGN_INPUT_BASIS=same_verified_input" >> "$GITHUB_ENV"
+          # The carry adapter binds an exact reviewed comparison checkout. No UI
+          # is built from it; it only anchors the carry replay's code identity.
           # Synthetic PR-merge commits may be absent from the branch checkout.
           if [[ ! "$BASELINE_REF" =~ ^[0-9a-f]{40}$ ]]; then
             echo "Design baseline requires a reviewed full commit SHA" >&2
@@ -133,36 +101,29 @@ jobs:
           git clone --shared "$GITHUB_WORKSPACE" "$RUNNER_TEMP/design-baseline"
           git -C "$RUNNER_TEMP/design-baseline" checkout --detach "$BASELINE_REF"
           test "$(git -C "$RUNNER_TEMP/design-baseline" rev-parse HEAD)" = "$BASELINE_REF"
-          if [ -n "${FINANCIAL_CANDIDATE_DIR:-}" ]; then
-            mv "$FINANCIAL_CANDIDATE_DIR/predecessor/static-data" "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
-          else
-            # Prepare one logical dataset before either UI build. The preview
-            # adapter retains the original source/audit/history and never seals
-            # or admits a financial source. No later exporter may rewrite it.
-            echo "Design stage: $(date -u +%FT%TZ) carry-prepare start"
-            node --max-old-space-size=4096 .github/scripts/design-financial-carry.mjs prepare "$RUNNER_TEMP/design-input-provenance.json" "$RUNNER_TEMP/design-baseline" 2>&1 | tee "$RUNNER_TEMP/design-carry-prepare.log"
-            echo "Design stage: $(date -u +%FT%TZ) carry-prepare complete"
-            if ! node --input-type=module -e 'import fs from "node:fs"; process.exit(JSON.parse(fs.readFileSync(process.argv[1])).schema === "design-financial-carry-preview-v1" ? 0 : 1)' "$RUNNER_TEMP/design-input-provenance.json"; then
-              # Derive sessions only on the candidate copy, never in the retained archive.
-              # Both comparison UIs receive these same dated calendar bytes below.
-              (cd frontend && env -u GH_TOKEN -u GITHUB_TOKEN "$SESSION_CALENDAR_PYTHON" -I tools/export-book-benchmark.py --calendar-only --root public/static-data --evaluated-at "$(date -u +%FT%TZ)" && node tools/export-research.mjs && node tools/record-candidate-history.mjs && node tools/check-data-quality.mjs)
-            fi
-            node .github/scripts/select-release-source.mjs check-design-data
-            rm -rf "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
-            cp -a frontend/public/static-data "$RUNNER_TEMP/design-baseline/frontend/public/static-data"
-            for file in research-daily.json portfolio-model.json qualification-audit.json ibd-reference.json; do
-              cp "frontend/public/$file" "$RUNNER_TEMP/design-baseline/frontend/public/$file"
-            done
-            # Includes top-level logical JSON, not merely static-data/.
-            node --input-type=module -e 'import {dataInventoryDigest} from "./.github/scripts/publication-state.mjs"; if (dataInventoryDigest(process.argv[1]) !== dataInventoryDigest(process.argv[2])) throw Error("Design comparison data differs before build")' frontend/public "$RUNNER_TEMP/design-baseline/frontend/public"
+          # Prepare one logical dataset before the build. The preview adapter
+          # retains the original source/audit/history and never seals or admits
+          # a financial source. No later exporter may rewrite it.
+          echo "Design stage: $(date -u +%FT%TZ) carry-prepare start"
+          node --max-old-space-size=4096 .github/scripts/design-financial-carry.mjs prepare "$RUNNER_TEMP/design-input-provenance.json" "$RUNNER_TEMP/design-baseline" 2>&1 | tee "$RUNNER_TEMP/design-carry-prepare.log"
+          echo "Design stage: $(date -u +%FT%TZ) carry-prepare complete"
+          if ! node --input-type=module -e 'import fs from "node:fs"; process.exit(JSON.parse(fs.readFileSync(process.argv[1])).schema === "design-financial-carry-preview-v1" ? 0 : 1)' "$RUNNER_TEMP/design-input-provenance.json"; then
+            # Derive sessions only on the candidate copy, never in the retained archive.
+            (cd frontend && env -u GH_TOKEN -u GITHUB_TOKEN "$SESSION_CALENDAR_PYTHON" -I tools/export-book-benchmark.py --calendar-only --root public/static-data --evaluated-at "$(date -u +%FT%TZ)" && node tools/export-research.mjs && node tools/record-candidate-history.mjs && node tools/check-data-quality.mjs)
           fi
-          if cmp -s frontend/package-lock.json "$RUNNER_TEMP/design-baseline/frontend/package-lock.json"; then
-            ln -s "$GITHUB_WORKSPACE/frontend/node_modules" "$RUNNER_TEMP/design-baseline/frontend/node_modules"
-          else
-            (cd "$RUNNER_TEMP/design-baseline/frontend" && npm ci --no-audit --no-fund)
-          fi
-      - name: Build both production versions without duplicating the large data tree
-        if: steps.prior.outputs.reuse != 'true'
+          node .github/scripts/select-release-source.mjs check-design-data
+          # A carry's transport verification replays against this separate raw
+          # copy of the identical logical data (DESIGN_COMPARISON_BASELINE).
+          comparison="$RUNNER_TEMP/design-baseline/frontend/dist"
+          rm -rf "$comparison"
+          mkdir -p "$comparison"
+          cp -a frontend/public/static-data "$comparison/static-data"
+          for file in research-daily.json portfolio-model.json qualification-audit.json ibd-reference.json; do
+            cp "frontend/public/$file" "$comparison/$file"
+          done
+          # Includes top-level logical JSON, not merely static-data/.
+          node --input-type=module -e 'import {dataInventoryDigest} from "./.github/scripts/publication-state.mjs"; if (dataInventoryDigest(process.argv[1]) !== dataInventoryDigest(process.argv[2])) throw Error("Design comparison data differs before build")' frontend/public "$comparison"
+      - name: Build the current UI and verify its packed transport
         env:
           GH_TOKEN: ${{ github.token }}
           VITE_STATIC_SITE: 'true'
@@ -170,87 +131,46 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for target in baseline current; do
-            if [ "$target" = baseline ]; then
-              source="$RUNNER_TEMP/design-baseline/frontend"
-            else
-              source="$GITHUB_WORKSPACE/frontend"
-            fi
-            if [ "$target" = current ] && [ -n "${FINANCIAL_CANDIDATE_DIR:-}" ]; then
-              # Measure and seal these exact UI/payload bytes. Publication may
-              # add only separately verified financial release metadata.
-              # There is no post-test UI build or source-data regeneration.
-              ln -s "$FINANCIAL_CANDIDATE_DIR/corrected" "$source/dist"
-              continue
-            fi
-            if [ -n "${FINANCIAL_CANDIDATE_DIR:-}" ]; then
-              # Existing correction comparisons retain their separate baseline.
-              (cd "$source" && node tools/export-research.mjs && node tools/record-candidate-history.mjs)
-            fi
-            # Ordinary/carry comparisons are Vite-only after the identical copy.
-            mv "$source/public/static-data" "$RUNNER_TEMP/design-$target-data"
-            echo "Design stage: $(date -u +%FT%TZ) vite-$target start"
-            (cd "$source" && npx vite build)
-            echo "Design stage: $(date -u +%FT%TZ) vite-$target complete"
-            if [ "$target" = current ] && [ -f "$source/dist/static-transport-capability.json" ]; then
-              # The new decoder must be measured with its actual physical
-              # representation. The old comparison UI remains raw.
-              mv "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
-              echo "Design stage: $(date -u +%FT%TZ) transport-verify-pack-roundtrip start"
-              node --max-old-space-size=4096 .github/scripts/design-transport.mjs "$source/dist" "$RUNNER_TEMP/design-input-provenance.json" 2>&1 | tee "$RUNNER_TEMP/design-transport.log"
-              echo "Design stage: $(date -u +%FT%TZ) transport-verify-pack-roundtrip complete"
-            else
-              mv "$RUNNER_TEMP/design-$target-data" "$source/dist/static-data"
-            fi
-          done
-          echo "Design stage: $(date -u +%FT%TZ) radar-build start"
-          (cd frontend && node tools/build-radar-benchmark.mjs)
-          echo "Design stage: $(date -u +%FT%TZ) radar-build complete"
-      - name: Measure all routes, screenshots, accessibility and CPU 4x
-        if: steps.prior.outputs.reuse != 'true'
+          source="$GITHUB_WORKSPACE/frontend"
+          # Vite-only after the checked input: the data tree is moved aside, never copied.
+          mv "$source/public/static-data" "$RUNNER_TEMP/design-current-data"
+          echo "Design stage: $(date -u +%FT%TZ) vite-current start"
+          (cd "$source" && npx vite build)
+          echo "Design stage: $(date -u +%FT%TZ) vite-current complete"
+          mv "$RUNNER_TEMP/design-current-data" "$source/dist/static-data"
+          if [ -f "$source/dist/static-transport-capability.json" ]; then
+            # Measure the decoder with its actual physical representation.
+            echo "Design stage: $(date -u +%FT%TZ) transport-verify-pack-roundtrip start"
+            node --max-old-space-size=4096 .github/scripts/design-transport.mjs "$source/dist" "$RUNNER_TEMP/design-input-provenance.json" 2>&1 | tee "$RUNNER_TEMP/design-transport.log"
+            echo "Design stage: $(date -u +%FT%TZ) transport-verify-pack-roundtrip complete"
+          fi
+      - name: Measure the brief screens, accessibility and CPU 4x
         id: measure
         working-directory: frontend
         env:
           CURRENT_BUILD: dist
-          BASELINE_BUILD: ${{ runner.temp }}/design-baseline/frontend/dist
-          RADAR_BUILD: test-results/radar-build
           DESIGN_REVIEW_OUTPUT: test-results/design-review
-          DESIGN_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
+          DESIGN_INPUT_PROVENANCE: ${{ runner.temp }}/design-input-provenance.json
         shell: bash
         run: |
           set -euo pipefail
           echo "Design stage: $(date -u +%FT%TZ) browser-measurements start"
           node tools/design-review.mjs
           echo "Design stage: $(date -u +%FT%TZ) browser-measurements complete"
-      - name: Require reviewed screenshots and four design scores of at least 8.0
-        if: (always()) && steps.prior.outputs.reuse != 'true'
+      - name: Require every capture, no objective failure, and reviewed scores or the owner waiver
+        if: (always())
         working-directory: frontend
         run: node tools/check-design-review.mjs
-      - name: Stage immutable reviewable Design capture
-        id: capture_package
-        if: always() && steps.prior.outputs.reuse != 'true' && steps.measure.outcome == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
-        working-directory: frontend
-        env:
-          DESIGN_RESEARCH_QUOTE_URL: ${{ vars.RESEARCH_QUOTE_URL }}
-        run: node tools/design-capture-lifecycle.mjs package
-      - name: Preserve immutable reviewable Design capture
-        if: always() && steps.capture_package.outcome == 'success' && steps.capture_package.outputs.staged == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: reviewable-design-capture-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/reviewable-design-capture/
-          retention-days: 14
-          if-no-files-found: error
       - name: Package UNAPPROVED financial diagnostics after unsuccessful Design
         id: financial_diagnostic
-        if: ((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true') && steps.prior.outputs.reuse != 'true'
+        if: ((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true')
         env:
           FINANCIAL_PREPARATION_OUTCOME: ${{ steps.financial.outcome }}
           FINANCIAL_CANDIDATE: ${{ steps.financial.outputs.candidate }}
           DESIGN_JOB_STATUS: ${{ job.status }}
         run: python3 .github/scripts/retain-financial-diagnostic.py
       - name: Retain UNAPPROVED financial diagnostics for review only
-        if: ((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true' && steps.financial_diagnostic.outcome == 'success') && steps.prior.outputs.reuse != 'true'
+        if: ((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true' && steps.financial_diagnostic.outcome == 'success')
         uses: actions/upload-artifact@v4
         with:
           name: unapproved-financial-diagnostic-${{ github.run_id }}-${{ github.run_attempt }}
@@ -260,11 +180,13 @@ jobs:
           compression-level: 0
           retention-days: 14
           if-no-files-found: error
+      # Unreachable while the refusal above stands: sealing requires a passing
+      # Design of the exact candidate bytes, which the brief cannot yet verify.
       - name: Seal the exact tested financial candidate
-        if: (success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '') && steps.prior.outputs.reuse != 'true'
+        if: (success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')
         run: node .github/scripts/financial-release-activation.mjs design-seal
       - name: Retain the exact tested financial candidate
-        if: (success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '') && steps.prior.outputs.reuse != 'true'
+        if: (success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')
         uses: actions/upload-artifact@v4
         with:
           name: financial-release-candidate-${{ github.run_id }}-${{ github.run_attempt }}
@@ -272,7 +194,7 @@ jobs:
           retention-days: 90
           if-no-files-found: error
       - name: Preserve all results even when a budget fails
-        if: (always()) && steps.prior.outputs.reuse != 'true'
+        if: (always())
         uses: actions/upload-artifact@v4
         with:
           name: design-acceptance-${{ github.sha }}
@@ -285,17 +207,3 @@ jobs:
             ${{ runner.temp }}/design-carry-prepare.log
             ${{ runner.temp }}/design-transport.log
           retention-days: 14
-      # Keep the normal review download separate from large profiling/source evidence.
-      # Stage all reports/screenshots and only explicitly named, size-bounded diagnostics.
-      - name: Stage bounded compact Design evidence
-        id: compact
-        if: (always()) && steps.prior.outputs.reuse != 'true'
-        run: node frontend/tools/prepare-compact-design.mjs frontend/test-results/design-review "${{ runner.temp }}/design-review-compact"
-      - name: Preserve compact Design review screenshots and report
-        if: (always() && steps.compact.outcome == 'success') && steps.prior.outputs.reuse != 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: design-review-compact-${{ github.sha }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/design-review-compact/
-          retention-days: 7
-          if-no-files-found: warn

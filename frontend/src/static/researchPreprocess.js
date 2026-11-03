@@ -8,15 +8,17 @@ import { validClock, validEvidenceDay } from './evidenceTime.js';
 import { prepareSessionIntervals } from './researchPresentation.js';
 import { prepareReadinessBoundaries } from './entryReadiness.js';
 
-export function prepareResearchBundle(payloads, expectedDate, { now = Date.now(), generation = null, evaluationEpoch = 0 } = {}) {
+export function prepareResearchBundle(payloads, expectedDate, { now = Date.now(), generation = null, evaluationEpoch = 0, methods = RESEARCH_METHODS } = {}) {
   if (!validClock(now) || !Number.isSafeInteger(evaluationEpoch) || evaluationEpoch < 0) throw Error('Invalid research evaluation');
+  // A screen may ask for only the rankings it shows (the brief: the trend template).
+  if (!Array.isArray(methods) || !methods.length || methods.some(method => !RESEARCH_METHODS.includes(method))) throw Error('Invalid research methods');
   const decoded = payloads.map(decodeResearchIndex);
   const date = decoded[0]?.as_of_date;
   if (!validEvidenceDay(date) || (expectedDate != null && date !== expectedDate)) throw Error('Snapshot date mismatch');
   const rows = mergeScanRows(decoded, date).map(row => projectFinancialRow(row, { now, asOfDate: date }));
   // Never accept a cached assessment/order independently of its current inputs.
   // This work runs once per publication or evidence expiry in the data worker.
-  const rankings = Object.fromEntries(RESEARCH_METHODS.map(method => [method, rankCandidates(rows, method, { now })]));
+  const rankings = Object.fromEntries(methods.map(method => [method, rankCandidates(rows, method, { now })]));
   // rankCandidates projects defensively; share the same final row objects in
   // packets and portfolio preparation to preserve references across delivery.
   const bySymbol = new Map(rows.map(row => [row.symbol, row]));

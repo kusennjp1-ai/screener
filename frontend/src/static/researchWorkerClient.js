@@ -37,20 +37,21 @@ export function runDataWorker(request, signal) {
   });
 }
 
-export async function loadResearchBundle(path, date, fetchJson, signal, { now = Date.now(), generation = null, evaluationEpoch = 0, publication, sha256 } = {}) {
+export async function loadResearchBundle(path, date, fetchJson, signal, { now = Date.now(), generation = null, evaluationEpoch = 0, publication, sha256, methods } = {}) {
   const pinned = await resolveStaticPublication({ publication, generation });
   const indexSha256 = sha256 || (/^research-index-[a-f0-9]{16}\.json$/.test(path) && /^[a-f0-9]{64}$/.test(generation || '') ? generation : undefined);
   if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
   if (typeof Worker !== 'undefined') return runDataWorker({
-    operation: 'research', path, publication: pinned, sha256: indexSha256, date, evaluation:{now,generation,evaluationEpoch},
+    operation: 'research', path, publication: pinned, sha256: indexSha256, date, evaluation:{now,generation,evaluationEpoch,...(methods ? {methods} : {})},
   }, signal);
   // Compatibility fallback for environments without Worker (including jsdom).
   const index = await fetchJson(path, { publication: pinned, sha256: indexSha256, signal, now, asOfDate: date });
   const chunks = await Promise.all((index.chunks || []).map(chunk => fetchJson(chunk.path, { publication: pinned, sha256: chunk.sha256, signal, now, asOfDate: date })));
-  return prepareResearchBundle([index, ...chunks], date, {now,generation,evaluationEpoch});
+  return prepareResearchBundle([index, ...chunks], date, {now,generation,evaluationEpoch,...(methods ? {methods} : {})});
 }
 
-export async function refreshResearchBundle(rows, date, { now = Date.now(), generation = null, evaluationEpoch = 0, signal } = {}) {
+export async function refreshResearchBundle(rows, date, { now = Date.now(), generation = null, evaluationEpoch = 0, signal, methods } = {}) {
   const payloads = [{ rows, as_of_date: date }];
-  return typeof Worker !== 'undefined' ? runDataWorker({ operation: 'prepare', payloads, date, evaluation:{now,generation,evaluationEpoch} },signal) : prepareResearchBundle(payloads, date,{now,generation,evaluationEpoch});
+  const evaluation = {now,generation,evaluationEpoch,...(methods ? {methods} : {})};
+  return typeof Worker !== 'undefined' ? runDataWorker({ operation: 'prepare', payloads, date, evaluation },signal) : prepareResearchBundle(payloads, date, evaluation);
 }

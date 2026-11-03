@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {gzipSync} from 'node:zlib';
 import {createPublisherBrowserProofHandoff,consumePublisherToolingBrowserProof} from './retained-price-publisher-tooling.mjs';
-import {localBrowserUrl,requireActualClock,selectBrowserCases,requireFinancialCategory,inspectHistoryExpiry,interruptRejection,requireUnknownPrice,compareDownloadedCsv,requireCarryBinding,BROWSER_LIMITS,startReleaseServer} from './retained-price-source-browser.mjs';
+import {localBrowserUrl,requireActualClock,selectBrowserCases,requireFinancialCategory,inspectHistoryExpiry,interruptRejection,requireUnknownPrice,requireCarryBinding,BROWSER_LIMITS,startReleaseServer} from './retained-price-source-browser.mjs';
 const day='2026-10-06';
 const rows=()=>Array.from({length:5901},(_,index)=>({symbol:['NVDA','FUTU','ALH','LPSN','UNDATED'][index]||`ROW${index}`,as_of_date:day,research_detail_path:`details/${index}.json`}));
 const prepared=()=>({target_as_of_date:day,patches:[{symbol:'LPSN',row:{}}],row_quarantines:[{symbol:'UNDATED'}]});
@@ -53,11 +53,60 @@ test('quarantined prices cannot regain measured values or verified status',()=>{
  const row={symbol:'X',as_of_date:day,current_price:null,price_change_1d:null,adv_usd:null,rs_rating:null,se_pivot_price:null,vcp_pivot:null,technical_audit:{valid:false}};requireUnknownPrice(row);
  for(const key of ['current_price','rs_rating','se_pivot_price'])assert.throws(()=>requireUnknownPrice({...row,[key]:1}));assert.throws(()=>requireUnknownPrice({...row,technical_audit:{valid:true}}));
 });
-test('actual CSV requires exact values, one selected symbol and no revived unknown price',()=>{
- const canonical={headers:['symbol','daily_price','pivot','qualified'],rows:[{symbol:'X',daily_price:'',pivot:'',qualified:'false'}]};assert.deepEqual(compareDownloadedCsv(structuredClone(canonical),canonical,'X',{unknownPrice:true}),canonical.rows[0]);
- for(const data of [{...canonical,headers:[...canonical.headers].reverse()},{...canonical,rows:[canonical.rows[0],canonical.rows[0]]},{...canonical,rows:[{...canonical.rows[0],daily_price:'42'}]}])assert.throws(()=>compareDownloadedCsv(data,canonical,'X',{unknownPrice:true}));
- const wrong={...canonical,rows:[{...canonical.rows[0],qualified:'true'}]};assert.throws(()=>compareDownloadedCsv(wrong,wrong,'X',{unknownPrice:true}));
+import {BRIEF_UI_MARKERS,BRIEF_CHART_SESSIONS,FALLBACK_FONT_SELECTORS,detectApprovedUi,requireBriefUi,parseBriefChartLabel,requireBriefChart,briefStockUrl,retainedHistoryNote} from './retained-price-source-browser.mjs';
+const briefSources=()=>{const files={};for(const [path,marker]of BRIEF_UI_MARKERS)files[path]=(files[path]||'')+'\n'+marker;return files;};
+const reader=files=>path=>Object.hasOwn(files,path)?files[path]:null;
+test('approved UI detection accepts only a checkout that carries the brief stock screen',()=>{
+ const brief=detectApprovedUi(reader(briefSources()));assert.deepEqual(brief,{kind:'brief',retired_workspace_present:false,missing:[]});assert.equal(requireBriefUi(brief,'a'.repeat(40)),brief);
+ // The previous approved UI carried both the research workspace and the brief: the brief is what is driven.
+ const both=detectApprovedUi(reader({...briefSources(),'src/static/pages/ResearchPage.jsx':'export default function ResearchPage(){}'}));assert.equal(both.kind,'brief');assert.equal(both.retired_workspace_present,true);requireBriefUi(both,'b'.repeat(40));
  assert(BROWSER_LIMITS.milliseconds<=360000&&BROWSER_LIMITS.requests<=4000);
+});
+test('the retired research workspace or an unknown UI fails closed with a clear reason',()=>{
+ const workspace=detectApprovedUi(reader({'src/static/pages/ResearchPage.jsx':'x','src/static/StaticAppShell.jsx':'<Route path="/" element={<ResearchPage />} />','tools/design-static-assets.mjs':'export async function createDesignAssetObserver(){}'}));
+ assert.equal(workspace.kind,'research-workspace');assert(workspace.missing.some(item=>item.startsWith('src/static/StaticAppShell.jsx: path="/brief/*"')));
+ assert.throws(()=>requireBriefUi(workspace,'1e1943e1d5f78a738a05baa69eb9f2e8508e32ac'),/Approved UI 1e1943e1d5f78a738a05baa69eb9f2e8508e32ac is the retired research workspace .*#\/brief\/stock\/SYMBOL/);
+ for(const [path,marker]of BRIEF_UI_MARKERS){
+  const files=briefSources();files[path]=files[path].replace(marker,'');const detection=detectApprovedUi(reader(files));
+  assert.equal(detection.kind,'unknown',path+' '+marker);assert.throws(()=>requireBriefUi(detection,'c'.repeat(40)),/not a recognised daily brief/);
+ }
+ for(const value of [null,{},{kind:'brief'},{kind:'brief',missing:['x']}])assert.throws(()=>requireBriefUi(value,'d'.repeat(40)),/Approved UI/);
+});
+test('brief markers match this checkout\'s own brief sources',()=>{
+ const frontend=new URL('../../frontend/',import.meta.url),read=path=>{try{return readFileSync(new URL(path,frontend),'utf8');}catch{return null;}};
+ assert.deepEqual(detectApprovedUi(read),{kind:'brief',retired_workspace_present:false,missing:[]});
+});
+const servedBars=(last,count=200)=>Array.from({length:count},(_,i)=>({date:new Date(Date.parse(last+'T00:00:00Z')-(count-1-i)*864e5).toISOString().slice(0,10)}));
+const label=(symbol,first,last,unit='日')=>`${symbol} の${unit}足チャート（${first}〜${last}）。終値 123.45、ピボット 120.00。`;
+test('a repaired symbol\'s brief chart must end on the repaired session and match the served bars',()=>{
+ const bars=servedBars(day),first=bars.at(-BRIEF_CHART_SESSIONS).date;
+ assert.deepEqual(parseBriefChartLabel(label('NVDA',first,day)),{symbol:'NVDA',interval:'day',first,last:day});
+ assert.equal(parseBriefChartLabel('NVDA chart'),null);assert.equal(parseBriefChartLabel(null),null);
+ assert.deepEqual(requireBriefChart({label:label('NVDA',first,day),candles:130},{symbol:'NVDA',bars,target:day}),{symbol:'NVDA',interval:'day',first,last:day,candles:130});
+ const short=servedBars(day,40);requireBriefChart({label:label('ALH',short[0].date,day),candles:40},{symbol:'ALH',bars:short,target:day});
+ for(const [observed,why]of [
+  [{label:label('FUTU',first,day),candles:130},/another symbol/],[{label:label('NVDA',first,day,'週'),candles:130},/daily/],
+  [{label:label('NVDA',first,'2026-10-05'),candles:130},/last candle/],[{label:label('NVDA',bars.at(-129).date,day),candles:130},/range/],
+  [{label:label('NVDA',first,day),candles:129},/candles/],[{label:'',candles:130},/readable label/],
+ ])assert.throws(()=>requireBriefChart(observed,{symbol:'NVDA',bars,target:day}),why);
+ // Served bars that stop early cannot pass as the repaired session, however they are labelled.
+ const early=servedBars('2026-10-02');assert.throws(()=>requireBriefChart({label:label('NVDA',early.at(-130).date,'2026-10-02'),candles:130},{symbol:'NVDA',bars:early,target:day}),/not the repaired session/);
+});
+test('retained older history may be drawn only with its own older last session',()=>{
+ const bars=servedBars('2026-10-01'),observed={label:label('LPSN',bars.at(-130).date,'2026-10-01'),candles:130};
+ assert.equal(requireBriefChart(observed,{symbol:'LPSN',bars,target:day,retained:true}).last,'2026-10-01');
+ assert.throws(()=>requireBriefChart(observed,{symbol:'LPSN',bars,target:day}),/not the repaired session/);
+ const current=servedBars(day);assert.throws(()=>requireBriefChart({label:label('LPSN',current.at(-130).date,day),candles:130},{symbol:'LPSN',bars:current,target:day,retained:true}),/presented as the repaired session/);
+ assert.equal(retainedHistoryNote('2026-10-01',day),'日足は 2026-10-01 までです（分析基準日 2026-10-06 の日足は未取得）');
+});
+test('the proof drives the brief stock screen and no retired research surface',()=>{
+ assert.equal(briefStockUrl('http://127.0.0.1:3210/screener/','BRK.B'),'http://127.0.0.1:3210/screener/#/brief/stock/BRK.B');
+ assert(FALLBACK_FONT_SELECTORS.every(selector=>selector.startsWith('.brief-')));
+ const source=readFileSync(new URL('./retained-price-source-browser.mjs',import.meta.url),'utf8');
+ assert.doesNotMatch(source,/financial-design-cases|#\/\?method=|財務・機関|CSV保存|research-detail-tabs/);
+ assert.match(source,/const ui=requireBriefUi\(detection,expected\.sha\)/);
+ const identified=source.indexOf('const ui=requireBriefUi(detection,expected.sha)'),loaded=source.indexOf('const load=path=>import(pathToFileURL(join(frontend,path)).href)');
+ assert(identified>0&&loaded>identified,'UI must be identified before approved modules load');
 });
 
 test('new carry generation is bound independently from original source and previous carry generations',()=>{
@@ -244,7 +293,7 @@ test('network report exhaustion and oversized metadata stay bounded, retain fail
   const huge=fontGateFixture();huge.request.url=()=>fontUrl+'x'.repeat(BROWSER_NETWORK_LIMITS.fieldChars);await huge.gate.route({request:()=>huge.request,abort:async()=>{}});
   assert.equal(huge.gate.evidence.retention_failed,true);assert.equal(huge.denials[0].length,BROWSER_NETWORK_LIMITS.fieldChars);assert.equal(huge.gate.evidence.unexpected_attempts[0].url_truncated,true);assert.throws(()=>huge.gate.assertClean(),/bounded retention/);
 });
-const fallbackSample=()=>({selector:'.symbol-title h2',computed_font_family:'"Geist Mono", monospace',visible_in_viewport:true,geometry:{x:10,y:10,width:80,height:24,viewport_width:1440,client_width:80,scroll_width:80},platform_fonts:[{familyName:'DejaVu Sans Mono',isCustomFont:false,glyphCount:4}]});
+const fallbackSample=()=>({selector:'.brief-stockhead h2 > span:first-child',computed_font_family:'"Geist Mono", monospace',visible_in_viewport:true,geometry:{x:10,y:10,width:80,height:24,viewport_width:1440,client_width:80,scroll_width:80},platform_fonts:[{familyName:'DejaVu Sans Mono',isCustomFont:false,glyphCount:4}]});
 test('selected fallback proof needs real platform font evidence and scoped visible text fit, with ordinary scrolling preserved',()=>{
   requireFallbackFontSample(fallbackSample());
   const offscreen=fallbackSample();offscreen.visible_in_viewport=false;offscreen.geometry.y=-200;requireFallbackFontSample(offscreen);

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useMediaQuery } from '@mui/material';
+import useMediaQuery from '../useMediaQuery';
 import { bifurcation, environmentPoint, historyWindow, BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT } from '../marketLongHistory';
 import { SECTORS } from '../sectorDefinitions';
 import { TrendChart } from './MarketTrendDashboard';
