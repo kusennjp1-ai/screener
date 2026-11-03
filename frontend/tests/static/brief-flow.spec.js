@@ -55,10 +55,14 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(page).toHaveURL(/#\/brief$/);
     await expect(page.getByRole('heading', { level: 1, name: '10月2日（金）の判断' })).toBeVisible();
     if (!phone) {
-      // With nothing chosen, the wide screen shows the first focus candidate.
-      await expect(page.locator('.brief-stockhead h2')).toContainText('ZZNV');
+      // Back on Today, the wide screen keeps the stock just viewed (it is a focus candidate),
+      // and 次の候補 moves to the focus candidate after it.
+      await expect(page.locator('.brief-stockhead h2')).toContainText(target);
+      const order = await focus.getByTestId('brief-candidate').evaluateAll(rows => rows.map(row => row.dataset.symbol));
+      const next = order[(order.indexOf(target) + 1) % order.length];
       await page.getByRole('button', { name: '次の候補' }).click();
-      await expect(page).toHaveURL(/#\/brief\/stock\/ZZKS$/);
+      await expect(page).toHaveURL(new RegExp(`#/brief/stock/${next}$`));
+      await expect(page.locator('.brief-stockhead h2')).toContainText(next);
     }
     expect(errors).toEqual([]);
     expect(external).toEqual([]);
