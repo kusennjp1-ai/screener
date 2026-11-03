@@ -104,7 +104,7 @@ export function marketTrends({ historyEnd = date } = {}) {
   const FTD_METHOD = 'rally-attempt-gain1.2-day4-15-decline6-v1';
   const follow = {
     '^GSPC': { available: true, method: FTD_METHOD, asOf: historyEnd, state: 'confirmed', peak: { date: ago(60), close: 5400 }, low: { date: ago(40), low: 4980 }, declinePct: 7.6,
-      attempt: { startDate: ago(39), day: 5 }, ftd: { date: ago(35), attemptDay: 5, gainPct: 1.62, volumeRatio: 1.18, sessionsSince: 35, distributionSince: 3 }, failedDate: null, events: [] },
+      attempt: null, ftd: { date: ago(35), attemptDay: 5, gainPct: 1.62, volumeRatio: 1.18, sessionsSince: 35, distributionSince: 3 }, failedDate: null, events: [] },
     '^IXIC': { available: true, method: FTD_METHOD, asOf: historyEnd, state: 'rally_attempt', peak: { date: ago(30), close: 17800 }, low: { date: ago(3), low: 16420 }, declinePct: 7.4,
       attempt: { startDate: ago(2), day: 3 }, ftd: null, failedDate: null, events: [] },
   };
