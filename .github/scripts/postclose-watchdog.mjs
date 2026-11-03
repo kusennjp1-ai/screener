@@ -23,6 +23,12 @@ const count = value => Number.isFinite(value) && value >= 0;
 const latest = points => Array.isArray(points) ? points.at(-1) : null;
 const stamp = value => typeof value === 'string' && Number.isFinite(Date.parse(value));
 const safePath = value => typeof value === 'string' && value.length < 256 && !value.startsWith('/') && !value.includes('..') && /^[A-Za-z0-9_./-]+$/.test(value);
+// Market-environment keys every current collector writes on each long-history
+// row (null on an under-covered session). A final row without one of them is an
+// older-schema capture: it is not current even at the target date, so the
+// ordinary full acquisition rebuilds it. Mirrors LONG_HISTORY_ENVIRONMENT_KEYS
+// in frontend/src/static/marketUpdateState.js.
+export const ENVIRONMENT_KEYS = ['trendTemplateCount','rs90TemplateCount','above200','above200Percent','stage1','stage2','stage3','stage4'];
 
 export function validateClock(clock, now) {
   check(clock?.schema_version === 'postclose-session-clock-v1' && clock.exchange === 'NYSE' && clock.provider === 'pandas_market_calendars', 'Unknown exchange clock');
@@ -53,7 +59,10 @@ export function observePublication({receipt, manifest, trends}, target) {
   record('put_call', putCall?.date, positive(putCall?.calls) && count(putCall?.puts) && count(putCall?.value));
   record('long_history', history?.as_of_date);
   const breadth = latest(history?.breadth), sp500 = latest(history?.sp500), rotation = latest(history?.sectorRotation?.frames);
-  record('long_breadth', breadth?.date, positive(breadth?.coverage) && breadth.coveragePercent >= 90 && count(breadth?.above50) && count(breadth?.newHighs) && count(breadth?.newLows) && count(breadth?.leaderCount));
+  // Key presence only: an older-schema row lacks the keys, while a current row
+  // may legitimately carry null values (they are not required to be counts here).
+  const missingEnvironment = breadth && typeof breadth === 'object' ? ENVIRONMENT_KEYS.filter(key => !Object.hasOwn(breadth, key)) : [];
+  record('long_breadth', breadth?.date, positive(breadth?.coverage) && breadth.coveragePercent >= 90 && count(breadth?.above50) && count(breadth?.newHighs) && count(breadth?.newLows) && count(breadth?.leaderCount) && missingEnvironment.length === 0);
   record('sp500_history', sp500?.date, positive(sp500?.close));
   const etfs = ['XLB','XLC','XLE','XLF','XLI','XLK','XLP','XLRE','XLU','XLV','XLY'];
   const ranks = rotation?.ranks;
@@ -83,7 +92,8 @@ export function observePublication({receipt, manifest, trends}, target) {
   const stale = Object.entries(fields).filter(([, value]) => value !== target).map(([key]) => key);
   if (charts.ratio < .9) stale.push('chart_coverage');
   check(!invalid.length, `Invalid/future public dates: ${invalid.join(', ')}`);
-  return {fields, charts, stale, fresh: stale.length === 0, publication_run_id: receipt.run_id, source_run_id: receipt.data_source?.run_id ?? null};
+  return {fields, charts, stale, fresh: stale.length === 0, publication_run_id: receipt.run_id, source_run_id: receipt.data_source?.run_id ?? null,
+    ...(missingEnvironment.length ? {long_breadth_missing_environment_keys: missingEnvironment} : {})};
 }
 
 function normalizeRuns(runs, workflow, now) {
@@ -243,7 +253,7 @@ export async function main(args = process.argv.slice(2)) {
     }
   }
   saveReport(args, report);
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### US close update check\n\nExpected session: **${clock.target_session}** (close ${clock.target_close}).\n\n| Observation | Published session |\n| --- | --- |\n${Object.entries(observed.fields).map(([key, value]) => `| ${key} | ${value || 'unavailable'} |`).join('\n')}\n\nCurrent chart observations: ${observed.charts.current}/${observed.charts.observed}. Action: ${plan.action}${plan.acquisition_mode ? ` (${plan.acquisition_mode})` : ''}; ${plan.reason}.\n\n${report.dispatched ? 'Requested the existing gated workflow; this is not publication confirmation.' : 'No workflow dispatched.'}\n`);
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### US close update check\n\nExpected session: **${clock.target_session}** (close ${clock.target_close}).\n\n| Observation | Published session |\n| --- | --- |\n${Object.entries(observed.fields).map(([key, value]) => `| ${key} | ${value || 'unavailable'} |`).join('\n')}\n\n${observed.long_breadth_missing_environment_keys ? `Long-history final row is an older-schema capture without ${observed.long_breadth_missing_environment_keys.join(', ')}; it is not current.\n\n` : ''}Current chart observations: ${observed.charts.current}/${observed.charts.observed}. Action: ${plan.action}${plan.acquisition_mode ? ` (${plan.acquisition_mode})` : ''}; ${plan.reason}.\n\n${report.dispatched ? 'Requested the existing gated workflow; this is not publication confirmation.' : 'No workflow dispatched.'}\n`);
   console.log(JSON.stringify(report, null, 2));
   if (plan.overdue) { console.error(`::error::US ${clock.target_session} still missing ${observed.stale.join(', ')} ${plan.elapsed_minutes} minutes after close; recovery ${plan.reason}.`); if (execute) process.exitCode = 1; }
   return report;

@@ -2,8 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {BASE_URL, PRODUCER, PUBLISHER, REPOSITORY, observePublication, planRecovery, dispatchRequestFor, readPublicObservations, recentWorkflowRuns, validateClock, main} from './postclose-watchdog.mjs';
+import {BASE_URL, ENVIRONMENT_KEYS, PRODUCER, PUBLISHER, REPOSITORY, observePublication, planRecovery, dispatchRequestFor, readPublicObservations, recentWorkflowRuns, validateClock, main} from './postclose-watchdog.mjs';
 import {completionRequest, waitForProducer, COMPLETION_TIMEOUT_MS, EVENT_GRACE_MS} from './postclose-completion.mjs';
+import {LONG_HISTORY_ENVIRONMENT_KEYS} from '../../frontend/src/static/marketUpdateState.js';
 
 const target = '2026-10-27', before = '2026-10-26';
 const hash = value => createHash('sha256').update(value).digest('hex');
@@ -14,7 +15,7 @@ const fixture = () => {
   const trends = {schema_version: 'market-trends-v1', market: 'US', as_of_date: target,
     indices: ['^GSPC','^IXIC'].map(symbol => ({symbol, available: true, points: [{date: target, value: 4}]})),
     put_call: {points: [{date: target, value: .8, calls: 100, puts: 80}]},
-    long_history: {as_of_date: target, breadth: [{date: target, coverage: 4400, coveragePercent: 99, above50: 3000, newHighs: 50, newLows: 20, leaderCount: 100}], sp500: [{date: target, close: 6000}],
+    long_history: {as_of_date: target, breadth: [{date: target, coverage: 4400, coveragePercent: 99, above50: 3000, newHighs: 50, newLows: 20, leaderCount: 100, trendTemplateCount: 600, rs90TemplateCount: 250, above200: 1900, above200Percent: 43.2, stage1: 900, stage2: 1300, stage3: 800, stage4: 1400}], sp500: [{date: target, close: 6000}],
       sectorRotation: {frames: [{date: target, ranks: etfs.map((symbol, i) => ({symbol, rank: i+1, relativeIndex: 100-i}))}]},
       sectorBreadth: [{sector: 'Technology', universe: 100, points: [{date: target, above50: 50, leaderCount: 10}]}]}};
   return {receipt, manifest, trends};
@@ -44,6 +45,47 @@ test('future dates fail rather than claim freshness', () => {
 test('null breadth and missing one ETF remain stale even with latest label', () => {
   const value = fixture(); value.trends.long_history.breadth[0].leaderCount = null; value.trends.long_history.sectorRotation.frames[0].ranks.pop();
   assert.deepEqual(observePublication(value, target).stale, ['long_breadth','sector_rs']);
+});
+test('an older-schema long history at the target date is not current', () => {
+  const value = fixture(); for (const key of ENVIRONMENT_KEYS) delete value.trends.long_history.breadth[0][key];
+  const observed = observePublication(value, target);
+  assert.equal(observed.fresh, false); assert.deepEqual(observed.stale, ['long_breadth']); assert.equal(observed.fields.long_breadth, null);
+  assert.equal(observed.fields.long_history, target); assert.deepEqual(observed.long_breadth_missing_environment_keys, ENVIRONMENT_KEYS);
+  for (const key of ENVIRONMENT_KEYS) {
+    const one = fixture(); delete one.trends.long_history.breadth[0][key];
+    assert.deepEqual(observePublication(one, target).stale, ['long_breadth']); assert.deepEqual(observePublication(one, target).long_breadth_missing_environment_keys, [key]);
+  }
+});
+test('environment keys are required by presence; null values on a current-schema row stay current', () => {
+  const value = fixture(); for (const key of ENVIRONMENT_KEYS) value.trends.long_history.breadth[0][key] = null;
+  const observed = observePublication(value, target);
+  assert.equal(observed.fresh, true); assert.equal('long_breadth_missing_environment_keys' in observed, false);
+  assert.deepEqual(ENVIRONMENT_KEYS, LONG_HISTORY_ENVIRONMENT_KEYS);
+});
+test('an older-schema capture follows exactly the recovery and backoff of a missing date', () => {
+  const legacy = fixture(); for (const key of ENVIRONMENT_KEYS) delete legacy.trends.long_history.breadth[0][key];
+  const dated = fixture(); dated.trends.long_history.breadth[0].date = before;
+  const scenarios = [
+    value => value,
+    value => {value.producerRuns = [run(PRODUCER, {status: 'in_progress', conclusion: null})];},
+    value => {value.producerRuns = [run(PRODUCER)];},
+    value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, conclusion: 'failure', created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T21:10:00Z'})];},
+    value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T21:10:00Z'})];},
+    value => {value.producerRuns = [run(PRODUCER, {conclusion: 'failure', updated_at: '2026-10-27T22:25:00Z'})];},
+    value => {value.producerRuns = Array.from({length: 6}, (_, i) => run(PRODUCER, {id: 200+i, conclusion: 'failure', created_at: `2026-10-27T20:${10+i}:00Z`, updated_at: '2026-10-27T21:00:00Z'}));},
+  ];
+  const plans = [];
+  for (const mutate of scenarios) {
+    const plan = source => { const value = context(); value.observed = observePublication(source, target); mutate(value); return planRecovery(value); };
+    assert.deepEqual(plan(legacy), plan(dated)); plans.push(plan(legacy));
+  }
+  assert.deepEqual(plans.map(item => item.reason), ['completed_session_not_published', 'existing_work_in_flight', 'producer_completed_without_publisher', 'retry_failed_publication_once', 'published_observations_still_behind', 'acquisition_retry_cooldown', 'acquisition_retry_cooldown']);
+  assert.equal(plans[6].retry_after, '2026-10-28T03:00:00.000Z');
+  // Only the existing full acquisition is ever requested; never a prices-only or publication-only shortcut.
+  assert.deepEqual(dispatchRequestFor(plans[0]), {workflow: PRODUCER, inputs: {market_group: 'us', prices_only: false}});
+  // Once the recapture carries the keys, the same session is current and nothing more is requested.
+  const value = context(); value.observed = observePublication(fixture(), target); value.producerRuns = [run(PRODUCER)];
+  assert.equal(planRecovery(value).reason, 'published_observations_current');
 });
 test('duplicate ETF cannot satisfy eleven ETF freshness', () => {
   const value = fixture(); value.trends.long_history.sectorRotation.frames[0].ranks[10].symbol = 'XLB';
@@ -201,6 +243,15 @@ test('public verification binds exact bytes and rereads receipt without caches',
   const value = httpFixture(); const result = await readPublicObservations(target, value.fetch);
   assert.equal(result.fresh, true); assert.equal(value.calls.length, 4);
   for (const call of value.calls) {assert.equal(call.options.cache, 'no-store'); assert.equal(call.options.redirect, 'error');}
+});
+test('public verification reports an older-schema long history as not current', async () => {
+  const value = fixture(); for (const key of ENVIRONMENT_KEYS) delete value.trends.long_history.breadth[0][key];
+  const files = new Map(), trendsRaw = Buffer.from(JSON.stringify(value.trends));
+  value.manifest.markets.US.assets = {market_trends: {path: `market-trends/series-${hash(trendsRaw)}.json`, sha256: hash(trendsRaw)}};
+  const manifestRaw = Buffer.from(JSON.stringify(value.manifest)); value.receipt.data_manifest_sha256 = hash(manifestRaw);
+  files.set(BASE_URL+'publication.json', Buffer.from(JSON.stringify(value.receipt))); files.set(BASE_URL+'static-data/manifest.json', manifestRaw); files.set(BASE_URL+'static-data/'+value.manifest.markets.US.assets.market_trends.path, trendsRaw);
+  const result = await readPublicObservations(target, async url => new Response(files.get(url)));
+  assert.equal(result.fresh, false); assert.deepEqual(result.stale, ['long_breadth']); assert.deepEqual(result.long_breadth_missing_environment_keys, ENVIRONMENT_KEYS);
 });
 test('changed manifest or trend bytes cannot report freshness', async () => {
   for (const kind of ['manifest','series']) {

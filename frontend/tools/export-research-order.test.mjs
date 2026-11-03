@@ -139,6 +139,36 @@ it('keeps whole breadth bytes stable across two exports with order-sensitive coh
   }
 });
 
+it('exports market trends for the scan date even when the backend breadth date lags, joining chart breadth only when it is current', async () => {
+  const marketTrends = async root => {
+    const ref = (await read(join(root, 'manifest.json'))).markets.US.assets.market_trends;
+    return { ref, series: await read(join(root, ref.path)) };
+  };
+  const current = await fixture({ withBreadth: true }), stale = await fixture({ withBreadth: true }), none = await fixture();
+  try {
+    const lagging = { as_of_date: '2026-10-01', payload: { current: { date: '2026-10-01' }, retained_source: 'synthetic breadth source' } };
+    await write(join(stale.root, 'breadth.json'), lagging);
+    const staleBreadth = await readFile(join(stale.root, 'breadth.json'));
+    for (const item of [current, stale, none]) item.run();
+    const fresh = await marketTrends(current.root);
+    expect(fresh.ref).toMatchObject({ schema_version: 'market-trends-v1', market: 'US', as_of_date: date });
+    expect(fresh.series.breadth.points.length).toBeGreaterThan(0);
+    expect((await read(join(current.root, 'breadth.json'))).payload.book_market_evidence).toBeDefined();
+    for (const item of [stale, none]) {
+      const { ref, series } = await marketTrends(item.root);
+      expect(ref).toMatchObject({ schema_version: 'market-trends-v1', market: 'US', as_of_date: date });
+      expect(series.as_of_date).toBe(date);
+      // No chart-universe breadth is joined without a same-date backend breadth; nothing is relabelled as current.
+      expect(series.breadth.points).toEqual([]);
+      expect(series.indices.map(index => [index.symbol, index.followThrough.available])).toEqual([['^GSPC', false], ['^IXIC', false]]);
+    }
+    // A lagging backend breadth page is left byte-identical.
+    expect(await readFile(join(stale.root, 'breadth.json'))).toEqual(staleBreadth);
+  } finally {
+    for (const item of [current, stale, none]) await rm(item.directory, { recursive: true, force: true });
+  }
+});
+
 it('keeps research and audit order across the exporter rewriting initial_rows while preserving current evidence and history', async () => {
   const context = await fixture();
   const { directory, root, rows, bars, histories, run, outputs } = context;

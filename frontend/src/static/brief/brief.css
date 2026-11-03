@@ -70,6 +70,17 @@
 .brief-fact b { font-family: var(--font-mono); font-size: 16px; white-space: nowrap; }
 .brief-fact b.is-warn { color: var(--ext); }
 .brief-fact em { font-style: normal; font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* Market facts: a label, an explanation or an older value's date wraps instead of being cut off. */
+.brief-market .brief-fact small, .brief-market .brief-fact em { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.45; }
+.brief-market .brief-fact.is-wide { grid-column: 1 / -1; }
+.brief-market .brief-frag { display: inline-block; max-width: 100%; }
+.brief-fact-asof { display: block; font-family: var(--font-body); font-size: 11px; font-weight: 400; line-height: 1.45; color: var(--ext); white-space: normal; }
+.brief-ftd { gap: 6px; align-content: start; }
+.brief-ftd-row { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); column-gap: 8px; align-items: baseline; }
+.brief-ftd-index { grid-row: span 2; font-size: 12px; font-weight: 700; color: var(--text-2); }
+.brief-ftd-row > b, .brief-ftd-row > em { grid-column: 2; min-width: 0; }
+.brief-ftd-row > b { white-space: normal; overflow-wrap: anywhere; }
+.brief-factnotes { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 12px; line-height: 1.6; color: var(--text-3); }
 .brief-environment { display: grid; gap: 8px; }
 .brief-stagebar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: var(--surface-2); }
 .brief-stagebar span { display: block; height: 100%; transform-origin: left; animation: brief-growx .7s var(--e-out) both; animation-delay: calc(.5s + var(--i, 0) * 110ms); }
@@ -83,7 +94,7 @@
 .brief-warnings { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .brief-warnings li { padding: 8px 12px; border: 1px solid var(--ext); border-radius: 8px; color: var(--ext); font-size: 13px; line-height: 1.6; }
 .brief-asof { color: var(--ext); }
-.brief-alert { margin: 0; padding: 8px 12px; border: 1px solid var(--ext); border-radius: 8px; color: var(--ext); font-size: 13px; line-height: 1.6; }
+.brief-alert { margin: 0; padding: 8px 12px; border: 1px solid var(--ext); border-radius: 8px; color: var(--ext); font-size: 13px; line-height: 1.6; overflow-wrap: anywhere; }
 
 /* rows */
 .brief-rows { list-style: none; margin: 0; padding: 0; display: grid; }
