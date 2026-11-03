@@ -49,13 +49,14 @@ export default function MarketCard({ market, trends, date, detail = false }) {
   // Never present an older observation as today's: say which session each block describes.
   const historyDate = last?.date || null, indexDate = spx?.latest?.date || null;
   const lagging = [historyDate && date && historyDate < date ? `長期集計は ${historyDate} 時点` : null, indexDate && date && indexDate < date ? `分配日は ${indexDate} 時点` : null].filter(Boolean);
-  return <section className="brief-card brief-market in" style={{ '--i': 1 }} aria-labelledby="brief-market-title">
+  return <section className={`brief-card brief-market in${detail ? ' is-detail' : ''}`} style={{ '--i': 1 }} aria-labelledby="brief-market-title">
     <div className="brief-step">{!detail && <span className="brief-step-no" aria-hidden="true">1</span>}<h2 id="brief-market-title">地合い</h2>{!detail && <Link className="brief-more" to="/brief/market">市場の詳細 <span aria-hidden="true">›</span></Link>}</div>
     <div className={`brief-verdict tone-${verdictTone}`} data-testid="brief-regime">
       <span className="brief-verdict-mark" aria-hidden="true">{verdictTone === 'zone' ? '●' : verdictTone === 'ext' ? '▲' : verdictTone === 'neg' ? '⊘' : '?'}</span>
       <div><strong>{market?.label || '市場未確認'}</strong><p>{market?.cap > 0 ? `新規の買いを検討できる地合い。エクスポージャーの目安は最大 ${Math.round(market.cap * 100)}%（独自判定）。` : market?.state === 'unknown' ? '市場の状態を確認できません。新規の買いは見送ります。' : '新規の買いは控えます（独自判定）。'}</p></div>
     </div>
     <IndexChart sp500={history?.sp500} distribution={spx} />
+    {(history?.sp500 || []).filter(p => finite(p.close)).length >= 60 && <p className="brief-index-legend" aria-hidden="true"><span className="is-close">S&amp;P 500 終値（半年）</span><span className="is-ma">50日線</span><span className="is-dist">▲ 分配日</span></p>}
     <div className="brief-facts">
       <div className="brief-fact"><small>分配日（25日）</small><b className={(dist(spx) ?? 0) >= 5 || (dist(ndx) ?? 0) >= 5 ? 'is-warn' : ''}>{dist(spx) == null && dist(ndx) == null ? '未確認' : `${num(dist(spx))}・${num(dist(ndx))}`}</b><em>S&amp;P・NAS</em></div>
       <div className="brief-fact"><small>TT達成数</small><b>{hasEnvironment ? `${num(last.trendTemplateCount)}銘柄` : '未取得'}</b><em>{hasEnvironment && finite(monthAgo?.trendTemplateCount) ? `1か月で ${delta(last.trendTemplateCount - monthAgo.trendTemplateCount)}` : '8条件すべて達成'}</em></div>

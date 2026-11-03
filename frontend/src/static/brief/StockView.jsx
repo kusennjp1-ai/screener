@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { money, signed, times } from '../positionGeometry';
 import PriceChart from './PriceChart';
-import { footprint, positionPlan, rsLineNewHigh, sellMarks, upDownVolume, sellSignals, SELL_RULES, withBookWarning, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
+import { footprint, ruleEvidence, positionPlan, rsLineNewHigh, sellMarks, upDownVolume, sellSignals, SELL_RULES, withBookWarning, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
 import { meterPercent } from './briefNav';
 
 const finite = Number.isFinite;
@@ -38,7 +38,7 @@ function TemplateCard({ template }) {
     </div>
     <ul className="brief-checks">{template.rules.map((rule, i) => <li key={rule.label} className="in" style={{ '--i': 4 + i }}>
       <span className={`brief-check is-${rule.state}`} aria-hidden="true">{stateIcon[rule.state] || '?'}</span>
-      <span>{rule.label}<span className="sr-only">（{rule.state === 'pass' ? '達成' : rule.state === 'fail' ? '未達' : '未確認'}）</span><em>{rule.evidence || ''}</em></span>
+      <span>{rule.label}<span className="sr-only">（{rule.state === 'pass' ? '達成' : rule.state === 'fail' ? '未達' : '未確認'}）</span><em>{ruleEvidence(rule)}</em></span>
     </li>)}</ul>
   </section>;
 }

@@ -25,6 +25,16 @@ export function trendTemplate(row, now = Date.now()) {
   };
 }
 
+/** The value behind a trend-template rule when the rule carries no evidence text of its own. */
+export function ruleEvidence(rule) {
+  if (rule?.evidence) return rule.evidence;
+  if (!finite(rule?.value) || rule.unit !== '%') return '';
+  const v = Math.abs(rule.value).toFixed(1);
+  if (rule.label.startsWith('52週安値')) return `52週安値から +${v}%`;
+  if (rule.label.startsWith('52週高値')) return rule.value === 0 ? '52週高値と同値' : `52週高値から −${v}%`;
+  return `${rule.value < 0 ? '−' : ''}${v}%`;
+}
+
 export function earningsDays(row, date) {
   const value = row?.entry_evidence?.earnings?.date;
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || typeof date !== 'string') return null;
