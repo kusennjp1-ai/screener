@@ -1,28 +1,18 @@
 import { useMemo, lazy, Suspense } from 'react';
 import useColorModePreference from './contexts/useColorModePreference';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { createQueryClient } from './config/queryClient';
 import { CssBaseline, ThemeProvider, createTheme, CircularProgress, Box } from '@mui/material';
 
 import { STATIC_SITE_MODE } from './config/runtimeMode';
-import StaticAppShell from './static/StaticAppShell';
+import StaticRoot from './StaticRoot';
 
 import { ColorModeContext } from './contexts/ColorModeContext';
 
 // Backend routes and chart libraries are loaded only for the connected app.
 const ServerApp = lazy(() => import('./ServerApp'));
 
-// Create React Query client with optimized settings
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      refetchOnWindowFocus: false,
-      retry: 1,
-      staleTime: 5 * 60 * 1000, // 5 minutes - data considered fresh
-      gcTime: 30 * 60 * 1000, // 30 minutes - keep in cache (was cacheTime in v4)
-      placeholderData: (previousData) => previousData, // Use previous data while loading
-    },
-  },
-});
+const queryClient = createQueryClient();
 
 // Function to create theme based on mode
 const getDesignTokens = (mode) => ({
@@ -192,7 +182,7 @@ function App() {
 
   const theme = useMemo(() => createTheme(getDesignTokens(mode)), [mode]);
 
-  const appShell = STATIC_SITE_MODE ? <StaticAppShell /> : (
+  const appShell = (
     <Suspense fallback={<Box role="status" sx={{p:4}}><CircularProgress aria-label="アプリを読み込み中" /></Box>}>
       <ServerApp />
     </Suspense>
@@ -210,4 +200,5 @@ function App() {
   );
 }
 
-export default App;
+// The static site renders without the connected app's Material UI shell.
+export default STATIC_SITE_MODE ? StaticRoot : App;

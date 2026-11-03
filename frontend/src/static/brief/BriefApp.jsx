@@ -1,6 +1,6 @@
 import { useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { useMediaQuery, useTheme } from '@mui/material';
+import useMediaQuery from '../useMediaQuery';
 import { ColorModeContext } from '../../contexts/ColorModeContext';
 import { themeCss } from '../theme/tokens';
 import { money, signed } from '../positionGeometry';
@@ -29,7 +29,7 @@ const finite = Number.isFinite;
 const DATE_JA = iso => { const d = new Date(`${iso}T12:00:00Z`); return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）` : '日付未確認'; };
 
 function ThemeToggle() {
-  const dark = useTheme().palette.mode === 'dark', colorMode = useContext(ColorModeContext);
+  const colorMode = useContext(ColorModeContext), dark = colorMode.mode === 'dark';
   return <button type="button" className="brief-iconbutton" onClick={colorMode.toggleColorMode} aria-label={dark ? 'ライトモードに切り替え' : 'ダークモードに切り替え'}>{dark ? ICON.sun : ICON.moon}</button>;
 }
 
@@ -144,9 +144,9 @@ export default function BriefApp() {
   const brief = useBriefData();
   const { watch, toggle, storageError } = useWatchlist();
   const location = useLocation();
-  const wide = useMediaQuery('(min-width:1024px)', { noSsr: true });
+  const wide = useMediaQuery('(min-width:1024px)');
   const go = useTransitionNavigate();
-  const dark = useTheme().palette.mode === 'dark';
+  const dark = useContext(ColorModeContext).mode === 'dark';
   useEffect(() => { document.documentElement.dataset.theme = dark ? 'dark' : 'light'; }, [dark]);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
