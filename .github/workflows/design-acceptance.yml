@@ -138,6 +138,8 @@ jobs:
           (cd "$source" && npx vite build)
           echo "Design stage: $(date -u +%FT%TZ) vite-current complete"
           mv "$RUNNER_TEMP/design-current-data" "$source/dist/static-data"
+          # Diagnostic only: where the bytes go before the strict Pages budget is applied.
+          (cd "$source" && node tools/site-size-breakdown.mjs dist 40) || echo '::warning::Site size breakdown unavailable'
           if [ -f "$source/dist/static-transport-capability.json" ]; then
             # Measure the decoder with its actual physical representation.
             echo "Design stage: $(date -u +%FT%TZ) transport-verify-pack-roundtrip start"
