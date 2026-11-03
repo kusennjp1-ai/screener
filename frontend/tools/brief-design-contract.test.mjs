@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { legacyTarget } from '../src/static/StaticAppShell';
+import { legacyTarget } from '../src/static/legacyRoutes.js';
 import { fontSizes, radii } from '../src/static/theme/tokens.js';
 import { CAPTURES, DESIGN_GROUPS, FONT_SIZES, LEGACY_REDIRECTS, RADII, REPORT_SCHEMA, TIMING, minimumTarget, requiredCaptureKeys, summarizeTiming } from './brief-design-contract.mjs';
 
