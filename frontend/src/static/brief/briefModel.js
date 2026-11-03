@@ -325,6 +325,78 @@ export function marketTone(market) {
   return 'neg';
 }
 
+const isoDay = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+/** 'YYYY-MM-DD' as M/D, with the year when it differs from the reference date's year. */
+export function shortDate(iso, reference) {
+  if (!isoDay(iso)) return '日付未確認';
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${isoDay(reference) && reference.slice(0, 4) !== iso.slice(0, 4) ? `${y}/` : ''}${m}/${d}`;
+}
+
+/**
+ * The newest row whose field (or every one of several fields) is a finite number, with its own
+ * session: { value, date, index, row } (value is an object of the fields when several are asked).
+ * An older value keeps its date so it is never shown as today's; no row → null.
+ */
+export function latestKnown(rows, field) {
+  const fields = Array.isArray(field) ? field : [field], list = rows || [];
+  for (let i = list.length - 1; i >= 0; i--) {
+    const row = list[i];
+    if (row && fields.every(key => finite(row[key]))) return { value: Array.isArray(field) ? Object.fromEntries(fields.map(key => [key, row[key]])) : row[field], date: row.date ?? null, index: i, row };
+  }
+  return null;
+}
+
+/** State of the market-trends asset: loading | error (with its reason) | none (not published) | ready. */
+export function trendsStatus(trends) {
+  if (trends?.loading) return { state: 'loading', reason: null };
+  if (trends?.error) return { state: 'error', reason: (typeof trends.failureReason?.message === 'string' && trends.failureReason.message) || '公開データの参照情報が一致しません' };
+  if (!trends?.data) return { state: 'none', reason: null };
+  return { state: 'ready', reason: null };
+}
+
+/**
+ * One index's 25-session distribution-day count with its own session: today's value, else the
+ * exporter's last observation (an index series that ends early), else the last finite point.
+ */
+export function distributionCount(index) {
+  if (!index) return null;
+  if (finite(index.latest?.value) && isoDay(index.latest.date)) return { value: index.latest.value, date: index.latest.date };
+  if (finite(index.lastObserved?.value) && isoDay(index.lastObserved.date)) return { value: index.lastObserved.value, date: index.lastObserved.date };
+  const points = Array.isArray(index.points) ? index.points : [];
+  for (let i = points.length - 1; i >= 0; i--) if (finite(points[i]?.value) && isoDay(points[i].date)) return { value: points[i].value, date: points[i].date };
+  return null;
+}
+
+// Wording only; the rule itself is computed by the exporter (parity with backend market_regime.py FTD_* constants).
+const FTD_TEXT = { minDay: 4, maxDay: 15, gain: '+1.2%', decline: '6%' };
+/**
+ * Compact tile text for one index's follow-through state (this app's own judgement):
+ * { b, em, asOf } where asOf is set when the judgement is older than the analysis date.
+ * A missing field (older publication) or an unavailable input never becomes a state.
+ */
+export function followThroughView(ft, date) {
+  if (ft === undefined) return { b: '未集計', em: '旧形式の公開データ', asOf: null };
+  if (!ft || typeof ft !== 'object') return { b: '算出不可', em: '判定データを読み取れません', asOf: null };
+  if (ft.available !== true) return { b: '算出不可', em: typeof ft.reason === 'string' && ft.reason ? ft.reason : '指数データを確認できません', asOf: null };
+  const asOf = isoDay(ft.asOf) && isoDay(date) && ft.asOf < date ? shortDate(ft.asOf, date) : null;
+  const at = value => shortDate(value, date), whole = value => Number.isSafeInteger(value) && value >= 0;
+  const fall = finite(ft.declinePct) ? `−${Math.abs(ft.declinePct).toFixed(1)}%` : null;
+  const join = parts => parts.filter(Boolean).join('・');
+  const { ftd, attempt, low, peak } = ft;
+  switch (ft.state) {
+    case 'confirmed': return { b: isoDay(ftd?.date) ? `確認 ${at(ftd.date)}` : '確認', asOf, tone: 'zone',
+      em: join([finite(ftd?.gainPct) ? `+${ftd.gainPct.toFixed(1)}%` : null, whole(ftd?.attemptDay) ? `反発${ftd.attemptDay}日目` : null, whole(ftd?.distributionSince) ? `その後の分配日${ftd.distributionSince}` : null]) };
+    case 'rally_attempt': return { b: whole(attempt?.day) ? `反発${attempt.day}日目` : '反発中', asOf,
+      em: join([isoDay(low?.date) ? `安値${at(low.date)}` : null, `${FTD_TEXT.minDay}日目以降の${FTD_TEXT.gain}上昇待ち`]) };
+    case 'correction': return { b: '調整中', asOf, em: fall ? `高値${isoDay(peak?.date) ? at(peak.date) : ''}から${fall}` : `${FTD_TEXT.decline}以上の下落` };
+    case 'attempt_expired': return { b: `${FTD_TEXT.maxDay}日以内のFTDなし`, asOf, em: join([isoDay(low?.date) ? `安値${at(low.date)}を維持` : null, whole(attempt?.day) ? `反発${attempt.day}日目` : null]) };
+    case 'ftd_failed': return { b: isoDay(ft.failedDate) ? `FTD失敗 ${at(ft.failedDate)}` : 'FTD失敗', asOf, tone: 'ext', em: isoDay(ftd?.date) ? `${at(ftd.date)}のFTD当日の安値を終値で下回る` : 'FTD当日の安値を終値で下回る' };
+    case 'no_correction': return { b: '不要', asOf, em: fall ? `高値から${fall}（${FTD_TEXT.decline}未満）` : `${FTD_TEXT.decline}以上の調整なし` };
+    default: return { b: '判定不明', em: `未対応の状態（${String(ft.state)}）`, asOf };
+  }
+}
+
 /** The three Code 33 conditions from the SEC rows, so a partly known Code 33 still shows what is known. */
 export function code33Parts(report) {
   if (!report?.valid) return null;

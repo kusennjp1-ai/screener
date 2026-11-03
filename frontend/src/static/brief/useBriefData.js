@@ -29,10 +29,13 @@ export function useBriefData() {
   const researchPath = entry.assets?.research?.path || entry.pages?.scan?.path;
   const version = manifest.data?.research_generation || manifest.data?.generated_at;
   const bundle = useResearchBundle(researchPath, entry.as_of_date, version, entry.publication, BRIEF_METHODS);
-  const trends = useMarketTrends(entry);
+  const marketTrends = useMarketTrends(entry);
+  // Before the manifest arrives there is no asset reference yet: that is loading, not "not published".
+  const trends = manifest.isLoading && !marketTrends.data && !marketTrends.error ? { ...marketTrends, loading: true } : marketTrends;
   const ranked = useMemo(() => filterRanked(bundle.data?.rankings?.minervini || [], { liquidOnly: true }), [bundle.data]);
   const date = bundle.data?.date || entry.as_of_date || null;
-  return { manifest, entry, version, bundle, ranked, date, market: bundle.data?.prepared?.market || null, trends };
+  const market = bundle.data?.prepared?.market || null;
+  return { manifest, entry, version, bundle, ranked, date, market, marketLoading: !market && (manifest.isLoading || bundle.isLoading), trends };
 }
 
 /** The watchlist shared with the research screens (same storage key). */
