@@ -15,6 +15,7 @@ import { auditDailyBars } from '../src/static/qualificationAudit.js';
 import { buildBookMarketEvidence } from '../src/static/bookMarketEvidence.js';
 import { validateResearchParity } from './research-quality.mjs';
 import { setupReadiness } from '../src/static/setupReadiness.js';
+import { VERIFIED_CHART_OMITTED } from './verified-chart-fields.mjs';
 
 const write = async (path, value) => {
   await mkdir(resolve(path, '..'), { recursive: true });
@@ -94,7 +95,7 @@ async function fixture({ withBreadth = false, withCalendar = true, setupReports 
   return { directory, frontend, root, rows, bars, histories, sourceCharts, benchmark, run, outputs };
 }
 
-it('publishes dated RS rank history in the canonical chart asset with current-rank parity', async () => {
+it('publishes a raw verified chart with only what the brief and its gates read', async () => {
   const { directory, run, outputs } = await fixture({ withBreadth: true });
   try {
     run();
@@ -102,10 +103,12 @@ it('publishes dated RS rank history in the canonical chart asset with current-ra
     expect(charts).toHaveLength(101);
     for (const chart of charts) {
       const row = index.rows.find(item => item.symbol === chart.symbol);
-      expect(chart.rs_rating_history).toMatchObject({ schema_version: 'published-universe-rs-history-v1', symbol: row.symbol, as_of_date: date, current_universe_size: 101, basis: 'current_verified_publication_universe_recalculated' });
-      expect(chart.rs_rating_history.points).toHaveLength(28);
-      expect(chart.rs_rating_history.points.at(-1)).toEqual({ time: date, value: row.rs_rating, universe_size: 101 });
       expect(row.chart_path).toMatch(/^verified-charts\//);
+      expect(chart.as_of_date).toBe(date);
+      expect(chart.bars.length).toBeGreaterThan(0);
+      expect(chart.rs_line.length).toBeGreaterThan(0);
+      expect(chart.stock_data.symbol).toBe(row.symbol);
+      for (const key of VERIFIED_CHART_OMITTED) expect(Object.hasOwn(chart, key)).toBe(false);
     }
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

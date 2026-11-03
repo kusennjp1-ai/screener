@@ -23,8 +23,8 @@ import { marketLeadership } from '../src/static/marketLeadership.js';
 import { buildBookTechnicalEvidence } from '../src/static/bookTechnicalEvidence.js';
 import { buildBookMarketEvidence } from '../src/static/bookMarketEvidence.js';
 import { auditDailyBars, mergeScanRows, rankVerifiedUniverse, AUDIT_VERSION } from '../src/static/qualificationAudit.js';
-import { buildRsRatingHistories } from './rs-rating-history.mjs';
 import { producerHistoryCoverage } from './producer-history-coverage.mjs';
+import { VERIFIED_CHART_OMITTED } from './verified-chart-fields.mjs';
 
 const root = resolve('public/static-data');
 const evaluatedAt = process.env.FINANCIAL_EVALUATED_AT ? Date.parse(process.env.FINANCIAL_EVALUATED_AT) : Date.now();
@@ -131,7 +131,6 @@ for (const row of merged) {
 await writeCorrectionHistory(root,correction,currentFinancials);
 await rewriteCorrectionChartAliases(root,correction);
 rows = new Map(rankVerifiedUniverse([...rows.values()]).map(row => [row.symbol, row]));
-const rsRatingHistories = buildRsRatingHistories({ rows: [...rows.values()], charts: marketCharts, sessions: sessionCalendar?.sessions, asOfDate: scan.as_of_date });
 currentEvaluation.instrument_applicability_universe=applicabilityUniverse([...rows.values()]);
 if (breadth) {
   if (breadth.payload?.current?.date === scan.as_of_date) {
@@ -162,7 +161,8 @@ for (const [symbol, row] of rows) {
     canonicalChart=overlayFinancialChart(await read(paths.get(symbol)),correction,symbol);
     if (!carry) canonicalChart=projectFinancialPayload(canonicalChart,{now:evaluatedAt,asOfDate:scan.as_of_date,market:row.market});
     Object.assign(canonicalChart,{signal:null,risk_plan:null,sell_plan:null,trend_template:null});
-    canonicalChart.rs_rating_history = rsRatingHistories.get(symbol) || null;
+    // Pages stores this copy raw; financials come from the row and its detail.
+    for (const key of VERIFIED_CHART_OMITTED) delete canonicalChart[key];
     const hashInput={...canonicalChart,stock_data:{...row,chart_path:undefined,research_detail_path:undefined}};
     const chartHash=createHash('sha256').update(JSON.stringify(hashInput)).digest('hex').slice(0,16);
     row.chart_path=`verified-charts/${encodeURIComponent(symbol)}-${chartHash}.json`;

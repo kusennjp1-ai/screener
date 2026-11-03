@@ -296,9 +296,13 @@ it('exports raw, canonical and nested fund aliases consistently in one run and d
         expect(financialView(chart)).toEqual(financialView(once));
         expect(chart.stock_data.instrument_applicability).toEqual(row.instrument_applicability);
         if(path!==row.chart_path) expect(chart.stock_data.financial_historical).toEqual(input.financial_historical);
-        expect(financialView(chart.fundamentals)).toEqual(financialView(once.fundamentals));
+        // The raw verified copy omits fundamentals; the packed aliases keep them.
+        if(path===row.chart_path) expect(chart).not.toHaveProperty('fundamentals');
+        else expect(financialView(chart.fundamentals)).toEqual(financialView(once.fundamentals));
         expect(chart.financial_historical).toEqual(once.financial_historical);
-        expect(priceBytes(chart)).toBe(priceBytes(rawFundChart(input)));
+        const source=rawFundChart(input);
+        if(path===row.chart_path) delete source.fundamentals;
+        expect(priceBytes(chart)).toBe(priceBytes(source));
         const repeated=overlayFinancialChart(chart,value);
         if(path!==row.chart_path) expect(repeated).toEqual(chart);
         expect(overlayFinancialChart(JSON.parse(JSON.stringify(repeated)),value)).toEqual(repeated);

@@ -605,7 +605,9 @@ it('exports inherited fund and corporate chart aliases through strict carry veri
     for (const row of index.rows) for (const path of [`charts/${row.symbol}.json`, `raw/${row.symbol}.json`, row.chart_path]) {
       const chart = await read(join(root, path)), repeated = overlayFinancialChart(chart, carry);
       expect(chart.bars).toEqual(chartForRow(row).bars);
-      for (const key of ['stock_data', 'fundamentals']) expect(repeated[key].financial_identity).toEqual(chart[key].financial_identity);
+      // The raw verified copy omits fundamentals; the packed aliases keep them.
+      if (path === row.chart_path) expect(chart).not.toHaveProperty('fundamentals');
+      for (const key of path === row.chart_path ? ['stock_data'] : ['stock_data', 'fundamentals']) expect(repeated[key].financial_identity).toEqual(chart[key].financial_identity);
       expect(repeated.financial_identity).toEqual(chart.financial_identity);
       expect(overlayFinancialChart(JSON.parse(JSON.stringify(repeated)), carry)).toEqual(repeated);
     }
@@ -868,7 +870,9 @@ it('exports stale, missing, identity-mismatch and current fields consistently ac
         const listed = index.rows.find(row => row.symbol === symbol);
         const detail = await read(join(root, listed.research_detail_path));
         const charts = await Promise.all([`raw/${symbol}.json`, `charts/${symbol}.json`, listed.chart_path].map(path => read(join(root, path))));
-        const rows = [listed, detail, ...charts.flatMap(chart => [chart.stock_data, chart.fundamentals])];
+        const [raw, market, verified] = charts;
+        expect(verified).not.toHaveProperty('fundamentals');
+        const rows = [listed, detail, raw.stock_data, raw.fundamentals, market.stock_data, market.fundamentals, verified.stock_data];
         for (const row of rows) {
           for (const field of FINANCIAL_FIELDS) expect(row[field]).toEqual(expected[field]);
           expect(row.financial_current).toEqual(expected.financial_current);
