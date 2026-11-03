@@ -15,7 +15,10 @@ export function modelMarket(rows) {
   // do not let those erase known observations, but reject conflicting regimes.
   if (!observed.length || regimes.length !== 1) return { label: '市場未確認', cap: 0, state: 'unknown' };
   if (observed.some(r => r.market_above_200dma === false)) return { label: '長期トレンド警戒', cap: 0 };
-  if (observed.some(r => r.market_above_50dma !== true)) return { label: '市場条件未確認・弱含み', cap: 0 };
+  // A close below the 50-day line is a known weak state, not an unknown one; anything else that is
+  // not an observed true stays explicitly unknown. Both keep new buying closed.
+  if (observed.some(r => r.market_above_50dma === false)) return { label: '50日線割れ（弱含み・独自判定）', cap: 0 };
+  if (observed.some(r => r.market_above_50dma !== true)) return { label: '市場条件未確認', cap: 0, state: 'unknown' };
   if (regimes[0] === 'confirmed_uptrend') return { label: '上昇トレンド（独自判定）', cap: .5 };
   if (regimes[0] === 'uptrend_under_pressure') return { label: '上昇に圧力（独自判定）', cap: .25 };
   return { label: '新規購入を抑制', cap: 0 };
