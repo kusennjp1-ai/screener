@@ -54,6 +54,28 @@ class HistoryTests(unittest.TestCase):
         self.assertTrue(all(row['rank']==1 for row in value['sectorRotation']['frames'][-1]['ranks']))
         del records['XLK']
         self.assertEqual(module.build(records,{},symbols,self.days,self.days[-1])['sectorRotation']['frames'],[])
+    def test_symbol_failing_mid_computation_contributes_to_no_aggregate(self):
+        symbols=[f'S{i}' for i in range(110)]
+        records={s:record(s,self.days,missing=100 if i%9==0 else None) for i,s in enumerate(symbols)}
+        # S5 alone has a provider-confirmed inception, so a partial contribution would also move the expected denominator.
+        records['S5']=record('S5',self.days,inception=int(datetime.fromisoformat(self.days[100]+'T00:00:00+00:00').timestamp()))
+        classification={'memberships':{s:module.GROUPS[i%len(module.GROUPS)] for i,s in enumerate(symbols)}}
+        absent={s:value for s,value in records.items() if s!='S5'}
+        reference=module.build(absent,{},symbols,self.days,self.days[-1],classification)
+        original=module.classify_stages;calls=[]
+        def stage_failure(*args):
+            calls.append(1)
+            if len(calls)==6:raise ValueError('synthetic mid-computation failure')
+            return original(*args)
+        broken={**records,'S5':{key:value for key,value in records['S5'].items() if key!='provenance'}}
+        # The first failure is after coverage/above50/new highs and before stages; the second is after every count.
+        for name,inputs,patcher in [('stage',records,patch.object(module,'classify_stages',side_effect=stage_failure)),('provenance',broken,patch.object(module,'classify_stages',side_effect=original))]:
+            with self.subTest(name),patcher:
+                calls.clear();value=module.build(inputs,{},symbols,self.days,self.days[-1],classification)
+                self.assertIn('S5',value['errors']);self.assertNotIn('S5',{row['symbol'] for row in value['provenance']})
+                self.assertEqual(value['breadth'],reference['breadth']);self.assertEqual(value['sectorBreadth'],reference['sectorBreadth'])
+                last=value['breadth'][-1];self.assertEqual(last['coverage'],109);self.assertEqual(last['eligibleUniverse'],110)
+                self.assertEqual(sum(last[f'stage{k}'] for k in (1,2,3,4)),last['coverage'])
 
 class DailyHistoryTests(unittest.TestCase):
     def current(self):
