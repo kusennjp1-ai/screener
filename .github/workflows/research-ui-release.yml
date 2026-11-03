@@ -226,6 +226,7 @@ jobs:
         working-directory: release/frontend
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          RELEASE_CARRIES_FINANCIALS: ${{ steps.plan.outputs.carry }}
         run: |
           python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
           python tools/test_sec_financials.py
@@ -243,7 +244,9 @@ jobs:
           # 1500 symbols at <=5 req/s. An older approved UI tree keeps its smaller default.
           python tools/sec-financials.py
           python tools/test_export_financial_history.py
-          python tools/export-financial-history.py --limit 300
+          # Under the financial carry every row's history is replaced by the carried
+          # one, so no Yahoo request is made (the same empty file prepare-carry writes).
+          if [ "$RELEASE_CARRIES_FINANCIALS" = true ]; then python tools/export-financial-history.py --limit 0; else python tools/export-financial-history.py --limit 300; fi
           # Earnings dates must exist before the final export, or the rows never carry them.
           python tools/export-entry-context.py
           node tools/export-research.mjs

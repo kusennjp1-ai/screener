@@ -1016,7 +1016,8 @@ jobs:
               fi
             fi
             python tools/sec-financials.py --limit 1500
-            python tools/export-financial-history.py --limit 300
+            # Yahoo at 1 call/s (3 calls per symbol): about 5 minutes; the release re-fetches or carries it.
+            python tools/export-financial-history.py --limit 100
             python tools/test_export_entry_context.py
             # Earnings dates and the session clock; a failed calendar leaves dates unknown.
             python tools/export-entry-context.py || echo '::warning::Earnings calendar unavailable; earnings dates stay unknown'
