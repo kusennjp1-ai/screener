@@ -103,12 +103,12 @@ describe('disabled explicit limited research assessment', () => {
     } finally { vi.unstubAllGlobals(); }
     expect(financialCaseCanonicalCsv(source, date, now)).toEqual(plain);
   });
-  it('preserves ordinary Design failure exit and separate output defaults', () => {
+  it('has no limited-preview mode in the brief Design harness, whose failures still exit non-zero', () => {
     const script = readFileSync(new URL('./design-review.mjs', import.meta.url), 'utf8');
-    expect(script).toContain("process.argv.includes('--limited-research-preview')");
-    expect(script).toContain("limitedAssessment ? 'test-results/limited-research-preview' : 'test-results/design-review'");
+    expect(script).not.toContain('--limited-research-preview');
+    expect(script).toContain("if (process.argv.length > 2) throw Error('The brief Design harness takes no arguments');");
     expect(script).toContain('if (report.failures.length) process.exitCode = 1;');
     const checker = readFileSync(new URL('./check-design-review.mjs', import.meta.url), 'utf8');
-    expect(checker).toContain("if (actual.failures.length) throw Error");
+    expect(checker).toContain('await requireObjectiveEvidence(actual, output, waiver)');
   });
 });

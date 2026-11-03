@@ -47,17 +47,11 @@ describe('bounded financial Design capture contract', () => {
     }
   });
 
-  it('keeps new captures in the ordinary screenshot and subjective-review accounting', () => {
+  it('is not part of the brief Design harness, which fails closed on a financial candidate', () => {
     const harness = readFileSync(new URL('./design-review.mjs', import.meta.url), 'utf8');
-    const checker = readFileSync(new URL('./check-design-review.mjs', import.meta.url), 'utf8');
-    expect(harness).toContain('await verifyFinancialCases({ page, viewport, theme, capture, check, report, currentUrl: current.url, output });');
-    expect(harness).toContain('...financialDesignScreens(viewport, theme)');
-    expect(harness).toContain('const screenEvidence = { key, screenshot,');
-    expect(harness).toContain('report.screens.push(screenEvidence);');
-    expect(harness).toContain("metrics_scope: 'original-viewport'");
-    expect(harness).toContain('viewport_geometry: geometry');
-    expect(harness.indexOf('checkFinancialViewportGeometry(geometry')).toBeLessThan(harness.indexOf('else await page.screenshot'));
-    expect(checker).toContain('actual.screens.some(screen => !reviewedKeys.has(screen.key))');
+    expect(harness).not.toContain('financial-design-cases');
+    expect(harness).toContain('if (process.env.FINANCIAL_CANDIDATE_DIR) {');
+    expect(harness).toContain('has no verified financial-display contract');
   });
 
   it('captures evidence at the original viewport with the complete first row as its visibility target', () => {
