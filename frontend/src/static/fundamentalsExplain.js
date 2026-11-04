@@ -26,6 +26,7 @@ const SEC_STATUS = {
   not_applicable: ['対象外', 'ファンド・ETF などは企業業績の対象外です。'],
   stale: ['古い', '直近の四半期から180日を超えているため判定に使いません。'],
   invalid: ['SEC 検証不可', '提出日や期間を検証できないため使いません。'],
+  no_quarterly_values: ['四半期の EPS・売上なし', 'SEC の XBRL に四半期の EPS・売上の報告がありません（年次の値や純利益だけの報告）。'],
   // The SEC record travels in the stock's research detail: until that file has arrived it is unknown.
   detail_loading: ['読み込み中…', '詳細データを読み込み中…'],
   detail_error: ['取得できません', '詳細データを取得できません。'],
@@ -51,6 +52,10 @@ export function secStatus(row, book, { detail = null } = {}) {
     return make(['no_cik', 'no_companyfacts', 'transient'].includes(data.reason) ? data.reason : 'invalid');
   }
   if (!book) return make('invalid');
+  // A well-formed record of this stock and day whose quarterly EPS and revenue are empty as written
+  // (only annual EPS or net income reported): nothing to verify, so it is not 検証不可.
+  const written = key => Array.isArray(data.quarterly?.[key]) && data.quarterly[key].length === 0;
+  if (!book.report.valid && ['available', 'partial'].includes(data.status) && data.symbol === row.symbol && data.as_of_date === book.report.date && written('eps') && written('revenue')) return make('no_quarterly_values');
   if (book.current) return make('ok', { latestEnd: book.report.rows.at(-1)?.end ?? null });
   if (book.reason === 'stale_book_period' && book.report?.valid) {
     const latestEnd = book.report.rows.at(-1).end;

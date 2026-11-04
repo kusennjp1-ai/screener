@@ -389,6 +389,12 @@ describe('fundamentals card model', () => {
     expect(status(stale, Date.parse('2026-09-01T12:00:00Z'), later)).toMatchObject({ state: 'stale', short: '古い', latestEnd: '2025-12-31', long: '直近の四半期は 2025-12期で、180日を超えているため判定に使いません。' });
     const broken = secRecord(); broken.quarterly.eps = [{ end: 'x' }]; broken.quarterly.revenue = [];
     expect(status(broken).state).toBe('invalid');
+    // Dates and periods are fine; the company simply reported no quarterly EPS or revenue.
+    const annualOnly = secRecord(); annualOnly.status = 'partial'; annualOnly.quarterly.eps = []; annualOnly.quarterly.revenue = [];
+    annualOnly.annualEps = [secPoint('eps', ['2025-01-01', '2025-12-31'], 5.5)];
+    expect(status(annualOnly)).toMatchObject({ state: 'no_quarterly_values', short: '四半期の EPS・売上なし', long: 'SEC の XBRL に四半期の EPS・売上の報告がありません（年次の値や純利益だけの報告）。' });
+    const otherDay = { ...annualOnly, as_of_date: '2026-01-30' };
+    expect(status(otherDay).state).toBe('invalid');
     expect(secStatus({ symbol: 'BITU', market: 'US', company_name: 'ProShares Ultra Bitcoin ETF' }, null)).toMatchObject({ state: 'not_applicable', short: '対象外' });
   });
 

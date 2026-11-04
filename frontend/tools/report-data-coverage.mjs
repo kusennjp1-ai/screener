@@ -51,7 +51,7 @@ export function fundamentalsCoverage({ daily, sec, history, audit = null, now = 
   return out;
 }
 
-const SEC_STATES = ['ok', 'stale', 'not_published', 'no_cik', 'no_companyfacts', 'no_quarterly', 'transient', 'not_applicable', 'invalid'];
+const SEC_STATES = ['ok', 'stale', 'not_published', 'no_cik', 'no_companyfacts', 'no_quarterly', 'no_quarterly_values', 'transient', 'not_applicable', 'invalid'];
 const UNKNOWN_KINDS = ['q4_eps', 'few_quarters', 'gap', 'stale', 'no_sec', 'other'];
 /**
  * What the brief can actually show for each row it lists, read from the published
