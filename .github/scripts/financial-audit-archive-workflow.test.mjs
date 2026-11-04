@@ -61,7 +61,7 @@ export function checkPublisherStep(text){
   assert.deepEqual(jobs(text),['renewal_route','publish'],'the publisher keeps exactly two jobs');
   const publish=job(text,'publish');
   assert.doesNotMatch(publish,/^    permissions:/m,'publish keeps the workflow permissions');
-  assert.match(text,/^permissions:\n  contents: read\n  actions: read\n  pages: write\n  id-token: write\n/m);
+  assert.match(text,/^permissions:\n  contents: read\n  actions: read\n  pages: write\n  id-token: write\n(?!  )/m,'publisher workflow permissions are exactly these four');
   const name='Verify the public audit archive before omitting older carries',body=step(publish,name);
   const names=steps(publish).map(block=>/- name: (.+)\n/.exec(block)?.[1]??null);
   const at=names.indexOf(name);
@@ -118,6 +118,8 @@ test('the publisher admits the archive from controller tooling before the approv
     ['finite price',text.replace(block,block.replace(" && needs.renewal_route.outputs.price_source != 'true'",''))],
     ['approved tree command',text.replace(block,block.replace('run: node .github/scripts/','run: node release/.github/scripts/'))],
     ['job permissions',text.replace('    environment:\n      name: github-pages\n','    permissions:\n      contents: write\n    environment:\n      name: github-pages\n')],
+    ['extra workflow permission',text.replace('  id-token: write\n','  id-token: write\n  packages: write\n')],
+    ['extra workflow permissions',text.replace('  id-token: write\n','  id-token: write\n  deployments: write\n  issues: write\n')],
     ['third job',text+'  archive:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'],
   ]){assert.notEqual(changed,text,label);assert.throws(()=>checkPublisherStep(changed),undefined,label);}
 });
