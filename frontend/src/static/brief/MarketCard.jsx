@@ -191,8 +191,9 @@ export default function MarketCard({ market, marketLoading = false, trends, date
     {dating.lagNote && <p className="brief-note brief-asof brief-lag" role="note">{dating.lagNote}</p>}
     <div className="brief-lead">
       <div className={`brief-verdict is-lead tone-${verdict.tone}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}>
-        <div className="brief-verdict-head">{verdictMark}<div><strong>{verdict.label}</strong>{verdict.date && <span className="brief-verdict-date numeric">{verdict.date}</span>}<p>{verdict.lead}</p></div></div>
-        {verdict.exposure !== null && <div className="brief-exposure"><small>エクスポージャーの目安</small><b className="numeric">{verdict.exposure > 0 ? `最大 ${verdict.exposure}%` : '0%'}</b><span className="brief-exposure-track" aria-hidden="true"><i style={{ width: `${verdict.exposure}%` }} /></span></div>}
+        <div className="brief-verdict-head">{verdictMark}<div><strong><Label text={verdict.label} /></strong>{verdict.date && <span className="brief-verdict-date numeric">{verdict.date}</span>}<p>{verdict.lead}</p></div></div>
+        {/* On a narrow phone the label breaks before の目安, never leaving 「安」 alone. */}
+        {verdict.exposure !== null && <div className="brief-exposure"><small><span className="brief-frag">エクスポージャー</span><span className="brief-frag">の目安</span></small><b className="numeric">{verdict.exposure > 0 ? `最大 ${verdict.exposure}%` : '0%'}</b><span className="brief-exposure-track" aria-hidden="true"><i style={{ width: `${verdict.exposure}%` }} /></span></div>}
         {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
       </div>
       {signals && <Signals signals={signals} exposure={verdict.exposure} />}

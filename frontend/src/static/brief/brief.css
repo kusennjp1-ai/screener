@@ -552,6 +552,16 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
      market-tab jump adds only 8px: the heading still lands 16px below the bar. */
   .brief-env-head h3, #brief-history-title, .market-history-explorer h3[id] { scroll-margin-top: 8px; }
 }
+/* Short notes never end on one orphaned character where the browser can avoid it. */
+.brief-env-toggle > em, .brief-env-pairs em, .brief-env-toggle > small, .brief-signals p { text-wrap: pretty; }
+/* Narrow phones: the 1-year line and the 1-month change take their own line, so a row's note has the
+   row's full width instead of the space left beside them; the status slot still fits ▲ and 注意 at 12px. */
+@media (max-width: 359px) {
+  .brief-env-toggle { grid-template-columns: 24px minmax(0, 1fr) auto 12px; grid-template-areas: "status label value chev" "status note note chev" "status spark change chev" "status flag flag chev"; column-gap: 6px; }
+  .brief-env-row.is-pair .brief-env-toggle { grid-template-areas: "status label label chev" "status pairs pairs chev" "status flag flag chev"; }
+  .brief-env-spark { justify-self: start; }
+  .brief-env-detail, .brief-env-row.is-stage .brief-stagebar, .brief-env-row.is-stage .brief-stagelegend { margin-left: 30px; }
+}
 /* Phone legibility for the market tab's own secondary text and the stock's fundamentals rows: the
    same 12px floor (labels in --text-2) as the shared tiles, so one group never mixes 11/12/13px. The
    conflict disclosure, the ▲ 注意 status word and the as-of tags carry meaning and are never smaller. */

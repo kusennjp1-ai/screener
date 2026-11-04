@@ -212,6 +212,24 @@ test.describe('tiles at 320px', () => {
   });
 });
 
+test.describe('market tab words at 320px', () => {
+  test.use(phone(320, 640));
+  test('the verdict keeps （独自判定） whole, the exposure label breaks before の目安, row notes get the row width', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    const verdict = page.getByTestId('brief-regime');
+    await expect(verdict.locator('strong .brief-frag')).toHaveText('（独自判定）');
+    expect(await verdict.locator('strong .brief-frag').evaluate(node => node.getClientRects().length)).toBe(1);
+    for (const part of await verdict.locator('.brief-exposure small .brief-frag').all()) expect(await part.evaluate(node => node.getClientRects().length)).toBe(1);
+    // Below 360px the 1-year line and the 1-month change sit under the note, not beside it.
+    const stacked = await page.locator('.brief-env-toggle').evaluateAll(toggles => toggles.filter(t => t.querySelector(':scope > em') && t.querySelector(':scope > .brief-env-change'))
+      .map(t => { const note = t.querySelector(':scope > em').getBoundingClientRect(), change = t.querySelector(':scope > .brief-env-change').getBoundingClientRect(); return change.top >= note.bottom - 1; }));
+    expect(stacked.length).toBeGreaterThanOrEqual(3);
+    expect(stacked.every(Boolean)).toBe(true);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('stock tiles at 200% zoom', () => {
   // A 375px phone at 200% text zoom lays out at 188 CSS px.
   test.use(phone(188, 600));
