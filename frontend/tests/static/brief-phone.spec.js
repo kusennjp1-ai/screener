@@ -309,6 +309,32 @@ test.describe('cold load', () => {
     for (const row of back) { expect(row.className, row.symbol).toBe('in'); expect(row.animations, row.symbol).toContain('brief-rise'); }
     expect(errors).toEqual([]);
   });
+
+  test('after a cold list load, a filter change with the data loaded plays the entrance', async ({ page }) => {
+    await page.addInitScript(() => {
+      window.__rows = [];
+      new MutationObserver(records => {
+        for (const record of records) for (const node of record.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          for (const row of node.matches('[data-testid="brief-candidate"]') ? [node] : node.querySelectorAll('[data-testid="brief-candidate"]')) {
+            const li = row.closest('li');
+            window.__rows.push({ symbol: row.dataset.symbol, className: li.className, animations: li.getAnimations().map(animation => animation.animationName) });
+          }
+        }
+      }).observe(document, { childList: true, subtree: true });
+    });
+    const { errors } = await openBrief(page, '#/brief/list');
+    await expect(candidates(page)).toHaveCount(5);
+    const cold = await page.evaluate(() => window.__rows.splice(0));
+    expect(cold.length).toBeGreaterThanOrEqual(5);
+    for (const row of cold) { expect(row.className, row.symbol).not.toContain('in'); expect(row.animations, row.symbol).toEqual([]); }
+    await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^ピボット接近/ }).click();
+    await expect(candidates(page)).toHaveCount(16);
+    const changed = await page.evaluate(() => window.__rows.splice(0));
+    expect(changed.length).toBe(16);
+    for (const row of changed) { expect(row.className, row.symbol).toBe('in'); expect(row.animations, row.symbol).toContain('brief-rise'); }
+    expect(errors).toEqual([]);
+  });
 });
 
 test.describe('desktop rows keep still when a stock opens beside them', () => {

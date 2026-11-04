@@ -166,13 +166,15 @@ export default function BriefApp() {
   const from = location.state?.from || (path === '/brief/list' ? 'list' : path === '/brief/watch' ? 'watch' : path === '/brief/market' ? 'market' : 'today');
   const view = symbol ? 'stock' : from;
   const now = brief.bundle.evaluatedNow ?? Date.now();
-  // Rows play their entrance when a screen opens with its data (a tab switch, then list changes);
-  // rows that mount because the data arrived after the screen opened appear at once. Decided in
-  // render from the previous render's view, so the first rows of a new screen already know.
+  // Rows play their entrance when a screen opens with its data (a tab switch) and on later list
+  // changes; rows that mount because the data arrived after the screen opened appear at once.
+  // Decided in render from the previous render's view, so the first rows of a new screen already
+  // know; once the rows that came with the data are committed, the screen animates list changes again.
   const loaded = Boolean(brief.bundle.data);
   const [entrance, setEntrance] = useState({ view, loaded });
   if (entrance.view !== view) setEntrance({ view, loaded });
   const animate = entrance.view === view ? entrance.loaded : loaded;
+  useEffect(() => { if (loaded && entrance.view === view && !entrance.loaded) setEntrance({ view, loaded: true }); }, [loaded, entrance, view]);
   const [listState, setListState] = useState({ filter: 'zone', sort: 'priority', query: '' });
   const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
     // eslint-disable-next-line react-hooks/exhaustive-deps
