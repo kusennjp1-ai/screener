@@ -249,7 +249,9 @@ export function marketCardView({ market, marketLoading = false, trends, date }) 
   const fired = checks.filter(c => c.fired).map(c => ({ ...c, itemAsOf: !boxDate && c.asOf && date && c.asOf < date ? shortDate(c.asOf, date) : null }));
   const unjudged = checks.filter(c => !c.judged);
   const reasons = [...new Set(unjudged.map(c => c.reason))].map(reason => ({ reason, labels: unjudged.filter(c => c.reason === reason).map(c => c.label) }));
-  const signals = ready ? { fired, unjudged, reasons, asOf: boxDate, historyMissing: !history } : null;
+  // The checks that were judged at all: with none, the summary can never say 「なし」.
+  const judged = checks.filter(c => c.judged).map(({ key, group, label }) => ({ key, group, label }));
+  const signals = ready ? { fired, unjudged, reasons, judged, asOf: boxDate, historyMissing: !history } : null;
   const firedIn = group => fired.filter(c => c.group === group).length;
 
   // ---- dating and verdict ----

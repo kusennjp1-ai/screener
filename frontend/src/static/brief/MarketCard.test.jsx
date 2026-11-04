@@ -178,7 +178,34 @@ describe('brief market card: market tab', () => {
     expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日');
     expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('確認 8/7');
     expect(group('市場の参加度')).toHaveTextContent('長期集計の整合性を確認できないため表示しません。');
-    expect(signals()).toHaveTextContent('長期集計がないため、分配日とFTDだけを判定しています。');
+    expect(signals()).toHaveTextContent(/^注意サインなし（独自判定）長期集計がないため、分配日とFTDだけを判定しています。$/);
+  });
+
+  const unavailable = symbol => ({ symbol, available: false, points: [], events: [], reason: '同じ基準日の出典付き指数履歴は未取得です。',
+    followThrough: { available: false, method: 'rally-attempt-gain1.2-day4-15-decline6-v1', reason: '同じ基準日の出典付き指数履歴は未取得です。' } });
+
+  it('never reads 注意サインなし when no check could be judged', () => {
+    const value = trends({ history: false });
+    value.data.long_history = null;
+    value.data.indices = [unavailable('^GSPC'), unavailable('^IXIC')];
+    const view = show(value);
+    expect(signals()).toHaveTextContent(/^注意サインを判定できません（独自判定）長期集計がないため、市場の参加度とリーダーの健全性も判定していません。判定していない項目 4件：S&Pの分配日・NASの分配日・S&PのFTD・NASのFTD（指数データを確認できません）$/);
+    expect(signals()).not.toHaveTextContent('注意サインなし');
+    expect(signals()).not.toHaveTextContent('分配日とFTDだけ');
+    view.unmount();
+    // One index judged, the other not: the scope names only what was judged, and the rest keep their reason.
+    const partly = trends({ history: false });
+    partly.data.indices[1] = unavailable('^IXIC');
+    show(partly);
+    expect(signals()).toHaveTextContent(/^注意サインなし（独自判定）長期集計がないため、S&Pの分配日・S&PのFTDだけを判定しています。判定していない項目 2件：NASの分配日・NASのFTD（指数データを確認できません）$/);
+  });
+
+  it('says 判定できません when a history is present but no check was judged', () => {
+    const value = trends({ rows: [] });
+    value.data.indices = [unavailable('^GSPC'), unavailable('^IXIC')];
+    show(value);
+    expect(signals()).toHaveTextContent(/^注意サインを判定できません（独自判定）判定していない項目 10件：/);
+    expect(signals()).not.toHaveTextContent('注意サインなし');
   });
 
   it('shows the reason for an unavailable index instead of a bare unknown', () => {

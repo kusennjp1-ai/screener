@@ -132,13 +132,23 @@ function Group({ group, children }) {
   </div>;
 }
 
+/** What the long history's absence leaves judged: only the index checks that themselves were judged. */
+function historyScope(judged) {
+  if (!judged.length) return '長期集計がないため、市場の参加度とリーダーの健全性も判定していません。';
+  const dist = judged.filter(c => c.key.startsWith('dist-')).length, ftd = judged.filter(c => c.key.startsWith('ftd-')).length;
+  const scope = dist === 2 && ftd === 2 ? '分配日とFTD' : judged.map(c => c.label).join('・');
+  return `長期集計がないため、${scope}だけを判定しています。`;
+}
+
 function Signals({ signals, exposure }) {
-  const { fired, unjudged, reasons, asOf, historyMissing } = signals;
+  const { fired, unjudged, reasons, judged = [], asOf, historyMissing } = signals;
+  // 「なし」 only when at least one check was judged: nothing judged is 判定できません, never an all-clear.
+  const headline = fired.length ? <><span aria-hidden="true">▲</span> 注意サイン {fired.length}件</> : judged.length ? '注意サインなし' : '注意サインを判定できません';
   return <div className={`brief-signals${fired.length ? ' is-warn' : ''}`} role="group" aria-label="注意サイン（独自判定）">
-    <b>{fired.length ? <><span aria-hidden="true">▲</span> 注意サイン {fired.length}件</> : '注意サインなし'}<small>（{asOf ? `${asOf}時点・` : ''}独自判定）</small></b>
+    <b>{headline}<small>（{asOf ? `${asOf}時点・` : ''}独自判定）</small></b>
     {fired.length > 0 && <ul>{fired.map(s => <li key={s.key}><span aria-hidden="true">▲</span><span>{s.text}{s.itemAsOf ? `（${s.itemAsOf}時点）` : ''}</span></li>)}</ul>}
-    {historyMissing ? <p>長期集計がないため、分配日とFTDだけを判定しています。</p>
-      : unjudged.length > 0 && <p className="brief-signals-unjudged">判定していない項目 {unjudged.length}件：{reasons.map(r => `${r.labels.join('・')}（${r.reason}）`).join('／')}</p>}
+    {historyMissing && <p>{historyScope(judged)}</p>}
+    {unjudged.length > 0 && <p className="brief-signals-unjudged">判定していない項目 {unjudged.length}件：{reasons.map(r => `${r.labels.join('・')}（${r.reason}）`).join('／')}</p>}
     {fired.length > 0 && exposure > 0 && <p>注意サインは判定とは別の確認項目で、エクスポージャーの目安は変えません。</p>}
   </div>;
 }
