@@ -139,11 +139,23 @@ anonymous (no `Authorization` header, https only, at most three redirects to
 
 Pruning is enabled only for plain carries. It is off for activation, renewal,
 limited preview, corrections, finite price repair, publisher-tooling and pinned
-ordinary-carry routes, while any renewal receipt is in the chain, and while
-`.github/financial-source-renewal-request.json` is committed. Those routes carry
-the index verbatim. A correction refuses a live index because it publishes no
-audit inventory. Pruning has a code-level kill switch
-(`ARCHIVE_POLICY.pruning_enabled`).
+ordinary-carry routes, while any renewal receipt is in the chain, and while the
+committed `.github/financial-source-renewal-request.json` names the live
+publication. Those routes carry the index verbatim. A correction refuses a live
+index because it publishes no audit inventory. Pruning has a code-level kill
+switch (`ARCHIVE_POLICY.pruning_enabled`).
+
+A renewal request can only be admitted while the live publication is its exact
+predecessor (`verifyRenewalPredecessor`), so `renewalRequestHold` pauses the
+publisher's pruning and the archive `collect` job only while the request names
+the live publication: its exact identity, its `publication.json` SHA-256, or its
+run and attempt (`collect` reads Pages anonymously and has no deployment
+identity, so it uses the last two). A request that names an earlier publication
+can never be admitted again and does not pause anything. A request that cannot
+be read or parsed pauses both, as does any request while the live identity is
+unknown. The request committed on main since 2026-10-07 (e2f0b5a) names run
+37456692717, not the live run 41779082131, so it can never be admitted and does
+not pause the first transition.
 
 Admission stops adding entries when either the 1 MiB index cap or the 4 MiB
 `publication.json` cap would be exceeded (degrade, not fail).
@@ -192,11 +204,13 @@ existing exact-controller rebind.
 - First transition (measured on the 2026-11-04 live publication, run
   41779082131): Pages hosts 25 release receipts and 24 carry projection bins
   (222,146,560 TAR bytes in total, the active carry included) with no index; the
-  TAR is 965,406,720 bytes. The first archive run (the push after merge) stages
-  and publishes all 24 bins. The next plain carry publication omits all 24 that
-  verify, hosts its own new carry (about 9.2 MB) and adds about 1.2 KB of index
-  per archived carry, so its TAR is about 752 MB before that day's other data
-  changes. Until a copy verifies, that carry simply stays hosted.
+  TAR is 965,406,720 bytes. No renewal receipt is hosted and the committed
+  renewal request names a superseded publication, so prune mode applies. The
+  first archive run (the push after merge) stages and publishes all 24 bins.
+  The next plain carry publication omits all 24 that verify, hosts its own new
+  carry (about 9.2 MB) and adds about 1.2 KB of index per archived carry, so its
+  TAR is about 752 MB before that day's other data changes. Until a copy
+  verifies, that carry simply stays hosted.
 
 ## Independent verification
 

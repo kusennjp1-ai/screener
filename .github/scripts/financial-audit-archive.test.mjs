@@ -4,10 +4,11 @@ import {createHash} from 'node:crypto';
 import {existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {gunzipSync,gzipSync} from 'node:zlib';
 import {ARCHIVE_POLICY,ARCHIVE_SCHEMA,ARCHIVE_TAG_PREFIX,RESERVED_RELEASE_PREFIX,archiveDigest,archiveLocation,assertFinancialAuditPreserved,parsePublicationReceipt,validateFinancialAuditArchive} from './financial-audit-history.mjs';
 import {ADMISSION_SCHEMA,ArchiveHttpError,admitAuditArchive,admissionCovers,applyArchivedDrops,archivePins,assertArchiveBinding,assertReleaseMetadata,collectArchive,composeFinancialAuditArchive,
-  fetchArchivedAsset,finalizeDrops,listArchiveReleases,pruneMode,releaseClient,rotatingPaths,selectArchiveCandidates,uploadArchive,uploadEntry,verifyArchiveAvailability,verifyArchivedBytes,verifyHistory,verifyPlan,verifyPublic,selfEncoding} from './financial-audit-archive.mjs';
+  fetchArchivedAsset,finalizeDrops,listArchiveReleases,pruneMode,RENEWAL_REQUEST_PATH,renewalRequestHold,releaseClient,rotatingPaths,selectArchiveCandidates,uploadArchive,uploadEntry,verifyArchiveAvailability,verifyArchivedBytes,verifyHistory,verifyPlan,verifyPublic,selfEncoding} from './financial-audit-archive.mjs';
 import {bootstrap,inventoryDigest,validateReceipt} from './publication-state.mjs';
 import {AUDIT_TRANSPORT_PREFIX} from './financial-audit-transport.mjs';
 import {pack} from '../../frontend/tools/static-transport/pack.mjs';
@@ -19,6 +20,10 @@ const repo=bootstrap.repository,site=new URL(bootstrap.site_url);
 const fc=(kind,hash)=>`static-data/financial-corrections/${kind}-${hash}.json`;
 const identity=`40/1/${H('c')}/${H('d')}`;
 const quiet=()=>{};
+// The real checkout: the publisher and the archive collect job run from it.
+const repoRoot=fileURLToPath(new URL('../../',import.meta.url));
+const supersededRequest=`37456692717/1/${H('0')}/${H('a')}`;
+const writeRequest=(dir,named)=>write(join(dir,'.github/financial-source-renewal-request.json'),typeof named==='string'&&!/^\d/.test(named)?named:JSON.stringify({schema_version:'financial-source-renewal-request-v1',previous_publication_identity:named}));
 function temp(t,prefix='audit-archive-'){const dir=mkdtempSync(join(tmpdir(),prefix));t.after(()=>rmSync(dir,{recursive:true,force:true}));return dir;}
 function write(path,bytes){mkdirSync(dirname(path),{recursive:true});writeFileSync(path,bytes);}
 
@@ -224,10 +229,41 @@ test('pruning is limited to plain carries and pauses for renewals, repairs and t
     s=>{s.ordinaryCarryAdmission={};},s=>{s.live.financialRelease.renewal={origin:{}};},s=>{s.live.receipt.financial_audit_files={[fc('renewal',H('1'))]:H('1')};},s=>{s.live.financialRelease=null;}]){
     const state=structuredClone(base);change(state);assert.equal(pruneMode(state,{root:dir}),false);
   }
-  write(join(dir,'.github/financial-source-renewal-request.json'),'{}');
-  assert.equal(pruneMode(base,{root:dir}),false,'a committed renewal request pauses pruning');
+  // A committed request pauses pruning only while renewal could still admit it:
+  // its predecessor must be the live publication (verifyRenewalPredecessor).
+  writeRequest(dir,supersededRequest);
+  assert.equal(pruneMode(base,{root:dir}),true,'a request naming a superseded publication can never be admitted and does not pause');
+  for(const [label,named]of [['exact identity',identity],['receipt hash',`41/2/${H('c')}/${H('9')}`],['run and attempt',`40/1/${H('7')}/${H('8')}`]]){
+    writeRequest(dir,named);assert.equal(pruneMode(base,{root:dir}),false,`a request naming the live publication pauses (${label})`);
+  }
+  for(const bad of ['{}','{"previous_publication_identity":"40/1/x/y"}','not json']){writeRequest(dir,bad);assert.equal(pruneMode(base,{root:dir}),false,`an unreadable request pauses: ${bad}`);}
+  writeRequest(dir,supersededRequest);
+  assert.equal(pruneMode({...base,live:{...base.live,identity:undefined}},{root:dir}),false,'an unidentified live publication pauses while any request is committed');
+  rmSync(join(dir,'.github'),{recursive:true});assert.equal(pruneMode({...base,live:{...base.live,identity:undefined}},{root:dir}),true,'no request: identity is not consulted');
+  mkdirSync(join(dir,RENEWAL_REQUEST_PATH),{recursive:true});assert.equal(pruneMode(base,{root:dir}),false,'a request path that is not a readable file pauses');
+  assert.equal(renewalRequestHold({root:dir,receiptSha256:H('c'),runId:40,runAttempt:1}),'an unreadable renewal request is committed');
   assert.equal(ARCHIVE_POLICY.pruning_enabled,true);assert.ok(Object.isFrozen(ARCHIVE_POLICY));
   assert.match(readFileSync(new URL('./financial-audit-archive.mjs',import.meta.url),'utf8'),/ARCHIVE_POLICY\.pruning_enabled&&state\?\.carry/,'the kill switch gates every removal');
+});
+
+// No temporary root: the request actually committed in this checkout (if any).
+test('the real checkout root pauses pruning and collect only for a renewal request that names the live publication',async t=>{
+  const base={live:{identity,financialRelease:{renewal:null},receipt:{financial_audit_files:{}}},carry:{},source:{artifact:{id:1}}};
+  assert.equal(pruneMode(base,{root:repoRoot}),true,'a plain carry prunes from the real checkout');
+  const committed=join(repoRoot,RENEWAL_REQUEST_PATH);
+  if(existsSync(committed)){
+    const named=JSON.parse(readFileSync(committed,'utf8')).previous_publication_identity;
+    assert.match(named,/^[1-9]\d*\/[1-9]\d*\/[a-f0-9]{64}\/[a-f0-9]{64}$/);
+    assert.equal(renewalRequestHold({root:repoRoot,identity}),null);
+    assert.equal(pruneMode({...base,live:{...base.live,identity:named}},{root:repoRoot}),false,'the committed request still pauses its own predecessor');
+    const [run,attempt,receipt]=named.split('/');
+    assert.equal(renewalRequestHold({root:repoRoot,receiptSha256:receipt,runId:1,runAttempt:1}),'a renewal request names the live publication');
+    assert.equal(renewalRequestHold({root:repoRoot,receiptSha256:H('9'),runId:Number(run),runAttempt:Number(attempt)}),'a renewal request names the live publication');
+  }
+  const site=await nestedSite(t,2),{fetcher}=world(t,site);
+  write(join(site.pages,'publication.json'),JSON.stringify(site.live.receipt));
+  const logs=[],plan=await collectArchive({output:join(temp(t),'staged'),fetcher,sleep:async()=>{},cwd:repoRoot,log:message=>logs.push(message),validate:value=>value});
+  assert.deepEqual(plan.entries.map(entry=>entry.path),site.carries.map(carry=>carry.path).sort(),logs.join('\n'));
 });
 
 test('candidate selection skips indexed, source and non-carry files, sorted and capped',()=>{
@@ -354,8 +390,8 @@ test('finalized drops bind receipts offline, compose an index and verify by the 
   assert.match(unboundWarnings[0],/no hosted receipt references it/);
   const moved=carryState({...site.live,identity:`41/1/${H('c')}/${H('d')}`});moved.auditArchive=structuredClone(state.auditArchive);
   assert.deepEqual(finalizeDrops(moved,root,{cwd,warn:quiet}),[],'a different predecessor removes nothing');
-  const renewal=carryState(site.live);renewal.auditArchive=structuredClone(state.auditArchive);write(join(cwd,'.github/financial-source-renewal-request.json'),'{}');
-  assert.deepEqual(finalizeDrops(renewal,root,{cwd,warn:quiet}),[],'a renewal request committed after admission removes nothing');
+  const renewal=carryState(site.live);renewal.auditArchive=structuredClone(state.auditArchive);writeRequest(cwd,site.live.identity);
+  assert.deepEqual(finalizeDrops(renewal,root,{cwd,warn:quiet}),[],'a renewal request for the live publication committed after admission removes nothing');
 });
 
 test('uploader creates immutable releases, is idempotent and never modifies a published release',async t=>{
@@ -436,8 +472,15 @@ test('collect stages exact Pages bins anonymously and verify-public accepts alte
   await assert.rejects(verifyPublic({input:output,fetcher,sleep:async()=>{},budgetMs:0}),/did not verify/);
   await uploadArchive({input:output,token:FAKE_WRITE_TOKEN,fetcher,sleep:async()=>{},log:quiet,controllerSha:'b'.repeat(40)});
   assert.equal(await verifyPublic({input:output,fetcher,sleep:async()=>{}}),1);
-  const cwd=temp(t);write(join(cwd,'.github/financial-source-renewal-request.json'),'{}');
-  assert.equal((await collectArchive({output,fetcher,sleep:async()=>{},cwd,log:quiet,validate:value=>value})).entries.length,0,'a committed renewal request pauses archiving');
+  // Collect has no deployment identity: a request pauses it when it names this
+  // publication.json (by hash) or its run and attempt, or cannot be read.
+  const cwd=temp(t),receiptSha=sha(readFileSync(join(site.pages,'publication.json')));
+  for(const [label,named]of [['receipt hash',`99/3/${receiptSha}/${H('d')}`],['run and attempt',`40/1/${H('7')}/${H('8')}`],['unreadable','{']]){
+    writeRequest(cwd,named);const logs=[],held=await collectArchive({output,fetcher,sleep:async()=>{},cwd,log:message=>logs.push(message),validate:value=>value});
+    assert.deepEqual([held.entries.length,held.conflicts.length],[0,0],label);assert.ok(logs.some(message=>/No carry projections to archive \(.*renewal request/.test(message)),label);
+  }
+  writeRequest(cwd,supersededRequest);
+  assert.deepEqual((await collectArchive({output,fetcher,sleep:async()=>{},cwd,log:quiet,validate:value=>value})).conflicts.map(entry=>entry.path),[site.carries[1].path],'a superseded request does not pause archiving');
   // The real receipt validator runs by default and rejects a malformed live receipt.
   await assert.rejects(collectArchive({output,fetcher,sleep:async()=>{},cwd,log:quiet,attempts:1}),/Invalid|receipt|universe|ledger/);
 });
@@ -491,13 +534,15 @@ test('first transition from 24 hosted carries and no index keeps today\'s public
   const site=await nestedSite(t,24),{fake,fetcher,api}=world(t,site),active=site.carries.at(-1);
   assert.equal(site.live.receipt.financial_audit_archive,undefined);
   const live={...site.live,receiptBytes:site.live.receiptBytes.padEnd(781350,' ')}; // live publication.json size on 2026-11-04
-  const root=temp(t,'carry-source-'),cwd=temp(t);
+  // The real checkout as admission root and collect cwd, exactly as the workflows
+  // run: whatever renewal request is committed there must not stop this transition.
+  const root=temp(t,'carry-source-'),cwd=repoRoot;
   for(const item of [...site.carries,...site.receipts])write(join(root,item.path),item.bytes);
   write(join(root,fc('source-projection',sha(site.sp))),site.sp);write(join(root,fc('source-base',sha(site.sb))),site.sb);
   // Before any archive run: no release exists, so nothing is dropped, nothing is
   // indexed and recheck makes no archive call. This is today's publication.
   const warnings=[],idle=carryState(live);
-  idle.auditArchive=await admitAuditArchive({state:idle,api,fetcher,root:temp(t),warn:message=>warnings.push(message)});
+  idle.auditArchive=await admitAuditArchive({state:idle,api,fetcher,warn:message=>warnings.push(message),root:repoRoot});
   assert.equal(idle.auditArchive.mode,'prune');assert.deepEqual(idle.auditArchive.drops,{});
   assert.equal(warnings.length,24);assert.ok(warnings.every(message=>/^Keeping static-data\/financial-corrections\/carry-projection-/.test(message)));
   assert.deepEqual(finalizeDrops(idle,root,{cwd,warn:quiet}),[]);
@@ -506,20 +551,20 @@ test('first transition from 24 hosted carries and no index keeps today\'s public
   assert.deepEqual(await verifyArchiveAvailability(null,{api:()=>{throw Error('no API call expected');},fetcher:()=>{throw Error('no download expected');}}),{probe:[],full:[]});
   // The archive workflow stages all 24 hosted bins, the active carry included.
   write(join(site.pages,'publication.json'),JSON.stringify(live.receipt));
-  const staged=join(temp(t),'staged'),plan=await collectArchive({output:staged,fetcher,sleep:async()=>{},cwd:temp(t),log:quiet,validate:value=>value});
+  const staged=join(temp(t),'staged'),plan=await collectArchive({output:staged,fetcher,sleep:async()=>{},cwd:repoRoot,log:quiet,validate:value=>value});
   assert.deepEqual(plan.entries.map(entry=>entry.path),site.carries.map(carry=>carry.path).sort());assert.deepEqual(plan.conflicts,[]);
   await uploadArchive({input:staged,token:FAKE_WRITE_TOKEN,fetcher,sleep:async()=>{},log:quiet,controllerSha:'b'.repeat(40)});
   assert.equal(await verifyPublic({input:staged,fetcher,sleep:async()=>{}}),24);
   assert.equal(fake.state().releases.filter(release=>release.tag_name.startsWith(ARCHIVE_TAG_PREFIX)&&!release.draft).length,24);
   // A copy that now redirects off the allowed hosts is the only carry kept.
   const odd=archiveLocation(site.carries[5].path);fake.fault(odd.tag,odd.asset,{redirectTo:'https://evil.example/carry.json.gz'});
-  const partialWarnings=[],partial=await admitAuditArchive({state:carryState(live),api,fetcher,root:temp(t),warn:message=>partialWarnings.push(message)});
+  const partialWarnings=[],partial=await admitAuditArchive({state:carryState(live),api,fetcher,root:repoRoot,warn:message=>partialWarnings.push(message)});
   assert.equal(Object.keys(partial.drops).length,23);assert.ok(!Object.hasOwn(partial.drops,site.carries[5].path));
   assert.equal(partialWarnings.length,1);assert.match(partialWarnings[0],/allowed public download hosts/);
   fake.clearFaults();
   // The next publication: every verified copy leaves Pages, including the live active carry.
   const state=carryState(live);
-  state.auditArchive=await admitAuditArchive({state,api,fetcher,root:temp(t),warn:quiet});
+  state.auditArchive=await admitAuditArchive({state,api,fetcher,root:repoRoot,warn:quiet});
   assert.equal(Object.keys(state.auditArchive.drops).length,24);assert.ok(Object.hasOwn(state.auditArchive.drops,active.path));
   const removal=finalizeDrops(state,root,{cwd,warn:quiet});
   assert.deepEqual(removal,site.carries.map(carry=>carry.path).sort());

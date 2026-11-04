@@ -169,12 +169,31 @@ export async function liveNestedEntry({publication,path,sha256,fetcher=fetch}){
 }
 
 const hostedRenewal=files=>Object.keys(files||{}).some(path=>renewalPattern.test(path));
+const identityPattern=/^([1-9]\d*)\/([1-9]\d*)\/([a-f0-9]{64})\/([a-f0-9]{64})$/;
+// A committed renewal request can only be admitted while the live publication
+// is its exact predecessor (verifyRenewalPredecessor). Archiving pauses while
+// the request names this publication (by identity, receipt hash or run and
+// attempt); a request naming an earlier, superseded publication can never be
+// admitted again and does not pause it. An unreadable request pauses.
+export function renewalRequestHold({root=process.cwd(),identity=null,receiptSha256=null,runId=null,runAttempt=null}={}){
+  let bytes;
+  try{bytes=readFileSync(join(root,RENEWAL_REQUEST_PATH));}
+  catch(error){return error?.code==='ENOENT'?null:'an unreadable renewal request is committed';}
+  let named=null;
+  try{named=identityPattern.exec(JSON.parse(bytes.toString('utf8'))?.previous_publication_identity);}catch{named=null;}
+  if(!named)return 'an unreadable renewal request is committed';
+  const live=typeof identity==='string'?identityPattern.exec(identity):null;
+  const receipt=receiptSha256??live?.[3]??null,run=runId??live?.[1]??null,attempt=runAttempt??live?.[2]??null;
+  if(!receipt&&(run===null||attempt===null))return 'a renewal request is committed and the live publication is unidentified';
+  if(named[0]===identity||named[3]===receipt||run!==null&&attempt!==null&&named[1]===String(run)&&named[2]===String(attempt))return 'a renewal request names the live publication';
+  return null;
+}
 // Only a plain carry may remove files. Every other route keeps today's behaviour.
-export function pruneMode(state,{exists=existsSync,root=process.cwd()}={}){
+export function pruneMode(state,{root=process.cwd()}={}){
   return Boolean(ARCHIVE_POLICY.pruning_enabled&&state?.carry&&!state.limited&&!state.activation&&!state.renewal&&!state.correction
     &&!state.source?.repair&&!state.publisherTooling&&!ordinaryCarrySelected(state)
     &&state.live?.financialRelease&&!state.live.financialRelease.renewal&&!hostedRenewal(state.live.receipt?.financial_audit_files)
-    &&!exists(join(root,RENEWAL_REQUEST_PATH)));
+    &&renewalRequestHold({root,identity:state.live.identity??null})===null);
 }
 
 export function selectArchiveCandidates(live){
@@ -228,10 +247,10 @@ function projectedEntry(path,candidate){
 
 // Runs before the approved UI tree is checked out. Uses the plan's
 // authenticated live publication; never re-reads or re-authenticates it.
-export async function admitAuditArchive({state,api=githubApi,fetcher=fetch,now=()=>new Date().toISOString(),seed=process.env.GITHUB_RUN_ID,exists=existsSync,root=process.cwd(),warn=warning}){
+export async function admitAuditArchive({state,api=githubApi,fetcher=fetch,now=()=>new Date().toISOString(),seed=process.env.GITHUB_RUN_ID,root=process.cwd(),warn=warning}){
   const live=state.live,prior=live.receipt?.financial_audit_archive??null;
   if(prior)validateFinancialAuditArchive(prior,live.receipt);
-  const mode=pruneMode(state,{exists,root})?'prune':'verify';
+  const mode=pruneMode(state,{root})?'prune':'verify';
   const record={schema_version:ADMISSION_SCHEMA,live_identity:live.identity,prior_sha256:archiveDigest(prior),mode,verified:{probe:[],full:[]},drops:{},verified_at:null};
   if(!prior&&mode==='verify'){record.verified_at=now();return record;}
   const hosted=live.receipt.financial_audit_files,candidates=mode==='prune'?selectArchiveCandidates(live):[];
@@ -298,10 +317,10 @@ function referencingReceipts(receipts,path,sha256){
 }
 // Offline, inside restoreCarrySources: binds every verified drop to the hosted
 // receipts that reference it. Anything unbound stays hosted.
-export function finalizeDrops(state,root,{warn=warning,exists=existsSync,cwd=process.cwd()}={}){
+export function finalizeDrops(state,root,{warn=warning,cwd=process.cwd()}={}){
   const record=state.auditArchive;
   if(!record)return [];
-  if(record.mode!=='prune'||record.live_identity!==state.live.identity||!pruneMode(state,{exists,root:cwd})){record.drops={};record.removal=[];return [];}
+  if(record.mode!=='prune'||record.live_identity!==state.live.identity||!pruneMode(state,{root:cwd})){record.drops={};record.removal=[];return [];}
   // An unindexed activation predecessor has no hosted map and nothing to omit.
   if(!Object.keys(record.drops||{}).length&&!state.live.receipt?.financial_audit_archive){record.drops={};record.removal=[];return [];}
   const hosted=validateFinancialAuditFiles(state.live.receipt.financial_audit_files),receipts=hostedReceipts(root,hosted),drops={};
@@ -379,23 +398,23 @@ async function readSitePublication({fetcher=fetch,siteUrl=bootstrap.site_url,val
 }
 const writeOutput=values=>{if(process.env.GITHUB_OUTPUT)appendFileSync(process.env.GITHUB_OUTPUT,Object.entries(values).map(([key,value])=>`${key}=${value}\n`).join(''));};
 
-export async function collectArchive({output,fetcher=fetch,sleep=defaultSleep,exists=existsSync,cwd=process.cwd(),attempts=3,log=console.log,validate=validateReceipt}){
+export async function collectArchive({output,fetcher=fetch,sleep=defaultSleep,cwd=process.cwd(),attempts=3,log=console.log,validate=validateReceipt}){
   for(let attempt=1;;attempt++){
-    try{return await collectOnce({output,fetcher,exists,cwd,log,validate});}
+    try{return await collectOnce({output,fetcher,cwd,log,validate});}
     catch(error){
       if(attempt>=attempts)throw error;
       log(`Live Pages changed or was unreadable while staging (${error.message}); retrying in 60 s`);await sleep(60000);
     }
   }
 }
-async function collectOnce({output,fetcher,exists,cwd,log,validate}){
+async function collectOnce({output,fetcher,cwd,log,validate}){
   rmSync(output,{recursive:true,force:true});mkdirSync(join(output,'bins'),{recursive:true});
   const {receipt,bytes}=await readSitePublication({fetcher,validate});
   const plan={schema_version:PLAN_SCHEMA,publication:{run_id:receipt.run_id,run_attempt:receipt.run_attempt,receipt_sha256:sha(bytes)},controller_sha:process.env.GITHUB_SHA||null,entries:[],conflicts:[]};
   let reason=null;
   if(!receipt.financial_release||!receipt.financial_audit_files)reason='no live financial release';
   else if(hostedRenewal(receipt.financial_audit_files))reason='a renewal receipt is hosted';
-  else if(exists(join(cwd,RENEWAL_REQUEST_PATH)))reason='a renewal request is committed';
+  else reason=renewalRequestHold({root:cwd,receiptSha256:sha(bytes),runId:receipt.run_id??null,runAttempt:receipt.run_attempt??null});
   const candidates=reason?[]:selectArchiveCandidates({receipt});
   if(candidates.length){
     const nested=await openNestedAudit({publication:receipt,fetcher});
