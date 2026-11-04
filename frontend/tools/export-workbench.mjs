@@ -8,8 +8,11 @@ import { HISTORY_RETENTION_SESSIONS } from '../src/static/candidatePerformance.j
 import { exportCandidatePerformance } from './export-candidate-performance.mjs';
 import { summarizeWorkbench } from '../src/static/workbenchSummary.js';
 import { workbenchRuleFingerprint } from './workbench-comparison.mjs';
+import { removeSupersededOutputs } from './superseded-export.mjs';
 const hash = value => createHash('sha256').update(value).digest('hex');
 export async function exportWorkbench({root, rows, manifest, entry, researchContent, now = Date.parse(manifest.generated_at), financialCorrection = {}}) {
+  // The input manifest's pair is replaced below, not accumulated per export.
+  const replaced={workbench:entry.assets?.workbench?.path,summary:entry.assets?.workbench_summary?.path};
   const ruleVersion=await workbenchRuleFingerprint();
   const meta={...financialCorrection,financial_evaluated_at:now,financial_semantics:'current_at_evaluation_not_historical_publication',as_of:entry.as_of_date,generated_at:manifest.generated_at,published_at:null,rule_version:ruleVersion,source_research_sha256:hash(researchContent),universe_members_sha256:hash(rows.map(r=>r.symbol).sort().join('\n'))};
   const snapshot=selectionSnapshot(rows,meta,now);
@@ -63,5 +66,8 @@ export async function exportWorkbench({root, rows, manifest, entry, researchCont
   const summaryDigest=hash(summary),summaryPath=`workbench-summary-${summaryDigest.slice(0,16)}.json`;
   await writeFile(resolve(root,summaryPath),summary);
   entry.assets.workbench_summary={...financialCorrection,path:summaryPath,sha256:summaryDigest,as_of_date:entry.as_of_date,snapshot_id:snapshotId,source_research_sha256:meta.source_research_sha256};
+  await removeSupersededOutputs({root,references:[manifest,entry],replacements:[
+    {family:'workbench',previous:replaced.workbench,current:path},
+    {family:'workbench_summary',previous:replaced.summary,current:summaryPath}]});
   return result;
 }
