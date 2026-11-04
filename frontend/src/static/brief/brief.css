@@ -248,10 +248,15 @@
 .brief-dl div { display: grid; grid-template-columns: 9em minmax(0, 1fr); gap: 8px; font-size: 13px; }
 @media (max-width: 520px) { .brief-dl div { grid-template-columns: minmax(0, 1fr); gap: 0; } .brief-dl div + div { margin-top: 4px; } }
 .brief-dl dt { color: var(--text-3); } .brief-dl dd { margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
-.brief-quarters { display: block; width: 100%; height: auto; max-height: 200px; }
-.q-base { stroke: var(--line-2); } .q-eps { fill: var(--zone); } .q-sales { fill: var(--wait); } .q-unknown { fill: none; stroke: var(--line-2); stroke-dasharray: 3 3; }
-.q-label { fill: var(--text-3); font-size: 11px; font-family: var(--font-mono); } .q-margin { fill: var(--text-2); font-size: 11px; font-family: var(--font-mono); }
-.q-unknown { fill: var(--surface-2); }
+/* The bars stretch to the card (their columns line up with the HTML axis below); strokes keep 1px. */
+.brief-quarters { display: block; width: 100%; height: 120px; }
+.q-base { stroke: var(--line-2); vector-effect: non-scaling-stroke; } .q-eps { fill: var(--zone); } .q-sales { fill: var(--wait); }
+.q-unknown { fill: var(--surface-2); stroke: var(--line-2); stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+.brief-q-axis { display: grid; grid-template-columns: repeat(var(--n, 8), minmax(0, 1fr)); margin-top: -8px; font-size: 12px; line-height: 1.35; font-family: var(--font-mono); text-align: center; color: var(--text-3); }
+.brief-q-axis > span { display: grid; min-width: 0; }
+.brief-q-axis b { font-weight: 400; color: var(--text-2); }
+.brief-q-axis i { font-style: normal; color: var(--text-2); }
+.brief-q-gaps { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 12px; line-height: 1.6; color: var(--text-2); }
 .brief-fin-source { margin-top: 2px; overflow-wrap: anywhere; }
 /* Fundamentals tiles explain why a value is missing, so their notes wrap instead of truncating. */
 .brief-facts.is-fin .brief-fact { align-content: start; }
@@ -390,6 +395,7 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-search input, .brief-sort select, .brief-inputs input { border-color: color-mix(in srgb, var(--text-3) 80%, var(--surface)); }
 @media (max-width: 520px) {
   .brief-market .brief-fact small, .brief-market .brief-fact em, .brief-summary small, .brief-summary em { font-size: 12px; }
+  .brief-q-legend { font-size: 12px; }
   /* The market redesign names each side of a tile pair (S&P / NAS, 高 / 安), which was a 12px note before. */
   .brief-market .brief-pair-name { font-size: 12px; }
   /* The four list filters as a 2×2 grid: the fourth one and every focus ring stay on screen. */

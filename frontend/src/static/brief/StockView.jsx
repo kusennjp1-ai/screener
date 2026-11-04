@@ -62,22 +62,57 @@ function VcpCard({ technical, bars, judged, view }) {
   </section>;
 }
 
+const shortPeriod = row => row.end.slice(2, 7);
+const monthIndex = end => Number(end.slice(0, 4)) * 12 + Number(end.slice(5, 7));
+/** Quarters as YY-MM periods; calendar-consecutive ones read as a range (24-09〜25-03). */
+function periodList(rows, indices) {
+  const runs = [];
+  for (const i of indices) {
+    const run = runs.at(-1);
+    if (run && run[1] === i - 1 && monthIndex(rows[i].end) - monthIndex(rows[i - 1].end) === 3) run[1] = i; else runs.push([i, i]);
+  }
+  return runs.map(([a, b]) => a === b ? shortPeriod(rows[a]) : `${shortPeriod(rows[a])}〜${shortPeriod(rows[b])}`).join('・');
+}
+/** Why each grey bar has no value, as text: one line per reason (EPS and 売上 share a line when their quarters match). */
+function quarterGaps(rows) {
+  const lines = [];
+  for (const [metric, key, name] of [['eps', 'epsYoY', 'EPS'], ['sales', 'salesYoY', '売上']]) {
+    const byReason = new Map();
+    rows.forEach((row, i) => { if (finite(row[key])) return; const reason = quarterReason(row, metric) || '比較できません'; byReason.set(reason, [...(byReason.get(reason) || []), i]); });
+    for (const [reason, indices] of byReason) {
+      const twin = lines.find(line => line.reason === reason && line.indices.join() === indices.join());
+      if (twin) twin.names.push(name); else lines.push({ names: [name], reason, indices });
+    }
+  }
+  return lines.sort((a, b) => a.indices[0] - b.indices[0]).map(line => `${line.names.join('・')} 前年比：${periodList(rows, line.indices)}期は${line.reason}`);
+}
+// A margin in at most four characters so each quarter's column stays readable at 12px on a 320px phone.
+const marginShort = value => !finite(value) ? '—' : value.toFixed(Math.abs(value) >= 10 ? 0 : 1).replace('-', '−');
+
 function QuarterBars({ rows }) {
   const known = rows.flatMap(r => [r.epsYoY, r.salesYoY]).filter(finite);
   if (!known.length) return null;
-  const max = Math.max(10, ...known.map(Math.abs)), H = 140, base = 110, W = rows.length * 48;
+  // Growth above and below the base line share one scale; a fall is never cut off at the bottom.
+  const up = Math.max(0, ...known), down = Math.max(0, ...known.map(v => -v)), span = Math.max(10, up + down), H = 120;
+  const unit = (H - 8) / span, base = 4 + up * unit, W = rows.length * 48;
+  const gaps = quarterGaps(rows), derived = rows.some(r => r.derived);
   return <>
-    <svg className="brief-quarters" viewBox={`0 0 ${W} ${H + 22}`} role="img" aria-label={`四半期の前年同期比成長率。直近 ${rows.at(-1).end}: EPS ${finite(rows.at(-1).epsYoY) ? signed(rows.at(-1).epsYoY, 0) : quarterReason(rows.at(-1), 'eps')}、売上 ${finite(rows.at(-1).salesYoY) ? signed(rows.at(-1).salesYoY, 0) : quarterReason(rows.at(-1), 'sales')}`}>
+    <svg className="brief-quarters" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`四半期の前年同期比成長率。直近 ${rows.at(-1).end}: EPS ${finite(rows.at(-1).epsYoY) ? signed(rows.at(-1).epsYoY, 0) : quarterReason(rows.at(-1), 'eps')}、売上 ${finite(rows.at(-1).salesYoY) ? signed(rows.at(-1).salesYoY, 0) : quarterReason(rows.at(-1), 'sales')}`}>
       <line x1="0" x2={W} y1={base} y2={base} className="q-base" />
       {rows.map((r, i) => {
         const cx = i * 48 + 24, period = `${r.end.slice(0, 7)}期`;
         const bar = (v, side, cls, metric, name) => finite(v)
-          ? <rect className={`${cls} grow-y`} style={{ '--i': i }} x={cx + (side < 0 ? -15 : 1)} width="14" y={v >= 0 ? base - v / max * 96 : base} height={Math.max(1, Math.abs(v) / max * 96)} rx="2"><title>{`${period} ${name} ${signed(v, 0)}`}</title></rect>
-          : <rect className="q-unknown" x={cx + (side < 0 ? -15 : 1)} width="14" y={base - 24} height="24" rx="2"><title>{`${period} ${name}：${quarterReason(r, metric)}`}</title></rect>;
-        return <g key={r.end}>{bar(r.epsYoY, -1, 'q-eps', 'eps', 'EPS 前年比')}{bar(r.salesYoY, 1, 'q-sales', 'sales', '売上 前年比')}<text x={cx} y={H - 12} textAnchor="middle" className="q-label">{r.end.slice(2, 7)}</text><text x={cx} y={H + 6} textAnchor="middle" className="q-margin">{finite(r.margin) ? r.margin.toFixed(1) : '—'}</text>{r.derived && <text x={cx} y={H + 20} textAnchor="middle" className="q-label">Q4算出</text>}</g>;
+          ? <rect className={`${cls} grow-y`} style={{ '--i': i }} x={cx + (side < 0 ? -15 : 1)} width="14" y={v >= 0 ? base - v * unit : base} height={Math.max(1, Math.abs(v) * unit)} rx="2"><title>{`${period} ${name} ${signed(v, 0)}`}</title></rect>
+          : <rect className="q-unknown" x={cx + (side < 0 ? -15 : 1)} width="14" y={base >= 28 ? base - 24 : base} height="24" rx="2"><title>{`${period} ${name}：${quarterReason(r, metric)}`}</title></rect>;
+        return <g key={r.end}>{bar(r.epsYoY, -1, 'q-eps', 'eps', 'EPS 前年比')}{bar(r.salesYoY, 1, 'q-sales', 'sales', '売上 前年比')}</g>;
       })}
     </svg>
-    <p className="brief-q-legend"><span><i className="q-key-eps" />EPS 前年比</span><span><i className="q-key-sales" />売上 前年比</span><span>下段＝純利益率(%)</span><span><i className="q-key-unknown" />灰色＝値なし（理由は各期にカーソル/長押しで表示）</span></p>
+    {/* Each quarter's period, margin and Q4 derivation as HTML under its bars (12px at every width). */}
+    <div className="brief-q-axis" aria-hidden="true" style={{ '--n': rows.length }}>
+      {rows.map(r => <span key={r.end}><span>{r.end.slice(2, 4)}年</span><span>{Number(r.end.slice(5, 7))}月</span><b>{marginShort(r.margin)}</b>{derived && <i>{r.derived ? '算出' : ''}</i>}</span>)}
+    </div>
+    <p className="brief-q-legend"><span><i className="q-key-eps" />EPS 前年比</span><span><i className="q-key-sales" />売上 前年比</span><span>下段＝純利益率(%)</span>{derived && <span>算出＝Q4を10-K年度値−3四半期で算出</span>}<span><i className="q-key-unknown" />灰色＝値なし{gaps.length ? '（理由は下記）' : ''}</span></p>
+    {gaps.length > 0 && <ul className="brief-q-gaps" aria-label="値なしの理由">{gaps.map(text => <li key={text}>{text}</li>)}</ul>}
   </>;
 }
 

@@ -159,6 +159,13 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(card.getByText('Code 33 未確認')).toBeVisible();
     await expect(card).toContainText('EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です');
     await expect(card.getByRole('img', { name: /四半期の前年同期比成長率/ })).toBeVisible();
+    // Each grey bar's reason is text (a phone shows no SVG title), and the periods and margins under the
+    // bars read at 12px at every width.
+    await expect(card.getByRole('list', { name: '値なしの理由' })).toContainText('EPS 前年比：25-06・26-06期はQ4のEPSは年次報告のみ');
+    await expect(card).not.toContainText(/カーソル|長押し/);
+    const axis = await card.locator('.brief-q-axis > span > *').evaluateAll(nodes => nodes.map(node => [node.textContent, parseFloat(getComputedStyle(node).fontSize), node.scrollWidth > node.clientWidth + 0.5]));
+    expect(axis.length).toBeGreaterThanOrEqual(24);
+    expect(axis.filter(([, size, cut]) => size < 12 || cut)).toEqual([]);
     // The legend swatches use a radius token (Design Acceptance flags any other corner radius).
     const swatches = await card.locator('.brief-q-legend i').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderTopLeftRadius));
     expect(swatches.length).toBeGreaterThanOrEqual(3);

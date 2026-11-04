@@ -78,8 +78,14 @@ describe('brief fundamentals card', () => {
     expect(scope.getByText('出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで')).toBeInTheDocument();
     expect(scope.getByText('Code 33 未確認')).toBeInTheDocument();
     expect(scope.getByText(/EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です/)).toBeInTheDocument();
-    expect(scope.getByText(/灰色＝値なし/)).toBeInTheDocument();
+    expect(scope.getByText('灰色＝値なし（理由は下記）')).toBeInTheDocument();
+    expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent(/カーソル|長押し/);
     expect(scope.getByRole('img', { name: /2026-06-30: EPS Q4のEPSは年次報告のみ、売上 \+100%/ })).toBeInTheDocument();
+    // Every grey bar's reason is readable text, not only an SVG title.
+    expect(scope.getByRole('list', { name: '値なしの理由' }).textContent).toBe(['EPS 前年比：24-09〜25-03期は前年同期の値なし', '売上 前年比：24-09〜25-06期は前年同期の値なし', 'EPS 前年比：25-06・26-06期はQ4のEPSは年次報告のみ'].join(''));
+    // Each quarter's period and margin sit under its bars as HTML.
+    const axis = [...document.querySelectorAll('.brief-q-axis > span')].map(cell => cell.textContent);
+    expect(axis).toEqual(['24年9月10', '24年12月10', '25年3月10', '25年6月10', '25年9月10', '25年12月11', '26年3月12', '26年6月13']);
     expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent('未取得');
   });
 
