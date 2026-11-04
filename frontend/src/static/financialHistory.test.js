@@ -43,3 +43,13 @@ it('rejects missing period records and keeps malformed source labels from crashi
   expect(assess(row,'ibd').rules.find(r=>r.label.includes('3年')).evidence).toContain('出典未確認');
  } finally {vi.useRealTimers();}
 });
+it('says why a quarterly rate is unknown: a stale quarter, no base, a missing value or a nonpositive base',()=>{
+  const at=(quarterly,date='2026-09-25')=>financialHistory({...fixture(),quarterly},'TEST',date,now);
+  expect(at(fixture().quarterly)).toMatchObject({epsYoYReason:null,salesYoYReason:null});
+  // 2025-12-31 is 268 days before 2026-09-25: more than 190, so no rate is compared.
+  const older=at([{end:'2024-12-31',eps:1,revenue:100},{end:'2025-12-31',eps:2,revenue:130}]);
+  expect(older).toMatchObject({valid:true,epsYoY:null,salesYoY:null,epsYoYReason:'stale_quarter',salesYoYReason:'stale_quarter'});
+  expect(at([{end:'2026-06-30',eps:2,revenue:130}])).toMatchObject({epsYoYReason:'no_base',salesYoYReason:'no_base'});
+  expect(at([{end:'2025-06-30',eps:-1,revenue:100},{end:'2026-06-30',eps:2,revenue:null}])).toMatchObject({epsYoY:null,salesYoY:null,epsYoYReason:'nonpositive_base',salesYoYReason:'not_reported'});
+  expect(at([])).toMatchObject({epsYoYReason:'no_quarter'});
+});

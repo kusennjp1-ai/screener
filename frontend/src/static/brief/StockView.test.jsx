@@ -170,5 +170,18 @@ describe('brief fundamentals card', () => {
     scope = card(financial(null, { history: { ...history, retrieved_at: '2026-09-20T00:00:00Z' } }));
     expect(scope.queryByText(/Yahoo/)).toBeNull();
     expect(tile(scope, 'EPS 前年比')).toHaveTextContent('—SEC 未配信');
+    cleanup();
+    // A current history whose newest quarter is more than 190 days old: the rates are not compared, and
+    // the tiles say that, not 比較不可.
+    const old = { ...history, quarterly: [['2024-12-31', 1, 100, 10], ['2025-03-31', 1, 100, 10], ['2025-06-30', 1.1, 110, 12], ['2025-09-30', 1.2, 120, 13], ['2025-12-31', 1.3, 130, 15]].map(([end, eps, revenue, netIncome]) => ({ end, eps, revenue, netIncome })) };
+    scope = card(financial(null, { history: old }));
+    expect(tile(scope, 'EPS 前年比')).toHaveTextContent('—参考・Yahoo 2025-12期は190日超のため比較しません');
+    expect(tile(scope, '売上 前年比')).toHaveTextContent('—参考・Yahoo 2025-12期は190日超のため比較しません');
+    expect(tile(scope, '純利益率')).toHaveTextContent('11.5%参考・Yahoo 2025-12期');
+    expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent('比較不可');
+    cleanup();
+    // A newest quarter with no year-ago quarter names that.
+    scope = card(financial(null, { history: { ...history, quarterly: history.quarterly.slice(1) } }));
+    expect(tile(scope, 'EPS 前年比')).toHaveTextContent('—参考・Yahoo 前年同期の値なし');
   });
 });

@@ -94,14 +94,17 @@ function QuarterTable({ rows }) {
 const noBaseOnly = rows => rows.every(r => [r.epsYoYReason, r.salesYoYReason].every(reason => !reason || ['no_base', 'ambiguous_base', 'not_reported'].includes(reason)));
 const noYoYText = rows => noBaseOnly(rows) ? `前年同期の値がないため成長率は表示できません（${rows.length}期分のみ）。` : '前年同期と比較できないため（前年同期が赤字・ゼロ、期間の不一致など）成長率は表示できません。';
 
+// Why a Yahoo quarterly rate is unknown, from financialHistory()'s reason.
+const YAHOO_REASON = { no_quarter: '四半期の値なし', no_base: '前年同期の値なし', ambiguous_base: '前年同期を特定できず', nonpositive_base: '前年同期が赤字・ゼロ', not_reported: '未報告' };
 /** Reference tiles from the current Yahoo quarterly statements, only when they passed financialHistory(). */
 function yahooTiles(history) {
   const latest = history.quarterly.at(-1);
   const marginRow = [...history.quarterly].reverse().find(q => finite(q.revenue) && q.revenue > 0 && finite(q.netIncome));
   const period = row => row ? `参考・Yahoo ${row.end.slice(0, 7)}期` : '参考・Yahoo 値なし';
+  const why = reason => reason === 'stale_quarter' ? `${period(latest)}は190日超のため比較しません` : `参考・Yahoo ${YAHOO_REASON[reason] || '前年同期と比較不可'}`;
   return [
-    { label: 'EPS 前年比', value: finite(history.epsYoY) ? signed(history.epsYoY, 0) : null, short: '—', note: finite(history.epsYoY) ? period(latest) : '参考・Yahoo 前年同期と比較不可' },
-    { label: '売上 前年比', value: finite(history.salesYoY) ? signed(history.salesYoY, 0) : null, short: '—', note: finite(history.salesYoY) ? period(latest) : '参考・Yahoo 前年同期と比較不可' },
+    { label: 'EPS 前年比', value: finite(history.epsYoY) ? signed(history.epsYoY, 0) : null, short: '—', note: finite(history.epsYoY) ? period(latest) : why(history.epsYoYReason) },
+    { label: '売上 前年比', value: finite(history.salesYoY) ? signed(history.salesYoY, 0) : null, short: '—', note: finite(history.salesYoY) ? period(latest) : why(history.salesYoYReason) },
     { label: '純利益率', value: marginRow ? `${(marginRow.netIncome / marginRow.revenue * 100).toFixed(1)}%` : null, short: '—', note: period(marginRow) },
   ];
 }
