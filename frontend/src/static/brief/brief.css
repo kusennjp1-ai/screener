@@ -454,9 +454,7 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-signals li { display: grid; grid-template-columns: 14px minmax(0, 1fr); gap: 4px; font-size: 13px; line-height: 1.55; color: var(--text); overflow-wrap: anywhere; }
 .brief-signals li > span:first-child { color: var(--ext); }
 .brief-signals p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-3); }
-.brief-jump { display: flex; gap: 6px; }
-.brief-jump button { flex: 1 1 0; min-width: 44px; min-height: 44px; padding: 0 8px; white-space: nowrap; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
-.brief-jump button:focus-visible, .brief-env-toggle:focus-visible, .brief-env-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.brief-env-toggle:focus-visible, .brief-env-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .brief-env-groups { display: grid; gap: 16px; min-width: 0; }
 .brief-env-group { display: grid; gap: 8px; align-content: start; min-width: 0; padding-top: 12px; border-top: 1px solid var(--line); }
 .brief-env-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 4px 12px; min-width: 0; }
@@ -584,8 +582,6 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 }
 @media (min-width: 1024px) {
   .brief-market.is-detail { padding: 20px 24px; }
-  /* Desktop shows the three groups side by side: no jump row. */
-  .brief-jump { display: none; }
   .brief-lead { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: stretch; gap: 12px; }
   .brief-env-groups { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; padding-top: 12px; border-top: 1px solid var(--line); }
   .brief-env-group { padding: 0; border-top: 0; }
@@ -640,3 +636,25 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
   .brief-search { flex: 1 1 140px; }
 }
 
+/* Market tab below 1024px: the groups and the long history are sections behind a sticky row of tabs
+   under the verdict (MarketCard switcher). The tabs stick under the bar; a ▲ count marks a section
+   with a fired check, in words for assistive tech. */
+.brief-switchbar { position: sticky; top: calc(var(--bar-h) + env(safe-area-inset-top, 0px)); z-index: 15; margin: 0 -14px; padding: 4px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
+.brief-switch { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 3px; border-radius: 12px; background: var(--surface-2); }
+.brief-switch button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 44px; padding: 0 4px; border: 0; border-radius: 8px; background: none; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; transition: background .2s, color .2s; }
+.brief-switch button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
+.brief-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.brief-switch-flag { display: inline-flex; align-items: baseline; gap: 1px; font-size: 12px; color: var(--ext); }
+.brief-panel { min-width: 0; }
+.brief-panel > .brief-env-group { padding-top: 0; border-top: 0; }
+.brief-history.is-section { display: grid; gap: 10px; min-width: 0; }
+.brief-signals-unjudged > summary { padding: 0; font-size: 12px; font-weight: 400; color: var(--text-2); }
+.brief-signals-unjudged .brief-expander-body { padding: 0 0 4px; }
+.brief-signals-unjudged p { font-size: 12px; line-height: 1.6; color: var(--text-3); }
+@media (max-width: 1023px) {
+  /* A focused control or a jumped-to heading is never under the bar and the stuck tabs. */
+  :root:has(.brief-switchbar) { scroll-padding-top: calc(48px + 58px + env(safe-area-inset-top, 0px) + 8px); }
+  .brief-market.is-detail .brief-index { height: 100px; }
+}
+@media (min-width: 521px) { .brief-switchbar { margin: 0 -16px; padding-inline: 16px; } }
+@media (max-width: 520px) { .brief-sector-list li { min-height: 34px; } }

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
@@ -102,16 +103,48 @@ describe('brief market card: market tab', () => {
     expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線（2026-05-26〜2026-10-02）。有効な分配日 0日$/ })).toBeInTheDocument();
   });
 
-  it('jumps from the phone navigation to a group heading and moves focus there', () => {
-    const scroll = vi.fn();
-    Element.prototype.scrollIntoView = scroll;
+  it('shows one section at a time behind phone tabs that carry each group\'s ▲ count and move by arrow keys', () => {
+    function Phone() {
+      const [section, setSection] = useState('index');
+      return <MemoryRouter><MarketCard market={UP} trends={trends({ rows: breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30 } : {})) })} date="2026-10-02" detail switcher section={section} onSection={setSection}
+        history={<section aria-label="市場環境の推移">long history</section>} /></MemoryRouter>;
+    }
+    render(<Phone />);
+    const tablist = screen.getByRole('tablist', { name: '市場タブの表示' });
+    const tabs = within(tablist).getAllByRole('tab');
+    expect(tabs.map(tab => tab.textContent)).toEqual(['指数', '参加度▲注意1', 'リーダー', '推移']);
+    expect(tabs.map(tab => tab.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false', 'false']);
+    expect(tabs.map(tab => tab.tabIndex)).toEqual([0, -1, -1, -1]);
+    // Only the selected section is shown; the others stay in the document, hidden.
+    expect(screen.getByRole('tabpanel', { name: '指数' })).toContainElement(screen.getByRole('heading', { level: 3, name: '指数のトレンド' }));
+    expect(screen.queryByRole('heading', { level: 3, name: '市場の参加度' })).toBeNull();
+    expect(document.getElementById('brief-panel-breadth')).not.toBeVisible();
+    fireEvent.click(tabs[1]);
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: '参加度注意1' })).toBeVisible();
+    expect(document.getElementById('brief-panel-index')).not.toBeVisible();
+    // Arrow keys move the selection and the focus; End and Home jump to the ends.
+    tabs[1].focus();
+    fireEvent.keyDown(tabs[1], { key: 'ArrowRight' });
+    expect(tabs[2]).toHaveAttribute('aria-selected', 'true');
+    expect(document.activeElement).toBe(tabs[2]);
+    fireEvent.keyDown(tabs[2], { key: 'End' });
+    expect(document.activeElement).toBe(tabs[3]);
+    expect(screen.getByRole('region', { name: '市場環境の推移' })).toBeVisible();
+    fireEvent.keyDown(tabs[3], { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(tabs[0]);
+    fireEvent.keyDown(tabs[0], { key: 'Home' });
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+    // The verdict and the warning summary stay above the tabs whatever the section.
+    expect(screen.getByTestId('brief-regime')).toBeVisible();
+    expect(signals()).toBeVisible();
+  });
+
+  it('keeps the three groups side by side without tabs on the desktop', () => {
     show(trends());
-    const nav = screen.getByRole('navigation', { name: '市場タブ内の移動' });
-    expect(within(nav).getAllByRole('button').map(button => button.textContent)).toEqual(['指数', '参加度', 'リーダー', '推移']);
-    fireEvent.click(within(nav).getByRole('button', { name: '参加度' }));
-    expect(scroll).toHaveBeenCalledTimes(1);
-    expect(document.activeElement).toHaveTextContent('市場の参加度');
-    delete Element.prototype.scrollIntoView;
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByRole('tabpanel')).toBeNull();
+    expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
   });
 
   it('dates an older block once, tags the verdict with its own date, and dates rows only where they differ', () => {

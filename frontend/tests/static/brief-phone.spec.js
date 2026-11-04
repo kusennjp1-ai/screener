@@ -184,8 +184,15 @@ test.describe('phone secondary text on the market tab and the fundamentals rows'
   test('reads at 12px or more, labels in --text-2, and 基準 is a label, not a 16px value', async ({ page }) => {
     // One session behind, so the as-of tags (「（10/1時点）」) are on screen too.
     const { errors } = await openBrief(page, '#/brief/market', { historyEnd: sessions.at(-2) });
-    await expect(page.locator('.market-history-explorer').getByRole('img')).toBeVisible();
-    const market = await sizes(page, MARKET);
+    // Every section of the tab, one after the other (a phone shows one at a time).
+    await expect(page.getByRole('tab')).toHaveCount(4);
+    const market = [];
+    for (const tab of await page.getByRole('tab').all()) {
+      await tab.click();
+      if ((await tab.textContent()) === '推移') await expect(page.locator('.market-history-explorer').getByRole('img')).toBeVisible();
+      market.push(...await sizes(page, MARKET));
+    }
+    await page.getByRole('tab', { name: '指数' }).click();
     expect(market.length).toBeGreaterThan(20);
     expect(market.filter(([, , size]) => size < 12)).toEqual([]);
     const label = await page.locator('.brief-index-stats small').first().evaluate(node => [getComputedStyle(node).color, getComputedStyle(node.closest('.brief-index-block')).getPropertyValue('--text-2')]);
@@ -225,7 +232,7 @@ const clippedTileText = (page, scope = '.brief-fact, .brief-kgrid, .brief-summar
   .map(node => `${node.tagName.toLowerCase()} “${node.textContent}” ${node.scrollWidth}>${node.clientWidth}`), scope);
 const READY = {
   '#/brief': page => expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5),
-  '#/brief/market': page => expect(page.locator('.market-history-explorer').getByRole('img')).toBeVisible(),
+  '#/brief/market': page => expect(page.locator('.market-history-explorer svg').first()).toBeAttached(),
   '#/brief/stock/ZZNV': page => expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down')).toHaveCount(130),
 };
 
@@ -236,6 +243,8 @@ test.describe('tiles at 320px', () => {
     await ready(page);
     await expect(page.locator('.brief-market .brief-fact b').filter({ hasText: '読み込み中' })).toHaveCount(0);
     expect(await clippedTileText(page)).toEqual([]);
+    // The market tab's other sections, each in turn.
+    for (const tab of await page.getByRole('tab').all()) { await tab.click(); expect(await clippedTileText(page)).toEqual([]); expect(await horizontalOverflow(page)).toBe(0); }
     if (hash.includes('stock')) await expect(page.locator('.brief-plan .brief-kgrid em').filter({ hasText: '口座の' })).toHaveText('口座の 17.7%');
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
