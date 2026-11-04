@@ -1,4 +1,4 @@
-import { memo, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, memo, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import useMediaQuery from '../useMediaQuery';
 import { ColorModeContext } from '../../contexts/ColorModeContext';
@@ -9,10 +9,14 @@ import './brief.css';
 import { useBriefData, useStockData, useWatchlist, useWatchSellChecks } from './useBriefData';
 import { candidateView, focusCandidates, focusCounts, leadingGroups, marketTone, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
 import MarketCard from './MarketCard';
-import MarketScreen from './MarketScreen';
 import StockView from './StockView';
 import { CandidateRow, Parts, RiseItem, Toast } from './BriefParts';
 import { useTransitionNavigate } from './briefNav';
+
+// The market tab (long-run chart, sector ranks) is its own chunk: Today does not download or parse it.
+// It is fetched once the first screen is idle, so a tap on 市場 rarely waits for it.
+const loadMarketScreen = () => import('./MarketScreen');
+const MarketScreen = lazy(loadMarketScreen);
 
 const ICON = {
   today: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" aria-hidden="true"><rect x="4" y="5" width="16" height="15" rx="2.5" /><path d="M8 3v4M16 3v4M4 10h16" /></svg>,
@@ -240,7 +244,12 @@ export default function BriefApp() {
   const barView = useMemo(() => { const item = symbol && (brief.bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol); return item ? candidateView(item, brief.date) : null; }, [symbol, brief.bundle.data, brief.date]);
   // Today's 「ピボット接近 N銘柄」: the candidate list with the near-pivot filter and no search.
   const showNear = useCallback(() => { setListState(state => ({ ...state, filter: 'near', query: '' })); go('/brief/list', { kind: 'tab' }); }, [go]);
-  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} onNear={showNear} /> : from === 'market' ? <MarketScreen brief={brief} /> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} />;
+  useEffect(() => {
+    const idle = window.requestIdleCallback ? window.requestIdleCallback(() => loadMarketScreen().catch(() => {}), { timeout: 4000 }) : setTimeout(() => loadMarketScreen().catch(() => {}), 1500);
+    return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
+  }, []);
+  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} onNear={showNear} />
+    : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} />;
   const watching = symbol && watch.includes(symbol);
   return <div className="leader-shell brief" data-theme={dark ? 'dark' : 'light'}>
     <style>{themeCss}</style>
