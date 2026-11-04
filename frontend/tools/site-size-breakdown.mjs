@@ -298,9 +298,12 @@ async function auditGenerations(root, publication, physical, files) {
     const receipt = await readJsonIfPresent(root, path);
     if (!receipt) throw Error(`Missing referenced financial release receipt: ${path}`);
     const projection = receipt.evaluation_projection?.path || null;
+    // Diagnostic only: an older carry moved to the public archive is not hosted.
+    const archived = projection && !hosted.has(projection) ? publication?.financial_audit_archive?.files?.[projection] ?? null : null;
     rows.push({ receipt: path, receiptBytes: files.get(path)?.bytes ?? null, mode: receipt.mode ?? null, evaluatedAt: receipt.evaluated_at ?? null,
       generation: receipt.financial_generation ?? null, projection, projectionKind: projection ? auditKind(projection) : null,
-      projectionBytes: projection ? hosted.get(projection) ?? null : null, active: path === publication.financial_release?.path });
+      projectionBytes: projection ? hosted.get(projection) ?? null : null, active: path === publication.financial_release?.path,
+      archived: Boolean(archived), archiveUrl: archived?.url ?? null });
   }
   return rows.sort((a, b) => String(a.evaluatedAt).localeCompare(String(b.evaluatedAt)) || (a.receipt < b.receipt ? -1 : 1));
 }
@@ -378,7 +381,7 @@ export function formatPacked(result, top = 60) {
   if (result.audit.length) {
     lines.push(`Financial audit generations (${result.audit.length} release receipts, oldest first): evaluated_at | mode | generation | evaluation projection hosted bytes | receipt bytes`);
     for (const row of result.audit) {
-      lines.push(`  ${String(row.evaluatedAt).padEnd(26)} ${String(row.mode).padEnd(10)} ${String(row.generation).slice(0, 12).padEnd(12)} ${String(row.projectionKind).padEnd(17)} ${column(row.projectionBytes, 12)} ${column(row.receiptBytes, 8)}${row.active ? '  (active)' : ''}`);
+      lines.push(`  ${String(row.evaluatedAt).padEnd(26)} ${String(row.mode).padEnd(10)} ${String(row.generation).slice(0, 12).padEnd(12)} ${String(row.projectionKind).padEnd(17)} ${column(row.projectionBytes, 12)} ${column(row.receiptBytes, 8)}${row.active ? '  (active)' : ''}${row.archived ? `  (archived ${row.archiveUrl})` : ''}`);
     }
   }
   lines.push(`Top ${result.topFiles.length} hosted files: bytes | TAR bytes | path [logical path] family`);

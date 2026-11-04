@@ -2,7 +2,7 @@ import {validateOrdinaryCalendarProof} from './ordinary-session-calendar.mjs';
 import {isLimitedPreviewApproval,verifyLimitedPreviewUiApproval,verifyLimitedPreviewFinancialScope} from './limited-research-approval.mjs';
 import {validateOrdinaryCarryReceipt} from './ordinary-carry-tooling.mjs';
 import {validatePublisherToolingReceipt} from './retained-price-publisher-tooling.mjs';
-import {validateFinancialAuditFiles,requiredFinancialAuditFiles,parsePublicationReceipt,PUBLICATION_METADATA_BYTES} from './financial-audit-history.mjs';
+import {validateFinancialAuditFiles,validateFinancialAuditArchive,requiredFinancialAuditFiles,parsePublicationReceipt,PUBLICATION_METADATA_BYTES} from './financial-audit-history.mjs';
 import {isPerformanceException, packedExceptionType, verifyPerformanceUiApproval, verifyExceptionFinancialScope} from './financial-performance-exception.mjs';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
@@ -128,6 +128,8 @@ export function validateReceipt(receipt) {
       || !/^[a-f0-9]{64}$/.test(receipt.financial_generation || '') || !/^[a-f0-9]{64}$/.test(receipt.data_inventory_sha256 || '')) throw Error('Invalid publication financial correction reference');
   }
   if(receipt.financial_audit_files!==undefined){validateFinancialAuditFiles(receipt.financial_audit_files);if(!receipt.financial_release||receipt.financial_audit_files[receipt.financial_release.path]!==receipt.financial_release.sha256)throw Error('Financial audit inventory lost the active release');}
+  // Structural and offline only. Archive availability is verified by the publisher.
+  if(Object.hasOwn(receipt,'financial_audit_archive'))validateFinancialAuditArchive(receipt.financial_audit_archive,receipt);
   if(Object.hasOwn(receipt,'ordinary_calendar_derivation'))validateOrdinaryCalendarProof(receipt.ordinary_calendar_derivation,receipt);
   if(Object.hasOwn(receipt,'ordinary_carry_tooling'))validateOrdinaryCarryReceipt(receipt.ordinary_carry_tooling,receipt);
   if(Object.hasOwn(receipt,'publisher_tooling'))validatePublisherToolingReceipt(receipt.publisher_tooling,receipt);

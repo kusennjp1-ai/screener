@@ -37,7 +37,7 @@ const bindings = manifestBytes => ({ manifestSha256: sha(manifestBytes), uiInven
 
 // A small final Pages tree built with the real codec: an outer transport plus
 // the nested financial audit transport, with current and superseded exports.
-async function packedFixture() {
+async function packedFixture({ archivedCarry = false } = {}) {
   root = await mkdtemp(join(tmpdir(), 'site-packed-'));
   const logical = join(root, 'logical'), dist = join(root, 'dist'), scratch = join(root, 'audit-source');
   const data = path => `static-data/${path}`;
@@ -97,7 +97,9 @@ async function packedFixture() {
   await put(scratch, 'static-data/manifest.json', manifest.bytes);
   const nested = await pack({ source: scratch, output: join(logical, AUDIT_PREFIX), bindings: bindings(manifest.bytes) });
   const receipts = {};
-  for (const [name, mode, projection, at] of [['activation', 'activation', audit['source-projection'], '2026-10-06T00:00:00Z'], ['old', 'carry', audit['carry one'], '2026-10-23T00:00:00Z'], ['active', 'carry', audit['carry two'], '2026-11-03T00:00:00Z']]) {
+  // An older carry moved to the public archive: its receipt stays hosted, its bytes do not.
+  const archivedProjection = `static-data/financial-corrections/carry-projection-${sha('archived carry')}.json`;
+  for (const [name, mode, projection, at] of [['activation', 'activation', audit['source-projection'], '2026-10-06T00:00:00Z'], ...(archivedCarry ? [['archived', 'carry', archivedProjection, '2026-10-12T00:00:00Z']] : []), ['old', 'carry', audit['carry one'], '2026-10-23T00:00:00Z'], ['active', 'carry', audit['carry two'], '2026-11-03T00:00:00Z']]) {
     const bytes = Buffer.from(JSON.stringify({ mode, evaluated_at: at, financial_generation: sha(name), evaluation_projection: { path: projection } })), hash = sha(bytes);
     receipts[name] = `static-data/financial-corrections/release-${hash}.json`;
     await put(logical, receipts[name], bytes);
@@ -105,8 +107,9 @@ async function packedFixture() {
   const outer = await pack({ source: logical, output: dist, bindings: bindings(manifest.bytes) });
   const files = Object.fromEntries([...Object.values(audit), ...Object.values(receipts)].map(path => [path, path.slice(-69, -5)]));
   await put(dist, 'publication.json', { transport: { root: outer.expectedRoot }, financial_audit_transport: { root: nested.expectedRoot },
-    financial_audit_files: files, financial_release: { path: receipts.active, sha256: receipts.active.slice(-69, -5) } });
-  return { dist, historySha, seriesSha, audit, receipts };
+    financial_audit_files: files, financial_release: { path: receipts.active, sha256: receipts.active.slice(-69, -5) },
+    ...(archivedCarry ? { financial_audit_archive: { files: { [archivedProjection]: { url: `https://github.com/o/r/releases/download/x/${archivedProjection.slice(34)}.gz` } } } } : {}) });
+  return { dist, historySha, seriesSha, audit, receipts, archivedProjection };
 }
 
 describe('site size breakdown', () => {
@@ -242,6 +245,16 @@ describe('site size breakdown', () => {
     const lines = formatPacked(result, 60);
     expect(lines[0]).toMatch(/^Final Pages payload \(packed transport/);
     expect(lines.some(line => line.includes(`TAR bytes  ${result.tarBytes.toLocaleString('en-US')} of 1,000,000,000`))).toBe(true);
+  });
+
+  it('reports an archived earlier carry projection with its public archive URL', async () => {
+    const { dist, receipts, archivedProjection } = await packedFixture({ archivedCarry: true });
+    const result = await packedBreakdown(dist);
+    const row = result.audit.find(item => item.receipt === receipts.archived);
+    expect(row).toMatchObject({ projection: archivedProjection, projectionBytes: null, archived: true });
+    expect(row.archiveUrl).toMatch(/^https:\/\/github\.com\/o\/r\/releases\/download\/x\/carry-projection-[a-f0-9]{64}\.json\.gz$/);
+    expect(result.audit.filter(item => item.archived)).toHaveLength(1);
+    expect(formatPacked(result, 60).some(line => line.includes(`(archived ${row.archiveUrl})`))).toBe(true);
   });
 
   it('models the exact archive GNU tar writes for the same tree', async () => {
