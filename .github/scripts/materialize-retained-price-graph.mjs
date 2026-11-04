@@ -59,6 +59,15 @@ function unknownRow(original,patch,snapshotHash,chartPath,target){
       financial_input_sha256:recoveryDigest(project(original,RECOVERY_FINANCIAL_FIELDS))}});
   return row;
 }
+// home.json publishes top_groups from the same group rankings as the groups
+// page. A manifest that names no groups page (the static export stopped
+// publishing groups.json) leaves the aggregate dependency proof nothing to
+// check, so any published top group fails closed instead of being skipped.
+export function assertTopGroupsHaveGroupSource(groupsPath,home){
+  if(groupsPath)return;
+  const top=home?.top_groups;
+  assert(top===undefined||top===null||(Array.isArray(top)&&top.length===0),'Aggregate dependency proof requires the source groups page for home.top_groups');
+}
 function rejectAffectedTopSymbols(value,symbols){
   if(!value||typeof value!=='object')return;
   assert(!symbols.has(value.top_symbol),'Affected group leader requires separate aggregate recalculation');
@@ -290,6 +299,7 @@ export function materializeRecoveryGraph({root,prepared,expectedPreparedSha256,s
   // checked, source-bound dependency equivalence, not just a claim that RS is
   // null. The exact proof contract is validated below.
   const groupsPath=market.pages?.groups?.path?data(market.pages.groups.path):null;
+  if(market.pages?.home?.path)assertTopGroupsHaveGroupSource(groupsPath,json(data(market.pages.home.path)));
   let groupProof=null;
   if(groupsPath){
     const groupsRaw=read(groupsPath),groups=JSON.parse(groupsRaw);

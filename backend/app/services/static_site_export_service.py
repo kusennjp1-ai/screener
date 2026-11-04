@@ -45,10 +45,6 @@ from app.services.preset_screens import (
     resolve_preset_screens_for_defaults,
     _matches_preset_filters,
 )
-from app.services.static_groups_rrg_export import (
-    StaticGroupsRRGUnavailableError,
-    StaticGroupsRRGPayloadBuilder,
-)
 from app.services.ui_snapshot_service import UISnapshotService
 from app.wiring.bootstrap import (
     get_benchmark_cache,
@@ -355,18 +351,6 @@ class StaticSiteExportService:
                 serialized_rows=serialized_rows,
             ),
         )
-        rrg_payload = self._build_optional_section_payload(
-            section=f"{market} rrg",
-            warnings=warnings,
-            generated_at=generated_at,
-            expected_as_of_date=latest_run.as_of_date,
-            build=lambda: self._build_groups_rrg_payload(
-                db=db,
-                generated_at=generated_at,
-                expected_as_of_date=latest_run.as_of_date,
-                market=market,
-            ),
-        )
         chart_manifest = self._export_chart_bundle(
             output_dir=output_dir,
             generated_at=generated_at,
@@ -415,12 +399,16 @@ class StaticSiteExportService:
             )
 
         breadth_path = path_prefix / "breadth.json"
-        groups_path = path_prefix / "groups.json"
-        groups_rrg_path = path_prefix / "groups_rrg.json"
         home_path = path_prefix / "home.json"
-        rrg_available = bool(rrg_payload.get("available", False))
         self._write_json(output_dir / breadth_path, breadth_payload)
-        self._write_json(output_dir / groups_path, groups_payload)
+        # The group rankings stay in memory only. The chart bundle uses them
+        # for its top-group coverage, and home.json carries top_groups plus
+        # freshness.groups_latest_date, which the publication checks compare
+        # across releases. No published screen or gate reads the full
+        # groups.json, and it alone was 17 MB of the Pages budget, so it is not
+        # written and the manifest names no pages.groups. The RRG payload had
+        # no other use, so the static export no longer builds it: there is no
+        # groups_rrg.json, no assets.groups_rrg and no features.rrg.
         self._write_json(output_dir / home_path, home_payload)
 
         assets: dict[str, Any] = {
@@ -430,12 +418,6 @@ class StaticSiteExportService:
                 "symbols_total": chart_manifest["symbols_total"],
             },
         }
-        # Only publish the RRG asset/file for markets that actually have it, so
-        # the static page hides the RRG toggle (gated on assets.groups_rrg.path)
-        # instead of offering an empty view that triggers a wasted fetch.
-        if rrg_available:
-            self._write_json(output_dir / groups_rrg_path, rrg_payload)
-            assets["groups_rrg"] = {"path": groups_rrg_path.as_posix()}
 
         reference_data = load_reference_data(
             db,
@@ -455,15 +437,16 @@ class StaticSiteExportService:
             "features": {
                 "scan": True,
                 "breadth": bool(breadth_payload.get("available", True)),
+                # The group rankings were available for this date: they feed
+                # home.json's top_groups and freshness.groups_latest_date. No
+                # groups page is published.
                 "groups": bool(groups_payload.get("available", False)),
-                "rrg": rrg_available,
                 "charts": bool(chart_manifest.get("available", False)),
             },
             "pages": {
                 "home": {"path": home_path.as_posix()},
                 "scan": {"path": (path_prefix / "scan" / "manifest.json").as_posix()},
                 "breadth": {"path": breadth_path.as_posix()},
-                "groups": {"path": groups_path.as_posix()},
             },
             "assets": assets,
             "freshness": home_payload.get("freshness", {}),
@@ -573,43 +556,6 @@ class StaticSiteExportService:
         if not market_entries and not allow_empty:
             raise RuntimeError("No market artifacts are available to combine into a static-site bundle")
         return market_entries, warnings
-
-    def _build_groups_rrg_payload(
-        self,
-        *,
-        db: Session,
-        generated_at: str,
-        expected_as_of_date: date,
-        market: str,
-    ) -> dict[str, Any]:
-        """Pre-compute the Relative Rotation Graph payload for the static bundle.
-
-        There is no live API in static mode, so RRG coordinates are baked here
-        using the SAME pure math as the live endpoint (``RRGService`` ->
-        ``compute_group_rrg``), emitting the same ``{date, market, scope,
-        groups[]}`` shape the shared ``RRGChart`` consumes. Both scopes
-        (groups + sectors) are stored so the static page's toggle works offline.
-
-        RRG tails want ~30 weekly points (~7 months) of
-        ``avg_rs_rating`` history — when the exported DB is shallower, the math
-        flags ``is_provisional`` / omits thin groups rather than fabricating.
-        If a lightweight export database lacks the RRG source tables entirely,
-        this optional section is reported unavailable without aborting export.
-        """
-        try:
-            return StaticGroupsRRGPayloadBuilder.from_runtime_services(
-                schema_version=STATIC_SITE_SCHEMA_VERSION
-            ).build(
-                db=db,
-                generated_at=generated_at,
-                expected_as_of_date=expected_as_of_date,
-                market=market,
-            )
-        except StaticGroupsRRGUnavailableError as exc:
-            raise StaticSiteSectionUnavailableError(
-                section=exc.section,
-                reason=exc.reason,
-            ) from exc
 
     def _build_optional_section_payload(
         self,
