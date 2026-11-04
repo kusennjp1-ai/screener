@@ -689,5 +689,11 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
   :root:has(.brief-switchbar) { scroll-padding-top: calc(48px + 58px + env(safe-area-inset-top, 0px) + 8px); }
   .brief-market.is-detail .brief-index { height: 100px; }
 }
+/* A short viewport (a phone held sideways): stuck, the tabs would take 59px of about 390 under the bar,
+   so they scroll with the page there, and only the bar is kept clear of a focused control. */
+@media (max-width: 1023px) and (max-height: 500px) {
+  .brief-switchbar { position: static; }
+  :root:has(.brief-switchbar) { scroll-padding-top: calc(48px + env(safe-area-inset-top, 0px) + 8px); }
+}
 @media (min-width: 521px) { .brief-switchbar { margin: 0 -16px; padding-inline: 16px; } }
 @media (max-width: 520px) { .brief-sector-list li { min-height: 34px; } }

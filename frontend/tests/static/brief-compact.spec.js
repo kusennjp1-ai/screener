@@ -330,3 +330,36 @@ for (const width of [320, 375, 414]) test.describe(`leading groups at ${width}px
     expect(errors).toEqual([]);
   });
 });
+
+// A phone held sideways (844×390): the section tabs scroll with the page instead of sticking under the bar.
+test.describe('the market tabs on a short landscape phone', () => {
+  test.use({ ...phone(844, 390) });
+  test('scroll away with the page, and a focused control is clear of the bar and the dock', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    await tabs(page).last().click();
+    await expect(page.locator('.market-history-explorer').getByRole('img')).toBeVisible();
+    await page.evaluate(() => scrollTo(0, 900));
+    const bar = await page.locator('.brief-bar').boundingBox(), strip = await page.locator('.brief-switchbar').boundingBox();
+    expect(strip.y + strip.height).toBeLessThanOrEqual(bar.y + bar.height);
+    await page.evaluate(() => scrollTo(0, 0));
+    await tabs(page).last().focus();
+    const seen = [];
+    for (let press = 0; press < 20; press++) {
+      await page.keyboard.press('Tab');
+      const step = await page.evaluate(() => {
+        const active = document.activeElement;
+        if (!document.getElementById('brief-main').contains(active)) return null;
+        const box = active.getBoundingClientRect(), bar = document.querySelector('.brief-bar').getBoundingClientRect(), dock = document.querySelector('.brief-dock').getBoundingClientRect();
+        return { label: (active.getAttribute('aria-label') || active.textContent).trim().slice(0, 30), top: box.top, bottom: box.bottom, barBottom: bar.bottom, dockTop: dock.top };
+      });
+      if (!step) break;
+      seen.push(step);
+    }
+    expect(seen.length).toBeGreaterThanOrEqual(5);
+    for (const step of seen) {
+      expect(step.top, step.label).toBeGreaterThanOrEqual(step.barBottom - 1);
+      expect(step.bottom, step.label).toBeLessThanOrEqual(step.dockTop + 1);
+    }
+    expect(errors).toEqual([]);
+  });
+});
