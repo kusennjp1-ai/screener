@@ -172,7 +172,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
       {view.warnings.length > 0 && <ul className="brief-warnings" aria-label="地合いの悪化サイン（独自判定）">{view.warnings.map(w => <li key={w.key}><span aria-hidden="true">▲</span> {w.text}（独自判定）</li>)}</ul>}
       {view.split?.warning && <p className="brief-alert" role="note">▲ {view.split.fromHigh > -0.05 ? '指数は1年高値の水準にありますが' : `指数は1年高値まであと${Math.abs(view.split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{num(view.split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
       {/* The phone's Today hides the verdict, so the card itself still says the judgement is the app's own. */}
-      <p className="brief-note">地合いの判定は独自判定です。分配日・ステージ・トレンドテンプレート数・RSは公開日足からの独自集計で、IBDの公式値ではありません。</p>
+      <p className="brief-note">地合いの判定と各集計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。</p>
     </section>;
   }
 
