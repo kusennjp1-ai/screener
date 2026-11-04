@@ -88,6 +88,10 @@ for (const [width, device] of Object.entries(FOLD)) test.describe(`Today's first
     expect(await market.evaluate(node => node.innerText)).toContain('独自判定');
     await expect(market.locator('.brief-fact')).toHaveCount(4);
     for (const fact of await market.locator('.brief-fact').all()) await expect(fact).toBeVisible();
+    // Tile text reads at 12px or more, including the names of a pair's sides (S&P / NAS, 高 / 安).
+    const tileText = await market.locator('.brief-fact small, .brief-fact em, .brief-pair-name').evaluateAll(nodes => nodes.map(node => [node.textContent, parseFloat(getComputedStyle(node).fontSize)]));
+    expect(tileText.filter(([, size]) => size < 12)).toEqual([]);
+    expect(tileText.map(([text]) => text)).toEqual(expect.arrayContaining(['S&P', 'NAS', '高', '安']));
     const summary = page.getByTestId('brief-summary');
     await expect(summary).toContainText('買い可・最大50%');
     expect(await summary.locator('.brief-frag', { hasText: '最大50%' }).evaluate(node => node.getClientRects().length)).toBe(1);

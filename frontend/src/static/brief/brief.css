@@ -390,6 +390,8 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-search input, .brief-sort select, .brief-inputs input { border-color: color-mix(in srgb, var(--text-3) 80%, var(--surface)); }
 @media (max-width: 520px) {
   .brief-market .brief-fact small, .brief-market .brief-fact em, .brief-summary small, .brief-summary em { font-size: 12px; }
+  /* The market redesign names each side of a tile pair (S&P / NAS, 高 / 安), which was a 12px note before. */
+  .brief-market .brief-pair-name { font-size: 12px; }
   /* The four list filters as a 2×2 grid: the fourth one and every focus ring stay on screen. */
   .brief-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 1 1 100%; overflow: visible; }
   .brief-seg button { justify-content: center; }
