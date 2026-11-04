@@ -34,10 +34,11 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`rows at ${w
   test('watch rows have no empty rank gutter', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': ['ZZNV', 'ZZSD'] } });
     await expect(page.getByRole('region', { name: 'ウォッチ中の銘柄' }).getByTestId('brief-candidate')).toHaveCount(2);
-    const gaps = await candidates(page).evaluateAll(nodes => nodes.map(row => {
+    // The title line and the chips both start at the row's content edge.
+    const gaps = await candidates(page).evaluateAll(nodes => nodes.flatMap(row => {
       const style = getComputedStyle(row), box = row.getBoundingClientRect();
       const contentLeft = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
-      return row.querySelector('.brief-row-main').getBoundingClientRect().left - contentLeft;
+      return ['.brief-row-title', '.brief-reasons'].map(part => row.querySelector(part).getBoundingClientRect().left - contentLeft);
     }));
     for (const gap of gaps) { expect(gap).toBeGreaterThanOrEqual(0); expect(gap).toBeLessThanOrEqual(8); }
     expect(await horizontalOverflow(page)).toBe(0);
@@ -48,15 +49,26 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`rows at ${w
 for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip ${name}`, () => {
   test.use(device);
 
-  test('Today\'s focus rows omit the constant TT 8/8 chip; the list keeps it', async ({ page }) => {
+  test('Today\'s focus rows omit the constant TT 8/8 chip; the desktop list keeps it, a phone keeps it where it varies', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief');
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
     for (const row of await focus.getByTestId('brief-candidate').all()) await expect(row).not.toContainText('TT 8/8');
-    await expect(focus).toContainText('注目候補はすべてトレンドテンプレート8条件を満たす銘柄');
+    // The constant is said once, in the screen's 注記.
+    await expect(page.locator('.brief-screen-notes', { hasText: '注目候補はすべてトレンドテンプレート8条件を満たす銘柄' })).toHaveCount(1);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
     await expect(page).toHaveURL(/#\/brief\/list$/);
-    await expect(candidates(page).first()).toContainText('TT 8/8');
+    if (name === 'desktop') await expect(candidates(page).first()).toContainText('TT 8/8');
+    else {
+      // A qualified-only filter's rows are all TT 8/8: the phone says so once in the 注記 and keeps each row's chips on one line.
+      for (const row of await candidates(page).all()) await expect(row).not.toContainText('TT 8/8');
+      await expect(page.locator('.brief-screen-notes')).toContainText('スマホでは「TT 8/8」の表示を省いています');
+      const lines = await candidates(page).evaluateAll(rows => rows.map(row => new Set([...row.querySelectorAll('.brief-reasons .brief-chip')].map(chip => chip.offsetTop)).size));
+      expect(lines.every(count => count === 1)).toBe(true);
+      // あと1条件 keeps the chip: there it says how many conditions are unmet.
+      await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^あと1条件/ }).click();
+      for (const row of await candidates(page).all()) await expect(row).toContainText('あと1条件');
+    }
     if (name === 'desktop') expect(await page.locator('.brief-left .brief-minimeter').count()).toBeGreaterThan(0);
     if (name === 'desktop') for (const meter of await page.locator('.brief-left .brief-minimeter').all()) await expect(meter).toBeVisible();
     expect(await horizontalOverflow(page)).toBe(0);

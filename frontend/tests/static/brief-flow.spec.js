@@ -74,7 +74,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const { errors } = await openBrief(page, '#/brief');
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
-    await expect(focus).toContainText('上位5件を表示（注目候補 21銘柄中）');
+    await expect(focus).toContainText('上位5件を表示（全21銘柄）');
     const near = focus.getByRole('link', { name: 'ピボット接近 16銘柄' });
     const box = await near.boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(44);
@@ -121,6 +121,11 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await filter('選定すべて').click();
     const all = await count('選定すべて');
     expect(all).toBe(await count('買いゾーン') + await count('ピボット接近'));
+    // A phone lists 20 rows at a time; the rest open in place.
+    if (phone) {
+      await expect(candidates(page)).toHaveCount(20);
+      await page.getByRole('button', { name: `さらに表示（残り ${all - 20}件）` }).click();
+    }
     await expect(candidates(page)).toHaveCount(all);
 
     const search = page.getByRole('searchbox', { name: '銘柄を検索' });

@@ -133,12 +133,19 @@
 .brief-marker { position: absolute; left: 0; top: 7px; width: 12px; height: 12px; margin-left: -6px; border-radius: 999px; background: var(--text); border: 2px solid var(--surface); transform: translateX(calc(var(--p, 50) * 1cqw)); transition: transform .8s var(--e-back); }
 .brief-marker.is-entering { animation: brief-slide-in .9s var(--e-back) both; }
 /* Phone rows: the chips carry the decision, so they take the mini meter's width (the state chip
-   repeats its pivot distance or says 未確認) and 12px text; a watch row has no empty rank gutter. */
+   repeats its pivot distance or says 未確認) and 12px text; a watch row has no empty rank gutter.
+   The rank sits before the ticker on the title line, so the chips get the row's full width and a
+   focus row's three chips fit one line from 375px; the row is as tall as its two lines. */
 @media (max-width: 520px) {
-  .brief-row { grid-template-columns: 20px minmax(0, 1fr); }
-  .brief-row.is-unranked { grid-template-columns: minmax(0, 1fr); }
+  .brief-row { grid-template-columns: auto minmax(0, 1fr); grid-template-areas: "rank title" "reasons reasons"; column-gap: 6px; row-gap: 3px; align-items: baseline; min-height: 0; padding: 6px 4px; }
+  .brief-row.is-unranked { grid-template-columns: minmax(0, 1fr); grid-template-areas: "title" "reasons"; }
+  .brief-row .brief-row-main { display: contents; }
+  .brief-row .brief-rank { grid-area: rank; min-width: 1ch; font-size: 13px; text-align: left; }
+  .brief-row .brief-row-title { grid-area: title; }
+  .brief-row .brief-row-title b { line-height: 1.3; }
+  .brief-row .brief-reasons { grid-area: reasons; }
   .brief-row .brief-minimeter, .brief-row.is-unranked .brief-rank { display: none; }
-  .brief-chip { font-size: 12px; line-height: 1.55; }
+  .brief-chip { font-size: 12px; line-height: 1.55; padding: 1px 6px; }
 }
 .brief-event { width: 100%; display: grid; grid-template-columns: 36px minmax(0, 1fr) 20px; gap: 12px; align-items: center; min-height: 64px; padding: 8px 4px; border: 0; border-top: 1px solid var(--line); background: none; color: inherit; text-align: left; cursor: pointer; }
 .brief-event b { font-size: 14px; }
@@ -605,3 +612,31 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-screen-notes ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 12px; line-height: 1.7; color: var(--text-2); overflow-wrap: anywhere; }
 .brief-screen-notes li { padding-left: 12px; text-indent: -12px; }
 .brief-screen-notes li::before { content: "・"; display: inline-block; width: 12px; text-indent: 0; color: var(--text-3); }
+/* Today's focus card: the count of the rest and the near-pivot link. */
+.brief-focusfoot { display: grid; gap: 12px; min-width: 0; }
+.brief-groups:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+
+/* Phone compaction (520px and below): fewer, denser lines without dropping a value, a date or a note. */
+@media (max-width: 520px) {
+  .brief-stack { gap: 10px; }
+  .brief-summary li { padding: 8px 10px; }
+  .brief-card { padding: 14px; gap: 10px; }
+  .brief-main { padding-bottom: calc(var(--dock-h) + 12px + env(safe-area-inset-bottom, 0px)); }
+  /* A screen's title and its date share one line (the bar carries the date too). */
+  .brief-hero:not(.is-today) { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 12px; padding-top: 4px; }
+  .brief-hero:not(.is-today) h1 { order: -1; margin: 0; font-size: 20px; line-height: 1.4; }
+  /* A card header's link keeps its 44px target and lends 8px above and below to the card's padding. */
+  .brief-step .brief-more { margin-block: -8px; }
+  .brief-focusfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+  .brief-focusfoot .brief-note { flex: 0 1 auto; }
+  .brief-focusfoot .brief-nearlink { flex: 1 0 auto; }
+  /* The leading groups as one line that scrolls sideways; the fading right edge says more follows. */
+  .brief-groups { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; white-space: nowrap; margin: 0; padding: 2px 32px 2px 2px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+  .brief-groups::-webkit-scrollbar { display: none; }
+  .brief-groups > * { flex: none; }
+  .brief-event { grid-template-columns: 32px minmax(0, 1fr) 20px; gap: 10px; min-height: 48px; padding: 4px; }
+  .brief-event-icon { width: 32px; height: 32px; }
+  /* The list's search and sort share a line. */
+  .brief-search { flex: 1 1 140px; }
+}
+
