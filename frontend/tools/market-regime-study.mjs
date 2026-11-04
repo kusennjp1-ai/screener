@@ -70,7 +70,9 @@
  *  Tests D, each for mean r_h (primary) and P(dd_h <= -5%) (secondary, the "falls" question): with three or more
  *  buckets, each bucket minus the baseline; with two, one contrast, the first bucket minus the second (both buckets
  *  against the baseline are the same comparison, so it is tested and counted once).
- *  Split-sample: first vs second half of the evaluation sample (by session count), each with its own baseline.
+ *  Split-sample: the first half of the evaluation sample by session count, and the rest after an embargo (a
+ *  second-half session must lie more than h sessions after the last first-half one, so no first-half outcome
+ *  window reaches a second-half close); each half has its own baseline.
  *  Rotation placebo (calibration against the data's own dependence). Shift k rotates every indicator series of a
  *  panel (index:^GSPC, index:^IXIC, breadth) against the panel's fixed outcomes, state_t <- state_((t + k) mod n):
  *  both series keep their own autocorrelation and volatility clustering while the alignment is broken, and one k
@@ -125,6 +127,8 @@
  *     differences are one contrast, (1 - c0/M)(m0 - m1) and -(c0/M)(m0 - m1): 128 of the seed's 912 tests, and none
  *     of its 72 CI pairs disagreed. v2 tests one contrast per two-state indicator, states the indicator-level test
  *     count and groups robust labels that share an input.
+ *  4. Overlap between the halves. v1 split the sample with no gap, so the last h first-half outcomes used
+ *     second-half closes (63 of the seed's 603 first-half sessions at h = 63). v2 embargoes h sessions.
  *
  * Proprietary RS inside the trend-template counts is this app's own RS, not IBD RS.
  */
@@ -552,9 +556,14 @@ function accumulate(scratch, from, to, out, groups, h) {
   }
   return part;
 }
-/** The full sample and its halves: the first half by session count and the rest. */
+/**
+ * The full sample and its halves: the first half by session count, then the rest after an embargo (a second-half
+ * session lies more than h sessions after the last first-half one, so no first-half outcome reaches its closes).
+ */
 function aggregate(states, shift, out, groups, h, scratch) {
-  const size = collect(states, shift, out, scratch), half = size >> 1, second = half;
+  const size = collect(states, shift, out, scratch), half = size >> 1;
+  let second = half;
+  if (half > 0) { const limit = scratch.t[half - 1] + h; while (second < size && scratch.t[second] <= limit) second++; }
   return { size, half, second, parts: [accumulate(scratch, 0, size, out, groups, h), accumulate(scratch, 0, half, out, groups, h), accumulate(scratch, second, size, out, groups, h)] };
 }
 /** The tests of an indicator: one contrast (first minus second) for two buckets, else each bucket against the baseline. */
@@ -630,7 +639,7 @@ export function evaluateIndicator(indicator, outcomes, { dates = null, shifts = 
     const members = ranges.map(([from, to]) => Array.from({ length: groups }, (_, g) => sample.slice(from, to).filter((_, i) => bucketOf[from + i] === g)));
     const baselines = ranges.map(([from, to]) => { const part = sample.slice(from, to); return roundStats(summarize(part.map(t => ret[t]), part.map(t => dd[t]))); });
     windows[h] = {
-      n: actual.size, start: day(sample[0]), end: day(sample.at(-1)), split: day(sample[actual.second]), block: blockLength(h), partMinimum: MIN_BLOCKS * blockLength(h),
+      n: actual.size, start: day(sample[0]), end: day(sample.at(-1)), split: day(sample[actual.second]), embargoed: actual.second - actual.half, block: blockLength(h), partMinimum: MIN_BLOCKS * blockLength(h),
       baseline: baselines[0], h1Baseline: baselines[1], h2Baseline: baselines[2],
       buckets: indicator.buckets.map((bucket, g) => {
         const ts = members[0][g], stats = summarize(ts.map(t => ret[t]), ts.map(t => dd[t])), i = tests.findIndex(test => test.bucket === g);
@@ -957,7 +966,7 @@ export function markdownReport(study) {
     for (const w of WINDOWS) {
       const win = r.windows[w], base = win.baseline;
       if (!win.n) { add(`| (no session with a complete ${w}-session forward window) | ${w} | 0 | | | | | | | | | | | |`); continue; }
-      add(`| baseline | ${w} | ${win.n} | | split ${win.split ?? '—'} | ${pct(base.meanReturn)} | ${pct(base.median)} | ${prob(base.pUp)} | ${prob(base.pDd5)} | ${prob(base.pDd10)} | | | | |`);
+      add(`| baseline | ${w} | ${win.n} | | split ${win.split ?? '—'}, embargo ${win.embargoed} | ${pct(base.meanReturn)} | ${pct(base.median)} | ${prob(base.pUp)} | ${prob(base.pDd5)} | ${prob(base.pDd10)} | | | | |`);
       for (const b of win.buckets) {
         const tail = b.role === 'complement' ? '(the contrast above) | | | ' : `${statText(b.mean)} | ${TAG[b.mean.label]} | ${statText(b.dd5, 1)} | ${TAG[b.dd5.label]} `;
         add(`| ${cell(b.label)} | ${w} | ${b.n} | ${b.episodes} | ${prob(b.firstHalfShare)} | ${pct(b.meanReturn)} | ${pct(b.median)} | ${prob(b.pUp)} | ${prob(b.pDd5)} | ${prob(b.pDd10)} | ${tail}|`);

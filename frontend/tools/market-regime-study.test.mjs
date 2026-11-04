@@ -305,6 +305,18 @@ describe('one test per comparison', () => {
     expect(three.windows[21].buckets.map(b => b.role)).toEqual(['vs-baseline', 'vs-baseline', 'vs-baseline']);
     expect(three.windows[21].buckets[2].mean.est).toBeCloseTo(three.windows[21].buckets[2].meanReturn - three.windows[21].baseline.meanReturn, 5);
   });
+  it('embargoes h sessions between the halves, so no first-half outcome window reaches a second-half close', () => {
+    const n = 1500, closes = garchCloses(mulberry32(12), n), outcomes = Object.fromEntries(WINDOWS.map(h => [h, forwardOutcomes(closes, h)]));
+    const dates = weekdays('2015-01-02', n), { windows } = evaluateIndicator(nullIndicator(regimes(mulberry32(13), n, 20), 2), outcomes, { dates });
+    for (const h of WINDOWS) {
+      const win = windows[h], h1 = win.buckets.reduce((a, b) => a + b.h1n, 0), h2 = win.buckets.reduce((a, b) => a + b.h2n, 0);
+      // A contiguous sample: the first half ends at session h1 - 1, the second starts h sessions after the plain midpoint.
+      expect(win.embargoed).toBe(h);
+      expect([h1, h1 + h + h2]).toEqual([Math.floor(win.n / 2), win.n]);
+      expect(win.split).toBe(dates[h1 + h]);
+      expect(dates.indexOf(win.split) - (h1 - 1)).toBeGreaterThan(h);
+    }
+  });
   it('groups labels whose indicators share an input, across indices and the long history', () => {
     expect(indicatorInputs('^GSPC.ma50')).toEqual(indicatorInputs('spx.ma50'));
     expect(indicatorInputs('^IXIC.ma.quadrant')).toEqual(['index:ma50', 'index:ma200']);
