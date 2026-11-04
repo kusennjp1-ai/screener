@@ -3,7 +3,7 @@
 // the section tabs stay under the bar while the page scrolls without covering a focused control,
 // the new controls keep the 12px text floor and 44px targets, and nothing overflows at 320/375/414 px.
 import { test, expect } from '@playwright/test';
-import { openBrief, horizontalOverflow, SEC_SYMBOL } from './brief-fixture.js';
+import { openBrief, horizontalOverflow, SEC_SYMBOL, charts, rowBySymbol } from './brief-fixture.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const WATCH = ['ZZNV', 'ZZZF', 'ZZSD', 'ZZKS'];
@@ -152,6 +152,35 @@ test.describe('expanders and tabs by keyboard', () => {
     await page.keyboard.press('Enter');
     await expect(card.locator('.brief-event')).toHaveCount(5);
     await expect(card.getByRole('button', { name: '表示を減らす' })).toBeFocused();
+    expect(errors).toEqual([]);
+  });
+
+  test('Today folds nothing while the sell checks load, and never a row whose check is unknown', async ({ page }) => {
+    const watch = ['ZZNV', 'ZZKS', 'ZZZF', 'ZZOD', 'ZZSD'];
+    const { errors } = await openBrief(page, '#/brief/market', { storage: { 'research-watch': watch } });
+    // Hold every chart (the sell checks read them) until released; registered last, so it runs first.
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const files = new Set(Object.keys(charts));
+    await page.route(url => files.has(url.pathname.split('/').pop()), async route => { await gate; await route.fallback(); });
+    await page.goto('/#/brief');
+    await page.reload();
+    const card = page.getByRole('region', { name: 'ウォッチの変化' });
+    await expect(card.locator('.brief-event')).toHaveCount(5);
+    await expect(card.locator('.brief-morebutton')).toHaveCount(0);
+    await expect(card.locator('.brief-sellchip')).toHaveCount(0);
+    release();
+    // Once every check is in: the first three, plus the row with a signal; the quiet one folds.
+    await expect(card.getByRole('button', { name: /ZZSD/ })).toContainText('売りのサイン');
+    await expect(card.locator('.brief-event')).toHaveCount(4);
+    await expect(card.getByRole('button', { name: 'さらに表示（残り 1件）' })).toBeVisible();
+    // A check that cannot be made (its chart fails) is 未確認: that row stays in view like a fired one.
+    const failing = rowBySymbol.ZZZF.chart_path.split('/').pop();
+    await page.route(url => url.pathname.endsWith(`/${failing}`), route => route.fulfill({ status: 404, json: {} }));
+    await page.reload();
+    await expect(card.getByRole('button', { name: /ZZZF/ })).toContainText('売りのサイン 未確認', { timeout: 30000 });
+    await expect(card.locator('.brief-event')).toHaveCount(5);
+    await expect(card.locator('.brief-morebutton')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 });

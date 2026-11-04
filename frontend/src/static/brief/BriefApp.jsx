@@ -67,10 +67,12 @@ function TodayView({ brief, watch, open, now, animate, onNear, wide }) {
   const watched = useMemo(() => (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)).map(item => candidateView(item, brief.date)).sort(briefOrder), [brief.bundle.data, watch, brief.date]);
   const sells = useWatchSellChecks(watched, brief);
   const state = bundleState(brief);
-  // The first rows of the watch list, plus every row whose sell check fired (never folded away);
-  // the rest open in place and stay open for this session.
+  // The first rows of the watch list, plus every row whose sell check fired or could not be made
+  // (未確認, never folded away); the rest open in place and stay open for this session. Nothing folds
+  // until every row's check is in, so a row with a signal never appears late from behind the button.
   const [watchAll, setWatchAll] = useSessionState('today-watch-all', false);
-  const watchFolded = watched.filter((view, i) => i < WATCH_ROWS || sells[view.symbol]?.hits > 0);
+  const sellsIn = watched.every(view => sells[view.symbol]);
+  const watchFolded = sellsIn ? watched.filter((view, i) => i < WATCH_ROWS || sells[view.symbol].hits > 0 || sells[view.symbol].unknown) : watched;
   const watchShown = watchAll ? watched : watchFolded, watchHidden = watched.length - watchFolded.length;
   return <>
     <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
