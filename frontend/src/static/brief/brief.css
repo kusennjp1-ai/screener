@@ -367,3 +367,27 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-code33-parts .tone-zone b { color: var(--zone); }
 .brief-code33-parts .tone-ext b { color: var(--ext); }
 
+/* Legibility. Tile labels use the secondary text colour; on a phone the Today/market tiles read at
+   12px. Stock tiles wrap a long label or note instead of cutting it off with an ellipsis, and drop a
+   column only when three tiles cannot fit (a 375px phone at 200% zoom is 188px wide). */
+.brief-fact small, .brief-kgrid small, .brief-summary small { color: var(--text-2); }
+.brief-kgrid { grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); }
+/* A card's column never grows past the card for a wide child, and a stock chip wider than its line
+   wraps inside itself, so at that zoom the tiles keep the card's width instead of leaving it. */
+.brief-card { grid-template-columns: minmax(0, 1fr); }
+.brief-tags .brief-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.brief-stock .brief-kgrid small, .brief-stock .brief-kgrid em, .brief-stock .brief-fact small, .brief-stock .brief-fact em { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+/* Form fields: a placeholder at the muted text colour and a field edge with 3:1 against its ground. */
+.brief input::placeholder { color: var(--text-3); opacity: 1; }
+.brief-search input, .brief-sort select, .brief-inputs input { border-color: color-mix(in srgb, var(--text-3) 80%, var(--surface)); }
+@media (max-width: 520px) {
+  .brief-market .brief-fact small, .brief-market .brief-fact em, .brief-summary small, .brief-summary em { font-size: 12px; }
+  /* The four list filters as a 2×2 grid: the fourth one and every focus ring stay on screen. */
+  .brief-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 1 1 100%; overflow: visible; }
+  .brief-seg button { justify-content: center; }
+}
+/* A focused control is never under the sticky bar or the fixed dock (their sizes live on .brief). */
+@media (max-width: 1023px) {
+  :root { scroll-padding-top: calc(48px + env(safe-area-inset-top, 0px) + 8px); scroll-padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 12px); }
+}
+

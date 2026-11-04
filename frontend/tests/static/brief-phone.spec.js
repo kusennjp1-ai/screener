@@ -126,3 +126,124 @@ test.describe('Today on desktop is unchanged', () => {
     expect(errors).toEqual([]);
   });
 });
+
+/** Tile text (small, b, em) that is cut off: its content is wider than its box. */
+const clippedTileText = (page, scope = '.brief-fact, .brief-kgrid, .brief-summary') => page.evaluate(selector => [...document.querySelectorAll(selector)]
+  .flatMap(tile => [...tile.querySelectorAll('small, b, em')]).filter(node => node.getClientRects().length && node.scrollWidth > node.clientWidth)
+  .map(node => `${node.tagName.toLowerCase()} “${node.textContent}” ${node.scrollWidth}>${node.clientWidth}`), scope);
+const READY = {
+  '#/brief': page => expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5),
+  '#/brief/market': page => expect(page.locator('.market-history-explorer').getByRole('img')).toBeVisible(),
+  '#/brief/stock/ZZNV': page => expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down')).toHaveCount(130),
+};
+
+test.describe('tiles at 320px', () => {
+  test.use(phone(320, 640));
+  for (const [hash, ready] of Object.entries(READY)) test(`no tile text is cut off on ${hash}`, async ({ page }) => {
+    const { errors } = await openBrief(page, hash);
+    await ready(page);
+    await expect(page.locator('.brief-market .brief-fact b').filter({ hasText: '読み込み中' })).toHaveCount(0);
+    expect(await clippedTileText(page)).toEqual([]);
+    if (hash.includes('stock')) await expect(page.locator('.brief-plan .brief-kgrid em').filter({ hasText: '口座の' })).toHaveText('口座の 17.7%');
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('stock tiles at 200% zoom', () => {
+  // A 375px phone at 200% text zoom lays out at 188 CSS px.
+  test.use(phone(188, 600));
+  test('kgrid tiles wrap and stay inside their card', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZSD');
+    await expect(page.getByTestId('brief-conclusion').locator('.brief-kgrid > div')).toHaveCount(3);
+    await expect(page.locator('.brief-plan .brief-kgrid > div')).toHaveCount(3);
+    expect(await clippedTileText(page, '.brief-kgrid')).toEqual([]);
+    const outside = await page.locator('.brief-kgrid').evaluateAll(grids => grids.flatMap(grid => {
+      const card = grid.closest('.brief-card').getBoundingClientRect();
+      return [...grid.children].filter(tile => tile.getBoundingClientRect().right > card.right + 0.5).map(tile => tile.textContent);
+    }));
+    expect(outside).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+});
+
+for (const [width, device] of Object.entries(PHONES)) test.describe(`list filters at ${width}px`, () => {
+  test.use(device);
+  test('all four filters are on screen, none scrolled away', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list');
+    const seg = page.getByRole('group', { name: '絞り込み' });
+    await expect(seg.getByRole('button')).toHaveCount(4);
+    const boxes = await seg.getByRole('button').evaluateAll(buttons => buttons.map(button => { const box = button.getBoundingClientRect(); return { left: box.left, right: box.right, height: box.height }; }));
+    const innerWidth = await page.evaluate(() => innerWidth);
+    for (const box of boxes) { expect(box.left).toBeGreaterThanOrEqual(0); expect(box.right).toBeLessThanOrEqual(innerWidth); expect(box.height).toBeGreaterThanOrEqual(44); }
+    expect(await seg.evaluate(node => node.scrollWidth - node.clientWidth)).toBe(0);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('keyboard focus on a phone', () => {
+  test.use(VIEWPORTS.phone);
+  test('every focused control in main is clear of the top bar and the dock', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZSD', 'ZZKS'] } });
+    await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
+    await expect(page.getByRole('region', { name: 'ウォッチの変化' }).getByRole('button')).toHaveCount(3);
+    await settled(page);
+    const seen = [];
+    for (let press = 0; press < 80; press++) {
+      await page.keyboard.press('Tab');
+      const step = await page.evaluate(() => {
+        const active = document.activeElement, main = document.getElementById('brief-main');
+        if (!active || active.matches('.brief-skip')) return { skip: true };
+        if (!main.contains(active)) return { outside: true };
+        const box = active.getBoundingClientRect(), bar = document.querySelector('.brief-bar').getBoundingClientRect(), dock = document.querySelector('.brief-dock').getBoundingClientRect();
+        return { label: (active.getAttribute('aria-label') || active.textContent).trim().slice(0, 40), top: box.top, bottom: box.bottom, barBottom: bar.bottom, dockTop: dock.top };
+      });
+      if (step.skip) continue;
+      if (step.outside) { if (seen.length) break; continue; }
+      seen.push(step);
+    }
+    expect(seen.length).toBeGreaterThanOrEqual(10);
+    for (const step of seen) {
+      expect(step.top, step.label).toBeGreaterThanOrEqual(step.barBottom);
+      expect(step.bottom, step.label).toBeLessThanOrEqual(step.dockTop);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+/** Colours as the page paints them (any CSS colour syntax, including color-mix), and WCAG contrast. */
+const fieldColours = (page, selector) => page.evaluate(target => {
+  const canvas = document.createElement('canvas'); canvas.width = canvas.height = 1;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  const rgb = colour => { context.clearRect(0, 0, 1, 1); context.fillStyle = '#000'; context.fillStyle = colour; context.fillRect(0, 0, 1, 1); return [...context.getImageData(0, 0, 1, 1).data]; };
+  const luminance = ([r, g, b]) => [r, g, b].map(v => { const c = v / 255; return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4; }).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+  const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const ground = node => { for (let at = node; at; at = at.parentElement) { const value = getComputedStyle(at).backgroundColor; if (rgb(value)[3] === 255) return rgb(value); } return [255, 255, 255, 255]; };
+  return [...document.querySelectorAll(target)].map(field => {
+    const style = getComputedStyle(field), edge = rgb(style.borderTopColor);
+    return { field: field.tagName.toLowerCase(), own: contrast(edge, ground(field)), behind: contrast(edge, ground(field.parentElement)),
+      placeholder: field.matches('input[placeholder]') ? rgb(getComputedStyle(field, '::placeholder').color).join() : null,
+      text3: rgb(getComputedStyle(field).getPropertyValue('--text-3').trim()).join() };
+  });
+}, selector);
+
+for (const theme of ['dark', 'light']) test.describe(`form fields in ${theme}`, () => {
+  test.use(VIEWPORTS.phone);
+  test('placeholders use --text-3 and field edges reach 3:1', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list', { storage: { 'screener:color-mode': theme } });
+    await expect(page.locator('.brief')).toHaveAttribute('data-theme', theme);
+    await expect(candidates(page).first()).toBeVisible();
+    const list = await fieldColours(page, '.brief-search input, .brief-sort select');
+    expect(list.map(item => item.field)).toEqual(['input', 'select']);
+    expect(list[0].placeholder).toBe(list[0].text3);
+    await page.goto('/#/brief/stock/ZZNV');
+    await expect(page.locator('.brief-inputs input')).toHaveCount(3);
+    const plan = await fieldColours(page, '.brief-inputs input');
+    for (const item of [...list, ...plan]) {
+      expect(item.own, JSON.stringify(item)).toBeGreaterThanOrEqual(3);
+      expect(item.behind, JSON.stringify(item)).toBeGreaterThanOrEqual(3);
+    }
+    expect(errors).toEqual([]);
+  });
+});
