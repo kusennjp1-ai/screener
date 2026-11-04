@@ -83,6 +83,17 @@ jobs:
               ),
           )
 
+          # The public financial audit archive (one immutable release per file)
+          # is never prunable: refuse before any view, download or delete.
+          RESERVED_RELEASE_PREFIXES = ("financial-audit-",)
+
+          def assert_prunable(release: str) -> None:
+              if not isinstance(release, str) or not release or release.startswith(RESERVED_RELEASE_PREFIXES):
+                  raise SystemExit(f"Refusing to prune reserved release {release!r}")
+
+          for reserved_check in POLICIES:
+              assert_prunable(reserved_check.release)
+
           def gh_json(args: list[str]) -> dict:
               output = subprocess.check_output(
                   ["gh", *args, "--repo", REPO],
@@ -102,11 +113,13 @@ jobs:
               return None
 
           def list_assets(policy: Policy) -> list[dict]:
+              assert_prunable(policy.release)
               payload = gh_json(["release", "view", policy.release, "--json", "assets"])
               return payload.get("assets") or []
 
           def manifest_referenced_assets(policy: Policy) -> set[str]:
               with tempfile.TemporaryDirectory(prefix=f"{policy.release}-latest-") as tmp:
+                  assert_prunable(policy.release)
                   result = subprocess.run(
                       [
                           "gh",
@@ -261,6 +274,7 @@ jobs:
               raise SystemExit(0)
 
           for policy, asset in all_deletions:
+              assert_prunable(policy.release)
               subprocess.run(
                   [
                       "gh",

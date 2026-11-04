@@ -211,6 +211,9 @@ jobs:
       - name: Final GitHub Pages payload guard contracts
         run: python3 -m unittest discover -s .github/scripts -p test_check_pages_payload.py
 
+      - name: Release asset cleanup never prunes the audit archive
+        run: python3 -m unittest discover -s .github/scripts -p test_release_asset_cleanup.py
+
       - name: US source promotion downstream input contracts
         run: node --test .github/scripts/export-source-promotion-inputs.test.mjs
 
