@@ -5,11 +5,13 @@ import { join, resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { expect, it } from 'vitest';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload } from '../src/static/financialCurrent.js';
 import { instrumentApplicability } from '../src/static/instrumentApplicability.js';
 import { withFinancialProof } from '../src/static/testFinancialFixture.js';
+import { secRecord } from '../src/test/fixtures/secRecord.js';
 import { FINANCIAL_CORRECTION_SCHEMA, CORRECTION_FIELDS, loadFinancialCorrection, validateCorrectionProjection, overlayFinancialCorrection, overlayFinancialChart, verifyCorrectionCompatibility } from './financial-correction-overlay.mjs';
 const now=Date.parse('2026-10-04T12:00:00Z'), date='2026-10-02', identity=`1/1/${'a'.repeat(64)}/${'b'.repeat(64)}`;
 const hash=value=>createHash('sha256').update(value).digest('hex');
@@ -44,6 +46,24 @@ it('is strictly opt-in and explicit null ownership preserves independent prices'
   expect(changed.financial_history.annual).toEqual([]);expect(input.eps_growth_yy).toBe(99);
 });
 
+it('keeps only an admitted same-day SEC record beside the projected scalars and history',()=>{
+  const input=rows()[0],record=secRecord({symbol:'AVAILABLE',asOfDate:date,retrievedAt:'2026-10-03T10:00:00.000Z'});
+  const changed=projectFinancialRow(overlayFinancialCorrection({...input,financial_history:{annual:[{end:'2025-12-31',eps:999}]},book_financials:record},projection()),{now});
+  expect(changed.book_financials).toBe(record);
+  expect(changed).toMatchObject({eps_growth_qq:30,eps_growth_yy:40,annual_eps_growth_3y:null,eps_rating:null,code33:null,code33_pass:null,canslim_score:null});
+  expect(changed.financial_history).toEqual(projection().symbols.AVAILABLE.financial_history);
+  for(const value of [secRecord({symbol:'EMPTY',asOfDate:date,retrievedAt:'2026-10-03T10:00:00.000Z'}),secRecord({symbol:'AVAILABLE',asOfDate:'2026-10-01',retrievedAt:'2026-10-03T10:00:00.000Z'}),
+    secRecord({symbol:'AVAILABLE',asOfDate:date,retrievedAt:'2026-10-04T12:00:00.001Z'}),{...record,schema_version:1}]) {
+    expect(projectFinancialRow(overlayFinancialCorrection({...input,book_financials:value},projection()),{now}).book_financials).toBeNull();
+  }
+  const future=structuredClone(record);future.quarterly.eps.at(-1).filed='2026-10-03';
+  expect(overlayFinancialCorrection({...input,book_financials:future},projection()).book_financials).toBeNull();
+  const chart={symbol:'AVAILABLE',market:'US',as_of_date:date,bars:[],stock_data:input,fundamentals:{...input,symbol:undefined}};
+  // Chart aliases never carry the record, so they keep their explicit null exactly as before.
+  const aliased=overlayFinancialChart(chart,projection());
+  expect([aliased.stock_data.book_financials,aliased.fundamentals.book_financials]).toEqual([null,null]);expect(aliased).not.toHaveProperty('book_financials');
+});
+
 it('rejects incomplete ownership, tampered artifact, target mismatch, clocks and partial opt-in',async()=>{
   const directory=await mkdtemp(join(tmpdir(),'financial-correction-validation-'));
   try {
@@ -61,7 +81,7 @@ it('rejects incomplete ownership, tampered artifact, target mismatch, clocks and
   } finally {await rm(directory,{recursive:true,force:true});}
 });
 
-async function fixture({baseline=false,annualHistory=false,sourceRows=rows(),value=projection({annualHistory}),chartForRow}={}) {
+async function fixture({baseline=false,annualHistory=false,sourceRows=rows(),value=projection({annualHistory}),chartForRow,book=null}={}) {
   const directory=await mkdtemp(join(tmpdir(),'financial-correction-export-')),frontend=join(directory,'frontend'),root=join(frontend,'public/static-data');
   const scan={as_of_date:date,initial_rows:sourceRows,preview_rows:sourceRows,chunks:[{path:'chunk.json'}],default_filters:{minVolume:500},preset_screens:[{id:'financial',filters:{epsRating:{min:80}}}],sort:{field:'composite_score',order:'desc'}};
   const entry={as_of_date:date,market:'US',pages:{scan:{path:'scan.json'}},assets:{charts:{path:'charts-index.json'},candidate_performance:{path:'candidate-performance-retained.json',sha256:'a'.repeat(64)}}};
@@ -73,6 +93,8 @@ async function fixture({baseline=false,annualHistory=false,sourceRows=rows(),val
     await write(join(root,`charts/${row.symbol}.json`),chart);await write(join(root,`raw/${row.symbol}.json`),chart);
   }
   await write(join(root,'financial-history.json'),{as_of_date:date,results:Object.fromEntries(sourceRows.map(row=>[row.symbol,{symbol:row.symbol,annual:[{end:'2025-12-31',eps:999}]}]))});
+  // The SEC input as tools/sec-financials.py writes it (gzip, schema 2).
+  if(book) await writeFile(join(root,'book-financials.json.gz'),gzipSync(JSON.stringify({schema_version:2,as_of_date:date,results:book})));
   await write(join(root,'candidate-history/index.json'),{snapshots:[]});await write(join(root,'candidate-history/retained-history.json'),'historical bytes unchanged\n');
   await write(join(root,'candidate-performance-history/index.json'),'performance archive bytes unchanged\n');await write(join(root,'candidate-performance-retained.json'),{preserved:'performance bytes unchanged'});
   await mkdir(join(directory,'data/ibd_reference/ibd50'),{recursive:true});
@@ -134,6 +156,33 @@ it('rejects resurrection and missing generations in every corrected row surface'
       await expect(verifyCorrectionCompatibility({root,projection:value,evaluatedAt:now+1000})).rejects.toThrow('Financial correction');await writeFile(join(root,path),original);
     }
     expect(await verifyCorrectionCompatibility({root,projection:value,evaluatedAt:now+1000})).toEqual(await verifyCorrectionCompatibility({root,projection:value,evaluatedAt:now+2000}));
+  } finally {await rm(directory,{recursive:true,force:true});}
+});
+
+it('gates every published detail on the same SEC admission, inside and outside the correction cohort',async()=>{
+  const retrievedAt='2026-10-03T10:00:00.000Z';
+  const book={AVAILABLE:secRecord({symbol:'AVAILABLE',asOfDate:date,retrievedAt}),OUTSIDE:secRecord({symbol:'OUTSIDE',asOfDate:date,retrievedAt}),EMPTY:secRecord({symbol:'EMPTY',asOfDate:'2026-10-01',retrievedAt})};
+  const {directory,root,value}=await fixture({book});
+  try {
+    expect((await verifyCorrectionCompatibility({root,projection:value,evaluatedAt:now+1000})).counts.sec_admitted).toBe(2);
+    const manifest=await read(join(root,'manifest.json')),index=decodeResearchIndex(await read(join(root,manifest.markets.US.assets.research.path)));
+    const detailPath=symbol=>join(root,index.rows.find(row=>row.symbol===symbol).research_detail_path);
+    expect((await read(detailPath('AVAILABLE'))).book_financials).toEqual(book.AVAILABLE);
+    expect((await read(detailPath('OUTSIDE'))).book_financials).toEqual(book.OUTSIDE);
+    // A record for another publication date never reaches a detail.
+    expect((await read(detailPath('EMPTY'))).book_financials).toBeNull();
+    // Outside the cohort no projection compares book_financials, so the explicit admission check alone refuses it.
+    const cases=[
+      ['OUTSIDE',record=>{record.quarterly.eps.at(-1).filed='2026-10-03';},'OUTSIDE/book_financials is not admitted same-day SEC evidence'],
+      ['OUTSIDE',record=>{record.as_of_date='2026-10-01';},'OUTSIDE/book_financials is not admitted same-day SEC evidence'],
+      ['OUTSIDE',record=>{record.retrieved_at='2026-10-04T12:00:00.001Z';},'OUTSIDE/book_financials is not admitted same-day SEC evidence'],
+      ['AVAILABLE',record=>{record.source='https://data.sec.gov/api/xbrl/companyfacts/CIK0000000002.json';},'AVAILABLE/book_financials mismatch'],
+    ];
+    for(const [symbol,mutate,message] of cases) {
+      const path=detailPath(symbol),original=await readFile(path,'utf8'),changed=JSON.parse(original);mutate(changed.book_financials);await write(path,changed);
+      await expect(verifyCorrectionCompatibility({root,projection:value,evaluatedAt:now+1000})).rejects.toThrow(message);await writeFile(path,original);
+    }
+    expect((await verifyCorrectionCompatibility({root,projection:value,evaluatedAt:now+1000})).counts.sec_admitted).toBe(2);
   } finally {await rm(directory,{recursive:true,force:true});}
 });
 

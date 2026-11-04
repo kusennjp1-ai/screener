@@ -9,16 +9,18 @@ const manifest=await read('manifest.json');
 const indexPath=(manifest.markets?.US||manifest).assets.research.path;
 const index=decodeResearchIndex(await read(indexPath));
 const checkedAt=Date.now();
+// The verifier counts details that kept an admitted same-day SEC record.
+const admitted=report=>Number.isSafeInteger(report?.counts?.sec_admitted) ? `; same-day SEC quarterly evidence admitted for ${report.counts.sec_admitted} details` : '';
 
 const carry=await readFinancialGenerationCarry();
 if(carry) {
-  await verifyCarryCompatibility({root:'public/static-data',carry,evaluatedAt:checkedAt});
-  console.log(`Financial carry gate passed: ${Object.keys(carry.symbols).length} owned destination symbols; original source lineage and independently fresh fields/history agree.`);
+  const report=await verifyCarryCompatibility({root:'public/static-data',carry,evaluatedAt:checkedAt});
+  console.log(`Financial carry gate passed: ${Object.keys(carry.symbols).length} owned destination symbols; original source lineage and independently fresh fields/history agree${admitted(report)}.`);
 }
 const correction=carry ? null : await loadFinancialCorrection({rows:index.rows,asOfDate:index.as_of_date});
 if(correction) {
-  await verifyCorrectionCompatibility({root:'public/static-data',projection:correction,evaluatedAt:checkedAt});
-  console.log(`Financial correction gate passed: ${Object.keys(correction.symbols).length} corrected symbols; every current chart alias and research assessment agrees.`);
+  const report=await verifyCorrectionCompatibility({root:'public/static-data',projection:correction,evaluatedAt:checkedAt});
+  console.log(`Financial correction gate passed: ${Object.keys(correction.symbols).length} corrected symbols; every current chart alias and research assessment agrees${admitted(report)}.`);
 }
 
 writeSync(3, 'data-quality:financial:complete:v1\n');

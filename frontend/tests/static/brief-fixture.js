@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 import { FINANCIAL_TEST_DATE, FINANCIAL_TEST_NOW } from '../../src/static/testFinancialFixture.js';
 import { SECTOR_ETFS } from '../../src/static/marketLongHistory.js';
+import { secPoint, secRecord } from '../../src/test/fixtures/secRecord.js';
 
 export const date = FINANCIAL_TEST_DATE;
 export const now = FINANCIAL_TEST_NOW;
@@ -60,6 +61,20 @@ export const rows = NAMES.map(([symbol, company, sector], index) => {
   }, date);
 });
 export const rowBySymbol = Object.fromEntries(rows.map(row => [row.symbol, row]));
+
+// One stock has a canonical detail with a same-day SEC record: a June fiscal year whose Q4 EPS
+// is only in the 10-K (the common 10-Q filer case), so the EPS tile falls back one quarter.
+export const SEC_SYMBOL = 'ZZNV';
+const SEC_QUARTERS = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+  ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30']];
+const secFinancials = (() => {
+  const record = secRecord({ symbol: SEC_SYMBOL, asOfDate: date, retrievedAt: `${date}T21:30:00.000Z`, quarters: SEC_QUARTERS });
+  record.quarterly.eps = record.quarterly.eps.filter(point => !point.end.endsWith('06-30'));
+  record.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4), secPoint('eps', ['2025-07-01', '2026-06-30'], 5.5)];
+  return record;
+})();
+rowBySymbol[SEC_SYMBOL].research_detail_path = `research-details/${SEC_SYMBOL}-detail.json`;
+export const details = { [`${SEC_SYMBOL}-detail.json`]: { ...rowBySymbol[SEC_SYMBOL], as_of_date: date, book_financials: secFinancials } };
 
 export const charts = Object.fromEntries(rows.map((row, index) => [row.chart_path.split('/').pop(), {
   symbol: row.symbol, as_of_date: date, bars: bars(index + 101, row.current_price, 0.5 + (index % 4) * 0.4),
@@ -146,6 +161,7 @@ export async function routeBrief(page, { historyEnd = date, schema, fail } = {})
       default_market: 'US', supported_markets: ['US'], markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' }, market_trends: trends.ref }, pages: {} } } } });
     if (file === 'research.json') return route.fulfill({ json: { as_of_date: date, rows } });
     if (file === trends.file) return route.fulfill({ contentType: 'application/json', body: trends.text });
+    if (details[file]) return route.fulfill({ json: details[file] });
     if (charts[file]) return route.fulfill({ json: charts[file] });
     return route.fulfill({ status: 404, json: {} });
   });

@@ -1,5 +1,6 @@
-import { expect, it } from 'vitest';
-import { bookFinancialEvidence } from './bookFinancialEvidence';
+import { describe, expect, it } from 'vitest';
+import { bookFinancialEvidence, yoyDetail } from './bookFinancialEvidence';
+import { secPoint, secRecord } from '../test/fixtures/secRecord';
 function fixture() {
   const periods = ['2024-03-31','2024-06-30','2024-09-30','2024-12-31','2025-03-31','2025-06-30','2025-09-30','2025-12-31'];
   const series = values => periods.map((end, i) => ({ end, start: `${end.slice(0, 4)}-${['01','04','07','10'][i % 4]}-01`, filed: new Date(Date.parse(end) + 30 * 86400000).toISOString().slice(0, 10), value: values[i], derived: false }));
@@ -83,4 +84,65 @@ it('accepts a documented derived Q4 for revenue and net income but never for EPS
   const eps = fixture();
   derive(eps.quarterly.eps.at(-1));
   expect(audit(eps).epsAcceleration).toBe('unknown');
+});
+
+describe('reasons, fiscal fourth quarters and three-valued Code 33', () => {
+  const date = '2026-02-01';
+  const report = record => bookFinancialEvidence(record, 'TEST', date);
+  // A 10-Q filer: the fiscal-Q4 EPS exists only as the 10-K annual value.
+  const tenQFiler = () => {
+    const record = secRecord();
+    record.quarterly.eps = record.quarterly.eps.filter(p => !p.end.endsWith('12-31'));
+    record.annualEps = [secPoint('eps', ['2024-01-01', '2024-12-31'], 4), secPoint('eps', ['2025-01-01', '2025-12-31'], 5.5)];
+    return record;
+  };
+
+  it('names why each growth rate or margin is unknown', () => {
+    const points = [{ end: '2024-12-20', start: '2024-09-21', value: 1 }, { end: '2025-01-05', start: '2024-10-07', value: 1 }];
+    expect(yoyDetail(points, '2025-12-31')).toEqual({ value: null, reason: 'not_reported' });
+    expect(yoyDetail([...points, { end: '2025-12-31', start: '2025-10-01', value: 2 }], '2025-12-31').reason).toBe('ambiguous_base');
+    const filer = report(tenQFiler());
+    const q4 = filer.rows.at(-1);
+    expect(q4).toMatchObject({ end: '2025-12-31', eps: null, epsYoY: null, epsYoYReason: 'not_reported', fiscalQ4: true, form: '10-K', salesYoYReason: null, marginReason: null });
+    expect(filer.rows.slice(0, 4).map(row => row.salesYoYReason)).toEqual(['no_base', 'no_base', 'no_base', 'no_base']);
+    expect(filer.rows.at(-2)).toMatchObject({ fiscalQ4: false, form: '10-Q', epsYoYReason: null });
+    const loss = secRecord(); loss.quarterly.eps[4].value = 0.2; loss.quarterly.eps[0].value = -0.5;
+    expect(report(loss).rows[4]).toMatchObject({ eps: 0.2, epsYoY: null, epsYoYReason: 'nonpositive_base' });
+    const short = secRecord(); short.quarterly.eps.at(-1).start = '2025-10-22';
+    expect(report(short).rows.at(-1).epsYoYReason).toBe('period_mismatch');
+    const margins = secRecord();
+    margins.quarterly.netIncome.splice(7, 1); margins.quarterly.revenue[6].value = 0; margins.quarterly.netIncome[5].start = '2025-04-02';
+    expect(report(margins).rows.slice(5).map(row => row.marginReason)).toEqual(['start_mismatch', 'nonpositive_revenue', 'not_reported']);
+  });
+
+  it('fails Code 33 on any known failure, passes only on three passes and otherwise stays unknown', () => {
+    expect(report(secRecord()).code33).toBe('pass');
+    const unknownEps = report(tenQFiler());
+    expect([unknownEps.epsAcceleration, unknownEps.salesAcceleration, unknownEps.marginImprovement, unknownEps.code33]).toEqual(['unknown', 'pass', 'pass', 'unknown']);
+    const falling = tenQFiler();
+    [12, 11, 10, 9, 12, 11, 10, 9].forEach((margin, i) => { falling.quarterly.netIncome[i].value = falling.quarterly.revenue[i].value * margin / 100; });
+    const failed = report(falling);
+    expect([failed.epsAcceleration, failed.marginImprovement, failed.code33]).toEqual(['unknown', 'fail', 'fail']);
+  });
+
+  it('gives the same evidence from the published 1100-day window as from the full series', () => {
+    const quarters = [], values = { eps: [], revenue: [], netIncome: [] };
+    for (let year = 2020; year <= 2025; year++) for (const [s, e] of [['01-01', '03-31'], ['04-01', '06-30'], ['07-01', '09-30'], ['10-01', '12-31']]) {
+      const i = quarters.push([`${year}-${s}`, `${year}-${e}`]) - 1;
+      values.eps.push(1 + i * 0.05 + (i % 3) * 0.02); values.revenue.push(100 * 1.03 ** i); values.netIncome.push(100 * 1.03 ** i * (0.08 + i * 0.002));
+    }
+    const full = secRecord({ quarters, ...values });
+    full.quarterly.inventory = quarters.map(([, end], i) => secPoint('inventory', [null, end], 50 + i * (i > 18 ? 9 : 1)));
+    full.annualEps = [2020, 2021, 2022, 2023, 2024].map(year => secPoint('eps', [`${year}-01-01`, `${year}-12-31`], 4 + year - 2020));
+    const trimmed = structuredClone(full);
+    const latest = [...full.quarterly.eps, ...full.quarterly.revenue].map(p => p.end).sort().at(-1);
+    const cutoff = new Date(Date.parse(latest) - 1100 * 86400000).toISOString().slice(0, 10);
+    for (const key of Object.keys(trimmed.quarterly)) trimmed.quarterly[key] = trimmed.quarterly[key].filter(p => p.end >= cutoff);
+    expect(trimmed.quarterly.eps.length).toBeLessThan(full.quarterly.eps.length);
+    const a = report(full), b = report(trimmed);
+    const keys = ['rows', 'code33', 'epsFloor', 'balanceWarnings', 'annualRecord', 'epsAcceleration', 'salesAcceleration', 'marginImprovement'];
+    expect(Object.fromEntries(keys.map(key => [key, b[key]]))).toEqual(Object.fromEntries(keys.map(key => [key, a[key]])));
+    expect(a.rows).toHaveLength(8);
+    expect(a.balanceWarnings.length).toBeGreaterThan(0);
+  });
 });
