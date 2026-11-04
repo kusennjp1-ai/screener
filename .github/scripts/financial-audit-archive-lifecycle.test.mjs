@@ -2,7 +2,7 @@
 // real packed Pages trees, and a GitHub Releases fake (fixtures/github-releases-fake.mjs).
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {existsSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
+import {copyFileSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {dirname,join} from 'node:path';
 import {execFileSync} from 'node:child_process';
@@ -18,16 +18,21 @@ import {inventoryDigest} from './publication-state.mjs';
 const here=dirname(fileURLToPath(import.meta.url)),archiveCli=join(here,'financial-audit-archive.mjs'),fakeModule=join(here,'fixtures/github-releases-fake.mjs');
 const frontend=fileURLToPath(new URL('../../frontend',import.meta.url)),stateModule=join(here,'publication-state.mjs');
 const carries=files=>Object.keys(files).filter(path=>/carry-projection-/.test(path)).sort();
+// The renewal request actually committed in this checkout (it names a superseded publication).
+const committedRequest=join(here,'../financial-source-renewal-request.json');
 const day=(id,date,price)=>({id,date,price,time:`${date}T12:00:00.000Z`});
 
-function archiveWorld(options={}){
+function archiveWorld({withCommittedRequest=false,...options}={}){
   const fakeDir=mkdtempSync(join(tmpdir(),'audit-archive-releases-')),fake=releasesFake(fakeDir);
   const fixture=lifecycleFixture({packedTransport:true,...options,env:{RELEASE_ARCHIVE_FAKE_DIR:fakeDir,RELEASE_ARCHIVE_FAKE_MODULE:fakeModule}});
+  // Both CLIs read the request relative to their working directory, as in the workflows.
+  const commitRequest=dir=>{if(withCommittedRequest&&existsSync(committedRequest)){mkdirSync(join(dir,'.github'),{recursive:true});copyFileSync(committedRequest,join(dir,'.github/financial-source-renewal-request.json'));}};
+  commitRequest(fixture.root);
   const sync=()=>{for(const key of Object.keys(fixture.config.api))if(/\/releases\?per_page=100&page=\d+$/.test(key))delete fixture.config.api[key];Object.assign(fixture.config.api,fake.apiEntries());fixture.save();};
   const readDeployed=()=>JSON.parse(fixture.success(fixture.invoke('--input-type=module',['-e',`import {livePublication} from ${JSON.stringify(stateModule)}; console.log(JSON.stringify(await livePublication()));`],fixture.root),'read deployed receipt').stdout);
   // The archive workflow: anonymous collect and verify; only upload has a token.
   const archive=({expectFailure=false}={})=>{
-    sync();const staged=join(fixture.root,`archive-staging-${Date.now()}`),results={};
+    sync();commitRequest(fixture.root);const staged=join(fixture.root,`archive-staging-${Date.now()}`),results={};
     for(const [command,flag,token]of [['collect','--output',null],['verify-plan','--input',null],['upload','--input',FAKE_WRITE_TOKEN],['verify-public','--input',null]]){
       const result=fixture.invoke(archiveCli,[command,flag,staged],fixture.root,{GITHUB_SHA:'b'.repeat(40),GH_TOKEN:token??''});
       results[command]=result;
@@ -36,7 +41,7 @@ function archiveWorld(options={}){
     sync();return {staged,results,plan:existsSync(join(staged,'plan.json'))?read(join(staged,'plan.json')):null};
   };
   const publish=(target,{admission=true,deploy=true,before=()=>{}}={})=>{
-    const release=fixture.advance(target);sync();before(release);
+    const release=fixture.advance(target);sync();commitRequest(release.root);before(release);
     release.command('plan');assert.match(readFileSync(release.output,'utf8'),/carry=true\n/);
     if(admission)release.command('audit-archive');
     release.command('restore');release.command('prepare-carry');release.build();release.command('compose');
@@ -49,9 +54,10 @@ function archiveWorld(options={}){
 async function logicalOf(release,publication){return canonicalPublication({root:release.dist,frontendRoot:frontend,publication,restore:join(release.root,`logical-${Date.now()}`)});}
 
 test('C4 omits verified archived carries C1..C3, C5 restores only hosted files, and a lost archive copy fails closed',{timeout:900000},async()=>{
-  const world=archiveWorld(),{fixture,fake}=world;
+  const world=archiveWorld({withCommittedRequest:true}),{fixture,fake}=world;
   try{
     fixture.seed();
+    assert.equal(existsSync(join(fixture.root,'.github/financial-source-renewal-request.json')),existsSync(committedRequest));
     const published=[];
     for(const target of [day(40,'2026-10-05',120),day(50,'2026-10-06',130),day(60,'2026-10-07',140)]){
       const release=world.publish(target);
