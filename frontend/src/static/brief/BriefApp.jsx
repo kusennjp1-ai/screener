@@ -243,7 +243,8 @@ export default function BriefApp() {
         <div className="brief-bar-title"><b><span style={{ viewTransitionName: 'brief-ticker' }}>{symbol}</span>{barView?.price != null && <span className="numeric brief-bar-price"> {money(barView.price)}</span>}</b><span>{barView ? `${barView.name}${barView.sector ? `・${barView.sector}` : ''}` : brief.bundle.data ? '分析対象外' : '読み込み中…'}</span></div>
         <button type="button" className={`brief-iconbutton${watching ? ' is-on' : ''}`} aria-pressed={Boolean(watching)} aria-label={watching ? 'ウォッチから外す' : 'ウォッチに追加'} onClick={event => toggleWatch(symbol, event.currentTarget)}>{watching ? ICON.starOn : ICON.star}</button>
       </> : <>
-        <div className="brief-bar-title"><b>米国株スクリーナー</b><span className="numeric">分析基準日 {brief.date ? `${brief.date} 引け・米国株` : '取得中'}</span></div>
+        {/* The phone's Today hides the hero date, so the bar alone says a date that could not be read: 未確認, never 取得中 for good. */}
+        <div className="brief-bar-title"><b>米国株スクリーナー</b><span className="numeric">分析基準日 {brief.date ? `${brief.date} 引け・米国株` : brief.manifest.isLoading || brief.bundle.isLoading ? '取得中' : '未確認'}</span></div>
       </>}
       <ThemeToggle />
     </header>

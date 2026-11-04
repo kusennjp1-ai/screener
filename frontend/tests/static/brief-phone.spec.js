@@ -99,6 +99,18 @@ for (const [width, device] of Object.entries(FOLD)) test.describe(`Today's first
   });
 });
 
+test.describe('a date that cannot be read on a phone', () => {
+  test.use(VIEWPORTS.phone);
+  test('the bar says 未確認 once loading has ended, never 取得中 for good', async ({ page }) => {
+    await openBrief(page, '#/brief', { fail: 'manifest' });
+    // The hero date (日付未確認) is hidden on the phone's Today; the bar carries the state.
+    await expect(page.locator('.brief-hero small')).toBeHidden();
+    await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 未確認');
+    await expect(page.locator('.brief-bar-title')).not.toContainText('取得中');
+    expect(await horizontalOverflow(page)).toBe(0);
+  });
+});
+
 test.describe('the market tab on a phone keeps the verdict and the chart', () => {
   test.use(VIEWPORTS.phone);
   test('verdict and S&P chart are visible on #/brief/market', async ({ page }) => {
