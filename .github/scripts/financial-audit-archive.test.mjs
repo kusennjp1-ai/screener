@@ -305,6 +305,42 @@ test('admission drops only same-run verified copies and keeps every unverified c
   assert.deepEqual(tagOutage.drops,{},'a failing fallback tag read keeps the candidate');
 });
 
+test('a candidate download obeys its deadline even when the host or fetcher stalls',async()=>{
+  const timeout=ms=>{const controller=new AbortController();setTimeout(()=>controller.abort(new DOMException('timeout','TimeoutError')),ms);return controller.signal;};
+  const url=`https://github.com/${repo}/releases/download/x/y.gz`;
+  await assert.rejects(fetchArchivedAsset(url,{fetcher:()=>new Promise(()=>{}),expectedBytes:10,signal:timeout(50)}),{name:'TimeoutError'},'stalled headers');
+  const stalledBody=()=>new Response(new ReadableStream({start(controller){controller.enqueue(new Uint8Array([0x1f,0x8b]));},pull(){return new Promise(()=>{});}}),{status:200,headers:{'content-length':'10'}});
+  await assert.rejects(fetchArchivedAsset(url,{fetcher:async()=>stalledBody(),expectedBytes:10,signal:timeout(50)}),{name:'TimeoutError'},'stalled body');
+  let seen=null;
+  const bytes=await fetchArchivedAsset(url,{fetcher:async(_,options)=>{seen=options.signal;return new Response(Buffer.alloc(10),{status:200,headers:{'content-length':'10'}});},expectedBytes:10,signal:timeout(5000)});
+  assert.equal(bytes.length,10);assert.ok(seen instanceof AbortSignal,'the deadline reaches the real fetch');
+  const plain=await fetchArchivedAsset(url,{fetcher:async(_,options)=>{assert.equal(options.signal,undefined,'indexed entries keep their unbounded fail-closed reads');return new Response(Buffer.alloc(10),{status:200});},expectedBytes:10});
+  assert.equal(plain.length,10);
+});
+
+test('a stalled or slow Releases host keeps candidates hosted within the admission budget instead of failing the run',async t=>{
+  const site=await nestedSite(t,4),{fetcher,api,archive}=world(t,site),sorted=[...site.carries].sort((a,b)=>a.path<b.path?-1:1);
+  for(const carry of site.carries)archive(carry,site.bin(carry));
+  // One copy whose download never answers, from a fetcher that ignores the signal.
+  const stalledAsset=archiveLocation(sorted[1].path).asset,warnings=[],started=Date.now();
+  const stalling=async(input,options)=>String(input).includes(stalledAsset)?new Promise(()=>{}):fetcher(input,options);
+  const record=await admitAuditArchive({state:carryState(site.live),api,fetcher:stalling,root:temp(t),warn:message=>warnings.push(message),candidateTimeoutMs:200});
+  assert.deepEqual(Object.keys(record.drops),[sorted[0].path,sorted[2].path,sorted[3].path]);
+  assert.equal(warnings.length,1);assert.ok(warnings[0].startsWith(`Keeping ${sorted[1].path} on Pages`));assert.match(warnings[0],/timeout/i);
+  assert.ok(Date.now()-started<20000,'the stall costs one candidate deadline, not the step limit');
+  // Pages reads for the nested index share the candidate deadline as well.
+  const pagesStall=async(input,options)=>new URL(input).pathname.includes(`/${AUDIT_TRANSPORT_PREFIX}`)?new Promise(()=>{}):fetcher(input,options);
+  const pagesWarnings=[],pages=await admitAuditArchive({state:carryState(site.live),api,fetcher:pagesStall,root:temp(t),warn:message=>pagesWarnings.push(message),candidateTimeoutMs:100});
+  assert.deepEqual(pages.drops,{});assert.equal(pagesWarnings.length,4);assert.ok(pagesWarnings.every(message=>/timeout/i.test(message)));
+  // A slow host exhausts the overall budget: later candidates are not attempted.
+  let tick=0,downloads=0;const clock=()=>tick;
+  const slow=async(input,options)=>{if(String(input).startsWith('https://github.com/')){downloads++;tick+=60000;}return fetcher(input,options);};
+  const budgetWarnings=[],limited=await admitAuditArchive({state:carryState(site.live),api,fetcher:slow,root:temp(t),warn:message=>budgetWarnings.push(message),clock,candidateBudgetMs:90000});
+  assert.deepEqual(Object.keys(limited.drops),[sorted[0].path,sorted[1].path]);assert.equal(downloads,2);
+  assert.deepEqual(budgetWarnings,[`Financial audit archive admission time budget reached; ${sorted[2].path} and later carries stay hosted`]);
+  assert.equal(limited.mode,'prune');assert.ok(limited.verified_at);
+});
+
 test('admission fails closed when an already indexed entry is missing, changed or undecodable',async t=>{
   const site=await nestedSite(t,3),{fake,fetcher,api,archive}=world(t,site),[c0,c1]=site.carries;
   archive(c0,site.bin(c0));

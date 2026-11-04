@@ -25,6 +25,10 @@ export const RENEWAL_REQUEST_PATH='.github/financial-source-renewal-request.json
 export const LEGACY_CLOSURE_GAPS=Object.freeze([]);
 // Room left in publication.json for the rest of one publication's changes.
 const PUBLICATION_MARGIN_BYTES=64*1024;
+// New candidates only: a slow or stalled Releases host keeps the remaining
+// carries hosted instead of running into the publish step's 20 minute limit.
+// Already indexed entries keep failing closed without these deadlines.
+export const CANDIDATE_TIMEOUT_MS=30000,CANDIDATE_BUDGET_MS=8*60000;
 const MAX_FALLBACK_TAG_READS=50,MAX_RELEASE_PAGES=200,PROBE_CONCURRENCY=8;
 const receiptPattern=/^static-data\/financial-corrections\/release-([a-f0-9]{64})\.json$/;
 const renewalPattern=/^static-data\/financial-corrections\/renewal-[a-f0-9]{64}\.json$/;
@@ -42,19 +46,36 @@ function allowedDownload(url){
   if(url.protocol!=='https:'||url.username||url.password||url.port||!ARCHIVE_POLICY.download_hosts.includes(url.hostname))throw Error(`Archived asset URL is outside the allowed public download hosts: ${url.host}`);
 }
 async function cancel(response){try{await response.body?.cancel();}catch{/* already closed */}}
-async function readCapped(response,cap){
+// Settles with the signal's reason once it aborts, even if a fetcher ignores it.
+function abortable(promise,signal){
+  if(!signal)return promise;
+  return new Promise((resolve,reject)=>{
+    const onAbort=()=>reject(signal.reason);
+    signal.addEventListener('abort',onAbort,{once:true});
+    if(signal.aborted)onAbort();
+    promise.then(resolve,reject).finally(()=>signal.removeEventListener('abort',onAbort));
+  });
+}
+// A referenced timer (AbortSignal.timeout is unreferenced): a stalled read must
+// end in this deadline, never in the process exiting with the work unfinished.
+function deadline(ms){
+  const controller=new AbortController(),timer=setTimeout(()=>controller.abort(new DOMException(`no answer within ${ms} ms (timeout)`,'TimeoutError')),ms);
+  return {signal:controller.signal,clear:()=>clearTimeout(timer)};
+}
+async function readCapped(response,cap,signal){
   const chunks=[];let size=0;
-  if(!response.body){const bytes=Buffer.from(await response.arrayBuffer());if(bytes.length>cap)throw Error('Archived asset exceeds its expected size');return bytes;}
-  const reader=response.body.getReader();
+  if(!response.body){const bytes=Buffer.from(await abortable(response.arrayBuffer(),signal));if(bytes.length>cap)throw Error('Archived asset exceeds its expected size');return bytes;}
+  const reader=response.body.getReader();let complete=false;
   try{
-    for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>cap){await reader.cancel().catch(()=>{});throw Error('Archived asset exceeds its expected size');}chunks.push(Buffer.from(value));}
-  }finally{reader.releaseLock();}
+    for(;;){const {done,value}=await abortable(reader.read(),signal);if(done)break;size+=value.byteLength;if(size>cap){await reader.cancel().catch(()=>{});throw Error('Archived asset exceeds its expected size');}chunks.push(Buffer.from(value));}
+    complete=true;
+  }finally{if(!complete)await reader.cancel().catch(()=>{});reader.releaseLock();}
   return Buffer.concat(chunks,size);
 }
 
 // Anonymous download from the allowed public hosts. Never sends credentials,
 // follows at most three https redirects, and never accepts a transfer encoding.
-export async function fetchArchivedAsset(url,{fetcher=fetch,expectedBytes,mode='full',cap}={}){
+export async function fetchArchivedAsset(url,{fetcher=fetch,expectedBytes,mode='full',cap,signal}={}){
   const limit=cap??expectedBytes;
   if(!['full','probe'].includes(mode)||!Number.isSafeInteger(limit)||limit<1||limit>FINANCIAL_AUDIT_MAX_FILE_BYTES
     ||(mode==='probe'||cap===undefined)&&(!Number.isSafeInteger(expectedBytes)||expectedBytes<2))throw Error('Invalid archived asset request bounds');
@@ -62,7 +83,7 @@ export async function fetchArchivedAsset(url,{fetcher=fetch,expectedBytes,mode='
   for(let hop=0;;hop++){
     allowedDownload(current);
     const headers={'Accept':'application/octet-stream','Accept-Encoding':'identity',...(mode==='probe'?{Range:'bytes=0-1'}:{})};
-    const response=await fetcher(current.href,{method:'GET',redirect:'manual',cache:'no-store',headers});
+    const response=await abortable(fetcher(current.href,{method:'GET',redirect:'manual',cache:'no-store',headers,...(signal?{signal}:{})}),signal);
     if([301,302,303,307,308].includes(response.status)){
       const location=response.headers.get('location');await cancel(response);
       if(hop>=3)throw Error('Archived asset redirected more than three times');
@@ -79,14 +100,14 @@ export async function fetchArchivedAsset(url,{fetcher=fetch,expectedBytes,mode='
       else if(response.status===200)total=length===null?null:Number(length);
       if(total!==expectedBytes){await cancel(response);throw new ArchiveHttpError(`Archived asset probe size mismatch (HTTP ${response.status})`,response.status);}
       const reader=response.body.getReader();let head=Buffer.alloc(0);
-      try{while(head.length<2){const {done,value}=await reader.read();if(done)break;head=Buffer.concat([head,Buffer.from(value)]);if(response.status===206&&head.length>2)throw Error('Archived asset probe returned extra bytes');}}
+      try{while(head.length<2){const {done,value}=await abortable(reader.read(),signal);if(done)break;head=Buffer.concat([head,Buffer.from(value)]);if(response.status===206&&head.length>2)throw Error('Archived asset probe returned extra bytes');}}
       finally{await reader.cancel().catch(()=>{});}
       if(head.length<2||head[0]!==0x1f||head[1]!==0x8b)throw Error('Archived asset probe is not gzip');
       return {status:response.status,bytes:expectedBytes};
     }
     if(response.status!==200){await cancel(response);throw new ArchiveHttpError(`Archived asset download failed: HTTP ${response.status}`,response.status);}
     if(length!==null&&(!/^\d+$/.test(length)||Number(length)>limit||cap===undefined&&Number(length)!==expectedBytes)){await cancel(response);throw Error('Archived asset length mismatch');}
-    const bytes=await readCapped(response,limit);
+    const bytes=await readCapped(response,limit,signal);
     if(cap===undefined&&bytes.length!==expectedBytes)throw Error('Archived asset length mismatch');
     return bytes;
   }
@@ -247,7 +268,8 @@ function projectedEntry(path,candidate){
 
 // Runs before the approved UI tree is checked out. Uses the plan's
 // authenticated live publication; never re-reads or re-authenticates it.
-export async function admitAuditArchive({state,api=githubApi,fetcher=fetch,now=()=>new Date().toISOString(),seed=process.env.GITHUB_RUN_ID,root=process.cwd(),warn=warning}){
+export async function admitAuditArchive({state,api=githubApi,fetcher=fetch,now=()=>new Date().toISOString(),seed=process.env.GITHUB_RUN_ID,root=process.cwd(),warn=warning,
+  clock=Date.now,candidateTimeoutMs=CANDIDATE_TIMEOUT_MS,candidateBudgetMs=CANDIDATE_BUDGET_MS}){
   const live=state.live,prior=live.receipt?.financial_audit_archive??null;
   if(prior)validateFinancialAuditArchive(prior,live.receipt);
   const mode=pruneMode(state,{root})?'prune':'verify';
@@ -273,9 +295,19 @@ export async function admitAuditArchive({state,api=githubApi,fetcher=fetch,now=(
     const projected={schema_version:ARCHIVE_SCHEMA,repository:bootstrap.repository,files:{...(prior?.files??{})}};
     const hostedEntry=`,"static-data/financial-corrections/release-${'0'.repeat(64)}.json":"${'0'.repeat(64)}"`.length;
     const priorIndexBytes=prior?Buffer.byteLength(JSON.stringify(prior)):0;
-    let nested=null;
+    // Every Pages and Releases read for a candidate shares that candidate's
+    // deadline; the whole candidate phase shares one budget.
+    let signal=null,nested=null;
+    const bounded=(input,options={})=>{
+      const current=signal,combined=current&&options.signal?AbortSignal.any([options.signal,current]):current??options.signal;
+      return abortable(fetcher(input,combined?{...options,signal:combined}:options),current);
+    };
+    const budgetEnd=clock()+candidateBudgetMs;
     try{
       for(const candidate of candidates){
+        const remaining=budgetEnd-clock();
+        if(!(remaining>0)){warn(`Financial audit archive admission time budget reached; ${candidate.path} and later carries stay hosted`);break;}
+        const limit=deadline(Math.max(1,Math.min(candidateTimeoutMs,remaining)));signal=limit.signal;
         const location=archiveLocation(candidate.path);
         try{
           if(hosted[candidate.path]!==candidate.sha256||location.sha256!==candidate.sha256)throw Error('candidate is not hosted under its content address');
@@ -288,9 +320,12 @@ export async function admitAuditArchive({state,api=githubApi,fetcher=fetch,now=(
           let release=listing.get(location.tag);
           if(!release){if(fallbacks<=0)throw Error('release listing omitted it');fallbacks--;release=releaseByTag(api,location.tag);if(!release)throw Error('no published archive release');listing.set(location.tag,release);}
           const meta=assertReleaseMetadata(release,{path:candidate.path});
-          nested??=await openNestedAudit({publication:live.receipt,fetcher});
-          const entry=await nested.entry(candidate.path,candidate.sha256);
-          const bytes=await fetchArchivedAsset(location.url,{fetcher,expectedBytes:meta.size});
+          if(!nested){
+            const opening=openNestedAudit({publication:live.receipt,fetcher:bounded});
+            try{nested=await abortable(opening,signal);}catch(error){opening.then(late=>late.dispose(),()=>{});throw error;}
+          }
+          const entry=await abortable(nested.entry(candidate.path,candidate.sha256),signal);
+          const bytes=await fetchArchivedAsset(location.url,{fetcher,expectedBytes:meta.size,signal});
           if(meta.digest!==null&&sha(bytes)!==meta.digest)throw Error('downloaded bytes differ from the release asset digest');
           const encoding=selfEncoding(bytes);
           await verifyArchivedBytes(bytes,{sha256:candidate.sha256,bytes:entry.decodedBytes,encoding});
@@ -298,8 +333,9 @@ export async function admitAuditArchive({state,api=githubApi,fetcher=fetch,now=(
           record.drops[candidate.path]={sha256:candidate.sha256,bytes:entry.decodedBytes,encoding,url:location.url,archived_at:release.published_at,verified_at:now()};
           projected.files[candidate.path]=projectedEntry(candidate.path,{sha256:candidate.sha256,bytes:entry.decodedBytes});
         }catch(error){warn(`Keeping ${candidate.path} on Pages: its public archive copy is not verified (${error.message})`);}
+        finally{limit.clear();}
       }
-    }finally{nested?.dispose();}
+    }finally{signal=null;nested?.dispose();}
   }
   record.drops=sortedObject(record.drops);record.verified_at=now();
   return record;

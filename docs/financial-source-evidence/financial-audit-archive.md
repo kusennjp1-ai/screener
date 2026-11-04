@@ -123,7 +123,12 @@ anonymous (no `Authorization` header, https only, at most three redirects to
 2. New candidates (plain carries only) must have a published release whose
    asset downloads in full, matches its digest and decodes with the canonical
    one-member gzip decoder to exactly the logical bytes and length. Any failure
-   keeps that carry hosted with a `::warning::`.
+   keeps that carry hosted with a `::warning::`. Each candidate's Pages and
+   Releases reads share a 30 s deadline (`CANDIDATE_TIMEOUT_MS`) and all
+   candidates share an 8 minute budget (`CANDIDATE_BUDGET_MS`), well inside the
+   step's 20 minute limit. A stalled or slow host therefore only keeps the
+   affected and remaining carries hosted, with a warning. Already indexed
+   entries (step 1) have no such deadline and still fail closed.
 3. During restore, every verified drop is bound offline to the hosted receipts
    that reference it. A drop with no referencing receipt, or with disagreeing
    generations, stays hosted. Only the bound drops are left out of the new
@@ -165,6 +170,7 @@ Admission stops adding entries when either the 1 MiB index cap or the 4 MiB
 | Situation | Result |
 | --- | --- |
 | Archive workflow failed, release missing or still a draft, listing unavailable before any index exists | Nothing is removed; today's behaviour. The TAR guard still fails closed at the limit. |
+| A candidate download stalls, or the candidate budget runs out | The stalled carry, or every candidate not yet tried, stays hosted with a warning; the run continues. |
 | A candidate copy is tampered, redirects to an unknown host, or does not decode | That file stays hosted with a warning. |
 | An already indexed copy is missing, changed or undecodable | Admission and recheck fail. Pages stays at the last good publication. |
 | GitHub API or Releases outage while an index exists | Fail closed; the post-close watchdog retries once. |
