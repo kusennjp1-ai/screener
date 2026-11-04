@@ -55,6 +55,12 @@
 .brief-index { display: block; width: 100%; height: 132px; }
 /* Phone Today: a shorter index chart so the candidates come up sooner; the market tab keeps 132px. */
 @media (max-width: 1023px) { .brief-market:not(.is-detail) .brief-index { height: 96px; } }
+/* Phone Today: the first screen answers both questions, the market and a candidate. The verdict
+   repeats the summary 地合い tile above it, the index chart is a shape only (the market tab keeps
+   it), and the bar already carries the date. The tiles, warnings, alerts and as-of notes stay. */
+@media (max-width: 520px) {
+  .brief-market:not(.is-detail) .brief-verdict, .brief-market:not(.is-detail) .brief-index, .brief-market:not(.is-detail) .brief-index-legend, .brief-hero.is-today small { display: none; }
+}
 .brief-index-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 0; font-size: 11px; color: var(--text-3); }
 .brief-index-legend span::before { content: ""; display: inline-block; width: 12px; height: 2px; margin-right: 4px; vertical-align: middle; background: var(--text); }
 .brief-index-legend .is-ma::before { background: var(--wait); }
@@ -332,6 +338,7 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-summary small { font-size: 11px; color: var(--text-3); }
 .brief-summary b { font-size: 14px; line-height: 1.35; color: var(--text); overflow-wrap: anywhere; }
 .brief-summary em { font-style: normal; font-size: 11px; color: var(--text-2); }
+.brief-frag { display: inline-block; max-width: 100%; }
 .brief-summary .tone-zone { border-top-color: var(--zone); }
 .brief-summary .tone-ext { border-top-color: var(--ext); }
 .brief-summary .tone-neg { border-top-color: var(--neg); }

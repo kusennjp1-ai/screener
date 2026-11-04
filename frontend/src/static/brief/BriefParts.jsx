@@ -2,6 +2,13 @@ import { signed, times } from '../positionGeometry';
 import { meterPercent } from './briefNav';
 
 const finite = Number.isFinite;
+/** A short phrase that wraps only between its 「・」 parts on a phone (「買い可・最大50%」 never splits 「50%」 off). */
+export function Parts({ text }) {
+  if (!text) return null;
+  const parts = String(text).split('・');
+  return parts.map((part, i) => <span key={i} className="brief-frag">{part}{i < parts.length - 1 ? '・' : ''}</span>);
+}
+
 export function MiniMeter({ distance, animate }) {
   if (!finite(distance)) return <span className="brief-minimeter is-unknown" aria-hidden="true"><span className="brief-minimeter-value">未確認</span></span>;
   return <span className="brief-minimeter" aria-hidden="true">

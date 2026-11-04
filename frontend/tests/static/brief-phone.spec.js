@@ -63,3 +63,66 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip $
     expect(errors).toEqual([]);
   });
 });
+
+const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+const FOLD = { 375: phone(375, 812), 390: VIEWPORTS.phone };
+
+for (const [width, device] of Object.entries(FOLD)) test.describe(`Today's first screen at ${width}px`, () => {
+  test.use(device);
+
+  test('shows the market answer and a candidate without scrolling', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief');
+    const market = page.getByRole('region', { name: '地合い' });
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    await expect(market.locator('.brief-fact').first()).not.toContainText('読み込み中');
+    await settled(page);
+    const first = await focus.getByTestId('brief-candidate').first().boundingBox();
+    const dock = await page.locator('.brief-dock').boundingBox();
+    expect(await page.evaluate(() => scrollY)).toBe(0);
+    expect(first.y + first.height).toBeLessThanOrEqual(dock.y);
+    // The verdict repeats the summary tile and the chart is a shape only: both stay on the market tab.
+    await expect(market.locator('.brief-verdict')).toBeHidden();
+    await expect(market.locator('.brief-index')).toBeHidden();
+    await expect(market.locator('.brief-index-legend')).toBeHidden();
+    expect(await market.evaluate(node => node.innerText)).toContain('独自判定');
+    await expect(market.locator('.brief-fact')).toHaveCount(4);
+    for (const fact of await market.locator('.brief-fact').all()) await expect(fact).toBeVisible();
+    const summary = page.getByTestId('brief-summary');
+    await expect(summary).toContainText('買い可・最大50%');
+    expect(await summary.locator('.brief-frag', { hasText: '最大50%' }).evaluate(node => node.getClientRects().length)).toBe(1);
+    await expect(page.locator('.brief-bar-title')).toContainText('2026-10-02');
+    await expect(page.locator('.brief-bar-title')).toContainText('引け');
+    await expect(page.locator('.brief-hero small')).toBeHidden();
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('the market tab on a phone keeps the verdict and the chart', () => {
+  test.use(VIEWPORTS.phone);
+  test('verdict and S&P chart are visible on #/brief/market', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    const market = page.getByRole('region', { name: '地合い' });
+    await expect(market.locator('.brief-verdict')).toBeVisible();
+    await expect(market.locator('.brief-index')).toBeVisible();
+    await expect(page.locator('.brief-hero small')).toBeVisible();
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('Today on desktop is unchanged', () => {
+  test.use(VIEWPORTS.desktop);
+  test('verdict, S&P chart and the hero date stay visible at 1440px', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief');
+    const market = page.getByRole('region', { name: '地合い' });
+    await expect(market.locator('.brief-verdict')).toBeVisible();
+    await expect(market.locator('.brief-index')).toBeVisible();
+    await expect(market.locator('.brief-index-legend')).toBeVisible();
+    await expect(page.locator('.brief-hero small')).toBeVisible();
+    await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 2026-10-02 引け・米国株');
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});

@@ -11,7 +11,7 @@ import { candidateView, focusCandidates, leadingGroups, marketTone, LIST_FILTERS
 import MarketCard from './MarketCard';
 import MarketScreen from './MarketScreen';
 import StockView from './StockView';
-import { CandidateRow, Toast } from './BriefParts';
+import { CandidateRow, Parts, Toast } from './BriefParts';
 import { useTransitionNavigate } from './briefNav';
 
 const ICON = {
@@ -49,7 +49,7 @@ function TodayView({ brief, watch, open, now, animate }) {
   const watched = useMemo(() => (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)).map(item => candidateView(item, brief.date)).sort(briefOrder), [brief.bundle.data, watch, brief.date]);
   const sells = useWatchSellChecks(watched, brief);
   return <>
-    <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
+    <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
     <TodaySummary market={brief.market} marketLoading={brief.marketLoading} focus={focus} watched={watched} sells={sells} loading={brief.bundle.isLoading} />
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={brief.trends} date={brief.date} />
     <section className="brief-card in" style={{ '--i': 2 }} aria-labelledby="brief-focus-title">
@@ -84,7 +84,7 @@ function TodaySummary({ market, marketLoading, focus, watched, sells, loading })
   const watchValue = !watched.length ? '未登録' : hits ? `${hits}件` : unchecked === watched.length ? '未確認' : '0件';
   const watchNote = !watched.length ? '☆で追加' : unchecked && unchecked < watched.length ? `未確認 ${unchecked}銘柄` : `${watched.length}銘柄を確認`;
   return <ul className="brief-summary in" style={{ '--i': 0 }} aria-label="今日の要点" data-testid="brief-summary">
-    <li className={`tone-${tone}`}><small>地合い</small><b>{!market && marketLoading ? '読込中' : verdict}</b><em>{!market && marketLoading ? '' : market?.cap > 0 ? `買い可・最大${Math.round(market.cap * 100)}%` : market?.state === 'unknown' || !market ? '買いは見送り' : '買いは控える'}</em></li>
+    <li className={`tone-${tone}`}><small>地合い</small><b>{!market && marketLoading ? '読込中' : verdict}</b><em><Parts text={!market && marketLoading ? '' : market?.cap > 0 ? `買い可・最大${Math.round(market.cap * 100)}%` : market?.state === 'unknown' || !market ? '買いは見送り' : '買いは控える'} /></em></li>
     <li className={focus.length ? 'tone-zone' : ''}><small>注目候補</small><b>{loading ? '読込中' : `${focus.length}銘柄`}</b><em>{loading ? '' : `ゾーン${zone}・接近${focus.length - zone}`}</em></li>
     <li className={hits ? 'tone-ext' : ''}><small>ウォッチの売り</small><b>{watchValue}</b><em>{watchNote}</em></li>
   </ul>;
@@ -232,7 +232,7 @@ export default function BriefApp() {
         <div className="brief-bar-title"><b><span style={{ viewTransitionName: 'brief-ticker' }}>{symbol}</span>{barView?.price != null && <span className="numeric brief-bar-price"> {money(barView.price)}</span>}</b><span>{barView ? `${barView.name}${barView.sector ? `・${barView.sector}` : ''}` : brief.bundle.data ? '分析対象外' : '読み込み中…'}</span></div>
         <button type="button" className={`brief-iconbutton${watching ? ' is-on' : ''}`} aria-pressed={Boolean(watching)} aria-label={watching ? 'ウォッチから外す' : 'ウォッチに追加'} onClick={event => toggleWatch(symbol, event.currentTarget)}>{watching ? ICON.starOn : ICON.star}</button>
       </> : <>
-        <div className="brief-bar-title"><b>米国株スクリーナー</b><span className="numeric">分析基準日 {brief.date || '取得中'}</span></div>
+        <div className="brief-bar-title"><b>米国株スクリーナー</b><span className="numeric">分析基準日 {brief.date ? `${brief.date} 引け・米国株` : '取得中'}</span></div>
       </>}
       <ThemeToggle />
     </header>
