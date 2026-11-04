@@ -366,7 +366,7 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 
 /* Market tab: the shared long-history explorer inside a brief card. */
 .brief { --market-card: var(--surface); --market-ink: var(--text); --market-muted: var(--text-2); }
-.brief-history .market-history-explorer, .brief-history .sector-rank-history { margin: 12px 0 0; padding: 12px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; }
+.brief-history .market-history-explorer { margin: 12px 0 0; padding: 12px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; }
 .brief-history .market-update-status { margin: 0 0 4px; }
 @media (min-width: 1024px) { .brief-desk.is-market { grid-template-columns: minmax(0, 1fr); max-width: 1080px; } }
 
