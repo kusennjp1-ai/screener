@@ -36,11 +36,26 @@ describe('long market history controls',()=>{
   render(<SectorRankHistory history={{...history,sectorRotation:{frames:[{date:'2026-10-23',ranks:symbols.map(symbol=>({symbol,rank:1,relativeIndex:100}))}]}}}/>);
   expect([...document.querySelectorAll('.sector-rank-track i')].map(node=>node.style.width)).toEqual(Array(11).fill('100%'));
  });
+ it('opens a metric asked from outside, falls back for one this history cannot draw, and titles the chart',()=>{
+  const {rerender}=render(<HistoricalBreadth history={history} request={{metric:'highsLows',seq:1}}/>);
+  // An older schema has no environment fields, but new highs and lows exist in every schema.
+  expect(screen.getByRole('button',{name:'新高値・新安値'})).toHaveAttribute('aria-pressed','true');
+  expect(document.querySelector('.history-chart-title')).toHaveTextContent('新高値・新安値全体');
+  rerender(<HistoricalBreadth history={history} request={{metric:'stages',seq:2}}/>);
+  expect(screen.queryByRole('button',{name:'ステージ構成'})).toBeNull();
+  expect(screen.getByRole('button',{name:'先導株数（価格条件）'})).toHaveAttribute('aria-pressed','true');
+  // The same request again changes nothing the reader chose since.
+  fireEvent.click(screen.getByRole('button',{name:'50日線上'}));
+  rerender(<HistoricalBreadth history={history} request={{metric:'stages',seq:2}}/>);
+  expect(screen.getByRole('button',{name:'50日線上'})).toHaveAttribute('aria-pressed','true');
+ });
  it('switches two-year industry breadth without replacing a missing industry observation with zero',()=>{
   render(<HistoricalBreadth history={{...history,sectorBreadth:[{sector:'Technology',points:history.breadth.map(row=>({...row,leaderCount:row.date==='2024-10-23'?null:8}))}]}}/>);
   fireEvent.click(screen.getByRole('button',{name:'2年'}));fireEvent.change(screen.getByRole('combobox'),{target:{value:'Technology'}});
   fireEvent.change(screen.getByRole('slider'),{target:{value:'0'}});
   expect(screen.getByText('未確認',{selector:'b'})).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button',{name:'4%騰落・10日レシオ'}));expect(screen.getByRole('combobox')).toHaveValue('all');
+  // A metric that has no industry series hides the industry choice (never a disabled control) and resets it.
+  fireEvent.click(screen.getByRole('button',{name:'4%騰落・10日レシオ'}));expect(screen.queryByRole('combobox')).toBeNull();
+  fireEvent.click(screen.getByRole('button',{name:'先導株数（価格条件）'}));expect(screen.getByRole('combobox')).toHaveValue('all');
  });
 });

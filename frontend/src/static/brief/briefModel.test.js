@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { briefOrder, code33Parts, environmentWarnings, ruleEvidence, footprint, matchesSearch, positionPlan, rsLineNewHigh, watchEvent, LIST_FILTERS, LIST_SORTS, STOP_MAX_PERCENT } from './briefModel';
+import { briefOrder, code33Parts, environmentRules, environmentWarnings, ruleEvidence, footprint, matchesSearch, positionPlan, rsLineNewHigh, watchEvent, LIST_FILTERS, LIST_SORTS, STOP_MAX_PERCENT } from './briefModel';
 
 const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, ...over });
 
@@ -88,6 +88,21 @@ describe('market deterioration notes', () => {
     rows[10] = row({ trendTemplateCount: null, stage2Percent: null, breakoutHoldPercent: null });
     expect(environmentWarnings(rows)).toEqual([]);
     expect(environmentWarnings([])).toEqual([]);
+  });
+
+  it('says for each rule whether it could be judged on the newest point, so a missing input is never read as all clear', () => {
+    const rows = Array.from({ length: 11 }, () => row({ leaderHealthPercent: 60 }));
+    expect(environmentRules(rows)).toEqual([
+      { key: 'template', judged: true, fired: false }, { key: 'stage', judged: true, fired: false },
+      { key: 'leaders', judged: true, fired: false }, { key: 'breakout', judged: true, fired: false }]);
+    rows[10] = row({ trendTemplateCount: 79, stage4Percent: null, leaderHealthPercent: 45 });
+    expect(environmentRules(rows)).toEqual([
+      { key: 'template', judged: true, fired: true, text: 'トレンドテンプレート達成数が10営業日で21%減少' }, { key: 'stage', judged: false, fired: false },
+      { key: 'leaders', judged: true, fired: true, text: '20営業日前のTT達成銘柄のうち、50日線より上は45%' }, { key: 'breakout', judged: true, fired: false }]);
+    // Under 20 in the base session, a drop is not judged at all.
+    rows[0] = row({ trendTemplateCount: 19 });
+    expect(environmentRules(rows)[0]).toEqual({ key: 'template', judged: false, fired: false });
+    expect(environmentRules([]).every(rule => !rule.judged)).toBe(true);
   });
 });
 

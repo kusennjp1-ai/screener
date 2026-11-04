@@ -125,20 +125,37 @@ export function positionPlan(view, { stopPercent = STOP_DEFAULT_PERCENT, account
 }
 
 /**
- * Deterioration notes from the derived long-history points (environmentPoint rows).
- * Thresholds are this app's own (labelled 独自判定 on screen); unknown inputs yield no note.
+ * Thresholds of the long-history deterioration notes. They are this app's own (labelled 独自判定 on
+ * screen); the market tab prints its 基準 lines from these same numbers so the two cannot drift.
+ */
+export const ENV_RULES = Object.freeze({ templateSessions: 10, templateMinBase: 20, templateDropPercent: 20, leaderHealthBelow: 50, breakoutHoldBelow: 40 });
+
+/**
+ * Each deterioration rule on the newest long-history point (environmentPoint rows), in a fixed order:
+ * { key, judged, fired, text } where text is set when the rule fired and judged is false when an
+ * input of the newest session is missing (then nothing is said about that rule).
+ */
+export function environmentRules(rows) {
+  const last = rows?.at(-1), before = rows?.at(-1 - ENV_RULES.templateSessions), rules = [];
+  const rule = (key, judged, fired, text) => rules.push({ key, judged, fired: judged && fired, ...(judged && fired ? { text } : {}) });
+  const templateJudged = Boolean(last) && finite(last.trendTemplateCount) && finite(before?.trendTemplateCount) && before.trendTemplateCount >= ENV_RULES.templateMinBase;
+  const change = templateJudged ? (last.trendTemplateCount / before.trendTemplateCount - 1) * 100 : null;
+  rule('template', templateJudged, change !== null && change <= -ENV_RULES.templateDropPercent, change === null ? null : `トレンドテンプレート達成数が${ENV_RULES.templateSessions}営業日で${Math.abs(change).toFixed(0)}%減少`);
+  const stageJudged = Boolean(last) && finite(last.stage4Percent) && finite(last.stage2Percent);
+  rule('stage', stageJudged, stageJudged && last.stage4Percent > last.stage2Percent, stageJudged ? `ステージ4（${last.stage4Percent.toFixed(0)}%）がステージ2（${last.stage2Percent.toFixed(0)}%）を上回る` : null);
+  const leadersJudged = Boolean(last) && finite(last.leaderHealthPercent);
+  rule('leaders', leadersJudged, leadersJudged && last.leaderHealthPercent < ENV_RULES.leaderHealthBelow, leadersJudged ? `20営業日前のTT達成銘柄のうち、50日線より上は${last.leaderHealthPercent.toFixed(0)}%` : null);
+  const breakoutJudged = Boolean(last) && finite(last.breakoutHoldPercent);
+  rule('breakout', breakoutJudged, breakoutJudged && last.breakoutHoldPercent < ENV_RULES.breakoutHoldBelow, breakoutJudged ? `ブレイクアウトの成功率が${last.breakoutHoldPercent.toFixed(0)}%に低下` : null);
+  return rules;
+}
+
+/**
+ * Deterioration notes from the derived long-history points (environmentPoint rows): the rules of
+ * environmentRules that fired. Unknown inputs yield no note.
  */
 export function environmentWarnings(rows) {
-  const last = rows?.at(-1), before = rows?.at(-11), notes = [];
-  if (!last) return notes;
-  if (finite(last.trendTemplateCount) && finite(before?.trendTemplateCount) && before.trendTemplateCount >= 20) {
-    const change = (last.trendTemplateCount / before.trendTemplateCount - 1) * 100;
-    if (change <= -20) notes.push({ key: 'template', text: `トレンドテンプレート達成数が10営業日で${Math.abs(change).toFixed(0)}%減少` });
-  }
-  if (finite(last.stage4Percent) && finite(last.stage2Percent) && last.stage4Percent > last.stage2Percent) notes.push({ key: 'stage', text: `ステージ4（${last.stage4Percent.toFixed(0)}%）がステージ2（${last.stage2Percent.toFixed(0)}%）を上回る` });
-  if (finite(last.leaderHealthPercent) && last.leaderHealthPercent < 50) notes.push({ key: 'leaders', text: `20営業日前のTT達成銘柄のうち、50日線より上は${last.leaderHealthPercent.toFixed(0)}%` });
-  if (finite(last.breakoutHoldPercent) && last.breakoutHoldPercent < 40) notes.push({ key: 'breakout', text: `ブレイクアウトの成功率が${last.breakoutHoldPercent.toFixed(0)}%に低下` });
-  return notes;
+  return environmentRules(rows).filter(rule => rule.fired).map(({ key, text }) => ({ key, text }));
 }
 
 /**
@@ -401,7 +418,7 @@ export function distributionCount(index) {
 // Wording only; the rule itself is computed by the exporter (parity with backend market_regime.py FTD_* constants).
 // The decline is the backend's: peak close to the close of the lowest-low session, which the tile names, since a
 // later close can sit lower. The post-FTD count is the distribution days still active (25-session window).
-const FTD_TEXT = { minDay: 4, maxDay: 15, gain: '+1.2%', decline: '6%' };
+export const FTD_TEXT = Object.freeze({ minDay: 4, maxDay: 15, gain: '+1.2%', decline: '6%' });
 /**
  * Compact tile text for one index's follow-through state (this app's own judgement):
  * { b, em, asOf } where asOf is set when the judgement is older than the analysis date.

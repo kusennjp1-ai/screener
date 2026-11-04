@@ -14,6 +14,8 @@ const exchange = JSON.parse(readFileSync(new URL('../../src/static/__fixtures__/
 const sessionsUntil = day => exchange.sessions.filter(session => session <= day);
 export const sessions = sessionsUntil(date);
 export const sessionCalendar = { ...exchange, as_of_date: date, range_end: date, sessions };
+// Long-history fields an older capture never had (market-long-history-v1 before the environment counts).
+const ENVIRONMENT_FIELDS = ['trendTemplateCount', 'trendTemplatePercent', 'rs90TemplateCount', 'above150', 'above150Percent', 'above200', 'above200Percent', 'stage1', 'stage2', 'stage3', 'stage4', 'breakouts', 'breakoutsJudged', 'breakoutsHeld', 'leaderCohort', 'leaderCohortAbove50'];
 
 const SECTORS = ['Technology', 'Healthcare', 'Industrials', 'Consumer Cyclical', 'Financial', 'Energy', 'Communication Services', 'Basic Materials'];
 const NAMES = [
@@ -67,9 +69,11 @@ export const charts = Object.fromEntries(rows.map((row, index) => [row.chart_pat
 /**
  * A market-trends asset (market-trends-v1 with a market-long-history-v1 body) that passes the
  * app's own validation. With `historyEnd` before the analysis date, the long history and the
- * index series stop at that session while the asset itself still names the analysis date.
+ * index series stop at that session while the asset itself still names the analysis date. With
+ * `schema: 'old'` the long history is written as before the market-environment fields existed
+ * (no trend-template, 150/200-day, stage, breakout or leader-cohort counts), as older captures are.
  */
-export function marketTrends({ historyEnd = date } = {}) {
+export function marketTrends({ historyEnd = date, schema = 'current' } = {}) {
   const days = sessionsUntil(historyEnd), n = days.length;
   const stamp = `${historyEnd}T21:00:00.000Z`, provenanceStamp = `${historyEnd}T20:30:00.000Z`;
   const symbols = Array.from({ length: 100 }, (_, i) => `ZZU${String(i).padStart(3, '0')}`);
@@ -90,6 +94,7 @@ export function marketTrends({ historyEnd = date } = {}) {
       breakoutsJudged: judged, breakoutsHeld: held, leaderCohort: cohort,
       leaderCohortAbove50: cohort === null ? null : Math.round(cohort * (0.7 + 0.2 * Math.sin(i / 50) - (i > n - 30 ? 0.35 : 0))) };
   });
+  if (schema === 'old') for (const row of breadth) for (const key of ENVIRONMENT_FIELDS) delete row[key];
   const ranks = SECTOR_ETFS.map((symbol, i) => ({ symbol, rank: i + 1, relativeIndex: 120 - i }));
   const history = {
     schema_version: 'market-long-history-v1', market: 'US', as_of_date: historyEnd, retrieved_at: stamp,
@@ -125,8 +130,8 @@ export function marketTrends({ historyEnd = date } = {}) {
 
 /** Serve the synthetic publication for every static-data request; abort everything that is not 127.0.0.1. */
 /** `fail` names one file to answer with an HTTP error: 'series' (404 for the market series) or 'manifest' (503). */
-export async function routeBrief(page, { historyEnd = date, fail } = {}) {
-  const trends = marketTrends({ historyEnd });
+export async function routeBrief(page, { historyEnd = date, schema, fail } = {}) {
+  const trends = marketTrends({ historyEnd, schema });
   const external = [];
   await page.route('**/*', route => {
     if (new URL(route.request().url()).hostname === '127.0.0.1') return route.fallback();
@@ -152,7 +157,7 @@ export async function routeBrief(page, { historyEnd = date, fail } = {}) {
  * `storage` seeds localStorage once per tab (a later change and reload keep the user's choice),
  * e.g. { 'research-watch': ['ZZNV'] } or { 'screener:color-mode': 'light' }.
  */
-export async function openBrief(page, hash = '#/brief', { historyEnd, storage, fail } = {}) {
+export async function openBrief(page, hash = '#/brief', { historyEnd, schema, storage, fail } = {}) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.clock.setFixedTime(new Date(now));
@@ -163,7 +168,7 @@ export async function openBrief(page, hash = '#/brief', { historyEnd, storage, f
       sessionStorage.setItem('brief-spec-seeded', '1');
     } catch { /* storage blocked: the app must still render */ }
   }, storage);
-  const network = await routeBrief(page, { historyEnd, fail });
+  const network = await routeBrief(page, { historyEnd, schema, fail });
   await page.goto(`/${hash}`);
   return { errors, external: network.external };
 }
