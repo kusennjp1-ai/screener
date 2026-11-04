@@ -169,7 +169,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/retained-price-source-admission.mjs prepare-controller --output "$RUNNER_TEMP/retained-price-controller"
       # Controller tooling only: the approved UI tree is not checked out yet. The
-      # read-only job token lists releases; every archive download is anonymous.
+      # existing job token (contents: read, actions: read, pages: write,
+      # id-token: write) is used only for read-only releases listing; every
+      # archive download is anonymous.
       # Unverified carries simply stay hosted; an indexed copy that is no longer
       # verifiably public fails the run before anything is built or deployed.
       - name: Verify the public audit archive before omitting older carries

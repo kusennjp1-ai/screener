@@ -94,9 +94,12 @@ runtime that re-encodes the same logical file is still a valid copy.
   Release completion, on a push that changes the archive workflow or module, every
   three hours (fallback: `workflow_run` cannot fire past depth three), and weekly
   for a full sweep.
-  - `collect` (permissions `contents: read`, no token) reads live Pages
-    anonymously, stages each not-yet-archived hosted carry's exact nested gzip
-    bin and verifies it decodes to its logical hash.
+  - `collect` (permissions `contents: read`) reads live Pages anonymously,
+    stages each not-yet-archived hosted carry's exact nested gzip bin and
+    verifies it decodes to its logical hash. Only its sweep step (weekly
+    schedule or `full_sweep` dispatch) receives the job's read-only `GH_TOKEN`
+    (`contents: read`), for the releases listing of `verify-history --orphans`;
+    staging uses no token.
   - `upload` is the only job with `contents: write`, and only its upload step
     receives `GH_TOKEN`. It creates a draft, uploads the asset, re-reads its
     state, size and digest, then publishes. It never uses `--clobber`, never
@@ -111,8 +114,11 @@ runtime that re-encodes the same logical file is still a valid copy.
 A new publish-job step, "Verify the public audit archive before omitting older
 carries", runs `node .github/scripts/select-release-source.mjs audit-archive`
 after the plan and before the approved UI tree is checked out, so only the
-controller's own tooling runs, including in data mode. It uses the existing
-read-only job token for one paginated releases listing. Every download is
+controller's own tooling runs, including in data mode. It passes the publish
+job's existing token as a step-scoped `GH_TOKEN`. That token carries the
+workflow permissions (`contents: read`, `actions: read`, `pages: write`,
+`id-token: write`); the step uses it only for a read-only, paginated releases
+listing and bounded per-tag reads. Every download is
 anonymous (no `Authorization` header, https only, at most three redirects to
 `github.com`, `release-assets.githubusercontent.com` or
 `objects.githubusercontent.com`, no transfer encoding).
