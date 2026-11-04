@@ -228,6 +228,8 @@ describe('brief market card: Today', () => {
     expect(screen.queryByRole('img', { name: /ステージ構成/ })).toBeNull();
     expect(screen.queryByRole('group', { name: '注意サイン（独自判定）' })).toBeNull();
     expect(screen.getByRole('link', { name: /市場の詳細/ })).toHaveAttribute('href', '/brief/market');
+    // Today's rows show RS推計, so Today's card names the RS as the app's own, not IBD's.
+    expect(screen.getByText('地合いの判定・各集計・RSは公開日足からの独自判定・独自集計で、IBDの公式値ではありません。')).toBeInTheDocument();
   });
 
   it('marks a warning with ▲ and a word on the side that fired, and names a stand-in for an older schema', () => {
