@@ -124,6 +124,14 @@
 .brief-minimeter.is-unknown .brief-minimeter-value { bottom: 6px; }
 .brief-marker { position: absolute; left: 0; top: 7px; width: 12px; height: 12px; margin-left: -6px; border-radius: 999px; background: var(--text); border: 2px solid var(--surface); transform: translateX(calc(var(--p, 50) * 1cqw)); transition: transform .8s var(--e-back); }
 .brief-marker.is-entering { animation: brief-slide-in .9s var(--e-back) both; }
+/* Phone rows: the chips carry the decision, so they take the mini meter's width (the state chip
+   repeats its pivot distance or says 未確認) and 12px text; a watch row has no empty rank gutter. */
+@media (max-width: 520px) {
+  .brief-row { grid-template-columns: 20px minmax(0, 1fr); }
+  .brief-row.is-unranked { grid-template-columns: minmax(0, 1fr); }
+  .brief-row .brief-minimeter, .brief-row.is-unranked .brief-rank { display: none; }
+  .brief-chip { font-size: 12px; line-height: 1.55; }
+}
 .brief-event { width: 100%; display: grid; grid-template-columns: 36px minmax(0, 1fr) 20px; gap: 12px; align-items: center; min-height: 64px; padding: 8px 4px; border: 0; border-top: 1px solid var(--line); background: none; color: inherit; text-align: left; cursor: pointer; }
 .brief-event b { font-size: 14px; }
 .brief-event small { display: block; font-size: 12px; color: var(--text-3); }
