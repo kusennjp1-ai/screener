@@ -59,6 +59,13 @@ const getDesignTokens = (mode) => ({
     },
   },
   components: {
+    // index.html paints the static brief's boot ground on <html>; the connected app takes the
+    // page ground back so its canvas follows the theme, as body's background did before.
+    MuiCssBaseline: {
+      styleOverrides: {
+        html: { backgroundColor: mode === 'light' ? '#f5f5f5' : '#0c0c11' },
+      },
+    },
     MuiTableCell: {
       styleOverrides: {
         root: {
