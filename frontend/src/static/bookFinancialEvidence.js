@@ -24,45 +24,70 @@ function safeSeries(points, date, kind = 'quarter', unit = null, allowDerived = 
   })) return [];
   return points;
 }
-function yoy(points, end, instant = false) {
+/**
+ * Year-over-year growth of the point ending `end`, with the reason when it is unknown:
+ * not_reported (no value for that quarter), no_base / ambiguous_base (no single
+ * quarter 345-385 days earlier), nonpositive_base (a loss or zero base has no
+ * growth rate) or period_mismatch (quarter lengths differ by more than a week).
+ */
+export function yoyDetail(points, end, instant = false) {
   const now = points.find(p => p.end === end);
+  if (!now) return { value: null, reason: 'not_reported' };
   const bases = points.filter(p => days(end, p.end) >= 345 && days(end, p.end) <= 385);
-  if (!now || bases.length !== 1 || bases[0].value <= 0) return null;
+  if (!bases.length) return { value: null, reason: 'no_base' };
+  if (bases.length !== 1) return { value: null, reason: 'ambiguous_base' };
+  if (bases[0].value <= 0) return { value: null, reason: 'nonpositive_base' };
   // Equal end months do not make a 70-day transition period comparable with a
   // 105-day quarter. Allow a 53-week retailer's one extra week, not extra months.
-  if (!instant && Math.abs(days(now.end, now.start) - days(bases[0].end, bases[0].start)) > 7) return null;
-  return (now.value / bases[0].value - 1) * 100;
+  if (!instant && Math.abs(days(now.end, now.start) - days(bases[0].end, bases[0].start)) > 7) return { value: null, reason: 'period_mismatch' };
+  return { value: (now.value / bases[0].value - 1) * 100, reason: null };
 }
+const yoy = (points, end, instant = false) => yoyDetail(points, end, instant).value;
 function rises(values) { return values.every(finite) ? values.slice(1).every((v, i) => v > values[i]) : null; }
+function marginDetail(revenue, income) {
+  if (!revenue || !income) return { value: null, reason: 'not_reported' };
+  if (!(revenue.value > 0)) return { value: null, reason: 'nonpositive_revenue' };
+  if (income.start !== revenue.start) return { value: null, reason: 'start_mismatch' };
+  return { value: income.value / revenue.value * 100, reason: null };
+}
 export function bookFinancialEvidence(data, symbol, date) {
   const result = { valid: false, date, rows: [], annual: [], unknowns: ['調整後EPS・一時利益の除外', '発表前の予想値とサプライズ', '時点付きの予想上方修正', '会社開示による新製品等の材料'], code33: 'unknown' };
   if (!data || data.symbol !== symbol || data.as_of_date !== date || !finite(stamp(date)) || !data.quarterly || !['available', 'partial'].includes(data.status)) return result;
   const q = Object.fromEntries(['eps', 'revenue', 'netIncome', 'inventory', 'receivables'].map(key => [key,
     safeSeries(data.quarterly[key], date, ['inventory', 'receivables'].includes(key) ? 'instant' : 'quarter', key === 'eps' ? 'USD/shares' : 'USD', DERIVABLE.has(key))]));
+  result.annual = safeSeries(data.annualEps, date, 'annual', 'USD/shares');
+  const fiscalYearEnds = new Set(result.annual.map(p => p.end));
   const ends = [...new Set([...q.eps, ...q.revenue].map(p => p.end))].sort();
   result.rows = ends.slice(-8).map(end => {
     const eps = q.eps.find(p => p.end === end), revenue = q.revenue.find(p => p.end === end), income = q.netIncome.find(p => p.end === end);
-    const margin = revenue?.value > 0 && income && income.start === revenue.start ? income.value / revenue.value * 100 : null;
+    const margin = marginDetail(revenue, income);
     const derived = [revenue, income].some(p => p?.derived === DERIVED_Q4);
-    return { end, derived, eps: eps?.value ?? null, revenue: revenue?.value ?? null, margin, epsYoY: yoy(q.eps, end), salesYoY: yoy(q.revenue, end), filed: [eps?.filed, revenue?.filed, income?.filed].filter(Boolean).sort().at(-1), accession: eps?.accession ?? revenue?.accession, inventoryYoY: yoy(q.inventory, end, true), receivablesYoY: yoy(q.receivables, end, true) };
+    const epsGrowth = yoyDetail(q.eps, end), salesGrowth = yoyDetail(q.revenue, end);
+    return { end, derived, eps: eps?.value ?? null, revenue: revenue?.value ?? null, margin: margin.value, epsYoY: epsGrowth.value, salesYoY: salesGrowth.value,
+      epsYoYReason: epsGrowth.reason, salesYoYReason: salesGrowth.reason, marginReason: margin.reason,
+      // A fiscal fourth quarter: the 10-K's fiscal-year end, or a Q4 derived from it.
+      fiscalQ4: fiscalYearEnds.has(end) || derived, form: eps?.form ?? revenue?.form ?? income?.form ?? null,
+      filed: [eps?.filed, revenue?.filed, income?.filed].filter(Boolean).sort().at(-1), accession: eps?.accession ?? revenue?.accession, inventoryYoY: yoy(q.inventory, end, true), receivablesYoY: yoy(q.receivables, end, true) };
   });
   result.valid = result.rows.length > 0;
   result.stale = !result.rows.length || days(date, result.rows.at(-1).end) > BOOK_QUARTER_MAX_AGE_DAYS;
   const last = result.rows.slice(-4);
   const consecutive = last.length === 4 && last.slice(1).every((p, i) => days(p.end, last[i].end) >= 70 && days(p.end, last[i].end) <= 110);
+  result.consecutive = consecutive;
   const comparable = consecutive && !result.stale;
   result.epsAcceleration = state(comparable ? rises(last.map(p => p.epsYoY)) : null);
   result.salesAcceleration = state(comparable ? rises(last.map(p => p.salesYoY)) : null);
   // Original Figure 8.10 shows NET MARGIN LEVELS, not margin YoY growth.
   result.marginImprovement = state(comparable ? rises(last.map(p => p.margin)) : null);
+  // Three-valued AND: one known failure fails Code 33; a pass needs all three
+  // known passes; anything else stays unknown. Missing data never passes.
   const trio = [result.epsAcceleration, result.salesAcceleration, result.marginImprovement];
-  result.code33 = trio.includes('unknown') ? 'unknown' : trio.every(s => s === 'pass') ? 'pass' : 'fail';
+  result.code33 = trio.includes('fail') ? 'fail' : trio.every(s => s === 'pass') ? 'pass' : 'unknown';
   result.epsFloor = Object.fromEntries([2, 4].map(count => {
     const selected = result.rows.slice(-count);
     const ready = selected.length === count && !result.stale && selected.every(p => finite(p.epsYoY)) && selected.slice(1).every((p, i) => days(p.end, selected[i].end) >= 70 && days(p.end, selected[i].end) <= 110);
     return [count, { at20: state(ready ? selected.every(p => p.epsYoY + 1e-9 >= 20) : null), at25: state(ready ? selected.every(p => p.epsYoY + 1e-9 >= 25) : null) }];
   }));
-  result.annual = safeSeries(data.annualEps, date, 'annual', 'USD/shares');
   const annualRecent = result.annual.length >= 3 && days(date, result.annual.at(-1).end) <= 550;
   result.annualRecord = annualRecent ? state(result.annual.at(-1).value > Math.max(...result.annual.slice(0, -1).map(p => p.value))) : 'unknown';
   result.balanceCoverage = result.rows.filter(p => finite(p.salesYoY) && (finite(p.inventoryYoY) || finite(p.receivablesYoY))).length;

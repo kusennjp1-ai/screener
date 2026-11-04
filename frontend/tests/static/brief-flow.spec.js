@@ -1,7 +1,7 @@
 // Daily brief: today → stock → back, candidate list filters and search, the watchlist (☆, toast
 // and undo) and the persisted colour mode, at phone and desktop width on synthetic data.
 import { test, expect } from '@playwright/test';
-import { date, openBrief, VIEWPORTS, horizontalOverflow, charts } from './brief-fixture.js';
+import { date, openBrief, VIEWPORTS, horizontalOverflow, charts, SEC_SYMBOL } from './brief-fixture.js';
 
 const candidates = page => page.getByTestId('brief-candidate');
 const symbolsShown = page => candidates(page).evaluateAll(nodes => nodes.map(node => node.dataset.symbol));
@@ -122,6 +122,28 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await page.getByRole('combobox', { name: '並び順' }).selectOption({ label: 'RS推計' });
     const rs = await candidates(page).evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('aria-label').match(/RS推計 (\d+)/)[1])));
     expect(rs).toEqual([...rs].sort((a, b) => b - a));
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('fundamentals show the latest SEC quarter with its source and say why a value is missing', async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
+    const card = page.getByTestId('brief-fundamentals');
+    await expect(card.getByText('出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで')).toBeVisible();
+    const epsTile = card.locator('.brief-fact').filter({ hasText: 'EPS 前年比' });
+    await expect(epsTile).toContainText('+40%');
+    await expect(epsTile).toContainText('2026-03期・最新 2026-06期はQ4のEPSは年次報告のみ');
+    await expect(card.getByText('Code 33 未確認')).toBeVisible();
+    await expect(card).toContainText('EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です');
+    await expect(card.getByRole('img', { name: /四半期の前年同期比成長率/ })).toBeVisible();
+    await expect(card).not.toContainText('未取得');
+    expect(await horizontalOverflow(page)).toBe(0);
+    // A stock without a published SEC record names that reason in every tile.
+    await page.goto('/#/brief/stock/ZZKS');
+    const other = page.getByTestId('brief-fundamentals');
+    await expect(other.locator('.brief-fact').first()).toContainText('SEC 未配信');
+    await expect(other).toContainText('この銘柄の当日分の SEC 四半期データは配信されていません');
+    await expect(other).not.toContainText('未取得');
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

@@ -17,7 +17,7 @@ import { institutionalGrowth } from '../institutionalEvidence';
 import { code33Layered } from '../code33Reference';
 import { diagnoseBookChart } from '../bookChartDiagnostics';
 import { auditDailyBars } from '../qualificationAudit';
-import { candidateView, sellSignals, trendTemplate, withBookWarning } from './briefModel';
+import { candidateView, secStatus, sellSignals, trendTemplate, withBookWarning } from './briefModel';
 
 export const WATCH_KEY = 'research-watch';
 // The brief ranks only the trend template; the worker skips the other methods' rankings.
@@ -107,8 +107,10 @@ export function useStockData(symbol, brief) {
     if (!row) return null;
     const book = row.book_financials ? bookFinancialCurrent(row.book_financials, row.symbol, date, financialNow, row) : null;
     const history = row.financial_history ? financialHistory(row.financial_history, row.symbol, date, financialNow) : null;
+    // Stale or unverifiable SEC rows never reach the tiles; secStatus says why.
     const report = book?.current ? book.report : null;
-    return { report, history, code33: code33Layered(report, history, date) };
+    const historyRetrievedAt = row.financial_history?.quarterly_retrieved_at || row.financial_history?.retrieved_at || null;
+    return { report, sec: secStatus(row, book), history, historyRetrievedAt, code33: code33Layered(report, history, date) };
   }, [row, date, financialNow]);
   // The publisher's diagnostics win, including an invalid verdict; the client recomputes only certified bars.
   const diagnostics = useMemo(() => {

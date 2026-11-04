@@ -227,6 +227,22 @@
 .brief-quarters { display: block; width: 100%; height: auto; max-height: 200px; }
 .q-base { stroke: var(--line-2); } .q-eps { fill: var(--zone); } .q-sales { fill: var(--wait); } .q-unknown { fill: none; stroke: var(--line-2); stroke-dasharray: 3 3; }
 .q-label { fill: var(--text-3); font-size: 11px; font-family: var(--font-mono); } .q-margin { fill: var(--text-2); font-size: 11px; font-family: var(--font-mono); }
+.q-unknown { fill: var(--surface-2); }
+.brief-fin-source { margin-top: 2px; overflow-wrap: anywhere; }
+/* Fundamentals tiles explain why a value is missing, so their notes wrap instead of truncating. */
+.brief-facts.is-fin .brief-fact { align-content: start; }
+.brief-facts.is-fin .brief-fact em { white-space: normal; overflow: visible; line-height: 1.45; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+  .brief-facts.is-fin { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .brief-facts.is-fin .brief-fact { grid-template-columns: 6.5em auto minmax(0, 1fr); align-items: baseline; column-gap: 10px; }
+}
+.brief-q-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: -4px 0 0; font-size: 11px; line-height: 1.5; color: var(--text-3); }
+.brief-q-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.brief-q-legend .q-key-eps { background: var(--zone); } .brief-q-legend .q-key-sales { background: var(--wait); }
+.brief-q-legend .q-key-unknown { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-2); }
+.brief-qtable { width: 100%; border-collapse: collapse; font-size: 12px; font-family: var(--font-mono); }
+.brief-qtable th, .brief-qtable td { padding: 4px 6px; text-align: right; border-bottom: 1px solid var(--line); white-space: nowrap; }
+.brief-qtable th:first-child { text-align: left; } .brief-qtable thead th { color: var(--text-3); font-weight: 400; font-family: var(--font-sans, inherit); }
 .brief-code33 { display: flex; gap: 12px; align-items: center; padding: 8px 12px; border-radius: 12px; background: var(--surface-2); }
 .brief-code33 strong { display: block; font-size: 14px; } .brief-code33 p { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
 .brief-code33-mark { width: 36px; height: 36px; border-radius: 8px; display: grid; place-items: center; flex: none; font-family: var(--font-mono); font-weight: 700; font-size: 13px; box-shadow: inset 0 0 0 1px var(--line-2); color: var(--neutral); }

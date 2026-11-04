@@ -27,8 +27,10 @@ export function code33Reference(history, date, maxAgeDays = 190) {
   result.eps = state(rises(result.quarters.map(q => q.epsYoY)));
   result.sales = state(rises(result.quarters.map(q => q.salesYoY)));
   result.margin = state(rises(result.quarters.map(q => q.margin)));
+  // Three-valued AND, as for the SEC evidence: any known failure fails, a pass
+  // needs three known passes, anything else stays unknown.
   const trio = [result.eps, result.sales, result.margin];
-  result.state = trio.includes('unknown') ? 'unknown' : trio.every(s => s === 'pass') ? 'pass' : 'fail';
+  result.state = trio.includes('fail') ? 'fail' : trio.every(s => s === 'pass') ? 'pass' : 'unknown';
   return result;
 }
 
