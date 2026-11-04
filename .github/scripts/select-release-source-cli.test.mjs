@@ -91,7 +91,7 @@ test('release CLI rejects unknown commands', t => {
   const result = fixture(t).invoke('unknown');
   assert.ifError(result.error);
   assert.equal(result.status, 1, result.stderr);
-  assert.match(result.stderr, /Expected plan, design, restore, compose, check-design-data, recheck or export-metadata/);
+  assert.match(result.stderr, /Expected plan, design, audit-archive, restore, compose, check-design-data, recheck or export-metadata/);
 });
 
 test('old-workflow recheck rejects oversized final payloads before any remote read in every publishing mode', t => {

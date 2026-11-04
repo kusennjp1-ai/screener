@@ -168,6 +168,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node .github/scripts/retained-price-source-admission.mjs prepare-controller --output "$RUNNER_TEMP/retained-price-controller"
+      # Controller tooling only: the approved UI tree is not checked out yet. The
+      # read-only job token lists releases; every archive download is anonymous.
+      # Unverified carries simply stay hosted; an indexed copy that is no longer
+      # verifiably public fails the run before anything is built or deployed.
+      - name: Verify the public audit archive before omitting older carries
+        id: audit-archive
+        if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.carry == 'true' && steps.plan.outputs.limited_research_preview != 'true' && needs.renewal_route.outputs.price_source != 'true'
+        timeout-minutes: 20
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/select-release-source.mjs audit-archive
       - name: Checkout the exact verified UI source
         if: steps.plan.outputs.publish == 'true'
         uses: actions/checkout@v4

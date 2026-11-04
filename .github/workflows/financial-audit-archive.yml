@@ -1,0 +1,96 @@
+name: Financial Audit Archive
+# Copies older financial audit carry projections from live Pages into one
+# immutable public GitHub release per file. It never edits Pages: the Research
+# UI Release publisher omits a carry only after its own anonymous re-download
+# reproduces the exact logical bytes. Only the upload job can write releases.
+on:
+  workflow_run:
+    workflows: [Research UI Release]
+    types: [completed]
+    branches: [main]
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/financial-audit-archive.yml
+      - .github/scripts/financial-audit-archive.mjs
+  schedule:
+    # workflow_run cannot fire past depth 3 (CI -> Static Site -> Release -> Archive).
+    - cron: '41 */3 * * *'
+    # Weekly full sweep of every archived copy.
+    - cron: '23 4 * * 0'
+  workflow_dispatch:
+    inputs:
+      full_sweep:
+        description: 'Also download and decode every archived copy'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: financial-audit-archive
+  cancel-in-progress: false
+jobs:
+  collect:
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    outputs:
+      pending: ${{ steps.collect.outputs.pending }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Stage exact hosted carry bins from live Pages
+        id: collect
+        run: node .github/scripts/financial-audit-archive.mjs collect --output "$RUNNER_TEMP/audit-archive"
+      - uses: actions/upload-artifact@v4
+        if: steps.collect.outputs.pending == 'true'
+        with:
+          name: financial-audit-archive-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/audit-archive
+          retention-days: 3
+          if-no-files-found: error
+          compression-level: 0
+      - name: Sweep the complete public archive
+        if: github.event.schedule == '23 4 * * 0' || inputs.full_sweep
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/financial-audit-archive.mjs verify-history --full --orphans
+      # A published release whose bytes do not reproduce its file is never
+      # modified. Fail after the other staged copies were handed to upload.
+      - name: Fail on conflicting published archive copies
+        if: steps.collect.outputs.conflicts != '0'
+        run: 'echo "::error::A published audit archive copy does not reproduce its file; see the collect step" && exit 1'
+  upload:
+    needs: collect
+    if: ${{ !cancelled() && needs.collect.outputs.pending == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@v4
+        with:
+          name: financial-audit-archive-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/audit-archive
+      - name: Re-verify staged bins offline
+        run: node .github/scripts/financial-audit-archive.mjs verify-plan --input "$RUNNER_TEMP/audit-archive"
+      - name: Create missing immutable audit archive releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/financial-audit-archive.mjs upload --input "$RUNNER_TEMP/audit-archive"
+      - name: Verify every staged archive copy by anonymous download
+        run: node .github/scripts/financial-audit-archive.mjs verify-public --input "$RUNNER_TEMP/audit-archive"
