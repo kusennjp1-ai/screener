@@ -261,7 +261,7 @@
   .brief-facts.is-fin .brief-fact { grid-template-columns: 6.5em auto minmax(0, 1fr); align-items: baseline; column-gap: 10px; }
 }
 .brief-q-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: -4px 0 0; font-size: 11px; line-height: 1.5; color: var(--text-3); }
-.brief-q-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+.brief-q-legend i { display: inline-block; width: 10px; height: 10px; border-radius: 4px; margin-right: 4px; vertical-align: -1px; }
 .brief-q-legend .q-key-eps { background: var(--zone); } .brief-q-legend .q-key-sales { background: var(--wait); }
 .brief-q-legend .q-key-unknown { background: var(--surface-2); box-shadow: inset 0 0 0 1px var(--line-2); }
 .brief-qtable { width: 100%; border-collapse: collapse; font-size: 12px; font-family: var(--font-mono); }

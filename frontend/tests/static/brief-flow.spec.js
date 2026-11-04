@@ -156,6 +156,10 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(card.getByText('Code 33 未確認')).toBeVisible();
     await expect(card).toContainText('EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です');
     await expect(card.getByRole('img', { name: /四半期の前年同期比成長率/ })).toBeVisible();
+    // The legend swatches use a radius token (Design Acceptance flags any other corner radius).
+    const swatches = await card.locator('.brief-q-legend i').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).borderTopLeftRadius));
+    expect(swatches.length).toBeGreaterThanOrEqual(3);
+    for (const radius of swatches) expect(['4px', '8px', '12px', '16px']).toContain(radius);
     await expect(card).not.toContainText('未取得');
     expect(await horizontalOverflow(page)).toBe(0);
     // A stock without a published SEC record names that reason in every tile.
