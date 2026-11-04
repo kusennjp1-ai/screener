@@ -160,3 +160,69 @@ describe('research worker lifecycle', () => {
     expect(instance.terminate).toHaveBeenCalledOnce();
   });
 });
+
+describe('prewarmed research worker', () => {
+  // A fresh module per test: the spare and its one-time guard are module state.
+  const fresh = async () => { vi.resetModules(); return import('./researchWorkerClient'); };
+  const stub = () => {
+    const made = [];
+    vi.stubGlobal('Worker', class { constructor(url, options) { this.url = url; this.options = options; made.push(this); } postMessage = vi.fn(); terminate = vi.fn(); });
+    return made;
+  };
+  const answer = worker => worker.onmessage({ data: { result: { ok: true } } });
+
+  it('is a no-op without Worker, and loading then uses the compatibility fallback', async () => {
+    vi.stubGlobal('Worker', undefined);
+    const client = await fresh();
+    expect(() => client.prewarmResearchWorker()).not.toThrow();
+    const fetchJson = vi.fn(async path => (path === 'research.json' ? { as_of_date: '2026-09-29', rows: [] } : null));
+    await client.loadResearchBundle('research.json', '2026-09-29', fetchJson, undefined, { now: Date.parse('2026-09-30T00:00:00Z') }).catch(() => null);
+    expect(fetchJson).toHaveBeenCalledWith('research.json', expect.objectContaining({ asOfDate: '2026-09-29' }));
+  });
+
+  it('starts one spare (StrictMode-safe), hands it to the next request once, then spawns as before', async () => {
+    const made = stub();
+    const client = await fresh();
+    client.prewarmResearchWorker();
+    client.prewarmResearchWorker();
+    expect(made).toHaveLength(1);
+    expect(made[0].options).toEqual({ type: 'module', name: 'research-data' });
+    expect(made[0].postMessage).not.toHaveBeenCalled();
+    const first = client.runDataWorker({ operation: 'json', path: 'a.json' });
+    expect(made).toHaveLength(1);
+    expect(made[0].postMessage).toHaveBeenCalledWith({ operation: 'json', path: 'a.json' });
+    answer(made[0]);
+    await expect(first).resolves.toEqual({ ok: true });
+    expect(made[0].terminate).toHaveBeenCalledOnce();
+    const second = client.runDataWorker({ operation: 'json', path: 'b.json' });
+    expect(made).toHaveLength(2);
+    answer(made[1]);
+    await expect(second).resolves.toEqual({ ok: true });
+    client.prewarmResearchWorker();
+    expect(made).toHaveLength(2);
+  });
+
+  it('drops a spare whose script failed before use, so a request never waits on it', async () => {
+    const made = stub();
+    const client = await fresh();
+    client.prewarmResearchWorker();
+    made[0].onerror(new Event('error'));
+    expect(made[0].terminate).toHaveBeenCalledOnce();
+    const pending = client.runDataWorker({ operation: 'json', path: 'a.json' });
+    expect(made).toHaveLength(2);
+    expect(made[1].postMessage).toHaveBeenCalledWith({ operation: 'json', path: 'a.json' });
+    answer(made[1]);
+    await expect(pending).resolves.toEqual({ ok: true });
+  });
+
+  it('rejects, not hangs, when the taken spare fails after the request starts', async () => {
+    const made = stub();
+    const client = await fresh();
+    client.prewarmResearchWorker();
+    const pending = client.runDataWorker({ operation: 'json', path: 'a.json' });
+    made[0].onerror(new Event('error'));
+    await expect(pending).rejects.toThrow('分析データの前処理に失敗しました');
+    expect(made[0].terminate).toHaveBeenCalledOnce();
+    expect(made).toHaveLength(1);
+  });
+});

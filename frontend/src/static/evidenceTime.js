@@ -5,10 +5,11 @@ const newYorkDayFormatter = new Intl.DateTimeFormat('en-CA', {
 
 // Cache only primitive parsing results, never evidence, eligibility or a clock
 // interval. Each caller still compares its exact current instant to deadlines.
-// Publications repeat the same dates and timestamps across thousands of rows.
-const days = new Map(), timestamps = new Map();
+// Publications repeat the same dates and timestamps across thousands of rows; a watched stock's
+// chart alone carries hundreds of bar dates, so the bound holds a dozen of them without thrashing.
+const days = new Map(), timestamps = new Map(), CACHE_LIMIT = 4096;
 function remember(cache, key, value) {
-  if (cache.size >= 256) cache.delete(cache.keys().next().value);
+  if (cache.size >= CACHE_LIMIT) cache.delete(cache.keys().next().value);
   cache.set(key, value);
   return value;
 }
