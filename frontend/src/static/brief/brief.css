@@ -57,9 +57,11 @@
 @media (max-width: 1023px) { .brief-market:not(.is-detail) .brief-index { height: 96px; } }
 /* Phone Today: the first screen answers both questions, the market and a candidate. The verdict
    repeats the summary 地合い tile above it, the index chart is a shape only (the market tab keeps
-   it), and the bar already carries the date. The tiles, warnings, alerts and as-of notes stay. */
+   it), and the bar already carries the date, so the dated title stays only as the page's heading for
+   assistive tech (its height went to notch insets). The tiles, warnings, alerts and as-of notes stay. */
 @media (max-width: 520px) {
   .brief-market:not(.is-detail) .brief-verdict, .brief-market:not(.is-detail) .brief-index, .brief-market:not(.is-detail) .brief-index-legend, .brief-hero.is-today small { display: none; }
+  .brief-hero.is-today { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 }
 .brief-index-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 0; font-size: 11px; color: var(--text-3); }
 .brief-index-legend span::before { content: ""; display: inline-block; width: 12px; height: 2px; margin-right: 4px; vertical-align: middle; background: var(--text); }

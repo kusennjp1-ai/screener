@@ -65,13 +65,27 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip $
 });
 
 const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
-const FOLD = { 375: phone(375, 812), 390: VIEWPORTS.phone };
+// What the first-screen goal covers: current-day data at 375x812 and 390x844, in the browser and as the
+// installed PWA (viewport-fit=cover: the bar and the dock grow by the notch and home-indicator insets,
+// emulated with Chromium's safe-area override), and a one-session lag at 390x844 in the browser. A lag
+// on a notched phone adds as-of tags and the 再集計待ち note, which are never hidden to make room, so
+// there the first candidate may sit under the dock.
+const FOLD = {
+  '375px': { device: phone(375, 812) },
+  '390px': { device: VIEWPORTS.phone },
+  '375px as an installed PWA on an iPhone X': { device: phone(375, 812), insets: { top: 44, bottom: 34 } },
+  '390px as an installed PWA on an iPhone 14': { device: VIEWPORTS.phone, insets: { top: 47, bottom: 34 } },
+  '390px one session behind': { device: VIEWPORTS.phone, lag: true },
+};
 
-for (const [width, device] of Object.entries(FOLD)) test.describe(`Today's first screen at ${width}px`, () => {
+for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.describe(`Today's first screen at ${width}`, () => {
   test.use(device);
 
   test('shows the market answer and a candidate without scrolling', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief');
+    if (insets) await (await page.context().newCDPSession(page)).send('Emulation.setSafeAreaInsetsOverride', { insets: { ...insets, left: 0, right: 0 } });
+    const { errors } = await openBrief(page, '#/brief', lag ? { historyEnd: sessions.at(-2) } : {});
+    if (insets) expect(await page.locator('.brief-dock').evaluate(node => node.getBoundingClientRect().height)).toBeGreaterThanOrEqual(56 + insets.bottom);
+    if (lag) await expect(page.getByRole('region', { name: '地合い' }).getByRole('note')).toContainText('再集計待ち');
     const market = page.getByRole('region', { name: '地合い' });
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
@@ -86,6 +100,10 @@ for (const [width, device] of Object.entries(FOLD)) test.describe(`Today's first
     await expect(market.locator('.brief-index')).toBeHidden();
     await expect(market.locator('.brief-index-legend')).toBeHidden();
     expect(await market.evaluate(node => node.innerText)).toContain('独自判定');
+    // Today's rows show RS推計: the card says the RS is the app's own, not IBD's.
+    await expect(market.locator('.brief-note').last()).toHaveText('地合いの判定・各集計・RSは公開日足からの独自判定・独自集計で、IBDの公式値ではありません。');
+    // The dated title stays the page heading for assistive tech; the bar shows the date.
+    await expect(page.getByRole('heading', { level: 1, name: '10月2日（金）の判断' })).toBeAttached();
     await expect(market.locator('.brief-fact')).toHaveCount(4);
     for (const fact of await market.locator('.brief-fact').all()) await expect(fact).toBeVisible();
     // Tile text reads at 12px or more, including the names of a pair's sides (S&P / NAS, 高 / 安).
