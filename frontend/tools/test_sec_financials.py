@@ -275,5 +275,59 @@ class PublishedWindow(unittest.TestCase):
         self.assertEqual(sec.series(facts([entry(accn=None)]), "eps", "2026-03-01"), [])
         self.assertEqual(len(sec.series(facts([entry(accn="0001-25-1")]), "eps", "2026-03-01")), 1)
 
+ADMIT_SCRIPT = """
+import { admitBookFinancials } from './src/static/bookFinancialAdmission.js';
+let input = '';
+for await (const chunk of process.stdin) input += chunk;
+const { asOfDate, evaluatedAt, results } = JSON.parse(input);
+const admitted = Object.fromEntries(Object.entries(results).map(([key, value]) => {
+  const symbol = value.symbol;
+  return [key, admitBookFinancials(value, { symbol, asOfDate, evaluatedAt: Date.parse(evaluatedAt), row: { symbol, market: 'US' } }) === value];
+}));
+console.log(JSON.stringify(admitted));
+"""
+
+class BrowserAdmission(unittest.TestCase):
+    """What this tool writes is exactly what the export, the carry overlay and the gate admit."""
+
+    @unittest.skipUnless(__import__("shutil").which("node"), "node runs src/static/bookFinancialAdmission.js")
+    def test_every_written_record_passes_the_browser_admission(self):
+        import copy, json, subprocess
+        from unittest.mock import patch
+        from urllib.error import HTTPError, URLError
+        rows = seven_years()
+        full = {"cik": 1, "facts": {"us-gaap": {"Revenues": {"units": {"USD": rows}},
+            "NetIncomeLoss": {"units": {"USD": [dict(r, val=r["val"] / 10) for r in rows]}},
+            "EarningsPerShareDiluted": {"units": {"USD/shares": [dict(r, val=r["val"] / 100) for r in rows]}},
+            "InventoryNet": {"units": {"USD": [{"end": f"{y}-12-31", "val": 7, "filed": f"{y + 1}-02-20", "form": "10-K", "accn": f"inv-{y}"} for y in range(2018, 2026)]}}}}}
+        tickers = {"FULL": 1, "GONE": 4, "FPI": 5, "BAD": 6, "DOWN": 8}
+        def get(url):
+            if url.endswith("company_tickers.json"):
+                return {str(i): {"ticker": t, "cik_str": c} for i, (t, c) in enumerate(tickers.items())}
+            cik = int(url.rsplit("CIK", 1)[1].split(".")[0])
+            if cik == 4:
+                raise HTTPError(url, 404, "Not Found", {}, None)
+            if cik == 5:
+                return {"cik": 5, "facts": {"ifrs-full": {"Revenue": {"units": {"USD": [{"form": "20-F", "val": 1}, {"form": "6-K", "val": 1}]}}}}}
+            if cik == 6:
+                return {"cik": 999, "facts": {}}
+            if cik == 8:
+                raise URLError("reset")
+            return full
+        with patch.object(sec, "now_iso", lambda: "2026-03-02T10:00:00.000Z"):
+            out = sec.collect([*tickers, "NONE"], "2026-03-02", get=get, sleep=lambda _: None)
+        results = out["results"]
+        self.assertEqual({s: r.get("reason") for s, r in results.items()},
+            {"FULL": None, "GONE": "no_companyfacts", "FPI": "no_quarterly", "BAD": "invalid_payload", "DOWN": "transient", "NONE": "no_cik"})
+        self.assertTrue(any(p["derived"] for p in results["FULL"]["quarterly"]["revenue"]))
+        # One mutation proves the check is live: a fact filed after the as-of date is refused.
+        future = copy.deepcopy(results["FULL"])
+        future["quarterly"]["eps"][-1]["filed"] = "2026-03-03"
+        cases = {**results, "FUTURE": future}
+        payload = json.dumps({"asOfDate": "2026-03-02", "evaluatedAt": "2026-03-02T12:00:00.000Z", "results": cases}, allow_nan=False)
+        run = subprocess.run(["node", "--input-type=module", "-e", ADMIT_SCRIPT], input=payload, cwd=Path(__file__).parent.parent,
+            capture_output=True, text=True, check=True, timeout=60)
+        self.assertEqual(json.loads(run.stdout), {**{symbol: True for symbol in results}, "FUTURE": False})
+
 if __name__ == "__main__":
     unittest.main()
