@@ -357,11 +357,21 @@ try {
       const verdict = page.getByRole('region', { name: '地合い', exact: true });
       const history = page.getByRole('region', { name: '市場環境の推移', exact: true });
       functional(group, 'market-regime-region', await verdict.isVisible(), 'the 「地合い」 region is not visible on #/brief/market');
-      functional(group, 'market-history-section', await history.isVisible(), 'the 「市場環境の推移」 section is not visible on #/brief/market');
+      // Below 1024px the market screen opens on its first section tab and keeps the long history
+      // behind the 推移 tab: capture the screen as it opens, then open 推移 to check the history.
+      const historyTab = page.getByRole('tablist', { name: '市場タブの表示' }).locator('#brief-tab-history');
+      const tabbed = await historyTab.isVisible();
+      if (tabbed) {
+        await capture(session, group, 'market', '#/brief/market');
+        await historyTab.click();
+        functional(group, 'market-history-tab-selected', await historyTab.getAttribute('aria-selected') === 'true', 'the 推移 tab is not selected after clicking it on #/brief/market');
+        await history.waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+      }
+      functional(group, 'market-history-section', await history.isVisible(), `the 「市場環境の推移」 section is not visible on #/brief/market${tabbed ? ' after opening its 推移 tab' : ''}`);
       const alert = history.locator('[role="alert"]');
       const alerts = await alert.count(), alertText = alerts ? await alert.first().innerText() : '';
       functional(group, 'market-history-loaded', !alerts, `the 「市場環境の推移」 section shows an error: ${alertText}`);
-      await capture(session, group, 'market', '#/brief/market');
+      if (!tabbed) await capture(session, group, 'market', '#/brief/market');
     });
     await step(session, group, 'stock', async () => {
       const candidates = await findCandidates(page);

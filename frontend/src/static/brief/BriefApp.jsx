@@ -10,7 +10,8 @@ import { useBriefData, useStockData, useWatchlist, useWatchSellChecks } from './
 import { candidateView, focusCandidates, focusCounts, leadingGroups, marketTone, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
 import MarketCard from './MarketCard';
 import StockView from './StockView';
-import { CandidateRow, Parts, RiseItem, Toast } from './BriefParts';
+import { CandidateRow, Parts, RiseItem, ScreenNotes, Toast } from './BriefParts';
+import useSessionState from './useSessionState';
 import { useTransitionNavigate } from './briefNav';
 
 // The market tab (long-run chart, sector ranks) is its own chunk: Today does not download or parse it.
@@ -34,6 +35,15 @@ const finite = Number.isFinite;
 const bundleState = brief => brief.bundle.data ? 'ready' : brief.bundle.isLoading || brief.manifest.isLoading ? 'loading' : brief.bundle.isError || brief.manifest.isError ? 'error' : 'none';
 const BUNDLE_TEXT = { loading: '候補を読み込み中…', error: '候補データを取得できません。', none: '候補データはこの公開に含まれていません。' };
 const BUNDLE_SHORT = { loading: '読込中', error: '取得できません', none: '未配信' };
+// A phone (520px and narrower, where rows are compacted) lists this many rows per 「さらに表示」;
+// wider screens list 50.
+const PHONE_PAGE = 20;
+const PHONE_QUERY = '(max-width:520px)';
+// Today's watch card shows this many rows before 「さらに表示」 (rows with a sell signal always show).
+const WATCH_ROWS = 3;
+// Footnotes: in place at 1024px and wider, gathered into the screen's 注記 below that.
+const TODAY_NOTE = '注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。同じ位置なら判定の達成数、RS推計の順。';
+const LIST_NOTE = '選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄。あと1条件＝未達が1つだけで未確認がない銘柄（流動性：株価$10以上・売買代金$2,000万以上）。';
 const DATE_JA = iso => { const d = new Date(`${iso}T12:00:00Z`); return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）` : '日付未確認'; };
 
 function ThemeToggle() {
@@ -51,14 +61,22 @@ function Tabs({ current, watchCount, go }) {
   </nav>;
 }
 
-function TodayView({ brief, watch, open, now, animate, onNear }) {
+function TodayView({ brief, watch, open, now, animate, onNear, wide }) {
   const focus = useMemo(() => focusCandidates(brief.ranked, brief.date), [brief.ranked, brief.date]);
   // The whole pool behind the five rows, so the summary never reads 「接近0」 while near-pivot stocks exist.
   const counts = useMemo(() => focusCounts(brief.ranked, brief.date), [brief.ranked, brief.date]);
   const groups = useMemo(() => leadingGroups(brief.ranked), [brief.ranked]);
+  const phone = useMediaQuery(PHONE_QUERY);
   const watched = useMemo(() => (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)).map(item => candidateView(item, brief.date)).sort(briefOrder), [brief.bundle.data, watch, brief.date]);
   const sells = useWatchSellChecks(watched, brief);
   const state = bundleState(brief);
+  // The first rows of the watch list, plus every row whose sell check fired or could not be made
+  // (未確認, never folded away); the rest open in place and stay open for this session. Nothing folds
+  // until every row's check is in, so a row with a signal never appears late from behind the button.
+  const [watchAll, setWatchAll] = useSessionState('today-watch-all', false);
+  const sellsIn = watched.every(view => sells[view.symbol]);
+  const watchFolded = sellsIn ? watched.filter((view, i) => i < WATCH_ROWS || sells[view.symbol].hits > 0 || sells[view.symbol].unknown) : watched;
+  const watchShown = watchAll ? watched : watchFolded, watchHidden = watched.length - watchFolded.length;
   return <>
     <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
     <TodaySummary market={brief.market} marketLoading={brief.marketLoading} counts={counts} watched={watched} watchCount={watch.length} sells={sells} state={state} />
@@ -67,21 +85,32 @@ function TodayView({ brief, watch, open, now, animate, onNear }) {
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">2</span><h2 id="brief-focus-title">注目候補</h2><Link className="brief-more" to="/brief/list">すべての候補 <span aria-hidden="true">›</span></Link></div>
       {focus.length ? <ol className="brief-rows">{focus.map((view, i) => <CandidateRow key={view.symbol} view={view} rank={i + 1} index={i} onOpen={open} now={now} animate={animate} hideTemplate />)}</ol>
         : <p className="brief-note">{state === 'ready' ? '買いゾーンまたはピボット接近（−5%以内）の選定銘柄はありません。' : BUNDLE_TEXT[state]}</p>}
-      {counts.total > focus.length && <p className="brief-note">上位{focus.length}件を表示（注目候補 {counts.total}銘柄中）</p>}
-      {counts.near > 0 && <Link className="brief-nearlink" to="/brief/list" onClick={event => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); onNear(); }}>ピボット接近 {counts.near}銘柄 <span aria-hidden="true">›</span></Link>}
-      {groups?.groups.length > 0 && <p className="brief-groups" data-testid="brief-groups"><span>選定銘柄の多い{groups.kind}</span>{groups.groups.map(g => <span key={g.name} className="brief-chip">{g.name}：<b className="numeric">{g.count}</b>銘柄</span>)}<span className="brief-note">（選定 {groups.total}銘柄中{groups.unnamed ? `・${groups.kind}未確認 ${groups.unnamed}` : ''}）</span></p>}
-      <p className="brief-note">注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。同じ位置なら判定の達成数、RS推計の順。</p>
+      {/* The count and the near-pivot link share one line where they fit, and wrap where they do not. The count
+          is of the focus candidates (buy zone and near pivot), not of every selected stock. */}
+      {(counts.total > focus.length || counts.near > 0) && <div className="brief-focusfoot">
+        {counts.total > focus.length && <p className="brief-note">上位{focus.length}件を表示（注目候補 {counts.total}銘柄中）</p>}
+        {counts.near > 0 && <Link className="brief-nearlink" to="/brief/list" onClick={event => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); onNear(); }}>ピボット接近 {counts.near}銘柄 <span aria-hidden="true">›</span></Link>}
+      </div>}
+      {/* The label carries the denominator and the 未確認 count, so they are never scrolled away. On a phone
+          the chips are one line that scrolls sideways (its fading edge says more follows), focusable for the keyboard. */}
+      {groups?.groups.length > 0 && <div className="brief-groups" data-testid="brief-groups">
+        <span className="brief-groups-label">選定銘柄の多い{groups.kind}<span className="brief-note">（選定 {groups.total}銘柄中{groups.unnamed ? `・${groups.kind}未確認 ${groups.unnamed}` : ''}）</span></span>
+        <span className="brief-groups-chips" role="group" aria-label={`選定銘柄の多い${groups.kind}`} tabIndex={phone ? 0 : undefined}>{groups.groups.map(g => <span key={g.name} className="brief-chip">{g.name}：<b className="numeric">{g.count}</b>銘柄</span>)}</span>
+      </div>}
+      {wide && <p className="brief-note">{TODAY_NOTE}</p>}
     </section>
     <section className="brief-card in" style={{ '--i': 3 }} aria-labelledby="brief-watch-title">
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">3</span><h2 id="brief-watch-title">ウォッチの変化</h2></div>
-      {watched.length ? <ul className="brief-rows">{watched.map((view, i) => { const event = watchEvent(view); return <RiseItem key={view.symbol} animate={animate} index={i}>
+      {watched.length ? <ul className="brief-rows" id="brief-watch-rows">{watchShown.map((view, i) => { const event = watchEvent(view); return <RiseItem key={view.symbol} animate={animate} index={i}>
         <button type="button" className="brief-event" onClick={e => open(view.symbol, e.currentTarget, 'watch')}>
           <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{event.kind === 'breakout' ? '↗' : event.kind === 'ext' ? '▲' : event.kind === 'near' ? '◔' : event.kind === 'zone' ? '●' : '≈'}</span>
           <span><b>{view.symbol}</b> {event.title}{sells[view.symbol]?.hits ? <span className="brief-chip tone-ext brief-sellchip"><span aria-hidden="true">▲</span> 売りのサイン {sells[view.symbol].hits}件</span> : sells[view.symbol]?.unknown ? <span className="brief-chip brief-sellchip" title={sells[view.symbol].reason || undefined}>売りのサイン 未確認</span> : null}<small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
           <span className="brief-chevron" aria-hidden="true">{ICON.next}</span>
         </button></RiseItem>; })}</ul>
         : <p className="brief-note">{state !== 'ready' && watch.length ? `ウォッチ中の${watch.length}銘柄は、${state === 'loading' ? '候補の読み込み後に確認します。' : '候補データがないため確認できません。'}` : '銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。'}</p>}
+      {watchHidden > 0 && <button type="button" className="brief-morebutton" aria-expanded={watchAll} aria-controls="brief-watch-rows" onClick={() => setWatchAll(value => !value)}>{watchAll ? '表示を減らす' : `さらに表示（残り ${watchHidden}件）`}</button>}
     </section>
+    <ScreenNotes id="today" wide={wide} notes={[TODAY_NOTE]} />
   </>;
 }
 
@@ -115,28 +144,42 @@ function listShown(views, kind, { filter, sort, query }) {
   return views.filter(kind === 'watch' ? () => true : LIST_FILTERS[filter].test).filter(view => matchesSearch(view, query)).sort(LIST_SORTS[sort].compare);
 }
 
-function ListView({ brief, kind, watch, open, now, animate, listState, setListState }) {
-  const { filter, sort, query } = listState, [limit, setLimit] = useState(50);
+function ListView({ brief, kind, watch, open, now, animate, listState, setListState, limits, setLimits, origin, wide }) {
+  const phone = useMediaQuery(PHONE_QUERY);
+  const pageSize = phone ? PHONE_PAGE : 50;
+  const { filter, sort, query } = listState;
+  // Under a qualified-only filter every row is TT 8/8: a phone leaves the constant chip out (the 注記 says so),
+  // which keeps each row's chips on one line. あと1条件 and the watch list keep it.
+  const constantTemplate = phone && kind !== 'watch' && filter !== 'one';
   const update = patch => setListState(state => ({ ...state, ...patch }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const views = useMemo(() => listSource(brief, kind, watch), [brief.bundle.data, brief.ranked, brief.date, kind, watch]);
   const counts = useMemo(() => Object.fromEntries(Object.entries(LIST_FILTERS).map(([key, value]) => [key, views.filter(value.test).length])), [views]);
   const shown = useMemo(() => listShown(views, kind, listState), [views, kind, listState]);
+  // The rows shown are kept per list across a stock's round trip (BriefApp holds them). Coming back
+  // from a stock, or after stepping past the last row shown, the stock last open is rendered too.
+  // A new filter or search starts again from one page.
+  const [floor, setFloor] = useState(() => { const at = origin ? shown.findIndex(view => view.symbol === origin) : -1; return { kind, rows: at >= 0 ? Math.ceil((at + 1) / pageSize) * pageSize : 0 }; });
+  const limit = Math.max(limits[kind] ?? pageSize, floor.kind === kind ? floor.rows : 0);
+  const setLimit = value => setLimits(state => ({ ...state, [kind]: value }));
+  const restart = () => { setLimit(undefined); setFloor({ kind, rows: 0 }); };
   const sells = useWatchSellChecks(kind === 'watch' ? shown : null, brief);
   const state = bundleState(brief);
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
     {kind !== 'watch' && <div className="brief-filters">
-      <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { update({ filter: key }); setLimit(50); }}>{value.label}<span className="numeric">{state === 'ready' ? counts[key] : '—'}</span></button>)}</div>
-      <label className="brief-search"><span className="sr-only">銘柄を検索</span><input type="search" inputMode="search" placeholder="ティッカー・社名" value={query} onChange={e => { update({ query: e.target.value }); setLimit(50); }} /></label>
+      <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { update({ filter: key }); restart(); }}>{value.label}<span className="numeric">{state === 'ready' ? counts[key] : '—'}</span></button>)}</div>
+      <label className="brief-search"><span className="sr-only">銘柄を検索</span><input type="search" inputMode="search" placeholder="ティッカー・社名" value={query} onChange={e => { update({ query: e.target.value }); restart(); }} /></label>
       <label className="brief-sort">並び順<select value={sort} onChange={e => update({ sort: e.target.value })}>{Object.entries(LIST_SORTS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
     </div>}
     <section className="brief-card in" style={{ '--i': 1 }} aria-label={kind === 'watch' ? 'ウォッチ中の銘柄' : '選定銘柄の一覧'}>
-      {shown.length ? <ol className="brief-rows">{shown.slice(0, limit).map((view, i) => <CandidateRow key={view.symbol} view={view} rank={kind === 'watch' ? null : i + 1} index={Math.min(i, 12)} onOpen={open} now={now} animate={animate} sell={sells[view.symbol]} />)}</ol>
+      {shown.length ? <ol className="brief-rows">{shown.slice(0, limit).map((view, i) => <CandidateRow key={view.symbol} view={view} rank={kind === 'watch' ? null : i + 1} index={Math.min(i, 12)} onOpen={open} now={now} animate={animate} sell={sells[view.symbol]} hideTemplate={constantTemplate} />)}</ol>
         : <p className="brief-note">{state !== 'ready' ? BUNDLE_TEXT[state] : kind === 'watch' ? '銘柄の画面で ☆ を押すと、ここに並びます。' : 'この条件の選定銘柄はありません。'}</p>}
-      {shown.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + 50)}>さらに表示（残り {shown.length - limit}件）</button>}
-      {kind !== 'watch' && <p className="brief-note">選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄。あと1条件＝未達が1つだけで未確認がない銘柄（流動性：株価$10以上・売買代金$2,000万以上）。</p>}
+      {shown.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + pageSize)}>さらに表示（残り {shown.length - limit}件）</button>}
+      {kind !== 'watch' && wide && <p className="brief-note">{LIST_NOTE}</p>}
     </section>
+    {kind !== 'watch' && <ScreenNotes id="list" wide={wide} notes={[LIST_NOTE,
+      phone ? '買いゾーン・ピボット接近・選定すべての行はすべてTT 8/8のため、スマホでは「TT 8/8」の表示を省いています（あと1条件では未達・未確認の数を表示します）。' : null]} />}
   </>;
 }
 
@@ -154,7 +197,7 @@ const StockScreen = memo(function StockScreen({ brief, symbol, watch, onToggleWa
     <span className="brief-stockhead-actions"><button type="button" className={`brief-iconbutton${on ? ' is-on' : ''}`} aria-pressed={on} aria-label={on ? 'ウォッチから外す' : 'ウォッチに追加'} onClick={event => onToggleWatch(symbol, event.currentTarget)}>{on ? ICON.starOn : ICON.star}</button>
       <button type="button" className="brief-iconbutton" aria-label="前の候補" onClick={() => step(-1)}>{ICON.back}</button><button type="button" className="brief-iconbutton" aria-label="次の候補" onClick={() => step(1)}>{ICON.next}</button></span>
   </div> : null;
-  return <StockView key={symbol} data={data} header={header} />;
+  return <StockView key={symbol} data={data} header={header} wide={Boolean(wide)} />;
 });
 
 export default function BriefApp() {
@@ -188,6 +231,8 @@ export default function BriefApp() {
   const animate = entrance.view === view ? entrance.loaded : loaded;
   useEffect(() => { if (loaded && entrance.view === view && !entrance.loaded) setEntrance({ view, loaded: true }); }, [loaded, entrance, view]);
   const [listState, setListState] = useState({ filter: 'zone', sort: 'priority', query: '' });
+  // How many rows each list (候補, ウォッチ) shows; reset when its filter or search changes.
+  const [listLimits, setListLimits] = useState({});
   const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [from, brief.bundle.data, brief.ranked, brief.date, watch, listState]);
@@ -243,13 +288,13 @@ export default function BriefApp() {
   };
   const barView = useMemo(() => { const item = symbol && (brief.bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol); return item ? candidateView(item, brief.date) : null; }, [symbol, brief.bundle.data, brief.date]);
   // Today's 「ピボット接近 N銘柄」: the candidate list with the near-pivot filter and no search.
-  const showNear = useCallback(() => { setListState(state => ({ ...state, filter: 'near', query: '' })); go('/brief/list', { kind: 'tab' }); }, [go]);
+  const showNear = useCallback(() => { setListState(state => ({ ...state, filter: 'near', query: '' })); setListLimits(state => ({ ...state, list: undefined })); go('/brief/list', { kind: 'tab' }); }, [go]);
   useEffect(() => {
     const idle = window.requestIdleCallback ? window.requestIdleCallback(() => loadMarketScreen().catch(() => {}), { timeout: 4000 }) : setTimeout(() => loadMarketScreen().catch(() => {}), 1500);
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
   }, []);
-  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} onNear={showNear} />
-    : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} />;
+  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} onNear={showNear} wide={wide} />
+    : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} limits={listLimits} setLimits={setListLimits} origin={kept} wide={wide} />;
   const watching = symbol && watch.includes(symbol);
   return <div className="leader-shell brief" data-theme={dark ? 'dark' : 'light'}>
     <style>{themeCss}</style>

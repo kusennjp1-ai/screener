@@ -7,6 +7,10 @@ import { date, openBrief, VIEWPORTS, horizontalOverflow, sessions } from './brie
 
 const STALE = sessions.at(-3), STALE_MD = STALE.slice(5).split('-').map(Number).join('/'), DATE_MD = date.slice(5).split('-').map(Number).join('/');
 const row = (market, label) => market.locator('.brief-env-row').filter({ has: market.page().locator('small', { hasText: label }) });
+/** Below 1024px the market tab shows one section at a time behind its tabs; the desktop shows them all. */
+const section = async (page, name) => { const tab = page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab', { name: new RegExp(`^${name}`) }); if (await tab.count()) { await tab.click(); await expect(tab).toHaveAttribute('aria-selected', 'true'); } };
+// The 地合い card's own as-of stamp (the sector ranks inside its 推移 section carry their own).
+const stamp = market => market.locator(':scope > .brief-step .brief-stamp');
 
 for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} ${device.viewport.width}px`, () => {
   test.use(device);
@@ -33,19 +37,23 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.getByTestId('brief-regime')).toContainText('上昇トレンド（独自判定）新規の買いを検討できます。エクスポージャーの目安最大 50%');
     await expect(market.getByTestId('brief-regime')).toContainText(`根拠（${DATE_MD}スキャン時点）：S&P 500（SPY）が50日線・200日線の上`);
-    await expect(market.locator('.brief-stamp')).toHaveText(`◷ ${DATE_MD} 引け`);
+    await expect(stamp(market)).toHaveText(`◷ ${DATE_MD} 引け`);
     await expect(market.getByRole('link', { name: /市場の詳細/ })).toHaveCount(0);
     // The phone's Today hides the verdict and the chart; the market tab keeps both visible.
     await expect(market.getByTestId('brief-regime')).toBeVisible();
     await expect(market.getByRole('img', { name: /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/ })).toBeVisible();
     // Verdict first, then the evidence grouped in decision order: index trend, participation, leaders.
-    await expect(market.getByRole('heading', { level: 3 })).toHaveText(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
+    await expect(market.locator('.brief-env-group h3')).toHaveText(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
+    // A phone shows the index section first, the others behind tabs that count their warnings and mark, with a
+    // neutral 「?」, a section holding a check that could not be judged (here TT達成数の急減 and リーダーの健全度).
+    if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度▲注意1?未確認あり', 'リーダー?未確認あり', '推移']);
     await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', '200日線より上', '50日線より上', '52週の新高値・新安値', 'TT達成数', 'RS90以上のTT達成', 'ブレイクアウト成功率', 'リーダーの健全度', 'ステージ構成']);
     // The fixture has more new lows (3) than new highs (2): one sentence under the verdict, ▲ 注意 on its row and group.
     const signals = market.getByRole('group', { name: '注意サイン（独自判定）' });
     await expect(signals.getByRole('listitem').filter({ hasText: '新安値（3）が新高値（2）を上回る' })).toHaveCount(1);
     await expect(row(market, '52週の新高値・新安値').locator('.brief-env-status')).toHaveText('▲注意');
     await expect(row(market, '50日線より上').locator('.brief-env-status')).toHaveText('');
+    await section(page, '参加度');
     await expect(market.getByRole('group', { name: /^市場の参加度/ }).locator('.brief-env-state')).toContainText('注意');
     const follow = market.locator('.brief-ftd');
     await expect(follow.locator('.brief-ftd-row')).toHaveCount(2);
@@ -61,9 +69,11 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     // With a complete publication no market-tab tile is left unknown, and nothing is dated as older.
     for (const fact of await market.locator('.brief-fact').all()) await expect(fact).not.toContainText(/未取得|未確認|未収録|未算出|算出不可|未集計/);
     await expect(market.locator('.brief-fact-asof')).toHaveCount(0);
+    await section(page, 'リーダー');
     await expect(market.getByRole('img', { name: /^ステージ構成 ステージ1 / })).toBeVisible();
     await expect(market.locator('.brief-asof')).toHaveCount(0);
 
+    await section(page, '推移');
     const history = page.getByRole('region', { name: '市場環境の推移' });
     await expect(history.locator('[data-update-state]')).toHaveAttribute('data-update-state', 'current');
     await expect(history.locator('[data-update-state]')).toHaveText(/10\/02 · 長期履歴反映/);
@@ -82,8 +92,10 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await history.getByRole('group', { name: '先導株と広がりの表示期間' }).getByRole('button', { name: '2年' }).click();
     await expect(chart).not.toHaveAccessibleName(before);
     await expect(history.getByRole('list', { name: /のセクター順位/ }).getByRole('listitem')).toHaveCount(11);
-    // A row's link opens its metric in the long-run chart and moves focus to the chart's heading.
+    // A row's link opens its metric in the long-run chart (on a phone, in the 推移 section) and moves focus to the chart's heading.
+    await section(page, '参加度');
     await above50.getByRole('button', { name: '市場環境の推移で見る' }).click();
+    if (phone) await expect(page.getByRole('tab', { name: '推移' })).toHaveAttribute('aria-selected', 'true');
     await expect(metrics.getByRole('button', { name: '移動平均線の上' })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.locator(':focus')).toHaveText('広がりと先導株');
     expect(await horizontalOverflow(page)).toBe(0);
@@ -103,6 +115,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     // Each group says once that it shows nothing, instead of a row of the same failure each.
     await expect(market.locator('.brief-env-group .brief-missing')).toHaveText(Array(3).fill('市場推移データを取得できないため表示しません。'));
     await expect(market.locator('.brief-env-row')).toHaveCount(0);
+    await section(page, '推移');
     await expect(page.getByRole('region', { name: '市場環境の推移' }).getByRole('alert')).toHaveText('長期履歴を取得できません（配信ファイルが見つかりません）。');
     await expect(page.locator('main')).not.toContainText(/series-|[a-f0-9]{16}|整合性/);
     expect(await horizontalOverflow(page)).toBe(0);
@@ -137,12 +150,13 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     // The market tab dates the whole block once and the verdict on its own date.
     await expect(market.getByRole('note').filter({ hasText: '時点' })).toHaveText(`市場データは${STALE_MD}引け時点（分析基準日${DATE_MD}の再集計待ち）。日付が異なる項目には個別に日付を付けています。`);
     await expect(market.getByTestId('brief-regime')).toContainText(`判定 ${DATE_MD}`);
-    await expect(market.locator('.brief-stamp')).toHaveCount(0);
+    await expect(stamp(market)).toHaveCount(0);
     await expect(market.getByRole('group', { name: '注意サイン（独自判定）' })).toContainText(`（${STALE_MD}時点・独自判定）`);
     // Each group whose values all describe the older session says so once; its rows carry no date of their own.
-    for (const name of ['指数のトレンド', '市場の参加度', 'リーダーの健全性']) await expect(market.getByRole('group', { name: `${name} ${STALE_MD}時点の値` })).toBeVisible();
+    for (const [tab, name] of [['指数', '指数のトレンド'], ['参加度', '市場の参加度'], ['リーダー', 'リーダーの健全性']]) { await section(page, tab); await expect(market.getByRole('group', { name: `${name} ${STALE_MD}時点の値` })).toBeVisible(); }
     await expect(market.locator('.brief-ftd .brief-ftd-row')).toHaveText([/^S&P確認 /, /^NAS反発3日目/]);
     await expect(market.locator('.brief-fact-asof')).toHaveCount(0);
+    await section(page, '推移');
     const history = page.getByRole('region', { name: '市場環境の推移' });
     await expect(history.locator('[data-update-state]')).toHaveAttribute('data-update-state', 'pending');
     await expect(history.locator('[data-update-state]')).toHaveText(/10\/02 履歴更新待ち/);
@@ -163,9 +177,18 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.getByTestId('brief-missing-breadth')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：200日線より上・TT達成数`);
     await expect(market.getByTestId('brief-missing-leaders')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：RS90以上のTT達成（独自RS）・ブレイクアウト成功率・リーダーの健全度・ステージ構成`);
-    await expect(market.getByRole('group', { name: '注意サイン（独自判定）' })).toContainText('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率（旧形式の長期集計に未収録）');
+    // A phone's tabs mark the sections that hold 未収録 values or unjudged checks, and the history awaiting its update.
+    if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度▲注意1?未確認あり', 'リーダー?未確認あり', '推移?更新待ち']);
+    // The desktop says which checks and why on one line; a phone names them on the summary line and folds the reason.
+    const unjudged = market.getByRole('group', { name: '注意サイン（独自判定）' });
+    if (phone) {
+      await expect(unjudged.locator('summary')).toHaveText('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率');
+      await unjudged.locator('summary').click();
+      await expect(unjudged.getByText('理由：旧形式の長期集計に未収録')).toBeVisible();
+    } else await expect(unjudged).toContainText('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率（旧形式の長期集計に未収録）');
     await expect(market.locator('.brief-fact small')).toHaveText(['フォロースルーデー（独自判定）', '分配日（25日）', '50日線より上', '52週の新高値・新安値', '先導株数（価格条件）']);
     for (const fact of await market.locator('.brief-fact').all()) await expect(fact).not.toContainText(/未取得|未確認|未算出/);
+    await section(page, '推移');
     const metrics = page.getByRole('region', { name: '市場環境の推移' }).getByRole('group', { name: '長期推移の指標' });
     await expect(metrics.getByRole('button', { name: '先導株数（価格条件）' })).toHaveAttribute('aria-pressed', 'true');
     await expect(metrics.getByRole('button', { name: 'トレンドテンプレート達成数' })).toHaveCount(0);

@@ -48,6 +48,75 @@ describe('brief stock view', () => {
   });
 });
 
+describe('brief stock view on a phone folds what is secondary, never a fired or unknown check', () => {
+  const rule = (label, state) => ({ label, state, evidence: `${label} の根拠` });
+  const template = states => ({ passed: states.filter(s => s === 'pass').length, failed: states.filter(s => s === 'fail').length, unknown: states.filter(s => s === 'unknown').length,
+    rules: states.map((state, i) => rule(`条件${i + 1}`, state)) });
+  const folded = element => Boolean(element.closest('details'));
+  const item = text => screen.getByText(text).closest('li');
+  afterEach(() => sessionStorage.clear());
+
+  it('lists unmet and unknown conditions and folds the met ones into a line that counts them', () => {
+    render(<StockView data={{ ...data(true), template: template(['pass', 'fail', 'pass', 'unknown', 'pass', 'pass', 'pass', 'pass']) }} />);
+    expect(folded(item('条件2'))).toBe(false);
+    expect(folded(item('条件4'))).toBe(false);
+    expect(folded(item('条件1'))).toBe(true);
+    expect(screen.getByText('達成した条件 6件').closest('summary')).toBeTruthy();
+    cleanup();
+    // All met: the eight conditions fold behind one line that says so.
+    render(<StockView data={{ ...data(true), template: template(Array(8).fill('pass')) }} />);
+    expect(screen.getByText('8条件の内訳（すべて達成）').closest('summary')).toBeTruthy();
+    for (let i = 1; i <= 8; i++) expect(folded(item(`条件${i}`))).toBe(true);
+  });
+
+  it('keeps a fired sell check listed, folds the quiet ones with their count, and names the plan inputs on their line', () => {
+    render(<StockView data={data(true)} />);
+    const sell = screen.getByTestId('brief-sell');
+    const hit = within(sell).getByText(/^出来高を伴う50日線割れ/).closest('li');
+    expect(hit.querySelector('.is-sell-hit')).toBeTruthy();
+    expect(folded(hit)).toBe(false);
+    const quiet = [...sell.querySelectorAll('li')].filter(li => !li.querySelector('.is-sell-hit, .is-sell-unknown'));
+    expect(quiet.length).toBeGreaterThan(0);
+    for (const li of quiet) expect(folded(li)).toBe(true);
+    expect(within(sell).getByText(/^サインなし \d+件/).closest('summary')).toBeTruthy();
+    expect(screen.getByText(/口座 \$50,000・リスク 1\.25%・損切り 7\.0%/).closest('summary')).toBeTruthy();
+    expect(folded(screen.getByRole('spinbutton', { name: '口座資金（$）', hidden: true }))).toBe(true);
+    // The plan's results stay in view.
+    expect(folded(screen.getByTestId('brief-shares'))).toBe(false);
+    // The methodology footnotes are in the screen's one 注記.
+    const notes = screen.getByText('注記').closest('details');
+    expect(notes).toHaveTextContent('EPS は報告値（希薄化）で調整後EPSとは異なります。');
+    expect(notes).toHaveTextContent('しきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。');
+  });
+
+  it('keeps 独自判定 and 売買の推奨ではありません on the sell card itself, never only behind a fold', () => {
+    for (const wide of [false, true]) {
+      render(<StockView data={data(true)} wide={wide} />);
+      const sell = screen.getByTestId('brief-sell');
+      const heading = within(sell).getByRole('heading', { level: 2 });
+      expect(heading).toHaveTextContent('売りのサイン（直近5営業日・独自判定）');
+      const qualifier = within(sell).getByTestId('brief-sell-qualifier');
+      expect(qualifier).toHaveTextContent('独自判定');
+      expect(qualifier).toHaveTextContent('売買の推奨ではありません。');
+      for (const element of [heading, qualifier]) expect(folded(element)).toBe(false);
+      cleanup();
+    }
+    // Bars that cannot be judged still carry the qualifier.
+    render(<StockView data={data(false, '2026-10-01')} />);
+    expect(within(screen.getByTestId('brief-sell')).getByTestId('brief-sell-qualifier')).toHaveTextContent('売買の推奨ではありません。');
+  });
+
+  it('shows everything open on the desktop, each footnote in place on its card and no 注記', () => {
+    render(<StockView data={{ ...data(true), template: template(Array(8).fill('pass')) }} wide />);
+    expect(document.querySelectorAll('details')).toHaveLength(0);
+    expect(screen.queryByText('注記')).toBeNull();
+    for (let i = 1; i <= 8; i++) expect(folded(item(`条件${i}`))).toBe(false);
+    expect(screen.getByText('上げ下げ出来高比（50日）').nextSibling).toHaveTextContent('上げた日の出来高 ÷ 下げた日の出来高。1超は買いが優勢');
+    expect(within(screen.getByTestId('brief-fundamentals')).getByText(/^EPS は報告値（希薄化）で調整後EPSとは異なります。/)).toBeInTheDocument();
+    expect(within(screen.getByTestId('brief-sell')).getByText(/^保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点.*売買の推奨ではありません。$/)).toBeInTheDocument();
+  });
+});
+
 describe('brief fundamentals card', () => {
   const now = Date.parse('2026-10-02T22:00:00Z');
   const QUARTERS = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],

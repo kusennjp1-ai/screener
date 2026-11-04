@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MarketCard from './MarketCard';
 import { attempt, breadth, closes, confirmed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
@@ -102,16 +103,77 @@ describe('brief market card: market tab', () => {
     expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線（2026-05-26〜2026-10-02）。有効な分配日 0日$/ })).toBeInTheDocument();
   });
 
-  it('jumps from the phone navigation to a group heading and moves focus there', () => {
-    const scroll = vi.fn();
-    Element.prototype.scrollIntoView = scroll;
-    show(trends());
-    const nav = screen.getByRole('navigation', { name: '市場タブ内の移動' });
-    expect(within(nav).getAllByRole('button').map(button => button.textContent)).toEqual(['指数', '参加度', 'リーダー', '推移']);
-    fireEvent.click(within(nav).getByRole('button', { name: '参加度' }));
-    expect(scroll).toHaveBeenCalledTimes(1);
-    expect(document.activeElement).toHaveTextContent('市場の参加度');
-    delete Element.prototype.scrollIntoView;
+  it('shows one section at a time behind phone tabs that carry each group\'s ▲ count and move by arrow keys', () => {
+    function Phone() {
+      const [section, setSection] = useState('index');
+      return <MemoryRouter><MarketCard market={UP} trends={trends({ rows: breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30 } : {})) })} date="2026-10-02" detail switcher section={section} onSection={setSection}
+        history={<section aria-label="市場環境の推移">long history</section>} /></MemoryRouter>;
+    }
+    render(<Phone />);
+    const tablist = screen.getByRole('tablist', { name: '市場タブの表示' });
+    const tabs = within(tablist).getAllByRole('tab');
+    // No index history of a year, so 乖離 is unjudged: 参加度 carries the neutral 「?」 beside its ▲ count.
+    expect(tabs.map(tab => tab.textContent)).toEqual(['指数', '参加度▲注意1?未確認あり', 'リーダー', '推移']);
+    expect(tabs.map(tab => tab.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false', 'false']);
+    expect(tabs.map(tab => tab.tabIndex)).toEqual([0, -1, -1, -1]);
+    // Only the selected section is shown; the others stay in the document, hidden.
+    expect(screen.getByRole('tabpanel', { name: '指数' })).toContainElement(screen.getByRole('heading', { level: 3, name: '指数のトレンド' }));
+    expect(screen.queryByRole('heading', { level: 3, name: '市場の参加度' })).toBeNull();
+    expect(document.getElementById('brief-panel-breadth')).not.toBeVisible();
+    fireEvent.click(tabs[1]);
+    expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tabpanel', { name: '参加度注意1未確認あり' })).toBeVisible();
+    expect(document.getElementById('brief-panel-index')).not.toBeVisible();
+    // Arrow keys move the selection and the focus; End and Home jump to the ends.
+    tabs[1].focus();
+    fireEvent.keyDown(tabs[1], { key: 'ArrowRight' });
+    expect(tabs[2]).toHaveAttribute('aria-selected', 'true');
+    expect(document.activeElement).toBe(tabs[2]);
+    fireEvent.keyDown(tabs[2], { key: 'End' });
+    expect(document.activeElement).toBe(tabs[3]);
+    expect(screen.getByRole('region', { name: '市場環境の推移' })).toBeVisible();
+    fireEvent.keyDown(tabs[3], { key: 'ArrowRight' });
+    expect(document.activeElement).toBe(tabs[0]);
+    fireEvent.keyDown(tabs[0], { key: 'Home' });
+    expect(tabs[0]).toHaveAttribute('aria-selected', 'true');
+    // The verdict and the warning summary stay above the tabs whatever the section.
+    expect(screen.getByTestId('brief-regime')).toBeVisible();
+    expect(signals()).toBeVisible();
+  });
+
+  it('marks a section tab with a neutral 「?」 when it holds a value or check that is not confirmed', () => {
+    const phone = (value, historyUnknown) => render(<MemoryRouter><MarketCard market={UP} trends={value} date="2026-10-02" detail switcher section="index" onSection={() => {}}
+      history={<section aria-label="市場環境の推移">long history</section>} historyUnknown={historyUnknown} /></MemoryRouter>);
+    const names = () => within(screen.getByRole('tablist', { name: '市場タブの表示' })).getAllByRole('tab').map(tab => tab.textContent);
+    // An older long-history schema: participation and leaders show 未収録 rows; the history awaits its update.
+    phone(trends({ rows: oldSchema(breadth('2026-10-02')), sp500: closes('2026-10-02') }), '更新待ち');
+    expect(names()).toEqual(['指数', '参加度?未確認あり', 'リーダー?未確認あり', '推移?更新待ち']);
+    for (const mark of document.querySelectorAll('.brief-switch-gap')) expect(mark.querySelector('[aria-hidden="true"]')).toHaveTextContent('?');
+    cleanup();
+    // No long history at all: both of its groups are unavailable, never read as clean.
+    phone(trends({ history: false }), '未確認');
+    expect(names()).toEqual(['指数', '参加度?未確認あり', 'リーダー?未確認あり', '推移?未確認']);
+    cleanup();
+    // Everything confirmed (a year of index closes well below their high): no marks, labels on one line.
+    phone(trends({ sp500: closes('2026-10-02', 260, 6000, -2) }), null);
+    expect(names()).toEqual(['指数', '参加度', 'リーダー', '推移']);
+    expect(document.querySelector('.brief-switch-marks')).toBeNull();
+  });
+
+  it('keeps the three groups side by side without tabs on the desktop, the source line in place and no 注記', () => {
+    show(trends({ sp500: closes('2026-10-02') }));
+    expect(screen.queryByRole('tablist')).toBeNull();
+    expect(screen.queryByRole('tabpanel')).toBeNull();
+    expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
+    expect(screen.getByText('3つの数値は長期履歴の^GSPC終値から計算しています。').closest('details')).toBeNull();
+    expect(document.querySelector('.brief-screen-notes')).toBeNull();
+  });
+
+  it('moves the plain source line into the 注記 behind the phone tabs', () => {
+    render(<MemoryRouter><MarketCard market={UP} trends={trends({ sp500: closes('2026-10-02') })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
+    expect(screen.getByRole('group', { name: /^S&P 500（長期履歴の\^GSPC終値/ })).toBeInTheDocument();
+    expect(document.querySelector('.brief-index-source')).toBeNull();
+    expect(document.querySelector('.brief-screen-notes')).toHaveTextContent('S&P 500の終値・1年高値からの位置・50日線比は、長期履歴の^GSPC終値から計算しています。');
   });
 
   it('dates an older block once, tags the verdict with its own date, and dates rows only where they differ', () => {
@@ -143,7 +205,23 @@ describe('brief market card: market tab', () => {
     expect(tile('50日線より上')).toHaveTextContent('43.0%');
     expect(tile('先導株数（価格条件）')).toHaveTextContent('20銘柄');
     expect(signals()).toHaveTextContent('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率（旧形式の長期集計に未収録）');
+    expect(signals().querySelector('details')).toBeNull();
     for (const element of tiles()) expect(element.textContent).not.toMatch(bare);
+  });
+
+  it('names the unjudged checks on the phone\'s summary line and folds only their reasons', () => {
+    const phone = rows => render(<MemoryRouter><MarketCard market={UP} trends={trends({ rows })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
+    phone(oldSchema(breadth('2026-10-02')));
+    const fold = signals().querySelector('details');
+    expect(fold.open).toBe(false);
+    expect(fold.querySelector('summary')).toHaveTextContent(/^判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率$/);
+    expect(fold.querySelector('.brief-expander-body')).toHaveTextContent(/^理由：旧形式の長期集計に未収録$/);
+    cleanup();
+    // Two reasons: each with the checks it applies to.
+    phone(breadth('2026-10-02', (i, n) => (i === n - 1 ? { leaderCohort: 4 } : {})));
+    const two = signals().querySelector('details');
+    expect(two.querySelector('summary')).toHaveTextContent(/^判定していない項目 2件：指数と個別株の乖離・リーダーの健全度$/);
+    expect(two.querySelector('.brief-expander-body')).toHaveTextContent(/^理由：指数と個別株の乖離（指数の履歴が1年に満たない）／リーダーの健全度（最新は対象4銘柄（10銘柄未満））$/);
   });
 
   it('says loading once per group while the series and the verdict load, never 未取得', () => {

@@ -7,7 +7,7 @@ const SCREENS = [
   ['today', '#/brief', page => expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5)],
   ['list', '#/brief/list', page => expect(page.getByTestId('brief-candidate').first()).toBeVisible()],
   ['watch', '#/brief/watch', page => expect(page.getByRole('region', { name: 'ウォッチ中の銘柄' }).getByTestId('brief-candidate')).toHaveCount(2)],
-  ['market', '#/brief/market', page => expect(page.locator('.market-history-explorer').getByRole('img')).toBeVisible()],
+  ['market', '#/brief/market', page => expect(page.locator('.market-history-explorer svg').first()).toBeAttached()],
   ['stock', '#/brief/stock/ZZNV', page => expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down')).toHaveCount(130)],
 ];
 
@@ -27,6 +27,13 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
       expect(await page.evaluate(() => document.getAnimations().filter(animation => animation.playState === 'running').map(animation => animation.animationName || animation.constructor.name)), `${screen} ${theme} running animations`).toEqual([]);
       expect(await axeViolations(page), `${screen} ${theme}`).toEqual([]);
       expect(await horizontalOverflow(page), `${screen} ${theme} overflow`).toBe(0);
+      // A phone's market tab shows one section at a time: each section is checked in turn.
+      for (const tab of await page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab').all()) {
+        await tab.click();
+        expect(await axeViolations(page), `${screen} ${theme} ${await tab.textContent()}`).toEqual([]);
+        expect(await horizontalOverflow(page), `${screen} ${theme} ${await tab.textContent()} overflow`).toBe(0);
+      }
+      if (screen === 'market' && name === 'phone') await page.getByRole('tab', { name: '指数' }).click();
     }
     expect(errors).toEqual([]);
     expect(external).toEqual([]);

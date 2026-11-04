@@ -1,9 +1,8 @@
-import { useId, useState } from 'react';
+import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sentence, shortDate, trendsAlert } from './briefModel';
-import { jumpTo } from './jump';
 import { marketCardView, num, signedPercent } from './marketTabModel';
-import { Parts } from './BriefParts';
+import { Expander, Parts, ScreenNotes } from './BriefParts';
 
 const finite = Number.isFinite;
 
@@ -140,7 +139,14 @@ function historyScope(judged) {
   return `長期集計がないため、${scope}だけを判定しています。`;
 }
 
-function Signals({ signals, exposure }) {
+/** Why each unjudged check was not judged: 「ラベル（理由）」 joined by 「／」. */
+const unjudgedReasons = reasons => reasons.map(r => `${r.labels.join('・')}（${r.reason}）`).join('／');
+
+/**
+ * The warning summary. `inline` (the desktop): every unjudged check and its reason on one line, as
+ * before. Below 1024px the summary line names the unjudged checks and only their reasons fold.
+ */
+function Signals({ signals, exposure, inline = true }) {
   const { fired, unjudged, reasons, judged = [], asOf, historyMissing } = signals;
   // 「なし」 only when at least one check was judged: nothing judged is 判定できません, never an all-clear.
   const headline = fired.length ? <><span aria-hidden="true">▲</span> 注意サイン {fired.length}件</> : judged.length ? '注意サインなし' : '注意サインを判定できません';
@@ -148,8 +154,37 @@ function Signals({ signals, exposure }) {
     <b>{headline}<small>（{asOf ? `${asOf}時点・` : ''}独自判定）</small></b>
     {fired.length > 0 && <ul>{fired.map(s => <li key={s.key}><span aria-hidden="true">▲</span><span>{s.text}{s.itemAsOf ? `（${s.itemAsOf}時点）` : ''}</span></li>)}</ul>}
     {historyMissing && <p>{historyScope(judged)}</p>}
-    {unjudged.length > 0 && <p className="brief-signals-unjudged">判定していない項目 {unjudged.length}件：{reasons.map(r => `${r.labels.join('・')}（${r.reason}）`).join('／')}</p>}
+    {unjudged.length > 0 && (inline ? <p className="brief-signals-unjudged">判定していない項目 {unjudged.length}件：{unjudgedReasons(reasons)}</p>
+      : <Expander id="market-unjudged" className="brief-signals-unjudged" summary={`判定していない項目 ${unjudged.length}件：${unjudged.map(c => c.label).join('・')}`}>
+        <p>理由：{reasons.length === 1 ? reasons[0].reason : unjudgedReasons(reasons)}</p>
+      </Expander>)}
     {fired.length > 0 && exposure > 0 && <p>注意サインは判定とは別の確認項目で、エクスポージャーの目安は変えません。</p>}
+  </div>;
+}
+
+/**
+ * The market tab's sections on a phone: the three groups and the long history, one at a time. A tab's
+ * marks sit on a line of their own under its label, so a label never runs into its neighbour's on a
+ * 320px phone; when any tab has a mark, every tab keeps that line, so the labels stay level.
+ */
+function SectionTabs({ panels, active, onSelect }) {
+  const refs = useRef({});
+  const move = (event, at) => {
+    const keys = { ArrowRight: at + 1, ArrowLeft: at - 1, Home: 0, End: panels.length - 1 };
+    if (!(event.key in keys)) return;
+    event.preventDefault();
+    const next = panels[(keys[event.key] + panels.length) % panels.length];
+    onSelect(next.id);
+    refs.current[next.id]?.focus();
+  };
+  const marked = panels.some(panel => panel.fired > 0 || panel.unknown);
+  return <div className="brief-switch" role="tablist" aria-label="市場タブの表示">
+    {panels.map((panel, at) => <button key={panel.id} ref={node => { refs.current[panel.id] = node; }} type="button" role="tab" id={`brief-tab-${panel.id}`} aria-selected={active === panel.id} aria-controls={`brief-panel-${panel.id}`}
+      tabIndex={active === panel.id ? 0 : -1} onClick={() => onSelect(panel.id)} onKeyDown={event => move(event, at)}>
+      <span className="brief-switch-label">{panel.label}</span>
+      {marked && <span className="brief-switch-marks">{panel.fired > 0 && <span className="brief-switch-flag"><span aria-hidden="true">▲</span><span className="sr-only">注意</span>{panel.fired}</span>}
+        {panel.unknown && <span className="brief-switch-gap"><span aria-hidden="true">?</span><span className="sr-only">{panel.unknown}</span></span>}</span>}
+    </button>)}
   </div>;
 }
 
@@ -159,7 +194,7 @@ function Signals({ signals, exposure }) {
  * Today (compact) keeps four tiles; the market tab (detail) leads with the verdict and the warning
  * summary, then the evidence in three groups whose rows open to their rule and one-year line.
  */
-export default function MarketCard({ market, marketLoading = false, trends, date, detail = false, onOpenMetric }) {
+export default function MarketCard({ market, marketLoading = false, trends, date, detail = false, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null }) {
   const view = marketCardView({ market, marketLoading, trends, date });
   const { status, verdict, dating, signals, summary, conflict, groups, chart } = view;
   const chartStatus = view.longError ? 'history-error' : status.state === 'error' && status.kind === 'fetch' ? 'fetch-error' : status.state;
@@ -169,6 +204,35 @@ export default function MarketCard({ market, marketLoading = false, trends, date
       : status.state === 'none' ? <p className="brief-note">市場推移データはこの公開に含まれていません。</p>
         : view.longError ? <p className="brief-alert" role="alert" data-check={trends.data.long_history_error_key || undefined}>{sentence(view.longError)}{detail ? '分配日・フォロースルーデー' : '分配日'}は指数データから表示しています。</p> : null;
   const chartEl = <IndexChart sp500={chart.sp500} distribution={chart.distribution} distributionEnd={chart.distributionEnd} status={chartStatus} detail={detail} />;
+  // Phone (switcher): a sticky row of section tabs under the verdict shows one group, or the long
+  // history passed in as `history`, at a time; each tab carries its group's ▲ count, and a neutral 「?」
+  // when the section holds a value or check that is not confirmed (`historyUnknown`: the long history's
+  // own state, from MarketScreen). Desktop keeps the three groups side by side and the history below.
+  const panels = detail && switcher ? [...groups.map(group => ({ id: group.id, label: group.short, fired: group.fired, unknown: group.unknown ? '未確認あり' : null })),
+    ...(history ? [{ id: 'history', label: '推移', fired: 0, unknown: historyUnknown }] : [])] : [];
+  const active = panels.some(panel => panel.id === section) ? section : panels[0]?.id;
+  const tabsRef = useRef(null), pending = useRef(false);
+  const select = id => {
+    if (id === active) return;
+    // A switch made while the tabs are stuck under the bar brings the new section's top under them.
+    const box = tabsRef.current?.getBoundingClientRect(), bar = document.querySelector('.brief-bar')?.getBoundingClientRect();
+    pending.current = Boolean(box && bar && box.top <= bar.bottom + 1);
+    onSection?.(id);
+  };
+  useLayoutEffect(() => {
+    if (!pending.current || !tabsRef.current) return;
+    pending.current = false;
+    // While stuck the tabs report the bar's edge, so the scroll is taken from what follows them.
+    const tabs = tabsRef.current, after = tabs.nextElementSibling, bar = document.querySelector('.brief-bar')?.getBoundingClientRect();
+    if (!after) return;
+    const top = after.getBoundingClientRect().top + window.scrollY - (bar?.bottom || 0) - tabs.offsetHeight;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'auto' });
+  }, [active]);
+  const panel = (id, child) => switcher ? <div key={id} role="tabpanel" id={`brief-panel-${id}`} aria-labelledby={`brief-tab-${id}`} className="brief-panel" hidden={active !== id}>{child}</div> : child;
+  const notes = [
+    summary && !conflict ? 'S&P 500の終値・1年高値からの位置・50日線比は、長期履歴の^GSPC終値から計算しています。' : null,
+    '各行を開くと、その値の基準（しきい値）と直近1年の推移を表示します。',
+  ];
 
   if (!detail) {
     return <section className="brief-card brief-market in" style={{ '--i': 1 }} aria-labelledby="brief-market-title">
@@ -197,28 +261,28 @@ export default function MarketCard({ market, marketLoading = false, trends, date
         {verdict.exposure !== null && <div className="brief-exposure"><small><span className="brief-frag">エクスポージャー</span><span className="brief-frag">の目安</span></small><b className="numeric">{verdict.exposure > 0 ? `最大 ${verdict.exposure}%` : '0%'}</b><span className="brief-exposure-track" aria-hidden="true"><i style={{ width: `${verdict.exposure}%` }} /></span></div>}
         {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
       </div>
-      {signals && <Signals signals={signals} exposure={verdict.exposure} />}
+      {signals && <Signals signals={signals} exposure={verdict.exposure} inline={!switcher} />}
     </div>
-    {/* Phone: one tap to each group and to the long history. */}
-    <nav className="brief-jump" aria-label="市場タブ内の移動">
-      {groups.map(group => <button key={group.id} type="button" onClick={() => jumpTo(`brief-env-${group.id}`)}>{group.short}</button>)}
-      <button type="button" onClick={() => jumpTo('brief-history-title')}>推移</button>
-    </nav>
     {statusAlert}
+    {switcher && panels.length > 0 && <div ref={tabsRef} className="brief-switchbar"><SectionTabs panels={panels} active={active} onSelect={select} /></div>}
     <div className="brief-env-groups">
-      {groups.map(group => <Group key={group.id} group={group}>
+      {groups.map(group => panel(group.id, <Group key={group.id} group={group}>
         {group.id === 'index' && <div className="brief-index-block">
           {summary && <div className="brief-index-stats" role="group" aria-label={`S&P 500（長期履歴の^GSPC終値、${shortDate(summary.date, date)}）`}>
             <div><small>S&amp;P 500</small><b className="numeric">{num(summary.close, 2)}</b><span>{shortDate(summary.date, date)}終値</span></div>
             <div><small>{summary.fullYear ? '1年高値から' : '期間内高値から'}</small><b className="numeric">{signedPercent(summary.fromHigh)}</b></div>
             <div><small>50日線比</small><b className="numeric">{signedPercent(summary.vsMa)}</b></div>
           </div>}
-          {summary && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || '3つの数値は長期履歴の^GSPC終値から計算しています。'}</p>}
+          {/* A disagreement with the verdict's scan input is always said here; the plain source line is in
+              place on the desktop and in the 注記 below 1024px. */}
+          {summary && (conflict || !switcher) && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || '3つの数値は長期履歴の^GSPC終値から計算しています。'}</p>}
           {chartEl}
         </div>}
         <div className="brief-env-rows">{group.items.map(item => <EnvRow key={item.key} item={item} groupAsOf={group.asOf} onOpenMetric={view.history ? onOpenMetric : null} />)}</div>
-      </Group>)}
+      </Group>))}
     </div>
+    {switcher && history && panel('history', history)}
     <p className="brief-note">分配日・フォロースルーデー・ステージ・トレンドテンプレート数・RSは公開日足からの独自集計で、IBDの公式値ではありません。注意サインの基準もこのアプリの独自判定です。</p>
+    <ScreenNotes id="market" wide={!switcher} notes={notes} />
   </section>;
 }
