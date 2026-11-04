@@ -52,15 +52,16 @@
  *                    FTD failed NAS, split, lows, template, stage, leaders, breakout): 0 / 1 / 2 / 3+; judged
  *                    only on sessions where all ten are judged
  *   combo.lows_below200     rule.lows fired AND ^GSPC close at or below its 200-day SMA, vs otherwise
- *   combo.washout_uptrend   above50Percent in its Q1 AND ^GSPC close above its 200-day SMA, vs otherwise
- *   q.<field>, d21.<field>  fixed quintiles of each continuous field and of its 21-session change
+ *   combo.washout_uptrend   above50Percent in its causal Q1 AND ^GSPC close above its 200-day SMA, vs otherwise
+ *   q.<field>, d21.<field>  causal quintiles of each continuous field and of its 21-session change
  *                    (value_t - value_{t-21}): above50Percent, above150Percent, above200Percent,
  *                    trendTemplatePercent, netHighsPercent = 100 (newHighs - newLows) / coverage, ratio_10day,
  *                    leaderPercent = 100 leaderCount / coverage, leaderHealthPercent, breakoutHoldPercent,
  *                    stageSpread = stage2Percent - stage4Percent.
- *                    Edges: the 20/40/60/80th percentiles (linear interpolation) over every session where the
- *                    value is known (at least 5 values); a value equal to an edge falls in the lower bucket.
- *                    The edges are in-sample and descriptive, not a trading rule.
+ *                    Edges at session t: the 20/40/60/80th percentiles (linear interpolation) of every known
+ *                    value strictly before t, judged once 252 values are known (EDGE_WARMUP); a value equal to
+ *                    an edge falls in the lower bucket. No later value enters a bucket, so both halves are out of
+ *                    sample. The edges drift with the history and are descriptive, not a trading rule.
  *
  * STATISTICS per (indicator bucket, h)
  *  Evaluation sample: sessions where the indicator is judged and r_h and dd_h are known. Baseline: the same
@@ -111,6 +112,10 @@
  *     stand-ins it fired in 4.3-6.1% there (400 paths each of AR(1) quintiles and 20- and 60-session binary
  *     regimes) and in 3.1-4.6% on 9,200 sessions (60 paths), and the chance-level rerun labelled null shifts at
  *     least as often as the actual (5.2-6.0% robust against 4.0-5.3%).
+ *  2. Look-ahead in the bucket edges. v1 fitted the q.* / d21.* quintile edges (and combo.washout_uptrend's Q1) on
+ *     the whole sample, past and future, and its split check reused them: truncating the seed changed the past
+ *     buckets of 9 series, and second-half buckets under first-half-only edges agreed with the full-sample ones on
+ *     only 66-93% of sessions. v2 edges are causal (expanding window, values strictly before t, 252-value warm-up).
  *
  * Proprietary RS inside the trend-template counts is this app's own RS, not IBD RS.
  */
@@ -136,6 +141,7 @@ export const STUDY_VERSION = 'market-regime-study-v2';
 export const WINDOWS = Object.freeze([5, 10, 21, 63]);
 export const DRAWDOWN = Object.freeze({ primary: -0.05, deep: -0.10 });
 export const QUANTILES = Object.freeze([0.2, 0.4, 0.6, 0.8]);
+export const EDGE_WARMUP = 252;
 export const CHANGE_SESSIONS = 21;
 export const FTD_WINDOW_SESSIONS = 280;
 export const FTD_RECENT_SESSIONS = 25;
@@ -408,6 +414,26 @@ export function quintileBucket(value, edges) {
   if (!finite(value) || !edges) return null;
   for (let k = 0; k < edges.length; k++) if (value <= edges[k]) return k;
   return edges.length;
+}
+/**
+ * Causal quintile buckets: at each session the edges are the quintiles of every known value strictly before it,
+ * once at least `warmup` are known. Returns the buckets and the edges at the first judged session and after the last.
+ */
+export function causalQuintiles(values, warmup = EDGE_WARMUP) {
+  const sorted = [], buckets = new Array(values.length).fill(null), need = Math.max(warmup, 5);
+  let first = null, firstIndex = null;
+  values.forEach((value, t) => {
+    if (!finite(value)) return;
+    if (sorted.length >= need) {
+      const edges = QUANTILES.map(p => quantileSorted(sorted, p));
+      buckets[t] = quintileBucket(value, edges);
+      if (!first) { first = edges; firstIndex = t; }
+    }
+    let lo = 0, hi = sorted.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] <= value) lo = mid + 1; else hi = mid; }
+    sorted.splice(lo, 0, value);
+  });
+  return { buckets, first, firstIndex, last: first ? QUANTILES.map(p => quantileSorted(sorted, p)) : null };
 }
 export const change = (values, lag = CHANGE_SESSIONS) => values.map((value, t) => t >= lag && finite(value) && finite(values[t - lag]) ? value - values[t - lag] : null);
 export function episodes(indices, h) {
@@ -693,25 +719,28 @@ export function breadthIndicators(states, indexByDate = {}) {
   list.push(make(panel, 'combo.lows_below200', '新安値 > 新高値 and S&P 500 at/below its 200-day', 'rule.lows fired and indexSummary vs200 <= 0', ['両方 (both)', 'それ以外 (otherwise)'],
     lows.map((fired, t) => { const a = above(ma[t]?.vs200 ?? null); return fired === null || a === null ? null : bin(fired && !a); }), outcome));
   const fieldIndicators = [];
-  let a50Edges = null;
+  let a50 = null;
   for (const [key, text] of BREADTH_FIELDS) {
     for (const [prefix, values, suffix] of [['q', fields[key], ''], ['d21', change(fields[key]), ` ${CHANGE_SESSIONS}-session change`]]) {
-      const edges = quintileEdges(values);
-      if (prefix === 'q' && key === 'above50Percent') a50Edges = edges;
-      const indicator = needs(make(panel, `${prefix}.${key}`, `${text}${suffix}`, edges ? `fixed in-sample quintiles; edges ${edges.map(e => round(e, 3)).join(' / ')}` : 'fewer than 5 known values',
-        edges ? ['Q1', 'Q2', 'Q3', 'Q4', 'Q5'].map((q, k) => `${q} ${k === 0 ? `≤ ${fmtEdge(edges[0])}` : k === 4 ? `> ${fmtEdge(edges[3])}` : `${fmtEdge(edges[k - 1])}–${fmtEdge(edges[k])}`}`) : ['Q1', 'Q2', 'Q3', 'Q4', 'Q5'],
-        values.map(value => quintileBucket(value, edges)), outcome), BREADTH_INPUTS[key]);
-      indicator.edges = edges?.map(e => round(e)) ?? null;
+      const causal = causalQuintiles(values), known = values.filter(finite).length;
+      if (prefix === 'q' && key === 'above50Percent') a50 = causal.buckets;
+      const rule = causal.first ? `causal quintiles (edges from every known value strictly before the session, judged after ${EDGE_WARMUP}); edges at the first judged session ${dates[causal.firstIndex]} ${fmtEdges(causal.first)}, after the last session ${fmtEdges(causal.last)}`
+        : `causal quintiles (judged after ${EDGE_WARMUP} known values)`;
+      const indicator = needs(make(panel, `${prefix}.${key}`, `${text}${suffix}`, rule, QUINTILE_LABELS, causal.buckets, outcome), BREADTH_INPUTS[key],
+        known && !causal.first ? `${known} known values, fewer than the ${EDGE_WARMUP} earlier values a causal quintile needs` : null);
+      indicator.edges = causal.first ? { firstJudged: dates[causal.firstIndex], first: causal.first.map(e => round(e)), last: causal.last.map(e => round(e)) } : null;
       fieldIndicators.push(indicator);
     }
   }
-  list.push(make(panel, 'combo.washout_uptrend', '50日線より上の割合がQ1 and S&P 500 above its 200-day', 'q.above50Percent bucket Q1 and indexSummary vs200 > 0', ['両方 (both)', 'それ以外 (otherwise)'],
-    fields.above50Percent.map((value, t) => { const q = quintileBucket(value, a50Edges), a = above(ma[t]?.vs200 ?? null); return q === null || a === null ? null : bin(q === 0 && a); }), outcome));
+  list.push(make(panel, 'combo.washout_uptrend', '50日線より上の割合がQ1 and S&P 500 above its 200-day', 'q.above50Percent causal bucket Q1 and indexSummary vs200 > 0', ['両方 (both)', 'それ以外 (otherwise)'],
+    fields.above50Percent.map((value, t) => { const q = a50?.[t] ?? null, a = above(ma[t]?.vs200 ?? null); return q === null || a === null ? null : bin(q === 0 && a); }), outcome));
   return [...list, ...fieldIndicators];
 }
 const BREADTH_INPUTS = { above50Percent: ['above50Percent'], above150Percent: ['above150Percent'], above200Percent: ['above200Percent'], trendTemplatePercent: ['trendTemplatePercent'],
   netHighsPercent: ['newHighs', 'newLows'], ratio_10day: ['ratio_10day'], leaderPercent: ['leaderCount'], leaderHealthPercent: ['leaderHealthPercent'], breakoutHoldPercent: ['breakoutHoldPercent'], stageSpread: ['stage2Percent', 'stage4Percent'] };
 const fmtEdge = value => Math.abs(value) >= 10 ? value.toFixed(1) : value.toFixed(2);
+const fmtEdges = edges => edges.map(fmtEdge).join(' / ');
+const QUINTILE_LABELS = ['Q1 下位20% (bottom fifth of earlier sessions)', 'Q2', 'Q3', 'Q4', 'Q5 上位20% (top fifth of earlier sessions)'];
 
 // ---- diagnostics ------------------------------------------------------------------------------------------------
 function solve3(a, b) {

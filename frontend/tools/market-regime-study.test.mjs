@@ -8,9 +8,9 @@ import { followThroughDay } from '../src/static/followThroughDay.js';
 import { bifurcation, environmentPoint } from '../src/static/marketLongHistory.js';
 import { environmentRules } from '../src/static/brief/briefModel.js';
 import {
-  alignIndex, breadthIndicators, breadthStates, chanceLevel, episodes, evaluateIndicator, fetchYahooIndex, forwardOutcomes, indexIndicators, indexStates, label, loadHistory, main,
+  alignIndex, breadthIndicators, breadthStates, causalQuintiles, chanceLevel, episodes, evaluateIndicator, fetchYahooIndex, forwardOutcomes, indexIndicators, indexStates, label, loadHistory, main,
   mulberry32, nullShiftIndices, parseYahooChart, placeboMargin, placeboP, placeboQuantile, placeboReference, placeboShifts, quintileBucket, quintileEdges, runStudy, shiftWeight,
-  FTD_WINDOW_SESSIONS, LABELS, MIN_BLOCKS, PLACEBO, STATS, WINDOWS,
+  EDGE_WARMUP, FTD_WINDOW_SESSIONS, LABELS, MIN_BLOCKS, PLACEBO, STATS, WINDOWS,
 } from './market-regime-study.mjs';
 
 // ---- synthetic series (no provider data) ----------------------------------------------------------------------
@@ -105,6 +105,15 @@ describe('no look-ahead in any indicator state', () => {
     }
     expect(full.split.slice(260).some(value => value !== null)).toBe(true);
   });
+  it('every breadth indicator series, causal quintiles and combos included, is unchanged at or before t when later data is truncated or replaced', () => {
+    const history = longHistory({ n: 400 }), other = longHistory({ n: 400, seed: 41 }), cut = 330;
+    const values = h => breadthIndicators(breadthStates(h)).map(i => [i.key, i.values]);
+    const full = values(history);
+    const views = [values({ ...history, breadth: history.breadth.slice(0, cut + 1), sp500: history.sp500.slice(0, cut + 1) }),
+      values({ ...history, breadth: [...history.breadth.slice(0, cut + 1), ...other.breadth.slice(cut + 1)], sp500: [...history.sp500.slice(0, cut + 1), ...other.sp500.slice(cut + 1)] })];
+    for (const view of views) view.forEach(([key, series], i) => { expect(key).toBe(full[i][0]); expect(series.slice(0, cut + 1)).toEqual(full[i][1].slice(0, cut + 1)); });
+    for (const key of ['q.above50Percent', 'd21.netHighsPercent', 'combo.washout_uptrend']) expect(full.find(([k]) => k === key)[1].slice(0, cut + 1).some(value => value !== null)).toBe(true);
+  });
 });
 
 describe('the app\'s own rules, as the brief computes them', () => {
@@ -167,6 +176,19 @@ describe('bucket edges', () => {
     expect([null, undefined, NaN].map(value => quintileBucket(value, edges))).toEqual([null, null, null]);
     expect(quintileEdges([1, 2, 3, 4])).toBeNull();
     expect(quintileBucket(3, null)).toBeNull();
+  });
+  it('bins causally: edges from the known values strictly before t, judged after the warm-up', () => {
+    const warm = Array.from({ length: EDGE_WARMUP }, (_, i) => i + 1), edge = quintileEdges([...warm, 300, 0])[0];
+    const values = [Number.NaN, ...warm, null, 300, 0, edge, 100];
+    const { buckets, first, firstIndex, last } = causalQuintiles(values);
+    expect(buckets.slice(0, EDGE_WARMUP + 2).every(value => value === null)).toBe(true);
+    expect(firstIndex).toBe(EDGE_WARMUP + 2);
+    // Edges at the first judged session come from the warm-up values alone, so 300 is above them all; a value
+    // exactly on an edge of its earlier values falls in the lower bucket.
+    expect(first).toEqual(quintileEdges(warm));
+    expect(buckets.slice(EDGE_WARMUP + 2)).toEqual([4, 0, 0, quintileBucket(100, quintileEdges([...warm, 300, 0, edge]))]);
+    expect(last).toEqual(quintileEdges(values));
+    expect(causalQuintiles([1, 2, 3])).toMatchObject({ first: null, last: null, buckets: [null, null, null] });
   });
   it('counts episodes by gaps longer than the window', () => {
     expect(episodes([1, 2, 3, 10, 11, 30], 5)).toBe(3);
