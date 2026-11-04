@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react';
 import { money, signed, times } from '../positionGeometry';
 import PriceChart from './PriceChart';
+import { Expander, ScreenNotes } from './BriefParts';
 import { code33Explain, code33Parts, fundamentalTiles, fundamentalsSource, quarterReason, secStatus, footprint, ruleEvidence, positionPlan, rsLineNewHigh, sellMarks, upDownVolume, sellSignals, SELL_RULES, withBookWarning, stageFromBars, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './briefModel';
 import { meterPercent } from './briefNav';
 
@@ -17,6 +18,14 @@ const CALL = {
   ext: v => ['ext', '買いゾーンを超過', `ピボット比 ${signed(v.distance)}。追いかけ買いは避け、次の土台を待ちます。`],
 };
 const stateIcon = { pass: '✓', fail: '✕', unknown: '?', not_applicable: '–' };
+// The stock screen's methodology footnotes, shown once in its 注記 at the end of the screen.
+const NOTES = {
+  updown: '上げ下げ出来高比（50日）は、上げた日の出来高 ÷ 下げた日の出来高です。1超は買いが優勢です。',
+  eps: 'EPS は報告値（希薄化）で調整後EPSとは異なります。Q4 の売上・純利益が年度値でしか報告されていない場合は、年度値から3四半期を差し引いて算出し「Q4算出」と表示します。',
+  sell: '売りのサインは保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。',
+};
+/** Phone: a secondary block folded into one line that opens in place. Desktop shows it as before. */
+const Fold = ({ wide, id, summary, children }) => wide ? children : <Expander id={id} summary={summary}>{children}</Expander>;
 
 function Meter({ distance }) {
   if (!finite(distance)) return <p className="brief-note">ピボットを確認できないため位置は未確認です。</p>;
@@ -28,19 +37,27 @@ function Meter({ distance }) {
   </div>;
 }
 
-function TemplateCard({ template }) {
+function TemplateCard({ template, wide }) {
   if (!template) return null;
   const circumference = 2 * Math.PI * 28;
+  const met = template.rules.filter(rule => rule.state === 'pass'), open = template.rules.filter(rule => rule.state !== 'pass');
   return <section className="brief-card in" style={{ '--i': 3 }} aria-labelledby="brief-tt-title">
     <div className="brief-ring-row">
       <div className="brief-ring" aria-hidden="true"><svg viewBox="0 0 68 68"><circle className="ring-bg" cx="34" cy="34" r="28" /><circle className="ring-fg" cx="34" cy="34" r="28" strokeDasharray={circumference} style={{ '--ring': circumference * (1 - template.passed / 8), '--full': circumference }} /></svg><b>{template.passed}/8</b></div>
       <div><h2 id="brief-tt-title">トレンドテンプレート {template.passed}/8</h2><p className="brief-note">{template.passed === 8 ? 'すべての条件を満たしています' : `${template.failed}項目が未達${template.unknown ? `・${template.unknown}項目が未確認` : ''}`}</p></div>
     </div>
-    <ul className="brief-checks">{template.rules.map((rule, i) => <li key={rule.label} className="in" style={{ '--i': 4 + i }}>
-      <span className={`brief-check is-${rule.state}`} aria-hidden="true">{stateIcon[rule.state] || '?'}</span>
-      <span>{rule.label}<span className="sr-only">（{rule.state === 'pass' ? '達成' : rule.state === 'fail' ? '未達' : '未確認'}）</span><em>{ruleEvidence(rule)}</em></span>
-    </li>)}</ul>
+    {wide ? <RuleList rules={template.rules} /> : <>
+      {open.length > 0 && <RuleList rules={open} />}
+      {met.length > 0 && <Expander id="stock-tt-met" summary={open.length ? `達成した条件 ${met.length}件` : '8条件の内訳（すべて達成）'}><RuleList rules={met} offset={open.length} /></Expander>}
+    </>}
   </section>;
+}
+
+function RuleList({ rules, offset = 0 }) {
+  return <ul className="brief-checks">{rules.map((rule, i) => <li key={rule.label} className="in" style={{ '--i': 4 + offset + i }}>
+    <span className={`brief-check is-${rule.state}`} aria-hidden="true">{stateIcon[rule.state] || '?'}</span>
+    <span>{rule.label}<span className="sr-only">（{rule.state === 'pass' ? '達成' : rule.state === 'fail' ? '未達' : '未確認'}）</span><em>{ruleEvidence(rule)}</em></span>
+  </li>)}</ul>;
 }
 
 function VcpCard({ technical, bars, judged, view }) {
@@ -51,13 +68,13 @@ function VcpCard({ technical, bars, judged, view }) {
     {print ? <>
       <p className="brief-footprint">{print.text}</p>
       <p className="brief-note">土台 {print.weeks}週・最大の押し {print.deepest.toFixed(0)}% → 最小 {print.shallowest.toFixed(0)}%・収縮 {print.count}回{print.contracting === true ? '（押しが毎回浅くなっています）' : print.contracting === false ? '（押しの縮小が途切れています）' : ''}</p>
-      <div className="brief-legs" aria-hidden="true">{legs.map((leg, i) => <div key={leg.startDate}><span className="grow-y" style={{ height: `${Math.max(6, leg.depthPct / Math.max(...legs.map(l => l.depthPct)) * 72)}px`, '--i': i }} />−{leg.depthPct.toFixed(0)}%</div>)}</div>
+      <div className="brief-legs" aria-hidden="true">{legs.map((leg, i) => <div key={leg.startDate}><span className="grow-y" style={{ height: `max(6px, calc(${(leg.depthPct / Math.max(...legs.map(l => l.depthPct))).toFixed(3)} * (100% - 22px)))`, '--i': i }} />−{leg.depthPct.toFixed(0)}%</div>)}</div>
     </> : <p className="brief-note">測定できる収縮が2回以上ないため、VCPは未確認です。</p>}
     <dl className="brief-dl">
-      <div><dt>最後の収縮の出来高</dt><dd>{finite(dry) ? `${times(dry)}（直前50日平均比）` : '未確認'}</dd></div>
-      <div><dt>上げ下げ出来高比（50日）</dt><dd>{(() => { const v = upDownVolume(judged); return v ? `${v.ratio.toFixed(2)}（上げた日の出来高 ÷ 下げた日の出来高。1超は買いが優勢）` : '未確認'; })()}</dd></div>
-      <div><dt>当日の出来高</dt><dd>{finite(view?.volumeRatio) ? `${times(view.volumeRatio)}（上抜けの目安 1.40×以上）` : '未確認'}</dd></div>
-      <div><dt>ピボット</dt><dd>{finite(view?.pivot) ? `${money(view.pivot)}（${view.pivotSource}）` : '未確認'}</dd></div>
+      <div><dt>最後の収縮の出来高</dt><dd>{finite(dry) ? <>{times(dry)}<small>直前50日平均比</small></> : '未確認'}</dd></div>
+      <div><dt>上げ下げ出来高比（50日）</dt><dd>{(() => { const v = upDownVolume(judged); return v ? <>{v.ratio.toFixed(2)}<small>1超は買いが優勢</small></> : '未確認'; })()}</dd></div>
+      <div><dt>当日の出来高</dt><dd>{finite(view?.volumeRatio) ? <>{times(view.volumeRatio)}<small>上抜けの目安 1.40×以上</small></> : '未確認'}</dd></div>
+      <div><dt>ピボット</dt><dd>{finite(view?.pivot) ? <>{money(view.pivot)}<small>{view.pivotSource}</small></> : '未確認'}</dd></div>
     </dl>
   </section>;
 }
@@ -175,7 +192,6 @@ function FundamentalsCard({ financial }) {
       : explain.kind !== 'no_sec' && <p className="brief-note">{sec.long}</p>}
     <div className={`brief-code33 tone-${tone}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>{explain.title}</strong><p>{explain.text}</p></div></div>
     {code33?.source !== 'yahoo' && <Code33Parts report={report} explained={explain.kind === 'q4_eps'} />}
-    <p className="brief-note">EPS は報告値（希薄化）で調整後EPSとは異なります。Q4 の売上・純利益が年度値でしか報告されていない場合は、年度値から3四半期を差し引いて算出し「Q4算出」と表示します。</p>
   </section>;
 }
 
@@ -201,42 +217,50 @@ function SellChecks({ title, checks }) {
   </>;
 }
 
-function SellCard({ sells, reason }) {
+function SellCard({ sells, reason, wide }) {
+  const groups = sells ? [['上昇の加速（強気での売り）', sells.strength], ['崩れ（弱気での売り）', sells.weakness]] : [];
+  const loud = check => check.state === 'hit' || check.state === 'unknown';
+  const shown = groups.map(([title, checks]) => [title, wide ? checks : checks.filter(loud)]).filter(([, checks]) => checks.length);
+  const quiet = wide ? [] : groups.map(([title, checks]) => [title, checks.filter(check => !loud(check))]).filter(([, checks]) => checks.length);
+  const count = state => quiet.flatMap(([, checks]) => checks).filter(check => check.state === state).length;
   return <section className="brief-card in" style={{ '--i': 8 }} aria-labelledby="brief-sell-title" data-testid="brief-sell">
     <h2 id="brief-sell-title">売りのサイン（直近{SELL_RULES.recentSessions}営業日）</h2>
     {sells ? <>
       <p className="brief-note">{sells.advance ? `起点（直近1年の安値）${sells.advance.startDate} の ${price(sells.advance.low)} から ${signed(sells.advance.gainPct)}・${sells.advance.sessions}営業日。` : `起点（直近1年の安値）から +${SELL_RULES.advanceMinPercent}%以上・${SELL_RULES.advanceMinSessions}営業日以上の上昇局面ではないため、上昇の加速と起点以来の下落は判定しません。`}{sells.hits ? ` ${sells.hits}件のサインが出ています。` : [...sells.strength, ...sells.weakness].some(c => c.state === 'unknown') ? ' 出ているサインはありませんが、未確認の項目があります。' : ' いま出ているサインはありません。'}</p>
-      <SellChecks title="上昇の加速（強気での売り）" checks={sells.strength} />
-      <SellChecks title="崩れ（弱気での売り）" checks={sells.weakness} />
+      {shown.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
+      {quiet.length > 0 && <Expander id="stock-sell-quiet" summary={[count('clear') ? `サインなし ${count('clear')}件` : null, count('na') ? `対象外 ${count('na')}件` : null].filter(Boolean).join('・')}>
+        {quiet.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
+      </Expander>}
     </> : <p className="brief-note">{reason ? `日足を分析基準日の値として検証できないため、売りのサインは未確認です（${reason}）。` : '日足が60本未満のため、売りのサインは未確認です。'}</p>}
-    <p className="brief-note">保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。</p>
   </section>;
 }
 
-function PlanCard({ view, plan, settings, onChange, earnings }) {
+function PlanCard({ view, plan, settings, onChange, earnings, wide }) {
   if (!plan) return null;
   const input = (key, label, step, extra = {}) => <label>{label}<input type="number" inputMode="decimal" step={step} value={settings[key]} onChange={e => onChange(key, Number(e.target.value))} {...extra} /></label>;
   return <section className="brief-card brief-plan in" style={{ '--i': 7 }} aria-labelledby="brief-plan-title">
     <h2 id="brief-plan-title">建て玉と損切りの計画</h2>
-    <div className="brief-inputs">{input('account', '口座資金（$）', 1000, { min: 0 })}{input('riskPercent', '1回のリスク（%）', 0.25, { min: 0.1, max: 5 })}{input('stopPercent', '損切り幅（%）', 0.5, { min: 1, max: STOP_MAX_PERCENT - 0.5 })}</div>
-    <label className="brief-range"><span className="sr-only">損切り幅（%）</span><input type="range" min="3" max={STOP_MAX_PERCENT - 0.5} step="0.5" value={settings.stopPercent} onChange={e => onChange('stopPercent', Number(e.target.value))} aria-label="損切り幅（%）" /><span aria-hidden="true">損切り幅 <b className="numeric">{plan.stopPercent.toFixed(1)}%</b>（10%未満）</span></label>
+    <Fold wide={wide} id="stock-plan-inputs" summary={<>条件<small>口座 ${finite(settings.account) ? settings.account.toLocaleString('en-US') : '—'}・リスク {settings.riskPercent}%・損切り {plan.stopPercent.toFixed(1)}%</small></>}>
+      <div className="brief-inputs">{input('account', '口座資金（$）', 1000, { min: 0 })}{input('riskPercent', '1回のリスク（%）', 0.25, { min: 0.1, max: 5 })}{input('stopPercent', '損切り幅（%）', 0.5, { min: 1, max: STOP_MAX_PERCENT - 0.5 })}</div>
+      <label className="brief-range"><span className="sr-only">損切り幅（%）</span><input type="range" min="3" max={STOP_MAX_PERCENT - 0.5} step="0.5" value={settings.stopPercent} onChange={e => onChange('stopPercent', Number(e.target.value))} aria-label="損切り幅（%）" /><span aria-hidden="true">損切り幅 <b className="numeric">{plan.stopPercent.toFixed(1)}%</b>（10%未満）</span></label>
+    </Fold>
     <div className="brief-kgrid">
       <div><small>株数</small><b className="numeric" data-testid="brief-shares">{finite(plan.shares) ? plan.shares.toLocaleString('en-US') : '—'}</b><em>リスク {finite(plan.riskDollars) ? `$${Math.round(plan.riskDollars).toLocaleString('en-US')}` : '—'}</em></div>
       <div><small>投資額</small><b className="numeric">{finite(plan.cost) ? `$${Math.round(plan.cost).toLocaleString('en-US')}` : '—'}</b><em>口座の {finite(plan.weight) ? plan.weight.toFixed(1) : '—'}%</em></div>
       <div><small>損切り</small><b className="numeric">{price(plan.stop)}</b><em>買値 {price(plan.entry)}</em></div>
     </div>
     <div className="brief-rbar" aria-hidden="true"><i className="r-risk">−1R</i><i className="r-2">+2R {price(plan.r2)}</i><i className="r-3">+3R</i></div>
-    <ul className="brief-rules">
+    <Fold wide={wide} id="stock-plan-rules" summary="損切りと利益確保のルール（4項目）"><ul className="brief-rules">
       <li><span>損切りの位置は買う前に決め、その価格に来たら例外なく手仕舞う。</span></li>
       <li><span>損失は最大でも10%未満に抑え、平均の損失はそれより小さく保つ。</span></li>
       <li><span>株価が +2R（{price(plan.r2)}）まで進んだら、損切りを買値まで引き上げて利益を守る。</span></li>
       <li><span>{earnings ? `決算をまたいで持つかどうかは、発表日（${earnings.date}・あと${earnings.days}日）の前に決めておく。` : '決算日を確認し、またいで持つかどうかを事前に決めておく。'}</span></li>
-    </ul>
+    </ul></Fold>
     <p className="brief-note">{view.symbol} の試算です。売買の推奨ではありません。</p>
   </section>;
 }
 
-export default function StockView({ data, header = null }) {
+export default function StockView({ data, header = null, wide = false }) {
   const { view, template, technical, diagnostics, financial, institutional, bars, row, certification } = data;
   // Values computed here from bars are shown only for bars certified for the analysis date.
   const judged = certification?.certified ? bars : null;
@@ -291,17 +315,18 @@ export default function StockView({ data, header = null }) {
     <section className="brief-card brief-chartcard in" style={{ '--i': 1 }} aria-label="株価チャート">
       {model ? <PriceChart ref={chartRef} model={model} period={period} /> : <p className="brief-note brief-chart-placeholder" role="status">{data.chart.isError ? '日足チャートを取得できません。' : row?.chart_path ? '日足チャートを読み込み中…' : 'この銘柄の日足チャートは未配信です。'}</p>}
       {bars && data.date && bars.at(-1)?.date !== data.date ? <p className="brief-note brief-asof" role="note">日足は {bars.at(-1)?.date} までです（分析基準日 {data.date} の日足は未取得）。チャートから算出する判定は未確認にしています。</p> : null}
-      <div className="brief-periods" role="group" aria-label="表示期間">{Object.entries(RANGES).map(([key, [, , label]]) => <button key={key} type="button" aria-pressed={range === key} onClick={() => setRange(key)}>{label}</button>)}<span className="brief-note">なぞると{interval === 'week' ? '週足' : '日足'}の値</span></div>
-      <div className="brief-legend" aria-hidden="true"><span><i className="lg-ma50" />{interval === 'week' ? '10週線' : '50日線'}</span><span><i className="lg-ma150" />{interval === 'week' ? '30・40週線' : '150・200日線'}</span><span><i className="lg-pivot" />ピボット</span><span><i className="lg-stop" />損切り</span><span><i className="lg-rs" />RS線（株価÷S&amp;P 500。RS推計とは別）</span><span>枠＝値幅の収縮</span>{model?.sellMarks?.length ? <span><i className="lg-sell" />売りのサイン（▼上昇の加速・▲崩れ）</span> : null}</div>
+      <div className="brief-periods" role="group" aria-label="表示期間">{Object.entries(RANGES).map(([key, [, , label]]) => <button key={key} type="button" aria-pressed={range === key} onClick={() => setRange(key)}>{label}</button>)}<span className="brief-note brief-periods-hint">なぞると{interval === 'week' ? '週足' : '日足'}の値</span></div>
+      <div className="brief-legend" aria-hidden="true"><span><i className="lg-ma50" />{interval === 'week' ? '10週線' : '50日線'}</span><span><i className="lg-ma150" />{interval === 'week' ? '30・40週線' : '150・200日線'}</span><span><i className="lg-pivot" />ピボット</span><span><i className="lg-stop" />損切り</span><span><i className="lg-rs" />RS線（株価÷S&amp;P 500。RS推計とは別）</span><span>枠＝値幅の収縮</span>{model?.sellMarks?.length ? <span><i className="lg-sell" />売りのサイン（▼上昇の加速・▲崩れ）</span> : null}<span className="brief-legend-hint">なぞると{interval === 'week' ? '週足' : '日足'}の値</span></div>
     </section>
     <div className="brief-grid">
-      <TemplateCard template={template} />
+      <TemplateCard template={template} wide={wide} />
       <VcpCard technical={technical} bars={bars} judged={judged} view={view} />
       <FundamentalsCard financial={financial} />
       <InstitutionalCard institutional={institutional} />
-      <PlanCard view={view} plan={plan} settings={settings} onChange={update} earnings={view.earnings} />
-      {bars ? <SellCard sells={sells} reason={certification?.certified ? null : certification?.reason} /> : null}
+      <PlanCard view={view} plan={plan} settings={settings} onChange={update} earnings={view.earnings} wide={wide} />
+      {bars ? <SellCard sells={sells} reason={certification?.certified ? null : certification?.reason} wide={wide} /> : null}
     </div>
     <p className="brief-note brief-pad">候補は購入推奨ではありません。数値は分析基準日の公開データに基づきます。</p>
+    <ScreenNotes id="stock" notes={[NOTES.updown, NOTES.eps, bars ? NOTES.sell : null]} />
   </div>;
 }

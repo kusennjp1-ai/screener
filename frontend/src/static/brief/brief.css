@@ -636,6 +636,35 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
   .brief-search { flex: 1 1 140px; }
 }
 
+/* Stock: the scrub hint's place in the legend (phones), and a figure's short qualifier after its value. */
+.brief-legend-hint { display: none; }
+.brief-dl dd small { margin-left: 8px; font-family: var(--font-body); font-size: 12px; color: var(--text-3); }
+/* Stock on a phone: a shorter chart (it still holds price, volume and the RS line), the period buttons
+   on one line with the scrub hint moved to the legend, the VCP figures as 2-column tiles, lower leg
+   and quarter bars, a smaller ring, tighter check rows. */
+@media (max-width: 520px) {
+  .brief-chart { height: min(44vh, 340px); min-height: 300px; }
+  .brief-chart-placeholder { min-height: 300px; }
+  .brief-stock, .brief-grid { gap: 10px; }
+  .brief-ring { width: 56px; height: 56px; }
+  .brief-ring-row { gap: 12px; }
+  .brief-quarters { height: 96px; }
+  .brief-periods { flex-wrap: nowrap; }
+  .brief-periods button { flex: 1 1 0; min-width: 0; padding: 0 6px; }
+  .brief-periods-hint { display: none; }
+  .brief-legend .brief-legend-hint { display: inline; }
+  .brief-legs { height: 64px; }
+  .brief-dl { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .brief-dl div, .brief-dl div + div { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 0; margin: 0; padding: 8px 10px; border-radius: 12px; background: var(--surface-2); }
+  .brief-dl dt { font-size: 12px; line-height: 1.45; color: var(--text-2); }
+  .brief-dl dd { font-size: 14px; line-height: 1.45; }
+  .brief-dl dd small { display: block; margin: 0; }
+  .brief-sellchecks li, .brief-checks li { padding: 6px 0; }
+  .brief-subhead { margin-top: 4px; }
+  .brief-code33-parts li { padding: 8px; }
+  .brief-footprint { font-size: 18px; }
+}
+
 /* Market tab below 1024px: the groups and the long history are sections behind a sticky row of tabs
    under the verdict (MarketCard switcher). The tabs stick under the bar; a ▲ count marks a section
    with a fired check, in words for assistive tech. */
