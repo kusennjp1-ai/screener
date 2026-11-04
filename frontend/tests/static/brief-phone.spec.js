@@ -288,6 +288,19 @@ test.describe('cold load', () => {
     await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#F3F4F8');
   });
 
+  // A production build links the app stylesheet in <head>, so it can arrive before the scripts run;
+  // the dev server injects CSS from JS, so the specs add it themselves. index.css has a bare body rule.
+  for (const theme of ['dark', 'light']) test(`the boot ground holds once the app stylesheet arrives before the scripts (${theme})`, async ({ page }) => {
+    await page.addInitScript(mode => { try { localStorage.setItem('screener:color-mode', mode); } catch { /* blocked */ } }, theme);
+    await withoutScripts(page);
+    await page.goto('/#/brief');
+    await expect(page.locator('#root')).toContainText('読み込み中…');
+    for (const path of ['src/index.css', 'src/static/theme/foundation.css', 'src/static/brief/brief.css']) await page.addStyleTag({ path });
+    const ground = theme === 'light' ? 'rgb(243, 244, 248)' : 'rgb(16, 18, 29)';
+    const painted = await page.evaluate(() => ({ html: getComputedStyle(document.documentElement).backgroundColor, body: getComputedStyle(document.body).backgroundColor, text: getComputedStyle(document.querySelector('.boot-shell')).color }));
+    expect(painted).toEqual({ html: ground, body: ground, text: theme === 'light' ? 'rgb(34, 34, 56)' : 'rgb(240, 242, 250)' });
+  });
+
   test('rows that arrive with the data appear at once; a tab switch still plays their entrance', async ({ page }) => {
     // Record each candidate row's entrance at the moment it is inserted.
     await page.addInitScript(() => {

@@ -13,21 +13,25 @@
     <meta name="apple-mobile-web-app-title" content="米国株スクリーナー" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>米国株スクリーナー</title>
-    <!-- Painted before any script arrives: the brief's dark ground (light when chosen) and a shell with
-         no data. :where() keeps these at zero specificity, so every app stylesheet overrides them. -->
+    <!-- Painted before any script arrives: a shell with no data on the brief's ground. The inline script
+         picks the ground from the stored colour mode with a class on <html>; those rules outrank a bare body
+         rule (index.css), so the ground holds once the stylesheet arrives before the scripts, and the brief's
+         :root[data-theme] rules outrank them in turn. The connected app drops the class. Without the script
+         (a strict CSP), the shell keeps the browser's ground and dark text. -->
     <style>
-      :where(html, body) { margin: 0; background: #10121D; }
-      :where(html.boot-light, html.boot-light body) { background: #F3F4F8; }
-      .boot-shell { color: #F0F2FA; font: 14px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif; }
-      .boot-shell header { display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; min-height: calc(48px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) 16px 0; border-bottom: 1px solid #343B51; }
+      :where(html, body) { margin: 0; }
+      html.boot-dark, .boot-dark body { background: #10121D; }
+      html.boot-light, .boot-light body { background: #F3F4F8; }
+      .boot-shell { color: #222238; font: 14px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif; }
+      .boot-shell header { display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; min-height: calc(48px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) 16px 0; border-bottom: 1px solid #E0E2ED; }
       .boot-shell b { font-size: 16px; }
-      .boot-shell span { font-size: 11px; color: #A2ADC5; }
-      .boot-light .boot-shell { color: #222238; }
-      .boot-light .boot-shell header { border-bottom-color: #E0E2ED; }
-      .boot-light .boot-shell span { color: #676A82; }
+      .boot-shell span { font-size: 11px; color: #676A82; }
+      .boot-dark .boot-shell { color: #F0F2FA; }
+      .boot-dark .boot-shell header { border-bottom-color: #343B51; }
+      .boot-dark .boot-shell span { color: #A2ADC5; }
     </style>
     <script>
-      try { if (localStorage.getItem('screener:color-mode') === 'light') { document.documentElement.classList.add('boot-light'); document.querySelector('meta[name="theme-color"]').setAttribute('content', '#F3F4F8'); } } catch (error) { /* storage blocked: keep the dark ground */ }
+      try { var light = localStorage.getItem('screener:color-mode') === 'light'; document.documentElement.classList.add(light ? 'boot-light' : 'boot-dark'); if (light) document.querySelector('meta[name="theme-color"]').setAttribute('content', '#F3F4F8'); } catch (error) { document.documentElement.classList.add('boot-dark'); }
     </script>
   </head>
   <body>
