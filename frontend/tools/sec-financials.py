@@ -196,6 +196,35 @@ def sec_rate(environ=None):
 
 LIMITER = RateLimiter(sec_rate())
 
+# One wall-clock budget for the whole run (ticker map, both passes, every retry), so a hanging
+# data.sec.gov can never outlast the job. A symbol not fetched in time stays `transient` (unknown);
+# nothing from an earlier run is reused. SEC_DEADLINE_SECONDS may set it (at most MAX_DEADLINE_SECONDS).
+DEFAULT_DEADLINE_SECONDS = 900
+MAX_DEADLINE_SECONDS = 3600
+DEADLINE_ERROR = "期限切れ（未取得）"
+
+class DeadlineExceeded(Exception):
+    """The run's SEC budget is spent: the request is not made."""
+
+class Deadline:
+    def __init__(self, seconds, clock=time.monotonic):
+        self.seconds, self.clock = seconds, clock
+        self.end = clock() + seconds
+
+    def remaining(self):
+        return self.end - self.clock()
+
+    def expired(self):
+        return self.remaining() <= 0
+
+def sec_deadline_seconds(environ=None):
+    environ = os.environ if environ is None else environ
+    try:
+        value = float(environ.get("SEC_DEADLINE_SECONDS", "") or DEFAULT_DEADLINE_SECONDS)
+    except ValueError:
+        value = DEFAULT_DEADLINE_SECONDS
+    return min(MAX_DEADLINE_SECONDS, value) if math.isfinite(value) and value > 0 else DEFAULT_DEADLINE_SECONDS
+
 def decode(response):
     raw = response.read()
     headers = getattr(response, "headers", None)
@@ -204,37 +233,50 @@ def decode(response):
         raw = gzip.decompress(raw)
     return json.loads(raw)
 
-def get_json(url, attempts=3, sleep=time.sleep, opener=urlopen, limiter=None):
-    """Every attempt, including retries, first takes a slot from the shared limiter."""
+def get_json(url, attempts=3, sleep=time.sleep, opener=urlopen, limiter=None, deadline=None):
+    """Every attempt, including retries, first takes a slot from the shared limiter. With a
+    `deadline`, no attempt or backoff starts once it has passed, and a socket wait never runs past it."""
     limiter = limiter or LIMITER
     req = Request(url, headers={"User-Agent": user_agent(), "Accept": "application/json", "Accept-Encoding": "gzip"})
+    def pause(seconds):
+        if deadline is not None and seconds >= deadline.remaining():
+            raise DeadlineExceeded(url)
+        sleep(seconds)
     for attempt in range(1, attempts + 1):
         try:
             limiter.wait()
-            with opener(req, timeout=30) as response:
+            if deadline is not None and deadline.expired():
+                raise DeadlineExceeded(url)
+            timeout = 30.0 if deadline is None else max(1.0, min(30.0, deadline.remaining()))
+            with opener(req, timeout=timeout) as response:
                 return decode(response)
         except HTTPError as error:
             if error.code not in RETRY_STATUS or attempt == attempts:
                 raise
             retry_after = (error.headers or {}).get("Retry-After", "") if hasattr(error, "headers") else ""
-            sleep(min(30.0, float(retry_after)) if str(retry_after).isdigit() else 2 ** (attempt - 1))
+            pause(min(30.0, float(retry_after)) if str(retry_after).isdigit() else 2 ** (attempt - 1))
         except (URLError, TimeoutError):
             if attempt == attempts:
                 raise
-            sleep(2 ** (attempt - 1))
+            pause(2 ** (attempt - 1))
 
 SECOND_PASS_DELAY_SECONDS = 20
 TRANSIENT_ERROR = "SEC取得不可"
 
-def fetch_symbol(symbol, tickers, as_of, get=None):
+def fetch_symbol(symbol, tickers, as_of, get=None, deadline=None):
     """One symbol's record. Permanent outcomes (no CIK, no companyfacts, no quarterly
-    report, an invalid payload) carry their reason; only `transient` is retried."""
+    report, an invalid payload) carry their reason; only `transient` is retried. Once the
+    run's deadline has passed no request is made and the symbol stays transient (unknown)."""
     get = get or get_json
     cik = tickers.get(symbol.replace(".", "-")) or tickers.get(symbol)
     if not cik:
         return unavailable(symbol, as_of, "no_cik", "SEC識別子未取得", now_iso())
+    if deadline is not None and deadline.expired():
+        return unavailable(symbol, as_of, "transient", f"{TRANSIENT_ERROR}: {DEADLINE_ERROR}", now_iso())
     try:
         facts = get(f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json")
+    except DeadlineExceeded:
+        return unavailable(symbol, as_of, "transient", f"{TRANSIENT_ERROR}: {DEADLINE_ERROR}", now_iso())
     except HTTPError as e:
         reason = "no_companyfacts" if e.code == 404 else "transient"
         return unavailable(symbol, as_of, reason, f"{TRANSIENT_ERROR}: {type(e).__name__} {e.code}", now_iso())
@@ -247,15 +289,21 @@ def fetch_symbol(symbol, tickers, as_of, get=None):
     except Exception as e:
         return unavailable(symbol, as_of, "invalid_payload", f"{TRANSIENT_ERROR}: {type(e).__name__}", retrieved_at)
 
-def fetch_all(symbols, tickers, as_of, get, workers=WORKERS):
+def fetch_all(symbols, tickers, as_of, get, workers=WORKERS, deadline=None):
     """Results in the order of `symbols`; the shared limiter bounds the total rate."""
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        return list(pool.map(lambda symbol: fetch_symbol(symbol, tickers, as_of, get), symbols))
+        return list(pool.map(lambda symbol: fetch_symbol(symbol, tickers, as_of, get, deadline), symbols))
 
-def collect(symbols, as_of, get=None, sleep=time.sleep, workers=WORKERS):
-    """Fetch every symbol, then give the ones that failed transiently one more pass.
-    A symbol that still fails stays unavailable (unknown); nothing from an earlier run is reused."""
-    get = get or get_json
+# The second pass is skipped when SEC failed broadly: more than half of the requested symbols,
+# and at least this many, failed transiently (retrying them would only spend the budget again).
+SECOND_PASS_BROAD_FAILURE = 20
+
+def collect(symbols, as_of, get=None, sleep=time.sleep, workers=WORKERS, deadline=None):
+    """Fetch every symbol, then give the ones that failed transiently one more pass, all within
+    one wall-clock budget. A symbol that still fails, or is not reached in time, stays unavailable
+    (unknown); nothing from an earlier run is reused."""
+    deadline = deadline or Deadline(sec_deadline_seconds())
+    get = get or (lambda url: get_json(url, deadline=deadline))
     output = {"schema_version": SCHEMA_VERSION, "as_of_date": as_of, "retrieved_at": now_iso(), "results": {}, "errors": []}
     tickers = {}
     for attempt in range(2):
@@ -264,21 +312,26 @@ def collect(symbols, as_of, get=None, sleep=time.sleep, workers=WORKERS):
             tickers = {r["ticker"].upper(): int(r["cik_str"]) for r in mapping.values()}
             break
         except Exception as e:
-            if attempt:
+            if attempt or deadline.remaining() <= SECOND_PASS_DELAY_SECONDS:
                 output["errors"].append(f"SEC ticker map unavailable: {type(e).__name__}")
-            else:
-                sleep(SECOND_PASS_DELAY_SECONDS)
-    for symbol, result in zip(symbols, fetch_all(symbols, tickers, as_of, get, workers)):
+                break
+            sleep(SECOND_PASS_DELAY_SECONDS)
+    for symbol, result in zip(symbols, fetch_all(symbols, tickers, as_of, get, workers, deadline)):
         output["results"][symbol] = result
     failed = [s for s, r in output["results"].items() if r.get("reason") == "transient"]
+    requested = sum(r.get("reason") != "no_cik" for r in output["results"].values())
+    broad = len(failed) >= SECOND_PASS_BROAD_FAILURE and len(failed) * 2 > requested
+    skipped = None if not failed else "deadline" if deadline.remaining() <= SECOND_PASS_DELAY_SECONDS else "broad_failure" if broad else None
     recovered = 0
-    if failed:
+    if failed and not skipped:
         sleep(SECOND_PASS_DELAY_SECONDS)
-        for symbol, result in zip(failed, fetch_all(failed, tickers, as_of, get, workers)):
+        for symbol, result in zip(failed, fetch_all(failed, tickers, as_of, get, workers, deadline)):
             if result.get("status") in ("available", "partial"):
                 recovered += 1
             output["results"][symbol] = result
-    output["second_pass"] = {"retried": len(failed), "recovered": recovered}
+    output["second_pass"] = {"retried": 0 if skipped else len(failed), "recovered": recovered, **({"skipped": skipped} if skipped else {})}
+    unreached = sum(DEADLINE_ERROR in (r.get("error") or "") for r in output["results"].values())
+    output["deadline"] = {"seconds": deadline.seconds, "expired": deadline.expired(), "unreached": unreached}
     return output
 
 def brief_targets(audit):
@@ -322,11 +375,13 @@ def main():
     symbols = requested(ordered, args.limit)
     output = collect(symbols, as_of)
     brief = same_day_brief(daily, audit)
-    output["coverage"] = {**coverage(output["results"], len(ordered), len(symbols), brief), "second_pass": output.pop("second_pass")}
+    output["coverage"] = {**coverage(output["results"], len(ordered), len(symbols), brief), "second_pass": output.pop("second_pass"), "deadline": output.pop("deadline")}
     write_output(root, output)
     print(f"SEC evidence {as_of}: " + json.dumps(output["coverage"], ensure_ascii=False) + "; missing remains unknown", flush=True)
     if output["coverage"]["truncated"] > 0:
         print(f"::warning::SEC evidence covers {len(symbols)} of {len(ordered)} eligible symbols; {output['coverage']['truncated']} stay unfetched (unknown)", flush=True)
+    if output["coverage"]["deadline"]["unreached"] > 0:
+        print(f"::warning::SEC budget of {output['coverage']['deadline']['seconds']:.0f}s ran out; {output['coverage']['deadline']['unreached']} symbols stay unfetched (transient, unknown)", flush=True)
 
 def coverage(results, eligible, requested, brief=()):
     values = list(results.values())

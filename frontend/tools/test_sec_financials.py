@@ -249,6 +249,79 @@ def seven_years():
         rows.append({"start": f"{year}-01-01", "end": f"{year}-12-31", "val": 500, "filed": f"{year + 1}-02-20", "form": "10-K", "accn": f"fy-{year}"})
     return rows
 
+class WallClockBudget(unittest.TestCase):
+    """A hanging data.sec.gov never outlasts the job: one budget bounds the whole run."""
+
+    def clock(self, start=0.0):
+        now = [start]
+        return now, (lambda: now[0])
+
+    def test_budget_comes_from_the_environment_within_bounds(self):
+        self.assertEqual(sec.sec_deadline_seconds({}), 900)
+        self.assertEqual(sec.sec_deadline_seconds({"SEC_DEADLINE_SECONDS": "300"}), 300)
+        self.assertEqual(sec.sec_deadline_seconds({"SEC_DEADLINE_SECONDS": "99999"}), 3600)
+        for bad in ("0", "-5", "nan", "inf", "x"):
+            self.assertEqual(sec.sec_deadline_seconds({"SEC_DEADLINE_SECONDS": bad}), 900)
+
+    def test_no_attempt_or_backoff_starts_after_the_deadline_and_a_socket_wait_never_runs_past_it(self):
+        from urllib.error import URLError
+        now, clock = self.clock()
+        deadline = sec.Deadline(10, clock=clock)
+        class Free:
+            def wait(self): return 0
+        timeouts = []
+        def slow(req, timeout):
+            timeouts.append(timeout)
+            now[0] += timeout
+            raise URLError("timed out")
+        with self.assertRaises(sec.DeadlineExceeded):
+            sec.get_json("https://data.sec.gov/a", sleep=lambda seconds: now.__setitem__(0, now[0] + seconds), opener=slow, limiter=Free(), deadline=deadline)
+        # The first wait is clamped to the 10 s left; no backoff or second attempt follows.
+        self.assertEqual(timeouts, [10.0])
+        calls = []
+        with self.assertRaises(sec.DeadlineExceeded):
+            sec.get_json("https://data.sec.gov/b", opener=lambda req, timeout: calls.append(1), limiter=Free(), deadline=deadline)
+        self.assertEqual(calls, [])
+
+    def test_symbols_not_reached_in_time_stay_transient_and_the_second_pass_is_skipped(self):
+        from urllib.error import URLError
+        now, clock = self.clock()
+        deadline = sec.Deadline(300, clock=clock)
+        names = [f"S{i:02d}" for i in range(12)]
+        calls = []
+        def get(url):
+            if url.endswith("company_tickers.json"):
+                return {str(i): {"ticker": name, "cik_str": i + 1} for i, name in enumerate(names)}
+            calls.append(url)
+            now[0] += 93  # three 30 s timeouts and the 1 s + 2 s backoff
+            raise URLError("timed out")
+        waits = []
+        out = sec.collect(names, "2026-10-02", get=get, sleep=waits.append, workers=1, deadline=deadline)
+        self.assertEqual(len(calls), 4)  # requests started at 0, 93, 186 and 279 s
+        self.assertEqual({r["reason"] for r in out["results"].values()}, {"transient"})
+        unreached = [s for s, r in out["results"].items() if sec.DEADLINE_ERROR in r["error"]]
+        self.assertEqual(unreached, names[4:])
+        self.assertEqual(out["second_pass"], {"retried": 0, "recovered": 0, "skipped": "deadline"})
+        self.assertNotIn(sec.SECOND_PASS_DELAY_SECONDS, waits)
+        self.assertEqual(out["deadline"], {"seconds": 300, "expired": True, "unreached": 8})
+        self.assertEqual(sec.coverage(out["results"], 12, 12)["reasons"]["transient"], 12)
+
+    def test_a_broad_failure_is_not_retried_but_a_few_failures_are(self):
+        from urllib.error import URLError
+        names = [f"B{i:02d}" for i in range(30)]
+        tickers = {str(i): {"ticker": name, "cik_str": i + 1} for i, name in enumerate(names)}
+        calls = []
+        def get(url):
+            if url.endswith("company_tickers.json"):
+                return tickers
+            calls.append(url)
+            raise URLError("reset")
+        out = sec.collect(names, "2026-10-02", get=get, sleep=lambda _: None)
+        self.assertEqual(len(calls), 30)
+        self.assertEqual(out["second_pass"], {"retried": 0, "recovered": 0, "skipped": "broad_failure"})
+        self.assertEqual(out["deadline"]["unreached"], 0)
+        self.assertFalse(out["deadline"]["expired"])
+
 class PublishedWindow(unittest.TestCase):
     def test_trim_keeps_the_rule_window_after_deriving_from_the_full_series(self):
         rows = seven_years()
