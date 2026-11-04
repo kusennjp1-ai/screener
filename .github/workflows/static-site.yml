@@ -992,7 +992,7 @@ jobs:
             node .github/scripts/retained-price-source-admission.mjs produce --output "$RUNNER_TEMP/retained-price-source" --job-start "$RUNNER_TEMP/retained-price-source-job-start"
           else
             cd frontend
-            npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookMarketEvidence.test.js src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/marketLongHistory.test.js src/static/legacyRoutes.test.js src/static/brief/briefModel.test.js src/static/brief/priceChart.test.js src/static/brief/MarketCard.test.jsx src/static/brief/StockView.test.jsx src/static/brief/useWatchSellChecks.test.jsx --maxWorkers=2
+            npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookFinancialAdmission.test.js src/static/bookMarketEvidence.test.js src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/marketLongHistory.test.js src/static/legacyRoutes.test.js src/static/brief/briefModel.test.js src/static/brief/priceChart.test.js src/static/brief/MarketCard.test.jsx src/static/brief/StockView.test.jsx src/static/brief/useWatchSellChecks.test.jsx --maxWorkers=2
             python tools/test_sec_financials.py
             python tools/test_sec_8k_samples.py
             python tools/export-book-benchmark.py --allow-unavailable
