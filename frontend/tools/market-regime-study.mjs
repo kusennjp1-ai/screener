@@ -18,13 +18,18 @@
  *     app's validateLongHistory and read through environmentPoint. Outcome series: H.sp500 (^GSPC closes of
  *     the same capture). It is a CURRENT-UNIVERSE RETROSPECTIVE (historical_membership_verified = false):
  *     names delisted before the capture are absent, so early breadth is expected to read healthier than it
- *     was (survivorship). Quantified by the diagnostics below; no correction is applied.
+ *     was (survivorship). Checked by the diagnostics below; no correction is applied. A moving-average or
+ *     bifurcation state uses only the run of known closes ending at its session, never bridging an unknown one.
  *  I  ^GSPC and ^IXIC daily OHLCV: Yahoo chart API (CI only, 1 request/s, generic UA, since 1990-01-01) or a
  *     market-trend-source-v1 file. Each bar is checked like distributionDays (every OHLCV value positive,
  *     high/low consistent). With an independent calendar (--calendar, or the file's calendar_sessions) a
  *     missing session is an unknown bar and a bar off the calendar is excluded; without one the provider's
  *     dates are used and the report says so. Bars after the as-of date are dropped. An unknown bar is never
  *     filled: a DD / FTD / moving-average window that would contain it is unjudged.
+ *  Plausibility (H.sp500 and I): a close more than 25% (IMPLAUSIBLE_MOVE) from the previous session's close is
+ *  unknown, as collect-market-history.py treats a stock's extreme move; a single bad print therefore makes two
+ *  sessions unknown. No daily close move of either index since 1990 has come near 25%. Flagged sessions are
+ *  listed in the inputs table.
  *
  * OUTCOMES (strictly causal: the indicator uses data up to close t; the outcome starts from close t)
  *  r_h(t)  = C(t+h) / C(t) - 1 for h in {5, 10, 21, 63} sessions of the outcome series.
@@ -129,6 +134,8 @@
  *     count and groups robust labels that share an input.
  *  4. Overlap between the halves. v1 split the sample with no gap, so the last h first-half outcomes used
  *     second-half closes (63 of the seed's 603 first-half sessions at h = 63). v2 embargoes h sessions.
+ *  5. Implausible prints. v1 accepted any structurally valid bar, so one 10x print passed silently and moved the
+ *     mean statistics. v2 makes a close more than 25% from the previous session's close unknown and lists it.
  *
  * Proprietary RS inside the trend-template counts is this app's own RS, not IBD RS.
  */
@@ -159,6 +166,7 @@ export const CHANGE_SESSIONS = 21;
 export const FTD_WINDOW_SESSIONS = 280;
 export const FTD_RECENT_SESSIONS = 25;
 export const DD_GRADES = Object.freeze([[0, 2], [3, 4], [5, 6], [7, Infinity]]);
+export const IMPLAUSIBLE_MOVE = 0.25;
 export const PLACEBO = Object.freeze({ shifts: 399, minShifts: 99, lookback: FTD_WINDOW_SESSIONS, alpha: 0.05, band: Object.freeze([0.05, 0.95]) });
 export const MIN_SESSIONS = 20, MIN_EPISODES = 3, MIN_BLOCKS = 10;
 export const blockLength = h => Math.max(2 * h, 21);
@@ -343,6 +351,17 @@ export function alignIndex({ symbol, bars, calendar = null, asOfDate = null }) {
     missing: sessions.filter(day => !byDate.has(day)), extra: input.filter(bar => !onCalendar.has(bar.date)).map(bar => bar.date) };
 }
 
+/**
+ * Sessions whose close is more than `limit` from the previous session's close (both known). Like the stock rule
+ * in collect-market-history.py, the comparison uses the provider's previous close, so a single bad print flags
+ * itself and the session after it.
+ */
+export function implausibleMoves(closes, limit = IMPLAUSIBLE_MOVE) {
+  const flagged = [];
+  for (let t = 1; t < closes.length; t++) if (positive(closes[t]) && positive(closes[t - 1]) && Math.abs(closes[t] / closes[t - 1] - 1) > limit) flagged.push(t);
+  return flagged;
+}
+
 /** Maximal runs of true as [start, end] index pairs. */
 export function runs(flags) {
   const out = [];
@@ -401,10 +420,13 @@ export function breadthStates(history) {
   const position = new Map(sp.map((point, i) => [point.date, i]));
   const dates = rows.map(row => row.date);
   const closes = dates.map(day => { const i = position.get(day); return i !== undefined && positive(sp[i].close) ? sp[i].close : null; });
+  // Start of the run of known closes ending at each position: a window never bridges an unknown close.
+  const runStart = [];
+  sp.forEach((point, i) => runStart.push(positive(point.close) ? (i && runStart[i - 1] !== null ? runStart[i - 1] : i) : null));
   const ma = [], split = [], lows = [], rules = { template: [], stage: [], leaders: [], breakout: [] };
   rows.forEach((row, t) => {
     const i = position.get(row.date), current = i !== undefined && positive(sp[i].close);
-    const prefix = current ? sp.slice(0, i + 1) : null;
+    const prefix = current ? sp.slice(runStart[i], i + 1) : null;
     // A summary dated before this session (its close unknown) would be stale: unjudged instead.
     const summary = current ? indexSummary(prefix) : null;
     ma.push(summary && summary.date === row.date ? maState(summary) : null);
@@ -838,13 +860,17 @@ export function runStudy({ history = null, historyMeta = {}, indices = null, cal
   const panelFor = (name, sessions) => { const panel = { name, sessions, shifts: placeboShifts(sessions, shiftCount), nulls: [] }; panels.push(panel); return panel; };
   for (const item of indices?.indices || []) {
     const ownCalendar = calendar || item.calendar_sessions || null;
-    const aligned = alignIndex({ symbol: item.symbol, bars: item.bars, calendar: ownCalendar, asOfDate });
+    const raw = alignIndex({ symbol: item.symbol, bars: item.bars, calendar: ownCalendar, asOfDate });
+    const flagged = implausibleMoves(raw.bars.map(bar => bar?.close ?? null)), unknown = new Set(flagged);
+    const aligned = { ...raw, bars: raw.bars.map((bar, t) => unknown.has(t) ? null : bar) };
     const states = indexStates(aligned), outcomes = Object.fromEntries(WINDOWS.map(h => [h, forwardOutcomes(states.closes, h)]));
-    const valid = aligned.bars.filter(validBar).length;
+    const valid = aligned.bars.filter(validBar).length, flaggedDates = flagged.map(t => aligned.dates[t]);
     inputs.indices.push({ symbol: item.symbol, source: item.source ?? null, provenance: item.provenance ?? null, calendarBasis: aligned.calendarBasis,
       first: aligned.dates[0] ?? null, last: aligned.dates.at(-1) ?? null, lastBar: aligned.bars.filter(Boolean).at(-1)?.date ?? null, sessions: aligned.dates.length,
       validBars: valid, invalidBars: aligned.bars.filter(bar => bar && !validBar(bar)).length, missingSessions: aligned.missing.length, offCalendarBars: aligned.extra.length,
-      validRuns: runs(aligned.bars.map(validBar)).length, missingSample: aligned.missing.slice(0, 10), offCalendarSample: aligned.extra.slice(0, 10) });
+      validRuns: runs(aligned.bars.map(validBar)).length, missingSample: aligned.missing.slice(0, 10), offCalendarSample: aligned.extra.slice(0, 10),
+      implausibleMoves: flagged.length, implausibleSample: flaggedDates.slice(0, 10) });
+    if (flagged.length) notes.push(`${item.symbol}: ${flagged.length} session(s) with a close more than ${100 * IMPLAUSIBLE_MOVE}% from the previous close are unknown, never filled: ${flaggedDates.slice(0, 10).join(', ')}${flagged.length > 10 ? ', …' : ''}.`);
     if (aligned.calendarBasis === 'provider') notes.push(`${item.symbol}: no independent calendar; the provider's dates are the sessions (a session the provider omits cannot be detected).`);
     indexByDate[item.symbol] = new Map(aligned.dates.map((day, t) => [day, { dd: states.dd[t], ftd: states.ftd[t] }]));
     const panel = panelFor(`index:${item.symbol}`, aligned.dates.length);
@@ -852,12 +878,17 @@ export function runStudy({ history = null, historyMeta = {}, indices = null, cal
   }
   let diagnostics = null;
   if (history) {
+    const sp = history.sp500 || [], flagged = implausibleMoves(sp.map(point => point.close)), unknown = new Set(flagged);
+    if (flagged.length) {
+      history = { ...history, sp500: sp.map((point, i) => unknown.has(i) ? { ...point, close: null } : point) };
+      notes.push(`Long history sp500: ${flagged.length} session(s) with a close more than ${100 * IMPLAUSIBLE_MOVE}% from the previous close are unknown, never filled: ${flagged.slice(0, 10).map(i => sp[i].date).join(', ')}${flagged.length > 10 ? ', …' : ''}.`);
+    }
     const states = breadthStates(history), outcomes = Object.fromEntries(WINDOWS.map(h => [h, forwardOutcomes(states.closes, h)]));
     const present = BREADTH_FIELDS.filter(([key]) => states.fields[key].some(finite)).map(([key]) => key);
     inputs.history = { as_of_date: history.as_of_date, retrieved_at: history.retrieved_at, sha256: historyMeta.sha256 ?? null, origin: historyMeta.origin ?? null,
       first: states.dates[0] ?? null, last: states.dates.at(-1) ?? null, sessions: states.dates.length, sp500Closes: states.closes.filter(positive).length,
       universe: history.universe.symbols.length, basis: history.universe.basis, historicalMembershipVerified: history.universe.historical_membership_verified,
-      fieldsPresent: present, fieldsAbsent: BREADTH_FIELDS.map(([key]) => key).filter(key => !present.includes(key)) };
+      fieldsPresent: present, fieldsAbsent: BREADTH_FIELDS.map(([key]) => key).filter(key => !present.includes(key)), implausibleMoves: flagged.length, implausibleSample: flagged.slice(0, 10).map(i => sp[i].date) };
     if (inputs.history.fieldsAbsent.length) notes.push(`Long history lacks ${inputs.history.fieldsAbsent.join(', ')} (older schema): those indicators and every rule that needs them are unjudged, never 0.`);
     const gspc = indexByDate['^GSPC'];
     if (gspc) {
@@ -920,8 +951,8 @@ export function markdownReport(study) {
     'Diagnostic research only: nothing here changes a rule, threshold, verdict or published value. Returns are forward index returns from the close of the session the state was observed (strictly causal). Δ columns are in percentage points: a bucket minus the unconditional baseline of the same sample (three or more buckets), or for a two-state indicator one contrast, the first state minus the second. [band] is the 90% range of Δ when the indicator series is rotated against the outcomes (what chance alone produced on this data); p is the two-sided rotation-placebo p.', '');
   add('## Inputs', '', '| input | basis | first | last | sessions | notes |', '|---|---|---|---|---|---|');
   const h = study.inputs.history;
-  if (h) add(`| long history (as of ${h.as_of_date}) | ${h.basis}; historical membership verified: ${h.historicalMembershipVerified} | ${h.first} | ${h.last} | ${h.sessions} | universe ${h.universe}; sha256 ${String(h.sha256).slice(0, 12)}; ${h.fieldsAbsent.length ? `absent: ${h.fieldsAbsent.join(', ')}` : 'all study fields present'}${h.sp500VsIndexSource ? `; sp500 vs index source max diff ${(100 * h.sp500VsIndexSource.maxRelativeDifference).toFixed(4)}% over ${h.sp500VsIndexSource.compared}` : ''} |`);
-  for (const i of study.inputs.indices) add(`| ${i.symbol} OHLCV | ${i.source ?? 'n/a'}; calendar ${i.calendarBasis} | ${i.first} | ${i.last} | ${i.sessions} | valid bars ${i.validBars}, invalid ${i.invalidBars}, missing sessions ${i.missingSessions}, off-calendar ${i.offCalendarBars}, valid runs ${i.validRuns}; last bar ${i.lastBar} |`);
+  if (h) add(`| long history (as of ${h.as_of_date}) | ${h.basis}; historical membership verified: ${h.historicalMembershipVerified} | ${h.first} | ${h.last} | ${h.sessions} | universe ${h.universe}; sha256 ${String(h.sha256).slice(0, 12)}; ${h.fieldsAbsent.length ? `absent: ${h.fieldsAbsent.join(', ')}` : 'all study fields present'}${h.sp500VsIndexSource ? `; sp500 vs index source max diff ${(100 * h.sp500VsIndexSource.maxRelativeDifference).toFixed(4)}% over ${h.sp500VsIndexSource.compared}` : ''}; implausible moves ${h.implausibleMoves} |`);
+  for (const i of study.inputs.indices) add(`| ${i.symbol} OHLCV | ${i.source ?? 'n/a'}; calendar ${i.calendarBasis} | ${i.first} | ${i.last} | ${i.sessions} | valid bars ${i.validBars}, invalid ${i.invalidBars}, missing sessions ${i.missingSessions}, off-calendar ${i.offCalendarBars}, valid runs ${i.validRuns}, implausible moves ${i.implausibleMoves}; last bar ${i.lastBar} |`);
   add('');
   for (const note of study.notes) add(`- ${note}`);
   if (h) add('- The long history is a CURRENT-UNIVERSE RETROSPECTIVE: stocks delisted before the capture are missing, so early breadth tends to read healthier than it was. Read breadth effects with the survivorship section and the split-sample labels.');

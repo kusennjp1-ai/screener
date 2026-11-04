@@ -8,9 +8,9 @@ import { followThroughDay } from '../src/static/followThroughDay.js';
 import { bifurcation, environmentPoint } from '../src/static/marketLongHistory.js';
 import { environmentRules } from '../src/static/brief/briefModel.js';
 import {
-  alignIndex, breadthIndicators, breadthStates, causalQuintiles, chanceLevel, episodes, evaluateIndicator, fetchYahooIndex, forwardOutcomes, indexIndicators, indexStates, indicatorInputs, inputGroups, label, loadHistory, main,
+  alignIndex, breadthIndicators, markdownReport, breadthStates, causalQuintiles, chanceLevel, episodes, evaluateIndicator, fetchYahooIndex, forwardOutcomes, indexIndicators, indexStates, implausibleMoves, indicatorInputs, inputGroups, label, loadHistory, main,
   mulberry32, nullShiftIndices, parseYahooChart, placeboMargin, placeboP, placeboQuantile, placeboReference, placeboShifts, quintileBucket, quintileEdges, runStudy, shiftWeight,
-  EDGE_WARMUP, FTD_WINDOW_SESSIONS, LABELS, MIN_BLOCKS, PLACEBO, STATS, WINDOWS,
+  EDGE_WARMUP, FTD_WINDOW_SESSIONS, IMPLAUSIBLE_MOVE, LABELS, MIN_BLOCKS, PLACEBO, STATS, WINDOWS,
 } from './market-regime-study.mjs';
 
 // ---- synthetic series (no provider data) ----------------------------------------------------------------------
@@ -150,6 +150,37 @@ describe('the app\'s own rules, as the brief computes them', () => {
     expect(gap.closes[200]).toBeNull();
     expect(gap.ma.slice(200, 259).every(value => value === null)).toBe(true);
     expect(forwardOutcomes(gap.closes, 5).ret.slice(195, 201).every(value => value === null)).toBe(true);
+  });
+  it('marks a close more than 25% from the previous close unknown, both sides of a bad print, and lists it', () => {
+    expect(IMPLAUSIBLE_MOVE).toBe(0.25);
+    expect(implausibleMoves([100, 101, 1010, 102, null, 200, 201, 251.25, 188.4375])).toEqual([2, 3]);
+    expect(implausibleMoves([100, 125, 93.75])).toEqual([]);
+    const dates = weekdays('2014-01-02', 700), clean = indexBars(dates, 23), bad = clean.map(bar => ({ ...bar }));
+    for (const key of ['open', 'high', 'low', 'close']) bad[400][key] *= 10;
+    const run = bars => runStudy({ indices: { indices: [{ symbol: '^GSPC', bars }] }, calendar: dates, shifts: 120 });
+    const flagged = run(bad), absent = run(clean.filter((_, i) => i !== 400 && i !== 401));
+    expect(flagged.inputs.indices[0]).toMatchObject({ implausibleMoves: 2, implausibleSample: [dates[400], dates[401]], invalidBars: 0 });
+    expect(flagged.notes.some(note => note.includes(`${dates[400]}, ${dates[401]}`) && /never filled/.test(note))).toBe(true);
+    // The flagged sessions are unknown exactly as if the provider had omitted them.
+    expect(strip(flagged.indicators)).toEqual(strip(absent.indicators));
+    expect(markdownReport(flagged)).toContain('implausible moves 2');
+  });
+  it('a long-history state never bridges an unknown close', () => {
+    const history = longHistory({ n: 420 }), gap = strip(history);
+    gap.sp500[150].close = null;
+    const full = breadthStates(history), states = breadthStates(gap);
+    expect(states.ma.slice(150, 210).every(value => value === null)).toBe(true);
+    expect(states.ma[210]).toMatchObject({ vs200: null });
+    expect(states.ma[210].vsMa).not.toBeNull();
+    // bifurcation needs 252 known closes: the run that starts after the gap reaches them at 150 + 252.
+    expect(states.split.slice(150, 150 + 252).every(value => value === null)).toBe(true);
+    expect(states.split[150 + 252]).not.toBeNull();
+    expect(strip(states.ma.slice(0, 150))).toEqual(strip(full.ma.slice(0, 150)));
+    const spike = strip(history);
+    spike.sp500[300].close *= 10;
+    const study = runStudy({ history: spike, shifts: 120 });
+    expect(study.inputs.history).toMatchObject({ implausibleMoves: 2, implausibleSample: [history.sp500[300].date, history.sp500[301].date] });
+    expect(study.notes.some(note => /^Long history sp500: 2 session/.test(note))).toBe(true);
   });
   it('a missing long-history input never becomes a pass: an older capture leaves the newer rules unjudged', () => {
     const states = breadthStates(longHistory({ n: 300, full: false }));
