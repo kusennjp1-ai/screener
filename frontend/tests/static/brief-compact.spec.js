@@ -290,3 +290,20 @@ test.describe('the desktop keeps every footnote in place', () => {
     expect(errors).toEqual([]);
   });
 });
+
+// The list's phone paging and the omitted TT 8/8 chip follow the 520px phone layout, not the 1024px desktop.
+test.describe('a tablet between the phone and the desktop', () => {
+  test.use({ viewport: { width: 768, height: 1024 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
+  test('keeps the TT 8/8 chip and 50-row pages, and its 注記 says nothing about phones', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list');
+    const rows = page.getByTestId('brief-candidate');
+    await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて/ }).click();
+    await expect(rows).toHaveCount(21);
+    await expect(page.getByRole('button', { name: /^さらに表示/ })).toHaveCount(0);
+    for (const row of await rows.all()) await expect(row).toContainText('TT 8/8');
+    await expect(page.locator('.brief-screen-notes')).toHaveCount(1);
+    await expect(page.locator('.brief-screen-notes')).not.toContainText('スマホ');
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});

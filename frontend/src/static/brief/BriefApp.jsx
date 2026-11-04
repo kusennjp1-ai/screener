@@ -35,8 +35,10 @@ const finite = Number.isFinite;
 const bundleState = brief => brief.bundle.data ? 'ready' : brief.bundle.isLoading || brief.manifest.isLoading ? 'loading' : brief.bundle.isError || brief.manifest.isError ? 'error' : 'none';
 const BUNDLE_TEXT = { loading: '候補を読み込み中…', error: '候補データを取得できません。', none: '候補データはこの公開に含まれていません。' };
 const BUNDLE_SHORT = { loading: '読込中', error: '取得できません', none: '未配信' };
-// A phone's candidate list shows this many rows per 「さらに表示」 (desktop: 50).
+// A phone (520px and narrower, where rows are compacted) lists this many rows per 「さらに表示」;
+// wider screens list 50.
 const PHONE_PAGE = 20;
+const PHONE_QUERY = '(max-width:520px)';
 // Today's watch card shows this many rows before 「さらに表示」 (rows with a sell signal always show).
 const WATCH_ROWS = 3;
 // Footnotes: in place at 1024px and wider, gathered into the screen's 注記 below that.
@@ -137,11 +139,12 @@ function listShown(views, kind, { filter, sort, query }) {
 }
 
 function ListView({ brief, kind, watch, open, now, animate, listState, setListState, limits, setLimits, origin, wide }) {
-  const pageSize = wide ? 50 : PHONE_PAGE;
+  const phone = useMediaQuery(PHONE_QUERY);
+  const pageSize = phone ? PHONE_PAGE : 50;
   const { filter, sort, query } = listState;
   // Under a qualified-only filter every row is TT 8/8: a phone leaves the constant chip out (the 注記 says so),
   // which keeps each row's chips on one line. あと1条件 and the watch list keep it.
-  const constantTemplate = !wide && kind !== 'watch' && filter !== 'one';
+  const constantTemplate = phone && kind !== 'watch' && filter !== 'one';
   const update = patch => setListState(state => ({ ...state, ...patch }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const views = useMemo(() => listSource(brief, kind, watch), [brief.bundle.data, brief.ranked, brief.date, kind, watch]);
@@ -170,7 +173,7 @@ function ListView({ brief, kind, watch, open, now, animate, listState, setListSt
       {kind !== 'watch' && wide && <p className="brief-note">{LIST_NOTE}</p>}
     </section>
     {kind !== 'watch' && <ScreenNotes id="list" wide={wide} notes={[LIST_NOTE,
-      wide ? null : '買いゾーン・ピボット接近・選定すべての行はすべてTT 8/8のため、スマホでは「TT 8/8」の表示を省いています（あと1条件では未達・未確認の数を表示します）。']} />}
+      phone ? '買いゾーン・ピボット接近・選定すべての行はすべてTT 8/8のため、スマホでは「TT 8/8」の表示を省いています（あと1条件では未達・未確認の数を表示します）。' : null]} />}
   </>;
 }
 
