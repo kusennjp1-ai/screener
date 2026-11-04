@@ -245,7 +245,17 @@ export async function loadHistory(location) {
     const series = JSON.parse(seriesBytes);
     const shaRef = series.long_history?.source_sha256;
     if (!/^[a-f0-9]{64}$/.test(shaRef || '')) throw Error('The published series carries no long history');
-    const bytes = await readLocation(join2(rootFromManifest, `market-trends/history-source-${shaRef}.json`));
+    let bytes = null;
+    try { bytes = await readLocation(join2(rootFromManifest, `market-trends/history-source-${shaRef}.json`)); }
+    catch (error) { if (error?.code !== 'ENOENT' && !/HTTP 404/.test(String(error?.message))) throw error; }
+    if (bytes === null) {
+      // The hash-pinned series embeds the same capture; validate it as the browser reader does.
+      const history = { ...series.long_history };
+      delete history.source_sha256;
+      validateLongHistory(history, entry.as_of_date, Infinity);
+      if (sha256(JSON.stringify(history.universe.symbols)) !== history.universe.sha256) throw Error('Long-history universe hash mismatch');
+      return { history, sha256: shaRef, origin: `${ref.path} long_history (raw source file absent)`, publicationDate: entry.as_of_date };
+    }
     if (sha256(bytes) !== shaRef) throw Error('Long-history source content address mismatch');
     return { history: verifyLongHistorySource(bytes, entry.as_of_date), sha256: shaRef, origin: `${ref.path} -> market-trends/history-source-${shaRef}.json`, publicationDate: entry.as_of_date };
   }

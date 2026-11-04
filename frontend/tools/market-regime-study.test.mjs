@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -9,7 +9,7 @@ import { bifurcation, environmentPoint } from '../src/static/marketLongHistory.j
 import { environmentRules } from '../src/static/brief/briefModel.js';
 import {
   alignIndex, blockBootstrap, breadthIndicators, breadthStates, episodes, evaluateIndicator, fetchYahooIndex, fnv1a, forwardOutcomes,
-  indexIndicators, indexStates, interval, label, main, mulberry32, parseYahooChart, quintileBucket, quintileEdges, runStudy, FTD_WINDOW_SESSIONS, WINDOWS,
+  indexIndicators, indexStates, interval, label, loadHistory, main, mulberry32, parseYahooChart, quintileBucket, quintileEdges, runStudy, FTD_WINDOW_SESSIONS, WINDOWS,
 } from './market-regime-study.mjs';
 
 // ---- synthetic series (no provider data) ----------------------------------------------------------------------
@@ -238,6 +238,32 @@ describe('provider input', () => {
     expect(calls[0].ua).toBe('Mozilla/5.0');
     expect(result.provenance.sha256).toBe(createHash('sha256').update(raw).digest('hex'));
     await expect(fetchYahooIndex('^GSPC', { asOfDate: '2026-11-03', fetchImpl: async () => ({ ok: false, status: 404 }), sleep: async () => {} })).rejects.toThrow(/HTTP 404/);
+  });
+});
+
+describe('published long history', () => {
+  it('reads a static-data root through the content-addressed series and history source, and fails closed on a changed byte', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'market-regime-root-'));
+    try {
+      const history = longHistory({ n: 120 }), raw = JSON.stringify(history), rawSha = createHash('sha256').update(raw).digest('hex');
+      const series = JSON.stringify({ schema_version: 'market-trends-v1', market: 'US', as_of_date: history.as_of_date, long_history: { ...history, source_sha256: rawSha } });
+      const seriesSha = createHash('sha256').update(series).digest('hex');
+      mkdirSync(join(root, 'market-trends'));
+      writeFileSync(join(root, 'market-trends', `history-source-${rawSha}.json`), raw);
+      writeFileSync(join(root, 'market-trends', `series-${seriesSha}.json`), series);
+      writeFileSync(join(root, 'manifest.json'), JSON.stringify({ markets: { US: { as_of_date: history.as_of_date, assets: { market_trends: { path: `market-trends/series-${seriesSha}.json`, sha256: seriesSha } } } } }));
+      const loaded = await loadHistory(root);
+      expect(loaded).toMatchObject({ sha256: rawSha, publicationDate: history.as_of_date, origin: `market-trends/series-${seriesSha}.json -> market-trends/history-source-${rawSha}.json` });
+      expect(loaded.history).toEqual(history);
+      rmSync(join(root, 'market-trends', `history-source-${rawSha}.json`));
+      const embedded = await loadHistory(root);
+      expect(embedded.origin).toMatch(/raw source file absent/);
+      expect(embedded.history).toEqual(history);
+      writeFileSync(join(root, 'market-trends', `history-source-${rawSha}.json`), `${raw} `);
+      await expect(loadHistory(root)).rejects.toThrow(/content address mismatch/);
+      writeFileSync(join(root, 'market-trends', `series-${seriesSha}.json`), `${series} `);
+      await expect(loadHistory(root)).rejects.toThrow(/series content address mismatch/);
+    } finally { rmSync(root, { recursive: true, force: true }); }
   });
 });
 
