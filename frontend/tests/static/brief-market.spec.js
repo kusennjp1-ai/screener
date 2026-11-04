@@ -10,12 +10,18 @@ const row = (market, label) => market.locator('.brief-env-row').filter({ has: ma
 
 for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} ${device.viewport.width}px`, () => {
   test.use(device);
+  const phone = name === 'phone';
 
   test('today\'s 地合い card leads to the market tab and its metric switch', async ({ page }) => {
     const { errors, external } = await openBrief(page, '#/brief');
     const today = page.getByRole('region', { name: '地合い' });
     await expect(today.getByTestId('brief-regime')).toContainText('上昇トレンド（独自判定）');
-    await expect(today.getByRole('img', { name: /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/ })).toBeVisible();
+    // The phone's Today keeps the S&P chart for the market tab; its first screen shows the tiles and a candidate.
+    if (phone) {
+      await expect(today.locator('.brief-index')).toHaveAttribute('aria-label', /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/);
+      await expect(today.locator('.brief-index')).toBeHidden();
+      await expect(today.getByTestId('brief-regime')).toBeHidden();
+    } else await expect(today.getByRole('img', { name: /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/ })).toBeVisible();
     await expect(today.locator('.brief-fact small')).toHaveText(['分配日（25日）', 'TT達成数', '200日線より上', '52週の新高値・新安値']);
     for (const fact of await today.locator('.brief-fact').all()) await expect(fact).not.toContainText(/未取得|未確認/);
     await expect(today.locator('.brief-asof')).toHaveCount(0);
@@ -29,6 +35,9 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(market.getByTestId('brief-regime')).toContainText(`根拠（${DATE_MD}スキャン時点）：S&P 500（SPY）が50日線・200日線の上`);
     await expect(market.locator('.brief-stamp')).toHaveText(`◷ ${DATE_MD} 引け`);
     await expect(market.getByRole('link', { name: /市場の詳細/ })).toHaveCount(0);
+    // The phone's Today hides the verdict and the chart; the market tab keeps both visible.
+    await expect(market.getByTestId('brief-regime')).toBeVisible();
+    await expect(market.getByRole('img', { name: /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/ })).toBeVisible();
     // Verdict first, then the evidence grouped in decision order: index trend, participation, leaders.
     await expect(market.getByRole('heading', { level: 3 })).toHaveText(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
     await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', '200日線より上', '50日線より上', '52週の新高値・新安値', 'TT達成数', 'RS90以上のTT達成', 'ブレイクアウト成功率', 'リーダーの健全度', 'ステージ構成']);
@@ -119,7 +128,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     // The exporter withholds today's distribution count for an index that ends early; the older count keeps its date.
     await expect(today.locator('.brief-fact').filter({ hasText: '分配日（25日）' })).toContainText(`（${STALE_MD}時点）`);
     await expect(today.locator('.brief-fact').filter({ hasText: 'TT達成数' })).toContainText(`（${STALE_MD}時点）`);
-    await expect(today.getByRole('img', { name: new RegExp(`^S&P 500 の終値と50日線（.*〜${STALE}）`) })).toBeVisible();
+    if (phone) await expect(today.locator('.brief-index')).toHaveAttribute('aria-label', new RegExp(`^S&P 500 の終値と50日線（.*〜${STALE}）`));
+    else await expect(today.getByRole('img', { name: new RegExp(`^S&P 500 の終値と50日線（.*〜${STALE}）`) })).toBeVisible();
 
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
     await expect(page).toHaveURL(/#\/brief\/market$/);

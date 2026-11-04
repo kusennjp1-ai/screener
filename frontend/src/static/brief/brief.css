@@ -55,6 +55,12 @@
 .brief-index { display: block; width: 100%; height: 132px; }
 /* Phone Today: a shorter index chart so the candidates come up sooner; the market tab keeps 132px. */
 @media (max-width: 1023px) { .brief-market:not(.is-detail) .brief-index { height: 96px; } }
+/* Phone Today: the first screen answers both questions, the market and a candidate. The verdict
+   repeats the summary 地合い tile above it, the index chart is a shape only (the market tab keeps
+   it), and the bar already carries the date. The tiles, warnings, alerts and as-of notes stay. */
+@media (max-width: 520px) {
+  .brief-market:not(.is-detail) .brief-verdict, .brief-market:not(.is-detail) .brief-index, .brief-market:not(.is-detail) .brief-index-legend, .brief-hero.is-today small { display: none; }
+}
 .brief-index-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 0; font-size: 11px; color: var(--text-3); }
 .brief-index-legend span::before { content: ""; display: inline-block; width: 12px; height: 2px; margin-right: 4px; vertical-align: middle; background: var(--text); }
 .brief-index-legend .is-ma::before { background: var(--wait); }
@@ -122,6 +128,14 @@
 .brief-minimeter.is-unknown .brief-minimeter-value { bottom: 6px; }
 .brief-marker { position: absolute; left: 0; top: 7px; width: 12px; height: 12px; margin-left: -6px; border-radius: 999px; background: var(--text); border: 2px solid var(--surface); transform: translateX(calc(var(--p, 50) * 1cqw)); transition: transform .8s var(--e-back); }
 .brief-marker.is-entering { animation: brief-slide-in .9s var(--e-back) both; }
+/* Phone rows: the chips carry the decision, so they take the mini meter's width (the state chip
+   repeats its pivot distance or says 未確認) and 12px text; a watch row has no empty rank gutter. */
+@media (max-width: 520px) {
+  .brief-row { grid-template-columns: 20px minmax(0, 1fr); }
+  .brief-row.is-unranked { grid-template-columns: minmax(0, 1fr); }
+  .brief-row .brief-minimeter, .brief-row.is-unranked .brief-rank { display: none; }
+  .brief-chip { font-size: 12px; line-height: 1.55; }
+}
 .brief-event { width: 100%; display: grid; grid-template-columns: 36px minmax(0, 1fr) 20px; gap: 12px; align-items: center; min-height: 64px; padding: 8px 4px; border: 0; border-top: 1px solid var(--line); background: none; color: inherit; text-align: left; cursor: pointer; }
 .brief-event b { font-size: 14px; }
 .brief-event small { display: block; font-size: 12px; color: var(--text-3); }
@@ -139,6 +153,7 @@
 .brief-sort { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3); }
 .brief-sort select { min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); color: var(--text); padding: 0 8px; }
 .brief-morebutton { min-height: 44px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--text); font-size: 13px; cursor: pointer; }
+.brief .brief-nearlink { display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--accent); font-size: 14px; font-weight: 700; text-decoration: none; }
 
 /* stock */
 .brief-stock { display: grid; gap: 12px; min-width: 0; }
@@ -322,6 +337,7 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-summary small { font-size: 11px; color: var(--text-3); }
 .brief-summary b { font-size: 14px; line-height: 1.35; color: var(--text); overflow-wrap: anywhere; }
 .brief-summary em { font-style: normal; font-size: 11px; color: var(--text-2); }
+.brief-frag { display: inline-block; max-width: 100%; }
 .brief-summary .tone-zone { border-top-color: var(--zone); }
 .brief-summary .tone-ext { border-top-color: var(--ext); }
 .brief-summary .tone-neg { border-top-color: var(--neg); }
@@ -332,9 +348,9 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-history .market-update-status { margin: 0 0 4px; }
 @media (min-width: 1024px) { .brief-desk.is-market { grid-template-columns: minmax(0, 1fr); max-width: 1080px; } }
 
-/* No Material UI baseline on the static site: the page behind the brief follows its theme, and
-   inherited text keeps the 14px / 1.5 body size the screens were designed with. */
-:root[data-theme] body { background: var(--ground); }
+/* No Material UI baseline on the static site: the page behind the brief follows its theme (replacing
+   index.html's boot ground), and inherited text keeps the 14px / 1.5 body size the screens were designed with. */
+:root[data-theme], :root[data-theme] body { background: var(--ground); }
 .brief { font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 /* Code 33's three conditions, shown even when one of them is unknown. */
 .brief-code33-parts { list-style: none; margin: 8px 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
@@ -342,6 +358,30 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-code33-parts b { font-size: 14px; color: var(--text); }
 .brief-code33-parts .tone-zone b { color: var(--zone); }
 .brief-code33-parts .tone-ext b { color: var(--ext); }
+
+/* Legibility. Tile labels use the secondary text colour; on a phone the Today/market tiles read at
+   12px. Stock tiles wrap a long label or note instead of cutting it off with an ellipsis, and drop a
+   column only when three tiles cannot fit (a 375px phone at 200% zoom is 188px wide). */
+.brief-fact small, .brief-kgrid small, .brief-summary small { color: var(--text-2); }
+.brief-kgrid { grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); }
+/* A card's column never grows past the card for a wide child, and a stock chip wider than its line
+   wraps inside itself, so at that zoom the tiles keep the card's width instead of leaving it. */
+.brief-card { grid-template-columns: minmax(0, 1fr); }
+.brief-tags .brief-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+.brief-stock .brief-kgrid small, .brief-stock .brief-kgrid em, .brief-stock .brief-fact small, .brief-stock .brief-fact em { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+/* Form fields: a placeholder at the muted text colour and a field edge with 3:1 against its ground. */
+.brief input::placeholder { color: var(--text-3); opacity: 1; }
+.brief-search input, .brief-sort select, .brief-inputs input { border-color: color-mix(in srgb, var(--text-3) 80%, var(--surface)); }
+@media (max-width: 520px) {
+  .brief-market .brief-fact small, .brief-market .brief-fact em, .brief-summary small, .brief-summary em { font-size: 12px; }
+  /* The four list filters as a 2×2 grid: the fourth one and every focus ring stay on screen. */
+  .brief-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 1 1 100%; overflow: visible; }
+  .brief-seg button { justify-content: center; }
+}
+/* A focused control is never under the sticky bar or the fixed dock (their sizes live on .brief). */
+@media (max-width: 1023px) {
+  :root { scroll-padding-top: calc(48px + env(safe-area-inset-top, 0px) + 8px); scroll-padding-bottom: calc(56px + env(safe-area-inset-bottom, 0px) + 12px); }
+}
 
 /* Market tab (MarketCard detail): the verdict and the warning summary first, then the evidence in
    three titled groups of rows. A warning is a ▲ and the word 注意 beside its value, never colour alone. */
@@ -483,6 +523,9 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
   .brief-history .history-metric-picker { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 6px; margin-inline: -2px; padding: 0 32px 0 2px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
   .brief-history .history-metric-picker::-webkit-scrollbar { display: none; }
   .brief-history .history-metric-picker button { flex: none; padding: 6px 10px; }
+  /* Below 1024px the root's scroll padding already clears the bar (see the focus rule above), so a
+     market-tab jump adds only 8px: the heading still lands 16px below the bar. */
+  .brief-env-head h3, #brief-history-title, .market-history-explorer h3[id] { scroll-margin-top: 8px; }
 }
 @media (min-width: 1024px) {
   .brief-market.is-detail { padding: 20px 24px; }

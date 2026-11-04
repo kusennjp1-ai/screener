@@ -81,3 +81,21 @@ it('reuses primitive parsing and ICU formatting for repeated exact inputs', () =
     parse.mockRestore(); format.mockRestore();
   }
 });
+
+it('keeps 3,000 distinct days and timestamps cached: a second pass parses nothing', () => {
+  const dayList = Array.from({ length: 3000 }, (_, i) => new Date(Date.UTC(1990, 0, 1) + i * 86400000).toISOString().slice(0, 10));
+  const stampList = dayList.map(day => `${day}T21:00:00.000Z`);
+  const first = [dayList.map(validEvidenceDay), stampList.map(evidenceTimestamp)];
+  expect(first[0].every(Boolean)).toBe(true);
+  expect(first[1]).toEqual(stampList.map(value => new Date(value).getTime()));
+  const parse = vi.spyOn(Date, 'parse');
+  try {
+    expect([dayList.map(validEvidenceDay), stampList.map(evidenceTimestamp)]).toEqual(first);
+    expect(parse).not.toHaveBeenCalled();
+  } finally { parse.mockRestore(); }
+  // Past the bound the oldest entries are evicted and re-parsed: the results never change.
+  const more = Array.from({ length: 5000 }, (_, i) => new Date(Date.UTC(2001, 0, 1) + i * 86400000).toISOString().slice(0, 10));
+  expect(more.map(validEvidenceDay).every(Boolean)).toBe(true);
+  expect(more.map(day => evidenceTimestamp(`${day}T21:00:00.000Z`))).toEqual(more.map(day => new Date(`${day}T21:00:00.000Z`).getTime()));
+  expect([dayList.map(validEvidenceDay), stampList.map(evidenceTimestamp)]).toEqual(first);
+});

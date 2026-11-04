@@ -79,16 +79,26 @@ export function briefOrder(a, b) {
   return near(a) - near(b) || (b.passed ?? -1) - (a.passed ?? -1) || (b.rs ?? -1) - (a.rs ?? -1) || a.symbol.localeCompare(b.symbol);
 }
 
+// One eligibility rule for Today's focus rows, their counts and the list's zone/near filters.
+const inZone = view => view.state === 'zone';
+const nearPivot = view => view.state === 'wait' && finite(view.distance) && view.distance >= -5;
+const focusPool = (ranked, date) => (ranked || []).filter(item => item?.assessment?.qualified).map(item => candidateView(item, date))
+  .filter(view => inZone(view) || nearPivot(view));
+
 /** Today's focus list: qualified, liquid Minervini candidates in the buy zone or within 5% below the pivot. */
 export function focusCandidates(ranked, date, limit = 5) {
-  return (ranked || []).filter(item => item?.assessment?.qualified).map(item => candidateView(item, date))
-    .filter(view => view.state === 'zone' || (view.state === 'wait' && finite(view.distance) && view.distance >= -5))
-    .sort(briefOrder).slice(0, limit);
+  return focusPool(ranked, date).sort(briefOrder).slice(0, limit);
+}
+
+/** The whole focus pool, not the top-`limit` slice Today shows: in the buy zone, near the pivot, and both. */
+export function focusCounts(ranked, date) {
+  const pool = focusPool(ranked, date), zone = pool.filter(inZone).length;
+  return { zone, near: pool.length - zone, total: pool.length };
 }
 
 export const LIST_FILTERS = {
-  zone: { label: '買いゾーン', test: view => view.qualified && view.state === 'zone' },
-  near: { label: 'ピボット接近', test: view => view.qualified && view.state === 'wait' && finite(view.distance) && view.distance >= -5 },
+  zone: { label: '買いゾーン', test: view => view.qualified && inZone(view) },
+  near: { label: 'ピボット接近', test: view => view.qualified && nearPivot(view) },
   all: { label: '選定すべて', test: view => view.qualified },
   one: { label: 'あと1条件', test: view => !view.qualified && view.failed === 1 && view.unknown === 0 },
 };
