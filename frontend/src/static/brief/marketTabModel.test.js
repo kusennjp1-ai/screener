@@ -275,7 +275,13 @@ describe('market tab helpers', () => {
   it('says what the long history shows today only from its own values', () => {
     const rows = days('2026-10-02', 260).map((date, i) => ({ date, coverage: 100, eligibleUniverse: 100, leaderCount: 10 + (i % 50) }));
     const frames = [{ date: '2026-10-02', ranks: SYMBOLS.map((symbol, j) => ({ symbol, rank: j + 1, relativeIndex: 110 - j })) }];
-    expect(historyTakeaway({ breadth: rows, sectorRotation: { frames } })).toBe('先導株数（価格条件）は1年前の18から19銘柄（1年の範囲 10〜59）。セクターの上位は素材・通信サービス・エネルギー。');
+    expect(historyTakeaway({ breadth: rows, sectorRotation: { frames } }, '2026-10-02')).toBe('先導株数（価格条件）は1年前の18から19銘柄（1年の範囲 10〜59）。セクターの上位は素材・通信サービス・エネルギー。');
+    // A lagging history: both values name their own session, never reading as the analysis date's.
+    expect(historyTakeaway({ breadth: rows, sectorRotation: { frames } }, '2026-10-05')).toBe('先導株数（価格条件）は1年前の18から19銘柄（10/2時点・1年の範囲 10〜59）。セクターの上位は素材・通信サービス・エネルギー（10/2時点）。');
+    // No value a year earlier: the count is dated by its session instead of 「現在」.
+    const noBase = rows.map((row, i) => (i === rows.length - 252 ? { ...row, leaderCount: null } : row));
+    expect(historyTakeaway({ breadth: noBase }, '2026-10-02')).toBe('先導株数（価格条件）は10/2時点で19銘柄（1年の範囲 10〜59）。');
+    expect(historyTakeaway({ breadth: noBase }, '2026-10-02')).not.toContain('現在');
     expect(historyTakeaway({ breadth: rows.slice(-100) })).toBeNull();
     expect(historyTakeaway(null)).toBeNull();
   });

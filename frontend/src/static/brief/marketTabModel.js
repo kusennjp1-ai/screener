@@ -330,20 +330,25 @@ export function marketCardView({ market, marketLoading = false, trends, date }) 
 // ---- the long-history section -----------------------------------------------------------------
 
 /**
- * One line on what the long history says today, from the data only: the leader count now against a
- * year earlier and its one-year range, and the leading sectors of the newest complete frame.
+ * One line on what the long history says, from the data only: the leader count against a year earlier
+ * and its one-year range, and the leading sectors of the newest complete frame. A value older than the
+ * analysis date `date` carries its own session (「9/30時点」), so a lagging history never reads as today's.
  */
-export function historyTakeaway(history) {
+export function historyTakeaway(history, date = null) {
   if (!history) return null;
   const rows = (history.breadth || []).map(environmentPoint);
   const field = rows.some(row => 'trendTemplateCount' in row) ? ['trendTemplateCount', 'TT達成数'] : ['leaderCount', '先導株数（価格条件）'];
   const hit = latestKnown(rows, field[0]), parts = [];
+  const olderThan = value => Boolean(value && date && value < date);
   if (hit && hit.index >= YEAR - 1) {
     const window = rows.slice(hit.index - (YEAR - 1), hit.index + 1).map(row => row[field[0]]).filter(finite), before = rows[hit.index - (YEAR - 1)]?.[field[0]];
-    if (window.length >= 200) parts.push(`${field[1]}は${finite(before) ? `1年前の${num(before)}から` : '現在'}${num(hit.value)}銘柄（1年の範囲 ${num(Math.min(...window))}〜${num(Math.max(...window))}）`);
+    const when = olderThan(hit.date) ? `${shortDate(hit.date, date)}時点・` : '';
+    // Without a year-earlier value the count is named by its own session, never 「現在」.
+    const from = finite(before) ? `1年前の${num(before)}から` : `${shortDate(hit.date, date || hit.date)}時点で`;
+    if (window.length >= 200) parts.push(`${field[1]}は${from}${num(hit.value)}銘柄（${finite(before) ? when : ''}1年の範囲 ${num(Math.min(...window))}〜${num(Math.max(...window))}）`);
   }
   const frame = (history.sectorRotation?.frames || []).at(-1);
-  if (frame?.ranks?.length === 11) parts.push(`セクターの上位は${[...frame.ranks].sort((a, b) => a.rank - b.rank).slice(0, 3).map(row => sectorNames[row.symbol] || row.symbol).join('・')}`);
+  if (frame?.ranks?.length === 11) parts.push(`セクターの上位は${[...frame.ranks].sort((a, b) => a.rank - b.rank).slice(0, 3).map(row => sectorNames[row.symbol] || row.symbol).join('・')}${olderThan(frame.date) ? `（${shortDate(frame.date, date)}時点）` : ''}`);
   return parts.length ? `${parts.join('。')}。` : null;
 }
 

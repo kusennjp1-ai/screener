@@ -25,7 +25,7 @@ export default function MarketScreen({ brief }) {
   // Same failure kinds as the 地合い card: a fetch failure is never called an integrity failure.
   const failure = status.state !== 'error' ? null : status.kind === 'fetch' ? `長期履歴を取得できません（${bare(status.reason)}）。`
     : status.kind === 'reader' ? `長期履歴を表示できません（${bare(status.reason)}）。` : '長期履歴の整合性を確認できません。';
-  const takeaway = status.state === 'ready' ? historyTakeaway(history) : null;
+  const takeaway = status.state === 'ready' ? historyTakeaway(history, brief.date) : null;
   const historyError = !history && typeof trends?.data?.long_history_error === 'string';
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>市場</h1></header>
