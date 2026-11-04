@@ -1,7 +1,7 @@
 // Daily brief on phones: rows, Today's first screen, tiles, filters and focus at 320/375/390 px,
 // against the desktop layout at 1440 px, on synthetic data.
 import { test, expect } from '@playwright/test';
-import { openBrief, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
+import { openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const PHONES = { 320: phone(320, 640), 390: VIEWPORTS.phone };
@@ -143,6 +143,33 @@ test.describe('the market tab on a phone keeps the verdict and the chart', () =>
     await expect(market.locator('.brief-index')).toBeVisible();
     await expect(page.locator('.brief-hero small')).toBeVisible();
     expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('phone secondary text on the market tab and the fundamentals rows', () => {
+  test.use(phone(375, 812));
+  const MARKET = '.brief-index-stats small, .brief-index-stats span, .brief-index-source, .brief-env-status, .brief-env-change, .brief-stagelegend, .brief-sector-name small, .brief-sector-move, .brief-fact-asof, .brief-signals > b small, .brief-verdict-date';
+  const sizes = (page, selector) => page.locator(selector).evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).map(node => [node.className, node.textContent.slice(0, 20), parseFloat(getComputedStyle(node).fontSize)]));
+  test('reads at 12px or more, labels in --text-2, and 基準 is a label, not a 16px value', async ({ page }) => {
+    // One session behind, so the as-of tags (「（10/1時点）」) are on screen too.
+    const { errors } = await openBrief(page, '#/brief/market', { historyEnd: sessions.at(-2) });
+    await expect(page.locator('.market-history-explorer').getByRole('img')).toBeVisible();
+    const market = await sizes(page, MARKET);
+    expect(market.length).toBeGreaterThan(20);
+    expect(market.filter(([, , size]) => size < 12)).toEqual([]);
+    const label = await page.locator('.brief-index-stats small').first().evaluate(node => [getComputedStyle(node).color, getComputedStyle(node.closest('.brief-index-block')).getPropertyValue('--text-2')]);
+    expect(label[0]).toBe(await page.evaluate(value => { const probe = document.createElement('span'); probe.style.color = value; document.body.append(probe); const color = getComputedStyle(probe).color; probe.remove(); return color; }, label[1].trim()));
+    await page.locator('.brief-env-toggle').first().click();
+    const rule = await page.locator('.brief-env-rule').first().evaluate(node => { const b = node.querySelector('b'); return [getComputedStyle(b).fontSize, getComputedStyle(node).fontSize, getComputedStyle(b).fontFamily === getComputedStyle(node).fontFamily]; });
+    expect(rule).toEqual(['12px', '12px', true]);
+    expect(await horizontalOverflow(page)).toBe(0);
+    await page.goto('/#/brief/stock/ZZNV');
+    const fin = page.getByTestId('brief-fundamentals');
+    await expect(fin.locator('.brief-q-axis')).toBeVisible();
+    const rows = await sizes(page, '.brief-facts.is-fin .brief-fact small, .brief-facts.is-fin .brief-fact em');
+    expect(rows).toHaveLength(6);
+    expect(rows.filter(([, , size]) => size < 12)).toEqual([]);
     expect(errors).toEqual([]);
   });
 });

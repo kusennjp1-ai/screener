@@ -506,7 +506,8 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-env-detail { display: grid; gap: 8px; margin: 0 0 10px 36px; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-size: 12px; line-height: 1.6; color: var(--text-2); overflow-wrap: anywhere; }
 .brief-env-detail[hidden] { display: none; }
 .brief-env-detail p { margin: 0; }
-.brief-env-rule b { margin-right: 8px; color: var(--text); }
+/* 「基準」 is a label in the detail's own text, not a tile value (.brief-fact b is a 16px mono value). */
+.brief-env-rule b { margin-right: 8px; color: var(--text); font-family: var(--font-body); font-size: inherit; white-space: normal; }
 .brief-yearline svg { display: block; width: 100%; height: 56px; overflow: visible; }
 .brief-yearline path { fill: none; stroke: var(--text-2); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .brief-yearline p { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--text-3); }
@@ -550,6 +551,15 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
   /* Below 1024px the root's scroll padding already clears the bar (see the focus rule above), so a
      market-tab jump adds only 8px: the heading still lands 16px below the bar. */
   .brief-env-head h3, #brief-history-title, .market-history-explorer h3[id] { scroll-margin-top: 8px; }
+}
+/* Phone legibility for the market tab's own secondary text and the stock's fundamentals rows: the
+   same 12px floor (labels in --text-2) as the shared tiles, so one group never mixes 11/12/13px. The
+   conflict disclosure, the ▲ 注意 status word and the as-of tags carry meaning and are never smaller. */
+@media (max-width: 520px) {
+  .brief-index-stats small, .brief-index-stats span, .brief-index-source, .brief-env-status, .brief-env-change, .brief-stagelegend, .brief-stagelegend b,
+  .brief-sector-name small, .brief-sector-move, .brief-fact-asof, .brief-signals > b small, .brief-verdict-date, .brief-yearline p, .brief-market.is-detail .brief-index-legend { font-size: 12px; }
+  .brief-index-stats small { color: var(--text-2); }
+  .brief-facts.is-fin .brief-fact small, .brief-facts.is-fin .brief-fact em { font-size: 12px; }
 }
 @media (min-width: 1024px) {
   .brief-market.is-detail { padding: 20px 24px; }
