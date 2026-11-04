@@ -994,6 +994,7 @@ jobs:
             cd frontend
             npm run test:run -- src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookMarketEvidence.test.js src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/static/marketLongHistory.test.js src/static/legacyRoutes.test.js src/static/brief/briefModel.test.js src/static/brief/priceChart.test.js src/static/brief/MarketCard.test.jsx src/static/brief/StockView.test.jsx src/static/brief/useWatchSellChecks.test.jsx --maxWorkers=2
             python tools/test_sec_financials.py
+            python tools/test_sec_8k_samples.py
             python tools/export-book-benchmark.py --allow-unavailable
             node tools/restore-market-trend-source.mjs
             node tools/restore-market-history-source.mjs
@@ -1016,6 +1017,9 @@ jobs:
               fi
             fi
             python tools/sec-financials.py --limit 1500
+            # Not published: up to 10 real 8-K earnings releases for fiscal-Q4 EPS that exist
+            # only in a 10-K, kept as a 7-day artifact to build a reviewed parser from.
+            python tools/sec-8k-samples.py --max 10 --output "$RUNNER_TEMP/sec-8k-samples" || echo '::warning::8-K earnings-release samples unavailable'
             # Yahoo at 1 call/s (3 calls per symbol): about 5 minutes; the release re-fetches or carries it.
             python tools/export-financial-history.py --limit 100
             python tools/test_export_entry_context.py
@@ -1041,6 +1045,15 @@ jobs:
         with:
           path: frontend/.cache/market-history
           key: ${{ steps.history-cache.outputs.cache-primary-key }}
+
+      - name: Retain 8-K earnings-release samples for the fiscal-Q4 EPS parser (not published)
+        if: ${{ always() && needs.select-markets.outputs.repair != 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: sec-8k-samples-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/sec-8k-samples
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Retain actual long-history freshness and independent replay result
         if: ${{ always() && needs.select-markets.outputs.mode == 'full' }}
