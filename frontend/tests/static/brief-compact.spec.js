@@ -108,6 +108,8 @@ test.describe('expanders and tabs by keyboard', () => {
     const { errors } = await openBrief(page, '#/brief/market');
     await tabs(page).last().click();
     await expect(page.locator('.market-history-explorer').getByRole('img')).toBeVisible();
+    // The 地合い card's entrance (brief-rise) can still be moving the stuck tabs when the chart is up.
+    await settled(page);
     await page.evaluate(() => scrollTo(0, 900));
     const bar = await page.locator('.brief-bar').boundingBox(), strip = await page.locator('.brief-switchbar').boundingBox();
     expect(Math.abs(strip.y - (bar.y + bar.height))).toBeLessThanOrEqual(1);
@@ -338,6 +340,7 @@ test.describe('the market tabs on a short landscape phone', () => {
     const { errors } = await openBrief(page, '#/brief/market');
     await tabs(page).last().click();
     await expect(page.locator('.market-history-explorer').getByRole('img')).toBeVisible();
+    await settled(page);
     await page.evaluate(() => scrollTo(0, 900));
     const bar = await page.locator('.brief-bar').boundingBox(), strip = await page.locator('.brief-switchbar').boundingBox();
     expect(strip.y + strip.height).toBeLessThanOrEqual(bar.y + bar.height);
