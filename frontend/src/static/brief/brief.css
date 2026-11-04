@@ -62,6 +62,9 @@
 @media (max-width: 520px) {
   .brief-market:not(.is-detail) .brief-verdict, .brief-market:not(.is-detail) .brief-index, .brief-market:not(.is-detail) .brief-index-legend, .brief-hero.is-today small { display: none; }
   .brief-hero.is-today { position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* A tighter Today market card (same content) so the first candidate clears the dock with CI's taller fonts too. */
+  .brief-market:not(.is-detail) { gap: 8px; padding-block: 12px; }
+  .brief-market:not(.is-detail) .brief-fact { padding-block: 6px; }
 }
 .brief-index-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 4px 0 0; font-size: 11px; color: var(--text-3); }
 .brief-index-legend span::before { content: ""; display: inline-block; width: 12px; height: 2px; margin-right: 4px; vertical-align: middle; background: var(--text); }
