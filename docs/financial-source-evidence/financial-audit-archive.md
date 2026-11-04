@@ -178,14 +178,25 @@ existing exact-controller rebind.
 
 ## Runbook
 
-- An indexed copy went missing or was corrupted: re-upload the identical logical
-  bytes (for example from a Pages artifact of 7 days or less, or any other copy)
-  as the same tag and asset; the publisher accepts any encoding that decodes to
-  the logical hash. Then rerun the publisher.
+- An indexed copy went missing or was corrupted: re-upload exactly the encoded
+  bytes the index records (`encoding.sha256` and `encoding.bytes`, for example
+  from a Pages artifact of 7 days or less) as the same tag and single asset, then
+  rerun the publisher. An index entry never changes, so an indexed entry accepts
+  only that exact encoding; a different encoding of the same logical file
+  (accepted for a new candidate) does not satisfy it. If those encoded bytes are
+  no longer available, publication stays blocked until an owner decides.
 - A conflict in the archive workflow: inspect the published release named in the
   log. Tooling never modifies it; an owner decides how to replace it.
 - Headroom ordering: before the first archive run, publications behave as before.
   If one fails the TAR guard, the next run after the archive workflow succeeds.
+- First transition (measured on the 2026-11-04 live publication, run
+  41779082131): Pages hosts 25 release receipts and 24 carry projection bins
+  (222,146,560 TAR bytes in total, the active carry included) with no index; the
+  TAR is 965,406,720 bytes. The first archive run (the push after merge) stages
+  and publishes all 24 bins. The next plain carry publication omits all 24 that
+  verify, hosts its own new carry (about 9.2 MB) and adds about 1.2 KB of index
+  per archived carry, so its TAR is about 752 MB before that day's other data
+  changes. Until a copy verifies, that carry simply stays hosted.
 
 ## Independent verification
 
