@@ -211,7 +211,9 @@ jobs:
         if: steps.plan.outputs.publish == 'true'
         # The approved UI may be the previous research workspace (data-only releases) or
         # the brief: every listed file exists in both trees, because vitest silently
-        # skips a filter that matches no file whenever another filter matches.
+        # skips a filter that matches no file whenever another filter matches. The SEC admission
+        # test (bookFinancialAdmission.test.js) joins once every approved tree has it; until then
+        # the daily Static Site build runs it before its export.
         run: npm run test:run -- src/static/researchPresentation.test.js src/static/financialHistory.test.js src/static/entryReadiness.test.js src/components/Charts/bookAnnotations.test.js src/components/Charts/vcpBoxPrimitive.test.js src/static/qualificationAudit.test.js src/static/bookProfiles.test.js src/static/bookTechnicalEvidence.test.js src/static/bookFinancialEvidence.test.js src/static/bookMarketEvidence.test.js src/static/marketLeadership.test.js src/static/bookChartDiagnostics.test.js src/static/researchEngine.test.js src/static/portfolioPlan.test.js src/App.static.test.jsx src/static/candidateHistory.test.js src/static/sectorStrength.test.js src/static/marketLongHistory.test.js src/static/chartPayloadIdentity.test.js src/static/brief/briefModel.test.js src/static/brief/priceChart.test.js src/static/brief/MarketCard.test.jsx src/static/brief/StockView.test.jsx src/static/brief/useWatchSellChecks.test.jsx --maxWorkers=2
         working-directory: release/frontend
       - name: Cache public SEC archives and security mappings
@@ -226,6 +228,7 @@ jobs:
         working-directory: release/frontend
         env:
           SEC_USER_AGENT: ${{ secrets.SEC_USER_AGENT }}
+          RELEASE_CARRIES_FINANCIALS: ${{ steps.plan.outputs.carry }}
         run: |
           python -m pip install 'yfinance==1.2.1' 'pandas_market_calendars==5.4.0'
           python tools/test_sec_financials.py
@@ -239,9 +242,13 @@ jobs:
           python tools/recalculate-setups.py
           node tools/export-research.mjs
           python tools/test_export_entry_context.py
-          python tools/sec-financials.py --limit 50
+          # The tool's own default budget: every brief-listable row first, at most
+          # 1500 symbols at <=5 req/s. An older approved UI tree keeps its smaller default.
+          python tools/sec-financials.py
           python tools/test_export_financial_history.py
-          python tools/export-financial-history.py --limit 300
+          # Under the financial carry every row's history is replaced by the carried
+          # one, so no Yahoo request is made (the same empty file prepare-carry writes).
+          if [ "$RELEASE_CARRIES_FINANCIALS" = true ]; then python tools/export-financial-history.py --limit 0; else python tools/export-financial-history.py --limit 300; fi
           # Earnings dates must exist before the final export, or the rows never carry them.
           python tools/export-entry-context.py
           node tools/export-research.mjs
@@ -294,6 +301,12 @@ jobs:
         if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.limited_research_preview == 'true'
         working-directory: release/frontend
         run: node tools/check-data-quality.mjs
+      - name: Report published fundamentals coverage (diagnostic only)
+        # Read-only, on the logical files before packing: per brief-listable row, the SEC
+        # record, the tiles with a value, the Code 33 state and why it stays unknown.
+        if: steps.plan.outputs.publish == 'true' && steps.restore.outputs.offline_recovery_verified != 'true'
+        working-directory: release/frontend
+        run: node tools/report-data-coverage.mjs --published || echo '::warning::Published fundamentals coverage unavailable'
       - name: Preserve approved UI bytes or record verified new UI
         if: steps.plan.outputs.publish == 'true'
         env:

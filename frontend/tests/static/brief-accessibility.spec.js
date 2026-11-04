@@ -12,8 +12,9 @@ const SCREENS = [
 ];
 
 for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} ${device.viewport.width}px`, () => {
-  // Reduced motion settles every entrance animation, so axe measures final colours.
-  test.use({ ...device, reducedMotion: 'reduce' });
+  // Reduced motion settles every entrance animation, so axe measures final colours. It is a
+  // browser-context option, so it goes through contextOptions (a bare `reducedMotion` is ignored).
+  test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
 
   for (const [screen, hash, ready] of SCREENS) test(`${screen} screen passes axe in dark and light`, async ({ page }) => {
     // A watched one-short stock and a watched candidate exercise the watch rows and sell checks.
@@ -22,7 +23,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
       if (theme === 'light') await page.getByRole('button', { name: 'ライトモードに切り替え' }).click();
       await expect(page.locator('.brief')).toHaveAttribute('data-theme', theme);
       await ready(page);
-      await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+      expect(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches)).toBe(true);
+      expect(await page.evaluate(() => document.getAnimations().filter(animation => animation.playState === 'running').map(animation => animation.animationName || animation.constructor.name)), `${screen} ${theme} running animations`).toEqual([]);
       expect(await axeViolations(page), `${screen} ${theme}`).toEqual([]);
       expect(await horizontalOverflow(page), `${screen} ${theme} overflow`).toBe(0);
     }

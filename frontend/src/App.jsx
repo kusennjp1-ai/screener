@@ -1,4 +1,4 @@
-import { useMemo, lazy, Suspense } from 'react';
+import { useLayoutEffect, useMemo, lazy, Suspense } from 'react';
 import useColorModePreference from './contexts/useColorModePreference';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { createQueryClient } from './config/queryClient';
@@ -181,6 +181,9 @@ function App() {
   );
 
   const theme = useMemo(() => createTheme(getDesignTokens(mode)), [mode]);
+  // index.html paints the static brief's boot ground through a class on <html>; the connected app
+  // drops it before its first paint, so the page ground is CssBaseline's theme background again.
+  useLayoutEffect(() => { document.documentElement.classList.remove('boot-dark', 'boot-light'); }, []);
 
   const appShell = (
     <Suspense fallback={<Box role="status" sx={{p:4}}><CircularProgress aria-label="アプリを読み込み中" /></Box>}>

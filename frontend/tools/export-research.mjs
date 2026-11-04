@@ -12,6 +12,8 @@ import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { scanListRow } from './scan-list-payload.mjs';
 import { setupEvidence } from './setup-evidence.mjs';
 import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
+import { admitBookFinancials } from '../src/static/bookFinancialAdmission.js';
+import { readBookFinancials } from './book-financials-input.mjs';
 // Daily, reproducible candidate snapshots use the exact same rules as the UI.
 import { readFile, writeFile, readdir, mkdir, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -68,7 +70,7 @@ try { currentFinancials = await read('financial-history.json'); } catch (error) 
 try { entryContext = await read('entry-context.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 try { benchmark = await read('book-benchmark.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
 if (benchmark?.as_of_date !== scan.as_of_date) benchmark = { symbol: breadth?.payload?.benchmark_symbol || 'SPY', as_of_date: scan.as_of_date, bars: breadth?.payload?.benchmark_overlay || breadth?.payload?.spy_overlay || [] };
-try { financials = await read('book-financials.json'); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+financials = await readBookFinancials(root);
 const marketCharts = [];
 const availableCharts = new Set();
 let rows = new Map();
@@ -126,7 +128,8 @@ for (const row of merged) {
     volumeRatio:averageVolume > 0 ? chart.bars.at(-1).volume / averageVolume : null };
   rows.set(row.symbol, projectFinancialRow(overlayFinancialCorrection({ ...row, as_of_date:scan.as_of_date, chart_path:paths.get(row.symbol) || null, entry_evidence:entryEvidence, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
     financial_history: currentFinancials?.as_of_date === scan.as_of_date ? currentFinancials.results?.[row.symbol] || null : null,
-    book_financials: financials?.as_of_date === scan.as_of_date ? financials.results?.[row.symbol] || null : null }, correction), {now:evaluatedAt,asOfDate:scan.as_of_date}));
+    // Only an exact same-day SEC record for this symbol reaches the row (also without a correction or carry).
+    book_financials: financials?.as_of_date === scan.as_of_date ? admitBookFinancials(financials.results?.[row.symbol], {symbol:row.symbol,asOfDate:scan.as_of_date,evaluatedAt,row}) : null }, correction), {now:evaluatedAt,asOfDate:scan.as_of_date}));
 }
 await writeCorrectionHistory(root,correction,currentFinancials);
 await rewriteCorrectionChartAliases(root,correction);

@@ -42,7 +42,7 @@ paths = [e['path'] for e in index['symbols'] if e['symbol'] in symbols]
 with ThreadPoolExecutor(max_workers=8) as pool:
     for i, _ in enumerate(pool.map(fetch, paths)):
         if i % 500 == 0: print('Public charts', i, '/', len(paths), flush=True)
-for path in ['book-benchmark.json','financial-history.json','book-financials.json','entry-context.json', market['pages']['breadth']['path']]:
+for path in ['book-benchmark.json','financial-history.json','book-financials.json.gz','book-financials.json','entry-context.json', market['pages']['breadth']['path']]:
     try: fetch(path)
     except Exception as error: print(path, type(error).__name__)
 print('Public snapshot ready', flush=True)

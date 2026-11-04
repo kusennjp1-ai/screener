@@ -6,6 +6,7 @@ import { readFileSync } from 'node:fs';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
 import { FINANCIAL_TEST_DATE, FINANCIAL_TEST_NOW } from '../../src/static/testFinancialFixture.js';
 import { SECTOR_ETFS } from '../../src/static/marketLongHistory.js';
+import { secPoint, secRecord } from '../../src/test/fixtures/secRecord.js';
 
 export const date = FINANCIAL_TEST_DATE;
 export const now = FINANCIAL_TEST_NOW;
@@ -14,6 +15,8 @@ const exchange = JSON.parse(readFileSync(new URL('../../src/static/__fixtures__/
 const sessionsUntil = day => exchange.sessions.filter(session => session <= day);
 export const sessions = sessionsUntil(date);
 export const sessionCalendar = { ...exchange, as_of_date: date, range_end: date, sessions };
+// Long-history fields an older capture never had (market-long-history-v1 before the environment counts).
+const ENVIRONMENT_FIELDS = ['trendTemplateCount', 'trendTemplatePercent', 'rs90TemplateCount', 'above150', 'above150Percent', 'above200', 'above200Percent', 'stage1', 'stage2', 'stage3', 'stage4', 'breakouts', 'breakoutsJudged', 'breakoutsHeld', 'leaderCohort', 'leaderCohortAbove50'];
 
 const SECTORS = ['Technology', 'Healthcare', 'Industrials', 'Consumer Cyclical', 'Financial', 'Energy', 'Communication Services', 'Basic Materials'];
 const NAMES = [
@@ -59,6 +62,30 @@ export const rows = NAMES.map(([symbol, company, sector], index) => {
 });
 export const rowBySymbol = Object.fromEntries(rows.map(row => [row.symbol, row]));
 
+// One stock has a canonical detail with a same-day SEC record: a June fiscal year whose Q4 EPS
+// is only in the 10-K (the common 10-Q filer case), so the EPS tile falls back one quarter. As
+// sec-financials.py writes it, a fiscal Q4 never comes from a 10-Q: its revenue and net income are
+// the 10-K's fiscal-year values minus three quarters (derived, naming the four source filings).
+export const SEC_SYMBOL = 'ZZNV';
+const SEC_QUARTERS = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+  ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30']];
+const tenK = end => ({ form: '10-K', filed: new Date(Date.parse(end) + 40 * 86400000).toISOString().slice(0, 10), accession: `0000000001-${end.slice(2, 4)}-${end.slice(5, 7)}${end.slice(8)}10` });
+const secFinancials = (() => {
+  const record = secRecord({ symbol: SEC_SYMBOL, asOfDate: date, retrievedAt: `${date}T21:30:00.000Z`, quarters: SEC_QUARTERS });
+  record.quarterly.eps = record.quarterly.eps.filter(point => !point.end.endsWith('06-30'));
+  // A June fiscal year files its December quarter on a 10-Q (secPoint assumes a calendar year).
+  for (const key of ['eps', 'revenue', 'netIncome']) for (const point of record.quarterly[key]) point.form = '10-Q';
+  for (const key of ['revenue', 'netIncome']) for (const point of record.quarterly[key].filter(p => p.end.endsWith('06-30'))) {
+    const filing = tenK(point.end);
+    const quarters = record.quarterly[key].filter(p => p.end < point.end && p.end > `${Number(point.end.slice(0, 4)) - 1}-06-30`).map(p => p.accession);
+    Object.assign(point, filing, { derived: 'fiscal-year-minus-three-quarters', components: [filing.accession, ...quarters] });
+  }
+  record.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4, tenK('2025-06-30')), secPoint('eps', ['2025-07-01', '2026-06-30'], 5.5, tenK('2026-06-30'))];
+  return record;
+})();
+rowBySymbol[SEC_SYMBOL].research_detail_path = `research-details/${SEC_SYMBOL}-detail.json`;
+export const details = { [`${SEC_SYMBOL}-detail.json`]: { ...rowBySymbol[SEC_SYMBOL], as_of_date: date, book_financials: secFinancials } };
+
 export const charts = Object.fromEntries(rows.map((row, index) => [row.chart_path.split('/').pop(), {
   symbol: row.symbol, as_of_date: date, bars: bars(index + 101, row.current_price, 0.5 + (index % 4) * 0.4),
   session_calendar: sessionCalendar, stock_data: row, rs_line: [],
@@ -67,9 +94,11 @@ export const charts = Object.fromEntries(rows.map((row, index) => [row.chart_pat
 /**
  * A market-trends asset (market-trends-v1 with a market-long-history-v1 body) that passes the
  * app's own validation. With `historyEnd` before the analysis date, the long history and the
- * index series stop at that session while the asset itself still names the analysis date.
+ * index series stop at that session while the asset itself still names the analysis date. With
+ * `schema: 'old'` the long history is written as before the market-environment fields existed
+ * (no trend-template, 150/200-day, stage, breakout or leader-cohort counts), as older captures are.
  */
-export function marketTrends({ historyEnd = date } = {}) {
+export function marketTrends({ historyEnd = date, schema = 'current' } = {}) {
   const days = sessionsUntil(historyEnd), n = days.length;
   const stamp = `${historyEnd}T21:00:00.000Z`, provenanceStamp = `${historyEnd}T20:30:00.000Z`;
   const symbols = Array.from({ length: 100 }, (_, i) => `ZZU${String(i).padStart(3, '0')}`);
@@ -90,6 +119,7 @@ export function marketTrends({ historyEnd = date } = {}) {
       breakoutsJudged: judged, breakoutsHeld: held, leaderCohort: cohort,
       leaderCohortAbove50: cohort === null ? null : Math.round(cohort * (0.7 + 0.2 * Math.sin(i / 50) - (i > n - 30 ? 0.35 : 0))) };
   });
+  if (schema === 'old') for (const row of breadth) for (const key of ENVIRONMENT_FIELDS) delete row[key];
   const ranks = SECTOR_ETFS.map((symbol, i) => ({ symbol, rank: i + 1, relativeIndex: 120 - i }));
   const history = {
     schema_version: 'market-long-history-v1', market: 'US', as_of_date: historyEnd, retrieved_at: stamp,
@@ -124,16 +154,20 @@ export function marketTrends({ historyEnd = date } = {}) {
 }
 
 /** Serve the synthetic publication for every static-data request; abort everything that is not 127.0.0.1. */
-/** `fail` names one file to answer with an HTTP error: 'series' (404 for the market series) or 'manifest' (503). */
-export async function routeBrief(page, { historyEnd = date, fail } = {}) {
-  const trends = marketTrends({ historyEnd });
+/**
+ * `fail` names one file to answer with an HTTP error: 'series' (404 for the market series), 'manifest'
+ * (503) or 'detail' (503 for every research detail). `detailGate` is a promise every research detail
+ * waits for before it answers (a detail that is still loading).
+ */
+export async function routeBrief(page, { historyEnd = date, schema, fail, detailGate } = {}) {
+  const trends = marketTrends({ historyEnd, schema });
   const external = [];
   await page.route('**/*', route => {
     if (new URL(route.request().url()).hostname === '127.0.0.1') return route.fallback();
     external.push(route.request().url());
     return route.abort();
   });
-  await page.route('**/static-data/**', route => {
+  await page.route('**/static-data/**', async route => {
     const file = new URL(route.request().url()).pathname.split('/').pop();
     if (file === 'manifest.json' && fail === 'manifest') return route.fulfill({ status: 503, json: {} });
     if (file === trends.file && fail === 'series') return route.fulfill({ status: 404, json: {} });
@@ -141,6 +175,8 @@ export async function routeBrief(page, { historyEnd = date, fail } = {}) {
       default_market: 'US', supported_markets: ['US'], markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' }, market_trends: trends.ref }, pages: {} } } } });
     if (file === 'research.json') return route.fulfill({ json: { as_of_date: date, rows } });
     if (file === trends.file) return route.fulfill({ contentType: 'application/json', body: trends.text });
+    if (details[file] && fail === 'detail') return route.fulfill({ status: 503, json: {} });
+    if (details[file]) { if (detailGate) await detailGate; return route.fulfill({ json: details[file] }); }
     if (charts[file]) return route.fulfill({ json: charts[file] });
     return route.fulfill({ status: 404, json: {} });
   });
@@ -152,7 +188,7 @@ export async function routeBrief(page, { historyEnd = date, fail } = {}) {
  * `storage` seeds localStorage once per tab (a later change and reload keep the user's choice),
  * e.g. { 'research-watch': ['ZZNV'] } or { 'screener:color-mode': 'light' }.
  */
-export async function openBrief(page, hash = '#/brief', { historyEnd, storage, fail } = {}) {
+export async function openBrief(page, hash = '#/brief', { historyEnd, schema, storage, fail, detailGate } = {}) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.clock.setFixedTime(new Date(now));
@@ -163,7 +199,7 @@ export async function openBrief(page, hash = '#/brief', { historyEnd, storage, f
       sessionStorage.setItem('brief-spec-seeded', '1');
     } catch { /* storage blocked: the app must still render */ }
   }, storage);
-  const network = await routeBrief(page, { historyEnd, fail });
+  const network = await routeBrief(page, { historyEnd, schema, fail, detailGate });
   await page.goto(`/${hash}`);
   return { errors, external: network.external };
 }

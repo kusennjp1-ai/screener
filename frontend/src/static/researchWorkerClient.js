@@ -2,9 +2,33 @@ import { resolveStaticPublication } from './staticPublication';
 import { prepareResearchBundle, validResearchEvaluation } from './researchPreprocess';
 import { createResearchReceiver } from './researchWorkerPackets';
 
+// The only construction site, so Vite bundles the worker script once.
+const spawnWorker = () => new Worker(new URL('./researchWorker.js', import.meta.url), { type: 'module', name: 'research-data' });
+
+// One spare worker started at app start, so its script downloads in parallel with the manifest
+// instead of after it. It carries no request and no data; the first request takes it.
+let spare = null, prewarmed = false;
+export function prewarmResearchWorker() {
+  if (prewarmed || typeof Worker === 'undefined') return;
+  prewarmed = true;
+  try {
+    const worker = spawnWorker();
+    // A spare whose script fails to load before use is dropped, so no request can wait on it.
+    worker.onerror = () => { if (spare === worker) spare = null; worker.terminate(); };
+    spare = worker;
+  } catch { spare = null; }
+}
+function takeWorker() {
+  const worker = spare;
+  spare = null;
+  if (!worker) return spawnWorker();
+  worker.onerror = null;
+  return worker;
+}
+
 export function runDataWorker(request, signal) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./researchWorker.js', import.meta.url), { type: 'module', name: 'research-data' });
+    const worker = takeWorker();
     let settled = false;
     const finish = (error, result) => {
       if (settled) return;

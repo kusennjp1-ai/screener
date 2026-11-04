@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { createHash } from 'node:crypto';
+import { gzipSync } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -11,6 +12,7 @@ import { FINANCIAL_GENERATION_CARRY_SCHEMA, FINANCIAL_GENERATION_CARRY_ENV, crea
 import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload, currentFinancialHistory, mergeFinancialDetail } from '../src/static/financialCurrent.js';
 import { withFinancialProof } from '../src/static/testFinancialFixture.js';
 import { nativeAnnualFixture } from '../src/test/fixtures/nativeAnnual.js';
+import { secRecord } from '../src/test/fixtures/secRecord.js';
 import { decodeResearchIndex, encodeResearchIndex, RESEARCH_METHODS } from '../src/static/researchTransport.js';
 import { assess, rankCandidates } from '../src/static/researchEngine.js';
 import { filterRanked } from '../src/static/researchPresentation.js';
@@ -269,7 +271,7 @@ it('loads only exact, exclusive, complete carry bindings for the complete curren
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
-async function exportFixture(options = inputs(), { withPrior = false, chartForRow } = {}) {
+async function exportFixture(options = inputs(), { withPrior = false, chartForRow, book = null } = {}) {
   const directory = await mkdtemp(join(tmpdir(), 'financial-carry-export-')), frontend = join(directory, 'frontend'), root = join(frontend, 'public/static-data'), rows = targetRows(options), date = JSON.parse(options.targetBase).as_of_date;
   const entry = { as_of_date: date, market: 'US', pages: { scan: { path: 'scan.json' } }, assets: { charts: { path: 'charts-index.json' } } };
   await write(join(root, 'manifest.json'), { generated_at: new Date(options.evaluatedAt).toISOString(), markets: { US: entry } });
@@ -295,6 +297,11 @@ async function exportFixture(options = inputs(), { withPrior = false, chartForRo
   const ordinaryEnv = { ...process.env, FINANCIAL_EVALUATED_AT: new Date(options.evaluatedAt).toISOString() };
   for (const key of Object.keys(ordinaryEnv)) if (key.startsWith('FINANCIAL_CORRECTION_') || key.startsWith('FINANCIAL_GENERATION_CARRY_')) delete ordinaryEnv[key];
   const exporter = fileURLToPath(new URL('./export-research.mjs', import.meta.url));
+  if (book) {
+    // As in the release: the first export precedes the SEC fetch, whose file the later exports read.
+    execFileSync(process.execPath, [exporter], { cwd: frontend, env: ordinaryEnv, encoding: 'utf8' });
+    await writeFile(join(root, 'book-financials.json.gz'), gzipSync(JSON.stringify({ schema_version: 2, as_of_date: date, results: book })));
+  }
   execFileSync(process.execPath, [exporter], { cwd: frontend, env: ordinaryEnv, encoding: 'utf8' });
   const baselineRoot = join(directory, 'before-public'); await cp(join(frontend, 'public'), baselineRoot, { recursive: true });
   const carry = createFinancialGenerationCarry(options), path = join(directory, 'carry.json'); await write(path, carry);
@@ -350,6 +357,40 @@ it('exports advancing carry across all aliases and records the final daily obser
     await expect(verifyCarryCompatibility({ root, carry, evaluatedAt: originalTime + 4 * day })).rejects.toThrow('expired');
     raw.fundamentals.eps_growth_yy = 999; await write(join(root, 'raw/OWNED.json'), raw); await expect(verifyCarryCompatibility({ root, carry, evaluatedAt: buildTime + 1000 })).rejects.toThrow('mismatch');
   } finally { if (process.env.FINANCIAL_CARRY_KEEP_FIXTURE) console.log(`Carry fixture: ${directory}`); else await rm(directory, { recursive: true, force: true }); }
+});
+
+const SEC_QUARTERS = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+  ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30']];
+it('keeps an admitted same-day SEC record through carry while every scalar stays carry-owned', async () => {
+  const record = secRecord({ symbol: 'OWNED', asOfDate: targetDate, retrievedAt: '2026-10-05T10:00:00.000Z', quarters: SEC_QUARTERS });
+  const stale = secRecord({ symbol: 'MISMATCH', asOfDate: originalDate, retrievedAt: '2026-10-05T10:00:00.000Z', quarters: SEC_QUARTERS });
+  const options = inputs();
+  const { directory, root, carry } = await exportFixture(options, { book: { OWNED: record, MISMATCH: { ...stale, as_of_date: targetDate, symbol: 'OTHER' } } });
+  try {
+    expect(carry.ownership).toEqual(createFinancialGenerationCarry(inputs()).ownership);
+    // A target row whose retained audit snapshot holds an SEC record (and so its CIK) keeps its ownership.
+    const target = JSON.parse(options.targetBase); target.rows.find(row => row.symbol === 'OWNED').financial_historical = { book_financials: record };
+    const withCik = { ...options, targetBase: JSON.stringify(target), targetBaseSha256: hash(JSON.stringify(target)) };
+    expect(createFinancialGenerationCarry(withCik).ownership).toEqual(carry.ownership);
+    const report = await verifyCarryCompatibility({ root, carry, evaluatedAt: buildTime + 1000 });
+    expect(report.counts.sec_admitted).toBe(1);
+    const manifest = await read(join(root, 'manifest.json')), index = decodeResearchIndex(await read(join(root, manifest.markets.US.assets.research.path)));
+    const listed = index.rows.find(row => row.symbol === 'OWNED'), detailPath = join(root, listed.research_detail_path), detail = await read(detailPath);
+    expect(detail.book_financials).toEqual(record);
+    expect(detail).toMatchObject({ eps_growth_yy: 40, financial_generation: carry.financial_generation });
+    expect(detail.financial_history).toEqual(carry.symbols.OWNED.financial_history);
+    expect((await read(join(root, index.rows.find(row => row.symbol === 'MISMATCH').research_detail_path))).book_financials).toBeNull();
+    // Compact rows (and therefore the next carry's target identity) never receive the SEC CIK.
+    expect(index.rows.every(row => !Object.hasOwn(row, 'book_financials'))).toBe(true);
+    const original = await readFile(detailPath);
+    for (const mutate of [value => { value.book_financials.quarterly.eps.at(-1).filed = '2026-10-06'; }, value => { value.book_financials.symbol = 'OTHER'; },
+      value => { value.book_financials.as_of_date = originalDate; }, value => { value.book_financials.quarterly.revenue[0].form = '8-K'; }]) {
+      const changed = JSON.parse(original); mutate(changed); await write(detailPath, changed);
+      await expect(verifyCarryCompatibility({ root, carry, evaluatedAt: buildTime + 1000 })).rejects.toThrow('book_financials mismatch');
+    }
+    await writeFile(detailPath, original);
+    expect((await verifyCarryCompatibility({ root, carry, evaluatedAt: buildTime + 1000 })).counts.sec_admitted).toBe(1);
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
 it('detects annual-only expiry at recheck while quarterly history remains valid', async () => {

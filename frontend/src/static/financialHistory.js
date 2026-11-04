@@ -76,10 +76,13 @@ export function financialHistory(data, symbol, date, now = Date.now()) {
   }
   const latest = result.quarterly.at(-1);
   const previous = latest ? result.quarterly.filter(p => days(latest.end,p.end) >= 345 && days(latest.end,p.end) <= 385) : [];
-  if (latest && days(date,latest.end) <= 190 && previous.length === 1) {
-    for (const [metric, output] of [['eps','epsYoY'],['revenue','salesYoY']]) {
-      if (finite(latest[metric]) && finite(previous[0][metric]) && previous[0][metric] > 0) result[output] = (latest[metric] / previous[0][metric] - 1) * 100;
-    }
+  // Why a quarterly rate is unknown: no quarter, a newest quarter more than 190 days old, no single
+  // year-ago quarter, or a missing value or a nonpositive base for that metric.
+  const shared = !latest ? 'no_quarter' : days(date,latest.end) > 190 ? 'stale_quarter' : !previous.length ? 'no_base' : previous.length > 1 ? 'ambiguous_base' : null;
+  for (const [metric, output] of [['eps','epsYoY'],['revenue','salesYoY']]) {
+    const reason = shared || (!finite(latest[metric]) ? 'not_reported' : !finite(previous[0][metric]) ? 'no_base' : previous[0][metric] <= 0 ? 'nonpositive_base' : null);
+    if (!reason) result[output] = (latest[metric] / previous[0][metric] - 1) * 100;
+    result[`${output}Reason`] = reason;
   }
   return result;
 }

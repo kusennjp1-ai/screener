@@ -23,6 +23,16 @@ describe('Yahoo reference Code 33', () => {
     expect(code33Reference({ valid: false, quarterly: accelerating().quarterly }, '2026-02-01').state).toBe('unknown');
   });
 
+  it('combines the three conditions with a three-valued AND', () => {
+    const failAndUnknown = accelerating(); failAndUnknown.quarterly[7].netIncome = 18; failAndUnknown.quarterly[7].eps = null;
+    expect(code33Reference(failAndUnknown, '2026-02-01')).toMatchObject({ state: 'fail', eps: 'unknown', margin: 'fail' });
+    const passAndUnknown = accelerating(); passAndUnknown.quarterly[7].eps = null;
+    expect(code33Reference(passAndUnknown, '2026-02-01')).toMatchObject({ state: 'unknown', eps: 'unknown', sales: 'pass', margin: 'pass' });
+    expect(code33Reference(accelerating(), '2026-02-01').state).toBe('pass');
+    // A known SEC failure wins over a Yahoo pass.
+    expect(code33Layered({ valid: true, code33: 'fail' }, accelerating(), '2026-02-01').source).toBe('sec');
+  });
+
   it('prefers the dated SEC result and labels the Yahoo fallback', () => {
     expect(code33Layered({ valid: true, code33: 'fail' }, accelerating(), '2026-02-01')).toMatchObject({ state: 'fail', source: 'sec' });
     expect(code33Layered({ valid: true, code33: 'unknown' }, accelerating(), '2026-02-01')).toMatchObject({ state: 'pass', source: 'yahoo', label: '参考：Yahoo四半期値' });
