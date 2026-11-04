@@ -150,9 +150,9 @@ anonymous (no `Authorization` header, https only, at most three redirects to
 
 Pruning is enabled only for plain carries. It is off for activation, renewal,
 limited preview, corrections, finite price repair, publisher-tooling and pinned
-ordinary-carry routes, while any renewal receipt is in the chain, and while the
-committed `.github/financial-source-renewal-request.json` names the live
-publication. Those routes carry the index verbatim. A correction refuses a live
+ordinary-carry routes, once any renewal receipt is in the chain (for good; see
+the limit below), and while the committed
+`.github/financial-source-renewal-request.json` names the live publication. Those routes carry the index verbatim. A correction refuses a live
 index because it publishes no audit inventory. Pruning has a code-level kill
 switch (`ARCHIVE_POLICY.pruning_enabled`).
 
@@ -170,6 +170,32 @@ not pause the first transition.
 
 Admission stops adding entries when either the 1 MiB index cap or the 4 MiB
 `publication.json` cap would be exceeded (degrade, not fail).
+
+### Limit: the first source renewal ends pruning
+
+The renewal guards stop pruning for good once a source renewal publishes; they
+do not merely pause it:
+
+- every later carry must carry the renewal authority forward
+  (`assertRenewalCarryContinuity`), so `financialRelease.renewal` stays set;
+- `renewal-*.json` receipts are never archivable, so a renewal receipt stays
+  hosted in every later publication;
+- the renewal chain verifiers (`verifyRenewalChainAuthority`,
+  `inspectRenewalChain`) re-read every file in each transition's
+  `history_inventory` from the publication, so the files that were hosted when
+  the renewal published must stay hosted.
+
+From the first renewal on, each publication again adds its new carry (about
+9.2 MB) to Pages, as before the archive, until the TAR guard blocks
+publication again. The headroom from this change therefore lasts only until the
+first renewal. Keeping it after a renewal needs a reviewed design change: prune
+only carries that appear in no renewal transition's `history_inventory` and are
+not pinned by the new receipt, proven by a renewal → carry → carry lifecycle
+test whose renewal chain verification still passes. Separately, a renewal on a
+chain that already has an archive index first requires binding the index
+digest into the renewal context (see
+[same-UI source renewal](same-ui-source-renewal.md)). The only renewal request
+committed today names a superseded publication.
 
 ## Degrade versus fail closed
 
@@ -213,6 +239,8 @@ existing exact-controller rebind.
   log. Tooling never modifies it; an owner decides how to replace it.
 - Headroom ordering: before the first archive run, publications behave as before.
   If one fails the TAR guard, the next run after the archive workflow succeeds.
+  After the first source renewal, pruning ends for good (see the limit above)
+  and Pages grows by about one carry per publication again.
 - First transition (measured on the 2026-11-04 live publication, run
   41779082131): Pages hosts 25 release receipts and 24 carry projection bins
   (222,146,560 TAR bytes in total, the active carry included) with no index; the
