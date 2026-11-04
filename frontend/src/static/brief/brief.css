@@ -587,3 +587,21 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
   .brief-history-grid { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); column-gap: 24px; align-items: start; }
   .brief-history-grid > .brief-sectors { margin-top: 12px; }
 }
+
+/* Expanders: a secondary block folded into one line that opens in place (native details, 44px summary). */
+.brief-expander { min-width: 0; }
+.brief-expander > summary { display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 4px; border-radius: 8px; cursor: pointer; list-style: none; font-size: 13px; font-weight: 700; line-height: 1.45; color: var(--text); }
+.brief-expander > summary::-webkit-details-marker { display: none; }
+.brief-expander > summary::marker { content: ''; }
+.brief-expander > summary:hover { background: color-mix(in srgb, var(--surface-2) 50%, var(--surface)); }
+.brief-expander > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.brief-expander-summary { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.brief-expander-summary small { margin-left: 6px; font-size: 12px; font-weight: 400; color: var(--text-3); }
+.brief-expander > summary::after { content: "⌄"; content: "⌄" / ""; flex: none; display: inline-block; font-size: 14px; line-height: 1; color: var(--text-3); transition: transform .2s var(--e-out); }
+.brief-expander[open] > summary::after { transform: rotate(180deg); }
+.brief-expander-body { display: grid; gap: 8px; min-width: 0; padding: 4px 4px 8px; }
+/* The screen's 注記: every methodology footnote of the screen behind one line at its end. */
+.brief-screen-notes { padding: 0 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+.brief-screen-notes ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 12px; line-height: 1.7; color: var(--text-2); overflow-wrap: anywhere; }
+.brief-screen-notes li { padding-left: 12px; text-indent: -12px; }
+.brief-screen-notes li::before { content: "・"; display: inline-block; width: 12px; text-indent: 0; color: var(--text-3); }
