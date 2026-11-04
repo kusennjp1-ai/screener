@@ -232,7 +232,7 @@ export default function StockView({ data, header = null }) {
     [`RS推計 ${finite(view.rs) ? view.rs : '未確認'}`, finite(view.rs) && view.rs >= 70 ? 'zone' : ''],
     // RS line at a new high while the price is still below its own high: the RS line is leading.
     ...(rsHigh ? [[finite(view.fromHigh) && view.fromHigh >= 2 ? `RS線 新高値（株価に先行・高値の${view.fromHigh.toFixed(0)}%下）` : 'RS線 新高値', 'zone']] : []),
-    [`Code 33 ${code33 === 'pass' ? '達成' : code33 === 'fail' ? '未達' : '未確認'}${financial?.code33?.source === 'yahoo' ? '（参考）' : ''}`, code33 === 'pass' ? 'zone' : ''],
+    [`Code 33 ${code33 === 'pass' ? '達成' : code33 === 'fail' ? '未達' : financial?.sec?.state === 'detail_loading' ? '読み込み中' : '未確認'}${financial?.code33?.source === 'yahoo' ? '（参考）' : ''}`, code33 === 'pass' ? 'zone' : ''],
     ...(Number.isInteger(row?.ibd_group_rank) ? [[`業種 ${row.ibd_group_rank}位（推計）`, row.ibd_group_rank <= 40 ? 'zone' : '']] : []),
     ...(sells?.hits ? [[`売りのサイン ${sells.hits}件`, 'ext']] : []),
     ...(diagnostics?.valid && diagnostics.powerPlay?.mechanicalMatch ? [['パワープレー候補（機械的探索）', 'wait']] : []),

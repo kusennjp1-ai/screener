@@ -108,15 +108,20 @@ export function useStockData(symbol, brief) {
     if (!row || !bars || !certification.certified) return null;
     try { return buildBookTechnicalEvidence(row, chart.data, date); } catch { return null; }
   }, [row, bars, chart.data, date, certification.certified]);
+  // The SEC record is only in the detail: until the detail has arrived (or after it failed) the record is
+  // unknown, never 未配信.
+  const detailState = !summary?.research_detail_path ? 'none' : detail.data ? 'loaded' : detail.isError ? 'error' : 'loading';
   const financial = useMemo(() => {
     if (!row) return null;
     const book = row.book_financials ? bookFinancialCurrent(row.book_financials, row.symbol, date, financialNow, row) : null;
-    const history = row.financial_history ? financialHistory(row.financial_history, row.symbol, date, financialNow) : null;
+    const sec = secStatus(row, book, { detail: detailState });
+    // While the detail loads, no Yahoo reference stands in for an SEC record that may still arrive.
+    const history = row.financial_history && sec.state !== 'detail_loading' ? financialHistory(row.financial_history, row.symbol, date, financialNow) : null;
     // Stale or unverifiable SEC rows never reach the tiles; secStatus says why.
     const report = book?.current ? book.report : null;
     const historyRetrievedAt = row.financial_history?.quarterly_retrieved_at || row.financial_history?.retrieved_at || null;
-    return { report, sec: secStatus(row, book), history, historyRetrievedAt, code33: code33Layered(report, history, date) };
-  }, [row, date, financialNow]);
+    return { report, sec, history, historyRetrievedAt, code33: code33Layered(report, history, date) };
+  }, [row, date, financialNow, detailState]);
   // The publisher's diagnostics win, including an invalid verdict; the client recomputes only certified bars.
   const diagnostics = useMemo(() => {
     if (row?.book_diagnostics && row.book_diagnostics.as_of_date === date) return row.book_diagnostics;

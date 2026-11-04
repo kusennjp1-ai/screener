@@ -144,8 +144,12 @@ export function marketTrends({ historyEnd = date, schema = 'current' } = {}) {
 }
 
 /** Serve the synthetic publication for every static-data request; abort everything that is not 127.0.0.1. */
-/** `fail` names one file to answer with an HTTP error: 'series' (404 for the market series) or 'manifest' (503). */
-export async function routeBrief(page, { historyEnd = date, schema, fail } = {}) {
+/**
+ * `fail` names one file to answer with an HTTP error: 'series' (404 for the market series), 'manifest'
+ * (503) or 'detail' (503 for every research detail). `detailGate` is a promise every research detail
+ * waits for before it answers (a detail that is still loading).
+ */
+export async function routeBrief(page, { historyEnd = date, schema, fail, detailGate } = {}) {
   const trends = marketTrends({ historyEnd, schema });
   const external = [];
   await page.route('**/*', route => {
@@ -153,7 +157,7 @@ export async function routeBrief(page, { historyEnd = date, schema, fail } = {})
     external.push(route.request().url());
     return route.abort();
   });
-  await page.route('**/static-data/**', route => {
+  await page.route('**/static-data/**', async route => {
     const file = new URL(route.request().url()).pathname.split('/').pop();
     if (file === 'manifest.json' && fail === 'manifest') return route.fulfill({ status: 503, json: {} });
     if (file === trends.file && fail === 'series') return route.fulfill({ status: 404, json: {} });
@@ -161,7 +165,8 @@ export async function routeBrief(page, { historyEnd = date, schema, fail } = {})
       default_market: 'US', supported_markets: ['US'], markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' }, market_trends: trends.ref }, pages: {} } } } });
     if (file === 'research.json') return route.fulfill({ json: { as_of_date: date, rows } });
     if (file === trends.file) return route.fulfill({ contentType: 'application/json', body: trends.text });
-    if (details[file]) return route.fulfill({ json: details[file] });
+    if (details[file] && fail === 'detail') return route.fulfill({ status: 503, json: {} });
+    if (details[file]) { if (detailGate) await detailGate; return route.fulfill({ json: details[file] }); }
     if (charts[file]) return route.fulfill({ json: charts[file] });
     return route.fulfill({ status: 404, json: {} });
   });
@@ -173,7 +178,7 @@ export async function routeBrief(page, { historyEnd = date, schema, fail } = {})
  * `storage` seeds localStorage once per tab (a later change and reload keep the user's choice),
  * e.g. { 'research-watch': ['ZZNV'] } or { 'screener:color-mode': 'light' }.
  */
-export async function openBrief(page, hash = '#/brief', { historyEnd, schema, storage, fail } = {}) {
+export async function openBrief(page, hash = '#/brief', { historyEnd, schema, storage, fail, detailGate } = {}) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.clock.setFixedTime(new Date(now));
@@ -184,7 +189,7 @@ export async function openBrief(page, hash = '#/brief', { historyEnd, schema, st
       sessionStorage.setItem('brief-spec-seeded', '1');
     } catch { /* storage blocked: the app must still render */ }
   }, storage);
-  const network = await routeBrief(page, { historyEnd, schema, fail });
+  const network = await routeBrief(page, { historyEnd, schema, fail, detailGate });
   await page.goto(`/${hash}`);
   return { errors, external: network.external };
 }

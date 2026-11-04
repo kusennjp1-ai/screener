@@ -117,6 +117,24 @@ describe('brief fundamentals card', () => {
     expect(card(fund).getByText(/ファンド・ETF などは企業業績の対象外です。/)).toBeInTheDocument();
   });
 
+  it('says the detail is loading or failed instead of 未配信 while the SEC record cannot have arrived', () => {
+    const pending = (detail, history = null) => {
+      const row = { symbol: 'AAA', market: 'US', as_of_date: DATE };
+      const sec = secStatus(row, null, { detail });
+      return { report: null, sec, history, historyRetrievedAt: null, code33: code33Layered(null, history, DATE) };
+    };
+    let scope = card(pending('loading'));
+    for (const label of ['EPS 前年比', '売上 前年比', '純利益率']) expect(tile(scope, label)).toHaveTextContent('読み込み中…');
+    expect(scope.getByText('Code 33 読み込み中')).toBeInTheDocument();
+    expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent(/未配信|配信されていません/);
+    expect(screen.getByText('Code 33 読み込み中', { selector: '.brief-chip' })).toBeInTheDocument();
+    cleanup();
+    scope = card(pending('error'));
+    for (const label of ['EPS 前年比', '売上 前年比', '純利益率']) expect(tile(scope, label)).toHaveTextContent('取得できません');
+    expect(scope.getByText('詳細データを取得できません。 Code 33 は判定していません。')).toBeInTheDocument();
+    expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent(/未配信|配信されていません/);
+  });
+
   it('labels Yahoo quarterly values as a reference only when that history is current', () => {
     const history = { symbol: 'AAA', as_of_date: DATE, status: 'available', basis: 'reported_diluted_eps', currency: 'USD', retrieved_at: '2026-10-02T20:15:00Z', annual: [],
       quarterly: [['2025-06-30', 1, 100, 10], ['2025-09-30', 1.1, 110, 12], ['2025-12-31', 1.2, 120, 13], ['2026-03-31', 1.3, 130, 15], ['2026-06-30', 1.5, 150, 18]].map(([end, eps, revenue, netIncome]) => ({ end, eps, revenue, netIncome })) };

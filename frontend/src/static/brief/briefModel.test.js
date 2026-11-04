@@ -392,6 +392,18 @@ describe('fundamentals card model', () => {
     expect(secStatus({ symbol: 'BITU', market: 'US', company_name: 'ProShares Ultra Bitcoin ETF' }, null)).toMatchObject({ state: 'not_applicable', short: '対象外' });
   });
 
+  it('never calls a record that is still in an unloaded or failed detail 未配信', () => {
+    expect(secStatus(row(null), null, { detail: 'loading' })).toMatchObject({ state: 'detail_loading', short: '読み込み中…', long: '詳細データを読み込み中…' });
+    expect(secStatus(row(null), null, { detail: 'error' })).toMatchObject({ state: 'detail_error', short: '取得できません', long: '詳細データを取得できません。' });
+    expect(secStatus(row(null), null, { detail: 'loaded' }).state).toBe('not_published');
+    expect(secStatus(row(null), null, { detail: 'none' }).state).toBe('not_published');
+    // A record that has arrived is judged on its own, whatever the detail state says.
+    const record = secRecord(), value = row(record);
+    expect(secStatus(value, bookFinancialCurrent(record, 'TEST', date, now, value), { detail: 'loaded' }).state).toBe('ok');
+    expect(code33Explain(null, secStatus(row(null), null, { detail: 'loading' }))).toMatchObject({ state: 'unknown', title: 'Code 33 読み込み中', text: '詳細データを読み込み中です。読み込み後に判定します。' });
+    expect(code33Explain(null, secStatus(row(null), null, { detail: 'error' })).text).toBe('詳細データを取得できません。 Code 33 は判定していません。');
+  });
+
   it('shows the newest quarter that has a value and why a newer one has none', () => {
     const [eps, sales, margin] = fundamentalTiles(report(tenQFiler()));
     expect(eps).toMatchObject({ label: 'EPS 前年比', value: '+40%', note: '2025-09期・最新 2025-12期はQ4のEPSは年次報告のみ' });

@@ -172,6 +172,28 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     expect(errors).toEqual([]);
   });
 
+  test('while the research detail loads or after it fails, the SEC record is never called 未配信', async ({ page }) => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { detailGate: gate });
+    const card = page.getByTestId('brief-fundamentals');
+    await expect(card.locator('.brief-fact').first()).toContainText('読み込み中…');
+    await expect(card).toContainText('Code 33 読み込み中');
+    await expect(card).not.toContainText(/SEC 未配信|配信されていません/);
+    release();
+    await expect(card.getByText(/^出典：SEC XBRL/)).toBeVisible();
+    await expect(card).not.toContainText(/読み込み中|未配信/);
+    // A detail that answers 503 says it could not be fetched, for good, and never 未配信.
+    const failed = await page.context().newPage();
+    const second = await openBrief(failed, `#/brief/stock/${SEC_SYMBOL}`, { fail: 'detail' });
+    const failedCard = failed.getByTestId('brief-fundamentals');
+    await expect(failedCard.locator('.brief-fact').first()).toContainText('取得できません', { timeout: 30000 });
+    await expect(failedCard).toContainText('詳細データを取得できません。');
+    await expect(failedCard).not.toContainText(/SEC 未配信|配信されていません/);
+    expect(errors).toEqual([]);
+    expect(second.errors).toEqual([]);
+  });
+
   test('watch with ☆, undo from the toast, and the watch tab', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/stock/ZZNV');
     const star = (phone ? page.locator('.brief-bar') : page.locator('.brief-stockhead-actions')).getByRole('button', { name: /^ウォッチ(に追加|から外す)$/ });

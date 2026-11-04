@@ -26,17 +26,23 @@ const SEC_STATUS = {
   not_applicable: ['対象外', 'ファンド・ETF などは企業業績の対象外です。'],
   stale: ['古い', '直近の四半期から180日を超えているため判定に使いません。'],
   invalid: ['SEC 検証不可', '提出日や期間を検証できないため使いません。'],
+  // The SEC record travels in the stock's research detail: until that file has arrived it is unknown.
+  detail_loading: ['読み込み中…', '詳細データを読み込み中…'],
+  detail_error: ['取得できません', '詳細データを取得できません。'],
 };
 
 /**
  * Why the SEC quarterly evidence of a row is or is not usable, in words the brief shows.
  * `book` is the bookFinancialCurrent() result for the row (null when there is no record).
+ * `detail` is the state of the row's research detail, which carries the record: 'loading' or
+ * 'error' while the record cannot have arrived yet. Only an absent record from a loaded detail (or a
+ * row without a detail) is 未配信.
  */
-export function secStatus(row, book) {
+export function secStatus(row, book, { detail = null } = {}) {
   const make = (state, extra = {}) => ({ state, short: SEC_STATUS[state][0], long: SEC_STATUS[state][1], latestEnd: null, ...extra });
   const data = row?.book_financials;
   if ((book?.applicability || instrumentApplicability(row || {})).status !== 'unverified') return make('not_applicable');
-  if (!data || typeof data !== 'object') return make('not_published');
+  if (!data || typeof data !== 'object') return make(detail === 'loading' ? 'detail_loading' : detail === 'error' ? 'detail_error' : 'not_published');
   if (data.status === 'unavailable') {
     if (data.reason === 'no_quarterly') {
       const forms = Array.isArray(data.forms) ? data.forms.filter(form => typeof form === 'string' && /^[0-9A-Z-]{2,8}(\/A)?$/.test(form)).slice(0, 5) : [];
@@ -112,6 +118,7 @@ export function code33Explain(report, sec, code33 = null) {
   const unknown = (kind, text) => ({ state: 'unknown', kind, title: 'Code 33 未確認', text });
   if (!report?.valid) {
     if (sec?.state === 'stale') return unknown('stale', `直近の四半期（${ym(sec.latestEnd)}）から180日を超えているため判定しません。`);
+    if (sec?.state === 'detail_loading') return { ...unknown('no_sec', '詳細データを読み込み中です。読み込み後に判定します。'), title: 'Code 33 読み込み中' };
     return unknown('no_sec', `${sec?.long || SEC_STATUS.not_published[1]} Code 33 は判定していません。`);
   }
   const keys = Object.keys(PART_NAMES);
