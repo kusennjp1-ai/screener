@@ -106,9 +106,14 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
     expect(within(screen.getByTestId('brief-sell')).getByTestId('brief-sell-qualifier')).toHaveTextContent('売買の推奨ではありません。');
   });
 
-  it('shows everything open on the desktop', () => {
+  it('shows everything open on the desktop, each footnote in place on its card and no 注記', () => {
     render(<StockView data={{ ...data(true), template: template(Array(8).fill('pass')) }} wide />);
-    expect([...document.querySelectorAll('details')].map(details => details.querySelector('summary').textContent)).toEqual(['注記（計算方法・出典 3件）']);
+    expect(document.querySelectorAll('details')).toHaveLength(0);
+    expect(screen.queryByText('注記')).toBeNull();
+    for (let i = 1; i <= 8; i++) expect(folded(item(`条件${i}`))).toBe(false);
+    expect(screen.getByText('上げ下げ出来高比（50日）').nextSibling).toHaveTextContent('上げた日の出来高 ÷ 下げた日の出来高。1超は買いが優勢');
+    expect(within(screen.getByTestId('brief-fundamentals')).getByText(/^EPS は報告値（希薄化）で調整後EPSとは異なります。/)).toBeInTheDocument();
+    expect(within(screen.getByTestId('brief-sell')).getByText(/^保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点.*売買の推奨ではありません。$/)).toBeInTheDocument();
   });
 });
 

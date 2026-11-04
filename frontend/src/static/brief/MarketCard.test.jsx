@@ -140,11 +140,20 @@ describe('brief market card: market tab', () => {
     expect(signals()).toBeVisible();
   });
 
-  it('keeps the three groups side by side without tabs on the desktop', () => {
-    show(trends());
+  it('keeps the three groups side by side without tabs on the desktop, the source line in place and no 注記', () => {
+    show(trends({ sp500: closes('2026-10-02') }));
     expect(screen.queryByRole('tablist')).toBeNull();
     expect(screen.queryByRole('tabpanel')).toBeNull();
     expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
+    expect(screen.getByText('3つの数値は長期履歴の^GSPC終値から計算しています。').closest('details')).toBeNull();
+    expect(document.querySelector('.brief-screen-notes')).toBeNull();
+  });
+
+  it('moves the plain source line into the 注記 behind the phone tabs', () => {
+    render(<MemoryRouter><MarketCard market={UP} trends={trends({ sp500: closes('2026-10-02') })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
+    expect(screen.getByRole('group', { name: /^S&P 500（長期履歴の\^GSPC終値/ })).toBeInTheDocument();
+    expect(document.querySelector('.brief-index-source')).toBeNull();
+    expect(document.querySelector('.brief-screen-notes')).toHaveTextContent('S&P 500の終値・1年高値からの位置・50日線比は、長期履歴の^GSPC終値から計算しています。');
   });
 
   it('dates an older block once, tags the verdict with its own date, and dates rows only where they differ', () => {

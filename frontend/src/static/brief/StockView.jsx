@@ -18,7 +18,12 @@ const CALL = {
   ext: v => ['ext', '買いゾーンを超過', `ピボット比 ${signed(v.distance)}。追いかけ買いは避け、次の土台を待ちます。`],
 };
 const stateIcon = { pass: '✓', fail: '✕', unknown: '?', not_applicable: '–' };
-// The stock screen's methodology footnotes, shown once in its 注記 at the end of the screen.
+// The stock screen's methodology footnotes: once in its 注記 at the end of the screen below 1024px;
+// at 1024px and wider each card keeps its own (INLINE) in place, as before the phone compaction.
+const INLINE = {
+  updown: '上げた日の出来高 ÷ 下げた日の出来高。1超は買いが優勢',
+  sell: '保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。',
+};
 const NOTES = {
   updown: '上げ下げ出来高比（50日）は、上げた日の出来高 ÷ 下げた日の出来高です。1超は買いが優勢です。',
   eps: 'EPS は報告値（希薄化）で調整後EPSとは異なります。Q4 の売上・純利益が年度値でしか報告されていない場合は、年度値から3四半期を差し引いて算出し「Q4算出」と表示します。',
@@ -60,7 +65,7 @@ function RuleList({ rules, offset = 0 }) {
   </li>)}</ul>;
 }
 
-function VcpCard({ technical, bars, judged, view }) {
+function VcpCard({ technical, bars, judged, view, wide }) {
   const print = footprint(technical, bars), legs = technical?.vcp?.legs || [];
   const dry = legs.at(-1)?.volumeEvidence?.intervalRatio;
   return <section className="brief-card in" style={{ '--i': 4 }} aria-labelledby="brief-vcp-title">
@@ -72,7 +77,7 @@ function VcpCard({ technical, bars, judged, view }) {
     </> : <p className="brief-note">測定できる収縮が2回以上ないため、VCPは未確認です。</p>}
     <dl className="brief-dl">
       <div><dt>最後の収縮の出来高</dt><dd>{finite(dry) ? <>{times(dry)}<small>直前50日平均比</small></> : '未確認'}</dd></div>
-      <div><dt>上げ下げ出来高比（50日）</dt><dd>{(() => { const v = upDownVolume(judged); return v ? <>{v.ratio.toFixed(2)}<small>1超は買いが優勢</small></> : '未確認'; })()}</dd></div>
+      <div><dt>上げ下げ出来高比（50日）</dt><dd>{(() => { const v = upDownVolume(judged); return v ? <>{v.ratio.toFixed(2)}<small>{wide ? INLINE.updown : '1超は買いが優勢'}</small></> : '未確認'; })()}</dd></div>
       <div><dt>当日の出来高</dt><dd>{finite(view?.volumeRatio) ? <>{times(view.volumeRatio)}<small>上抜けの目安 1.40×以上</small></> : '未確認'}</dd></div>
       <div><dt>ピボット</dt><dd>{finite(view?.pivot) ? <>{money(view.pivot)}<small>{view.pivotSource}</small></> : '未確認'}</dd></div>
     </dl>
@@ -172,7 +177,7 @@ function Code33Parts({ report, explained }) {
   </>;
 }
 
-function FundamentalsCard({ financial }) {
+function FundamentalsCard({ financial, wide }) {
   const report = financial?.report, code33 = financial?.code33, history = financial?.history;
   const sec = financial?.sec || secStatus(null, null);
   const rows = report?.rows?.slice(-8) || [];
@@ -192,6 +197,7 @@ function FundamentalsCard({ financial }) {
       : explain.kind !== 'no_sec' && <p className="brief-note">{sec.long}</p>}
     <div className={`brief-code33 tone-${tone}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>{explain.title}</strong><p>{explain.text}</p></div></div>
     {code33?.source !== 'yahoo' && <Code33Parts report={report} explained={explain.kind === 'q4_eps'} />}
+    {wide && <p className="brief-note">{NOTES.eps}</p>}
   </section>;
 }
 
@@ -233,7 +239,7 @@ function SellCard({ sells, reason, wide }) {
         {quiet.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
       </Expander>}
     </> : <p className="brief-note">{reason ? `日足を分析基準日の値として検証できないため、売りのサインは未確認です（${reason}）。` : '日足が60本未満のため、売りのサインは未確認です。'}</p>}
-    <p className="brief-note" data-testid="brief-sell-qualifier">保有中の判断材料です（独自判定）。売買の推奨ではありません。</p>
+    <p className="brief-note" data-testid="brief-sell-qualifier">{wide ? INLINE.sell : '保有中の判断材料です（独自判定）。売買の推奨ではありません。'}</p>
   </section>;
 }
 
@@ -322,13 +328,13 @@ export default function StockView({ data, header = null, wide = false }) {
     </section>
     <div className="brief-grid">
       <TemplateCard template={template} wide={wide} />
-      <VcpCard technical={technical} bars={bars} judged={judged} view={view} />
-      <FundamentalsCard financial={financial} />
+      <VcpCard technical={technical} bars={bars} judged={judged} view={view} wide={wide} />
+      <FundamentalsCard financial={financial} wide={wide} />
       <InstitutionalCard institutional={institutional} />
       <PlanCard view={view} plan={plan} settings={settings} onChange={update} earnings={view.earnings} wide={wide} />
       {bars ? <SellCard sells={sells} reason={certification?.certified ? null : certification?.reason} wide={wide} /> : null}
     </div>
     <p className="brief-note brief-pad">候補は購入推奨ではありません。数値は分析基準日の公開データに基づきます。</p>
-    <ScreenNotes id="stock" notes={[NOTES.updown, NOTES.eps, bars ? NOTES.sell : null]} />
+    <ScreenNotes id="stock" wide={wide} notes={[NOTES.updown, NOTES.eps, bars ? NOTES.sell : null]} />
   </div>;
 }

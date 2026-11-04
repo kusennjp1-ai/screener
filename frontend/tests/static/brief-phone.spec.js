@@ -54,8 +54,11 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip $
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
     for (const row of await focus.getByTestId('brief-candidate').all()) await expect(row).not.toContainText('TT 8/8');
-    // The constant is said once, in the screen's 注記.
-    await expect(page.locator('.brief-screen-notes', { hasText: '注目候補はすべてトレンドテンプレート8条件を満たす銘柄' })).toHaveCount(1);
+    // The constant is said once: in place on the desktop, in the screen's 注記 on a phone.
+    if (name === 'desktop') {
+      await expect(focus.getByText(/^注目候補はすべてトレンドテンプレート8条件を満たす銘柄/)).toBeVisible();
+      await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
+    } else await expect(page.locator('.brief-screen-notes', { hasText: '注目候補はすべてトレンドテンプレート8条件を満たす銘柄' })).toHaveCount(1);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
     await expect(page).toHaveURL(/#\/brief\/list$/);
     if (name === 'desktop') await expect(candidates(page).first()).toContainText('TT 8/8');

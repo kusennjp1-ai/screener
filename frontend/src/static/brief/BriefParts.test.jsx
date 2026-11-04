@@ -89,5 +89,8 @@ describe('brief expanders', () => {
     expect([...container.querySelectorAll('li')].map(li => li.textContent)).toEqual(['RSは独自推計です。', '出典：SEC XBRL。']);
     cleanup();
     expect(render(<ScreenNotes id="none" notes={[null, '']} />).container).toBeEmptyDOMElement();
+    cleanup();
+    // At 1024px and wider each card keeps its footnote in place: no 注記.
+    expect(render(<ScreenNotes id="wide" wide notes={['RSは独自推計です。']} />).container).toBeEmptyDOMElement();
   });
 });

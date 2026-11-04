@@ -19,10 +19,14 @@ export function Expander({ id, summary, children, className = '', defaultOpen = 
   </details>;
 }
 
-/** One 注記 per screen: the methodology footnotes of every card, in one place at the end of the screen. */
-export function ScreenNotes({ id, notes }) {
+/**
+ * One 注記 per screen below 1024px: the methodology footnotes of every card, folded in one place at the
+ * end of the screen. At 1024px and wider (`wide`) height is not the problem, so each card keeps its own
+ * footnote in place, open, and there is no 注記.
+ */
+export function ScreenNotes({ id, notes, wide = false }) {
   const list = (notes || []).filter(Boolean);
-  if (!list.length) return null;
+  if (wide || !list.length) return null;
   return <Expander id={`notes-${id}`} className="brief-screen-notes" summary={<>注記<small>（計算方法・出典 {list.length}件）</small></>}>
     <ul>{list.map(note => <li key={typeof note === 'string' ? note : note.key}>{typeof note === 'string' ? note : note.text}</li>)}</ul>
   </Expander>;

@@ -215,3 +215,23 @@ for (const [width, options] of [[375, phone(375)], [1440, { viewport: { width: 1
     expect(errors).toEqual([]);
   });
 });
+
+// The desktop has the height: every footnote stays in place and open, as before the phone compaction.
+test.describe('the desktop keeps every footnote in place', () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+  test('no 注記 fold on Today, 候補, 市場 or the stock pane; each note is visible on its card', async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
+    await expect(page.getByTestId('brief-fundamentals').getByText(/^出典：SEC XBRL/)).toBeVisible();
+    await expect(page.getByRole('region', { name: '注目候補' }).getByText(/^注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8\/8）です。/)).toBeVisible();
+    await expect(page.getByTestId('brief-fundamentals').getByText(/^EPS は報告値（希薄化）/)).toBeVisible();
+    await expect(page.getByTestId('brief-sell').getByText(/^保有中の判断材料です。複合警告は/)).toBeVisible();
+    await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
+    await expect(page.getByRole('region', { name: '選定銘柄の一覧' }).getByText(/^選定銘柄＝トレンドテンプレート8条件/)).toBeVisible();
+    await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
+    await expect(page.getByText('3つの数値は長期履歴の^GSPC終値から計算しています。')).toBeVisible();
+    await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+});

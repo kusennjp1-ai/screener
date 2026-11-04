@@ -257,8 +257,9 @@ export default function MarketCard({ market, marketLoading = false, trends, date
             <div><small>{summary.fullYear ? '1年高値から' : '期間内高値から'}</small><b className="numeric">{signedPercent(summary.fromHigh)}</b></div>
             <div><small>50日線比</small><b className="numeric">{signedPercent(summary.vsMa)}</b></div>
           </div>}
-          {/* A disagreement with the verdict's scan input is said here; the plain source line is in the 注記. */}
-          {summary && conflict && <p className="brief-index-source is-conflict">{conflict}</p>}
+          {/* A disagreement with the verdict's scan input is always said here; the plain source line is in
+              place on the desktop and in the 注記 below 1024px. */}
+          {summary && (conflict || !switcher) && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || '3つの数値は長期履歴の^GSPC終値から計算しています。'}</p>}
           {chartEl}
         </div>}
         <div className="brief-env-rows">{group.items.map(item => <EnvRow key={item.key} item={item} groupAsOf={group.asOf} onOpenMetric={view.history ? onOpenMetric : null} />)}</div>
@@ -266,6 +267,6 @@ export default function MarketCard({ market, marketLoading = false, trends, date
     </div>
     {switcher && history && panel('history', history)}
     <p className="brief-note">分配日・フォロースルーデー・ステージ・トレンドテンプレート数・RSは公開日足からの独自集計で、IBDの公式値ではありません。注意サインの基準もこのアプリの独自判定です。</p>
-    <ScreenNotes id="market" notes={notes} />
+    <ScreenNotes id="market" wide={!switcher} notes={notes} />
   </section>;
 }

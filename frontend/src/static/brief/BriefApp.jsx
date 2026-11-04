@@ -39,6 +39,9 @@ const BUNDLE_SHORT = { loading: '読込中', error: '取得できません', non
 const PHONE_PAGE = 20;
 // Today's watch card shows this many rows before 「さらに表示」 (rows with a sell signal always show).
 const WATCH_ROWS = 3;
+// Footnotes: in place at 1024px and wider, gathered into the screen's 注記 below that.
+const TODAY_NOTE = '注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。同じ位置なら判定の達成数、RS推計の順。';
+const LIST_NOTE = '選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄。あと1条件＝未達が1つだけで未確認がない銘柄（流動性：株価$10以上・売買代金$2,000万以上）。';
 const DATE_JA = iso => { const d = new Date(`${iso}T12:00:00Z`); return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）` : '日付未確認'; };
 
 function ThemeToggle() {
@@ -56,7 +59,7 @@ function Tabs({ current, watchCount, go }) {
   </nav>;
 }
 
-function TodayView({ brief, watch, open, now, animate, onNear }) {
+function TodayView({ brief, watch, open, now, animate, onNear, wide }) {
   const focus = useMemo(() => focusCandidates(brief.ranked, brief.date), [brief.ranked, brief.date]);
   // The whole pool behind the five rows, so the summary never reads 「接近0」 while near-pivot stocks exist.
   const counts = useMemo(() => focusCounts(brief.ranked, brief.date), [brief.ranked, brief.date]);
@@ -84,6 +87,7 @@ function TodayView({ brief, watch, open, now, animate, onNear }) {
       </div>}
       {/* Phone: one line that scrolls sideways (its fading edge says more follows); focusable for the keyboard. */}
       {groups?.groups.length > 0 && <div className="brief-groups" data-testid="brief-groups" role="group" aria-label={`選定銘柄の多い${groups.kind}`} tabIndex={0}><span>選定銘柄の多い{groups.kind}</span>{groups.groups.map(g => <span key={g.name} className="brief-chip">{g.name}：<b className="numeric">{g.count}</b>銘柄</span>)}<span className="brief-note">（選定 {groups.total}銘柄中{groups.unnamed ? `・${groups.kind}未確認 ${groups.unnamed}` : ''}）</span></div>}
+      {wide && <p className="brief-note">{TODAY_NOTE}</p>}
     </section>
     <section className="brief-card in" style={{ '--i': 3 }} aria-labelledby="brief-watch-title">
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">3</span><h2 id="brief-watch-title">ウォッチの変化</h2></div>
@@ -96,7 +100,7 @@ function TodayView({ brief, watch, open, now, animate, onNear }) {
         : <p className="brief-note">{state !== 'ready' && watch.length ? `ウォッチ中の${watch.length}銘柄は、${state === 'loading' ? '候補の読み込み後に確認します。' : '候補データがないため確認できません。'}` : '銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。'}</p>}
       {watchHidden > 0 && <button type="button" className="brief-morebutton" aria-expanded={watchAll} aria-controls="brief-watch-rows" onClick={() => setWatchAll(value => !value)}>{watchAll ? '表示を減らす' : `さらに表示（残り ${watchHidden}件）`}</button>}
     </section>
-    <ScreenNotes id="today" notes={['注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。同じ位置なら判定の達成数、RS推計の順。']} />
+    <ScreenNotes id="today" wide={wide} notes={[TODAY_NOTE]} />
   </>;
 }
 
@@ -154,8 +158,9 @@ function ListView({ brief, kind, watch, open, now, animate, listState, setListSt
       {shown.length ? <ol className="brief-rows">{shown.slice(0, limit).map((view, i) => <CandidateRow key={view.symbol} view={view} rank={kind === 'watch' ? null : i + 1} index={Math.min(i, 12)} onOpen={open} now={now} animate={animate} sell={sells[view.symbol]} hideTemplate={constantTemplate} />)}</ol>
         : <p className="brief-note">{state !== 'ready' ? BUNDLE_TEXT[state] : kind === 'watch' ? '銘柄の画面で ☆ を押すと、ここに並びます。' : 'この条件の選定銘柄はありません。'}</p>}
       {shown.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + pageSize)}>さらに表示（残り {shown.length - limit}件）</button>}
+      {kind !== 'watch' && wide && <p className="brief-note">{LIST_NOTE}</p>}
     </section>
-    {kind !== 'watch' && <ScreenNotes id="list" notes={['選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄。あと1条件＝未達が1つだけで未確認がない銘柄（流動性：株価$10以上・売買代金$2,000万以上）。',
+    {kind !== 'watch' && <ScreenNotes id="list" wide={wide} notes={[LIST_NOTE,
       wide ? null : '買いゾーン・ピボット接近・選定すべての行はすべてTT 8/8のため、スマホでは「TT 8/8」の表示を省いています（あと1条件では未達・未確認の数を表示します）。']} />}
   </>;
 }
@@ -268,7 +273,7 @@ export default function BriefApp() {
     const idle = window.requestIdleCallback ? window.requestIdleCallback(() => loadMarketScreen().catch(() => {}), { timeout: 4000 }) : setTimeout(() => loadMarketScreen().catch(() => {}), 1500);
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
   }, []);
-  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} onNear={showNear} />
+  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} onNear={showNear} wide={wide} />
     : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} wide={wide} />;
   const watching = symbol && watch.includes(symbol);
   return <div className="leader-shell brief" data-theme={dark ? 'dark' : 'light'}>
