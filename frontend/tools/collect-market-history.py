@@ -162,6 +162,10 @@ def build(records, errors, symbols, sessions, target, classification=None):
     for column, symbol in enumerate(symbols):
         record = records.get(symbol)
         if record is None: continue
+        # Every per-session contribution is computed into locals first. A symbol
+        # that fails anywhere contributes to no denominator, count, stage or
+        # breakout (as if its response had failed to parse) and is reported in
+        # errors; a partial contribution would undercount or break the stage partition.
         try:
             f, meta = parse_series(record, sessions)
             # Only provider-confirmed inception can remove a not-yet-listed
@@ -172,29 +176,24 @@ def build(records, errors, symbols, sessions, target, classification=None):
                 inception = datetime.fromtimestamp(stamp,timezone.utc).date().isoformat()
                 eligible = np.array([day >= inception for day in sessions])
                 eligible_history=pd.Series(eligible).rolling(253,min_periods=253).sum().fillna(0).to_numpy() >= 253
-                expected -= (~eligible_history).astype(int)
+            ineligible=(~eligible_history).astype(int)
             c=f.close; good=c.rolling(253,min_periods=253).count().eq(253).to_numpy() & eligible_history
             sma=lambda n,lag=0:c.rolling(n,min_periods=n).mean().shift(lag)
             high=f.high.rolling(252,min_periods=252).max(); low=f.low.rolling(252,min_periods=252).min()
             ma50,ma150,ma200=sma(50),sma(150),sma(200)
-            covered += good
-            above += good & (c>ma50).to_numpy()
-            observed[:,column]=good; over50[:,column]=good & (c>ma50).to_numpy()
+            is_above50=good & (c>ma50).to_numpy()
             group=group_data[memberships.get(symbol,'Unknown')]
-            group['eligibleUniverse']-=(~eligible_history).astype(int)
-            group['coverage']+=good
-            group['above50']+=good & (c>ma50).to_numpy()
-            highs += good & (f.high > f.high.shift(1).rolling(251,min_periods=251).max()).to_numpy()
-            lows += good & (f.low < f.low.shift(1).rolling(251,min_periods=251).min()).to_numpy()
+            new_high=good & (f.high > f.high.shift(1).rolling(251,min_periods=251).max()).to_numpy()
+            new_low=good & (f.low < f.low.shift(1).rolling(251,min_periods=251).min()).to_numpy()
             change=c/c.shift(1)-1
-            ups += good & (change>=.04).to_numpy(); downs += good & (change<=-.04).to_numpy()
-            momentum[:,column]=sum((c/c.shift(lag)-1)*weight for lag,weight in [(63,.4),(126,.2),(189,.2),(252,.2)]).where(good).to_numpy()
+            up=good & (change>=.04).to_numpy(); down=good & (change<=-.04).to_numpy()
+            score=sum((c/c.shift(lag)-1)*weight for lag,weight in [(63,.4),(126,.2),(189,.2),(252,.2)]).where(good).to_numpy()
             price_trend_ok=(c>ma150)&(c>ma200)&(ma150>ma200)&(ma200>sma(200,21))&(ma50>ma150)&(ma50>ma200)&(c>ma50)&(c/high>=.75)
-            template[:,column]=(good & (price_trend_ok&(c/low>=1.25)).to_numpy())
-            template30[:,column]=(good & (price_trend_ok&(c/low>=1.30)).to_numpy())
-            above150 += good & (c>ma150).to_numpy(); above200 += good & (c>ma200).to_numpy()
+            met25=(good & (price_trend_ok&(c/low>=1.25)).to_numpy())
+            met30=(good & (price_trend_ok&(c/low>=1.30)).to_numpy())
+            is_above150=good & (c>ma150).to_numpy(); is_above200=good & (c>ma200).to_numpy()
             stage=classify_stages(c, ma200, slope_weights, slope_sxx)
-            for value,counts in stages.items():counts += good & (stage==value)
+            in_stage={value:good & (stage==value) for value in stages}
             # Breakout: close above the prior 251-session high on >=1.4x the prior
             # 50-session average volume while the 30% price template holds. It is
             # judged only once ten later sessions exist: held unless a low within
@@ -202,13 +201,22 @@ def build(records, errors, symbols, sessions, target, classification=None):
             volume=f.volume
             prior_high=f.high.shift(1).rolling(251,min_periods=251).max()
             prior_volume=volume.shift(1).rolling(50,min_periods=50).mean()
-            breakout=good & template30[:,column] & (c>prior_high).to_numpy() & (volume>=BREAKOUT_VOLUME_RATIO*prior_volume).to_numpy()
+            breakout=good & met30 & (c>prior_high).to_numpy() & (volume>=BREAKOUT_VOLUME_RATIO*prior_volume).to_numpy()
             later_low=f.low.iloc[::-1].rolling(BREAKOUT_HOLD_SESSIONS,min_periods=BREAKOUT_HOLD_SESSIONS).min().iloc[::-1].shift(-1)
             matured=breakout & later_low.notna().to_numpy()
-            breakouts_new += breakout; breakouts_matured += matured
-            breakouts_held += matured & (later_low > c*(1-BREAKOUT_FAILURE_DRAWDOWN)).to_numpy()
-            provenance.append({'symbol':symbol,'first_trade_date':meta.get('firstTradeDate'),'valid_bars':int(c.count()),'excluded_extreme_dates':meta['excluded_extreme_dates'], **record['provenance']})
-        except Exception as error: parse_errors[symbol]=str(error)
+            held=matured & (later_low > c*(1-BREAKOUT_FAILURE_DRAWDOWN)).to_numpy()
+            proof={'symbol':symbol,'first_trade_date':meta.get('firstTradeDate'),'valid_bars':int(c.count()),'excluded_extreme_dates':meta['excluded_extreme_dates'], **record['provenance']}
+        except Exception as error:
+            parse_errors[symbol]=str(error); continue
+        expected -= ineligible; covered += good; above += is_above50
+        observed[:,column]=good; over50[:,column]=is_above50
+        group['eligibleUniverse']-=ineligible; group['coverage']+=good; group['above50']+=is_above50
+        highs += new_high; lows += new_low; ups += up; downs += down
+        momentum[:,column]=score; template[:,column]=met25; template30[:,column]=met30
+        above150 += is_above150; above200 += is_above200
+        for value,counts in stages.items():counts += in_stage[value]
+        breakouts_new += breakout; breakouts_matured += matured; breakouts_held += held
+        provenance.append(proof)
     ranks=pd.DataFrame(momentum).rank(axis=1,method='average',ascending=True)
     eligible_rs=np.isfinite(momentum).sum(axis=1)
     rs=1+98*(ranks.to_numpy()-1)/np.maximum(eligible_rs[:,None]-1,1)

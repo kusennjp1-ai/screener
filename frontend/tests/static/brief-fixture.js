@@ -98,11 +98,21 @@ export function marketTrends({ historyEnd = date } = {}) {
     provenance: [...symbols, '^GSPC', 'SPY', ...SECTOR_ETFS].map(symbol => ({ symbol, url: `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(symbol)}`, sha256: sha(`synthetic ${symbol}`), retrieved_at: provenanceStamp })),
     sectorRotation: { lookback_sessions: 126, frames: days.slice(-252).map(day => ({ date: day, ranks })) },
   };
-  const recent = days.slice(-280);
+  const recent = days.slice(-280), ago = k => recent[recent.length - 1 - k], historical = historyEnd < date;
+  // The exporter's shape (tools/export-market-trends.mjs): an index series that ends before the
+  // analysis date keeps its points and lastObserved but withholds `latest` and says why.
+  const FTD_METHOD = 'rally-attempt-gain1.2-day4-15-decline6-v1';
+  const follow = {
+    '^GSPC': { available: true, method: FTD_METHOD, asOf: historyEnd, state: 'confirmed', peak: { date: ago(60), close: 5400 }, low: { date: ago(40), low: 4980 }, declinePct: 7.6,
+      attempt: null, ftd: { date: ago(35), attemptDay: 5, gainPct: 1.62, volumeRatio: 1.18, sessionsSince: 35, distributionSince: 3 }, failedDate: null, events: [] },
+    '^IXIC': { available: true, method: FTD_METHOD, asOf: historyEnd, state: 'rally_attempt', peak: { date: ago(30), close: 17800 }, low: { date: ago(3), low: 16420 }, declinePct: 7.4,
+      attempt: { startDate: ago(2), day: 3 }, ftd: null, failedDate: null, events: [] },
+  };
   const index = (symbol, active) => {
-    const events = active.map(k => ({ date: recent[recent.length - 1 - k], close: 5000, changePct: -0.6, volumeRatio: 1.1, state: 'active', removedDate: null, removal: null, ageSessions: k }));
+    const events = active.map(k => ({ date: ago(k), close: 5000, changePct: -0.6, volumeRatio: 1.1, state: 'active', removedDate: null, removal: null, ageSessions: k }));
     const points = recent.map((day, i) => ({ date: day, value: i < 25 ? null : active.filter(k => recent.length - 1 - k <= i).length, distribution: events.some(e => e.date === day), reason: null }));
-    return { symbol, available: true, points, events, latest: points.at(-1) };
+    return { symbol, available: !historical, points, events, latest: historical ? null : points.at(-1), lastObserved: { date: points.at(-1).date, value: points.at(-1).value },
+      ...(historical ? { historical: true, reason: `${date}は未取得。${historyEnd}までの過去記録を表示しています。` } : {}), followThrough: follow[symbol] };
   };
   // The exchange schedule says which session has closed by `now` (the analysis date), independent of the data.
   const schedule = exchange.sessions.filter(session => session > sessions.at(-6) && session <= exchange.sessions[exchange.sessions.indexOf(date) + 3]);
@@ -114,7 +124,8 @@ export function marketTrends({ historyEnd = date } = {}) {
 }
 
 /** Serve the synthetic publication for every static-data request; abort everything that is not 127.0.0.1. */
-export async function routeBrief(page, { historyEnd = date } = {}) {
+/** `fail` names one file to answer with an HTTP error: 'series' (404 for the market series) or 'manifest' (503). */
+export async function routeBrief(page, { historyEnd = date, fail } = {}) {
   const trends = marketTrends({ historyEnd });
   const external = [];
   await page.route('**/*', route => {
@@ -124,6 +135,8 @@ export async function routeBrief(page, { historyEnd = date } = {}) {
   });
   await page.route('**/static-data/**', route => {
     const file = new URL(route.request().url()).pathname.split('/').pop();
+    if (file === 'manifest.json' && fail === 'manifest') return route.fulfill({ status: 503, json: {} });
+    if (file === trends.file && fail === 'series') return route.fulfill({ status: 404, json: {} });
     if (file === 'manifest.json') return route.fulfill({ json: { as_of_date: date, generated_at: new Date(now).toISOString(), research_generation: 'brief-browser-fixture',
       default_market: 'US', supported_markets: ['US'], markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' }, market_trends: trends.ref }, pages: {} } } } });
     if (file === 'research.json') return route.fulfill({ json: { as_of_date: date, rows } });
@@ -139,7 +152,7 @@ export async function routeBrief(page, { historyEnd = date } = {}) {
  * `storage` seeds localStorage once per tab (a later change and reload keep the user's choice),
  * e.g. { 'research-watch': ['ZZNV'] } or { 'screener:color-mode': 'light' }.
  */
-export async function openBrief(page, hash = '#/brief', { historyEnd, storage } = {}) {
+export async function openBrief(page, hash = '#/brief', { historyEnd, storage, fail } = {}) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.clock.setFixedTime(new Date(now));
@@ -150,7 +163,7 @@ export async function openBrief(page, hash = '#/brief', { historyEnd, storage } 
       sessionStorage.setItem('brief-spec-seeded', '1');
     } catch { /* storage blocked: the app must still render */ }
   }, storage);
-  const network = await routeBrief(page, { historyEnd });
+  const network = await routeBrief(page, { historyEnd, fail });
   await page.goto(`/${hash}`);
   return { errors, external: network.external };
 }

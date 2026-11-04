@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildPortfolioPlan } from './portfolioPlan';
+import { buildPortfolioPlan, modelMarket } from './portfolioPlan';
+import { marketTone } from './brief/briefModel';
 import { withAuditFixture } from './testAuditFixture';
 
 export const fixture = (symbol = 'LEAD', extra = {}) => withAuditFixture({ symbol, market: 'US', currency: 'USD', gics_sector: 'Technology',
@@ -56,4 +57,18 @@ it('does not let unscanned rows erase known market context, but blocks conflicts
   const unknown = fixture('UNKNOWN', { market_regime: null, market_above_50dma: null, market_above_200dma: null, passes_template: false });
   expect(buildPortfolioPlan([fixture(), unknown], '2026-09-23').market.cap).toBe(.5);
   expect(buildPortfolioPlan([fixture(), fixture('OTHER', { market_regime: 'uptrend_under_pressure' })], '2026-09-23').market.cap).toBe(0);
+});
+it('names a close below the 50-day line as a known weak state and keeps missing context unknown, both closed to new buying', () => {
+  const weak = modelMarket([fixture(), fixture('WEAK', { market_above_50dma: false })]);
+  expect(weak).toEqual({ label: '50日線割れ（弱含み・独自判定）', cap: 0 });
+  expect(marketTone(weak)).toBe('neg');
+  const unknown = modelMarket([fixture('NULL', { market_above_50dma: null, market_above_200dma: null })]);
+  expect(unknown).toMatchObject({ state: 'unknown', cap: 0 });
+  expect(unknown.label).toMatch(/未確認/);
+  expect(marketTone(unknown)).toBe('neutral');
+  // A known weak close keeps the plan in cash exactly as before; only the label changed.
+  const plan = buildPortfolioPlan([fixture(), fixture('WEAK', { market_above_50dma: false })], '2026-09-23', 100000, now);
+  expect(plan.allocationCap).toBe(0);
+  expect(plan.positions).toEqual([]);
+  expect(plan.blockers[0]).toBe('50日線割れ（弱含み・独自判定）');
 });
