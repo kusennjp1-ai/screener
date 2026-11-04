@@ -85,9 +85,10 @@ function TodayView({ brief, watch, open, now, animate, onNear, wide }) {
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">2</span><h2 id="brief-focus-title">注目候補</h2><Link className="brief-more" to="/brief/list">すべての候補 <span aria-hidden="true">›</span></Link></div>
       {focus.length ? <ol className="brief-rows">{focus.map((view, i) => <CandidateRow key={view.symbol} view={view} rank={i + 1} index={i} onOpen={open} now={now} animate={animate} hideTemplate />)}</ol>
         : <p className="brief-note">{state === 'ready' ? '買いゾーンまたはピボット接近（−5%以内）の選定銘柄はありません。' : BUNDLE_TEXT[state]}</p>}
-      {/* The count and the near-pivot link share one line where they fit (they wrap on a 320px phone). */}
+      {/* The count and the near-pivot link share one line where they fit, and wrap where they do not. The count
+          is of the focus candidates (buy zone and near pivot), not of every selected stock. */}
       {(counts.total > focus.length || counts.near > 0) && <div className="brief-focusfoot">
-        {counts.total > focus.length && <p className="brief-note">上位{focus.length}件を表示（全{counts.total}銘柄）</p>}
+        {counts.total > focus.length && <p className="brief-note">上位{focus.length}件を表示（注目候補 {counts.total}銘柄中）</p>}
         {counts.near > 0 && <Link className="brief-nearlink" to="/brief/list" onClick={event => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); onNear(); }}>ピボット接近 {counts.near}銘柄 <span aria-hidden="true">›</span></Link>}
       </div>}
       {/* The label carries the denominator and the 未確認 count, so they are never scrolled away. On a phone

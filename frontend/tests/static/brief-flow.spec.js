@@ -74,7 +74,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const { errors } = await openBrief(page, '#/brief');
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
-    await expect(focus).toContainText('上位5件を表示（全21銘柄）');
+    await expect(focus).toContainText('上位5件を表示（注目候補 21銘柄中）');
     const near = focus.getByRole('link', { name: 'ピボット接近 16銘柄' });
     const box = await near.boundingBox();
     expect(box.height).toBeGreaterThanOrEqual(44);
