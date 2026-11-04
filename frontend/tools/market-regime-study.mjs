@@ -103,11 +103,15 @@
  *  labels are read as evidence only when their count exceeds the null 95th percentile; otherwise the report calls
  *  them consistent with chance.
  *
- * SURVIVORSHIP DIAGNOSTICS (H)
- *  1. eligibleUniverse / universe and coverage / universe by year.
- *  2. OLS of above50Percent on ^GSPC % vs its 50-day and 200-day SMA; mean residual by year and by half
- *     (positive early residuals are consistent with survivorship inflation, or a genuinely broader market).
+ * SURVIVORSHIP DIAGNOSTICS (H): a relative-tilt check, not a measure of the delisting bias
+ *  1. eligibleUniverse / universe and coverage / universe by year: how many of today's names had enough history
+ *     (listing age), not how many names were delisted.
+ *  2. OLS of above50Percent on ^GSPC % vs its 50-day and 200-day SMA over the sessions with both states judged;
+ *     mean residual by year and by half. With an intercept the residuals sum to zero, so the half means mirror
+ *     each other and a constant (level) bias leaves no trace; a bias that tracks the index is absorbed by the fit.
  *  3. Per bucket, the share of its sessions in the first half (period concentration).
+ *  The bias itself is not measurable here: the capture holds aggregates of today's names only, so neither the
+ *  delisted names nor a run restricted to names with history across the whole window can be formed from it.
  *
  * DEVIATIONS FROM v1 (recorded 2026-11-04, before any CI real-data run; v1 and v2 numbers are not comparable)
  *  v1 ran once, locally, on the 2026-10-23 seed (old-schema 5-year long history, 280-session index source): 6
@@ -136,6 +140,10 @@
  *     second-half closes (63 of the seed's 603 first-half sessions at h = 63). v2 embargoes h sessions.
  *  5. Implausible prints. v1 accepted any structurally valid bar, so one 10x print passed silently and moved the
  *     mean statistics. v2 makes a close more than 25% from the previous session's close unknown and lists it.
+ *  6. Survivorship wording. v1 read early positive residuals as consistent with survivorship inflation; the
+ *     residual halves are mechanical mirrors and the fit starts at the first judged 200-day state (77 of the
+ *     seed's 254 sessions in the lowest full-sample above50 quintile lie before it). v2 calls the diagnostics a
+ *     relative-tilt check and says the delisting bias cannot be measured from the capture.
  *
  * Proprietary RS inside the trend-template counts is this app's own RS, not IBD RS.
  */
@@ -840,7 +848,7 @@ export function survivorship(history, states) {
       const ybar = sample.reduce((a, p) => a + p.y, 0) / sample.length;
       const ssTot = sample.reduce((a, p) => a + (p.y - ybar) ** 2, 0), ssRes = sample.reduce((a, p) => a + residual(p) ** 2, 0);
       const half = Math.floor(sample.length / 2);
-      fit = { n: sample.length, intercept: round(beta[0], 4), vs50: round(beta[1], 4), vs200: round(beta[2], 4), r2: round(1 - ssRes / ssTot, 4),
+      fit = { n: sample.length, fitStart: rows[sample[0].t].date, outsideFit: rows.length - sample.length, intercept: round(beta[0], 4), vs50: round(beta[1], 4), vs200: round(beta[2], 4), r2: round(1 - ssRes / ssTot, 4),
         firstHalf: { from: rows[sample[0].t].date, to: rows[sample[half - 1].t].date, meanResidual: round(mean(sample.slice(0, half)), 3) },
         secondHalf: { from: rows[sample[half].t].date, to: rows[sample.at(-1).t].date, meanResidual: round(mean(sample.slice(half)), 3) },
         byYear: [...years.keys()].map(year => ({ year, meanResidual: round(mean(sample.filter(p => p.year === year)), 3) })) };
@@ -955,7 +963,7 @@ export function markdownReport(study) {
   for (const i of study.inputs.indices) add(`| ${i.symbol} OHLCV | ${i.source ?? 'n/a'}; calendar ${i.calendarBasis} | ${i.first} | ${i.last} | ${i.sessions} | valid bars ${i.validBars}, invalid ${i.invalidBars}, missing sessions ${i.missingSessions}, off-calendar ${i.offCalendarBars}, valid runs ${i.validRuns}, implausible moves ${i.implausibleMoves}; last bar ${i.lastBar} |`);
   add('');
   for (const note of study.notes) add(`- ${note}`);
-  if (h) add('- The long history is a CURRENT-UNIVERSE RETROSPECTIVE: stocks delisted before the capture are missing, so early breadth tends to read healthier than it was. Read breadth effects with the survivorship section and the split-sample labels.');
+  if (h) add('- The long history is a CURRENT-UNIVERSE RETROSPECTIVE: stocks delisted before the capture are missing, so early breadth tends to read healthier than it was. This study cannot measure that bias (see the survivorship section); read breadth results with it in mind.');
   const t = study.tests, chance = t.chance;
   add('', '## Tests and chance level', '',
     `${t.available} of ${t.indicators} indicators had judged sessions; ${t.contrasts} contrasts (a two-state indicator is one) × ${WINDOWS.length} windows × 2 statistics = **${t.tests} tests**, from ${t.indicatorLevel} indicator-level tests (indicator × window × statistic). The windows overlap: each starts at the same close.`,
@@ -985,9 +993,13 @@ export function markdownReport(study) {
   if (!ordered.length) add('| | none | | | | | | | | | | |');
   const s = study.survivorship;
   if (s) {
-    add('', '## Survivorship diagnostics (long history)', '', '| year | sessions | eligible / universe | coverage / universe | mean above50% residual |', '|---|---|---|---|---|');
+    add('', '## Survivorship diagnostics (long history): a relative-tilt check only', '',
+      'These cannot measure the survivorship (delisting) bias: the capture holds aggregates of today\'s names only, so neither the delisted names nor a run restricted to names with history across the whole window can be formed from it.', '',
+      '| year | sessions | eligible / universe (listing age) | coverage / universe | mean above50% residual |', '|---|---|---|---|---|');
     for (const y of s.byYear) add(`| ${y.year} | ${y.sessions} | ${prob(y.eligibleShare)} | ${prob(y.coverageShare)} | ${s.above50Residual?.byYear.find(r => r.year === y.year)?.meanResidual ?? '—'} |`);
-    if (s.above50Residual) add('', `OLS above50Percent = ${s.above50Residual.intercept} ${signedTerm(s.above50Residual.vs50)}·(^GSPC % vs 50-day) ${signedTerm(s.above50Residual.vs200)}·(% vs 200-day), R² ${s.above50Residual.r2}, n ${s.above50Residual.n}. Mean residual first half (${s.above50Residual.firstHalf.from}–${s.above50Residual.firstHalf.to}) ${s.above50Residual.firstHalf.meanResidual} pt, second half (${s.above50Residual.secondHalf.from}–${s.above50Residual.secondHalf.to}) ${s.above50Residual.secondHalf.meanResidual} pt. A positive early residual is consistent with survivorship inflation (or a genuinely broader market then); this cannot separate the two.`);
+    add('', 'eligible / universe is the share of today\'s names with enough price history on that session (listing age), not a count of delisted names.');
+    const fit = s.above50Residual;
+    if (fit) add('', `OLS above50Percent = ${fit.intercept} ${signedTerm(fit.vs50)}·(^GSPC % vs 50-day) ${signedTerm(fit.vs200)}·(% vs 200-day), R² ${fit.r2}, n ${fit.n}, from ${fit.fitStart} (the first session with both states judged; ${fit.outsideFit} breadth sessions are outside the fit). Mean residual first half (${fit.firstHalf.from}–${fit.firstHalf.to}) ${fit.firstHalf.meanResidual} pt, second half (${fit.secondHalf.from}–${fit.secondHalf.to}) ${fit.secondHalf.meanResidual} pt. With an intercept the residuals sum to zero, so the halves mirror each other and a constant (level) bias leaves no trace; a bias that tracks the index is absorbed by the fit. The residuals show only whether breadth drifts against the index over time.`);
   }
   add('', '## All indicators', '');
   for (const r of study.indicators) {

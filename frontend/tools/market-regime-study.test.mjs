@@ -464,6 +464,14 @@ describe('study and CLI on synthetic inputs', () => {
       }
       expect(saved.indicators.find(i => i.key === 'rule.count').available).toBe(true);
       expect(saved.survivorship.byYear.map(y => y.year)).toEqual(['2019', '2020']);
+      // The residual halves are mirrors by construction (OLS with an intercept), and the report says so.
+      const fit = saved.survivorship.above50Residual, firstN = Math.floor(fit.n / 2);
+      expect(firstN * fit.firstHalf.meanResidual + (fit.n - firstN) * fit.secondHalf.meanResidual).toBeCloseTo(0, 0);
+      expect(fit.fitStart).toBe(saved.indicators.find(i => i.key === 'spx.ma200').firstJudged);
+      expect(fit.outsideFit).toBe(history.breadth.length - fit.n);
+      expect(markdown).toContain('a relative-tilt check only');
+      expect(markdown).toMatch(/cannot measure the survivorship \(delisting\) bias/);
+      expect(markdown).not.toMatch(/consistent with survivorship inflation|no early/);
       for (const heading of ['## Inputs', '## Tests and chance level', '## Labels passing the split rule', '## Survivorship diagnostics', '## All indicators', '`^IXIC.ftd.state`', '`d21.stageSpread`']) expect(markdown).toContain(heading);
       expect(markdown).not.toMatch(/expected by chance alone|90% CI|bootstrap/);
       expect(strip(runStudy({ history, indices, shifts: 120 }).indicators.map(i => i.key))).toEqual(saved.indicators.map(i => i.key));
