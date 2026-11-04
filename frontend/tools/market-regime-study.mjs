@@ -124,10 +124,12 @@
  *     count in a quarter of the shifts. v2 replaces the bootstrap CIs and their split rule by the rotation
  *     placebo, states the placebo chance level instead of "about 10% by chance", and raises the minimum span from
  *     4 to 10 blocks. The placebo design was settled on the same GARCH null only: leaving out M shifts on both
- *     sides of 0 (a first draft) let p <= 0.05 fire in 9-28% of judged tests on 1,270 sessions; with the past-side
- *     stand-ins it fired in 4.3-6.1% there (400 paths each of AR(1) quintiles and 20- and 60-session binary
- *     regimes) and in 3.1-4.6% on 9,200 sessions (60 paths), and the chance-level rerun labelled null shifts at
- *     least as often as the actual (5.2-6.0% robust against 4.0-5.3%).
+ *     sides of 0 (a first draft) let p <= 0.05 fire in 9-28% of judged tests on 1,270 sessions. With the past-side
+ *     stand-ins and deviations 2-4 in place it fired in 4.2-6.0% there (400 paths each of AR(1) causal quintiles
+ *     and 20- and 60-session binary regimes; the 60-session regime's mean statistic 7.4-7.7%; a 250-session regime
+ *     was judged only 10 times in 400 paths, too rarely to estimate) and in 3.1-4.4% on 9,200 sessions (60 paths
+ *     each, a 250-session regime included). The chance-level rerun labelled null shifts at least as often as the
+ *     actual (4.6-5.9% robust against 3.1-5.3%), so the count comparison is not anti-conservative.
  *  2. Look-ahead in the bucket edges. v1 fitted the q.* / d21.* quintile edges (and combo.washout_uptrend's Q1) on
  *     the whole sample, past and future, and its split check reused them: truncating the seed changed the past
  *     buckets of 9 series, and second-half buckets under first-half-only edges agreed with the full-sample ones on
