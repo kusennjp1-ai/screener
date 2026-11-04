@@ -63,11 +63,13 @@
  *                    an edge falls in the lower bucket. No later value enters a bucket, so both halves are out of
  *                    sample. The edges drift with the history and are descriptive, not a trading rule.
  *
- * STATISTICS per (indicator bucket, h)
+ * STATISTICS per (indicator, h)
  *  Evaluation sample: sessions where the indicator is judged and r_h and dd_h are known. Baseline: the same
  *  sample, unconditionally. Reported: n, episodes (in-bucket sessions more than h sessions apart start a new
  *  episode), mean, median, P(r_h > 0), P(dd_h <= -5%), P(dd_h <= -10%).
- *  Differences D vs baseline: mean r_h (primary) and P(dd_h <= -5%) (secondary, the "falls" question).
+ *  Tests D, each for mean r_h (primary) and P(dd_h <= -5%) (secondary, the "falls" question): with three or more
+ *  buckets, each bucket minus the baseline; with two, one contrast, the first bucket minus the second (both buckets
+ *  against the baseline are the same comparison, so it is tested and counted once).
  *  Split-sample: first vs second half of the evaluation sample (by session count), each with its own baseline.
  *  Rotation placebo (calibration against the data's own dependence). Shift k rotates every indicator series of a
  *  panel (index:^GSPC, index:^IXIC, breadth) against the panel's fixed outcomes, state_t <- state_((t + k) mod n):
@@ -88,8 +90,11 @@
  *  Chance level: the whole labelling is rerun on every grid shift more than M from 0 on both sides, with the
  *  actual's geometry (that shift and its own look-ahead zone left out, its past side standing in for the zone, the
  *  actual series in the reference). The report gives the null median and 95th percentile of the number of robust
- *  labels next to the actual count. Robust labels are read as evidence only when their count exceeds that 95th
- *  percentile; otherwise the report calls them consistent with chance.
+ *  labels, and of robust groups, next to the actual counts. Labels group when their indicators share an input
+ *  series (one rule on ^GSPC, ^IXIC and the long-history S&P shares one; every window starts at the same close, so
+ *  horizons overlap); the report also states the indicator-level test count (indicator x h x statistic). Robust
+ *  labels are read as evidence only when their count exceeds the null 95th percentile; otherwise the report calls
+ *  them consistent with chance.
  *
  * SURVIVORSHIP DIAGNOSTICS (H)
  *  1. eligibleUniverse / universe and coverage / universe by year.
@@ -116,6 +121,10 @@
  *     the whole sample, past and future, and its split check reused them: truncating the seed changed the past
  *     buckets of 9 series, and second-half buckets under first-half-only edges agreed with the full-sample ones on
  *     only 66-93% of sessions. v2 edges are causal (expanding window, values strictly before t, 252-value warm-up).
+ *  3. Double counting. Both buckets of a two-bucket indicator were tested against the baseline, although the two
+ *     differences are one contrast, (1 - c0/M)(m0 - m1) and -(c0/M)(m0 - m1): 128 of the seed's 912 tests, and none
+ *     of its 72 CI pairs disagreed. v2 tests one contrast per two-state indicator, states the indicator-level test
+ *     count and groups robust labels that share an input.
  *
  * Proprietary RS inside the trend-template counts is this app's own RS, not IBD RS.
  */
@@ -548,8 +557,8 @@ function aggregate(states, shift, out, groups, h, scratch) {
   const size = collect(states, shift, out, scratch), half = size >> 1, second = half;
   return { size, half, second, parts: [accumulate(scratch, 0, size, out, groups, h), accumulate(scratch, 0, half, out, groups, h), accumulate(scratch, second, size, out, groups, h)] };
 }
-/** The tests of an indicator: each bucket against the baseline. */
-const testsFor = groups => Array.from({ length: groups }, (_, bucket) => ({ bucket }));
+/** The tests of an indicator: one contrast (first minus second) for two buckets, else each bucket against the baseline. */
+const testsFor = groups => groups === 2 ? [{ bucket: 0, versus: 1 }] : Array.from({ length: groups }, (_, bucket) => ({ bucket }));
 function estimate(part, test, stat) {
   const sums = stat === 'mean' ? part.r : part.d, total = stat === 'mean' ? part.sumR : part.sumD, a = part.n[test.bucket];
   if (!a || !part.size) return NaN;
@@ -625,8 +634,9 @@ export function evaluateIndicator(indicator, outcomes, { dates = null, shifts = 
       baseline: baselines[0], h1Baseline: baselines[1], h2Baseline: baselines[2],
       buckets: indicator.buckets.map((bucket, g) => {
         const ts = members[0][g], stats = summarize(ts.map(t => ret[t]), ts.map(t => dd[t])), i = tests.findIndex(test => test.bucket === g);
-        // meanReturn is the bucket's own forward-return mean; mean / dd5 carry the tests (D vs baseline).
-        return { key: bucket.key, label: bucket.label, ...roundStats(stats), episodes: actual.parts[0].episodes[g], h1n: members[1][g].length, h2n: members[2][g].length,
+        // meanReturn is the bucket's own forward-return mean; mean / dd5 carry the tests (D vs the baseline, or for
+        // two buckets the contrast, on the first bucket; the second is its complement).
+        return { key: bucket.key, label: bucket.label, role: groups === 2 ? (g === 0 ? 'contrast' : 'complement') : 'vs-baseline', ...roundStats(stats), episodes: actual.parts[0].episodes[g], h1n: members[1][g].length, h2n: members[2][g].length,
           firstHalfShare: ts.length ? round(members[1][g].length / ts.length, 4) : null, mean: i >= 0 ? results[i].mean : null, dd5: i >= 0 ? results[i].dd5 : null };
       }),
     };
@@ -643,23 +653,48 @@ const distribution = values => {
  * Null distribution of the number of robust labels: per panel over its shifts, and in total over the shifts that
  * every panel with a placebo has (the j-th shift of each).
  */
-export function chanceLevel(panels, actual) {
+export function chanceLevel(panels, actual, actualGroups = null) {
   const perPanel = panels.map(panel => {
-    const index = nullShiftIndices(panel.shifts, panel.sessions), K = index.length, robust = new Array(K).fill(0);
-    for (const test of panel.nulls) for (let j = 0; j < K; j++) if (test.codes[j] === ROBUST) robust[j]++;
+    const index = nullShiftIndices(panel.shifts, panel.sessions), K = index.length, robust = Array.from({ length: K }, () => []);
+    for (const test of panel.nulls) for (let j = 0; j < K; j++) if (test.codes[j] === ROBUST) robust[j].push(test.inputs ?? [test.key ?? 'test']);
     return { panel: panel.name, sessions: panel.sessions, grid: panel.shifts.length, shifts: K, first: panel.shifts[index[0]] ?? null, last: panel.shifts[index.at(-1)] ?? null, robust, actual: panel.actual };
   });
   const active = perPanel.filter(panel => panel.shifts > 0);
   const K = active.length ? Math.min(...active.map(panel => panel.shifts)) : 0;
-  const total = Array.from({ length: K }, (_, j) => active.reduce((a, panel) => a + panel.robust[j], 0));
+  const labels = j => active.flatMap(panel => panel.robust[j]);
+  const total = Array.from({ length: K }, (_, j) => labels(j).length), groups = Array.from({ length: K }, (_, j) => groupCount(labels(j)));
   const summary = distribution(total);
-  return { available: K > 0, shifts: K, margin: placeboMargin(), actual, robust: summary, shareAtLeastActual: K ? round(total.filter(v => v >= actual).length / K, 4) : null,
-    clears: summary ? actual > summary.p95 : null,
-    panels: perPanel.map(({ robust, ...panel }) => ({ ...panel, robust: distribution(robust) })) };
+  return { available: K > 0, shifts: K, margin: placeboMargin(), actual, actualGroups, robust: summary, groups: distribution(groups),
+    shareAtLeastActual: K ? round(total.filter(v => v >= actual).length / K, 4) : null, clears: summary ? actual > summary.p95 : null,
+    panels: perPanel.map(({ robust, ...panel }) => ({ ...panel, robust: distribution(robust.map(list => list.length)) })) };
 }
 
 // ---- indicators -------------------------------------------------------------------------------------------------
-const make = (panel, key, label, rule, bucketLabels, values, outcome) => ({ panel, key, label, rule, outcome, buckets: bucketLabels.map(text => ({ key: text, label: text })), values });
+const make = (panel, key, label, rule, bucketLabels, values, outcome) => ({ panel, key, label, rule, outcome, inputs: indicatorInputs(key), buckets: bucketLabels.map(text => ({ key: text, label: text })), values });
+// Input series of each indicator, for grouping labels: one rule on ^GSPC, ^IXIC and the long-history S&P shares one input.
+const INDICATOR_INPUTS = { 'dd.binary': ['index:distribution'], 'dd.graded': ['index:distribution'], 'ftd.state': ['index:ftd'], 'combo.ftd_recent': ['index:ftd'],
+  ma50: ['index:ma50'], ma200: ['index:ma200'], 'ma.quadrant': ['index:ma50', 'index:ma200'], 'high.near': ['index:high'], 'combo.dd_ma50': ['index:distribution', 'index:ma50'],
+  'rule.split': ['index:high', 'breadth:above200'], 'rule.lows': ['breadth:newHighsLows'], 'rule.template': ['breadth:trendTemplate'], 'rule.stage': ['breadth:stages'],
+  'rule.leaders': ['breadth:leaderHealth'], 'rule.breakout': ['breadth:breakoutHold'],
+  'rule.count': ['index:distribution', 'index:ftd', 'index:high', 'breadth:above200', 'breadth:newHighsLows', 'breadth:trendTemplate', 'breadth:stages', 'breadth:leaderHealth', 'breadth:breakoutHold'],
+  'combo.lows_below200': ['breadth:newHighsLows', 'index:ma200'], 'combo.washout_uptrend': ['breadth:above50', 'index:ma200'] };
+const FIELD_INPUTS = { above50Percent: 'breadth:above50', above150Percent: 'breadth:above150', above200Percent: 'breadth:above200', trendTemplatePercent: 'breadth:trendTemplate',
+  netHighsPercent: 'breadth:newHighsLows', ratio_10day: 'breadth:upDown4pct', leaderPercent: 'breadth:leaderCount', leaderHealthPercent: 'breadth:leaderHealth',
+  breakoutHoldPercent: 'breadth:breakoutHold', stageSpread: 'breadth:stages' };
+export function indicatorInputs(key) {
+  const field = /^(?:q|d21)\.(.+)$/.exec(key);
+  if (field) return [FIELD_INPUTS[field[1]] ?? key];
+  return INDICATOR_INPUTS[key.replace(/^(?:\^GSPC|\^IXIC|spx)\./, '')] ?? [key];
+}
+/** Group of each item (a list of inputs): items sharing an input, directly or through others, form one group. */
+export function inputGroups(items) {
+  const parent = new Map(), find = x => { while (parent.get(x) !== x) { parent.set(x, parent.get(parent.get(x))); x = parent.get(x); } return x; };
+  for (const inputs of items) for (const input of inputs) if (!parent.has(input)) parent.set(input, input);
+  for (const inputs of items) for (const input of inputs.slice(1)) { const a = find(inputs[0]), b = find(input); if (a !== b) parent.set(a, b); }
+  const number = new Map();
+  return items.map(inputs => { const root = find(inputs[0]); if (!number.has(root)) number.set(root, number.size + 1); return number.get(root); });
+}
+const groupCount = items => new Set(inputGroups(items)).size;
 const bin = flag => flag === null || flag === undefined ? null : flag ? 0 : 1;
 const above = value => value === null || value === undefined ? null : value > 0;
 const quad = state => state && state.vsMa !== null && state.vs200 !== null ? (state.vs200 > 0 ? (state.vsMa > 0 ? 0 : 1) : (state.vsMa > 0 ? 2 : 3)) : null;
@@ -830,25 +865,32 @@ export function runStudy({ history = null, historyMeta = {}, indices = null, cal
   const tally = Object.fromEntries(LABELS.map(name => [name, 0]));
   let tests = 0;
   for (const r of tested) for (const h of WINDOWS) for (const bucket of r.windows[h].buckets) for (const stat of STATS) if (bucket[stat]) { tests++; tally[bucket[stat].label]++; }
-  const chance = chanceLevel(panels.map(panel => ({ ...panel, actual: panelRobust(results, panel.name) })), tally.robust);
+  const robustLabels = robustList(results), groups = inputGroups(robustLabels.map(item => item.inputs));
+  robustLabels.forEach((item, i) => { item.group = groups[i]; });
+  const chance = chanceLevel(panels.map(panel => ({ ...panel, actual: panelRobust(results, panel.name) })), tally.robust, new Set(groups).size);
   return { schema_version: STUDY_VERSION, label: runLabel, generated_at: new Date().toISOString(), as_of_date: asOfDate,
     method: { windows: WINDOWS, drawdownLevels: [DRAWDOWN.primary, DRAWDOWN.deep], quintiles: QUANTILES, changeSessions: CHANGE_SESSIONS, ftdWindowSessions: FTD_WINDOW_SESSIONS,
       placebo: { ...PLACEBO, shifts: shiftCount, margin: placeboMargin(), rotation: 'state_t <- state_((t + k) mod n), one k per panel' }, minSessions: MIN_SESSIONS, minEpisodes: MIN_EPISODES, minBlocks: MIN_BLOCKS, block: 'max(2h, 21)',
       appRules: { DISTRIBUTION_WARN, DISTRIBUTION_METHOD, FOLLOW_THROUGH_METHOD, SPLIT_RULE, ENV_RULES } },
     inputs, notes, survivorship: diagnostics,
-    tests: { indicators: results.length, available: tested.length, buckets: tested.reduce((a, r) => a + r.buckets.length, 0), tests, labels: tally, chance },
+    tests: { indicators: results.length, available: tested.length, buckets: tested.reduce((a, r) => a + r.buckets.length, 0),
+      contrasts: tested.reduce((a, r) => a + (r.buckets.length === 2 ? 1 : r.buckets.length), 0), tests, indicatorLevel: tested.length * WINDOWS.length * STATS.length,
+      labels: tally, robustGroups: new Set(groups).size, robust: robustLabels, chance },
     indicators: results };
 }
 
+/** Every robust label in report order, with its indicator's inputs. */
+const robustList = results => results.filter(r => r.available).flatMap(r => WINDOWS.flatMap(h => r.windows[h].buckets.flatMap((bucket, g) => STATS.filter(stat => bucket[stat]?.label === 'robust')
+  .map(stat => ({ key: r.key, bucket: g, h, stat, inputs: r.inputs })))));
 const panelRobust = (results, name) => results.filter(r => r.available && r.panel === name).reduce((a, r) => a + WINDOWS.reduce((b, h) => b + r.windows[h].buckets.reduce((c, bucket) => c + STATS.filter(stat => bucket[stat]?.label === 'robust').length, 0), 0), 0);
 
 function finish(indicator, outcomes, dates, panel) {
   const judged = indicator.values.filter(value => value !== null).length;
-  const base = { panel: indicator.panel, key: indicator.key, label: indicator.label, rule: indicator.rule, outcome: indicator.outcome, edges: indicator.edges ?? null,
+  const base = { panel: indicator.panel, key: indicator.key, label: indicator.label, rule: indicator.rule, outcome: indicator.outcome, inputs: indicator.inputs, edges: indicator.edges ?? null,
     buckets: indicator.buckets, judged, available: judged > 0 };
   if (!judged) return { ...base, reason: indicator.unavailableReason || 'no judged session (the input is too short for the rule)', windows: null };
   const { windows, nulls } = evaluateIndicator(indicator, outcomes, { dates, shifts: panel.shifts });
-  for (const test of nulls) panel.nulls.push({ ...test, key: indicator.key });
+  for (const test of nulls) panel.nulls.push({ ...test, key: indicator.key, inputs: indicator.inputs });
   return { ...base, firstJudged: dates[indicator.values.findIndex(value => value !== null)], lastJudged: dates[indicator.values.findLastIndex(value => value !== null)], windows };
 }
 
@@ -866,7 +908,7 @@ export function markdownReport(study) {
   const lines = [], add = (...rows) => lines.push(...rows);
   add(`# Market-regime study${study.label ? ` — ${study.label}` : ''}`, '',
     `${STUDY_VERSION} (pre-registered in frontend/tools/market-regime-study.mjs, with its deviations from v1) · as of ${study.as_of_date ?? 'n/a'} · rotation placebo: up to ${study.method.placebo.shifts} shifts per panel, margin ${study.method.placebo.margin} sessions · robust = placebo p ≤ ${PLACEBO.alpha} and both halves agree in sign`, '',
-    'Diagnostic research only: nothing here changes a rule, threshold, verdict or published value. Returns are forward index returns from the close of the session the state was observed (strictly causal). Δ columns are differences from the unconditional baseline of the same sample, in percentage points. [band] is the 90% range of Δ when the indicator series is rotated against the outcomes (what chance alone produced on this data); p is the two-sided rotation-placebo p.', '');
+    'Diagnostic research only: nothing here changes a rule, threshold, verdict or published value. Returns are forward index returns from the close of the session the state was observed (strictly causal). Δ columns are in percentage points: a bucket minus the unconditional baseline of the same sample (three or more buckets), or for a two-state indicator one contrast, the first state minus the second. [band] is the 90% range of Δ when the indicator series is rotated against the outcomes (what chance alone produced on this data); p is the two-sided rotation-placebo p.', '');
   add('## Inputs', '', '| input | basis | first | last | sessions | notes |', '|---|---|---|---|---|---|');
   const h = study.inputs.history;
   if (h) add(`| long history (as of ${h.as_of_date}) | ${h.basis}; historical membership verified: ${h.historicalMembershipVerified} | ${h.first} | ${h.last} | ${h.sessions} | universe ${h.universe}; sha256 ${String(h.sha256).slice(0, 12)}; ${h.fieldsAbsent.length ? `absent: ${h.fieldsAbsent.join(', ')}` : 'all study fields present'}${h.sp500VsIndexSource ? `; sp500 vs index source max diff ${(100 * h.sp500VsIndexSource.maxRelativeDifference).toFixed(4)}% over ${h.sp500VsIndexSource.compared}` : ''} |`);
@@ -876,25 +918,31 @@ export function markdownReport(study) {
   if (h) add('- The long history is a CURRENT-UNIVERSE RETROSPECTIVE: stocks delisted before the capture are missing, so early breadth tends to read healthier than it was. Read breadth effects with the survivorship section and the split-sample labels.');
   const t = study.tests, chance = t.chance;
   add('', '## Tests and chance level', '',
-    `${t.available} of ${t.indicators} indicators had judged sessions; ${t.buckets} buckets × ${WINDOWS.length} windows × 2 statistics = **${t.tests} tests**.`,
-    `Labels: robust ${t.labels.robust} · weak ${t.labels.weak} · unstable ${t.labels.unstable} · insufficient ${t.labels.insufficient}. robust = rotation-placebo p ≤ ${PLACEBO.alpha} and both halves' Δ have the full-sample sign.`, '');
+    `${t.available} of ${t.indicators} indicators had judged sessions; ${t.contrasts} contrasts (a two-state indicator is one) × ${WINDOWS.length} windows × 2 statistics = **${t.tests} tests**, from ${t.indicatorLevel} indicator-level tests (indicator × window × statistic). The windows overlap: each starts at the same close.`,
+    `Labels: robust ${t.labels.robust} (in ${t.robustGroups} input group${t.robustGroups === 1 ? '' : 's'}) · weak ${t.labels.weak} · unstable ${t.labels.unstable} · insufficient ${t.labels.insufficient}. robust = rotation-placebo p ≤ ${PLACEBO.alpha} and both halves' Δ have the full-sample sign. Labels share a group when their indicators share an input series; the same rule on ^GSPC, ^IXIC and the long-history S&P is one input.`, '');
   if (!chance.available) add(`Chance level: unavailable. Every panel is shorter than 2 × ${chance.margin} sessions plus ${PLACEBO.minShifts} shifts, so every test is insufficient.`, '');
   else {
-    add(`Chance level (rotation placebo: the whole labelling rerun on each of ${chance.shifts} shifts, one shift for every indicator of a panel so the tests' dependence is kept): robust labels median ${num2(chance.robust.median)}, 95th percentile ${num2(chance.robust.p95)}, max ${chance.robust.max}; ${prob(chance.shareAtLeastActual)} of shifts reached the actual ${chance.actual}.`,
+    add(`Chance level (rotation placebo: the whole labelling rerun on each of ${chance.shifts} shifts, one shift for every indicator of a panel so the tests' dependence is kept): robust labels median ${num2(chance.robust.median)}, 95th percentile ${num2(chance.robust.p95)}, max ${chance.robust.max}; ${prob(chance.shareAtLeastActual)} of shifts reached the actual ${chance.actual}. Robust groups: actual ${chance.actualGroups}, placebo median ${num2(chance.groups.median)}, 95th percentile ${num2(chance.groups.p95)}.`,
       ...chance.panels.map(panel => `- ${panel.panel}: ${panel.sessions} sessions, ${panel.shifts ? `${panel.shifts} shifts (${panel.first}–${panel.last}); robust labels actual ${panel.actual}, placebo median ${num2(panel.robust.median)}, 95th percentile ${num2(panel.robust.p95)}` : 'too short for the placebo (every test insufficient)'}.`), '',
       chance.clears ? `**${chance.actual} robust labels exceed the placebo 95th percentile (${num2(chance.robust.p95)}).** Read them with the split and survivorship caveats.`
         : `**${chance.actual} robust labels do not exceed the placebo 95th percentile (${num2(chance.robust.p95)}): as a set they are consistent with chance and are not reported as effects.**`, '');
   }
   const chanceTitle = chance.available ? `chance level median ${num2(chance.robust.median)}, 95th percentile ${num2(chance.robust.p95)} (placebo)` : 'chance level unavailable';
-  add(`## Labels passing the split rule (placebo p ≤ ${PLACEBO.alpha}, halves agree) — ${chanceTitle}`, '', '| indicator | bucket | h | n | episodes | mean | baseline | Δmean [placebo band] p | P(DD≤−5%) | ΔP(DD≤−5%) [placebo band] p | which |', '|---|---|---|---|---|---|---|---|---|---|---|');
-  let robust = 0;
-  for (const r of study.indicators) if (r.available) for (const w of WINDOWS) for (const b of r.windows[w].buckets) {
-    const which = STATS.filter(stat => b[stat]?.label === 'robust');
-    if (!which.length) continue;
-    robust++;
-    add(`| ${cell(r.label)} \`${r.key}\` | ${cell(b.label)} | ${w} | ${b.n} | ${b.episodes} | ${pct(b.meanReturn)} | ${pct(r.windows[w].baseline.meanReturn)} | ${statText(b.mean)} | ${prob(b.pDd5)} | ${statText(b.dd5, 1)} | ${which.join(', ')} |`);
+  add(`## Labels passing the split rule (placebo p ≤ ${PLACEBO.alpha}, halves agree) — ${chanceTitle}`, '',
+    '| group | indicator | state | h | n | episodes | mean | reference | Δmean [placebo band] p | P(DD≤−5%) | ΔP(DD≤−5%) [placebo band] p | which |', '|---|---|---|---|---|---|---|---|---|---|---|---|');
+  const byKey = new Map(study.indicators.map(r => [r.key, r])), rows = new Map();
+  for (const item of t.robust) {
+    const id = `${item.key}|${item.h}|${item.bucket}`;
+    if (!rows.has(id)) rows.set(id, { ...item, which: [] });
+    rows.get(id).which.push(item.stat);
   }
-  if (!robust) add('| none | | | | | | | | | | |');
+  const ordered = [...rows.values()].sort((a, b) => a.group - b.group);
+  for (const row of ordered) {
+    const r = byKey.get(row.key), win = r.windows[row.h], b = win.buckets[row.bucket], other = b.role === 'contrast' ? win.buckets[row.bucket + 1] : null;
+    const pair = (a, c) => other ? `${a} / ${c}` : a;
+    add(`| ${row.group} | ${cell(r.label)} \`${r.key}\` | ${cell(other ? `${b.label} vs ${other.label}` : b.label)} | ${row.h} | ${pair(b.n, other?.n)} | ${pair(b.episodes, other?.episodes)} | ${pct(b.meanReturn)} | ${other ? pct(other.meanReturn) : `baseline ${pct(win.baseline.meanReturn)}`} | ${statText(b.mean)} | ${pair(prob(b.pDd5), other ? prob(other.pDd5) : '')} | ${statText(b.dd5, 1)} | ${row.which.join(', ')} |`);
+  }
+  if (!ordered.length) add('| | none | | | | | | | | | | |');
   const s = study.survivorship;
   if (s) {
     add('', '## Survivorship diagnostics (long history)', '', '| year | sessions | eligible / universe | coverage / universe | mean above50% residual |', '|---|---|---|---|---|');
@@ -903,14 +951,17 @@ export function markdownReport(study) {
   }
   add('', '## All indicators', '');
   for (const r of study.indicators) {
-    add(`### ${r.label} — \`${r.key}\``, '', `${r.rule}. Outcome: ${r.outcome}.${r.available ? ` Judged ${r.judged} sessions (${r.firstJudged} to ${r.lastJudged}).` : ''}`, '');
+    add(`### ${r.label} — \`${r.key}\``, '', `${r.rule}. Outcome: ${r.outcome}.${r.available ? ` Judged ${r.judged} sessions (${r.firstJudged} to ${r.lastJudged}).` : ''}${r.buckets.length === 2 ? ' Two states: one contrast, the first minus the second.' : ''}`, '');
     if (!r.available) { add(`Unavailable: ${r.reason}.`, ''); continue; }
     add('| bucket | h | n | ep | 1st-half share | mean | median | P(up) | P(DD≤−5%) | P(DD≤−10%) | Δmean [placebo band] p | label | ΔP(DD≤−5%) [placebo band] p | label |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const w of WINDOWS) {
       const win = r.windows[w], base = win.baseline;
       if (!win.n) { add(`| (no session with a complete ${w}-session forward window) | ${w} | 0 | | | | | | | | | | | |`); continue; }
       add(`| baseline | ${w} | ${win.n} | | split ${win.split ?? '—'} | ${pct(base.meanReturn)} | ${pct(base.median)} | ${prob(base.pUp)} | ${prob(base.pDd5)} | ${prob(base.pDd10)} | | | | |`);
-      for (const b of win.buckets) add(`| ${cell(b.label)} | ${w} | ${b.n} | ${b.episodes} | ${prob(b.firstHalfShare)} | ${pct(b.meanReturn)} | ${pct(b.median)} | ${prob(b.pUp)} | ${prob(b.pDd5)} | ${prob(b.pDd10)} | ${statText(b.mean)} | ${b.mean ? TAG[b.mean.label] : ''} | ${statText(b.dd5, 1)} | ${b.dd5 ? TAG[b.dd5.label] : ''} |`);
+      for (const b of win.buckets) {
+        const tail = b.role === 'complement' ? '(the contrast above) | | | ' : `${statText(b.mean)} | ${TAG[b.mean.label]} | ${statText(b.dd5, 1)} | ${TAG[b.dd5.label]} `;
+        add(`| ${cell(b.label)} | ${w} | ${b.n} | ${b.episodes} | ${prob(b.firstHalfShare)} | ${pct(b.meanReturn)} | ${pct(b.median)} | ${prob(b.pUp)} | ${prob(b.pDd5)} | ${prob(b.pDd10)} | ${tail}|`);
+      }
     }
     add('');
   }

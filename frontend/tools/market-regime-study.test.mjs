@@ -8,7 +8,7 @@ import { followThroughDay } from '../src/static/followThroughDay.js';
 import { bifurcation, environmentPoint } from '../src/static/marketLongHistory.js';
 import { environmentRules } from '../src/static/brief/briefModel.js';
 import {
-  alignIndex, breadthIndicators, breadthStates, causalQuintiles, chanceLevel, episodes, evaluateIndicator, fetchYahooIndex, forwardOutcomes, indexIndicators, indexStates, label, loadHistory, main,
+  alignIndex, breadthIndicators, breadthStates, causalQuintiles, chanceLevel, episodes, evaluateIndicator, fetchYahooIndex, forwardOutcomes, indexIndicators, indexStates, indicatorInputs, inputGroups, label, loadHistory, main,
   mulberry32, nullShiftIndices, parseYahooChart, placeboMargin, placeboP, placeboQuantile, placeboReference, placeboShifts, quintileBucket, quintileEdges, runStudy, shiftWeight,
   EDGE_WARMUP, FTD_WINDOW_SESSIONS, LABELS, MIN_BLOCKS, PLACEBO, STATS, WINDOWS,
 } from './market-regime-study.mjs';
@@ -285,7 +285,36 @@ describe('rotation placebo', () => {
     expect(result.robust.max).toBe(1);
     expect(result.clears).toBe(true);
     expect(result.panels.find(p => p.panel === 'index:^IXIC')).toMatchObject({ shifts: 0, robust: null });
+    expect(result.groups.max).toBe(1);
     expect(chanceLevel([panel('index:^IXIC', 280, () => true)], 0)).toMatchObject({ available: false, clears: null });
+  });
+});
+
+describe('one test per comparison', () => {
+  it('tests a two-state indicator once, as the first state minus the second', () => {
+    const n = 1500, closes = garchCloses(mulberry32(8), n), outcomes = Object.fromEntries(WINDOWS.map(h => [h, forwardOutcomes(closes, h)]));
+    const values = regimes(mulberry32(9), n, 20), { windows, nulls } = evaluateIndicator(nullIndicator(values, 2), outcomes, {});
+    for (const h of WINDOWS) {
+      const [first, second] = windows[h].buckets;
+      expect(first.mean.est).toBeCloseTo(first.meanReturn - second.meanReturn, 5);
+      expect(first.dd5.est).toBeCloseTo(first.pDd5 - second.pDd5, 3);
+      expect([second.mean, second.dd5]).toEqual([null, null]);
+    }
+    expect(nulls.map(t => [t.h, t.bucket, t.stat])).toEqual(WINDOWS.flatMap(h => STATS.map(stat => [h, 0, stat])));
+    const three = evaluateIndicator(nullIndicator(values.map((v, t) => (t % 3 ? v : 2)), 3), outcomes, {});
+    expect(three.windows[21].buckets.map(b => b.role)).toEqual(['vs-baseline', 'vs-baseline', 'vs-baseline']);
+    expect(three.windows[21].buckets[2].mean.est).toBeCloseTo(three.windows[21].buckets[2].meanReturn - three.windows[21].baseline.meanReturn, 5);
+  });
+  it('groups labels whose indicators share an input, across indices and the long history', () => {
+    expect(indicatorInputs('^GSPC.ma50')).toEqual(indicatorInputs('spx.ma50'));
+    expect(indicatorInputs('^IXIC.ma.quadrant')).toEqual(['index:ma50', 'index:ma200']);
+    expect(indicatorInputs('q.netHighsPercent')).toEqual(indicatorInputs('rule.lows'));
+    expect(indicatorInputs('d21.above50Percent')).toEqual(['breadth:above50']);
+    expect(inputGroups([indicatorInputs('^GSPC.ma50'), indicatorInputs('^IXIC.ma200'), indicatorInputs('spx.ma.quadrant'), indicatorInputs('q.ratio_10day'), indicatorInputs('combo.washout_uptrend'), indicatorInputs('q.above50Percent')]))
+      .toEqual([1, 1, 1, 2, 1, 1]);
+    expect(inputGroups([indicatorInputs('^GSPC.dd.binary'), indicatorInputs('q.ratio_10day')])).toEqual([1, 2]);
+    for (const indicator of [...indexIndicators(indexStates({ symbol: '^GSPC', dates: weekdays('2019-01-02', 300), bars: indexBars(weekdays('2019-01-02', 300)) })), ...breadthIndicators(breadthStates(longHistory({ n: 300 })))])
+      expect(indicator.inputs.every(input => /^(?:index|breadth):/.test(input))).toBe(true);
   });
 });
 
@@ -307,8 +336,8 @@ describe('pre-registered labels', () => {
     const n = 1270, closes = garchCloses(mulberry32(3), n), outcomes = Object.fromEntries(WINDOWS.map(h => [h, forwardOutcomes(closes, h)]));
     const { windows } = evaluateIndicator(nullIndicator(regimes(mulberry32(4), n, 20), 2), outcomes, {});
     expect(windows[63].partMinimum).toBe(1260);
-    expect(windows[63].buckets.every(bucket => STATS.every(stat => bucket[stat].label === 'insufficient'))).toBe(true);
-    expect(windows[21].buckets.some(bucket => STATS.some(stat => bucket[stat].label !== 'insufficient'))).toBe(true);
+    expect(STATS.every(stat => windows[63].buckets[0][stat].label === 'insufficient')).toBe(true);
+    expect(STATS.some(stat => windows[21].buckets[0][stat].label !== 'insufficient')).toBe(true);
   });
 });
 
@@ -372,7 +401,9 @@ describe('study and CLI on synthetic inputs', () => {
       const study = await main(['--history', join(directory, 'history.json'), '--indices', join(directory, 'indices.json'), '--out', join(directory, 'out.json'), '--markdown', join(directory, 'out.md'), '--shifts', '120', '--label', 'synthetic']);
       const saved = JSON.parse(readFileSync(join(directory, 'out.json'), 'utf8')), markdown = readFileSync(join(directory, 'out.md'), 'utf8');
       expect(saved.schema_version).toBe('market-regime-study-v2');
-      expect(saved.tests.tests).toBe(saved.indicators.filter(i => i.available).reduce((a, i) => a + i.buckets.length, 0) * WINDOWS.length * 2);
+      const available = saved.indicators.filter(i => i.available);
+      expect(saved.tests.tests).toBe(available.reduce((a, i) => a + (i.buckets.length === 2 ? 1 : i.buckets.length), 0) * WINDOWS.length * 2);
+      expect(saved.tests.indicatorLevel).toBe(available.length * WINDOWS.length * 2);
       // 420 sessions leave fewer than PLACEBO.minShifts shifts: the chance level is unavailable and every test insufficient.
       expect(saved.tests.chance).toMatchObject({ available: false, shifts: 0 });
       expect(saved.tests.labels.insufficient).toBe(saved.tests.tests);
@@ -383,7 +414,10 @@ describe('study and CLI on synthetic inputs', () => {
       for (const indicator of saved.indicators.filter(i => i.available)) for (const h of WINDOWS) {
         const window = indicator.windows[h];
         expect(window.buckets.reduce((a, b) => a + b.n, 0)).toBe(window.n);
-        for (const bucket of window.buckets) if (!bucket.n) expect([bucket.meanReturn, bucket.mean.est, bucket.dd5.est, bucket.mean.p, bucket.mean.label]).toEqual([null, null, null, null, 'insufficient']);
+        for (const bucket of window.buckets) if (!bucket.n && bucket.mean) expect([bucket.meanReturn, bucket.mean.est, bucket.dd5.est, bucket.mean.p, bucket.mean.label]).toEqual([null, null, null, null, 'insufficient']);
+        // A two-state indicator carries one contrast on its first state; the second is its complement, untested.
+        if (indicator.buckets.length === 2) expect(window.buckets.map(b => [b.role, b.mean === null, b.dd5 === null])).toEqual([['contrast', false, false], ['complement', true, true]]);
+        else expect(window.buckets.every(b => b.role === 'vs-baseline' && b.mean && b.dd5)).toBe(true);
       }
       expect(saved.indicators.find(i => i.key === 'rule.count').available).toBe(true);
       expect(saved.survivorship.byYear.map(y => y.year)).toEqual(['2019', '2020']);
