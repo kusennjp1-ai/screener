@@ -22,20 +22,22 @@ describe('brief market screen on a phone', () => {
   it('puts the long history behind the 推移 tab, keeps the tab for the session, and a row link opens it', () => {
     show(history300());
     const tabs = screen.getByRole('tablist', { name: '市場タブの表示' });
-    expect(within(tabs).getAllByRole('tab').map(tab => tab.textContent)).toEqual(['指数', '参加度', 'リーダー', '推移']);
+    // No index history of a year (乖離 unjudged) and no trading calendar to say the long history is current:
+    // both sections carry the neutral 「?」, said in words for assistive tech.
+    expect(within(tabs).getAllByRole('tab').map(tab => tab.textContent)).toEqual(['指数', '参加度?未確認あり', 'リーダー', '推移?未確認']);
     expect(screen.queryByRole('region', { name: '市場環境の推移' })).toBeNull();
-    fireEvent.click(within(tabs).getByRole('tab', { name: '推移' }));
+    fireEvent.click(within(tabs).getByRole('tab', { name: /^推移/ }));
     expect(screen.getByRole('region', { name: '市場環境の推移' })).toBeVisible();
     expect(JSON.parse(sessionStorage.getItem('brief-open:market-section'))).toBe('history');
     cleanup();
     // Coming back in the same session opens the same section.
     show(history300());
-    expect(screen.getByRole('tab', { name: '推移' })).toHaveAttribute('aria-selected', 'true');
-    fireEvent.click(screen.getByRole('tab', { name: '参加度' }));
+    expect(screen.getByRole('tab', { name: /^推移/ })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('tab', { name: /^参加度/ }));
     const row = [...document.querySelectorAll('.brief-env-row')].find(element => element.querySelector('small').textContent === '52週の新高値・新安値');
     fireEvent.click(within(row).getAllByRole('button')[0]);
     fireEvent.click(within(row).getByRole('button', { name: '市場環境の推移で見る' }));
-    expect(screen.getByRole('tab', { name: '推移' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: /^推移/ })).toHaveAttribute('aria-selected', 'true');
     expect(within(screen.getByRole('group', { name: '長期推移の指標' })).getByRole('button', { name: '新高値・新安値' })).toHaveAttribute('aria-pressed', 'true');
     expect(document.activeElement).toHaveTextContent('広がりと先導株');
   });

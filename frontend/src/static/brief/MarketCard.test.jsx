@@ -112,7 +112,8 @@ describe('brief market card: market tab', () => {
     render(<Phone />);
     const tablist = screen.getByRole('tablist', { name: '市場タブの表示' });
     const tabs = within(tablist).getAllByRole('tab');
-    expect(tabs.map(tab => tab.textContent)).toEqual(['指数', '参加度▲注意1', 'リーダー', '推移']);
+    // No index history of a year, so 乖離 is unjudged: 参加度 carries the neutral 「?」 beside its ▲ count.
+    expect(tabs.map(tab => tab.textContent)).toEqual(['指数', '参加度▲注意1?未確認あり', 'リーダー', '推移']);
     expect(tabs.map(tab => tab.getAttribute('aria-selected'))).toEqual(['true', 'false', 'false', 'false']);
     expect(tabs.map(tab => tab.tabIndex)).toEqual([0, -1, -1, -1]);
     // Only the selected section is shown; the others stay in the document, hidden.
@@ -121,7 +122,7 @@ describe('brief market card: market tab', () => {
     expect(document.getElementById('brief-panel-breadth')).not.toBeVisible();
     fireEvent.click(tabs[1]);
     expect(tabs[1]).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tabpanel', { name: '参加度注意1' })).toBeVisible();
+    expect(screen.getByRole('tabpanel', { name: '参加度注意1未確認あり' })).toBeVisible();
     expect(document.getElementById('brief-panel-index')).not.toBeVisible();
     // Arrow keys move the selection and the focus; End and Home jump to the ends.
     tabs[1].focus();
@@ -138,6 +139,25 @@ describe('brief market card: market tab', () => {
     // The verdict and the warning summary stay above the tabs whatever the section.
     expect(screen.getByTestId('brief-regime')).toBeVisible();
     expect(signals()).toBeVisible();
+  });
+
+  it('marks a section tab with a neutral 「?」 when it holds a value or check that is not confirmed', () => {
+    const phone = (value, historyUnknown) => render(<MemoryRouter><MarketCard market={UP} trends={value} date="2026-10-02" detail switcher section="index" onSection={() => {}}
+      history={<section aria-label="市場環境の推移">long history</section>} historyUnknown={historyUnknown} /></MemoryRouter>);
+    const names = () => within(screen.getByRole('tablist', { name: '市場タブの表示' })).getAllByRole('tab').map(tab => tab.textContent);
+    // An older long-history schema: participation and leaders show 未収録 rows; the history awaits its update.
+    phone(trends({ rows: oldSchema(breadth('2026-10-02')), sp500: closes('2026-10-02') }), '更新待ち');
+    expect(names()).toEqual(['指数', '参加度?未確認あり', 'リーダー?未確認あり', '推移?更新待ち']);
+    for (const mark of document.querySelectorAll('.brief-switch-gap')) expect(mark.querySelector('[aria-hidden="true"]')).toHaveTextContent('?');
+    cleanup();
+    // No long history at all: both of its groups are unavailable, never read as clean.
+    phone(trends({ history: false }), '未確認');
+    expect(names()).toEqual(['指数', '参加度?未確認あり', 'リーダー?未確認あり', '推移?未確認']);
+    cleanup();
+    // Everything confirmed (a year of index closes well below their high): no marks, labels on one line.
+    phone(trends({ sp500: closes('2026-10-02', 260, 6000, -2) }), null);
+    expect(names()).toEqual(['指数', '参加度', 'リーダー', '推移']);
+    expect(document.querySelector('.brief-switch-marks')).toBeNull();
   });
 
   it('keeps the three groups side by side without tabs on the desktop, the source line in place and no 注記', () => {

@@ -313,9 +313,13 @@ export function marketCardView({ market, marketLoading = false, trends, date }) 
 
   // Values a former long-history schema did not record are named once per group, not row by row.
   const missingLine = items => { const gone = items.filter(item => item.missing); return gone.length ? `旧形式の長期集計（${shortDate(history.as_of_date, date)}）には未収録：${gone.map(item => item.label).join('・')}` : null; };
+  // `unknown`: the group shows a value as 未収録・算出不可・未算出 (or nothing at all), or one of its
+  // checks could not be judged. A phone's section tab marks it, so a hidden section never reads as clean.
+  const unvalued = item => (item.rows ? item.rows.some(row => !row.valued) : !item.valued);
   const makeGroup = (id, title, question, short, items, scope) => {
     const unavailable = groupUnavailable(scope);
-    return { id, title, question, short, items: unavailable ? [] : items.filter(item => !item.missing), fired: firedIn(id), asOf: unavailable ? null : groupDate(items), missing: unavailable || !history ? null : missingLine(items), unavailable };
+    const unknown = status.state !== 'loading' && (Boolean(unavailable) || items.some(unvalued) || checks.some(c => c.group === id && !c.judged));
+    return { id, title, question, short, items: unavailable ? [] : items.filter(item => !item.missing), fired: firedIn(id), unknown, asOf: unavailable ? null : groupDate(items), missing: unavailable || !history ? null : missingLine(items), unavailable };
   };
   const groups = [
     makeGroup('index', '指数のトレンド', '上昇トレンドは続いているか', '指数', [ftdItem, distItem], 'index'),

@@ -177,12 +177,13 @@ function SectionTabs({ panels, active, onSelect }) {
     onSelect(next.id);
     refs.current[next.id]?.focus();
   };
-  const marked = panels.some(panel => panel.fired > 0);
+  const marked = panels.some(panel => panel.fired > 0 || panel.unknown);
   return <div className="brief-switch" role="tablist" aria-label="市場タブの表示">
     {panels.map((panel, at) => <button key={panel.id} ref={node => { refs.current[panel.id] = node; }} type="button" role="tab" id={`brief-tab-${panel.id}`} aria-selected={active === panel.id} aria-controls={`brief-panel-${panel.id}`}
       tabIndex={active === panel.id ? 0 : -1} onClick={() => onSelect(panel.id)} onKeyDown={event => move(event, at)}>
       <span className="brief-switch-label">{panel.label}</span>
-      {marked && <span className="brief-switch-marks">{panel.fired > 0 && <span className="brief-switch-flag"><span aria-hidden="true">▲</span><span className="sr-only">注意</span>{panel.fired}</span>}</span>}
+      {marked && <span className="brief-switch-marks">{panel.fired > 0 && <span className="brief-switch-flag"><span aria-hidden="true">▲</span><span className="sr-only">注意</span>{panel.fired}</span>}
+        {panel.unknown && <span className="brief-switch-gap"><span aria-hidden="true">?</span><span className="sr-only">{panel.unknown}</span></span>}</span>}
     </button>)}
   </div>;
 }
@@ -193,7 +194,7 @@ function SectionTabs({ panels, active, onSelect }) {
  * Today (compact) keeps four tiles; the market tab (detail) leads with the verdict and the warning
  * summary, then the evidence in three groups whose rows open to their rule and one-year line.
  */
-export default function MarketCard({ market, marketLoading = false, trends, date, detail = false, onOpenMetric, switcher = false, section = null, onSection, history = null }) {
+export default function MarketCard({ market, marketLoading = false, trends, date, detail = false, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null }) {
   const view = marketCardView({ market, marketLoading, trends, date });
   const { status, verdict, dating, signals, summary, conflict, groups, chart } = view;
   const chartStatus = view.longError ? 'history-error' : status.state === 'error' && status.kind === 'fetch' ? 'fetch-error' : status.state;
@@ -204,9 +205,11 @@ export default function MarketCard({ market, marketLoading = false, trends, date
         : view.longError ? <p className="brief-alert" role="alert" data-check={trends.data.long_history_error_key || undefined}>{sentence(view.longError)}{detail ? '分配日・フォロースルーデー' : '分配日'}は指数データから表示しています。</p> : null;
   const chartEl = <IndexChart sp500={chart.sp500} distribution={chart.distribution} distributionEnd={chart.distributionEnd} status={chartStatus} detail={detail} />;
   // Phone (switcher): a sticky row of section tabs under the verdict shows one group, or the long
-  // history passed in as `history`, at a time; each tab carries its group's ▲ count. Desktop keeps
-  // the three groups side by side and the long history below the card.
-  const panels = detail && switcher ? [...groups.map(group => ({ id: group.id, label: group.short, fired: group.fired })), ...(history ? [{ id: 'history', label: '推移', fired: 0 }] : [])] : [];
+  // history passed in as `history`, at a time; each tab carries its group's ▲ count, and a neutral 「?」
+  // when the section holds a value or check that is not confirmed (`historyUnknown`: the long history's
+  // own state, from MarketScreen). Desktop keeps the three groups side by side and the history below.
+  const panels = detail && switcher ? [...groups.map(group => ({ id: group.id, label: group.short, fired: group.fired, unknown: group.unknown ? '未確認あり' : null })),
+    ...(history ? [{ id: 'history', label: '推移', fired: 0, unknown: historyUnknown }] : [])] : [];
   const active = panels.some(panel => panel.id === section) ? section : panels[0]?.id;
   const tabsRef = useRef(null), pending = useRef(false);
   const select = id => {

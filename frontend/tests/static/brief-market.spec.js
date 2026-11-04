@@ -44,8 +44,9 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(market.getByRole('img', { name: /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/ })).toBeVisible();
     // Verdict first, then the evidence grouped in decision order: index trend, participation, leaders.
     await expect(market.locator('.brief-env-group h3')).toHaveText(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
-    // A phone shows the index section first, the others behind tabs that count their warnings.
-    if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度▲注意1', 'リーダー', '推移']);
+    // A phone shows the index section first, the others behind tabs that count their warnings and mark, with a
+    // neutral 「?」, a section holding a check that could not be judged (here TT達成数の急減 and リーダーの健全度).
+    if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度▲注意1?未確認あり', 'リーダー?未確認あり', '推移']);
     await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', '200日線より上', '50日線より上', '52週の新高値・新安値', 'TT達成数', 'RS90以上のTT達成', 'ブレイクアウト成功率', 'リーダーの健全度', 'ステージ構成']);
     // The fixture has more new lows (3) than new highs (2): one sentence under the verdict, ▲ 注意 on its row and group.
     const signals = market.getByRole('group', { name: '注意サイン（独自判定）' });
@@ -176,6 +177,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.getByTestId('brief-missing-breadth')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：200日線より上・TT達成数`);
     await expect(market.getByTestId('brief-missing-leaders')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：RS90以上のTT達成（独自RS）・ブレイクアウト成功率・リーダーの健全度・ステージ構成`);
+    // A phone's tabs mark the sections that hold 未収録 values or unjudged checks, and the history awaiting its update.
+    if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度▲注意1?未確認あり', 'リーダー?未確認あり', '推移?更新待ち']);
     // The desktop says which checks and why on one line; a phone names them on the summary line and folds the reason.
     const unjudged = market.getByRole('group', { name: '注意サイン（独自判定）' });
     if (phone) {

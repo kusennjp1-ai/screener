@@ -5,6 +5,7 @@ import WhenNear from './WhenNear';
 import { HistoricalBreadth } from '../components/MarketHistoryExplorer';
 import MarketUpdateStatus from '../components/MarketUpdateStatus';
 import useMediaQuery from '../useMediaQuery';
+import { marketUpdateState } from '../marketUpdateState';
 import { bare, sentence, trendsStatus } from './briefModel';
 import { jumpTo } from './jump';
 import { historyTakeaway } from './marketTabModel';
@@ -33,6 +34,9 @@ export default function MarketScreen({ brief }) {
     : status.kind === 'reader' ? `長期履歴を表示できません（${bare(status.reason)}）。` : '長期履歴の整合性を確認できません。';
   const takeaway = status.state === 'ready' ? historyTakeaway(history, brief.date) : null;
   const historyError = !history && typeof trends?.data?.long_history_error === 'string';
+  // The 推移 tab's 「?」 on a phone: no long history to show, or one that is not the latest session's.
+  const update = status.state === 'ready' && history ? marketUpdateState(trends.data).state : null;
+  const historyUnknown = status.state === 'loading' || update === 'current' ? null : update === 'pending' ? '更新待ち' : '未確認';
   const historySection = <section className={wide ? 'brief-card brief-history in' : 'brief-history is-section'} style={wide ? { '--i': 2 } : undefined} aria-labelledby="brief-history-title">
     <div className="brief-step"><h2 id="brief-history-title" tabIndex={-1}>市場環境の推移</h2></div>
     {status.state === 'loading' ? <p className="brief-note" role="status">長期履歴を読み込み中…</p>
@@ -54,7 +58,7 @@ export default function MarketScreen({ brief }) {
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>市場</h1></header>
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={trends} date={brief.date} detail onOpenMetric={openMetric}
-      switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} />
+      switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} historyUnknown={historyUnknown} />
     {wide && historySection}
   </>;
 }

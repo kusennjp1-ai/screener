@@ -680,6 +680,7 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-switch-label { max-width: 100%; line-height: 1.4; }
 .brief-switch-marks { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; min-height: 16px; font-size: 12px; line-height: 16px; }
 .brief-switch-flag { display: inline-flex; align-items: baseline; gap: 1px; font-size: 12px; color: var(--ext); }
+.brief-switch-gap { font-size: 12px; font-weight: 700; color: var(--text-2); }
 .brief-panel { min-width: 0; }
 .brief-panel > .brief-env-group { padding-top: 0; border-top: 0; }
 .brief-history.is-section { display: grid; gap: 10px; min-width: 0; }
