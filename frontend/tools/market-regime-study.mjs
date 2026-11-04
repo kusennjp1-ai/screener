@@ -523,14 +523,17 @@ export function indexIndicators(states) {
 
 export function breadthIndicators(states, indexByDate = {}) {
   const panel = 'breadth', outcome = '^GSPC (long-history sp500 closes)', { ma, split, lows, rules, fields, dates } = states;
+  // Why a rule is never judged: name the capture's absent inputs instead of a generic reason.
+  const absent = keys => keys.filter(key => !states.rows.some(row => finite(row[key])));
+  const needs = (indicator, keys, extra = null) => { const missing = absent(keys); if (missing.length || extra) indicator.unavailableReason = [missing.length ? `needs ${missing.join(', ')}, absent from this capture (older schema)` : null, extra].filter(Boolean).join('; '); return indicator; };
   const list = [
     ...maIndicators(panel, 'spx', 'S&P 500 (long history)', ma, outcome),
-    make(panel, 'rule.split', '指数と個別株の乖離 (bifurcation)', `bifurcation(): index within ${SPLIT_RULE.nearHighPercent}% of its 252-session closing high and above200Percent < ${SPLIT_RULE.above200Below}`, ['注意サイン (warning)', 'なし'], split.map(bin), outcome),
+    needs(make(panel, 'rule.split', '指数と個別株の乖離 (bifurcation)', `bifurcation(): index within ${SPLIT_RULE.nearHighPercent}% of its 252-session closing high and above200Percent < ${SPLIT_RULE.above200Below}`, ['注意サイン (warning)', 'なし'], split.map(bin), outcome), ['above200Percent']),
     make(panel, 'rule.lows', '新安値 > 新高値 (new lows outnumber new highs)', 'newLows > newHighs', ['注意サイン (warning)', 'なし'], lows.map(bin), outcome),
-    make(panel, 'rule.template', 'TT達成数の急減 (trend-template drop)', `environmentRules template: ${ENV_RULES.templateSessions}-session drop >= ${ENV_RULES.templateDropPercent}% from a base >= ${ENV_RULES.templateMinBase}`, ['注意サイン (warning)', 'なし'], rules.template.map(bin), outcome),
-    make(panel, 'rule.stage', 'ステージ構成 (stage 4 % > stage 2 %)', 'environmentRules stage', ['注意サイン (warning)', 'なし'], rules.stage.map(bin), outcome),
-    make(panel, 'rule.leaders', 'リーダーの健全度 (leader health)', `environmentRules leaders: < ${ENV_RULES.leaderHealthBelow}%`, ['注意サイン (warning)', 'なし'], rules.leaders.map(bin), outcome),
-    make(panel, 'rule.breakout', 'ブレイクアウト成功率 (breakout hold rate)', `environmentRules breakout: < ${ENV_RULES.breakoutHoldBelow}%`, ['注意サイン (warning)', 'なし'], rules.breakout.map(bin), outcome),
+    needs(make(panel, 'rule.template', 'TT達成数の急減 (trend-template drop)', `environmentRules template: ${ENV_RULES.templateSessions}-session drop >= ${ENV_RULES.templateDropPercent}% from a base >= ${ENV_RULES.templateMinBase}`, ['注意サイン (warning)', 'なし'], rules.template.map(bin), outcome), ['trendTemplateCount']),
+    needs(make(panel, 'rule.stage', 'ステージ構成 (stage 4 % > stage 2 %)', 'environmentRules stage', ['注意サイン (warning)', 'なし'], rules.stage.map(bin), outcome), ['stage2Percent', 'stage4Percent']),
+    needs(make(panel, 'rule.leaders', 'リーダーの健全度 (leader health)', `environmentRules leaders: < ${ENV_RULES.leaderHealthBelow}%`, ['注意サイン (warning)', 'なし'], rules.leaders.map(bin), outcome), ['leaderHealthPercent']),
+    needs(make(panel, 'rule.breakout', 'ブレイクアウト成功率 (breakout hold rate)', `environmentRules breakout: < ${ENV_RULES.breakoutHoldBelow}%`, ['注意サイン (warning)', 'なし'], rules.breakout.map(bin), outcome), ['breakoutHoldPercent']),
   ];
   const checks = dates.map((day, t) => {
     const at = symbol => indexByDate[symbol]?.get(day);
@@ -539,7 +542,9 @@ export function breadthIndicators(states, indexByDate = {}) {
       split[t], lows[t], rules.template[t], rules.stage[t], rules.leaders[t], rules.breakout[t]];
     return parts.some(value => value === null || value === undefined) ? null : Math.min(3, parts.filter(Boolean).length);
   });
-  list.push(make(panel, 'rule.count', '注意サインの数 (fired warning-summary checks)', 'dist S&P, dist NAS, FTD failed S&P, FTD failed NAS, split, lows, template, stage, leaders, breakout; all ten judged', ['0', '1', '2', '3+'], checks, outcome));
+  list.push(needs(make(panel, 'rule.count', '注意サインの数 (fired warning-summary checks)', 'dist S&P, dist NAS, FTD failed S&P, FTD failed NAS, split, lows, template, stage, leaders, breakout; all ten judged', ['0', '1', '2', '3+'], checks, outcome),
+    ['above200Percent', 'trendTemplateCount', 'stage2Percent', 'stage4Percent', 'leaderHealthPercent', 'breakoutHoldPercent'],
+    ['^GSPC', '^IXIC'].every(symbol => [...(indexByDate[symbol]?.values() || [])].some(value => value.ftd)) ? null : 'needs the distribution count and FTD state of both indices on the same session (a 280-session index window)'));
   list.push(make(panel, 'combo.lows_below200', '新安値 > 新高値 and S&P 500 at/below its 200-day', 'rule.lows fired and indexSummary vs200 <= 0', ['両方 (both)', 'それ以外 (otherwise)'],
     lows.map((fired, t) => { const a = above(ma[t]?.vs200 ?? null); return fired === null || a === null ? null : bin(fired && !a); }), outcome));
   const fieldIndicators = [];
@@ -548,9 +553,9 @@ export function breadthIndicators(states, indexByDate = {}) {
     for (const [prefix, values, suffix] of [['q', fields[key], ''], ['d21', change(fields[key]), ` ${CHANGE_SESSIONS}-session change`]]) {
       const edges = quintileEdges(values);
       if (prefix === 'q' && key === 'above50Percent') a50Edges = edges;
-      const indicator = make(panel, `${prefix}.${key}`, `${text}${suffix}`, edges ? `fixed in-sample quintiles; edges ${edges.map(e => round(e, 3)).join(' / ')}` : 'fewer than 5 known values',
+      const indicator = needs(make(panel, `${prefix}.${key}`, `${text}${suffix}`, edges ? `fixed in-sample quintiles; edges ${edges.map(e => round(e, 3)).join(' / ')}` : 'fewer than 5 known values',
         edges ? ['Q1', 'Q2', 'Q3', 'Q4', 'Q5'].map((q, k) => `${q} ${k === 0 ? `≤ ${fmtEdge(edges[0])}` : k === 4 ? `> ${fmtEdge(edges[3])}` : `${fmtEdge(edges[k - 1])}–${fmtEdge(edges[k])}`}`) : ['Q1', 'Q2', 'Q3', 'Q4', 'Q5'],
-        values.map(value => quintileBucket(value, edges)), outcome);
+        values.map(value => quintileBucket(value, edges)), outcome), BREADTH_INPUTS[key]);
       indicator.edges = edges?.map(e => round(e)) ?? null;
       fieldIndicators.push(indicator);
     }
@@ -559,6 +564,8 @@ export function breadthIndicators(states, indexByDate = {}) {
     fields.above50Percent.map((value, t) => { const q = quintileBucket(value, a50Edges), a = above(ma[t]?.vs200 ?? null); return q === null || a === null ? null : bin(q === 0 && a); }), outcome));
   return [...list, ...fieldIndicators];
 }
+const BREADTH_INPUTS = { above50Percent: ['above50Percent'], above150Percent: ['above150Percent'], above200Percent: ['above200Percent'], trendTemplatePercent: ['trendTemplatePercent'],
+  netHighsPercent: ['newHighs', 'newLows'], ratio_10day: ['ratio_10day'], leaderPercent: ['leaderCount'], leaderHealthPercent: ['leaderHealthPercent'], breakoutHoldPercent: ['breakoutHoldPercent'], stageSpread: ['stage2Percent', 'stage4Percent'] };
 const fmtEdge = value => Math.abs(value) >= 10 ? value.toFixed(1) : value.toFixed(2);
 
 // ---- diagnostics ------------------------------------------------------------------------------------------------
@@ -645,14 +652,14 @@ export function runStudy({ history = null, historyMeta = {}, indices = null, cal
   const tally = { robust: 0, weak: 0, unstable: 0, insufficient: 0 };
   let tests = 0;
   for (const r of tested) for (const h of WINDOWS) for (const bucket of r.windows[h].buckets) for (const stat of ['mean', 'dd5']) { tests++; tally[bucket[stat].label]++; }
-  let excludesFull = 0;
-  for (const r of tested) for (const h of WINDOWS) for (const bucket of r.windows[h].buckets) for (const stat of ['mean', 'dd5']) if (excludes(bucket[stat].ci) !== 0) excludesFull++;
+  let excludesFull = 0, withCi = 0;
+  for (const r of tested) for (const h of WINDOWS) for (const bucket of r.windows[h].buckets) for (const stat of ['mean', 'dd5']) if (bucket[stat].ci) { withCi++; if (excludes(bucket[stat].ci) !== 0) excludesFull++; }
   return { schema_version: STUDY_VERSION, label: runLabel, generated_at: new Date().toISOString(), as_of_date: asOfDate,
     method: { windows: WINDOWS, drawdownLevels: [DRAWDOWN.primary, DRAWDOWN.deep], quintiles: QUANTILES, changeSessions: CHANGE_SESSIONS, ftdWindowSessions: FTD_WINDOW_SESSIONS,
       bootstrap: { ...BOOTSTRAP, seed, replicates, block: 'max(2h, 21)' }, minSessions: MIN_SESSIONS, minEpisodes: MIN_EPISODES,
       appRules: { DISTRIBUTION_WARN, DISTRIBUTION_METHOD, FOLLOW_THROUGH_METHOD, SPLIT_RULE, ENV_RULES } },
     inputs, notes, survivorship: diagnostics,
-    tests: { indicators: results.length, available: tested.length, buckets: tested.reduce((a, r) => a + r.buckets.length, 0), tests, fullSampleCiExcludesZero: excludesFull, labels: tally },
+    tests: { indicators: results.length, available: tested.length, buckets: tested.reduce((a, r) => a + r.buckets.length, 0), tests, fullSampleCi: withCi, fullSampleCiExcludesZero: excludesFull, labels: tally },
     indicators: results };
 }
 
@@ -660,7 +667,7 @@ function finish(indicator, outcomes, dates, options) {
   const judged = indicator.values.filter(value => value !== null).length;
   const base = { panel: indicator.panel, key: indicator.key, label: indicator.label, rule: indicator.rule, outcome: indicator.outcome, edges: indicator.edges ?? null,
     buckets: indicator.buckets, judged, available: judged > 0 };
-  if (!judged) return { ...base, reason: 'no judged session (input absent from this capture, or too short for the rule)', windows: null };
+  if (!judged) return { ...base, reason: indicator.unavailableReason || 'no judged session (the input is too short for the rule)', windows: null };
   return { ...base, firstJudged: dates[indicator.values.findIndex(value => value !== null)], lastJudged: dates[indicator.values.findLastIndex(value => value !== null)],
     windows: evaluateIndicator(indicator, outcomes, { ...options, dates }) };
 }
@@ -671,6 +678,7 @@ const pp = (value, digits = 2) => finite(value) ? `${value > 0 ? '+' : value < 0
 const prob = value => finite(value) ? `${(100 * value).toFixed(0)}%` : '—';
 const ciText = (stat, digits = 2) => stat.est === null ? '—' : `${pp(stat.est, digits)} [${stat.ci ? `${pp(stat.ci[0], digits)}, ${pp(stat.ci[1], digits)}` : 'n/a'}]`;
 const TAG = { robust: '**robust**', weak: 'weak', unstable: 'unstable', insufficient: 'insufficient' };
+const signedTerm = value => `${value < 0 ? '−' : '+'} ${Math.abs(value)}`;
 const cell = text => String(text).replace(/\|/g, '\\|');
 
 export function markdownReport(study) {
@@ -686,7 +694,7 @@ export function markdownReport(study) {
   for (const note of study.notes) add(`- ${note}`);
   if (h) add('- The long history is a CURRENT-UNIVERSE RETROSPECTIVE: stocks delisted before the capture are missing, so early breadth tends to read healthier than it was. Read breadth effects with the survivorship section and the split-sample labels.');
   add('', '## Tests and labels', '',
-    `${study.tests.available} of ${study.tests.indicators} indicators had judged sessions; ${study.tests.buckets} buckets × ${WINDOWS.length} windows × 2 statistics = **${study.tests.tests} tests**. Full-sample 90% CIs excluding 0: ${study.tests.fullSampleCiExcludesZero} (about ${Math.round(study.tests.tests * 0.1)} expected by chance alone).`,
+    `${study.tests.available} of ${study.tests.indicators} indicators had judged sessions; ${study.tests.buckets} buckets × ${WINDOWS.length} windows × 2 statistics = **${study.tests.tests} tests**. ${study.tests.fullSampleCi} have a full-sample 90% CI; ${study.tests.fullSampleCiExcludesZero} of them exclude 0 (about ${Math.round(study.tests.fullSampleCi * 0.1)} expected by chance alone).`,
     `Labels: robust ${study.tests.labels.robust} · weak ${study.tests.labels.weak} · unstable ${study.tests.labels.unstable} · insufficient ${study.tests.labels.insufficient}. "robust" = both halves' CIs exclude 0 with the same sign; it is not adjusted for the number of tests.`, '');
   add('## Robust effects (both halves agree)', '', '| indicator | bucket | h | n | episodes | mean | baseline | Δmean [90% CI] | P(DD≤−5%) | ΔP(DD≤−5%) [90% CI] | which |', '|---|---|---|---|---|---|---|---|---|---|---|');
   let robust = 0;
@@ -701,7 +709,7 @@ export function markdownReport(study) {
   if (s) {
     add('', '## Survivorship diagnostics (long history)', '', '| year | sessions | eligible / universe | coverage / universe | mean above50% residual |', '|---|---|---|---|---|');
     for (const y of s.byYear) add(`| ${y.year} | ${y.sessions} | ${prob(y.eligibleShare)} | ${prob(y.coverageShare)} | ${s.above50Residual?.byYear.find(r => r.year === y.year)?.meanResidual ?? '—'} |`);
-    if (s.above50Residual) add('', `OLS above50Percent = ${s.above50Residual.intercept} + ${s.above50Residual.vs50}·(^GSPC % vs 50-day) + ${s.above50Residual.vs200}·(% vs 200-day), R² ${s.above50Residual.r2}, n ${s.above50Residual.n}. Mean residual first half (${s.above50Residual.firstHalf.from}–${s.above50Residual.firstHalf.to}) ${s.above50Residual.firstHalf.meanResidual} pt, second half (${s.above50Residual.secondHalf.from}–${s.above50Residual.secondHalf.to}) ${s.above50Residual.secondHalf.meanResidual} pt. A positive early residual is consistent with survivorship inflation (or a genuinely broader market then); this cannot separate the two.`);
+    if (s.above50Residual) add('', `OLS above50Percent = ${s.above50Residual.intercept} ${signedTerm(s.above50Residual.vs50)}·(^GSPC % vs 50-day) ${signedTerm(s.above50Residual.vs200)}·(% vs 200-day), R² ${s.above50Residual.r2}, n ${s.above50Residual.n}. Mean residual first half (${s.above50Residual.firstHalf.from}–${s.above50Residual.firstHalf.to}) ${s.above50Residual.firstHalf.meanResidual} pt, second half (${s.above50Residual.secondHalf.from}–${s.above50Residual.secondHalf.to}) ${s.above50Residual.secondHalf.meanResidual} pt. A positive early residual is consistent with survivorship inflation (or a genuinely broader market then); this cannot separate the two.`);
   }
   add('', '## All indicators', '');
   for (const r of study.indicators) {
@@ -710,6 +718,7 @@ export function markdownReport(study) {
     add('| bucket | h | n | ep | 1st-half share | mean | median | P(up) | P(DD≤−5%) | P(DD≤−10%) | Δmean [90% CI] | label | ΔP(DD≤−5%) [90% CI] | label |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const w of WINDOWS) {
       const win = r.windows[w], base = win.baseline;
+      if (!win.n) { add(`| (no session with a complete ${w}-session forward window) | ${w} | 0 | | | | | | | | | | | |`); continue; }
       add(`| baseline | ${w} | ${win.n} | | split ${win.split ?? '—'} | ${pct(base.meanReturn)} | ${pct(base.median)} | ${prob(base.pUp)} | ${prob(base.pDd5)} | ${prob(base.pDd10)} | | | | |`);
       for (const b of win.buckets) add(`| ${cell(b.label)} | ${w} | ${b.n} | ${b.episodes} | ${prob(b.firstHalfShare)} | ${pct(b.meanReturn)} | ${pct(b.median)} | ${prob(b.pUp)} | ${prob(b.pDd5)} | ${prob(b.pDd10)} | ${ciText(b.mean)} | ${TAG[b.mean.label]} | ${ciText(b.dd5, 1)} | ${TAG[b.dd5.label]} |`);
     }

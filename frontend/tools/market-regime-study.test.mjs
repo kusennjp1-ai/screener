@@ -149,6 +149,11 @@ describe('the app\'s own rules, as the brief computes them', () => {
     expect(indicators.find(i => i.key === 'rule.count').values.every(value => value === null)).toBe(true);
     expect(indicators.find(i => i.key === 'q.above200Percent').values.every(value => value === null)).toBe(true);
     expect(indicators.find(i => i.key === 'q.above50Percent').values.some(value => value !== null)).toBe(true);
+    const study = runStudy({ history: longHistory({ n: 300, full: false }), replicates: 100 }), byKey = key => study.indicators.find(i => i.key === key);
+    expect(byKey('rule.split')).toMatchObject({ available: false, windows: null, reason: 'needs above200Percent, absent from this capture (older schema)' });
+    expect(byKey('rule.count').reason).toMatch(/trendTemplateCount.*; needs the distribution count and FTD state of both indices/);
+    expect(byKey('q.stageSpread').reason).toBe('needs stage2Percent, stage4Percent, absent from this capture (older schema)');
+    expect(study.notes.some(note => /never 0/.test(note))).toBe(true);
   });
 });
 
