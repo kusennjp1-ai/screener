@@ -26,6 +26,10 @@ const ICON = {
   moon: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" /></svg>,
 };
 const finite = Number.isFinite;
+/** Where the research bundle stands before anything is counted from it: never a 0 for missing data. */
+const bundleState = brief => brief.bundle.data ? 'ready' : brief.bundle.isLoading || brief.manifest.isLoading ? 'loading' : brief.bundle.isError || brief.manifest.isError ? 'error' : 'none';
+const BUNDLE_TEXT = { loading: '候補を読み込み中…', error: '候補データを取得できません。', none: '候補データはこの公開に含まれていません。' };
+const BUNDLE_SHORT = { loading: '読込中', error: '取得できません', none: '未配信' };
 const DATE_JA = iso => { const d = new Date(`${iso}T12:00:00Z`); return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）` : '日付未確認'; };
 
 function ThemeToggle() {
@@ -50,14 +54,15 @@ function TodayView({ brief, watch, open, now, animate, onNear }) {
   const groups = useMemo(() => leadingGroups(brief.ranked), [brief.ranked]);
   const watched = useMemo(() => (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)).map(item => candidateView(item, brief.date)).sort(briefOrder), [brief.bundle.data, watch, brief.date]);
   const sells = useWatchSellChecks(watched, brief);
+  const state = bundleState(brief);
   return <>
     <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
-    <TodaySummary market={brief.market} marketLoading={brief.marketLoading} counts={counts} watched={watched} sells={sells} loading={brief.bundle.isLoading} />
+    <TodaySummary market={brief.market} marketLoading={brief.marketLoading} counts={counts} watched={watched} watchCount={watch.length} sells={sells} state={state} />
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={brief.trends} date={brief.date} />
     <section className="brief-card in" style={{ '--i': 2 }} aria-labelledby="brief-focus-title">
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">2</span><h2 id="brief-focus-title">注目候補</h2><Link className="brief-more" to="/brief/list">すべての候補 <span aria-hidden="true">›</span></Link></div>
       {focus.length ? <ol className="brief-rows">{focus.map((view, i) => <CandidateRow key={view.symbol} view={view} rank={i + 1} index={i} onOpen={open} now={now} animate={animate} hideTemplate />)}</ol>
-        : <p className="brief-note">{brief.bundle.isLoading ? '候補を読み込み中…' : '買いゾーンまたはピボット接近（−5%以内）の選定銘柄はありません。'}</p>}
+        : <p className="brief-note">{state === 'ready' ? '買いゾーンまたはピボット接近（−5%以内）の選定銘柄はありません。' : BUNDLE_TEXT[state]}</p>}
       {counts.total > focus.length && <p className="brief-note">上位{focus.length}件を表示（注目候補 {counts.total}銘柄中）</p>}
       {counts.near > 0 && <Link className="brief-nearlink" to="/brief/list" onClick={event => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); onNear(); }}>ピボット接近 {counts.near}銘柄 <span aria-hidden="true">›</span></Link>}
       {groups?.groups.length > 0 && <p className="brief-groups" data-testid="brief-groups"><span>選定銘柄の多い{groups.kind}</span>{groups.groups.map(g => <span key={g.name} className="brief-chip">{g.name}：<b className="numeric">{g.count}</b>銘柄</span>)}<span className="brief-note">（選定 {groups.total}銘柄中{groups.unnamed ? `・${groups.kind}未確認 ${groups.unnamed}` : ''}）</span></p>}
@@ -71,24 +76,26 @@ function TodayView({ brief, watch, open, now, animate, onNear }) {
           <span><b>{view.symbol}</b> {event.title}{sells[view.symbol]?.hits ? <span className="brief-chip tone-ext brief-sellchip"><span aria-hidden="true">▲</span> 売りのサイン {sells[view.symbol].hits}件</span> : sells[view.symbol]?.unknown ? <span className="brief-chip brief-sellchip" title={sells[view.symbol].reason || undefined}>売りのサイン 未確認</span> : null}<small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
           <span className="brief-chevron" aria-hidden="true">{ICON.next}</span>
         </button></RiseItem>; })}</ul>
-        : <p className="brief-note">銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。</p>}
+        : <p className="brief-note">{state !== 'ready' && watch.length ? `ウォッチ中の${watch.length}銘柄は、${state === 'loading' ? '候補の読み込み後に確認します。' : '候補データがないため確認できません。'}` : '銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。'}</p>}
     </section>
   </>;
 }
 
 /** Three answers first: can I buy, how many setups, does anything I watch need selling. */
-function TodaySummary({ market, marketLoading, counts, watched, sells, loading }) {
+function TodaySummary({ market, marketLoading, counts, watched, watchCount, sells, state }) {
   const tone = marketTone(market);
   // The card below carries 独自判定; the summary keeps only the state (「50日線割れ（弱含み）」).
   const verdict = market?.label ? market.label.replace(/（(?:(.+)・)?独自判定）$/, (_, inner) => inner ? `（${inner}）` : '') : '市場未確認';
   const results = watched.map(view => sells[view.symbol]).filter(Boolean);
   const hits = results.reduce((sum, result) => sum + (result.hits || 0), 0);
   const unchecked = watched.length - results.filter(result => !result.unknown).length;
-  const watchValue = !watched.length ? '未登録' : hits ? `${hits}件` : unchecked === watched.length ? '未確認' : '0件';
-  const watchNote = !watched.length ? '☆で追加' : unchecked && unchecked < watched.length ? `未確認 ${unchecked}銘柄` : `${watched.length}銘柄を確認`;
+  // A watch list whose stocks cannot be looked up yet is not 未登録.
+  const pendingWatch = state !== 'ready' && watchCount > 0;
+  const watchValue = pendingWatch ? BUNDLE_SHORT[state] : !watched.length ? '未登録' : hits ? `${hits}件` : unchecked === watched.length ? '未確認' : '0件';
+  const watchNote = pendingWatch ? `${watchCount}銘柄を登録` : !watched.length ? '☆で追加' : unchecked && unchecked < watched.length ? `未確認 ${unchecked}銘柄` : `${watched.length}銘柄を確認`;
   return <ul className="brief-summary in" style={{ '--i': 0 }} aria-label="今日の要点" data-testid="brief-summary">
     <li className={`tone-${tone}`}><small>地合い</small><b>{!market && marketLoading ? '読込中' : verdict}</b><em><Parts text={!market && marketLoading ? '' : market?.cap > 0 ? `買い可・最大${Math.round(market.cap * 100)}%` : market?.state === 'unknown' || !market ? '買いは見送り' : '買いは控える'} /></em></li>
-    <li className={counts.total ? 'tone-zone' : ''}><small>注目候補</small><b>{loading ? '読込中' : `${counts.total}銘柄`}</b><em><Parts text={loading ? '' : `ゾーン${counts.zone}・接近${counts.near}`} /></em></li>
+    <li className={state === 'ready' && counts.total ? 'tone-zone' : ''}><small>注目候補</small><b>{state === 'ready' ? `${counts.total}銘柄` : BUNDLE_SHORT[state]}</b><em><Parts text={state === 'ready' ? `ゾーン${counts.zone}・接近${counts.near}` : ''} /></em></li>
     <li className={hits ? 'tone-ext' : ''}><small>ウォッチの売り</small><b>{watchValue}</b><em>{watchNote}</em></li>
   </ul>;
 }
@@ -112,16 +119,17 @@ function ListView({ brief, kind, watch, open, now, animate, listState, setListSt
   const counts = useMemo(() => Object.fromEntries(Object.entries(LIST_FILTERS).map(([key, value]) => [key, views.filter(value.test).length])), [views]);
   const shown = useMemo(() => listShown(views, kind, listState), [views, kind, listState]);
   const sells = useWatchSellChecks(kind === 'watch' ? shown : null, brief);
+  const state = bundleState(brief);
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
     {kind !== 'watch' && <div className="brief-filters">
-      <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { update({ filter: key }); setLimit(50); }}>{value.label}<span className="numeric">{counts[key]}</span></button>)}</div>
+      <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { update({ filter: key }); setLimit(50); }}>{value.label}<span className="numeric">{state === 'ready' ? counts[key] : '—'}</span></button>)}</div>
       <label className="brief-search"><span className="sr-only">銘柄を検索</span><input type="search" inputMode="search" placeholder="ティッカー・社名" value={query} onChange={e => { update({ query: e.target.value }); setLimit(50); }} /></label>
       <label className="brief-sort">並び順<select value={sort} onChange={e => update({ sort: e.target.value })}>{Object.entries(LIST_SORTS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
     </div>}
     <section className="brief-card in" style={{ '--i': 1 }} aria-label={kind === 'watch' ? 'ウォッチ中の銘柄' : '選定銘柄の一覧'}>
       {shown.length ? <ol className="brief-rows">{shown.slice(0, limit).map((view, i) => <CandidateRow key={view.symbol} view={view} rank={kind === 'watch' ? null : i + 1} index={Math.min(i, 12)} onOpen={open} now={now} animate={animate} sell={sells[view.symbol]} />)}</ol>
-        : <p className="brief-note">{brief.bundle.isLoading ? '候補を読み込み中…' : kind === 'watch' ? '銘柄の画面で ☆ を押すと、ここに並びます。' : 'この条件の選定銘柄はありません。'}</p>}
+        : <p className="brief-note">{state !== 'ready' ? BUNDLE_TEXT[state] : kind === 'watch' ? '銘柄の画面で ☆ を押すと、ここに並びます。' : 'この条件の選定銘柄はありません。'}</p>}
       {shown.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + 50)}>さらに表示（残り {shown.length - limit}件）</button>}
       {kind !== 'watch' && <p className="brief-note">選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄。あと1条件＝未達が1つだけで未確認がない銘柄（流動性：株価$10以上・売買代金$2,000万以上）。</p>}
     </section>

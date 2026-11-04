@@ -115,6 +115,25 @@ test.describe('a date that cannot be read on a phone', () => {
   });
 });
 
+test.describe('a failed manifest on Today', () => {
+  test.use(VIEWPORTS.phone);
+  test('the summary, the focus card and the watch card say the candidates cannot be fetched, never 0', async ({ page }) => {
+    await openBrief(page, '#/brief', { fail: 'manifest', storage: { 'research-watch': ['ZZNV'] } });
+    const summary = page.getByTestId('brief-summary');
+    await expect(summary).toContainText('注目候補取得できません');
+    await expect(summary).toContainText('ウォッチの売り取得できません1銘柄を登録');
+    await expect(summary).not.toContainText(/0銘柄|ゾーン0|接近0|未登録/);
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus).toContainText('候補データを取得できません。');
+    await expect(focus).not.toContainText('選定銘柄はありません');
+    await expect(page.getByRole('region', { name: 'ウォッチの変化' })).toContainText('ウォッチ中の1銘柄は、候補データがないため確認できません。');
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
+    await expect(page.getByRole('region', { name: '選定銘柄の一覧' })).toContainText('候補データを取得できません。');
+    for (const count of await page.getByRole('group', { name: '絞り込み' }).locator('.numeric').allTextContents()) expect(count).toBe('—');
+    expect(await horizontalOverflow(page)).toBe(0);
+  });
+});
+
 test.describe('the market tab on a phone keeps the verdict and the chart', () => {
   test.use(VIEWPORTS.phone);
   test('verdict and S&P chart are visible on #/brief/market', async ({ page }) => {
