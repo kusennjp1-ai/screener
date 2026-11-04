@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { sentence, shortDate, trendsAlert } from './briefModel';
 import { jumpTo } from './jump';
 import { marketCardView, num, signedPercent } from './marketTabModel';
+import { Parts } from './BriefParts';
 
 const finite = Number.isFinite;
 
@@ -30,8 +31,7 @@ function IndexChart({ sp500, distribution, distributionEnd, status, detail }) {
 }
 
 const AsOf = ({ value }) => value ? <span className="brief-fact-asof">（{value}時点）</span> : null;
-// On a phone an explanation wraps only between its 「・」 parts, and a label keeps its （…） together.
-const Parts = ({ text }) => { const parts = String(text).split('・'); return parts.map((part, i) => <span key={i} className="brief-frag">{part}{i < parts.length - 1 ? '・' : ''}</span>); };
+// On a phone an explanation wraps only between its 「・」 parts (Parts), and a label keeps its （…） together.
 const Label = ({ text }) => { const at = text.indexOf('（'); return at > 0 ? <>{text.slice(0, at)}<span className="brief-frag">{text.slice(at)}</span></> : text; };
 // A warning is never colour alone: the ▲ and the word travel with the amber value.
 const WarnMark = () => <span className="brief-warnmark"><span aria-hidden="true">▲</span><span className="sr-only">注意 </span></span>;

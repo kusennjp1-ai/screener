@@ -4,34 +4,20 @@ Do not invent filing dates, adjusted EPS, missing years or Q4 EPS by subtraction
 """
 import argparse
 from datetime import date, datetime, timezone
+import importlib.util
 import json
 import math
 from pathlib import Path
-import threading
-import time
+
+# One thread-safe limiter for every provider: the SEC tool's (calls at least 1/rate seconds apart).
+_spec = importlib.util.spec_from_file_location("sec_financials", Path(__file__).with_name("sec-financials.py"))
+_sec = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_sec)
+RateLimiter = _sec.RateLimiter
 
 # Self-imposed Yahoo limit: one provider call per second, one worker.
 YAHOO_RPS = 1.0
 DEPTH_BUCKETS = ('0', '1-4', '5', '6-7', '8+')
-
-
-class RateLimiter:
-    """Spaces calls at least 1/rate seconds apart (thread-safe)."""
-
-    def __init__(self, rate, clock=time.monotonic, sleep=time.sleep):
-        if not (isinstance(rate, (int, float)) and math.isfinite(rate) and rate > 0):
-            raise ValueError('rate must be positive')
-        self.interval, self.clock, self.sleep = 1.0 / rate, clock, sleep
-        self.lock, self.next_slot = threading.Lock(), None
-
-    def wait(self):
-        with self.lock:
-            now = self.clock()
-            slot = now if self.next_slot is None or self.next_slot <= now else self.next_slot
-            self.next_slot = slot + self.interval
-        if slot > now:
-            self.sleep(slot - now)
-        return slot
 
 
 def depth_bucket(count):

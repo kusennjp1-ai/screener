@@ -84,7 +84,6 @@
 /* Market facts: a label, an explanation or an older value's date wraps instead of being cut off. */
 .brief-market .brief-fact small, .brief-market .brief-fact em { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; line-height: 1.45; }
 .brief-market .brief-fact.is-wide { grid-column: 1 / -1; }
-.brief-market .brief-frag { display: inline-block; max-width: 100%; }
 .brief-fact-asof { display: block; font-family: var(--font-body); font-size: 11px; font-weight: 400; line-height: 1.45; color: var(--ext); white-space: normal; }
 .brief-ftd { gap: 6px; align-content: start; }
 .brief-ftd-row { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); column-gap: 8px; align-items: baseline; }
