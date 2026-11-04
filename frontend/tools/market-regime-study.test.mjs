@@ -8,8 +8,9 @@ import { followThroughDay } from '../src/static/followThroughDay.js';
 import { bifurcation, environmentPoint } from '../src/static/marketLongHistory.js';
 import { environmentRules } from '../src/static/brief/briefModel.js';
 import {
-  alignIndex, blockBootstrap, breadthIndicators, breadthStates, episodes, evaluateIndicator, fetchYahooIndex, fnv1a, forwardOutcomes,
-  indexIndicators, indexStates, interval, label, loadHistory, main, mulberry32, parseYahooChart, quintileBucket, quintileEdges, runStudy, FTD_WINDOW_SESSIONS, WINDOWS,
+  alignIndex, breadthIndicators, breadthStates, chanceLevel, episodes, evaluateIndicator, fetchYahooIndex, forwardOutcomes, indexIndicators, indexStates, label, loadHistory, main,
+  mulberry32, nullShiftIndices, parseYahooChart, placeboMargin, placeboP, placeboQuantile, placeboReference, placeboShifts, quintileBucket, quintileEdges, runStudy, shiftWeight,
+  FTD_WINDOW_SESSIONS, LABELS, MIN_BLOCKS, PLACEBO, STATS, WINDOWS,
 } from './market-regime-study.mjs';
 
 // ---- synthetic series (no provider data) ----------------------------------------------------------------------
@@ -149,7 +150,7 @@ describe('the app\'s own rules, as the brief computes them', () => {
     expect(indicators.find(i => i.key === 'rule.count').values.every(value => value === null)).toBe(true);
     expect(indicators.find(i => i.key === 'q.above200Percent').values.every(value => value === null)).toBe(true);
     expect(indicators.find(i => i.key === 'q.above50Percent').values.some(value => value !== null)).toBe(true);
-    const study = runStudy({ history: longHistory({ n: 300, full: false }), replicates: 100 }), byKey = key => study.indicators.find(i => i.key === key);
+    const study = runStudy({ history: longHistory({ n: 300, full: false }) }), byKey = key => study.indicators.find(i => i.key === key);
     expect(byKey('rule.split')).toMatchObject({ available: false, windows: null, reason: 'needs above200Percent, absent from this capture (older schema)' });
     expect(byKey('rule.count').reason).toMatch(/trendTemplateCount.*; needs the distribution count and FTD state of both indices/);
     expect(byKey('q.stageSpread').reason).toBe('needs stage2Percent, stage4Percent, absent from this capture (older schema)');
@@ -174,47 +175,118 @@ describe('bucket edges', () => {
   });
 });
 
-describe('bootstrap', () => {
-  const y = Float64Array.from({ length: 400 }, (_, i) => Math.sin(i / 7) + (i % 3) / 10);
-  const group = Int32Array.from({ length: 400 }, (_, i) => (i % 50 < 20 ? 0 : 1));
-  const run = key => blockBootstrap({ ys: [y], group, groups: 2, block: 21, replicates: 300, rng: mulberry32(fnv1a(key)) });
-  it('is deterministic for a seed and key, and changes with the key', () => {
-    expect(Array.from(run('20261104|x|5|full')[0][0])).toEqual(Array.from(run('20261104|x|5|full')[0][0]));
-    expect(Array.from(run('20261104|x|5|full')[0][0])).not.toEqual(Array.from(run('20261104|x|5|h1')[0][0]));
-    expect(fnv1a('20261104|x|5|full')).toBe(fnv1a('20261104|x|5|full'));
+// ---- GARCH(1,1) null: an index with volatility clustering and an indicator independent of it ------------------
+function gauss(rng) { let u = 0; while (u === 0) u = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * rng()); }
+function garchCloses(rng, n, { alpha = 0.09, beta = 0.9, vol = 0.011, drift = 0.0003 } = {}) {
+  const omega = (1 - alpha - beta) * vol * vol, out = [];
+  let s2 = vol * vol, e = 0, close = 1000;
+  for (let i = 0; i < n; i++) { s2 = omega + alpha * e * e + beta * s2; e = Math.sqrt(s2) * gauss(rng); close *= Math.exp(drift + e); out.push(close); }
+  return out;
+}
+const regimes = (rng, n, duration) => { let state = rng() < 0.5 ? 0 : 1; return Array.from({ length: n }, () => { if (rng() < 1 / duration) state = 1 - state; return state; }); };
+const nullIndicator = (values, groups) => ({ key: 'null', buckets: Array.from({ length: groups }, (_, k) => ({ key: `b${k}`, label: `b${k}` })), values });
+
+describe('rotation placebo', () => {
+  it('spaces the grid over [M + 1, n - 1], leaving out the look-ahead shifts 1..M, and doubles the past-side stand-ins', () => {
+    const M = placeboMargin();
+    expect(M).toBe(FTD_WINDOW_SESSIONS + Math.max(...WINDOWS));
+    const grid = placeboShifts(1270);
+    expect(grid).toHaveLength(PLACEBO.shifts);
+    expect([grid[0], grid.at(-1)]).toEqual([M + 1, 1269]);
+    expect(grid.every((k, j) => Number.isSafeInteger(k) && (j === 0 || k > grid[j - 1]))).toBe(true);
+    expect(placeboShifts(700)).toEqual(Array.from({ length: 700 - M - 1 }, (_, j) => M + 1 + j));
+    expect(placeboShifts(M + 1)).toEqual([]);
+    expect(placeboShifts(280)).toEqual([]);
+    expect([shiftWeight(1270 - M - 1, 1270), shiftWeight(1270 - M, 1270), shiftWeight(1269, 1270)]).toEqual([1, 2, 2]);
+    // The chance level reruns the labelling on shifts more than M from 0 on both sides.
+    const index = nullShiftIndices(grid, 1270);
+    expect(index.every(j => grid[j] > M && grid[j] < 1270 - M)).toBe(true);
+    expect(index.length).toBe(grid.filter(k => k < 1270 - M).length);
   });
-  it('gives a zero difference for a constant outcome and for a bucket that is the whole sample', () => {
-    const flat = blockBootstrap({ ys: [new Float64Array(200).fill(0.01)], group: new Int32Array(200), groups: 1, block: 21, replicates: 100, rng: mulberry32(1) });
-    expect(Array.from(flat[0][0]).every(value => Math.abs(value) < 1e-12)).toBe(true);
-    expect(interval(flat[0][0]).map(value => Math.abs(value) < 1e-12)).toEqual([true, true]);
+  it('gives a two-sided rank p and a weighted band, leaving a shift itself out of its own reference', () => {
+    const unit = placeboReference([4, 1, 3, 2]);
+    expect(placeboP(5, unit)).toBeCloseTo(2 / 5, 12);
+    expect(placeboP(0, unit)).toBeCloseTo(2 / 5, 12);
+    expect(placeboP(2.5, unit)).toBe(1);
+    expect(placeboP(4, unit, 1)).toBeCloseTo(2 / 4, 12);
+    expect(placeboP(Number.NaN, unit)).toBeNull();
+    const weighted = placeboReference([1, 2, 3, Number.NaN], [1, 1, 2, 5]);
+    expect(weighted).toMatchObject({ count: 3, total: 4 });
+    expect(placeboP(3.5, weighted)).toBeCloseTo(2 / 5, 12);
+    expect(placeboP(0.5, weighted)).toBeCloseTo(2 / 5, 12);
+    expect([placeboQuantile(weighted, 0.05), placeboQuantile(weighted, 0.5), placeboQuantile(weighted, 0.95)]).toEqual([1, 2, 3]);
   });
-  it('drops replicates that miss a bucket and withholds a CI when too many do', () => {
-    const rare = Int32Array.from({ length: 400 }, (_, i) => (i === 3 ? 0 : 1));
-    const reps = blockBootstrap({ ys: [y], group: rare, groups: 2, block: 21, replicates: 200, rng: mulberry32(2) });
-    expect(Array.from(reps[0][0]).some(Number.isNaN)).toBe(true);
-    expect(interval(reps[0][0])).toBeNull();
+  it('is deterministic and labels a real effect robust while the null shifts rarely are', () => {
+    const n = 1500, closes = garchCloses(mulberry32(17), n), outcomes = Object.fromEntries(WINDOWS.map(h => [h, forwardOutcomes(closes, h)]));
+    // A state that knows the next 5 sessions (an effect by construction), persistent in 30-session stretches.
+    const values = closes.map((close, t) => t + 30 < n ? (closes[t - (t % 30) + 30] > closes[t - (t % 30)] ? 0 : 1) : null);
+    const indicator = nullIndicator(values, 2), a = evaluateIndicator(indicator, outcomes, {}), b = evaluateIndicator(indicator, outcomes, {});
+    expect(strip(a.windows)).toEqual(strip(b.windows));
+    const stat = a.windows[21].buckets[0].mean;
+    expect(stat).toMatchObject({ label: 'robust' });
+    expect(stat.est).toBeGreaterThan(stat.band[1]);
+    expect(stat.shifts).toBe(placeboShifts(n).length);
+    const codes = a.nulls.find(t => t.h === 21 && t.stat === 'mean' && t.bucket === 0).codes;
+    expect(codes.length).toBe(nullShiftIndices(placeboShifts(n), n).length);
+    expect(codes.filter(code => code === LABELS.indexOf('robust')).length / codes.length).toBeLessThan(0.1);
   });
-  it('evaluates an indicator identically on repeated runs', () => {
-    const dates = weekdays('2018-01-02', 600), bars = indexBars(dates, 21), states = indexStates({ symbol: '^GSPC', dates, bars });
-    const outcomes = Object.fromEntries(WINDOWS.map(h => [h, forwardOutcomes(states.closes, h)]));
-    const indicator = indexIndicators(states).find(i => i.key === '^GSPC.ma50');
-    const a = evaluateIndicator(indicator, outcomes, { replicates: 200, dates }), b = evaluateIndicator(indicator, outcomes, { replicates: 200, dates });
-    expect(a).toEqual(b);
-    expect(a[21].buckets[0].mean.ci).not.toBeNull();
-    expect(a[21].buckets[0].n + a[21].buckets[1].n).toBe(a[21].n);
+  it('keeps the robust label near its nominal 5% on a GARCH(1,1) null with persistent independent states', () => {
+    let judged = 0, small = 0, robust = 0;
+    for (let path = 0; path < 40; path++) {
+      const closes = garchCloses(mulberry32(1000 + path), 1270), outcomes = Object.fromEntries(WINDOWS.map(h => [h, forwardOutcomes(closes, h)]));
+      const rng = mulberry32(9000 + path);
+      let x = 0;
+      const ar = Array.from({ length: 1270 }, () => (x = 0.985 * x + gauss(rng)));
+      const edges = quintileEdges(ar);
+      for (const indicator of [nullIndicator(ar.map(v => quintileBucket(v, edges)), 5), nullIndicator(regimes(mulberry32(5000 + path), 1270, 60), 2)]) {
+        const { windows } = evaluateIndicator(indicator, outcomes, {});
+        for (const h of WINDOWS) for (const bucket of windows[h].buckets) for (const stat of STATS) {
+          const value = bucket[stat];
+          if (!value || value.label === 'insufficient') continue;
+          judged++; if (value.p <= PLACEBO.alpha) small++; if (value.label === 'robust') robust++;
+        }
+      }
+    }
+    expect(judged).toBeGreaterThan(500);
+    expect(small / judged).toBeGreaterThan(0.02);
+    expect(small / judged).toBeLessThan(0.08);
+    expect(robust / judged).toBeLessThan(0.07);
+  }, 120000);
+  it('summarizes the null count of robust labels per panel and over the shared shifts', () => {
+    const panel = (name, sessions, robustAt) => {
+      const shifts = placeboShifts(sessions), K = nullShiftIndices(shifts, sessions).length;
+      return { name, sessions, shifts, actual: 1, nulls: [{ codes: Uint8Array.from({ length: K }, (_, j) => (robustAt(j) ? LABELS.indexOf('robust') : 0)) }] };
+    };
+    const result = chanceLevel([panel('index:^GSPC', 9000, j => j % 10 === 0), panel('breadth', 1270, () => false), panel('index:^IXIC', 280, () => true)], 3);
+    expect(result.available).toBe(true);
+    expect(result.shifts).toBe(nullShiftIndices(placeboShifts(1270), 1270).length);
+    expect(result.robust.max).toBe(1);
+    expect(result.clears).toBe(true);
+    expect(result.panels.find(p => p.panel === 'index:^IXIC')).toMatchObject({ shifts: 0, robust: null });
+    expect(chanceLevel([panel('index:^IXIC', 280, () => true)], 0)).toMatchObject({ available: false, clears: null });
   });
 });
 
 describe('pre-registered labels', () => {
-  const part = (est, ci, n = 50, ep = 5) => ({ n, episodes: ep, est, ci });
-  it('marks robust only when both halves exclude 0 with the same sign', () => {
-    expect(label({ full: part(0.01, [0.004, 0.02]), h1: part(0.01, [0.002, 0.02]), h2: part(0.012, [0.001, 0.02]) })).toBe('robust');
-    expect(label({ full: part(-0.01, [-0.02, -0.004]), h1: part(-0.01, [-0.02, -0.002]), h2: part(-0.012, [-0.02, -0.001]) })).toBe('robust');
-    expect(label({ full: part(0.01, [0.004, 0.02]), h1: part(0.01, [0.002, 0.02]), h2: part(0.004, [-0.001, 0.01]) })).toBe('weak');
-    expect(label({ full: part(0.001, [-0.004, 0.006]), h1: part(0.01, [0.002, 0.02]), h2: part(-0.01, [-0.02, -0.001]) })).toBe('unstable');
-    expect(label({ full: part(0.01, [0.004, 0.02]), h1: part(0.01, [0.002, 0.02], 19), h2: part(0.012, [0.001, 0.02]) })).toBe('insufficient');
-    expect(label({ full: part(0.01, [0.004, 0.02]), h1: part(0.01, [0.002, 0.02], 50, 2), h2: part(0.012, [0.001, 0.02]) })).toBe('insufficient');
-    expect(label({ full: part(0.01, null), h1: part(0.01, [0.002, 0.02]), h2: part(0.012, [0.001, 0.02]) })).toBe('insufficient');
+  const part = (est, sufficient = true) => ({ sufficient, est });
+  it('marks robust only when the placebo p is small and both halves have the full-sample sign', () => {
+    const ok = { p: 0.01, shifts: 399 };
+    expect(label({ full: part(0.01), h1: part(0.012), h2: part(0.004), ...ok })).toBe('robust');
+    expect(label({ full: part(-0.01), h1: part(-0.012), h2: part(-0.004), ...ok })).toBe('robust');
+    expect(label({ full: part(0.01), h1: part(0.012), h2: part(0.004), p: 0.06, shifts: 399 })).toBe('weak');
+    expect(label({ full: part(0.01), h1: part(0.012), h2: part(0), ...ok })).toBe('weak');
+    expect(label({ full: part(0.001), h1: part(0.01), h2: part(-0.01), ...ok })).toBe('unstable');
+    expect(label({ full: part(0.01), h1: part(0.012, false), h2: part(0.004), ...ok })).toBe('insufficient');
+    expect(label({ full: part(0.01), h1: part(0.012), h2: part(0.004), p: 0.01, shifts: PLACEBO.minShifts - 1 })).toBe('insufficient');
+    expect(label({ full: part(0.01), h1: part(0.012), h2: part(0.004), p: null, shifts: 399 })).toBe('insufficient');
+  });
+  it('needs 10 blocks of max(2h, 21) sessions in each half, so h = 63 is insufficient on a 5-year panel', () => {
+    expect(MIN_BLOCKS).toBe(10);
+    const n = 1270, closes = garchCloses(mulberry32(3), n), outcomes = Object.fromEntries(WINDOWS.map(h => [h, forwardOutcomes(closes, h)]));
+    const { windows } = evaluateIndicator(nullIndicator(regimes(mulberry32(4), n, 20), 2), outcomes, {});
+    expect(windows[63].partMinimum).toBe(1260);
+    expect(windows[63].buckets.every(bucket => STATS.every(stat => bucket[stat].label === 'insufficient'))).toBe(true);
+    expect(windows[21].buckets.some(bucket => STATS.some(stat => bucket[stat].label !== 'insufficient'))).toBe(true);
   });
 });
 
@@ -275,22 +347,28 @@ describe('study and CLI on synthetic inputs', () => {
       const indices = { schema_version: 'market-regime-indices-v1', as_of_date: dates.at(-1), indices: ['^GSPC', '^IXIC'].map((symbol, i) => ({ symbol, source: 'synthetic', bars: indexBars(dates, 30 + i) })) };
       writeFileSync(join(directory, 'history.json'), JSON.stringify(history));
       writeFileSync(join(directory, 'indices.json'), JSON.stringify(indices));
-      const study = await main(['--history', join(directory, 'history.json'), '--indices', join(directory, 'indices.json'), '--out', join(directory, 'out.json'), '--markdown', join(directory, 'out.md'), '--replicates', '200', '--label', 'synthetic']);
+      const study = await main(['--history', join(directory, 'history.json'), '--indices', join(directory, 'indices.json'), '--out', join(directory, 'out.json'), '--markdown', join(directory, 'out.md'), '--shifts', '120', '--label', 'synthetic']);
       const saved = JSON.parse(readFileSync(join(directory, 'out.json'), 'utf8')), markdown = readFileSync(join(directory, 'out.md'), 'utf8');
-      expect(saved.schema_version).toBe('market-regime-study-v1');
+      expect(saved.schema_version).toBe('market-regime-study-v2');
       expect(saved.tests.tests).toBe(saved.indicators.filter(i => i.available).reduce((a, i) => a + i.buckets.length, 0) * WINDOWS.length * 2);
+      // 420 sessions leave fewer than PLACEBO.minShifts shifts: the chance level is unavailable and every test insufficient.
+      expect(saved.tests.chance).toMatchObject({ available: false, shifts: 0 });
+      expect(saved.tests.labels.insufficient).toBe(saved.tests.tests);
+      expect(markdown).toContain('Chance level: unavailable');
       expect(Object.values(saved.tests.labels).reduce((a, b) => a + b, 0)).toBe(saved.tests.tests);
       expect(saved.inputs.indices.map(i => i.calendarBasis)).toEqual(['provider', 'provider']);
       expect(saved.notes.some(note => /no independent calendar/.test(note))).toBe(true);
       for (const indicator of saved.indicators.filter(i => i.available)) for (const h of WINDOWS) {
         const window = indicator.windows[h];
         expect(window.buckets.reduce((a, b) => a + b.n, 0)).toBe(window.n);
-        for (const bucket of window.buckets) if (!bucket.n) expect([bucket.meanReturn, bucket.mean.est, bucket.dd5.est, bucket.mean.label]).toEqual([null, null, null, 'insufficient']);
+        for (const bucket of window.buckets) if (!bucket.n) expect([bucket.meanReturn, bucket.mean.est, bucket.dd5.est, bucket.mean.p, bucket.mean.label]).toEqual([null, null, null, null, 'insufficient']);
       }
       expect(saved.indicators.find(i => i.key === 'rule.count').available).toBe(true);
       expect(saved.survivorship.byYear.map(y => y.year)).toEqual(['2019', '2020']);
-      for (const heading of ['## Inputs', '## Tests and labels', '## Robust effects', '## Survivorship diagnostics', '## All indicators', '`^IXIC.ftd.state`', '`d21.stageSpread`']) expect(markdown).toContain(heading);
-      expect(strip(runStudy({ history, indices, replicates: 100 }).indicators.map(i => i.key))).toEqual(saved.indicators.map(i => i.key));
+      for (const heading of ['## Inputs', '## Tests and chance level', '## Labels passing the split rule', '## Survivorship diagnostics', '## All indicators', '`^IXIC.ftd.state`', '`d21.stageSpread`']) expect(markdown).toContain(heading);
+      expect(markdown).not.toMatch(/expected by chance alone|90% CI|bootstrap/);
+      expect(strip(runStudy({ history, indices, shifts: 120 }).indicators.map(i => i.key))).toEqual(saved.indicators.map(i => i.key));
+      await expect(main(['--history', join(directory, 'history.json'), '--shifts', '20'])).rejects.toThrow(/--shifts/);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 });

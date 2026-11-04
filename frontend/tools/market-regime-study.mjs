@@ -7,9 +7,10 @@
  * indicators did the index tend to fall or rise afterwards?
  *
  * ============================================================================================================
- * PRE-REGISTERED PLAN  market-regime-study-v1
- * Fixed before any real-data run. Changing any item below needs a new STUDY_VERSION and is reported as a
- * deviation; no threshold, bucket edge, window or test is chosen after looking at results.
+ * PRE-REGISTERED PLAN  market-regime-study-v2
+ * v1 was fixed before any real-data run; v2 revises it before any CI real-data run, for the methodological reasons
+ * under DEVIATIONS FROM v1. Changing any item below needs a new STUDY_VERSION and is reported as a deviation; no
+ * threshold, bucket edge, window or test is chosen after looking at results.
  * ============================================================================================================
  *
  * DATA
@@ -65,24 +66,51 @@
  *  Evaluation sample: sessions where the indicator is judged and r_h and dd_h are known. Baseline: the same
  *  sample, unconditionally. Reported: n, episodes (in-bucket sessions more than h sessions apart start a new
  *  episode), mean, median, P(r_h > 0), P(dd_h <= -5%), P(dd_h <= -10%).
- *  Differences vs baseline: mean r_h (primary) and P(dd_h <= -5%) (secondary, the "falls" question).
- *  90% CI: circular moving-block bootstrap of the time-ordered sample, block L = max(2h, 21), 2000
- *  replicates, mulberry32 seeded by FNV-1a("20261104|<indicator>|<h>|<sample>"), percentiles 5 / 95. A
- *  replicate that misses the bucket is dropped; the CI is withheld when more than 10% are dropped or when the
- *  sample spans fewer than 4 blocks.
- *  Split-sample: first vs second half of the evaluation sample (by session count), each with its own baseline
- *  and bootstrap; the bucket edges stay fixed.
- *  Label (per statistic): insufficient = n < 20 or episodes < 3 or no CI in the full sample or either half;
- *  robust = both halves' CIs exclude 0 with the same sign; unstable = the halves' estimates have opposite
- *  signs; weak = otherwise. Report "weak" and "unstable" together as weak/unstable.
- *  Multiple comparisons: the report states the number of tests (bucket x h x statistic). At 90% about 10% of
- *  full-sample CIs exclude 0 by chance. Only "robust" is read as evidence, and it is not adjusted either.
+ *  Differences D vs baseline: mean r_h (primary) and P(dd_h <= -5%) (secondary, the "falls" question).
+ *  Split-sample: first vs second half of the evaluation sample (by session count), each with its own baseline.
+ *  Rotation placebo (calibration against the data's own dependence). Shift k rotates every indicator series of a
+ *  panel (index:^GSPC, index:^IXIC, breadth) against the panel's fixed outcomes, state_t <- state_((t + k) mod n):
+ *  both series keep their own autocorrelation and volatility clustering while the alignment is broken, and one k
+ *  for all of a panel's indicators keeps the dependence between tests. Grid: min(399, available) integer shifts
+ *  evenly spaced in [M + 1, n - 1], M = 280 + 63 = 343 (the longest lookback, the FTD window, plus the longest
+ *  window). A shift in 1..M is left out: it would pair the outcome from close t with a state computed inside that
+ *  outcome window (look-ahead). A shift k in [n - M, n - 1] pairs it with a state from n - k sessions before t
+ *  (no shared input); by stationarity it relates to the actual alignment as the left-out shift n - k would, so it
+ *  stands in for that shift too (weight 2). Sample, halves and D are recomputed per shift; a shift counts when its
+ *  rotated full sample meets the sufficiency rule below (K' shifts, total weight W). Two-sided placebo
+ *  p = min(1, 2 min(1 + W(D_k >= D), 1 + W(D_k <= D)) / (1 + W)); placebo band = weighted 5th / 95th percentiles.
+ *  Sufficiency, in the full sample and in each half: the bucket has n >= 20 and >= 3 episodes, and the part has
+ *  at least 10 L sessions (L = max(2h, 21), i.e. 10 blocks: h = 63 needs 1,260 sessions in each half).
+ *  Label (per statistic): insufficient = a part fails sufficiency or K' < 99; robust = placebo p <= 0.05 and both
+ *  halves' D have the full-sample sign; unstable = the halves' D have opposite signs; weak = otherwise. Report
+ *  "weak" and "unstable" together as weak/unstable.
+ *  Chance level: the whole labelling is rerun on every grid shift more than M from 0 on both sides, with the
+ *  actual's geometry (that shift and its own look-ahead zone left out, its past side standing in for the zone, the
+ *  actual series in the reference). The report gives the null median and 95th percentile of the number of robust
+ *  labels next to the actual count. Robust labels are read as evidence only when their count exceeds that 95th
+ *  percentile; otherwise the report calls them consistent with chance.
  *
  * SURVIVORSHIP DIAGNOSTICS (H)
  *  1. eligibleUniverse / universe and coverage / universe by year.
  *  2. OLS of above50Percent on ^GSPC % vs its 50-day and 200-day SMA; mean residual by year and by half
  *     (positive early residuals are consistent with survivorship inflation, or a genuinely broader market).
  *  3. Per bucket, the share of its sessions in the first half (period concentration).
+ *
+ * DEVIATIONS FROM v1 (recorded 2026-11-04, before any CI real-data run; v1 and v2 numbers are not comparable)
+ *  v1 ran once, locally, on the 2026-10-23 seed (old-schema 5-year long history, 280-session index source): 6
+ *  labels passed its split rule and 91 of 586 full-sample CIs excluded 0. That output is kept as the review's
+ *  archive. The changes below come from null simulations and method checks, not from any indicator's result.
+ *  1. Inference. v1's circular block bootstrap (L = max(2h, 21), at least 4 blocks, percentiles 5 / 95)
+ *     under-covers with persistent states and volatility clustering: on a GARCH(1,1) index (alpha 0.09, beta 0.90)
+ *     with an independent indicator over 1,270 sessions, its full-sample 90% CIs excluded 0 in 12-29% of cases,
+ *     and rotating the seed's breadth indicators against the real outcomes gave at least the seed's v1 "robust"
+ *     count in a quarter of the shifts. v2 replaces the bootstrap CIs and their split rule by the rotation
+ *     placebo, states the placebo chance level instead of "about 10% by chance", and raises the minimum span from
+ *     4 to 10 blocks. The placebo design was settled on the same GARCH null only: leaving out M shifts on both
+ *     sides of 0 (a first draft) let p <= 0.05 fire in 9-28% of judged tests on 1,270 sessions; with the past-side
+ *     stand-ins it fired in 4.3-6.1% there (400 paths each of AR(1) quintiles and 20- and 60-session binary
+ *     regimes) and in 3.1-4.6% on 9,200 sessions (60 paths), and the chance-level rerun labelled null shifts at
+ *     least as often as the actual (5.2-6.0% robust against 4.0-5.3%).
  *
  * Proprietary RS inside the trend-template counts is this app's own RS, not IBD RS.
  */
@@ -104,7 +132,7 @@ if (!process.env.VITEST) register(`data:text/javascript,${encodeURIComponent(RES
 const { environmentRules, ENV_RULES } = await import('../src/static/brief/briefModel.js');
 const { DISTRIBUTION_WARN, indexSummary } = await import('../src/static/brief/marketTabModel.js');
 
-export const STUDY_VERSION = 'market-regime-study-v1';
+export const STUDY_VERSION = 'market-regime-study-v2';
 export const WINDOWS = Object.freeze([5, 10, 21, 63]);
 export const DRAWDOWN = Object.freeze({ primary: -0.05, deep: -0.10 });
 export const QUANTILES = Object.freeze([0.2, 0.4, 0.6, 0.8]);
@@ -112,8 +140,8 @@ export const CHANGE_SESSIONS = 21;
 export const FTD_WINDOW_SESSIONS = 280;
 export const FTD_RECENT_SESSIONS = 25;
 export const DD_GRADES = Object.freeze([[0, 2], [3, 4], [5, 6], [7, Infinity]]);
-export const BOOTSTRAP = Object.freeze({ replicates: 2000, seed: 20261104, lower: 0.05, upper: 0.95, minBlocks: 4, maxDropped: 0.1 });
-export const MIN_SESSIONS = 20, MIN_EPISODES = 3;
+export const PLACEBO = Object.freeze({ shifts: 399, minShifts: 99, lookback: FTD_WINDOW_SESSIONS, alpha: 0.05, band: Object.freeze([0.05, 0.95]) });
+export const MIN_SESSIONS = 20, MIN_EPISODES = 3, MIN_BLOCKS = 10;
 export const blockLength = h => Math.max(2 * h, 21);
 export const YAHOO = Object.freeze({ start: '1990-01-01', symbols: Object.freeze(['^GSPC', '^IXIC']), spacingMs: 1000 });
 export const FTD_BUCKETS = Object.freeze([
@@ -388,52 +416,64 @@ export function episodes(indices, h) {
   return total;
 }
 
-// ---- bootstrap ------------------------------------------------------------------------------------------------
+// ---- rotation placebo -------------------------------------------------------------------------------------------
+/** M: the longest indicator lookback (the FTD window) plus the longest outcome window. */
+export const placeboMargin = () => PLACEBO.lookback + Math.max(...WINDOWS);
 /**
- * Circular moving-block bootstrap of (bucket mean - sample mean) for every bucket and every statistic in ys.
- * One resample (the same block starts) serves all buckets and statistics. Returns [stat][bucket] Float64Array
- * replicates; NaN marks a replicate without the bucket.
+ * The placebo grid: min(count, available) integer shifts evenly spaced in [M + 1, n - 1]. A shift k in 1..M is
+ * left out: it pairs the outcome from close t with a state computed from sessions inside that outcome window
+ * (look-ahead). None when the panel is too short.
  */
-export function blockBootstrap({ ys, group, groups, block, replicates, rng }) {
-  const M = group.length, S = ys.length;
-  const cnt = Array.from({ length: groups }, () => new Float64Array(M + 1));
-  const tot = ys.map(() => new Float64Array(M + 1));
-  const sum = ys.map(() => Array.from({ length: groups }, () => new Float64Array(M + 1)));
-  for (let i = 0; i < M; i++) {
-    const g = group[i];
-    for (let k = 0; k < groups; k++) cnt[k][i + 1] = cnt[k][i] + (k === g ? 1 : 0);
-    for (let s = 0; s < S; s++) {
-      tot[s][i + 1] = tot[s][i] + ys[s][i];
-      for (let k = 0; k < groups; k++) sum[s][k][i + 1] = sum[s][k][i] + (k === g ? ys[s][i] : 0);
-    }
-  }
-  const span = (prefix, start, length) => start + length <= M ? prefix[start + length] - prefix[start] : prefix[M] - prefix[start] + prefix[start + length - M];
-  const out = ys.map(() => Array.from({ length: groups }, () => new Float64Array(replicates)));
-  const blocks = Math.ceil(M / block), starts = new Int32Array(blocks), lengths = new Int32Array(blocks), base = new Float64Array(S);
-  for (let r = 0; r < replicates; r++) {
-    let remaining = M;
-    for (let b = 0; b < blocks; b++) { starts[b] = Math.floor(rng() * M); lengths[b] = Math.min(block, remaining); remaining -= lengths[b]; }
-    for (let s = 0; s < S; s++) { let total = 0; for (let b = 0; b < blocks; b++) total += span(tot[s], starts[b], lengths[b]); base[s] = total / M; }
-    for (let k = 0; k < groups; k++) {
-      let c = 0;
-      for (let b = 0; b < blocks; b++) c += span(cnt[k], starts[b], lengths[b]);
-      for (let s = 0; s < S; s++) {
-        if (c < 0.5) { out[s][k][r] = NaN; continue; }
-        let total = 0;
-        for (let b = 0; b < blocks; b++) total += span(sum[s][k], starts[b], lengths[b]);
-        out[s][k][r] = total / c - base[s];
-      }
-    }
-  }
-  return out;
+export function placeboShifts(n, count = PLACEBO.shifts) {
+  const lo = placeboMargin() + 1, hi = n - 1;
+  if (!Number.isSafeInteger(n) || !Number.isSafeInteger(count) || count < 1 || hi < lo) return [];
+  const available = hi - lo + 1;
+  if (available <= count) return Array.from({ length: available }, (_, j) => lo + j);
+  if (count === 1) return [lo];
+  return Array.from({ length: count }, (_, j) => lo + Math.round(j * (hi - lo) / (count - 1)));
 }
-export function interval(replicates) {
-  const values = Array.from(replicates).filter(finite).sort((a, b) => a - b);
-  if (!values.length || values.length < (1 - BOOTSTRAP.maxDropped) * replicates.length) return null;
-  return [quantileSorted(values, BOOTSTRAP.lower), quantileSorted(values, BOOTSTRAP.upper)];
+/**
+ * Weight of a grid shift. A shift k in [n - M, n - 1] pairs the outcome with a state from n - k sessions before t;
+ * by stationarity it relates to the actual alignment as the left-out shift n - k would, so it also stands in for
+ * that shift (weight 2). Without it the actual alignment's own neighbourhood would be missing on one side and the
+ * test would be anti-conservative for persistent states.
+ */
+export const shiftWeight = (k, n) => k >= n - placeboMargin() ? 2 : 1;
+/** Grid indices whose shift lies more than M from 0 on both sides: the shifts the chance level reruns the labelling on. */
+export const nullShiftIndices = (shifts, n) => shifts.flatMap((k, j) => k < n - placeboMargin() ? [j] : []);
+const lowerBound = (sorted, x) => { let lo = 0, hi = sorted.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] < x) lo = mid + 1; else hi = mid; } return lo; };
+const upperBound = (sorted, x) => { let lo = 0, hi = sorted.length; while (lo < hi) { const mid = (lo + hi) >> 1; if (sorted[mid] <= x) lo = mid + 1; else hi = mid; } return lo; };
+/** A weighted reference distribution: ascending values and cumulative weights. */
+export function placeboReference(values, weights = values.map(() => 1)) {
+  const order = values.map((_, i) => i).filter(i => finite(values[i]) && weights[i] > 0).sort((a, b) => values[a] - values[b]);
+  const v = Float64Array.from(order, i => values[i]), cw = new Float64Array(order.length + 1);
+  order.forEach((i, r) => { cw[r + 1] = cw[r] + weights[i]; });
+  return { values: v, cumulative: cw, total: cw[order.length], count: order.length };
+}
+/**
+ * Two-sided rank p of x against a weighted reference: min(1, 2 min(1 + W(>= x), 1 + W(<= x)) / (1 + W)). With
+ * selfWeight, x is itself in the reference with that weight and is left out (a placebo shift against the others).
+ */
+export function placeboP(x, reference, selfWeight = 0) {
+  const total = reference.total - selfWeight;
+  if (!finite(x) || !(total >= 1)) return null;
+  const ge = reference.total - reference.cumulative[lowerBound(reference.values, x)] - selfWeight, le = reference.cumulative[upperBound(reference.values, x)] - selfWeight;
+  return Math.min(1, 2 * Math.min(1 + ge, 1 + le) / (1 + total));
+}
+/** Weighted quantile: the smallest reference value whose cumulative weight reaches q of the total. */
+export function placeboQuantile(reference, q) {
+  if (!reference.count) return null;
+  const target = q * reference.total;
+  let lo = 0, hi = reference.count - 1;
+  while (lo < hi) { const mid = (lo + hi) >> 1; if (reference.cumulative[mid + 1] >= target) hi = mid; else lo = mid + 1; }
+  return reference.values[lo];
 }
 
 // ---- evaluation -------------------------------------------------------------------------------------------------
+export const STATS = Object.freeze(['mean', 'dd5']);
+export const LABELS = Object.freeze(['insufficient', 'weak', 'unstable', 'robust']);
+const ROBUST = LABELS.indexOf('robust');
+
 function summarize(rets, dds) {
   const n = rets.length;
   if (!n) return { n: 0, mean: null, median: null, pUp: null, pDd5: null, pDd10: null };
@@ -441,61 +481,156 @@ function summarize(rets, dds) {
   return { n, mean: rets.reduce((a, b) => a + b, 0) / n, median: quantileSorted(sorted, 0.5), pUp: rets.filter(v => v > 0).length / n,
     pDd5: dds.filter(v => v <= DRAWDOWN.primary).length / n, pDd10: dds.filter(v => v <= DRAWDOWN.deep).length / n };
 }
+const roundStats = s => ({ n: s.n, meanReturn: round(s.mean), median: round(s.median), pUp: round(s.pUp, 4), pDd5: round(s.pDd5, 4), pDd10: round(s.pDd10, 4) });
 
-function describe(part, values, outcome, h, groups, { key, replicates }) {
-  const { ret, dd } = outcome, members = Array.from({ length: groups }, () => []);
-  for (const t of part) members[values[t]].push(t);
-  const baseline = summarize(part.map(t => ret[t]), part.map(t => dd[t]));
-  const L = blockLength(h);
-  let ci = null;
-  if (part.length >= BOOTSTRAP.minBlocks * L) {
-    const reps = blockBootstrap({ ys: [Float64Array.from(part, t => ret[t]), Float64Array.from(part, t => dd[t] <= DRAWDOWN.primary ? 1 : 0)],
-      group: Int32Array.from(part, t => values[t]), groups, block: L, replicates, rng: mulberry32(fnv1a(key)) });
-    ci = reps.map(stat => stat.map(interval));
+const typedOutcomes = new WeakMap();
+/** Outcome arrays for the inner loops: NaN / -1 mark an unknown return / drawdown. */
+function typed(outcome) {
+  let value = typedOutcomes.get(outcome);
+  if (!value) {
+    value = { r: Float64Array.from(outcome.ret, v => v === null ? NaN : v), d5: Int8Array.from(outcome.dd, (v, t) => v === null || outcome.ret[t] === null ? -1 : v <= DRAWDOWN.primary ? 1 : 0) };
+    typedOutcomes.set(outcome, value);
   }
-  return { n: part.length, start: part[0] ?? null, end: part.at(-1) ?? null, baseline,
-    buckets: members.map((ts, g) => {
-      const stats = summarize(ts.map(t => ret[t]), ts.map(t => dd[t]));
-      return { ...stats, episodes: episodes(ts, h), diff: { mean: stats.n ? stats.mean - baseline.mean : null, dd5: stats.n ? stats.pDd5 - baseline.pDd5 : null }, ci: { mean: ci?.[0][g] ?? null, dd5: ci?.[1][g] ?? null } };
-    }) };
+  return value;
 }
+/** The evaluation sample of the series rotated by shift (state_t <- state_((t + shift) mod n)), into scratch. */
+function collect(states, shift, out, scratch) {
+  const n = states.length, { d5 } = out, { t: ts, g: gs } = scratch;
+  let size = 0;
+  for (let t = 0, u = shift % n; t < n; t++, u = u + 1 === n ? 0 : u + 1) {
+    const g = states[u];
+    if (g < 0 || d5[t] < 0) continue;
+    ts[size] = t; gs[size] = g; size++;
+  }
+  return size;
+}
+/** Per-bucket sums and episodes of the sample members [from, to). */
+function accumulate(scratch, from, to, out, groups, h) {
+  const { r, d5 } = out, { t: ts, g: gs } = scratch;
+  const part = { size: Math.max(0, to - from), sumR: 0, sumD: 0, n: new Int32Array(groups), r: new Float64Array(groups), d: new Float64Array(groups), episodes: new Int32Array(groups) };
+  const last = new Int32Array(groups).fill(-1);
+  for (let i = from; i < to; i++) {
+    const t = ts[i], g = gs[i];
+    part.sumR += r[t]; part.sumD += d5[t]; part.n[g]++; part.r[g] += r[t]; part.d[g] += d5[t];
+    if (last[g] < 0 || t - last[g] > h) part.episodes[g]++;
+    last[g] = t;
+  }
+  return part;
+}
+/** The full sample and its halves: the first half by session count and the rest. */
+function aggregate(states, shift, out, groups, h, scratch) {
+  const size = collect(states, shift, out, scratch), half = size >> 1, second = half;
+  return { size, half, second, parts: [accumulate(scratch, 0, size, out, groups, h), accumulate(scratch, 0, half, out, groups, h), accumulate(scratch, second, size, out, groups, h)] };
+}
+/** The tests of an indicator: each bucket against the baseline. */
+const testsFor = groups => Array.from({ length: groups }, (_, bucket) => ({ bucket }));
+function estimate(part, test, stat) {
+  const sums = stat === 'mean' ? part.r : part.d, total = stat === 'mean' ? part.sumR : part.sumD, a = part.n[test.bucket];
+  if (!a || !part.size) return NaN;
+  if (test.versus !== undefined) { const b = part.n[test.versus]; return b ? sums[test.bucket] / a - sums[test.versus] / b : NaN; }
+  return sums[test.bucket] / a - total / part.size;
+}
+const compared = test => test.versus === undefined ? [test.bucket] : [test.bucket, test.versus];
+const sufficient = (part, test, h) => part.size >= MIN_BLOCKS * blockLength(h) && compared(test).every(g => part.n[g] >= MIN_SESSIONS && part.episodes[g] >= MIN_EPISODES);
 
-const excludes = ci => !ci ? 0 : ci[0] > 0 ? 1 : ci[1] < 0 ? -1 : 0;
-/** Pre-registered label of one statistic of one bucket from its full-sample and half-sample results. */
-export function label({ full, h1, h2 }) {
-  for (const part of [full, h1, h2]) if (!part || part.n < MIN_SESSIONS || part.episodes < MIN_EPISODES || !part.ci) return 'insufficient';
-  const first = excludes(h1.ci);
-  if (first !== 0 && first === excludes(h2.ci)) return 'robust';
+/** Pre-registered label of one statistic from the full sample, the halves and the placebo. */
+export function label({ full, h1, h2, p, shifts }) {
+  if (![full, h1, h2].every(part => part?.sufficient && finite(part.est)) || !(shifts >= PLACEBO.minShifts) || !finite(p)) return 'insufficient';
+  const sign = Math.sign(full.est);
+  if (p <= PLACEBO.alpha && sign !== 0 && Math.sign(h1.est) === sign && Math.sign(h2.est) === sign) return 'robust';
   if (Math.sign(h1.est) * Math.sign(h2.est) < 0) return 'unstable';
   return 'weak';
 }
 
-export function evaluateIndicator(indicator, outcomes, { seed = BOOTSTRAP.seed, replicates = BOOTSTRAP.replicates, dates }) {
-  const groups = indicator.buckets.length, windows = {};
+/**
+ * Descriptive statistics, tests and rotation placebo of one indicator on the panel's outcomes. Returns the
+ * report's windows and, per test, the label code it gets under each placebo shift (for the chance level).
+ */
+export function evaluateIndicator(indicator, outcomes, { dates = null, shifts = placeboShifts(indicator.values.length) } = {}) {
+  const groups = indicator.buckets.length, n = indicator.values.length, K = shifts.length;
+  const states = Int8Array.from(indicator.values, v => Number.isInteger(v) && v >= 0 && v < groups ? v : -1);
+  const scratch = { t: new Int32Array(n), g: new Int8Array(n) }, tests = testsFor(groups), windows = {}, nulls = [];
+  const margin = placeboMargin(), nullIndex = nullShiftIndices(shifts, n);
+  const day = index => index === undefined || index === null ? null : dates?.[index] ?? null;
   for (const h of WINDOWS) {
-    const outcome = outcomes[h], sample = [];
-    for (let t = 0; t < indicator.values.length; t++) if (indicator.values[t] !== null && outcome.ret[t] !== null && outcome.dd[t] !== null) sample.push(t);
-    const half = Math.floor(sample.length / 2);
-    const parts = Object.fromEntries(Object.entries({ full: sample, h1: sample.slice(0, half), h2: sample.slice(half) })
-      .map(([name, part]) => [name, describe(part, indicator.values, outcome, h, groups, { key: `${seed}|${indicator.key}|${h}|${name}`, replicates })]));
-    const stat = (g, which) => {
-      const view = name => ({ n: parts[name].buckets[g].n, episodes: parts[name].buckets[g].episodes, est: parts[name].buckets[g].diff[which], ci: parts[name].buckets[g].ci[which] });
-      const full = view('full'), h1 = view('h1'), h2 = view('h2');
-      return { est: round(full.est), ci: full.ci?.map(v => round(v)) ?? null, h1: { est: round(h1.est), ci: h1.ci?.map(v => round(v)) ?? null }, h2: { est: round(h2.est), ci: h2.ci?.map(v => round(v)) ?? null }, label: label({ full, h1, h2 }) };
-    };
-    const day = index => index === null ? null : dates[index];
+    const outcome = outcomes[h], out = typed(outcome);
+    const actual = aggregate(states, 0, out, groups, h, scratch);
+    const sample = Array.from(scratch.t.subarray(0, actual.size)), bucketOf = Array.from(scratch.g.subarray(0, actual.size));
+    const store = tests.map(() => ({ ok: new Uint8Array(K), halves: new Uint8Array(K), mean: [0, 1, 2].map(() => new Float64Array(K)), dd5: [0, 1, 2].map(() => new Float64Array(K)) }));
+    shifts.forEach((k, j) => {
+      const { parts } = aggregate(states, k, out, groups, h, scratch);
+      tests.forEach((test, i) => {
+        const s = store[i];
+        s.ok[j] = sufficient(parts[0], test, h) ? 1 : 0;
+        s.halves[j] = sufficient(parts[1], test, h) && sufficient(parts[2], test, h) ? 1 : 0;
+        for (const stat of STATS) for (let p = 0; p < 3; p++) s[stat][p][j] = estimate(parts[p], test, stat);
+      });
+    });
+    const results = tests.map((test, i) => Object.fromEntries(STATS.map(stat => {
+      const s = store[i], view = actual.parts.map(part => ({ sufficient: sufficient(part, test, h), est: estimate(part, test, stat) }));
+      const D = s[stat][0], weights = shifts.map((k, j) => s.ok[j] && finite(D[j]) ? shiftWeight(k, n) : 0);
+      const reference = placeboReference(Array.from(D), weights), counted = reference.count;
+      const p = counted >= PLACEBO.minShifts ? placeboP(view[0].est, reference) : null;
+      // The same labelling under each null shift j with the actual's geometry: j itself and its own look-ahead
+      // zone (j, j + M] are left out, the shifts in [j - M, j) stand in for that zone, and the actual joins the
+      // reference.
+      const actualKnown = view[0].sufficient && finite(view[0].est);
+      const pool = placeboReference([...D, actualKnown ? view[0].est : NaN], [...weights, 1]), codes = new Uint8Array(nullIndex.length);
+      nullIndex.forEach((j, c) => {
+        if (!weights[j]) return;
+        const x = D[j];
+        let ge = pool.total - pool.cumulative[lowerBound(pool.values, x)], le = pool.cumulative[upperBound(pool.values, x)], total = pool.total, distinct = pool.count;
+        const adjust = (i, dw, dn) => { if (!weights[i]) return; total += dw; distinct += dn; if (D[i] >= x) ge += dw; if (D[i] <= x) le += dw; };
+        adjust(j, -weights[j], -1);
+        for (let i = j + 1; i < K && shifts[i] - shifts[j] <= margin; i++) adjust(i, -weights[i], -1);
+        for (let i = j - 1; i >= 0 && shifts[j] - shifts[i] <= margin; i--) adjust(i, 1, 0);
+        const pj = total >= 1 ? Math.min(1, 2 * Math.min(1 + ge, 1 + le) / (1 + total)) : null;
+        codes[c] = LABELS.indexOf(label({ full: { sufficient: true, est: x }, h1: { sufficient: s.halves[j] === 1, est: s[stat][1][j] }, h2: { sufficient: s.halves[j] === 1, est: s[stat][2][j] }, p: pj, shifts: distinct }));
+      });
+      nulls.push({ h, bucket: test.bucket, stat, codes });
+      return [stat, { est: round(view[0].est), band: counted ? [round(placeboQuantile(reference, PLACEBO.band[0])), round(placeboQuantile(reference, PLACEBO.band[1]))] : null,
+        p: round(p, 4), shifts: counted, h1: { est: round(view[1].est) }, h2: { est: round(view[2].est) }, label: label({ full: view[0], h1: view[1], h2: view[2], p, shifts: counted }) }];
+    })));
+    const { ret, dd } = outcome, ranges = [[0, actual.size], [0, actual.half], [actual.second, actual.size]];
+    const members = ranges.map(([from, to]) => Array.from({ length: groups }, (_, g) => sample.slice(from, to).filter((_, i) => bucketOf[from + i] === g)));
+    const baselines = ranges.map(([from, to]) => { const part = sample.slice(from, to); return roundStats(summarize(part.map(t => ret[t]), part.map(t => dd[t]))); });
     windows[h] = {
-      n: sample.length, start: day(parts.full.start), end: day(parts.full.end), split: day(parts.h2.start), block: blockLength(h),
-      baseline: roundStats(parts.full.baseline), h1Baseline: roundStats(parts.h1.baseline), h2Baseline: roundStats(parts.h2.baseline),
-      buckets: indicator.buckets.map((bucket, g) => { const b = parts.full.buckets[g];
-        // meanReturn is the bucket's own forward-return mean; mean / dd5 carry the differences vs baseline.
-        return { key: bucket.key, label: bucket.label, ...roundStats(b), episodes: b.episodes, h1n: parts.h1.buckets[g].n, h2n: parts.h2.buckets[g].n,
-          firstHalfShare: b.n ? round(parts.h1.buckets[g].n / b.n, 4) : null, mean: stat(g, 'mean'), dd5: stat(g, 'dd5') }; }),
+      n: actual.size, start: day(sample[0]), end: day(sample.at(-1)), split: day(sample[actual.second]), block: blockLength(h), partMinimum: MIN_BLOCKS * blockLength(h),
+      baseline: baselines[0], h1Baseline: baselines[1], h2Baseline: baselines[2],
+      buckets: indicator.buckets.map((bucket, g) => {
+        const ts = members[0][g], stats = summarize(ts.map(t => ret[t]), ts.map(t => dd[t])), i = tests.findIndex(test => test.bucket === g);
+        // meanReturn is the bucket's own forward-return mean; mean / dd5 carry the tests (D vs baseline).
+        return { key: bucket.key, label: bucket.label, ...roundStats(stats), episodes: actual.parts[0].episodes[g], h1n: members[1][g].length, h2n: members[2][g].length,
+          firstHalfShare: ts.length ? round(members[1][g].length / ts.length, 4) : null, mean: i >= 0 ? results[i].mean : null, dd5: i >= 0 ? results[i].dd5 : null };
+      }),
     };
   }
-  return windows;
+  return { windows, nulls };
 }
-const roundStats = s => ({ n: s.n, meanReturn: round(s.mean), median: round(s.median), pUp: round(s.pUp, 4), pDd5: round(s.pDd5, 4), pDd10: round(s.pDd10, 4) });
+
+const distribution = values => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return { median: quantileSorted(sorted, 0.5), p95: round(quantileSorted(sorted, 0.95), 2), max: sorted.at(-1), mean: round(values.reduce((a, b) => a + b, 0) / values.length, 2) };
+};
+/**
+ * Null distribution of the number of robust labels: per panel over its shifts, and in total over the shifts that
+ * every panel with a placebo has (the j-th shift of each).
+ */
+export function chanceLevel(panels, actual) {
+  const perPanel = panels.map(panel => {
+    const index = nullShiftIndices(panel.shifts, panel.sessions), K = index.length, robust = new Array(K).fill(0);
+    for (const test of panel.nulls) for (let j = 0; j < K; j++) if (test.codes[j] === ROBUST) robust[j]++;
+    return { panel: panel.name, sessions: panel.sessions, grid: panel.shifts.length, shifts: K, first: panel.shifts[index[0]] ?? null, last: panel.shifts[index.at(-1)] ?? null, robust, actual: panel.actual };
+  });
+  const active = perPanel.filter(panel => panel.shifts > 0);
+  const K = active.length ? Math.min(...active.map(panel => panel.shifts)) : 0;
+  const total = Array.from({ length: K }, (_, j) => active.reduce((a, panel) => a + panel.robust[j], 0));
+  const summary = distribution(total);
+  return { available: K > 0, shifts: K, margin: placeboMargin(), actual, robust: summary, shareAtLeastActual: K ? round(total.filter(v => v >= actual).length / K, 4) : null,
+    clears: summary ? actual > summary.p95 : null,
+    panels: perPanel.map(({ robust, ...panel }) => ({ ...panel, robust: distribution(robust) })) };
+}
 
 // ---- indicators -------------------------------------------------------------------------------------------------
 const make = (panel, key, label, rule, bucketLabels, values, outcome) => ({ panel, key, label, rule, outcome, buckets: bucketLabels.map(text => ({ key: text, label: text })), values });
@@ -623,9 +758,11 @@ export function survivorship(history, states) {
 }
 
 // ---- the study --------------------------------------------------------------------------------------------------
-export function runStudy({ history = null, historyMeta = {}, indices = null, calendar = null, asOfDate = null, seed = BOOTSTRAP.seed, replicates = BOOTSTRAP.replicates, label: runLabel = null }) {
-  const results = [], inputs = { history: null, indices: [] }, notes = [];
+export function runStudy({ history = null, historyMeta = {}, indices = null, calendar = null, asOfDate = null, shifts: shiftCount = PLACEBO.shifts, label: runLabel = null }) {
+  const results = [], inputs = { history: null, indices: [] }, notes = [], panels = [];
   const indexByDate = {};
+  // One shift set per panel, shared by all of its indicators (the tests' dependence is kept under the placebo).
+  const panelFor = (name, sessions) => { const panel = { name, sessions, shifts: placeboShifts(sessions, shiftCount), nulls: [] }; panels.push(panel); return panel; };
   for (const item of indices?.indices || []) {
     const ownCalendar = calendar || item.calendar_sessions || null;
     const aligned = alignIndex({ symbol: item.symbol, bars: item.bars, calendar: ownCalendar, asOfDate });
@@ -637,7 +774,8 @@ export function runStudy({ history = null, historyMeta = {}, indices = null, cal
       validRuns: runs(aligned.bars.map(validBar)).length, missingSample: aligned.missing.slice(0, 10), offCalendarSample: aligned.extra.slice(0, 10) });
     if (aligned.calendarBasis === 'provider') notes.push(`${item.symbol}: no independent calendar; the provider's dates are the sessions (a session the provider omits cannot be detected).`);
     indexByDate[item.symbol] = new Map(aligned.dates.map((day, t) => [day, { dd: states.dd[t], ftd: states.ftd[t] }]));
-    for (const indicator of indexIndicators(states)) results.push(finish(indicator, outcomes, aligned.dates, { seed, replicates }));
+    const panel = panelFor(`index:${item.symbol}`, aligned.dates.length);
+    for (const indicator of indexIndicators(states)) results.push(finish(indicator, outcomes, aligned.dates, panel));
   }
   let diagnostics = null;
   if (history) {
@@ -655,38 +793,42 @@ export function runStudy({ history = null, historyMeta = {}, indices = null, cal
       states.dates.forEach((day, t) => { const a = states.closes[t], b = closeByDate.get(day); if (positive(a) && positive(b)) { compared++; worst = Math.max(worst, Math.abs(a / b - 1)); } });
       inputs.history.sp500VsIndexSource = { compared, maxRelativeDifference: round(worst, 8) };
     }
-    for (const indicator of breadthIndicators(states, indexByDate)) results.push(finish(indicator, outcomes, states.dates, { seed, replicates }));
+    const panel = panelFor('breadth', states.dates.length);
+    for (const indicator of breadthIndicators(states, indexByDate)) results.push(finish(indicator, outcomes, states.dates, panel));
     diagnostics = survivorship(history, states);
   }
   const tested = results.filter(r => r.available);
-  const tally = { robust: 0, weak: 0, unstable: 0, insufficient: 0 };
+  const tally = Object.fromEntries(LABELS.map(name => [name, 0]));
   let tests = 0;
-  for (const r of tested) for (const h of WINDOWS) for (const bucket of r.windows[h].buckets) for (const stat of ['mean', 'dd5']) { tests++; tally[bucket[stat].label]++; }
-  let excludesFull = 0, withCi = 0;
-  for (const r of tested) for (const h of WINDOWS) for (const bucket of r.windows[h].buckets) for (const stat of ['mean', 'dd5']) if (bucket[stat].ci) { withCi++; if (excludes(bucket[stat].ci) !== 0) excludesFull++; }
+  for (const r of tested) for (const h of WINDOWS) for (const bucket of r.windows[h].buckets) for (const stat of STATS) if (bucket[stat]) { tests++; tally[bucket[stat].label]++; }
+  const chance = chanceLevel(panels.map(panel => ({ ...panel, actual: panelRobust(results, panel.name) })), tally.robust);
   return { schema_version: STUDY_VERSION, label: runLabel, generated_at: new Date().toISOString(), as_of_date: asOfDate,
     method: { windows: WINDOWS, drawdownLevels: [DRAWDOWN.primary, DRAWDOWN.deep], quintiles: QUANTILES, changeSessions: CHANGE_SESSIONS, ftdWindowSessions: FTD_WINDOW_SESSIONS,
-      bootstrap: { ...BOOTSTRAP, seed, replicates, block: 'max(2h, 21)' }, minSessions: MIN_SESSIONS, minEpisodes: MIN_EPISODES,
+      placebo: { ...PLACEBO, shifts: shiftCount, margin: placeboMargin(), rotation: 'state_t <- state_((t + k) mod n), one k per panel' }, minSessions: MIN_SESSIONS, minEpisodes: MIN_EPISODES, minBlocks: MIN_BLOCKS, block: 'max(2h, 21)',
       appRules: { DISTRIBUTION_WARN, DISTRIBUTION_METHOD, FOLLOW_THROUGH_METHOD, SPLIT_RULE, ENV_RULES } },
     inputs, notes, survivorship: diagnostics,
-    tests: { indicators: results.length, available: tested.length, buckets: tested.reduce((a, r) => a + r.buckets.length, 0), tests, fullSampleCi: withCi, fullSampleCiExcludesZero: excludesFull, labels: tally },
+    tests: { indicators: results.length, available: tested.length, buckets: tested.reduce((a, r) => a + r.buckets.length, 0), tests, labels: tally, chance },
     indicators: results };
 }
 
-function finish(indicator, outcomes, dates, options) {
+const panelRobust = (results, name) => results.filter(r => r.available && r.panel === name).reduce((a, r) => a + WINDOWS.reduce((b, h) => b + r.windows[h].buckets.reduce((c, bucket) => c + STATS.filter(stat => bucket[stat]?.label === 'robust').length, 0), 0), 0);
+
+function finish(indicator, outcomes, dates, panel) {
   const judged = indicator.values.filter(value => value !== null).length;
   const base = { panel: indicator.panel, key: indicator.key, label: indicator.label, rule: indicator.rule, outcome: indicator.outcome, edges: indicator.edges ?? null,
     buckets: indicator.buckets, judged, available: judged > 0 };
   if (!judged) return { ...base, reason: indicator.unavailableReason || 'no judged session (the input is too short for the rule)', windows: null };
-  return { ...base, firstJudged: dates[indicator.values.findIndex(value => value !== null)], lastJudged: dates[indicator.values.findLastIndex(value => value !== null)],
-    windows: evaluateIndicator(indicator, outcomes, { ...options, dates }) };
+  const { windows, nulls } = evaluateIndicator(indicator, outcomes, { dates, shifts: panel.shifts });
+  for (const test of nulls) panel.nulls.push({ ...test, key: indicator.key });
+  return { ...base, firstJudged: dates[indicator.values.findIndex(value => value !== null)], lastJudged: dates[indicator.values.findLastIndex(value => value !== null)], windows };
 }
 
 // ---- markdown ----------------------------------------------------------------------------------------------------
 const pct = (value, digits = 2) => finite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(100 * value).toFixed(digits)}%` : '—';
 const pp = (value, digits = 2) => finite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(100 * value).toFixed(digits)}` : '—';
 const prob = value => finite(value) ? `${(100 * value).toFixed(0)}%` : '—';
-const ciText = (stat, digits = 2) => stat.est === null ? '—' : `${pp(stat.est, digits)} [${stat.ci ? `${pp(stat.ci[0], digits)}, ${pp(stat.ci[1], digits)}` : 'n/a'}]`;
+const statText = (stat, digits = 2) => !stat || stat.est === null ? '—' : `${pp(stat.est, digits)} [${stat.band ? `${pp(stat.band[0], digits)}, ${pp(stat.band[1], digits)}` : 'n/a'}] p ${stat.p === null ? 'n/a' : stat.p.toFixed(3)}`;
+const num2 = value => finite(value) ? String(round(value, 1)) : '—';
 const TAG = { robust: '**robust**', weak: 'weak', unstable: 'unstable', insufficient: 'insufficient' };
 const signedTerm = value => `${value < 0 ? '−' : '+'} ${Math.abs(value)}`;
 const cell = text => String(text).replace(/\|/g, '\\|');
@@ -694,8 +836,8 @@ const cell = text => String(text).replace(/\|/g, '\\|');
 export function markdownReport(study) {
   const lines = [], add = (...rows) => lines.push(...rows);
   add(`# Market-regime study${study.label ? ` — ${study.label}` : ''}`, '',
-    `${STUDY_VERSION} (pre-registered in frontend/tools/market-regime-study.mjs) · as of ${study.as_of_date ?? 'n/a'} · seed ${study.method.bootstrap.seed} · ${study.method.bootstrap.replicates} circular block-bootstrap replicates (block max(2h,21)) · 90% CI`, '',
-    'Diagnostic research only: nothing here changes a rule, threshold, verdict or published value. Returns are forward index returns from the close of the session the state was observed (strictly causal). Δ columns are differences from the unconditional baseline of the same sample, in percentage points.', '');
+    `${STUDY_VERSION} (pre-registered in frontend/tools/market-regime-study.mjs, with its deviations from v1) · as of ${study.as_of_date ?? 'n/a'} · rotation placebo: up to ${study.method.placebo.shifts} shifts per panel, margin ${study.method.placebo.margin} sessions · robust = placebo p ≤ ${PLACEBO.alpha} and both halves agree in sign`, '',
+    'Diagnostic research only: nothing here changes a rule, threshold, verdict or published value. Returns are forward index returns from the close of the session the state was observed (strictly causal). Δ columns are differences from the unconditional baseline of the same sample, in percentage points. [band] is the 90% range of Δ when the indicator series is rotated against the outcomes (what chance alone produced on this data); p is the two-sided rotation-placebo p.', '');
   add('## Inputs', '', '| input | basis | first | last | sessions | notes |', '|---|---|---|---|---|---|');
   const h = study.inputs.history;
   if (h) add(`| long history (as of ${h.as_of_date}) | ${h.basis}; historical membership verified: ${h.historicalMembershipVerified} | ${h.first} | ${h.last} | ${h.sessions} | universe ${h.universe}; sha256 ${String(h.sha256).slice(0, 12)}; ${h.fieldsAbsent.length ? `absent: ${h.fieldsAbsent.join(', ')}` : 'all study fields present'}${h.sp500VsIndexSource ? `; sp500 vs index source max diff ${(100 * h.sp500VsIndexSource.maxRelativeDifference).toFixed(4)}% over ${h.sp500VsIndexSource.compared}` : ''} |`);
@@ -703,16 +845,25 @@ export function markdownReport(study) {
   add('');
   for (const note of study.notes) add(`- ${note}`);
   if (h) add('- The long history is a CURRENT-UNIVERSE RETROSPECTIVE: stocks delisted before the capture are missing, so early breadth tends to read healthier than it was. Read breadth effects with the survivorship section and the split-sample labels.');
-  add('', '## Tests and labels', '',
-    `${study.tests.available} of ${study.tests.indicators} indicators had judged sessions; ${study.tests.buckets} buckets × ${WINDOWS.length} windows × 2 statistics = **${study.tests.tests} tests**. ${study.tests.fullSampleCi} have a full-sample 90% CI; ${study.tests.fullSampleCiExcludesZero} of them exclude 0 (about ${Math.round(study.tests.fullSampleCi * 0.1)} expected by chance alone).`,
-    `Labels: robust ${study.tests.labels.robust} · weak ${study.tests.labels.weak} · unstable ${study.tests.labels.unstable} · insufficient ${study.tests.labels.insufficient}. "robust" = both halves' CIs exclude 0 with the same sign; it is not adjusted for the number of tests.`, '');
-  add('## Robust effects (both halves agree)', '', '| indicator | bucket | h | n | episodes | mean | baseline | Δmean [90% CI] | P(DD≤−5%) | ΔP(DD≤−5%) [90% CI] | which |', '|---|---|---|---|---|---|---|---|---|---|---|');
+  const t = study.tests, chance = t.chance;
+  add('', '## Tests and chance level', '',
+    `${t.available} of ${t.indicators} indicators had judged sessions; ${t.buckets} buckets × ${WINDOWS.length} windows × 2 statistics = **${t.tests} tests**.`,
+    `Labels: robust ${t.labels.robust} · weak ${t.labels.weak} · unstable ${t.labels.unstable} · insufficient ${t.labels.insufficient}. robust = rotation-placebo p ≤ ${PLACEBO.alpha} and both halves' Δ have the full-sample sign.`, '');
+  if (!chance.available) add(`Chance level: unavailable. Every panel is shorter than 2 × ${chance.margin} sessions plus ${PLACEBO.minShifts} shifts, so every test is insufficient.`, '');
+  else {
+    add(`Chance level (rotation placebo: the whole labelling rerun on each of ${chance.shifts} shifts, one shift for every indicator of a panel so the tests' dependence is kept): robust labels median ${num2(chance.robust.median)}, 95th percentile ${num2(chance.robust.p95)}, max ${chance.robust.max}; ${prob(chance.shareAtLeastActual)} of shifts reached the actual ${chance.actual}.`,
+      ...chance.panels.map(panel => `- ${panel.panel}: ${panel.sessions} sessions, ${panel.shifts ? `${panel.shifts} shifts (${panel.first}–${panel.last}); robust labels actual ${panel.actual}, placebo median ${num2(panel.robust.median)}, 95th percentile ${num2(panel.robust.p95)}` : 'too short for the placebo (every test insufficient)'}.`), '',
+      chance.clears ? `**${chance.actual} robust labels exceed the placebo 95th percentile (${num2(chance.robust.p95)}).** Read them with the split and survivorship caveats.`
+        : `**${chance.actual} robust labels do not exceed the placebo 95th percentile (${num2(chance.robust.p95)}): as a set they are consistent with chance and are not reported as effects.**`, '');
+  }
+  const chanceTitle = chance.available ? `chance level median ${num2(chance.robust.median)}, 95th percentile ${num2(chance.robust.p95)} (placebo)` : 'chance level unavailable';
+  add(`## Labels passing the split rule (placebo p ≤ ${PLACEBO.alpha}, halves agree) — ${chanceTitle}`, '', '| indicator | bucket | h | n | episodes | mean | baseline | Δmean [placebo band] p | P(DD≤−5%) | ΔP(DD≤−5%) [placebo band] p | which |', '|---|---|---|---|---|---|---|---|---|---|---|');
   let robust = 0;
   for (const r of study.indicators) if (r.available) for (const w of WINDOWS) for (const b of r.windows[w].buckets) {
-    const which = ['mean', 'dd5'].filter(stat => b[stat].label === 'robust');
+    const which = STATS.filter(stat => b[stat]?.label === 'robust');
     if (!which.length) continue;
     robust++;
-    add(`| ${cell(r.label)} \`${r.key}\` | ${cell(b.label)} | ${w} | ${b.n} | ${b.episodes} | ${pct(b.meanReturn)} | ${pct(r.windows[w].baseline.meanReturn)} | ${ciText(b.mean)} | ${prob(b.pDd5)} | ${ciText(b.dd5, 1)} | ${which.join(', ')} |`);
+    add(`| ${cell(r.label)} \`${r.key}\` | ${cell(b.label)} | ${w} | ${b.n} | ${b.episodes} | ${pct(b.meanReturn)} | ${pct(r.windows[w].baseline.meanReturn)} | ${statText(b.mean)} | ${prob(b.pDd5)} | ${statText(b.dd5, 1)} | ${which.join(', ')} |`);
   }
   if (!robust) add('| none | | | | | | | | | | |');
   const s = study.survivorship;
@@ -725,12 +876,12 @@ export function markdownReport(study) {
   for (const r of study.indicators) {
     add(`### ${r.label} — \`${r.key}\``, '', `${r.rule}. Outcome: ${r.outcome}.${r.available ? ` Judged ${r.judged} sessions (${r.firstJudged} to ${r.lastJudged}).` : ''}`, '');
     if (!r.available) { add(`Unavailable: ${r.reason}.`, ''); continue; }
-    add('| bucket | h | n | ep | 1st-half share | mean | median | P(up) | P(DD≤−5%) | P(DD≤−10%) | Δmean [90% CI] | label | ΔP(DD≤−5%) [90% CI] | label |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+    add('| bucket | h | n | ep | 1st-half share | mean | median | P(up) | P(DD≤−5%) | P(DD≤−10%) | Δmean [placebo band] p | label | ΔP(DD≤−5%) [placebo band] p | label |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const w of WINDOWS) {
       const win = r.windows[w], base = win.baseline;
       if (!win.n) { add(`| (no session with a complete ${w}-session forward window) | ${w} | 0 | | | | | | | | | | | |`); continue; }
       add(`| baseline | ${w} | ${win.n} | | split ${win.split ?? '—'} | ${pct(base.meanReturn)} | ${pct(base.median)} | ${prob(base.pUp)} | ${prob(base.pDd5)} | ${prob(base.pDd10)} | | | | |`);
-      for (const b of win.buckets) add(`| ${cell(b.label)} | ${w} | ${b.n} | ${b.episodes} | ${prob(b.firstHalfShare)} | ${pct(b.meanReturn)} | ${pct(b.median)} | ${prob(b.pUp)} | ${prob(b.pDd5)} | ${prob(b.pDd10)} | ${ciText(b.mean)} | ${TAG[b.mean.label]} | ${ciText(b.dd5, 1)} | ${TAG[b.dd5.label]} |`);
+      for (const b of win.buckets) add(`| ${cell(b.label)} | ${w} | ${b.n} | ${b.episodes} | ${prob(b.firstHalfShare)} | ${pct(b.meanReturn)} | ${pct(b.median)} | ${prob(b.pUp)} | ${prob(b.pDd5)} | ${prob(b.pDd10)} | ${statText(b.mean)} | ${b.mean ? TAG[b.mean.label] : ''} | ${statText(b.dd5, 1)} | ${b.dd5 ? TAG[b.dd5.label] : ''} |`);
     }
     add('');
   }
@@ -741,7 +892,7 @@ export function markdownReport(study) {
 export async function main(argv = process.argv.slice(2)) {
   const { values } = parseArgs({ args: argv, strict: true, options: {
     history: { type: 'string' }, indices: { type: 'string' }, yahoo: { type: 'boolean' }, calendar: { type: 'string' }, 'save-indices': { type: 'string' },
-    'as-of': { type: 'string' }, out: { type: 'string' }, markdown: { type: 'string' }, seed: { type: 'string' }, replicates: { type: 'string' }, label: { type: 'string' } } });
+    'as-of': { type: 'string' }, out: { type: 'string' }, markdown: { type: 'string' }, shifts: { type: 'string' }, label: { type: 'string' } } });
   if (!values.history && !values.indices && !values.yahoo) throw Error('Usage: market-regime-study.mjs --history <static-data dir|manifest|series|capture|url> [--indices <file> | --yahoo] [--calendar <file>] [--save-indices <file>] [--as-of YYYY-MM-DD] --out <json> --markdown <md>');
   if (values.yahoo && values.indices) throw Error('Choose --indices or --yahoo');
   const loaded = values.history ? await loadHistory(values.history) : null;
@@ -755,12 +906,14 @@ export async function main(argv = process.argv.slice(2)) {
   } else if (values.indices) indices = await loadIndices(values.indices);
   let calendar = null;
   if (values.calendar) { const value = JSON.parse(await readFile(values.calendar)); calendar = checkCalendar(Array.isArray(value) ? value : value.sessions); }
-  const seed = values.seed === undefined ? BOOTSTRAP.seed : Number(values.seed), replicates = values.replicates === undefined ? BOOTSTRAP.replicates : Number(values.replicates);
-  if (!Number.isSafeInteger(seed) || !Number.isSafeInteger(replicates) || replicates < 100) throw Error('Invalid --seed or --replicates');
-  const study = runStudy({ history: loaded?.history ?? null, historyMeta: loaded ?? {}, indices, calendar, asOfDate, seed, replicates, label: values.label ?? null });
+  const shifts = values.shifts === undefined ? PLACEBO.shifts : Number(values.shifts);
+  // Fewer shifts than PLACEBO.minShifts would leave every test insufficient.
+  if (!Number.isSafeInteger(shifts) || shifts < PLACEBO.minShifts) throw Error(`Invalid --shifts (an integer >= ${PLACEBO.minShifts})`);
+  const study = runStudy({ history: loaded?.history ?? null, historyMeta: loaded ?? {}, indices, calendar, asOfDate, shifts, label: values.label ?? null });
   const markdown = markdownReport(study);
   for (const [path, body] of [[values.out, `${JSON.stringify(study)}\n`], [values.markdown, markdown]]) if (path) { await mkdir(dirname(resolve(path)), { recursive: true }); await writeFile(path, body); }
-  console.log(JSON.stringify({ schema_version: STUDY_VERSION, as_of_date: asOfDate, indicators: study.tests.indicators, available: study.tests.available, tests: study.tests.tests, labels: study.tests.labels }));
+  console.log(JSON.stringify({ schema_version: STUDY_VERSION, as_of_date: asOfDate, indicators: study.tests.indicators, available: study.tests.available, tests: study.tests.tests, labels: study.tests.labels,
+    chance: study.tests.chance.available ? { shifts: study.tests.chance.shifts, median: study.tests.chance.robust.median, p95: study.tests.chance.robust.p95, clears: study.tests.chance.clears } : null }));
   return study;
 }
 
