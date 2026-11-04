@@ -7,7 +7,7 @@ import { money, signed } from '../positionGeometry';
 import '../theme/foundation.css';
 import './brief.css';
 import { useBriefData, useStockData, useWatchlist, useWatchSellChecks } from './useBriefData';
-import { candidateView, focusCandidates, leadingGroups, marketTone, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
+import { candidateView, focusCandidates, focusCounts, leadingGroups, marketTone, LIST_FILTERS, LIST_SORTS, briefOrder, matchesSearch, watchEvent } from './briefModel';
 import MarketCard from './MarketCard';
 import MarketScreen from './MarketScreen';
 import StockView from './StockView';
@@ -43,19 +43,23 @@ function Tabs({ current, watchCount, go }) {
   </nav>;
 }
 
-function TodayView({ brief, watch, open, now, animate }) {
+function TodayView({ brief, watch, open, now, animate, onNear }) {
   const focus = useMemo(() => focusCandidates(brief.ranked, brief.date), [brief.ranked, brief.date]);
+  // The whole pool behind the five rows, so the summary never reads 「接近0」 while near-pivot stocks exist.
+  const counts = useMemo(() => focusCounts(brief.ranked, brief.date), [brief.ranked, brief.date]);
   const groups = useMemo(() => leadingGroups(brief.ranked), [brief.ranked]);
   const watched = useMemo(() => (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)).map(item => candidateView(item, brief.date)).sort(briefOrder), [brief.bundle.data, watch, brief.date]);
   const sells = useWatchSellChecks(watched, brief);
   return <>
     <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
-    <TodaySummary market={brief.market} marketLoading={brief.marketLoading} focus={focus} watched={watched} sells={sells} loading={brief.bundle.isLoading} />
+    <TodaySummary market={brief.market} marketLoading={brief.marketLoading} counts={counts} watched={watched} sells={sells} loading={brief.bundle.isLoading} />
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={brief.trends} date={brief.date} />
     <section className="brief-card in" style={{ '--i': 2 }} aria-labelledby="brief-focus-title">
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">2</span><h2 id="brief-focus-title">注目候補</h2><Link className="brief-more" to="/brief/list">すべての候補 <span aria-hidden="true">›</span></Link></div>
       {focus.length ? <ol className="brief-rows">{focus.map((view, i) => <CandidateRow key={view.symbol} view={view} rank={i + 1} index={i} onOpen={open} now={now} animate={animate} hideTemplate />)}</ol>
         : <p className="brief-note">{brief.bundle.isLoading ? '候補を読み込み中…' : '買いゾーンまたはピボット接近（−5%以内）の選定銘柄はありません。'}</p>}
+      {counts.total > focus.length && <p className="brief-note">上位{focus.length}件を表示（注目候補 {counts.total}銘柄中）</p>}
+      {counts.near > 0 && <Link className="brief-jump" to="/brief/list" onClick={event => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); onNear(); }}>ピボット接近 {counts.near}銘柄 <span aria-hidden="true">›</span></Link>}
       {groups?.groups.length > 0 && <p className="brief-groups" data-testid="brief-groups"><span>選定銘柄の多い{groups.kind}</span>{groups.groups.map(g => <span key={g.name} className="brief-chip">{g.name}：<b className="numeric">{g.count}</b>銘柄</span>)}<span className="brief-note">（選定 {groups.total}銘柄中{groups.unnamed ? `・${groups.kind}未確認 ${groups.unnamed}` : ''}）</span></p>}
       <p className="brief-note">注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。同じ位置なら判定の達成数、RS推計の順。</p>
     </section>
@@ -73,11 +77,10 @@ function TodayView({ brief, watch, open, now, animate }) {
 }
 
 /** Three answers first: can I buy, how many setups, does anything I watch need selling. */
-function TodaySummary({ market, marketLoading, focus, watched, sells, loading }) {
+function TodaySummary({ market, marketLoading, counts, watched, sells, loading }) {
   const tone = marketTone(market);
   // The card below carries 独自判定; the summary keeps only the state (「50日線割れ（弱含み）」).
   const verdict = market?.label ? market.label.replace(/（(?:(.+)・)?独自判定）$/, (_, inner) => inner ? `（${inner}）` : '') : '市場未確認';
-  const zone = focus.filter(view => view.state === 'zone').length;
   const results = watched.map(view => sells[view.symbol]).filter(Boolean);
   const hits = results.reduce((sum, result) => sum + (result.hits || 0), 0);
   const unchecked = watched.length - results.filter(result => !result.unknown).length;
@@ -85,7 +88,7 @@ function TodaySummary({ market, marketLoading, focus, watched, sells, loading })
   const watchNote = !watched.length ? '☆で追加' : unchecked && unchecked < watched.length ? `未確認 ${unchecked}銘柄` : `${watched.length}銘柄を確認`;
   return <ul className="brief-summary in" style={{ '--i': 0 }} aria-label="今日の要点" data-testid="brief-summary">
     <li className={`tone-${tone}`}><small>地合い</small><b>{!market && marketLoading ? '読込中' : verdict}</b><em><Parts text={!market && marketLoading ? '' : market?.cap > 0 ? `買い可・最大${Math.round(market.cap * 100)}%` : market?.state === 'unknown' || !market ? '買いは見送り' : '買いは控える'} /></em></li>
-    <li className={focus.length ? 'tone-zone' : ''}><small>注目候補</small><b>{loading ? '読込中' : `${focus.length}銘柄`}</b><em>{loading ? '' : `ゾーン${zone}・接近${focus.length - zone}`}</em></li>
+    <li className={counts.total ? 'tone-zone' : ''}><small>注目候補</small><b>{loading ? '読込中' : `${counts.total}銘柄`}</b><em><Parts text={loading ? '' : `ゾーン${counts.zone}・接近${counts.near}`} /></em></li>
     <li className={hits ? 'tone-ext' : ''}><small>ウォッチの売り</small><b>{watchValue}</b><em>{watchNote}</em></li>
   </ul>;
 }
@@ -221,7 +224,9 @@ export default function BriefApp() {
   };
   const animate = animateKey > 0;
   const barView = useMemo(() => { const item = symbol && (brief.bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol); return item ? candidateView(item, brief.date) : null; }, [symbol, brief.bundle.data, brief.date]);
-  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} /> : from === 'market' ? <MarketScreen brief={brief} /> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} />;
+  // Today's 「ピボット接近 N銘柄」: the candidate list with the near-pivot filter and no search.
+  const showNear = useCallback(() => { setListState(state => ({ ...state, filter: 'near', query: '' })); go('/brief/list', { kind: 'tab' }); }, [go]);
+  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} onNear={showNear} /> : from === 'market' ? <MarketScreen brief={brief} /> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} />;
   const watching = symbol && watch.includes(symbol);
   return <div className="leader-shell brief" data-theme={dark ? 'dark' : 'light'}>
     <style>{themeCss}</style>

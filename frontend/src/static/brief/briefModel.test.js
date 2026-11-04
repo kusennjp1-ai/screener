@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { briefOrder, code33Parts, environmentWarnings, ruleEvidence, footprint, matchesSearch, positionPlan, rsLineNewHigh, watchEvent, LIST_FILTERS, LIST_SORTS, STOP_MAX_PERCENT } from './briefModel';
+import { briefOrder, candidateView, code33Parts, environmentWarnings, focusCandidates, focusCounts, ruleEvidence, footprint, matchesSearch, positionPlan, rsLineNewHigh, watchEvent, LIST_FILTERS, LIST_SORTS, STOP_MAX_PERCENT } from './briefModel';
 
 const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, ...over });
 
@@ -64,6 +64,34 @@ describe('brief model', () => {
     expect(footprint({ vcp: { legs, measurementsValid: true } }, [{ date: '2026-10-02' }]).text).toBe('収縮 18週 24/5 3T（縮小は未確認）');
     expect(footprint({ vcp: { legs, measurementsValid: false } }, [])).toBeNull();
     expect(footprint({ vcp: { legs: legs.slice(0, 1), measurementsValid: true } }, [])).toBeNull();
+  });
+});
+
+describe('Today\'s focus counts', () => {
+  // A row's state and pivot distance come from its price against its pivot (100).
+  const item = (symbol, price, qualified = true) => ({ row: { symbol, current_price: price, se_pivot_price: 100 }, assessment: { qualified, passed: qualified ? 8 : 7, failed: qualified ? 0 : 1, unknown: 0, total: 8 } });
+  const ranked = [
+    item('ZON1', 100), item('ZON2', 102), // qualified, in the buy zone
+    item('NEA1', 99.5), item('NEA2', 97), item('NEA3', 95.0000001), // qualified, waiting −0.5 / −3 / −5 (the boundary)
+    item('FAR1', 93), // qualified, waiting −7: not near
+    item('UNQ1', 101, false), // in the zone but not qualified
+    item('EXT1', 107), // qualified, extended
+  ];
+  it('counts the whole focus pool, not the shown slice', () => {
+    expect(focusCounts(ranked, '2026-10-02')).toEqual({ zone: 2, near: 3, total: 5 });
+    expect(focusCandidates(ranked, '2026-10-02', 2)).toHaveLength(2);
+    expect(focusCandidates(ranked, '2026-10-02', 5).length).toBeLessThanOrEqual(focusCounts(ranked, '2026-10-02').total);
+    expect(focusCandidates(ranked, '2026-10-02', 5).map(view => view.symbol).sort()).toEqual(['NEA1', 'NEA2', 'NEA3', 'ZON1', 'ZON2']);
+  });
+  it('agrees with the list\'s zone and near filters over the same rows', () => {
+    const views = ranked.map(entry => candidateView(entry, '2026-10-02'));
+    const { zone, near } = focusCounts(ranked, '2026-10-02');
+    expect(zone).toBe(views.filter(LIST_FILTERS.zone.test).length);
+    expect(near).toBe(views.filter(LIST_FILTERS.near.test).length);
+  });
+  it('is all zero without rows', () => {
+    expect(focusCounts([], '2026-10-02')).toEqual({ zone: 0, near: 0, total: 0 });
+    expect(focusCounts(undefined, '2026-10-02')).toEqual({ zone: 0, near: 0, total: 0 });
   });
 });
 

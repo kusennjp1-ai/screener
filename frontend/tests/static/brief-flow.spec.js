@@ -24,7 +24,9 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(page.getByRole('heading', { level: 1, name: '10月2日（金）の判断' })).toBeVisible();
     const summary = page.getByTestId('brief-summary');
     await expect(summary).toContainText('上昇トレンド');
-    await expect(summary).toContainText('5銘柄');
+    // The whole focus pool (5 in the buy zone, 16 near the pivot), not the five rows shown.
+    await expect(summary).toContainText('21銘柄');
+    await expect(summary).toContainText('ゾーン5・接近16');
     await expect(page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' })).toHaveAttribute('aria-current', 'page');
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
@@ -66,6 +68,24 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     }
     expect(errors).toEqual([]);
     expect(external).toEqual([]);
+  });
+
+  test('Today shows the top five of the focus pool and opens the near-pivot list', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief');
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    await expect(focus).toContainText('上位5件を表示（注目候補 21銘柄中）');
+    const near = focus.getByRole('link', { name: 'ピボット接近 16銘柄' });
+    const box = await near.boundingBox();
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    if (phone) await near.tap(); else await near.click();
+    await expect(page).toHaveURL(/#\/brief\/list$/);
+    const filters = page.getByRole('group', { name: '絞り込み' });
+    await expect(filters.getByRole('button', { name: /^ピボット接近\s*16$/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('searchbox', { name: '銘柄を検索' })).toHaveValue('');
+    await expect(candidates(page)).toHaveCount(16);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
   });
 
   test('candidate list filters and search', async ({ page }) => {
