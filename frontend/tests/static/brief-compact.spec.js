@@ -16,7 +16,7 @@ const SCREENS = {
 };
 // Content height (the bottom of the screen's last block) at 375×812 on this fixture. Before the
 // compaction it measured today 1615, list 906, watch 535, market 3517 and stock 4675 px (after: about
-// 1235, 635, 472, 1192 and 3078); the budgets keep about a tenth of headroom over the compacted layout
+// 1286, 635, 472, 1192 and 3112 with the review fixes); the budgets keep about a tenth of headroom over the compacted layout
 // for other fonts (CI renders taller text).
 const BUDGET = { today: 1400, list: 720, watch: 520, market: 1300, stock: 3400 };
 const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
