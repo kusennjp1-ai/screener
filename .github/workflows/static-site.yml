@@ -1025,6 +1025,7 @@ jobs:
             # earnings dates reach the rows (the tools read the first export's lists).
             node tools/export-research.mjs
             node tools/report-data-coverage.mjs || echo '::warning::Data coverage report unavailable'
+            node tools/report-data-coverage.mjs --published || echo '::warning::Published fundamentals coverage unavailable'
             npm run build
             # Each export above wrote new hash-named workbench, summary,
             # performance, market-trend and snapshot files. Keep only what the

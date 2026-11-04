@@ -84,13 +84,31 @@ The brief and the 市場 page also show a bifurcation note: the index is within 
 
 ## Fundamentals layering (Code 33)
 
-1. **Dated SEC evidence** (`tools/sec-financials.py` → `book_financials`). EPS uses directly reported quarters only. A Q4 for revenue or net income that is reported only as a fiscal-year total is recovered as the annual value minus three quarters of the same concept, with its four source filings recorded.
-2. **Reference from the current Yahoo quarterly statements** (`financial_history`), used only when the SEC result is unknown. It applies the same rule and is labelled 「参考：Yahoo四半期値」.
-3. **Otherwise 未確認.**
+1. **Dated SEC evidence** (`tools/sec-financials.py` → `book_financials`). EPS uses directly reported (diluted) quarters only. A Q4 for revenue or net income that is reported only as a fiscal-year total is recovered as the annual value minus three quarters of the same concept, with its four source filings recorded and labelled 「Q4算出」. Fiscal-Q4 EPS is never derived.
+2. **Reference from the current Yahoo quarterly statements** (`financial_history`), used only when the SEC result is unknown and that history is at most 72 hours old. It applies the same rule and is labelled 「参考：Yahoo四半期値」.
+3. **Otherwise 未確認**, with the reason.
 
-SEC access reads the `SEC_USER_AGENT` secret and retries 429/5xx responses with backoff.
+Code 33 combines its three conditions (EPS growth acceleration, sales growth acceleration, rising net margin) with a three-valued AND: one known 未達 condition makes it 未達, 達成 needs all three known 達成, and anything else is 未確認. Missing data never becomes a pass.
+
+### SEC fetch
+
+- **Targets**: every row the brief can list comes first — trend-template qualifiers, then the rows one condition short with nothing unknown, from the same-day qualification audit (a stale audit adds nothing) — then the trend-template top 50, then the minervini2, IBD and O'Neil lists. At most 1500 symbols (`MAX_SYMBOLS`, the tool's default budget).
+- **Rate**: one shared limiter for all 4 worker threads, 5 requests/second by default (`SEC_MAX_RPS` may lower it or raise it to at most 8; SEC allows 10), before every request and retry, including `company_tickers.json`. Responses are requested gzip-compressed. The User-Agent comes from the `SEC_USER_AGENT` secret.
+- **Failures** are recorded, never filled: `no_cik` (not in SEC's ticker map), `no_companyfacts` (404), `no_quarterly` (no us-gaap quarterly facts; the most frequent filing forms, e.g. 20-F, are kept), `invalid_payload`, and `transient` (429/5xx after retries, timeouts, resets). Only `transient` gets the second pass 20 s later. Nothing from an earlier run is reused.
+- **Window**: Q4 derivation uses the full series; the published quarterly series are then trimmed to 1100 days before the latest quarter (the 8 quarters the rules read and their year-ago bases). Annual EPS stays complete.
+- **Output**: `public/static-data/book-financials.json.gz` (schema 2, deterministic gzip). Every record carries `retrieved_at`. Readers still accept a legacy raw `book-financials.json`.
+
+### Admission into published rows
+
+Ordinary releases run the financial carry, which owns every scalar financial field and `financial_history`. `book_financials` is the one exception: the export, the carry/correction overlay and the financial gate each keep it only when `admitBookFinancials` (`src/static/bookFinancialAdmission.js`) accepts it — same symbol and as-of date, retrieved between the start of that day and the evaluation instant, a companyfacts URL bound to the CIK, every fact filed on or before the as-of date in a named 10-K/10-Q (or amendment) with its field's tag and unit, and no extra keys. Anything else, and every fund or quarantined instrument, publishes `null`. Admitted records never change rankings or qualification (`researchEngine` does not read them). Point-in-time granularity is the filing date; the acceptance time of day is not known.
+
+The Yahoo history fetch keeps 1 request/second with one worker. Under the carry the release requests none (`--limit 0`), because the carried history replaces it.
+
+### What the stock screen shows
+
+Each tile shows the newest quarter that has a value, with its period. When a newer quarter has none, the tile says why (for example 「2026-06期・最新 2026-09期はQ4のEPSは年次報告のみ」); with no value at all it shows the reason (比較不可 for a loss or zero base, 前年同期なし, 未報告). A source line names the filing (`出典：SEC XBRL（10-Q 2026-08-05 提出）・2026-06期まで`). Without a usable SEC record the card says why: SEC 未配信, SEC 対象外, SEC データなし, 四半期報告なし, SEC 取得失敗, 対象外 (funds), 古い (latest quarter older than 180 days) or SEC 検証不可. The Code 33 box names the failed condition, or why it is unknown (Q4 EPS only in the 10-K, fewer than 8 quarters, a gap, stale, no SEC record).
 
 ### Coverage of the brief's rows
 
-The daily build fetches SEC evidence, reported financial history and earnings dates for every row the brief can list: the ranked top-50 lists, then all trend-template qualifiers and the rows one condition short with nothing unknown, from the same-day qualification audit (up to 400 symbols; a stale audit never widens the list). They run before the final research export, so the rows carry this session's evidence. The build log prints `Data coverage (fundamentals)` and `Data coverage (market environment, last 20 sessions)` (`frontend/tools/report-data-coverage.mjs`); missing values stay unknown.
+The build log prints `SEC evidence <date>` (requested, reasons, `brief_listed`/`brief_fetched`, `truncated`, with a warning when truncated), `Data coverage (fundamentals)`, `Data coverage (market environment, last 20 sessions)`, and after the build `Published coverage (fundamentals)` (`frontend/tools/report-data-coverage.mjs --published`): per brief-listable row what the published detail carries — SEC records, tiles with a value, SEC states, Code 33 states and the reasons Code 33 stays unknown. Reported financial history (up to 300 eligible rows, none under the carry) and earnings dates are fetched by their own tools; missing values stay unknown.
 

@@ -299,6 +299,12 @@ jobs:
         if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.limited_research_preview == 'true'
         working-directory: release/frontend
         run: node tools/check-data-quality.mjs
+      - name: Report published fundamentals coverage (diagnostic only)
+        # Read-only, on the logical files before packing: per brief-listable row, the SEC
+        # record, the tiles with a value, the Code 33 state and why it stays unknown.
+        if: steps.plan.outputs.publish == 'true' && steps.restore.outputs.offline_recovery_verified != 'true'
+        working-directory: release/frontend
+        run: node tools/report-data-coverage.mjs --published || echo '::warning::Published fundamentals coverage unavailable'
       - name: Preserve approved UI bytes or record verified new UI
         if: steps.plan.outputs.publish == 'true'
         env:
