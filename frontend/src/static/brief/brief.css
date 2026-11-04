@@ -124,6 +124,7 @@
 .brief-chip.tone-ext { color: var(--ext); border-color: var(--ext); background: none; font-weight: 700; }
 .brief-groups { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 4px 0 0; font-size: 12px; color: var(--text-2); }
 .brief-groups .brief-note { margin: 0; }
+.brief-groups-chips { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
 .brief-sellchip { margin-left: 8px; vertical-align: 1px; }
 .brief-minimeter { position: relative; height: 28px; container-type: inline-size; }
 .brief-minimeter-track { position: absolute; left: 0; right: 0; top: 11px; height: 4px; border-radius: 999px; background: var(--line); }
@@ -611,7 +612,7 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-screen-notes li::before { content: "・"; display: inline-block; width: 12px; text-indent: 0; color: var(--text-3); }
 /* Today's focus card: the count of the rest and the near-pivot link. */
 .brief-focusfoot { display: grid; gap: 12px; min-width: 0; }
-.brief-groups:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
+.brief-groups-chips:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 8px; }
 
 /* Phone compaction (520px and below): fewer, denser lines without dropping a value, a date or a note. */
 @media (max-width: 520px) {
@@ -627,10 +628,12 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
   .brief-focusfoot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
   .brief-focusfoot .brief-note { flex: 0 1 auto; }
   .brief-focusfoot .brief-nearlink { flex: 1 0 auto; }
-  /* The leading groups as one line that scrolls sideways; the fading right edge says more follows. */
-  .brief-groups { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; white-space: nowrap; margin: 0; padding: 2px 32px 2px 2px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
-  .brief-groups::-webkit-scrollbar { display: none; }
-  .brief-groups > * { flex: none; }
+  /* The leading groups: the label and its denominator on one line, the chips below as one line that
+     scrolls sideways; the fading right edge says more follows. */
+  .brief-groups { margin: 0; row-gap: 4px; }
+  .brief-groups-chips { flex: 1 0 100%; flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; white-space: nowrap; padding: 2px 32px 2px 2px; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 40px), transparent); }
+  .brief-groups-chips::-webkit-scrollbar { display: none; }
+  .brief-groups-chips > * { flex: none; }
   .brief-event { grid-template-columns: 32px minmax(0, 1fr) 20px; gap: 10px; min-height: 48px; padding: 4px; }
   .brief-event-icon { width: 32px; height: 32px; }
   /* The list's search and sort share a line. */

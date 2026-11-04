@@ -217,7 +217,7 @@ test.describe('text floor and targets of the compact controls', () => {
     const { errors } = await openBrief(page, '#/brief/market');
     await expect(tabs(page)).toHaveCount(4);
     const check = async () => {
-      const small = await page.locator('.brief-expander summary, .brief-switch button, .brief-switch-flag, .brief-screen-notes li, .brief-dl dt, .brief-dl small, .brief-focusfoot .brief-note, .brief-groups > *')
+      const small = await page.locator('.brief-expander summary, .brief-switch button, .brief-switch-flag, .brief-screen-notes li, .brief-dl dt, .brief-dl small, .brief-focusfoot .brief-note, .brief-groups-label, .brief-groups .brief-chip')
         .evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).filter(node => parseFloat(getComputedStyle(node).fontSize) < 12).map(node => node.textContent.slice(0, 30)));
       expect(small).toEqual([]);
       const short = await page.locator('.brief-expander > summary, .brief-switch button, .brief-morebutton, .brief-nearlink')
@@ -303,6 +303,29 @@ test.describe('a tablet between the phone and the desktop', () => {
     for (const row of await rows.all()) await expect(row).toContainText('TT 8/8');
     await expect(page.locator('.brief-screen-notes')).toHaveCount(1);
     await expect(page.locator('.brief-screen-notes')).not.toContainText('スマホ');
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Today's leading groups on a phone: the denominator (and any 未確認 count) is never behind the sideways
+// scroll, and the first chip is whole, clear of the fading edge.
+for (const width of [320, 375, 414]) test.describe(`leading groups at ${width}px`, () => {
+  test.use(phone(width, 760));
+  test('the label and its denominator are on screen and the first chip is whole', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief');
+    const strip = page.getByTestId('brief-groups');
+    await expect(strip.locator('.brief-chip').first()).toBeVisible();
+    await expect(strip.locator('.brief-groups-label')).toHaveText(/^選定銘柄の多い.+（選定 \d+銘柄中.*）$/);
+    const box = await strip.evaluate(node => {
+      const card = node.closest('.brief-card').getBoundingClientRect(), label = node.querySelector('.brief-groups-label').getBoundingClientRect();
+      const chips = node.querySelector('.brief-groups-chips'), scroller = chips.getBoundingClientRect(), first = chips.querySelector('.brief-chip').getBoundingClientRect();
+      return { cardLeft: card.left, cardRight: card.right, labelLeft: label.left, labelRight: label.right, fade: scroller.right - 40, firstLeft: first.left, firstRight: first.right };
+    });
+    expect(box.labelLeft).toBeGreaterThanOrEqual(box.cardLeft);
+    expect(box.labelRight).toBeLessThanOrEqual(box.cardRight);
+    expect(box.firstLeft).toBeGreaterThanOrEqual(box.cardLeft);
+    expect(box.firstRight).toBeLessThanOrEqual(box.fade);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

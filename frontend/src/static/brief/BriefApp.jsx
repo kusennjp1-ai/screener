@@ -66,6 +66,7 @@ function TodayView({ brief, watch, open, now, animate, onNear, wide }) {
   // The whole pool behind the five rows, so the summary never reads 「接近0」 while near-pivot stocks exist.
   const counts = useMemo(() => focusCounts(brief.ranked, brief.date), [brief.ranked, brief.date]);
   const groups = useMemo(() => leadingGroups(brief.ranked), [brief.ranked]);
+  const phone = useMediaQuery(PHONE_QUERY);
   const watched = useMemo(() => (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)).map(item => candidateView(item, brief.date)).sort(briefOrder), [brief.bundle.data, watch, brief.date]);
   const sells = useWatchSellChecks(watched, brief);
   const state = bundleState(brief);
@@ -89,8 +90,12 @@ function TodayView({ brief, watch, open, now, animate, onNear, wide }) {
         {counts.total > focus.length && <p className="brief-note">上位{focus.length}件を表示（全{counts.total}銘柄）</p>}
         {counts.near > 0 && <Link className="brief-nearlink" to="/brief/list" onClick={event => { if (event.metaKey || event.ctrlKey) return; event.preventDefault(); onNear(); }}>ピボット接近 {counts.near}銘柄 <span aria-hidden="true">›</span></Link>}
       </div>}
-      {/* Phone: one line that scrolls sideways (its fading edge says more follows); focusable for the keyboard. */}
-      {groups?.groups.length > 0 && <div className="brief-groups" data-testid="brief-groups" role="group" aria-label={`選定銘柄の多い${groups.kind}`} tabIndex={0}><span>選定銘柄の多い{groups.kind}</span>{groups.groups.map(g => <span key={g.name} className="brief-chip">{g.name}：<b className="numeric">{g.count}</b>銘柄</span>)}<span className="brief-note">（選定 {groups.total}銘柄中{groups.unnamed ? `・${groups.kind}未確認 ${groups.unnamed}` : ''}）</span></div>}
+      {/* The label carries the denominator and the 未確認 count, so they are never scrolled away. On a phone
+          the chips are one line that scrolls sideways (its fading edge says more follows), focusable for the keyboard. */}
+      {groups?.groups.length > 0 && <div className="brief-groups" data-testid="brief-groups">
+        <span className="brief-groups-label">選定銘柄の多い{groups.kind}<span className="brief-note">（選定 {groups.total}銘柄中{groups.unnamed ? `・${groups.kind}未確認 ${groups.unnamed}` : ''}）</span></span>
+        <span className="brief-groups-chips" role="group" aria-label={`選定銘柄の多い${groups.kind}`} tabIndex={phone ? 0 : undefined}>{groups.groups.map(g => <span key={g.name} className="brief-chip">{g.name}：<b className="numeric">{g.count}</b>銘柄</span>)}</span>
+      </div>}
       {wide && <p className="brief-note">{TODAY_NOTE}</p>}
     </section>
     <section className="brief-card in" style={{ '--i': 3 }} aria-labelledby="brief-watch-title">
