@@ -137,6 +137,7 @@ test('every stage keeps its exact condition',()=>{
     ['name: Install certified offline projection dependencies',request],['name: Verify isolated offline native projection runtime',request],
     ['name: Prepare the certified financial candidate',null],['name: Refuse a financial candidate without a brief financial-display contract',"steps.financial.outputs.candidate == 'true'"],
     ['name: Restore checked input and prepare the carry comparison data',null],
+    ['name: Diagnostic market-regime study (never a gate)',null],
     ['name: Build the current UI and verify its packed transport',null],['name: Measure the brief screens, accessibility and CPU 4x',null],
     ['name: Require every capture, no objective failure, and reviewed scores or the owner waiver','(always())'],
     ['name: Package UNAPPROVED financial diagnostics after unsuccessful Design',"((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true')"],
@@ -145,7 +146,7 @@ test('every stage keeps its exact condition',()=>{
     ['name: Retain the exact tested financial candidate',"(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')"],
     ['name: Preserve all results even when a budget fails','(always())'],
   ];
-  assert.equal(guards.length,16);
+  assert.equal(guards.length,17);
   for(const [header,expected]of guards)expectCondition(header,expected);
   assert.equal(stepBlocks.filter(block=>/^      - name: /.test(block)).length,guards.length-2);
 });
@@ -156,4 +157,43 @@ test('a financial candidate fails closed before input restore and measurement',(
   assert.ok(workflow.indexOf('name: Refuse a financial candidate')<workflow.indexOf('name: Restore checked input'));
   assert.doesNotMatch(step('name: Restore checked input and prepare the carry comparison data'),/FINANCIAL_CANDIDATE_DIR|same_prices_repaired_financials/);
   assert.match(step('name: Restore checked input and prepare the carry comparison data'),/echo "DESIGN_INPUT_BASIS=same_verified_input" >> "\$GITHUB_ENV"/);
+});
+test('the market-regime study is a diagnostic: restored input only, runner-temp output, never a Design failure',async()=>{
+  const {mkdtempSync,writeFileSync,rmSync,readFileSync:read,existsSync}=await import('node:fs');
+  const {tmpdir}=await import('node:os');const {join}=await import('node:path');
+  const header='name: Diagnostic market-regime study (never a gate)',body=step(header);
+  assert.equal(condition(body),null);
+  const restore=workflow.indexOf('      - name: Restore checked input and prepare the carry comparison data'),study=workflow.indexOf(`      - ${header}`),build=workflow.indexOf('      - name: Build the current UI and verify its packed transport');
+  assert.ok(restore>=0&&study>restore&&build>study,'between the restored input and the build that moves it');
+  assert.match(body,/^        shell: bash$/m);
+  assert.match(body,/^          STUDY_OUT: \$\{\{ runner.temp \}\}\/market-regime-study$/m);
+  assert.doesNotMatch(body,/GH_TOKEN: |GITHUB_TOKEN: |secrets\.|continue-on-error|timeout-minutes|working-directory/);
+  assert.match(body,/node frontend\/tools\/market-regime-study\.mjs --history frontend\/public\/static-data --yahoo /);
+  const targets=[...body.matchAll(/(?:--out|--markdown|--save-indices|>>?)\s+("?[^\s"]+"?)/g)];
+  assert.ok(targets.length>=4);
+  for(const match of targets)assert.match(match[1],/^"\$(?:STUDY_OUT\/|GITHUB_STEP_SUMMARY")/,match[0]);
+  assert.match(body,/^          study \|\| echo '::warning title=Market-regime study unavailable::Diagnostic only; the Design result is unaffected\.'$/m);
+  assert.match(step('name: Preserve all results even when a budget fails'),/^            \$\{\{ runner.temp \}\}\/market-regime-study\/$/m);
+  // Shell-only fixture with the runner's bash flags: stub node/python executables, no provider request.
+  const script=body.slice(body.indexOf('        run: |\n')+'        run: |\n'.length).replace(/^          /gm,'');
+  const dir=mkdtempSync(join(tmpdir(),'market-regime-step-'));
+  try{
+    writeFileSync(join(dir,'node'),'#!/usr/bin/env bash\nprintf "%s\\n" "$@" > "$FIXTURE/node-args"\nenv > "$FIXTURE/node-env"\nif [ "$NODE_STATUS" = 0 ]; then printf "# study fixture\\n" > "$STUDY_OUT/results.md"; fi\nexit "$NODE_STATUS"\n',{mode:0o755});
+    writeFileSync(join(dir,'python'),'#!/usr/bin/env bash\nenv > "$FIXTURE/python-env"\n[ "$PY_STATUS" = 0 ] || exit "$PY_STATUS"\nprintf "[\\"2026-11-03\\"]" > "${@: -1}"\n',{mode:0o755});
+    const run=(node,python)=>{
+      const out=join(dir,`out-${node}-${python}`),summary=join(dir,`summary-${node}-${python}`);writeFileSync(summary,'');
+      const stdout=execFileSync('bash',['--noprofile','--norc','-eo','pipefail','-c',script],{env:{PATH:`${dir}:${process.env.PATH}`,FIXTURE:dir,STUDY_OUT:out,GITHUB_STEP_SUMMARY:summary,SESSION_CALENDAR_PYTHON:join(dir,'python'),NODE_STATUS:String(node),PY_STATUS:String(python),GH_TOKEN:'job-token-fixture',GITHUB_TOKEN:'job-token-fixture'},encoding:'utf8',stdio:'pipe'});
+      return {stdout,summary:read(summary,'utf8'),args:read(join(dir,'node-args'),'utf8').trim().split('\n'),out};
+    };
+    const ok=run(0,0);
+    assert.match(ok.stdout,/# study fixture/);assert.equal(ok.summary,'# study fixture\n');assert.doesNotMatch(ok.stdout,/::warning/);
+    assert.deepEqual(ok.args.slice(0,5),['frontend/tools/market-regime-study.mjs','--history','frontend/public/static-data','--yahoo','--calendar']);
+    assert.equal(ok.args[5],join(ok.out,'nyse-sessions.json'));assert.ok(existsSync(ok.args[5]));
+    for(const file of ['node-env','python-env'])assert.doesNotMatch(read(join(dir,file),'utf8'),/job-token-fixture/,file);
+    const failed=run(3,0);
+    assert.match(failed.stdout,/::warning title=Market-regime study unavailable::/);assert.equal(failed.summary,'');
+    const noCalendar=run(0,1);
+    assert.match(noCalendar.stdout,/::warning title=Market-regime study::Independent NYSE calendar unavailable/);
+    assert.ok(!noCalendar.args.includes('--calendar'));assert.equal(noCalendar.summary,'# study fixture\n');
+  }finally{rmSync(dir,{recursive:true,force:true});}
 });

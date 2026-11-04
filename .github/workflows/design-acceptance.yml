@@ -123,6 +123,30 @@ jobs:
           done
           # Includes top-level logical JSON, not merely static-data/.
           node --input-type=module -e 'import {dataInventoryDigest} from "./.github/scripts/publication-state.mjs"; if (dataInventoryDigest(process.argv[1]) !== dataInventoryDigest(process.argv[2])) throw Error("Design comparison data differs before build")' frontend/public "$comparison"
+      # Diagnostic only, never a gate: the pre-registered market-regime study
+      # (frontend/tools/market-regime-study.mjs) on the long history restored
+      # above (the bytes the build below moves to design-current-data) and long
+      # ^GSPC/^IXIC daily bars from Yahoo. It reads frontend/public only, writes
+      # only under $RUNNER_TEMP, and every failure becomes a warning.
+      - name: Diagnostic market-regime study (never a gate)
+        shell: bash
+        env:
+          STUDY_OUT: ${{ runner.temp }}/market-regime-study
+        run: |
+          study() {
+            mkdir -p "$STUDY_OUT" || return 1
+            local calendar=()
+            # Independent NYSE sessions from the isolated offline calendar runtime; otherwise provider dates, flagged in the report.
+            if env -u GH_TOKEN -u GITHUB_TOKEN "$SESSION_CALENDAR_PYTHON" -I -c 'import json,sys,pandas_market_calendars as m; s=m.get_calendar("NYSE").schedule(start_date="1990-01-01",end_date=sys.argv[1]); json.dump([str(d.date()) for d in s.index],open(sys.argv[2],"w"))' "$(date -u +%F)" "$STUDY_OUT/nyse-sessions.json"; then
+              calendar=(--calendar "$STUDY_OUT/nyse-sessions.json")
+            else
+              echo '::warning title=Market-regime study::Independent NYSE calendar unavailable; provider dates are used and flagged in the report.'
+            fi
+            env -u GH_TOKEN -u GITHUB_TOKEN timeout 900 node frontend/tools/market-regime-study.mjs --history frontend/public/static-data --yahoo "${calendar[@]}" --save-indices "$STUDY_OUT/indices.json" --label 'CI: live long history + Yahoo index history since 1990' --out "$STUDY_OUT/results.json" --markdown "$STUDY_OUT/results.md" || return 1
+            cat "$STUDY_OUT/results.md" || return 1
+            head -c 900000 "$STUDY_OUT/results.md" >> "$GITHUB_STEP_SUMMARY" || return 1
+          }
+          study || echo '::warning title=Market-regime study unavailable::Diagnostic only; the Design result is unaffected.'
       - name: Build the current UI and verify its packed transport
         env:
           GH_TOKEN: ${{ github.token }}
@@ -208,4 +232,5 @@ jobs:
             ${{ runner.temp }}/design-carry-verifier-reports/
             ${{ runner.temp }}/design-carry-prepare.log
             ${{ runner.temp }}/design-transport.log
+            ${{ runner.temp }}/market-regime-study/
           retention-days: 14
