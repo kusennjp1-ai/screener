@@ -162,7 +162,11 @@ function Signals({ signals, exposure, inline = true }) {
   </div>;
 }
 
-/** The market tab's sections on a phone: the three groups and the long history, one at a time. */
+/**
+ * The market tab's sections on a phone: the three groups and the long history, one at a time. A tab's
+ * marks sit on a line of their own under its label, so a label never runs into its neighbour's on a
+ * 320px phone; when any tab has a mark, every tab keeps that line, so the labels stay level.
+ */
 function SectionTabs({ panels, active, onSelect }) {
   const refs = useRef({});
   const move = (event, at) => {
@@ -173,10 +177,12 @@ function SectionTabs({ panels, active, onSelect }) {
     onSelect(next.id);
     refs.current[next.id]?.focus();
   };
+  const marked = panels.some(panel => panel.fired > 0);
   return <div className="brief-switch" role="tablist" aria-label="市場タブの表示">
     {panels.map((panel, at) => <button key={panel.id} ref={node => { refs.current[panel.id] = node; }} type="button" role="tab" id={`brief-tab-${panel.id}`} aria-selected={active === panel.id} aria-controls={`brief-panel-${panel.id}`}
       tabIndex={active === panel.id ? 0 : -1} onClick={() => onSelect(panel.id)} onKeyDown={event => move(event, at)}>
-      <span>{panel.label}</span>{panel.fired > 0 && <span className="brief-switch-flag"><span aria-hidden="true">▲</span><span className="sr-only">注意</span>{panel.fired}</span>}
+      <span className="brief-switch-label">{panel.label}</span>
+      {marked && <span className="brief-switch-marks">{panel.fired > 0 && <span className="brief-switch-flag"><span aria-hidden="true">▲</span><span className="sr-only">注意</span>{panel.fired}</span>}</span>}
     </button>)}
   </div>;
 }

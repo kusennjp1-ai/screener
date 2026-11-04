@@ -674,9 +674,11 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
    with a fired check, in words for assistive tech. */
 .brief-switchbar { position: sticky; top: calc(var(--bar-h) + env(safe-area-inset-top, 0px)); z-index: 15; margin: 0 -14px; padding: 4px 14px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .brief-switch { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 4px; padding: 3px; border-radius: 12px; background: var(--surface-2); }
-.brief-switch button { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 44px; padding: 0 4px; border: 0; border-radius: 8px; background: none; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; transition: background .2s, color .2s; }
+.brief-switch button { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; min-width: 0; min-height: 44px; padding: 0 4px; border: 0; border-radius: 8px; background: none; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; transition: background .2s, color .2s; }
 .brief-switch button[aria-selected="true"] { background: var(--surface); color: var(--text); box-shadow: inset 0 0 0 1px var(--line-2); }
 .brief-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.brief-switch-label { max-width: 100%; line-height: 1.4; }
+.brief-switch-marks { display: inline-flex; align-items: baseline; justify-content: center; gap: 4px; min-height: 16px; font-size: 12px; line-height: 16px; }
 .brief-switch-flag { display: inline-flex; align-items: baseline; gap: 1px; font-size: 12px; color: var(--ext); }
 .brief-panel { min-width: 0; }
 .brief-panel > .brief-env-group { padding-top: 0; border-top: 0; }

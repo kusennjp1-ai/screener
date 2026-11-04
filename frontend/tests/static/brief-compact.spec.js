@@ -363,3 +363,23 @@ test.describe('the market tabs on a short landscape phone', () => {
     expect(errors).toEqual([]);
   });
 });
+
+// At 320px a tab's ▲ count sits under its label, so no label runs into its neighbour's (「参加度▲1リーダー」).
+test.describe('market tab labels at 320px', () => {
+  test.use(phone(320, 640));
+  test('each label and its marks fit inside the tab, with clear space between neighbours', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    await expect(tabs(page)).toHaveText(['指数', '参加度▲注意1', 'リーダー', '推移']);
+    const boxes = await tabs(page).evaluateAll(nodes => nodes.map(node => {
+      const tab = node.getBoundingClientRect(), parts = [...node.querySelectorAll('.brief-switch-label, .brief-switch-marks > *')].map(part => part.getBoundingClientRect());
+      return { label: node.textContent, tab: [tab.left, tab.right], text: [Math.min(...parts.map(part => part.left)), Math.max(...parts.map(part => part.right))], overflow: node.scrollWidth - node.clientWidth };
+    }));
+    for (const box of boxes) {
+      expect(box.overflow, box.label).toBeLessThanOrEqual(0);
+      expect(box.text[0], box.label).toBeGreaterThanOrEqual(box.tab[0] + 2);
+      expect(box.text[1], box.label).toBeLessThanOrEqual(box.tab[1] - 2);
+    }
+    for (let i = 1; i < boxes.length; i++) expect(boxes[i].text[0] - boxes[i - 1].text[1], `${boxes[i - 1].label} | ${boxes[i].label}`).toBeGreaterThanOrEqual(12);
+    expect(errors).toEqual([]);
+  });
+});
