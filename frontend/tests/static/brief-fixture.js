@@ -63,14 +63,24 @@ export const rows = NAMES.map(([symbol, company, sector], index) => {
 export const rowBySymbol = Object.fromEntries(rows.map(row => [row.symbol, row]));
 
 // One stock has a canonical detail with a same-day SEC record: a June fiscal year whose Q4 EPS
-// is only in the 10-K (the common 10-Q filer case), so the EPS tile falls back one quarter.
+// is only in the 10-K (the common 10-Q filer case), so the EPS tile falls back one quarter. As
+// sec-financials.py writes it, a fiscal Q4 never comes from a 10-Q: its revenue and net income are
+// the 10-K's fiscal-year values minus three quarters (derived, naming the four source filings).
 export const SEC_SYMBOL = 'ZZNV';
 const SEC_QUARTERS = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
   ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30']];
+const tenK = end => ({ form: '10-K', filed: new Date(Date.parse(end) + 40 * 86400000).toISOString().slice(0, 10), accession: `0000000001-${end.slice(2, 4)}-${end.slice(5, 7)}${end.slice(8)}10` });
 const secFinancials = (() => {
   const record = secRecord({ symbol: SEC_SYMBOL, asOfDate: date, retrievedAt: `${date}T21:30:00.000Z`, quarters: SEC_QUARTERS });
   record.quarterly.eps = record.quarterly.eps.filter(point => !point.end.endsWith('06-30'));
-  record.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4), secPoint('eps', ['2025-07-01', '2026-06-30'], 5.5)];
+  // A June fiscal year files its December quarter on a 10-Q (secPoint assumes a calendar year).
+  for (const key of ['eps', 'revenue', 'netIncome']) for (const point of record.quarterly[key]) point.form = '10-Q';
+  for (const key of ['revenue', 'netIncome']) for (const point of record.quarterly[key].filter(p => p.end.endsWith('06-30'))) {
+    const filing = tenK(point.end);
+    const quarters = record.quarterly[key].filter(p => p.end < point.end && p.end > `${Number(point.end.slice(0, 4)) - 1}-06-30`).map(p => p.accession);
+    Object.assign(point, filing, { derived: 'fiscal-year-minus-three-quarters', components: [filing.accession, ...quarters] });
+  }
+  record.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4, tenK('2025-06-30')), secPoint('eps', ['2025-07-01', '2026-06-30'], 5.5, tenK('2026-06-30'))];
   return record;
 })();
 rowBySymbol[SEC_SYMBOL].research_detail_path = `research-details/${SEC_SYMBOL}-detail.json`;

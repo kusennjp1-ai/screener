@@ -149,10 +149,13 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   test('fundamentals show the latest SEC quarter with its source and say why a value is missing', async ({ page }) => {
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
     const card = page.getByTestId('brief-fundamentals');
-    await expect(card.getByText('出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで')).toBeVisible();
+    await expect(card.getByText('出典：SEC XBRL（10-K 2026-08-09 提出）・2026-06期まで・売上/純利益のQ4は10-K年度値−3四半期で算出')).toBeVisible();
     const epsTile = card.locator('.brief-fact').filter({ hasText: 'EPS 前年比' });
     await expect(epsTile).toContainText('+40%');
     await expect(epsTile).toContainText('2026-03期・最新 2026-06期はQ4のEPSは年次報告のみ');
+    // The June quarter's sales are a derived Q4 compared with a derived Q4 a year earlier.
+    await expect(card.locator('.brief-fact').filter({ hasText: '売上 前年比' })).toContainText('2026-06期・前期 +60%・前年同期はQ4算出');
+    await expect(card.getByText('Q4算出').first()).toBeAttached();
     await expect(card.getByText('Code 33 未確認')).toBeVisible();
     await expect(card).toContainText('EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です');
     await expect(card.getByRole('img', { name: /四半期の前年同期比成長率/ })).toBeVisible();
