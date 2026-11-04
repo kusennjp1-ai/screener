@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { marketUpdateState } from './marketUpdateState';
+import { LEGACY_LONG_HISTORY_REASON, LONG_HISTORY_ENVIRONMENT_KEYS, marketUpdateState } from './marketUpdateState';
 import { SECTOR_ETFS } from './marketLongHistory';
-const history=date=>({as_of_date:date,breadth:[{date,coverage:100,eligibleUniverse:100,above50Percent:50,newHighs:10,newLows:1,leaderCount:20}],sp500:[{date,close:6000}],sectorRotation:{frames:[{date,ranks:SECTOR_ETFS.map((symbol,i)=>({symbol,rank:i+1,relativeIndex:110-i}))}]}});
+const environment={trendTemplateCount:12,rs90TemplateCount:4,above200:55,above200Percent:55,stage1:10,stage2:40,stage3:20,stage4:30};
+const history=date=>({as_of_date:date,breadth:[{date,coverage:100,eligibleUniverse:100,above50Percent:50,newHighs:10,newLows:1,leaderCount:20,...environment}],sp500:[{date,close:6000}],sectorRotation:{frames:[{date,ranks:SECTOR_ETFS.map((symbol,i)=>({symbol,rank:i+1,relativeIndex:110-i}))}]}});
 const data=()=>({as_of_date:'2026-11-25',long_history:history('2026-11-25'),refresh_schedule:{provider:'pandas_market_calendars:NYSE',valid_until:'2026-12-01T05:00:00Z',sessions:[{date:'2026-11-25',close_at:'2026-11-25T21:00:00Z'},{date:'2026-11-27',close_at:'2026-11-27T18:00:00Z'},{date:'2026-11-30',close_at:'2026-11-30T21:00:00Z'}]}});
 describe('market update session status',()=>{
  it('keeps the last completed session across a holiday and begins waiting exactly at an early close',()=>{
@@ -31,5 +32,28 @@ describe('market update session status',()=>{
   const input=data(),ranks=input.long_history.sectorRotation.frames[0].ranks;
   ranks[1].relativeIndex=ranks[0].relativeIndex;ranks[1].rank=1;
   expect(marketUpdateState(input,Date.parse('2026-11-26T22:00:00Z')).state).toBe('current');
+ });
+ it('keeps an older-schema capture without environment keys pending at its own date, with a reason',()=>{
+  const now=Date.parse('2026-11-26T22:00:00Z');
+  expect(marketUpdateState(data(),now)).toMatchObject({state:'current',reason:null});
+  for(const key of LONG_HISTORY_ENVIRONMENT_KEYS){
+   const input=data();delete input.long_history.breadth[0][key];
+   expect(marketUpdateState(input,now)).toEqual({state:'pending',target:'2026-11-25',daily:'2026-11-25',history:'2026-11-25',reason:LEGACY_LONG_HISTORY_REASON});
+  }
+  const legacy=data();for(const key of LONG_HISTORY_ENVIRONMENT_KEYS)delete legacy.long_history.breadth[0][key];
+  expect(marketUpdateState(legacy,now)).toMatchObject({state:'pending',history:'2026-11-25',reason:'環境指標（TT・ステージ等）を含まない旧形式の長期集計'});
+  // An older date stays pending for its date; the legacy reason is still reported.
+  const stale=data();stale.as_of_date='2026-11-27';for(const key of LONG_HISTORY_ENVIRONMENT_KEYS)delete stale.long_history.breadth[0][key];
+  expect(marketUpdateState(stale,Date.parse('2026-11-28T12:00:00Z'))).toMatchObject({state:'pending',target:'2026-11-27',history:'2026-11-25',reason:LEGACY_LONG_HISTORY_REASON});
+ });
+ it('accepts null environment values on a current-schema row: presence of the keys, not their values, marks the schema',()=>{
+  const input=data();for(const key of LONG_HISTORY_ENVIRONMENT_KEYS)input.long_history.breadth[0][key]=null;
+  expect(marketUpdateState(input,Date.parse('2026-11-26T22:00:00Z'))).toMatchObject({state:'current',reason:null});
+ });
+ it('does not invent a legacy reason when there is no long history at all',()=>{
+  const input=data();delete input.long_history;
+  expect(marketUpdateState(input,Date.parse('2026-11-26T22:00:00Z'))).toMatchObject({state:'pending',history:null,reason:null});
+  const empty=data();empty.long_history.breadth=[];
+  expect(marketUpdateState(empty,Date.parse('2026-11-26T22:00:00Z'))).toMatchObject({state:'pending',reason:null});
  });
 });

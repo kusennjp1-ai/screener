@@ -135,14 +135,16 @@ await writeCorrectionHistory(root,correction,currentFinancials);
 await rewriteCorrectionChartAliases(root,correction);
 rows = new Map(rankVerifiedUniverse([...rows.values()]).map(row => [row.symbol, row]));
 currentEvaluation.instrument_applicability_universe=applicabilityUniverse([...rows.values()]);
-if (breadth) {
-  if (breadth.payload?.current?.date === scan.as_of_date) {
-    breadth.payload.book_leadership = marketLeadership([...rows.values()], scan.as_of_date);
-    breadth.payload.book_market_evidence = buildBookMarketEvidence({ charts: marketCharts, asOfDate: scan.as_of_date, benchmark, expectedUniverseSize: rows.size, lookbackSessions: 60 });
-    await exportMarketTrends({root,entry,asOfDate:scan.as_of_date,bookEvidence:breadth.payload.book_market_evidence,evaluatedAt});
-    await writeFile(resolve(root, entry.pages.breadth.path), JSON.stringify(breadth));
-  }
+// Index distribution/follow-through and the long history do not depend on the backend breadth page:
+// market trends are always exported for the scan date, and the chart-universe breadth joins only when
+// the backend breadth is current for that same date (buildMarketTrends leaves it empty otherwise).
+const breadthCurrent = breadth?.payload?.current?.date === scan.as_of_date;
+if (breadthCurrent) {
+  breadth.payload.book_leadership = marketLeadership([...rows.values()], scan.as_of_date);
+  breadth.payload.book_market_evidence = buildBookMarketEvidence({ charts: marketCharts, asOfDate: scan.as_of_date, benchmark, expectedUniverseSize: rows.size, lookbackSessions: 60 });
 }
+await exportMarketTrends({root,entry,asOfDate:scan.as_of_date,bookEvidence:breadthCurrent ? breadth.payload.book_market_evidence : undefined,evaluatedAt});
+if (breadthCurrent) await writeFile(resolve(root, entry.pages.breadth.path), JSON.stringify(breadth));
 // Details are fetched only when a symbol is opened. Keep rule inputs in the index.
 await mkdir(resolve(root, 'research-details'), {recursive:true});
 await mkdir(resolve(root, 'verified-charts'), {recursive:true});

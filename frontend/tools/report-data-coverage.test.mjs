@@ -5,7 +5,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { secPoint, secRecord, secUnavailable } from '../src/test/fixtures/secRecord.js';
-import { briefRows, environmentCoverage, fundamentalsCoverage, publishedCoverage } from './report-data-coverage.mjs';
+import { briefRows, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, publishedCoverage } from './report-data-coverage.mjs';
 
 const write = async (path, value) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(value)); };
 
@@ -62,5 +62,26 @@ describe('data coverage report', () => {
     expect(report.present.trendTemplateCount).toBe('1/2');
     expect(report.present.stage2).toBe('1/2');
     expect(report.present.leaderCohort).toBe('0/2');
+  });
+
+  it('prints the final row values, keeping absent keys, nulls and small samples distinct from zero', () => {
+    const current = { date: 'd2', coverage: 4536, above50Percent: 43.1, above200: 1948, above200Percent: 42.9, trendTemplateCount: 619, rs90TemplateCount: 249,
+      stage1: 1000, stage2: 1200, stage3: 900, stage4: 1436, breakoutsJudged: 4, breakoutsHeld: 0, leaderCohort: 600, leaderCohortAbove50: 450 };
+    const report = finalEnvironmentRow({ breadth: [{ date: 'd1' }, current] });
+    expect(report.date).toBe('d2');
+    expect(report.values).toEqual({ breakoutsJudged: 4, breakoutsHeld: 0, leaderCohort: 600, leaderCohortAbove50: 450, trendTemplateCount: 619, rs90TemplateCount: 249, above50Percent: 43.1, above200Percent: 42.9 });
+    expect(report.missing_environment_keys).toEqual([]);
+    // Four judged breakouts are below the screens' minimum sample: the rate stays unknown, not 0%.
+    expect(report.derived.breakoutHoldPercent).toBeNull();
+    expect(report.derived.leaderHealthPercent).toBe(75);
+    const legacy = finalEnvironmentRow({ breadth: [{ date: 'd2', coverage: 4428, above50: 1758, above50Percent: 39.7, newHighs: 141, newLows: 217, leaderCount: 632 }] });
+    expect(legacy.values).toEqual({ breakoutsJudged: 'absent', breakoutsHeld: 'absent', leaderCohort: 'absent', leaderCohortAbove50: 'absent', trendTemplateCount: 'absent', rs90TemplateCount: 'absent', above50Percent: 39.7, above200Percent: 'absent' });
+    expect(legacy.missing_environment_keys).toEqual(['trendTemplateCount', 'rs90TemplateCount', 'above200', 'above200Percent', 'stage1', 'stage2', 'stage3', 'stage4']);
+    expect(legacy.derived).toEqual({ breakoutHoldPercent: null, leaderHealthPercent: null });
+    const insufficient = finalEnvironmentRow({ breadth: [{ ...current, breakoutsJudged: null, breakoutsHeld: null, leaderCohort: null, leaderCohortAbove50: null }] });
+    expect(insufficient.values.breakoutsJudged).toBeNull();
+    expect(insufficient.derived).toEqual({ breakoutHoldPercent: null, leaderHealthPercent: null });
+    expect(finalEnvironmentRow(null)).toEqual({ date: null, values: null, missing_environment_keys: null, derived: null });
+    expect(finalEnvironmentRow({ breadth: [] }).values).toBeNull();
   });
 });

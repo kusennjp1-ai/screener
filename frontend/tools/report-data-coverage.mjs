@@ -10,6 +10,8 @@ import { financialHistory } from '../src/static/financialHistory.js';
 import { code33Layered } from '../src/static/code33Reference.js';
 import { code33Explain, code33Parts, fundamentalTiles, secStatus } from '../src/static/fundamentalsExplain.js';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
+import { environmentPoint } from '../src/static/marketLongHistory.js';
+import { LONG_HISTORY_ENVIRONMENT_KEYS } from '../src/static/marketUpdateState.js';
 import { readBookFinancials } from './book-financials-input.mjs';
 
 const read = async path => { try { return JSON.parse(await readFile(path, 'utf8')); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } };
@@ -93,6 +95,21 @@ export function environmentCoverage(history, sessions = 20) {
     present: Object.fromEntries(fields.map(field => [field, rows.filter(row => row[field] !== null && row[field] !== undefined).length + '/' + rows.length])) };
 }
 
+const FINAL_FIELDS = ['breakoutsJudged', 'breakoutsHeld', 'leaderCohort', 'leaderCohortAbove50', 'trendTemplateCount', 'rs90TemplateCount', 'above50Percent', 'above200Percent'];
+/**
+ * The final long-history row as the brief reads it (diagnostic only). An absent key is
+ * reported as 'absent' (older-schema capture), a null as null; the derived rates use
+ * the screens' own thresholds, so a small sample stays null rather than becoming a rate.
+ */
+export function finalEnvironmentRow(history) {
+  const row = history?.breadth?.at(-1);
+  if (!row || typeof row !== 'object') return { date: null, values: null, missing_environment_keys: null, derived: null };
+  const point = environmentPoint(row);
+  return { date: row.date ?? null, values: Object.fromEntries(FINAL_FIELDS.map(field => [field, Object.hasOwn(row, field) ? row[field] : 'absent'])),
+    missing_environment_keys: LONG_HISTORY_ENVIRONMENT_KEYS.filter(key => !Object.hasOwn(row, key)),
+    derived: { breakoutHoldPercent: point.breakoutHoldPercent, leaderHealthPercent: point.leaderHealthPercent } };
+}
+
 if (import.meta.url === `file://${process.argv[1]}`) {
   if (process.argv.includes('--published')) {
     const report = await publishedCoverage();
@@ -103,5 +120,8 @@ if (import.meta.url === `file://${process.argv[1]}`) {
       read('public/static-data/financial-history.json'), read('public/static-data/market-history-source.json'), read('public/qualification-audit.json')]);
     console.log('Data coverage (fundamentals): ' + JSON.stringify(fundamentalsCoverage({ daily, sec, history, audit })));
     console.log('Data coverage (market environment, last 20 sessions): ' + JSON.stringify(environmentCoverage(market)));
+    // Diagnostic only: a malformed row must not turn this report into a build failure.
+    try { console.log('Data coverage (market environment, final session): ' + JSON.stringify(finalEnvironmentRow(market))); }
+    catch (error) { console.log('Data coverage (market environment, final session) unavailable: ' + String(error?.message || error).slice(0, 200)); }
   }
 }
