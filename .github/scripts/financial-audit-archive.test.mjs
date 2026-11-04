@@ -484,3 +484,63 @@ test('activation, renewal, limited and verify-only carries keep the index verbat
   assert.match(selector,/if \(state\.live\.receipt\?\.financial_audit_archive\) throw Error\('A financial correction cannot drop the public financial audit archive index'\)/);
   assert.match(selector,/else if\(archive\)throw Error\('A financial audit archive index requires a live financial release'\)/);
 });
+
+// The first transition from today's live shape: every carry projection is still
+// hosted (24 nested bins plus the two sources) and there is no archive index.
+test('first transition from 24 hosted carries and no index keeps today\'s publication until each copy verifies, then omits all 24',async t=>{
+  const site=await nestedSite(t,24),{fake,fetcher,api}=world(t,site),active=site.carries.at(-1);
+  assert.equal(site.live.receipt.financial_audit_archive,undefined);
+  const live={...site.live,receiptBytes:site.live.receiptBytes.padEnd(781350,' ')}; // live publication.json size on 2026-11-04
+  const root=temp(t,'carry-source-'),cwd=temp(t);
+  for(const item of [...site.carries,...site.receipts])write(join(root,item.path),item.bytes);
+  write(join(root,fc('source-projection',sha(site.sp))),site.sp);write(join(root,fc('source-base',sha(site.sb))),site.sb);
+  // Before any archive run: no release exists, so nothing is dropped, nothing is
+  // indexed and recheck makes no archive call. This is today's publication.
+  const warnings=[],idle=carryState(live);
+  idle.auditArchive=await admitAuditArchive({state:idle,api,fetcher,root:temp(t),warn:message=>warnings.push(message)});
+  assert.equal(idle.auditArchive.mode,'prune');assert.deepEqual(idle.auditArchive.drops,{});
+  assert.equal(warnings.length,24);assert.ok(warnings.every(message=>/^Keeping static-data\/financial-corrections\/carry-projection-/.test(message)));
+  assert.deepEqual(finalizeDrops(idle,root,{cwd,warn:quiet}),[]);
+  assert.equal(composeFinancialAuditArchive({state:idle,dist:root,hosted:live.receipt.financial_audit_files,runId:50,runAttempt:1}),null);
+  assert.doesNotThrow(()=>assertArchiveBinding(idle,live,{...live.receipt}));
+  assert.deepEqual(await verifyArchiveAvailability(null,{api:()=>{throw Error('no API call expected');},fetcher:()=>{throw Error('no download expected');}}),{probe:[],full:[]});
+  // The archive workflow stages all 24 hosted bins, the active carry included.
+  write(join(site.pages,'publication.json'),JSON.stringify(live.receipt));
+  const staged=join(temp(t),'staged'),plan=await collectArchive({output:staged,fetcher,sleep:async()=>{},cwd:temp(t),log:quiet,validate:value=>value});
+  assert.deepEqual(plan.entries.map(entry=>entry.path),site.carries.map(carry=>carry.path).sort());assert.deepEqual(plan.conflicts,[]);
+  await uploadArchive({input:staged,token:FAKE_WRITE_TOKEN,fetcher,sleep:async()=>{},log:quiet,controllerSha:'b'.repeat(40)});
+  assert.equal(await verifyPublic({input:staged,fetcher,sleep:async()=>{}}),24);
+  assert.equal(fake.state().releases.filter(release=>release.tag_name.startsWith(ARCHIVE_TAG_PREFIX)&&!release.draft).length,24);
+  // A copy that now redirects off the allowed hosts is the only carry kept.
+  const odd=archiveLocation(site.carries[5].path);fake.fault(odd.tag,odd.asset,{redirectTo:'https://evil.example/carry.json.gz'});
+  const partialWarnings=[],partial=await admitAuditArchive({state:carryState(live),api,fetcher,root:temp(t),warn:message=>partialWarnings.push(message)});
+  assert.equal(Object.keys(partial.drops).length,23);assert.ok(!Object.hasOwn(partial.drops,site.carries[5].path));
+  assert.equal(partialWarnings.length,1);assert.match(partialWarnings[0],/allowed public download hosts/);
+  fake.clearFaults();
+  // The next publication: every verified copy leaves Pages, including the live active carry.
+  const state=carryState(live);
+  state.auditArchive=await admitAuditArchive({state,api,fetcher,root:temp(t),warn:quiet});
+  assert.equal(Object.keys(state.auditArchive.drops).length,24);assert.ok(Object.hasOwn(state.auditArchive.drops,active.path));
+  const removal=finalizeDrops(state,root,{cwd,warn:quiet});
+  assert.deepEqual(removal,site.carries.map(carry=>carry.path).sort());
+  site.carries.forEach((carry,i)=>assert.deepEqual(state.auditArchive.drops[carry.path].receipts,[site.receipts[i].path]));
+  // The new carry and its receipt are hosted; the 24 older bins are not.
+  const dist=temp(t,'dist-'),next=Buffer.from(JSON.stringify({schema_version:'carry',next:true})),nextPath=fc('carry-projection',sha(next));
+  const nextReceipt={mode:'carry',financial_generation:sha('next generation'),evaluation_projection:{path:nextPath,sha256:sha(next)},source_projection:{path:fc('source-projection',sha(site.sp)),sha256:sha(site.sp)},source_base:{path:fc('source-base',sha(site.sb)),sha256:sha(site.sb)}};
+  const nextBytes=Buffer.from(JSON.stringify(nextReceipt)),nextRef={schema_version:'financial-release-receipt-v1',path:fc('release',sha(nextBytes)),sha256:sha(nextBytes)};
+  for(const item of site.receipts)write(join(dist,item.path),item.bytes);
+  write(join(dist,nextPath),next);write(join(dist,nextRef.path),nextBytes);write(join(dist,fc('source-projection',sha(site.sp))),site.sp);write(join(dist,fc('source-base',sha(site.sb))),site.sb);
+  const hosted={...Object.fromEntries(Object.entries(live.receipt.financial_audit_files).filter(([path])=>!removal.includes(path))),[nextPath]:sha(next),[nextRef.path]:nextRef.sha256};
+  const index=composeFinancialAuditArchive({state,dist,hosted,runId:50,runAttempt:1});
+  assert.deepEqual(Object.keys(index.files),removal);
+  const publication={...live.receipt,financial_release:nextRef,financial_audit_files:hosted,financial_audit_archive:index};
+  assert.equal(validateFinancialAuditArchive(index,publication),index);
+  assert.ok(Buffer.byteLength(JSON.stringify(index))<32*1024,'about 1.2 KB of index per archived carry');
+  assert.doesNotThrow(()=>assertFinancialAuditPreserved(live.receipt.financial_audit_files,hosted,{archivedAfter:index.files,pinned:archivePins(nextReceipt,nextRef)}));
+  assert.equal(Object.keys(hosted).filter(path=>/carry-projection-/.test(path)).length,1,'only the new active carry stays in the nested audit layer');
+  // Recheck after a covering admission: metadata only, no further downloads.
+  const calls=fake.calls().length;
+  assert.equal(admissionCovers(state,live),true);assertArchiveBinding(state,live,publication);
+  assert.deepEqual(await verifyArchiveAvailability(index,{api,fetcher,probeAll:!admissionCovers(state,live)}),{probe:[],full:[]});
+  assert.equal(fake.calls().length,calls,'a covered recheck reads only release metadata');
+});

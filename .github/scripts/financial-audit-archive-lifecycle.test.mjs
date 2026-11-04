@@ -60,23 +60,26 @@ test('C4 omits verified archived carries C1..C3, C5 restores only hosted files, 
       assert.equal(release.state().auditArchive.mode,'prune');assert.deepEqual(release.state().auditArchive.drops,{});
       published.push(publication);
     }
-    const c3=published.at(-1),[C1,C2,C3]=carries(c3.financial_audit_files);
-    assert.ok(C1&&C2&&C3);
+    const c3=published.at(-1),hosted3=carries(c3.financial_audit_files);
+    // C3 is the live active carry: it is itself a candidate and must leave Pages in C4.
+    const C3=world.readDeployed().financialRelease.evaluation_projection.path,[C1,C2]=hosted3.filter(path=>path!==C3);
+    assert.ok(C1&&C2&&C3&&hosted3.length===3&&hosted3.includes(C3));
+    const kept=[C1,C3].sort();
     // A pre-existing published copy of C2 that does not reproduce it: never modified, never trusted.
     const bad=archiveLocation(C2);fake.seed({tag:bad.tag,name:bad.asset,bytes:execFileSync('gzip',['-6','-n','-c'],{input:'not the carry'})});
     const first=world.archive({expectFailure:true});
     assert.equal(first.results.collect.status,0);
-    assert.deepEqual(first.plan.entries.map(entry=>entry.path),[C1,C3]);
+    assert.deepEqual(first.plan.entries.map(entry=>entry.path),kept);
     assert.deepEqual(first.plan.conflicts.map(entry=>entry.path),[C2]);
     for(const command of ['verify-plan','upload','verify-public'])assert.equal(first.results[command].status,0,command);
     assert.ok(fake.calls().filter(call=>!/api\.github\.com|uploads\.github\.com/.test(call.url)).every(call=>!call.auth),'every download is anonymous');
-    // C4: C1 and C3 verify and leave Pages; the tampered C2 stays hosted.
+    // C4: C1 and the previously active C3 verify and leave Pages; the tampered C2 stays hosted.
     const c4=world.publish(day(70,'2026-10-08',150),{deploy:false});
     const state=c4.state(),publication=read(join(c4.dist,'publication.json'));
-    assert.deepEqual(Object.keys(state.auditArchive.drops).sort(),[C1,C3]);
-    assert.deepEqual(state.auditArchive.removal,[C1,C3]);
+    assert.deepEqual(Object.keys(state.auditArchive.drops).sort(),kept);
+    assert.deepEqual(state.auditArchive.removal,kept);
     const index=validateFinancialAuditArchive(publication.financial_audit_archive,publication);
-    assert.deepEqual(Object.keys(index.files).sort(),[C1,C3]);
+    assert.deepEqual(Object.keys(index.files).sort(),kept);
     for(const path of [C1,C3]){
       assert.equal(Object.hasOwn(publication.financial_audit_files,path),false);
       assert.equal(index.files[path].removed_by.previous_publication_identity,state.live.identity);
@@ -98,7 +101,7 @@ test('C4 omits verified archived carries C1..C3, C5 restores only hosted files, 
     assert.notEqual(c4.command('recheck',{allowFailure:true}).status,0);
     writeFileSync(join(c4.dist,'publication.json'),saved);c4.command('recheck');c4.deploy();
     const live4=world.readDeployed();
-    assert.deepEqual(Object.keys(live4.receipt.financial_audit_archive.files).sort(),[C1,C3]);
+    assert.deepEqual(Object.keys(live4.receipt.financial_audit_archive.files).sort(),kept);
 
     // C5 from an older publisher workflow (no admission step): the index is carried verbatim and verified.
     const c5=world.publish(day(80,'2026-10-09',160),{admission:false,deploy:false});

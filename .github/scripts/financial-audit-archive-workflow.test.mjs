@@ -42,6 +42,16 @@ export function checkArchiveWorkflow(text){
   assert.ok(step(collect,'Sweep the complete public archive').includes('run: node .github/scripts/financial-audit-archive.mjs verify-history --full --orphans'));
   const order=steps(upload).map(block=>/- name: (.+)\n/.exec(block)?.[1]??/uses: (\S+)/.exec(block)?.[1]);
   assert.deepEqual(order,['actions/checkout@v4','actions/setup-node@v4','actions/download-artifact@v4','Re-verify staged bins offline','Create missing immutable audit archive releases','Verify every staged archive copy by anonymous download']);
+  // Collect stages every verifiable bin first, hands them to upload, and only
+  // then fails on a conflicting published copy (which is never modified).
+  const collectOrder=steps(collect).map(block=>/- name: (.+)\n/.exec(block)?.[1]??/uses: (\S+)/.exec(block)?.[1]);
+  assert.deepEqual(collectOrder,['actions/checkout@v4','actions/setup-node@v4','Stage exact hosted carry bins from live Pages','actions/upload-artifact@v4','Sweep the complete public archive','Fail on conflicting published archive copies']);
+  const handoff=steps(collect).find(block=>block.includes('uses: actions/upload-artifact@v4'));
+  assert.match(handoff,/^        if: steps\.collect\.outputs\.pending == 'true'$/m);
+  assert.match(handoff,/^          if-no-files-found: error$/m);
+  assert.match(step(collect,'Sweep the complete public archive'),/^        if: github\.event\.schedule == '23 4 \* \* 0' \|\| inputs\.full_sweep$/m);
+  const conflict=step(collect,'Fail on conflicting published archive copies');
+  assert.match(conflict,/^        if: steps\.collect\.outputs\.conflicts != '0'$/m);assert.match(conflict,/exit 1/);
   // Never the approved UI tree, npm, Pages, or a destructive release command.
   assert.doesNotMatch(text,/\bnpm\b|\bnpx\b|release\/|working-directory|deploy-pages|upload-pages-artifact|configure-pages|--clobber|gh release (?:delete|upload|edit|create)|delete-asset|continue-on-error/);
   return true;
@@ -87,6 +97,9 @@ test('the archive workflow keeps write access in one upload job with a step toke
     ['release delete',text.replace('run: node .github/scripts/financial-audit-archive.mjs verify-public','run: gh release delete x && node .github/scripts/financial-audit-archive.mjs verify-public')],
     ['pages action',text.replace('      - uses: actions/download-artifact@v4','      - uses: actions/deploy-pages@v4\n      - uses: actions/download-artifact@v4')],
     ['continue on error',text.replace('      - name: Re-verify staged bins offline\n','      - name: Re-verify staged bins offline\n        continue-on-error: true\n')],
+    ['conflicts never fail',text.replace("if: steps.collect.outputs.conflicts != '0'","if: false")],
+    ['conflict check before hand-off',(()=>{const block=step(job(text,'collect'),'Fail on conflicting published archive copies'),fail=block.endsWith('\n')?block:`${block}\n`;assert.ok(text.includes(fail));return text.replace(fail,'').replace('      - uses: actions/upload-artifact@v4\n',fail+'      - uses: actions/upload-artifact@v4\n');})()],
+    ['staging hand-off ungated',text.replace("        if: steps.collect.outputs.pending == 'true'\n        with:","        with:")],
     ['upload before verify',text.replace('      - name: Re-verify staged bins offline\n        run: node .github/scripts/financial-audit-archive.mjs verify-plan --input "$RUNNER_TEMP/audit-archive"\n','').replace('      - name: Verify every staged archive copy','      - name: Re-verify staged bins offline\n        run: node .github/scripts/financial-audit-archive.mjs verify-plan --input "$RUNNER_TEMP/audit-archive"\n      - name: Verify every staged archive copy')],
   ]){assert.notEqual(changed,text,label);assert.throws(()=>checkArchiveWorkflow(changed),undefined,label);}
 });
