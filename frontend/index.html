@@ -6,16 +6,32 @@
     <link rel="apple-touch-icon" href="/fire.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <meta name="description" content="米国株スクリーナー — Minervini / CANSLIM / 騰落 / 業種グループの日次スナップショット" />
-    <meta name="theme-color" content="#1976d2" />
+    <meta name="theme-color" content="#10121D" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="米国株スクリーナー" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <title>米国株スクリーナー</title>
+    <!-- Painted before any script arrives: the brief's dark ground (light when chosen) and a shell with
+         no data. :where() keeps these at zero specificity, so every app stylesheet overrides them. -->
+    <style>
+      :where(html, body) { margin: 0; background: #10121D; }
+      :where(html.boot-light, html.boot-light body) { background: #F3F4F8; }
+      .boot-shell { color: #F0F2FA; font: 14px/1.3 -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans CJK JP", "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif; }
+      .boot-shell header { display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; min-height: calc(48px + env(safe-area-inset-top, 0px)); padding: env(safe-area-inset-top, 0px) 16px 0; border-bottom: 1px solid #343B51; }
+      .boot-shell b { font-size: 16px; }
+      .boot-shell span { font-size: 11px; color: #A2ADC5; }
+      .boot-light .boot-shell { color: #222238; }
+      .boot-light .boot-shell header { border-bottom-color: #E0E2ED; }
+      .boot-light .boot-shell span { color: #676A82; }
+    </style>
+    <script>
+      try { if (localStorage.getItem('screener:color-mode') === 'light') { document.documentElement.classList.add('boot-light'); document.querySelector('meta[name="theme-color"]').setAttribute('content', '#F3F4F8'); } } catch (error) { /* storage blocked: keep the dark ground */ }
+    </script>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root"><div class="boot-shell"><header><b>米国株スクリーナー</b><span>読み込み中…</span></header></div></div>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>

@@ -350,9 +350,9 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
 .brief-history .market-update-status { margin: 0 0 4px; }
 @media (min-width: 1024px) { .brief-desk.is-market { grid-template-columns: minmax(0, 1fr); max-width: 1080px; } }
 
-/* No Material UI baseline on the static site: the page behind the brief follows its theme, and
-   inherited text keeps the 14px / 1.5 body size the screens were designed with. */
-:root[data-theme] body { background: var(--ground); }
+/* No Material UI baseline on the static site: the page behind the brief follows its theme (replacing
+   index.html's boot ground), and inherited text keeps the 14px / 1.5 body size the screens were designed with. */
+:root[data-theme], :root[data-theme] body { background: var(--ground); }
 .brief { font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
 /* Phone: the long-run metric choices scroll sideways in one row instead of stacking four rows. */
 @media (max-width: 1023px) {

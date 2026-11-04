@@ -11,7 +11,7 @@ import { candidateView, focusCandidates, focusCounts, leadingGroups, marketTone,
 import MarketCard from './MarketCard';
 import MarketScreen from './MarketScreen';
 import StockView from './StockView';
-import { CandidateRow, Parts, Toast } from './BriefParts';
+import { CandidateRow, Parts, RiseItem, Toast } from './BriefParts';
 import { useTransitionNavigate } from './briefNav';
 
 const ICON = {
@@ -65,12 +65,12 @@ function TodayView({ brief, watch, open, now, animate, onNear }) {
     </section>
     <section className="brief-card in" style={{ '--i': 3 }} aria-labelledby="brief-watch-title">
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">3</span><h2 id="brief-watch-title">ウォッチの変化</h2></div>
-      {watched.length ? <ul className="brief-rows">{watched.map((view, i) => { const event = watchEvent(view); return <li key={view.symbol} className={animate ? 'in' : ''} style={{ '--i': i }}>
+      {watched.length ? <ul className="brief-rows">{watched.map((view, i) => { const event = watchEvent(view); return <RiseItem key={view.symbol} animate={animate} index={i}>
         <button type="button" className="brief-event" onClick={e => open(view.symbol, e.currentTarget, 'watch')}>
           <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{event.kind === 'breakout' ? '↗' : event.kind === 'ext' ? '▲' : event.kind === 'near' ? '◔' : event.kind === 'zone' ? '●' : '≈'}</span>
           <span><b>{view.symbol}</b> {event.title}{sells[view.symbol]?.hits ? <span className="brief-chip tone-ext brief-sellchip"><span aria-hidden="true">▲</span> 売りのサイン {sells[view.symbol].hits}件</span> : sells[view.symbol]?.unknown ? <span className="brief-chip brief-sellchip" title={sells[view.symbol].reason || undefined}>売りのサイン 未確認</span> : null}<small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
           <span className="brief-chevron" aria-hidden="true">{ICON.next}</span>
-        </button></li>; })}</ul>
+        </button></RiseItem>; })}</ul>
         : <p className="brief-note">銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。</p>}
     </section>
   </>;
@@ -160,14 +160,19 @@ export default function BriefApp() {
   }, [dark]);
   const [toast, setToast] = useState(null);
   const toastTimer = useRef(null);
-  const [animateKey, setAnimateKey] = useState(0);
   const path = location.pathname.replace(/\/+$/, '');
   const stockMatch = path.match(/^\/brief\/stock\/([^/]+)$/);
   const symbol = stockMatch ? decodeURIComponent(stockMatch[1]).toUpperCase() : null;
   const from = location.state?.from || (path === '/brief/list' ? 'list' : path === '/brief/watch' ? 'watch' : path === '/brief/market' ? 'market' : 'today');
   const view = symbol ? 'stock' : from;
   const now = brief.bundle.evaluatedNow ?? Date.now();
-  useEffect(() => { setAnimateKey(k => k + 1); }, [view]);
+  // Rows play their entrance when a screen opens with its data (a tab switch, then list changes);
+  // rows that mount because the data arrived after the screen opened appear at once. Decided in
+  // render from the previous render's view, so the first rows of a new screen already know.
+  const loaded = Boolean(brief.bundle.data);
+  const [entrance, setEntrance] = useState({ view, loaded });
+  if (entrance.view !== view) setEntrance({ view, loaded });
+  const animate = entrance.view === view ? entrance.loaded : loaded;
   const [listState, setListState] = useState({ filter: 'zone', sort: 'priority', query: '' });
   const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -222,7 +227,6 @@ export default function BriefApp() {
     s.el.style.transition = ''; s.el.style.transform = ''; s.el.style.opacity = '';
     if (Math.abs(s.dx) > 80) step(s.dx < 0 ? 1 : -1);
   };
-  const animate = animateKey > 0;
   const barView = useMemo(() => { const item = symbol && (brief.bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol); return item ? candidateView(item, brief.date) : null; }, [symbol, brief.bundle.data, brief.date]);
   // Today's 「ピボット接近 N銘柄」: the candidate list with the near-pivot filter and no search.
   const showNear = useCallback(() => { setListState(state => ({ ...state, filter: 'near', query: '' })); go('/brief/list', { kind: 'tab' }); }, [go]);

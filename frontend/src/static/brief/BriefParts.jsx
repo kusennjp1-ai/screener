@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { signed, times } from '../positionGeometry';
 import { meterPercent } from './briefNav';
 
@@ -38,8 +39,19 @@ export function Reasons({ view, now, sell, hideTemplate = false }) {
   return <span className="brief-reasons">{chips}</span>;
 }
 
+/**
+ * A row's entrance is decided when it mounts: a row that stays while the screen or the data
+ * changes never (re)starts it, and a row that mounts with `animate` false never plays it.
+ */
+const useEntrance = animate => useState(animate)[0];
+export function RiseItem({ animate, index = 0, children }) {
+  const enter = useEntrance(animate);
+  return <li className={enter ? 'in' : ''} style={{ '--i': index }}>{children}</li>;
+}
+
 export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morph = false, sell = null, hideTemplate = false }) {
-  return <li className={animate ? 'in' : ''} style={{ '--i': index }}>
+  const enter = useEntrance(animate);
+  return <li className={enter ? 'in' : ''} style={{ '--i': index }}>
     <button type="button" className={`brief-row${rank ? '' : ' is-unranked'}`} data-symbol={view.symbol} data-testid="brief-candidate" onClick={event => onOpen(view.symbol, event.currentTarget)}
       aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${view.stateLabel}${finite(view.distance) ? ` ${signed(view.distance)}` : ''}、RS推計 ${finite(view.rs) ? view.rs : '未確認'}${sell?.hits ? `、売りのサイン ${sell.hits}件` : sell?.unknown ? '、売りのサイン 未確認' : ''}`}>
       <span className="brief-rank" aria-hidden="true">{rank || ''}</span>
@@ -47,7 +59,7 @@ export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morp
         <span className="brief-row-title"><b style={morph ? { viewTransitionName: 'brief-ticker' } : undefined}>{view.symbol}</b><span>{view.name}{view.sector ? `・${view.sector}` : ''}</span></span>
         <Reasons view={view} now={now} sell={sell} hideTemplate={hideTemplate} />
       </span>
-      <MiniMeter distance={view.distance} animate={animate} />
+      <MiniMeter distance={view.distance} animate={enter} />
     </button>
   </li>;
 }

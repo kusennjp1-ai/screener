@@ -247,3 +247,81 @@ for (const theme of ['dark', 'light']) test.describe(`form fields in ${theme}`, 
     expect(errors).toEqual([]);
   });
 });
+
+test.describe('cold load', () => {
+  test.use(VIEWPORTS.phone);
+  // No script of the app runs: what is painted comes from index.html alone (its inline boot script still runs).
+  const withoutScripts = page => page.route('**/*', route => {
+    const request = route.request(), url = new URL(request.url());
+    if (url.hostname !== '127.0.0.1') return route.abort();
+    return request.resourceType() === 'script' || /\.jsx?$/.test(url.pathname) ? route.abort() : route.fallback();
+  });
+
+  test('a static shell on the dark ground is painted before any script', async ({ page }) => {
+    await withoutScripts(page);
+    await page.goto('/#/brief');
+    await expect(page.locator('#root')).toContainText('米国株スクリーナー');
+    await expect(page.locator('#root')).toContainText('読み込み中…');
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#10121D');
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(16, 18, 29)');
+  });
+
+  test('a stored light choice switches the boot ground', async ({ page }) => {
+    await page.addInitScript(() => { try { localStorage.setItem('screener:color-mode', 'light'); } catch { /* blocked */ } });
+    await withoutScripts(page);
+    await page.goto('/#/brief');
+    await expect(page.locator('#root')).toContainText('読み込み中…');
+    expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(243, 244, 248)');
+    expect(await page.evaluate(() => getComputedStyle(document.documentElement).backgroundColor)).toBe('rgb(243, 244, 248)');
+    await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute('content', '#F3F4F8');
+  });
+
+  test('rows that arrive with the data appear at once; a tab switch still plays their entrance', async ({ page }) => {
+    // Record each candidate row's entrance at the moment it is inserted.
+    await page.addInitScript(() => {
+      window.__rows = [];
+      new MutationObserver(records => {
+        for (const record of records) for (const node of record.addedNodes) {
+          if (node.nodeType !== 1) continue;
+          for (const row of node.matches('[data-testid="brief-candidate"]') ? [node] : node.querySelectorAll('[data-testid="brief-candidate"]')) {
+            const li = row.closest('li');
+            window.__rows.push({ symbol: row.dataset.symbol, className: li.className, animations: li.getAnimations().map(animation => animation.animationName) });
+          }
+        }
+      }).observe(document, { childList: true, subtree: true });
+    });
+    const { errors } = await openBrief(page, '#/brief');
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    const cold = await page.evaluate(() => window.__rows.splice(0));
+    expect(cold.length).toBeGreaterThanOrEqual(5);
+    for (const row of cold) { expect(row.className, row.symbol).not.toContain('in'); expect(row.animations, row.symbol).toEqual([]); }
+    // Opening the list and coming back with the data loaded plays the entrance as before.
+    const tabs = page.getByRole('navigation', { name: 'ブリーフの画面' });
+    await tabs.getByRole('link', { name: '候補' }).click();
+    await expect(page).toHaveURL(/#\/brief\/list$/);
+    await expect(candidates(page).first()).toBeVisible();
+    await page.evaluate(() => window.__rows.splice(0));
+    await tabs.getByRole('link', { name: '今日' }).click();
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    const back = await page.evaluate(() => window.__rows.splice(0));
+    expect(back.length).toBeGreaterThanOrEqual(5);
+    for (const row of back) { expect(row.className, row.symbol).toBe('in'); expect(row.animations, row.symbol).toContain('brief-rise'); }
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('desktop rows keep still when a stock opens beside them', () => {
+  test.use(VIEWPORTS.desktop);
+  test('opening a stock does not replay the entrance of the rows already shown', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief');
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    await focus.getByTestId('brief-candidate').nth(2).click();
+    await expect(page).toHaveURL(/#\/brief\/stock\/ZZ[A-Z]+$/);
+    await expect(page.getByTestId('brief-conclusion')).toBeVisible();
+    const replayed = await focus.locator('li').evaluateAll(items => items.filter(li => li.className.includes('in') || li.getAnimations().some(animation => animation.animationName === 'brief-rise')).length);
+    expect(replayed).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
