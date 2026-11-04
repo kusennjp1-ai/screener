@@ -224,7 +224,8 @@ function SellCard({ sells, reason, wide }) {
   const quiet = wide ? [] : groups.map(([title, checks]) => [title, checks.filter(check => !loud(check))]).filter(([, checks]) => checks.length);
   const count = state => quiet.flatMap(([, checks]) => checks).filter(check => check.state === state).length;
   return <section className="brief-card in" style={{ '--i': 8 }} aria-labelledby="brief-sell-title" data-testid="brief-sell">
-    <h2 id="brief-sell-title">売りのサイン（直近{SELL_RULES.recentSessions}営業日）</h2>
+    {/* The qualifier stays on the card at every width, next to any fired check; the 注記 keeps only the sources. */}
+    <h2 id="brief-sell-title">売りのサイン<small>（直近{SELL_RULES.recentSessions}営業日・独自判定）</small></h2>
     {sells ? <>
       <p className="brief-note">{sells.advance ? `起点（直近1年の安値）${sells.advance.startDate} の ${price(sells.advance.low)} から ${signed(sells.advance.gainPct)}・${sells.advance.sessions}営業日。` : `起点（直近1年の安値）から +${SELL_RULES.advanceMinPercent}%以上・${SELL_RULES.advanceMinSessions}営業日以上の上昇局面ではないため、上昇の加速と起点以来の下落は判定しません。`}{sells.hits ? ` ${sells.hits}件のサインが出ています。` : [...sells.strength, ...sells.weakness].some(c => c.state === 'unknown') ? ' 出ているサインはありませんが、未確認の項目があります。' : ' いま出ているサインはありません。'}</p>
       {shown.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
@@ -232,6 +233,7 @@ function SellCard({ sells, reason, wide }) {
         {quiet.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
       </Expander>}
     </> : <p className="brief-note">{reason ? `日足を分析基準日の値として検証できないため、売りのサインは未確認です（${reason}）。` : '日足が60本未満のため、売りのサインは未確認です。'}</p>}
+    <p className="brief-note" data-testid="brief-sell-qualifier">保有中の判断材料です（独自判定）。売買の推奨ではありません。</p>
   </section>;
 }
 

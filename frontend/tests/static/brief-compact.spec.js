@@ -199,3 +199,19 @@ for (const width of [320, 375, 414]) test.describe(`no overflow at ${width}px`, 
     expect(errors).toEqual([]);
   });
 });
+
+// The sell card's qualifier is on the card at every width, next to a fired check, not only in the 注記.
+for (const [width, options] of [[375, phone(375)], [1440, { viewport: { width: 1440, height: 900 } }]]) test.describe(`sell card qualifier at ${width}px`, () => {
+  test.use(options);
+  test('独自判定 and 売買の推奨ではありません are visible on the card beside a fired check', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZSD');
+    const sell = page.getByTestId('brief-sell');
+    await expect(sell.locator('.is-sell-hit').first()).toBeVisible();
+    await expect(sell.getByRole('heading', { level: 2 })).toHaveText('売りのサイン（直近5営業日・独自判定）');
+    const qualifier = sell.getByTestId('brief-sell-qualifier');
+    await expect(qualifier).toBeVisible();
+    await expect(qualifier).toContainText('独自判定');
+    await expect(qualifier).toContainText('売買の推奨ではありません。');
+    expect(errors).toEqual([]);
+  });
+});

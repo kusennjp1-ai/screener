@@ -89,6 +89,23 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
     expect(notes).toHaveTextContent('しきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。');
   });
 
+  it('keeps 独自判定 and 売買の推奨ではありません on the sell card itself, never only behind a fold', () => {
+    for (const wide of [false, true]) {
+      render(<StockView data={data(true)} wide={wide} />);
+      const sell = screen.getByTestId('brief-sell');
+      const heading = within(sell).getByRole('heading', { level: 2 });
+      expect(heading).toHaveTextContent('売りのサイン（直近5営業日・独自判定）');
+      const qualifier = within(sell).getByTestId('brief-sell-qualifier');
+      expect(qualifier).toHaveTextContent('独自判定');
+      expect(qualifier).toHaveTextContent('売買の推奨ではありません。');
+      for (const element of [heading, qualifier]) expect(folded(element)).toBe(false);
+      cleanup();
+    }
+    // Bars that cannot be judged still carry the qualifier.
+    render(<StockView data={data(false, '2026-10-01')} />);
+    expect(within(screen.getByTestId('brief-sell')).getByTestId('brief-sell-qualifier')).toHaveTextContent('売買の推奨ではありません。');
+  });
+
   it('shows everything open on the desktop', () => {
     render(<StockView data={{ ...data(true), template: template(Array(8).fill('pass')) }} wide />);
     expect([...document.querySelectorAll('details')].map(details => details.querySelector('summary').textContent)).toEqual(['注記（計算方法・出典 3件）']);
