@@ -155,6 +155,32 @@ test.describe('expanders and tabs by keyboard', () => {
     expect(errors).toEqual([]);
   });
 
+  test('the list keeps its rows across a stock round trip and renders the stock last open', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list');
+    const rows = page.getByTestId('brief-candidate');
+    const all = async () => { await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて/ }).click(); await expect(rows).toHaveCount(20); };
+    await all();
+    await page.getByRole('button', { name: 'さらに表示（残り 1件）' }).click();
+    await expect(rows).toHaveCount(21);
+    const last = await rows.nth(20).getAttribute('data-symbol');
+    await rows.nth(20).click();
+    await expect(page.locator('.brief-bar-title')).toContainText(last);
+    await page.getByRole('button', { name: '戻る' }).click();
+    await expect(rows).toHaveCount(21);
+    await expect(page.locator(`[data-testid="brief-candidate"][data-symbol="${last}"]`)).toHaveCount(1);
+    // A new filter starts from one page again; stepping past the last row shown, 戻る renders the stock reached.
+    await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ }).click();
+    await all();
+    const twentieth = await rows.nth(19).getAttribute('data-symbol');
+    await rows.nth(19).click();
+    await expect(page.locator('.brief-bar-title')).toContainText(twentieth);
+    await page.locator('.brief-dock').getByRole('button', { name: '次の候補' }).click();
+    await expect(page.locator('.brief-bar-title')).toContainText(last);
+    await page.getByRole('button', { name: '戻る' }).click();
+    await expect(page.locator(`[data-testid="brief-candidate"][data-symbol="${last}"]`)).toHaveCount(1);
+    expect(errors).toEqual([]);
+  });
+
   test('Today folds nothing while the sell checks load, and never a row whose check is unknown', async ({ page }) => {
     const watch = ['ZZNV', 'ZZKS', 'ZZZF', 'ZZOD', 'ZZSD'];
     const { errors } = await openBrief(page, '#/brief/market', { storage: { 'research-watch': watch } });

@@ -136,9 +136,9 @@ function listShown(views, kind, { filter, sort, query }) {
   return views.filter(kind === 'watch' ? () => true : LIST_FILTERS[filter].test).filter(view => matchesSearch(view, query)).sort(LIST_SORTS[sort].compare);
 }
 
-function ListView({ brief, kind, watch, open, now, animate, listState, setListState, wide }) {
+function ListView({ brief, kind, watch, open, now, animate, listState, setListState, limits, setLimits, origin, wide }) {
   const pageSize = wide ? 50 : PHONE_PAGE;
-  const { filter, sort, query } = listState, [limit, setLimit] = useState(pageSize);
+  const { filter, sort, query } = listState;
   // Under a qualified-only filter every row is TT 8/8: a phone leaves the constant chip out (the 注記 says so),
   // which keeps each row's chips on one line. あと1条件 and the watch list keep it.
   const constantTemplate = !wide && kind !== 'watch' && filter !== 'one';
@@ -147,13 +147,20 @@ function ListView({ brief, kind, watch, open, now, animate, listState, setListSt
   const views = useMemo(() => listSource(brief, kind, watch), [brief.bundle.data, brief.ranked, brief.date, kind, watch]);
   const counts = useMemo(() => Object.fromEntries(Object.entries(LIST_FILTERS).map(([key, value]) => [key, views.filter(value.test).length])), [views]);
   const shown = useMemo(() => listShown(views, kind, listState), [views, kind, listState]);
+  // The rows shown are kept per list across a stock's round trip (BriefApp holds them). Coming back
+  // from a stock, or after stepping past the last row shown, the stock last open is rendered too.
+  // A new filter or search starts again from one page.
+  const [floor, setFloor] = useState(() => { const at = origin ? shown.findIndex(view => view.symbol === origin) : -1; return { kind, rows: at >= 0 ? Math.ceil((at + 1) / pageSize) * pageSize : 0 }; });
+  const limit = Math.max(limits[kind] ?? pageSize, floor.kind === kind ? floor.rows : 0);
+  const setLimit = value => setLimits(state => ({ ...state, [kind]: value }));
+  const restart = () => { setLimit(undefined); setFloor({ kind, rows: 0 }); };
   const sells = useWatchSellChecks(kind === 'watch' ? shown : null, brief);
   const state = bundleState(brief);
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
     {kind !== 'watch' && <div className="brief-filters">
-      <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { update({ filter: key }); setLimit(pageSize); }}>{value.label}<span className="numeric">{state === 'ready' ? counts[key] : '—'}</span></button>)}</div>
-      <label className="brief-search"><span className="sr-only">銘柄を検索</span><input type="search" inputMode="search" placeholder="ティッカー・社名" value={query} onChange={e => { update({ query: e.target.value }); setLimit(pageSize); }} /></label>
+      <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { update({ filter: key }); restart(); }}>{value.label}<span className="numeric">{state === 'ready' ? counts[key] : '—'}</span></button>)}</div>
+      <label className="brief-search"><span className="sr-only">銘柄を検索</span><input type="search" inputMode="search" placeholder="ティッカー・社名" value={query} onChange={e => { update({ query: e.target.value }); restart(); }} /></label>
       <label className="brief-sort">並び順<select value={sort} onChange={e => update({ sort: e.target.value })}>{Object.entries(LIST_SORTS).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></label>
     </div>}
     <section className="brief-card in" style={{ '--i': 1 }} aria-label={kind === 'watch' ? 'ウォッチ中の銘柄' : '選定銘柄の一覧'}>
@@ -215,6 +222,8 @@ export default function BriefApp() {
   const animate = entrance.view === view ? entrance.loaded : loaded;
   useEffect(() => { if (loaded && entrance.view === view && !entrance.loaded) setEntrance({ view, loaded: true }); }, [loaded, entrance, view]);
   const [listState, setListState] = useState({ filter: 'zone', sort: 'priority', query: '' });
+  // How many rows each list (候補, ウォッチ) shows; reset when its filter or search changes.
+  const [listLimits, setListLimits] = useState({});
   const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [from, brief.bundle.data, brief.ranked, brief.date, watch, listState]);
@@ -270,13 +279,13 @@ export default function BriefApp() {
   };
   const barView = useMemo(() => { const item = symbol && (brief.bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol); return item ? candidateView(item, brief.date) : null; }, [symbol, brief.bundle.data, brief.date]);
   // Today's 「ピボット接近 N銘柄」: the candidate list with the near-pivot filter and no search.
-  const showNear = useCallback(() => { setListState(state => ({ ...state, filter: 'near', query: '' })); go('/brief/list', { kind: 'tab' }); }, [go]);
+  const showNear = useCallback(() => { setListState(state => ({ ...state, filter: 'near', query: '' })); setListLimits(state => ({ ...state, list: undefined })); go('/brief/list', { kind: 'tab' }); }, [go]);
   useEffect(() => {
     const idle = window.requestIdleCallback ? window.requestIdleCallback(() => loadMarketScreen().catch(() => {}), { timeout: 4000 }) : setTimeout(() => loadMarketScreen().catch(() => {}), 1500);
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
   }, []);
   const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} onNear={showNear} wide={wide} />
-    : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} wide={wide} />;
+    : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} limits={listLimits} setLimits={setListLimits} origin={kept} wide={wide} />;
   const watching = symbol && watch.includes(symbol);
   return <div className="leader-shell brief" data-theme={dark ? 'dark' : 'light'}>
     <style>{themeCss}</style>
