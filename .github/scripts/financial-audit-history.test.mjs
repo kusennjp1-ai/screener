@@ -4,7 +4,7 @@ import {linkSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFile
 import {execFileSync} from 'node:child_process';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {financialAuditInventory,validateFinancialAuditFiles,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt} from './financial-audit-history.mjs';
+import {financialAuditInventory,validateFinancialAuditFiles,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt,ARCHIVE_TAG_PREFIX,RESERVED_RELEASE_PREFIX,archiveLocation} from './financial-audit-history.mjs';
 import {restorePublishedFinancialSource,writeFinancialReleaseReceipt,verifyFinancialReleaseAssets,sourceLineage} from './financial-release-activation.mjs';
 import {lifecycleFixture,read} from './fixtures/financial-release-lifecycle.mjs';
 import {createFinancialGenerationCarry} from '../../frontend/tools/financial-generation-carry.mjs';
@@ -27,6 +27,15 @@ test('inventory comparison is order independent while changed hashes and dropped
   assert.doesNotThrow(()=>assertFinancialAuditPreserved(before,Object.fromEntries(Object.entries(before).reverse())));
   assert.throws(()=>assertFinancialAuditPreserved(before,{[path]:H}),/removed or changed/);
   assert.throws(()=>assertFinancialAuditPreserved(before,{...before,[path]:'b'.repeat(64)}),/content-addressed/);
+});
+
+test('hosted-only preservation is unchanged and only carry projections have archive coordinates',()=>{
+  const before={[path]:H,[`static-data/financial-corrections/carry-projection-${H}.json`]:H};
+  assert.doesNotThrow(()=>assertFinancialAuditPreserved(before,before,{}));
+  assert.throws(()=>assertFinancialAuditPreserved(before,{[path]:H}),/removed or changed/,'without an archive entry a dropped carry is still refused');
+  assert.ok(ARCHIVE_TAG_PREFIX.startsWith(RESERVED_RELEASE_PREFIX));
+  assert.equal(archiveLocation(`static-data/financial-corrections/carry-projection-${H}.json`).asset,`carry-projection-${H}.json.gz`);
+  for(const kind of ['release','renewal','source-projection','source-base'])assert.throws(()=>archiveLocation(`static-data/financial-corrections/${kind}-${H}.json`),/Only carry projections/);
 });
 
 test('audit scanning rejects file links, directory links, hard links, special files and changed bytes',()=>{

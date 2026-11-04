@@ -156,3 +156,27 @@ test('offline packed limited capture restores, composes and rechecks only its fr
     assert.ok(calls.every(v=>v.pages||v.api?.startsWith(prefix+'/')),'only closed synthetic GitHub/Pages transports used');
   }finally{f.cleanup();}
 });
+
+// The frozen preview never omits a hosted audit file and carries the public
+// archive index verbatim; recheck binds it to the live index.
+test('limited preview carries the live public audit archive index verbatim and refuses drops',{timeout:240000},async()=>{
+  const f=await fixture();try{
+    f.command('plan');f.command('restore');
+    const release=f.live.receipt.financial_release.path,carry=`static-data/financial-corrections/carry-projection-${'7'.repeat(64)}.json`;
+    const refs=[f.live.financialRelease.source_projection,f.live.financialRelease.source_base,f.live.financialRelease.evaluation_projection,f.live.receipt.financial_release];
+    const hosted=Object.fromEntries(refs.map(ref=>[ref.path,ref.sha256]));
+    // A hosted file the frozen capture lacks may not disappear, even if it is archived.
+    withState(f,state=>{state.live.receipt.financial_audit_files={...hosted,[carry]:'7'.repeat(64)};},()=>fails(f.command('compose',{allowFailure:true}),/removed or changed/));
+    const index={schema_version:'financial-audit-archive-v1',repository:bootstrap.repository,files:{[carry]:{kind:'carry-projection',sha256:'7'.repeat(64),bytes:10,financial_generation:'8'.repeat(64),receipts:[release],
+      encoding:{kind:'gzip',sha256:'9'.repeat(64),bytes:30},url:`https://github.com/${bootstrap.repository}/releases/download/financial-audit-archive-carry-projection-${'7'.repeat(64)}/carry-projection-${'7'.repeat(64)}.json.gz`,
+      archived_at:'2026-10-16T13:00:00Z',verified_at:'2026-10-16T13:05:00.000Z',removed_by:{run_id:59,run_attempt:1,previous_publication_identity:f.live.identity}}}};
+    f.command('restore'); // The refused composition already wrote its new receipt into dist.
+    const state=JSON.parse(readFileSync(f.statePath));state.live.receipt.financial_audit_files=hosted;state.live.receipt.financial_audit_archive=index;writeFileSync(f.statePath,JSON.stringify(state));
+    f.command('compose');
+    const publication=read(join(f.dist,'publication.json'));
+    assert.deepEqual(publication.financial_audit_archive,index);
+    assert.equal(Object.hasOwn(publication.financial_audit_files,carry),false);
+    // The real live publication has no index: the carried copy no longer matches it.
+    fails(f.command('recheck',{allowFailure:true}),/changed the public financial audit archive index/);
+  }finally{f.cleanup();}
+});

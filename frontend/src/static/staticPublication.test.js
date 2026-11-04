@@ -232,6 +232,20 @@ it.each([false,true])('reads %s packed production metadata with retained financi
   expect(await api.loadStaticManifest()).toEqual(source);
   expect(fetcher).toHaveBeenCalledTimes(2);expect(transport.create).not.toHaveBeenCalled();
 });
+// The public audit archive index is controller metadata. The approved UI never
+// reads or fetches it, and no archived URL is ever requested by the browser.
+it.each([false,true])('reads %s packed production metadata carrying the public audit archive index',async packed=>{
+  const source=manifest(),metadata=packed?receipt(source,true):{schema:1,data_manifest_sha256:hash(json(source))};
+  const digest='9'.repeat(64),path=`static-data/financial-corrections/release-${digest}.json`,carry='8'.repeat(64);
+  metadata.financial_release={schema_version:'financial-release-receipt-v1',path,sha256:digest};
+  metadata.financial_audit_files={[path]:digest};
+  metadata.financial_audit_archive={schema_version:'financial-audit-archive-v1',repository:'kusennjp1-ai/screener',files:{[`static-data/financial-corrections/carry-projection-${carry}.json`]:{kind:'carry-projection',sha256:carry,
+    url:`https://github.com/kusennjp1-ai/screener/releases/download/financial-audit-archive-carry-projection-${carry}/carry-projection-${carry}.json.gz`}}};
+  const fetcher=serve({'static-data/manifest.json':source,'publication.json':metadata});
+  expect(await api.loadStaticManifest()).toEqual(source);
+  expect(fetcher).toHaveBeenCalledTimes(2);expect(transport.create).not.toHaveBeenCalled();
+  expect(fetcher.mock.calls.every(([url])=>!String(url).includes('github.com/'))).toBe(true);
+});
 
 function auditPreview() {
  const source={...manifest(),financial_generation:'3'.repeat(64)},metadata=receipt(source);
@@ -255,6 +269,7 @@ it.each([
  ['missing lineage',p=>{p.transport.root.bindings.financialGeneration=null;p.financial_audit_transport.root.bindings.financialGeneration=null;}],
  ['bad path',p=>{p.financial_audit_files={'static-data/financial-corrections/source-base-wrong.json':'6'.repeat(64)};}],
  ['extra descriptor field',p=>{p.financial_audit_transport.approved=true;}],
+ ['public archive index',p=>{p.financial_audit_archive={schema_version:'financial-audit-archive-v1',repository:'kusennjp1-ai/screener',files:{}};}],
 ])('rejects an audit preview with %s',async(_label,change)=>{
  const {source,metadata}=auditPreview();change(metadata);serve({'static-data/manifest.json':source,'publication.json':metadata});
  await expect(api.loadStaticManifest()).rejects.toThrow();

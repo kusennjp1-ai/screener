@@ -1,6 +1,7 @@
 import {captureOrdinaryCalendarSource,sealOrdinaryCalendarSource,prepareOrdinaryCalendar,bindOrdinaryCalendarBaseline,verifyOrdinaryCalendar} from './ordinary-session-calendar.mjs';
 import {isLimitedPreviewApproval} from './limited-research-approval.mjs';
 import {FINANCIAL_AUDIT_MAX_FILE_BYTES,financialAuditInventory,requiredFinancialAuditFiles,assertFinancialAuditPreserved,parsePublicationReceipt} from './financial-audit-history.mjs';
+import {admitAuditArchive,admissionCovers,applyArchivedDrops,archivePins,assertArchiveBinding,composeFinancialAuditArchive,finalizeDrops,verifyArchiveAvailability} from './financial-audit-archive.mjs';
 import {selectRenewalControls,selectRenewalCandidate,verifyRenewalSelection,restoreRenewalCandidate,prepareRenewalReceipt,verifyPreparedRenewalRelease,checkFinalRenewalPayload} from './financial-source-renewal-publisher.mjs';
 import {verifyPublishedRenewal,verifyPreparedAutomaticRenewal} from './financial-source-renewal.mjs';
 import {renewalCiLocalContext} from './financial-renewal-ci-admission.mjs';
@@ -493,6 +494,8 @@ async function compose() {
     data_manifest_sha256: sha256(readFileSync(join(dist, 'static-data/manifest.json'))),
     data_source: { artifact_id: state.source.artifact.id, run_id: state.source.runId, attempt: state.source.attempt } };
   if (state.correction) {
+    // A correction publishes no financial audit inventory, so it could not carry the archive index.
+    if (state.live.receipt?.financial_audit_archive) throw Error('A financial correction cannot drop the public financial audit archive index');
     const prepared = await prepareCorrectionReceipt(state, dist);
     receipt.financial_correction = prepared.reference;
     receipt.financial_generation = prepared.receipt.financial.generation;
@@ -503,7 +506,13 @@ async function compose() {
     receipt.financial_release=prepared.reference;receipt.financial_lineage_sha256=prepared.receipt.lineage_sha256;
     receipt.financial_generation=prepared.receipt.financial_generation;receipt.data_inventory_sha256=inventoryDigest(dataInventory(dist));
     receipt.financial_audit_files=financialAuditInventory(dist);
-    if(state.live.financialRelease)assertFinancialAuditPreserved(requiredFinancialAuditFiles(state.live),receipt.financial_audit_files);
+    // Hosted ∪ archived is the full history. Only drops verified in this run and
+    // absent from the final hosted map are added; everything else is verbatim.
+    const archive=composeFinancialAuditArchive({state,dist,hosted:receipt.financial_audit_files});
+    if(archive)receipt.financial_audit_archive=archive;
+    if(state.live.financialRelease)assertFinancialAuditPreserved(requiredFinancialAuditFiles(state.live),receipt.financial_audit_files,
+      {archivedBefore:state.live.receipt?.financial_audit_archive?.files??{},archivedAfter:archive?.files??{},pinned:archivePins(prepared.receipt,prepared.reference)});
+    else if(archive)throw Error('A financial audit archive index requires a live financial release');
     state.financialPrepared=prepared;writeFileSync(statePath(),JSON.stringify(state));
   }
   if(state.carry?.calendar)receipt.ordinary_calendar_derivation=state.carry.calendar.proof;
@@ -580,8 +589,14 @@ async function restoreActivation(state) {
 }
 async function restoreCarrySources(state) {
   const root=join(scratch(),'carry-source');
+  // Every hosted audit file is restored and kept in the authenticated source root.
   await restorePublishedFinancialSource(state.live,root);
-  cpSync(join(root,'static-data/financial-corrections'),resolve('release/frontend/public/static-data/financial-corrections'),{recursive:true});
+  // Same-run verified archive copies are bound to their hosted receipts offline;
+  // only those leave the new publication. Anything unbound stays hosted.
+  const removal=finalizeDrops(state,root),omitted=new Set(removal.map(path=>resolve(root,path)));
+  cpSync(join(root,'static-data/financial-corrections'),resolve('release/frontend/public/static-data/financial-corrections'),{recursive:true,filter:source=>!omitted.has(resolve(source))});
+  applyArchivedDrops(resolve('release/frontend/public'),removal);
+  if(removal.length)console.log(`Omitting ${removal.length} publicly archived carry projection(s) from Pages`);
   state.carry.sourceRoot=root;writeFileSync(statePath(),JSON.stringify(state));
 }
 function copyBundleData(source,destination) {
@@ -705,6 +720,8 @@ async function replayCalendarPreparedInput(state,root){
     if(existsSync(target)&&sha256(readFileSync(target))!==hash)throw Error('Calendar source conflicts with retained financial audit');
     cpSync(join(state.carry.sourceRoot,path),target);
   }
+  // Replay the same sealed omission of publicly archived carries.
+  applyArchivedDrops(root,state.auditArchive?.removal??[]);
 }
 async function carryAssessment(state,root) {
   assertCalendarIntent(state);
@@ -744,7 +761,12 @@ async function verifyPreparedFinancialRelease(state,live,dist=resolve('release/f
   if(digest(publication.ordinary_calendar_derivation??null)!==digest(state.carry?.calendar?.proof??null))throw Error('Ordinary calendar publication proof changed');
   const receipt=verifyFinancialReleaseAssets(dist,publication.financial_release,publication);
   if(!publication.financial_audit_files)throw Error('Prepared financial publication lost its complete audit inventory');
-  if(live.financialRelease)assertFinancialAuditPreserved(requiredFinancialAuditFiles(live),publication.financial_audit_files);
+  if(live.financialRelease)assertFinancialAuditPreserved(requiredFinancialAuditFiles(live),publication.financial_audit_files,
+    {archivedBefore:live.receipt?.financial_audit_archive?.files??{},archivedAfter:publication.financial_audit_archive?.files??{},pinned:archivePins(receipt,publication.financial_release)});
+  // The index is either this run's composition or the live index verbatim, and
+  // every archived copy it names must be publicly available now (fail closed).
+  assertArchiveBinding(state,live,publication);
+  await verifyArchiveAvailability(publication.financial_audit_archive??null,{api:githubApi,fetcher:fetch,probeAll:!admissionCovers(state,live)});
   if(receipt.renewal){
     const options={readAsset:path=>readFileSync(join(dist,path)),verifiedApproval:isPerformanceException(publication.approval)?verifyPerformanceUiApproval(publication,repository()):undefined};
     if(state.renewal?.transition.publisher.ci_admission)await verifyPreparedAutomaticRenewal(receipt,state.renewal.transition,options);
@@ -863,7 +885,7 @@ function exportMetadata() {
   writeFileSync(join(directory, 'source.json'), JSON.stringify({ price_observations: observations, price_observations_sha256: priceObservationDigest(observations), run_id: runId, run_attempt: attempt, source_sha: process.env.GITHUB_SHA,
     artifact_name: `static-site-data-${runId}-${attempt}`, manifest_json: bytes.toString('utf8'), manifest_sha256: sha256(bytes) }));
 }
-const publisherCommands=new Set(['restore','prepare-carry','ordinary-carry-build','publisher-build-before','publisher-build-after','compose','recheck']);
+const publisherCommands=new Set(['audit-archive','restore','prepare-carry','ordinary-carry-build','publisher-build-before','publisher-build-after','compose','recheck']);
 function assertPublisherState(state) {
   const preview=value=>value&&typeof value==='object'&&(Object.hasOwn(value,'publication_authority')||Object.hasOwn(value,'financial_admission')
     ||[value.schema,value.schema_version].some(schema=>typeof schema==='string'&&schema.includes('preview')));
@@ -879,7 +901,7 @@ async function runCommand(command) {
   // A routing output grants no authority: every command obtains a fresh full
   // admission and checks the saved immutable proof before touching its inputs.
   let ordinaryCiProof=null;
-  if(['plan','restore','prepare-carry','ordinary-carry-build','compose','recheck','publisher-build-before','publisher-build-after'].includes(command)){
+  if(['plan','audit-archive','restore','prepare-carry','ordinary-carry-build','compose','recheck','publisher-build-before','publisher-build-after'].includes(command)){
     const event=JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH,'utf8'));
     ordinaryCiProof=await readVerifiedOrdinaryCiAdmission({event,now:Date.now()});
     if(command!=='plan'){
@@ -893,6 +915,7 @@ async function runCommand(command) {
     if(automatic&&renewalCiLocalContext({phase:'publish',event}).eligible.status==='eligible')enforceRenewalQuota('publish',command);
   }
   if (command === 'plan') await plan(false,ordinaryCiProof);
+  else if (command === 'audit-archive') { const state = readState(); state.auditArchive = await admitAuditArchive({ state }); writeFileSync(statePath(), JSON.stringify(state)); const drops = Object.keys(state.auditArchive.drops).length; console.log(`Audit archive ${state.auditArchive.mode}: ${state.auditArchive.verified.probe.length} probed, ${state.auditArchive.verified.full.length} fully re-downloaded, ${drops} verified carry projection(s) may leave Pages`); }
   else if (command === 'design') { await plan(true); await materialize(readState().source, resolve('frontend/public'),false,resolve('frontend')); }
   else if (command === 'restore') { const state = readState(); if(state.limited){const {restoreLimited}=await import('./limited-research-publisher.mjs');await restoreLimited(state);writeFileSync(statePath(),JSON.stringify(state));}else if(state.renewal){await restoreRenewalCandidate(state.renewal,state.live);writeFileSync(statePath(),JSON.stringify(state));}else if(state.activation)await restoreActivation(state);else{await materialize(state.source, resolve('release/frontend/public'), state.decision.migration,resolve('release/frontend'),state.live); diskReport('restore:source',{scratch:scratch(),selected:resolve('release/frontend/public/static-data')}); const restoredState=readState(); const calendarSource=await captureOrdinaryCalendarSource({state:restoredState,frontend:resolve('release/frontend'),root:resolve('release/frontend/public')}); if(calendarSource){restoredState.ordinaryCalendarSource=calendarSource;writeFileSync(statePath(),JSON.stringify(restoredState));output({offline_session_calendar:true});} await restoreSelectedHistory(readState()); diskReport('restore:history',{scratch:scratch(),predecessor:join(scratch(),'history-predecessor')}); if(state.correction) await restoreCorrection(state);if(state.carry){const restored=readState();await restoreCarrySources(restored);const sealed=readState();if(sealed.ordinaryCarryAdmission?.ci_admission)await ordinaryContext(sealed);sealOrdinaryCalendarSource({state:sealed,root:resolve('release/frontend/public')});writeFileSync(statePath(),JSON.stringify(sealed));}} }
   else if(command==='prepare-carry')await prepareCarry();
@@ -906,7 +929,7 @@ async function runCommand(command) {
   else if (command === 'check-design-data') await verifyCoverage(resolve('frontend'), resolve('frontend/public/static-data'), readState().live.verificationUniverse.required_symbols);
   else if (command === 'recheck') await recheck();
   else if (command === 'export-metadata') exportMetadata();
-  else throw Error('Expected plan, design, restore, compose, check-design-data, recheck or export-metadata');
+  else throw Error('Expected plan, design, audit-archive, restore, compose, check-design-data, recheck or export-metadata');
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   // Finish evaluating this module before activation lazily imports preview,

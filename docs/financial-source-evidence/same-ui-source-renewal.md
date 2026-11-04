@@ -152,8 +152,13 @@ intent removal, registry-only mutation, wrong attempts/hashes or a substituted
 financial generation also invalidate it.
 
 Publication metadata also records a bounded, content-addressed `financial_audit_files`
-inventory. Every later carry restores the whole listed audit set, verifies its
-bytes, and appends its new receipt/evaluation. The original active v1 activation
+inventory of the hosted audit files. Every later carry restores the whole hosted
+set, verifies its bytes, and appends its new receipt/evaluation. Older carries may
+move to the public archive index (`financial_audit_archive`); a renewal's
+`history_inventory` is the hosted set. Pruning is off while any renewal receipt is
+in the chain or a committed renewal request names the live publication, and
+enabling renewal on a pruned chain first requires binding the archive index into
+the renewal context. The original active v1 activation
 can seed the first inventory without changing its receipt. This fixes the prior
 clean-restore behavior where a second ordinary carry could omit the activation
 receipt while retaining current financial values. Already-lost historical files
@@ -201,6 +206,14 @@ physical closures, the reconstructed logical inventory and the existing restore
 budget before financial replay. Final renewal rechecks retain every original
 outer and nested encoded payload while admitting only the bounded new audit
 assets. There is no context or trust override in CLI or environment inputs.
+The sealed audit map is the hosted `financial_audit_files` set only; the public
+archive index (`financial_audit_archive`, see
+[the public audit archive](financial-audit-archive.md)) is not part of this
+sidecar. Renewal publications carry that index verbatim and never prune, and the
+archive pauses pruning while a renewal receipt is hosted or a committed renewal
+request names the live publication (a request for a superseded predecessor can
+never be admitted and does not pause it). Enabling renewal on a chain whose
+earlier carries are already archived first requires binding the archive index digest into the renewal context.
 
 The full compressed lifecycle passed 8/8 tests without failures or skips on
 `a7b51f61a9758696cca95cdb4901626d217919ae`, tree

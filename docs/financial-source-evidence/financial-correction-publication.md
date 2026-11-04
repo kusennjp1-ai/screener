@@ -92,7 +92,10 @@ material for 90 days. This is **expiring operational retention**, not a claim of
 permanent storage. Before any future activation, an operator must independently
 retain and verify the exact final source ZIP/archive, full predecessor bundle,
 projection and correction receipt in durable private storage. Keep private storage
-IDs and links out of the repository, public receipts and CI.
+IDs and links out of the repository, public receipts and CI. The public financial
+audit archive (GitHub Release assets for older carry projections) is separate from
+this private evidence and never holds correction material. A correction refuses a
+live publication that carries an archive index.
 
 A separate reviewed promotion mechanism must bind the exact prepared artifact's
 repository/run/attempt/ID/ZIP digest and candidate receipt digest, repeat all

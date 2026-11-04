@@ -149,6 +149,7 @@ test('all authenticated finite entry points inherit only the existing step-scope
   const publisherNames=[
     'Verify live provenance, UI gates and non-regressing data',
     'Prepare immutable controller for finite price publication',
+    'Verify the public audit archive before omitting older carries',
     'Restore the exact selected data artifact',
     'Carry the active financial source onto the new price target',
     'Verify publisher tooling before finite build',

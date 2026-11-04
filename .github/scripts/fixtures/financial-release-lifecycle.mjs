@@ -66,7 +66,7 @@ function bars(date,price,source=fixtureCalendar) {
   return dates.map((date,index)=>{const close=price*(0.8+0.2*index/259);return {date,open:close,high:close*1.01,low:close*0.99,close,volume:1000000};});
 }
 
-export function lifecycleFixture({controllerPath=controller,packedTransport=false,omitAcquiredHistory=false,calendarCheckout=false,withoutSeedCalendar=false,marketTrendBreadth=false}={}) {
+export function lifecycleFixture({controllerPath=controller,packedTransport=false,omitAcquiredHistory=false,calendarCheckout=false,withoutSeedCalendar=false,marketTrendBreadth=false,env:fixtureEnv={},retainPackedPublications=false}={}) {
   // The legacy fixture ends October 16. The market-source regression uses the
   // dated seed's real independently collected calendar, not invented weekdays.
   const marketCalendar=marketTrendBreadth?read(join(repoRoot,'frontend/data/market-trend-source-2026-10-23.json')).calendar:null;
@@ -98,6 +98,8 @@ else throw Error('Unexpected fixture API read '+endpoint);`);chmodSync(join(bin,
 const config=JSON.parse(readFileSync(process.env.RELEASE_CLI_FIXTURE)),base=new URL(${JSON.stringify(bootstrap.site_url)});
 const RealDate=Date;globalThis.Date=class extends RealDate{constructor(...args){super(...(args.length?args:[process.env.RELEASE_FIXTURE_NOW]));}static now(){return RealDate.parse(process.env.RELEASE_FIXTURE_NOW);}};
 globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathname.slice(base.pathname.length);
+ // Opt-in offline GitHub Releases fake for the public audit archive tests only.
+ if(process.env.RELEASE_ARCHIVE_FAKE_DIR&&url.origin!==base.origin){const {releasesFake}=await import(process.env.RELEASE_ARCHIVE_FAKE_MODULE);return releasesFake(process.env.RELEASE_ARCHIVE_FAKE_DIR).fetch(input,options);}
  if(url.origin!==base.origin||!url.pathname.startsWith(base.pathname)||path.includes('..')||options.redirect!=='error')throw Error('Unexpected fixture fetch');
  appendFileSync(process.env.RELEASE_CLI_TRACE,JSON.stringify({pages:path})+'\\n');
  const bytes=readFileSync(join(config.liveRoot,path));return new Response(bytes);};`);
@@ -106,7 +108,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
   const save=()=>write(configPath,config);
   const environment=extra=>({PATH:`${bin}:${process.env.PATH}`,RUNNER_TEMP:join(releaseRoot||root,'runner'),GITHUB_REPOSITORY:repository,
     GITHUB_EVENT_NAME:'workflow_dispatch',GITHUB_EVENT_PATH:join(root,'event.json'),RELEASE_SHA:sha,GITHUB_RUN_ID:String(releaseId),GITHUB_RUN_ATTEMPT:'1',
-    RELEASE_CLI_FIXTURE:configPath,RELEASE_CLI_TRACE:join(root,'trace.jsonl'),RELEASE_FIXTURE_NOW:now,...(process.env.SESSION_CALENDAR_PYTHON?{SESSION_CALENDAR_PYTHON:process.env.SESSION_CALENDAR_PYTHON}:{}),NODE_OPTIONS:`--import=${preload}`,...extra});
+    RELEASE_CLI_FIXTURE:configPath,RELEASE_CLI_TRACE:join(root,'trace.jsonl'),RELEASE_FIXTURE_NOW:now,...(process.env.SESSION_CALENDAR_PYTHON?{SESSION_CALENDAR_PYTHON:process.env.SESSION_CALENDAR_PYTHON}:{}),NODE_OPTIONS:`--import=${preload}`,...fixtureEnv,...extra});
   // Real deployed receipts include raw historical evidence; keep capture bounded above Node's 1 MiB default.
   function invoke(path,args=[],cwd=releaseRoot,extra={}){save();return spawnSync(process.execPath,[path,...args],{cwd,encoding:'utf8',timeout:30000,maxBuffer:16*1024*1024,env:environment(extra)});}
   function success(result,label){assert.ifError(result.error);assert.equal(result.status,0,`${label}\n${result.stdout}\n${result.stderr}`);return result;}
@@ -150,7 +152,7 @@ globalThis.fetch=async(input,options)=>{const url=new URL(input),path=url.pathna
     api[`${prefix}/actions/runs/${id}/attempts/1`]=run(id,'research-ui-release.yml','workflow_dispatch');
     const start=new Date(Date.parse(now)+60000).toISOString(),end=new Date(Date.parse(now)+120000).toISOString();
     api[`${prefix}/actions/runs/${id}/attempts/1/jobs?per_page=100`]=[{jobs:[{run_attempt:1,started_at:now,steps:[{name:'Deploy to GitHub Pages',conclusion:'success',started_at:start,completed_at:end}]}]}];
-    if(!packedTransport)retainedPublicationArtifact=pack(900000+id,`github-pages-${id}-1`,liveRoot,'artifact.tar',null,id);
+    if(!packedTransport||retainPackedPublications)retainedPublicationArtifact=pack(900000+id,`github-pages-${id}-1`,liveRoot,'artifact.tar',null,id);
     save();return liveRoot;
   }
   function seed(){

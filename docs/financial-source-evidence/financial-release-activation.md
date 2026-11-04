@@ -80,7 +80,9 @@ certificate identities, original native projection hash, receipt inventory and
 policy. Its original projection and target base remain content-addressed assets.
 Later advancing exports restore those original bytes from the verified live
 publication; expiry of an operational Actions artifact does not reset or erase
-the lineage.
+the lineage. The source projection and base are always hosted; only older carry
+evaluations may move to the public audit archive
+([details](financial-audit-archive.md)).
 
 Normal preparation first builds the new-price baseline with the already approved
 consumer. The distinct `financial-generation-carry-v1` helper evaluates owned
@@ -109,7 +111,8 @@ end-to-end fixtures and the actual coordinated candidate's normal CI/Design/data
 gates, and independently
 retain and verify the exact final source ZIP, full predecessor ZIP, native/source
 projections, preview receipt and tested candidate in durable private storage.
-Actions retention remains operational and expiring. Storage IDs/links do not
+Actions retention remains operational and expiring. The public audit archive of
+older carry projections is not this private evidence store and does not replace it. Storage IDs/links do not
 belong in repository requests, public receipts or CI logs. The control-only pin
 commit allows the exact retained bytes to be tested again without changing their
 receipt or projection. It does not replace that backup requirement or any normal
