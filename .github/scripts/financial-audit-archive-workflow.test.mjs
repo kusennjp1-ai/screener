@@ -10,6 +10,18 @@ function step(text,name){const found=steps(text).filter(block=>block.startsWith(
 function jobs(text){const body=text.slice(text.indexOf('\njobs:\n')+7);return [...body.matchAll(/^  ([a-zA-Z][\w-]*):\s*$/gm)].map(match=>match[1]);}
 const archiveName='financial-audit-archive.yml',publisherName='research-ui-release.yml';
 const tokenLine='          GH_TOKEN: ${{ github.token }}\n';
+// Every `run:` script (single line or block scalar) with its exact text.
+export function runScripts(text){
+  const lines=text.split('\n'),scripts=[];
+  for(let i=0;i<lines.length;i++){
+    const match=/^( *)(- )?run:(.*)$/.exec(lines[i]);if(!match)continue;
+    const indent=match[1].length+(match[2]?2:0),value=match[3].trim();
+    if(!/^[|>][+-]?$/.test(value)){scripts.push(value);continue;}
+    const body=[];for(let j=i+1;j<lines.length&&(lines[j].trim()===''||lines[j].search(/\S/)>indent);j++)body.push(lines[j]);
+    scripts.push(body.join('\n'));
+  }
+  return scripts;
+}
 
 export function checkArchiveWorkflow(text){
   assert.match(text,/^permissions:\n  contents: read\n(?!  )/m,'top-level permissions must be exactly contents: read');
@@ -31,12 +43,25 @@ export function checkArchiveWorkflow(text){
   // Credentials: every checkout drops its token; GH_TOKEN only where needed.
   const checkouts=text.match(/uses: actions\/checkout@v4\n        with:\n(?:          [^\n]*\n)*/g)||[];
   assert.equal(checkouts.length,(text.match(/actions\/checkout@/g)||[]).length);
-  for(const block of checkouts)assert.match(block,/persist-credentials: false/,'checkout must not persist credentials');
+  for(const block of checkouts){
+    assert.match(block,/persist-credentials: false/,'checkout must not persist credentials');
+    // workflow_run runs from main: never check out the triggering run's head.
+    assert.deepEqual(block.match(/^          ref:.*$/gm),['          ref: ${{ github.sha }}'],'every checkout pins ref: ${{ github.sha }}');
+  }
   assert.equal(checkouts.length,2);
-  const tokenSteps=[...steps(collect),...steps(upload)].filter(block=>block.includes('GH_TOKEN'));
+  // The job token appears exactly twice, each time as the step-scoped GH_TOKEN
+  // of one named step: never under another name, as an action input, or on
+  // any other step.
+  assert.equal((text.match(/github\.token/g)||[]).length,2,'github.token appears only in the two token steps');
+  assert.equal(text.split(tokenLine).length-1,2,'github.token is passed only as GH_TOKEN');
+  const tokenSteps=[...steps(collect),...steps(upload)].filter(block=>/github\.token|GH_TOKEN|GITHUB_TOKEN/.test(block));
   assert.deepEqual(tokenSteps.map(block=>/- name: (.+)\n/.exec(block)?.[1]),['Sweep the complete public archive','Create missing immutable audit archive releases']);
   for(const block of tokenSteps){assert.ok(block.includes(`        env:\n${tokenLine}`),'step-scoped token');assert.doesNotMatch(block,/GH_TOKEN:.*(?:secrets\.|steps\.|inputs\.|vars\.)/);}
   assert.doesNotMatch(text,/secrets\.|GITHUB_TOKEN:|^    env:/m,'no job-level env or secret token source');
+  assert.doesNotMatch(text,/^ +(?:github-token|token|run-id|repository):/m,'no action input takes a token, another run or another repository');
+  // No run script interpolates an expression (workflow_run injection).
+  const scripts=runScripts(text);assert.equal(scripts.length,6);
+  for(const script of scripts)assert.doesNotMatch(script,/\$\{\{/,'run scripts never interpolate expressions');
   assert.equal(step(upload,'Create missing immutable audit archive releases').trim().split('\n').at(-1).trim(),'run: node .github/scripts/financial-audit-archive.mjs upload --input "$RUNNER_TEMP/audit-archive"');
   assert.ok(step(collect,'Stage exact hosted carry bins from live Pages').includes('run: node .github/scripts/financial-audit-archive.mjs collect --output "$RUNNER_TEMP/audit-archive"'));
   assert.ok(step(collect,'Sweep the complete public archive').includes('run: node .github/scripts/financial-audit-archive.mjs verify-history --full --orphans'));
@@ -102,6 +127,15 @@ test('the archive workflow keeps write access in one upload job with a step toke
     ['conflicts never fail',text.replace("if: steps.collect.outputs.conflicts != '0'","if: false")],
     ['conflict check before hand-off',(()=>{const block=step(job(text,'collect'),'Fail on conflicting published archive copies'),fail=block.endsWith('\n')?block:`${block}\n`;assert.ok(text.includes(fail));return text.replace(fail,'').replace('      - uses: actions/upload-artifact@v4\n',fail+'      - uses: actions/upload-artifact@v4\n');})()],
     ['staging hand-off ungated',text.replace("        if: steps.collect.outputs.pending == 'true'\n        with:","        with:")],
+    ['token under another env name',text.replace('      - name: Verify every staged archive copy by anonymous download\n','      - name: Verify every staged archive copy by anonymous download\n        env:\n          TOKEN: ${{ github.token }}\n')],
+    ['token as an action input',text.replace('          path: ${{ runner.temp }}/audit-archive\n      - name: Re-verify','          github-token: ${{ github.token }}\n          run-id: ${{ github.event.workflow_run.id }}\n          path: ${{ runner.temp }}/audit-archive\n      - name: Re-verify')],
+    ['cross-run artifact download',text.replace('          path: ${{ runner.temp }}/audit-archive\n      - name: Re-verify','          run-id: 1\n          path: ${{ runner.temp }}/audit-archive\n      - name: Re-verify')],
+    ['token in a run script',text.replace('run: node .github/scripts/financial-audit-archive.mjs verify-public --input','run: TOKEN=${{ github.token }} node .github/scripts/financial-audit-archive.mjs verify-public --input')],
+    ['interpolated run line',text.replace('verify-history --full --orphans','verify-history --full --orphans ${{ github.event.workflow_run.head_branch }}')],
+    ['interpolated block run',text.replace('        run: node .github/scripts/financial-audit-archive.mjs verify-plan --input "$RUNNER_TEMP/audit-archive"\n','        run: |\n          echo "${{ github.event.workflow_run.display_title }}"\n          node .github/scripts/financial-audit-archive.mjs verify-plan --input "$RUNNER_TEMP/audit-archive"\n')],
+    ['checkout of the triggering head',text.replace('          ref: ${{ github.sha }}\n','          ref: ${{ github.event.workflow_run.head_sha }}\n')],
+    ['checkout without a pinned ref',text.replace('          ref: ${{ github.sha }}\n','')],
+    ['checkout of another repository',text.replace('          ref: ${{ github.sha }}\n','          ref: ${{ github.sha }}\n          repository: other/fork\n')],
     ['gh api release delete',text.replace('run: node .github/scripts/financial-audit-archive.mjs verify-public','run: gh api -X DELETE repos/x/y/releases/assets/1 && node .github/scripts/financial-audit-archive.mjs verify-public')],
     ['curl release call',text.replace('run: node .github/scripts/financial-audit-archive.mjs verify-public','run: curl -fsS https://api.github.com/repos/x/y/releases && node .github/scripts/financial-audit-archive.mjs verify-public')],
     ['upload before verify',text.replace('      - name: Re-verify staged bins offline\n        run: node .github/scripts/financial-audit-archive.mjs verify-plan --input "$RUNNER_TEMP/audit-archive"\n','').replace('      - name: Verify every staged archive copy','      - name: Re-verify staged bins offline\n        run: node .github/scripts/financial-audit-archive.mjs verify-plan --input "$RUNNER_TEMP/audit-archive"\n      - name: Verify every staged archive copy')],
