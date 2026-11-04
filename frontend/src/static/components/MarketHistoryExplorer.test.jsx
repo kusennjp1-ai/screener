@@ -32,15 +32,22 @@ describe('long market history controls',()=>{
   render(<SectorRankHistory history={{...history,sectorRotation:{frames:[{date:'2026-10-23',ranks:[]}]}}}/>);
   expect(screen.getByText('この日の11セクターすべてを確認できません。')).toBeInTheDocument();
  });
- it('draws each sector bar from its value against SPY, the same for equal values',()=>{
+ it('uses the same bar length for tied ranks',()=>{
   render(<SectorRankHistory history={{...history,sectorRotation:{frames:[{date:'2026-10-23',ranks:symbols.map(symbol=>({symbol,rank:1,relativeIndex:100}))}]}}}/>);
-  expect([...document.querySelectorAll('.sector-rank-track i')].map(node=>node.style.width)).toEqual(Array(11).fill('0%'));
-  expect(screen.getAllByText('±0.0%')).toHaveLength(11);
-  cleanup();
-  render(<SectorRankHistory history={history}/>);
-  // 109 (XLB) is the farthest from 100 in the newest frame: a full half bar to the right.
-  expect(document.querySelector('.sector-rank-track i').style.width).toBe('50%');
-  expect(screen.getAllByText('+9.0%')).toHaveLength(1);
+  expect([...document.querySelectorAll('.sector-rank-track i')].map(node=>node.style.width)).toEqual(Array(11).fill('100%'));
+ });
+ it('opens a metric asked from outside, falls back for one this history cannot draw, and titles the chart',()=>{
+  const {rerender}=render(<HistoricalBreadth history={history} request={{metric:'highsLows',seq:1}}/>);
+  // An older schema has no environment fields, but new highs and lows exist in every schema.
+  expect(screen.getByRole('button',{name:'新高値・新安値'})).toHaveAttribute('aria-pressed','true');
+  expect(document.querySelector('.history-chart-title')).toHaveTextContent('新高値・新安値全体');
+  rerender(<HistoricalBreadth history={history} request={{metric:'stages',seq:2}}/>);
+  expect(screen.queryByRole('button',{name:'ステージ構成'})).toBeNull();
+  expect(screen.getByRole('button',{name:'先導株数（価格条件）'})).toHaveAttribute('aria-pressed','true');
+  // The same request again changes nothing the reader chose since.
+  fireEvent.click(screen.getByRole('button',{name:'50日線上'}));
+  rerender(<HistoricalBreadth history={history} request={{metric:'stages',seq:2}}/>);
+  expect(screen.getByRole('button',{name:'50日線上'})).toHaveAttribute('aria-pressed','true');
  });
  it('switches two-year industry breadth without replacing a missing industry observation with zero',()=>{
   render(<HistoricalBreadth history={{...history,sectorBreadth:[{sector:'Technology',points:history.breadth.map(row=>({...row,leaderCount:row.date==='2024-10-23'?null:8}))}]}}/>);

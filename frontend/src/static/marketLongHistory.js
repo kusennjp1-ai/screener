@@ -24,11 +24,12 @@ export function environmentPoint(row){
  * Index near its high while few stocks are above their 200-day line: the "bifurcated market" Minervini has described.
  * Thresholds (index within 5% of its 252-session closing high, under 50% of stocks above the 200-day line) are this app's own.
  */
+export const SPLIT_RULE=Object.freeze({nearHighPercent:5,above200Below:50});
 export function bifurcation(history){
  const sp=(history?.sp500||[]).filter(row=>number(row.close)),last=history?.breadth?.at(-1);
  if(sp.length<252||!last||!number(last.above200Percent))return null;
  const high=Math.max(...sp.slice(-252).map(row=>row.close)),close=sp.at(-1).close,fromHigh=100*(close/high-1);
- return {date:last.date,fromHigh,above200Percent:last.above200Percent,warning:fromHigh>=-5&&last.above200Percent<50};
+ return {date:last.date,fromHigh,above200Percent:last.above200Percent,warning:fromHigh>=-SPLIT_RULE.nearHighPercent&&last.above200Percent<SPLIT_RULE.above200Below};
 }
 export function historyWindow(points,months,asOfDate){
  if(!day(asOfDate)||!Number.isSafeInteger(months)||months<1||months>60)return [];

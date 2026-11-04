@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MarketScreen from './MarketScreen';
+import { breadth, trends } from '../../test/fixtures/marketTrends';
 
 const index = symbol => ({ symbol, available: true, points: [{ date: '2026-10-02', value: 3 }], events: [], latest: { date: '2026-10-02', value: 3 }, lastObserved: { date: '2026-10-02', value: 3 },
   followThrough: { available: false, method: 'rally-attempt-gain1.2-day4-15-decline6-v1', reason: '指数OHLCVに欠測・重複・不正値があります。' } });
@@ -27,6 +28,20 @@ describe('brief market screen', () => {
       long_history: { as_of_date: days.at(-1), retrieved_at: `${days.at(-1)}T21:00:00Z`, universe: { symbols: ['A'] }, breadth, sp500: [], sectorRotation: { frames: [{ date: days.at(-1), ranks }] } } } });
     const history = screen.getByRole('region', { name: '市場環境の推移' });
     expect(within(history).getByText('先導株数（価格条件）は1年前の18から19銘柄（1年の範囲 10〜59）。セクターの上位は素材・通信サービス・エネルギー。')).toBeInTheDocument();
+  });
+
+  it('opens a row\'s metric in the long-run chart and moves focus to its heading', () => {
+    const value = trends({ rows: breadth('2026-10-02', undefined, 300) });
+    Object.assign(value.data.long_history, { retrieved_at: '2026-10-02T21:00:00Z', universe: { symbols: ['A'] } });
+    show(value);
+    const metrics = screen.getByRole('group', { name: '長期推移の指標' });
+    expect(within(metrics).getByRole('button', { name: 'トレンドテンプレート達成数' })).toHaveAttribute('aria-pressed', 'true');
+    const row = [...document.querySelectorAll('.brief-env-row')].find(element => element.querySelector('small').textContent === '52週の新高値・新安値');
+    fireEvent.click(within(row).getAllByRole('button')[0]);
+    fireEvent.click(within(row).getByRole('button', { name: '市場環境の推移で見る' }));
+    expect(within(metrics).getByRole('button', { name: '新高値・新安値' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('img', { name: /^新高値・新安値の長期推移/ })).toBeInTheDocument();
+    expect(document.activeElement).toHaveTextContent('広がりと先導株');
   });
 
   it('names a fetch failure of the series in the history section by its cause', () => {
