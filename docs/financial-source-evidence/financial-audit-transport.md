@@ -2,10 +2,12 @@
 
 This controller-only codec compresses only the hash-addressed `source-projection`,
 `source-base`, and `carry-projection` JSON members listed in
-`publication.financial_audit_files`. Small `release` JSON receipts remain served
-at their original identity URLs. Every receipt, map, source hash and predecessor
-chain keeps its exact logical meaning and original bytes. An old identity-form
-publication remains readable without a new descriptor.
+`publication.financial_audit_files` (the hosted set). Small `release` JSON receipts
+remain served at their original identity URLs. Every receipt, map, source hash and
+predecessor chain keeps its exact logical meaning and original bytes. An old
+identity-form publication remains readable without a new descriptor. Carries
+listed in the public archive index (`financial_audit_archive`) are not hosted and
+are not part of this codec; see [the public audit archive](financial-audit-archive.md).
 
 ## Two verified layers, unchanged captured consumer
 
@@ -63,7 +65,10 @@ Ordinary carries derive the compressed source path solely from the verified live
 publication's audit map and pinned nested root. The existing transport reader
 checks encoded length/hash, gzip framing, decoded length/hash and the raw logical
 SHA-256. Missing or corrupt packed members fail; there is no identity fallback
-for a declared compressed member. Release receipts remain identity reads.
+for a declared compressed member. Release receipts remain identity reads. Only
+hosted files are restored; an archived carry is never read back into a
+publication. The archive tooling reuses this nested reader to stage the exact
+hosted bin, and the same canonical decoder to verify every archived copy.
 
 Before canonicalization writes decoded files, the controller authenticates the
 small roots and logical inventories and checks the complete reconstructed tree
@@ -114,11 +119,14 @@ Reserves include a 1 MiB publication, 64 KiB per release receipt, 4 KiB per audi
 asset for additional entries, 128 KiB fixed inner files, 270 KiB outer inventory
 entries, 270 KiB additional inner TAR overhead and per-entry TAR padding.
 
-This is a finite capacity estimate, not a 27-day guarantee. Ordinary data growth,
-larger carries, receipt growth, filesystem/TAR overhead and the 128 MiB decoded
-member cap can stop publication sooner. Every actual final candidate needs its
-own physical/TAR measurement. No deletion, external storage, new provider,
-scheduled work, source authority, UI authority or policy change is introduced.
+This was a finite capacity estimate, not a 27-day guarantee, and the live site
+reached it (TAR 995,194,880 bytes with 24 nested carry bins). Since the 2026-11-03
+owner decision (N1) older carries move to immutable public GitHub Release assets
+after same-run verification, so the nested audit layer stays at the source
+projection, the source base and the active carry, and Pages grows by about one
+receipt and one index entry per publication. Every actual final candidate still
+needs its own physical/TAR measurement. No new provider, source authority, UI
+authority, codec, threshold or payload limit change is introduced.
 
 ## Verification scope
 
@@ -130,7 +138,8 @@ unchanged browser validator, including many chart/audit-metadata collisions.
 
 The production offline controller fixture runs R0 → C1 → C2 → C3, restores all
 prior receipts and evaluations byte-for-byte, advances real fixture price data,
-and lets financial availability expire on the original source clocks. This is
+and lets financial availability expire on the original source clocks. The archive
+lifecycle fixture continues through C5 with an offline Releases fake. This is
 local controller verification, not new browser execution, certification,
 deployment approval, or publication.
 

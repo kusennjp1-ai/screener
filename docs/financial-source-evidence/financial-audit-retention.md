@@ -3,7 +3,10 @@
 The current v1 financial release receipt is unchanged. Its publication envelope
 now includes `financial_audit_files`, a path-to-SHA-256 map covering every actual
 content-addressed `source-projection`, `source-base`, `carry-projection`, and
-`release` JSON file in `static-data/financial-corrections/`.
+`release` JSON file hosted in `static-data/financial-corrections/`. Since the
+2026-11-03 owner decision (N1), older carry projections may instead be listed in
+`financial_audit_archive`, the public archive index; the full audit history is the
+hosted map plus that index. See [the public audit archive](financial-audit-archive.md).
 
 The older financial-correction `receipt-`/`projection-` directory is outside this
 release inventory. Its existing workflow remains prepare-only. Any future
@@ -16,9 +19,12 @@ carry. A legacy carry without a map is rejected: its current references cannot
 prove which original activation or older evaluations have already been lost.
 The controller never fabricates or silently reconstructs missing history.
 
-Every subsequent carry restores all declared audit files into a clean directory,
-checks each content hash, and retains the previous map before adding its new
-receipt and evaluation. Missing files, lost entries, mismatched hashes, duplicate
+Every subsequent carry restores all hosted audit files into a clean directory,
+checks each content hash, and retains every previous entry (hosted, or archived
+with the same hash) before adding its new receipt and evaluation. An older carry
+leaves Pages only after the same publish run downloaded its public archive copy
+anonymously and decoded it to the exact logical bytes; otherwise it stays hosted.
+Archive entries are append-only and never change. Missing files, lost entries, mismatched hashes, duplicate
 JSON keys (including escaped aliases), unsafe names, links, hard links, and
 special files fail closed. Inventory comparison ignores object-key order. A map
 is bounded to 1 MiB, the full publication metadata remains bounded to the
@@ -37,7 +43,9 @@ schema, controller, producer, registry, or policy is introduced.
 The focused tests exercise a fresh R0 → C1 → C2 → C3 restoration chain and the
 actual production controller CLI through three ordinary price advances. They
 check that the original R0 receipt remains readable and each earlier evaluation
-and receipt remains byte-identical. Packed exception-v2 carries, unchanged
+and receipt remains byte-identical. The archive lifecycle test continues to C5 and
+checks that every omitted carry is archived with the same hash and that a lost
+archive copy blocks publication. Packed exception-v2 carries, unchanged
 browser publication parsing, existing approval/source/price gates, and the
 1 GB payload guard are separate regression checks. Tiny fixtures are offline
 controller tests, not new source certification or real deployment authority.
@@ -73,5 +81,8 @@ must reject any carry exceeding either physical or TAR limits.
 The separately reviewed narrow codec reuses the existing lossless transport for
 source/base/carry JSON while retaining small release receipts as identity files.
 See [the nested codec contract and finite measured headroom](financial-audit-transport.md).
-No history is removed, no format is weakened, and the captured browser stays
-byte-identical. Compression provides finite headroom; it is not unlimited storage.
+Compression provides finite headroom; it is not unlimited storage. Older carries
+therefore move to the public archive only after same-run verification. No history
+is deleted: every receipt stays hosted and names the same hashes, and every
+earlier evaluation stays retrievable and verifiable from Pages or the archive.
+No format is weakened and the captured browser stays byte-identical.
