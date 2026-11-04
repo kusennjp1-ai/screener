@@ -139,7 +139,14 @@ function historyScope(judged) {
   return `長期集計がないため、${scope}だけを判定しています。`;
 }
 
-function Signals({ signals, exposure }) {
+/** Why each unjudged check was not judged: 「ラベル（理由）」 joined by 「／」. */
+const unjudgedReasons = reasons => reasons.map(r => `${r.labels.join('・')}（${r.reason}）`).join('／');
+
+/**
+ * The warning summary. `inline` (the desktop): every unjudged check and its reason on one line, as
+ * before. Below 1024px the summary line names the unjudged checks and only their reasons fold.
+ */
+function Signals({ signals, exposure, inline = true }) {
   const { fired, unjudged, reasons, judged = [], asOf, historyMissing } = signals;
   // 「なし」 only when at least one check was judged: nothing judged is 判定できません, never an all-clear.
   const headline = fired.length ? <><span aria-hidden="true">▲</span> 注意サイン {fired.length}件</> : judged.length ? '注意サインなし' : '注意サインを判定できません';
@@ -147,10 +154,10 @@ function Signals({ signals, exposure }) {
     <b>{headline}<small>（{asOf ? `${asOf}時点・` : ''}独自判定）</small></b>
     {fired.length > 0 && <ul>{fired.map(s => <li key={s.key}><span aria-hidden="true">▲</span><span>{s.text}{s.itemAsOf ? `（${s.itemAsOf}時点）` : ''}</span></li>)}</ul>}
     {historyMissing && <p>{historyScope(judged)}</p>}
-    {/* The count of unjudged checks stays on the line; which ones and why opens in place. */}
-    {unjudged.length > 0 && <Expander id="market-unjudged" className="brief-signals-unjudged" summary={<>判定していない項目 {unjudged.length}件<span className="sr-only">：</span></>}>
-      <p>{reasons.map(r => `${r.labels.join('・')}（${r.reason}）`).join('／')}</p>
-    </Expander>}
+    {unjudged.length > 0 && (inline ? <p className="brief-signals-unjudged">判定していない項目 {unjudged.length}件：{unjudgedReasons(reasons)}</p>
+      : <Expander id="market-unjudged" className="brief-signals-unjudged" summary={`判定していない項目 ${unjudged.length}件：${unjudged.map(c => c.label).join('・')}`}>
+        <p>理由：{reasons.length === 1 ? reasons[0].reason : unjudgedReasons(reasons)}</p>
+      </Expander>)}
     {fired.length > 0 && exposure > 0 && <p>注意サインは判定とは別の確認項目で、エクスポージャーの目安は変えません。</p>}
   </div>;
 }
@@ -245,7 +252,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
         {verdict.exposure !== null && <div className="brief-exposure"><small><span className="brief-frag">エクスポージャー</span><span className="brief-frag">の目安</span></small><b className="numeric">{verdict.exposure > 0 ? `最大 ${verdict.exposure}%` : '0%'}</b><span className="brief-exposure-track" aria-hidden="true"><i style={{ width: `${verdict.exposure}%` }} /></span></div>}
         {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
       </div>
-      {signals && <Signals signals={signals} exposure={verdict.exposure} />}
+      {signals && <Signals signals={signals} exposure={verdict.exposure} inline={!switcher} />}
     </div>
     {statusAlert}
     {switcher && panels.length > 0 && <div ref={tabsRef} className="brief-switchbar"><SectionTabs panels={panels} active={active} onSelect={select} /></div>}

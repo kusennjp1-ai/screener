@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { describe, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MarketCard from './MarketCard';
 import { attempt, breadth, closes, confirmed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
@@ -185,7 +185,23 @@ describe('brief market card: market tab', () => {
     expect(tile('50日線より上')).toHaveTextContent('43.0%');
     expect(tile('先導株数（価格条件）')).toHaveTextContent('20銘柄');
     expect(signals()).toHaveTextContent('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率（旧形式の長期集計に未収録）');
+    expect(signals().querySelector('details')).toBeNull();
     for (const element of tiles()) expect(element.textContent).not.toMatch(bare);
+  });
+
+  it('names the unjudged checks on the phone\'s summary line and folds only their reasons', () => {
+    const phone = rows => render(<MemoryRouter><MarketCard market={UP} trends={trends({ rows })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
+    phone(oldSchema(breadth('2026-10-02')));
+    const fold = signals().querySelector('details');
+    expect(fold.open).toBe(false);
+    expect(fold.querySelector('summary')).toHaveTextContent(/^判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率$/);
+    expect(fold.querySelector('.brief-expander-body')).toHaveTextContent(/^理由：旧形式の長期集計に未収録$/);
+    cleanup();
+    // Two reasons: each with the checks it applies to.
+    phone(breadth('2026-10-02', (i, n) => (i === n - 1 ? { leaderCohort: 4 } : {})));
+    const two = signals().querySelector('details');
+    expect(two.querySelector('summary')).toHaveTextContent(/^判定していない項目 2件：指数と個別株の乖離・リーダーの健全度$/);
+    expect(two.querySelector('.brief-expander-body')).toHaveTextContent(/^理由：指数と個別株の乖離（指数の履歴が1年に満たない）／リーダーの健全度（最新は対象4銘柄（10銘柄未満））$/);
   });
 
   it('says loading once per group while the series and the verdict load, never 未取得', () => {
