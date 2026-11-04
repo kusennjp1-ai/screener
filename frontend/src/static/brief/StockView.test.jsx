@@ -83,6 +83,29 @@ describe('brief fundamentals card', () => {
     expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent('未取得');
   });
 
+  it('flags a sales rate whose quarter or year-ago base is a derived Q4', () => {
+    const derive = point => Object.assign(point, { form: '10-K', derived: 'fiscal-year-minus-three-quarters', components: ['fy', 'q1', 'q2', 'q3'] });
+    // Only the base (2025-06) is derived: the shown 2026-06 quarter is reported.
+    const baseOnly = tenQFiler();
+    for (const key of ['revenue', 'netIncome']) derive(baseOnly.quarterly[key].find(p => p.end === '2025-06-30'));
+    let scope = card(financial(baseOnly));
+    expect(tile(scope, '売上 前年比')).toHaveTextContent('+100%2026-06期・前期 +60%・前年同期はQ4算出');
+    expect(scope.getByText(/^出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで・売上\/純利益のQ4は10-K年度値−3四半期で算出$/)).toBeInTheDocument();
+    expect(tile(scope, '純利益率')).not.toHaveTextContent('Q4算出');
+    cleanup();
+    // Both the quarter and its base are derived: the source names the derivation once.
+    const both = tenQFiler();
+    for (const key of ['revenue', 'netIncome']) for (const end of ['2025-06-30', '2026-06-30']) derive(both.quarterly[key].find(p => p.end === end));
+    scope = card(financial(both));
+    expect(tile(scope, '売上 前年比')).toHaveTextContent('・前年同期はQ4算出');
+    expect(scope.getByText(/^出典：SEC XBRL（10-K 2026-07-30 提出）・2026-06期まで・売上\/純利益のQ4は10-K年度値−3四半期で算出$/)).toBeInTheDocument();
+    cleanup();
+    // Neither derived: no derivation note anywhere.
+    scope = card(financial(tenQFiler()));
+    expect(tile(scope, '売上 前年比')).not.toHaveTextContent('Q4算出');
+    expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent('年度値−3四半期で算出');
+  });
+
   it('says a loss-making base cannot be compared and shows the EPS', () => {
     const loss = record(); loss.quarterly.eps.forEach((p, i) => { p.value = i < 4 ? -0.2 : 0.15; });
     const scope = card(financial(loss));

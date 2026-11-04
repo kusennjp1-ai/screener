@@ -40,7 +40,7 @@ export function yoyDetail(points, end, instant = false) {
   // Equal end months do not make a 70-day transition period comparable with a
   // 105-day quarter. Allow a 53-week retailer's one extra week, not extra months.
   if (!instant && Math.abs(days(now.end, now.start) - days(bases[0].end, bases[0].start)) > 7) return { value: null, reason: 'period_mismatch' };
-  return { value: (now.value / bases[0].value - 1) * 100, reason: null };
+  return { value: (now.value / bases[0].value - 1) * 100, reason: null, base: bases[0] };
 }
 const yoy = (points, end, instant = false) => yoyDetail(points, end, instant).value;
 function rises(values) { return values.every(finite) ? values.slice(1).every((v, i) => v > values[i]) : null; }
@@ -63,7 +63,9 @@ export function bookFinancialEvidence(data, symbol, date) {
     const margin = marginDetail(revenue, income);
     const derived = [revenue, income].some(p => p?.derived === DERIVED_Q4);
     const epsGrowth = yoyDetail(q.eps, end), salesGrowth = yoyDetail(q.revenue, end);
-    return { end, derived, eps: eps?.value ?? null, revenue: revenue?.value ?? null, margin: margin.value, epsYoY: epsGrowth.value, salesYoY: salesGrowth.value,
+    // Sales growth rests on this quarter's revenue and its year-ago base: either one may be a derived Q4.
+    const salesDerived = revenue?.derived === DERIVED_Q4, salesBaseDerived = salesGrowth.base?.derived === DERIVED_Q4;
+    return { end, derived, salesDerived, salesBaseDerived, eps: eps?.value ?? null, revenue: revenue?.value ?? null, margin: margin.value, epsYoY: epsGrowth.value, salesYoY: salesGrowth.value,
       epsYoYReason: epsGrowth.reason, salesYoYReason: salesGrowth.reason, marginReason: margin.reason,
       // A fiscal fourth quarter: the 10-K's fiscal-year end, or a Q4 derived from it.
       fiscalQ4: fiscalYearEnds.has(end) || derived, form: eps?.form ?? revenue?.form ?? income?.form ?? null,

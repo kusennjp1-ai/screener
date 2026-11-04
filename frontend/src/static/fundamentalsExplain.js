@@ -95,10 +95,13 @@ export function fundamentalTiles(report) {
     while (index >= 0 && !finite(rows[index][key])) index--;
     if (index < 0) return { label, value: null, short: shortReason(newest, metric), note: `${ym(newest.end)}・${quarterReason(newest, metric)}`, end: newest.end };
     const row = rows[index], previous = rows[index - 1];
-    const note = row === newest
+    // A sales rate compared with a derived Q4 base says so; the margin uses only its own quarter.
+    const baseDerived = metric === 'sales' && row.salesBaseDerived === true;
+    const note = (row === newest
       ? metric === 'margin' ? ym(row.end) : `${ym(row.end)}・前期 ${previous ? finite(previous[key]) ? format(previous[key]) : quarterReason(previous, metric) : 'なし'}`
-      : `${ym(row.end)}・最新 ${ym(newest.end)}は${quarterReason(newest, metric)}`;
-    return { label, value: format(row[key]), short: null, note, end: row.end, derived: metric !== 'eps' && row.derived };
+      : `${ym(row.end)}・最新 ${ym(newest.end)}は${quarterReason(newest, metric)}`) + (baseDerived ? '・前年同期はQ4算出' : '');
+    const derived = metric === 'sales' ? (row.salesDerived ?? row.derived) === true || baseDerived : metric === 'margin' && row.derived === true;
+    return { label, value: format(row[key]), short: null, note, end: row.end, derived };
   };
   return [tile('EPS 前年比', 'eps', 'epsYoY', v => signed(v, 0)), tile('売上 前年比', 'sales', 'salesYoY', v => signed(v, 0)), tile('純利益率', 'margin', 'margin', v => `${v.toFixed(1)}%`)];
 }
