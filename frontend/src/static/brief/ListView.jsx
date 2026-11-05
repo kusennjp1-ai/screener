@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import useMediaQuery from '../useMediaQuery';
-import { candidateView, LIST_FILTERS, LIST_SORTS, matchesSearch } from './briefCandidate';
+import { briefOrder, candidateView, LIST_FILTERS, LIST_SORTS, matchesSearch } from './briefCandidate';
 import { CandidateRow } from './BriefParts';
 import { ScreenNotes } from './briefPrimitives';
 import { PHONE_QUERY } from './briefNav';
@@ -21,10 +21,15 @@ export function listSource(brief, kind, watch) {
     : brief.ranked.filter(item => item.assessment?.qualified || (item.assessment?.failed === 1 && item.assessment?.unknown === 0));
   return source.map(item => candidateView(item, brief.date));
 }
-/** Exactly the rows a list screen shows, in its order; prev/next and swipe follow the same sequence. */
+/**
+ * Exactly the rows a list screen shows, in its order; prev/next and swipe follow the same sequence. The
+ * watch list has no filter, search or sort control of its own, so the 候補 tab's never drop or reorder a
+ * watched stock: every one is listed, in the order Today's watch card uses.
+ */
 // eslint-disable-next-line react-refresh/only-export-components -- the stock pane steps through the same rows
 export function listShown(views, kind, { filter, sort, query }) {
-  return views.filter(kind === 'watch' ? () => true : (LIST_FILTERS[filter] || LIST_FILTERS[DEFAULT_FILTER]).test).filter(view => matchesSearch(view, query)).sort(LIST_SORTS[sort].compare);
+  if (kind === 'watch') return [...views].sort(briefOrder);
+  return views.filter((LIST_FILTERS[filter] || LIST_FILTERS[DEFAULT_FILTER]).test).filter(view => matchesSearch(view, query)).sort(LIST_SORTS[sort].compare);
 }
 /**
  * Watch rows in their list order, with the broken setups (the 50-day check or the book's warning fired)

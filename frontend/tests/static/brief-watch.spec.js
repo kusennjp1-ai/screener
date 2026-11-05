@@ -1,6 +1,7 @@
 // Daily brief watch list: Today's watch rows and their folding while the sell checks load, the watch tile
 // (only broken setups counted, 0件 only when every check is in, the 12-stock limit and unlisted symbols said), a
-// symbol this publication does not list, the 375×812 budgets and row heights with a broken setup, the list's rows across a stock round trip, and the sell card's
+// symbol this publication does not list, every watched stock listed whatever the 候補 tab's search, the 375×812
+// budgets and row heights with a broken setup, the list's rows across a stock round trip, and the sell card's
 // qualifier, on synthetic data.
 import { test, expect } from '@playwright/test';
 import { openBrief, charts, rows, rowBySymbol, horizontalOverflow } from './brief-fixture.js';
@@ -160,6 +161,27 @@ test.describe('a watched symbol the publication does not list', () => {
     await expect(card.locator('.brief-unlisted')).toHaveCount(0);
     await expect(tile).toContainText('ウォッチの注意0件2銘柄を確認・保有未登録');
     await expect(tabs.getByRole('link', { name: /ウォッチ/ }).locator('.brief-count')).toHaveText('2');
+    expect(errors).toEqual([]);
+  });
+});
+
+// Every watched stock is listed whatever the 候補 tab's search: the badge, the rows and the dock agree.
+test.describe('the watch tab and the 候補 search', () => {
+  test.use(phone(390, 844));
+  test('a search typed on 候補 never hides a watched stock', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list', { storage: { 'research-watch': ['ZZNV', 'ZZKS', 'QQQX', 'ZZSD'] } });
+    await page.getByRole('searchbox', { name: '銘柄を検索' }).fill('ZZNV');
+    await expect(page.getByTestId('brief-candidate')).toHaveCount(1);
+    const tabs = page.getByRole('navigation', { name: 'ブリーフの画面' });
+    await tabs.getByRole('link', { name: /ウォッチ/ }).click();
+    const region = page.getByRole('region', { name: 'ウォッチ中の銘柄' });
+    await expect(region.getByTestId('brief-candidate')).toHaveCount(3);
+    await expect(region.locator('.brief-rows > li')).toHaveCount(4);
+    await expect(tabs.getByRole('link', { name: /ウォッチ/ }).locator('.brief-count')).toHaveText('4');
+    // The stock screen steps through the same three listed rows.
+    await region.getByTestId('brief-candidate').last().click();
+    await expect(page.locator('.brief-dockpos .numeric')).toHaveText('3/3');
+    await expect(page.locator('.brief-dockpos p')).toContainText('ウォッチ');
     expect(errors).toEqual([]);
   });
 });

@@ -2,8 +2,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import ListView, { watchOrder } from './ListView';
-import { LIST_FILTERS } from './briefCandidate';
+import ListView, { listShown, watchOrder } from './ListView';
+import { candidateView, LIST_FILTERS } from './briefCandidate';
 
 afterEach(cleanup);
 
@@ -72,5 +72,23 @@ describe('the watch list', () => {
     // The advance's largest down day alone is a holder's signal: it does not move a row.
     expect(watchOrder(views, { A: quiet, B: quiet, C: { hits: 1, weaknessHits: 1, breakdownHits: 0 } }).map(v => v.symbol)).toEqual(['A', 'B', 'C']);
     expect(watchOrder([], {})).toEqual([]);
+  });
+
+  it('lists every watched stock whatever the 候補 tab\'s filter, search and sort, in Today\'s order', () => {
+    const views = ranked.map(entry => candidateView(entry, DATE));
+    const plain = listShown(views, 'watch', { filter: 'zone', sort: 'priority', query: '' }).map(v => v.symbol);
+    expect(plain).toHaveLength(ranked.length);
+    for (const state of [{ filter: 'one', sort: 'rs', query: 'ZON1' }, { filter: 'near', sort: 'volume', query: 'nothing matches' }])
+      expect(listShown(views, 'watch', state).map(v => v.symbol)).toEqual(plain);
+    // The 候補 tab keeps its search.
+    expect(listShown(views, 'list', { filter: 'all', sort: 'priority', query: 'ZON1' }).map(v => v.symbol)).toEqual(['ZON1']);
+  });
+
+  it('renders every watched row while the 候補 tab has a search', () => {
+    const { getAllByTestId } = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ListView brief={brief} kind="watch" watch={['NEA1', 'ZON1', 'FAR1']} open={() => {}} now={0} animate={false} listState={{ filter: 'zone', sort: 'priority', query: 'ZON1' }} setListState={() => {}}
+        limits={{}} setLimits={() => {}} origin={null} wide onUnwatch={() => {}} />
+    </QueryClientProvider>);
+    expect(getAllByTestId('brief-candidate')).toHaveLength(3);
   });
 });
