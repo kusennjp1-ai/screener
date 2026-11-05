@@ -25,7 +25,8 @@ describe('brief stock view', () => {
   it('keeps everything computed from uncertified or lagging bars unknown and says why (the conclusion)', () => {
     render(<StockView data={data(false, '2026-10-01')} />);
     expect(screen.getByText('ステージ 未確認')).toBeInTheDocument();
-    expect(screen.getByText('損切り −7.0%')).toBeInTheDocument();
+    // The chart labels its stop line the same way; the conclusion's tile is the one asserted here.
+    expect(within(screen.getByTestId('brief-conclusion')).getByText('損切り −7.0%')).toBeInTheDocument();
   });
 
   it('labels the stop without a percentage when there is no plan', () => {
@@ -79,7 +80,7 @@ describe('the conclusion says why there is no buy', () => {
     const t = template === undefined ? trendTemplate(row) : template;
     const a = assessment || { qualified: t.qualified, passed: t.passed + (t.integrity?.state === 'pass' ? 1 : 0), failed: t.failed, unknown: t.unknown, total: 9 };
     const view = candidateView({ row, assessment: a }, DAY);
-    render(<StockVerdict view={view} plan={plan === undefined ? positionPlan(view) : plan} stage={null} technical={null} bars={null} judged={judged} template={t} rsHigh={false} financial={null} row={row} sells={null} diagnostics={null} market={market} now={now} />);
+    render(<StockVerdict view={view} plan={plan === undefined ? positionPlan(view, {}, { market, template: t }) : plan} stage={null} technical={null} bars={null} judged={judged} template={t} rsHigh={false} financial={null} row={row} sells={null} diagnostics={null} market={market} now={now} />);
     return screen.getByTestId('brief-conclusion');
   };
   const title = card => card.querySelector('strong').textContent, sub = card => card.querySelector('.brief-call-status p').textContent;
@@ -99,8 +100,10 @@ describe('the conclusion says why there is no buy', () => {
     expect([...card.querySelectorAll('.brief-meter-name')].map(node => node.textContent)).toEqual(['土台形成中', 'ピボット接近', '買いゾーン', '買いゾーン超過']);
     // The short names a column narrower than a word shows instead (a 375px phone at 200% zoom).
     expect([...card.querySelectorAll('.brief-meter-short')].map(node => node.textContent)).toEqual(['土台', '接近', '買い', '超過']);
-    expect(tiles(card)).toEqual([['買いの範囲', '100.00', '〜105.00'], ['損切り −7.0%', '93.93', '買値 101.00'], ['株数', '88株', 'リスク $625']]);
-    expect(card.querySelectorAll('.brief-tilequal')).toHaveLength(0);
+    // The plan is the shell's (usePositionPlan passes the market and the template); with every input at its
+    // default, the stop and the shares carry 既定条件 (Track F's contract), and nothing reads 参考.
+    expect(tiles(card)).toEqual([['買いの範囲', '100.00', '〜105.00'], ['損切り −7.0%', '93.93', '買値 101.00', '既定条件'], ['株数', '88株', 'リスク $625', '既定条件']]);
+    expect(quals(card)).toEqual(['既定条件', '既定条件']);
   });
 
   it('names the failed template rule with its value, in a neutral tone, and marks the position and the prices 参考', () => {
