@@ -12,8 +12,9 @@ import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { scanListRow } from './scan-list-payload.mjs';
 import { setupEvidence } from './setup-evidence.mjs';
 import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
-import { admitBookFinancials } from '../src/static/bookFinancialAdmission.js';
+import { admitBookFinancialsDetailed } from '../src/static/bookFinancialAdmission.js';
 import { readBookFinancials } from './book-financials-input.mjs';
+import { appendStepSummary, formatSecAdmission, fundamentalsCoverageBlock, secAdmissionState } from './report-data-coverage.mjs';
 // Daily, reproducible candidate snapshots use the exact same rules as the UI.
 import { readFile, writeFile, readdir, mkdir, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -74,6 +75,10 @@ financials = await readBookFinancials(root);
 const marketCharts = [];
 const availableCharts = new Set();
 let rows = new Map();
+// The SEC admission of each row (export stage, then after the carry/correction overlay), for the
+// detail-only sec_admission, the manifest's coverage block and the logs. Nothing here changes a value.
+const secFile = financials?.as_of_date === scan.as_of_date ? financials : null;
+const secExport = new Map(), secStates = new Map();
 for (const row of merged) {
   row.se_explain=row.setup_engine?.explain || null;
   row.se_candidates=row.setup_engine?.candidates || null;
@@ -129,7 +134,28 @@ for (const row of merged) {
   rows.set(row.symbol, projectFinancialRow(overlayFinancialCorrection({ ...row, as_of_date:scan.as_of_date, chart_path:paths.get(row.symbol) || null, entry_evidence:entryEvidence, technical_audit: audit, book_diagnostics: diagnostics, book_technical_evidence: technical,
     financial_history: currentFinancials?.as_of_date === scan.as_of_date ? currentFinancials.results?.[row.symbol] || null : null,
     // Only an exact same-day SEC record for this symbol reaches the row (also without a correction or carry).
-    book_financials: financials?.as_of_date === scan.as_of_date ? admitBookFinancials(financials.results?.[row.symbol], {symbol:row.symbol,asOfDate:scan.as_of_date,evaluatedAt,row}) : null }, correction), {now:evaluatedAt,asOfDate:scan.as_of_date}));
+    book_financials: secAdmitted(row) }, correction), {now:evaluatedAt,asOfDate:scan.as_of_date}));
+  const published = rows.get(row.symbol), raw = secFile?.results?.[row.symbol];
+  // A record the export admitted but the overlay did not: the overlay's own (carry or correction) admission names why.
+  const overlay = correction && raw !== undefined && !published.book_financials && secExport.get(row.symbol)?.value ? admitBookFinancialsDetailed(raw, {symbol:row.symbol,asOfDate:scan.as_of_date,evaluatedAt:typeof correction.financial_evaluated_at === 'number' ? correction.financial_evaluated_at : Date.parse(correction.financial_evaluated_at),row}) : null;
+  secStates.set(row.symbol, secAdmissionState({file:financials,asOfDate:scan.as_of_date,symbol:row.symbol,published:Boolean(published.book_financials),refusal:overlay?.reason ?? secExport.get(row.symbol)?.reason ?? null}));
+}
+function secAdmitted(row) {
+  const result = secFile ? admitBookFinancialsDetailed(secFile.results?.[row.symbol], {symbol:row.symbol,asOfDate:scan.as_of_date,evaluatedAt,row}) : null;
+  if (result && secFile.results && Object.hasOwn(secFile.results, row.symbol)) secExport.set(row.symbol, result);
+  return result?.value ?? null;
+}
+{
+  const exported = [...secExport.values()], refused = {};
+  for (const {reason} of exported) if (reason) refused[reason] = (refused[reason] || 0) + 1;
+  const line = formatSecAdmission(scan.as_of_date, {stage:'export', file:financials, admitted:exported.filter(item => item.value).length, refused, universe:merged.length});
+  console.log(line); appendStepSummary(`- ${line}`);
+  if (correction) {
+    const states = [...secStates.values()], overlayRefused = {};
+    for (const item of states) if (item.state === 'refused') overlayRefused[item.reason] = (overlayRefused[item.reason] || 0) + 1;
+    const overlayLine = formatSecAdmission(scan.as_of_date, {stage:carry ? 'financial carry overlay' : 'financial correction overlay', file:financials, admitted:states.filter(item => item.state === 'admitted').length, refused:overlayRefused, universe:states.length});
+    console.log(overlayLine); appendStepSummary(`- ${overlayLine}`);
+  }
 }
 await writeCorrectionHistory(root,correction,currentFinancials);
 await rewriteCorrectionChartAliases(root,correction);
@@ -173,9 +199,10 @@ for (const [symbol, row] of rows) {
     row.chart_path=`verified-charts/${encodeURIComponent(symbol)}-${chartHash}.json`;
     paths.set(symbol,row.chart_path);currentCharts.add(row.chart_path);
   }
-  const { book_diagnostics, book_technical_evidence, book_financials, research_detail_path: previousDetailPath, ...compact } = row;
-  void previousDetailPath;
-  const detail = {...compact, symbol, as_of_date:scan.as_of_date, book_diagnostics, book_technical_evidence, book_financials};
+  const { book_diagnostics, book_technical_evidence, book_financials, sec_admission: previousAdmission, research_detail_path: previousDetailPath, ...compact } = row;
+  void previousDetailPath; void previousAdmission;
+  // sec_admission is detail-only, beside the record it describes (never in the list rows or the scan pages).
+  const detail = {...compact, symbol, as_of_date:scan.as_of_date, book_diagnostics, book_technical_evidence, book_financials, sec_admission:secStates.get(symbol)};
   const content = JSON.stringify(detail);
   const hash = createHash('sha256').update(content).digest('hex').slice(0,16);
   const path = `research-details/${encodeURIComponent(symbol)}-${hash}.json`;
@@ -294,5 +321,9 @@ const producerCoverage=await producerHistoryCoverage({root,entry,rows:[...rows.v
 await writeFile(resolve(root,'data-quality.json'),JSON.stringify({as_of_date:scan.as_of_date,total:producerCoverage?.total ?? liquid.length,verified:producerCoverage?.verified ?? liquid.filter(r=>r.technical_audit.valid).length,reasons:producerCoverage?.missing?.reasons ?? failures,rs_universe:[...rows.values()][0]?.rs_universe_size,minimum_target:.9}));
 
 await exportWorkbench({root,rows:[...rows.values()],manifest,entry,researchContent,now:evaluatedAt,financialCorrection:correctionMeta});
+// The publication's SEC coverage, from the SEC input and every row's final admission (report-data-coverage
+// computes the same block from the published files; the quality gate requires the two to agree).
+entry.fundamentals_coverage = fundamentalsCoverageBlock({file:financials, asOfDate:scan.as_of_date,
+  states:[...rows.values()].map(row => ({symbol:row.symbol, ...secStates.get(row.symbol), status:row.book_financials?.status ?? null}))});
 // Publish the manifest pointer only after every referenced asset is complete.
 await writeFile(resolve(root, 'manifest.json'), JSON.stringify(manifest));

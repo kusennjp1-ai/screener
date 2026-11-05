@@ -1,11 +1,12 @@
 // @vitest-environment node
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { secPoint, secRecord, secUnavailable } from '../src/test/fixtures/secRecord.js';
-import { briefRows, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, publishedCoverage } from './report-data-coverage.mjs';
+import { briefRows, compareSecCarryForward, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, publishedCoverage, runPublished, secAdmissionState, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
 
 const write = async (path, value) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(value)); };
 
@@ -83,5 +84,117 @@ describe('data coverage report', () => {
     expect(insufficient.derived).toEqual({ breakoutHoldPercent: null, leaderHealthPercent: null });
     expect(finalEnvironmentRow(null)).toEqual({ date: null, values: null, missing_environment_keys: null, derived: null });
     expect(finalEnvironmentRow({ breadth: [] }).values).toBeNull();
+  });
+});
+
+describe('the publication SEC coverage block and the published report', () => {
+  const date = '2026-02-01', now = Date.parse('2026-02-01T12:00:00Z');
+  const record = symbol => secRecord({ symbol, asOfDate: date });
+  // A small publication: the listed rows' details (with their admission), the SEC input and the manifest block.
+  async function bundle({ listed = 5, withRecord = 5, file = 'current', refusals = {}, block = true, schema = 2 } = {}) {
+    const root = await mkdtemp(join(tmpdir(), 'published-report-'));
+    const symbols = Array.from({ length: listed }, (_, i) => `S${i}`), results = {}, states = [];
+    const refusedSymbols = Object.entries(refusals).flatMap(([reason, n]) => Array.from({ length: n }, () => reason));
+    for (const [i, symbol] of symbols.entries()) {
+      const has = i < withRecord, reason = !has ? refusedSymbols[i - withRecord] : undefined;
+      if (file && (has || reason)) results[symbol] = { ...record(symbol), schema_version: schema };
+      const state = has ? { state: 'admitted', reason: null } : reason ? { state: 'refused', reason } : file ? { state: 'not_requested', reason: null } : { state: 'not_fetched', reason: 'no_file' };
+      states.push({ symbol, ...state, status: has ? 'available' : null });
+      await write(join(root, `static-data/research-details/${symbol}.json`), { symbol, market: 'US', as_of_date: date, book_financials: has ? results[symbol] : null, sec_admission: state });
+    }
+    const input = file ? { schema_version: schema, as_of_date: file === 'stale' ? '2026-01-30' : date, results, coverage: { eligible: listed + 3, requested: Object.keys(results).length, truncated: 3, deadline: { unreached: 0 } } } : null;
+    if (input) await writeFile(join(root, 'static-data/book-financials.json.gz'), gzipSync(JSON.stringify(input)));
+    const rows = symbols.map(symbol => ({ symbol, market: 'US', as_of_date: date, research_detail_path: `research-details/${symbol}.json` }));
+    await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows }));
+    const US = { as_of_date: date, assets: { research: { path: 'research.json' } }, ...(block ? { fundamentals_coverage: fundamentalsCoverageBlock({ file: input, asOfDate: date, states }) } : {}) };
+    await write(join(root, 'static-data/manifest.json'), { markets: { US } });
+    await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: symbols.map(symbol => ({ symbol, methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } })) });
+    return root;
+  }
+  const published = async (root, args = [], env = {}) => { const lines = []; const code = await runPublished(['--published', '--root', root, ...args], { env, log: line => lines.push(line), now }); return { code, lines, text: lines.join('\n') }; };
+
+  it('builds the block from the SEC input and every row, with unknown counts null, never 0', () => {
+    const states = [{ symbol: 'A', state: 'admitted', reason: null, status: 'available' }, { symbol: 'B', state: 'admitted', reason: null, status: 'unavailable' },
+      { symbol: 'C', state: 'refused', reason: 'cik_url' }, { symbol: 'D', state: 'not_requested', reason: null }];
+    const file = { schema_version: 2, as_of_date: date, results: { A: {}, B: {}, C: {} } };
+    const block = fundamentalsCoverageBlock({ file, asOfDate: date, states });
+    expect(block).toEqual({ schema_version: 'fundamentals-coverage-v1', as_of_date: date, sec_fetch_ran: true, sec_as_of: date, file_schema: 2, universe: 4, requested: 3,
+      eligible: null, truncated: null, deadline_unreached: null, admitted: 2, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 } });
+    expect(validFundamentalsCoverageBlock(block)).toBe(true);
+    // No same-day input: nothing about the fetch is counted as zero.
+    const none = fundamentalsCoverageBlock({ file: null, asOfDate: date, states: [{ symbol: 'A', state: 'not_fetched', reason: 'no_file' }] });
+    expect(none).toMatchObject({ sec_fetch_ran: false, sec_as_of: null, file_schema: null, requested: null, eligible: null, admitted: 0, not_fetched: 1 });
+    const stale = fundamentalsCoverageBlock({ file: { ...file, as_of_date: '2026-01-30' }, asOfDate: date, states: [{ symbol: 'A', state: 'not_fetched', reason: 'other_date' }] });
+    expect(stale).toMatchObject({ sec_fetch_ran: false, sec_as_of: '2026-01-30', file_schema: 2, requested: null });
+    expect(validFundamentalsCoverageBlock(undefined)).toBe(true);
+    for (const broken of [{ ...block, admitted: 3 }, { ...block, extra: 1 }, { ...block, requested: -1 }, { ...block, refused_by_reason: { cik_url: 2 } }, { ...block, sec_as_of: '2026-01-30' }, null, []])
+      expect(validFundamentalsCoverageBlock(broken)).toBe(false);
+    expect(secAdmissionState({ file, asOfDate: date, symbol: 'Z', published: false })).toEqual({ state: 'not_requested', reason: null });
+    expect(secAdmissionState({ file, asOfDate: date, symbol: 'C', published: false, refusal: 'cik_url' })).toEqual({ state: 'refused', reason: 'cik_url' });
+    expect(secAdmissionState({ file: null, asOfDate: date, symbol: 'A', published: false })).toEqual({ state: 'not_fetched', reason: 'no_file' });
+    expect(formatSecAdmission(date, { stage: 'export', file, admitted: 2, refused: { cik_url: 1 }, universe: 4 })).toBe(`SEC admission ${date} (export): file_schema 2, records 3, admitted 2 of 4, refused {"cik_url":1}`);
+    expect(formatSecAdmission(date, { file: null, admitted: 0 })).toBe(`SEC admission ${date}: file_schema none, records 0, admitted 0, refused {}`);
+  });
+
+  it('warns on each condition, writes the summary table with 未計測 and never fails a build', async () => {
+    const cases = [
+      [{}, []],
+      [{ withRecord: 3 }, ['SEC records cover 3/5 brief-listed rows (60.0%, below 80%)']],
+      [{ withRecord: 0, file: null }, ['No brief-listed row carries an SEC record (0/5)', 'The SEC input file is absent (expected schema 2)']],
+      [{ withRecord: 4, refusals: { not_corporate: 1 } }, []],
+      [{ withRecord: 3, refusals: { cik_url: 1, 'series:eps': 1 } }, ['SEC records cover 3/5', 'SEC records refused at admission: cik_url 1, series:eps 1']],
+      [{ withRecord: 0, refusals: { schema: 5 }, schema: 1 }, ['No brief-listed row carries an SEC record (0/5)', 'The SEC input file has schema 1, expected 2', 'SEC records refused at admission: schema 5']],
+    ];
+    for (const [options, expected] of cases) {
+      const root = await bundle(options), summary = join(root, 'summary.md');
+      try {
+        await writeFile(summary, '');
+        const result = await published(root, ['--json', join(root, 'report.json')], { GITHUB_STEP_SUMMARY: summary });
+        expect(result.code).toBe(0);
+        const warnings = result.lines.filter(line => line.startsWith('::warning::'));
+        for (const text of expected) expect(warnings.some(line => line.includes(text)), `${JSON.stringify(options)}: ${text}`).toBe(true);
+        if (!expected.length) expect(warnings).toEqual([]);
+        const table = await readFile(summary, 'utf8');
+        expect(table).toContain(`### Published fundamentals coverage ${date}`);
+        expect(table).toContain('| brief-listed rows | 5 |');
+        const report = JSON.parse(await readFile(join(root, 'report.json'), 'utf8'));
+        expect(report.coverage.listed).toBe(5);
+        expect(Object.keys(report.records)).toHaveLength(options.withRecord ?? 5);
+        if (options.file === null) expect(table).toContain('| records in the input for this date | 未計測 (eligible 未計測, truncated 未計測, deadline unreached 未計測) |');
+        else expect(table).toContain('(eligible 8, truncated 3, deadline unreached 0)');
+      } finally { await rm(root, { recursive: true, force: true }); }
+    }
+    // An input for another day is said so, and the block is checked against the details.
+    const stale = await bundle({ withRecord: 0, file: 'stale', block: false });
+    try { expect((await published(stale)).text).toContain('::warning::The SEC input file is for 2026-01-30, not for this publication (2026-02-01)'); }
+    finally { await rm(stale, { recursive: true, force: true }); }
+    // A missing bundle or an unreadable one is a warning, not a failure.
+    const empty = await mkdtemp(join(tmpdir(), 'published-report-empty-'));
+    try { expect(await published(empty)).toMatchObject({ code: 0, lines: ['::warning::Published fundamentals coverage unavailable: No published static-data bundle'] }); }
+    finally { await rm(empty, { recursive: true, force: true }); }
+  });
+
+  it('says when a UI-only republish drops SEC coverage, and refuses it only when required and not allowed', async () => {
+    const before = await bundle({ withRecord: 5 }), after = await bundle({ withRecord: 3 });
+    try {
+      const previous = join(before, 'report.json');
+      await published(before, ['--json', previous]);
+      expect(compareSecCarryForward(JSON.parse(await readFile(previous, 'utf8')), JSON.parse(await readFile(previous, 'utf8')))).toMatchObject({ comparable: true, before: 5, kept: 5, dropped: false });
+      const diagnostic = await published(after, ['--previous', previous]);
+      expect(diagnostic.code).toBe(0);
+      expect(diagnostic.text).toContain('::warning::SEC coverage dropped from 5 to 3 against the given previous report');
+      const required = await published(after, ['--previous', previous, '--require-sec-carry-forward']);
+      expect(required.code).toBe(1);
+      expect(required.text).toContain('::error::SEC coverage dropped from 5 to 3 in a UI-only republish (lost 2: S3 S4; changed 0)');
+      const allowed = await published(after, ['--previous', previous, '--require-sec-carry-forward', '--allow-sec-coverage-drop']);
+      expect(allowed.code).toBe(0);
+      expect(allowed.text).toContain('::warning::SEC coverage dropped from 5 to 3 in a UI-only republish');
+      // Unchanged records pass; a previous report of another publication date is not comparable and fails closed when required.
+      expect((await published(before, ['--previous', previous, '--require-sec-carry-forward'])).text).toContain('SEC records carried forward unchanged in a UI-only republish: 5/5');
+      const other = JSON.parse(await readFile(previous, 'utf8')); other.as_of_date = '2026-01-30'; await writeFile(previous, JSON.stringify(other));
+      expect(await published(before, ['--previous', previous, '--require-sec-carry-forward'])).toMatchObject({ code: 1 });
+      await writeFile(previous, JSON.stringify({ unavailable: 'boom' }));
+      expect((await published(before, ['--previous', previous, '--require-sec-carry-forward'])).text).toContain('cannot be verified: boom');
+    } finally { await rm(before, { recursive: true, force: true }); await rm(after, { recursive: true, force: true }); }
   });
 });
