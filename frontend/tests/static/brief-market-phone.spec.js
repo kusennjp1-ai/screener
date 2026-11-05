@@ -145,6 +145,49 @@ test.describe('the market screen at 375×812 with what the new exporter publishe
   });
 });
 
+// Long history one session behind the analysis date (a known production state): the lag is said in the heading's
+// stamp slot, the rest of the sentence in the 注記, so the screen keeps its budget and its lead block.
+test.describe('the market screen at 375×812 one session behind', () => {
+  test.use({ ...phone(375, 812), contextOptions: { reducedMotion: 'reduce' } });
+  for (const [name, mutate] of [['the base data', undefined], ['a Nasdaq position', nasdaqState]]) test(`with ${name}: within 1300, the lead above 756px, the lag in the stamp slot`, async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market', { historyEnd: sessions.at(-2), mutate });
+    await expect(page.locator('.market-history-explorer svg').first()).toBeAttached();
+    const market = page.getByRole('region', { name: '地合い' });
+    const stamp = market.locator(':scope > .brief-step .brief-stamp');
+    await expect(stamp).toHaveText('◷ 10/1引け・10/2分は再集計待ち');
+    await expect(stamp).toHaveAttribute('role', 'note');
+    await expect(market.locator('.brief-lag')).toHaveCount(0);
+    await expect(page.locator('.brief-screen-notes')).toContainText('日付が異なる項目には個別に日付を付けています。');
+    await expect(market.getByTestId('brief-regime')).toContainText('判定 10/2');
+    await settled(page);
+    // One line beside the heading.
+    expect(await stamp.evaluate(node => node.getClientRects().length)).toBe(1);
+    expect(Math.round((await stamp.boundingBox()).height)).toBeLessThanOrEqual(16);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(1300);
+    for (const locator of [market.getByTestId('brief-regime'), market.getByRole('group', { name: '注意サイン（独自判定）' }), page.getByRole('tab').first()]) {
+      const box = await locator.boundingBox();
+      expect(box.y + box.height).toBeLessThanOrEqual(756);
+    }
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('the lag stamp at 320px', () => {
+  test.use(phone(320, 640));
+  test('stays within the width and beside the heading', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market', { historyEnd: sessions.at(-2) });
+    const market = page.getByRole('region', { name: '地合い' });
+    const stamp = market.locator(':scope > .brief-step .brief-stamp');
+    await expect(stamp).toHaveText('◷ 10/1引け・10/2分は再集計待ち');
+    const [head, box] = [await market.locator(':scope > .brief-step h2').boundingBox(), await stamp.boundingBox()];
+    expect(box.x).toBeGreaterThan(head.x + head.width);
+    expect(box.x + box.width).toBeLessThanOrEqual(320);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
 for (const width of [375, 390]) test.describe(`the S&P stats row without 200 closes at ${width}px`, () => {
   test.use({ ...phone(width, width === 375 ? 812 : 844), contextOptions: { reducedMotion: 'reduce' } });
   test('keeps its height: a dash is visible, the words are read out and the reason is in the 注記', async ({ page, context }) => {

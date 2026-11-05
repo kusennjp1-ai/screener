@@ -66,13 +66,16 @@ const Label = ({ text }) => { const at = text.indexOf('（'); return at > 0 ? <>
 // A warning is never colour alone: the ▲ and the word travel with the amber value.
 const WarnMark = () => <span className="brief-warnmark"><span aria-hidden="true">▲</span><span className="sr-only">注意 </span></span>;
 
-/** Today's tile: a pair names each side (S&P / NAS, 高 / 安) and marks the side that fired. */
-const Fact = ({ fact }) => <div className={`brief-fact${fact.warn ? ' is-warn' : ''}`}>
+/**
+ * Today's tile: a pair names each side (S&P / NAS, 高 / 安) and marks the side that fired. `blockAsOf` is the
+ * one older session the card's note dates every source to: a tile of that session needs no date of its own.
+ */
+const Fact = ({ fact, blockAsOf = null }) => { const asOf = fact.asOf && fact.asOf !== blockAsOf ? fact.asOf : null; return <div className={`brief-fact${fact.warn ? ' is-warn' : ''}`}>
   <small><Label text={fact.label} /></small>
-  {fact.pairs ? <b className="brief-pairs">{fact.pairs.map(pair => <span key={pair.name} className={`brief-pair${pair.warn ? ' is-warn' : ''}`}><span className="brief-pair-name">{pair.name}</span>{pair.warn && <WarnMark />}{pair.value}</span>)}<AsOf value={fact.asOf} /></b>
-    : <b className={fact.warn ? 'is-warn' : ''}>{fact.warn && <WarnMark />}{fact.b}<AsOf value={fact.asOf} /></b>}
+  {fact.pairs ? <b className="brief-pairs">{fact.pairs.map(pair => <span key={pair.name} className={`brief-pair${pair.warn ? ' is-warn' : ''}`}><span className="brief-pair-name">{pair.name}</span>{pair.warn && <WarnMark />}{pair.value}</span>)}<AsOf value={asOf} /></b>
+    : <b className={fact.warn ? 'is-warn' : ''}>{fact.warn && <WarnMark />}{fact.b}<AsOf value={asOf} /></b>}
   {fact.em ? <em className={fact.warn ? 'is-warn' : ''}><Parts text={fact.em} /></em> : null}
-</div>;
+</div>; };
 
 // ---- market tab: rows that open to their rule, one-year line and long-history link ----------------
 
@@ -268,6 +271,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
   }, [active]);
   const panel = (id, child) => switcher ? <div key={id} role="tabpanel" id={`brief-panel-${id}`} aria-labelledby={`brief-tab-${id}`} className="brief-panel" hidden={active !== id}>{child}</div> : child;
   const notes = [
+    switcher ? dating.lagDetail : null,
     summary && !conflict ? 'S&P 500の終値・1年高値からの位置・50日線比・200日線比は、長期履歴の^GSPC終値から計算しています。' : null,
     '各行を開くと、その値の基準（しきい値）と直近1年の推移を表示します。',
     `参加度・リーダーの値は、${SURVIVORSHIP_NOTE}です。`,
@@ -283,20 +287,22 @@ export default function MarketCard({ market, marketLoading = false, trends, date
       <div className={`brief-verdict tone-${verdict.tone}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}>{verdictMark}<div><strong>{verdict.label}</strong><p>{verdict.text}</p></div></div>
       {chartEl}
       {statusAlert}
-      <div className="brief-facts">{view.today.map(fact => <Fact key={fact.key} fact={fact} />)}</div>
+      <div className="brief-facts">{view.today.map(fact => <Fact key={fact.key} fact={fact} blockAsOf={dating.blockAsOf} />)}</div>
       {view.distReasons.length > 0 && <ul className="brief-factnotes">{view.distReasons.map(text => <li key={text}>{text}</li>)}</ul>}
       {dating.todayNote && <p className="brief-note brief-asof" role="note">{dating.todayNote}</p>}
       {view.warnings.length > 0 && <ul className="brief-warnings" aria-label="地合いの悪化サイン（独自判定）">{view.warnings.map(w => <li key={w.key}><span aria-hidden="true">▲</span> {w.text}（独自判定）</li>)}</ul>}
       {view.split?.warning && <p className="brief-alert" role="note">▲ {view.split.fromHigh > -0.05 ? '指数は1年高値の水準にありますが' : `指数は1年高値まであと${Math.abs(view.split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{num(view.split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
       {/* The phone's Today hides the verdict, so the card itself still says the judgement is the app's own,
           and Today's candidate rows show RS推計: the RS is the app's own too, never IBD's. */}
-      <p className="brief-note">地合いの判定・各集計・RSは公開日足からの独自判定・独自集計で、IBDの公式値ではありません。</p>
+      <p className="brief-note">地合いの判定・各集計・RS推計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。</p>
     </section>;
   }
 
   return <section className="brief-card brief-market is-detail in" style={{ '--i': 1 }} aria-labelledby="brief-market-title">
-    <div className="brief-step"><h2 id="brief-market-title">地合い</h2>{dating.stamp && <span className="brief-stamp numeric"><span aria-hidden="true">◷</span> {dating.stamp}</span>}</div>
-    {dating.lagNote && <p className="brief-note brief-asof brief-lag" role="note">{dating.lagNote}</p>}
+    {/* On a phone a lag is said in the stamp slot (the rest is in the 注記); the desktop keeps the full line. */}
+    <div className="brief-step"><h2 id="brief-market-title">地合い</h2>{dating.stamp ? <span className="brief-stamp numeric"><span aria-hidden="true">◷</span> {dating.stamp}</span>
+      : switcher && dating.lagStamp ? <span className="brief-stamp numeric is-older brief-lagstamp" role="note"><span aria-hidden="true">◷</span> {dating.lagStamp}</span> : null}</div>
+    {dating.lagNote && !switcher && <p className="brief-note brief-asof brief-lag" role="note">{dating.lagNote}</p>}
     <div className="brief-lead">
       <div className={`brief-verdict is-lead tone-${verdict.tone}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}>
         <div className="brief-verdict-head">{verdictMark}<div><strong><Label text={verdict.label} /></strong>{verdict.date && <span className="brief-verdict-date numeric">{verdict.date}</span>}<p>{verdict.lead}</p></div></div>
@@ -345,7 +351,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
       </Group>))}
     </div>
     {switcher && history && panel('history', history)}
-    <p className="brief-note">分配日・フォロースルーデー・ステージ・トレンドテンプレート数・RSは公開日足からの独自集計で、IBDの公式値ではありません。注意サインの基準もこのアプリの独自判定です。</p>
+    <p className="brief-note">分配日・フォロースルーデー・ステージ・トレンドテンプレート数・RS推計は公開日足からの独自集計で、IBDの公式値ではありません。注意サインの基準もこのアプリの独自判定です。</p>
     <ScreenNotes id="market" wide={!switcher} notes={notes} />
   </section>;
 }

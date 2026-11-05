@@ -58,3 +58,6 @@
   .brief-history .market-trend-plot svg text,
   .brief-history .market-trend-scrubber { font-size: 12px; }
 }
+
+/* A phone's market tab says a lag in the heading's stamp slot: it may wrap (right-aligned) on the narrowest phones. */
+.brief-step > .brief-stamp.brief-lagstamp { flex: 0 1 auto; min-width: 0; white-space: normal; text-align: right; line-height: 16px; }

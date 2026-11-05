@@ -203,6 +203,16 @@ describe('brief market card: market tab', () => {
     expect(screen.getByRole('img', { name: /ステージ構成 .*（10\/1時点）$/ })).toBeInTheDocument();
   });
 
+  it('says an older block in the heading\'s stamp slot on a phone, and the rest in the 注記', () => {
+    render(<MemoryRouter><MarketCard market={UP} trends={trends({ asOf: '2026-10-01', date: '2026-10-02' })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
+    const note = screen.getByRole('note');
+    expect(note).toHaveClass('brief-stamp');
+    expect(note).toHaveTextContent(/^◷ 10\/1引け・10\/2分は再集計待ち$/);
+    expect(document.querySelector('.brief-lag')).toBeNull();
+    expect(document.querySelector('.brief-screen-notes')).toHaveTextContent('日付が異なる項目には個別に日付を付けています。');
+    expect(screen.getByTestId('brief-regime')).toHaveTextContent('判定 10/2');
+  });
+
   it('names the one index whose count is older instead of dating the block', () => {
     const value = trends();
     value.data.indices[1] = index('^IXIC', '2026-10-01', 4, '2026-10-02', attempt('2026-10-01'));
@@ -323,7 +333,7 @@ describe('brief market card: Today', () => {
     expect(screen.queryByRole('group', { name: '注意サイン（独自判定）' })).toBeNull();
     expect(screen.getByRole('link', { name: /市場の詳細/ })).toHaveAttribute('href', '/brief/market');
     // Today's rows show RS推計, so Today's card names the RS as the app's own, not IBD's.
-    expect(screen.getByText('地合いの判定・各集計・RSは公開日足からの独自判定・独自集計で、IBDの公式値ではありません。')).toBeInTheDocument();
+    expect(screen.getByText('地合いの判定・各集計・RS推計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。')).toBeInTheDocument();
   });
 
   it('marks a warning with ▲ and a word on the side that fired, and names a stand-in for an older schema', () => {
@@ -338,11 +348,12 @@ describe('brief market card: Today', () => {
     expect(tile('50日線より上')).toHaveTextContent('43.0%200日線は旧形式で未収録');
   });
 
-  it('keeps the original as-of note for an older long history and index', () => {
+  it('dates an older long history and index on Today in one line', () => {
     show(trends({ asOf: '2026-10-01', date: '2026-10-02' }), { detail: false });
-    expect(screen.getByRole('note')).toHaveTextContent('長期集計は 2026-10-01 時点・分配日は 2026-10-01 時点（分析基準日 2026-10-02 の再集計待ち）');
-    expect(tile('TT達成数')).toHaveTextContent('30銘柄（10/1時点）');
-    expect(tile('分配日（25日）')).toHaveTextContent('（10/1時点）');
+    expect(screen.getByRole('note')).toHaveTextContent(/^市場の集計は10\/1時点（10\/2分は再集計待ち）$/);
+    // The note dates every tile of that one session: none repeats it.
+    expect(tile('TT達成数')).toHaveTextContent(/^TT達成数30銘柄/);
+    expect(document.querySelector('.brief-fact-asof')).toBeNull();
   });
 
   it('reports a reader failure with its own sentence instead of unknown values', () => {

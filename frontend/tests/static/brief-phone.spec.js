@@ -44,7 +44,7 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
     await expect(market.locator('.brief-index-legend')).toBeHidden();
     expect(await market.evaluate(node => node.innerText)).toContain('独自判定');
     // Today's rows show RS推計: the card says the RS is the app's own, not IBD's.
-    await expect(market.locator('.brief-note').last()).toHaveText('地合いの判定・各集計・RSは公開日足からの独自判定・独自集計で、IBDの公式値ではありません。');
+    await expect(market.locator('.brief-note').last()).toHaveText('地合いの判定・各集計・RS推計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。');
     // The dated title stays the page heading for assistive tech; the bar shows the date.
     await expect(page.getByRole('heading', { level: 1, name: '10月2日（金）の判断' })).toBeAttached();
     await expect(market.locator('.brief-fact')).toHaveCount(4);

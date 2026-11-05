@@ -137,22 +137,31 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const { errors } = await openBrief(page, '#/brief', { historyEnd: STALE });
     // The stocks are current; only the market series are older and say so.
     await expect(page.getByRole('heading', { level: 1, name: '10月2日（金）の判断' })).toBeVisible();
-    const note = `長期集計は ${STALE} 時点・分配日は ${STALE} 時点（分析基準日 ${date} の再集計待ち）`;
+    const note = `市場の集計は${STALE_MD}時点（${DATE_MD}分は再集計待ち）`;
     const today = page.getByRole('region', { name: '地合い' });
     await expect(today.getByRole('note').filter({ hasText: '時点' })).toHaveText(note);
-    // The exporter withholds today's distribution count for an index that ends early; the older count keeps its date.
-    await expect(today.locator('.brief-fact').filter({ hasText: '分配日（25日）' })).toContainText(`（${STALE_MD}時点）`);
-    await expect(today.locator('.brief-fact').filter({ hasText: 'TT達成数' })).toContainText(`（${STALE_MD}時点）`);
+    // The exporter withholds today's distribution count for an index that ends early; the older count is dated by
+    // the note, which dates every source to that one session, so no tile repeats it.
+    await expect(today.locator('.brief-fact').filter({ hasText: '分配日（25日）' })).toContainText(/S&P\d+日NAS\d+日/);
+    await expect(today.locator('.brief-fact-asof')).toHaveCount(0);
     if (phone) await expect(today.locator('.brief-index')).toHaveAttribute('aria-label', new RegExp(`^S&P 500 の終値と50日線（.*〜${STALE}）`));
     else await expect(today.getByRole('img', { name: new RegExp(`^S&P 500 の終値と50日線（.*〜${STALE}）`) })).toBeVisible();
 
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
     await expect(page).toHaveURL(/#\/brief\/market$/);
     const market = page.getByRole('region', { name: '地合い' });
-    // The market tab dates the whole block once and the verdict on its own date.
-    await expect(market.getByRole('note').filter({ hasText: '時点' })).toHaveText(`市場データは${STALE_MD}引け時点（分析基準日${DATE_MD}の再集計待ち）。日付が異なる項目には個別に日付を付けています。`);
+    // The market tab dates the whole block once and the verdict on its own date: on a phone in the heading's
+    // stamp slot (the rest of the sentence is in the 注記), on the desktop in one line under the heading.
+    if (phone) {
+      await expect(stamp(market)).toHaveText(`◷ ${STALE_MD}引け・${DATE_MD}分は再集計待ち`);
+      await expect(stamp(market)).toHaveAttribute('role', 'note');
+      await expect(market.locator('.brief-lag')).toHaveCount(0);
+      await expect(page.locator('.brief-screen-notes')).toContainText('日付が異なる項目には個別に日付を付けています。');
+    } else {
+      await expect(market.getByRole('note').filter({ hasText: '時点' })).toHaveText(`市場データは${STALE_MD}引け時点（分析基準日${DATE_MD}の再集計待ち）。日付が異なる項目には個別に日付を付けています。`);
+      await expect(stamp(market)).toHaveCount(0);
+    }
     await expect(market.getByTestId('brief-regime')).toContainText(`判定 ${DATE_MD}`);
-    await expect(stamp(market)).toHaveCount(0);
     await expect(market.getByRole('group', { name: '注意サイン（独自判定）' })).toContainText(`（${STALE_MD}時点・独自判定）`);
     // Each group whose values all describe the older session says so once; its rows carry no date of their own.
     for (const [tab, name] of [['指数', '指数のトレンド'], ['参加度', '市場の参加度'], ['リーダー', 'リーダーの健全性']]) { await section(page, tab); await expect(market.getByRole('group', { name: `${name} ${STALE_MD}時点の値` })).toBeVisible(); }

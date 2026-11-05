@@ -4,7 +4,7 @@
 // budgets and row heights with a broken setup, the list's rows across a stock round trip, and the sell card's
 // qualifier, on synthetic data.
 import { test, expect } from '@playwright/test';
-import { openBrief, charts, rows, rowBySymbol, horizontalOverflow } from './brief-fixture.js';
+import { openBrief, charts, rows, rowBySymbol, horizontalOverflow, sessions } from './brief-fixture.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 // A broken setup's chip: its short form on the rows, its full sentence for assistive tech (Today) and as its title.
@@ -256,6 +256,31 @@ test.describe('the 375×812 budgets with a broken setup', () => {
     // The tiles keep their height: 97 with every stock checked, one note line more with an unlisted symbol.
     const tiles = await page.getByTestId('brief-summary').locator('li').evaluateAll(items => items.map(li => Math.round(li.getBoundingClientRect().height)));
     for (const height of tiles) expect(Math.abs(height - (watch.length === 4 ? 97 : 115))).toBeLessThanOrEqual(2);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// The market data one session behind the analysis date (a known production state): Today's note is one line and
+// its tiles carry no date of their own (the note dates them), so Today keeps its budget with five watched (1390
+// here) and with four and a broken setup. Five with a broken setup measures 1410: a budget for that is the owner's.
+test.describe('the 375×812 budget one session behind', () => {
+  test.use({ ...phone(375), contextOptions: { reducedMotion: 'reduce' } });
+  const contentHeight = page => page.evaluate(() => Math.round(document.querySelector('#brief-main .brief-stack').getBoundingClientRect().bottom + scrollY));
+  const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+  const WATCH5 = ['ZZNV', 'ZZZF', 'QQQX', 'ZZSD', 'ZZKS'];
+  const WATCH4 = ['ZZNV', 'ZZZF', 'ZZSD', 'ZZKS'];
+  for (const [name, watch, mutate] of [['five watched (one unlisted)', WATCH5, undefined], ['four watched and a broken setup', WATCH4, broken('ZZSD')]]) test(`Today with ${name} fits 1400`, async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': watch }, historyEnd: sessions.at(-2), mutate });
+    await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
+    const market = page.getByRole('region', { name: '地合い' });
+    const note = market.getByRole('note');
+    await expect(note).toHaveText('市場の集計は10/1時点（10/2分は再集計待ち）');
+    await expect(market.locator('.brief-fact-asof')).toHaveCount(0);
+    if (mutate) await expect(page.getByRole('region', { name: 'ウォッチの状況' }).locator('.brief-sellchip')).toHaveCount(1);
+    await settled(page);
+    expect(await note.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size; })).toBe(1);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(1400);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

@@ -38,7 +38,7 @@ describe('market tab view model: a complete, current publication', () => {
   });
 
   it('dates the block once, leads with the verdict and its basis, and counts no warning', () => {
-    expect(model.dating).toEqual({ current: true, stamp: '10/2 引け', lagNote: null, todayNote: null, verdictDate: null });
+    expect(model.dating).toEqual({ current: true, stamp: '10/2 引け', lagNote: null, lagStamp: null, lagDetail: null, todayNote: null, blockAsOf: null, verdictDate: null });
     expect(model.verdict).toMatchObject({ tone: 'zone', exposure: 50, label: '上昇トレンド（独自判定）', lead: '新規の買いを検討できます。', date: null,
       basis: { text: '根拠（10/2スキャン時点）：S&P 500（SPY）が50日線・200日線の上で、局面判定（分配日・FTDなど）が「上昇トレンド」', above50: true, above200: true } });
     expect(model.signals.fired).toEqual([]);
@@ -128,7 +128,9 @@ describe('market tab view model: older observations', () => {
     const model = view(trends({ asOf: '2026-10-01', date: '2026-10-02' }));
     expect(model.dating).toEqual({ current: false, stamp: null, verdictDate: '判定 10/2',
       lagNote: '市場データは10/1引け時点（分析基準日10/2の再集計待ち）。日付が異なる項目には個別に日付を付けています。',
-      todayNote: '長期集計は 2026-10-01 時点・分配日は 2026-10-01 時点（分析基準日 2026-10-02 の再集計待ち）' });
+      // A phone's market tab: the lag in the stamp slot, the rest in the 注記. Today: one line.
+      lagStamp: '10/1引け・10/2分は再集計待ち', lagDetail: '日付が異なる項目には個別に日付を付けています。',
+      todayNote: '市場の集計は10/1時点（10/2分は再集計待ち）', blockAsOf: '10/1' });
     expect(model.groups.map(g => g.asOf)).toEqual(['10/1', '10/1', '10/1']);
     expect(model.verdict.date).toBe('判定 10/2');
     expect(model.signals.asOf).toBe('10/1');
@@ -142,7 +144,11 @@ describe('market tab view model: older observations', () => {
     value.data.indices[1] = index('^IXIC', '2026-10-01', 4, '2026-10-02', attempt('2026-10-01'));
     const model = view(value);
     expect(model.dating.lagNote).toBe('分配日・FTDはNAS 10/1引け時点（分析基準日10/2の再集計待ち）。日付が異なる項目には個別に日付を付けています。');
-    expect(model.dating.todayNote).toBe('分配日は NAS 2026-10-01 時点（分析基準日 2026-10-02 の再集計待ち）');
+    expect(model.dating.todayNote).toBe('分配日はNAS 10/1時点（10/2分は再集計待ち）');
+    // Sources on different sessions: the stamp says only that some are behind; the 注記 names each one.
+    expect(model.dating.lagStamp).toBe('一部の集計は10/2分の再集計待ち');
+    expect(model.dating.lagDetail).toBe(model.dating.lagNote);
+    expect(model.dating.blockAsOf).toBeNull();
     expect(group(model, 'index').asOf).toBeNull();
     expect(item(model, 'dist').rows.map(r => r.asOf)).toEqual([null, '10/1']);
     expect(item(model, 'ftd').rows.map(r => r.asOf)).toEqual([null, '10/1']);
@@ -257,6 +263,8 @@ describe('market tab helpers', () => {
     expect(marketDating({ date: '2026-10-02', historyDate: null, indexDates: [] })).toMatchObject({ current: false, stamp: null, lagNote: null });
     expect(marketDating({ date: '2026-10-02', historyDate: '2026-09-30', indexDates: [{ name: 'S&P', date: '2026-10-01' }, { name: 'NAS', date: '2026-10-01' }] }).lagNote)
       .toBe('長期集計は9/30引け、分配日・FTDは10/1引け時点（分析基準日10/2の再集計待ち）。日付が異なる項目には個別に日付を付けています。');
+    expect(marketDating({ date: '2026-10-02', historyDate: '2026-09-30', indexDates: [{ name: 'S&P', date: '2026-10-01' }, { name: 'NAS', date: '2026-10-01' }] }).todayNote)
+      .toBe('長期集計は9/30・分配日は10/1時点（10/2分は再集計待ち）');
     expect(groupDate([{ valued: true, asOf: '10/1' }, { rows: [{ valued: true, asOf: '10/1' }, { b: '算出不可' }] }])).toBe('10/1');
     expect(groupDate([{ valued: true, asOf: '10/1' }, { valued: true, asOf: null }])).toBeNull();
     expect(groupDate([{ b: '未算出' }])).toBeNull();

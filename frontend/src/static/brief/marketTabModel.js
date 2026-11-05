@@ -98,25 +98,37 @@ function ftdSignal(name, ft, date) {
   return `${name}のFTDが失敗${ft.failedDate ? `（${shortDate(ft.failedDate, date)}）` : ''}`;
 }
 
+// The behind sentence's second half: the phone's market tab keeps it in the screen's 注記.
+const PER_ITEM_DATES = '日付が異なる項目には個別に日付を付けています。';
+
 /**
  * The block's dating. Every source (the long history and each index series) is compared with the analysis
- * date: current → a 「M/D 引け」 stamp; behind → one sentence naming each older source, the verdict's
- * own date, and (for Today) the original note.
+ * date: current → a 「M/D 引け」 stamp; behind → one sentence naming each older source (`lagNote`, the
+ * desktop's line), the verdict's own date, and Today's one-line note (`blockAsOf`: the one older session
+ * when every source shares it, so Today's tiles of that session need no date of their own). On a phone the market tab says the lag
+ * in the heading's stamp slot instead (`lagStamp`: the older session when every source shares it, else that
+ * some are behind) and moves the rest (`lagDetail`) to the screen's 注記.
  */
 export function marketDating({ date, historyDate, indexDates }) {
   const md = value => shortDate(value, date);
   const sources = [historyDate, ...indexDates.map(d => d.date)].filter(Boolean);
   const behind = date ? sources.filter(value => value < date) : [];
   const olderIndex = indexDates.filter(d => date && d.date < date);
-  // Today's original note (pinned wording): both indices on one older session read as one date.
-  const indexDate = !olderIndex.length ? null : olderIndex.length === 2 && olderIndex[0].date === olderIndex[1].date ? olderIndex[0].date : olderIndex.map(d => `${d.name} ${d.date}`).join('・');
-  const legacy = [historyDate && date && historyDate < date ? `長期集計は ${historyDate} 時点` : null, indexDate ? `分配日は ${indexDate} 時点` : null].filter(Boolean);
-  if (!behind.length) return { current: sources.length > 0, stamp: sources.length && date ? `${md(date)} 引け` : null, lagNote: null, todayNote: null, verdictDate: null };
+  if (!behind.length) return { current: sources.length > 0, stamp: sources.length && date ? `${md(date)} 引け` : null, lagNote: null, lagStamp: null, lagDetail: null, todayNote: null, blockAsOf: null, verdictDate: null };
   const single = new Set(sources).size === 1;
-  const indexPart = !olderIndex.length ? null : olderIndex.length === 2 && olderIndex[0].date === olderIndex[1].date ? `分配日・FTDは${md(olderIndex[0].date)}引け` : `分配日・FTDは${olderIndex.map(d => `${d.name} ${md(d.date)}`).join('・')}引け`;
+  const sameIndexDate = olderIndex.length === 2 && olderIndex[0].date === olderIndex[1].date;
+  const indexPart = !olderIndex.length ? null : sameIndexDate ? `分配日・FTDは${md(olderIndex[0].date)}引け` : `分配日・FTDは${olderIndex.map(d => `${d.name} ${md(d.date)}`).join('・')}引け`;
   const parts = single ? [`市場データは${md(sources[0])}引け`] : [historyDate && historyDate < date ? `長期集計は${md(historyDate)}引け` : null, indexPart].filter(Boolean);
-  return { current: false, stamp: null, lagNote: `${parts.join('、')}時点（分析基準日${md(date)}の再集計待ち）。日付が異なる項目には個別に日付を付けています。`,
-    todayNote: `${legacy.join('・')}（分析基準日 ${date} の再集計待ち）`, verdictDate: `判定 ${md(date)}` };
+  const lagNote = `${parts.join('、')}時点（分析基準日${md(date)}の再集計待ち）。${PER_ITEM_DATES}`;
+  // Today's note, one line on a phone: both indices on one older session read as one date.
+  const todayParts = single ? [`市場の集計は${md(sources[0])}`] : [historyDate && historyDate < date ? `長期集計は${md(historyDate)}` : null,
+    !olderIndex.length ? null : `分配日は${sameIndexDate ? md(olderIndex[0].date) : olderIndex.map(d => `${d.name} ${md(d.date)}`).join('・')}`].filter(Boolean);
+  return { current: false, stamp: null, lagNote,
+    lagStamp: single ? `${md(sources[0])}引け・${md(date)}分は再集計待ち` : `一部の集計は${md(date)}分の再集計待ち`,
+    lagDetail: single ? PER_ITEM_DATES : lagNote,
+    todayNote: `${todayParts.join('・')}時点（${md(date)}分は再集計待ち）`,
+    // Every source on one older session: Today's note dates them all, so its tiles carry no date of their own.
+    blockAsOf: single ? md(sources[0]) : null, verdictDate: `判定 ${md(date)}` };
 }
 
 /** The one session every valued item of a group describes, when they all agree on an older one. */
