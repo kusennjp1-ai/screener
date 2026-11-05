@@ -1,12 +1,14 @@
 // @vitest-environment node
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { secPoint, secRecord, secUnavailable } from '../src/test/fixtures/secRecord.js';
-import { briefRows, compareSecCarryForward, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, publishedCoverage, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
+import { briefRows, compareSecCarryForward, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, invokedAsCommand, publishedCoverage, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
 
 const write = async (path, value) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(value)); };
 
@@ -215,6 +217,28 @@ describe('the publication SEC coverage block and the published report', () => {
     expect(secRefusalReason({ exported: { value: {}, reason: null }, overlay: null, corporate: true })).toBe('projection');
   });
 
+  it('runs as a command from a symlinked path with spaces, and titles the table it was asked to', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'report command '));
+    try {
+      const link = join(root, 'linked tools', 'report.mjs');
+      await mkdir(dirname(link), { recursive: true });
+      await symlink(fileURLToPath(new URL('./report-data-coverage.mjs', import.meta.url)), link);
+      const json = join(root, 'out.json');
+      const output = execFileSync(process.execPath, [link, '--published', '--root', join(root, 'empty'), '--json', json], { encoding: 'utf8', env: { ...process.env, GITHUB_STEP_SUMMARY: '' } });
+      expect(output).toContain('::warning::Published fundamentals coverage unavailable: No published static-data bundle');
+      expect(JSON.parse(await readFile(json, 'utf8'))).toEqual({ unavailable: 'No published static-data bundle' });
+      expect(invokedAsCommand('file:///nowhere/report.mjs', ['node', link])).toBe(false);
+      expect(invokedAsCommand(new URL('./report-data-coverage.mjs', import.meta.url).href, ['node', link])).toBe(true);
+      expect(invokedAsCommand('file:///x.mjs', ['node'])).toBe(false);
+    } finally { await rm(root, { recursive: true, force: true }); }
+    const live = await bundle(), summary = join(live, 'summary.md');
+    try {
+      await writeFile(summary, '');
+      await published(live, ['--label', 'live, before republish'], { GITHUB_STEP_SUMMARY: summary });
+      expect(await readFile(summary, 'utf8')).toContain(`### Published fundamentals coverage ${date} (live, before republish)`);
+    } finally { await rm(live, { recursive: true, force: true }); }
+  });
+
   it('says when a UI-only republish drops SEC coverage, and refuses it only when required and not allowed', async () => {
     const before = await bundle({ withRecord: 5 }), after = await bundle({ withRecord: 3 });
     try {
@@ -223,7 +247,15 @@ describe('the publication SEC coverage block and the published report', () => {
       expect(compareSecCarryForward(JSON.parse(await readFile(previous, 'utf8')), JSON.parse(await readFile(previous, 'utf8')))).toMatchObject({ comparable: true, before: 5, kept: 5, dropped: false });
       const diagnostic = await published(after, ['--previous', previous]);
       expect(diagnostic.code).toBe(0);
-      expect(diagnostic.text).toContain('::warning::SEC coverage dropped from 5 to 3 against the given previous report');
+      expect(diagnostic.text).toContain('::warning::SEC coverage dropped from 5 to 3 against the given previous report (lost 2: S3 S4; changed 0)');
+      // The round-1 default for a UI-only republish: the drop is a warning, said as one, and the build goes on.
+      const warned = await published(after, ['--previous', previous, '--ui-only-republish']);
+      expect(warned.code).toBe(0);
+      expect(warned.text).toContain('::warning::SEC coverage dropped from 5 to 3 in a UI-only republish (lost 2: S3 S4; changed 0)');
+      // A previous report that cannot be read or compared is 未計測, a warning, never a pass and never a failure.
+      const unreadable = await published(after, ['--previous', join(before, 'absent.json'), '--ui-only-republish']);
+      expect(unreadable.code).toBe(0);
+      expect(unreadable.text).toMatch(/::warning::SEC records of the replaced publication: 未計測 \(not compared: ENOENT/);
       const required = await published(after, ['--previous', previous, '--require-sec-carry-forward']);
       expect(required.code).toBe(1);
       expect(required.text).toContain('::error::SEC coverage dropped from 5 to 3 in a UI-only republish (lost 2: S3 S4; changed 0)');

@@ -6,15 +6,20 @@
 // --published also takes:
 //   --root DIR                  the publication's logical root (default public; static-data inside it)
 //   --json FILE                 write the machine-judged report (it carries the per-symbol SEC record digests)
+//   --label TEXT                a note for the job-summary table's heading (e.g. the live publication before a republish)
 //   --previous FILE             a report of the publication this build replaces (written with --json)
+//   --ui-only-republish         this build republishes the same data with a new UI: a drop against --previous
+//                               is said as one (a ::warning::, the round-1 default)
 //   --require-sec-carry-forward fail (exit 1) when, for the same publication date, any SEC record of the
-//                               previous report is missing or changed, or the check cannot be made
+//                               previous report is missing or changed, or the check cannot be made (only
+//                               when the owner turns it on; see research-ui-release.yml)
 //   --allow-sec-coverage-drop   explicit approval: report such a drop as a warning instead
 // Every other finding is a ::warning:: and a $GITHUB_STEP_SUMMARY table; the report never fails a build.
 import { createHash } from 'node:crypto';
-import { appendFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { admitBookFinancialsDetailed, SEC_PUBLICATION_REFUSAL_REASONS, SEC_RECORD_SCHEMA } from '../src/static/bookFinancialAdmission.js';
 import { bookFinancialCurrent } from '../src/static/bookFinancialCurrent.js';
 import { financialHistory } from '../src/static/financialHistory.js';
@@ -304,10 +309,10 @@ export async function publishedFundamentalsReport({ root = 'public', now = Date.
 
 const cell = value => value === null || value === undefined ? '未計測' : typeof value === 'object' ? (Object.keys(value).length ? Object.entries(value).map(([key, n]) => `${key} ${n}`).join(', ') : 'none') : String(value);
 const percent = ratio => ratio === null || ratio === undefined ? '未計測' : `${(ratio * 100).toFixed(1)}%`;
-/** The job-summary table of one report. */
-export function fundamentalsSummaryTable(report) {
+/** The job-summary table of one report; `label` names which publication it describes when a job prints two. */
+export function fundamentalsSummaryTable(report, { label = null } = {}) {
   const c = report.coverage, b = report.fundamentals_coverage, f = report.file, carry = report.carry_forward;
-  const lines = [`### Published fundamentals coverage ${report.as_of_date}`, '', '| measure | value |', '| --- | --- |',
+  const lines = [`### Published fundamentals coverage ${report.as_of_date}${label ? ` (${label})` : ''}`, '', '| measure | value |', '| --- | --- |',
     `| brief-listed rows | ${cell(c.listed)} |`, `| with an SEC record / with SEC quarters | ${cell(c.sec_record)} (${percent(c.sec_record_ratio)}) / ${cell(c.with_quarters_listed)} (${percent(c.with_quarters_ratio)}) |`,
     `| SEC input file | ${f.present ? `${cell(f.name)}, schema ${cell(f.schema)}, for ${cell(f.as_of)}` : 'absent'} |`,
     `| records in the input for this date | ${cell(b.requested)} (eligible ${cell(b.eligible)}, truncated ${cell(b.truncated)}, deadline unreached ${cell(b.deadline_unreached)}; ticker map ${b.ticker_map_ok === null ? '未計測' : b.ticker_map_ok ? 'read' : 'unavailable'}) |`,
@@ -352,15 +357,16 @@ export function finalEnvironmentRow(history) {
  */
 export async function runPublished(args, { env = process.env, log = console.log, now = Date.now() } = {}) {
   const option = name => { const index = args.indexOf(name); return index >= 0 && typeof args[index + 1] === 'string' && !args[index + 1].startsWith('--') ? args[index + 1] : null; };
-  const root = option('--root') || 'public', json = option('--json'), previousPath = option('--previous');
+  const root = option('--root') || 'public', json = option('--json'), previousPath = option('--previous'), label = option('--label');
   const required = args.includes('--require-sec-carry-forward'), allowed = args.includes('--allow-sec-coverage-drop');
+  const uiOnly = required || args.includes('--ui-only-republish');
   let previous = null, previousError = null;
   if (previousPath) {
     try { previous = JSON.parse(await readFile(previousPath, 'utf8')); if (!previous?.records) { previousError = previous?.unavailable || 'no SEC record inventory'; previous = null; } }
     catch (error) { previousError = String(error?.message || error).slice(0, 200); }
   } else if (required) previousError = 'no report of the replaced publication was given';
   let report = null, failure = null;
-  try { report = await publishedFundamentalsReport({ root, now, previous, uiOnlyRepublish: required }); if (!report) failure = 'No published static-data bundle'; }
+  try { report = await publishedFundamentalsReport({ root, now, previous, uiOnlyRepublish: uiOnly }); if (!report) failure = 'No published static-data bundle'; }
   catch (error) { failure = String(error?.message || error).slice(0, 200); }
   if (json) writeFileSync(json, JSON.stringify(report ?? { unavailable: failure }));
   const refuse = problem => {
@@ -372,21 +378,29 @@ export async function runPublished(args, { env = process.env, log = console.log,
     log(`::warning::Published fundamentals coverage unavailable: ${failure}`);
     return required ? refuse(`SEC records of the replaced publication cannot be verified: ${failure}`) : 0;
   }
+  // A previous report that was given but cannot be read is 未計測 in the table, never a clean comparison.
+  if (previousPath && previousError && !report.carry_forward) report.carry_forward = { comparable: false, reason: previousError };
   const { records, ...shown } = report; void records;
   log('Published coverage (fundamentals): ' + JSON.stringify(shown));
   for (const warning of report.warnings) log(`::warning::${warning}`);
-  appendStepSummary(fundamentalsSummaryTable(report), env);
+  appendStepSummary(fundamentalsSummaryTable(report, { label }), env);
   const carry = report.carry_forward;
   if (required) {
     if (previousError) return refuse(`SEC records of the replaced publication cannot be verified: ${previousError}`);
     if (!carry.comparable) return refuse(`SEC records of the replaced publication cannot be compared (${carry.reason})`);
     if (carry.dropped) return refuse(`SEC coverage dropped from ${carry.before} to ${carry.kept} in a UI-only republish (lost ${carry.lost}${carry.lost_symbols.length ? `: ${carry.lost_symbols.join(' ')}` : ''}; changed ${carry.changed}${carry.changed_symbols.length ? `: ${carry.changed_symbols.join(' ')}` : ''})`);
     log(`SEC records carried forward unchanged in a UI-only republish: ${carry.kept}/${carry.before} for ${carry.as_of_date} (gained ${carry.gained}; input file ${carry.file_unchanged ? 'byte-identical' : 'changed'})`);
-  } else if (carry?.comparable && carry.dropped) log(`::warning::SEC coverage dropped from ${carry.before} to ${carry.kept} against the given previous report`);
+  } else if (carry?.comparable && carry.dropped) log(`::warning::SEC coverage dropped from ${carry.before} to ${carry.kept} ${uiOnly ? 'in a UI-only republish' : 'against the given previous report'} (lost ${carry.lost}${carry.lost_symbols.length ? `: ${carry.lost_symbols.join(' ')}` : ''}; changed ${carry.changed}${carry.changed_symbols.length ? `: ${carry.changed_symbols.join(' ')}` : ''})`);
+  else if (carry && !carry.comparable) log(`::warning::SEC records of the replaced publication: 未計測 (not compared: ${carry.reason})`);
   return 0;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+/** Whether this module is the command node runs (a symlinked checkout or a path with spaces still counts). */
+export function invokedAsCommand(moduleUrl = import.meta.url, argv = process.argv) {
+  try { return typeof argv[1] === 'string' && moduleUrl === pathToFileURL(realpathSync(argv[1])).href; } catch { return false; }
+}
+
+if (invokedAsCommand()) {
   const args = process.argv.slice(2);
   if (args.includes('--published')) process.exitCode = await runPublished(args);
   else {

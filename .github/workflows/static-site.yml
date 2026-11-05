@@ -1031,6 +1031,8 @@ jobs:
             # Diagnostic and non-blocking: the reports turn their findings into warnings and a job-summary table.
             node tools/report-data-coverage.mjs
             node tools/report-data-coverage.mjs --published --json "$RUNNER_TEMP/published-fundamentals-coverage.json"
+            # The report writes its JSON even when the bundle cannot be read; no file means the tool never ran.
+            test -s "$RUNNER_TEMP/published-fundamentals-coverage.json"
             npm run build
             # Each export above wrote new hash-named workbench, summary,
             # performance, market-trend and snapshot files. Keep only what the
