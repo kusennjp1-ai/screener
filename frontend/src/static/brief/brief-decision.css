@@ -52,6 +52,14 @@
   .brief-call .brief-meter-short { display: inline; }
 }
 
+/* Narrow phones (359px and below): a row's chips keep two lines in a full-width (CJK) font, as an iPhone renders
+   kana and brackets: the row lends its side padding to the chips (the card's padding is narrower too, brief-watch.css)
+   and each chip is 4px narrower on each side. Text stays 12px. */
+@media (max-width: 359px) {
+  .brief-row { padding-inline: 0; }
+  .brief-chip { padding-inline: 4px; }
+}
+
 /* Phones: the conclusion's tile labels and notes, the meter's names and ticks read at 12px (the notes in
    the secondary text colour); the row chips are 12px in brief.css already. */
 @media (max-width: 520px) {

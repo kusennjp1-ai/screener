@@ -39,6 +39,16 @@
   .brief-dockpos-sep { display: none; }
 }
 
+/* Narrow phones (359px and below): every card gives its content 8px more width, so a row's chips, a verdict's fold
+   summary or a title in a full-width (CJK) font keep their lines. The market tab's sticky section tabs follow the
+   padding they span; the watch rows lend their side padding as the candidate rows do (brief-decision.css), so every
+   row of a list starts at the card's content edge. */
+@media (max-width: 359px) {
+  .brief-card { padding-inline: 10px; }
+  .brief-switchbar { margin-inline: -10px; padding-inline: 10px; }
+  .brief-unlisted, .brief-event { padding-inline: 0; }
+}
+
 @media (max-width: 520px) {
   .brief-summary .brief-tile { padding: 8px 10px; }
   /* The bar carries the date (with its weekday) and the dock the screen: the 候補, ウォッチ and 市場 headings
