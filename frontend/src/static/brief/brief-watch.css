@@ -24,6 +24,17 @@
 .brief-filterchip .numeric { font-size: 12px; font-weight: 400; color: var(--text-2); }
 .brief-filterchip [aria-hidden="true"] { font-size: 16px; line-height: 1; color: var(--text-2); }
 
+/* The stock dock: the list position and its name beside the ☆, between the prev/next buttons. */
+.brief-dockpos { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.brief-dockpos p { flex: 1 1 auto; min-width: 0; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; font-size: 13px; font-weight: 700; color: var(--text-2); }
+.brief-dockpos .numeric { color: var(--text); }
+.brief-actions .brief-dockpos button { flex: none; width: 48px; padding: 0; }
+
 @media (max-width: 520px) {
   .brief-summary .brief-tile { padding: 8px 10px; }
+  /* The bar carries the date (with its weekday) and the dock the screen: the 候補, ウォッチ and 市場 headings
+     stay only for assistive tech, as Today's does. */
+  .brief-hero:not(.is-today) { display: block; position: absolute; width: 1px; height: 1px; margin: 0; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  /* The 12px floor for the tabs, the bar's second line and the watch count. */
+  .brief-tabs a, .brief-bar-title > span, .brief-count { font-size: 12px; }
 }

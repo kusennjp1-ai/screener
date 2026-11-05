@@ -84,7 +84,7 @@ test.describe('Today\'s watch card at 390px', () => {
 test.describe('the watch tile', () => {
   test.use(phone(390, 844));
 
-  test('one broken setup: 1件, and the tile opens that stock', async ({ page }) => {
+  test('one broken setup: 1件, the tile opens that stock, which steps through the watch list flagged first', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZSD'] }, mutate: broken('ZZSD') });
     const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
     await expect(tile).toContainText('ウォッチの注意1件2銘柄を確認・保有未登録');
@@ -92,6 +92,8 @@ test.describe('the watch tile', () => {
     await expect(tile).toHaveAttribute('href', '#/brief/stock/ZZSD');
     await tile.click();
     await expect(page).toHaveURL(/#\/brief\/stock\/ZZSD$/);
+    await expect(page.locator('.brief-dockpos .numeric')).toHaveText('1/2');
+    await expect(page.locator('.brief-dockpos p')).toContainText('ウォッチ');
     await expect(page.getByTestId('brief-conclusion')).toContainText(WEAKNESS);
     await expect(page.getByTestId('brief-sell').locator('.is-sell-hit')).toHaveCount(1);
     expect(errors).toEqual([]);
@@ -163,6 +165,16 @@ test.describe('watch at 375×812 with five symbols, one unlisted', () => {
   const contentHeight = page => page.evaluate(() => Math.round(document.querySelector('#brief-main .brief-stack').getBoundingClientRect().bottom + scrollY));
   const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
   const WATCH5 = ['ZZNV', 'ZZZF', 'QQQX', 'ZZSD', 'ZZKS'];
+
+  test('fits the 520 budget with the unlisted row', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': WATCH5 } });
+    await expect(page.getByRole('region', { name: 'ウォッチ中の銘柄' }).getByTestId('brief-candidate')).toHaveCount(4);
+    await expect(page.locator('.brief-unlisted')).toHaveCount(1);
+    await settled(page);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(520);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
 
   test('a broken setup\'s chip wraps between its phrases and nothing overflows at 375 or 320', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': WATCH5 }, mutate: broken('ZZSD') });

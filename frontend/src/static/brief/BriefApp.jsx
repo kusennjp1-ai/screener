@@ -1,5 +1,5 @@
-import { lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { lazy, Suspense, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Link, useLocation, useNavigationType } from 'react-router-dom';
 import useMediaQuery from '../useMediaQuery';
 import { ColorModeContext } from '../../contexts/ColorModeContext';
 import { palettes, themeCss } from '../theme/tokens';
@@ -15,19 +15,36 @@ import './brief-decision.css';
 import './brief-plan.css';
 import './brief-watch.css';
 import { useBriefData, useWatchlist, useWatchSellChecks } from './useBriefData';
-import { candidateView, focusCandidates } from './briefCandidate';
+import { candidateView, focusCandidates, LIST_FILTERS } from './briefCandidate';
 import TodayView from './TodayView';
 import ListView, { listShown, listSource, watchOrder } from './ListView';
 import StockScreen from './StockScreen';
 import { BarQuote } from './BriefParts';
 import { Toast } from './briefPrimitives';
 import { ICON } from './briefIcons';
-import { useTransitionNavigate } from './briefNav';
+import { recallScroll, rememberScroll, stepTarget, useBriefBack, useTransitionNavigate } from './briefNav';
 
 // The market tab (long-run chart, sector ranks) is its own chunk: Today does not download or parse it.
 // It is fetched once the first screen is idle, so a tap on 市場 rarely waits for it.
 const loadMarketScreen = () => import('./MarketScreen');
 const MarketScreen = lazy(loadMarketScreen);
+
+const WEEKDAY = '日月火水木金土';
+/** The analysis date as the bar says it: 「10/2（金）」 (the session's own weekday, never today's). */
+function barDay(iso) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${WEEKDAY[d.getUTCDay()]}）` : iso;
+}
+
+/** Brings a row between the bar and the dock when it is not already there. */
+function reveal(row) {
+  const top = document.querySelector('.brief-bar')?.getBoundingClientRect().bottom ?? 0;
+  const bottom = document.querySelector('.brief-dock')?.getBoundingClientRect().top ?? window.innerHeight;
+  const box = row.getBoundingClientRect();
+  if (box.top >= top && box.bottom <= bottom) return;
+  window.scrollTo(0, window.scrollY + box.top - top - Math.max(0, (bottom - top - box.height) / 2));
+}
+const rowOf = symbol => document.querySelector(`#brief-main [data-symbol="${symbol.replace(/["\\]/g, '\\$&')}"]`);
 
 function ThemeToggle() {
   const colorMode = useContext(ColorModeContext), dark = colorMode.mode === 'dark';
@@ -84,21 +101,32 @@ export default function BriefApp() {
   const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : from === 'watch' ? watchOrder(watchViews, watchSells) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [from, brief.bundle.data, brief.ranked, brief.date, watch, listState, watchViews, watchSells]);
+  // The list the stock screen steps through, as the dock and the end-of-list message name it.
+  const listName = from === 'today' || from === 'market' ? '注目候補' : from === 'watch' ? 'ウォッチ' : LIST_FILTERS[listState.filter]?.label || '候補';
   // Desktop keeps the stock pane on the same stock across tab switches while that stock is in
   // the new list, so switching tabs does not redraw a different chart.
   const [kept, setKept] = useState(null);
   const selected = symbol || (wide && view !== 'market' ? (kept && sequence.includes(kept) ? kept : sequence[0] || null) : null);
   useEffect(() => { if (selected) setKept(selected); }, [selected]);
   const open = useCallback((ticker, trigger, origin = from) => {
+    // A phone remembers where this screen was, to come back to it (Today's watch rows open the watch list's sequence).
+    if (!wide && view !== 'stock') rememberScroll(view, ticker, window.scrollY);
     document.querySelectorAll('.brief-row-title b').forEach(element => { element.style.viewTransitionName = ''; });
     const title = trigger?.querySelector?.('.brief-row-title b');
     go(`/brief/stock/${encodeURIComponent(ticker)}`, { kind: wide ? 'pane' : 'forward', state: { from: origin }, before: () => { if (title && !wide) title.style.viewTransitionName = 'brief-ticker'; } });
-  }, [go, from, wide]);
+  }, [go, from, wide, view]);
+  const notify = useCallback(text => {
+    clearTimeout(toastTimer.current);
+    setToast({ id: Date.now(), text, ticker: null });
+    toastTimer.current = setTimeout(() => setToast(null), 4200);
+  }, []);
+  // No wraparound: at either end the buttons, j/k and a swipe all say where the list ends.
   const step = useCallback(direction => {
-    if (!sequence.length || !selected) return;
-    const at = sequence.indexOf(selected), next = at < 0 ? sequence[direction > 0 ? 0 : sequence.length - 1] : sequence[(at + direction + sequence.length) % sequence.length];
-    if (next && next !== selected) go(`/brief/stock/${encodeURIComponent(next)}`, { kind: direction > 0 ? 'next' : 'prev', state: { from }, replace: true });
-  }, [sequence, selected, go, from]);
+    const target = stepTarget(sequence, selected, direction);
+    if (!target) return;
+    if (target.edge) { notify(target.edge === 'end' ? `一巡しました（${listName}${sequence.length}件）` : '先頭です'); return; }
+    if (target.symbol !== selected) go(`/brief/stock/${encodeURIComponent(target.symbol)}`, { kind: direction > 0 ? 'next' : 'prev', state: { from }, replace: true });
+  }, [sequence, selected, go, from, notify, listName]);
   // Stable identities for the memoized stock pane: the step handler reads the latest sequence
   // through a ref, and the pane's brief changes only with the inputs the pane reads.
   const stepRef = useRef(step);
@@ -114,6 +142,27 @@ export default function BriefApp() {
     toastTimer.current = setTimeout(() => setToast(null), 4200);
   }, [toggle]);
   useEffect(() => () => clearTimeout(toastTimer.current), []);
+  // Coming back from a stock on a phone (the in-app 戻る or the browser's back), the list screen returns to
+  // where it was when the stock opened; after stepping to another stock (or with nothing kept), the row of
+  // the stock last shown is brought between the bar and the dock. Done once the rows are rendered.
+  const shown = useRef({ view, symbol: null }), restore = useRef(null);
+  const loadedRows = Boolean(brief.bundle.data), navigationType = useNavigationType();
+  useLayoutEffect(() => {
+    const before = shown.current;
+    shown.current = { view, symbol: view === 'stock' ? symbol : before.symbol };
+    if (view === 'stock') { restore.current = null; return; }
+    if (before.view === 'stock' && before.symbol && !wide) restore.current = { screen: view, symbol: before.symbol };
+    const pending = restore.current;
+    if (!pending || pending.screen !== view || !loadedRows) return;
+    restore.current = null;
+    const kept = recallScroll(view), row = rowOf(pending.symbol);
+    if (kept && kept.symbol === pending.symbol) window.scrollTo(0, kept.y);
+    else if (row) reveal(row);
+    else if (kept) window.scrollTo(0, kept.y);
+    // Nothing to return to: the browser's own back keeps what it restored; a replace starts at the top.
+    else if (navigationType !== 'POP') window.scrollTo(0, 0);
+  });
+  const back = useBriefBack();
   useEffect(() => {
     if (!selected) return undefined;
     const key = event => { if (event.target.closest?.('input, select, textarea')) return; if (event.key === 'ArrowRight' || event.key === 'j') { event.preventDefault(); step(1); } else if (event.key === 'ArrowLeft' || event.key === 'k') { event.preventDefault(); step(-1); } };
@@ -146,17 +195,19 @@ export default function BriefApp() {
   const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} wide={wide} nav={todayNav} onUnwatch={toggleWatch} />
     : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} limits={listLimits} setLimits={setListLimits} origin={kept} wide={wide} onUnwatch={toggleWatch} />;
   const watching = symbol && watch.includes(symbol);
+  const at = selected ? sequence.indexOf(selected) : -1;
   return <div className="leader-shell brief" data-theme={dark ? 'dark' : 'light'}>
     <style>{themeCss}</style>
     <a className="brief-skip" href="#brief-main" onClick={event => { event.preventDefault(); document.getElementById('brief-main')?.focus(); }}>メインコンテンツへ</a>
     <header className="brief-bar">
       {view === 'stock' && !wide ? <>
-        <button type="button" className="brief-iconbutton" aria-label="戻る" onClick={() => go(from === 'today' ? '/brief' : `/brief/${from}`, { kind: 'back' })}>{ICON.back}</button>
+        <button type="button" className="brief-iconbutton" aria-label="戻る" onClick={() => back(from)}>{ICON.back}</button>
+        {/* The ☆ lives in the dock, beside the list position. */}
         <div className="brief-bar-title"><b><span style={{ viewTransitionName: 'brief-ticker' }}>{symbol}</span><BarQuote view={barView} /></b><span>{barView ? `${barView.name}${barView.sector ? `・${barView.sector}` : ''}` : brief.bundle.data ? '分析対象外' : '読み込み中…'}</span></div>
-        <button type="button" className={`brief-iconbutton${watching ? ' is-on' : ''}`} aria-pressed={Boolean(watching)} aria-label={watching ? 'ウォッチから外す' : 'ウォッチに追加'} onClick={event => toggleWatch(symbol, event.currentTarget)}>{watching ? ICON.starOn : ICON.star}</button>
       </> : <>
-        {/* The phone's Today hides the hero date, so the bar alone says a date that could not be read: 未確認, never 取得中 for good. */}
-        <div className="brief-bar-title"><b>米国株スクリーナー</b><span className="numeric">分析基準日 {brief.date ? `${brief.date} 引け・米国株` : brief.manifest.isLoading || brief.bundle.isLoading ? '取得中' : '未確認'}</span></div>
+        {/* The phone's Today hides the hero date, so the bar alone says the analysis date (with its weekday), or
+            one that could not be read: 未確認, never 取得中 for good. */}
+        <div className="brief-bar-title"><b>米国株スクリーナー</b><span className="numeric">分析基準日 {brief.date ? <><time dateTime={brief.date}>{barDay(brief.date)}</time>引け・米国株</> : brief.manifest.isLoading || brief.bundle.isLoading ? '取得中' : '未確認'}</span></div>
       </>}
       <ThemeToggle />
     </header>
@@ -171,9 +222,13 @@ export default function BriefApp() {
     </main>}
     {!wide && (view === 'stock' ? <div className="brief-dock brief-actions">
       <button type="button" aria-label="前の候補" onClick={() => step(-1)}>{ICON.back}</button>
-      <button type="button" className={`is-primary${watching ? ' is-on' : ''}`} aria-pressed={Boolean(watching)} onClick={event => toggleWatch(symbol, event.currentTarget)}>{watching ? ICON.starOn : ICON.star}{watching ? 'ウォッチ中' : 'ウォッチに追加'}</button>
+      {/* Which list the buttons step through, and where in it this stock is, beside the ☆. */}
+      <div className="brief-dockpos">
+        <p><span className="numeric" aria-hidden="true">{at >= 0 ? at + 1 : '—'}/{sequence.length}</span><span className="sr-only">{at >= 0 ? `${sequence.length}件中${at + 1}件目` : `一覧外・${sequence.length}件`}</span> {listName}</p>
+        <button type="button" className={watching ? 'is-on' : ''} aria-pressed={Boolean(watching)} aria-label={watching ? 'ウォッチから外す' : 'ウォッチに追加'} onClick={event => toggleWatch(symbol, event.currentTarget)}>{watching ? ICON.starOn : ICON.star}</button>
+      </div>
       <button type="button" aria-label="次の候補" onClick={() => step(1)}>{ICON.next}</button>
     </div> : <Tabs current={from} watchCount={watch.length} go={go} />)}
-    <Toast toast={toast} onUndo={toast ? () => { toggle(toast.ticker); setToast(null); } : null} />
+    <Toast toast={toast} onUndo={toast?.ticker ? () => { toggle(toast.ticker); setToast(null); } : null} />
   </div>;
 }

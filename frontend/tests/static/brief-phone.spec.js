@@ -56,8 +56,9 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
     const summary = page.getByTestId('brief-summary');
     await expect(summary).toContainText('検討可・目安≤50%');
     expect(await summary.locator('.brief-frag', { hasText: '目安≤50%' }).evaluate(node => node.getClientRects().length)).toBe(1);
-    await expect(page.locator('.brief-bar-title')).toContainText('2026-10-02');
-    await expect(page.locator('.brief-bar-title')).toContainText('引け');
+    // The bar says the analysis session with its weekday, never today's date.
+    await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
+    await expect(page.locator('.brief-bar-title time')).toHaveAttribute('datetime', '2026-10-02');
     await expect(page.locator('.brief-hero small')).toBeHidden();
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
@@ -137,7 +138,7 @@ test.describe('Today on desktop is unchanged', () => {
     await expect(market.locator('.brief-index')).toBeVisible();
     await expect(market.locator('.brief-index-legend')).toBeVisible();
     await expect(page.locator('.brief-hero small')).toBeVisible();
-    await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 2026-10-02 引け・米国株');
+    await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
@@ -413,6 +414,44 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`すべて
     await expect(page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて\s*21$/ })).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByRole('searchbox', { name: '銘柄を検索' })).toHaveValue('');
     await expect(page.getByTestId('brief-candidate')).toHaveCount(name === 'phone' ? 20 : 21);
+    expect(errors).toEqual([]);
+  });
+});
+
+// One date on a phone's first screen: the bar's. The 候補, ウォッチ and 市場 headings stay for assistive tech only;
+// the tabs, the bar's second line and the watch count read at 12px.
+for (const [width, device] of Object.entries({ 320: phone(320, 640), 375: phone(375, 812), 390: VIEWPORTS.phone })) test.describe(`one date and the 12px chrome at ${width}px`, () => {
+  test.use(device);
+  test('the list, watch and market headings are visually hidden, never removed', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list', { storage: { 'research-watch': ['ZZNV', 'ZZSD'] } });
+    for (const [hash, heading] of [['#/brief/list', '候補'], ['#/brief/watch', 'ウォッチ'], ['#/brief/market', '市場']]) {
+      await page.goto(`/${hash}`);
+      const title = page.getByRole('heading', { level: 1, name: heading });
+      await expect(title).toBeAttached();
+      expect(await page.locator('.brief-hero').evaluate(node => { const box = node.getBoundingClientRect(); return box.width <= 1 && box.height <= 1; })).toBe(true);
+      await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
+    }
+    const sizes = await page.locator('.brief-tabs a, .brief-bar-title > span, .brief-count').evaluateAll(nodes => nodes.map(node => [node.textContent, parseFloat(getComputedStyle(node).fontSize)]));
+    expect(sizes.length).toBeGreaterThanOrEqual(6);
+    expect(sizes.filter(([, size]) => size < 12)).toEqual([]);
+    for (const box of await page.locator('.brief-tabs a').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))) expect(box.height).toBeGreaterThanOrEqual(44);
+    const chrome = await page.evaluate(() => document.querySelector('.brief-bar').getBoundingClientRect().height + document.querySelector('.brief-dock').getBoundingClientRect().height);
+    expect(chrome).toBeLessThanOrEqual(110);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('the stock dock: the list position and the ☆ beside it, 44px targets, the chrome within 110px', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZNV');
+    const dock = page.locator('.brief-dock');
+    await expect(dock.locator('.brief-dockpos .numeric')).toHaveText('1/5');
+    await expect(dock.locator('.brief-dockpos p')).toContainText('5件中1件目 注目候補');
+    for (const box of await dock.getByRole('button').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    expect(await dock.evaluate(node => node.getBoundingClientRect().height)).toBe(56);
+    const chrome = await page.evaluate(() => document.querySelector('.brief-bar').getBoundingClientRect().height + document.querySelector('.brief-dock').getBoundingClientRect().height);
+    expect(chrome).toBeLessThanOrEqual(110);
+    expect(await dock.locator('.brief-dockpos p').evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(12);
+    expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
 });
