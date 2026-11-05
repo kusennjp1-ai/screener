@@ -1,21 +1,35 @@
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react';
+import { forwardRef, memo, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import { renderPriceChart } from './priceChart';
 
 let introducedOnce = false;
 
-/** Large daily chart. Animates once per symbol/period; resizes redraw without animation. */
-const PriceChart = forwardRef(function PriceChart({ model, period, className = '' }, ref) {
+/**
+ * Large daily chart. Animates once per symbol/period; resizes redraw without animation. `onScrub` gets the
+ * bar index (into the chart interval's bars) a touch, drag or the mouse selects, or null for the latest
+ * bar; `selected` places the crosshair. The handle moves the stop, emphasises a contraction and selects a bar.
+ */
+const PriceChart = forwardRef(function PriceChart({ model, period, className = '', onScrub = null, selected = null }, ref) {
   const element = useRef(null), controller = useRef(null), introduced = useRef(null), stopRef = useRef(model?.stop);
-  stopRef.current = model?.stop;
+  const scrubRef = useRef(onScrub), selectedRef = useRef(selected), legRef = useRef(null);
+  stopRef.current = model?.stop; scrubRef.current = onScrub; selectedRef.current = selected;
   const key = model ? `${model.symbol}|${model.interval || 'day'}|${period}|${model.bars?.length}|${model.bars?.at(-1)?.date}` : null;
   // Levels and overlays can arrive after the bars (detail merge); they redraw without replaying the intro.
-  const content = model ? `${key}|${model.pivot}|${model.upper}|${model.rsNewHigh}|${model.rsLine?.length}|${model.legs?.length}|${model.dryUpLeg?.startDate}|${(model.sellMarks || []).map(m => m.date).join(',')}` : null;
-  useImperativeHandle(ref, () => ({ moveStop: value => controller.current?.moveStop(value) }), []);
+  const content = model ? `${key}|${model.pivot}|${model.upper}|${model.entry}|${model.r2}|${model.r3}|${model.structuralLow}|${model.auditHigh}|${model.rsNewHigh}|${model.rsLine?.length}|${model.rsReason}|${model.rsLead?.dates?.length}|${model.legs?.length}|${model.legsValid}|${model.dryUpLeg?.startDate}|${(model.gaps || []).length}|${model.earnings?.date}|${model.earnings?.days}|${(model.sellMarks || []).map(m => m.date).join(',')}` : null;
+  const draw = options => {
+    const chart = renderPriceChart(element.current, { ...model, stop: stopRef.current }, { period, onScrub: index => scrubRef.current?.(index), selected: selectedRef.current, ...options });
+    if (chart && legRef.current !== null) chart.highlightLeg(legRef.current);
+    return chart;
+  };
+  useImperativeHandle(ref, () => ({
+    moveStop: value => controller.current?.moveStop(value),
+    highlightLeg: index => { legRef.current = index ?? null; return controller.current?.highlightLeg(legRef.current) ?? false; },
+    select: index => controller.current?.select(index),
+  }), []);
   useLayoutEffect(() => {
     if (!element.current || !model?.bars?.length) return undefined;
     const abort = new AbortController();
     const animate = introduced.current !== key;
-    controller.current = renderPriceChart(element.current, { ...model, stop: stopRef.current }, { period, animate, fast: animate && introducedOnce, signal: abort.signal });
+    controller.current = draw({ animate, fast: animate && introducedOnce, signal: abort.signal });
     let painted = false;
     const frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => { painted = true; if (animate) introducedOnce = true; }) : null;
     if (animate) introduced.current = key;
@@ -28,6 +42,7 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     // The stop moves through the controller; content changes redraw, identity changes animate.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, period]);
+  useEffect(() => { controller.current?.select(selected); }, [selected]);
   useEffect(() => {
     const target = element.current;
     if (!target || typeof ResizeObserver !== 'function' || !model?.bars?.length) return undefined;
@@ -35,7 +50,7 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     const observer = new ResizeObserver(() => {
       if (Math.abs(target.clientWidth - width) < 2) return;
       width = target.clientWidth; clearTimeout(timer);
-      timer = setTimeout(() => { controller.current = renderPriceChart(target, { ...model, stop: stopRef.current }, { period, animate: false }); }, 120);
+      timer = setTimeout(() => { controller.current = draw({ animate: false }); }, 120);
     });
     observer.observe(target);
     return () => { clearTimeout(timer); observer.disconnect(); };
@@ -44,4 +59,4 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
   return <div ref={element} className={`brief-chart ${className}`} data-testid="brief-price-chart" />;
 });
 
-export default PriceChart;
+export default memo(PriceChart);
