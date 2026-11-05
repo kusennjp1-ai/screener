@@ -36,7 +36,7 @@ export function yoyDetail(points, end, instant = false) {
   const bases = points.filter(p => days(end, p.end) >= 345 && days(end, p.end) <= 385);
   if (!bases.length) return { value: null, reason: 'no_base' };
   if (bases.length !== 1) return { value: null, reason: 'ambiguous_base' };
-  if (bases[0].value <= 0) return { value: null, reason: 'nonpositive_base' };
+  if (bases[0].value <= 0) return { value: null, reason: 'nonpositive_base', base: bases[0] };
   // Equal end months do not make a 70-day transition period comparable with a
   // 105-day quarter. Allow a 53-week retailer's one extra week, not extra months.
   if (!instant && Math.abs(days(now.end, now.start) - days(bases[0].end, bases[0].start)) > 7) return { value: null, reason: 'period_mismatch' };
@@ -79,6 +79,8 @@ export function bookFinancialEvidence(data, symbol, date) {
     const salesDerived = revenue?.derived === DERIVED_Q4, salesBaseDerived = salesGrowth.base?.derived === DERIVED_Q4;
     return { end, derived, salesDerived, salesBaseDerived, eps: eps?.value ?? null, revenue: revenue?.value ?? null, margin: margin.value, epsYoY: epsGrowth.value, salesYoY: salesGrowth.value,
       epsYoYReason: epsGrowth.reason, salesYoYReason: salesGrowth.reason, marginReason: margin.reason,
+      // The year-ago EPS behind a loss or zero base, so a swing to a profit is told as a fact, never a rate.
+      epsBase: epsGrowth.reason === 'nonpositive_base' ? epsGrowth.base.value : null,
       // A fiscal fourth quarter: the 10-K's fiscal-year end, or a Q4 derived from it.
       fiscalQ4: fiscalYearEnds.has(end) || derived, form: eps?.form ?? revenue?.form ?? income?.form ?? null,
       filed: [eps?.filed, revenue?.filed, income?.filed].filter(Boolean).sort().at(-1), accession: eps?.accession ?? revenue?.accession, inventoryYoY: yoy(q.inventory, end, true), receivablesYoY: yoy(q.receivables, end, true) };
