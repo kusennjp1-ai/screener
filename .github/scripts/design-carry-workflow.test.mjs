@@ -141,6 +141,7 @@ test('every stage keeps its exact condition',()=>{
     ['name: Prepare the certified financial candidate',null],['name: Refuse a financial candidate without a brief financial-display contract',"steps.financial.outputs.candidate == 'true'"],
     ['name: Restore checked input and prepare the carry comparison data',null],
     ['name: Diagnostic market-regime study (never a gate)',null],
+    ['name: Diagnostic market-regime reference drift (never a gate)',null],
     ['name: Build the current UI and verify its packed transport',null],['name: Measure the brief screens, accessibility and CPU 4x',null],
     ['name: Require every capture, no objective failure, and reviewed scores or the owner waiver','(always())'],
     ['name: Package UNAPPROVED financial diagnostics after unsuccessful Design',"((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true')"],
@@ -149,7 +150,7 @@ test('every stage keeps its exact condition',()=>{
     ['name: Retain the exact tested financial candidate',"(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')"],
     ['name: Preserve all results even when a budget fails','(always())'],
   ];
-  assert.equal(guards.length,17);
+  assert.equal(guards.length,18);
   for(const [header,expected]of guards)expectCondition(header,expected);
   assert.equal(stepBlocks.filter(block=>/^      - name: /.test(block)).length,guards.length-2);
 });
@@ -182,7 +183,14 @@ test('the market-regime study is a diagnostic: restored input only, runner-temp 
   // copy the study to a release.
   assert.match(step('name: Preserve all results even when a budget fails'),/\n          retention-days: 90\n?$/);
   assert.equal((workflow.match(/\$\{\{ runner.temp \}\}\/market-regime-study\//g)||[]).length,1,'only the Design artifact holds the study');
-  assert.equal(stepBlocks[stepBlocks.indexOf(body)+1].split('\n')[0],'      - name: Build the current UI and verify its packed transport','no upload between the study and the build');
+  assert.equal(stepBlocks[stepBlocks.indexOf(body)+1].split('\n')[0],'      - name: Diagnostic market-regime reference drift (never a gate)','the reference drift reads the study output next');
+  assert.equal(stepBlocks[stepBlocks.indexOf(body)+2].split('\n')[0],'      - name: Build the current UI and verify its packed transport','no upload between the study and the build');
+  // The drift diagnostic: the committed reference against this run's fresh results.json, never a gate, no token.
+  const drift=step('name: Diagnostic market-regime reference drift (never a gate)');
+  assert.equal(condition(drift),null);
+  assert.doesNotMatch(drift,/GH_TOKEN: |GITHUB_TOKEN: |secrets\.|continue-on-error|timeout-minutes|working-directory/);
+  assert.match(drift,/env -u GH_TOKEN -u GITHUB_TOKEN node frontend\/tools\/market-regime-reference\.mjs --results "\$STUDY_OUT\/results\.json" --check frontend\/src\/static\/reference\/market-regime-reference-v1\.json --summary "\$GITHUB_STEP_SUMMARY" > "\$STUDY_OUT\/reference-drift\.md"/);
+  assert.match(drift,/^          drift \|\| echo '::warning title=Market-regime reference drift::/m);
   // Shell-only fixture with the runner's bash flags: stub node/python executables, no provider request.
   const script=body.slice(body.indexOf('        run: |\n')+'        run: |\n'.length).replace(/^          /gm,'');
   const dir=mkdtempSync(join(tmpdir(),'market-regime-step-'));
