@@ -25,6 +25,20 @@ function breakBelow50(bars) {
 }
 const broken = (...symbols) => ({ charts: served => { for (const symbol of symbols) breakBelow50(served[`${symbol}.json`].bars); } });
 
+/**
+ * Only the book's combined warning: the last 19 closes 3% above the final close (so it is under the 20-day line
+ * and still above the 50-day line), three lower lows in a row, and the final session at twice the prior 50-day
+ * average volume. The final close stays the row's price, so the bars stay certified for the analysis date.
+ */
+function bookOnly(bars) {
+  const n = bars.length, close = bars[n - 1].close;
+  for (let i = n - 20; i < n - 1; i++) Object.assign(bars[i], { open: close * 1.03, close: close * 1.03, high: close * 1.035, low: close * 1.025 });
+  bars[n - 3].low = close * 1.02;
+  bars[n - 2].low = close * 1.015;
+  Object.assign(bars[n - 1], { open: close * 1.01, high: close * 1.012, low: close * 0.99 });
+  bars[n - 1].volume = Math.round(bars.slice(n - 51, n - 1).reduce((sum, bar) => sum + bar.volume, 0) / 50 * 2);
+}
+
 test.describe('Today\'s watch card at 390px', () => {
   test.use(phone(390, 844));
 
@@ -130,6 +144,32 @@ test.describe('the watch tile', () => {
     const limited = page.getByRole('region', { name: 'ウォッチ中の銘柄' }).locator('.brief-chip', { hasText: '売りのサイン 未確認（上限12銘柄）' });
     await expect(limited).toHaveCount(1);
     await expect(limited).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});
+
+// The book's combined warning alone (still above the 50-day line, TT 8/8) is a broken setup on every screen:
+// no green chip or mark beside the ▲, the warning named on Today's row, a neutral stock conclusion.
+test.describe('a setup broken by the book\'s combined warning alone', () => {
+  test.use(phone(390, 844));
+  test('the watch tab, Today\'s watch row and the stock conclusion never read green', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': ['ZZKS', 'ZZNV'] }, mutate: { charts: served => bookOnly(served['ZZKS.json'].bars) } });
+    const row = page.getByRole('region', { name: 'ウォッチ中の銘柄' }).locator('[data-testid="brief-candidate"][data-symbol="ZZKS"]');
+    await expect(row.locator('.brief-chip', { hasText: WEAKNESS })).toBeVisible();
+    await expect(row.locator('.brief-chip', { hasText: WEAKNESS })).toHaveAttribute('title', new RegExp(`^${WEAKNESS_FULL}：20日線割れ・3日連続の安値切り下げ・大商い（書籍の複合警告）$`));
+    await expect(row).toContainText('TT 8/8');
+    await expect(row.locator('.tone-zone, .is-strong')).toHaveCount(0);
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
+    const event = page.getByRole('region', { name: 'ウォッチの状況' }).locator('.brief-event[data-symbol="ZZKS"]');
+    await expect(event).toContainText('ZZKS 書籍の複合警告（20日線割れ・安値切り下げ・大商い）');
+    await expect(event.locator('.brief-event-icon')).toHaveText('▲');
+    await expect(event.locator('.brief-event-icon')).toHaveClass(/tone-ext/);
+    await expect(event.locator('.tone-zone')).toHaveCount(0);
+    await event.click();
+    await expect(page).toHaveURL(/#\/brief\/stock\/ZZKS$/);
+    const conclusion = page.getByTestId('brief-conclusion');
+    await expect(conclusion.locator('strong').first()).toHaveText('買いの前提が崩れた（独自判定）');
+    await expect(page.getByTestId('brief-sell').locator('.is-sell-hit')).toHaveCount(1);
     expect(errors).toEqual([]);
   });
 });

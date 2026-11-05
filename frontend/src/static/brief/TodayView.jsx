@@ -4,7 +4,7 @@ import useMediaQuery from '../useMediaQuery';
 import { money, signed } from '../positionGeometry';
 import { briefOrder, candidateView, earningsCall, focusCandidates, focusCounts, focusHeadingNote, focusTone, watchEvent } from './briefCandidate';
 import { leadingGroups, marketTone } from './briefEnvironment';
-import { ma50Hit, sellChipView } from './briefSell';
+import { isBreakdown, sellChipView } from './briefSell';
 import MarketCard from './MarketCard';
 import { CandidateRow } from './BriefParts';
 import { Parts, RiseItem, ScreenNotes } from './briefPrimitives';
@@ -20,7 +20,14 @@ const WATCH_ROWS = 3;
 // Footnotes: in place at 1024px and wider, gathered into the screen's 注記 below that.
 const TODAY_NOTE = '注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。同じ位置なら判定の達成数、RS推計の順。';
 const DATE_JA = iso => { const d = new Date(`${iso}T12:00:00Z`); return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）` : '日付未確認'; };
-const EVENT_ICON = { breakout: '↗', ext: '▲', heavyDown: '▲', near: '◔', zone: '●', ma50: '↘' };
+const EVENT_ICON = { breakout: '↗', ext: '▲', heavyDown: '▲', near: '◔', zone: '●', ma50: '↘', book: '▲' };
+// A broken setup leads its watch row (never the day's position event, which could be green): the 50-day hit's
+// own headline, or the book's combined warning by name.
+const BOOK_HEADLINE = '書籍の複合警告（20日線割れ・安値切り下げ・大商い）';
+const brokenEvent = sell => {
+  const broke = sell?.weakness?.find(isBreakdown);
+  return broke ? { kind: broke.key, tone: 'ext', title: broke.headline || (broke.key === 'book' ? BOOK_HEADLINE : broke.detail) } : null;
+};
 // A stale pivot far below the price reads as extended (▲); one above it keeps the neutral mark.
 const eventIcon = event => event.kind === 'stale' && event.tone === 'ext' ? '▲' : EVENT_ICON[event.kind] || '≈';
 /** A plain click on a link runs the in-app handler; a modified click keeps the browser's own behaviour. */
@@ -116,7 +123,7 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">3</span><h2 id="brief-watch-title">ウォッチの状況</h2></div>
       {watched.length || unlisted.length ? <ul className="brief-rows" id="brief-watch-rows">
         {unlisted.map(symbol => <UnlistedWatchRow key={symbol} symbol={symbol} date={brief.date} onRemove={onUnwatch} />)}
-        {watchShown.map((view, i) => { const broke = ma50Hit(sells[view.symbol]), event = broke ? { kind: 'ma50', tone: 'ext', title: broke.headline || broke.detail } : watchEvent(view, brief.market), earnings = earningsCall(view, now); return <RiseItem key={view.symbol} animate={animate} index={i}>
+        {watchShown.map((view, i) => { const event = brokenEvent(sells[view.symbol]) || watchEvent(view, brief.market), earnings = earningsCall(view, now); return <RiseItem key={view.symbol} animate={animate} index={i}>
           <button type="button" className="brief-event" data-symbol={view.symbol} onClick={e => open(view.symbol, e.currentTarget, 'watch')}>
             <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{eventIcon(event)}</span>
             <span><b>{view.symbol}</b> {event.title}<SellChip sell={sells[view.symbol]} /><small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{earnings?.soon ? `・${earnings.chip}` : ''}</small></span>

@@ -80,13 +80,15 @@ export function Reasons({ view, now, sell, hideTemplate = false, muted = false }
 /**
  * `context` carries the screen's market verdict ({ market }): unless it is open to new buying, the row's
  * green chips go neutral (a cap of 0, an unknown state, or no verdict: rows render only once the bundle
- * that carries the verdict has loaded, so a missing one is not still loading and nothing flashes).
+ * that carries the verdict has loaded, so a missing one is not still loading and nothing flashes). A broken
+ * setup (`sell` with a 50-day hit or the book's combined warning) has no green chip either: its ▲ chip says
+ * the buy setup is gone, as the stock conclusion does.
  */
 export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morph = false, sell = null, hideTemplate = false, context = null }) {
   const enter = useEntrance(animate);
   const sellChip = sellChipView(sell);
   const gate = candidateMarketGate(context?.market);
-  const muted = gate !== 'open';
+  const muted = gate !== 'open' || sell?.breakdownHits > 0;
   return <li className={enter ? 'in' : ''} style={{ '--i': index }}>
     <button type="button" className={`brief-row${rank ? '' : ' is-unranked'}`} data-symbol={view.symbol} data-testid="brief-candidate" onClick={event => onOpen(view.symbol, event.currentTarget)}
       aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${view.stateLabel}${!view.stale && finite(view.distance) ? ` ${signed(view.distance)}` : ''}、${dayChangeText(view)}${view.missing ? `、${view.missing.text}` : ''}、RS推計 ${rsShown(view.rs)}${sellChip ? `、${sellChip.text}` : ''}`}>

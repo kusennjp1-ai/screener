@@ -201,6 +201,19 @@ describe('BriefParts seams', () => {
     }
   });
 
+  it('gives a broken setup\'s row no green chip in an open market: its ▲ chip says why', () => {
+    const book = { key: 'book', label: '20日線割れ・3日連続の安値切り下げ・大商い（書籍の複合警告）', state: 'hit' };
+    const sell = { strength: [], weakness: [{ key: 'ma50', label: '出来高を伴う50日線割れ', state: 'clear' }, book], hits: 1, breakdownHits: 1 };
+    const { container } = row({ view: view({ rsLineHigh: true }), sell });
+    expect(container.querySelectorAll('.tone-zone')).toHaveLength(0);
+    expect(container.querySelector('.is-strong')).toBeNull();
+    expect(chipTexts(container)).toEqual(['● 買いゾーン +1.2%', '▲ 崩れ（独自判定）', 'TT 8/8', '出来高 1.60×', 'RS推計 88', 'RS線 新高値']);
+    cleanup();
+    // A caution (50日線の下) or a holder's signal alone is no broken setup: the open market keeps the green chips.
+    const caution = { strength: [], weakness: [{ key: 'ma50', label: '出来高を伴う50日線割れ', state: 'caution', detail: '50日線の下' }], hits: 0, breakdownHits: 0 };
+    expect(row({ view: view({ rsLineHigh: true }), sell: caution }).container.querySelectorAll('.tone-zone')).toHaveLength(4);
+  });
+
   it('re-exports the frozen layout primitives under the old import path', () => {
     expect([Expander, ScreenNotes, Parts, RiseItem, Toast]).toEqual([primitives.Expander, primitives.ScreenNotes, primitives.Parts, primitives.RiseItem, primitives.Toast]);
   });
