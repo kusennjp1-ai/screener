@@ -88,6 +88,62 @@ _Avoid_: market enabled state
 The first-run hydration workflow that prepares selected Markets with universe, price, fundamentals, breadth, group ranking, feature snapshot, and initial autoscan data.
 _Avoid_: setup, initial load
 
+## Daily brief vocabulary (static app)
+
+The words the brief's screens use (Japanese, as shown), so plans, tests and reviews name the same thing the same way.
+
+**RS推計**:
+The app's own relative-strength rank (1–99), computed from the published daily bars. Never IBD's RS Rating.
+_Avoid_: RS, IBD RS, 独自RS
+
+**RS線**:
+The price divided by the S&P 500, drawn as a line. A different measure from **RS推計** and from IBD RS.
+_Avoid_: RS推計 (for the line)
+
+**SEC 今回未取得**:
+The stock was not in this publication's SEC fetch. Temporary: a later publication may fetch it.
+_Avoid_: 取得対象外, SEC 対象外
+
+**SEC 対象外**:
+The stock has no SEC identifier (no CIK in SEC's ticker map).
+
+**SEC 不採用**:
+An SEC record was fetched but refused at verification; the screen names the reason.
+
+**配信側の問題**:
+The publication delivered no SEC quarters at all (no same-day fetch, another schema, or no ticker map). Never the stock's own state.
+
+**ウォッチの状況**:
+Today's watch card: each watched stock's state today, not a change since the previous publication.
+_Avoid_: ウォッチの変化
+
+**ウォッチの注意**:
+Today's tile that counts watched stocks whose buy setup broke. It reads 0件 only when every check is in.
+
+**保有未登録**:
+The brief keeps no holdings, so no sell count implies a holding.
+
+**崩れ（独自判定）**:
+A row's short form of 「買いの前提が崩れた／保有なら売りのサイン（独自判定）」: a heavy-volume break of the 50-day line with the close still below it, or the book's combined warning.
+
+**保有なら売りのサイン**:
+A row's short form of a holder's signal (a climax, the advance's largest down day). It means something only for a holding.
+
+**一部未確認**:
+Some weakness checks could not be judged. Never read as clear.
+
+**上限超**:
+Watched stocks beyond the sell checks' 12-stock limit. Their checks are 未確認.
+
+**一覧外**:
+The open stock is not in the list the dock steps through.
+
+**注目候補（上位）**:
+The list the dock steps through from Today or the market tab: the top focus candidates Today shows (「注目候補の上位5件」), never the whole focus pool.
+
+**参考 / 試算のみ / 既定条件**:
+The qualifiers on the stock's level tiles: 参考 when the stock is no buy candidate now (TT未達, TT未確認, a broken setup, the market or an earnings date), 試算のみ when the market guide allows no new position or is unknown, 既定条件 when every plan input is still at its default.
+
 ## Relationships
 
 - A **Market Catalog** describes many **Markets**.
@@ -149,3 +205,5 @@ _Avoid_: setup, initial load
 - Multi-Market scans are not multiple **Scans** by default. Resolution: one **Scan** has one **Universe**, and row-level Market/MIC/currency plus mixed-market policy govern result semantics.
 - **Universe** row identity remains canonical symbol for now, but `(Market, MIC, local code)` is a required active-row invariant.
 - "Scan-ready Market" previously risked meaning only enabled in Runtime Preferences. Resolution: **Scan Readiness** is a scan-admission decision using Universe data, freshness, field coverage, and Market Workload state.
+- "対象外" appears in three places in the brief. Resolution: SEC's word is always **SEC 対象外** (no CIK), never for a stock this publication merely did not fetch (**SEC 今回未取得**); the fundamentals card's 対象外 is a fund; the watch tile's 対象外N counts watched symbols this publication does not analyse (delisted, renamed or missing), whose state is 未確認, never 0. The dock's word for a stock outside its step list is **一覧外**.
+- "RS" alone is ambiguous between the app's rank, the RS line and IBD's RS Rating. Resolution: the rank is **RS推計** (独自計算), the line is **RS線**, and IBD's value is never shown as either.
