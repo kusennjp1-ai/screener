@@ -2,12 +2,10 @@
 // known or unknown, in the words the brief shows. Pure, and importable from node tools
 // (tools/report-data-coverage.mjs applies it to the published bundle). Never fills a gap.
 import { instrumentApplicability } from './instrumentApplicability.js';
-import { signed } from './positionGeometry.js';
+import { fixedMinus, signed } from './positionGeometry.js';
 import { SEC_RECORD_SCHEMA } from './bookFinancialAdmission.js';
 
 const finite = value => typeof value === 'number' && Number.isFinite(value);
-/** A fixed-point number with U+2212 for a negative sign (never the ASCII hyphen), as every brief figure reads. */
-export const fixedMinus = (value, digits) => value.toFixed(digits).replace('-', '−');
 
 /** The three Code 33 conditions from the SEC rows, so a partly known Code 33 still shows what is known. */
 export function code33Parts(report) {

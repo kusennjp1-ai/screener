@@ -1,5 +1,5 @@
-import { signed } from '../positionGeometry';
-import { code33Explain, code33Parts, fixedMinus, fundamentalTiles, fundamentalsSource, quarterReason, secStatus } from '../fundamentalsExplain.js';
+import { fixedMinus, signed } from '../positionGeometry';
+import { code33Explain, code33Parts, fundamentalTiles, fundamentalsSource, quarterReason, secStatus } from '../fundamentalsExplain.js';
 import { Expander } from './briefPrimitives';
 
 const finite = Number.isFinite;
