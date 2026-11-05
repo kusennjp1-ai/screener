@@ -48,3 +48,13 @@
 /* Study tags on the warning summary and the groups' survivorship caveat. */
 .brief-signal-tag { margin-left: 4px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
 .brief-env-caveat { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-3); }
+
+/* The long-run explorer on the 推移 tab reads at the phone text floor too: its chart title's group, the
+   chart's axis labels (the SVG's viewBox is its display width, so 12 is 12px) and the scrubber hint. The
+   explorer's own stylesheet loads with the lazy market chunk, after this one, so these rules carry the
+   .brief-history ancestor. */
+@media (max-width: 520px) {
+  .brief-history .history-chart-title span,
+  .brief-history .market-trend-plot svg text,
+  .brief-history .market-trend-scrubber { font-size: 12px; }
+}
