@@ -108,7 +108,8 @@ test.describe('the plan card on a phone', () => {
     const button = plan(page).getByRole('button', { name: 'この位置を使う' });
     await expect(button).toBeVisible();
     const structural = (await plan(page).locator('.brief-structural b').textContent()).trim();
-    const stopGroup = page.getByTestId('brief-price-chart').locator('.bc-stopgroup');
+    // The chart prints the stop's price in its axis tag (the line's own label gives the percentage).
+    const stopGroup = page.getByTestId('brief-price-chart').locator('[data-tag="stop"]');
     await expect(stopGroup).not.toContainText(structural);
     // From the keyboard: the button keeps the focus once applied (適用済み is announced in place).
     await button.focus();
@@ -138,7 +139,7 @@ test.describe('the plan card on a phone', () => {
     const entry = Number((await plan(page).getByRole('heading', { level: 2 }).textContent()).match(/(\d+\.\d{2}) で買う場合/)[1]);
     const stop = (entry * 0.93).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     await expect(plan(page).getByRole('group', { name: 'R倍数の価格' })).toContainText(`−1R ${stop}`);
-    await expect(page.getByTestId('brief-price-chart').locator('.bc-stopgroup')).toContainText(stop);
+    await expect(page.getByTestId('brief-price-chart').locator('[data-tag="stop"]')).toContainText(stop);
     const button = plan(page).getByRole('button', { name: 'この位置を使う' });
     await expect(button).toBeVisible();
     await expect(button).not.toHaveAttribute('aria-disabled', 'true');
