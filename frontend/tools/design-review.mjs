@@ -386,11 +386,12 @@ try {
       functional(group, 'row-opens-stock', candles >= MIN_CANDLES, `#/brief/stock/${symbol} draws ${candles} candles, needs at least ${MIN_CANDLES}`);
       await capture(session, group, 'stock', `#/brief/stock/${symbol}`, { requireDate: !group.mobile });
       session.step = 'stock-weekly';
-      const weekly = page.locator('.brief-periods button', { hasText: '週足2年' });
-      if (!await weekly.count()) fail(`${group.key}: the chart has no 週足2年 range control; stock-weekly cannot be captured`);
+      // The weekly range names its real length (「週足（58週）」), so it is found by the leading 週足.
+      const weekly = page.locator('.brief-periods button', { hasText: /^週足/ });
+      if (!await weekly.count()) fail(`${group.key}: the chart has no 週足 range control; stock-weekly cannot be captured`);
       else {
         await weekly.first().click();
-        functional(group, 'weekly-range-pressed', await weekly.first().getAttribute('aria-pressed') === 'true', 'the 週足2年 range is not pressed after clicking it');
+        functional(group, 'weekly-range-pressed', await weekly.first().getAttribute('aria-pressed') === 'true', 'the 週足 range is not pressed after clicking it');
         await page.locator('.brief-legend', { hasText: '10週線' }).first().waitFor({ state: 'attached', timeout: 15000 });
         const weeklyCandles = await waitForCandles(page, 1);
         functional(group, 'weekly-chart-drawn', weeklyCandles > 0, `the weekly chart draws ${weeklyCandles} candles`);
