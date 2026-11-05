@@ -61,9 +61,12 @@ export const PLAN_BLOCKED = Object.freeze({
  * @property {boolean} trialOnly The market guide allows no new position (0%) or is unknown: 試算のみ.
  * @property {{known: boolean, maxPercent: number|null, usedPercent: number|null, over: boolean}} marketGuide
  *   The market's exposure guide (地合いの目安) and how much of it this position takes.
- * @property {boolean} reference The trend template is not passed: shown for reference only (参考).
- * @property {'TT未達'|'TT未確認'|null} referenceReason Why: TT未達 (a failed rule) or TT未確認 (no template,
- *   an unknown rule, or the daily-bar integrity rule not passed); null when the template passes.
+ * @property {boolean} reference The plan is shown for reference only (参考): the trend template is not passed,
+ *   the buy setup is broken, or earnings are near.
+ * @property {'TT未達'|'TT未確認'|'崩れ'|'決算前'|null} referenceReason Why, in the conclusion's order: TT未達 (a
+ *   failed rule) or TT未確認 (no template, an unknown rule, or the daily-bar integrity rule not passed); 崩れ (a
+ *   broken setup: the 50-day check or the book's combined warning fired, 独自判定); 決算前 (earnings within
+ *   EARNINGS_WARN_DAYS); null when none applies.
  * @property {boolean} defaults Every input (account, risk, stop, cap) is still at its default and the stop
  *   is not this stock's structural stop (既定条件).
  * @property {StructuralStop} structural The stop from the base's last measured contraction, or why there is none.
@@ -198,11 +201,13 @@ function marketMax(market) {
  * 低変動, 買収, 判定不可), or null without a usable entry. `settings` holds the inputs and
  * `structuralSymbols`, the stocks whose own structural stop the viewer chose: for this stock (view.symbol)
  * that stop sets the width while it is usable; every other stock keeps the stop setting. `context` holds
- * the market verdict (brief.market), the trend template, the technical evidence and `judged` (the bars
- * certified for the analysis date, or null: the only bars the structural stop and ADR are computed from).
+ * the market verdict (brief.market), the trend template, the technical evidence, `judged` (the bars
+ * certified for the analysis date, or null: the only bars the structural stop and ADR are computed from),
+ * `broken` (a broken buy setup, from the sell checks) and `earningsSoon` (earnings within EARNINGS_WARN_DAYS):
+ * either makes the plan a reference only, as the conclusion does.
  * @returns {PositionPlan|{blocked: string}|null}
  */
-export function positionPlan(view, settings = {}, { market = null, template = null, technical = null, judged = null } = {}) {
+export function positionPlan(view, settings = {}, { market = null, template = null, technical = null, judged = null, broken = false, earningsSoon = false } = {}) {
   if (view && PLAN_BLOCKED[view.state]) return { blocked: PLAN_BLOCKED[view.state] };
   const input = { ...PLAN_DEFAULTS, ...settings };
   const { account } = input;
@@ -231,7 +236,7 @@ export function positionPlan(view, settings = {}, { market = null, template = nu
   const cost = shares === null ? null : shares * entry;
   const weight = cost === null ? null : cost / account * 100;
   const maxPercent = marketMax(market);
-  const referenceReason = templateReference(template);
+  const referenceReason = templateReference(template) ?? (broken === true ? '崩れ' : earningsSoon === true ? '決算前' : null);
   const adr = adrState(judged);
   return {
     entry, basis, stop, stopPercent: pct, stopSource, risk, r2: entry + 2 * risk, r3: entry + 3 * risk, riskDollars, shares, cost, weight,

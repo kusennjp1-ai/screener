@@ -150,7 +150,8 @@ test.describe('the watch tile', () => {
 });
 
 // The book's combined warning alone (still above the 50-day line, TT 8/8) is a broken setup on every screen:
-// no green chip or mark beside the ▲, the warning named on Today's row, a neutral stock conclusion.
+// no green chip or mark beside the ▲, the warning named on Today's row, a neutral stock conclusion and a plan for
+// reference only.
 test.describe('a setup broken by the book\'s combined warning alone', () => {
   test.use(phone(390, 844));
   test('the watch tab, Today\'s watch row and the stock conclusion never read green', async ({ page }) => {
@@ -171,6 +172,8 @@ test.describe('a setup broken by the book\'s combined warning alone', () => {
     const conclusion = page.getByTestId('brief-conclusion');
     await expect(conclusion.locator('strong').first()).toHaveText('買いの前提が崩れた（独自判定）');
     await expect(page.getByTestId('brief-sell').locator('.is-sell-hit')).toHaveCount(1);
+    // The plan is a reference only, as the conclusion's tiles are.
+    await expect(page.locator('#brief-plan-title')).toContainText('で買う場合・参考（崩れ）');
     expect(errors).toEqual([]);
   });
 });

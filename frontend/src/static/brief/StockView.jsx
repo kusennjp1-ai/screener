@@ -4,7 +4,8 @@ import { ScreenNotes } from './briefPrimitives';
 import useSessionState from './useSessionState';
 import { gapDays, rsLeadMarks, rsLineNewHigh, stageFromBars } from './briefChartModel';
 import { CHART_RANGES as RANGES, chartNotes, shortAveragesDrawn } from './chartReadout';
-import { sellMarks, stockSells } from './briefSell';
+import { isBreakdown, sellMarks, stockSells } from './briefSell';
+import { earningsSoon } from './briefCandidate';
 import { planLevels } from './positionSizing';
 import StockVerdict from './StockVerdict';
 import TemplateCard from './StockTemplateCard';
@@ -47,11 +48,14 @@ export default function StockView({ data, header = null, wide = false, market = 
     // Published by an earlier method: measure the contractions again on the certified bars.
     try { return { ...technical, vcp: buildBookTechnicalEvidence(row, chartPayload, data.date).vcp ?? null }; } catch { return { ...technical, vcp: null }; }
   }, [technical, vcpPending, certified, row, chartPayload, data.date]);
-  const { plan, settings, update } = usePositionPlan({ view, template, market, technical: evidence, certified, judged, chartRef });
+  const sells = useMemo(() => stockSells({ judged, diagnostics, view }), [judged, diagnostics, view]);
+  // A broken setup or near earnings leaves the plan a reference only, as the conclusion is (参考).
+  const broken = Array.isArray(sells?.weakness) && sells.weakness.some(isBreakdown);
+  const soon = earningsSoon(view, Date.now());
+  const { plan, settings, update } = usePositionPlan({ view, template, market, technical: evidence, certified, judged, broken, earningsSoon: soon, chartRef });
   const legsValid = certified && evidence?.vcp?.measurementsValid === true;
   const legs = useMemo(() => (legsValid ? evidence.vcp.legs : []), [legsValid, evidence]);
   const stage = useMemo(() => Number.isInteger(row?.stage) ? { value: row.stage, computed: false } : (() => { const value = stageFromBars(judged); return value ? { value, computed: true } : null; })(), [row?.stage, judged]);
-  const sells = useMemo(() => stockSells({ judged, diagnostics, view }), [judged, diagnostics, view]);
   const rsLine = data.chart.data?.rs_line;
   // The RS line's new high and its lead marks are judged from certified bars only (not the backend flag).
   const rsHigh = useMemo(() => (judged ? rsLineNewHigh(rsLine, judged) === true : false), [rsLine, judged]);

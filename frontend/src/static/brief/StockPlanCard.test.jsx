@@ -27,8 +27,8 @@ const measured = (low = 96) => {
   return { judged: list, technical: { as_of_date: DATE, vcp: { measurementsValid: true, legs: [{ low: 80, lowDate: list[170].date }, { low, lowDate: list[190].date }] } } };
 };
 /** The plan card with its hook, as the stock view wires them. */
-function Harness({ planView = view, market = UP, template = PASS, technical = null, judged = null, certified = true, chartRef = { current: null }, wide = false }) {
-  const { plan, settings, update } = usePositionPlan({ view: planView, template, market, technical, certified, judged, chartRef });
+function Harness({ planView = view, market = UP, template = PASS, technical = null, judged = null, certified = true, broken = false, earningsSoon = false, chartRef = { current: null }, wide = false }) {
+  const { plan, settings, update } = usePositionPlan({ view: planView, template, market, technical, certified, judged, broken, earningsSoon, chartRef });
   return <PlanCard view={planView} plan={plan} settings={settings} onChange={update} earnings={null} judged={judged} wide={wide} />;
 }
 const card = () => screen.getByRole('region', { name: /建て玉と損切りの計画/ });
@@ -153,6 +153,19 @@ describe('the plan card', () => {
     }
     render(<Harness />);
     expect(heading()).not.toHaveTextContent('参考');
+  });
+
+  it('a broken setup or near earnings marks the plan 参考 too, as the conclusion does', () => {
+    const heading = () => screen.getByRole('heading', { level: 2 });
+    const { unmount } = render(<Harness broken />);
+    expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（崩れ）');
+    unmount();
+    const { unmount: next } = render(<Harness earningsSoon />);
+    expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（決算前）');
+    next();
+    // The template's reason leads, in the conclusion's order.
+    render(<Harness template={{ ...PASS, passed: 7, failed: 1 }} broken earningsSoon />);
+    expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（TT未達）');
   });
 
   it('in the buy zone the entry is the analysis date\'s close (終値), never called the current price', () => {

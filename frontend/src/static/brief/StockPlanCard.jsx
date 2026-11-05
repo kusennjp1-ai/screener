@@ -31,10 +31,10 @@ const Fold = ({ wide, id, summary, children }) => wide ? children : <Expander id
  * and the chart draws no stop; the plan card names the reason.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- the plan's hook lives beside its card (one owner)
-export function usePositionPlan({ view, template = null, market = null, technical = null, certified = false, judged = null, chartRef }) {
+export function usePositionPlan({ view, template = null, market = null, technical = null, certified = false, judged = null, broken = false, earningsSoon = false, chartRef }) {
   const [settings, setSettings] = useState(readPlan);
   const bars = certified === true ? judged : null;
-  const context = useMemo(() => ({ market, template, technical, judged: bars }), [market, template, technical, bars]);
+  const context = useMemo(() => ({ market, template, technical, judged: bars, broken, earningsSoon }), [market, template, technical, bars, broken, earningsSoon]);
   const plan = useMemo(() => {
     const result = view ? positionPlan(view, settings, context) : null;
     return result?.blocked ? null : result;

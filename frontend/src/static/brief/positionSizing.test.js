@@ -143,6 +143,12 @@ describe('position plan: gating (F2)', () => {
     expect(reason({ passed: 8, failed: 0, unknown: 0 })).toEqual([true, 'TT未確認']);
     expect(reason(PASS)).toEqual([false, null]);
     expect(templateReference(PASS)).toBeNull();
+    // A broken setup (崩れ) or near earnings (決算前) also leaves the plan a reference; the template's reason leads.
+    const more = (template, context) => { const plan = positionPlan(view(), PLAN_DEFAULTS, { template, ...context }); return [plan.reference, plan.referenceReason]; };
+    expect(more(PASS, { broken: true })).toEqual([true, '崩れ']);
+    expect(more(PASS, { earningsSoon: true })).toEqual([true, '決算前']);
+    expect(more(PASS, { broken: true, earningsSoon: true })).toEqual([true, '崩れ']);
+    expect(more({ ...PASS, passed: 7, failed: 1 }, { broken: true })).toEqual([true, 'TT未達']);
   });
 });
 
