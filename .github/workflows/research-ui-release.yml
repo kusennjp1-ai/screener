@@ -18,6 +18,10 @@ on:
         description: 'Prepare only: financial-correction-v1 intent bound to exact predecessor/source; never deploys'
         type: string
         default: ''
+      allow_sec_coverage_drop:
+        description: 'Owner approval only: let a UI-only republish publish fewer or changed same-day SEC records than the live publication'
+        type: boolean
+        default: false
   workflow_run:
     workflows: [CI, Design Acceptance, Static Site]
     types: [completed]
@@ -202,6 +206,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RETAINED_PRICE_PUBLISHER_JOB_START: ${{ runner.temp }}/retained-price-publisher-job-start
         run: node .github/scripts/select-release-source.mjs restore
+      # A UI-only republish (verified live input, no SEC fetch) restores the live logical tree here, before
+      # any export: record which same-day SEC records it publishes. The reviewed controller's own tool
+      # reads it (node built-ins and src/static only) and writes outside the restored data root.
+      - name: Record the live publication's SEC records before a UI-only republish
+        if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.published_input == 'true' && steps.plan.outputs.mode == 'ui' && steps.plan.outputs.limited_research_preview != 'true' && steps.restore.outputs.offline_recovery_verified != 'true'
+        run: node frontend/tools/report-data-coverage.mjs --published --root release/frontend/public --json "$RUNNER_TEMP/live-fundamentals-coverage.json"
       - uses: actions/setup-python@v5
         if: steps.restore.outputs.offline_session_calendar == 'true'
         with:
@@ -319,12 +329,21 @@ jobs:
         if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.limited_research_preview == 'true'
         working-directory: release/frontend
         run: node tools/check-data-quality.mjs
-      - name: Report published fundamentals coverage (diagnostic only)
-        # Read-only, on the logical files before packing: per brief-listable row, the SEC
-        # record, the tiles with a value, the Code 33 state and why it stays unknown.
+      - name: Report published fundamentals coverage and keep a UI-only republish's SEC records
+        # Read-only, on the logical files before packing, with the reviewed controller's tool (release/ may
+        # hold an older approved UI): per brief-listable row the SEC record, tiles, Code 33 state and why it
+        # stays unknown, the publication's SEC admission, and a job-summary table. Its findings are warnings.
+        # A UI-only republish must also publish every same-day SEC record of the live publication unchanged;
+        # otherwise it stops here unless the owner set allow_sec_coverage_drop on a manual dispatch.
         if: steps.plan.outputs.publish == 'true' && steps.restore.outputs.offline_recovery_verified != 'true'
-        working-directory: release/frontend
-        run: node tools/report-data-coverage.mjs --published || echo '::warning::Published fundamentals coverage unavailable'
+        env:
+          UI_ONLY_REPUBLISH: ${{ steps.plan.outputs.published_input == 'true' && steps.plan.outputs.mode == 'ui' && steps.plan.outputs.limited_research_preview != 'true' }}
+          ALLOW_SEC_COVERAGE_DROP: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_sec_coverage_drop == true }}
+        run: |
+          args=(--published --root release/frontend/public --json "$RUNNER_TEMP/published-fundamentals-coverage.json")
+          if [ "$UI_ONLY_REPUBLISH" = true ]; then args+=(--previous "$RUNNER_TEMP/live-fundamentals-coverage.json" --require-sec-carry-forward); fi
+          if [ "$ALLOW_SEC_COVERAGE_DROP" = true ]; then args+=(--allow-sec-coverage-drop); fi
+          node frontend/tools/report-data-coverage.mjs "${args[@]}"
       - name: Preserve approved UI bytes or record verified new UI
         if: steps.plan.outputs.publish == 'true'
         env:

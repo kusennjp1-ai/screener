@@ -1028,8 +1028,9 @@ jobs:
             # Re-export so this session's SEC evidence, reported financial history and
             # earnings dates reach the rows (the tools read the first export's lists).
             node tools/export-research.mjs
-            node tools/report-data-coverage.mjs || echo '::warning::Data coverage report unavailable'
-            node tools/report-data-coverage.mjs --published || echo '::warning::Published fundamentals coverage unavailable'
+            # Diagnostic and non-blocking: the reports turn their findings into warnings and a job-summary table.
+            node tools/report-data-coverage.mjs
+            node tools/report-data-coverage.mjs --published --json "$RUNNER_TEMP/published-fundamentals-coverage.json"
             npm run build
             # Each export above wrote new hash-named workbench, summary,
             # performance, market-trend and snapshot files. Keep only what the
