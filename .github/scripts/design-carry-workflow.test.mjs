@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import {execFileSync} from 'node:child_process';
+// market-study-archive.yml copies this workflow's study output to a release;
+// its contracts run with this file in CI (ci.yml lists test files explicitly).
+import './market-study-archive-workflow.test.mjs';
 const workflow=readFileSync(new URL('../workflows/design-acceptance.yml',import.meta.url),'utf8');
 const adapter=readFileSync(new URL('./design-financial-carry.mjs',import.meta.url),'utf8');
 // Step-local structural contracts avoid confusing a neighbouring step's token or
@@ -174,6 +177,12 @@ test('the market-regime study is a diagnostic: restored input only, runner-temp 
   for(const match of targets)assert.match(match[1],/^"\$(?:STUDY_OUT\/|GITHUB_STEP_SUMMARY")/,match[0]);
   assert.match(body,/^          study \|\| echo '::warning title=Market-regime study unavailable::Diagnostic only; the Design result is unaffected\.'$/m);
   assert.match(step('name: Preserve all results even when a budget fails'),/^            \$\{\{ runner.temp \}\}\/market-regime-study\/$/m);
+  // The one preserved Design artifact is the study's only upload (no new failure
+  // point before the build); it is kept 90 days so market-study-archive.yml can
+  // copy the study to a release.
+  assert.match(step('name: Preserve all results even when a budget fails'),/\n          retention-days: 90\n?$/);
+  assert.equal((workflow.match(/\$\{\{ runner.temp \}\}\/market-regime-study\//g)||[]).length,1,'only the Design artifact holds the study');
+  assert.equal(stepBlocks[stepBlocks.indexOf(body)+1].split('\n')[0],'      - name: Build the current UI and verify its packed transport','no upload between the study and the build');
   // Shell-only fixture with the runner's bash flags: stub node/python executables, no provider request.
   const script=body.slice(body.indexOf('        run: |\n')+'        run: |\n'.length).replace(/^          /gm,'');
   const dir=mkdtempSync(join(tmpdir(),'market-regime-step-'));
