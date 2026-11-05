@@ -7,11 +7,11 @@ and the daily market-environment series behind them. For vocabulary, see `CONTEX
 
 | Route | Content |
 |---|---|
-| `#/brief` | A three-item summary first (地合い with the exposure cap, number of focus candidates, sell signals on the watchlist), then 1 Market (verdict, S&P 500 with active distribution days, trend-template count, RS90 leaders, stage mix, share above the 200-day line, 52-week new highs and lows, breakout follow-through, bifurcation note) · 2 Top five qualified candidates in the buy zone or within −5% of the pivot, and the industry groups (or sectors, when most rows lack a group) with the most qualified stocks · 3 Watchlist changes |
+| `#/brief` | A three-item summary first, each a link (地合い with the exposure guide, number of focus candidates, ウォッチの注意: broken setups among the watched stocks), then 1 Market (verdict, S&P 500 with active distribution days, trend-template count, RS90 leaders, stage mix, share above the 200-day line, 52-week new highs and lows, breakout follow-through, bifurcation note) · 2 Top five qualified candidates in the buy zone or within −5% of the pivot, and the industry groups (or sectors, when most rows lack a group) with the most qualified stocks · 3 ウォッチの状況 (each watched stock's state today) |
 | `#/brief/list` | Qualified candidates. Filters: buy zone, near pivot, all qualified, one condition short. Search box and five sort orders (priority, RS, distance to the pivot, volume, distance to the 52-week high). |
 | `#/brief/watch` | The shared `research-watch` watchlist |
 | `#/brief/market` | 地合い with every figure and the stage mix, the index's past tendencies (see below), then the long-run explorer (trend-template count and RS90, stage mix, share above the 50- and 200-day lines, leader health, breakout success) and sector ETF ranks. Each block keeps its own as-of date. |
-| `#/brief/stock/:symbol` | Conclusion card (status, position meter, buy range, stop, 2R) → large daily chart (3 months, 6 months, 1 year, or a 2-year weekly view with 10/30/40-week averages) → eight trend-template rules → VCP footprint → quarterly growth with layered Code 33 → 13F counts → position plan → sell checks |
+| `#/brief/stock/:symbol` | Conclusion card (status, position meter, buy range, stop, shares) → large daily chart with its readout (3 months, 6 months, 1 year, or a weekly view of up to 2 years, labelled with its real length, with 10/30/40-week averages) → eight trend-template rules → VCP footprint → quarterly growth with layered Code 33 → 13F counts → position plan → sell checks |
 
 - **Shell:** the screens have their own shell (48 px top bar, 56 px bottom tabs, light/dark toggle from the existing colour-mode preference).
 - **Desktop (≥1024 px):** two panes, list on the left and the selected stock on the right.
@@ -37,19 +37,18 @@ The VCP footprint ("VCP 7週 24/5 3T": weeks since the first contraction, deepes
 
 The stock screen also lists checks for the last five sessions, in two groups:
 
-- **Selling into strength** (climax): the largest one-day gain since the start of the advance, the largest five-session gain since the start, at least 8 up days in the last 10, and +25% or more within 15 sessions.
-- **Selling into weakness:** the largest one-day loss since the start of the advance, a close that crosses below the 50-day SMA on at least 1.4× the prior 50-day average volume, and the book's combined warning from `diagnoseBookChart`: below the 20-day line, three lower lows and heavy volume. The research screen shows the same combined warning.
+- **Selling into strength** (climax): the largest one-day gain since the pivot breakout, the largest five-session gain since then, at least 8 up days in the last 10 (sessions after the breakout only), and +25% or more within 15 sessions. They are judged only for a stock beyond the buy zone (`view.state === 'ext'`) at least `SELL_RULES.climaxFromPivotPercent` (+20%) above its pivot whose run of closes above the pivot is at least 15 sessions old; otherwise each reads 対象外 with the reason (below the pivot, a small gain since the breakout, a breakout only N sessions ago).
+- **Selling into weakness:** the largest one-day loss since the start of the advance (the lowest low of the last 252 sessions; judged only when the close is at least 30% above it and 20 or more sessions have passed), the 50-day line as a state, and the book's combined warning from `diagnoseBookChart`: below the 20-day line, three lower lows and heavy volume.
 
-How the checks are judged:
+The 50-day check is a state, not a one-day event. Below the line, the break day is the session after the last close at or above it (within 252 sessions): a hit when it traded at least 1.4× the prior 50-day average volume (「9/22 に出来高 2.2倍で割れ、以降50日線の下（9営業日）」), a caution (「50日線の下（大商いの割れは未確認）」) after a lighter break or when no close above the line is found, 未確認 when that day's volume is missing or 0. Back above the line it is clear.
 
-- The start of the advance is the lowest low of the last 252 sessions.
-- The strength checks and the largest one-day loss run only when the close is at least 30% above that low and 20 or more sessions have passed. Otherwise they show 対象外.
-- A missing volume on a break day leaves that check 未確認.
-- Every check computed from bars — these sell checks, the stage computed from bars, the RS-line high, up/down volume, and the chart marks — needs certified bars. The publisher's `technical_audit` must have passed, and `auditDailyBars` must pass on the same payload: the last bar is on the analysis date, every exchange session is present, and the last close matches the row. Retained or gapped histories leave them 未確認 with the reason, and the chart states the date its bars end on.
+A **broken setup** is a hit of the 50-day check or of the combined warning (`isBreakdown`). The stock's conclusion then never makes a buy-side call (「買いの前提が崩れた（独自判定）」), the rows show 崩れ（独自判定）, and the watch counts it. A climax or the advance's largest down day alone is a holder's signal: the rows say 保有なら売りのサイン and nothing counts it, because no holding is registered (保有未登録).
+
+Every check computed from bars — these sell checks, the stage computed from bars, the RS-line high, up/down volume, and the chart marks — needs certified bars. The publisher's `technical_audit` must have passed, and `auditDailyBars` must pass on the same payload: the last bar is on the analysis date, every exchange session is present, and the last close matches the row. Retained or gapped histories leave them 未確認 with the reason, and the chart states the date its bars end on.
 
 The chart marks each day with a signal (▼ above the bar for a climax, ▲ below it for a breakdown). Heavy volume on a lower close is drawn in the warning colour, not the breakout colour.
 
-The watchlist (today's 3rd block and the ウォッチ tab) shows ▲ 売りのサイン n件 for watched stocks. It uses the same chart queries as the stock screen, and only the first 12 watched stocks are fetched. A watched stock that was not checked (beyond the first 12, a failed chart, or uncertified bars) shows 売りのサイン 未確認, so an unchecked stock never looks the same as one with no signals.
+Today's tile 「ウォッチの注意」 counts the broken setups only, and reads 0件 only when every watched stock was checked; unchecked, limited (beyond the first 12), unlisted and partly checked stocks are said in its note (未確認, 上限超, 対象外, 一部未確認, 保有未登録). Each watched stock that was not checked shows 売りのサイン 未確認, so an unchecked stock never looks the same as one with no signals. The watch uses the same chart queries as the stock screen.
 
 The ideas follow Minervini's sell rules. The combined warning cites 『株式トレード 基本と原則』, and its 1.4× volume is the app's proxy. Every other number is this app's own threshold, and the screen labels them 独自判定. The stock screen also shows パワープレー候補（機械的探索） when `diagnoseBookChart` finds its mechanical power-play match, and the RS-line chip adds 株価に先行 when the RS line is at a new high while the price is still 2% or more below its own 52-week high.
 
@@ -134,6 +133,30 @@ Code 33 combines its three conditions (EPS growth acceleration, sales growth acc
 Ordinary releases run the financial carry, which owns every scalar financial field and `financial_history`. `book_financials` is the one exception: the export, the carry/correction overlay and the financial gate each keep it only when `admitBookFinancials` (`src/static/bookFinancialAdmission.js`) accepts it — same symbol and as-of date, retrieved between the start of that day and the evaluation instant, a companyfacts URL bound to the CIK, every fact filed on or before the as-of date in a named 10-K/10-Q (or amendment) with its field's tag and unit, and no extra keys. Anything else, and every fund or quarantined instrument, publishes `null`. Admitted records never change rankings or qualification (`researchEngine` does not read them). Point-in-time granularity is the filing date; the acceptance time of day is not known.
 
 The Yahoo history fetch keeps 1 request/second with one worker. Under the carry the release requests none (`--limit 0`), because the carried history replaces it.
+
+### Why a same-day SEC record is not published
+
+Every published row's research detail carries `sec_admission` (detail-only, never in the list rows or the scan pages): `admitted` (the detail holds the record), `not_requested` (the same-day SEC input has no record for the symbol: 今回の取得に含まれていない), `not_fetched` (no SEC input for this publication date: `no_file` or `other_date`) or `refused` with the reason, observed, never guessed — the export's own admission reason, else the carry/correction overlay's re-admission reason, else what the final row shows:
+
+| Reason | Meaning |
+|---|---|
+| `schema` | The record's schema version is not the reader's |
+| `symbol` | The record's symbol is not the row's |
+| `as_of` | The record's date is not the publication date |
+| `retrieved_window` | The retrieval time cannot be checked against the evaluation instant |
+| `keys` | The record has keys other than the expected ones |
+| `cik_url` | The companyfacts URL is not bound to the CIK |
+| `series:<field>` | A quarterly series (`eps`, `revenue`, `netIncome`, `inventory`, `receivables`) or `series:annualEps` fails its filing date, period, form, tag or unit check |
+| `not_corporate` | A fund or quarantined instrument, including one the overlay or the projection made non-corporate (the projection then nulls `book_financials`) |
+| `projection` | Admission accepted the record but a later publication step removed it from the row (a label only; admission never returns it) |
+
+The manifest carries the publication's block at `markets.US.fundamentals_coverage` (`fundamentals-coverage-v1`, computed by one function for the export, the quality gate and the report): `as_of_date`, `sec_fetch_ran` (the SEC input is for this date), `sec_as_of`, `file_schema`, `universe` (published rows, funds and ETFs included), `requested`, `eligible`, `truncated`, `deadline_unreached`, `ticker_map_ok` (null when the input lists no errors, false when the SEC ticker map could not be read), `admitted`, `with_quarters` (admitted records with status available or partial), `not_requested`, `not_fetched`, `refused` and `refused_by_reason`. A count the input does not carry is null (未計測), never 0. The four states add up to `universe`, and the financial quality gate (`check-data-quality-financial.mjs`) rejects a block that is malformed or differs from the one it recomputes from the published details and the SEC input. The brief-listed counts (`sec_record`, `with_quarters_listed` over `listed`) stay in the report's `--published` output, not in the block.
+
+`report-data-coverage.mjs --published` warns (never fails the build) when SEC quarters cover under 80% of the brief-listed rows, when the input holds records for the date but no published row carries quarters, when `deadline_unreached` is above 0, when `ticker_map_ok` is false, when the input file is missing, of another schema or of another date, and when the manifest block differs from the published details.
+
+A UI-only republish of the Research UI Release records the live publication's SEC records before the export and compares them after it. Round 1 ships it warn-only (plan §9.1): a dropped or changed record, or a comparison that cannot be made (未計測), is a `::warning::`. It fails the release only when the repository variable `SEC_CARRY_FORWARD_REQUIRED` is `'true'`; the manual input `allow_sec_coverage_drop` then lets one owner-approved drop through.
+
+The stock screen keeps the reasons apart: **配信側の問題** (the publication delivered no SEC quarters at all: no same-day fetch, another schema, or no ticker map; not the stock's own state), **SEC 今回未取得** (not in this publication's SEC fetch; temporary), **SEC 不採用** (fetched, refused at verification, with the reason) and **SEC 対象外** (no CIK in SEC's ticker map).
 
 ### What the stock screen shows
 
