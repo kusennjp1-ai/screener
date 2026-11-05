@@ -1,7 +1,8 @@
 // Daily brief on phones, compacted: each screen's height at 375×812 stays within its budget, every
 // expander and the market tab's section tabs work by keyboard and keep their state for the session,
 // the section tabs stay under the bar while the page scrolls without covering a focused control,
-// the new controls keep the 12px text floor and 44px targets, and nothing overflows at 320/375/414 px.
+// the new controls keep the 12px text floor and 44px targets, every visible text on a phone reads at 12px or
+// more (SVG at its rendered size), and nothing overflows at 320/375/414 px.
 import { test, expect } from '@playwright/test';
 import { openBrief, horizontalOverflow, SEC_SYMBOL } from './brief-fixture.js';
 
@@ -162,6 +163,62 @@ test.describe('text floor and targets of the compact controls', () => {
       await expect(page.locator('.brief-screen-notes')).toBeVisible();
       for (const summary of await page.locator('.brief-expander > summary').all()) await summary.click();
       await check();
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+// The round-1 text floor on phones: every visible text in the main area, the bar and the dock reads at 12px
+// or more, SVG text at its rendered size (font size × the SVG's scale), on every screen, every market section,
+// every opened fold and the stock's weekly chart, at 320, 375 and 390 px.
+const smallText = page => page.evaluate(() => {
+  const clipped = element => {
+    for (let node = element; node && node !== document.documentElement; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.visibility === 'hidden' || Number(style.opacity) === 0) return true;
+      // .sr-only: read by screen readers, not on screen.
+      if (style.position === 'absolute' && style.overflow === 'hidden' && parseFloat(style.width) <= 1 && parseFloat(style.height) <= 1) return true;
+    }
+    return false;
+  };
+  const found = [];
+  for (const root of document.querySelectorAll('#brief-main, .brief-bar, .brief-dock')) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent.trim(), element = node.parentElement;
+      if (!text || !element) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      if (![...range.getClientRects()].some(rect => rect.width > 0 && rect.height > 0) || clipped(element)) continue;
+      let size = parseFloat(getComputedStyle(element).fontSize);
+      if (element instanceof SVGGraphicsElement) { const matrix = element.getScreenCTM(); if (matrix) size *= Math.hypot(matrix.a, matrix.b); }
+      if (size < 11.95) found.push(`${element.closest('[class]')?.className?.baseVal ?? element.closest('[class]')?.className ?? element.tagName} ${size.toFixed(1)}px “${text.slice(0, 24)}”`);
+    }
+  }
+  return [...new Set(found)];
+});
+
+for (const width of [320, 375, 390]) test.describe(`text floor at ${width}px`, () => {
+  test.use({ ...phone(width, width === 390 ? 844 : 812), contextOptions: { reducedMotion: 'reduce' } });
+  test('every visible text in the main area, the bar and the dock is 12px or more (SVG scaled)', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': WATCH } });
+    const openFolds = async () => { for (const summary of await page.locator('#brief-main .brief-expander > summary').all()) if (await summary.isVisible() && !await summary.evaluate(node => node.parentElement.open)) await summary.click(); };
+    for (const [name, [hash, ready]] of Object.entries(SCREENS)) {
+      await page.goto(`/${hash}`);
+      await ready(page);
+      expect(await smallText(page), name).toEqual([]);
+      await openFolds();
+      expect(await smallText(page), `${name} opened`).toEqual([]);
+      if (name === 'market') for (const tab of await tabs(page).all()) {
+        await tab.click();
+        await openFolds();
+        expect(await smallText(page), `market ${await tab.textContent()}`).toEqual([]);
+      }
+      if (name === 'stock') {
+        await page.locator('.brief-periods button', { hasText: /^週足/ }).click();
+        await expect(page.locator('.brief-legend', { hasText: '10週線' }).first()).toBeAttached();
+        expect(await smallText(page), 'stock weekly').toEqual([]);
+      }
     }
     expect(errors).toEqual([]);
   });
