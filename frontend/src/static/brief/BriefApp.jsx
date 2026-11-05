@@ -5,6 +5,13 @@ import { ColorModeContext } from '../../contexts/ColorModeContext';
 import { palettes, themeCss } from '../theme/tokens';
 import '../theme/foundation.css';
 import './brief.css';
+// Each round-1 track's overrides of brief.css, in this fixed order (a later file wins a tie).
+import './brief-chart.css';
+import './brief-market-history.css';
+import './brief-fundamentals.css';
+import './brief-decision.css';
+import './brief-plan.css';
+import './brief-watch.css';
 import { useBriefData, useWatchlist } from './useBriefData';
 import { candidateView, focusCandidates } from './briefCandidate';
 import TodayView from './TodayView';
