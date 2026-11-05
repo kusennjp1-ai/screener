@@ -123,7 +123,7 @@ test.describe('the publication\'s SEC coverage on the stock screen', () => {
     const line = fin(page).getByText('業績：SEC未配信（配信側の問題）・Code 33 未確認');
     await expect(line).toBeVisible();
     await line.click();
-    await expect(fin(page)).toContainText(`この公開（${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}分）では SEC 四半期データを反映していません（0/30銘柄・配信側の問題で、業績の良し悪しではありません）。`);
+    await expect(fin(page)).toContainText(`この公開（${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}分）では SEC 四半期データを反映していません（反映は公開30銘柄中0銘柄・配信側の問題で、業績の良し悪しではありません）。`);
     await expect(fin(page)).not.toContainText(/今後|次回|対象です/);
     expect(errors).toEqual([]);
   });
@@ -131,8 +131,9 @@ test.describe('the publication\'s SEC coverage on the stock screen', () => {
   test('a stock outside this SEC fetch and a refused record each say so', async ({ page }) => {
     const manifest = value => { value.markets.US.fundamentals_coverage = coverage(); };
     const { errors } = await openBrief(page, '#/brief/stock/ZZAR', { mutate: { manifest, ...withAdmission({ state: 'not_requested', reason: null }) } });
-    await expect(fin(page).getByText('業績：SEC取得対象外・Code 33 未確認')).toBeVisible();
-    await expect(fin(page)).toContainText('今回の SEC 取得の対象外です（取得 2/30銘柄）。');
+    await expect(fin(page).getByText('業績：SEC今回未取得・Code 33 未確認')).toBeVisible();
+    await expect(fin(page)).toContainText('今回の SEC 取得には含まれていません（取得は公開30銘柄中2銘柄）。');
+    await expect(fin(page)).not.toContainText(/対象です|対象外です/);
     const refused = await page.context().newPage();
     try {
       const second = await openBrief(refused, '#/brief/stock/ZZAR', { mutate: { manifest, ...withAdmission({ state: 'refused', reason: 'cik_url' }) } });

@@ -20,7 +20,8 @@ const ym = end => typeof end === 'string' ? `${end.slice(0, 7)}期` : '期 未�
 const SEC_STATUS = {
   ok: ['SEC XBRL', ''],
   not_published: ['SEC 未配信', 'この銘柄の当日分の SEC 四半期データは配信されていません。'],
-  not_requested: ['SEC 取得対象外', '今回の SEC 取得の対象外です。'],
+  // Not in this publication's SEC fetch (temporary), unlike 対象外 (no SEC identifier at all).
+  not_requested: ['SEC 今回未取得', '今回の SEC 取得には含まれていません。'],
   refused: ['SEC 不採用', '取得対象でしたが、SEC の記録を検証できず不採用にしました。'],
   no_cik: ['SEC 対象外', 'SEC の銘柄コード表に該当がありません（ETF・外国企業・上場直後など）。'],
   no_companyfacts: ['SEC データなし', 'SEC に XBRL の財務データがありません。'],
@@ -37,7 +38,7 @@ const SEC_STATUS = {
 // Why the publisher's admission refused a same-day record (bookFinancialAdmission's reasons), in words.
 const SERIES_NAME = { eps: 'EPS', revenue: '売上', netIncome: '純利益', inventory: '在庫', receivables: '売掛金', annualEps: '年間EPS' };
 const REFUSAL_TEXT = { schema: 'SEC データの形式の版が違うため', symbol: '銘柄が一致しないため', as_of: '公開日と記録の日付が一致しないため', retrieved_window: '取得時刻を確かめられないため',
-  keys: '記録の項目が想定と違うため', cik_url: '出典URLとCIK番号が一致しないため', not_corporate: '企業業績の対象外の銘柄のため' };
+  keys: '記録の項目が想定と違うため', cik_url: '出典URLとCIK番号が一致しないため', not_corporate: '企業業績の対象外の銘柄のため', projection: '公開時の整合確認で外れたため' };
 function refusalText(reason) {
   if (typeof reason !== 'string') return '理由は記録されていません';
   if (reason.startsWith('series:')) return `${SERIES_NAME[reason.slice(7)] || 'いずれか'}の系列（提出日・期間・様式）を確かめられないため`;
@@ -45,12 +46,18 @@ function refusalText(reason) {
 }
 const monthDay = date => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) ? `${Number(date.slice(5, 7))}/${Number(date.slice(8, 10))}` : null;
 const known = value => Number.isSafeInteger(value) && value >= 0;
-/** The publication did not deliver usable SEC quarters at all (no same-day fetch, or another schema). */
-const secDeliveryFailed = coverage => Boolean(coverage) && (coverage.sec_fetch_ran !== true || coverage.file_schema !== SEC_RECORD_SCHEMA);
+/**
+ * The publication did not deliver usable SEC quarters at all: no same-day fetch, another schema, or a fetch
+ * without the SEC ticker map (every symbol then reads as without a CIK, which is not the stock's own fact).
+ */
+const secDeliveryFailed = coverage => Boolean(coverage) && (coverage.sec_fetch_ran !== true || coverage.file_schema !== SEC_RECORD_SCHEMA || coverage.ticker_map_ok === false);
+// The counts are of the publication's rows (funds and ETFs included), never of the brief's listed rows.
 function deliveryText(coverage) {
-  const date = monthDay(coverage.as_of_date), counts = known(coverage.with_quarters) && known(coverage.universe) ? `${coverage.with_quarters}/${coverage.universe}銘柄・` : '';
+  const date = monthDay(coverage.as_of_date), counts = known(coverage.with_quarters) && known(coverage.universe) ? `反映は公開${coverage.universe}銘柄中${coverage.with_quarters}銘柄・` : '';
   return `この公開${date ? `（${date}分）` : ''}では SEC 四半期データを反映していません（${counts}配信側の問題で、業績の良し悪しではありません）。`;
 }
+// The published rows this SEC fetch included (admitted or refused), out of every published row.
+const fetchedText = coverage => known(coverage?.admitted) && known(coverage?.refused) && known(coverage?.universe) ? `（取得は公開${coverage.universe}銘柄中${coverage.admitted + coverage.refused}銘柄）` : '';
 
 /**
  * Why the SEC quarterly evidence of a row is or is not usable, in words the brief shows.
@@ -72,7 +79,7 @@ export function secStatus(row, book, { detail = null, coverage = null } = {}) {
     // A delivery failure of the whole publication is told as that, never as this stock's results.
     if (secDeliveryFailed(coverage)) return make('not_published', { delivery: true, long: deliveryText(coverage) });
     const admission = row?.sec_admission;
-    if (admission?.state === 'not_requested') return make('not_requested', { long: `今回の SEC 取得の対象外です${known(coverage?.requested) && known(coverage?.universe) ? `（取得 ${coverage.requested}/${coverage.universe}銘柄）` : ''}。` });
+    if (admission?.state === 'not_requested') return make('not_requested', { long: `今回の SEC 取得には含まれていません${fetchedText(coverage)}。` });
     if (admission?.state === 'refused') return make('refused', { reason: admission.reason, long: `取得対象でしたが、SEC の記録を検証できず不採用にしました（${refusalText(admission.reason)}）。` });
     return make('not_published');
   }
@@ -81,6 +88,8 @@ export function secStatus(row, book, { detail = null, coverage = null } = {}) {
       const forms = Array.isArray(data.forms) ? data.forms.filter(form => typeof form === 'string' && /^[0-9A-Z-]{2,8}(\/A)?$/.test(form)).slice(0, 5) : [];
       return make('no_quarterly', forms.length ? { long: `四半期報告（10-Q）を提出しない企業です（${forms.join('・')}）。SEC の四半期データはありません。` } : {});
     }
+    // Without the ticker map every symbol is written as no_cik: a delivery failure, never this stock's fact.
+    if (data.reason === 'no_cik' && secDeliveryFailed(coverage)) return make('not_published', { delivery: true, long: deliveryText(coverage) });
     return make(['no_cik', 'no_companyfacts', 'transient'].includes(data.reason) ? data.reason : 'invalid');
   }
   if (!book) return make('invalid');
@@ -109,7 +118,7 @@ export function quarterReason(row, metric) {
   const reason = metric === 'eps' ? row.epsYoYReason : row.salesYoYReason;
   if (!reason) return null;
   if (reason === 'not_reported') return metric === 'eps' ? (row.fiscalQ4 ? 'Q4のEPSは年次報告のみ' : 'EPS未報告') : '売上未報告';
-  if (reason === 'nonpositive_base' && metric === 'eps' && finite(row.eps)) return `${EPS_REASON.nonpositive_base}（EPS ${row.eps.toFixed(2)}）`;
+  if (reason === 'nonpositive_base' && metric === 'eps' && finite(row.eps)) return `${EPS_REASON.nonpositive_base}（EPS ${row.eps.toFixed(2).replace('-', '−')}）`;
   return EPS_REASON[reason] || '比較できません';
 }
 const shortReason = (row, metric) => SHORT_REASON[metric === 'eps' ? row.epsYoYReason : metric === 'sales' ? row.salesYoYReason : row.marginReason] || '—';
@@ -197,9 +206,11 @@ export function code33ChipView(financial) {
   if (state === 'pass') return { text: `Code 33 達成${reference}`, tone: 'zone' };
   if (state === 'fail') return { text: `Code 33 未達${reference}`, tone: 'ext' };
   const sec = financial?.sec ?? null;
-  if (sec?.state === 'detail_loading') return { text: 'Code 33 読み込み中', tone: '' };
+  // Nothing known about the SEC record: no reason is claimed.
+  if (!sec) return { text: 'Code 33 未確認', tone: '' };
+  if (sec.state === 'detail_loading') return { text: 'Code 33 読み込み中', tone: '' };
   const kind = code33Explain(financial?.report ?? null, sec, code33 ?? null).kind;
-  const word = kind === 'no_sec' ? CHIP_SEC[sec?.state ?? 'not_published'] || String(sec?.short || '').replace(/\s+/g, '') : CHIP_KIND[kind];
+  const word = kind === 'no_sec' ? CHIP_SEC[sec.state] || String(sec.short || '').replace(/\s+/g, '') : CHIP_KIND[kind];
   return { text: `Code 33 未確認${word ? `・${word}` : ''}`, tone: '' };
 }
 
@@ -218,5 +229,7 @@ export function publishedFundamentalsCoverage(marketEntry, { bundle = null } = {
   if (typeof block.as_of_date !== 'string' || block.as_of_date !== marketEntry.as_of_date || (bundle?.date && bundle.date !== block.as_of_date)) return null;
   if (typeof block.sec_fetch_ran !== 'boolean' || !BLOCK_COUNTS.every(key => known(block[key])) || !['requested', 'eligible', 'truncated', 'deadline_unreached'].every(key => block[key] === null || known(block[key]))) return null;
   if (!(block.file_schema === null || Number.isSafeInteger(block.file_schema)) || !block.refused_by_reason || typeof block.refused_by_reason !== 'object') return null;
+  // ticker_map_ok: false is a delivery failure; a block without the field (or null) claims nothing about the map.
+  if (![undefined, null, true, false].includes(block.ticker_map_ok)) return null;
   return block;
 }

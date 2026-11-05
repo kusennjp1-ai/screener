@@ -110,11 +110,11 @@ describe('brief fundamentals card', () => {
     // 黒字 is a known fact: it keeps the EPS colour, never the grey of 値なし.
     for (const cell of turned) expect(cell).not.toHaveClass('is-unknown');
     cleanup();
-    // A loss now (both years negative) stays 比較不可 with the EPS.
+    // A loss now (both years negative) stays 比較不可 with the EPS, written with the minus sign the card uses everywhere.
     const deeper = record(); deeper.quarterly.eps.forEach((p, i) => { p.value = i < 4 ? -0.2 : -0.1; });
     const other = card(financial(deeper));
     expect(tile(other, 'EPS 前年比')).toHaveTextContent('比較不可');
-    expect(tile(other, 'EPS 前年比')).toHaveTextContent('前年同期が赤字・ゼロ（EPS -0.10）');
+    expect(tile(other, 'EPS 前年比')).toHaveTextContent('前年同期が赤字・ゼロ（EPS −0.10）');
     cleanup();
     // A profit a year ago and a loss now: the fact 赤字 in four characters or fewer, never −1300.
     const fell = record({ eps: [1, 1, 1, 1, 1.1, 1.2, 1.4, -12] });
@@ -201,7 +201,7 @@ describe('brief fundamentals card', () => {
     const failed = row => ({ report: null, sec: secStatus(row, null, { detail: 'loaded', coverage }), history: null, code33: code33Layered(null, null, DATE) });
     render(<StockView data={{ ...data(true), financial: failed({ symbol: 'AAA', market: 'US', as_of_date: DATE }) }} />);
     expect(screen.getByText('業績：SEC未配信（配信側の問題）・Code 33 未確認')).toBeInTheDocument();
-    expect(screen.getByTestId('brief-fundamentals')).toHaveTextContent('この公開（10/2分）では SEC 四半期データを反映していません（0/993銘柄・配信側の問題で、業績の良し悪しではありません）。');
+    expect(screen.getByTestId('brief-fundamentals')).toHaveTextContent('この公開（10/2分）では SEC 四半期データを反映していません（反映は公開993銘柄中0銘柄・配信側の問題で、業績の良し悪しではありません）。');
     cleanup();
     const refused = { ...coverage, sec_fetch_ran: true, sec_as_of: DATE, file_schema: 2, requested: 600, not_fetched: 0, not_requested: 973, refused: 20, refused_by_reason: { cik_url: 20 } };
     render(<StockView data={{ ...data(true), financial: { report: null, sec: secStatus({ symbol: 'AAA', market: 'US', as_of_date: DATE, sec_admission: { state: 'refused', reason: 'cik_url' } }, null, { detail: 'loaded', coverage: refused }), history: null, code33: code33Layered(null, null, DATE) } }} />);
