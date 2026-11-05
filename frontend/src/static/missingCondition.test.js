@@ -93,6 +93,6 @@ describe('a rule in a few words, with the value that settled it', () => {
     expect(conditionCompactText({ label: '52週高値からの距離 ≤ 25%（日中高値）', value: 30.25, unit: '%' })).toBe('高値から25%以内（30.3%）');
     expect(conditionCompactText({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: 61.9 })).toBe('RS ≥ 70（61）');
     expect(['株価 > SMA150・SMA200', 'SMA150 > SMA200', 'SMA200が21営業日前より上（1か月の上向き判定）', 'SMA50 > SMA150・SMA200', '株価 > SMA50', '52週高値からの距離 ≤ 25%（日中高値）', 'RS 推計 ≥ 70（公開日足の共通母集団）']
-      .map(label => conditionChipLabel(rule(label)))).toEqual(['株価 > 150・200日', '150日 > 200日', '200日線が上向き', '50日 > 150・200日', '株価 > 50日線', '高値から25%以内', 'RS ≥ 70']);
+      .map(label => conditionChipLabel(rule(label)))).toEqual(['株価 > 150・200日', '150日 > 200日', '200日線が上向き', '50日 > 150・200日', '株価 > 50日線', '高値から25%以内', 'RS推計']);
   });
 });

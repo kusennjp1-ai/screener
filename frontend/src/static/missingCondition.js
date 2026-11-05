@@ -73,8 +73,12 @@ const CHIP_LABELS = [
 /**
  * A rule's name for a phone row's chip (「あと1条件：…」), the shortest of the three: the compact name,
  * with the moving-average comparisons in 日線 words (「150日 > 200日」), so the chip fits the row's second line.
+ * The RS rule is named by the estimate, 「RS推計」: the row drops its own RS推計 chip for it, so this chip carries the
+ * word and the value (「あと1条件：RS推計（61）」); its threshold is in the chip's title and the row's label, which
+ * keep the full rule (「未達：RS ≥ 70（61）」), so a 320px row with a sell chip still keeps two chip lines.
  */
 export function conditionChipLabel(rule) {
   const compact = conditionCompactLabel(rule);
+  if (/^RS ≥ \d+$/.test(compact)) return 'RS推計';
   return CHIP_LABELS.find(([pattern]) => pattern.test(compact))?.[1] || compact;
 }

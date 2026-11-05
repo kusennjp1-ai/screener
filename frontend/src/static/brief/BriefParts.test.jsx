@@ -114,8 +114,8 @@ describe('rows say the day and the decision honestly', () => {
 
   it('names the unmet rule of an あと1条件 row in one neutral chip, last, which carries the RS value when RS is that rule', () => {
     const one = over => row({ view: view({ qualified: false, passed: 8, failed: 1, unknown: 0, rs: 61.4, ...over }) }).container;
-    const rs = one({ missing: { chip: 'あと1条件：RS ≥ 70（61）', text: '未達：RS ≥ 70（61）', rs: true } });
-    expect(chipTexts(rs)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', 'あと1条件：RS ≥ 70（61）']);
+    const rs = one({ missing: { chip: 'あと1条件：RS推計（61）', text: '未達：RS ≥ 70（61）', rs: true } });
+    expect(chipTexts(rs)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', 'あと1条件：RS推計（61）']);
     expect(rs.querySelector('.brief-row').getAttribute('aria-label')).toBe('1位 AAA Alpha、買いゾーン +1.2%、前日比 +2.0%、未達：RS ≥ 70（61）、RS推計 61');
     const chip = [...rs.querySelectorAll('.brief-chip')].find(node => node.textContent.startsWith('あと1条件'));
     expect([toneOf(chip), chip.getAttribute('title')]).toEqual([null, '未達：RS ≥ 70（61）']);

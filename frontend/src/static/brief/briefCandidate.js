@@ -161,7 +161,7 @@ export function candidateView(item, date) {
 }
 
 /**
- * The one unmet rule of an あと1条件 row: `chip` the row's one chip for it (「あと1条件：RS ≥ 70（61）」,
+ * The one unmet rule of an あと1条件 row: `chip` the row's one chip for it (「あと1条件：RS推計（61）」,
  * 「あと1条件：高値から25%以内」, 「あと1条件：150日 > 200日」: only the RS rule keeps its value there, so the
  * chip fits a 320px row's second line), `text` the full rule with its value (「未達：52週高値からの距離 ≤ 25%
  * （30.2%）」: the chip's title and the row's label), `rs` whether it is the RS estimate's rule (the chip then

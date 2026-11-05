@@ -190,7 +190,7 @@ describe('position names, RS and earnings, the same on every screen', () => {
   });
   it('names the one unmet rule of an あと1条件 row with its value', () => {
     const v = verdict(audited('ONE', { rs: 61.7 }), { qualified: false, passed: 8, failed: 1, unknown: 0, total: 9 });
-    expect(v.missing).toEqual({ chip: 'あと1条件：RS ≥ 70（61）', text: '未達：RS ≥ 70（61）', rs: true });
+    expect(v.missing).toEqual({ chip: 'あと1条件：RS推計（61）', text: '未達：RS ≥ 70（61）', rs: true });
     const high = verdict(audited('HIGH', { rs: 80 }), { qualified: false, passed: 8, failed: 1, unknown: 0, total: 9 });
     expect(high.missing).toBeNull();
     const sma = audited('SMA', { rs: 80 });
