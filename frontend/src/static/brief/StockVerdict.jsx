@@ -43,14 +43,15 @@ const listed = rules => rules.length === 1 ? <Unit>{conditionCompactText(rules[0
 /**
  * Why the stock is no buy candidate by the trend template, from the template's own rules (never from
  * `qualified` alone), or null when it is one. An unmet RS estimate is named in the title (the plan's copy,
- * two lines at 375px); any other unmet rule, or several, are counted in a one-line title and named in the
- * line under it (`note`), so the conclusion card stays within its height on a phone.
+ * two lines at 375px); any other unmet rule, or several, are counted in a one-line title (「TT 3条件未達」, one
+ * line at 375px in a full-width font too, without brackets) and named in the line under it (`note`), so the
+ * conclusion card stays within its height on a phone.
  */
 function templateGate(view, template) {
   const rules = template?.rules || [];
   const failed = rules.filter(rule => rule.state === 'fail'), open = rules.filter(rule => rule.state !== 'pass' && rule.state !== 'fail');
   if (failed.length === 1 && /^RS 推計/.test(failed[0].label)) return { title: <>トレンドテンプレート未達（未達：<Unit>{conditionCompactText(failed[0])}</Unit>）— 買いの対象外</> };
-  if (failed.length) return { title: `TT未達（${failed.length}条件）— 買いの対象外`, note: <>未達：{listed(failed)}。</> };
+  if (failed.length) return { title: `TT ${failed.length}条件未達 — 買いの対象外`, note: <>未達：{listed(failed)}。</> };
   if (!template && view.failed > 0) return { title: 'トレンドテンプレート未達 — 買いの対象外' };
   if (open.length || (!template && view.unknown > 0)) return { title: 'TT未確認・買い判断不可', note: open.length ? <>未確認：{listed(open)}。</> : null };
   if (view.qualified === true) return null;

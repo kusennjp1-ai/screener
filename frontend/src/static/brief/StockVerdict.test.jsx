@@ -122,12 +122,12 @@ describe('the conclusion says why there is no buy', () => {
     const far = audited({ rs: 90 });
     far.technical_audit.values.belowHigh = 30.25;
     const one = conclusionOf({ row: far });
-    expect([title(one), sub(one), one.className.includes('tone-neutral')]).toEqual(['TT未達（1条件）— 買いの対象外', '未達：高値から25%以内（30.3%）。位置は参考：買いゾーン・ピボット比 +1.0%。', true]);
+    expect([title(one), sub(one), one.className.includes('tone-neutral')]).toEqual(['TT 1条件未達 — 買いの対象外', '未達：高値から25%以内（30.3%）。位置は参考：買いゾーン・ピボット比 +1.0%。', true]);
     cleanup();
     const three = audited({ rs: 61 });
     Object.assign(three.technical_audit.values, { belowHigh: 30.2, sma50: 120 });
     const card = conclusionOf({ row: three });
-    expect([title(card), sub(card)]).toEqual(['TT未達（3条件）— 買いの対象外', '未達：株価 > SMA50、ほか2件。位置は参考：買いゾーン・ピボット比 +1.0%。']);
+    expect([title(card), sub(card)]).toEqual(['TT 3条件未達 — 買いの対象外', '未達：株価 > SMA50、ほか2件。位置は参考：買いゾーン・ピボット比 +1.0%。']);
     expect(quals(card)).toEqual(['参考', '参考', '参考']);
   });
 

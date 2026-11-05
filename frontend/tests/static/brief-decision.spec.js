@@ -187,7 +187,7 @@ test.describe('the stock screen at 375×812', () => {
 
   test('a stock three rules below the trend template keeps the card within the allowance and names the first rule', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/stock/ZZZF', { mutate: THREE_UNMET });
-    await expect(conclusion(page).locator('strong')).toHaveText('TT未達（3条件）— 買いの対象外');
+    await expect(conclusion(page).locator('strong')).toHaveText('TT 3条件未達 — 買いの対象外');
     await expect(conclusion(page).locator('.brief-call-status p')).toHaveText('未達：株価 > SMA50、ほか2件。位置は参考：買いゾーン・ピボット比 ±0.0%。');
     await settled(page);
     const box = await callBox(page);
