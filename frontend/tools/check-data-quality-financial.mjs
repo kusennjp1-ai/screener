@@ -4,7 +4,6 @@ import { readFile } from 'node:fs/promises';
 import { readFinancialGenerationCarry, verifyCarryCompatibility } from './financial-generation-carry.mjs';
 import { loadFinancialCorrection, verifyCorrectionCompatibility } from './financial-correction-overlay.mjs';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
-import { appendStepSummary, formatSecAdmission, publishedSecInventory, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
 const read=async path=>JSON.parse(await readFile(`public/static-data/${path}`,'utf8'));
 const manifest=await read('manifest.json');
 const indexPath=(manifest.markets?.US||manifest).assets.research.path;
@@ -28,9 +27,11 @@ if(correction) {
 // none, which stays valid; a block must be well formed and equal what the published details and the SEC
 // input show, and every detail's sec_admission must be the one its record and that input give.
 const declared=(manifest.markets?.US||manifest).fundamentals_coverage;
-if(!validFundamentalsCoverageBlock(declared)) throw Error('Invalid fundamentals_coverage block in the manifest');
 if(declared===undefined) console.log('Fundamentals coverage block absent (an exporter without it); nothing to compare.');
 else {
+  // Loaded only for a block: a bundle without one needs nothing beyond the financial modes above.
+  const {appendStepSummary,formatSecAdmission,publishedSecInventory,validFundamentalsCoverageBlock}=await import('./report-data-coverage.mjs');
+  if(!validFundamentalsCoverageBlock(declared)) throw Error('Invalid fundamentals_coverage block in the manifest');
   const inventory=await publishedSecInventory({root:'public'});
   if(inventory.derived_states) throw Error(`fundamentals_coverage requires every detail's sec_admission: ${inventory.derived_states} missing`);
   if(inventory.admission_problems.length) throw Error(`sec_admission disagrees with the detail's record or the SEC input: ${inventory.admission_problems.slice(0,10).join(' ')}`);
