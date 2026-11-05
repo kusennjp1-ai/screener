@@ -1,0 +1,402 @@
+name: Market Study Archive
+
+# Copies the diagnostic market-regime study output (results.json, results.md,
+# indices.json) out of a Design Acceptance artifact (design-acceptance-<sha>,
+# kept 90 days), before that artifact expires, into the GitHub release
+# market-regime-study-v2-run-<run_id>. The files are byte copies of the CI
+# output: nothing is recomputed, and no production data, Pages output or cache
+# is read or changed. An asset already on the release is kept when its sha256
+# matches and refused when it differs.
+#
+# Least privilege: the verify job (actions: read, no write token) downloads and
+# parses the artifact; the publish job (contents: write only) never reads the
+# artifact, only verify's hand-off, which it re-hashes against the plan whose
+# sha256 verify passed as a job output.
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Design Acceptance run whose market-regime study output is archived'
+        required: true
+        default: '41844557380'
+        type: string
+      artifact_id:
+        description: 'Artifact of that run holding the study files (blank: its single design-acceptance-<sha> artifact)'
+        required: false
+        default: '13331791935'
+        type: string
+      as_of_date:
+        description: 'The as_of_date that results.json and indices.json must carry (YYYY-MM-DD)'
+        required: true
+        default: '2026-11-03'
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: market-study-archive
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    name: Verify the market-regime study output
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+    outputs:
+      plan_sha256: ${{ steps.verify.outputs.plan_sha256 }}
+    steps:
+      # No checkout: only the official gh CLI and python3 of the runner image
+      # and GitHub's own artifact actions run.
+      - name: Download and verify only the study files
+        id: verify
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          ARTIFACT_ID: ${{ inputs.artifact_id }}
+          EXPECTED_AS_OF: ${{ inputs.as_of_date }}
+        run: |
+          python3 -I - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import shutil
+          import subprocess
+          import zipfile
+          from pathlib import Path
+
+          REPO = os.environ["GITHUB_REPOSITORY"]
+          RUN_ID = os.environ.get("RUN_ID", "").strip()
+          ARTIFACT_ID = os.environ.get("ARTIFACT_ID", "").strip()
+          EXPECTED_AS_OF = os.environ.get("EXPECTED_AS_OF", "").strip()
+          WORK = Path(os.environ["RUNNER_TEMP"]) / "market-study-archive"
+          STUDY = WORK / "study"
+          STUDY_WORKFLOW = ".github/workflows/design-acceptance.yml"
+          STUDY_SCHEMA = "market-regime-study-v2"
+          INDICES_SCHEMA = "market-regime-indices-v1"
+          INDEX_SYMBOLS = ["^GSPC", "^IXIC"]
+          TAG_PREFIX = "market-regime-study-v2-run-"
+          ASSETS = ("results.json", "results.md", "indices.json")
+          RECORDED = ("nyse-sessions.json",)
+          MAX_ARTIFACT_BYTES = 512 * 1024 * 1024
+          MAX_FILE_BYTES = 256 * 1024 * 1024
+          ID = re.compile(r"[1-9][0-9]{0,19}")
+          DESIGN_ARTIFACT = re.compile(r"design-acceptance-[0-9a-f]{40}")
+
+          def fail(message):
+              print(f"::error title=Market-study archive::{message}")
+              raise SystemExit(1)
+
+          if not ID.fullmatch(RUN_ID):
+              fail("run_id must be a positive integer")
+          if ARTIFACT_ID and not ID.fullmatch(ARTIFACT_ID):
+              fail("artifact_id must be blank or a positive integer")
+          if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", EXPECTED_AS_OF):
+              fail("as_of_date must be YYYY-MM-DD")
+
+          def gh_json(path):
+              return json.loads(subprocess.check_output(["gh", "api", path]))
+
+          # The run: a completed Design Acceptance run of this repository, not a fork.
+          run = gh_json(f"repos/{REPO}/actions/runs/{RUN_ID}")
+          if run.get("id") != int(RUN_ID) or run.get("path") != STUDY_WORKFLOW:
+              fail(f"run {RUN_ID} is not a {STUDY_WORKFLOW} run")
+          if (run.get("repository") or {}).get("full_name") != REPO or (run.get("head_repository") or {}).get("full_name") != REPO:
+              fail(f"run {RUN_ID} did not run on {REPO} code")
+          if run.get("status") != "completed":
+              fail(f"run {RUN_ID} has not completed")
+          head_sha = str(run.get("head_sha") or "")
+          if not re.fullmatch(r"[0-9a-f]{40}", head_sha):
+              fail(f"run {RUN_ID} has no head commit")
+
+          # The artifact: named explicitly, or the run's single Design artifact.
+          if not ARTIFACT_ID:
+              listing = gh_json(f"repos/{REPO}/actions/runs/{RUN_ID}/artifacts?per_page=100")
+              found = [item for item in listing.get("artifacts") or [] if DESIGN_ARTIFACT.fullmatch(str(item.get("name", "")))]
+              if len(found) != 1:
+                  fail(f"run {RUN_ID} has {len(found)} design-acceptance-<sha> artifacts; pass artifact_id")
+              ARTIFACT_ID = str(found[0].get("id"))
+              if not ID.fullmatch(ARTIFACT_ID):
+                  fail("the listed artifact has no id")
+          artifact = gh_json(f"repos/{REPO}/actions/artifacts/{ARTIFACT_ID}")
+          name = str(artifact.get("name") or "")
+          if artifact.get("id") != int(ARTIFACT_ID) or (artifact.get("workflow_run") or {}).get("id") != int(RUN_ID):
+              fail(f"artifact {ARTIFACT_ID} does not belong to run {RUN_ID}")
+          if artifact.get("expired") is not False:
+              fail(f"artifact {ARTIFACT_ID} has expired")
+          if DESIGN_ARTIFACT.fullmatch(name) is None:
+              fail(f"artifact {name!r} is not a design-acceptance-<sha> artifact")
+          if not isinstance(artifact.get("size_in_bytes"), int) or not 0 < artifact["size_in_bytes"] <= MAX_ARTIFACT_BYTES:
+              fail(f"artifact {ARTIFACT_ID} has an unexpected size")
+
+          if WORK.exists():
+              shutil.rmtree(WORK)
+          STUDY.mkdir(parents=True)
+          archive_path = WORK / "artifact.zip"
+          with archive_path.open("wb") as out:
+              subprocess.run(["gh", "api", f"repos/{REPO}/actions/artifacts/{ARTIFACT_ID}/zip"], stdout=out, check=True)
+          zip_sha256 = hashlib.sha256(archive_path.read_bytes()).hexdigest()
+          if artifact.get("digest") != f"sha256:{zip_sha256}":
+              fail(f"downloaded bytes (sha256 {zip_sha256}) differ from the artifact digest {artifact.get('digest')!r}")
+
+          # Only the study files are read out, by exact name, into fixed paths.
+          # The Design artifact holds them under .../market-regime-study/.
+          wanted = ASSETS + RECORDED
+          members = {}
+          with zipfile.ZipFile(archive_path) as archive:
+              for info in archive.infolist():
+                  if info.is_dir():
+                      continue
+                  parts = info.filename.split("/")
+                  if parts[-1] not in wanted:
+                      continue
+                  if len(parts) >= 2 and parts[-2] == "market-regime-study":
+                      members.setdefault(parts[-1], []).append(info)
+              for file in ASSETS:
+                  if len(members.get(file, [])) != 1:
+                      fail(f"artifact {name} must hold exactly one market-regime-study/{file}")
+              if any(len(found) != 1 for found in members.values()):
+                  fail(f"artifact {name} holds a study file twice")
+              if len({info.filename.rpartition("/")[0] for [info] in members.values()}) != 1:
+                  fail(f"artifact {name} holds the study files in more than one directory")
+              for file, [info] in sorted(members.items()):
+                  with archive.open(info) as source:
+                      data = source.read(MAX_FILE_BYTES + 1)
+                  if len(data) > MAX_FILE_BYTES:
+                      fail(f"{file} is larger than {MAX_FILE_BYTES} bytes")
+                  (STUDY / file).write_bytes(data)
+          archive_path.unlink()
+
+          def strict_json(file):
+              def reject(value):
+                  raise ValueError(f"non-finite number {value}")
+              try:
+                  return json.loads((STUDY / file).read_bytes().decode("utf-8"), parse_constant=reject)
+              except ValueError as error:
+                  fail(f"{file} is not strict JSON: {error}")
+
+          results = strict_json("results.json")
+          if not isinstance(results, dict) or results.get("schema_version") != STUDY_SCHEMA:
+              fail(f"results.json schema_version is {results.get('schema_version') if isinstance(results, dict) else None!r}, not {STUDY_SCHEMA!r}")
+          if results.get("as_of_date") != EXPECTED_AS_OF:
+              fail(f"results.json as_of_date is {results.get('as_of_date')!r}, not {EXPECTED_AS_OF!r}")
+          if not isinstance(results.get("method"), dict) or not isinstance(results.get("tests"), dict) or not isinstance(results.get("indicators"), list) or not results["indicators"]:
+              fail("results.json is not a complete study (method, tests and indicators)")
+          generated_at = str(results.get("generated_at") or "")
+          if not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9:.]+Z", generated_at):
+              fail("results.json has no generated_at timestamp")
+          indices = strict_json("indices.json")
+          if not isinstance(indices, dict) or indices.get("schema_version") != INDICES_SCHEMA or indices.get("as_of_date") != EXPECTED_AS_OF:
+              fail(f"indices.json is not {INDICES_SCHEMA} as of {EXPECTED_AS_OF}")
+          if [item.get("symbol") if isinstance(item, dict) else None for item in indices.get("indices") or []] != INDEX_SYMBOLS:
+              fail(f"indices.json does not hold exactly {INDEX_SYMBOLS}")
+          # The report's fixed header lines (markdownReport), tied to this results.json.
+          try:
+              lines = (STUDY / "results.md").read_bytes().decode("utf-8").split("\n")
+          except UnicodeDecodeError as error:
+              fail(f"results.md is not UTF-8: {error}")
+          title = "# Market-regime study" + (f" — {results['label']}" if results.get("label") else "")
+          header = f"{STUDY_SCHEMA} (pre-registered in frontend/tools/market-regime-study.mjs, with its deviations from v1) · as of {EXPECTED_AS_OF} · "
+          if len(lines) < 3 or lines[0] != title or lines[1] != "" or not lines[2].startswith(header):
+              fail(f"results.md does not open as the {STUDY_SCHEMA} report of this results.json as of {EXPECTED_AS_OF}")
+
+          # nyse-sessions.json exists once the calendar call starts, even when it
+          # failed and the study fell back to provider dates: results.json says which.
+          inputs = results.get("inputs") if isinstance(results.get("inputs"), dict) else {}
+          listed = inputs.get("indices") if isinstance(inputs.get("indices"), list) else []
+          bases = [item.get("calendarBasis") if isinstance(item, dict) else None for item in listed]
+          if bases and all(basis == "independent" for basis in bases):
+              calendar_note = "Recorded, not uploaded (the NYSE calendar the run used, calendarBasis=independent):"
+          elif bases and all(basis == "provider" for basis in bases):
+              calendar_note = "nyse-sessions.json present but not used: the study used provider dates (calendarBasis=provider). Recorded, not uploaded:"
+          else:
+              calendar_note = f"nyse-sessions.json present; results.json does not show that the study used it (calendarBasis {bases!r}). Recorded, not uploaded:"
+
+          sums = {file: hashlib.sha256((STUDY / file).read_bytes()).hexdigest() for file in sorted(members)}
+          tag = TAG_PREFIX + RUN_ID
+          listing = "\n".join(f"{sums[file]}  {file}" for file in ASSETS)
+          recorded = "\n".join(f"{sums[file]}  {file}" for file in RECORDED if file in sums)
+          notes = "\n".join([
+              f"Byte copies of the diagnostic market-regime study output of Design Acceptance run {RUN_ID} (head {head_sha}, {run.get('event')}), artifact {name} (id {ARTIFACT_ID}, sha256 {zip_sha256}).",
+              "",
+              f"- schema_version: {STUDY_SCHEMA}",
+              f"- as_of_date: {EXPECTED_AS_OF}",
+              f"- generated_at: {generated_at}",
+              f"- indices.json: {INDICES_SCHEMA}, {', '.join(INDEX_SYMBOLS)}",
+              "",
+              "sha256 of the release assets:",
+              "",
+              "```",
+              listing,
+              "```",
+              *(["", calendar_note, "", "```", recorded, "```"] if recorded else []),
+              "",
+              "Index-level diagnostic research, not a forecast and not a stock-level value; it changes no rule, threshold or verdict.",
+              f"Archived by market-study-archive.yml run {os.environ.get('GITHUB_RUN_ID', '')} at {os.environ.get('GITHUB_SHA', '')}.",
+              "",
+          ])
+          (WORK / "notes.md").write_text(notes, encoding="utf-8")
+          plan = {
+              "notes_sha256": hashlib.sha256((WORK / "notes.md").read_bytes()).hexdigest(),
+              "tag": tag,
+              "title": f"Market-regime study v2, Design Acceptance run {RUN_ID} (as of {EXPECTED_AS_OF})",
+              "run_id": int(RUN_ID),
+              "artifact_id": int(ARTIFACT_ID),
+              "as_of_date": EXPECTED_AS_OF,
+              "assets": {file: sums[file] for file in ASSETS},
+          }
+          (WORK / "archive.json").write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
+          # The publish job checks its hand-off against this, passed outside the artifact.
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"plan_sha256={hashlib.sha256((WORK / 'archive.json').read_bytes()).hexdigest()}\n")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(f"## Verified market-regime study for {tag}\n\n{notes}\n")
+          print(listing)
+          PY
+      - name: Hand the verified study to the publish job
+        # Only the verified files (study/, notes.md, archive.json); the zip was removed.
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-study-archive-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/market-study-archive/
+          retention-days: 1
+          if-no-files-found: error
+          compression-level: 0
+  publish:
+    name: Publish the verified study to its release
+    needs: verify
+    if: github.repository == 'kusennjp1-ai/screener' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - name: Receive the verified study
+        uses: actions/download-artifact@v4
+        with:
+          name: market-study-archive-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/market-study-archive/
+      - name: Publish to the study release without overwriting different bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          PLAN_SHA256: ${{ needs.verify.outputs.plan_sha256 }}
+        run: |
+          python3 -I - <<'PY'
+          import hashlib
+          import json
+          import os
+          import re
+          import subprocess
+          import tempfile
+          from pathlib import Path
+
+          REPO = os.environ["GITHUB_REPOSITORY"]
+          RUN_ID = os.environ.get("RUN_ID", "").strip()
+          PLAN_SHA256 = os.environ.get("PLAN_SHA256", "").strip()
+          TARGET = os.environ.get("GITHUB_SHA", "")
+          WORK = Path(os.environ["RUNNER_TEMP"]) / "market-study-archive"
+          STUDY = WORK / "study"
+          TAG_PREFIX = "market-regime-study-v2-run-"
+          ASSETS = ("results.json", "results.md", "indices.json")
+
+          def fail(message):
+              print(f"::error title=Market-study archive::{message}")
+              raise SystemExit(1)
+
+          if not re.fullmatch(r"[1-9][0-9]{0,19}", RUN_ID):
+              fail("run_id must be a positive integer")
+          if not re.fullmatch(r"[0-9a-f]{40}", TARGET):
+              fail("the release target needs this workflow's commit")
+          if not re.fullmatch(r"[0-9a-f]{64}", PLAN_SHA256):
+              fail("the verify job passed no plan sha256")
+          TAG = TAG_PREFIX + RUN_ID
+          # The hand-off is the verify job's: its plan matches the sha256 passed
+          # as a job output, and every file matches the plan.
+          plan_bytes = (WORK / "archive.json").read_bytes()
+          if hashlib.sha256(plan_bytes).hexdigest() != PLAN_SHA256:
+              fail("archive.json differs from the plan the verify job wrote")
+          plan = json.loads(plan_bytes.decode("utf-8"))
+          if plan.get("tag") != TAG or sorted(plan.get("assets") or {}) != sorted(ASSETS):
+              fail("the verified plan does not match this dispatch")
+          if hashlib.sha256((WORK / "notes.md").read_bytes()).hexdigest() != plan.get("notes_sha256"):
+              fail("notes.md changed after verification")
+          local = {}
+          for file in ASSETS:
+              local[file] = hashlib.sha256((STUDY / file).read_bytes()).hexdigest()
+              if local[file] != plan["assets"][file]:
+                  fail(f"{file} changed after verification")
+
+          def release_by_tag():
+              result = subprocess.run(["gh", "api", f"repos/{REPO}/releases/tags/{TAG}"], capture_output=True, text=True)
+              if result.returncode != 0:
+                  if "HTTP 404" in result.stderr:
+                      return None
+                  fail(f"cannot read release {TAG}: {result.stderr.strip()}")
+              release = json.loads(result.stdout)
+              if release.get("tag_name") != TAG or release.get("draft") is not False:
+                  fail(f"the lookup of {TAG} returned another or an unpublished release")
+              return release
+
+          def remote_sha256(asset):
+              digest = asset.get("digest")
+              if isinstance(digest, str) and re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+                  return digest[len("sha256:"):]
+              with tempfile.TemporaryDirectory() as directory:
+                  subprocess.run(["gh", "release", "download", TAG, "--pattern", asset["name"], "--dir", directory, "--repo", REPO], check=True)
+                  return hashlib.sha256((Path(directory) / asset["name"]).read_bytes()).hexdigest()
+
+          def published_assets(release):
+              found = {}
+              for asset in (release or {}).get("assets") or []:
+                  found.setdefault(asset.get("name"), []).append(asset)
+              return found
+
+          def conflicts(release):
+              problems = []
+              for file, assets in published_assets(release).items():
+                  if file not in ASSETS:
+                      continue
+                  if len(assets) != 1 or assets[0].get("state") != "uploaded":
+                      problems.append(f"{file}: not one complete asset")
+                      continue
+                  remote = remote_sha256(assets[0])
+                  if remote != local[file]:
+                      problems.append(f"{file}: the release has sha256 {remote}, the verified study has {local[file]}")
+              return problems
+
+          release = release_by_tag()
+          problems = conflicts(release)
+          if problems:
+              fail(f"refusing to overwrite {TAG}: " + "; ".join(problems))
+          notes = str(WORK / "notes.md")
+          heading = "Published"
+          if release is None:
+              subprocess.run(["gh", "release", "create", TAG, *[str(STUDY / file) for file in ASSETS], "--repo", REPO, "--target", TARGET,
+                              "--title", plan["title"], "--notes-file", notes, "--latest=false"], check=True)
+          else:
+              missing = [file for file in ASSETS if file not in published_assets(release)]
+              if missing:
+                  # No overwrite flag: gh refuses a name that appeared meanwhile.
+                  subprocess.run(["gh", "release", "upload", TAG, *[str(STUDY / file) for file in missing], "--repo", REPO], check=True)
+                  subprocess.run(["gh", "release", "edit", TAG, "--repo", REPO, "--title", plan["title"], "--notes-file", notes, "--latest=false"], check=True)
+              else:
+                  # Every asset is already there with the verified bytes: the first
+                  # dispatch's title, notes and tag target (its provenance) stay.
+                  heading = "Already archived"
+
+          # Read back: every asset is on the release with the verified bytes.
+          release = release_by_tag()
+          if release is None:
+              fail(f"release {TAG} is missing after publishing")
+          problems = conflicts(release)
+          absent = [file for file in ASSETS if file not in published_assets(release)]
+          if problems or absent:
+              fail(f"release {TAG} does not hold the verified study: " + "; ".join(problems + [f"{file}: absent" for file in absent]))
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write(f"\n## {heading} {TAG}\n\n{release.get('html_url', '')}\n\n```\n" + "\n".join(f"{local[file]}  {file}" for file in ASSETS) + "\n```\n")
+          print(f"{TAG}: {', '.join(ASSETS)} verified ({heading.lower()})")
+          PY

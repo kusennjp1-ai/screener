@@ -233,4 +233,4 @@ jobs:
             ${{ runner.temp }}/design-carry-prepare.log
             ${{ runner.temp }}/design-transport.log
             ${{ runner.temp }}/market-regime-study/
-          retention-days: 14
+          retention-days: 90
