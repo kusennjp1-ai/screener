@@ -26,7 +26,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const count = async label => Number(await filter(label).locator('.numeric').innerText());
     await expect(filter('買いゾーン')).toHaveAttribute('aria-pressed', 'true');
     await expect(candidates(page)).toHaveCount(await count('買いゾーン'));
-    await expect(candidates(page).first()).toContainText('買いゾーン内');
+    await expect(candidates(page).first()).toContainText('買いゾーン');
     const zone = await symbolsShown(page);
     expect(zone).toContain('ZZNV');
 
@@ -43,7 +43,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(candidates(page)).toHaveCount(await count('ピボット接近'));
     // Within 5% below the pivot, waiting for the breakout.
     for (const label of await candidates(page).evaluateAll(nodes => nodes.map(node => node.getAttribute('aria-label')))) {
-      const below = Number(label.match(/ピボット待ち −(\d+(?:\.\d+)?)%/)?.[1]);
+      const below = Number(label.match(/ピボット接近 −(\d+(?:\.\d+)?)%/)?.[1]);
       expect(below, label).toBeGreaterThan(0);
       expect(below, label).toBeLessThanOrEqual(5);
     }
@@ -93,7 +93,7 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`rows at ${w
     const rows = await candidates(page).evaluateAll(nodes => nodes.slice(0, 5).map(row => ({
       symbol: row.dataset.symbol, height: row.getBoundingClientRect().height,
       lines: new Set([...row.querySelectorAll('.brief-reasons .brief-chip')].map(chip => chip.offsetTop)).size,
-      title: row.querySelector('.brief-row-title span').clientWidth,
+      title: row.querySelector('.brief-row-name').clientWidth,
     })));
     expect(rows).toHaveLength(5);
     for (const row of rows) {
@@ -115,6 +115,46 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`rows at ${w
       return ['.brief-row-title', '.brief-reasons'].map(part => row.querySelector(part).getBoundingClientRect().left - contentLeft);
     }));
     for (const gap of gaps) { expect(gap).toBeGreaterThanOrEqual(0); expect(gap).toBeLessThanOrEqual(8); }
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// RS estimates as the publisher writes them (midranks, so decimals): every displayed RS is the whole number
+// below it, so a chip never grows with the decimals and a row keeps its height.
+const DECIMAL_RS = { rows: rows => { rows.forEach((row, i) => { row.rs_rating += [0.01283880171184, 0.5, 0.999][i % 3]; }); rows[0].rs_rating = 97.01283880171184; } };
+for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.desktop })) test.describe(`decimal RS at ${width}px`, () => {
+  test.use(device);
+
+  test('rows under 選定すべて stay 100px or less with single-line chips, and あと1条件 names the unmet rule', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list', { mutate: DECIMAL_RS });
+    const filters = page.getByRole('group', { name: '絞り込み' });
+    await filters.getByRole('button', { name: /^選定すべて/ }).click();
+    await expect(candidates(page).first()).toBeVisible();
+    const rows = await candidates(page).evaluateAll(nodes => nodes.map(row => {
+      const chips = [...row.querySelectorAll('.brief-reasons .brief-chip')];
+      return { symbol: row.dataset.symbol, height: row.getBoundingClientRect().height, lines: new Set(chips.map(chip => chip.offsetTop)).size,
+        wrapped: chips.filter(chip => chip.getClientRects().length > 1 || chip.getBoundingClientRect().height > 2 * parseFloat(getComputedStyle(chip).fontSize)).map(chip => chip.textContent),
+        rs: chips.map(chip => chip.textContent).filter(text => text.startsWith('RS推計')), label: row.getAttribute('aria-label') };
+    }));
+    expect(rows.length).toBeGreaterThan(10);
+    for (const row of rows) {
+      expect(row.height, row.symbol).toBeLessThanOrEqual(100);
+      expect(row.lines, row.symbol).toBeLessThanOrEqual(2);
+      expect(row.wrapped, row.symbol).toEqual([]);
+      expect(row.rs, row.symbol).toEqual([expect.stringMatching(/^RS推計 \d+$/)]);
+      expect(row.label, row.symbol).toMatch(/RS推計 \d+$/);
+    }
+    expect(rows.find(row => row.symbol === 'ZZNV').rs).toEqual(['RS推計 97']);
+
+    await filters.getByRole('button', { name: /^あと1条件/ }).click();
+    await expect(page.locator('[data-symbol="ZZZF"]')).toContainText('未達：RS ≥ 70（61）');
+    for (const chip of await page.locator('[data-symbol="ZZZF"] .brief-chip', { hasText: '未達：' }).all()) await expect(chip).not.toHaveClass(/tone-/);
+    // The named rule keeps an あと1条件 row within the same height and two chip lines.
+    const oneShort = await candidates(page).evaluateAll(nodes => nodes.map(row => ({ symbol: row.dataset.symbol, height: row.getBoundingClientRect().height,
+      lines: new Set([...row.querySelectorAll('.brief-reasons .brief-chip')].map(chip => chip.offsetTop)).size })));
+    expect(oneShort.length).toBeGreaterThan(0);
+    for (const row of oneShort) { expect(row.height, row.symbol).toBeLessThanOrEqual(100); expect(row.lines, row.symbol).toBeLessThanOrEqual(2); }
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
