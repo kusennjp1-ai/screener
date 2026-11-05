@@ -63,3 +63,76 @@ test.describe('market tab words at 320px', () => {
     expect(errors).toEqual([]);
   });
 });
+
+// ---- 過去の傾向 and the guide's basis on a phone (Track B) -----------------------------------------------------
+const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+const B_TEXT = '.brief-regime-ref summary, .brief-regime-index li, .brief-regime-index h4, .brief-regime-foot, .brief-exposure-basis summary, .brief-exposure-basis p, .brief-signal-tag, .brief-signals-tags, .brief-index-nas, .brief-index-scale, .brief-index-mark, .brief-index-stats span';
+
+test.describe('the study block and the guide\'s basis at 375×812', () => {
+  test.use({ ...phone(375, 812), contextOptions: { reducedMotion: 'reduce' } });
+  test('fit the market budget, keep the lead above 756px, fold to 44–48px, open by keyboard and read at 12px or more', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    await expect(page.locator('.market-history-explorer svg').first()).toBeAttached();
+    await settled(page);
+    expect(await page.evaluate(() => Math.round(document.querySelector('#brief-main .brief-stack').getBoundingClientRect().bottom + scrollY))).toBeLessThanOrEqual(1300);
+    const market = page.getByRole('region', { name: '地合い' });
+    const verdict = market.getByTestId('brief-regime'), basis = verdict.locator('details.brief-exposure-basis'), study = market.locator('details.brief-regime-ref');
+    for (const locator of [verdict, verdict.locator('.brief-exposure'), basis, market.getByRole('group', { name: '注意サイン（独自判定）' }), page.getByRole('tab').first()]) {
+      const box = await locator.boundingBox();
+      expect(box.y + box.height).toBeLessThanOrEqual(756);
+    }
+    // The Nasdaq is on a rally attempt while the verdict is positive: its note is the fold's summary.
+    await expect(basis.locator('summary')).toHaveText('Nasdaqは反発3日目（判定はSPYのみ）');
+    for (const fold of [basis, study]) {
+      await expect(fold).not.toHaveAttribute('open', '');
+      const height = (await fold.locator('summary').boundingBox()).height;
+      expect(height).toBeGreaterThanOrEqual(44);
+      expect(height).toBeLessThanOrEqual(48);
+      await fold.locator('summary').focus();
+      await page.keyboard.press('Enter');
+      await expect(fold).toHaveAttribute('open', '');
+      await page.keyboard.press('Space');
+      await expect(fold).not.toHaveAttribute('open', '');
+      await page.keyboard.press('Enter');
+    }
+    await expect(basis).toContainText('根拠（10/2スキャン時点）：S&P 500（SPY）が50日線・200日線の上');
+    await expect(basis).toContainText('独自の目安：上昇トレンド 最大50%・上昇に圧力 最大25%・それ以外 0%');
+    await expect(study.locator('li').first()).toBeVisible();
+    // The 〔参考〕 legend is short on a phone; the full sentence is in the 注記.
+    await expect(market.locator('.brief-signals-tags')).toHaveText('〔参考〕＝2021〜26年の検証で関係未確認');
+    await expect(page.locator('.brief-screen-notes')).toContainText('注意サインの印：〔参考〕は、2021〜2026年の参加度データ');
+    await expect(page.locator('.brief-screen-notes')).toContainText('参加度・リーダーの値は、現在の銘柄で過去をさかのぼった集計（上場廃止銘柄を含まない）です。');
+    const small = await page.locator(B_TEXT).evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).filter(node => parseFloat(getComputedStyle(node).fontSize) < 12).map(node => node.textContent.slice(0, 30)));
+    expect(small).toEqual([]);
+    expect(await page.locator(B_TEXT).evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).length)).toBeGreaterThan(12);
+    // The 200-day distance is the 50-day cell's second line: the stats row stays one row.
+    const cells = await market.locator('.brief-index-stats > div').evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().top)));
+    expect(new Set(cells).size).toBe(1);
+    await expect(market.locator('.brief-index-stats .is-ma span')).toHaveText(/^200日線比 [+−]\d+\.\d%$/);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+for (const width of [320, 375, 414]) test.describe(`the study block and the Nasdaq row at ${width}px`, () => {
+  test.use(phone(width, 812));
+  test('stay within the width, opened and with every mark', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: { trends: value => {
+      for (const index of value.indices) index.method = 'index-down-strictly-over-0.2-higher-volume-age25-high5-v1';
+      value.indices[1].state = { date: value.indices[1].points.at(-1).date, close: 18234.56, vs50: -1.4, vs200: 3.2, fromHigh: -7.25, fullYear: true };
+    } } });
+    const market = page.getByRole('region', { name: '地合い' });
+    await expect(market.locator('.brief-index-nas')).toBeVisible();
+    for (const summary of await market.locator('details.brief-regime-ref > summary, details.brief-exposure-basis > summary').all()) await summary.click();
+    await expect(market.locator('details.brief-regime-ref .brief-regime-index').last().locator('li').first()).toHaveText('200日線の上・50日線の下（10/2時点）：26%（全期間 26%）〔未確立〕');
+    await market.locator('.brief-env-row.brief-dist').filter({ hasText: '分配日（25日）' }).locator('.brief-env-toggle').click();
+    expect(await horizontalOverflow(page)).toBe(0);
+    const frame = await market.locator('.brief-index-frame').boundingBox();
+    for (const mark of await market.locator('.brief-index-mark, .brief-index-mark-label, .brief-index-scale').all()) {
+      const box = await mark.boundingBox();
+      expect(box.x).toBeGreaterThanOrEqual(frame.x - 1);
+      expect(box.x + box.width).toBeLessThanOrEqual(frame.x + frame.width + 1);
+    }
+    expect(errors).toEqual([]);
+  });
+});

@@ -41,13 +41,14 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(market.getByRole('link', { name: /市場の詳細/ })).toHaveCount(0);
     // The phone's Today hides the verdict and the chart; the market tab keeps both visible.
     await expect(market.getByTestId('brief-regime')).toBeVisible();
-    await expect(market.getByRole('img', { name: /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/ })).toBeVisible();
+    // The market tab's chart adds the 200-day line, the FTD day and the rally low (Today's keeps the 50-day line).
+    await expect(market.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（.*〜2026-10-02）。有効な分配日 3日。FTD 8\/13、反発の安値 \d+\/\d+。目盛り [\d,]+〜[\d,]+$/ })).toBeVisible();
     // Verdict first, then the evidence grouped in decision order: index trend, participation, leaders.
     await expect(market.locator('.brief-env-group h3')).toHaveText(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
     // A phone shows the index section first, the others behind tabs that count their warnings and mark, with a
     // neutral 「?」, a section holding a check that could not be judged (here TT達成数の急減 and リーダーの健全度).
     if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度▲注意1?未確認あり', 'リーダー?未確認あり', '推移']);
-    await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', '200日線より上', '50日線より上', '52週の新高値・新安値', 'TT達成数', 'RS90以上のTT達成', 'ブレイクアウト成功率', 'リーダーの健全度', 'ステージ構成']);
+    await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', '200日線より上', '50日線より上', '52週の新高値・新安値', 'TT達成数', 'RS推計90以上のTT達成（独自）', 'ブレイクアウト成功率', 'リーダーの健全度', 'ステージ構成']);
     // The fixture has more new lows (3) than new highs (2): one sentence under the verdict, ▲ 注意 on its row and group.
     const signals = market.getByRole('group', { name: '注意サイン（独自判定）' });
     await expect(signals.getByRole('listitem').filter({ hasText: '新安値（3）が新高値（2）を上回る' })).toHaveCount(1);
@@ -176,7 +177,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.getByTestId('brief-missing-breadth')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：200日線より上・TT達成数`);
-    await expect(market.getByTestId('brief-missing-leaders')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：RS90以上のTT達成（独自RS）・ブレイクアウト成功率・リーダーの健全度・ステージ構成`);
+    await expect(market.getByTestId('brief-missing-leaders')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：RS推計90以上のTT達成（独自）・ブレイクアウト成功率・リーダーの健全度・ステージ構成`);
     // A phone's tabs mark the sections that hold 未収録 values or unjudged checks, and the history awaiting its update.
     if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度▲注意1?未確認あり', 'リーダー?未確認あり', '推移?更新待ち']);
     // The desktop says which checks and why on one line; a phone names them on the summary line and folds the reason.
@@ -193,6 +194,97 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(metrics.getByRole('button', { name: '先導株数（価格条件）' })).toHaveAttribute('aria-pressed', 'true');
     await expect(metrics.getByRole('button', { name: 'トレンドテンプレート達成数' })).toHaveCount(0);
     expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// ---- 過去の傾向, the exposure basis, the index position (Track B) ----------------------------------------------
+const DD_METHOD = 'index-down-strictly-over-0.2-higher-volume-age25-high5-v1';
+/** The exporter's shape: method ids on both index series and, with `nasdaq`, the Nasdaq's position on its last session. */
+const published = ({ nasdaq = false } = {}) => ({ trends: value => {
+  for (const index of value.indices) index.method = DD_METHOD;
+  if (nasdaq) value.indices[1].state = { date: value.indices[1].points.at(-1).date, close: 18234.56, vs50: -1.4, vs200: 3.2, fromHigh: -7.25, fullYear: true };
+} });
+
+test.describe('desktop 1440px: the study block and the guide\'s basis', () => {
+  test.use(VIEWPORTS.desktop);
+  test('過去の傾向 is open in the 指数 column with one dated line per state; the basis is one line under the meter', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: published() });
+    const market = page.getByRole('region', { name: '地合い' });
+    const fold = market.locator('details.brief-regime-ref');
+    await expect(fold).toHaveAttribute('open', '');
+    await expect(fold.locator('summary')).toHaveText('過去の傾向（1990〜2026年・予測ではありません）');
+    await expect(market.getByRole('group', { name: /^指数のトレンド/ }).locator('details.brief-regime-ref')).toHaveCount(1);
+    await expect(fold.locator('h4')).toHaveText(['S&P 500', 'Nasdaq総合']);
+    await expect(fold.locator('li').first()).toHaveText(/^50日線・200日線の上（10\/2時点）：21日以内に−5%以上下げた割合 10%（全期間 16%）〔S&P・Nasdaqとも〕$/);
+    await expect(fold.locator('li').nth(1)).toHaveText(/^1年高値から5%超の下（10\/2時点・境界まで0\.3%）：29%（5%以内 11%）〔S&P・Nasdaqとも〕$/);
+    await expect(fold.locator('li').nth(2)).toHaveText(/^分配日3〜4日（10\/2時点）：15%（全期間 17%）〔未確立〕$/);
+    // An older publication has no Nasdaq position: said, never 0.
+    await expect(fold.locator('.brief-regime-index').last().locator('li').first()).toHaveText('50日線・200日線との位置：旧形式の公開データに未収録');
+    await expect(fold.locator('.brief-regime-foot')).toContainText('指数の結果で、個別銘柄の値ではありません。出典：market-regime-study-v2（CI run 41844557380）');
+    await expect(market.locator('.brief-index-nas')).toHaveCount(0);
+    // Never in the verdict or the warning summary.
+    await expect(market.getByTestId('brief-regime')).not.toContainText(/過去の傾向（|全期間|21日以内/);
+    await expect(market.getByRole('group', { name: '注意サイン（独自判定）' })).not.toContainText(/全期間|21日以内/);
+    // The exposure guide's basis and the Nasdaq note, in place under the meter.
+    await expect(market.locator('p.brief-exposure-basis')).toHaveText(/^独自の目安：上昇トレンド 最大50%・上昇に圧力 最大25%・それ以外 0%（S&P 500（SPY）の50日線・200日線と局面判定から。/);
+    await expect(market.locator('.brief-exposure-nasdaq')).toHaveText('判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は反発3日目（FTD未確認・独自判定）。');
+    // The fired breadth check carries 〔参考〕, and the tags are explained in place.
+    const signals = market.getByRole('group', { name: '注意サイン（独自判定）' });
+    await expect(signals.getByRole('listitem')).toHaveText(['▲新安値（3）が新高値（2）を上回る〔参考〕']);
+    await expect(signals.locator('.brief-signals-tags')).toContainText('〔参考〕は、2021〜2026年の参加度データ');
+    for (const name of ['市場の参加度', 'リーダーの健全性']) await expect(market.getByRole('group', { name: new RegExp(`^${name}`) }).locator('.brief-env-caveat')).toHaveText('現在の銘柄で過去をさかのぼった集計（上場廃止銘柄を含まない）');
+    await expect(page.locator('.brief-sectors header')).toContainText('相対力（SPY比・126営業日・100基準・独自）');
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('the index chart draws a dashed 200-day line, the FTD day and the rally low inside its window', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    const frame = page.getByRole('region', { name: '地合い' }).locator('.brief-index-frame');
+    const ma200 = frame.locator('svg.brief-index path.brief-index-ma200');
+    await expect(ma200).toHaveCount(1);
+    expect(await ma200.getAttribute('d')).toMatch(/^M[\d.]+,[\d.]+(L[\d.]+,[\d.]+){50,}$/);
+    expect(await ma200.evaluate(path => getComputedStyle(path).strokeDasharray)).not.toBe('none');
+    await expect(frame.locator('.brief-index-mark.is-ftd')).toHaveText('◆FTD 8/13');
+    await expect(frame.locator('.brief-index-mark.is-low')).toHaveText('○');
+    const box = await frame.boundingBox();
+    for (const mark of await frame.locator('.brief-index-mark, .brief-index-scale').all()) {
+      const at = await mark.boundingBox();
+      expect(at.x).toBeGreaterThanOrEqual(box.x - 1);
+      expect(at.x + at.width).toBeLessThanOrEqual(box.x + box.width + 1);
+      expect(parseFloat(await mark.evaluate(node => getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(12);
+    }
+    // Today's chart is unchanged: the 50-day line only.
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
+    await expect(page.getByRole('region', { name: '地合い' }).locator('svg.brief-index')).toBeVisible();
+    await expect(page.locator('.brief-index-ma200, .brief-index-frame')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a publication with the Nasdaq position shows its row and its study lines', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: published({ nasdaq: true }) });
+    const market = page.getByRole('region', { name: '地合い' });
+    await expect(market.locator('.brief-index-nas')).toHaveText('Nasdaq総合18,234.5610/2終値・1年高値から −7.3%・50日線比 −1.4%・200日線比 +3.2%');
+    const nasdaq = market.locator('details.brief-regime-ref .brief-regime-index').last();
+    await expect(nasdaq.locator('li')).toHaveText([
+      '200日線の上・50日線の下（10/2時点）：26%（全期間 26%）〔未確立〕', '1年高値から5%超の下（10/2時点・境界まで2.3%）：35%（5%以内 19%）〔S&P・Nasdaqとも〕',
+      '分配日3〜4日（10/2時点）：23%（全期間 26%）〔Nasdaqのみ〕', '反発中（FTD判定）（10/2時点）：32%（全期間 26%）〔未確立〕']);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('the opened 分配日 row says how the days are counted, lists them with the sessions left, and draws each index\'s year', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    const market = page.getByRole('region', { name: '地合い' });
+    const dist = row(market, '分配日（25日）');
+    await dist.getByRole('button').first().click();
+    const detail = dist.locator('.brief-env-detail');
+    await expect(detail.locator('p').first()).toHaveText('下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・5日以上で注意）');
+    await expect(detail.locator('p').nth(1)).toHaveText(/^S&P：\d+\/\d+・\d+\/\d+・\d+\/\d+（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）$/);
+    await expect(detail.locator('p').nth(2)).toHaveText(/^NAS：(\d+\/\d+・){3}\d+\/\d+（最も古い日はあと4営業日で失効・後日の高値で早く除外される場合あり）$/);
+    await expect(detail.getByRole('img', { name: /^S&Pの分配日の直近1年の推移。/ })).toBeVisible();
+    await expect(detail.getByRole('img', { name: /^NASの分配日の直近1年の推移。/ })).toBeVisible();
     expect(errors).toEqual([]);
   });
 });
