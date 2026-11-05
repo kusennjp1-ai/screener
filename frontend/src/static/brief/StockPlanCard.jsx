@@ -19,14 +19,18 @@ const Fold = ({ wide, id, summary, children }) => wide ? children : <Expander id
 // eslint-disable-next-line react-refresh/only-export-components -- the plan's hook lives beside its card (one owner)
 export function usePositionPlan({ view, chartRef }) {
   const [settings, setSettings] = useState(readPlan);
-  const plan = useMemo(() => view ? positionPlan(view, settings) : null, [view, settings]);
+  // A position that gets no new plan (買いゾーン超過, 低変動, 買収, 判定不可) hands the screen no plan.
+  const plan = useMemo(() => {
+    const result = view ? positionPlan(view, settings) : null;
+    return result?.blocked ? null : result;
+  }, [view, settings]);
   const moveStop = stop => chartRef?.current?.moveStop(stop);
   const update = (key, value) => {
     if (!finite(value)) return;
     const next = { ...settings, [key]: key === 'stopPercent' ? Math.min(STOP_MAX_PERCENT - 0.5, Math.max(1, value)) : Math.max(0, value) };
     setSettings(next);
     try { localStorage.setItem(PLAN_KEY, JSON.stringify(next)); } catch { /* per-viewer convenience only */ }
-    if (key === 'stopPercent') { const nextPlan = positionPlan(view, next); if (nextPlan) moveStop(nextPlan.stop); }
+    if (key === 'stopPercent') { const nextPlan = positionPlan(view, next); if (nextPlan && !nextPlan.blocked) moveStop(nextPlan.stop); }
   };
   return { plan, settings, update, moveStop };
 }
