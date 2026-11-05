@@ -23,4 +23,22 @@ if(correction) {
   console.log(`Financial correction gate passed: ${Object.keys(correction.symbols).length} corrected symbols; every current chart alias and research assessment agrees${admitted(report)}.`);
 }
 
+// The publication's SEC coverage block (manifest.markets.US.fundamentals_coverage): an older exporter writes
+// none, which stays valid; a block must be well formed and equal what the published details and the SEC
+// input show, and every detail's sec_admission must be the one its record and that input give.
+const declared=(manifest.markets?.US||manifest).fundamentals_coverage;
+if(declared===undefined) console.log('Fundamentals coverage block absent (an exporter without it); nothing to compare.');
+else {
+  // Loaded only for a block: a bundle without one needs nothing beyond the financial modes above.
+  const {appendStepSummary,formatSecAdmission,publishedSecInventory,validFundamentalsCoverageBlock}=await import('./report-data-coverage.mjs');
+  if(!validFundamentalsCoverageBlock(declared)) throw Error('Invalid fundamentals_coverage block in the manifest');
+  const inventory=await publishedSecInventory({root:'public'});
+  if(inventory.derived_states) throw Error(`fundamentals_coverage requires every detail's sec_admission: ${inventory.derived_states} missing`);
+  if(inventory.admission_problems.length) throw Error(`sec_admission disagrees with the detail's record or the SEC input: ${inventory.admission_problems.slice(0,10).join(' ')}`);
+  const sorted=value=>Array.isArray(value)?value.map(sorted):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,sorted(value[key])])):value;
+  if(JSON.stringify(sorted(inventory.block))!==JSON.stringify(sorted(declared))) throw Error('fundamentals_coverage differs from the published details and SEC input');
+  const line=formatSecAdmission(index.as_of_date,{stage:'financial gate',input:{present:declared.file_schema!==null||declared.sec_as_of!==null,schema:declared.file_schema,as_of:declared.sec_as_of,same_day:declared.sec_fetch_ran,records:declared.requested},admitted:declared.admitted,refused:declared.refused_by_reason,universe:declared.universe});
+  console.log(`Fundamentals coverage gate passed. ${line}.`);appendStepSummary(`- ${line}`);
+}
+
 writeSync(3, 'data-quality:financial:complete:v1\n');
