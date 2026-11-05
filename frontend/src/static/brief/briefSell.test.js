@@ -21,12 +21,20 @@ describe('the 50-day line is a state, not an event', () => {
     expect(ma50).toMatchObject({ state: 'hit', date: bars[200].date, sessions: 9 });
     expect(ma50.ratio).toBeCloseTo(2.2, 5);
     const day = `${Number(bars[200].date.slice(5, 7))}/${Number(bars[200].date.slice(8))}`;
-    expect(ma50.detail).toBe(`${day} に出来高 2.2倍で割れ、以降50日線の下（9営業日）`);
+    expect(ma50.detail).toBe(`${day} に出来高 2.20×で割れ、以降50日線の下（9営業日）`);
     // The short form a watch row leads with.
-    expect(ma50.headline).toBe(`50日線割れ（${day}・出来高2.2倍）`);
+    expect(ma50.headline).toBe(`50日線割れ（${day}・出来高2.20×）`);
+    expect(ma50.label).toBe('出来高を伴う50日線割れ（1.40×以上）');
     // A sixth or ninth session never turns it back to clear, as the five-day event did.
     expect(sellSignals(bars).weaknessHits).toBeGreaterThanOrEqual(1);
     expect(ma50Hit(sellSignals(bars))).toEqual(ma50);
+  });
+
+  it('floors the ratio as every screen does: a break at 1.396× is a caution that reads 1.39×, never 1.4', () => {
+    const ma50 = sellSignals(broken(13960)).weakness.find(c => c.key === 'ma50');
+    expect(ma50.state).toBe('caution');
+    expect(ma50.detail).toMatch(/に出来高 1\.39×で割れ/);
+    expect(ma50.detail).not.toMatch(/1\.4/);
   });
 
   it('back above the line is clear', () => {
@@ -40,7 +48,7 @@ describe('the 50-day line is a state, not an event', () => {
   it('a light break that is still below the line is a caution, never clear', () => {
     const ma50 = sellSignals(broken(12000)).weakness.find(c => c.key === 'ma50');
     expect(ma50.state).toBe('caution');
-    expect(ma50.detail).toMatch(/^50日線の下（大商いの割れは未確認）・.* に出来高 1\.2倍で割れ、以降9営業日$/);
+    expect(ma50.detail).toMatch(/^50日線の下（大商いの割れは未確認）・.* に出来高 1\.20×で割れ、以降9営業日$/);
     expect(sellSignals(broken(12000))).toMatchObject({ weaknessHits: 0, cautions: 1 });
   });
 
@@ -52,11 +60,11 @@ describe('the 50-day line is a state, not an event', () => {
     expect(sellSignals(bars)).toMatchObject({ weaknessHits: 0, breakdownHits: 0, unknowns: 1 });
   });
 
-  it('a volume of 0 on the break day (or before it) is a gap in the data, never a 0.0倍 break', () => {
+  it('a volume of 0 on the break day (or before it) is a gap in the data, never a 0.00× break', () => {
     const zero = sellSignals(broken(0)).weakness.find(c => c.key === 'ma50');
     expect(zero.state).toBe('unknown');
     expect(zero.detail).toContain('割れた日の出来高（または直前50日の出来高）が未取得');
-    expect(zero.detail).not.toContain('0.0倍');
+    expect(zero.detail).not.toContain('0.00×');
     const bars = broken(22000);
     bars[180].volume = 0;
     expect(sellSignals(bars).weakness.find(c => c.key === 'ma50').state).toBe('unknown');
@@ -179,6 +187,8 @@ describe('book combined warning', () => {
     const warn = over => ({ valid: true, priceWarnings: { below20: true, threeLowerLows: true, currentVolumeRatio: 1.6, combinedWarning: true, recoveryInUpperHalf: false, ...over } });
     expect(bookWarningCheck(warn()).state).toBe('hit');
     expect(bookWarningCheck(warn()).detail).toBe('20日線割れ・3日連続の安値切り下げ あり・出来高 1.60×');
+    // The same floor as the 50-day check and the chips: 1.396 reads 1.39×, never 1.40× beside a 1.4× bar.
+    expect(bookWarningCheck(warn({ currentVolumeRatio: 1.396, combinedWarning: false })).detail).toBe('20日線割れ・3日連続の安値切り下げ あり・出来高 1.39×');
     expect(bookWarningCheck(warn({ recoveryInUpperHalf: true })).detail).toContain('買い支え');
     expect(bookWarningCheck(warn({ combinedWarning: false, threeLowerLows: false })).state).toBe('clear');
     expect(bookWarningCheck(warn({ combinedWarning: null, currentVolumeRatio: null })).state).toBe('unknown');

@@ -1,8 +1,8 @@
 // Sell-side checks for the daily-brief screens, from certified daily bars: the climax and breakdown
 // checks, the book's combined warning, the chart marks and the sell chip. Unknown stays unknown.
 import { finite } from '../researchEngine';
-import { signed, times } from '../positionGeometry';
-import { BREAKOUT_VOLUME_RATIO } from './briefCandidate';
+import { signed } from '../positionGeometry';
+import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
 import { shortDate } from './briefShared';
 
 // Sell-side checks after an advance. The ideas (selling into strength on a climax run,
@@ -31,7 +31,9 @@ const STRENGTH = [
   ['climax', rules => `${rules.climaxSessions}営業日以内に +${rules.climaxPercent}%以上の急騰`],
 ];
 const label = (entry, rules) => typeof entry === 'function' ? entry(rules) : entry;
-const ratioText = ratio => `${ratio.toFixed(1)}倍`;
+// A volume ratio as every screen prints it (ratioShown: floored to 2 decimals, in ×), so a ratio under the 1.4×
+// bar never reads 1.4 and the readout, the chips and both checks print the same value for the same day.
+const ratioText = ratioShown;
 
 /**
  * Whether the strength checks may run for this stock today, and from where. They run only when the
@@ -163,7 +165,7 @@ export function bookWarningCheck(diagnostics) {
   const text = '20日線割れ・3日連続の安値切り下げ・大商い（書籍の複合警告）';
   const w = diagnostics?.valid ? diagnostics.priceWarnings : null;
   if (!w) return { key: 'book', label: text, state: 'unknown', detail: '検証済みの日足による書籍診断が未取得' };
-  const parts = [`20日線${w.below20 ? '割れ' : 'の上'}`, `3日連続の安値切り下げ ${w.threeLowerLows ? 'あり' : 'なし'}`, `出来高 ${finite(w.currentVolumeRatio) ? times(w.currentVolumeRatio) : '未確認'}`];
+  const parts = [`20日線${w.below20 ? '割れ' : 'の上'}`, `3日連続の安値切り下げ ${w.threeLowerLows ? 'あり' : 'なし'}`, `出来高 ${finite(w.currentVolumeRatio) ? ratioText(w.currentVolumeRatio) : '未確認'}`];
   if (w.combinedWarning === true && w.recoveryInUpperHalf) parts.push('引けは値幅の上半分（買い支えを確認）');
   return { key: 'book', label: text, date: diagnostics.as_of_date, state: w.combinedWarning === true ? 'hit' : w.combinedWarning === false ? 'clear' : 'unknown', detail: parts.join('・') };
 }

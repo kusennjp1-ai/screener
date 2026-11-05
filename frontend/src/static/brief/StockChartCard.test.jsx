@@ -77,6 +77,15 @@ describe('brief stock chart card', () => {
     expect(screen.queryByRole('button', { name: '最新足' })).toBeNull();
   });
 
+  it('prints the volume ratio floored as the chips, the events and the sell card do: 1.396 reads 1.39×', () => {
+    const quiet = data(true);
+    quiet.bars = quiet.bars.map((bar, i, all) => (i === all.length - 1 ? { ...bar, volume: 13960 } : bar));
+    render(<StockView data={quiet} />);
+    const readout = screen.getByRole('group', { name: '最新の足の値' });
+    expect(readout).toHaveTextContent('1.39×');
+    expect(readout).not.toHaveTextContent('1.40×');
+  });
+
   it('shows — with a screen-reader word for an average whose window is short, never 0', () => {
     render(<StockView data={data(true)} />);
     const averages = screen.getByRole('group', { name: '最新の足の値' }).querySelector('.ro-averages');

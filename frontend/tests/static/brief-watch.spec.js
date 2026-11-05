@@ -14,14 +14,15 @@ const WEAKNESS_FULL = '買いの前提が崩れた／保有なら売りのサイ
 /**
  * A heavy-volume break of the 50-day line nine sessions ago, the close still under the line: the bars before
  * it are lifted 15%, the session before it closes at its 50-day high, and the break day trades 2.2 times the
- * prior 50-day average. The last close stays the row's price, so the bars stay certified for the analysis date.
+ * prior 50-day average (2.20×). The last close stays the row's price, so the bars stay certified for the analysis date.
  */
 function breakBelow50(bars) {
   const n = bars.length, at = n - 9;
   for (let i = 0; i < at; i++) for (const key of ['open', 'high', 'low', 'close']) bars[i][key] *= 1.15;
   const top = Math.max(...bars.slice(at - 50, at - 1).map(bar => bar.close));
   Object.assign(bars[at - 1], { open: top, close: top, high: top * 1.005, low: top * 0.995 });
-  bars[at].volume = Math.round(bars.slice(at - 50, at).reduce((sum, bar) => sum + bar.volume, 0) / 50 * 2.2);
+  // Rounded up, so the ratio is at least 2.2 and reads 2.20× (every ratio on screen is floored to 2 decimals).
+  bars[at].volume = Math.ceil(bars.slice(at - 50, at).reduce((sum, bar) => sum + bar.volume, 0) / 50 * 2.2);
 }
 const broken = (...symbols) => ({ charts: served => { for (const symbol of symbols) breakBelow50(served[`${symbol}.json`].bars); } });
 
@@ -49,7 +50,7 @@ test.describe('Today\'s watch card at 390px', () => {
     const first = card.locator('.brief-event').first();
     await expect(first).toHaveAttribute('data-symbol', 'ZZSD');
     // A 50-day hit leads the row: the break day and its volume.
-    await expect(first).toContainText(/ZZSD 50日線割れ（\d+\/\d+・出来高2\.2倍）/);
+    await expect(first).toContainText(/ZZSD 50日線割れ（\d+\/\d+・出来高2\.20×）/);
     await expect(first.locator('.brief-sellchip [aria-hidden="true"]')).toHaveText(['▲', WEAKNESS]);
     await expect(first.locator('.brief-sellchip .sr-only')).toHaveText(WEAKNESS_FULL);
     await expect(first.locator('.brief-sellchip')).toHaveAttribute('title', new RegExp(`^${WEAKNESS_FULL}：出来高を伴う50日線割れ`));
@@ -351,7 +352,7 @@ for (const [width, options] of [[375, phone(375)], [1440, { viewport: { width: 1
     const sell = page.getByTestId('brief-sell');
     await expect(sell.locator('.is-sell-hit').first()).toBeVisible();
     await expect(sell.getByRole('heading', { level: 2 })).toHaveText('売りのサイン（独自判定）');
-    await expect(sell).toContainText(/に出来高 2\.2倍で割れ、以降50日線の下（9営業日）/);
+    await expect(sell).toContainText(/に出来高 2\.20×で割れ、以降50日線の下（9営業日）/);
     const qualifier = sell.getByTestId('brief-sell-qualifier');
     await expect(qualifier).toBeVisible();
     await expect(qualifier).toContainText('独自判定');

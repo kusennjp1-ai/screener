@@ -29,7 +29,7 @@ describe('brief stock view', () => {
     expect(conclusion.includes(WEAKNESS_ROW_CHIP) || conclusion.includes(WEAKNESS_CHIP)).toBe(true);
     expect(screen.queryByText(/^売りのサイン [0-9]+件$/)).toBeNull();
     expect(screen.getByTestId('brief-sell')).toHaveTextContent('出来高を伴う50日線割れ');
-    expect(screen.getByTestId('brief-sell')).toHaveTextContent(/に出来高 3\.0倍で割れ、以降50日線の下（1営業日）/);
+    expect(screen.getByTestId('brief-sell')).toHaveTextContent(/に出来高 3\.00×で割れ、以降50日線の下（1営業日）/);
   });
 
   it('judges the climax checks only beyond +20% from the pivot and says so on the card', () => {

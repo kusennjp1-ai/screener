@@ -243,11 +243,11 @@ describe('the conclusion says why there is no buy', () => {
 
   // Track E's sell checks (I4, requested by Track E): a broken setup is never a buy-side call, and the chip says it in full.
   it('calls a broken setup neutral whatever the position, names its check, and gives the chip its full sentence', () => {
-    const ma50 = state => ({ key: 'ma50', label: '出来高を伴う50日線割れ（1.4倍以上）', state, date: '2026-09-22', detail: '9/22 に出来高 2.2倍で割れ、以降50日線の下（9営業日）', ...(state === 'hit' ? { headline: '50日線割れ（9/22・出来高2.2倍）' } : {}) });
+    const ma50 = state => ({ key: 'ma50', label: '出来高を伴う50日線割れ（1.40×以上）', state, date: '2026-09-22', detail: '9/22 に出来高 2.20×で割れ、以降50日線の下（9営業日）', ...(state === 'hit' ? { headline: '50日線割れ（9/22・出来高2.20×）' } : {}) });
     const sells = state => ({ strength: [], weakness: [ma50(state)], hits: state === 'hit' ? 1 : 0, breakdownHits: state === 'hit' ? 1 : 0, cautions: state === 'caution' ? 1 : 0, unknowns: 0 });
     const card = conclusionOf({ sells: sells('hit') });
     expect(card.className).toContain('tone-neutral');
-    expect([title(card), sub(card)]).toEqual(['買いの前提が崩れた（独自判定）', '50日線割れ（9/22・出来高2.2倍）。位置は参考：買いゾーン・ピボット比 +1.0%。']);
+    expect([title(card), sub(card)]).toEqual(['買いの前提が崩れた（独自判定）', '50日線割れ（9/22・出来高2.20×）。位置は参考：買いゾーン・ピボット比 +1.0%。']);
     expect(quals(card)).toEqual(['参考', '参考', '参考']);
     expect(meter(card).classList.contains('is-reference')).toBe(true);
     expect([...card.querySelectorAll('.brief-tags .brief-chip')].map(node => node.textContent)).toContain('買いの前提が崩れた／保有なら売りのサイン（独自判定）');

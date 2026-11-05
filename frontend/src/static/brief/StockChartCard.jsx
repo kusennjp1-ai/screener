@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import PriceChart from './PriceChart';
 import { sellMarks } from './briefSell';
 import { auditValues } from '../qualificationAudit';
+import { ratioShown } from './briefCandidate';
 import { CHART_RANGES as RANGES, chartReadout, formatPercent, formatPrice, shortAveragesDrawn, weeklyBars, weeklyRangeLabel } from './chartReadout';
 
 /** The 上げ下げ出来高比 footnote, in the stock screen's 注記 below 1024px. */
@@ -35,7 +36,7 @@ function Readout({ readout, compact }) {
     <span className="ro-line">
       <span className="ro-group">
         <span className="ro-item"><i>出来高</i>{readout.volume === null ? <Missing word="未取得" /> : readout.volumeText}</span>
-        <span className="ro-item" title={`直前${readout.volumeBasis}の平均出来高との比`}>{readout.volumeRatio === null ? <Missing /> : `${readout.volumeRatio.toFixed(2)}×`}<span className="sr-only">（直前{readout.volumeBasis}平均比）</span></span>
+        <span className="ro-item" title={`直前${readout.volumeBasis}の平均出来高との比`}>{readout.volumeRatio === null ? <Missing /> : ratioShown(readout.volumeRatio)}<span className="sr-only">（直前{readout.volumeBasis}平均比）</span></span>
       </span>
       {readout.pivotRatio !== null ? <span className="ro-item"><i>対ピボット</i>{formatPercent(readout.pivotRatio)}</span> : null}
       {readout.fromHigh !== null ? <span className="ro-item" title="52週高値から"><i>{compact ? <><span className="sr-only">52週</span>高値から</> : '52週高値から'}</i>{formatPercent(readout.fromHigh)}</span> : null}
