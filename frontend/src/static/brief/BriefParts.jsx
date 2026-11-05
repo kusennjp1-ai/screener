@@ -1,8 +1,8 @@
-import { money, signed, times } from '../positionGeometry';
+import { money, signed } from '../positionGeometry';
 import { sellChipView } from './briefSell';
 import { meterPercent } from './briefNav';
 import { useEntrance } from './briefPrimitives';
-import { BREAKOUT_VOLUME_RATIO, candidateMarketGate, earningsSoon, rsShown } from './briefCandidate';
+import { BREAKOUT_VOLUME_RATIO, candidateMarketGate, earningsCall, ratioShown, rsShown } from './briefCandidate';
 
 // The layout primitives every track uses (Expander, ScreenNotes, Parts, RiseItem, Toast) live in the
 // frozen briefPrimitives.jsx; they are re-exported here so the old import path keeps working.
@@ -54,36 +54,42 @@ function volumeTone(view) {
   return finite(view.change) && view.change > 0 ? 'zone' : '';
 }
 
-/** `hideTemplate`: Today's focus rows, where every row is qualified and 「TT 8/8」 would be constant. `muted`: the market holds off new buying. */
+/**
+ * `hideTemplate`: Today's focus rows, where every row is qualified and 「TT 8/8」 would be constant. `muted`:
+ * the market is not open to new buying. A row that is muted, or not a buy candidate, has no green chip.
+ * `now` dates the earnings chip (the days from the later of the analysis date and today).
+ */
 export function Reasons({ view, now, sell, hideTemplate = false, muted = false }) {
-  void now;
-  const zone = tone => muted && tone === 'zone' ? '' : tone;
+  const zone = tone => (muted || view.qualified === false) && tone === 'zone' ? '' : tone;
   const chips = [<StateChip key="state" view={view} muted={muted} />];
   const sellChip = sellChipView(sell);
   if (sellChip) chips.push(chip('sell', sellChip.tone, sellChip.text, sellChip.title));
-  if (!hideTemplate) chips.push(chip('tt', zone(view.qualified ? 'zone' : ''), view.qualified ? 'TT 8/8' : Number.isInteger(view.failed) ? `あと${view.failed}条件${view.unknown ? `・未確認${view.unknown}` : ''}` : '条件 未確認'));
-  // An あと1条件 row names its unmet rule (neutral); when that rule is the RS estimate's, this chip carries the RS value.
-  if (view.missing) chips.push(chip('missing', '', view.missing.text));
+  if (!view.missing && !hideTemplate) chips.push(chip('tt', zone(view.qualified ? 'zone' : ''), view.qualified ? 'TT 8/8' : Number.isInteger(view.failed) ? `あと${view.failed}条件${view.unknown ? `・未確認${view.unknown}` : ''}` : '条件 未確認'));
   const volume = volumeTone(view);
-  if (volume !== null) chips.push(chip('vol', zone(volume), `出来高 ${times(view.volumeRatio)}`));
+  if (volume !== null) chips.push(chip('vol', zone(volume), `出来高 ${ratioShown(view.volumeRatio)}`));
   if (!view.missing?.rs) chips.push(chip('rs', '', `RS推計 ${rsShown(view.rs)}`));
   if (view.rsLineHigh) chips.push(chip('rsl', zone('zone'), 'RS線 新高値'));
-  if (earningsSoon(view)) chips.push(chip('earn', 'ext', `決算 ${view.earnings.days}日後`));
+  const earnings = earningsCall(view, now);
+  if (earnings?.soon) chips.push(chip('earn', 'ext', earnings.chip));
+  // An あと1条件 row says which rule in one neutral chip, last, so a phone gives it the second line (the full
+  // rule and its value are the chip's title and the row's label); for the RS rule it carries the RS value.
+  if (view.missing) chips.push(chip('tt', '', view.missing.chip, view.missing.text));
   return <span className="brief-reasons">{chips}</span>;
 }
 
 /**
- * `context` carries the screen's market verdict ({ market }): while it holds off new buying (a known
- * state with a cap of 0) or is unknown, the row's green chips go neutral. No verdict: as before.
+ * `context` carries the screen's market verdict ({ market }): unless it is open to new buying, the row's
+ * green chips go neutral (a cap of 0, an unknown state, or no verdict: rows render only once the bundle
+ * that carries the verdict has loaded, so a missing one is not still loading and nothing flashes).
  */
 export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morph = false, sell = null, hideTemplate = false, context = null }) {
   const enter = useEntrance(animate);
   const sellChip = sellChipView(sell);
   const gate = candidateMarketGate(context?.market);
-  const muted = gate === 'hold' || gate === 'unknown';
+  const muted = gate !== 'open';
   return <li className={enter ? 'in' : ''} style={{ '--i': index }}>
     <button type="button" className={`brief-row${rank ? '' : ' is-unranked'}`} data-symbol={view.symbol} data-testid="brief-candidate" onClick={event => onOpen(view.symbol, event.currentTarget)}
-      aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${view.stateLabel}${!view.stale && finite(view.distance) ? ` ${signed(view.distance)}` : ''}、${dayChangeText(view)}、RS推計 ${rsShown(view.rs)}${sellChip ? `、${sellChip.text}` : ''}`}>
+      aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${view.stateLabel}${!view.stale && finite(view.distance) ? ` ${signed(view.distance)}` : ''}、${dayChangeText(view)}${view.missing ? `、${view.missing.text}` : ''}、RS推計 ${rsShown(view.rs)}${sellChip ? `、${sellChip.text}` : ''}`}>
       <span className="brief-rank" aria-hidden="true">{rank || ''}</span>
       <span className="brief-row-main">
         <span className="brief-row-title"><b style={morph ? { viewTransitionName: 'brief-ticker' } : undefined}>{view.symbol}</b><DayChange view={view} /><span className="brief-row-name">{view.name}{view.sector ? `・${view.sector}` : ''}</span></span>
