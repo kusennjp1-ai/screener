@@ -1,9 +1,14 @@
 import { signed } from '../positionGeometry';
 import { code33Explain, code33Parts, fundamentalTiles, fundamentalsSource, quarterReason, secStatus } from '../fundamentalsExplain.js';
+import { Expander } from './briefPrimitives';
 
 const finite = Number.isFinite;
 /** The EPS footnote: in place on the card at 1024px and wider, in the stock screen's 注記 below that. */
-export const EPS_NOTE = 'EPS は報告値（希薄化）で調整後EPSとは異なります。Q4 の売上・純利益が年度値でしか報告されていない場合は、年度値から3四半期を差し引いて算出し「Q4算出」と表示します。';
+export const EPS_NOTE = 'EPS は報告値（希薄化）で調整後EPSとは異なります。Q4 の売上・純利益が年度値でしか報告されていない場合は、年度値から3四半期を差し引いて算出し「Q4算出」と表示します。'
+  + '在庫・売掛金の注意は独自判定で、直近1〜2四半期の前年比の伸びが売上の伸びを20ポイント以上上回るときに表示します。';
+// What the SEC quarters cannot tell (shown in the card's fold on phones, in place on the desktop).
+const OUT_OF_SCOPE = '対象外：予想・サプライズ・予想修正・調整後EPS';
+const CAUTION_POINTS = 20;
 
 const shortPeriod = row => row.end.slice(2, 7);
 const monthIndex = end => Number(end.slice(0, 4)) * 12 + Number(end.slice(5, 7));
@@ -31,15 +36,23 @@ function quarterGaps(rows) {
 }
 // A margin in at most four characters so each quarter's column stays readable at 12px on a 320px phone.
 const marginShort = value => !finite(value) ? '—' : value.toFixed(Math.abs(value) >= 10 ? 0 : 1).replace('-', '−');
+// A growth rate in at most four characters (+120, −35, >999); a loss-to-profit quarter says 黒字 (a fact, not a rate).
+const growthShort = (value, row, metric) => {
+  if (metric === 'eps' && !finite(value) && row.epsYoYReason === 'nonpositive_base' && finite(row.eps) && row.eps > 0) return '黒字';
+  if (!finite(value)) return '—';
+  const rounded = Math.round(value);
+  return rounded > 999 ? '>999' : `${rounded > 0 ? '+' : rounded < 0 ? '−' : '±'}${Math.abs(rounded)}`;
+};
 
-function QuarterBars({ rows }) {
+function QuarterBars({ rows, wide }) {
   const known = rows.flatMap(r => [r.epsYoY, r.salesYoY]).filter(finite);
   if (!known.length) return null;
   // Growth above and below the base line share one scale; a fall is never cut off at the bottom.
   const up = Math.max(0, ...known), down = Math.max(0, ...known.map(v => -v)), span = Math.max(10, up + down), H = 120;
   const unit = (H - 8) / span, base = 4 + up * unit, W = rows.length * 48;
   const gaps = quarterGaps(rows), derived = rows.some(r => r.derived);
-  return <>
+  const gapList = gaps.length > 0 && <ul className="brief-q-gaps" aria-label="値なしの理由">{gaps.map(text => <li key={text}>{text}</li>)}</ul>;
+  return <div className="brief-fin-chart">
     <svg className="brief-quarters" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`四半期の前年同期比成長率。直近 ${rows.at(-1).end}: EPS ${finite(rows.at(-1).epsYoY) ? signed(rows.at(-1).epsYoY, 0) : quarterReason(rows.at(-1), 'eps')}、売上 ${finite(rows.at(-1).salesYoY) ? signed(rows.at(-1).salesYoY, 0) : quarterReason(rows.at(-1), 'sales')}`}>
       <line x1="0" x2={W} y1={base} y2={base} className="q-base" />
       {rows.map((r, i) => {
@@ -50,13 +63,20 @@ function QuarterBars({ rows }) {
         return <g key={r.end}>{bar(r.epsYoY, -1, 'q-eps', 'eps', 'EPS 前年比')}{bar(r.salesYoY, 1, 'q-sales', 'sales', '売上 前年比')}</g>;
       })}
     </svg>
-    {/* Each quarter's period, margin and Q4 derivation as HTML under its bars (12px at every width). */}
+    {/* Each quarter's period, EPS and sales growth, margin and Q4 derivation as HTML under its bars (12px at every width). */}
     <div className="brief-q-axis" aria-hidden="true" style={{ '--n': rows.length }}>
-      {rows.map(r => <span key={r.end}><span>{r.end.slice(2, 4)}年</span><span>{Number(r.end.slice(5, 7))}月</span><b>{marginShort(r.margin)}</b>{derived && <i>{r.derived ? '算出' : ''}</i>}</span>)}
+      {rows.map(r => <span key={r.end}><span>{r.end.slice(2, 4)}年</span><span>{Number(r.end.slice(5, 7))}月</span>
+        <span className={`q-eps-t${finite(r.epsYoY) ? '' : ' is-unknown'}`}>{growthShort(r.epsYoY, r, 'eps')}</span><span className={`q-sales-t${finite(r.salesYoY) ? '' : ' is-unknown'}`}>{growthShort(r.salesYoY, r, 'sales')}</span>
+        <b>{marginShort(r.margin)}</b>{derived && <i>{r.derived ? '算出' : ''}</i>}</span>)}
     </div>
-    <p className="brief-q-legend"><span><i className="q-key-eps" />EPS 前年比</span><span><i className="q-key-sales" />売上 前年比</span><span>下段＝純利益率(%)</span>{derived && <span>算出＝Q4を10-K年度値−3四半期で算出</span>}<span><i className="q-key-unknown" />灰色＝値なし{gaps.length ? '（理由は下記）' : ''}</span></p>
-    {gaps.length > 0 && <ul className="brief-q-gaps" aria-label="値なしの理由">{gaps.map(text => <li key={text}>{text}</li>)}</ul>}
-  </>;
+    {wide ? <p className="brief-q-legend"><span><i className="q-key-eps" />EPS 前年比</span><span><i className="q-key-sales" />売上 前年比</span><span>棒の下＝前年比(%)・下段＝純利益率(%)</span>{derived && <span>算出＝Q4を10-K年度値−3四半期で算出</span>}<span><i className="q-key-unknown" />灰色＝値なし{gaps.length ? '（理由は下記）' : ''}</span></p>
+      // A phone keeps the legend on one line; the Q4 derivation is already named by the source line.
+      : <p className="brief-q-legend"><span><i className="q-key-eps" />EPS</span><span><i className="q-key-sales" />売上</span><span>前年比%・下段は純利益率%</span><span><i className="q-key-unknown" />値なし</span></p>}
+    {wide ? <>{gapList}<p className="brief-note brief-fin-scope">{OUT_OF_SCOPE}</p></>
+      : <Expander id="stock-fin-gaps" className="brief-fin-gaps" summary={gaps.length ? <>値なしの理由<small>{gaps.length}件・対象外の項目</small></> : '判定の対象外の項目'}>
+        {gapList}<p className="brief-note brief-fin-scope">{OUT_OF_SCOPE}</p>
+      </Expander>}
+  </div>;
 }
 
 const usd = value => !finite(value) ? '—' : Math.abs(value) >= 1e9 ? `$${(value / 1e9).toFixed(2)}B` : Math.abs(value) >= 1e6 ? `$${(value / 1e6).toFixed(1)}M` : `$${Math.round(value).toLocaleString('en-US')}`;
@@ -88,14 +108,55 @@ function yahooTiles(history) {
 }
 const utcStamp = value => { const time = Date.parse(value); return Number.isFinite(time) ? new Date(time).toISOString().slice(5, 16).replace('T', ' ') : null; };
 
-function Code33Parts({ report, explained }) {
+function Code33Parts({ report, explained, hidden }) {
   const value = code33Parts(report);
   if (!value) return null;
   const label = { pass: ['zone', '達成'], fail: ['ext', '未達'] };
   return <>
-    <ul className="brief-code33-parts" aria-label="Code 33 の3条件">{value.parts.map(([name, state]) => <li key={name} className={`tone-${label[state]?.[0] || 'neutral'}`}><span>{name}</span><b>{label[state]?.[1] || '未確認'}</b></li>)}</ul>
+    {/* On a phone the parts repeat what the Code 33 text already says (each part's state); they stay for a 未達. */}
+    <ul className={`brief-code33-parts${hidden ? ' is-said' : ''}`} aria-label="Code 33 の3条件">{value.parts.map(([name, state]) => <li key={name} className={`tone-${label[state]?.[0] || 'neutral'}`}><span>{name}</span><b>{label[state]?.[1] || '未確認'}</b></li>)}</ul>
     {value.q4Eps && !explained && <p className="brief-note">第4四半期の EPS は年次報告（10-K）にしか無いため、EPS の加速は未確認です（年間値から差し引いて推計はしません）。</p>}
   </>;
+}
+
+// The two quarters behind each known 未達 (bookFinancialEvidence's settled): a growth rate or a margin level.
+const SETTLED = [['epsAcceleration', 'EPS の加速', v => signed(v, 0)], ['salesAcceleration', '売上の加速', v => signed(v, 0)], ['marginImprovement', '純利益率の上昇', v => `${v.toFixed(1)}%`]];
+const periodOf = end => `${end.slice(0, 7)}期`;
+function settledText(report) {
+  const parts = SETTLED.filter(([key]) => report?.[key] === 'fail' && report.settled?.[key]).map(([key, name, format]) => {
+    const { from, to } = report.settled[key];
+    return `${name}は${periodOf(from.end)} ${format(from.value)} → ${periodOf(to.end)} ${format(to.value)}`;
+  });
+  return parts.length ? `未達の根拠：${parts.join('、')}で上昇していません。` : null;
+}
+
+/** Three-valued quality checks from the SEC quarters (never a pass from missing data). */
+function qualityChips(report) {
+  const word = { pass: '達成', fail: '未達', unknown: '未確認' }, tone = { pass: 'zone', fail: 'ext', unknown: '' };
+  const floor = report.epsFloor?.[4]?.at25 !== 'unknown' ? [4, report.epsFloor[4]] : report.epsFloor?.[2]?.at25 !== 'unknown' ? [2, report.epsFloor[2]] : [4, report.epsFloor?.[4] || { at25: 'unknown', at20: 'unknown' }];
+  const [count, levels] = floor;
+  // The chip names the rule in short (EPS前年比≥25%・直近N期); its title says it in full.
+  const rule = `EPS前年比が直近${count}期すべて25%以上か`;
+  const chips = [{ text: `EPS≥25%（直近${count}期）${word[levels.at25]}`, tone: tone[levels.at25],
+    title: `${rule}${levels.at25 === 'fail' && levels.at20 === 'pass' ? `（20%以上は直近${count}期とも達成）` : levels.at25 === 'unknown' ? '（前年比がそろう四半期が足りず未確認）' : ''}` }];
+  chips.push({ text: `年間EPS最高 ${{ pass: '更新', fail: '未更新', unknown: '未確認' }[report.annualRecord || 'unknown']}`, tone: tone[report.annualRecord || 'unknown'], title: '' });
+  if (report.balanceCoverage > 0) {
+    const recent = new Set(report.rows.slice(-2).map(row => row.end));
+    const seen = new Set();
+    for (const warning of [...(report.balanceWarnings || [])].reverse()) {
+      if (!recent.has(warning.end) || seen.has(warning.metric) || !(warning.growth - warning.salesGrowth >= CAUTION_POINTS)) continue;
+      seen.add(warning.metric);
+      chips.push({ text: `${warning.metric === 'inventoryYoY' ? '在庫' : '売掛金'}の伸び＞売上（${warning.end.slice(2, 7)}期）`, tone: 'wait',
+        title: `独自判定：前年比 ${signed(warning.growth, 0)} に対し売上 ${signed(warning.salesGrowth, 0)}（${CAUTION_POINTS}ポイント以上の差）` });
+    }
+  }
+  return chips;
+}
+
+// The one line a phone shows for a stock without SEC quarters: what is missing and why, then Code 33.
+function missingLine(sec, explain) {
+  const why = sec.delivery ? '配信側の問題' : sec.state === 'refused' ? '検証できず' : '';
+  return `業績：${String(sec.short).replace(/\s+/g, '')}${why ? `（${why}）` : ''}・${explain.title}`;
 }
 
 /** The fundamentals card: SEC quarters first, the Yahoo reference only when SEC has none and it is current. */
@@ -112,13 +173,32 @@ export default function FundamentalsCard({ financial, wide }) {
   const explain = code33Explain(report, sec, code33);
   const tone = explain.state === 'pass' ? 'zone' : explain.state === 'fail' ? 'ext' : 'neutral';
   const yoyKnown = rows.some(r => finite(r.epsYoY) || finite(r.salesYoY));
-  return <section className="brief-card in" style={{ '--i': 5 }} aria-labelledby="brief-fin-title" data-testid="brief-fundamentals">
+  const settled = explain.state === 'fail' && code33?.source !== 'yahoo' ? settledText(report) : null;
+  const quality = rows.length ? qualityChips(report) : null;
+  const facts = <div className="brief-facts is-fin">{tiles.map(t => <div className="brief-fact" key={t.label}><small>{t.label}</small>
+    {t.turnaround ? <><b>黒字転換</b><em>{`${t.turnaround.end.slice(0, 7)}期・前年 ${t.turnaround.from.toFixed(2).replace('-', '−')} → ${t.turnaround.to.toFixed(2)}`}</em></>
+      : <><b>{t.value ?? t.short}</b><em>{t.note}</em></>}</div>)}</div>;
+  const box = <div className={`brief-code33 tone-${tone}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>{explain.title}</strong><p>{explain.text}</p>{settled && <p>{settled}</p>}</div></div>;
+  // The parts repeat the text unless something failed (the text then names only the failed part).
+  const parts = code33?.source !== 'yahoo' && <Code33Parts report={report} explained={explain.kind === 'q4_eps'} hidden={!wide && explain.state !== 'fail'} />;
+  const missing = !rows.length && !yahoo;
+  return <section className="brief-card in brief-fin" style={{ '--i': 5 }} aria-labelledby="brief-fin-title" data-testid="brief-fundamentals">
     <div><h2 id="brief-fin-title">業績の加速</h2>{source && <p className="brief-note brief-fin-source">{source}</p>}</div>
-    <div className="brief-facts is-fin">{tiles.map(t => <div className="brief-fact" key={t.label}><small>{t.label}</small><b>{t.value ?? t.short}</b><em>{t.note}</em></div>)}</div>
-    {rows.length ? yoyKnown ? <QuarterBars rows={rows} /> : <><QuarterTable rows={rows} /><p className="brief-note">{noYoYText(rows)}</p></>
-      : explain.kind !== 'no_sec' && <p className="brief-note">{sec.long}</p>}
-    <div className={`brief-code33 tone-${tone}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>{explain.title}</strong><p>{explain.text}</p></div></div>
-    {code33?.source !== 'yahoo' && <Code33Parts report={report} explained={explain.kind === 'q4_eps'} />}
+    {missing && !wide
+      // No SEC quarters and no current reference: one line on a phone, today's reasons in its fold.
+      ? <Expander id="stock-fin-missing" className="brief-fin-missing" summary={missingLine(sec, explain)}>
+        {facts}
+        {explain.kind !== 'no_sec' && <p className="brief-note">{sec.long}</p>}
+        {box}
+      </Expander>
+      : <>
+        {facts}
+        {quality && <ul className="brief-fin-quality" aria-label="業績の質（SEC XBRL）">{quality.map(chip => <li key={chip.text} className={`brief-chip${chip.tone ? ` tone-${chip.tone}` : ''}`} title={chip.title || undefined}>{chip.text}</li>)}</ul>}
+        {rows.length ? yoyKnown ? <QuarterBars rows={rows} wide={wide} /> : <><QuarterTable rows={rows} /><p className="brief-note">{noYoYText(rows)}</p><p className="brief-note brief-fin-scope">{OUT_OF_SCOPE}</p></>
+          : explain.kind !== 'no_sec' && <p className="brief-note">{sec.long}</p>}
+        {box}
+        {parts}
+      </>}
     {wide && <p className="brief-note">{EPS_NOTE}</p>}
   </section>;
 }
