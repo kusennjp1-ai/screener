@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
-import { WEAKNESS_CHIP } from './briefSell';
+import { WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
 
 const DATE = '2026-10-02';
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -23,8 +23,10 @@ afterEach(cleanup);
 describe('brief stock view', () => {
   it('judges sell checks and computed values only on certified bars (the sell checks)', () => {
     render(<StockView data={data(true)} />);
-    // The conclusion's chip names a broken setup for a stock not held, never a bare sell count.
-    expect(screen.getByText(WEAKNESS_CHIP)).toBeInTheDocument();
+    // The conclusion's chip names a broken setup for a stock not held, never a bare sell count (sellChipView's
+    // `text`; D's conclusion may show its `full` sentence instead).
+    const conclusion = screen.getByTestId('brief-conclusion').textContent;
+    expect(conclusion.includes(WEAKNESS_ROW_CHIP) || conclusion.includes(WEAKNESS_CHIP)).toBe(true);
     expect(screen.queryByText(/^売りのサイン [0-9]+件$/)).toBeNull();
     expect(screen.getByTestId('brief-sell')).toHaveTextContent('出来高を伴う50日線割れ');
     expect(screen.getByTestId('brief-sell')).toHaveTextContent(/に出来高 3\.0倍で割れ、以降50日線の下（1営業日）/);
@@ -34,6 +36,8 @@ describe('brief stock view', () => {
     render(<StockView data={data(true)} />);
     const sell = screen.getByTestId('brief-sell');
     expect(sell).toHaveTextContent('上昇の加速はピボット比 +20%以上でのみ判定します。');
+    // The advance's 起点 is said as a short date, like every date on the card.
+    expect(sell).toHaveTextContent(/起点（直近1年の安値）2025\/1\/1 の /);
     // A stock below its pivot: the four climax checks are folded as 対象外 with the reason.
     expect(within(sell).getByText('対象外 4件').closest('summary')).toBeTruthy();
     expect(sell).toHaveTextContent('ピボットより下（ブレイク前）のため判定しません');

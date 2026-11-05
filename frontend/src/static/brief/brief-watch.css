@@ -14,8 +14,9 @@
 .brief-unlisted b { font-size: 14px; color: var(--text); }
 .brief-unlisted button { min-width: 48px; min-height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
 
-/* Watch rows say a weakness in full words: their sell chip may wrap instead of running off the row, between
-   its phrases (before 「（独自判定）」) rather than inside a word, and anywhere only when a phrase is too wide. */
+/* Watch rows carry the short form of a sell chip (the full sentence is its title and, on Today, its screen-reader
+   text). A longer one (「売りのサイン 未確認（上限12銘柄）」) may wrap instead of running off the row, between its
+   phrases rather than inside a word, and anywhere only when a phrase is too wide. */
 .brief-event .brief-sellchip, .brief-watchlist .brief-reasons .brief-chip { display: inline-block; max-width: 100%; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; border-radius: 12px; }
 .brief-check.is-sell-caution { color: var(--wait); box-shadow: inset 0 0 0 2px var(--wait); }
 

@@ -377,8 +377,11 @@ for (const [width, device] of Object.entries({ 320: phone(320, 640), 375: phone(
     const tiles = summary.getByRole('link');
     await expect(tiles).toHaveCount(3);
     for (const box of await tiles.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
-    // The link fills its tile: the tile is as tall as before (its text sets it, not the link).
+    // The link fills its tile, and the tile is as tall as before (its text sets it, not the link): 97px at 375
+    // with the default storage, as measured before the tiles became links (brief-watch.spec.js pins the tile
+    // with a watch list).
     expect(await summary.locator('li').evaluateAll(items => items.every(li => Math.abs(li.getBoundingClientRect().height - li.querySelector('a').getBoundingClientRect().height) <= 4))).toBe(true);
+    if (width === '375') for (const height of await summary.locator('li').evaluateAll(items => items.map(li => li.getBoundingClientRect().height))) expect(Math.abs(height - 97)).toBeLessThanOrEqual(2);
     await expect(tiles.nth(0)).toHaveAttribute('href', '#/brief/market');
     await tiles.nth(0).click();
     await expect(page).toHaveURL(/#\/brief\/market$/);
@@ -428,7 +431,8 @@ for (const [width, device] of Object.entries({ 320: phone(320, 640), 375: phone(
       await page.goto(`/${hash}`);
       const title = page.getByRole('heading', { level: 1, name: heading });
       await expect(title).toBeAttached();
-      expect(await page.locator('.brief-hero').evaluate(node => { const box = node.getBoundingClientRect(); return box.width <= 1 && box.height <= 1; })).toBe(true);
+      // Polled: read at once after the tab switch, the box was larger on some runs of a cold dev server.
+      await expect.poll(() => page.locator('.brief-hero').evaluate(node => { const box = node.getBoundingClientRect(); return box.width <= 1 && box.height <= 1; })).toBe(true);
       await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
     }
     const sizes = await page.locator('.brief-tabs a, .brief-bar-title > span, .brief-count').evaluateAll(nodes => nodes.map(node => [node.textContent, parseFloat(getComputedStyle(node).fontSize)]));

@@ -22,9 +22,11 @@ export const SELL_RULES = {
   climaxFromPivotPercent: 20,
 };
 
+// The strength checks start at the pivot breakout (the first close of the current run above the pivot); the
+// weakness side's 起点 stays the lowest low of the last year, as the sell card says.
 const STRENGTH = [
-  ['day-up', '起点以来で最大の1日の上昇（直近5営業日）'],
-  ['week-up', '起点以来で最大の5営業日の上昇（直近5営業日）'],
+  ['day-up', 'ピボット上抜け以降で最大の1日の上昇（直近5営業日）'],
+  ['week-up', 'ピボット上抜け以降で最大の5営業日の上昇（直近5営業日）'],
   ['up-days', rules => `直近${rules.upDaysWindow}営業日のうち${rules.upDaysMin}日以上が上昇`],
   ['climax', rules => `${rules.climaxSessions}営業日以内に +${rules.climaxPercent}%以上の急騰`],
 ];
@@ -33,19 +35,24 @@ const ratioText = ratio => `${ratio.toFixed(1)}倍`;
 
 /**
  * Whether the strength checks may run for this stock today, and from where. They run only when the
- * stock is beyond the buy zone (`view.state === 'ext'`) and its close is at least
- * `rules.climaxFromPivotPercent` above the pivot. Their origin is the start of the current run of closes
- * above that pivot (dated breakouts come later). Otherwise they are 'na' with the reason.
+ * stock is beyond the buy zone (`view.state === 'ext'`), its close is at least
+ * `rules.climaxFromPivotPercent` above the pivot, and the current run of closes above that pivot (its
+ * origin, the breakout) is at least `rules.climaxSessions` sessions old: a fresh breakout's fast gain is a
+ * reason to hold, not a climax. Otherwise they are 'na' with the reason. Dated breakouts come later.
  */
 function climaxGate(list, view, rules) {
   const pivot = view?.pivot, distance = view?.distance;
   if (!view || !finite(distance) || !finite(pivot) || pivot <= 0) return { on: false, reason: 'ピボット比が未確認のため判定しません' };
   if (view.state === 'wait' || distance < 0) return { on: false, reason: 'ピボットより下（ブレイク前）のため判定しません' };
+  // A position that is neither the buy zone nor beyond it (low volatility, an acquisition, unjudged) is never judged.
+  if (view.state !== 'ext' && view.state !== 'zone') return { on: false, reason: `買いゾーン超過の銘柄ではないため判定しません（位置：${view.stateLabel || '判定不可'}）` };
   if (view.state !== 'ext' || distance < rules.climaxFromPivotPercent) return { on: false, reason: `ブレイク後の上昇が小さいため判定しません（ピボット比 ${signed(distance)}・判定は +${rules.climaxFromPivotPercent}%以上）` };
   const n = list.length;
   if (!(list[n - 1].close > pivot)) return { on: false, reason: '日足の終値がピボットを上回っていないため判定しません' };
   let origin = n - 1;
   while (origin > 0 && list[origin - 1].close > pivot) origin--;
+  const age = n - 1 - origin;
+  if (age < rules.climaxSessions) return { on: false, reason: `${age ? `ピボット上抜けから${age}営業日` : 'ピボット上抜けの当日'}のため判定しません（判定は上抜けから${rules.climaxSessions}営業日以上・独自判定）` };
   return { on: true, origin, pivot, distance };
 }
 
@@ -66,11 +73,13 @@ function ma50State(list, rules) {
   for (let i = n - 2; i >= 49; i--) if (list[i].close >= sma(i)) { above = i; break; }
   if (above < 0) return { ...base, state: 'caution', detail: `50日線の下（直近${n - 49}営業日に50日線より上の終値なし・大商いの割れは未確認）・終値は50日線から ${signed(position)}` };
   const at = above + 1, sessions = n - at, day = shortDate(list[at].date, list[n - 1].date);
+  // A volume of 0 is a gap in the data, not a quiet day: it leaves the break unknown, never a ratio of 0.
   const prior = at >= 50 ? list.slice(at - 50, at).map(bar => bar.volume) : [];
-  const average = prior.length === 50 && prior.every(finite) ? prior.reduce((a, b) => a + b, 0) / 50 : null;
-  if (!finite(list[at].volume) || !(average > 0)) return { ...base, date: list[at].date, state: 'unknown', detail: `${day} に50日線を割れ、以降50日線の下（${sessions}営業日）。割れた日の出来高（または直前50日の出来高）が未取得` };
+  const average = prior.length === 50 && prior.every(volume => finite(volume) && volume > 0) ? prior.reduce((a, b) => a + b, 0) / 50 : null;
+  if (!(finite(list[at].volume) && list[at].volume > 0) || !(average > 0)) return { ...base, date: list[at].date, state: 'unknown', detail: `${day} に50日線を割れ、以降50日線の下（${sessions}営業日）。割れた日の出来高（または直前50日の出来高）が未取得` };
   const ratio = list[at].volume / average;
-  if (ratio >= rules.breakVolumeRatio) return { ...base, date: list[at].date, ratio, sessions, state: 'hit', detail: `${day} に出来高 ${ratioText(ratio)}で割れ、以降50日線の下（${sessions}営業日）` };
+  // `headline` is the short form a watch row leads with; the sell card keeps the full detail.
+  if (ratio >= rules.breakVolumeRatio) return { ...base, date: list[at].date, ratio, sessions, state: 'hit', detail: `${day} に出来高 ${ratioText(ratio)}で割れ、以降50日線の下（${sessions}営業日）`, headline: `50日線割れ（${day}・出来高${ratioText(ratio)}）` };
   return { ...base, date: list[at].date, ratio, sessions, state: 'caution', detail: `50日線の下（大商いの割れは未確認）・${day} に出来高 ${ratioText(ratio)}で割れ、以降${sessions}営業日` };
 }
 
@@ -85,6 +94,7 @@ export function sellSignals(bars, rules = SELL_RULES, { view = null } = {}) {
   if (list.length < 60 || list.some(b => !finite(b?.close) || !finite(b?.low) || b.close <= 0 || b.low <= 0)) return null;
   const n = list.length, recent = n - rules.recentSessions, last = list[n - 1];
   const change = i => (list[i].close / list[i - 1].close - 1) * 100;
+  const on = i => shortDate(list[i].date, last.date);
 
   // The weakness side keeps its advance: from the lowest low of the last year.
   let start = 0;
@@ -100,37 +110,49 @@ export function sellSignals(bars, rules = SELL_RULES, { view = null } = {}) {
     let up = null, week = null;
     for (let i = o + 1; i < n; i++) if (up === null || change(i) > change(up)) up = i;
     for (let j = Math.max(o + 5, 5); j < n; j++) { const v = (list[j].close / list[j - 5].close - 1) * 100; if (!week || v > week.v) week = { j, v }; }
-    const short = '起点以降の日足が不足のため判定しません';
+    const short = '上抜け以降の日足が不足のため判定しません';
     strength.push(up === null ? na('day-up', label(STRENGTH[0][1], rules), short)
-      : { key: 'day-up', label: label(STRENGTH[0][1], rules), date: list[up].date, state: up >= recent && change(up) > 0 ? 'hit' : 'clear', detail: `最大は ${list[up].date} の ${signed(change(up))}` });
-    strength.push(week ? { key: 'week-up', label: label(STRENGTH[1][1], rules), date: list[week.j].date, state: week.j >= recent && week.v > 0 ? 'hit' : 'clear', detail: `最大は ${list[week.j].date} までの ${signed(week.v)}` }
+      : { key: 'day-up', label: label(STRENGTH[0][1], rules), date: list[up].date, state: up >= recent && change(up) > 0 ? 'hit' : 'clear', detail: `最大は ${on(up)} の ${signed(change(up))}` });
+    strength.push(week ? { key: 'week-up', label: label(STRENGTH[1][1], rules), date: list[week.j].date, state: week.j >= recent && week.v > 0 ? 'hit' : 'clear', detail: `最大は ${on(week.j)} までの ${signed(week.v)}` }
       : na('week-up', label(STRENGTH[1][1], rules), short));
-    const span = Array.from({ length: rules.upDaysWindow }, (_, k) => n - rules.upDaysWindow + k).filter(i => i > 0);
+    // Only sessions after the breakout count: the base before it says nothing about a climax run.
+    const span = Array.from({ length: rules.upDaysWindow }, (_, k) => n - rules.upDaysWindow + k).filter(i => i > o);
     const ups = span.filter(i => change(i) > 0).length;
     strength.push({ key: 'up-days', label: label(STRENGTH[2][1], rules), date: last.date, state: ups >= rules.upDaysMin ? 'hit' : 'clear', detail: `上昇 ${ups}日 / ${span.length}日` });
     const window = list.slice(Math.max(o, n - 1 - rules.climaxSessions), n - 1).map(b => b.close);
     if (window.length) {
       const run = (last.close / Math.min(...window) - 1) * 100;
-      strength.push({ key: 'climax', label: label(STRENGTH[3][1], rules), date: last.date, state: run >= rules.climaxPercent ? 'hit' : 'clear', detail: `直近${rules.climaxSessions}営業日（起点以降）の最安終値から ${signed(run)}` });
+      strength.push({ key: 'climax', label: label(STRENGTH[3][1], rules), date: last.date, state: run >= rules.climaxPercent ? 'hit' : 'clear', detail: `直近${rules.climaxSessions}営業日（上抜け以降）の最安終値から ${signed(run)}` });
     } else strength.push(na('climax', label(STRENGTH[3][1], rules), short));
   } else for (const [key, text] of STRENGTH) strength.push(na(key, label(text, rules), gate.reason));
 
   if (inAdvance) {
     let down = start + 1;
     for (let i = start + 1; i < n; i++) if (change(i) < change(down)) down = i;
-    weakness.push({ key: 'day-down', label: '起点以来で最大の1日の下落（直近5営業日）', date: list[down].date, state: down >= recent && change(down) < 0 ? 'hit' : 'clear', detail: `最大は ${list[down].date} の ${signed(change(down))}` });
+    weakness.push({ key: 'day-down', label: '起点以来で最大の1日の下落（直近5営業日）', date: list[down].date, state: down >= recent && change(down) < 0 ? 'hit' : 'clear', detail: `最大は ${on(down)} の ${signed(change(down))}` });
   } else weakness.push(na('day-down', '起点以来で最大の1日の下落（直近5営業日）', `起点（直近1年の安値）から +${rules.advanceMinPercent}%・${rules.advanceMinSessions}営業日以上の上昇局面でのみ判定`));
   weakness.push(ma50State(list, rules));
 
   const run = gate.on ? { startDate: list[gate.origin].date, startClose: list[gate.origin].close, pivot: gate.pivot, distance: gate.distance, sessions: n - 1 - gate.origin } : null;
-  return tally({ advance: inAdvance ? advance : null, run, runReason: gate.on ? null : gate.reason, strength, weakness });
+  return tally({ asOf: last.date, advance: inAdvance ? advance : null, run, runReason: gate.on ? null : gate.reason, strength, weakness });
 }
 
-/** The counts every caller reads: all hits (the sell card), the weakness side (the watch's 注意) and the strength side. */
+/**
+ * A broken buy setup: the 50-day check or the book's combined warning fired. The largest down day of the
+ * advance is a holder's sell-into-weakness rule (a VCP's first contraction is often that sharp), so it is
+ * not one.
+ */
+export const isBreakdown = check => (check.key === 'ma50' || check.key === 'book') && check.state === 'hit';
+
+/**
+ * The counts every caller reads: all hits (the sell card), the weakness and strength sides, the broken
+ * setups (the watch's 注意, its order and the ▲ chip), the cautions and the weakness checks left unknown.
+ */
 function tally(sells) {
   const hit = checks => checks.filter(c => c.state === 'hit').length;
   const strengthHits = hit(sells.strength), weaknessHits = hit(sells.weakness);
-  return { ...sells, hits: strengthHits + weaknessHits, strengthHits, weaknessHits, cautions: sells.weakness.filter(c => c.state === 'caution').length };
+  return { ...sells, hits: strengthHits + weaknessHits, strengthHits, weaknessHits, breakdownHits: sells.weakness.filter(isBreakdown).length,
+    cautions: sells.weakness.filter(c => c.state === 'caution').length, unknowns: sells.weakness.filter(c => c.state === 'unknown').length };
 }
 
 /**
@@ -175,24 +197,39 @@ export const ma50Hit = sells => sells?.weakness?.find(check => check.key === 'ma
 
 /** Weakness signals: a broken buy setup for a stock not held, a sell signal for one held (独自判定). */
 export const WEAKNESS_CHIP = '買いの前提が崩れた／保有なら売りのサイン（独自判定）';
-/** Strength (climax) signals mean something only for a holding, and no holding is registered. */
+/** Holders' signals (a climax, the advance's largest down day) mean something only for a holding, and none is registered. */
 export const HOLDING_CHIP = '保有している場合の売りのサイン（保有未登録）';
+/**
+ * The short forms a row shows (list rows and Today's watch rows), so a flagged row keeps its chips on two
+ * lines from 320px up; the full sentence is the chip's `full` (the stock conclusion, assistive tech) and
+ * leads its title. 「崩れ」 is the sell card's own word for the weakness side.
+ */
+export const WEAKNESS_ROW_CHIP = '崩れ（独自判定）';
+export const HOLDING_ROW_CHIP = '保有なら売りのサイン';
 
 /**
  * The sell chip a list row, a Today watch row or the stock conclusion shows for a sell result:
- * { text, tone, title } or null (nothing to say). Weakness hits come first ('ext', drawn with ▲); climax
- * hits alone are a holding's signal and stay neutral; a 50-day caution is 'wait'. A result that could not
- * be checked says so, with the 12-stock limit as visible text and any other reason as the title.
- * A result without the strength/weakness split (an older shape) keeps the plain count.
+ * { text, full, tone, title } or null (nothing to say). `text` is the short form rows show, `full` the
+ * sentence where there is room. In order: a result that could not be checked (the 12-stock limit as visible
+ * text, any other reason as the title); a broken setup ('ext', drawn with ▲); the 50-day line under a caution
+ * ('wait') or with its break-day volume unknown; any other weakness check unknown (一部未確認); and last the
+ * holders' signals alone, which stay neutral and are never counted. A result without the strength/weakness
+ * split (an older shape) keeps the plain count.
  */
 export function sellChipView(sell) {
   if (!sell) return null;
-  if (sell.unknown) return { text: `売りのサイン 未確認${sell.limit ? `（上限${sell.limit}銘柄）` : ''}`, tone: '', title: sell.reason || undefined };
-  const fired = checks => (checks || []).filter(c => c.state === 'hit').map(c => c.label).join('・');
-  if (!Array.isArray(sell.weakness)) return sell.hits ? { text: `売りのサイン ${sell.hits}件`, tone: 'ext', title: undefined } : null;
-  if (sell.weaknessHits) return { text: WEAKNESS_CHIP, tone: 'ext', title: fired(sell.weakness) };
-  if (sell.strengthHits) return { text: HOLDING_CHIP, tone: '', title: fired(sell.strength) };
-  const caution = sell.weakness.find(c => c.state === 'caution');
-  if (caution) return { text: '50日線の下（大商いの割れは未確認）', tone: 'wait', title: caution.detail };
+  const chip = (text, tone, title, full = text) => ({ text, full, tone, title });
+  if (sell.unknown) { const text = `売りのサイン 未確認${sell.limit ? `（上限${sell.limit}銘柄）` : ''}`; return chip(text, '', sell.reason || undefined); }
+  if (!Array.isArray(sell.weakness)) return sell.hits ? chip(`売りのサイン ${sell.hits}件`, 'ext', undefined) : null;
+  const named = checks => checks.map(c => c.label).join('・');
+  const broken = sell.weakness.filter(isBreakdown);
+  if (broken.length) return chip(WEAKNESS_ROW_CHIP, 'ext', `${WEAKNESS_CHIP}：${named(broken)}`, WEAKNESS_CHIP);
+  const ma50 = sell.weakness.find(c => c.key === 'ma50');
+  if (ma50?.state === 'caution') return chip('50日線の下', 'wait', ma50.detail, '50日線の下（大商いの割れは未確認）');
+  if (ma50?.state === 'unknown') return chip('50日線の下・出来高未確認', 'wait', ma50.detail, '50日線の下（割れた日の出来高は未確認）');
+  const unsure = sell.weakness.filter(c => c.state === 'unknown');
+  if (unsure.length) return chip('売りのサイン 一部未確認', '', unsure.map(c => `${c.label}：${c.detail}`).join('・'));
+  const holding = [...(sell.strength || []), ...sell.weakness].filter(c => c.state === 'hit');
+  if (holding.length) return chip(HOLDING_ROW_CHIP, '', `${HOLDING_CHIP}：${named(holding)}`, HOLDING_CHIP);
   return null;
 }

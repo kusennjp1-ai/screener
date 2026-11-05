@@ -24,16 +24,22 @@ const EVENT_ICON = { breakout: '↗', ext: '▲', near: '◔', zone: '●', ma50
 /** A plain click on a link runs the in-app handler; a modified click keeps the browser's own behaviour. */
 const follow = handler => event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); handler(event); };
 
-/** A watch row's sell chip, from the same sellChipView as the list rows and the stock conclusion. */
+/**
+ * A watch row's sell chip, from the same sellChipView as the list rows and the stock conclusion: the row's
+ * short form on screen, the full sentence for assistive tech when the two differ.
+ */
 function SellChip({ sell }) {
   const chip = sellChipView(sell);
-  return chip ? <span className={`brief-chip${chip.tone ? ` tone-${chip.tone}` : ''} brief-sellchip`} title={chip.title}>{chip.tone === 'ext' && <><span aria-hidden="true">▲</span> </>}{chip.text}</span> : null;
+  if (!chip) return null;
+  const glyph = chip.tone === 'ext' && <><span aria-hidden="true">▲</span> </>;
+  return <span className={`brief-chip${chip.tone ? ` tone-${chip.tone}` : ''} brief-sellchip`} title={chip.title}>{glyph}{chip.full && chip.full !== chip.text ? <><span aria-hidden="true">{chip.text}</span><span className="sr-only">{chip.full}</span></> : chip.text}</span>;
 }
 
 /**
- * The watch tile of Today's summary: what needs attention among the watched stocks. Only the weakness side
- * counts (a broken setup, or a sell signal if held), because no holding is registered; 0件 only when every
- * watched stock was checked. Unlisted and unchecked stocks are said, never counted as checked.
+ * The watch tile of Today's summary: what needs attention among the watched stocks. Only a broken setup
+ * counts (the 50-day check or the book's warning fired), because no holding is registered; 0件 only when
+ * every check of every watched stock is in. Unlisted, unchecked and partly checked stocks are said, never
+ * counted as checked. The note is short (n/N), because the tile is a third of the width.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- the tile's wording is tested on its own
 export function watchAttention({ state, watched, watchCount, unlisted, sells }) {
@@ -41,15 +47,19 @@ export function watchAttention({ state, watched, watchCount, unlisted, sells }) 
   const total = watched.length + unlisted.length;
   if (!total) return { value: '未登録', note: '☆で追加', flagged: [] };
   const results = watched.map(view => sells[view.symbol]);
-  const pending = results.filter(result => !result).length, checked = results.filter(result => result && !result.unknown).length;
+  const flagged = watched.filter(view => sells[view.symbol]?.breakdownHits > 0).map(view => view.symbol);
+  // A result with a weakness check left unknown and nothing broken is only partly checked.
+  const partial = results.filter(result => result && !result.unknown && !(result.breakdownHits > 0) && result.unknowns > 0).length;
+  const pending = results.filter(result => !result).length;
+  const checked = results.filter(result => result && !result.unknown).length - partial;
   const limited = results.filter(result => result?.unknown && result.limit), unknown = results.filter(result => result?.unknown && !result.limit).length;
-  const flagged = watched.filter(view => sells[view.symbol]?.weaknessHits > 0).map(view => view.symbol);
-  const unsure = limited.length + unknown + unlisted.length;
+  const unsure = limited.length + unknown + partial + unlisted.length;
   const value = flagged.length ? `${flagged.length}件` : pending ? '確認中' : unsure ? '未確認' : '0件';
-  const parts = pending ? [`${total}銘柄を確認中`] : [unsure ? `${total}銘柄中${checked}銘柄を確認` : `${checked}銘柄を確認`,
-    unlisted.length ? `${unlisted.length}銘柄は対象外（未確認）` : null,
-    limited.length ? `${limited.length}銘柄は未確認（上限${limited[0].limit}銘柄）` : null,
-    unknown ? `${unknown}銘柄は未確認` : null];
+  const parts = pending ? [`${total}銘柄を確認中`] : [unsure ? `${checked}/${total}を確認` : `${checked}銘柄を確認`,
+    unlisted.length ? `対象外${unlisted.length}` : null,
+    limited.length ? `上限超${limited.length}` : null,
+    unknown ? `未確認${unknown}` : null,
+    partial ? `一部未確認${partial}` : null];
   return { value, note: [...parts, '保有未登録'].filter(Boolean).join('・'), flagged };
 }
 
@@ -103,7 +113,7 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">3</span><h2 id="brief-watch-title">ウォッチの状況</h2></div>
       {watched.length || unlisted.length ? <ul className="brief-rows" id="brief-watch-rows">
         {unlisted.map(symbol => <UnlistedWatchRow key={symbol} symbol={symbol} date={brief.date} onRemove={onUnwatch} />)}
-        {watchShown.map((view, i) => { const broke = ma50Hit(sells[view.symbol]), event = broke ? { kind: 'ma50', tone: 'ext', title: broke.detail } : watchEvent(view); return <RiseItem key={view.symbol} animate={animate} index={i}>
+        {watchShown.map((view, i) => { const broke = ma50Hit(sells[view.symbol]), event = broke ? { kind: 'ma50', tone: 'ext', title: broke.headline || broke.detail } : watchEvent(view); return <RiseItem key={view.symbol} animate={animate} index={i}>
           <button type="button" className="brief-event" data-symbol={view.symbol} onClick={e => open(view.symbol, e.currentTarget, 'watch')}>
             <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{EVENT_ICON[event.kind] || '≈'}</span>
             <span><b>{view.symbol}</b> {event.title}<SellChip sell={sells[view.symbol]} /><small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>

@@ -63,12 +63,14 @@ describe('the watch list', () => {
     expect(removed).toEqual(['QQQX']);
   });
 
-  it('puts the rows whose weakness check fired first, only once every check is in', () => {
+  it('puts the broken setups first, only once every check is in', () => {
     const views = ['A', 'B', 'C'].map(symbol => ({ symbol }));
-    const quiet = { weaknessHits: 0 }, weak = { weaknessHits: 1 };
+    const quiet = { weaknessHits: 0, breakdownHits: 0 }, weak = { weaknessHits: 1, breakdownHits: 1 };
     expect(watchOrder(views, { A: quiet, B: quiet, C: weak }).map(v => v.symbol)).toEqual(['C', 'A', 'B']);
     expect(watchOrder(views, { A: quiet, B: weak }).map(v => v.symbol)).toEqual(['A', 'B', 'C']);
     expect(watchOrder(views, { A: { unknown: true }, B: weak, C: { hits: 2, strengthHits: 2, weaknessHits: 0 } }).map(v => v.symbol)).toEqual(['B', 'A', 'C']);
+    // The advance's largest down day alone is a holder's signal: it does not move a row.
+    expect(watchOrder(views, { A: quiet, B: quiet, C: { hits: 1, weaknessHits: 1, breakdownHits: 0 } }).map(v => v.symbol)).toEqual(['A', 'B', 'C']);
     expect(watchOrder([], {})).toEqual([]);
   });
 });

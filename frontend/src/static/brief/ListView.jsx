@@ -27,13 +27,13 @@ export function listShown(views, kind, { filter, sort, query }) {
   return views.filter(kind === 'watch' ? () => true : (LIST_FILTERS[filter] || LIST_FILTERS[DEFAULT_FILTER]).test).filter(view => matchesSearch(view, query)).sort(LIST_SORTS[sort].compare);
 }
 /**
- * Watch rows in their list order, with the rows whose weakness check fired first. Nothing moves until
- * every row's check is in, so a row never jumps while the checks load.
+ * Watch rows in their list order, with the broken setups (the 50-day check or the book's warning fired)
+ * first. Nothing moves until every row's check is in, so a row never jumps while the checks load.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- Today and the stock pane order the watch rows the same way
 export function watchOrder(views, sells) {
   if (!views.every(view => sells?.[view.symbol])) return views;
-  const flagged = view => sells[view.symbol].weaknessHits > 0;
+  const flagged = view => sells[view.symbol].breakdownHits > 0;
   return [...views.filter(flagged), ...views.filter(view => !flagged(view))];
 }
 
