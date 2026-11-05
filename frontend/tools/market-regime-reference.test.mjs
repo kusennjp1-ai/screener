@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { APP_RULES } from './market-regime-study.mjs';
-import { BREADTH_RULES, buildReference, compareReferences, fromResults, main, parseStudyMarkdown, refusals, serialize, studyDefinitions, REFERENCE_VERSION, STATE_IDS } from './market-regime-reference.mjs';
+import { BREADTH_RULES, buildReference, compareReferences, fromResults, main, meanDirection, parseStudyMarkdown, refusals, serialize, studyDefinitions, REFERENCE_VERSION, STATE_IDS } from './market-regime-reference.mjs';
 
 const SOURCE = resolve('tools/reference-sources/market-regime-study-v2/ci-results-run41844557380.md');
 const REFERENCE = resolve('src/static/reference/market-regime-reference-v1.json');
@@ -60,6 +60,20 @@ describe('the committed source and reference', () => {
     expect(ref.breadth['rule.lows']).toEqual({ labelDd5: 'insufficient', labelMean: 'insufficient' });
   });
 
+  it('keeps a robust mean\'s direction only, from the sign of its Δmean, and none for any other label', () => {
+    const ref = committed(), state = (key, id) => ref.indicators[key].states[id];
+    // 調整中: Δmean +1.22 (S&P) and +1.02 (Nasdaq) pt at h=21, robust on both.
+    expect(state('^GSPC.ftd.state', 'correction')).toMatchObject({ labelMean: 'robust', meanDirection: 'higher' });
+    expect(state('^IXIC.ftd.state', 'correction')).toMatchObject({ labelMean: 'robust', meanDirection: 'higher' });
+    expect(state('^GSPC.ftd.state', 'rally_attempt')).toMatchObject({ labelMean: 'weak', meanDirection: null });
+    for (const indicator of Object.values(ref.indicators)) for (const row of Object.values(indicator.states)) expect(row.meanDirection === null || row.labelMean === 'robust').toBe(true);
+    expect([meanDirection('robust', 0.4), meanDirection('robust', -0.4), meanDirection('robust', 0), meanDirection('weak', -0.4), meanDirection('robust', null)]).toEqual(['higher', 'lower', null, null, null]);
+    // A two-state contrast is the first state minus the second: the second state takes the opposite direction.
+    const flipped = parseStudyMarkdown(markdown().replace(/(\| 1年高値から5%以内 \(near high\) \| 21 \|(?:[^|\n]*\|){8}) −0\.33 \[−0\.69, \+0\.60\] p 0\.466 \| unstable \|/, '$1 −0.33 [−0.69, +0.60] p 0.005 | **robust** |'));
+    const near = buildReference(flipped, SOURCE_META).indicators['^GSPC.high.near'].states;
+    expect([near.near.meanDirection, near.below.meanDirection]).toEqual(['lower', 'higher']);
+  });
+
   it('gives a two-state indicator\'s second state the contrast row\'s labels', () => {
     const ref = committed();
     expect(ref.indicators['^GSPC.high.near'].states.below).toMatchObject({ labelDd5: 'robust', labelMean: 'unstable' });
@@ -102,7 +116,10 @@ describe('results.json input', () => {
     const near = ref.indicators['^GSPC.high.near'].states;
     expect(near.near.pDd5).toBeCloseTo(100 * (0.1012 + Object.keys(studyDefinitions()).indexOf('^GSPC.high.near') * 0.001), 2);
     expect(near.near.firstHalfShare).toBe(47.12);
-    expect(near.below).toMatchObject({ labelDd5: 'robust', labelMean: 'weak', comparatorState: 'near', comparatorPDd5: near.near.pDd5 });
+    expect(near.below).toMatchObject({ labelDd5: 'robust', labelMean: 'weak', meanDirection: null, comparatorState: 'near', comparatorPDd5: near.near.pDd5 });
+    // A robust mean takes its direction from mean.est, the complement the opposite one.
+    const robustMean = buildReference(fromResults(syntheticResults(study => { for (const r of study.indicators) for (const b of r.windows[21].buckets) if (b.mean) b.mean = { est: -0.004, label: 'robust' }; return study; })), { sha256: 'c'.repeat(64) });
+    expect([robustMean.indicators['^GSPC.high.near'].states.near.meanDirection, robustMean.indicators['^GSPC.high.near'].states.below.meanDirection, robustMean.indicators['^GSPC.ma.quadrant'].states.above_both.meanDirection]).toEqual(['lower', 'higher', 'lower']);
     expect(ref.indicators['^GSPC.ma.quadrant'].states.above_both).toMatchObject({ comparator: 'baseline', comparatorPDd5: 16.34 });
     expect(ref.samples['^IXIC']).toMatchObject({ last: '2026-11-10', sessions: 9283 });
   });
@@ -123,7 +140,22 @@ describe('--check', () => {
     const outside = compareReferences(base(), fresh);
     expect(outside.ok).toBe(false);
     expect(outside.drift.filter(d => !d.within).map(d => [d.key, d.state, d.field])).toEqual([['^GSPC.ma.quadrant', 'above_both', 'pDd5'], ['^IXIC.dd.binary', 'warn', 'labelDd5'], ['rule.lows', 'warning', 'labelDd5']]);
-    expect(compareReferences(base(), base())).toEqual({ ok: true, drift: [] });
+    expect(compareReferences(base(), base())).toEqual({ ok: true, drift: [], counts: { sizes: 0 } });
+  });
+
+  it('checks the first-half share within ±1 pt and never across the 〔偏り〕 bounds, the mean direction exactly, and counts size changes', () => {
+    const fresh = base(), states = key => fresh.indicators[key].states;
+    states('^GSPC.ma.quadrant').above_both.firstHalfShare = 47.8; // 47 → 47.8: within
+    states('^IXIC.ma.quadrant').below_both.firstHalfShare = 59.5; // 60 → 59.5: within 1 pt, but 〔偏り〕 would disappear
+    states('^GSPC.ftd.state').ftd_failed.firstHalfShare = 63; // 66 → 63: outside
+    states('^GSPC.ftd.state').correction.meanDirection = null;
+    states('^GSPC.dd.graded')['3-4'].n += 5;
+    const result = compareReferences(base(), fresh);
+    expect(result.ok).toBe(false);
+    expect(result.drift.map(d => [d.key, d.state, d.field, d.within])).toEqual([
+      ['^GSPC.ftd.state', 'correction', 'meanDirection', false], ['^GSPC.ftd.state', 'ftd_failed', 'firstHalfShare', false],
+      ['^GSPC.ma.quadrant', 'above_both', 'firstHalfShare', true], ['^IXIC.ma.quadrant', 'below_both', 'firstHalfShare', false]]);
+    expect(result.counts).toEqual({ sizes: 1 });
   });
 
   it('runs from the command line against a committed reference and appends the drift to a summary', async () => {

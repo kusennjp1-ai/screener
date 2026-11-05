@@ -15,12 +15,14 @@
  *
  * Output: per index indicator (^GSPC / ^IXIC × ma.quadrant, high.near, dd.graded, dd.binary, ftd.state,
  * combo.ftd_recent) and state, at h = 21 sessions: n, episodes, P(21-session drawdown <= -5%), the first-half
- * share, the labels of the drawdown and mean statistics (the mean as a label only, never a number), and the
- * comparator (the baseline of the same sample, or for a two-state indicator the other state) with its share.
- * The breadth panel's rule.* indicators carry their labels only.
+ * share, the labels of the drawdown and mean statistics (the mean as a label and, when that label is robust, its
+ * direction only: never a number), and the comparator (the baseline of the same sample, or for a two-state
+ * indicator the other state) with its share. The breadth panel's rule.* indicators carry their labels only.
  *
- * --check <reference> compares a fresh build with a committed one: labels must be equal and every share within
- * ±1 percentage point (a markdown build is rounded to 1 pt). It prints the drift and exits 1 when outside.
+ * --check <reference> compares a fresh build with a committed one: labels and mean directions must be equal, every
+ * share and first-half share within ±1 percentage point (a markdown build is rounded to 1 pt), and no first-half
+ * share may cross the 〔偏り〕 bounds. Changes of n and episodes are counted as information. It prints the drift and
+ * exits 1 when outside.
  * Diagnostic research only: nothing here changes a rule, threshold, verdict or published value.
  */
 import { createHash } from 'node:crypto';
@@ -29,6 +31,7 @@ import { dirname, relative, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 import { APP_RULES, DD_GRADES, FTD_BUCKETS, FTD_RECENT_SESSIONS, FTD_WINDOW_SESSIONS, STUDY_VERSION, indexIndicators } from './market-regime-study.mjs';
+import { BIAS_SHARE } from '../src/static/reference/marketRegimeReference.js';
 
 export const REFERENCE_VERSION = 'market-regime-reference-v1';
 export const HORIZON = 21;
@@ -71,6 +74,14 @@ const cells = line => line.trim().replace(/^\|/, '').replace(/\|$/, '').split(/(
 const percent = text => { const m = /^(−|-)?(\d+(?:\.\d+)?)%$/.exec(text || ''); return m ? (m[1] ? -1 : 1) * Number(m[2]) : null; };
 const integer = text => /^\d+$/.test(text || '') ? Number(text) : null;
 const labelOf = text => { const value = String(text || '').replace(/\*/g, '').trim(); return LABELS.has(value) ? value : null; };
+/** The estimate in front of a Δ cell (「+0.74 [−0.29, +0.31] p 0.005」), or null. */
+const delta = text => { const m = /^(−|-|\+)?(\d+(?:\.\d+)?) \[/.exec(text || ''); return m ? (m[1] === '−' || m[1] === '-' ? -1 : 1) * Number(m[2]) : null; };
+/**
+ * The direction of a robust mean contrast ('higher' / 'lower' than its comparator), never its size; null unless the
+ * mean label is robust. A two-state indicator's contrast is the first state minus the second, so the second state
+ * takes the opposite direction.
+ */
+export const meanDirection = (label, estimate) => label === 'robust' && finite(estimate) && estimate !== 0 ? (estimate > 0 ? 'higher' : 'lower') : null;
 
 /** The study's markdown report as the builder's neutral shape (see fromResults for the JSON one). */
 export function parseStudyMarkdown(text) {
@@ -93,9 +104,10 @@ export function parseStudyMarkdown(text) {
     const rows = lines.filter(line => line.startsWith('| ') && !line.startsWith('| bucket') && !line.startsWith('|---')).map(cells).filter(c => integer(c[1]) === HORIZON);
     const baseline = rows.find(c => c[0] === 'baseline');
     const buckets = rows.filter(c => c[0] !== 'baseline').map(c => ({ label: c[0], n: integer(c[2]), episodes: integer(c[3]), firstHalfShare: percent(c[4]), pDd5: percent(c[8]),
-      complement: c[10] === '(the contrast above)', labelMean: labelOf(c[11]), labelDd5: labelOf(c[13]) }));
-    // A two-state indicator is tested once, on its first state: the second state takes the contrast row's labels.
-    buckets.forEach((b, g) => { if (b.complement && g > 0) Object.assign(b, { labelMean: buckets[g - 1].labelMean, labelDd5: buckets[g - 1].labelDd5 }); });
+      complement: c[10] === '(the contrast above)', meanDelta: delta(c[10]), labelMean: labelOf(c[11]), labelDd5: labelOf(c[13]) }));
+    // A two-state indicator is tested once, on its first state: the second state takes the contrast row's labels
+    // and the opposite sign of its mean contrast.
+    buckets.forEach((b, g) => { if (b.complement && g > 0) Object.assign(b, { labelMean: buckets[g - 1].labelMean, labelDd5: buckets[g - 1].labelDd5, meanDelta: finite(buckets[g - 1].meanDelta) ? -buckets[g - 1].meanDelta : null }); });
     indicators[key] = { rule: description.split('. Outcome: ')[0], judged: judged ? { sessions: Number(judged[1]), first: judged[2], last: judged[3] } : null,
       baseline: baseline ? { n: integer(baseline[2]), pDd5: percent(baseline[8]) } : null, buckets };
   }
@@ -115,7 +127,8 @@ export function fromResults(study) {
     const win = r.available ? r.windows?.[HORIZON] ?? r.windows?.[String(HORIZON)] : null;
     const buckets = (win?.buckets || []).map((b, g, all) => {
       const source = b.role === 'complement' ? all[g - 1] : b;
-      return { label: b.label, n: b.n, episodes: b.episodes, firstHalfShare: share(b.firstHalfShare), pDd5: share(b.pDd5), complement: b.role === 'complement', labelMean: source?.mean?.label ?? null, labelDd5: source?.dd5?.label ?? null };
+      const estimate = finite(source?.mean?.est) ? (b.role === 'complement' ? -source.mean.est : source.mean.est) : null;
+      return { label: b.label, n: b.n, episodes: b.episodes, firstHalfShare: share(b.firstHalfShare), pDd5: share(b.pDd5), complement: b.role === 'complement', meanDelta: estimate, labelMean: source?.mean?.label ?? null, labelDd5: source?.dd5?.label ?? null };
     });
     indicators[r.key] = { rule: r.rule, judged: r.available ? { sessions: r.judged, first: r.firstJudged, last: r.lastJudged } : null, baseline: win ? { n: win.baseline.n, pDd5: share(win.baseline.pDd5) } : null, buckets };
   }
@@ -160,7 +173,7 @@ export function buildReference(parsed, source) {
     found.buckets.forEach((b, g) => {
       const other = two ? found.buckets[1 - g] : null;
       states[ids[g]] = { label: b.label, n: b.n, episodes: b.episodes, pDd5: b.pDd5, firstHalfShare: b.firstHalfShare, labelDd5: b.labelDd5, labelMean: b.labelMean,
-        comparator: two ? 'other_state' : 'baseline', comparatorState: two ? ids[1 - g] : null, comparatorPDd5: two ? other.pDd5 : found.baseline.pDd5 };
+        meanDirection: meanDirection(b.labelMean, b.meanDelta), comparator: two ? 'other_state' : 'baseline', comparatorState: two ? ids[1 - g] : null, comparatorPDd5: two ? other.pDd5 : found.baseline.pDd5 };
     });
     indicators[key] = { judged: found.judged, baseline: found.baseline, states };
   }
@@ -179,36 +192,48 @@ export function buildReference(parsed, source) {
   };
 }
 
-/** Labels must be equal and every share within ±tolerance points. Returns { ok, drift: [{ key, state, field, committed, fresh }] }. */
+/** The 〔偏り〕 test of the market tab (marketRegimeReference.js biasTag), on a first-half share. */
+const biased = value => finite(value) && (value >= BIAS_SHARE.atLeast || value <= BIAS_SHARE.atMost);
+
+/**
+ * Labels and mean directions must be equal, every share and first-half share within ±tolerance points, and no
+ * first-half share may cross the 〔偏り〕 bounds (that flips a tag on screen). Returns { ok, drift: [{ key, state,
+ * field, committed, fresh, within }], counts }, where counts.sizes is the number of states whose n or episodes
+ * changed (information only: a later study has more sessions).
+ */
 export function compareReferences(committed, fresh, tolerance = TOLERANCE_POINTS) {
   const drift = [];
+  let sizes = 0;
   const note = (key, state, field, a, b, within) => drift.push({ key, state, field, committed: a ?? null, fresh: b ?? null, within });
   for (const key of new Set([...Object.keys(committed?.indicators || {}), ...Object.keys(fresh?.indicators || {})])) {
     const a = committed?.indicators?.[key]?.states || {}, b = fresh?.indicators?.[key]?.states || {};
     for (const state of new Set([...Object.keys(a), ...Object.keys(b)])) {
       const x = a[state], y = b[state];
       if (!x || !y) { note(key, state, 'state', x ? 'present' : 'absent', y ? 'present' : 'absent', false); continue; }
-      for (const field of ['labelDd5', 'labelMean']) if (x[field] !== y[field]) note(key, state, field, x[field], y[field], false);
-      for (const field of ['pDd5', 'comparatorPDd5']) {
+      for (const field of ['labelDd5', 'labelMean', 'meanDirection']) if ((x[field] ?? null) !== (y[field] ?? null)) note(key, state, field, x[field], y[field], false);
+      for (const field of ['pDd5', 'comparatorPDd5', 'firstHalfShare']) {
         if (x[field] === y[field]) continue;
         const both = finite(x[field]) && finite(y[field]);
-        note(key, state, field, x[field], y[field], both && Math.abs(x[field] - y[field]) <= tolerance + 1e-9);
+        const flips = field === 'firstHalfShare' && biased(x[field]) !== biased(y[field]);
+        note(key, state, field, x[field], y[field], both && !flips && Math.abs(x[field] - y[field]) <= tolerance + 1e-9);
       }
+      if (x.n !== y.n || x.episodes !== y.episodes) sizes++;
     }
   }
   for (const key of new Set([...Object.keys(committed?.breadth || {}), ...Object.keys(fresh?.breadth || {})]))
     for (const field of ['labelDd5', 'labelMean']) if (committed?.breadth?.[key]?.[field] !== fresh?.breadth?.[key]?.[field]) note(key, 'warning', field, committed?.breadth?.[key]?.[field], fresh?.breadth?.[key]?.[field], false);
-  return { ok: drift.every(d => d.within), drift };
+  return { ok: drift.every(d => d.within), drift, counts: { sizes } };
 }
 
 export function driftMarkdown(result, committed, fresh) {
   const lines = [`### Market-regime reference drift (diagnostic, never a gate)`, '',
-    `Committed ${committed.schema_version} from ${committed.source?.kind} (study as of ${committed.study_as_of}, CI run ${committed.source?.ci_run ?? 'n/a'}) against a fresh build from ${fresh.source?.kind} (study as of ${fresh.study_as_of}). Labels must be equal; shares within ±${TOLERANCE_POINTS} pt.`, ''];
+    `Committed ${committed.schema_version} from ${committed.source?.kind} (study as of ${committed.study_as_of}, CI run ${committed.source?.ci_run ?? 'n/a'}) against a fresh build from ${fresh.source?.kind} (study as of ${fresh.study_as_of}). Labels and mean directions must be equal; shares and first-half shares within ±${TOLERANCE_POINTS} pt, without crossing the ${BIAS_SHARE.atMost}/${BIAS_SHARE.atLeast}% bias bounds.`, ''];
   if (!result.drift.length) lines.push('No drift: every label and share matches.');
   else {
     lines.push(`${result.ok ? 'Within tolerance' : '**Outside tolerance**'}: ${result.drift.length} difference(s).`, '', '| indicator | state | field | committed | fresh | within |', '|---|---|---|---|---|---|');
     for (const d of result.drift) lines.push(`| ${d.key} | ${d.state} | ${d.field} | ${d.committed ?? '—'} | ${d.fresh ?? '—'} | ${d.within ? 'yes' : 'no'} |`);
   }
+  if (result.counts?.sizes) lines.push('', `Information only: n or episodes changed for ${result.counts.sizes} state(s).`);
   return `${lines.join('\n')}\n`;
 }
 
