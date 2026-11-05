@@ -5,8 +5,9 @@ import { MemoryRouter } from 'react-router-dom';
 import MarketCard from './MarketCard';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { attempt, breadth, closes, confirmed, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
+import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
 import reference from '../reference/market-regime-reference-v1.json' with { type: 'json' };
+import { followThroughDay } from '../followThroughDay';
 import { exposureRuleText } from '../portfolioPlan';
 
 const show = (value, { date = '2026-10-02', detail = true, market = UP, marketLoading = false, onOpenMetric, ref = reference } = {}) => render(<MemoryRouter><MarketCard market={market} marketLoading={marketLoading} trends={value} date={date} detail={detail} onOpenMetric={onOpenMetric} reference={ref} /></MemoryRouter>);
@@ -106,7 +107,8 @@ describe('brief market card: market tab', () => {
     expect(stats).toHaveTextContent('S&P 5005,482.0010/2終値1年高値から−8.4%50日線比−0.9%200日線比 −3.5%');
     // The verdict says SPY was above its 50-day line at the scan; the long history's ^GSPC close is not.
     expect(screen.getByText('判定の根拠はスキャン時点のSPY、この数値は長期履歴の^GSPC終値（10/2）です。50日線・200日線との位置が一致していません。')).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（2026-05-26〜2026-10-02）。有効な分配日 0日。FTD 8\/7、反発の安値 8\/1。目盛り 5,482〜5,801$/ })).toBeInTheDocument();
+    // A confirmed FTD whose record carries no ftd event has no rally-low date: the ◆ only, no ○.
+    expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（2026-05-26〜2026-10-02）。有効な分配日 0日。FTD 8\/7。目盛り 5,482〜5,801$/ })).toBeInTheDocument();
   });
 
   it('shows one section at a time behind phone tabs that carry each group\'s ▲ count and move by arrow keys', () => {
@@ -480,6 +482,45 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     value.data.indices[1].state = { date: '2026-10-02', close: 18234.56, vs50: 1.24, vs200: null, fromHigh: -2.1, fullYear: true };
     show(value);
     expect(document.querySelector('.brief-index-nas')).toHaveTextContent('Nasdaq総合18,234.5610/2終値・1年高値から −2.1%・50日線比 +1.2%・200日線比 未算出');
+  });
+
+  it('marks the rally low the FTD confirmed, not a later pullback\'s low, from real follow-through output', () => {
+    // A decline of 10% to a low, a rally attempt, an FTD on its 4th day, new highs, then a 4% pullback: still confirmed.
+    const dates = days('2026-10-02', 120), bars = [];
+    let close = 5000;
+    dates.forEach((date, i) => {
+      const before = close;
+      close = i < 60 ? 5000 + i * 1000 / 59 : i < 80 ? 6000 - (i - 59) * 30 : i === 80 ? close * 1.003 : i === 81 ? close * 1.002 : i === 82 ? close * 1.001 : i === 83 ? close * 1.016 : i < 110 ? close * 1.006 : close * 0.996;
+      const open = i ? before : close;
+      bars.push({ date, open, high: Math.max(open, close) * 1.001, low: Math.min(open, close) * (i > 79 && i < 84 ? 0.9995 : 0.999), close, volume: i === 83 ? 2e9 : 1e9 });
+    });
+    const ft = followThroughDay({ symbol: '^GSPC', bars, asOfDate: '2026-10-02' });
+    expect(ft).toMatchObject({ state: 'confirmed', ftd: { date: dates[83] } });
+    // The record's own low is the pullback's, after the FTD; the FTD event keeps the rally low.
+    expect(ft.low.date > ft.ftd.date).toBe(true);
+    expect(ft.events.find(e => e.type === 'ftd')).toMatchObject({ date: dates[83], lowDate: dates[79] });
+    const value = trends({ sp500: bars.map(bar => ({ date: bar.date, close: bar.close })), follow: [ft, attempt('2026-10-02')] });
+    show(value);
+    const md = date => `${Number(date.slice(5, 7))}/${Number(date.slice(8))}`;
+    expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線/ })).toHaveAttribute('aria-label', expect.stringContaining(`FTD ${md(dates[83])}、反発の安値 ${md(dates[79])}`));
+    const low = document.querySelector('.brief-index-mark.is-low'), x = i => 4 + i * 592 / 119;
+    expect(low.style.left).toBe(`${(100 * x(79) / 600).toFixed(2)}%`);
+  });
+
+  it('says a failed FTD failed on its ◆, draws no ○ without the FTD\'s own low, and puts a label near the top under its ◆', () => {
+    show(trends({ sp500: closes('2026-10-02', 300), follow: [failed('2026-10-02'), attempt('2026-10-02')] }));
+    const mark = document.querySelector('.brief-index-mark.is-ftd');
+    expect(mark).toHaveTextContent('◆FTD 8/7（失敗 10/2）');
+    expect(mark).toHaveClass('is-failed');
+    expect(document.querySelector('.brief-index-mark.is-low')).toBeNull();
+    expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線/ }).getAttribute('aria-label')).toMatch(/。FTD 8\/7（失敗 10\/2）。目盛り/);
+    expect(document.querySelector('.brief-index-legend .is-ftd')).toHaveTextContent('◆ FTD（失敗）');
+    cleanup();
+    // An FTD on the window's high: the label goes under the ◆, inside the frame.
+    const late = { ...confirmed('2026-10-02'), ftd: { ...confirmed('2026-10-02').ftd, date: '2026-10-01' } };
+    show(trends({ sp500: closes('2026-10-02', 300), follow: [late, attempt('2026-10-02')] }));
+    expect(document.querySelector('.brief-index-mark.is-ftd')).toHaveClass('is-below');
+    expect(document.querySelector('.brief-index-mark.is-ftd')).not.toHaveClass('is-failed');
   });
 
   it('uses none of the banned words anywhere on the market card or in its sources', () => {

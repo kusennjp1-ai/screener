@@ -7,11 +7,15 @@
 .brief-index-ma200 { fill: none; stroke: var(--text-3); stroke-width: 1.2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
 .brief-index-legend .is-ma200::before { height: 0; border-top: 2px dashed var(--text-3); background: none; }
 .brief-index-legend .is-ftd::before { display: none; }
-.brief-index-scale { position: absolute; left: 4px; transform: translateY(-50%); padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 82%, transparent); font-size: 12px; line-height: 16px; color: var(--text-2); pointer-events: none; }
+/* The price labels keep a halo, not a filled pill, so the lines' starts stay visible under them. */
+.brief-index-scale { position: absolute; left: 4px; transform: translateY(-50%); padding: 0 2px; background: none; text-shadow: 0 0 2px var(--surface), 0 0 4px var(--surface), 0 0 4px var(--surface); font-size: 12px; line-height: 16px; color: var(--text-2); pointer-events: none; }
 .brief-index-mark { position: absolute; transform: translate(-50%, -50%); font-size: 12px; line-height: 1; color: var(--text); pointer-events: none; }
 .brief-index-mark.is-low { color: var(--text-2); }
 .brief-index-mark-label { position: absolute; bottom: calc(100% + 4px); left: 50%; padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 82%, transparent); font-size: 12px; line-height: 16px; white-space: nowrap; color: var(--text); }
 .brief-index-mark.is-end .brief-index-mark-label { left: auto; right: 50%; }
+/* A close near the frame's top: the label goes under its ◆, so it never leaves the frame. */
+.brief-index-mark.is-below .brief-index-mark-label { bottom: auto; top: calc(100% + 4px); }
+.brief-index-mark.is-failed { color: var(--text-2); }
 
 /* The 200-day distance sits under the 50-day one, so the stats row keeps its height. */
 .brief-index-stats > .is-ma { flex: 0 1 auto; }

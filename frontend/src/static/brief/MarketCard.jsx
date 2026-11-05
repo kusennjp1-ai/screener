@@ -30,9 +30,15 @@ function IndexChart({ sp500, distribution, distributionEnd, followThrough = null
   // The exporter's follow-through record for the same index: a mark only for a day inside the window.
   const ft = detail && followThrough?.available === true ? followThrough : null, find = day => isDay(day) ? points.findIndex(p => p.date === day) : -1;
   const ftdAt = ft && ['confirmed', 'ftd_failed'].includes(ft.state) ? find(ft.ftd?.date) : -1;
-  const lowAt = ft && ['rally_attempt', 'attempt_expired', 'confirmed', 'ftd_failed'].includes(ft.state) ? find(ft.low?.date) : -1;
+  // The rally low: during an attempt the record's own low; once an FTD stands (or failed) the record's low is a
+  // later pullback's, so the low the FTD confirmed comes from its ftd event. Without that date, no ○.
+  const rallyLow = !ft ? null : ['rally_attempt', 'attempt_expired'].includes(ft.state) ? ft.low?.date
+    : ['confirmed', 'ftd_failed'].includes(ft.state) ? (Array.isArray(ft.events) ? ft.events : []).find(e => e?.type === 'ftd' && e.date === ft.ftd?.date)?.lowDate : null;
+  const lowAt = find(rallyLow);
   const at = i => ({ left: `${(100 * x(i) / W).toFixed(2)}%`, top: `${(100 * y(points[i].close) / H).toFixed(2)}%` });
-  const words = [ftdAt >= 0 ? `FTD ${shortDate(points[ftdAt].date, chartEnd)}` : null, lowAt >= 0 ? `反発の安値 ${shortDate(points[lowAt].date, chartEnd)}` : null].filter(Boolean);
+  // A failed FTD keeps its ◆ but says it failed, so the mark never reads as a standing follow-through.
+  const ftdWord = ftdAt >= 0 ? `FTD ${shortDate(points[ftdAt].date, chartEnd)}${ft.state === 'ftd_failed' && isDay(ft.failedDate) ? `（失敗 ${shortDate(ft.failedDate, chartEnd)}）` : ft.state === 'ftd_failed' ? '（失敗）' : ''}` : null;
+  const words = [ftdWord, lowAt >= 0 ? `反発の安値 ${shortDate(points[lowAt].date, chartEnd)}` : null].filter(Boolean);
   const svg = <svg className={`brief-index${detail ? ' is-detail' : ''}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
     aria-label={`S&P 500 の終値と50日線${line200 ? '・200日線' : ''}（${points[0].date}〜${chartEnd}）。有効な分配日 ${marks.length}日${words.length ? `。${words.join('、')}` : ''}${detail ? `。目盛り ${num(lo, 0)}〜${num(hi, 0)}` : ''}`}>
     {line200 && <path d={line200} className="brief-index-ma200" />}
@@ -47,9 +53,10 @@ function IndexChart({ sp500, distribution, distributionEnd, followThrough = null
       <span className="brief-index-scale is-hi numeric" aria-hidden="true" style={{ top: `${(100 * y(hi) / H).toFixed(2)}%` }}>{num(hi, 0)}</span>
       <span className="brief-index-scale is-lo numeric" aria-hidden="true" style={{ top: `${(100 * y(lo) / H).toFixed(2)}%` }}>{num(lo, 0)}</span>
       {lowAt >= 0 && <span className="brief-index-mark is-low" aria-hidden="true" style={at(lowAt)}>○</span>}
-      {ftdAt >= 0 && <span className={`brief-index-mark is-ftd${x(ftdAt) > W * 0.6 ? ' is-end' : ''}`} aria-hidden="true" style={at(ftdAt)}>◆<span className="brief-index-mark-label">FTD {shortDate(points[ftdAt].date, chartEnd)}</span></span>}
+      {/* The FTD label sits above its ◆, or below it when the close is near the frame's top. */}
+      {ftdAt >= 0 && <span className={`brief-index-mark is-ftd${x(ftdAt) > W * 0.6 ? ' is-end' : ''}${y(points[ftdAt].close) < H * 0.3 ? ' is-below' : ''}${ft.state === 'ftd_failed' ? ' is-failed' : ''}`} aria-hidden="true" style={at(ftdAt)}>◆<span className="brief-index-mark-label">{ftdWord}</span></span>}
     </div> : svg}
-    <p className="brief-index-legend" aria-hidden="true"><span className="is-close">S&amp;P 500 終値（{detail ? `${shortDate(points[0].date, chartEnd)}〜${shortDate(chartEnd, chartEnd)}` : '半年'}）</span><span className="is-ma">50日線</span>{line200 && <span className="is-ma200">200日線</span>}<span className="is-dist">▲ 分配日{detail && distributionEnd && distributionEnd !== chartEnd ? `（${shortDate(distributionEnd, chartEnd)}まで）` : ''}</span>{(ftdAt >= 0 || lowAt >= 0) && <span className="is-ftd">{ftdAt >= 0 ? '◆ FTD' : ''}{ftdAt >= 0 && lowAt >= 0 ? '・' : ''}{lowAt >= 0 ? '○ 反発の安値' : ''}</span>}</p>
+    <p className="brief-index-legend" aria-hidden="true"><span className="is-close">S&amp;P 500 終値（{detail ? `${shortDate(points[0].date, chartEnd)}〜${shortDate(chartEnd, chartEnd)}` : '半年'}）</span><span className="is-ma">50日線</span>{line200 && <span className="is-ma200">200日線</span>}<span className="is-dist">▲ 分配日{detail && distributionEnd && distributionEnd !== chartEnd ? `（${shortDate(distributionEnd, chartEnd)}まで）` : ''}</span>{(ftdAt >= 0 || lowAt >= 0) && <span className="is-ftd">{ftdAt >= 0 ? `◆ FTD${ft.state === 'ftd_failed' ? '（失敗）' : ''}` : ''}{ftdAt >= 0 && lowAt >= 0 ? '・' : ''}{lowAt >= 0 ? '○ 反発の安値' : ''}</span>}</p>
   </>;
 }
 

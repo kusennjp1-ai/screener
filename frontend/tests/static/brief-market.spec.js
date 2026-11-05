@@ -41,8 +41,9 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(market.getByRole('link', { name: /市場の詳細/ })).toHaveCount(0);
     // The phone's Today hides the verdict and the chart; the market tab keeps both visible.
     await expect(market.getByTestId('brief-regime')).toBeVisible();
-    // The market tab's chart adds the 200-day line, the FTD day and the rally low (Today's keeps the 50-day line).
-    await expect(market.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（.*〜2026-10-02）。有効な分配日 3日。FTD 8\/13、反発の安値 \d+\/\d+。目盛り [\d,]+〜[\d,]+$/ })).toBeVisible();
+    // The market tab's chart adds the 200-day line and the FTD day (Today's keeps the 50-day line); the base
+    // fixture's follow-through record has no ftd event, so there is no rally-low date and no ○.
+    await expect(market.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（.*〜2026-10-02）。有効な分配日 3日。FTD 8\/13。目盛り [\d,]+〜[\d,]+$/ })).toBeVisible();
     // Verdict first, then the evidence grouped in decision order: index trend, participation, leaders.
     await expect(market.locator('.brief-env-group h3')).toHaveText(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
     // A phone shows the index section first, the others behind tabs that count their warnings and mark, with a
@@ -200,11 +201,19 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
 
 // ---- 過去の傾向, the exposure basis, the index position (Track B) ----------------------------------------------
 const DD_METHOD = 'index-down-strictly-over-0.2-higher-volume-age25-high5-v1';
-/** The exporter's shape: method ids on both index series and, with `nasdaq`, the Nasdaq's position on its last session. */
+/**
+ * The exporter's shape: method ids on both index series, the S&P's ftd event with the rally low it confirmed
+ * (followThroughDay records it; the record's own `low` is then a later pullback's, as on live data) and, with
+ * `nasdaq`, the Nasdaq's position on its last session.
+ */
 const published = ({ nasdaq = false } = {}) => ({ trends: value => {
   for (const index of value.indices) index.method = DD_METHOD;
+  const ft = value.indices[0].followThrough, dates = value.indices[0].points.map(point => point.date);
+  ft.events = [{ type: 'ftd', date: ft.ftd.date, attemptDay: ft.ftd.attemptDay, gainPct: ft.ftd.gainPct, volumeRatio: ft.ftd.volumeRatio, lowDate: ft.low.date }];
+  ft.low = { date: dates.at(-6), low: 5900 };
   if (nasdaq) value.indices[1].state = { date: value.indices[1].points.at(-1).date, close: 18234.56, vs50: -1.4, vs200: 3.2, fromHigh: -7.25, fullYear: true };
 } });
+const md = day => day.slice(5).split('-').map(Number).join('/');
 
 test.describe('desktop 1440px: the study block and the guide\'s basis', () => {
   test.use(VIEWPORTS.desktop);
@@ -240,8 +249,12 @@ test.describe('desktop 1440px: the study block and the guide\'s basis', () => {
   });
 
   test('the index chart draws a dashed 200-day line, the FTD day and the rally low inside its window', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/market');
+    let lowDate = null, pullback = null;
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: { trends: value => { published().trends(value); lowDate = value.indices[0].followThrough.events[0].lowDate; pullback = value.indices[0].followThrough.low.date; } } });
     const frame = page.getByRole('region', { name: '地合い' }).locator('.brief-index-frame');
+    // The ○ is the rally low the FTD confirmed (its ftd event), never the record's later pullback low.
+    await expect(frame.getByRole('img')).toHaveAttribute('aria-label', new RegExp(`。FTD 8/13、反発の安値 ${md(lowDate)}。目盛り`));
+    expect(await frame.getByRole('img').getAttribute('aria-label')).not.toContain(`反発の安値 ${md(pullback)}`);
     const ma200 = frame.locator('svg.brief-index path.brief-index-ma200');
     await expect(ma200).toHaveCount(1);
     expect(await ma200.getAttribute('d')).toMatch(/^M[\d.]+,[\d.]+(L[\d.]+,[\d.]+){50,}$/);
@@ -249,12 +262,16 @@ test.describe('desktop 1440px: the study block and the guide\'s basis', () => {
     await expect(frame.locator('.brief-index-mark.is-ftd')).toHaveText('◆FTD 8/13');
     await expect(frame.locator('.brief-index-mark.is-low')).toHaveText('○');
     const box = await frame.boundingBox();
-    for (const mark of await frame.locator('.brief-index-mark, .brief-index-scale').all()) {
+    for (const mark of await frame.locator('.brief-index-mark, .brief-index-mark-label, .brief-index-scale').all()) {
       const at = await mark.boundingBox();
       expect(at.x).toBeGreaterThanOrEqual(box.x - 1);
       expect(at.x + at.width).toBeLessThanOrEqual(box.x + box.width + 1);
+      expect(at.y).toBeGreaterThanOrEqual(box.y - 1);
+      expect(at.y + at.height).toBeLessThanOrEqual(box.y + box.height + 1);
       expect(parseFloat(await mark.evaluate(node => getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(12);
     }
+    // The price labels keep a halo, not a filled pill over the lines' starts.
+    expect(await frame.locator('.brief-index-scale').first().evaluate(node => [getComputedStyle(node).backgroundColor, getComputedStyle(node).textShadow !== 'none'])).toEqual(['rgba(0, 0, 0, 0)', true]);
     // Today's chart is unchanged: the 50-day line only.
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
     await expect(page.getByRole('region', { name: '地合い' }).locator('svg.brief-index')).toBeVisible();
