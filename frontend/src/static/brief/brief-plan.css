@@ -1,0 +1,46 @@
+/* Position plan (StockPlanCard). Overrides brief.css rules for the plan card only, at equal or higher
+   specificity (this file loads after brief.css and the track files before it). */
+
+/* The single-stock cap: an input in the inputs' column width (and their field style), its terms beside it. */
+.brief-plan-cap { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; align-items: center; }
+.brief-plan-cap label { display: grid; gap: 4px; min-width: 0; font-size: 11px; color: var(--text-3); }
+.brief-plan-cap input { min-height: 44px; width: 100%; border: 1px solid color-mix(in srgb, var(--text-3) 80%, var(--surface)); border-radius: 12px; background: var(--surface-2); color: var(--text); padding: 0 10px; font-family: var(--font-mono); font-size: 16px; }
+.brief-plan-cap .brief-plan-terms { grid-column: span 2; }
+.brief-plan-terms { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-3); }
+
+/* Tiles: the notes under a figure in the secondary text colour; the market guide over its maximum in the ext tone. */
+.brief-plan .brief-kgrid > div { align-content: start; }
+.brief-plan .brief-kgrid em { color: var(--text-2); }
+.brief-plan .brief-plan-guide.tone-ext em { color: var(--ext); font-weight: 700; }
+
+/* The R bar carries the −1R, +2R and +3R prices; a label wraps inside its segment rather than overflow. */
+.brief-plan .brief-rbar { height: auto; min-height: 32px; }
+.brief-plan .brief-rbar i { padding: 4px; line-height: 1.3; text-align: center; overflow-wrap: anywhere; min-width: 0; }
+
+/* The stop width and, beside it, the stock's ADR (a stop inside one day's range is easily hit). */
+.brief-range-text { display: flex; flex-wrap: wrap; gap: 0 12px; }
+.brief-plan-adr { color: var(--text-2); }
+
+/* The structural stop, close under the R bar: two lines of text beside its 44px button, or one line when
+   there is nothing to apply. */
+.brief-structural { display: flex; align-items: center; gap: 8px; min-width: 0; margin: -4px 0 0; font-size: 13px; line-height: 1.45; color: var(--text); }
+.brief-structural p { flex: 1 1 auto; min-width: 0; margin: 0; }
+.brief-structural > span, .brief-structural > small, .brief-structural p > span, .brief-structural p > small { display: block; }
+.brief-structural small { font-size: 12px; line-height: 1.5; color: var(--text-2); }
+p.brief-structural { display: block; }
+.brief-structural.is-unknown > span, .brief-structural.is-unknown > small { display: inline; }
+.brief-structural.tone-ext small { color: var(--ext); font-weight: 700; }
+.brief-structural b { font-weight: 700; }
+.brief-structural button { flex: none; min-height: 44px; padding: 0 12px; margin-left: auto; border: 1px solid var(--line-2); border-radius: 12px; background: var(--surface-2); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; white-space: nowrap; cursor: pointer; transition: background .2s, color .2s; }
+.brief-structural button:hover:not(:disabled) { background: color-mix(in srgb, var(--surface-2) 60%, var(--surface)); }
+.brief-structural button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.brief-structural button:disabled { cursor: default; color: var(--text-2); background: none; }
+
+/* A position that gets no new plan: the reason only. */
+.brief-plan-blocked { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+
+/* Phones: the plan's small text at the 12px floor. */
+@media (max-width: 520px) {
+  .brief-plan .brief-rbar, .brief-plan .brief-inputs label, .brief-plan-cap label, .brief-plan .brief-kgrid small, .brief-plan .brief-kgrid em { font-size: 12px; }
+  .brief-structural button { padding: 0 8px; font-size: 12px; }
+}
