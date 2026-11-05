@@ -171,7 +171,8 @@ describe('brief price chart', () => {
     expect(el.getAttribute('aria-label')).toContain('週足チャート');
     expect(el.querySelectorAll('.bc-up, .bc-down').length).toBe(count * 2);
     expect(el.textContent).toContain('出来高・10週平均');
-    expect(texts(el, '.bc-notice').slice(0, 2)).toEqual([`週足は直近${count}週分（${weeklyBars(bars)[0].start.slice(0, 7)}〜）。`, '2年分はありません']);
+    // The month is written as on the date axis (YYYY/MM).
+    expect(texts(el, '.bc-notice').slice(0, 2)).toEqual([`週足は直近${count}週分（${weeklyBars(bars)[0].start.slice(0, 7).replace('-', '/')}〜）。`, '2年分はありません']);
   });
 
   it('ticks month starts and writes the year at the left edge and where it changes', () => {
@@ -197,7 +198,12 @@ describe('brief price chart', () => {
     renderPriceChart(el, { ...model, rsLead: { dates: [...dates, '1999-01-01'], threshold: 120 } }, { period: 130, animate: false });
     expect(el.querySelectorAll('.bc-rslead')).toHaveLength(3);
     expect(el.querySelector('.bc-rsmax')).not.toBeNull();
-    expect(el.querySelector('.bc-rscaption').textContent).toBe('RS線（株価÷S&P 500）— RS推計（独自）・IBD RSとは別');
+    // The RS line is neither RS推計 (the rating) nor IBD RS, at every width.
+    expect(el.querySelector('.bc-rscaption').textContent).toBe('RS線（株価÷S&P 500）・RS推計やIBD RSとは別');
+    expect(el.getAttribute('aria-label')).toContain('RS線（株価÷S&P 500。RS推計やIBD RSとは別）を表示');
+    const narrow = container(280, 340);
+    renderPriceChart(narrow, model, { period: 130, animate: false });
+    expect(narrow.querySelector('.bc-rscaption').textContent).toBe('RS線（株価÷S&P 500）・RS推計/IBD RSと別');
     const high = container();
     renderPriceChart(high, { ...model, rsLead: { dates: [], threshold: 999 } }, { period: 130, animate: false });
     expect(high.querySelector('.bc-rsmax')).toBeNull();
@@ -220,6 +226,9 @@ describe('brief price chart', () => {
     expect(near.querySelector('.bc-earnings-soon')).toBeNull();
     expect(soon.querySelector('.bc-earnings-soon').textContent).toBe('決算 11/12 あと8日');
     expect(far.querySelector('.bc-earnings')).toBeNull();
+    const today = container();
+    renderPriceChart(today, { ...model, earnings: { date: '2026-10-02', days: 0 } }, { period: 130, animate: false });
+    expect(texts(today, '.bc-earnings')).toEqual(['決算 10/2 当日']);
     expect(none.querySelector('.bc-earnings')).toBeNull();
     const gaps = container();
     renderPriceChart(gaps, { ...model, gaps: [{ date: bars.at(-5).date, direction: 'up' }, { date: bars[0].date, direction: 'down' }] }, { period: 130, animate: false });
@@ -270,5 +279,56 @@ describe('brief price chart', () => {
     const el = container();
     expect(renderPriceChart(el, { ...model, bars: [] }, { animate: false })).toBeNull();
     expect(el.textContent).toContain('日足データが不足しています');
+  });
+
+  it('keeps the names of the averages off the newest candles, joined to their lines by a leader when moved', () => {
+    // A tight, flat finish: every average ends inside the last candles' range.
+    const flat = bars.map((b, i) => (i > 200 ? { ...b, open: 90, high: 91.5, low: 88.5, close: 90 } : b));
+    for (const width of [390, 1000]) {
+      const el = container(width, 340);
+      renderPriceChart(el, { ...model, bars: flat, pivot: 92, upper: 96.6, stop: 85, legs: [] }, { period: 130, animate: false });
+      const bodies = [...el.querySelectorAll('rect.bc-up, rect.bc-down')].slice(-5).map(r => ({ x0: Number(r.getAttribute('x')), x1: Number(r.getAttribute('x')) + Number(r.getAttribute('width')), y0: Number(r.getAttribute('y')), y1: Number(r.getAttribute('y')) + Number(r.getAttribute('height')) }));
+      const labels = [...el.querySelectorAll('.bc-malabel')];
+      expect(labels.length).toBeGreaterThan(0);
+      for (const label of labels) {
+        const right = Number(label.getAttribute('x')), base = Number(label.getAttribute('y')), w = label.textContent.length * 7.2;
+        const covered = bodies.filter(body => right > body.x0 && right - w < body.x1 && base + 2 > body.y0 && base - 10 < body.y1);
+        expect({ label: label.textContent, width, covered }).toEqual({ label: label.textContent, width, covered: [] });
+      }
+      expect(el.querySelectorAll('.bc-maleader').length).toBeGreaterThan(0);
+    }
+  });
+
+  it('writes 出来高の枯渇 inside the volume panel, clear of its caption', () => {
+    const el = container(600, 420);
+    renderPriceChart(el, { ...model, dryUpLeg: model.legs[1] }, { period: 130, animate: false });
+    const note = el.querySelector('.bc-notetext'), caption = el.querySelector('.bc-volcaption');
+    expect(note.textContent).toBe('出来高の枯渇');
+    expect(note.getAttribute('y')).toBe(caption.getAttribute('y'));
+    expect(Number(note.getAttribute('x'))).toBeGreaterThan(4 + 12 * 14);
+    expect(caption.querySelector('.bc-volkey').textContent).toBe('●');
+    // A phone has no room beside the caption: the name goes on the line under it, still in the panel.
+    const phone = container(390, 340);
+    renderPriceChart(phone, { ...model, dryUpLeg: model.legs[1] }, { period: 130, animate: false });
+    const under = phone.querySelector('.bc-notetext');
+    expect(Number(under.getAttribute('y'))).toBe(Number(phone.querySelector('.bc-volcaption').getAttribute('y')) + 14);
+  });
+
+  it('offers the plot corner with the fewest candles for 最新足, never over the selected bar or the notices', () => {
+    // A rising chart under a buy zone at its top: the bottom-right corner is empty.
+    const el = container(390, 340);
+    const chart = renderPriceChart(el, model, { period: 130, animate: false });
+    const corner = chart.freeCorner(72, 44);
+    expect(corner.x).toBe(390 - 68 - 4 - 72);
+    const bodies = [...el.querySelectorAll('rect.bc-up, rect.bc-down')].map(r => ({ x: Number(r.getAttribute('x')), y: Number(r.getAttribute('y')), h: Number(r.getAttribute('height')) }));
+    expect(bodies.filter(b => b.x > corner.x && b.x < corner.x + 72 && b.y < corner.y + 44 && b.y + b.h > corner.y)).toEqual([]);
+    // With a bar selected under that corner, another corner is chosen.
+    chart.select(bars.length - 5);
+    expect(chart.freeCorner(72, 44)).not.toEqual(corner);
+    // The notices take a corner first: 最新足 does not cover them.
+    const missing = container(390, 340);
+    const other = renderPriceChart(missing, { ...model, pivot: null, upper: null }, { period: 130, animate: false });
+    const notice = missing.querySelector('.bc-notice'), spot = other.freeCorner(72, 44);
+    expect(Math.abs(spot.x - Number(notice.getAttribute('x'))) > 72 || Math.abs(spot.y - Number(notice.getAttribute('y'))) > 44).toBe(true);
   });
 });

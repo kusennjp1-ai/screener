@@ -15,6 +15,7 @@ const fmt = (value, digits = 2) => (finite(value) ? value.toLocaleString('en-US'
 const signed = (value, digits = 1) => (finite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.abs(value).toFixed(digits)}%` : '—');
 const esc = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const FS = 12, TAG_H = 20, TAG_GAP = 20;
+const RS_CAPTION = 'RS線（株価÷S&amp;P 500）・RS推計やIBD RSとは別', RS_CAPTION_NARROW = 'RS線（株価÷S&amp;P 500）・RS推計/IBD RSと別';
 const mono = 'font-family="var(--font-mono)"';
 const text = (x, y, body, cls, extra = '') => `<text x="${x}" y="${y}" class="${cls}" font-size="${FS}" ${extra}>${body}</text>`;
 // Estimated width of a 12px label: CJK glyphs are 1em, mono digits 0.6em, other Latin about 0.56em.
@@ -208,18 +209,26 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
 
   // Front layer
   // Panel captions. The RS caption sits in the panel's top margin, clear of the line.
-  const rsCaption = rsKnown.length > 1 ? (W >= 300 ? 'RS線（株価÷S&amp;P 500）— RS推計（独自）・IBD RSとは別' : 'RS線（株価÷S&amp;P 500）・IBD RSとは別')
-    : `RS線 未配信${model.rsReason ? `（${esc(model.rsReason)}）` : ''}`;
+  // The RS line is not RS推計 (the 1–99 rating) and not IBD RS: the caption keeps the three apart at every width.
+  const rsCaption = rsKnown.length > 1 ? (W >= 300 ? RS_CAPTION : RS_CAPTION_NARROW) : `RS線 未配信${model.rsReason ? `（${esc(model.rsReason)}）` : ''}`;
   F.push(text(4, rsTop + 12, rsCaption, 'bc-caption bc-rscaption'));
-  const heavyLabel = `●${BREAKOUT_VOLUME_RATIO.toFixed(1)}×以上（独自判定）`;
-  F.push(text(4, volTop + 12, pw >= 230 ? `出来高・${volumeLength}${unit}平均・${heavyLabel}` : `出来高・${heavyLabel}`, 'bc-caption bc-volcaption'));
+  const heavyLabel = `<tspan class="bc-volkey">●</tspan>${BREAKOUT_VOLUME_RATIO.toFixed(1)}×以上（独自判定）`;
+  const volumeCaption = pw >= 230 ? `出来高・${volumeLength}${unit}平均・${heavyLabel}` : `出来高・${heavyLabel}`;
+  F.push(text(4, volTop + 12, volumeCaption, 'bc-caption bc-volcaption'));
+  const volumeCaptionRight = 4 + width(volumeCaption.replace(/<[^>]+>/g, ''));
   // The volume axis: the period's maximum and the latest average (— when its window is short).
   const averageNow = series.latestAverage;
   F.push(text(pw + 6, volTop + 11, formatVolume(vmax), 'bc-axis bc-volmax', mono));
   F.push(text(pw + 6, Math.min(volTop + volH, Math.max(volTop + 27, (finite(averageNow) && averageNow <= vmax ? vy(averageNow) : volTop + volH) + 4)), `平均 ${formatVolume(averageNow)}`, 'bc-axis bc-volavg'));
   if (dry && Number.isInteger(dry.a) && Number.isInteger(dry.b) && dry.b - dry.a > 3) {
     const xa = Math.max(0, x(dry.a) - bw / 2), xb = x(dry.b) + bw / 2;
-    F.push(`<g class="bc-note"><path d="M${xa},${volTop - 1}v-4H${xb}v4" class="bc-bracket" fill="none"/><line x1="${xa}" x2="${xb}" y1="${volTop + volH + 1.5}" y2="${volTop + volH + 1.5}" class="bc-dryline"/>${text((xa + xb) / 2, volTop - 8, '出来高の枯渇', 'bc-notetext', 'text-anchor="middle" font-weight="700"')}</g>`);
+    // Its name sits inside the volume panel, above the (low) dry-up bars: beside the caption when there is
+    // room, otherwise on the line under it; left out when the panel is too short for a second line.
+    const note = '出来高の枯渇', w = width(note), centre = (xa + xb) / 2 - w / 2;
+    const beside = Math.min(Math.max(centre, volumeCaptionRight + 8), pw - 4 - w), under = Math.min(Math.max(centre, 4), pw - 4 - w);
+    const label = beside >= volumeCaptionRight + 8 ? text(beside.toFixed(1), volTop + 12, note, 'bc-notetext', 'font-weight="700"')
+      : volH >= 40 ? text(under.toFixed(1), volTop + 26, note, 'bc-notetext', 'font-weight="700"') : '';
+    F.push(`<g class="bc-note"><path d="M${xa},${volTop - 1}v-4H${xb}v4" class="bc-bracket" fill="none"/><line x1="${xa}" x2="${xb}" y1="${volTop + volH + 1.5}" y2="${volTop + volH + 1.5}" class="bc-dryline"/>${label}</g>`);
   }
   // Levels: dotted plan lines (entry, 2R, 3R) and the structural low only inside the y-range; the 52-week high
   // (certified bars only, from the published audit). The y-axis is never widened for them.
@@ -250,31 +259,43 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   // contractions' T numbers right-first, the zone, the pivot and the stop, the other levels, the depths.
   const boxes = [];
   const fits = (x0, x1, yc) => yc - 6 >= padT && yc + 6 <= plotBottom && !boxes.some(b => x0 < b.x1 + 3 && x1 > b.x0 - 3 && Math.abs(yc - b.y) < 13);
+  // A label box over a candle (its whole high–low range, the body's width plus 1px).
+  const overCandle = (x0, x1, yc) => bars.some((b, i) => x(i) + cw / 2 + 1 > x0 && x(i) - cw / 2 - 1 < x1 && y(b.high) < yc + 7 && y(b.low) > yc - 7);
   const claim = (x0, w, candidates, required = false) => {
     for (const yc of candidates) if (fits(x0, x0 + w, yc)) { boxes.push({ x0, x1: x0 + w, y: yc }); return yc; }
     if (!required) return null;
     boxes.push({ x0, x1: x0 + w, y: candidates[0] });
     return candidates[0];
   };
+  const lines = [model.pivot, model.upper, model.stop, model.auditHigh].filter(inRange).map(y);
+  let noticeBox = null;
   const notices = [];
-  if (weekly && all.length < 104) notices.push(`週足は直近${all.length}週分（${(all[0].start || all[0].date).slice(0, 7)}〜）。`, '2年分はありません');
+  if (weekly && all.length < 104) notices.push(`週足は直近${all.length}週分（${(all[0].start || all[0].date).slice(0, 7).replace('-', '/')}〜）。`, '2年分はありません');
   if (!hasPivot) notices.push('ピボット 未確認');
   if (model.legsValid === false) notices.push('収縮は未確認');
   if (notices.length) {
     // The notices take the plot corner with the fewest candles and level lines under them (top-left first).
     const w = Math.max(...notices.map(notice => width(notice))), h = notices.length * 16;
-    const lines = [model.pivot, model.upper, model.stop, model.auditHigh].filter(inRange).map(y);
     const corners = [[4, padT + 9], [4, plotBottom - h + 7], [Math.max(4, pw - 34 - w), plotBottom - h + 7], [Math.max(4, pw - 34 - w), padT + 9]];
     const score = ([x0, top]) => bars.reduce((sum, b, i) => sum + (x(i) >= x0 && x(i) <= x0 + w && y(b.high) <= top + h && y(b.low) >= top - 8 ? 1 : 0), 0) + lines.filter(ly => ly >= top - 10 && ly <= top + h).length * 4;
     const [nx, ny] = corners.reduce((best, corner) => (score(corner) < score(best) ? corner : best));
+    noticeBox = { x0: nx, x1: nx + w, y0: ny - 8, y1: ny - 8 + h };
     notices.forEach((notice, i) => { const yc = claim(nx, width(notice), [ny + i * 16], true); F.push(text(nx.toFixed(1), (yc + 4).toFixed(1), notice, 'bc-notice')); });
   }
-  // Moving-average names at their right ends, spread vertically so none overlaps.
+  // Moving-average names at their right ends, spread vertically so none overlaps and never over the newest
+  // candles: one whose place is taken moves to the nearest free height (a 1px leader behind the candles
+  // joins it to its line's end) and is left out when there is none within 72px.
   const ends = averages.map(a => ({ a, v: a.shown.at(-1) })).filter(({ v }) => finite(v) && inRange(v)).map(({ a, v }) => ({ key: a.key, y: y(v), body: String(a.length) }));
   for (const label of spread(ends, 13, padT + 6, plotBottom - 6)) {
-    const w = width(label.body, true);
-    claim(pw - 3 - w, w, [label.at], true);
-    F.push(text((pw - 3).toFixed(1), (label.at + 4).toFixed(1), label.body, `bc-malabel bc-malabel-${label.key}`, `text-anchor="end" font-weight="700" ${mono}`));
+    const w = width(label.body, true), x0 = pw - 3 - w;
+    let at = null;
+    for (let d = 0; d <= 72 && at === null; d += 2) {
+      for (const yc of d ? [label.at - d, label.at + d] : [label.at]) if (fits(x0, pw - 3, yc) && !overCandle(x0, pw - 3, yc)) { at = yc; break; }
+    }
+    if (at === null) continue;
+    boxes.push({ x0, x1: pw - 3, y: at });
+    if (Math.abs(at - label.y) > 3) B.push(`<line x1="${pw - 1.5}" x2="${pw - 1.5}" y1="${label.y.toFixed(1)}" y2="${(at + (label.y > at ? 6 : -6)).toFixed(1)}" class="bc-maleader bc-maleader-${label.key}"/>`);
+    F.push(text((pw - 3).toFixed(1), (at + 4).toFixed(1), label.body, `bc-malabel bc-malabel-${label.key}`, `text-anchor="end" font-weight="700" ${mono}`));
   }
   // Contraction labels: T1…Tn over the boxes (centres at least 18px apart, the newest kept first and the
   // last always) and each depth under its box when the box is wide enough.
@@ -323,7 +344,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   if (model.rsNewHigh && rsLast != null) F.push(`<g class="bc-rshigh"><circle cx="${lastX}" cy="${rsLast}" r="4" class="bc-rsdot"/>${text(lastX - 8, rsLast + 4, '新高値', 'bc-rstext', 'text-anchor="end" font-weight="700"')}</g>`);
   // The date axis: month ticks with the year where it starts or changes, and the next earnings date outside its right edge.
   const earnings = model.earnings && finite(model.earnings.days) && model.earnings.days <= 28 ? model.earnings : null;
-  const earningsText = earnings ? `決算 ${Number(earnings.date.slice(5, 7))}/${Number(earnings.date.slice(8))} あと${earnings.days}日` : null;
+  const earningsText = earnings ? `決算 ${Number(earnings.date.slice(5, 7))}/${Number(earnings.date.slice(8))} ${earnings.days === 0 ? '当日' : `あと${earnings.days}日`}` : null;
   const axisLimit = earningsText ? W - width(earningsText) - 10 : W;
   let previousRight = -Infinity;
   for (const tick of dateTicks(bars, pw)) {
@@ -339,7 +360,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const box = `viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false"`;
   const depths = (model.legs || []).map(leg => `${Math.round(leg.depthPct)}%`).join('→');
   el.setAttribute('role', 'img');
-  el.setAttribute('aria-label', `${model.symbol} の${unit}足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${hasPivot ? `、ピボット ${fmt(model.pivot)}` : '、ピボット 未確認'}${finite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : model.legsValid === false ? '、収縮は未確認' : ''}${(model.sellMarks || []).some(m => barOf(m.date) !== undefined) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => barOf(m.date) !== undefined).map(m => m.date).join('・')}` : ''}${rsKnown.length > 1 ? '' : `。RS線 未配信${model.rsReason ? `（${model.rsReason}）` : ''}`}${earningsText ? `。${earningsText}` : ''}。`);
+  el.setAttribute('aria-label', `${model.symbol} の${unit}足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${hasPivot ? `、ピボット ${fmt(model.pivot)}` : '、ピボット 未確認'}${finite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : model.legsValid === false ? '、収縮は未確認' : ''}${(model.sellMarks || []).some(m => barOf(m.date) !== undefined) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => barOf(m.date) !== undefined).map(m => m.date).join('・')}` : ''}${rsKnown.length > 1 ? '。RS線（株価÷S&P 500。RS推計やIBD RSとは別）を表示' : `。RS線 未配信${model.rsReason ? `（${model.rsReason}）` : ''}`}${earningsText ? `。${earningsText}` : ''}。`);
   el.innerHTML = `<svg class="bc-layer" ${box}>${B.join('')}</svg><div class="bc-reveal"><svg class="bc-layer" ${box}>${M.join('')}</svg></div><svg class="bc-layer" ${box}>${F.join('')}</svg>`;
   const [back, reveal, front] = el.children, mid = reveal.firstChild;
 
@@ -408,7 +429,22 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     return back.querySelector(`.bc-leg[data-leg="${index}"]`) !== null;
   };
   const select = index => { const i = Number.isInteger(index) && index >= from && index < all.length ? index - from : null; current = i === n - 1 ? null : i; place(current); };
-  const controller = { moveStop, highlightLeg, select };
+  // The plot corner for a w×h control (「最新足」): the fewest candles, level lines and labels under it, never
+  // over the notices or the selected bar. Returns its top-left in CSS pixels (the viewBox is the display size).
+  const freeCorner = (w, h) => {
+    const spots = [[4, padT + 4], [pw - 4 - w, padT + 4], [4, plotBottom - 4 - h], [pw - 4 - w, plotBottom - 4 - h]];
+    const score = ([x0, y0]) => {
+      const x1 = x0 + w, y1 = y0 + h, across = (a0, a1, b0, b1) => a1 > b0 && a0 < b1;
+      let total = bars.reduce((sum, b, i) => sum + (across(x(i) - bw / 2, x(i) + bw / 2, x0, x1) && across(y(b.high), y(b.low), y0, y1) ? 1 : 0), 0);
+      total += lines.filter(ly => ly >= y0 && ly <= y1).length * 4 + boxes.filter(b => across(b.x0, b.x1, x0, x1) && across(b.y - 6, b.y + 6, y0, y1)).length * 8;
+      if (noticeBox && across(noticeBox.x0, noticeBox.x1, x0, x1) && across(noticeBox.y0, noticeBox.y1, y0, y1)) total += 500;
+      if (current !== null && across(x(current) - 6, x(current) + 6, x0, x1)) total += 1000;
+      return total;
+    };
+    const [bx, by] = spots.reduce((best, spot) => (score(spot) < score(best) ? spot : best));
+    return { x: Math.round(Math.max(0, bx)), y: Math.round(by) };
+  };
+  const controller = { moveStop, highlightLeg, select, freeCorner };
   if (!animate || reduced()) { front.querySelectorAll('.bc-pulse').forEach(e => { e.style.opacity = 0; }); return controller; }
 
   // Intro: grid → zone → candles swept in → contractions drop one by one → rising lows → pivot draws → tags → last price pulse.
