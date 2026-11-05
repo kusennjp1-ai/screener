@@ -127,7 +127,11 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
   const underOne = levels && finite(levels.risk) && levels.risk > 0 && finite(levels.riskDollars) && levels.riskDollars > 0
     && (levels.shares === 0 || levels.shares === null);
   const shares = finite(levels?.shares) && levels.shares > 0 ? `${levels.shares.toLocaleString('en-US')}株` : underOne ? '1株未満' : DASH;
-  const shareNote = underOne ? (levels.binding === 'cap' ? '1銘柄の上限超' : 'リスク上限超') : <>リスク {risk || DASH}</>;
+  // The cap set the count: the loss at the stop is then below the risk budget, so the tile gives the cap and that real risk.
+  const actual = finite(levels?.actualRisk) ? `$${Math.round(levels.actualRisk).toLocaleString('en-US')}` : null;
+  const shareNote = underOne ? (levels.binding === 'cap' ? '1銘柄の上限超' : 'リスク上限超')
+    : levels?.binding === 'cap' && finite(levels.capPercent) ? <><Unit>{`上限${levels.capPercent}%`}</Unit>・<Unit>実リスク {actual || DASH}</Unit></>
+      : <>リスク {risk || DASH}</>;
   const chips = [
     [stage ? `ステージ${stage.value}${stage.computed ? '（日足から算出）' : ''}` : 'ステージ 未確認', stage?.value === 2 ? 'zone' : stage ? 'ext' : ''],
     // Green only while the base still contracts: a base already broken out of is history (「・上抜け済み（M/D）」),

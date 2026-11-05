@@ -221,6 +221,14 @@ describe('the conclusion says why there is no buy', () => {
     cleanup();
     // No risk budget (no account): nothing was computed, so a dash.
     expect(tiles(conclusionOf({ plan: { ...base, shares: null, riskDollars: null } }))[2]).toEqual(['株数', DASH, `リスク ${DASH}`]);
+    cleanup();
+    // Track F's binding (I4, requested by Track F): the risk budget reads as before; when the single-stock cap
+    // set the count, the tile gives the cap and the loss at the stop, which is then below the budget.
+    expect(tiles(conclusionOf({ plan: { ...base, binding: 'risk', capPercent: 25, actualRisk: 622.2 } }))[2]).toEqual(['株数', '88株', 'リスク $625']);
+    cleanup();
+    expect(tiles(conclusionOf({ plan: { ...base, binding: 'cap', capPercent: 25, actualRisk: 547.3 } }))[2]).toEqual(['株数', '88株', '上限25%・実リスク $547']);
+    cleanup();
+    expect(tiles(conclusionOf({ plan: { ...base, binding: 'cap', capPercent: 25, actualRisk: null } }))[2]).toEqual(['株数', '88株', `上限25%・実リスク ${DASH}`]);
   });
 
   it('calls a heavy down day in the zone a warning and dates a recent crossing from certified bars', () => {
