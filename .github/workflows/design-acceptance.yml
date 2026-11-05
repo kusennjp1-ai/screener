@@ -147,6 +147,16 @@ jobs:
             head -c 900000 "$STUDY_OUT/results.md" >> "$GITHUB_STEP_SUMMARY" || return 1
           }
           study || echo '::warning title=Market-regime study unavailable::Diagnostic only; the Design result is unaffected.'
+      # The study files alone, kept 90 days so market-study-archive.yml can copy
+      # them to a release after the 14-day Design artifact (which keeps its own
+      # copy and retention below) has expired.
+      - name: Retain the market-regime study output for 90 days
+        uses: actions/upload-artifact@v4
+        with:
+          name: market-regime-study-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/market-regime-study/
+          retention-days: 90
+          if-no-files-found: warn
       - name: Build the current UI and verify its packed transport
         env:
           GH_TOKEN: ${{ github.token }}

@@ -84,8 +84,9 @@ jobs:
           )
 
           # The public financial audit archive (one immutable release per file)
-          # is never prunable: refuse before any view, download or delete.
-          RESERVED_RELEASE_PREFIXES = ("financial-audit-",)
+          # and the archived market-regime study output (market-study-archive.yml)
+          # are never prunable: refuse before any view, download or delete.
+          RESERVED_RELEASE_PREFIXES = ("financial-audit-", "market-regime-study-")
 
           def assert_prunable(release: str) -> None:
               if not isinstance(release, str) or not release or release.startswith(RESERVED_RELEASE_PREFIXES):

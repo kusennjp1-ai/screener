@@ -1,4 +1,5 @@
-"""Release asset cleanup must never prune the public financial audit archive.
+"""Release asset cleanup must never prune the public financial audit archive
+or the archived market-regime study releases.
 
 The real inline cleanup program is extracted from the workflow and executed with
 a fake ``gh`` on PATH, so the guard is exercised exactly as CI would run it.
@@ -26,6 +27,8 @@ if args[:2] == ["release", "view"]:
     release = args[2]
     if release.startswith("financial-audit-"):
         print(json.dumps({"assets": [{"name": "carry-projection-x.json.gz", "size": 9, "createdAt": "2026-11-01"}]}))
+    elif release.startswith("market-regime-study-"):
+        print(json.dumps({"assets": [{"name": "results.json", "size": 9, "createdAt": "2026-11-05"}]}))
     elif release == "daily-price-data":
         names = [f"daily-price-us-202610{day:02d}.json.gz" for day in range(1, 15)]
         print(json.dumps({"assets": [{"name": name, "size": 10, "createdAt": "2026-10-20"} for name in names]}))
@@ -70,21 +73,22 @@ class ReleaseAssetCleanupGuard(unittest.TestCase):
         self.assertEqual(len(deleted), 4, "daily-price-data keeps ten dated assets")
         self.assertTrue(all(call[2] == "daily-price-data" for call in deleted))
         for call in calls:
-            self.assertFalse(call[2].startswith("financial-audit-"), call)
+            self.assertFalse(call[2].startswith(("financial-audit-", "market-regime-study-")), call)
 
     def test_reserved_policy_exits_before_any_gh_call(self):
-        program = inline_program().replace('release="daily-price-data"', 'release="financial-audit-x"', 1)
-        self.assertIn('release="financial-audit-x"', program)
-        result, calls = self.run_cleanup(program)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Refusing to prune reserved release", result.stderr + result.stdout)
-        self.assertEqual(calls, [])
+        for target in ("financial-audit-x", "market-regime-study-v2-run-41844557380"):
+            program = inline_program().replace('release="daily-price-data"', f'release="{target}"', 1)
+            self.assertIn(f'release="{target}"', program)
+            result, calls = self.run_cleanup(program)
+            self.assertNotEqual(result.returncode, 0, target)
+            self.assertIn("Refusing to prune reserved release", result.stderr + result.stdout)
+            self.assertEqual(calls, [], target)
 
     def test_every_view_download_and_delete_is_guarded_even_without_the_startup_check(self):
         program = inline_program()
         startup = "for reserved_check in POLICIES:\n    assert_prunable(reserved_check.release)\n"
         self.assertIn(startup, program)
-        for target in ("financial-audit-archive-carry-projection-x", "financial-audit-y"):
+        for target in ("financial-audit-archive-carry-projection-x", "financial-audit-y", "market-regime-study-v2-run-41844557380"):
             changed = program.replace(startup, "").replace('release="daily-price-data"', f'release="{target}"', 1)
             result, calls = self.run_cleanup(changed)
             self.assertNotEqual(result.returncode, 0)
@@ -98,7 +102,13 @@ class ReleaseAssetCleanupGuard(unittest.TestCase):
             self.assertTrue(guard, command)
             between = window[guard[-1] + 1:]
             self.assertTrue(all(line in ('result = subprocess.run(', 'subprocess.run(', '[', '"gh",', '"release",', 'payload = gh_json(["release", "view", policy.release, "--json", "assets"])') or line.startswith('payload = gh_json') for line in between), (command, between))
-        self.assertIn('RESERVED_RELEASE_PREFIXES = ("financial-audit-",)', program)
+        self.assertIn('RESERVED_RELEASE_PREFIXES = ("financial-audit-", "market-regime-study-")', program)
+
+    def test_study_archive_tags_sit_under_a_reserved_prefix(self):
+        archive = (REPO / ".github/workflows/market-study-archive.yml").read_text()
+        self.assertEqual(archive.count('TAG_PREFIX = "market-regime-study-v2-run-"'), 2)
+        self.assertTrue("market-regime-study-v2-run-".startswith("market-regime-study-"))
+        self.assertNotIn("delete-asset", archive)
 
     def test_guard_is_registered_in_exact_main_ci(self):
         ci = (REPO / ".github/workflows/ci.yml").read_text()
