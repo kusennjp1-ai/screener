@@ -9,6 +9,19 @@ const symbolsShown = page => candidates(page).evaluateAll(nodes => nodes.map(nod
 const phoneDevice = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const PHONES = { 320: phoneDevice(320, 640), 390: VIEWPORTS.phone };
 const median = values => { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor(sorted.length / 2)]; };
+/**
+ * A heavy-volume break of the 50-day line nine sessions ago with the close still under the line (Track E's
+ * fixture for a broken setup, as in brief-watch.spec.js): the bars before it are lifted 15%, the session before
+ * it closes at its 50-day high and the break day trades 2.2 times the prior 50-day average. The last close
+ * stays the row's price, so the bars stay certified and the 50-day sell check fires.
+ */
+function breakBelow50(bars) {
+  const n = bars.length, at = n - 9;
+  for (let i = 0; i < at; i++) for (const key of ['open', 'high', 'low', 'close']) bars[i][key] *= 1.15;
+  const top = Math.max(...bars.slice(at - 50, at - 1).map(bar => bar.close));
+  Object.assign(bars[at - 1], { open: top, close: top, high: top * 1.005, low: top * 0.995 });
+  bars[at].volume = Math.round(bars.slice(at - 50, at).reduce((sum, bar) => sum + bar.volume, 0) / 50 * 2.2);
+}
 /** Tile text (small, b, em) that is cut off: its content is wider than its box. */
 const clippedTileText = (page, scope = '.brief-fact, .brief-kgrid, .brief-summary') => page.evaluate(selector => [...document.querySelectorAll(selector)]
   .flatMap(tile => [...tile.querySelectorAll('small, b, em')]).filter(node => node.getClientRects().length && node.scrollWidth > node.clientWidth)
@@ -221,9 +234,11 @@ for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.deskto
 test.describe('the watch list at 320px', () => {
   test.use(PHONES[320]);
   test('rows with a sell check and an あと1条件 chip stay 100px or less on two chip lines', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': ['ZZNV', 'ZZZF', 'ZZSD', 'ZZKS'] } });
+    // ZZSD's setup is broken (Track E's 50-day check fires), so its row carries the sell chip beside あと1条件.
+    const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': ['ZZNV', 'ZZZF', 'ZZSD', 'ZZKS'] }, mutate: { charts: served => breakBelow50(served['ZZSD.json'].bars) } });
     await expect(page.getByRole('region', { name: 'ウォッチ中の銘柄' }).getByTestId('brief-candidate')).toHaveCount(4);
-    await expect(page.locator('[data-symbol="ZZSD"]')).toContainText('売りのサイン');
+    await expect(page.locator('[data-symbol="ZZSD"]')).toContainText('崩れ（独自判定）');
+    await expect(page.locator('[data-symbol="ZZSD"]')).toContainText('あと1条件');
     for (const row of await rowBoxes(page)) {
       expect(row.height, row.symbol).toBeLessThanOrEqual(100);
       expect(row.lines, row.symbol).toBeLessThanOrEqual(2);

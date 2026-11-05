@@ -24,6 +24,19 @@ const smallText = page => page.locator('.brief-chartcard').evaluate(card => {
 });
 // A rising RS line (price ÷ a flat benchmark) for the rs_line hook.
 const withRsLine = charts => { for (const chart of Object.values(charts)) chart.rs_line = chart.bars.map(bar => ({ time: bar.date, value: bar.close / 50 })); };
+/**
+ * A heavy-volume break of the 50-day line nine sessions ago with the close still under the line (Track E's
+ * fixture for a broken setup, as in brief-watch.spec.js): the bars before it are lifted 15%, the session before
+ * it closes at its 50-day high and the break day trades 2.2 times the prior 50-day average. The last close
+ * stays the row's price, so the bars stay certified and the 50-day sell check fires.
+ */
+function breakBelow50(bars) {
+  const n = bars.length, at = n - 9;
+  for (let i = 0; i < at; i++) for (const key of ['open', 'high', 'low', 'close']) bars[i][key] *= 1.15;
+  const top = Math.max(...bars.slice(at - 50, at - 1).map(bar => bar.close));
+  Object.assign(bars[at - 1], { open: top, close: top, high: top * 1.005, low: top * 0.995 });
+  bars[at].volume = Math.round(bars.slice(at - 50, at).reduce((sum, bar) => sum + bar.volume, 0) / 50 * 2.2);
+}
 // The same charts at about $1,300 (the rows are not scaled, so these bars are not certified: display only).
 const scaled = charts => { withRsLine(charts); for (const chart of Object.values(charts)) chart.bars = chart.bars.map(b => ({ ...b, open: b.open * 12, high: b.high * 12, low: b.low * 12, close: b.close * 12 })); };
 /** The 390×844 chart budget: the readout in 3 rows or fewer, the card 520px or less, the legend 2 lines or fewer. */
@@ -77,9 +90,10 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
 test.describe('390×844 phone', () => {
   test.use({ ...VIEWPORTS.phone, contextOptions: { reducedMotion: 'reduce' } });
 
-  // ZZMO carries sell marks, so its legend has the ▼▲ item.
+  // ZZMO carries a sell mark (a heavy-volume 50-day break, the one Track E's checks fire on), so its legend has the ▼▲ item.
   for (const symbol of ['ZZNV', 'ZZAR', 'ZZMO']) test(`${symbol}: the periods, the readout and the top of the chart are on the first screen, within the card budget on every view`, async ({ page }) => {
-    const { errors } = await openBrief(page, `#/brief/stock/${symbol}`, { mutate: { charts: withRsLine } });
+    const charts = served => { withRsLine(served); if (symbol === 'ZZMO') breakBelow50(served['ZZMO.json'].bars); };
+    const { errors } = await openBrief(page, `#/brief/stock/${symbol}`, { mutate: { charts } });
     await chartReady(page);
     await settled(page);
     const periods = await page.getByRole('group', { name: '表示期間' }).boundingBox();
