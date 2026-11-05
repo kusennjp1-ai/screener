@@ -227,13 +227,16 @@ function briefMetrics({ minTarget, fontSizes, radii }) {
   const fixedDock = [...document.querySelectorAll('.brief-dock')].find(element => shown(element) && getComputedStyle(element).position === 'fixed');
   const bar = height('.brief-bar'), dock = fixedDock ? fixedDock.getBoundingClientRect().height : 0;
   const barText = document.querySelector('.brief-bar')?.innerText || '';
+  // The bar shows the analysis date as 「10/2（金）」 inside <time datetime="2026-10-02">.
+  const barTime = document.querySelector('.brief-bar time[datetime]');
   return {
     theme: root.dataset.theme, documentTheme: document.documentElement.dataset.theme || null,
     smallTargets, fontIssues, radiusIssues, asciiMinus, invalidValues,
     horizontalOverflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > innerWidth,
     scrollWidth: document.documentElement.scrollWidth, viewport: { width: innerWidth, height: innerHeight }, pageHeight: document.documentElement.scrollHeight,
     chrome: { bar: Math.round(bar * 10) / 10, dock: Math.round(dock * 10) / 10, total: Math.round((bar + dock) * 10) / 10 },
-    analysisDate: barText.match(/分析基準日\s*(\S+)/)?.[1] || null,
+    analysisDate: barTime?.getAttribute('datetime') ?? barText.match(/分析基準日\s*(\d{4}-\d{2}-\d{2})/)?.[1] ?? null,
+    barDay: barTime?.textContent?.trim() ?? null,
     rows: root.querySelectorAll('[data-testid="brief-candidate"]').length,
     candles: root.querySelectorAll('[data-testid="brief-price-chart"] rect.bc-up, [data-testid="brief-price-chart"] rect.bc-down').length,
   };
@@ -247,6 +250,9 @@ async function runAxe(page) {
       nodes: violation.nodes.slice(0, 8).map(node => ({ target: node.target, summary: node.failureSummary })) }));
   }, AXE_TAGS);
 }
+
+/** The analysis date as the bar shows it on screen: 「10/2（金）」 (the session's own weekday). */
+const visibleDay = iso => { const day = new Date(`${iso}T12:00:00Z`); return `${day.getUTCMonth() + 1}/${day.getUTCDate()}（${'日月火水木金土'[day.getUTCDay()]}）`; };
 
 /** Capture one screen: settle, measure, axe, screenshot; every objective finding blocks. */
 async function capture(session, group, screen, path, { requireDate = true } = {}) {
@@ -277,6 +283,7 @@ async function capture(session, group, screen, path, { requireDate = true } = {}
   if (requireDate) {
     if (!expectedDate) flag('the published as-of date is unknown, so 分析基準日 cannot be verified');
     else if (metrics.analysisDate !== expectedDate) flag(`bar shows 分析基準日 ${metrics.analysisDate ?? '(missing)'}, published as-of date is ${expectedDate}`);
+    else if (metrics.barDay !== visibleDay(expectedDate)) flag(`bar shows 分析基準日 「${metrics.barDay ?? '(missing)'}」 on screen, expected 「${visibleDay(expectedDate)}」 for ${expectedDate}`);
   }
   console.log(`Captured ${key}; ${entry.failures.length} findings.`);
   await save();
