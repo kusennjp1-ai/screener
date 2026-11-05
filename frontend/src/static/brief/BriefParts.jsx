@@ -94,7 +94,13 @@ export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morp
   </li>;
 }
 
-/** The stock's quote in the phone's top bar, after the ticker: the price and the verified day change. */
+// The bar is one line on a 320px phone: a price of $1,000 or more drops its cents there (the tiles keep them).
+const barPrice = value => finite(value) && Math.abs(value) >= 1000 ? `$${Math.round(value).toLocaleString('en-US')}` : money(value);
+
+/**
+ * The stock's quote in the phone's top bar, after the ticker: the price and the verified day change.
+ * The change never truncates (brief-decision.css): only the price can, with an ellipsis.
+ */
 export function BarQuote({ view }) {
-  return view?.price != null ? <><span className="numeric brief-bar-price"> {money(view.price)}</span> <DayChange view={view} className="brief-bar-change" /></> : null;
+  return view?.price != null ? <><span className="numeric brief-bar-price"> {barPrice(view.price)}</span> <DayChange view={view} className="brief-bar-change" /></> : null;
 }

@@ -122,7 +122,14 @@ describe('rows say the day and the decision honestly', () => {
 // Step-0 seams D owns and other tracks call (BriefApp's bar, Today's and the list's rows).
 describe('BriefParts seams', () => {
   it('BarQuote shows the price and the verified day change after the ticker, and nothing without a price', () => {
-    expect(render(<BarQuote view={{ price: 1234.5, change: -1.25 }} />).container.innerHTML).toBe('<span class="numeric brief-bar-price"> $1,234.50</span> <span class="numeric brief-daychg is-down brief-bar-change"><span class="sr-only">前日比 </span>−1.3%</span>');
+    const quote = view => render(<BarQuote view={view} />).container;
+    const small = quote({ price: 110.74, change: -1.25 });
+    expect([small.querySelector('.brief-bar-price').textContent.trim(), small.querySelector('.brief-bar-change').textContent]).toEqual(['$110.74', '前日比 −1.3%']);
+    expect(small.querySelector('.brief-bar-price').compareDocumentPosition(small.querySelector('.brief-bar-change')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(small.querySelector('.brief-bar-change').classList.contains('is-down')).toBe(true);
+    cleanup();
+    // $1,000 and up drops the cents, so the change keeps its place on a 320px phone.
+    expect(quote({ price: 1234.56, change: -12.34 }).textContent).toBe(' $1,235 前日比 −12.3%');
     cleanup();
     // An unverified change is a dash the screen reader says as 前日比 未確認, never 0%.
     const unknown = render(<BarQuote view={{ price: 10, change: null }} />).container;

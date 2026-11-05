@@ -7,6 +7,8 @@ import { openBrief, VIEWPORTS, horizontalOverflow, rowBySymbol, SEC_SYMBOL } fro
 const phoneDevice = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const conclusion = page => page.getByTestId('brief-conclusion');
 const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+/** A variant of one stock's row, and of its research detail when it has one (the stock screen merges the detail in). */
+const onRow = (symbol, fn) => ({ rows: rows => { fn(rows.find(r => r.symbol === symbol)); }, details: details => { for (const detail of Object.values(details)) if (detail.symbol === symbol) fn(detail); } });
 // A market that holds off new buying: every row's S&P 500 is below its 50-day line (modelMarket: cap 0, a known state).
 const HOLD_MARKET = { rows: rows => { for (const row of rows) row.market_above_50dma = false; } };
 // The opened focus row closes above its pivot instead of on it (the synthetic day is +2.0% on 1.6× volume).
@@ -87,22 +89,31 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   });
 });
 
+// A four-digit price with a two-digit fall (the NFLX/AZO/BKNG class) as well as the fixture's ~$100 one.
+const BIG_PRICE = onRow('ZZNV', row => { row.current_price = 1234.56; Object.assign(row.technical_audit.values, { close: 1234.56, change: -12.34 }); });
 for (const width of [320, 390]) test.describe(`the bar at ${width}px`, () => {
   test.use(phoneDevice(width, 844));
 
-  test('carries the price and the verified day change and stays 48px or less', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/stock/ZZNV');
-    await expect(conclusion(page)).toBeVisible();
-    const change = page.locator('.brief-bar .brief-bar-change');
-    await expect(change).toHaveText('前日比 +2.0%');
-    await expect(change).toHaveClass(/is-up/);
-    expect((await page.locator('.brief-bar').boundingBox()).height).toBeLessThanOrEqual(48);
-    // The ticker, the price and the change are all on screen, not cut off.
-    const cut = await page.locator('.brief-bar-title b').evaluate(b => b.scrollWidth > b.clientWidth + 0.5);
-    expect(cut).toBe(false);
-    expect(await horizontalOverflow(page)).toBe(0);
-    expect(errors).toEqual([]);
-  });
+  for (const [label, mutate, price, change, tone] of [['a three-digit price', undefined, /^\$\d{3}\.\d{2}$/, '前日比 +2.0%', /is-up/], ['a four-digit price and a two-digit fall', BIG_PRICE, /^\$1,235$/, '前日比 −12.3%', /is-down/]]) {
+    test(`carries ${label} and the verified day change, whole, and stays 48px or less`, async ({ page }) => {
+      const { errors } = await openBrief(page, '#/brief/stock/ZZNV', mutate ? { mutate } : {});
+      await expect(conclusion(page)).toBeVisible();
+      const quote = page.locator('.brief-bar .brief-bar-change');
+      await expect(quote).toHaveText(change);
+      await expect(quote).toHaveClass(tone);
+      expect((await page.locator('.brief-bar .brief-bar-price').innerText()).trim()).toMatch(price);
+      expect((await page.locator('.brief-bar').boundingBox()).height).toBeLessThanOrEqual(48);
+      // The ticker, the price and the change are all on screen: nothing overflows the title, and the change
+      // lies wholly inside it (only the price could give way, with an ellipsis).
+      const fit = await page.locator('.brief-bar-title b').evaluate(b => {
+        const box = b.getBoundingClientRect(), change = b.querySelector('.brief-bar-change').getBoundingClientRect(), price = b.querySelector('.brief-bar-price');
+        return { cut: b.scrollWidth > b.clientWidth + 0.5, inside: change.left >= box.left - 0.5 && change.right <= box.right + 0.5, price: price.scrollWidth > price.clientWidth + 0.5 };
+      });
+      expect(fit).toEqual({ cut: false, inside: true, price: false });
+      expect(await horizontalOverflow(page)).toBe(0);
+      expect(errors).toEqual([]);
+    });
+  }
 
   test('says 前日比 未確認 without the verified audit of the analysis day, never 0%', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/stock/ZZNV', { mutate: { rows: rows => { delete rows.find(r => r.symbol === 'ZZNV').technical_audit.values.change; } } });
