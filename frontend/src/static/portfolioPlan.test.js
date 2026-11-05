@@ -84,6 +84,13 @@ describe('the exposure guide\'s caps and their disclosure', () => {
     expect(exposureRuleText({ ...MARKET_CAPS, confirmed_uptrend: 0.4 })).not.toBe(exposureRuleText());
   });
 
+  it('caps every known state that is not an uptrend at MARKET_CAPS.otherwise, the disclosure\'s 「それ以外」; an unknown market stays 0', () => {
+    const known = [[fixture('C', { market_regime: 'market_in_correction' })], [fixture('L', { market_above_200dma: false })], [fixture('W', { market_above_50dma: false })]];
+    expect(known.map(rows => modelMarket(rows).cap)).toEqual([MARKET_CAPS.otherwise, MARKET_CAPS.otherwise, MARKET_CAPS.otherwise]);
+    expect(modelMarket([fixture('U', { market_above_50dma: 'n/a' })])).toMatchObject({ cap: 0, state: 'unknown' });
+    expect(modelMarket([])).toMatchObject({ cap: 0, state: 'unknown' });
+  });
+
   it('keeps every verdict and cap of modelMarket for fixed inputs (snapshot)', () => {
     const cases = {
       confirmed: [fixture()],
