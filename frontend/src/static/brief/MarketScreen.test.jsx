@@ -19,6 +19,15 @@ afterEach(() => { cleanup(); delete window.matchMedia; sessionStorage.clear(); }
 describe('brief market screen on a phone', () => {
   beforeEach(() => atWidth(375));
 
+  it('hands the committed study reference to the 地合い card, so 過去の傾向 has its rows (closed on a phone)', () => {
+    show(history300());
+    const fold = document.querySelector('details.brief-regime-ref');
+    expect(fold).not.toHaveAttribute('open');
+    expect(fold.querySelector('summary')).toHaveTextContent('過去の傾向（1990〜2026年・予測ではありません）');
+    expect([...fold.querySelectorAll('h4')].map(h => h.textContent)).toEqual(['S&P 500', 'Nasdaq総合']);
+    expect(fold).toHaveTextContent('出典：market-regime-study-v2（CI run 41844557380）');
+  });
+
   it('puts the long history behind the 推移 tab, keeps the tab for the session, and a row link opens it', () => {
     show(history300());
     const tabs = screen.getByRole('tablist', { name: '市場タブの表示' });

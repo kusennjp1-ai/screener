@@ -10,8 +10,12 @@ import { bare, sentence, trendsStatus } from './briefModel';
 import { jumpTo } from './jump';
 import { historyTakeaway } from './marketTabModel';
 import useSessionState from './useSessionState';
+import referenceData from '../reference/market-regime-reference-v1.json' with { type: 'json' };
+import { validReference } from '../reference/marketRegimeReference.js';
 
 const EXPLORER_TITLE = 'brief-history-explorer-title';
+/** The versioned market-regime study reference (tools/market-regime-reference.mjs); an invalid one shows nothing. */
+const REFERENCE = validReference(referenceData) ? referenceData : null;
 
 /**
  * The market tab: the verdict, the warning summary and today's evidence (MarketCard detail), then the
@@ -58,7 +62,7 @@ export default function MarketScreen({ brief }) {
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>市場</h1></header>
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={trends} date={brief.date} detail onOpenMetric={openMetric}
-      switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} historyUnknown={historyUnknown} />
+      switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} historyUnknown={historyUnknown} reference={REFERENCE} />
     {wide && historySection}
   </>;
 }

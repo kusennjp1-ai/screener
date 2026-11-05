@@ -9,7 +9,7 @@ import { attempt, breadth, closes, confirmed, failed, index, oldSchema, trends, 
 import reference from '../reference/market-regime-reference-v1.json' with { type: 'json' };
 import { exposureRuleText } from '../portfolioPlan';
 
-const show = (value, { date = '2026-10-02', detail = true, market = UP, marketLoading = false, onOpenMetric } = {}) => render(<MemoryRouter><MarketCard market={market} marketLoading={marketLoading} trends={value} date={date} detail={detail} onOpenMetric={onOpenMetric} /></MemoryRouter>);
+const show = (value, { date = '2026-10-02', detail = true, market = UP, marketLoading = false, onOpenMetric, ref = reference } = {}) => render(<MemoryRouter><MarketCard market={market} marketLoading={marketLoading} trends={value} date={date} detail={detail} onOpenMetric={onOpenMetric} reference={ref} /></MemoryRouter>);
 const tiles = () => [...document.querySelectorAll('.brief-fact')];
 const tile = label => tiles().find(element => element.querySelector('small').textContent === label) || null;
 const toggle = label => within(tile(label)).getAllByRole('button')[0];
@@ -367,7 +367,7 @@ describe('brief market card: Today', () => {
 // ---- Track B: 過去の傾向, the study tags, the exposure basis, the index position ------------------------------
 const DD = reference.methods.distribution;
 const withMethods = value => { value.data.indices = value.data.indices.map(item => ({ ...item, method: DD })); return value; };
-const phone = (value, { market = UP, date = '2026-10-02' } = {}) => render(<MemoryRouter><MarketCard market={market} trends={value} date={date} detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
+const phone = (value, { market = UP, date = '2026-10-02' } = {}) => render(<MemoryRouter><MarketCard market={market} trends={value} date={date} detail switcher section="index" onSection={() => {}} reference={reference} /></MemoryRouter>);
 const regime = () => document.querySelector('details.brief-regime-ref');
 const BANNED = /上がりやすい|下がりやすい|安全|底打ち|オールクリア|今日の確率/;
 
