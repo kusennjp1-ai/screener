@@ -42,3 +42,27 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
     expect(screen.getByText('上げ下げ出来高比（50日）').nextSibling).toHaveTextContent('上げた日の出来高 ÷ 下げた日の出来高。1超は買いが優勢');
   });
 });
+
+describe('brief stock view shell', () => {
+  afterEach(() => sessionStorage.clear());
+
+  it('judges the RS line new high from certified bars only, not the backend flag', () => {
+    // The backend says new high, but no RS line was delivered: the conclusion has no RS-line chip.
+    render(<StockView data={{ ...data(true), view: { ...view, rsLineHigh: true } }} />);
+    expect(screen.queryByText(/^RS線 新高値/)).toBeNull();
+    expect(screen.getByTestId('brief-price-chart').querySelector('.bc-rscaption')).toHaveTextContent('RS線 未配信');
+  });
+
+  it('gathers the chart footnotes into the 注記 on a phone and shows them on the chart card on a desktop', () => {
+    render(<StockView data={data(true)} />);
+    const notes = document.querySelector('.brief-screen-notes');
+    expect(notes).toHaveTextContent('—＝必要な本数に足りない値');
+    expect(notes).toHaveTextContent('10日線・21日EMAは独自計算です。');
+    // 200 bars: the 200-day line exists on its last bar only.
+    expect(notes).toHaveTextContent('200日線は直近1本のみ（日足が足りないため）');
+    cleanup();
+    render(<StockView data={data(true)} wide />);
+    expect(document.querySelector('.brief-screen-notes')).toBeNull();
+    expect(document.querySelector('.brief-chart-notes')).toHaveTextContent('10日線・21日EMAは独自計算です。');
+  });
+});
