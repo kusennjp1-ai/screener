@@ -140,10 +140,13 @@ export function chartReadout(model, index, { certified = false, pivot = null, au
   };
 }
 
-/** The weekly period's button: 「週足2年」 only when two years of weeks exist, otherwise the honest count. */
+/**
+ * The weekly period's button: 「週足2年」 only when two years of weeks exist, otherwise the honest count. Without
+ * bars (a chart not delivered, failed or still loading) the count is unknown, never 0: 「週足（本数 未確認）」.
+ */
 export function weeklyRangeLabel(bars) {
   const count = weeklyBars(bars).length;
-  return count >= 104 ? '週足2年' : `週足（${count}週）`;
+  return !count ? '週足（本数 未確認）' : count >= 104 ? '週足2年' : `週足（${count}週）`;
 }
 
 /**

@@ -30,6 +30,16 @@ describe('brief stock view', () => {
 });
 
 describe('brief stock chart card', () => {
+  it('names the weekly period without a count when there are no bars: never 「0週」', () => {
+    for (const chart of [{ data: null, isError: false }, { data: null, isError: true }]) {
+      render(<StockView data={{ ...data(true), row: { symbol: 'AAA', chart_path: null }, bars: null, certification: null, chart }} />);
+      const weekly = within(screen.getByRole('group', { name: '表示期間' })).getByRole('button', { name: '週足（本数 未確認）' });
+      expect(weekly).toHaveTextContent(/^週足$/);
+      expect(screen.getByRole('group', { name: '表示期間' })).not.toHaveTextContent(/0週/);
+      cleanup();
+    }
+  });
+
   const tap = (clientX) => {
     const chart = screen.getByTestId('brief-price-chart'), front = chart.children[2];
     front.getBoundingClientRect = () => ({ left: 0, top: 0, width: 240, height: 340 });

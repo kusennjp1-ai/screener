@@ -46,9 +46,13 @@ function Readout({ readout, compact }) {
   </div>;
 }
 
-/** The weekly period's button text: the honest week count, on two lines (no brackets) on the narrowest phones. */
+/**
+ * The weekly period's button text: the honest week count, on two lines (no brackets) on the narrowest phones.
+ * Without bars it is plain 「週足」 (its label says the count is unknown), never 「0週」.
+ */
 function WeeklyLabel({ bars }) {
   const count = weeklyBars(bars).length;
+  if (!count) return '週足';
   if (count >= 104) return weeklyRangeLabel(bars);
   return <>週足<span className="brief-weeks"><span className="brief-paren">（</span>{count}週<span className="brief-paren">）</span></span></>;
 }

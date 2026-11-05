@@ -106,7 +106,8 @@ describe('the weekly period label', () => {
     expect(weeklyRangeLabel(short)).toBe(`週足（${weeklyBars(short).length}週）`);
     expect(weeklyBars(long).length).toBeGreaterThanOrEqual(104);
     expect(weeklyRangeLabel(long)).toBe('週足2年');
-    expect(weeklyRangeLabel(null)).toBe('週足（0週）');
+    // No bars (none delivered, a failed fetch, still loading): the count is unknown, never 0.
+    for (const none of [null, undefined, [], [{ date: null }]]) expect(weeklyRangeLabel(none)).toBe('週足（本数 未確認）');
   });
 });
 
