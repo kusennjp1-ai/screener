@@ -16,25 +16,41 @@
 .brief-bar-title b > .brief-bar-price { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brief-bar-title b > .brief-bar-change { margin-left: 5px; }
 
+/* A unit a line breaks before rather than inside (a rule with its value, 「＋5%」): an inline block moves to
+   the next line whole, and wraps inside only when it is wider than the line (200% zoom), never widening the card. */
+.brief-call .brief-nowrap { display: inline-block; }
+
+/* A row chip is never wider than the row (a 375px phone at 200% zoom): a long one wraps inside itself. */
+.brief-reasons .brief-chip { max-width: 100%; white-space: normal; overflow-wrap: anywhere; }
+
 /* The pivot meter names the four positions with the table every screen uses (土台形成中・ピボット接近・
    買いゾーン・買いゾーン超過). The names are longer than the old ones, so the meter is a grid: the names
-   take the lines they need, and the track, the marker and the ticks follow them instead of a fixed top. */
+   take the lines they need, and the track, the marker and the ticks follow them instead of a fixed top.
+   The 24px marker sits within the track's row, clear of the ticks under it. */
 .brief-call .brief-meter { height: auto; display: grid; grid-template-columns: minmax(0, 1fr); }
 .brief-call .brief-meter > * { grid-column: 1; }
-.brief-call .brief-meter-labels { position: static; grid-row: 1; align-items: end; line-height: 1.25; word-break: keep-all; }
+.brief-call .brief-meter-labels { position: static; grid-row: 1; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; line-height: 1.25; word-break: keep-all; }
 .brief-call .brief-meter-track { position: relative; top: auto; grid-row: 2; align-self: center; }
-.brief-call .brief-meter-marker { position: relative; top: auto; grid-row: 2; align-self: center; justify-self: start; margin-block: -1px; }
-.brief-call .brief-meter-ticks { position: static; grid-row: 3; margin-top: -3px; line-height: 1.25; }
+.brief-call .brief-meter-marker { position: relative; top: auto; grid-row: 2; align-self: center; justify-self: start; width: 24px; height: 24px; margin-left: -12px; margin-block: -1px; }
+.brief-call .brief-meter-ticks { position: static; grid-row: 3; margin-top: 1px; line-height: 1.25; }
+.brief-call .brief-meter-short { display: none; }
+/* Not a buy candidate now (the template, the market or the earnings date): the buy zone in the neutral line. */
+.brief-call .brief-meter.is-reference .brief-meter-track .seg-zone { background: var(--line-2); }
+.brief-call .brief-meter.is-reference .brief-meter-labels .is-zone { color: var(--text-2); }
 .brief-call .brief-kgrid > div { position: relative; }
 .brief-tilequal { position: absolute; top: -9px; right: 8px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); font-size: 12px; line-height: 16px; font-weight: 400; color: var(--text-2); white-space: nowrap; }
 /* Where a column is narrower than 「買いゾーン超過」 but the names still fit one line, the last column takes a
    little of the buy zone's width and its name ends at the track's end; narrower still, the names break
-   between their words (土台／形成中, ピボット／接近, 買いゾーン／超過). */
+   between their words (土台／形成中, ピボット／接近, 買いゾーン／超過); narrower than a word, the short names. */
 @container (min-width: 292px) and (max-width: 339.98px) {
-  .brief-call .brief-meter-labels { grid-template-columns: 1fr 1fr .85fr 1.15fr; }
+  .brief-call .brief-meter-labels { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, .85fr) minmax(0, 1.15fr); }
   .brief-call .brief-meter-labels > :last-child { text-align: right; }
 }
 @container (max-width: 291.98px) { .brief-call .brief-meter-labels { column-gap: 6px; } }
+@container (max-width: 239.98px) {
+  .brief-call .brief-meter-name { display: none; }
+  .brief-call .brief-meter-short { display: inline; }
+}
 
 /* Phones: the conclusion's tile labels and notes, the meter's names and ticks read at 12px (the notes in
    the secondary text colour); the row chips are 12px in brief.css already. */

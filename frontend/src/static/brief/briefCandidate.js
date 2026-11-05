@@ -3,10 +3,11 @@
 // rows and the existing rule functions; unknown stays unknown.
 import { assess, entryPlan, finite, highDistance } from '../researchEngine';
 import { canonicalPivot } from '../researchPresentation';
-import { stateKey, STATES, times } from '../positionGeometry';
+import { stateKey, STATES } from '../positionGeometry';
 import { auditValues, verifiedVolumeRatio } from '../qualificationAudit';
-import { conditionText, singleMissingCondition } from '../missingCondition';
-import { shortDate } from './briefShared';
+import { conditionChipLabel, conditionText, conditionValueText, singleMissingCondition } from '../missingCondition';
+import { newYorkDate } from '../evidenceTime';
+import { isoDay, shortDate } from './briefShared';
 
 export const BREAKOUT_VOLUME_RATIO = 1.4;
 /** Calendar days before an earnings date at which every screen warns (the chips and the conclusion line). */
@@ -49,12 +50,14 @@ function rsEvidence(value, row) {
 export function ruleEvidence(rule) {
   if (rule?.evidence) return rule.evidence;
   if (!finite(rule?.value) || rule.unit !== '%') return '';
-  const v = Math.abs(rule.value).toFixed(1);
-  if (rule.label.startsWith('52週安値')) return `52週安値から +${v}%`;
-  if (rule.label.startsWith('52週高値')) return rule.value === 0 ? '52週高値と同値' : `52週高値から −${v}%`;
-  return `${rule.value < 0 ? '−' : ''}${v}%`;
+  // The number as the rule's own chip and title show it (rounded away from the threshold's passing side).
+  const shown = conditionValueText(rule), size = shown.replace(/^−/, ''), below = shown.startsWith('−');
+  if (rule.label.startsWith('52週安値')) return `52週安値から ${below ? '−' : '+'}${size}`;
+  if (rule.label.startsWith('52週高値')) return rule.value === 0 ? '52週高値と同値' : `52週高値から ${below ? '+' : '−'}${size}`;
+  return shown;
 }
 
+/** The earnings date and the calendar days to it from the analysis date, or null (unknown, or before that date). */
 export function earningsDays(row, date) {
   const value = row?.entry_evidence?.earnings?.date;
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || typeof date !== 'string') return null;
@@ -62,8 +65,29 @@ export function earningsDays(row, date) {
   return Number.isFinite(days) && days >= 0 ? { date: value, days } : null;
 }
 
-/** True when the earnings date is EARNINGS_WARN_DAYS calendar days away or nearer (an unknown date is not). */
-export const earningsSoon = view => Boolean(view?.earnings) && view.earnings.days <= EARNINGS_WARN_DAYS;
+/**
+ * The earnings date as a trader acting now reads it: the calendar days from the later of the analysis
+ * date and today's New York date (`now`), so a stale analysis never counts from its own day. Null for an
+ * unknown date. `days` below 0 means the date has passed since the analysis: the analysis predates the
+ * report. `soon` (EARNINGS_WARN_DAYS or nearer, or passed) gates the green call. `chip` is the one short
+ * form every chip uses (「決算まで3日」, 「決算当日」, 「決算日経過」); `line` the conclusion's line.
+ * Without a usable `now` the days count from the analysis date, as before.
+ */
+export function earningsCall(view, now) {
+  const earnings = view?.earnings;
+  if (!earnings || !finite(earnings.days)) return null;
+  const today = newYorkDate(now);
+  const lag = isoDay(view.asOf) && today && today > view.asOf ? Math.round((Date.parse(today) - Date.parse(view.asOf)) / DAY) : 0;
+  const days = earnings.days - (finite(lag) ? lag : 0), day = shortDate(earnings.date, view.asOf);
+  const chip = days > 0 ? `決算まで${days}日` : days === 0 ? '決算当日' : '決算日経過';
+  const line = days > 0 ? `決算まで${days}日（${day}）：新規買いは見送り候補（独自判定）`
+    : days === 0 ? `決算当日（${day}）：新規買いは見送り候補（独自判定）`
+      : `決算（${day}）後のデータ待ち：新規買いは保留（独自判定）`;
+  return { date: earnings.date, days, soon: days <= EARNINGS_WARN_DAYS, chip, line };
+}
+
+/** True when the earnings date is EARNINGS_WARN_DAYS calendar days away or nearer, or has passed since the analysis (an unknown date is not). */
+export const earningsSoon = (view, now) => Boolean(earningsCall(view, now)?.soon);
 
 /**
  * The analysis day as the publisher verified it (technical_audit for this date only): the close, the
@@ -105,6 +129,8 @@ export function candidateView(item, date) {
   const failed = assessment?.failed ?? null, unknown = assessment?.unknown ?? null;
   return {
     symbol: row.symbol,
+    // The analysis date every value here is as of (an event is that day's, never 「本日」's).
+    asOf: typeof date === 'string' ? date : null,
     name: row.company_name || row.name || '',
     sector: row.gics_sector || row.sector || '',
     price: finite(plan.price) ? plan.price : null,
@@ -134,29 +160,43 @@ export function candidateView(item, date) {
   };
 }
 
-/** { text: 「未達：RS ≥ 70（61）」, rs: whether the unmet rule is the RS estimate's (the chip then carries the RS value) }. */
+/**
+ * The one unmet rule of an あと1条件 row: `chip` the row's one chip for it (「あと1条件：RS ≥ 70（61）」,
+ * 「あと1条件：高値から25%以内」, 「あと1条件：150日 > 200日」: only the RS rule keeps its value there, so the
+ * chip fits a 320px row's second line), `text` the full rule with its value (「未達：52週高値からの距離 ≤ 25%
+ * （30.2%）」: the chip's title and the row's label), `rs` whether it is the RS estimate's rule (the chip then
+ * carries the RS value and the row drops its RS chip).
+ */
 function oneMissing(row) {
   const missing = singleMissingCondition(assess(row, 'minervini'));
-  return missing?.state === 'fail' ? { text: `未達：${conditionText(missing)}`, rs: /^RS 推計/.test(missing.label) } : null;
+  if (missing?.state !== 'fail') return null;
+  const rs = /^RS 推計/.test(missing.label), value = rs ? conditionValueText(missing) : null;
+  return { chip: `あと1条件：${conditionChipLabel(missing)}${value === null ? '' : `（${value}）`}`, text: `未達：${conditionText(missing)}`, rs };
 }
 
 const cents = value => Math.round(value * 100);
+/** A volume ratio as an event title shows it: floored to 2 decimals, so 1.396 never reads 1.40× under a 1.4× bar. */
+export const ratioShown = value => `${(Math.floor(value * 100 + 1e-9) / 100).toFixed(2)}×`;
 
 /**
  * The analysis day as an event, from the verified close, its change and the verified volume ratio only:
  * a breakout is strictly previous close < pivot < close on an up day with BREAKOUT_VOLUME_RATIO or more.
- * Only for a stock in the buy zone; null when any input is missing (nothing is said about a breakout).
+ * Only for a stock in the buy zone; null when any input (the analysis date too) is missing: nothing is said
+ * about a breakout. The titles name the analysis date (「10/2に上抜け」), never 「本日」: the data may be older than today.
+ * A crossing without the volume (or with it unknown) is not a breakout: tone 'wait', never the green call.
  * `bars`, when given, are bars certified for the analysis date: they date a crossing 1–3 sessions back.
  */
 export function breakoutEvent(view, bars = null) {
-  if (view?.state !== 'zone' || !positive(view.pivot) || !positive(view.close) || !positive(view.prevClose) || !finite(view.change)) return null;
+  if (view?.state !== 'zone' || !isoDay(view.asOf) || !positive(view.pivot) || !positive(view.close) || !positive(view.prevClose) || !finite(view.change)) return null;
   const { pivot, close, prevClose, change } = view, volume = finite(view.volumeRatio) ? view.volumeRatio : null;
-  const heavy = volume !== null && volume >= BREAKOUT_VOLUME_RATIO;
-  if (change < 0 && heavy) return { kind: 'heavyDown', tone: 'ext', title: `下落日の大商い ${times(volume)}（要注意）` };
+  const heavy = volume !== null && volume >= BREAKOUT_VOLUME_RATIO, day = shortDate(view.asOf);
+  if (change < 0 && heavy) return { kind: 'heavyDown', tone: 'ext', title: `下落日の大商い ${ratioShown(volume)}（要注意）` };
   if (prevClose < pivot && cents(close) === cents(pivot)) return { kind: 'touch', tone: 'zone', title: 'ピボット到達' };
   if (prevClose < pivot && close > pivot) {
-    if (change > 0 && heavy) return { kind: 'breakout', tone: 'zone', title: `本日ピボットを出来高${times(volume)}で上抜け` };
-    return { kind: 'cross', tone: 'zone', title: volume === null ? '本日ピボットを上抜け（出来高 未確認）' : `本日ピボットを上抜け（出来高${times(volume)}・${BREAKOUT_VOLUME_RATIO}×未満）` };
+    if (change > 0 && heavy) return { kind: 'breakout', tone: 'zone', title: `${day}に上抜け・出来高${ratioShown(volume)}` };
+    // The ratio and the bar go in the call's line under the title (`note`), so the title stays one line on a phone.
+    return { kind: 'cross', tone: 'wait', title: volume === null ? `${day}に上抜け・出来高 未確認` : `${day}に上抜け・出来高不足`,
+      note: volume === null ? '出来高を確認できないため、上抜けの裏付けはありません。' : `出来高${ratioShown(volume)}は基準の${BREAKOUT_VOLUME_RATIO}×に届きません。` };
   }
   if (prevClose >= pivot) {
     const crossed = pivotCrossing(bars, pivot);
@@ -222,9 +262,14 @@ export function focusTone(state, counts, market) {
   return state === 'ready' && counts?.total && candidateMarketGate(market) === 'open' ? 'zone' : '';
 }
 
-/** A note after Today's 注目候補 heading for the market verdict, or null (open, or not loaded yet). */
-export function focusHeadingNote(market) {
+/**
+ * A note after Today's 注目候補 heading for the market verdict, or null (open, or not loaded yet). With the
+ * bundle's `state`, a ready bundle that carries no verdict at all also reads 「（地合い未確認）」 (the verdict
+ * comes with the bundle, so once it is ready nothing is still loading); without it, nothing is said.
+ */
+export function focusHeadingNote(market, state) {
   const gate = candidateMarketGate(market);
+  if (gate === null && state === 'ready') return '（地合い未確認）';
   return gate === 'hold' ? '（地合い：買いは控える・監視のみ）' : gate === 'unknown' ? '（地合い未確認）' : null;
 }
 
@@ -249,14 +294,21 @@ export const LIST_SORTS = {
 /** Why a stock is not a buy candidate by the trend template: 'TT未達', 'TT未確認' or '選定対象外'. */
 export const templateShort = view => Number.isInteger(view?.failed) && view.failed > 0 ? 'TT未達' : Number.isInteger(view?.unknown) && view.unknown > 0 ? 'TT未確認' : '選定対象外';
 
-/** What changed for a watched stock, in the order a trader acts on it. */
-export function watchEvent(view) {
+/**
+ * What changed for a watched stock, in the order a trader acts on it. With `market` (prepared.market, or
+ * null when the bundle carries none), a market that is not open to new buying turns the green tones
+ * neutral, as Today's focus rows do; the titles stay. Without the argument, the tones are as before.
+ */
+export function watchEvent(view, market) {
   // Not a buy candidate: the position stays visible, in a neutral tone, with the reason.
   if (!view.qualified) return { kind: 'unqualified', tone: 'neutral', title: `${view.stateLabel}（${templateShort(view)}）` };
+  const held = market !== undefined && candidateMarketGate(market) !== 'open';
+  const tone = value => held && value === 'zone' ? 'neutral' : value;
   const event = breakoutEvent(view);
-  if (event?.kind === 'breakout') return { kind: 'breakout', tone: 'zone', title: event.title };
+  if (event?.kind === 'breakout') return { kind: 'breakout', tone: tone('zone'), title: event.title };
   if (event?.kind === 'heavyDown') return { kind: 'heavyDown', tone: 'ext', title: event.title };
-  if (view.state === 'zone') return { kind: 'zone', tone: 'zone', title: event?.title || '買いゾーン内' };
+  // A crossing without the volume keeps the zone's ● but not its green (tone 'wait').
+  if (view.state === 'zone') return { kind: 'zone', tone: tone(event?.tone || 'zone'), title: event?.title || '買いゾーン内' };
   if (view.position === 'near' || (view.state === 'wait' && finite(view.distance) && view.distance >= -5)) return { kind: 'near', tone: 'wait', title: `${POSITION_NAMES.near}（あと${Math.abs(view.distance).toFixed(1)}%）` };
   if (view.state === 'ext') return { kind: 'ext', tone: 'ext', title: POSITION_NAMES.ext };
   if (view.state === 'wait') return { kind: 'base', tone: 'neutral', title: POSITION_NAMES.base };
