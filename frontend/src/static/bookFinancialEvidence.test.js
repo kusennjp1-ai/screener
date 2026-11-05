@@ -176,3 +176,49 @@ describe('three-valued "rises" (Kleene)', () => {
     expect(report(secRecord())).toMatchObject({ code33: 'pass', settled: {} });
   });
 });
+
+describe('the EPS floor and the annual record (three-valued, never a pass from a gap or a loss)', () => {
+  const date = '2026-02-01', report = record => bookFinancialEvidence(record, 'TEST', date);
+  const growth = values => secRecord({ eps: [1, 1, 1, 1, ...values.map(value => value === null ? null : 1 + value / 100)] });
+  // The rule before it was three-valued: all N quarters known, consecutive and current, and each at the level.
+  const before = (value, count, threshold) => {
+    const rows = value.rows.slice(-count);
+    return rows.length === count && !value.stale && rows.every(row => Number.isFinite(row.epsYoY)) && rows.every(row => row.epsYoY + 1e-9 >= threshold);
+  };
+
+  it('fails on a known quarter under the level even beside a missing one, and stays unknown otherwise', () => {
+    // The common 10-Q filer: +10, +20, +40 and a fiscal-Q4 EPS that is only annual.
+    const filer = report(growth([10, 20, 40, null]));
+    expect(filer.epsFloor[4]).toMatchObject({ at25: 'fail', at20: 'fail' });
+    expect(filer.epsFloor[4].below25.map(item => [item.end, Math.round(item.value)])).toEqual([['2025-03-31', 10], ['2025-06-30', 20]]);
+    expect(filer.epsFloor[4].below20.map(item => item.end)).toEqual(['2025-03-31']);
+    expect(filer.epsFloor[2]).toMatchObject({ at25: 'unknown', at20: 'unknown', below25: [] });
+    // Every known quarter is at the level, one is missing: unknown, never a pass.
+    const open = report(growth([30, null, 40, 50]));
+    expect(open.epsFloor[4]).toMatchObject({ at25: 'unknown', at20: 'unknown', below25: [], below20: [] });
+    expect(open.epsFloor[2]).toMatchObject({ at25: 'pass', at20: 'pass' });
+    // 22% is under 25 but not under 20: the two levels are settled separately.
+    const between = report(growth([22, 30, null, 40]));
+    expect(between.epsFloor[4]).toMatchObject({ at25: 'fail', at20: 'unknown' });
+    // A stale or broken window settles nothing.
+    const gap = growth([10, 20, 40, 50]); for (const key of ['eps', 'revenue', 'netIncome']) gap.quarterly[key].splice(6, 1);
+    expect(report(gap).epsFloor[4]).toMatchObject({ at25: 'unknown', at20: 'unknown', below25: [] });
+    expect(bookFinancialEvidence({ ...growth([10, 20, 40, 50]), as_of_date: '2026-09-25' }, 'TEST', '2026-09-25').epsFloor[4]).toMatchObject({ at25: 'unknown', below25: [] });
+  });
+
+  it('gives no fixture a pass the earlier rule did not give', () => {
+    const fixtures = [secRecord(), growth([10, 20, 40, null]), growth([30, null, 40, 50]), growth([25, 26, 30, 31]), growth([30, 40, 50, 24]), growth([null, null, null, null]), growth([-10, 30, 40, 50])];
+    for (const value of fixtures.map(report)) for (const count of [2, 4]) for (const threshold of [20, 25])
+      expect(value.epsFloor[count][`at${threshold}`] === 'pass').toBe(before(value, count, threshold));
+    expect(report(growth([25, 26, 30, 31])).epsFloor[4]).toMatchObject({ at25: 'pass', at20: 'pass' });
+  });
+
+  it('never calls a loss year a record, however much smaller the loss', () => {
+    const annual = values => { const record = secRecord(); record.annualEps = values.map((value, i) => secPoint('eps', [`${2022 + i}-01-01`, `${2022 + i}-12-31`], value)); return report(record).annualRecord; };
+    expect(annual([-3, -2, -1.5, -0.8])).toBe('fail');
+    expect(annual([1, 2, 0])).toBe('fail');
+    expect(annual([3, 3.5, 5.5])).toBe('pass');
+    expect(annual([-1, 2, 1])).toBe('fail');
+    expect(annual([3, 5.5])).toBe('unknown');
+  });
+});

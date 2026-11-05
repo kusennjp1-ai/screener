@@ -8,6 +8,7 @@
 .brief-fin-quality .brief-chip { white-space: normal; overflow-wrap: anywhere; }
 .brief-fin-scope { margin: 0; }
 .brief-fin-gaps .brief-expander-body, .brief-fin-missing .brief-expander-body { padding-inline: 0; }
+.brief-fin-gaps .brief-expander-summary small > span { white-space: nowrap; }
 @media (max-width: 1023.98px) {
   /* The parts are said by the Code 33 text (only a 未達 keeps them). */
   .brief-fin .brief-code33-parts.is-said { display: none; }

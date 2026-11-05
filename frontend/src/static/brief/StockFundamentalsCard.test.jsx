@@ -56,7 +56,7 @@ describe('brief fundamentals card', () => {
     expect(scope.getByText(/EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です/)).toBeInTheDocument();
     // A phone's legend stays on one line; the reasons are one fold away, with their count.
     expect(scope.getByText('値なし', { selector: '.brief-q-legend span' })).toBeInTheDocument();
-    expect(scope.getByText('値なしの理由').closest('summary')).toHaveTextContent('値なしの理由3件・対象外の項目');
+    expect(scope.getByText('値なしの理由').closest('summary')).toHaveTextContent('値なしの理由3件・業績の質の根拠・対象外の項目');
     expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent(/カーソル|長押し/);
     expect(scope.getByRole('img', { name: /2026-06-30: EPS Q4のEPSは年次報告のみ、売上 \+100%/ })).toBeInTheDocument();
     // Every grey bar's reason is readable text, not only an SVG title.
@@ -69,8 +69,11 @@ describe('brief fundamentals card', () => {
     // The Q4 EPS explanation is given once, in the Code 33 section (the parts it repeats are hidden on a phone).
     expect(screen.getByTestId('brief-fundamentals').textContent.match(/年次報告（10-K）にしか無い/g)).toHaveLength(1);
     expect(document.querySelector('.brief-code33-parts')).toHaveClass('is-said');
-    // The quality row: three-valued, nothing passes from missing quarters.
-    expect([...document.querySelectorAll('.brief-fin-quality li')].map(chip => chip.textContent)).toEqual(['EPS≥25%（直近4期）未確認', '年間EPS最高 未確認']);
+    // The quality row: three-valued. +10% and +20% are known and under 25%, so the missing fiscal-Q4 EPS cannot
+    // rescue the rule: 未達, with the quarters named in the fold. Nothing passes from missing quarters.
+    expect([...document.querySelectorAll('.brief-fin-quality li')].map(chip => [chip.textContent, chip.className])).toEqual([['EPS前年比≥25%（直近4期）未達', 'brief-chip tone-ext'], ['年間EPS最高 未確認', 'brief-chip']]);
+    expect(scope.getByRole('list', { name: '業績の質の根拠' }).closest('details')).not.toBeNull();
+    expect(scope.getByRole('list', { name: '業績の質の根拠' })).toHaveTextContent('EPS前年比が25%未満の期：25-09期 +10%・25-12期 +20%');
     expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent('未取得');
   });
 
@@ -102,13 +105,26 @@ describe('brief fundamentals card', () => {
     const scope = card(financial(loss));
     expect(tile(scope, 'EPS 前年比')).toHaveTextContent('黒字転換2026-06期・前年 −0.20 → 0.15');
     expect(tile(scope, 'EPS 前年比')).not.toHaveTextContent('%');
-    expect([...document.querySelectorAll('.brief-q-axis .q-eps-t')].map(cell => cell.textContent).slice(-4)).toEqual(['黒字', '黒字', '黒字', '黒字']);
+    const turned = [...document.querySelectorAll('.brief-q-axis .q-eps-t')].slice(-4);
+    expect(turned.map(cell => cell.textContent)).toEqual(['黒字', '黒字', '黒字', '黒字']);
+    // 黒字 is a known fact: it keeps the EPS colour, never the grey of 値なし.
+    for (const cell of turned) expect(cell).not.toHaveClass('is-unknown');
     cleanup();
     // A loss now (both years negative) stays 比較不可 with the EPS.
     const deeper = record(); deeper.quarterly.eps.forEach((p, i) => { p.value = i < 4 ? -0.2 : -0.1; });
     const other = card(financial(deeper));
     expect(tile(other, 'EPS 前年比')).toHaveTextContent('比較不可');
-    expect(tile(other, 'EPS 前年比')).toHaveTextContent('前年同期が赤字・ゼロ（EPS −0.10）'.replace('−', '-'));
+    expect(tile(other, 'EPS 前年比')).toHaveTextContent('前年同期が赤字・ゼロ（EPS -0.10）');
+    cleanup();
+    // A profit a year ago and a loss now: the fact 赤字 in four characters or fewer, never −1300.
+    const fell = record({ eps: [1, 1, 1, 1, 1.1, 1.2, 1.4, -12] });
+    card(financial(fell));
+    const last = [...document.querySelectorAll('.brief-q-axis .q-eps-t')].at(-1);
+    expect(last).toHaveTextContent('赤字');
+    expect(last).not.toHaveClass('is-unknown');
+    for (const cell of document.querySelectorAll('.brief-q-axis .q-eps-t, .brief-q-axis .q-sales-t')) expect(cell.textContent.length).toBeLessThanOrEqual(4);
+    // The 未達 it settles says the loss as a fact as well.
+    expect(screen.getByText('未達の根拠：EPS 前年比が2026-03期 +40% → 2026-06期は赤字（EPS −12.00）です。')).toBeInTheDocument();
   });
 
   it('labels each quarter in four characters or fewer and flags only recent balance-sheet growth well above sales', () => {
@@ -117,10 +133,13 @@ describe('brief fundamentals card', () => {
     const scope = card(financial(value));
     expect([...document.querySelectorAll('.brief-q-axis .q-sales-t')].map(cell => cell.textContent).slice(-4)).toEqual(['>999', '−35', '+60', '+100']);
     for (const cell of document.querySelectorAll('.brief-q-axis .q-eps-t, .brief-q-axis .q-sales-t')) expect(cell.textContent.length).toBeLessThanOrEqual(4);
-    // Inventory +200% against sales +100% in the newest quarter: a caution, labelled as this app's own rule.
-    const caution = scope.getByText('在庫の伸び＞売上（26-06期）');
+    // Inventory +200% against sales +100% in the newest quarter: a caution, labelled as this app's own rule on its
+    // face, with its numbers in visible text (the fold on a phone), not only in a title.
+    const caution = scope.getByText('在庫の伸び＞売上（26-06期・独自判定）');
     expect(caution).toHaveClass('tone-wait');
-    expect(caution).toHaveAttribute('title', '独自判定：前年比 +200% に対し売上 +100%（20ポイント以上の差）');
+    const detail = '在庫の伸び：26-06期 前年比 +200%、売上 +100%（20ポイント以上の差で表示する独自判定）';
+    expect(caution).toHaveAttribute('title', detail);
+    expect(scope.getByRole('list', { name: '業績の質の根拠' })).toHaveTextContent(detail);
     cleanup();
     // Within 20 points, or no balance-sheet quarters at all: no caution.
     const close = record(); close.quarterly.inventory = QUARTERS.map(([, end], i) => secPoint('inventory', [null, end], [50, 50, 50, 50, 50, 50, 50, 105][i]));
@@ -134,23 +153,38 @@ describe('brief fundamentals card', () => {
   it('passes the EPS floor and the annual record only on known values and names the quarters behind a 未達', () => {
     const strong = record({ eps: [1, 1, 1, 1, 1.3, 1.4, 1.6, 2] });
     strong.annualEps = [secPoint('eps', ['2023-01-01', '2023-12-31'], 3), secPoint('eps', ['2024-01-01', '2024-12-31'], 3.5), secPoint('eps', ['2025-01-01', '2025-12-31'], 5.5)];
-    card(financial(strong));
+    let scope = card(financial(strong));
     expect([...document.querySelectorAll('.brief-fin-quality li')].map(chip => [chip.textContent, chip.className])).toEqual([
-      ['EPS≥25%（直近4期）達成', 'brief-chip tone-zone'], ['年間EPS最高 更新', 'brief-chip tone-zone']]);
+      ['EPS前年比≥25%（直近4期）達成', 'brief-chip tone-zone'], ['年間EPS最高 更新', 'brief-chip tone-zone']]);
+    // The span the annual record compared is said in words, not only in a title.
+    expect(document.querySelectorAll('.brief-fin-quality li')[1]).toHaveAttribute('title', 'SEC年次報告のある3年度で最高');
+    expect(scope.getByRole('list', { name: '業績の質の根拠' })).toHaveTextContent('年間EPS：直近の年度（2025-12期）の 5.50 は、SEC 年次報告のある3年度で最高です。');
     cleanup();
-    // A lower latest annual EPS is 未更新; two growth rates under 25% in the latest four is 未達, with the 20% level in the title.
+    // A lower latest annual EPS is 未更新; one growth rate under 25% in the latest four is 未達, and the 20% level
+    // reached by every quarter is said on the chip itself.
     const weaker = record({ eps: [1, 1, 1, 1, 1.3, 1.22, 1.4, 1.5] });
     weaker.annualEps = [secPoint('eps', ['2023-01-01', '2023-12-31'], 3), secPoint('eps', ['2024-01-01', '2024-12-31'], 5.5), secPoint('eps', ['2025-01-01', '2025-12-31'], 5)];
-    card(financial(weaker));
+    scope = card(financial(weaker));
     const chips = [...document.querySelectorAll('.brief-fin-quality li')];
-    expect(chips.map(chip => [chip.textContent, chip.className])).toEqual([['EPS≥25%（直近4期）未達', 'brief-chip tone-ext'], ['年間EPS最高 未更新', 'brief-chip tone-ext']]);
-    expect(chips[0]).toHaveAttribute('title', 'EPS前年比が直近4期すべて25%以上か（20%以上は直近4期とも達成）');
+    expect(chips.map(chip => [chip.textContent, chip.className])).toEqual([['EPS前年比≥25%（直近4期）未達（20%以上は達成）', 'brief-chip tone-ext'], ['年間EPS最高 未更新', 'brief-chip tone-ext']]);
+    expect(chips[0]).toHaveAttribute('title', 'EPS前年比が25%未満の期：25-12期 +22%（20%以上は直近4期とも達成）');
+    expect(scope.getByRole('list', { name: '業績の質の根拠' })).toHaveTextContent('EPS前年比が25%未満の期：25-12期 +22%（20%以上は直近4期とも達成）');
     cleanup();
-    // Sales growth +10, +30, +60, then +30: a known fall settles 未達, and the card names the two quarters.
+    // A loss-maker whose loss shrinks every year never reads as a record (and never in the zone tone).
+    const shrinking = record({ eps: [1, 1, 1, 1, 1.3, 1.4, 1.6, 2] });
+    shrinking.annualEps = [-3, -2, -1.5, -0.8].map((value, i) => secPoint('eps', [`${2022 + i}-01-01`, `${2022 + i}-12-31`], value));
+    scope = card(financial(shrinking));
+    const annual = [...document.querySelectorAll('.brief-fin-quality li')][1];
+    expect([annual.textContent, annual.className]).toEqual(['年間EPS 赤字', 'brief-chip tone-ext']);
+    expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent(/更新/);
+    expect([...document.querySelectorAll('.brief-fin-quality li.tone-zone')].map(chip => chip.textContent)).toEqual(['EPS前年比≥25%（直近4期）達成']);
+    expect(scope.getByRole('list', { name: '業績の質の根拠' })).toHaveTextContent('年間EPS：直近の年度（2025-12期）は −0.80 の赤字です（赤字の年度は最高と数えません）。');
+    cleanup();
+    // Sales growth +10, +30, +60, then +30: a known fall settles 未達, and the card names the series and its two quarters.
     const falling = record({ revenue: [100, 100, 100, 100, 110, 130, 160, 130] });
-    const scope = card(financial(falling));
+    scope = card(financial(falling));
     expect(scope.getByText('Code 33 未達')).toBeInTheDocument();
-    expect(scope.getByText('未達の根拠：売上の加速は2026-03期 +60% → 2026-06期 +30%で上昇していません。')).toBeInTheDocument();
+    expect(scope.getByText('未達の根拠：売上 前年比が2026-03期 +60% → 2026-06期 +30%と伸びが鈍化しています。')).toBeInTheDocument();
     // A 未達 keeps the three parts visible on a phone (the text names only the failed one).
     expect(document.querySelector('.brief-code33-parts')).not.toHaveClass('is-said');
   });
@@ -163,7 +197,7 @@ describe('brief fundamentals card', () => {
     expect(summary.closest('details')).toHaveTextContent('この銘柄の当日分の SEC 四半期データは配信されていません。');
     cleanup();
     // A delivery failure of the publication says so in the line; a refused record says it was not verified.
-    const coverage = { schema_version: 'fundamentals-coverage-v1', as_of_date: DATE, sec_fetch_ran: false, sec_as_of: null, file_schema: null, universe: 993, requested: null, eligible: null, truncated: null, deadline_unreached: null, admitted: 0, with_quarters: 0, not_requested: 0, not_fetched: 993, refused: 0, refused_by_reason: {} };
+    const coverage = { schema_version: 'fundamentals-coverage-v1', as_of_date: DATE, sec_fetch_ran: false, sec_as_of: null, file_schema: null, universe: 993, requested: null, eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 0, with_quarters: 0, not_requested: 0, not_fetched: 993, refused: 0, refused_by_reason: {} };
     const failed = row => ({ report: null, sec: secStatus(row, null, { detail: 'loaded', coverage }), history: null, code33: code33Layered(null, null, DATE) });
     render(<StockView data={{ ...data(true), financial: failed({ symbol: 'AAA', market: 'US', as_of_date: DATE }) }} />);
     expect(screen.getByText('業績：SEC未配信（配信側の問題）・Code 33 未確認')).toBeInTheDocument();
@@ -189,6 +223,9 @@ describe('brief fundamentals card', () => {
     expect(scope.getByText('前年同期の値がないため成長率は表示できません（4期分のみ）。')).toBeInTheDocument();
     expect(scope.getByText('四半期データが 4 期分のため判定できません（直近4期とその前年同期の計8期が必要）。')).toBeInTheDocument();
     expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent('未取得');
+    // The text says only 「4 期分」, so the known rise of the margin stays visible on a phone.
+    expect(document.querySelector('.brief-code33-parts')).not.toHaveClass('is-said');
+    expect(document.querySelector('.brief-code33-parts')).toHaveTextContent('純利益率の上昇達成');
   });
 
   it('gives the reason for every missing SEC record instead of 未取得', () => {
@@ -214,6 +251,8 @@ describe('brief fundamentals card', () => {
       return { report: null, sec, history, historyRetrievedAt: null, code33: code33Layered(null, history, DATE) };
     };
     let scope = card(pending('loading'));
+    // The phone's one line says it once.
+    expect(document.querySelector('.brief-fin-missing summary').textContent).toBe('業績：読み込み中…');
     for (const label of ['EPS 前年比', '売上 前年比', '純利益率']) expect(tile(scope, label)).toHaveTextContent('読み込み中…');
     expect(scope.getByText('Code 33 読み込み中')).toBeInTheDocument();
     expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent(/未配信|配信されていません/);

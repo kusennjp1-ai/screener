@@ -106,13 +106,24 @@ export function bookFinancialEvidence(data, symbol, date) {
   // known passes; anything else stays unknown. Missing data never passes.
   const trio = [result.epsAcceleration, result.salesAcceleration, result.marginImprovement];
   result.code33 = trio.includes('fail') ? 'fail' : trio.every(s => s === 'pass') ? 'pass' : 'unknown';
+  // "EPS growth of N% or more in each of the latest `count` quarters", three-valued within one consecutive,
+  // current window: fail as soon as a known quarter is below the level (a missing one cannot rescue it),
+  // pass only when all of them are known and at or above it, otherwise unknown. `below` names the known
+  // quarters under each level.
   result.epsFloor = Object.fromEntries([2, 4].map(count => {
     const selected = result.rows.slice(-count);
-    const ready = selected.length === count && !result.stale && selected.every(p => finite(p.epsYoY)) && selected.slice(1).every((p, i) => days(p.end, selected[i].end) >= 70 && days(p.end, selected[i].end) <= 110);
-    return [count, { at20: state(ready ? selected.every(p => p.epsYoY + 1e-9 >= 20) : null), at25: state(ready ? selected.every(p => p.epsYoY + 1e-9 >= 25) : null) }];
+    const window = selected.length === count && !result.stale && selected.slice(1).every((p, i) => days(p.end, selected[i].end) >= 70 && days(p.end, selected[i].end) <= 110);
+    const level = threshold => {
+      const below = window ? selected.filter(p => finite(p.epsYoY) && p.epsYoY + 1e-9 < threshold).map(p => ({ end: p.end, value: p.epsYoY })) : [];
+      return { state: !window ? 'unknown' : below.length ? 'fail' : selected.every(p => finite(p.epsYoY)) ? 'pass' : 'unknown', below };
+    };
+    const [at20, at25] = [level(20), level(25)];
+    return [count, { at20: at20.state, at25: at25.state, below20: at20.below, below25: at25.below }];
   }));
+  // A record year needs a profit: a smaller loss than every earlier year is never a new high.
   const annualRecent = result.annual.length >= 3 && days(date, result.annual.at(-1).end) <= 550;
-  result.annualRecord = annualRecent ? state(result.annual.at(-1).value > Math.max(...result.annual.slice(0, -1).map(p => p.value))) : 'unknown';
+  const latestAnnual = result.annual.at(-1)?.value;
+  result.annualRecord = annualRecent ? latestAnnual <= 0 ? 'fail' : state(latestAnnual > Math.max(...result.annual.slice(0, -1).map(p => p.value))) : 'unknown';
   result.balanceCoverage = result.rows.filter(p => finite(p.salesYoY) && (finite(p.inventoryYoY) || finite(p.receivablesYoY))).length;
   result.balanceWarnings = result.rows.filter(p => finite(p.salesYoY)).flatMap(p => ['inventoryYoY', 'receivablesYoY'].filter(k => finite(p[k]) && p[k] > p.salesYoY).map(k => ({ end: p.end, metric: k, growth: p[k], salesGrowth: p.salesYoY })));
   result.source = data.source;
