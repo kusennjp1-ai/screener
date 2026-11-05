@@ -22,19 +22,13 @@ import StockScreen from './StockScreen';
 import { BarQuote } from './BriefParts';
 import { Toast } from './briefPrimitives';
 import { ICON } from './briefIcons';
-import { recallScroll, rememberScroll, stepTarget, useBriefBack, useTransitionNavigate } from './briefNav';
+import { barDay, recallScroll, rememberScroll, stepTarget, useBriefBack, useTransitionNavigate } from './briefNav';
 
 // The market tab (long-run chart, sector ranks) is its own chunk: Today does not download or parse it.
 // It is fetched once the first screen is idle, so a tap on 市場 rarely waits for it.
 const loadMarketScreen = () => import('./MarketScreen');
 const MarketScreen = lazy(loadMarketScreen);
 
-const WEEKDAY = '日月火水木金土';
-/** The analysis date as the bar says it: 「10/2（金）」 (the session's own weekday, never today's). */
-function barDay(iso) {
-  const d = new Date(`${iso}T12:00:00Z`);
-  return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${WEEKDAY[d.getUTCDay()]}）` : iso;
-}
 
 /** Brings a row between the bar and the dock when it is not already there. */
 function reveal(row) {

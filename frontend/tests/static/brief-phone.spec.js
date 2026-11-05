@@ -139,6 +139,13 @@ test.describe('Today on desktop is unchanged', () => {
     await expect(market.locator('.brief-index-legend')).toBeVisible();
     await expect(page.locator('.brief-hero small')).toBeVisible();
     await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
+    // Each screen's heading says the date the way the bar does, so one date reads one way on a screen.
+    await expect(page.locator('.brief-hero small')).toHaveText('10/2（金）引け・米国株');
+    const tabs = page.getByRole('navigation', { name: 'ブリーフの画面' });
+    await tabs.getByRole('link', { name: '市場' }).click();
+    await expect(page.locator('.brief-hero small')).toHaveText('10/2（金）引け・米国株');
+    await tabs.getByRole('link', { name: '候補' }).click();
+    await expect(page.locator('.brief-hero small')).toHaveText('10/2（金）引け');
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

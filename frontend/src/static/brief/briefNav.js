@@ -85,4 +85,14 @@ export function recallScroll(screen) {
   return value && Number.isFinite(value.y) && typeof value.symbol === 'string' ? value : null;
 }
 
+const WEEKDAY = '日月火水木金土';
+/**
+ * The analysis date as the bar says it: 「10/2（金）」 (the session's own weekday, never today's). The screens'
+ * headings use it too, so one date reads one way on a screen.
+ */
+export function barDay(iso) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  return typeof iso === 'string' && Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}/${d.getUTCDate()}（${WEEKDAY[d.getUTCDay()]}）` : iso;
+}
+
 export const meterPercent = value => (Math.max(-10, Math.min(10, value)) + 10) * 5;

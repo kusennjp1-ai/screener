@@ -9,6 +9,7 @@ import { marketUpdateState } from '../marketUpdateState';
 import { bare, sentence, trendsStatus } from './briefModel';
 import { Expander, Parts } from './briefPrimitives';
 import { jumpTo } from './jump';
+import { barDay } from './briefNav';
 import { historyTakeaway } from './marketTabModel';
 import useSessionState from './useSessionState';
 import referenceData from '../reference/market-regime-reference-v1.json' with { type: 'json' };
@@ -87,7 +88,7 @@ export default function MarketScreen({ brief }) {
         </>}
   </section>;
   return <>
-    <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>市場</h1></header>
+    <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け・米国株` : '日付未確認'}</small><h1>市場</h1></header>
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={trends} date={brief.date} detail onOpenMetric={openMetric}
       switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} historyUnknown={historyUnknown}
       study={study} studyBlock={<RegimeContext context={study.regime} wide={wide} nasdaq={study.nasdaqPosition?.state ? study.nasdaqFigures : null} />} />

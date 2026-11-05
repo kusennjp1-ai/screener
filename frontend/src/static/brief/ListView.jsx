@@ -3,7 +3,7 @@ import useMediaQuery from '../useMediaQuery';
 import { briefOrder, candidateView, LIST_FILTERS, LIST_SORTS, matchesSearch } from './briefCandidate';
 import { CandidateRow } from './BriefParts';
 import { ScreenNotes } from './briefPrimitives';
-import { PHONE_QUERY } from './briefNav';
+import { barDay, PHONE_QUERY } from './briefNav';
 import { bundleState, BUNDLE_TEXT, unlistedWatch, useWatchSellChecks } from './useBriefData';
 
 // A phone (520px and narrower, where rows are compacted) lists this many rows per 「さらに表示」;
@@ -75,7 +75,7 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   const state = bundleState(brief);
   const hidden = LIST_FILTERS[filter]?.hidden ? filter : null;
   return <>
-    <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
+    <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け` : '日付未確認'}</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
     {kind !== 'watch' && <div className="brief-filters">
       <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).filter(([, value]) => !value.hidden).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => { update({ filter: key }); restart(); }}>{value.label}<span className="numeric">{state === 'ready' ? counts[key] : '—'}</span></button>)}</div>
       {/* A hidden filter (Today's 注目候補 tile) is said as a chip that clears it, only while it is on. */}

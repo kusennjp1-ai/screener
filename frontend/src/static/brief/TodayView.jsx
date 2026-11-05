@@ -9,7 +9,7 @@ import MarketCard from './MarketCard';
 import { CandidateRow } from './BriefParts';
 import { Parts, RiseItem, ScreenNotes } from './briefPrimitives';
 import { ICON } from './briefIcons';
-import { PHONE_QUERY } from './briefNav';
+import { barDay, PHONE_QUERY } from './briefNav';
 import { bundleState, BUNDLE_SHORT, BUNDLE_TEXT, unlistedWatch, useWatchSellChecks } from './useBriefData';
 import { UnlistedWatchRow, watchOrder } from './ListView';
 import useSessionState from './useSessionState';
@@ -97,7 +97,7 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
   const watchFolded = sellsIn ? ordered.filter((view, i) => i < WATCH_ROWS || sellChipView(sells[view.symbol])) : ordered;
   const watchShown = watchAll ? ordered : watchFolded, watchHidden = ordered.length - watchFolded.length;
   return <>
-    <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
+    <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け・米国株` : '日付未確認'}</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
     <TodaySummary market={brief.market} marketLoading={brief.marketLoading} counts={counts} attention={watchAttention({ state, watched, watchCount: watch.length, unlisted, sells })} state={state} nav={nav} open={open} />
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={brief.trends} date={brief.date} />
     <section className="brief-card in" style={{ '--i': 2 }} aria-labelledby="brief-focus-title">
