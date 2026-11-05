@@ -10,7 +10,9 @@ const SELL_INLINE = '保有中の判断材料です。複合警告は『株式�
 /** The sell card's sources, in the stock screen's 注記 below 1024px. */
 export const SELL_NOTE = `売りのサインは保有中の判断材料です。上昇の加速はピボット比 +${SELL_RULES.climaxFromPivotPercent}%以上の買いゾーン超過で、ピボット上抜けから${SELL_RULES.climaxSessions}営業日以上の銘柄でのみ判定し、50日線は割れた日の出来高で判定します。複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。`;
 
-const SELL_STATE = { hit: ['!', 'サインあり'], caution: ['△', '注意'], clear: ['·', 'サインなし'], unknown: ['?', '未確認'], na: ['–', '対象外'] };
+// A check that is not judged for this stock (its reason says why: 「…のため判定しません」) reads 判定せず, never 対象外,
+// which the brief keeps for SEC, funds and unlisted watch symbols (CONTEXT.md).
+const SELL_STATE = { hit: ['!', 'サインあり'], caution: ['△', '注意'], clear: ['·', 'サインなし'], unknown: ['?', '未確認'], na: ['–', '判定せず'] };
 
 function SellChecks({ title, checks }) {
   return <>
@@ -45,7 +47,7 @@ export default function SellCard({ sells, reason, wide }) {
     {sells ? <>
       <p className="brief-note">{sells.advance ? `起点（直近1年の安値）${shortDate(sells.advance.startDate, sells.asOf)} の ${price(sells.advance.low)} から ${signed(sells.advance.gainPct)}・${sells.advance.sessions}営業日。` : `起点（直近1年の安値）から +${SELL_RULES.advanceMinPercent}%以上・${SELL_RULES.advanceMinSessions}営業日以上の上昇局面ではないため、起点以来の下落は判定しません。`}{strengthNote(sells)}{status}</p>
       {shown.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
-      {quiet.length > 0 && <Expander id="stock-sell-quiet" summary={[count('clear') ? `サインなし ${count('clear')}件` : null, count('na') ? `対象外 ${count('na')}件` : null].filter(Boolean).join('・')}>
+      {quiet.length > 0 && <Expander id="stock-sell-quiet" summary={[count('clear') ? `サインなし ${count('clear')}件` : null, count('na') ? `判定せず ${count('na')}件` : null].filter(Boolean).join('・')}>
         {quiet.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
       </Expander>}
     </> : <p className="brief-note">{reason ? `日足を分析基準日の値として検証できないため、売りのサインは未確認です（${reason}）。` : '日足が60本未満のため、売りのサインは未確認です。'}</p>}

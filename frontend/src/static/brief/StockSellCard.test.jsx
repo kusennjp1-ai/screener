@@ -38,8 +38,9 @@ describe('brief stock view', () => {
     expect(sell).toHaveTextContent('上昇の加速はピボット比 +20%以上でのみ判定します。');
     // The advance's 起点 is said as a short date, like every date on the card.
     expect(sell).toHaveTextContent(/起点（直近1年の安値）2025\/1\/1 の /);
-    // A stock below its pivot: the four climax checks are folded as 対象外 with the reason.
-    expect(within(sell).getByText('対象外 4件').closest('summary')).toBeTruthy();
+    // A stock below its pivot: the four climax checks are folded as 判定せず with the reason (never 対象外).
+    expect(within(sell).getByText('判定せず 4件').closest('summary')).toBeTruthy();
+    expect(sell).not.toHaveTextContent('対象外');
     expect(sell).toHaveTextContent('ピボットより下（ブレイク前）のため判定しません');
   });
 
@@ -63,7 +64,7 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
     const quiet = [...sell.querySelectorAll('li')].filter(li => !li.querySelector('.is-sell-hit, .is-sell-unknown'));
     expect(quiet.length).toBeGreaterThan(0);
     for (const li of quiet) expect(folded(li)).toBe(true);
-    expect(within(sell).getByText(/^(サインなし \d+件・)?対象外 \d+件$/).closest('summary')).toBeTruthy();
+    expect(within(sell).getByText(/^(サインなし \d+件・)?判定せず \d+件$/).closest('summary')).toBeTruthy();
   });
 
   it('keeps 独自判定 and 売買の推奨ではありません on the sell card itself, never only behind a fold', () => {
