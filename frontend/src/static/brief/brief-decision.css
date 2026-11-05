@@ -1,0 +1,42 @@
+/* Track D (the buy decision): the conclusion card, the rows' day change and position chips, the bar quote.
+   brief.css is frozen in round 1, so each rule here overrides one of its rules with equal or higher
+   specificity (this file loads after it). Type sizes 12/13/16; colours only from the theme tokens. */
+
+/* The verified day change after the ticker: a row's title line, the phone bar and the desktop header.
+   Up and down use the text tokens brief.css gives .is-up / .is-down; an unknown change is a muted —. */
+.brief-row-title .brief-daychg { flex: none; font-size: 12px; color: var(--text-3); overflow: visible; }
+.brief-row-title .brief-daychg.is-up, .brief-bar-title .brief-bar-change.is-up, .brief-stockhead h2 .brief-daychg.is-up { color: color-mix(in srgb, var(--up) 72%, var(--text)); }
+.brief-row-title .brief-daychg.is-down, .brief-bar-title .brief-bar-change.is-down, .brief-stockhead h2 .brief-daychg.is-down { color: color-mix(in srgb, var(--down) 72%, var(--text)); }
+.brief-bar-title .brief-bar-change { font-size: 13px; font-weight: 400; color: var(--text-2); }
+.brief-stockhead h2 .brief-daychg { font-size: 16px; font-weight: 400; color: var(--text-2); }
+
+/* The pivot meter names the four positions with the table every screen uses (土台形成中・ピボット接近・
+   買いゾーン・買いゾーン超過). The names are longer than the old ones, so the meter is a grid: the names
+   take the lines they need, and the track, the marker and the ticks follow them instead of a fixed top. */
+.brief-call .brief-meter { height: auto; display: grid; grid-template-columns: minmax(0, 1fr); }
+.brief-call .brief-meter > * { grid-column: 1; }
+.brief-call .brief-meter-labels { position: static; grid-row: 1; align-items: end; line-height: 1.25; word-break: keep-all; }
+.brief-call .brief-meter-track { position: relative; top: auto; grid-row: 2; align-self: center; }
+.brief-call .brief-meter-marker { position: relative; top: auto; grid-row: 2; align-self: center; justify-self: start; margin-block: -1px; }
+.brief-call .brief-meter-ticks { position: static; grid-row: 3; margin-top: -3px; line-height: 1.25; }
+.brief-call .brief-kgrid > div { position: relative; }
+.brief-tilequal { position: absolute; top: -9px; right: 8px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); font-size: 12px; line-height: 16px; font-weight: 400; color: var(--text-2); white-space: nowrap; }
+/* Where a column is narrower than 「買いゾーン超過」 but the names still fit one line, the last column takes a
+   little of the buy zone's width and its name ends at the track's end; narrower still, the names break
+   between their words (土台／形成中, ピボット／接近, 買いゾーン／超過). */
+@container (min-width: 292px) and (max-width: 339.98px) {
+  .brief-call .brief-meter-labels { grid-template-columns: 1fr 1fr .85fr 1.15fr; }
+  .brief-call .brief-meter-labels > :last-child { text-align: right; }
+}
+@container (max-width: 291.98px) { .brief-call .brief-meter-labels { column-gap: 6px; } }
+
+/* Phones: the conclusion's tile labels and notes, the meter's names and ticks read at 12px (the notes in
+   the secondary text colour); the row chips are 12px in brief.css already. */
+@media (max-width: 520px) {
+  .brief-call .brief-kgrid small, .brief-call .brief-kgrid em { font-size: 12px; }
+  .brief-call .brief-kgrid em { color: var(--text-2); }
+  .brief-call .brief-meter-labels, .brief-call .brief-meter-ticks { font-size: 12px; }
+  /* The market note after Today's 注目候補 heading (focusHeadingNote) takes its own line, so the heading
+     and 「すべての候補 ›」 keep theirs. */
+  #brief-focus-title > small { display: block; }
+}
