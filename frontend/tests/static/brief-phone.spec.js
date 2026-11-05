@@ -383,6 +383,10 @@ for (const [width, device] of Object.entries({ 320: phone(320, 640), 375: phone(
     await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
     const tiles = summary.getByRole('link');
     await expect(tiles).toHaveCount(3);
+    // Measure once the summary's entrance has finished: mid-slide, a tile reads 4.0000076px taller than its link.
+    await summary.evaluate(node => Promise.all(node.getAnimations({ subtree: true })
+      .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+      .map(animation => animation.finished.catch(() => null))));
     for (const box of await tiles.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
     // The link fills its tile, and the tile is as tall as before (its text sets it, not the link): 97px at 375
     // with the default storage, as measured before the tiles became links (brief-watch.spec.js pins the tile
