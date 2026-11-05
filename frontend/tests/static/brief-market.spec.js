@@ -225,17 +225,24 @@ test.describe('desktop 1440px: the study block and the guide\'s basis', () => {
     await expect(fold.locator('summary')).toHaveText('過去の傾向（1990〜2026年・予測ではありません）');
     await expect(market.getByRole('group', { name: /^指数のトレンド/ }).locator('details.brief-regime-ref')).toHaveCount(1);
     await expect(fold.locator('h4')).toHaveText(['S&P 500', 'Nasdaq総合']);
-    await expect(fold.locator('li').first()).toHaveText(/^50日線・200日線の上（10\/2時点）：21日以内に−5%以上下げた割合 10%（全期間 16%）〔S&P・Nasdaqとも〕$/);
+    await expect(fold.locator('li').first()).toHaveText(/^50日線・200日線の上（10\/2時点）：21営業日以内に5%以上下げた割合 10%（全期間 16%）〔S&P・Nasdaqとも〕$/);
     await expect(fold.locator('li').nth(1)).toHaveText(/^1年高値から5%超の下（10\/2時点・境界まで0\.3%）：29%（5%以内 11%）〔S&P・Nasdaqとも〕$/);
     await expect(fold.locator('li').nth(2)).toHaveText(/^分配日3〜4日（10\/2時点）：15%（全期間 17%）〔未確立〕$/);
     // An older publication has no Nasdaq position: said, never 0.
     await expect(fold.locator('.brief-regime-index').last().locator('li').first()).toHaveText('50日線・200日線との位置：旧形式の公開データに未収録');
     await expect(fold.locator('.brief-regime-foot')).toContainText('指数の結果で、個別銘柄の値ではありません。出典：market-regime-study-v2（CI run 41844557380）');
+    // The key names the outcome, 全期間 and exactly the tags the lines show.
+    const shown = new Set((await fold.locator('li .brief-regime-keep').allTextContents()).filter(text => text.startsWith('〔')));
+    expect(new Set((await fold.locator('.brief-regime-key').textContent()).match(/〔[^〕]+〕(?=＝)/g))).toEqual(shown);
+    await expect(fold.locator('.brief-regime-key')).toContainText('割合は、その日の終値から21営業日以内に終値で5%以上下げた日の割合です。');
+    // A comparator and a tag never break inside: each is one line box.
+    for (const keep of await fold.locator('.brief-regime-keep').all()) expect(await keep.evaluate(node => node.getClientRects().length)).toBe(1);
     await expect(market.locator('.brief-index-nas')).toHaveCount(0);
     // Never in the verdict or the warning summary.
-    await expect(market.getByTestId('brief-regime')).not.toContainText(/過去の傾向（|全期間|21日以内/);
-    await expect(market.getByRole('group', { name: '注意サイン（独自判定）' })).not.toContainText(/全期間|21日以内/);
-    // The exposure guide's basis and the Nasdaq note, in place under the meter.
+    await expect(market.getByTestId('brief-regime')).not.toContainText(/過去の傾向（|全期間|21営業日以内に5%/);
+    await expect(market.getByRole('group', { name: '注意サイン（独自判定）' })).not.toContainText(/全期間|21営業日以内に5%以上下げた割合 /);
+    // The exposure guide's basis and the Nasdaq note, in place under the meter, in the phone's order.
+    expect(await market.getByTestId('brief-regime').locator('.brief-verdict-why, .brief-exposure-nasdaq, p.brief-exposure-basis').evaluateAll(nodes => nodes.map(node => node.className))).toEqual(['brief-verdict-why', 'brief-exposure-nasdaq', 'brief-exposure-basis']);
     await expect(market.locator('p.brief-exposure-basis')).toHaveText(/^独自の目安：上昇トレンド 最大50%・上昇に圧力 最大25%・それ以外 0%（S&P 500（SPY）の50日線・200日線と局面判定から。/);
     await expect(market.locator('.brief-exposure-nasdaq')).toHaveText('判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は反発3日目（FTD未確認・独自判定）。');
     // The fired breadth check carries 〔参考〕, and the tags are explained in place.
@@ -286,7 +293,9 @@ test.describe('desktop 1440px: the study block and the guide\'s basis', () => {
     const nasdaq = market.locator('details.brief-regime-ref .brief-regime-index').last();
     await expect(nasdaq.locator('li')).toHaveText([
       '200日線の上・50日線の下（10/2時点）：26%（全期間 26%）〔未確立〕', '1年高値から5%超の下（10/2時点・境界まで2.3%）：35%（5%以内 19%）〔S&P・Nasdaqとも〕',
-      '分配日3〜4日（10/2時点）：23%（全期間 26%）〔Nasdaqのみ〕', '反発中（FTD判定）（10/2時点）：32%（全期間 26%）〔未確立〕']);
+      '分配日3〜4日（10/2時点）：23%（全期間 26%）〔Nasdaqのみ〕', '反発中（FTD判定・10/2時点）：32%（全期間 26%）〔未確立〕']);
+    // In place on the desktop only: never inside the fold too.
+    await expect(market.locator('.brief-regime-nas')).toHaveCount(0);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

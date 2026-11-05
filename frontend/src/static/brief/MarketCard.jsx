@@ -1,7 +1,7 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sentence, shortDate, trendsAlert } from './briefModel';
-import { marketCardView, marketRegimeContext, num, signedPercent, SURVIVORSHIP_NOTE } from './marketTabModel';
+import { marketCardView, num, signedPercent, SURVIVORSHIP_NOTE } from './marketTabModel';
 import { Expander, Parts, ScreenNotes } from './briefPrimitives';
 import { exposureRuleText } from '../portfolioPlan';
 
@@ -164,23 +164,6 @@ function Group({ group, caveat = null, children }) {
   </div>;
 }
 
-/**
- * 「過去の傾向」: one fold in the 指数 panel (open by default on the desktop), one line per index state with
- * the study's share for that state, its comparator, its tag and its own date, then what the numbers are not.
- * Never in the verdict or the warning summary.
- */
-function RegimeContext({ context, wide }) {
-  return <Expander id={`market-regime-ref${wide ? '-wide' : ''}`} className="brief-regime-ref" summary={context.summary} defaultOpen={wide}>
-    {!context.available ? <p className="brief-regime-foot">{context.reason}</p> : <>
-      {context.indices.map(block => <div key={block.symbol} className="brief-regime-index">
-        <h4>{block.name}</h4>
-        <ul>{block.items.map(item => <li key={item.indicator} className={item.reason ? 'is-reason' : undefined}>{item.text}</li>)}</ul>
-      </div>)}
-      <p className="brief-regime-foot">{context.footer}</p>
-    </>}
-  </Expander>;
-}
-
 /** What the long history's absence leaves judged: only the index checks that themselves were judged. */
 function historyScope(judged) {
   if (!judged.length) return '長期集計がないため、市場の参加度とリーダーの健全性も判定していません。';
@@ -202,7 +185,7 @@ function Signals({ signals, exposure, inline = true }) {
   const headline = fired.length ? <><span aria-hidden="true">▲</span> 注意サイン {fired.length}件</> : judged.length ? '注意サインなし' : '注意サインを判定できません';
   return <div className={`brief-signals${fired.length ? ' is-warn' : ''}`} role="group" aria-label="注意サイン（独自判定）">
     <b>{headline}<small>（{asOf ? `${asOf}時点・` : ''}独自判定）</small></b>
-    {fired.length > 0 && <ul>{fired.map(s => <li key={s.key}><span aria-hidden="true">▲</span><span>{s.text}{s.itemAsOf ? `（${s.itemAsOf}時点）` : ''}{s.tag ? <span className="brief-signal-tag">{s.tag}</span> : null}</span></li>)}</ul>}
+    {fired.length > 0 && <ul>{fired.map(s => <li key={s.key}><span aria-hidden="true">▲</span><span>{s.text}{s.itemAsOf ? `（${s.itemAsOf}時点）` : ''}{s.tags?.length ? <span className="brief-signal-tag">{s.tags.join('')}</span> : null}</span></li>)}</ul>}
     {/* The study tags' key: on a phone the short 〔参考〕 legend (the full sentence is in the 注記), on the desktop the sentence itself. */}
     {inline ? tagNote && <p className="brief-signals-tags">{tagNote}</p> : legend && <p className="brief-signals-tags">{legend}</p>}
     {historyMissing && <p>{historyScope(judged)}</p>}
@@ -245,13 +228,12 @@ function SectionTabs({ panels, active, onSelect }) {
  * Every value shows a number (an older one only with its own date) or the precise reason it has none.
  * Today (compact) keeps four tiles; the market tab (detail) leads with the verdict and the warning
  * summary, then the evidence in three groups whose rows open to their rule and one-year line.
- * `reference` is the market-regime study reference (MarketScreen passes it, so its data stays in the
- * market tab's chunk); without one the tab shows no study tags and says why 過去の傾向 has no rows.
+ * The market tab's study parts come from MarketScreen, so the study's code and data stay in its lazy chunk:
+ * `study` (reference/marketTabStudy.js: the warning summary's tags, the 分配日 detail, the Nasdaq note and position)
+ * and `studyBlock`, the 「過去の傾向」 fold it renders at the end of the 指数 panel. Today passes neither.
  */
-export default function MarketCard({ market, marketLoading = false, trends, date, detail = false, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, reference = null }) {
-  const view = marketCardView({ market, marketLoading, trends, date, reference });
-  // The 指数 panel's 「過去の傾向」 (market tab only): today's state of each index joined to the study's row.
-  const regime = detail ? marketRegimeContext({ history: view.history, trends, reference, date }) : null;
+export default function MarketCard({ market, marketLoading = false, trends, date, detail = false, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, study = null, studyBlock = null }) {
+  const view = marketCardView({ market, marketLoading, trends, date, study: detail ? study : null });
   const { status, verdict, dating, signals, summary, conflict, groups, chart } = view;
   const chartStatus = view.longError ? 'history-error' : status.state === 'error' && status.kind === 'fetch' ? 'fetch-error' : status.state;
   const verdictMark = <span className="brief-verdict-mark" aria-hidden="true">{verdict.pending ? '…' : verdict.tone === 'zone' ? '●' : verdict.tone === 'ext' ? '▲' : verdict.tone === 'neg' ? '⊘' : '?'}</span>;
@@ -290,8 +272,10 @@ export default function MarketCard({ market, marketLoading = false, trends, date
     '各行を開くと、その値の基準（しきい値）と直近1年の推移を表示します。',
     `参加度・リーダーの値は、${SURVIVORSHIP_NOTE}です。`,
     signals?.tagNote ? `注意サインの印：${signals.tagNote}` : null,
+    summary && !finite(summary.vs200) ? '200日線比は、長期履歴に200日分の終値がないため未算出です。' : null,
   ];
-  const nas = view.nasdaqPosition?.state || null;
+  // The Nasdaq's published position: in place on the desktop, inside 過去の傾向 on a phone (the screen's budget).
+  const nas = switcher ? null : view.nasdaqFigures;
 
   if (!detail) {
     return <section className="brief-card brief-market in" style={{ '--i': 1 }} aria-labelledby="brief-market-title">
@@ -318,19 +302,19 @@ export default function MarketCard({ market, marketLoading = false, trends, date
         <div className="brief-verdict-head">{verdictMark}<div><strong><Label text={verdict.label} /></strong>{verdict.date && <span className="brief-verdict-date numeric">{verdict.date}</span>}<p>{verdict.lead}</p></div></div>
         {/* On a narrow phone the label breaks before の目安, never leaving 「安」 alone. */}
         {verdict.exposure !== null && <div className="brief-exposure"><small><span className="brief-frag">エクスポージャー</span><span className="brief-frag">の目安</span></small><b className="numeric">{verdict.exposure > 0 ? `最大 ${verdict.exposure}%` : '0%'}</b><span className="brief-exposure-track" aria-hidden="true"><i style={{ width: `${verdict.exposure}%` }} /></span></div>}
-        {/* 目安と判定の基準: the verdict's basis, how the guide is set (from MARKET_CAPS) and, while the verdict is
-            positive, the Nasdaq's own state. One fold under the meter on a phone (the Nasdaq note, when it
-            applies, is its summary); in place on the desktop. */}
+        {/* 目安と判定の基準, in the same order on both: the verdict's basis, while the verdict is positive the Nasdaq's
+            own state, then how the guide is set (from MARKET_CAPS). One fold under the meter on a phone, whose summary
+            names the fold and, when it applies, the Nasdaq note's short form; in place on the desktop. */}
         {switcher && (verdict.exposure !== null || verdict.basis)
-          ? <Expander id="market-exposure-rule" className="brief-exposure-basis" summary={verdict.nasdaq ? verdict.nasdaq.short : '目安と判定の基準'}>
+          ? <Expander id="market-exposure-rule" className="brief-exposure-basis" summary={verdict.nasdaq ? <Parts text={`目安と判定の基準・${verdict.nasdaq.short}`} /> : '目安と判定の基準'}>
             {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
             {verdict.nasdaq && <p>{verdict.nasdaq.long}</p>}
             {verdict.exposure !== null && <p>{exposureRuleText()}</p>}
           </Expander>
           : <>
-            {verdict.exposure !== null && <p className="brief-exposure-basis">{exposureRuleText()}</p>}
-            {verdict.nasdaq && <p className="brief-exposure-nasdaq">{verdict.nasdaq.long}</p>}
             {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
+            {verdict.nasdaq && <p className="brief-exposure-nasdaq">{verdict.nasdaq.long}</p>}
+            {verdict.exposure !== null && <p className="brief-exposure-basis">{exposureRuleText()}</p>}
           </>}
       </div>
       {signals && <Signals signals={signals} exposure={verdict.exposure} inline={!switcher} />}
@@ -344,17 +328,20 @@ export default function MarketCard({ market, marketLoading = false, trends, date
             <div><small>S&amp;P 500</small><b className="numeric">{num(summary.close, 2)}</b><span>{shortDate(summary.date, date)}終値</span></div>
             <div><small>{summary.fullYear ? '1年高値から' : '期間内高値から'}</small><b className="numeric">{signedPercent(summary.fromHigh)}</b></div>
             {/* The 200-day distance is the cell's second line, so the row keeps its height. */}
-            <div className="is-ma"><small>50日線比</small><b className="numeric">{signedPercent(summary.vsMa)}</b><span>{finite(summary.vs200) ? `200日線比 ${signedPercent(summary.vs200)}` : '200日線比 未算出（200日分の終値なし）'}</span></div>
+            {/* Without 200 closes a dash keeps the cell as narrow as a value (the row never wraps); the words are read
+                out and the reason is in the 注記 and in 過去の傾向. */}
+            <div className="is-ma"><small>50日線比</small><b className="numeric">{signedPercent(summary.vsMa)}</b>{finite(summary.vs200) ? <span>200日線比 {signedPercent(summary.vs200)}</span>
+              : <><span aria-hidden="true">200日線比 —</span><span className="sr-only">200日線比 未算出（200日分の終値なし）</span></>}</div>
           </div>}
           {/* The Nasdaq's position, only from a publication whose exporter recorded it (older ones never did). */}
-          {nas && <p className="brief-index-nas"><b>Nasdaq総合</b><span className="numeric">{num(nas.close, 2)}</span><Parts text={`${shortDate(nas.date, date)}終値・${finite(nas.fromHigh) ? `1年高値から ${signedPercent(nas.fromHigh)}` : '1年高値から 未算出'}・${finite(nas.vsMa) ? `50日線比 ${signedPercent(nas.vsMa)}` : '50日線比 未算出'}・${finite(nas.vs200) ? `200日線比 ${signedPercent(nas.vs200)}` : '200日線比 未算出'}`} /></p>}
+          {nas && <p className="brief-index-nas"><b>Nasdaq総合</b><span className="numeric">{nas.close}</span><Parts text={nas.text} /></p>}
           {/* A disagreement with the verdict's scan input is always said here; the plain source line is in
               place on the desktop and in the 注記 below 1024px. */}
           {summary && (conflict || !switcher) && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || <><span>3つの数値は長期履歴の^GSPC終値から計算しています。</span><span>200日線比も同じ終値からです。</span></>}</p>}
           {chartEl}
         </div>}
         <div className="brief-env-rows">{group.items.map(item => <EnvRow key={item.key} item={item} groupAsOf={group.asOf} onOpenMetric={view.history ? onOpenMetric : null} />)}</div>
-        {group.id === 'index' && regime && <RegimeContext context={regime} wide={!switcher} />}
+        {group.id === 'index' && studyBlock}
       </Group>))}
     </div>
     {switcher && history && panel('history', history)}

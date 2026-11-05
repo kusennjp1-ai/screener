@@ -7,6 +7,7 @@ const finite = Number.isFinite;
 export const REFERENCE_SCHEMA = 'market-regime-reference-v1';
 export const INDEX_SYMBOLS = Object.freeze(['^GSPC', '^IXIC']);
 const LABELS = new Set(['robust', 'weak', 'unstable', 'insufficient']);
+const DIRECTIONS = new Set(['higher', 'lower']);
 /** 〔偏り〕: a state whose sessions lie 60% or more, or 40% or less, in the study's first half (findings-final.md). */
 export const BIAS_SHARE = Object.freeze({ atLeast: 60, atMost: 40 });
 export const TAGS = Object.freeze({
@@ -19,7 +20,7 @@ const share = value => value === null || (finite(value) && value >= 0 && value <
 /** A reference the market tab may read: its schema, methods, buckets and every state's fields in shape. */
 export function validReference(ref) {
   if (!plain(ref) || ref.schema_version !== REFERENCE_SCHEMA || typeof ref.study_version !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(ref.study_as_of || '')) return false;
-  if (typeof ref.methods?.distribution !== 'string' || typeof ref.methods?.followThrough !== 'string') return false;
+  if (typeof ref.methods?.distribution !== 'string' || typeof ref.methods?.followThrough !== 'string' || !Number.isSafeInteger(ref.methods?.followThroughWindowSessions)) return false;
   if (ref.outcome?.horizonSessions !== 21 || ref.outcome?.drawdownPercent !== -5) return false;
   const b = ref.buckets;
   if (!plain(b) || !Array.isArray(b.ddGrades) || !finite(b.ddWarn) || !finite(b.nearHighPercent) || !finite(b.ftdRecentSessions) || !plain(b.states)) return false;
@@ -29,6 +30,8 @@ export function validReference(ref) {
     if (!plain(indicator?.states)) return false;
     for (const state of Object.values(indicator.states)) {
       if (!plain(state) || !LABELS.has(state.labelDd5) || !LABELS.has(state.labelMean) || !share(state.pDd5) || !share(state.comparatorPDd5) || !share(state.firstHalfShare)) return false;
+      // A mean carries a direction only with a robust label, and never a size.
+      if (state.meanDirection === null ? false : !(DIRECTIONS.has(state.meanDirection) && state.labelMean === 'robust')) return false;
       if (!['baseline', 'other_state'].includes(state.comparator)) return false;
     }
   }
@@ -50,6 +53,10 @@ export function stateTag(ref, suffix, symbol, state) {
 }
 export const biasTag = entry => finite(entry?.firstHalfShare) && (entry.firstHalfShare >= BIAS_SHARE.atLeast || entry.firstHalfShare <= BIAS_SHARE.atMost) ? TAGS.bias : null;
 
+/** The states whose mean return was robustly lower than their comparator, on any index ([indicator, state] pairs). */
+export const meanLowerStates = ref => Object.entries(ref?.indicators || {}).flatMap(([key, indicator]) => Object.entries(indicator?.states || {})
+  .filter(([, state]) => state?.labelMean === 'robust' && state.meanDirection === 'lower').map(([state]) => [key, state]));
+
 /** The warning summary's checks (marketCardView keys) and the study indicator each one is. */
 export const SIGNAL_INDICATORS = Object.freeze({
   'dist-S&P': Object.freeze({ symbol: '^GSPC', suffix: 'dd.binary', state: 'warn', method: 'distribution' }),
@@ -60,16 +67,19 @@ export const SIGNAL_INDICATORS = Object.freeze({
   stage: Object.freeze({ breadth: 'rule.stage' }), leaders: Object.freeze({ breadth: 'rule.leaders' }), breakout: Object.freeze({ breadth: 'rule.breakout' }),
 });
 /**
- * A fired check's tag. Breadth checks are 〔参考〕 (the 2021-26 breadth panel was consistent with chance as a
- * whole); an index check takes its state's tag, and none when the published method differs from the study's.
- * `methods` holds the published method ids of the check's index ({ distribution, followThrough }).
+ * A fired check's tags. A breadth check whose rule the study did not find robust is 〔参考〕 (the 2021-26 breadth
+ * panel was consistent with chance as a whole; the legend 「関係未確認」 relies on this); a robust one gets none.
+ * An index check takes its state's tag and its 〔偏り〕, and none when the published method, or for the
+ * follow-through state the judged window, differs from the study's. `published` holds the check's index inputs:
+ * { distribution, followThrough } method ids and followThroughWindow, the sessions its follow-through was judged on.
  */
-export function signalTag(ref, key, methods = {}) {
+export function signalTags(ref, key, published = {}) {
   const map = SIGNAL_INDICATORS[key];
-  if (!ref || !map) return null;
-  if (map.breadth) return ref.breadth?.[map.breadth] ? TAGS.breadth : null;
-  if (!methods[map.method] || methods[map.method] !== ref.methods?.[map.method]) return null;
-  return stateTag(ref, map.suffix, map.symbol, map.state);
+  if (!ref || !map) return [];
+  if (map.breadth) { const rule = ref.breadth?.[map.breadth]; return rule && rule.labelDd5 !== 'robust' ? [TAGS.breadth] : []; }
+  if (!published[map.method] || published[map.method] !== ref.methods?.[map.method]) return [];
+  if (map.method === 'followThrough' && published.followThroughWindow !== ref.methods.followThroughWindowSessions) return [];
+  return [stateTag(ref, map.suffix, map.symbol, map.state), biasTag(referenceState(ref, `${map.symbol}.${map.suffix}`, map.state))].filter(Boolean);
 }
 
 // ---- states, judged as the study judged them --------------------------------------------------------------

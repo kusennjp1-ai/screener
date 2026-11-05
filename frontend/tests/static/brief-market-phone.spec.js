@@ -66,7 +66,14 @@ test.describe('market tab words at 320px', () => {
 
 // ---- 過去の傾向 and the guide's basis on a phone (Track B) -----------------------------------------------------
 const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
-const B_TEXT = '.brief-regime-ref summary, .brief-regime-index li, .brief-regime-index h4, .brief-regime-foot, .brief-exposure-basis summary, .brief-exposure-basis p, .brief-signal-tag, .brief-signals-tags, .brief-index-nas, .brief-index-scale, .brief-index-mark, .brief-index-stats span';
+const B_TEXT = '.brief-regime-ref summary, .brief-regime-index li, .brief-regime-index h4, .brief-regime-nas, .brief-regime-key, .brief-regime-foot, .brief-exposure-basis summary, .brief-exposure-basis p, .brief-signal-tag, .brief-signals-tags, .brief-index-nas, .brief-index-scale, .brief-index-mark, .brief-index-stats span';
+const contentHeight = page => page.evaluate(() => Math.round(document.querySelector('#brief-main .brief-stack').getBoundingClientRect().bottom + scrollY));
+const DD_METHOD = 'index-down-strictly-over-0.2-higher-volume-age25-high5-v1';
+/** What every publication of the new exporter carries: method ids on both series and the Nasdaq's position. */
+const nasdaqState = { trends: value => {
+  for (const index of value.indices) index.method = DD_METHOD;
+  value.indices[1].state = { date: value.indices[1].points.at(-1).date, close: 18234.56, vs50: -1.4, vs200: 3.2, fromHigh: -7.25, fullYear: true };
+} };
 
 test.describe('the study block and the guide\'s basis at 375×812', () => {
   test.use({ ...phone(375, 812), contextOptions: { reducedMotion: 'reduce' } });
@@ -81,8 +88,8 @@ test.describe('the study block and the guide\'s basis at 375×812', () => {
       const box = await locator.boundingBox();
       expect(box.y + box.height).toBeLessThanOrEqual(756);
     }
-    // The Nasdaq is on a rally attempt while the verdict is positive: its note is the fold's summary.
-    await expect(basis.locator('summary')).toHaveText('Nasdaqは反発3日目（判定はSPYのみ）');
+    // The Nasdaq is on a rally attempt while the verdict is positive: the summary names the fold and the note's short form.
+    await expect(basis.locator('summary')).toHaveText('目安と判定の基準・Nasdaqは反発3日目（判定はSPYのみ）');
     for (const fold of [basis, study]) {
       await expect(fold).not.toHaveAttribute('open', '');
       const height = (await fold.locator('summary').boundingBox()).height;
@@ -114,17 +121,63 @@ test.describe('the study block and the guide\'s basis at 375×812', () => {
   });
 });
 
-for (const width of [320, 375, 414]) test.describe(`the study block and the Nasdaq row at ${width}px`, () => {
-  test.use(phone(width, 812));
-  test('stay within the width, opened and with every mark', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/market', { mutate: { trends: value => {
-      for (const index of value.indices) index.method = 'index-down-strictly-over-0.2-higher-volume-age25-high5-v1';
-      value.indices[1].state = { date: value.indices[1].points.at(-1).date, close: 18234.56, vs50: -1.4, vs200: 3.2, fromHigh: -7.25, fullYear: true };
-    } } });
+test.describe('the market screen at 375×812 with what the new exporter publishes', () => {
+  test.use({ ...phone(375, 812), contextOptions: { reducedMotion: 'reduce' } });
+  test('a Nasdaq position fits the market budget: its figures fold into 過去の傾向, the lead stays above 756px', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: nasdaqState });
+    await expect(page.locator('.market-history-explorer svg').first()).toBeAttached();
+    await settled(page);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(1300);
     const market = page.getByRole('region', { name: '地合い' });
-    await expect(market.locator('.brief-index-nas')).toBeVisible();
+    for (const locator of [market.getByTestId('brief-regime'), market.getByRole('group', { name: '注意サイン（独自判定）' }), page.getByRole('tab').first()]) {
+      const box = await locator.boundingBox();
+      expect(box.y + box.height).toBeLessThanOrEqual(756);
+    }
+    // No row of its own on a phone: the figures are the first line of the Nasdaq block inside the (closed) fold.
+    await expect(market.locator('.brief-index-nas')).toHaveCount(0);
+    const study = market.locator('details.brief-regime-ref');
+    await expect(study).not.toHaveAttribute('open', '');
+    await study.locator('summary').click();
+    await expect(study.locator('.brief-regime-index').last().locator('h4 + .brief-regime-nas')).toHaveText('18,234.5610/2終値・1年高値から −7.3%・50日線比 −1.4%・200日線比 +3.2%');
+    expect(errors).toEqual([]);
+  });
+});
+
+for (const width of [375, 390]) test.describe(`the S&P stats row without 200 closes at ${width}px`, () => {
+  test.use({ ...phone(width, width === 375 ? 812 : 844), contextOptions: { reducedMotion: 'reduce' } });
+  test('keeps its height: a dash is visible, the words are read out and the reason is in the 注記', async ({ page, context }) => {
+    // The row's height with every close, on a page of its own.
+    const before = await context.newPage();
+    await openBrief(before, '#/brief/market');
+    const full = (await before.getByRole('region', { name: '地合い' }).locator('.brief-index-stats').boundingBox()).height;
+    await before.close();
+    const row = page.getByRole('region', { name: '地合い' }).locator('.brief-index-stats');
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: { trends: value => { const closes = value.long_history.sp500; closes.forEach((point, i) => { if (i < closes.length - 150) point.close = null; }); } } });
+    await expect(row.locator('.is-ma span').first()).toHaveText('200日線比 —');
+    await expect(row.locator('.is-ma .sr-only')).toHaveText('200日線比 未算出（200日分の終値なし）');
+    expect((await row.boundingBox()).height).toBe(full);
+    const cells = await row.locator(':scope > div').evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().top)));
+    expect(new Set(cells).size).toBe(1);
+    await expect(page.locator('.brief-screen-notes')).toContainText('200日線比は、長期履歴に200日分の終値がないため未算出です。');
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+for (const width of [320, 375, 414]) test.describe(`the study block and the Nasdaq figures at ${width}px`, () => {
+  test.use(phone(width, 812));
+  test('stay within the width, opened and with every mark inside the chart\'s frame', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: nasdaqState });
+    const market = page.getByRole('region', { name: '地合い' });
+    await expect(market.locator('.brief-index-nas')).toHaveCount(0);
+    // The guide's fold keeps a 44–48px summary even with the Nasdaq note in it.
+    const basis = (await market.locator('details.brief-exposure-basis > summary').boundingBox()).height;
+    expect(basis).toBeGreaterThanOrEqual(44);
+    expect(basis).toBeLessThanOrEqual(48);
     for (const summary of await market.locator('details.brief-regime-ref > summary, details.brief-exposure-basis > summary').all()) await summary.click();
+    await expect(market.locator('.brief-regime-nas')).toBeVisible();
     await expect(market.locator('details.brief-regime-ref .brief-regime-index').last().locator('li').first()).toHaveText('200日線の上・50日線の下（10/2時点）：26%（全期間 26%）〔未確立〕');
+    for (const keep of await market.locator('.brief-regime-keep').all()) expect(await keep.evaluate(node => node.getClientRects().length)).toBe(1);
     await market.locator('.brief-env-row.brief-dist').filter({ hasText: '分配日（25日）' }).locator('.brief-env-toggle').click();
     expect(await horizontalOverflow(page)).toBe(0);
     const frame = await market.locator('.brief-index-frame').boundingBox();
@@ -132,6 +185,8 @@ for (const width of [320, 375, 414]) test.describe(`the study block and the Nasd
       const box = await mark.boundingBox();
       expect(box.x).toBeGreaterThanOrEqual(frame.x - 1);
       expect(box.x + box.width).toBeLessThanOrEqual(frame.x + frame.width + 1);
+      expect(box.y).toBeGreaterThanOrEqual(frame.y - 1);
+      expect(box.y + box.height).toBeLessThanOrEqual(frame.y + frame.height + 1);
     }
     expect(errors).toEqual([]);
   });

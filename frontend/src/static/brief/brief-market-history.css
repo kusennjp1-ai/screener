@@ -29,8 +29,14 @@
 .brief-regime-index { display: grid; gap: 4px; min-width: 0; }
 .brief-regime-index h4 { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text); }
 .brief-regime-index ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
-.brief-regime-index li { font-size: 12px; line-height: 1.6; color: var(--text); overflow-wrap: anywhere; text-wrap: pretty; }
+.brief-regime-index li { font-size: 12px; line-height: 1.6; color: var(--text); text-wrap: pretty; }
 .brief-regime-index li.is-reason { color: var(--text-2); }
+/* A comparator (「（全期間 16%）」) and each tag (「〔Nasdaqのみ〕」) never break inside. */
+.brief-regime-keep { white-space: nowrap; }
+/* The Nasdaq's position on a phone: the first line of its block. */
+.brief-regime-nas { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+.brief-regime-nas .numeric { color: var(--text); }
+.brief-regime-key { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
 .brief-regime-foot { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-3); text-wrap: pretty; }
 
 /* The exposure guide's basis: a quiet fold under the meter on a phone, one line on the desktop. */
