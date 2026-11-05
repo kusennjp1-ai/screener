@@ -17,7 +17,7 @@ import { institutionalGrowth } from '../institutionalEvidence';
 import { code33Layered } from '../code33Reference';
 import { diagnoseBookChart } from '../bookChartDiagnostics';
 import { auditDailyBars } from '../qualificationAudit';
-import { secStatus, fundamentalsCoverage } from '../fundamentalsExplain.js';
+import { publishedFundamentalsCoverage, secStatus } from '../fundamentalsExplain.js';
 import { candidateView, trendTemplate } from './briefCandidate';
 import { stockSells } from './briefSell';
 
@@ -82,7 +82,7 @@ export function certifyBars(row, payload, date) {
 }
 
 export function useStockData(symbol, brief) {
-  const { bundle, version, entry, date } = brief;
+  const { manifest, bundle, version, entry, date } = brief;
   const item = useMemo(() => (bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol) || null, [bundle.data, symbol]);
   const summary = item?.row || null;
   const detail = useQuery({
@@ -118,8 +118,10 @@ export function useStockData(symbol, brief) {
   // The SEC record is only in the detail: until the detail has arrived (or after it failed) the record is
   // unknown, never 未配信.
   const detailState = !summary?.research_detail_path ? 'none' : detail.data ? 'loaded' : detail.isError ? 'error' : 'loading';
-  // The publication's SEC coverage (fundamentalsCoverage), for secStatus' wording.
-  const coverage = useMemo(() => fundamentalsCoverage(entry), [entry]);
+  // The publication's SEC coverage, for secStatus' wording. Read from the raw sources (the manifest's
+  // US market entry as published and the research bundle), not from `entry`: resolveStaticMarketEntry
+  // rebuilds the entry with only the fields it knows (and a new object on every render).
+  const coverage = useMemo(() => publishedFundamentalsCoverage(manifest.data?.markets?.US ?? null, { bundle: bundle.data ?? null }), [manifest.data, bundle.data]);
   const financial = useMemo(() => {
     if (!row) return null;
     const book = row.book_financials ? bookFinancialCurrent(row.book_financials, row.symbol, date, financialNow, row) : null;

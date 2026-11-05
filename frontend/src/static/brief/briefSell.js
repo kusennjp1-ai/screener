@@ -110,8 +110,9 @@ export function stockSells({ judged, diagnostics, view }) {
 }
 
 /**
- * The sell chip a row or the stock conclusion shows for a sell result: { text, tone, title } or null
- * (nothing to say). A result that could not be checked carries its reason as the title.
+ * The sell chip a list row, a Today watch row or the stock conclusion shows for a sell result:
+ * { text, tone, title } or null (nothing to say). A result that could not be checked carries its reason
+ * as the title; callers draw the ▲ glyph for tone 'ext'.
  */
 export function sellChipView(sell) {
   if (sell?.hits) return { text: `売りのサイン ${sell.hits}件`, tone: 'ext', title: undefined };

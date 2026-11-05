@@ -5,7 +5,9 @@ import { ColorModeContext } from '../../contexts/ColorModeContext';
 import { palettes, themeCss } from '../theme/tokens';
 import '../theme/foundation.css';
 import './brief.css';
-// Each round-1 track's overrides of brief.css, in this fixed order (a later file wins a tie).
+// Each round-1 track's overrides of brief.css, in this fixed order. A later file wins a tie only against
+// foundation.css, brief.css and the files above it: component stylesheets that load later (the lazy market
+// chunk's marketHistoryExplorer, marketUpdateStatus and metricDisclosure CSS) need a more specific selector.
 import './brief-chart.css';
 import './brief-market-history.css';
 import './brief-fundamentals.css';
@@ -17,7 +19,8 @@ import { candidateView, focusCandidates } from './briefCandidate';
 import TodayView from './TodayView';
 import ListView, { listShown, listSource } from './ListView';
 import StockScreen from './StockScreen';
-import { BarQuote, Toast } from './BriefParts';
+import { BarQuote } from './BriefParts';
+import { Toast } from './briefPrimitives';
 import { ICON } from './briefIcons';
 import { useTransitionNavigate } from './briefNav';
 

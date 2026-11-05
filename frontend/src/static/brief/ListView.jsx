@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
 import useMediaQuery from '../useMediaQuery';
 import { candidateView, LIST_FILTERS, LIST_SORTS, matchesSearch } from './briefCandidate';
-import { CandidateRow, ScreenNotes } from './BriefParts';
+import { CandidateRow } from './BriefParts';
+import { ScreenNotes } from './briefPrimitives';
 import { PHONE_QUERY } from './briefNav';
 import { bundleState, BUNDLE_TEXT, useWatchSellChecks } from './useBriefData';
 

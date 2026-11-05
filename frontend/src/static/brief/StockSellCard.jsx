@@ -1,5 +1,5 @@
 import { signed } from '../positionGeometry';
-import { Expander } from './BriefParts';
+import { Expander } from './briefPrimitives';
 import { SELL_RULES } from './briefSell';
 
 const finite = Number.isFinite;

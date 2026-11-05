@@ -2,7 +2,7 @@ import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sentence, shortDate, trendsAlert } from './briefModel';
 import { marketCardView, num, signedPercent } from './marketTabModel';
-import { Expander, Parts, ScreenNotes } from './BriefParts';
+import { Expander, Parts, ScreenNotes } from './briefPrimitives';
 
 const finite = Number.isFinite;
 

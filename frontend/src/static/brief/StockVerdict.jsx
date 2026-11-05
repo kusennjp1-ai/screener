@@ -25,10 +25,13 @@ function Meter({ distance }) {
 
 /**
  * The stock's conclusion card: the position call, the pivot meter, the three level tiles and the chip
- * list. `market` is the market verdict (step 0: not read yet).
+ * list. `bars` are the chart's bars as published (display only); `judged` is the same bars when they are
+ * certified for the analysis date, else null, and is the only source for anything judged from a chart.
+ * `template` is the trend template (useStockData's, with its rules); `market` is the market verdict
+ * (step 0: judged, template and market are not read yet).
  */
-export default function StockVerdict({ view, plan, stage, technical, bars, rsHigh, financial, row, sells, diagnostics, market = null }) {
-  void market;
+export default function StockVerdict({ view, plan, stage, technical, bars, judged = null, template = null, rsHigh, financial, row, sells, diagnostics, market = null }) {
+  void judged; void template; void market;
   const breakout = view.state === 'zone' && finite(view.volumeRatio) && view.volumeRatio >= 1.4;
   const [tone, title, sub] = (CALL[view.state] || (() => ['neutral', view.stateLabel, '買い位置を判定できません。']))(view, breakout);
   const print = footprint(technical, bars);

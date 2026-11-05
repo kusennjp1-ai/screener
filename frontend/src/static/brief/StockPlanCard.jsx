@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Expander } from './BriefParts';
+import { Expander } from './briefPrimitives';
 import { positionPlan, STOP_DEFAULT_PERCENT, STOP_MAX_PERCENT } from './positionSizing';
 
 const finite = Number.isFinite;
@@ -13,7 +13,8 @@ const Fold = ({ wide, id, summary, children }) => wide ? children : <Expander id
  * The stock's position plan and its inputs, kept per viewer in localStorage (a convenience only).
  * Returns { plan, settings, update, moveStop }: `update(key, value)` changes one input and, for the
  * stop, moves the chart's stop line through `chartRef`; `moveStop(price)` moves that line. Also
- * receives template, market, technical and certified (step 0: not read yet).
+ * receives template, market, technical, certified and `judged` (the bars certified for the analysis
+ * date, or null: the only bars a plan value may be computed from) (step 0: not read yet).
  */
 // eslint-disable-next-line react-refresh/only-export-components -- the plan's hook lives beside its card (one owner)
 export function usePositionPlan({ view, chartRef }) {
@@ -30,8 +31,12 @@ export function usePositionPlan({ view, chartRef }) {
   return { plan, settings, update, moveStop };
 }
 
-/** The plan card: the inputs (folded on a phone), the shares, the cost, the stop, the R bar and the rules. */
-export default function PlanCard({ view, plan, settings, onChange, earnings, wide }) {
+/**
+ * The plan card: the inputs (folded on a phone), the shares, the cost, the stop, the R bar and the rules.
+ * `judged` is the bars certified for the analysis date, or null (step 0: not read yet).
+ */
+export default function PlanCard({ view, plan, settings, onChange, earnings, judged = null, wide }) {
+  void judged;
   if (!plan) return null;
   const input = (key, label, step, extra = {}) => <label>{label}<input type="number" inputMode="decimal" step={step} value={settings[key]} onChange={e => onChange(key, Number(e.target.value))} {...extra} /></label>;
   return <section className="brief-card brief-plan in" style={{ '--i': 7 }} aria-labelledby="brief-plan-title">

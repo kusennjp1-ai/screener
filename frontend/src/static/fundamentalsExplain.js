@@ -37,8 +37,8 @@ const SEC_STATUS = {
  * `book` is the bookFinancialCurrent() result for the row (null when there is no record).
  * `detail` is the state of the row's research detail, which carries the record: 'loading' or
  * 'error' while the record cannot have arrived yet. Only an absent record from a loaded detail (or a
- * row without a detail) is 未配信. `coverage` is the publication's fundamentalsCoverage() block (step 0:
- * always null, and not read yet).
+ * row without a detail) is 未配信. `coverage` is the publication's publishedFundamentalsCoverage() block
+ * (step 0: always null, and not read yet).
  */
 export function secStatus(row, book, { detail = null } = {}) {
   const make = (state, extra = {}) => ({ state, short: SEC_STATUS[state][0], long: SEC_STATUS[state][1], latestEnd: null, ...extra });
@@ -161,10 +161,14 @@ export function code33ChipView(financial) {
 }
 
 /**
- * The publication's SEC fundamentals coverage for a market entry of the manifest, or null when the
- * publication carries none (step 0: always null).
+ * The SEC fundamentals coverage block the publication carries, as read by the brief (not the report
+ * that tools/report-data-coverage.mjs fundamentalsCoverage() computes for the publisher), or null when
+ * the publication carries none (step 0: always null).
+ * `marketEntry` is the manifest's raw US market entry (manifest.markets.US, as published, or null);
+ * `bundle` is the research bundle the brief loaded (useResearchBundle's data, or null). Either may
+ * hold the block; nothing is guessed when neither does.
  */
-export function fundamentalsCoverage(entry) {
-  void entry;
+export function publishedFundamentalsCoverage(marketEntry, { bundle = null } = {}) {
+  void marketEntry; void bundle;
   return null;
 }

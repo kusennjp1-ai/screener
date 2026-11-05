@@ -4,8 +4,10 @@ import useMediaQuery from '../useMediaQuery';
 import { money, signed } from '../positionGeometry';
 import { briefOrder, candidateView, focusCandidates, focusCounts, focusHeadingNote, focusTone, watchEvent } from './briefCandidate';
 import { leadingGroups, marketTone } from './briefEnvironment';
+import { sellChipView } from './briefSell';
 import MarketCard from './MarketCard';
-import { CandidateRow, Parts, RiseItem, ScreenNotes } from './BriefParts';
+import { CandidateRow } from './BriefParts';
+import { Parts, RiseItem, ScreenNotes } from './briefPrimitives';
 import { ICON } from './briefIcons';
 import { PHONE_QUERY } from './briefNav';
 import { bundleState, BUNDLE_SHORT, BUNDLE_TEXT, useWatchSellChecks } from './useBriefData';
@@ -17,6 +19,11 @@ const WATCH_ROWS = 3;
 // Footnotes: in place at 1024px and wider, gathered into the screen's 注記 below that.
 const TODAY_NOTE = '注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。同じ位置なら判定の達成数、RS推計の順。';
 const DATE_JA = iso => { const d = new Date(`${iso}T12:00:00Z`); return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）` : '日付未確認'; };
+/** A watch row's sell chip, from the same sellChipView as the list rows and the stock conclusion. */
+function SellChip({ sell }) {
+  const chip = sellChipView(sell);
+  return chip ? <span className={`brief-chip${chip.tone ? ` tone-${chip.tone}` : ''} brief-sellchip`} title={chip.title}>{chip.tone === 'ext' && <><span aria-hidden="true">▲</span> </>}{chip.text}</span> : null;
+}
 
 /** Today: the three answers, the market card, the focus candidates and the watch list. */
 export default function TodayView({ brief, watch, open, now, animate, onNear, wide }) {
@@ -63,7 +70,7 @@ export default function TodayView({ brief, watch, open, now, animate, onNear, wi
       {watched.length ? <ul className="brief-rows" id="brief-watch-rows">{watchShown.map((view, i) => { const event = watchEvent(view); return <RiseItem key={view.symbol} animate={animate} index={i}>
         <button type="button" className="brief-event" onClick={e => open(view.symbol, e.currentTarget, 'watch')}>
           <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{event.kind === 'breakout' ? '↗' : event.kind === 'ext' ? '▲' : event.kind === 'near' ? '◔' : event.kind === 'zone' ? '●' : '≈'}</span>
-          <span><b>{view.symbol}</b> {event.title}{sells[view.symbol]?.hits ? <span className="brief-chip tone-ext brief-sellchip"><span aria-hidden="true">▲</span> 売りのサイン {sells[view.symbol].hits}件</span> : sells[view.symbol]?.unknown ? <span className="brief-chip brief-sellchip" title={sells[view.symbol].reason || undefined}>売りのサイン 未確認</span> : null}<small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
+          <span><b>{view.symbol}</b> {event.title}<SellChip sell={sells[view.symbol]} /><small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
           <span className="brief-chevron" aria-hidden="true">{ICON.next}</span>
         </button></RiseItem>; })}</ul>
         : <p className="brief-note">{state !== 'ready' && watch.length ? `ウォッチ中の${watch.length}銘柄は、${state === 'loading' ? '候補の読み込み後に確認します。' : '候補データがないため確認できません。'}` : '銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。'}</p>}

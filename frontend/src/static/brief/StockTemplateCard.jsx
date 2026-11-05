@@ -1,4 +1,4 @@
-import { Expander } from './BriefParts';
+import { Expander } from './briefPrimitives';
 import { ruleEvidence } from './briefCandidate';
 
 const stateIcon = { pass: '✓', fail: '✕', unknown: '?', not_applicable: '–' };
