@@ -26,7 +26,7 @@ describe('brief model', () => {
     const legs = [{ startDate: '2026-05-01', endDate: '2026-06-10', depthPct: 25 }, { startDate: '2026-06-20', endDate: '2026-07-10', depthPct: 12 }, { startDate: '2026-07-15', endDate: '2026-08-07', depthPct: 6 }];
     const base = { startDate: '2026-05-01', endDate: '2026-08-20', brokeOut: true, breakoutDate: '2026-08-21' };
     const print = footprint({ vcp: { legs, measurementsValid: true, depthsContract: true, base } }, [{ date: '2026-10-02' }]);
-    expect(print).toMatchObject({ weeks: 16, brokeOut: true, breakoutDate: '2026-08-21', text: 'VCP 16週 25/6 3T・上抜け済み（8/21）' });
+    expect(print).toMatchObject({ weeks: 16, brokeOut: true, breakoutDate: '2026-08-21', text: 'VCP 16週 25/6 3T・土台の高値を上抜け（8/21）' });
     const open = footprint({ vcp: { legs, measurementsValid: true, depthsContract: true, base: { ...base, brokeOut: false, breakoutDate: undefined } } }, [{ date: '2026-10-02' }]);
     expect(open).toMatchObject({ weeks: 22, brokeOut: false, text: 'VCP 22週 25/6 3T' });
   });

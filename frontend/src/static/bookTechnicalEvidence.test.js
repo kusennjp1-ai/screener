@@ -229,7 +229,7 @@ describe('VCP measurement from the base high', () => {
     // The footprint counts the base's weeks to its end and says it has been broken out of.
     const print = footprint(run(f), f.payload.bars);
     expect(print.brokeOut).toBe(true);
-    expect(print.text).toMatch(new RegExp(`^VCP \\d+週 25/6 3T・上抜け済み（${Number(vcp.base.breakoutDate.slice(5, 7))}/${Number(vcp.base.breakoutDate.slice(8))}）$`));
+    expect(print.text).toMatch(new RegExp(`^VCP \\d+週 25/6 3T・土台の高値を上抜け（${Number(vcp.base.breakoutDate.slice(5, 7))}/${Number(vcp.base.breakoutDate.slice(8))}）$`));
     expect(vcp.legs.map(l => Math.round(l.depthPct))).toEqual([25, 12, 6]);
     const bars = f.payload.bars, second = bars.findIndex((b, i) => i > 250 && b.close === 99);
     const candidate = { pattern: 'vcp', timeframe: 'daily', start_date: bars[second].date, end_date: bars.at(-8).date };

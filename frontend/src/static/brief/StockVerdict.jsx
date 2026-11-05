@@ -138,7 +138,7 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
       : <>リスク {risk || DASH}</>;
   const chips = [
     [stage ? `ステージ${stage.value}${stage.computed ? '（日足から算出）' : ''}` : 'ステージ 未確認', stage?.value === 2 ? 'zone' : stage ? 'ext' : ''],
-    // Green only while the base still contracts: a base already broken out of is history (「・上抜け済み（M/D）」),
+    // Green only while the base still contracts: a base already broken out of is history (「・土台の高値を上抜け（M/D）」),
     // unless the breakout is the analysis day's own event.
     [print ? print.text : 'VCP 未確認', print?.contracting === true && (!print.brokeOut || print.breakoutDate === view.asOf) ? 'zone' : ''],
     [`RS推計 ${rsShown(view.rs)}`, finite(view.rs) && view.rs >= 70 ? 'zone' : ''],

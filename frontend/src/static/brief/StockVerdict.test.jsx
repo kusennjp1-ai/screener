@@ -272,9 +272,24 @@ describe('the conclusion says why there is no buy', () => {
     expect([contracting.textContent, contracting.classList.contains('tone-zone')]).toEqual(['VCP 12週 25/6 3T', true]);
     cleanup();
     const broken = chip(conclusionOf({ technical: vcp({ brokeOut: true, breakoutDate: '2026-09-28' }) }));
-    expect([broken.textContent, broken.classList.contains('tone-zone')]).toEqual(['VCP 13週 25/6 3T・上抜け済み（9/28）', false]);
+    expect([broken.textContent, broken.classList.contains('tone-zone')]).toEqual(['VCP 13週 25/6 3T・土台の高値を上抜け（9/28）', false]);
     cleanup();
     const today = chip(conclusionOf({ technical: vcp({ brokeOut: true, endDate: DAY, breakoutDate: DAY }) }));
-    expect([today.textContent, today.classList.contains('tone-zone')]).toEqual(['VCP 13週 25/6 3T・上抜け済み（10/2）', true]);
+    expect([today.textContent, today.classList.contains('tone-zone')]).toEqual(['VCP 13週 25/6 3T・土台の高値を上抜け（10/2）', true]);
+  });
+
+  // The VCP base's high is not always the canonical pivot: two crossings of two levels on two days.
+  it('names which level each breakout crossed when the base high is not the pivot, so the two dates never contradict', () => {
+    const bars = [['2026-09-25', 96], ['2026-09-28', 98.5], ['2026-09-29', 99], ['2026-09-30', 100.5], ['2026-10-01', 101.5], ['2026-10-02', 103]].map(([date, close]) => ({ date, close }));
+    // The base's high was crossed on 9/28 (below the pivot of 100); the pivot itself on 9/30.
+    const technical = { vcp: { measurementsValid: true, depthsContract: true, volumeContracts: true, droppedLegs: 0,
+      legs: [{ depthPct: 25, startDate: '2026-07-01', endDate: '2026-07-31' }, { depthPct: 12, startDate: '2026-08-01', endDate: '2026-08-31' }, { depthPct: 6, startDate: '2026-09-01', endDate: '2026-09-25' }],
+      base: { startDate: '2026-07-01', endDate: '2026-09-25', brokeOut: true, breakoutDate: '2026-09-28' } } };
+    const card = conclusionOf({ row: audited({ price: 103, change: 1.5 }), judged: bars, technical });
+    expect(title(card)).toBe('買いゾーン内（9/30に上抜け・2営業日前）');
+    const vcpChip = [...card.querySelectorAll('.brief-tags .brief-chip')].find(node => node.textContent.startsWith('VCP'));
+    expect(vcpChip.textContent).toBe('VCP 12週 25/6 3T・土台の高値を上抜け（9/28）');
+    // The chip never claims a pivot crossing of its own.
+    expect(vcpChip.textContent).not.toMatch(/ピボット|上抜け済み/);
   });
 });

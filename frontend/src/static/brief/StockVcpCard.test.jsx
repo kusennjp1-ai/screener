@@ -61,7 +61,7 @@ describe('brief VCP card', () => {
 
   it('says when the base has been broken out of', () => {
     render(<VcpCard technical={technical(legs, { base: { startDate: legs[0].startDate, endDate: '2026-09-25', brokeOut: true, breakoutDate: '2026-09-28' } })} bars={bars} judged={null} view={{}} />);
-    expect(screen.getByText('VCP 13週 13/4 2T・上抜け済み（9/28）')).toBeInTheDocument();
+    expect(screen.getByText('VCP 13週 13/4 2T・土台の高値を上抜け（9/28）')).toBeInTheDocument();
     expect(screen.getByText(/9\/28に土台の高値を上抜けています。/)).toBeInTheDocument();
   });
 
