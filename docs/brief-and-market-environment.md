@@ -33,7 +33,7 @@ Unknown inputs stay 未確認 or 未取得. They are never counted as a pass.
 
 The VCP footprint ("VCP 7週 24/5 3T": weeks since the first contraction, deepest/shallowest depth, number of contractions) says VCP only when each contraction is shallower than the one before. Otherwise it reads 収縮 … （縮小途切れ）, or （縮小は未確認） when that is unknown. The VCP card also shows the 50-day up/down volume ratio: volume on up closes ÷ volume on down closes.
 
-### Sell checks (`sellSignals` in `briefModel.js`)
+### Sell checks (`sellSignals` in `briefSell.js`)
 
 The stock screen also lists checks for the last five sessions, in two groups:
 
