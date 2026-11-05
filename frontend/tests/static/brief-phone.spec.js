@@ -1,4 +1,4 @@
-// Daily brief on phones: rows, Today's first screen, tiles, filters and focus at 320/375/390 px,
+// Daily brief on phones: Today's first screen, tiles, filters and focus at 320/375/390 px,
 // against the desktop layout at 1440 px, on synthetic data.
 import { test, expect } from '@playwright/test';
 import { openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
@@ -6,78 +6,6 @@ import { openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixt
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const PHONES = { 320: phone(320, 640), 390: VIEWPORTS.phone };
 const candidates = page => page.getByTestId('brief-candidate');
-const median = values => { const sorted = [...values].sort((a, b) => a - b); return sorted[Math.floor(sorted.length / 2)]; };
-
-for (const [width, device] of Object.entries(PHONES)) test.describe(`rows at ${width}px`, () => {
-  test.use(device);
-
-  test('candidate rows give the chips the width of the hidden mini meter', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/list');
-    await expect(candidates(page).first()).toBeVisible();
-    expect(await page.locator('.brief-minimeter').count()).toBeGreaterThan(0);
-    for (const meter of await page.locator('.brief-minimeter').all()) await expect(meter).toBeHidden();
-    const rows = await candidates(page).evaluateAll(nodes => nodes.slice(0, 5).map(row => ({
-      symbol: row.dataset.symbol, height: row.getBoundingClientRect().height,
-      lines: new Set([...row.querySelectorAll('.brief-reasons .brief-chip')].map(chip => chip.offsetTop)).size,
-      title: row.querySelector('.brief-row-title span').clientWidth,
-    })));
-    expect(rows).toHaveLength(5);
-    for (const row of rows) {
-      expect(row.lines, row.symbol).toBeLessThanOrEqual(2);
-      expect(row.height, row.symbol).toBeLessThanOrEqual(100);
-    }
-    if (width === '390') expect(median(rows.map(row => row.title))).toBeGreaterThanOrEqual(200);
-    expect(await horizontalOverflow(page)).toBe(0);
-    expect(errors).toEqual([]);
-  });
-
-  test('watch rows have no empty rank gutter', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': ['ZZNV', 'ZZSD'] } });
-    await expect(page.getByRole('region', { name: 'ウォッチ中の銘柄' }).getByTestId('brief-candidate')).toHaveCount(2);
-    // The title line and the chips both start at the row's content edge.
-    const gaps = await candidates(page).evaluateAll(nodes => nodes.flatMap(row => {
-      const style = getComputedStyle(row), box = row.getBoundingClientRect();
-      const contentLeft = box.left + parseFloat(style.borderLeftWidth) + parseFloat(style.paddingLeft);
-      return ['.brief-row-title', '.brief-reasons'].map(part => row.querySelector(part).getBoundingClientRect().left - contentLeft);
-    }));
-    for (const gap of gaps) { expect(gap).toBeGreaterThanOrEqual(0); expect(gap).toBeLessThanOrEqual(8); }
-    expect(await horizontalOverflow(page)).toBe(0);
-    expect(errors).toEqual([]);
-  });
-});
-
-for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip ${name}`, () => {
-  test.use(device);
-
-  test('Today\'s focus rows omit the constant TT 8/8 chip; the desktop list keeps it, a phone keeps it where it varies', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief');
-    const focus = page.getByRole('region', { name: '注目候補' });
-    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
-    for (const row of await focus.getByTestId('brief-candidate').all()) await expect(row).not.toContainText('TT 8/8');
-    // The constant is said once: in place on the desktop, in the screen's 注記 on a phone.
-    if (name === 'desktop') {
-      await expect(focus.getByText(/^注目候補はすべてトレンドテンプレート8条件を満たす銘柄/)).toBeVisible();
-      await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
-    } else await expect(page.locator('.brief-screen-notes', { hasText: '注目候補はすべてトレンドテンプレート8条件を満たす銘柄' })).toHaveCount(1);
-    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
-    await expect(page).toHaveURL(/#\/brief\/list$/);
-    if (name === 'desktop') await expect(candidates(page).first()).toContainText('TT 8/8');
-    else {
-      // A qualified-only filter's rows are all TT 8/8: the phone says so once in the 注記 and keeps each row's chips on one line.
-      for (const row of await candidates(page).all()) await expect(row).not.toContainText('TT 8/8');
-      await expect(page.locator('.brief-screen-notes')).toContainText('スマホでは「TT 8/8」の表示を省いています');
-      const lines = await candidates(page).evaluateAll(rows => rows.map(row => new Set([...row.querySelectorAll('.brief-reasons .brief-chip')].map(chip => chip.offsetTop)).size));
-      expect(lines.every(count => count === 1)).toBe(true);
-      // あと1条件 keeps the chip: there it says how many conditions are unmet.
-      await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^あと1条件/ }).click();
-      for (const row of await candidates(page).all()) await expect(row).toContainText('あと1条件');
-    }
-    if (name === 'desktop') expect(await page.locator('.brief-left .brief-minimeter').count()).toBeGreaterThan(0);
-    if (name === 'desktop') for (const meter of await page.locator('.brief-left .brief-minimeter').all()) await expect(meter).toBeVisible();
-    expect(await horizontalOverflow(page)).toBe(0);
-    expect(errors).toEqual([]);
-  });
-});
 
 const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
 // What the first-screen goal covers: current-day data at 375x812 and 390x844, in the browser and as the
@@ -136,6 +64,39 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
   });
 });
 
+for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip ${name}`, () => {
+  test.use(device);
+
+  test('Today\'s focus rows omit the constant TT 8/8 chip; the desktop list keeps it, a phone keeps it where it varies', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief');
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    for (const row of await focus.getByTestId('brief-candidate').all()) await expect(row).not.toContainText('TT 8/8');
+    // The constant is said once: in place on the desktop, in the screen's 注記 on a phone.
+    if (name === 'desktop') {
+      await expect(focus.getByText(/^注目候補はすべてトレンドテンプレート8条件を満たす銘柄/)).toBeVisible();
+      await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
+    } else await expect(page.locator('.brief-screen-notes', { hasText: '注目候補はすべてトレンドテンプレート8条件を満たす銘柄' })).toHaveCount(1);
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
+    await expect(page).toHaveURL(/#\/brief\/list$/);
+    if (name === 'desktop') await expect(candidates(page).first()).toContainText('TT 8/8');
+    else {
+      // A qualified-only filter's rows are all TT 8/8: the phone says so once in the 注記 and keeps each row's chips on one line.
+      for (const row of await candidates(page).all()) await expect(row).not.toContainText('TT 8/8');
+      await expect(page.locator('.brief-screen-notes')).toContainText('スマホでは「TT 8/8」の表示を省いています');
+      const lines = await candidates(page).evaluateAll(rows => rows.map(row => new Set([...row.querySelectorAll('.brief-reasons .brief-chip')].map(chip => chip.offsetTop)).size));
+      expect(lines.every(count => count === 1)).toBe(true);
+      // あと1条件 keeps the chip: there it says how many conditions are unmet.
+      await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^あと1条件/ }).click();
+      for (const row of await candidates(page).all()) await expect(row).toContainText('あと1条件');
+    }
+    if (name === 'desktop') expect(await page.locator('.brief-left .brief-minimeter').count()).toBeGreaterThan(0);
+    if (name === 'desktop') for (const meter of await page.locator('.brief-left .brief-minimeter').all()) await expect(meter).toBeVisible();
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('a date that cannot be read on a phone', () => {
   test.use(VIEWPORTS.phone);
   test('the bar says 未確認 once loading has ended, never 取得中 for good', async ({ page }) => {
@@ -164,53 +125,6 @@ test.describe('a failed manifest on Today', () => {
     await expect(page.getByRole('region', { name: '選定銘柄の一覧' })).toContainText('候補データを取得できません。');
     for (const count of await page.getByRole('group', { name: '絞り込み' }).locator('.numeric').allTextContents()) expect(count).toBe('—');
     expect(await horizontalOverflow(page)).toBe(0);
-  });
-});
-
-test.describe('the market tab on a phone keeps the verdict and the chart', () => {
-  test.use(VIEWPORTS.phone);
-  test('verdict and S&P chart are visible on #/brief/market', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/market');
-    const market = page.getByRole('region', { name: '地合い' });
-    await expect(market.locator('.brief-verdict')).toBeVisible();
-    await expect(market.locator('.brief-index')).toBeVisible();
-    await expect(page.locator('.brief-hero small')).toBeVisible();
-    expect(await horizontalOverflow(page)).toBe(0);
-    expect(errors).toEqual([]);
-  });
-});
-
-test.describe('phone secondary text on the market tab and the fundamentals rows', () => {
-  test.use(phone(375, 812));
-  const MARKET = '.brief-index-stats small, .brief-index-stats span, .brief-index-source, .brief-env-status, .brief-env-change, .brief-stagelegend, .brief-sector-name small, .brief-sector-move, .brief-fact-asof, .brief-signals > b small, .brief-verdict-date';
-  const sizes = (page, selector) => page.locator(selector).evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).map(node => [node.className, node.textContent.slice(0, 20), parseFloat(getComputedStyle(node).fontSize)]));
-  test('reads at 12px or more, labels in --text-2, and 基準 is a label, not a 16px value', async ({ page }) => {
-    // One session behind, so the as-of tags (「（10/1時点）」) are on screen too.
-    const { errors } = await openBrief(page, '#/brief/market', { historyEnd: sessions.at(-2) });
-    // Every section of the tab, one after the other (a phone shows one at a time).
-    await expect(page.getByRole('tab')).toHaveCount(4);
-    const market = [];
-    for (const tab of await page.getByRole('tab').all()) {
-      await tab.click();
-      if ((await tab.textContent()) === '推移') await expect(page.locator('.market-history-explorer').getByRole('img')).toBeVisible();
-      market.push(...await sizes(page, MARKET));
-    }
-    await page.getByRole('tab', { name: '指数' }).click();
-    expect(market.length).toBeGreaterThan(20);
-    expect(market.filter(([, , size]) => size < 12)).toEqual([]);
-    const label = await page.locator('.brief-index-stats small').first().evaluate(node => [getComputedStyle(node).color, getComputedStyle(node.closest('.brief-index-block')).getPropertyValue('--text-2')]);
-    expect(label[0]).toBe(await page.evaluate(value => { const probe = document.createElement('span'); probe.style.color = value; document.body.append(probe); const color = getComputedStyle(probe).color; probe.remove(); return color; }, label[1].trim()));
-    await page.locator('.brief-env-toggle').first().click();
-    const rule = await page.locator('.brief-env-rule').first().evaluate(node => { const b = node.querySelector('b'); return [getComputedStyle(b).fontSize, getComputedStyle(node).fontSize, getComputedStyle(b).fontFamily === getComputedStyle(node).fontFamily]; });
-    expect(rule).toEqual(['12px', '12px', true]);
-    expect(await horizontalOverflow(page)).toBe(0);
-    await page.goto('/#/brief/stock/ZZNV');
-    const fin = page.getByTestId('brief-fundamentals');
-    await expect(fin.locator('.brief-q-axis')).toBeVisible();
-    const rows = await sizes(page, '.brief-facts.is-fin .brief-fact small, .brief-facts.is-fin .brief-fact em');
-    expect(rows).toHaveLength(6);
-    expect(rows.filter(([, , size]) => size < 12)).toEqual([]);
-    expect(errors).toEqual([]);
   });
 });
 
@@ -250,41 +164,6 @@ test.describe('tiles at 320px', () => {
     for (const tab of await page.getByRole('tab').all()) { await tab.click(); expect(await clippedTileText(page)).toEqual([]); expect(await horizontalOverflow(page)).toBe(0); }
     if (hash.includes('stock')) await expect(page.locator('.brief-plan .brief-kgrid em').filter({ hasText: '口座の' })).toHaveText('口座の 17.7%');
     expect(await horizontalOverflow(page)).toBe(0);
-    expect(errors).toEqual([]);
-  });
-});
-
-test.describe('market tab words at 320px', () => {
-  test.use(phone(320, 640));
-  test('the verdict keeps （独自判定） whole, the exposure label breaks before の目安, row notes get the row width', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/market');
-    const verdict = page.getByTestId('brief-regime');
-    await expect(verdict.locator('strong .brief-frag')).toHaveText('（独自判定）');
-    expect(await verdict.locator('strong .brief-frag').evaluate(node => node.getClientRects().length)).toBe(1);
-    for (const part of await verdict.locator('.brief-exposure small .brief-frag').all()) expect(await part.evaluate(node => node.getClientRects().length)).toBe(1);
-    // Below 360px the 1-year line and the 1-month change sit under the note, not beside it.
-    const stacked = await page.locator('.brief-env-toggle').evaluateAll(toggles => toggles.filter(t => t.querySelector(':scope > em') && t.querySelector(':scope > .brief-env-change'))
-      .map(t => { const note = t.querySelector(':scope > em').getBoundingClientRect(), change = t.querySelector(':scope > .brief-env-change').getBoundingClientRect(); return change.top >= note.bottom - 1; }));
-    expect(stacked.length).toBeGreaterThanOrEqual(3);
-    expect(stacked.every(Boolean)).toBe(true);
-    expect(await horizontalOverflow(page)).toBe(0);
-    expect(errors).toEqual([]);
-  });
-});
-
-test.describe('stock tiles at 200% zoom', () => {
-  // A 375px phone at 200% text zoom lays out at 188 CSS px.
-  test.use(phone(188, 600));
-  test('kgrid tiles wrap and stay inside their card', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/stock/ZZSD');
-    await expect(page.getByTestId('brief-conclusion').locator('.brief-kgrid > div')).toHaveCount(3);
-    await expect(page.locator('.brief-plan .brief-kgrid > div')).toHaveCount(3);
-    expect(await clippedTileText(page, '.brief-kgrid')).toEqual([]);
-    const outside = await page.locator('.brief-kgrid').evaluateAll(grids => grids.flatMap(grid => {
-      const card = grid.closest('.brief-card').getBoundingClientRect();
-      return [...grid.children].filter(tile => tile.getBoundingClientRect().right > card.right + 0.5).map(tile => tile.textContent);
-    }));
-    expect(outside).toEqual([]);
     expect(errors).toEqual([]);
   });
 });

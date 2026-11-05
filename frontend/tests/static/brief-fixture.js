@@ -30,6 +30,16 @@ const NAMES = [
   ['ZZHW', 'Hydra Water', 2], ['ZZNS', 'Nova Satellite', 6],
 ];
 
+/**
+ * A variant of base data for one spec: the mutator gets a deep copy of the base and either changes it in
+ * place or returns the value to use. The base itself (rows, charts, details, the market trends) never changes.
+ */
+const variant = (base, mutator) => {
+  if (!mutator) return base;
+  const copy = structuredClone(base), value = mutator(copy);
+  return value === undefined ? copy : value;
+};
+
 function rng(seed) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 2 ** 32); }
 const round = value => Math.round(value * 100) / 100;
 
@@ -97,8 +107,10 @@ export const charts = Object.fromEntries(rows.map((row, index) => [row.chart_pat
  * index series stop at that session while the asset itself still names the analysis date. With
  * `schema: 'old'` the long history is written as before the market-environment fields existed
  * (no trend-template, 150/200-day, stage, breakout or leader-cohort counts), as older captures are.
+ * `mutate` changes a copy of the asset's value before it is hashed (see variant), so the variant still
+ * passes the app's integrity check.
  */
-export function marketTrends({ historyEnd = date, schema = 'current' } = {}) {
+export function marketTrends({ historyEnd = date, schema = 'current', mutate } = {}) {
   const days = sessionsUntil(historyEnd), n = days.length;
   const stamp = `${historyEnd}T21:00:00.000Z`, provenanceStamp = `${historyEnd}T20:30:00.000Z`;
   const symbols = Array.from({ length: 100 }, (_, i) => `ZZU${String(i).padStart(3, '0')}`);
@@ -146,10 +158,10 @@ export function marketTrends({ historyEnd = date, schema = 'current' } = {}) {
   };
   // The exchange schedule says which session has closed by `now` (the analysis date), independent of the data.
   const schedule = exchange.sessions.filter(session => session > sessions.at(-6) && session <= exchange.sessions[exchange.sessions.indexOf(date) + 3]);
-  const value = { schema_version: 'market-trends-v1', market: 'US', as_of_date: date, indices: [index('^GSPC', [3, 11, 19]), index('^IXIC', [2, 7, 13, 21])],
+  const base = { schema_version: 'market-trends-v1', market: 'US', as_of_date: date, indices: [index('^GSPC', [3, 11, 19]), index('^IXIC', [2, 7, 13, 21])],
     breadth: { points: [] }, put_call: { points: [] }, long_history: history,
     refresh_schedule: { provider: 'pandas_market_calendars:NYSE', valid_until: `${schedule.at(-1)}T23:00:00Z`, sessions: schedule.map(session => ({ date: session, close_at: `${session}T20:00:00Z` })) } };
-  const text = JSON.stringify(value), digest = sha(text);
+  const value = variant(base, mutate), text = JSON.stringify(value), digest = sha(text);
   return { text, file: `series-${digest}.json`, ref: { schema_version: 'market-trends-v1', market: 'US', as_of_date: date, sha256: digest, path: `market-trends/series-${digest}.json` } };
 }
 
@@ -157,10 +169,15 @@ export function marketTrends({ historyEnd = date, schema = 'current' } = {}) {
 /**
  * `fail` names one file to answer with an HTTP error: 'series' (404 for the market series), 'manifest'
  * (503) or 'detail' (503 for every research detail). `detailGate` is a promise every research detail
- * waits for before it answers (a detail that is still loading).
+ * waits for before it answers (a detail that is still loading). `mutate` holds optional mutators (see
+ * variant) for this page only: `rows` (the research rows), `charts` (the chart payloads by file name),
+ * `details` (the research details by file name), `trends` (the market-trends value) and `manifest`.
  */
-export async function routeBrief(page, { historyEnd = date, schema, fail, detailGate } = {}) {
-  const trends = marketTrends({ historyEnd, schema });
+export async function routeBrief(page, { historyEnd = date, schema, fail, detailGate, mutate = {} } = {}) {
+  const trends = marketTrends({ historyEnd, schema, mutate: mutate.trends });
+  const served = { rows: variant(rows, mutate.rows), charts: variant(charts, mutate.charts), details: variant(details, mutate.details) };
+  const manifest = variant({ as_of_date: date, generated_at: new Date(now).toISOString(), research_generation: 'brief-browser-fixture',
+    default_market: 'US', supported_markets: ['US'], markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' }, market_trends: trends.ref }, pages: {} } } }, mutate.manifest);
   const external = [];
   await page.route('**/*', route => {
     if (new URL(route.request().url()).hostname === '127.0.0.1') return route.fallback();
@@ -171,13 +188,12 @@ export async function routeBrief(page, { historyEnd = date, schema, fail, detail
     const file = new URL(route.request().url()).pathname.split('/').pop();
     if (file === 'manifest.json' && fail === 'manifest') return route.fulfill({ status: 503, json: {} });
     if (file === trends.file && fail === 'series') return route.fulfill({ status: 404, json: {} });
-    if (file === 'manifest.json') return route.fulfill({ json: { as_of_date: date, generated_at: new Date(now).toISOString(), research_generation: 'brief-browser-fixture',
-      default_market: 'US', supported_markets: ['US'], markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' }, market_trends: trends.ref }, pages: {} } } } });
-    if (file === 'research.json') return route.fulfill({ json: { as_of_date: date, rows } });
+    if (file === 'manifest.json') return route.fulfill({ json: manifest });
+    if (file === 'research.json') return route.fulfill({ json: { as_of_date: date, rows: served.rows } });
     if (file === trends.file) return route.fulfill({ contentType: 'application/json', body: trends.text });
-    if (details[file] && fail === 'detail') return route.fulfill({ status: 503, json: {} });
-    if (details[file]) { if (detailGate) await detailGate; return route.fulfill({ json: details[file] }); }
-    if (charts[file]) return route.fulfill({ json: charts[file] });
+    if (served.details[file] && fail === 'detail') return route.fulfill({ status: 503, json: {} });
+    if (served.details[file]) { if (detailGate) await detailGate; return route.fulfill({ json: served.details[file] }); }
+    if (served.charts[file]) return route.fulfill({ json: served.charts[file] });
     return route.fulfill({ status: 404, json: {} });
   });
   return { external, trends };
@@ -186,9 +202,10 @@ export async function routeBrief(page, { historyEnd = date, schema, fail, detail
 /**
  * A fresh page on the synthetic publication at the fixed analysis clock, collecting page errors.
  * `storage` seeds localStorage once per tab (a later change and reload keep the user's choice),
- * e.g. { 'research-watch': ['ZZNV'] } or { 'screener:color-mode': 'light' }.
+ * e.g. { 'research-watch': ['ZZNV'] } or { 'screener:color-mode': 'light' }. `mutate` serves a variant
+ * of the data to this page (routeBrief), e.g. { rows: rows => { rows[0].rs_rating = 97.01; } }.
  */
-export async function openBrief(page, hash = '#/brief', { historyEnd, schema, storage, fail, detailGate } = {}) {
+export async function openBrief(page, hash = '#/brief', { historyEnd, schema, storage, fail, detailGate, mutate } = {}) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.clock.setFixedTime(new Date(now));
@@ -199,7 +216,7 @@ export async function openBrief(page, hash = '#/brief', { historyEnd, schema, st
       sessionStorage.setItem('brief-spec-seeded', '1');
     } catch { /* storage blocked: the app must still render */ }
   }, storage);
-  const network = await routeBrief(page, { historyEnd, schema, fail, detailGate });
+  const network = await routeBrief(page, { historyEnd, schema, fail, detailGate, mutate });
   await page.goto(`/${hash}`);
   return { errors, external: network.external };
 }
