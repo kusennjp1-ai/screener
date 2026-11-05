@@ -74,6 +74,10 @@ test.describe('expanders and tabs by keyboard', () => {
     await page.keyboard.press('Space');
     await expect(fold).not.toHaveAttribute('open', '');
     await page.keyboard.press('Enter');
+    // The details' toggle event (and so the session write) lands a task after the key press: reload only
+    // once the open state is stored, or the reload can race it.
+    await expect(fold).toHaveAttribute('open', '');
+    await expect.poll(() => page.evaluate(() => sessionStorage.getItem('brief-open:stock-tt-met'))).toBe('true');
     await page.reload();
     await expect(page.locator('summary', { hasText: '8条件の内訳（すべて達成）' }).locator('..')).toHaveAttribute('open', '');
     // The screen's 注記 holds the footnotes the cards no longer repeat.
