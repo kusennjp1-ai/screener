@@ -106,6 +106,15 @@ describe('research rules and financial data integrity', () => {
     expect(assess(withFinancialProof({ eps_growth_yy: 0 }), 'oneil', FINANCIAL_TEST_NOW).rules[0].state).toBe('fail');
     expect(assess({ rs_rating: NaN }, 'ibd').rules[1].state).toBe('unknown');
   });
+  it('says an absent bar count or RS universe is 未確認, never 0本 or 0銘柄', () => {
+    const missing = assess({ symbol: 'NONE', technical_audit: { as_of_date: '2026-10-02', status: 'unknown', errors: [] } }, 'minervini');
+    expect(missing.rules[8].evidence).toBe('基準日 2026-10-02・本数 未確認');
+    expect(missing.rules[7].evidence).toBe('母集団 未確認・基準日未確認 / 独自推計');
+    for (const text of [missing.rules[8].evidence, missing.rules[7].evidence]) expect(text).not.toMatch(/(^|・)0(本|銘柄)/);
+    const known = assess(withAuditFixture({ symbol: 'KNOWN', market: 'US', currency: 'USD', current_price: 100, rs_rating: 80 }, '2026-10-02'), 'minervini');
+    expect(known.rules[7].evidence).toBe('1000銘柄・2026-10-02 / 独自推計');
+    expect(assess({ symbol: 'ZERO', technical_audit: { as_of_date: '2026-10-02', status: 'unknown', errors: [], bars: 0 }, rs_universe_size: 0 }, 'minervini').rules[8].evidence).toBe('基準日 2026-10-02・0本');
+  });
   it('handles pivot boundary, extension, waiting and invalid prices', () => {
     expect(entryPlan({ current_price: 105, se_pivot_price: 100 }).state).toBe('買いゾーン内');
     expect(entryPlan({ current_price: 105.01, se_pivot_price: 100 }).state).toBe('買いゾーン超過');
