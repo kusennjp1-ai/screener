@@ -1,8 +1,11 @@
 // Today's watch tile (TodayView, E): only a broken setup is counted (no holding is registered), 0件 only when
 // every check of every watched stock is in, and unlisted, unchecked, limited and partly checked stocks are said
 // (n/N, a third of the width), never counted as checked.
-import { describe, expect, it } from 'vitest';
-import { watchAttention } from './TodayView';
+import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import TodayView, { watchAttention } from './TodayView';
 
 const view = symbol => ({ symbol });
 const quiet = { strength: [], weakness: [], hits: 0, strengthHits: 0, weaknessHits: 0, breakdownHits: 0, unknowns: 0 };
@@ -62,5 +65,41 @@ describe('the watch tile', () => {
     expect(tile({ state: 'error', watchCount: 1 })).toEqual({ value: '取得できません', note: '1銘柄を登録', flagged: [] });
     expect(tile({})).toEqual({ value: '未登録', note: '☆で追加', flagged: [] });
     expect(tile({ state: 'loading' })).toEqual({ value: '未登録', note: '☆で追加', flagged: [] });
+  });
+});
+
+// Today reads Track D's market-aware seams (I4, requested by Track D): the heading note with the bundle's
+// state, the watch rows' event under the market, and the earnings countdown from the later of the analysis
+// date and today.
+describe('Today under the market verdict and the earnings date', () => {
+  afterEach(cleanup);
+  const DATE = '2026-10-02';
+  const item = (symbol, price, earnings) => ({ row: { symbol, company_name: symbol, current_price: price, se_pivot_price: 100, ...(earnings ? { entry_evidence: { earnings: { date: earnings } } } : {}) },
+    assessment: { qualified: true, passed: 8, failed: 0, unknown: 0, total: 8 } });
+  const show = ({ market = null, ranked, watch = [], now = Date.parse(`${DATE}T20:00:00Z`) }) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>
+    <TodayView brief={{ bundle: { data: { date: DATE, rankings: { minervini: ranked } }, isLoading: false, isError: false }, manifest: { isLoading: false, isError: false }, ranked, date: DATE, market, marketLoading: false, trends: null, version: 'v1' }}
+      watch={watch} open={() => {}} now={now} animate={false} wide nav={{ market() {}, list() {}, watch() {} }} onUnwatch={() => {}} />
+  </MemoryRouter></QueryClientProvider>);
+  const watchRow = symbol => screen.getByRole('region', { name: 'ウォッチの状況' }).querySelector(`[data-symbol="${symbol}"]`);
+
+  it('says 地合い未確認 after the heading when a ready bundle has no market verdict', () => {
+    show({ ranked: [item('ZON1', 101)] });
+    expect(screen.getByRole('heading', { level: 2, name: /^注目候補/ })).toHaveTextContent('注目候補（地合い未確認）');
+  });
+
+  it('keeps a watched stock in the buy zone out of green while the market holds new buys', () => {
+    show({ ranked: [item('ZON1', 101)], watch: ['ZON1'], market: { label: '調整中（独自判定）', state: 'correction', cap: 0 } });
+    expect(watchRow('ZON1').querySelector('.brief-event-icon').className).toContain('tone-neutral');
+    cleanup();
+    show({ ranked: [item('ZON1', 101)], watch: ['ZON1'], market: { label: '上昇トレンド（独自判定）', state: 'confirmed_uptrend', cap: 0.5 } });
+    expect(watchRow('ZON1').querySelector('.brief-event-icon').className).toContain('tone-zone');
+  });
+
+  it('counts the earnings days from today when the analysis is older, and says 決算当日 on the day', () => {
+    show({ ranked: [item('NEA1', 97, '2026-10-05'), item('DAY1', 97, '2026-10-03'), item('FAR1', 97, '2026-10-30')], watch: ['NEA1', 'DAY1', 'FAR1'], now: Date.parse('2026-10-03T15:00:00Z') });
+    const line = symbol => watchRow(symbol).querySelector('small').textContent;
+    expect(line('NEA1')).toMatch(/・決算まで2日$/);
+    expect(line('DAY1')).toMatch(/・決算当日$/);
+    expect(line('FAR1')).not.toContain('決算');
   });
 });

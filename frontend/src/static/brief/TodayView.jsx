@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import useMediaQuery from '../useMediaQuery';
 import { money, signed } from '../positionGeometry';
-import { briefOrder, candidateView, focusCandidates, focusCounts, focusHeadingNote, focusTone, watchEvent } from './briefCandidate';
+import { briefOrder, candidateView, earningsCall, focusCandidates, focusCounts, focusHeadingNote, focusTone, watchEvent } from './briefCandidate';
 import { leadingGroups, marketTone } from './briefEnvironment';
 import { ma50Hit, sellChipView } from './briefSell';
 import MarketCard from './MarketCard';
@@ -20,7 +20,9 @@ const WATCH_ROWS = 3;
 // Footnotes: in place at 1024px and wider, gathered into the screen's 注記 below that.
 const TODAY_NOTE = '注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。同じ位置なら判定の達成数、RS推計の順。';
 const DATE_JA = iso => { const d = new Date(`${iso}T12:00:00Z`); return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）` : '日付未確認'; };
-const EVENT_ICON = { breakout: '↗', ext: '▲', near: '◔', zone: '●', ma50: '↘' };
+const EVENT_ICON = { breakout: '↗', ext: '▲', heavyDown: '▲', near: '◔', zone: '●', ma50: '↘' };
+// A stale pivot far below the price reads as extended (▲); one above it keeps the neutral mark.
+const eventIcon = event => event.kind === 'stale' && event.tone === 'ext' ? '▲' : EVENT_ICON[event.kind] || '≈';
 /** A plain click on a link runs the in-app handler; a modified click keeps the browser's own behaviour. */
 const follow = handler => event => { if (event.metaKey || event.ctrlKey || event.shiftKey) return; event.preventDefault(); handler(event); };
 
@@ -72,12 +74,13 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
   // The whole pool behind the five rows, so the summary never reads 「接近0」 while near-pivot stocks exist.
   const counts = useMemo(() => focusCounts(brief.ranked, brief.date), [brief.ranked, brief.date]);
   const groups = useMemo(() => leadingGroups(brief.ranked), [brief.ranked]);
-  const headingNote = focusHeadingNote(brief.market);
   const phone = useMediaQuery(PHONE_QUERY);
   const watched = useMemo(() => (brief.bundle.data?.rankings?.minervini || []).filter(item => watch.includes(item.row.symbol)).map(item => candidateView(item, brief.date)).sort(briefOrder), [brief.bundle.data, watch, brief.date]);
   const unlisted = useMemo(() => unlistedWatch(brief, watch), [brief, watch]);
   const sells = useWatchSellChecks(watched, brief);
   const state = bundleState(brief);
+  // A ready bundle without a market verdict says so after the heading (the verdict comes with the bundle).
+  const headingNote = focusHeadingNote(brief.market, state);
   // The first rows of the watch list, plus every row with a sell chip (a fired check, a caution or 未確認,
   // never folded away); the rest open in place and stay open for this session. Nothing folds or moves
   // until every row's check is in, so a row with a signal never appears late from behind the button.
@@ -113,10 +116,10 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">3</span><h2 id="brief-watch-title">ウォッチの状況</h2></div>
       {watched.length || unlisted.length ? <ul className="brief-rows" id="brief-watch-rows">
         {unlisted.map(symbol => <UnlistedWatchRow key={symbol} symbol={symbol} date={brief.date} onRemove={onUnwatch} />)}
-        {watchShown.map((view, i) => { const broke = ma50Hit(sells[view.symbol]), event = broke ? { kind: 'ma50', tone: 'ext', title: broke.headline || broke.detail } : watchEvent(view); return <RiseItem key={view.symbol} animate={animate} index={i}>
+        {watchShown.map((view, i) => { const broke = ma50Hit(sells[view.symbol]), event = broke ? { kind: 'ma50', tone: 'ext', title: broke.headline || broke.detail } : watchEvent(view, brief.market), earnings = earningsCall(view, now); return <RiseItem key={view.symbol} animate={animate} index={i}>
           <button type="button" className="brief-event" data-symbol={view.symbol} onClick={e => open(view.symbol, e.currentTarget, 'watch')}>
-            <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{EVENT_ICON[event.kind] || '≈'}</span>
-            <span><b>{view.symbol}</b> {event.title}<SellChip sell={sells[view.symbol]} /><small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{view.earnings && view.earnings.days <= 10 ? `・決算まで${view.earnings.days}日` : ''}</small></span>
+            <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{eventIcon(event)}</span>
+            <span><b>{view.symbol}</b> {event.title}<SellChip sell={sells[view.symbol]} /><small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${signed(view.distance)}` : 'ピボット未確認'}{earnings?.soon ? `・${earnings.chip}` : ''}</small></span>
             <span className="brief-chevron" aria-hidden="true">{ICON.next}</span>
           </button></RiseItem>; })}</ul>
         : <p className="brief-note">{state !== 'ready' && watch.length ? `ウォッチ中の${watch.length}銘柄は、${state === 'loading' ? '候補の読み込み後に確認します。' : '候補データがないため確認できません。'}` : '銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。'}</p>}
