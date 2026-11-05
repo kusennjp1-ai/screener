@@ -64,11 +64,11 @@ export default function StockChartCard({ data, view, legs, legsValid = false, rs
   } : null),
   // eslint-disable-next-line react-hooks/exhaustive-deps
   [bars, view?.symbol, view?.pivot, view?.upper, view?.earnings, legs, legsValid, data.chart.data, rsHigh, rsLead, gaps, sells, interval, short, certified, certification?.reason, row?.technical_audit, levels?.entry, levels?.r2, levels?.r3, levels?.structuralLow]);
-  // The selected bar belongs to one chart model; a new model (symbol, period, data) starts on its latest bar.
-  const [scrub, setScrub] = useState(null), modelRef = useRef(model);
-  modelRef.current = model;
-  const index = scrub && scrub.model === model ? scrub.index : null;
-  const onScrub = useCallback(i => setScrub({ model: modelRef.current, index: i }), []);
+  // The selected bar belongs to one chart (model and period); a new one (symbol, period, data) starts on its latest bar.
+  const [scrub, setScrub] = useState(null), current = useRef({ model, period });
+  current.current = { model, period };
+  const index = scrub && scrub.model === model && scrub.period === period ? scrub.index : null;
+  const onScrub = useCallback(i => setScrub({ ...current.current, index: i }), []);
   const readout = useMemo(() => (model ? chartReadout(model, index ?? undefined, { certified, pivot: view?.pivot ?? null, auditHigh: model.auditHigh }) : null), [model, index, certified, view?.pivot]);
   // At 1024px and wider the stock pane scrolls on its own: a thin fade at its bottom says more follows.
   const card = useRef(null);

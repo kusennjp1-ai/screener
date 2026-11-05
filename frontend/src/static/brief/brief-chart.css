@@ -60,7 +60,7 @@
 .bc-vol.bc-volhi.bc-volhi-down { fill: var(--ext); opacity: 1; }
 .bc-voldot { fill: var(--up); } .bc-voldot.bc-voldot-down { fill: var(--ext); }
 .bc-dryline { stroke: var(--wait); stroke-width: 2; }
-.bc-caption, .bc-notice, .bc-levelnote, .bc-malabel, .bc-ttext, .bc-zonetext { paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.bc-caption, .bc-notice, .bc-levelnote, .bc-malabel, .bc-ttext, .bc-zonetext, .bc-notetext, .bc-rstext, .bc-earnings { paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
 .bc-notice { fill: var(--text-2); }
 .bc-levelnote { fill: var(--text-2); }
 .bc-levelnote.bc-pivot-text { fill: var(--zone); } .bc-levelnote.bc-stop-text { fill: var(--neg); }
