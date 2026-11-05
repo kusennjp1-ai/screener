@@ -110,6 +110,8 @@
   .brief-legs .brief-legs-labels, .brief-legs .brief-leg { grid-template-rows: repeat(4, 16px); }
   .brief-legs .brief-legbar { display: none; }
 }
+/* The card's headline (the footprint, or 「VCP 未確認」) on the type scale on phones: brief.css sets 18px there. */
+@media (max-width: 520px) { .brief .brief-footprint { font-size: 16px; } }
 
 /* At 1024px and wider the stock pane scrolls by itself: a thin fade at its bottom while more follows. */
 @media (min-width: 1024px) {
