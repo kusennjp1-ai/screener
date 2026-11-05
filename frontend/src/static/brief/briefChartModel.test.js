@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { footprint, RS_LEAD_FROM_HIGH_PERCENT, rsLineNewHigh } from './briefChartModel';
+import { footprint, gapDays, RS_LEAD_FROM_HIGH_PERCENT, rsLeadMarks, rsLineNewHigh } from './briefChartModel';
 
 describe('brief model', () => {
   it('writes the VCP footprint only from valid, measured legs', () => {
@@ -11,6 +11,43 @@ describe('brief model', () => {
     expect(footprint({ vcp: { legs, measurementsValid: true } }, [{ date: '2026-10-02' }]).text).toBe('収縮 18週 24/5 3T（縮小は未確認）');
     expect(footprint({ vcp: { legs, measurementsValid: false } }, [])).toBeNull();
     expect(footprint({ vcp: { legs: legs.slice(0, 1), measurementsValid: true } }, [])).toBeNull();
+  });
+
+  it('calls legs[0] 最初の押し, and 最大の押し only when it really is the deepest; the base runs from the base high', () => {
+    const legs = [{ startDate: '2026-06-23', endDate: '2026-07-31', depthPct: 13.1 }, { startDate: '2026-09-17', endDate: '2026-10-01', depthPct: 4.2 }];
+    const deepest = footprint({ vcp: { legs, measurementsValid: true, depthsContract: true, base: { startDate: '2026-06-23' } } }, [{ date: '2026-10-02' }]);
+    expect(deepest).toMatchObject({ weeks: 14, firstLabel: '最大の押し', firstIsDeepest: true, text: 'VCP 14週 13/4 2T' });
+    const widening = [legs[0], { ...legs[1], depthPct: 18 }];
+    expect(footprint({ vcp: { legs: widening, measurementsValid: true, depthsContract: false } }, [{ date: '2026-10-02' }]).firstLabel).toBe('最初の押し');
+    expect(footprint({ vcp: { legs, measurementsValid: true, depthsContract: true, droppedLegs: 2 } }, [{ date: '2026-10-02' }]).firstLabel).toBe('直近6回の最初の押し');
+  });
+});
+
+describe('RS line leadership marks', () => {
+  const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
+  it('marks only bars from the 253rd point where the RS line leads a price at least 2% below its high', () => {
+    // The price peaks at bar 100 and stays 5% lower; the RS line rises steadily, so every bar from 252 on is at an RS high.
+    const bars = Array.from({ length: 300 }, (_, i) => ({ date: day(i), close: i === 100 ? 105 : 100, high: i === 100 ? 106 : 100.5 }));
+    const line = bars.map((b, i) => ({ time: b.date, value: 1 + i / 1000 }));
+    const marks = rsLeadMarks(line, bars);
+    expect(marks.eligible).toBe(48);
+    // Bar 100's high leaves the 252-bar window after bar 351, so the price is 2% or more below its high until then.
+    expect(marks.dates).toEqual(bars.slice(252).map(b => b.date));
+    expect(marks.threshold).toBeCloseTo(1 + 298 / 1000);
+    expect(rsLeadMarks(line.slice(-200), bars)).toMatchObject({ dates: [], eligible: 0, threshold: null });
+    expect(rsLeadMarks(line, null)).toBeNull();
+    // Near its own high (within 2%) the RS line's high is not a lead.
+    const atHigh = bars.map(b => ({ ...b, close: 100, high: 100.5 }));
+    expect(rsLeadMarks(line, atHigh).dates).toEqual([]);
+  });
+});
+
+describe('opening gaps', () => {
+  it('marks opens at least 2% of the prior close beyond the prior high or low, skipping gaps in the data', () => {
+    const bars = [{ date: 'a', open: 100, high: 101, low: 99, close: 100 }, { date: 'b', open: 103.1, high: 104, low: 103, close: 103.5 },
+      { date: 'c', open: 101.5, high: 102, low: 100, close: 100.5 }, { date: 'd', open: null, high: 101, low: 100, close: 100.5 }, { date: 'e', open: 97.5, high: 98, low: 97, close: 97.5 }];
+    expect(gapDays(bars)).toEqual([{ date: 'b', direction: 'up' }, { date: 'e', direction: 'down' }]);
+    expect(gapDays(null)).toEqual([]);
   });
 });
 

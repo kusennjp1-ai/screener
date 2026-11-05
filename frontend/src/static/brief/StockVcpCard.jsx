@@ -13,7 +13,7 @@ export default function VcpCard({ technical, bars, judged, view, wide }) {
     <h2 id="brief-vcp-title">値幅の収縮（VCP）</h2>
     {print ? <>
       <p className="brief-footprint">{print.text}</p>
-      <p className="brief-note">土台 {print.weeks}週・最大の押し {print.deepest.toFixed(0)}% → 最小 {print.shallowest.toFixed(0)}%・収縮 {print.count}回{print.contracting === true ? '（押しが毎回浅くなっています）' : print.contracting === false ? '（押しの縮小が途切れています）' : ''}</p>
+      <p className="brief-note">土台 {print.weeks}週・{print.firstLabel} {print.first.toFixed(0)}% → 最後 {print.last.toFixed(0)}%・収縮 {print.count}回{print.contracting === true ? '（押しが毎回浅くなっています）' : print.contracting === false ? '（押しの縮小が途切れています）' : ''}</p>
       <div className="brief-legs" aria-hidden="true">{legs.map((leg, i) => <div key={leg.startDate}><span className="grow-y" style={{ height: `max(6px, calc(${(leg.depthPct / Math.max(...legs.map(l => l.depthPct))).toFixed(3)} * (100% - 22px)))`, '--i': i }} />−{leg.depthPct.toFixed(0)}%</div>)}</div>
     </> : <p className="brief-note">測定できる収縮が2回以上ないため、VCPは未確認です。</p>}
     <dl className="brief-dl">

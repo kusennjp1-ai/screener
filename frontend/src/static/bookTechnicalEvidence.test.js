@@ -1,6 +1,10 @@
+// @vitest-environment node
+// (The browser fixture reads its session calendar with node:fs, which needs Node's URL.)
 import { tradingDays, calendarAt } from './testMarketCalendarFixture.js';
 import { describe, expect, it } from 'vitest';
 import { buildBookTechnicalEvidence } from './bookTechnicalEvidence';
+import { footprint } from './brief/briefChartModel';
+import { charts, date as FIXTURE_DATE, rowBySymbol } from '../../tests/static/brief-fixture.js';
 
 function fixture(count = 320) {
   const bars = [];
@@ -142,5 +146,72 @@ describe('book technical evidence', () => {
     expect(r.sma200).toBeNull();
     expect(r.rs).toBeNull();
     expect(r.vcp).toBeNull();
+  });
+});
+
+// A synthetic base after a linear advance: piecewise-linear closes through the given turning points,
+// each bar's high and low 0.3% around its close.
+function based(turns, count = 320) {
+  const f = fixture(count), bars = f.payload.bars, advance = count - turns.reduce((sum, [length]) => sum + length, 0);
+  const closes = [];
+  for (let i = 0; i <= advance; i++) closes.push(50 + 50 * i / advance);
+  for (const [length, to] of turns) { const from = closes.at(-1); for (let i = 1; i <= length; i++) closes.push(from + (to - from) * i / length); }
+  bars.forEach((bar, i) => { const close = closes[i]; Object.assign(bar, { open: close, close, high: close * 1.003, low: close * 0.997 }); });
+  f.row.current_price = bars.at(-1).close;
+  f.benchmark.bars = bars.map(b => ({ date: b.date, close: 100 }));
+  return f;
+}
+
+describe('VCP measurement from the base high', () => {
+  it('starts the fixture bases at their highs: ZZNV 06-23 about 13% over about 14 weeks, ZZAR and ZZZF about 19%', () => {
+    const measure = symbol => buildBookTechnicalEvidence(rowBySymbol[symbol], charts[`${symbol}.json`], FIXTURE_DATE);
+    const nv = measure('ZZNV');
+    expect(nv.vcp.base).toMatchObject({ startDate: '2026-06-23', source: 'algorithm' });
+    expect(nv.vcp.legs[0].startDate).toBe('2026-06-23');
+    expect(nv.vcp.legs[0].depthPct).toBeCloseTo(13, 0);
+    expect(footprint(nv, charts['ZZNV.json'].bars).weeks).toBe(14);
+    for (const symbol of ['ZZAR', 'ZZZF']) expect(measure(symbol).vcp.legs[0].depthPct, symbol).toBeCloseTo(19, 0);
+  });
+
+  it('reads a 25/12/6 base as 「VCP n週 25/6 3T」', () => {
+    const f = based([[25, 75.6], [20, 99], [15, 87.5], [12, 98], [8, 92.4], [6, 97]]);
+    const evidence = run(f), vcp = evidence.vcp;
+    expect(vcp.legs.map(l => Math.round(l.depthPct))).toEqual([25, 12, 6]);
+    expect(vcp.legs[0].startDate).toBe(vcp.base.startDate);
+    expect(vcp.measurementsValid).toBe(true);
+    expect(vcp.depthsContract).toBe(true);
+    expect(footprint(evidence, f.payload.bars).text).toMatch(/^VCP \d+週 25\/6 3T$/);
+  });
+
+  it('keeps a 3% final contraction and drops a dip under the noise floor', () => {
+    const f = based([[25, 75.6], [20, 99], [15, 87.5], [12, 98], [8, 92.4], [6, 97.5], [4, 94.8], [3, 95.4]]);
+    expect(run(f).vcp.legs.map(l => Math.round(l.depthPct))).toEqual([25, 12, 6, 3]);
+    const g = based([[25, 75.6], [20, 99], [15, 87.5], [12, 98], [8, 92.4], [6, 97.5], [2, 96.9], [2, 97.2]]);
+    expect(run(g).vcp.legs.map(l => Math.round(l.depthPct))).toEqual([25, 12, 6]);
+  });
+
+  it('does not call a flat ±3% range a VCP', () => {
+    const wave = [101.5, 103, 101.5, 100, 98.5, 97, 98.5, 100];
+    const f = based(Array.from({ length: 80 }, (_, i) => [1, wave[i % wave.length]]));
+    const evidence = run(f), vcp = evidence.vcp;
+    expect(vcp.legs.length).toBeLessThanOrEqual(6);
+    expect(vcp.droppedLegs).toBeGreaterThan(0);
+    expect(vcp.depthsContract).not.toBe(true);
+    expect(footprint(evidence, f.payload.bars)?.text ?? '').not.toMatch(/^VCP/);
+  });
+
+  it('stops at a breakout above the base high and anchors on the Setup Engine base only when it is current', () => {
+    const f = based([[25, 75.6], [20, 99], [15, 87.5], [12, 98], [8, 92.4], [4, 104], [2, 103]]);
+    const vcp = run(f).vcp;
+    expect(vcp.base.brokeOut).toBe(true);
+    expect(vcp.legs.map(l => Math.round(l.depthPct))).toEqual([25, 12, 6]);
+    const bars = f.payload.bars, second = bars.findIndex((b, i) => i > 250 && b.close === 99);
+    const candidate = { pattern: 'vcp', timeframe: 'daily', start_date: bars[second].date, end_date: bars.at(-8).date };
+    const current = { ...f.row, se_pattern_primary: 'vcp', se_candidates: [candidate], setup_recalculation: { status: 'calculated', as_of_date: f.date } };
+    const engine = buildBookTechnicalEvidence(current, f.payload, f.date, { benchmark: f.benchmark }).vcp;
+    expect(engine.base).toMatchObject({ source: 'setup-engine', startDate: bars[second].date });
+    expect(engine.legs.map(l => Math.round(l.depthPct))).toEqual([12, 6]);
+    const stale = { ...current, setup_recalculation: { status: 'calculated', as_of_date: '2026-01-02' } };
+    expect(buildBookTechnicalEvidence(stale, f.payload, f.date, { benchmark: f.benchmark }).vcp.base.source).toBe('algorithm');
   });
 });

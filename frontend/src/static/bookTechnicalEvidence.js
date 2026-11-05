@@ -1,6 +1,6 @@
 import { auditDailyBars } from './qualificationAudit.js';
 
-export const BOOK_TECHNICAL_VERSION = 'book-technical-evidence-v1';
+export const BOOK_TECHNICAL_VERSION = 'book-technical-evidence-v2';
 const finite = n => typeof n === 'number' && Number.isFinite(n);
 const mean = xs => xs.reduce((sum, x) => sum + x, 0) / xs.length;
 const validDate = date => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date;
@@ -67,10 +67,99 @@ function measuredLeg(bars, start, end) {
     lowAfterPeak: lowIndex > 0 };
 }
 
-function contractions(bars, review) {
+// Automatic contraction measurement (独自近似). The base starts at its high: the highest swing high
+// the zigzag confirms within the lookback (a breakout high not yet followed by a pullback is not one),
+// or the Setup Engine's base when its recalculation is current for the analysis date. From there a
+// zigzag finds each contraction (swing high → swing low). A reversal counts when it moves at least
+// max(1.5×ATR20, 30% of the previous contraction's depth); a lower high followed by a lower low is the
+// same decline, not a new contraction. The last contraction needs only the noise floor, so a tight
+// 2–4% final T is kept. Measurement stops where the price first trades above the base high.
+const VCP_LOOKBACK = 150, ATR_SESSIONS = 20, ATR_MULTIPLE = 1.5, DEPTH_FRACTION = 0.3, FINAL_FLOOR_PCT = 1.5, MAX_LEGS = 6;
+export const VCP_METHOD = Object.freeze({ lookback: VCP_LOOKBACK, atrSessions: ATR_SESSIONS, atrMultiple: ATR_MULTIPLE, depthFraction: DEPTH_FRACTION, finalFloorPct: FINAL_FLOOR_PCT, maxLegs: MAX_LEGS });
+
+/** ATR20 as a percent of each bar's close (trailing true ranges); null until 20 bars exist. */
+function atrPercent(bars) {
+  const out = new Array(bars.length).fill(null);
+  let sum = 0;
+  const range = i => (i ? Math.max(bars[i].high, bars[i - 1].close) - Math.min(bars[i].low, bars[i - 1].close) : bars[i].high - bars[i].low);
+  for (let i = 0; i < bars.length; i++) {
+    sum += range(i);
+    if (i >= ATR_SESSIONS) sum -= range(i - ATR_SESSIONS);
+    if (i >= ATR_SESSIONS - 1) out[i] = sum / ATR_SESSIONS / bars[i].close * 100;
+  }
+  return out;
+}
+
+/** The Setup Engine's base (its primary pattern's dates) when the recalculation is current for `date`. */
+function setupBase(row, bars, date) {
+  const calculation = row?.setup_recalculation;
+  if (calculation?.status !== 'calculated' || calculation.as_of_date !== date) return null;
+  const primary = row?.se_pattern_primary;
+  const candidate = Array.isArray(row?.se_candidates) && primary && primary !== 'none' ? row.se_candidates.find(c => c?.pattern === primary) : null;
+  if (!candidate || !validDate(candidate.start_date)) return null;
+  const start = bars.findIndex(b => b.date >= candidate.start_date);
+  let end = bars.length - 1;
+  if (validDate(candidate.end_date)) while (end > start && bars[end].date > candidate.end_date) end--;
+  if (start < 0 || end <= start) return null;
+  let anchor = start;
+  for (let i = start; i <= end; i++) if (bars[i].high > bars[anchor].high) anchor = i;
+  return anchor < bars.length - 1 ? { anchor, source: 'setup-engine', pattern: primary, startDate: candidate.start_date } : null;
+}
+
+function automaticLegs(bars, setup) {
+  const atr = atrPercent(bars), n = bars.length;
+  const floorAt = i => ATR_MULTIPLE * (atr[i] ?? atr.find(v => v !== null) ?? 0);
+  const drop = (h, l) => (bars[h].high - bars[l].low) / bars[h].high * 100;
+  const rise = (l, i) => (bars[i].high - bars[l].low) / bars[l].low * 100;
+  let anchor = setup?.anchor ?? null;
+  if (anchor === null) {
+    // Pass 1: confirmed swing highs with the ATR threshold; the base high is the highest of them.
+    let mode = 'up', ext = Math.max(0, n - VCP_LOOKBACK);
+    for (let i = ext + 1; i < n; i++) {
+      if (mode === 'up') {
+        if (bars[i].high > bars[ext].high) ext = i;
+        else if (drop(ext, i) >= floorAt(ext)) { if (anchor === null || bars[ext].high > bars[anchor].high) anchor = ext; mode = 'down'; ext = i; }
+      } else if (bars[i].low < bars[ext].low) ext = i;
+      else if (rise(ext, i) >= floorAt(ext)) { mode = 'up'; ext = i; }
+    }
+  }
+  const base = anchor === null ? null : { startDate: bars[anchor].date, high: bars[anchor].high, source: setup ? 'setup-engine' : 'algorithm', ...(setup ? { pattern: setup.pattern } : {}) };
+  if (anchor === null) return { base, legs: [], found: 0 };
+  // The base ends where the price first trades above its high (a breakout); later swings belong to a new base.
+  let stop = anchor + 1;
+  while (stop < n && bars[stop].high <= bars[anchor].high) stop++;
+  base.endDate = bars[stop - 1].date;
+  base.brokeOut = stop < n;
+  const legs = [];
+  const push = (a, b) => {
+    const previous = legs.at(-1);
+    if (previous && bars[b].low < bars[previous.b].low && bars[a].high <= bars[previous.a].high) { previous.b = b; previous.depth = drop(previous.a, b); return; }
+    legs.push({ a, b, depth: drop(a, b) });
+  };
+  let mode = 'down', hi = anchor, lo = null;
+  for (let i = anchor + 1; i < stop; i++) {
+    if (mode === 'down') {
+      if (lo === null || bars[i].low < bars[lo].low) lo = i;
+      else if (rise(lo, i) >= Math.max(floorAt(lo), DEPTH_FRACTION * drop(hi, lo))) { push(hi, lo); mode = 'up'; hi = i; lo = null; }
+    } else if (bars[i].high > bars[hi].high) hi = i;
+    else if (drop(hi, i) >= Math.max(floorAt(hi), legs.length ? DEPTH_FRACTION * legs.at(-1).depth : 0)) { mode = 'down'; lo = i; }
+  }
+  if (mode === 'down' && lo !== null) push(hi, lo);
+  else if (mode === 'up') {
+    // The final contraction: only the noise floor (1.5%, or one ATR20 when that is larger) applies.
+    let low = null;
+    for (let j = hi + 1; j < stop; j++) if (low === null || bars[j].low < bars[low].low) low = j;
+    if (low !== null && drop(hi, low) >= Math.max(FINAL_FLOOR_PCT, atr[hi] ?? 0)) push(hi, low);
+  }
+  return { base, legs: legs.map(({ a, b }) => measuredLeg(bars, a, b)), found: legs.length };
+}
+
+function contractions(bars, review, { row = null, date = null } = {}) {
   const result = { scope: 'OHLCV実測を伴う通常VCPの候補。パワープレー等の例外は別評価',
-    certification: false, source: 'algorithm', reviewer: null, errors: [], legs: [],
-    limitations: ['自動ピーク探索は2本左右の局所高値・直近150本を使う独自近似', '出来高区間平均は売り枯れの代理指標', 'ベース全体の位置・ステージ・買い場は別途確認'] };
+    certification: false, source: 'algorithm', reviewer: null, errors: [], legs: [], base: null,
+    limitations: ['ベース高値（直近150本で確定した最高のスイング高値、またはSetup Engineの現在のベース）からのジグザグ測定は独自近似',
+      '反転幅は1.5×ATR20と直前の収縮の深さの3割の大きい方。最後の収縮は雑音下限（1.5%とATR20の大きい方）のみ',
+      '出来高区間平均は売り枯れの代理指標', 'ベース全体の位置・ステージ・買い場は別途確認'] };
   if (review != null) {
     result.source = 'reviewer-intervals';
     if (typeof review.source !== 'string' || !review.source.trim() || typeof review.reviewedAt !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(review.reviewedAt) ||
@@ -87,22 +176,14 @@ function contractions(bars, review) {
     }
     if (result.errors.length) { result.legs = []; return result; }
   } else {
-    const begin = Math.max(0, bars.length - 150), peaks = [];
-    for (let i = begin + 2; i < bars.length - 2; i++) {
-      if ([i - 2, i - 1, i + 1, i + 2].every(j => bars[i].high > bars[j].high)) peaks.push(i);
-    }
-    // Find the low after each peak, before the next peak, so a higher recovery
-    // high cannot distort the previous contraction's starting high.
-    for (let i = 0; i < peaks.length; i++) {
-      const start = peaks[i], limit = i + 1 < peaks.length ? peaks[i + 1] : bars.length - 1;
-      let low = start;
-      for (let j = start + 1; j <= limit; j++) if (bars[j].low < bars[low].low) low = j;
-      if (low > start) result.legs.push(measuredLeg(bars, start, low));
-    }
-    result.legs = result.legs.slice(-6);
+    const measured = automaticLegs(bars, setupBase(row, bars, date));
+    result.base = measured.base;
+    result.legs = measured.legs.slice(-MAX_LEGS);
+    // More contractions than the six kept: the first kept one is not the base's first.
+    result.droppedLegs = Math.max(0, measured.found - MAX_LEGS);
   }
   const legs = result.legs;
-  result.enoughLegs = legs.length >= 2 && legs.length <= 6;
+  result.enoughLegs = legs.length >= 2 && legs.length <= MAX_LEGS;
   result.measurementsValid = result.enoughLegs && legs.every(l => l.validPeak && l.lowAfterPeak && l.depthPct > 0);
   result.depthsContract = result.measurementsValid ? legs.slice(1).every((l, i) => l.depthPct < legs[i].depthPct) : null;
   result.volumeContracts = result.measurementsValid && legs.every(l => l.averageVolume > 0)
@@ -132,6 +213,6 @@ export function buildBookTechnicalEvidence(row, payload, date, { benchmark = nul
   result.sma200 = { oneMonth: direction(points, 21), preferredFourMonths: direction(points, 84), preferredFiveMonths: direction(points, 105),
     source: { book1Seconds: 36, book2Seconds: 347.5 }, preferredNotRequired: true };
   result.rs = independentRs(bars, benchmark, date);
-  result.vcp = contractions(bars, review);
+  result.vcp = contractions(bars, review, { row, date });
   return result;
 }
