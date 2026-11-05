@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPortfolioPlan, modelMarket } from './portfolioPlan';
+import { buildPortfolioPlan, exposureRuleText, modelMarket, MARKET_CAPS } from './portfolioPlan';
 import { marketTone } from './brief/briefModel';
 import { withAuditFixture } from './testAuditFixture';
 
@@ -71,4 +71,41 @@ it('names a close below the 50-day line as a known weak state and keeps missing 
   expect(plan.allocationCap).toBe(0);
   expect(plan.positions).toEqual([]);
   expect(plan.blockers[0]).toBe('50日線割れ（弱含み・独自判定）');
+});
+
+describe('the exposure guide\'s caps and their disclosure', () => {
+  it('prints the disclosure from MARKET_CAPS, so a changed cap changes the words', () => {
+    expect(MARKET_CAPS).toEqual({ confirmed_uptrend: 0.5, uptrend_under_pressure: 0.25, otherwise: 0 });
+    expect(Object.isFrozen(MARKET_CAPS)).toBe(true);
+    expect(exposureRuleText()).toBe('独自の目安：上昇トレンド 最大50%・上昇に圧力 最大25%・それ以外 0%（S&P 500（SPY）の50日線・200日線と局面判定から。バックエンドの局面判定の目安とは別）。注意サインも指数の過去の傾向も目安を変えません。');
+    expect(exposureRuleText({ ...MARKET_CAPS, confirmed_uptrend: 0.4 })).toContain('上昇トレンド 最大40%・上昇に圧力 最大25%');
+    expect(exposureRuleText({ ...MARKET_CAPS, uptrend_under_pressure: 0 })).toContain('上昇に圧力 0%・それ以外 0%');
+    expect(exposureRuleText({ ...MARKET_CAPS, otherwise: 0.1 })).toContain('それ以外 最大10%');
+    expect(exposureRuleText({ ...MARKET_CAPS, confirmed_uptrend: 0.4 })).not.toBe(exposureRuleText());
+  });
+
+  it('keeps every verdict and cap of modelMarket for fixed inputs (snapshot)', () => {
+    const cases = {
+      confirmed: [fixture()],
+      pressure: [fixture('P', { market_regime: 'uptrend_under_pressure' })],
+      correction: [fixture('C', { market_regime: 'market_in_correction' })],
+      below200: [fixture('L', { market_above_200dma: false })],
+      below50: [fixture('W', { market_above_50dma: false })],
+      unknown50: [fixture('U', { market_above_50dma: 'n/a' })],
+      noRegime: [fixture('N', { market_regime: null })],
+      conflict: [fixture(), fixture('O', { market_regime: 'uptrend_under_pressure' })],
+      nonUsd: [fixture('J', { currency: 'JPY' })],
+    };
+    expect(Object.fromEntries(Object.entries(cases).map(([name, rows]) => [name, modelMarket(rows)]))).toEqual({
+      confirmed: { label: '上昇トレンド（独自判定）', cap: 0.5 },
+      pressure: { label: '上昇に圧力（独自判定）', cap: 0.25 },
+      correction: { label: '新規購入を抑制', cap: 0 },
+      below200: { label: '長期トレンド警戒', cap: 0 },
+      below50: { label: '50日線割れ（弱含み・独自判定）', cap: 0 },
+      unknown50: { label: '市場未確認', cap: 0, state: 'unknown' },
+      noRegime: { label: '市場未確認', cap: 0, state: 'unknown' },
+      conflict: { label: '市場未確認', cap: 0, state: 'unknown' },
+      nonUsd: { label: '市場未確認', cap: 0, state: 'unknown' },
+    });
+  });
 });
