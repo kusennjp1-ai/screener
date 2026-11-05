@@ -31,7 +31,7 @@ function IndexChart({ sp500, distribution, distributionEnd, followThrough = null
   const ft = detail && followThrough?.available === true ? followThrough : null, find = day => isDay(day) ? points.findIndex(p => p.date === day) : -1;
   const ftdAt = ft && ['confirmed', 'ftd_failed'].includes(ft.state) ? find(ft.ftd?.date) : -1;
   const lowAt = ft && ['rally_attempt', 'attempt_expired', 'confirmed', 'ftd_failed'].includes(ft.state) ? find(ft.low?.date) : -1;
-  const at = (i, extra = {}) => ({ left: `${(100 * x(i) / W).toFixed(2)}%`, top: `${(100 * y(points[i].close) / H).toFixed(2)}%`, ...extra });
+  const at = i => ({ left: `${(100 * x(i) / W).toFixed(2)}%`, top: `${(100 * y(points[i].close) / H).toFixed(2)}%` });
   const words = [ftdAt >= 0 ? `FTD ${shortDate(points[ftdAt].date, chartEnd)}` : null, lowAt >= 0 ? `反発の安値 ${shortDate(points[lowAt].date, chartEnd)}` : null].filter(Boolean);
   const svg = <svg className={`brief-index${detail ? ' is-detail' : ''}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
     aria-label={`S&P 500 の終値と50日線${line200 ? '・200日線' : ''}（${points[0].date}〜${chartEnd}）。有効な分配日 ${marks.length}日${words.length ? `。${words.join('、')}` : ''}${detail ? `。目盛り ${num(lo, 0)}〜${num(hi, 0)}` : ''}`}>
