@@ -345,7 +345,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
           {nas && <p className="brief-index-nas"><b>Nasdaq総合</b><span className="numeric">{num(nas.close, 2)}</span><Parts text={`${shortDate(nas.date, date)}終値・${finite(nas.fromHigh) ? `1年高値から ${signedPercent(nas.fromHigh)}` : '1年高値から 未算出'}・${finite(nas.vsMa) ? `50日線比 ${signedPercent(nas.vsMa)}` : '50日線比 未算出'}・${finite(nas.vs200) ? `200日線比 ${signedPercent(nas.vs200)}` : '200日線比 未算出'}`} /></p>}
           {/* A disagreement with the verdict's scan input is always said here; the plain source line is in
               place on the desktop and in the 注記 below 1024px. */}
-          {summary && (conflict || !switcher) && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || 'S&P 500の数値は長期履歴の^GSPC終値から計算しています。'}</p>}
+          {summary && (conflict || !switcher) && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || <><span>3つの数値は長期履歴の^GSPC終値から計算しています。</span><span>200日線比も同じ終値からです。</span></>}</p>}
           {chartEl}
         </div>}
         <div className="brief-env-rows">{group.items.map(item => <EnvRow key={item.key} item={item} groupAsOf={group.asOf} onOpenMetric={view.history ? onOpenMetric : null} />)}</div>

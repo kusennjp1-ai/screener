@@ -171,7 +171,8 @@ describe('brief market card: market tab', () => {
     expect(screen.queryByRole('tablist')).toBeNull();
     expect(screen.queryByRole('tabpanel')).toBeNull();
     expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
-    expect(screen.getByText('S&P 500の数値は長期履歴の^GSPC終値から計算しています。').closest('details')).toBeNull();
+    expect(screen.getByText('3つの数値は長期履歴の^GSPC終値から計算しています。').closest('details')).toBeNull();
+    expect(document.querySelector('.brief-index-source')).toHaveTextContent(/^3つの数値は長期履歴の\^GSPC終値から計算しています。200日線比も同じ終値からです。$/);
     expect(document.querySelector('.brief-screen-notes')).toBeNull();
   });
 
