@@ -256,11 +256,11 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`the ends 
     if (phone) await expect(page.locator('.brief-dockpos')).toContainText('5/5');
     const status = page.getByRole('status').filter({ hasText: '一巡しました' });
     await press(page, '次の候補');
-    await expect(status).toHaveText('一巡しました（注目候補5件）');
+    await expect(status).toHaveText('一巡しました（注目候補の上位5件）');
     await expect(page).toHaveURL(/#\/brief\/stock\/ZZDM$/);
     await page.keyboard.press('j');
     await expect(page).toHaveURL(/#\/brief\/stock\/ZZDM$/);
-    await expect(status).toHaveText('一巡しました（注目候補5件）');
+    await expect(status).toHaveText('一巡しました（注目候補の上位5件）');
     await page.goto('/#/brief/stock/ZZNV');
     await expect(page).toHaveURL(/#\/brief\/stock\/ZZNV$/);
     await page.keyboard.press('k');
@@ -279,7 +279,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`the ends 
     await main.dispatchEvent('pointerdown', { pointerType: 'touch', clientX: from, clientY: y, isPrimary: true });
     for (let k = 1; k <= 6; k++) await main.dispatchEvent('pointermove', { pointerType: 'touch', clientX: from - k * 30, clientY: y, isPrimary: true });
     await main.dispatchEvent('pointerup', { pointerType: 'touch', clientX: from - 180, clientY: y, isPrimary: true });
-    await expect(page.getByRole('status').filter({ hasText: '一巡しました' })).toHaveText('一巡しました（注目候補5件）');
+    await expect(page.getByRole('status').filter({ hasText: '一巡しました' })).toHaveText('一巡しました（注目候補の上位5件）');
     await expect(page).toHaveURL(/#\/brief\/stock\/ZZDM$/);
     expect(errors).toEqual([]);
   });

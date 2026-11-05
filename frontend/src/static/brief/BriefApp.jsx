@@ -94,15 +94,19 @@ export default function BriefApp() {
   const [listState, setListState] = useState({ filter: 'zone', sort: 'priority', query: '' });
   // How many rows each list (候補, ウォッチ) shows; reset when its filter or search changes.
   const [listLimits, setListLimits] = useState({});
-  // The watch list steps in the order its screen shows: rows whose weakness check fired first.
+  // The watch list steps in the order its screen shows (every watched stock, whatever the 候補 tab's search):
+  // broken setups first.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const watchViews = useMemo(() => (from === 'watch' ? listShown(listSource(brief, 'watch', watch), 'watch', listState) : null), [from, brief.bundle.data, brief.date, watch, listState]);
   const watchSells = useWatchSellChecks(watchViews, brief);
   const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : from === 'watch' ? watchOrder(watchViews, watchSells) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [from, brief.bundle.data, brief.ranked, brief.date, watch, listState, watchViews, watchSells]);
-  // The list the stock screen steps through, as the dock and the end-of-list message name it.
-  const listName = from === 'today' || from === 'market' ? '注目候補' : from === 'watch' ? 'ウォッチ' : LIST_FILTERS[listState.filter]?.label || '候補';
+  // The list the stock screen steps through, as the dock (listName) and the end-of-list message (listCount)
+  // name it. From Today (and the market tab) it is Today's top focus rows, never the whole focus pool.
+  const focusTop = from === 'today' || from === 'market';
+  const listName = focusTop ? '注目候補（上位）' : from === 'watch' ? 'ウォッチ' : LIST_FILTERS[listState.filter]?.label || '候補';
+  const listCount = focusTop ? `注目候補の上位${sequence.length}件` : `${listName}${sequence.length}件`;
   // Desktop keeps the stock pane on the same stock across tab switches while that stock is in
   // the new list, so switching tabs does not redraw a different chart.
   const [kept, setKept] = useState(null);
@@ -124,9 +128,9 @@ export default function BriefApp() {
   const step = useCallback(direction => {
     const target = stepTarget(sequence, selected, direction);
     if (!target) return;
-    if (target.edge) { notify(target.edge === 'end' ? `一巡しました（${listName}${sequence.length}件）` : '先頭です'); return; }
+    if (target.edge) { notify(target.edge === 'end' ? `一巡しました（${listCount}）` : '先頭です'); return; }
     if (target.symbol !== selected) go(`/brief/stock/${encodeURIComponent(target.symbol)}`, { kind: direction > 0 ? 'next' : 'prev', state: { from }, replace: true });
-  }, [sequence, selected, go, from, notify, listName]);
+  }, [sequence, selected, go, from, notify, listCount]);
   // Stable identities for the memoized stock pane: the step handler reads the latest sequence
   // through a ref, and the pane's brief changes only with the inputs the pane reads.
   const stepRef = useRef(step);
@@ -222,9 +226,11 @@ export default function BriefApp() {
     </main>}
     {!wide && (view === 'stock' ? <div className="brief-dock brief-actions">
       <button type="button" aria-label="前の候補" onClick={() => step(-1)}>{ICON.back}</button>
-      {/* Which list the buttons step through, and where in it this stock is, beside the ☆. */}
+      {/* Which list the buttons step through, and where in it this stock is, beside the ☆. A stock outside
+          that list says so in words, never as a missing number. */}
       <div className="brief-dockpos">
-        <p><span className="numeric" aria-hidden="true">{at >= 0 ? at + 1 : '—'}/{sequence.length}</span><span className="sr-only">{at >= 0 ? `${sequence.length}件中${at + 1}件目` : `一覧外・${sequence.length}件`}</span> {listName}</p>
+        {at >= 0 ? <p><span className="brief-dockpos-at"><span className="numeric" aria-hidden="true">{at + 1}/{sequence.length}</span><span className="sr-only">{sequence.length}件中{at + 1}件目</span></span> <span className="brief-dockpos-name">{listName}</span></p>
+          : <p><span className="brief-dockpos-at">一覧外</span><span className="brief-dockpos-sep">・</span><span className="brief-dockpos-name">{listCount}</span></p>}
         <button type="button" className={watching ? 'is-on' : ''} aria-pressed={Boolean(watching)} aria-label={watching ? 'ウォッチから外す' : 'ウォッチに追加'} onClick={event => toggleWatch(symbol, event.currentTarget)}>{watching ? ICON.starOn : ICON.star}</button>
       </div>
       <button type="button" aria-label="次の候補" onClick={() => step(1)}>{ICON.next}</button>

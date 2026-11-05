@@ -458,4 +458,22 @@ for (const [width, device] of Object.entries({ 320: phone(320, 640), 375: phone(
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
+
+  test('a stock outside the stepped list says so in words, and the dock never cuts the list\'s name', async ({ page }) => {
+    const clipped = locator => locator.evaluate(node => [node, ...node.querySelectorAll('span:not(.sr-only)')].some(el => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1));
+    // ZZSD is not among Today's top focus rows, which a direct link steps through.
+    const { errors } = await openBrief(page, '#/brief/stock/ZZSD');
+    const position = page.locator('.brief-dock .brief-dockpos p');
+    await expect(position).toHaveText('一覧外・注目候補の上位5件');
+    await expect(position.locator('[aria-hidden="true"], .sr-only')).toHaveCount(0);
+    expect(await clipped(position)).toBe(false);
+    // The next stock enters the list at its first row.
+    await page.locator('.brief-dock').getByRole('button', { name: '次の候補' }).click();
+    await expect(page).toHaveURL(/#\/brief\/stock\/ZZNV$/);
+    await expect(position).toContainText('1/5');
+    await expect(position).toContainText('注目候補（上位）');
+    expect(await clipped(position)).toBe(false);
+    for (const node of await position.locator('span:not(.sr-only)').all()) expect(await node.evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(12);
+    expect(errors).toEqual([]);
+  });
 });
