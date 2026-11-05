@@ -48,28 +48,52 @@ function admitSeries(points, field, asOfDate, annual = false) {
     points.every((point, index) => admitPoint(point, field, asOfDate, annual) && (!index || point.end > points[index - 1].end));
 }
 
+// Why a record was refused, one reason per existing check (no new rule): the record's structure or a
+// value of its envelope (`keys`), its schema version, its symbol, its publication date, its retrieval
+// clock against that date and the evaluation instant, the companyfacts URL bound to its CIK, one
+// quarterly or annual series (`series:<field>`, annual EPS is `series:annualEps`), or an instrument
+// that never carries company financials (`not_corporate`).
+export const SEC_REFUSAL_REASONS = Object.freeze(['schema', 'symbol', 'as_of', 'retrieved_window', 'keys', 'cik_url', ...QUARTERLY_FIELDS.map(field => `series:${field}`), 'series:annualEps', 'not_corporate']);
+const refuse = reason => ({ value: null, reason });
+
+/**
+ * The admission of one same-day SEC companyfacts record with the reason it was refused:
+ * { value, reason }, where value is the same record (reason null) or null (reason one of
+ * SEC_REFUSAL_REASONS). The checks and their order are exactly those of admitBookFinancials;
+ * the reason only names which one refused the record.
+ */
+export function admitBookFinancialsDetailed(value, { symbol, asOfDate, evaluatedAt, row } = {}) {
+  if (!plain(value)) return refuse('keys');
+  if (typeof symbol !== 'string' || !symbol || value.symbol !== symbol) return refuse('symbol');
+  if (!day(asOfDate) || value.as_of_date !== asOfDate) return refuse('as_of');
+  if (!Number.isFinite(evaluatedAt)) return refuse('retrieved_window');
+  if (!corporateFinancialsAllowed(row && typeof row === 'object' ? row : { symbol })) return refuse('not_corporate');
+  if (value.schema_version !== SEC_RECORD_SCHEMA) return refuse('schema');
+  if (!instant(value.retrieved_at)) return refuse('retrieved_window');
+  const retrieved = Date.parse(value.retrieved_at);
+  if (retrieved < Date.parse(`${asOfDate}T00:00:00Z`) || retrieved > evaluatedAt) return refuse('retrieved_window');
+  if (value.status === 'unavailable') {
+    if (Object.keys(value).some(key => !UNAVAILABLE_KEYS.has(key)) || !SEC_UNAVAILABLE_REASONS.includes(value.reason)) return refuse('keys');
+    if (Object.hasOwn(value, 'error') && !text(value.error, 200)) return refuse('keys');
+    if (Object.hasOwn(value, 'forms') && !(Array.isArray(value.forms) && value.forms.length <= 5 && value.forms.every(form => typeof form === 'string' && /^[0-9A-Z-]{2,8}(\/A)?$/.test(form)))) return refuse('keys');
+    return { value, reason: null };
+  }
+  if (!['available', 'partial'].includes(value.status) || !sameKeys(value, RECORD_KEYS)) return refuse('keys');
+  if (!Number.isSafeInteger(value.cik) || value.cik <= 0 || value.source !== `https://data.sec.gov/api/xbrl/companyfacts/CIK${String(value.cik).padStart(10, '0')}.json`) return refuse('cik_url');
+  if (!plain(value.quarterly) || !sameKeys(value.quarterly, QUARTERLY_FIELDS)) return refuse('keys');
+  const series = QUARTERLY_FIELDS.find(field => !admitSeries(value.quarterly[field], field, asOfDate));
+  if (series) return refuse(`series:${series}`);
+  if (!admitSeries(value.annualEps, 'eps', asOfDate, true)) return refuse('series:annualEps');
+  if (!Array.isArray(value.limitations) || value.limitations.length > 10 || !value.limitations.every(item => text(item, 200))) return refuse('keys');
+  return { value, reason: null };
+}
+
 /**
  * Returns the same record when it is an exact, same-day SEC companyfacts record for
  * this symbol and publication, else null. `evaluatedAt` is the publication's
  * evaluation instant (ms); the record cannot have been retrieved after it or before
  * the publication date began. Funds and quarantined instruments never carry one.
  */
-export function admitBookFinancials(value, { symbol, asOfDate, evaluatedAt, row } = {}) {
-  if (!plain(value) || typeof symbol !== 'string' || !symbol || value.symbol !== symbol || !day(asOfDate) || value.as_of_date !== asOfDate) return null;
-  if (!Number.isFinite(evaluatedAt) || !corporateFinancialsAllowed(row && typeof row === 'object' ? row : { symbol })) return null;
-  if (value.schema_version !== SEC_RECORD_SCHEMA || !instant(value.retrieved_at)) return null;
-  const retrieved = Date.parse(value.retrieved_at);
-  if (retrieved < Date.parse(`${asOfDate}T00:00:00Z`) || retrieved > evaluatedAt) return null;
-  if (value.status === 'unavailable') {
-    if (Object.keys(value).some(key => !UNAVAILABLE_KEYS.has(key)) || !SEC_UNAVAILABLE_REASONS.includes(value.reason)) return null;
-    if (Object.hasOwn(value, 'error') && !text(value.error, 200)) return null;
-    if (Object.hasOwn(value, 'forms') && !(Array.isArray(value.forms) && value.forms.length <= 5 && value.forms.every(form => typeof form === 'string' && /^[0-9A-Z-]{2,8}(\/A)?$/.test(form)))) return null;
-    return value;
-  }
-  if (!['available', 'partial'].includes(value.status) || !sameKeys(value, RECORD_KEYS)) return null;
-  if (!Number.isSafeInteger(value.cik) || value.cik <= 0 || value.source !== `https://data.sec.gov/api/xbrl/companyfacts/CIK${String(value.cik).padStart(10, '0')}.json`) return null;
-  if (!plain(value.quarterly) || !sameKeys(value.quarterly, QUARTERLY_FIELDS)) return null;
-  if (!QUARTERLY_FIELDS.every(field => admitSeries(value.quarterly[field], field, asOfDate)) || !admitSeries(value.annualEps, 'eps', asOfDate, true)) return null;
-  if (!Array.isArray(value.limitations) || value.limitations.length > 10 || !value.limitations.every(item => text(item, 200))) return null;
-  return value;
+export function admitBookFinancials(value, context = {}) {
+  return admitBookFinancialsDetailed(value, context).value;
 }
