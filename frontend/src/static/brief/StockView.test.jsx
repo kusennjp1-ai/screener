@@ -1,6 +1,14 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import StockView from './StockView';
+
+// The shell measures the contractions again when the published evidence is of an earlier method; the
+// measurement itself is bookTechnicalEvidence.test.js's, so here it returns a known result.
+const rebuilt = vi.hoisted(() => ({ vcp: null, calls: [] }));
+vi.mock('../bookTechnicalEvidence', async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual, buildBookTechnicalEvidence: (...args) => { rebuilt.calls.push(args); return { ...actual.buildBookTechnicalEvidence(...args), vcp: rebuilt.vcp }; } };
+});
 
 const DATE = '2026-10-02';
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -64,5 +72,44 @@ describe('brief stock view shell', () => {
     render(<StockView data={data(true)} wide />);
     expect(document.querySelector('.brief-screen-notes')).toBeNull();
     expect(document.querySelector('.brief-chart-notes')).toHaveTextContent('10日線・21日EMAは独自計算です。');
+  });
+});
+
+describe('brief stock view evidence', () => {
+  const vcpLeg = (startDate, endDate, depthPct, high) => ({ startDate, endDate, depthPct, high, low: high * (1 - depthPct / 100), bars: 10, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.8 } });
+  const current = { vcp: { source: 'algorithm', legs: [vcpLeg('2025-06-01', '2025-06-20', 9, 80), vcpLeg('2025-06-25', '2025-07-10', 4, 80)], measurementsValid: true, depthsContract: true, base: { startDate: '2025-06-01' } } };
+  const v1 = { version: 'book-technical-evidence-v1', as_of_date: DATE, vcp: { legs: Array.from({ length: 6 }, (_, i) => vcpLeg(day(150 + i * 8), day(154 + i * 8), 4 - i * 0.3, 90)), measurementsValid: true, depthsContract: false } };
+  const withDetail = (technical, detail, certified = true) => ({ ...data(certified), technical, row: { symbol: 'AAA', chart_path: 'AAA.json', research_detail_path: 'detail/AAA.json' }, detail });
+  afterEach(() => { sessionStorage.clear(); rebuilt.vcp = null; rebuilt.calls = []; });
+
+  it('never draws the legs of an earlier method: it measures them again on the certified bars', async () => {
+    const { BOOK_TECHNICAL_VERSION } = await import('../bookTechnicalEvidence');
+    rebuilt.vcp = current.vcp;
+    render(<StockView data={withDetail(v1, { data: { value: {} }, isError: false })} />);
+    expect(rebuilt.calls).toHaveLength(1);
+    expect(screen.getAllByText(/^VCP \d+週 9\/4 2T$/).length).toBeGreaterThan(0);
+    expect(screen.getByTestId('brief-price-chart').querySelectorAll('.bc-legbox')).toHaveLength(2);
+    expect(screen.queryByText(/6T/)).toBeNull();
+    cleanup();
+    // Evidence of the current method is used as published.
+    render(<StockView data={withDetail({ ...current, version: BOOK_TECHNICAL_VERSION }, { data: { value: {} }, isError: false })} />);
+    expect(rebuilt.calls).toHaveLength(1);
+    expect(screen.getAllByText(/^VCP \d+週 9\/4 2T$/).length).toBeGreaterThan(0);
+  });
+
+  it('keeps the VCP unknown while the research detail loads and on uncertified bars', async () => {
+    const { BOOK_TECHNICAL_VERSION } = await import('../bookTechnicalEvidence');
+    render(<StockView data={withDetail({ ...current, version: BOOK_TECHNICAL_VERSION }, { data: undefined, isError: false })} />);
+    expect(screen.getByText('VCP 未確認（読み込み中）')).toBeInTheDocument();
+    const chart = screen.getByTestId('brief-price-chart');
+    expect(chart.querySelectorAll('.bc-legbox')).toHaveLength(0);
+    // Loading is not a measured absence: the chart does not say 収縮は未確認 yet.
+    expect(chart.querySelector('.bc-notice')?.textContent ?? '').not.toContain('収縮は未確認');
+    expect(rebuilt.calls).toHaveLength(0);
+    cleanup();
+    render(<StockView data={withDetail({ ...current, version: BOOK_TECHNICAL_VERSION }, { data: { value: {} }, isError: false }, false)} />);
+    expect(screen.getByText('日足を分析基準日で検証できないため（最終日足が分析日と不一致）、VCPは未確認です。')).toBeInTheDocument();
+    expect(screen.getByTestId('brief-price-chart').querySelectorAll('.bc-legbox')).toHaveLength(0);
+    expect([...screen.getByTestId('brief-price-chart').querySelectorAll('.bc-notice')].map(node => node.textContent)).toContain('収縮は未確認');
   });
 });

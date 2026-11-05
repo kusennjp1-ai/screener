@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { money, times } from '../positionGeometry';
 import { footprint, upDownVolume } from './briefChartModel';
 import { weeklyBars } from './chartReadout';
+import { shortDate } from './briefShared';
 
 const finite = Number.isFinite;
 // The desktop (1024px and wider) keeps this footnote in place; below that it is in the screen's 注記.
@@ -27,10 +28,12 @@ function legLength(leg, bars, weekly) {
  * contraction is a button with its T number, depth, length and interval volume ratio; pressing it
  * emphasises that contraction on the chart (`chartRef`). `interval` is the chart's ('week' counts weeks).
  * The Setup Engine's base is shown beside the result when it is current, with a mark when they differ.
+ * `pending` (the research detail or the bars still loading) and `uncertified` ({ reason }: the bars are
+ * not certified for the analysis date) leave the VCP 未確認 and say why.
  */
-export default function VcpCard({ technical, bars, judged, view, wide, chartRef = null, interval = 'day', row = null, date = null }) {
-  const print = footprint(technical, bars), legs = print ? technical.vcp.legs : [];
-  const dry = technical?.vcp?.legs?.at(-1)?.volumeEvidence?.intervalRatio;
+export default function VcpCard({ technical, bars, judged, view, wide, chartRef = null, interval = 'day', row = null, date = null, pending = false, uncertified = null }) {
+  const print = pending || uncertified ? null : footprint(technical, bars), legs = print ? technical.vcp.legs : [];
+  const dry = print ? legs.at(-1)?.volumeEvidence?.intervalRatio : null;
   const engine = engineBase(row, date);
   const [active, setActive] = useState(null);
   const disagree = engine && print && ((engine.weeks !== null && Math.abs(engine.weeks - print.weeks) > 2) || (engine.depth !== null && Math.abs(engine.depth - Math.max(...legs.map(l => l.depthPct))) > 3));
@@ -50,7 +53,7 @@ export default function VcpCard({ technical, bars, judged, view, wide, chartRef 
     <h2 id="brief-vcp-title">値幅の収縮（VCP）</h2>
     {print ? <>
       <p className="brief-footprint">{print.text}</p>
-      <p className="brief-note">土台 {print.weeks}週・{print.firstLabel} {print.first.toFixed(0)}% → 最後 {print.last.toFixed(0)}%・収縮 {print.count}回{print.contracting === true ? '（押しが毎回浅くなっています）' : print.contracting === false ? '（押しの縮小が途切れています）' : ''}。日足からの独自近似です。</p>
+      <p className="brief-note">土台 {print.weeks}週・{print.firstLabel} {print.first.toFixed(0)}% → 最後の押し {print.last.toFixed(0)}%・収縮 {print.count}回{print.contracting === true ? '（押しが毎回浅くなっています）' : print.contracting === false ? '（押しの縮小が途切れています）' : ''}。{print.brokeOut ? `${print.breakoutDate ? `${shortDate(print.breakoutDate)}に` : ''}土台の高値を上抜けています。` : ''}日足からの独自近似です。各収縮を押すとチャートで強調します。</p>
       <div className="brief-legs" role="group" aria-label="収縮ごとの深さ・長さ・出来高（押すとチャートで強調）">
         <span className="brief-legs-labels" aria-hidden="true"><span className="brief-legbar" /><span /><span>深さ</span><span>長さ</span><span>出来高</span></span>
         {legs.map((leg, i) => {
@@ -66,8 +69,10 @@ export default function VcpCard({ technical, bars, judged, view, wide, chartRef 
         })}
       </div>
     </> : <>
-      <p className="brief-footprint">VCP 未確認</p>
-      <p className="brief-note">測定できる収縮が2回以上ないため、VCPは未確認です。</p>
+      <p className="brief-footprint">{pending ? 'VCP 未確認（読み込み中）' : 'VCP 未確認'}</p>
+      <p className="brief-note">{pending ? '収縮を測る詳細データを読み込み中です。'
+        : uncertified ? `${bars?.length ? `日足を分析基準日で検証できないため${uncertified.reason ? `（${uncertified.reason}）` : ''}` : '日足がないため'}、VCPは未確認です。`
+          : '測定できる収縮が2回以上ないため、VCPは未確認です。'}</p>
     </>}
     {engine ? <p className="brief-note brief-vcp-engine">Setup Engine：土台 {engine.weeks === null ? '未確認' : `${Math.round(engine.weeks)}週`}・深さ {engine.depth === null ? '未確認' : `${engine.depth.toFixed(0)}%`}{disagree ? '（独自近似と異なります）' : !print ? '（独自近似は未確認）' : ''}</p> : null}
     <dl className="brief-dl">

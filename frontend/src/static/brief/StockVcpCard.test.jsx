@@ -14,7 +14,7 @@ describe('brief VCP card', () => {
   it('lists each contraction with its T number, depth, length and volume ratio, 出来高 未確認 when unknown', () => {
     render(<VcpCard technical={technical(legs)} bars={bars} judged={null} view={{ pivot: 110 }} />);
     expect(screen.getByText('VCP 14週 13/4 2T')).toBeInTheDocument();
-    expect(screen.getByText(/最大の押し 13% → 最後 4%・収縮 2回.*独自近似/)).toBeInTheDocument();
+    expect(screen.getByText(/最大の押し 13% → 最後の押し 4%・収縮 2回.*独自近似です。各収縮を押すとチャートで強調します。/)).toBeInTheDocument();
     const group = screen.getByRole('group', { name: /収縮ごと/ });
     const [first, second] = within(group).getAllByRole('button');
     expect(first).toHaveTextContent('T1−13%28日0.90×');
@@ -43,7 +43,26 @@ describe('brief VCP card', () => {
   it('reads VCP 未確認 when nothing is measurable', () => {
     render(<VcpCard technical={technical(legs.slice(0, 1))} bars={bars} judged={null} view={{}} />);
     expect(screen.getByText('VCP 未確認')).toBeInTheDocument();
+    expect(screen.getByText('測定できる収縮が2回以上ないため、VCPは未確認です。')).toBeInTheDocument();
     expect(screen.queryByRole('group', { name: /収縮ごと/ })).toBeNull();
+  });
+
+  it('says the VCP is unknown while the detail loads and why on uncertified bars, never drawing the legs', () => {
+    render(<VcpCard technical={technical(legs)} bars={bars} judged={null} view={{}} pending />);
+    expect(screen.getByText('VCP 未確認（読み込み中）')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /収縮ごと/ })).toBeNull();
+    cleanup();
+    render(<VcpCard technical={technical(legs)} bars={bars} judged={null} view={{}} uncertified={{ reason: '最終日足が分析日と不一致' }} />);
+    expect(screen.getByText('日足を分析基準日で検証できないため（最終日足が分析日と不一致）、VCPは未確認です。')).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /収縮ごと/ })).toBeNull();
+    const dry = screen.getByText('最後の収縮の出来高').nextSibling;
+    expect(dry).toHaveTextContent('未確認');
+  });
+
+  it('says when the base has been broken out of', () => {
+    render(<VcpCard technical={technical(legs, { base: { startDate: legs[0].startDate, endDate: '2026-09-25', brokeOut: true, breakoutDate: '2026-09-28' } })} bars={bars} judged={null} view={{}} />);
+    expect(screen.getByText('VCP 13週 13/4 2T・上抜け済み（9/28）')).toBeInTheDocument();
+    expect(screen.getByText(/9\/28に土台の高値を上抜けています。/)).toBeInTheDocument();
   });
 
   it('shows the Setup Engine base beside the result only when it is current, and says when they differ', () => {
