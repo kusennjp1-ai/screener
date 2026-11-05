@@ -152,6 +152,10 @@ test.describe('text floor and targets of the compact controls', () => {
     const { errors } = await openBrief(page, '#/brief/market');
     await expect(tabs(page)).toHaveCount(4);
     const check = async () => {
+      // Measure once every finite entrance animation has finished: a strip still scaling in reads 43.9999px.
+      await page.evaluate(() => Promise.all(document.getAnimations()
+        .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map(animation => animation.finished.catch(() => null))));
       const small = await page.locator('.brief-expander summary, .brief-switch button, .brief-switch-flag, .brief-screen-notes li, .brief-dl dt, .brief-dl small, .brief-focusfoot .brief-note, .brief-groups-label, .brief-groups .brief-chip')
         .evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).filter(node => parseFloat(getComputedStyle(node).fontSize) < 12).map(node => node.textContent.slice(0, 30)));
       expect(small).toEqual([]);
