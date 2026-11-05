@@ -1,7 +1,7 @@
 // Daily brief fundamentals: the SEC quarters with their source and reasons, the detail's loading and
 // failure states, and the phone's text floor on the fundamentals rows, on synthetic data.
 import { test, expect } from '@playwright/test';
-import { openBrief, VIEWPORTS, horizontalOverflow, SEC_SYMBOL } from './brief-fixture.js';
+import { openBrief, sessions, VIEWPORTS, horizontalOverflow, SEC_SYMBOL } from './brief-fixture.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 
@@ -71,7 +71,9 @@ test.describe('phone secondary text on the fundamentals rows', () => {
   test.use(phone(375, 812));
   const sizes = (page, selector) => page.locator(selector).evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).map(node => [node.className, node.textContent.slice(0, 20), parseFloat(getComputedStyle(node).fontSize)]));
   test('reads at 12px or more', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/stock/ZZNV');
+    // The fundamentals half of the phone secondary-text test (its market half is in brief-market-phone.spec.js),
+    // with the same data: one session behind.
+    const { errors } = await openBrief(page, '#/brief/stock/ZZNV', { historyEnd: sessions.at(-2) });
     const fin = page.getByTestId('brief-fundamentals');
     await expect(fin.locator('.brief-q-axis')).toBeVisible();
     const rows = await sizes(page, '.brief-facts.is-fin .brief-fact small, .brief-facts.is-fin .brief-fact em');

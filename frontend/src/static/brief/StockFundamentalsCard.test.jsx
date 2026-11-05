@@ -20,6 +20,8 @@ const data = (certified, end) => ({
   bars: bars(end), date: DATE, certification: certified ? { certified: true, reason: null } : { certified: false, reason: '最終日足が分析日と不一致' },
   chart: { data: { rs_line: [] }, isError: false },
 });
+// The desktop render of the shell's split test: every condition of the trend template met.
+const allMet = { passed: 8, failed: 0, unknown: 0, rules: Array.from({ length: 8 }, (_, i) => ({ label: `条件${i + 1}`, state: 'pass', evidence: `条件${i + 1} の根拠` })) };
 afterEach(cleanup);
 
 describe('brief fundamentals card', () => {
@@ -163,5 +165,21 @@ describe('brief fundamentals card', () => {
     // A newest quarter with no year-ago quarter names that.
     scope = card(financial(null, { history: { ...history, quarterly: history.quarterly.slice(1) } }));
     expect(tile(scope, 'EPS 前年比')).toHaveTextContent('—参考・Yahoo 前年同期の値なし');
+  });
+});
+
+describe('brief stock view on a phone folds what is secondary, never a fired or unknown check', () => {
+  afterEach(() => sessionStorage.clear());
+
+  it('gathers the methodology footnotes in the screen\'s one 注記 (the fundamentals card\'s)', () => {
+    render(<StockView data={data(true)} />);
+    // The methodology footnotes are in the screen's one 注記.
+    const notes = screen.getByText('注記').closest('details');
+    expect(notes).toHaveTextContent('EPS は報告値（希薄化）で調整後EPSとは異なります。');
+  });
+
+  it('shows everything open on the desktop, each footnote in place on its card and no 注記 (the fundamentals card)', () => {
+    render(<StockView data={{ ...data(true), template: allMet }} wide />);
+    expect(within(screen.getByTestId('brief-fundamentals')).getByText(/^EPS は報告値（希薄化）で調整後EPSとは異なります。/)).toBeInTheDocument();
   });
 });

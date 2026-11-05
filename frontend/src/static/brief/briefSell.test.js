@@ -75,3 +75,30 @@ describe('book combined warning', () => {
     expect(withBookWarning(null, warn())).toBeNull();
   });
 });
+
+// Step-0 seams E owns and other tracks call (the stock view shell, BriefParts' rows, the conclusion).
+describe('briefSell seams', () => {
+  const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
+  const make = closes => closes.map((close, i) => ({ date: day(i), open: close, high: close * 1.005, low: close * 0.995, close, volume: 10000 }));
+  const warn = { valid: true, as_of_date: '2025-07-19', priceWarnings: { below20: true, threeLowerLows: true, currentVolumeRatio: 1.6, combinedWarning: true, recoveryInUpperHalf: false } };
+
+  it('sellChipView gives the chip for a fired, an unknown and a quiet result', async () => {
+    const { sellChipView } = await import('./briefSell');
+    expect(sellChipView({ hits: 3, strength: [], weakness: [] })).toEqual({ text: '売りのサイン 3件', tone: 'ext', title: undefined });
+    expect(sellChipView({ unknown: true, reason: '日足を取得できません' })).toEqual({ text: '売りのサイン 未確認', tone: '', title: '日足を取得できません' });
+    expect(sellChipView({ unknown: true })).toEqual({ text: '売りのサイン 未確認', tone: '', title: undefined });
+    for (const value of [null, undefined, { hits: 0, strength: [], weakness: [] }]) expect(sellChipView(value)).toBeNull();
+  });
+
+  it('stockSells is the bars\' checks plus the book warning, and null without judged bars', async () => {
+    const { sellSignals, stockSells, withBookWarning } = await import('./briefSell');
+    const closes = Array.from({ length: 200 }, (_, i) => 50 * 1.003 ** i);
+    closes.push(closes.at(-1) * 0.9);
+    const bars = make(closes);
+    const view = { symbol: 'AAA', state: 'wait', distance: -3 };
+    for (const diagnostics of [null, warn, { valid: false }]) expect(stockSells({ judged: bars, diagnostics, view })).toEqual(withBookWarning(sellSignals(bars), diagnostics));
+    expect(stockSells({ judged: bars, diagnostics: warn, view }).hits).toBeGreaterThan(0);
+    expect(stockSells({ judged: null, diagnostics: warn, view })).toBeNull();
+    expect(stockSells({ judged: make(closes.slice(0, 59)), diagnostics: null, view })).toBeNull();
+  });
+});

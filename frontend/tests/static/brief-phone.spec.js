@@ -64,6 +64,39 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
   });
 });
 
+for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip ${name}`, () => {
+  test.use(device);
+
+  test('Today\'s focus rows omit the constant TT 8/8 chip; the desktop list keeps it, a phone keeps it where it varies', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief');
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    for (const row of await focus.getByTestId('brief-candidate').all()) await expect(row).not.toContainText('TT 8/8');
+    // The constant is said once: in place on the desktop, in the screen's 注記 on a phone.
+    if (name === 'desktop') {
+      await expect(focus.getByText(/^注目候補はすべてトレンドテンプレート8条件を満たす銘柄/)).toBeVisible();
+      await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
+    } else await expect(page.locator('.brief-screen-notes', { hasText: '注目候補はすべてトレンドテンプレート8条件を満たす銘柄' })).toHaveCount(1);
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
+    await expect(page).toHaveURL(/#\/brief\/list$/);
+    if (name === 'desktop') await expect(candidates(page).first()).toContainText('TT 8/8');
+    else {
+      // A qualified-only filter's rows are all TT 8/8: the phone says so once in the 注記 and keeps each row's chips on one line.
+      for (const row of await candidates(page).all()) await expect(row).not.toContainText('TT 8/8');
+      await expect(page.locator('.brief-screen-notes')).toContainText('スマホでは「TT 8/8」の表示を省いています');
+      const lines = await candidates(page).evaluateAll(rows => rows.map(row => new Set([...row.querySelectorAll('.brief-reasons .brief-chip')].map(chip => chip.offsetTop)).size));
+      expect(lines.every(count => count === 1)).toBe(true);
+      // あと1条件 keeps the chip: there it says how many conditions are unmet.
+      await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^あと1条件/ }).click();
+      for (const row of await candidates(page).all()) await expect(row).toContainText('あと1条件');
+    }
+    if (name === 'desktop') expect(await page.locator('.brief-left .brief-minimeter').count()).toBeGreaterThan(0);
+    if (name === 'desktop') for (const meter of await page.locator('.brief-left .brief-minimeter').all()) await expect(meter).toBeVisible();
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('a date that cannot be read on a phone', () => {
   test.use(VIEWPORTS.phone);
   test('the bar says 未確認 once loading has ended, never 取得中 for good', async ({ page }) => {

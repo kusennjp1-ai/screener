@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { footprint, rsLineNewHigh } from './briefChartModel';
+import { footprint, RS_LEAD_FROM_HIGH_PERCENT, rsLineNewHigh } from './briefChartModel';
 
 describe('brief model', () => {
   it('writes the VCP footprint only from valid, measured legs', () => {
@@ -45,5 +45,12 @@ describe('up/down volume', () => {
     expect(upDownVolume(bars.slice(1))).toBeNull();
     const gap = bars.map((b, i) => (i === 30 ? { ...b, volume: null } : b));
     expect(upDownVolume(gap)).toBeNull();
+  });
+});
+
+// Step-0 seam A owns and the conclusion's RS-line chip (D) reads.
+describe('RS line lead threshold', () => {
+  it('is the 2% below the price high the conclusion uses today', () => {
+    expect(RS_LEAD_FROM_HIGH_PERCENT).toBe(2);
   });
 });

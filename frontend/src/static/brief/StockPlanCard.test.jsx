@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, renderHook, screen } from '@testing-library/react';
 import StockView from './StockView';
+import { usePositionPlan } from './StockPlanCard';
+import { positionPlan } from './positionSizing';
 
 const DATE = '2026-10-02';
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -27,5 +29,33 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
     expect(folded(screen.getByRole('spinbutton', { name: '口座資金（$）', hidden: true }))).toBe(true);
     // The plan's results stay in view.
     expect(folded(screen.getByTestId('brief-shares'))).toBe(false);
+  });
+});
+
+// Step-0 seam F owns and the stock view shell (A) calls.
+describe('usePositionPlan', () => {
+  afterEach(() => localStorage.clear());
+
+  it('returns the plan, its inputs, update and moveStop, and moves the chart\'s stop line with the stop', () => {
+    const moves = [];
+    const chartRef = { current: { moveStop: stop => moves.push(stop) } };
+    const { result } = renderHook(() => usePositionPlan({ view, template: null, market: null, technical: null, certified: true, judged: bars(), chartRef }));
+    expect(Object.keys(result.current).sort()).toEqual(['moveStop', 'plan', 'settings', 'update']);
+    expect(result.current.settings).toEqual({ stopPercent: 7, account: 50000, riskPercent: 1.25 });
+    expect(result.current.plan).toEqual(positionPlan(view, result.current.settings));
+    act(() => result.current.update('stopPercent', 5));
+    expect(result.current.settings.stopPercent).toBe(5);
+    expect(moves).toEqual([positionPlan(view, { ...result.current.settings }).stop]);
+    expect(JSON.parse(localStorage.getItem('brief-plan'))).toMatchObject({ stopPercent: 5 });
+    result.current.moveStop(90);
+    expect(moves.at(-1)).toBe(90);
+    // A value that is not a number changes nothing.
+    act(() => result.current.update('account', Number.NaN));
+    expect(result.current.settings.account).toBe(50000);
+  });
+
+  it('has no plan without a view', () => {
+    const { result } = renderHook(() => usePositionPlan({ view: null, chartRef: { current: null } }));
+    expect(result.current.plan).toBeNull();
   });
 });

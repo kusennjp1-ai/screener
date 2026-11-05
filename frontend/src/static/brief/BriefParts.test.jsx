@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render } from '@testing-library/react';
-import { CandidateRow, Expander, ScreenNotes, StateChip } from './BriefParts';
+import { cleanup, render } from '@testing-library/react';
+import { BarQuote, CandidateRow, Expander, Parts, Reasons, RiseItem, ScreenNotes, StateChip, Toast } from './BriefParts';
+import * as primitives from './briefPrimitives';
 
 afterEach(cleanup);
 
@@ -53,44 +54,32 @@ describe('brief rows', () => {
   });
 });
 
-describe('brief expanders', () => {
-  afterEach(() => sessionStorage.clear());
-  const toggle = details => { details.open = !details.open; fireEvent(details, new Event('toggle')); };
-
-  it('folds a block into its summary line, keeps the content in the document, and keeps the open state for the session', () => {
-    const { container } = render(<Expander id="spec" summary="達成した条件 6件"><p>SMA150 &gt; SMA200</p></Expander>);
-    const details = container.querySelector('details');
-    expect(details.open).toBe(false);
-    expect(details.querySelector('summary')).toHaveTextContent(/^達成した条件 6件$/);
-    // Closed, the content is still there (find-in-page and text checks reach it) but not shown.
-    expect(details).toHaveTextContent('達成した条件 6件SMA150 > SMA200');
-    toggle(details);
-    expect(details.open).toBe(true);
-    expect(JSON.parse(sessionStorage.getItem('brief-open:spec'))).toBe(true);
+// Step-0 seams D owns and other tracks call (BriefApp's bar, Today's and the list's rows).
+describe('BriefParts seams', () => {
+  it('BarQuote shows the price after the ticker, and nothing without one', () => {
+    expect(render(<BarQuote view={{ price: 1234.5 }} />).container.innerHTML).toBe('<span class="numeric brief-bar-price"> $1,234.50</span>');
     cleanup();
-    const again = render(<Expander id="spec" summary="達成した条件 6件"><p>SMA150 &gt; SMA200</p></Expander>);
-    expect(again.container.querySelector('details').open).toBe(true);
+    for (const value of [null, undefined, {}, { price: null }]) { expect(render(<BarQuote view={value} />).container).toBeEmptyDOMElement(); cleanup(); }
   });
 
-  it('works without session storage', () => {
-    const original = Object.getOwnPropertyDescriptor(window, 'sessionStorage');
-    Object.defineProperty(window, 'sessionStorage', { configurable: true, get() { throw new Error('blocked'); } });
-    try {
-      const { container } = render(<Expander id="blocked" summary="注記"><p>body</p></Expander>);
-      const details = container.querySelector('details');
-      toggle(details);
-      expect(details.open).toBe(true);
-    } finally { Object.defineProperty(window, 'sessionStorage', original); }
+  it('draws the row\'s sell chip from sellChipView: ▲ only for a fired check, the reason as the title of an unknown one', () => {
+    const chip = sell => [...render(<Reasons view={view()} now={0} sell={sell} />).container.querySelectorAll('.brief-chip')].find(node => node.textContent.includes('売りのサイン'));
+    const hit = chip({ hits: 2 });
+    expect([hit.className, hit.textContent, hit.getAttribute('title')]).toEqual(['brief-chip tone-ext', '▲ 売りのサイン 2件', null]);
+    cleanup();
+    const unknown = chip({ unknown: true, reason: '日足を取得できません' });
+    expect([unknown.className, unknown.textContent, unknown.getAttribute('title')]).toEqual(['brief-chip', '売りのサイン 未確認', '日足を取得できません']);
+    cleanup();
+    for (const value of [null, undefined, { hits: 0 }]) { expect(chip(value)).toBeUndefined(); cleanup(); }
   });
 
-  it('gathers a screen\'s footnotes into one 注記 and leaves nothing behind when there are none', () => {
-    const { container } = render(<ScreenNotes id="spec" notes={['RSは独自推計です。', null, '出典：SEC XBRL。']} />);
-    expect(container.querySelector('summary')).toHaveTextContent('注記（計算方法・出典 2件）');
-    expect([...container.querySelectorAll('li')].map(li => li.textContent)).toEqual(['RSは独自推計です。', '出典：SEC XBRL。']);
+  it('takes the screen\'s market context on a row without reading it yet', () => {
+    const plain = row().container.innerHTML;
     cleanup();
-    expect(render(<ScreenNotes id="none" notes={[null, '']} />).container).toBeEmptyDOMElement();
-    cleanup();
-    // At 1024px and wider each card keeps its footnote in place: no 注記.
-    expect(render(<ScreenNotes id="wide" wide notes={['RSは独自推計です。']} />).container).toBeEmptyDOMElement();
+    expect(row({ context: { market: { cap: 0, state: 'correction' } } }).container.innerHTML).toBe(plain);
+  });
+
+  it('re-exports the frozen layout primitives under the old import path', () => {
+    expect([Expander, ScreenNotes, Parts, RiseItem, Toast]).toEqual([primitives.Expander, primitives.ScreenNotes, primitives.Parts, primitives.RiseItem, primitives.Toast]);
   });
 });

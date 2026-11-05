@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import StockView from './StockView';
 
 const DATE = '2026-10-02';
@@ -18,10 +18,9 @@ const data = (certified, end) => ({
 afterEach(cleanup);
 
 describe('brief stock view', () => {
-  it('judges sell checks and computed values only on certified bars', () => {
+  // One test per owner over the same certified bars: the sell checks' part is in StockSellCard.test.jsx (E).
+  it('judges sell checks and computed values only on certified bars (the chart)', () => {
     render(<StockView data={data(true)} />);
-    expect(screen.getByText(/^売りのサイン [1-9]件$/)).toBeInTheDocument();
-    expect(screen.getByTestId('brief-sell')).toHaveTextContent('出来高を伴う50日線割れ');
     expect(screen.queryByText(/チャートから算出する判定は未確認/)).toBeNull();
   });
 });
@@ -30,25 +29,16 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
   const rule = (label, state) => ({ label, state, evidence: `${label} の根拠` });
   const template = states => ({ passed: states.filter(s => s === 'pass').length, failed: states.filter(s => s === 'fail').length, unknown: states.filter(s => s === 'unknown').length,
     rules: states.map((state, i) => rule(`条件${i + 1}`, state)) });
-  const folded = element => Boolean(element.closest('details'));
-  const item = text => screen.getByText(text).closest('li');
   afterEach(() => sessionStorage.clear());
 
-  it('gathers the methodology footnotes in the screen\'s one 注記', () => {
-    render(<StockView data={data(true)} />);
-    // The methodology footnotes are in the screen's one 注記.
-    const notes = screen.getByText('注記').closest('details');
-    expect(notes).toHaveTextContent('EPS は報告値（希薄化）で調整後EPSとは異なります。');
-    expect(notes).toHaveTextContent('しきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。');
-  });
-
-  it('shows everything open on the desktop, each footnote in place on its card and no 注記', () => {
+  // The screen's one 注記 gathers each card's footnote: that test is split by the footnote's owner, in
+  // StockFundamentalsCard.test.jsx (C) and StockSellCard.test.jsx (E). The desktop test below is split the
+  // same way: the template card's part is with D's template tests (StockVerdict.test.jsx), the
+  // fundamentals card's in StockFundamentalsCard.test.jsx (C) and the sell card's in StockSellCard.test.jsx (E).
+  it('shows everything open on the desktop, each footnote in place on its card and no 注記 (the screen and the VCP card)', () => {
     render(<StockView data={{ ...data(true), template: template(Array(8).fill('pass')) }} wide />);
     expect(document.querySelectorAll('details')).toHaveLength(0);
     expect(screen.queryByText('注記')).toBeNull();
-    for (let i = 1; i <= 8; i++) expect(folded(item(`条件${i}`))).toBe(false);
     expect(screen.getByText('上げ下げ出来高比（50日）').nextSibling).toHaveTextContent('上げた日の出来高 ÷ 下げた日の出来高。1超は買いが優勢');
-    expect(within(screen.getByTestId('brief-fundamentals')).getByText(/^EPS は報告値（希薄化）で調整後EPSとは異なります。/)).toBeInTheDocument();
-    expect(within(screen.getByTestId('brief-sell')).getByText(/^保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点.*売買の推奨ではありません。$/)).toBeInTheDocument();
   });
 });

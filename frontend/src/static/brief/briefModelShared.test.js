@@ -5,6 +5,14 @@ import { bookFinancialCurrent } from '../bookFinancialCurrent';
 import { bookFinancialEvidence } from '../bookFinancialEvidence';
 import { secPoint, secRecord, secUnavailable } from '../../test/fixtures/secRecord';
 import { code33Explain, code33Parts, fundamentalTiles, fundamentalsSource, secStatus } from './briefModel';
+import * as barrel from './briefModel';
+import * as briefCandidate from './briefCandidate';
+import * as positionSizing from './positionSizing';
+import * as briefSell from './briefSell';
+import * as briefChartModel from './briefChartModel';
+import * as briefEnvironment from './briefEnvironment';
+import * as briefShared from './briefShared';
+import * as fundamentalsExplain from '../fundamentalsExplain.js';
 
 describe('brief model', () => {
   it('lists the three Code 33 conditions and names a missing fiscal-Q4 EPS without estimating it', () => {
@@ -114,5 +122,44 @@ describe('fundamentals card model', () => {
     expect(code33Explain(null, { state: 'no_cik', long: 'SEC の銘柄コード表に該当がありません（ETF・外国企業・上場直後など）。' })).toMatchObject({ kind: 'no_sec', text: 'SEC の銘柄コード表に該当がありません（ETF・外国企業・上場直後など）。 Code 33 は判定していません。' });
     expect(code33Explain(null, null).text).toMatch(/配信されていません.*Code 33 は判定していません。$/);
     expect(code33Explain(null, { state: 'ok' }, { state: 'pass', source: 'yahoo', label: '参考：Yahoo四半期値' })).toMatchObject({ kind: 'yahoo', title: 'Code 33 達成', text: '参考：Yahoo四半期値。SEC提出書類で判定できないため、提供元の四半期値で同じ規則を当てはめた参考判定です。' });
+  });
+});
+
+// The barrel `export *`s five track modules that all grow in round 1: a name two of them export drops
+// out of the barrel (Rollup only warns; native ESM in the dev server throws on the named import).
+describe('the briefModel barrel', () => {
+  const modules = { briefCandidate, positionSizing, briefSell, briefChartModel, briefEnvironment, fundamentalsExplain };
+  // Every name the barrel carried at eca9854, before the split.
+  const BEFORE_SPLIT = ['BREAKOUT_VOLUME_RATIO', 'ENV_RULES', 'FTD_TEXT', 'LIST_FILTERS', 'LIST_SORTS', 'SELL_RULES', 'STOP_DEFAULT_PERCENT', 'STOP_MAX_PERCENT',
+    'bare', 'bookWarningCheck', 'briefOrder', 'candidateView', 'code33Explain', 'code33Parts', 'distributionCount', 'earningsDays', 'environmentRules',
+    'environmentWarnings', 'focusCandidates', 'focusCounts', 'followThroughView', 'footprint', 'fundamentalTiles', 'fundamentalsSource', 'latestKnown',
+    'leadingGroups', 'marketTone', 'matchesSearch', 'positionPlan', 'quarterReason', 'rsLineNewHigh', 'ruleEvidence', 'secStatus', 'sellMarks', 'sellSignals',
+    'sentence', 'shortDate', 'stageFromBars', 'trendTemplate', 'trendsAlert', 'trendsFailure', 'trendsStatus', 'upDownVolume', 'watchEvent', 'withBookWarning'];
+  // The step-0 seams the barrel adds.
+  const SEAMS = ['RS_LEAD_FROM_HIGH_PERCENT', 'code33ChipView', 'focusHeadingNote', 'focusTone', 'planLevels', 'publishedFundamentalsCoverage', 'sellChipView', 'stockSells'];
+
+  it('re-exports every export of each module, the same binding, so no two modules share a name', () => {
+    const owner = {}, shared = [], missing = [];
+    for (const [name, module] of Object.entries(modules)) {
+      for (const key of Object.keys(module)) {
+        if (owner[key]) shared.push(`${key}: ${owner[key]} and ${name}`);
+        owner[key] = name;
+        if (!Object.hasOwn(barrel, key) || barrel[key] !== module[key]) missing.push(`${name}.${key}`);
+      }
+    }
+    for (const key of ['shortDate', 'latestKnown', 'sentence', 'bare']) {
+      if (owner[key]) shared.push(`${key}: briefShared and ${owner[key]}`);
+      if (barrel[key] !== briefShared[key]) missing.push(`briefShared.${key}`);
+    }
+    expect(shared).toEqual([]);
+    expect(missing).toEqual([]);
+    expect(Object.keys(owner).length).toBeGreaterThan(40);
+  });
+
+  it('still carries the 45 names it had before the split and the 8 step-0 seams', () => {
+    expect(BEFORE_SPLIT).toHaveLength(45);
+    expect(SEAMS).toHaveLength(8);
+    const names = Object.keys(barrel);
+    expect([...BEFORE_SPLIT, ...SEAMS].filter(key => !names.includes(key))).toEqual([]);
   });
 });

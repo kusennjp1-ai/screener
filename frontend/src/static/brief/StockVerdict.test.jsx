@@ -18,6 +18,12 @@ const data = (certified, end) => ({
 afterEach(cleanup);
 
 describe('brief stock view', () => {
+  it('keeps everything computed from uncertified or lagging bars unknown and says why (the conclusion)', () => {
+    render(<StockView data={data(false, '2026-10-01')} />);
+    expect(screen.getByText('ステージ 未確認')).toBeInTheDocument();
+    expect(screen.getByText('損切り（−7.0%）')).toBeInTheDocument();
+  });
+
   it('labels the stop without a percentage when there is no plan', () => {
     render(<StockView data={{ ...data(true), view: { ...view, pivot: null, price: null } }} />);
     expect(within(screen.getByTestId('brief-conclusion')).getByText('損切り')).toBeInTheDocument();
@@ -44,5 +50,10 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
     render(<StockView data={{ ...data(true), template: template(Array(8).fill('pass')) }} />);
     expect(screen.getByText('8条件の内訳（すべて達成）').closest('summary')).toBeTruthy();
     for (let i = 1; i <= 8; i++) expect(folded(item(`条件${i}`))).toBe(true);
+  });
+
+  it('shows everything open on the desktop, each footnote in place on its card and no 注記 (the template card)', () => {
+    render(<StockView data={{ ...data(true), template: template(Array(8).fill('pass')) }} wide />);
+    for (let i = 1; i <= 8; i++) expect(folded(item(`条件${i}`))).toBe(false);
   });
 });
