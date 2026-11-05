@@ -1,0 +1,29 @@
+/* Track E (watch, Today, navigation): overrides of brief.css. This file loads last, so a rule here wins a tie
+   against brief.css and the other track files (not against the lazy market chunk's component stylesheets). */
+
+/* Today's three answers are links to where each is explained; the tile keeps its size and look. */
+.brief-summary li { display: flex; padding: 0; overflow: hidden; }
+.brief-summary .brief-tile { flex: 1 1 auto; display: grid; gap: 2px; align-content: start; min-width: 0; min-height: 44px; padding: 10px 12px; color: inherit; text-decoration: none; transition: background .2s; }
+.brief-summary .brief-tile:hover { background: var(--surface-2); }
+.brief-summary .brief-tile:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* A watched symbol this publication does not list: its reason in full, and a 44px 外す. */
+.brief-unlisted { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 4px; border-top: 1px solid var(--line); }
+.brief-rows li.brief-unlisted:first-child { border-top-color: transparent; }
+.brief-unlisted p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--text-2); overflow-wrap: anywhere; }
+.brief-unlisted b { font-size: 14px; color: var(--text); }
+.brief-unlisted button { min-width: 48px; min-height: 44px; padding: 0 10px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
+
+/* Watch rows say a weakness in full words: their sell chip may wrap instead of running off the row, between
+   its phrases (before 「（独自判定）」) rather than inside a word, and anywhere only when a phrase is too wide. */
+.brief-event .brief-sellchip, .brief-watchlist .brief-reasons .brief-chip { display: inline-block; max-width: 100%; white-space: normal; word-break: keep-all; overflow-wrap: anywhere; border-radius: 12px; }
+.brief-check.is-sell-caution { color: var(--wait); box-shadow: inset 0 0 0 2px var(--wait); }
+
+/* The list's hidden filter (Today's 注目候補 tile), said as a chip that clears it. */
+.brief-filterchip { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; border: 1px solid var(--accent); border-radius: 12px; background: var(--surface); color: var(--text); font-size: 13px; font-weight: 700; cursor: pointer; }
+.brief-filterchip .numeric { font-size: 12px; font-weight: 400; color: var(--text-2); }
+.brief-filterchip [aria-hidden="true"] { font-size: 16px; line-height: 1; color: var(--text-2); }
+
+@media (max-width: 520px) {
+  .brief-summary .brief-tile { padding: 8px 10px; }
+}

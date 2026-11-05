@@ -112,7 +112,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     if (phone) await page.getByRole('button', { name: '戻る', exact: true }).click();
     const tabs = page.getByRole('navigation', { name: 'ブリーフの画面' });
     await expect(tabs.getByRole('link', { name: /ウォッチ/ })).toContainText('1');
-    await expect(page.getByRole('region', { name: 'ウォッチの変化' }).getByRole('button', { name: /ZZNV/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'ウォッチの状況' }).getByRole('button', { name: /ZZNV/ })).toBeVisible();
     await tabs.getByRole('link', { name: /ウォッチ/ }).click();
     await expect(page).toHaveURL(/#\/brief\/watch$/);
     await expect(page.getByRole('heading', { level: 1, name: 'ウォッチ' })).toBeVisible();

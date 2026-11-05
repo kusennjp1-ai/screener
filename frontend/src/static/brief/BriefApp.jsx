@@ -14,10 +14,10 @@ import './brief-fundamentals.css';
 import './brief-decision.css';
 import './brief-plan.css';
 import './brief-watch.css';
-import { useBriefData, useWatchlist } from './useBriefData';
+import { useBriefData, useWatchlist, useWatchSellChecks } from './useBriefData';
 import { candidateView, focusCandidates } from './briefCandidate';
 import TodayView from './TodayView';
-import ListView, { listShown, listSource } from './ListView';
+import ListView, { listShown, listSource, watchOrder } from './ListView';
 import StockScreen from './StockScreen';
 import { BarQuote } from './BriefParts';
 import { Toast } from './briefPrimitives';
@@ -77,9 +77,13 @@ export default function BriefApp() {
   const [listState, setListState] = useState({ filter: 'zone', sort: 'priority', query: '' });
   // How many rows each list (候補, ウォッチ) shows; reset when its filter or search changes.
   const [listLimits, setListLimits] = useState({});
-  const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
+  // The watch list steps in the order its screen shows: rows whose weakness check fired first.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const watchViews = useMemo(() => (from === 'watch' ? listShown(listSource(brief, 'watch', watch), 'watch', listState) : null), [from, brief.bundle.data, brief.date, watch, listState]);
+  const watchSells = useWatchSellChecks(watchViews, brief);
+  const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : from === 'watch' ? watchOrder(watchViews, watchSells) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [from, brief.bundle.data, brief.ranked, brief.date, watch, listState]);
+    [from, brief.bundle.data, brief.ranked, brief.date, watch, listState, watchViews, watchSells]);
   // Desktop keeps the stock pane on the same stock across tab switches while that stock is in
   // the new list, so switching tabs does not redraw a different chart.
   const [kept, setKept] = useState(null);
@@ -131,14 +135,16 @@ export default function BriefApp() {
     if (Math.abs(s.dx) > 80) step(s.dx < 0 ? 1 : -1);
   };
   const barView = useMemo(() => { const item = symbol && (brief.bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol); return item ? candidateView(item, brief.date) : null; }, [symbol, brief.bundle.data, brief.date]);
-  // Today's 「ピボット接近 N銘柄」: the candidate list with the near-pivot filter and no search.
-  const showNear = useCallback(() => { setListState(state => ({ ...state, filter: 'near', query: '' })); setListLimits(state => ({ ...state, list: undefined })); go('/brief/list', { kind: 'tab' }); }, [go]);
+  // Today's links: a list with a filter and no search (「ピボット接近 N銘柄」 near, 「すべての候補」 all, the
+  // 注目候補 tile the hidden focus filter), the market tab and the watch tab.
+  const showList = useCallback(filter => { setListState(state => ({ ...state, filter, query: '' })); setListLimits(state => ({ ...state, list: undefined })); go('/brief/list', { kind: 'tab' }); }, [go]);
+  const todayNav = useMemo(() => ({ list: showList, market: () => go('/brief/market', { kind: 'tab' }), watch: () => go('/brief/watch', { kind: 'tab' }) }), [go, showList]);
   useEffect(() => {
     const idle = window.requestIdleCallback ? window.requestIdleCallback(() => loadMarketScreen().catch(() => {}), { timeout: 4000 }) : setTimeout(() => loadMarketScreen().catch(() => {}), 1500);
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
   }, []);
-  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} onNear={showNear} wide={wide} />
-    : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} limits={listLimits} setLimits={setListLimits} origin={kept} wide={wide} />;
+  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} wide={wide} nav={todayNav} onUnwatch={toggleWatch} />
+    : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} limits={listLimits} setLimits={setListLimits} origin={kept} wide={wide} onUnwatch={toggleWatch} />;
   const watching = symbol && watch.includes(symbol);
   return <div className="leader-shell brief" data-theme={dark ? 'dark' : 'light'}>
     <style>{themeCss}</style>

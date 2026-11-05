@@ -54,8 +54,8 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
     expect(tileText.filter(([, size]) => size < 12)).toEqual([]);
     expect(tileText.map(([text]) => text)).toEqual(expect.arrayContaining(['S&P', 'NAS', '高', '安']));
     const summary = page.getByTestId('brief-summary');
-    await expect(summary).toContainText('買い可・最大50%');
-    expect(await summary.locator('.brief-frag', { hasText: '最大50%' }).evaluate(node => node.getClientRects().length)).toBe(1);
+    await expect(summary).toContainText('検討可・目安≤50%');
+    expect(await summary.locator('.brief-frag', { hasText: '目安≤50%' }).evaluate(node => node.getClientRects().length)).toBe(1);
     await expect(page.locator('.brief-bar-title')).toContainText('2026-10-02');
     await expect(page.locator('.brief-bar-title')).toContainText('引け');
     await expect(page.locator('.brief-hero small')).toBeHidden();
@@ -115,12 +115,12 @@ test.describe('a failed manifest on Today', () => {
     await openBrief(page, '#/brief', { fail: 'manifest', storage: { 'research-watch': ['ZZNV'] } });
     const summary = page.getByTestId('brief-summary');
     await expect(summary).toContainText('注目候補取得できません');
-    await expect(summary).toContainText('ウォッチの売り取得できません1銘柄を登録');
+    await expect(summary).toContainText('ウォッチの注意取得できません1銘柄を登録');
     await expect(summary).not.toContainText(/0銘柄|ゾーン0|接近0|未登録/);
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus).toContainText('候補データを取得できません。');
     await expect(focus).not.toContainText('選定銘柄はありません');
-    await expect(page.getByRole('region', { name: 'ウォッチの変化' })).toContainText('ウォッチ中の1銘柄は、候補データがないため確認できません。');
+    await expect(page.getByRole('region', { name: 'ウォッチの状況' })).toContainText('ウォッチ中の1銘柄は、候補データがないため確認できません。');
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
     await expect(page.getByRole('region', { name: '選定銘柄の一覧' })).toContainText('候補データを取得できません。');
     for (const count of await page.getByRole('group', { name: '絞り込み' }).locator('.numeric').allTextContents()) expect(count).toBe('—');
@@ -188,7 +188,7 @@ test.describe('keyboard focus on a phone', () => {
   test('every focused control in main is clear of the top bar and the dock', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZSD', 'ZZKS'] } });
     await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
-    await expect(page.getByRole('region', { name: 'ウォッチの変化' }).getByRole('button')).toHaveCount(3);
+    await expect(page.getByRole('region', { name: 'ウォッチの状況' }).getByRole('button')).toHaveCount(3);
     await settled(page);
     const seen = [];
     for (let press = 0; press < 80; press++) {
@@ -362,6 +362,57 @@ test.describe('desktop rows keep still when a stock opens beside them', () => {
     await expect(page.getByTestId('brief-conclusion')).toBeVisible();
     const replayed = await focus.locator('li').evaluateAll(items => items.filter(li => li.className.includes('in') || li.getAnimations().some(animation => animation.animationName === 'brief-rise')).length);
     expect(replayed).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Today's three answers are links (44px or more, at their own height) to where each is explained.
+for (const [width, device] of Object.entries({ 320: phone(320, 640), 375: phone(375, 812), 390: VIEWPORTS.phone })) test.describe(`Today's tiles at ${width}px`, () => {
+  test.use(device);
+  test('each tile is a link of 44px or more, to the market tab, the focus pool and the watch tab', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief');
+    const summary = page.getByTestId('brief-summary');
+    await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
+    const tiles = summary.getByRole('link');
+    await expect(tiles).toHaveCount(3);
+    for (const box of await tiles.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    // The link fills its tile: the tile is as tall as before (its text sets it, not the link).
+    expect(await summary.locator('li').evaluateAll(items => items.every(li => Math.abs(li.getBoundingClientRect().height - li.querySelector('a').getBoundingClientRect().height) <= 4))).toBe(true);
+    await expect(tiles.nth(0)).toHaveAttribute('href', '#/brief/market');
+    await tiles.nth(0).click();
+    await expect(page).toHaveURL(/#\/brief\/market$/);
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
+    // 注目候補: the list of the same pool (zone and near), said as a chip that clears it; no segment is pressed.
+    await tiles.nth(1).click();
+    await expect(page).toHaveURL(/#\/brief\/list$/);
+    const chip = page.getByRole('button', { name: /^注目候補（ゾーン＋接近）\s*21/ });
+    await expect(chip).toBeVisible();
+    expect((await chip.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await expect(page.getByTestId('brief-candidate')).toHaveCount(20);
+    await expect(page.getByRole('button', { name: 'さらに表示（残り 1件）' })).toBeVisible();
+    for (const button of await page.getByRole('group', { name: '絞り込み' }).getByRole('button').all()) await expect(button).toHaveAttribute('aria-pressed', 'false');
+    await chip.click();
+    await expect(chip).toHaveCount(0);
+    await expect(page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
+    await tiles.nth(2).click();
+    await expect(page).toHaveURL(/#\/brief\/watch$/);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`すべての候補 ${name}`, () => {
+  test.use(device);
+  test('opens every selected stock with no search, not the buy zone alone', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list');
+    await page.getByRole('searchbox', { name: '銘柄を検索' }).fill('ZZ');
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
+    await page.getByRole('region', { name: '注目候補' }).getByRole('link', { name: 'すべての候補' }).click();
+    await expect(page).toHaveURL(/#\/brief\/list$/);
+    await expect(page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて\s*21$/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('searchbox', { name: '銘柄を検索' })).toHaveValue('');
+    await expect(page.getByTestId('brief-candidate')).toHaveCount(name === 'phone' ? 20 : 21);
     expect(errors).toEqual([]);
   });
 });

@@ -55,6 +55,32 @@ describe('watch sell checks', () => {
     const views = Array.from({ length: SELL_WATCH_LIMIT + 1 }, (_, i) => ({ symbol: `S${i}`, row: { symbol: `S${i}`, chart_path: 'BAD.json', technical_audit: { valid: true } } }));
     const { result } = renderHook(() => useWatchSellChecks(views, { version: 'v1', date: DATE }), { wrapper });
     await waitFor(() => expect(Object.keys(result.current)).toHaveLength(SELL_WATCH_LIMIT + 1));
-    expect(result.current[`S${SELL_WATCH_LIMIT}`].reason).toBe(`確認は先頭${SELL_WATCH_LIMIT}銘柄まで`);
+    expect(result.current[`S${SELL_WATCH_LIMIT}`]).toMatchObject({ unknown: true, limit: SELL_WATCH_LIMIT, reason: `確認は先頭${SELL_WATCH_LIMIT}銘柄まで` });
+    // The limit is visible text on the row's chip, not only a title.
+    const { sellChipView } = await import('./briefSell');
+    expect(sellChipView(result.current[`S${SELL_WATCH_LIMIT}`]).text).toBe(`売りのサイン 未確認（上限${SELL_WATCH_LIMIT}銘柄）`);
+    expect(result.current.S0.limit).toBeUndefined();
+  });
+
+  it('gates the climax checks by each stock\'s position (stockSells gets the view)', async () => {
+    const { useWatchSellChecks } = await import('./useBriefData');
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const wrapper = ({ children }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>;
+    const row = { symbol: 'AAA', market: 'US', chart_path: 'AAA.json', current_price: payloads['AAA.json'].bars.at(-1).close, technical_audit: { valid: true } };
+    const { result } = renderHook(() => useWatchSellChecks([{ symbol: 'AAA', state: 'wait', distance: -3, pivot: row.current_price * 1.03, row }], { version: 'v1', date: DATE }), { wrapper });
+    await waitFor(() => expect(result.current.AAA).toBeTruthy());
+    expect(result.current.AAA.strength.map(c => c.state)).toEqual(['na', 'na', 'na', 'na']);
+    expect(result.current.AAA.strength[0].detail).toBe('ピボットより下（ブレイク前）のため判定しません');
+  });
+});
+
+describe('watched symbols the publication does not list', () => {
+  it('are kept with their own row once the bundle is in, never before', async () => {
+    const { unlistedWatch } = await import('./useBriefData');
+    const brief = rows => ({ bundle: { data: rows ? { rankings: { minervini: rows.map(symbol => ({ row: { symbol } })) } } : null } });
+    expect(unlistedWatch(brief(['AAA', 'BBB']), ['AAA', 'QQQX', 'BBB', 'OLD'])).toEqual(['QQQX', 'OLD']);
+    expect(unlistedWatch(brief(['AAA']), ['AAA'])).toEqual([]);
+    // Before the bundle arrives nothing is known about any symbol: none is called unlisted.
+    expect(unlistedWatch(brief(null), ['AAA', 'QQQX'])).toEqual([]);
   });
 });
