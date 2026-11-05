@@ -188,8 +188,10 @@ test.describe('a watched symbol the publication does not list', () => {
     await expect(region.locator('.brief-rows > li')).toHaveCount(3);
     await expect(tabs.getByRole('link', { name: /ウォッチ/ }).locator('.brief-count')).toHaveText('3');
     const remove = unlisted.getByRole('button', { name: /^外す/ });
-    expect((await remove.boundingBox()).height).toBeGreaterThanOrEqual(44);
-    expect((await remove.boundingBox()).width).toBeGreaterThanOrEqual(44);
+    // Measured once every entrance has finished, with Design Acceptance's 0.1px tolerance for sub-pixel layout.
+    await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+    const box = await remove.boundingBox();
+    expect(Math.min(box.width, box.height) + 0.1).toBeGreaterThanOrEqual(44);
     await tabs.getByRole('link', { name: '今日' }).click();
     const card = page.getByRole('region', { name: 'ウォッチの状況' });
     await expect(card.locator('.brief-rows > li').first()).toContainText('QQQX：この公開（2026-10-02 引け）の分析対象に含まれていません');
