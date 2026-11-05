@@ -187,7 +187,7 @@ test.describe('a watched symbol the publication does not list', () => {
     const region = page.getByRole('region', { name: 'ウォッチ中の銘柄' });
     await expect(region.getByTestId('brief-candidate')).toHaveCount(2);
     const unlisted = region.locator('.brief-rows > li').first();
-    await expect(unlisted).toHaveText('QQQX：この公開（2026-10-02 引け）の分析対象に含まれていません（上場廃止・ティッカー変更・データ欠落など）。売りのサイン・位置は未確認外す（QQQX をウォッチから外す）');
+    await expect(unlisted).toHaveText('QQQX：この公開（10/2引け）の分析対象外（上場廃止・ティッカー変更・データ欠落など）。売りのサイン・位置は未確認外す（QQQX をウォッチから外す）');
     // The badge counts what the list shows.
     await expect(region.locator('.brief-rows > li')).toHaveCount(3);
     await expect(tabs.getByRole('link', { name: /ウォッチ/ }).locator('.brief-count')).toHaveText('3');
@@ -198,7 +198,7 @@ test.describe('a watched symbol the publication does not list', () => {
     expect(Math.min(box.width, box.height) + 0.1).toBeGreaterThanOrEqual(44);
     await tabs.getByRole('link', { name: '今日' }).click();
     const card = page.getByRole('region', { name: 'ウォッチの状況' });
-    await expect(card.locator('.brief-rows > li').first()).toContainText('QQQX：この公開（2026-10-02 引け）の分析対象に含まれていません');
+    await expect(card.locator('.brief-rows > li').first()).toContainText('QQQX：この公開（10/2引け）の分析対象外');
     const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
     await expect(tile).toContainText('ウォッチの注意未確認2/3を確認・対象外1・保有未登録');
     await expect(tile).not.toContainText(/0件|未登録（/);

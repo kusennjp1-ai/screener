@@ -39,6 +39,15 @@
   .brief-dockpos-sep { display: none; }
 }
 
+/* From a 375px phone up, Today's count of the focus candidates and the near-pivot link share one 44px line: the count
+   takes the width the link leaves and breaks before its parenthesis (two 12px lines beside the link). Narrower, the
+   link keeps a line of its own, as before; a link without the count still takes the whole line. */
+@media (min-width: 375px) and (max-width: 520px) {
+  .brief-focusfoot { flex-wrap: nowrap; }
+  .brief-focusfoot .brief-note { flex: 1 1 0; min-width: 0; }
+  .brief-focusfoot .brief-note + .brief-nearlink { flex: none; }
+}
+
 /* Narrow phones (359px and below): every card gives its content 8px more width, so a row's chips, a verdict's fold
    summary or a title in a full-width (CJK) font keep their lines. The market tab's sticky section tabs follow the
    padding they span; the watch rows lend their side padding as the candidate rows do (brief-decision.css), so every

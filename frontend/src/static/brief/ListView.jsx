@@ -4,6 +4,7 @@ import { briefOrder, candidateView, LIST_FILTERS, LIST_SORTS, matchesSearch } fr
 import { CandidateRow } from './BriefParts';
 import { ScreenNotes } from './briefPrimitives';
 import { barDay, PHONE_QUERY } from './briefNav';
+import { shortDate } from './briefShared';
 import { bundleState, BUNDLE_TEXT, unlistedWatch, useWatchSellChecks } from './useBriefData';
 
 // A phone (520px and narrower, where rows are compacted) lists this many rows per 「さらに表示」;
@@ -45,7 +46,7 @@ export function watchOrder(views, sells) {
 /** A watched symbol this publication does not list: said with its reason, never dropped, with a 44px 外す. */
 export function UnlistedWatchRow({ symbol, date, onRemove }) {
   return <li className="brief-unlisted" data-unlisted={symbol}>
-    <p><b>{symbol}</b>：この公開（<span className="numeric">{date || '日付未確認'}</span> 引け）の分析対象に含まれていません（上場廃止・ティッカー変更・データ欠落など）。売りのサイン・位置は未確認</p>
+    <p><b>{symbol}</b>：この公開（{date ? <><span className="numeric">{shortDate(date, date)}</span>引け</> : '日付未確認'}）の分析対象外（上場廃止・ティッカー変更・データ欠落など）。売りのサイン・位置は未確認</p>
     <button type="button" onClick={event => onRemove?.(symbol, event.currentTarget)}>外す<span className="sr-only">（{symbol} をウォッチから外す）</span></button>
   </li>;
 }

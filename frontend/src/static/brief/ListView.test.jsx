@@ -57,7 +57,7 @@ describe('the watch list', () => {
     const { container, getAllByTestId, getByRole } = list('zone', { kind: 'watch', watch: ['NEA1', 'QQQX', 'ZON1'], onUnwatch: symbol => removed.push(symbol) });
     const items = [...container.querySelectorAll('.brief-rows > li')];
     expect(items).toHaveLength(3);
-    expect(items[0]).toHaveTextContent('QQQX：この公開（2026-10-02 引け）の分析対象に含まれていません（上場廃止・ティッカー変更・データ欠落など）。売りのサイン・位置は未確認');
+    expect(items[0]).toHaveTextContent('QQQX：この公開（10/2引け）の分析対象外（上場廃止・ティッカー変更・データ欠落など）。売りのサイン・位置は未確認');
     expect(getAllByTestId('brief-candidate').map(row => row.dataset.symbol)).toEqual(['ZON1', 'NEA1']);
     getByRole('button', { name: '外す（QQQX をウォッチから外す）' }).click();
     expect(removed).toEqual(['QQQX']);
