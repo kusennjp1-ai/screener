@@ -71,11 +71,14 @@ function measuredLeg(bars, start, end) {
 // the zigzag confirms within the lookback (a breakout high not yet followed by a pullback is not one),
 // or the Setup Engine's base when its recalculation is current for the analysis date. From there a
 // zigzag finds each contraction (swing high → swing low). A reversal counts when it moves at least
-// max(1.5×ATR20, 30% of the previous contraction's depth); a lower high followed by a lower low is the
-// same decline, not a new contraction. The last contraction needs only the noise floor, so a tight
-// 2–4% final T is kept. Measurement stops where the price first trades above the base high.
-const VCP_LOOKBACK = 150, ATR_SESSIONS = 20, ATR_MULTIPLE = 1.5, DEPTH_FRACTION = 0.3, FINAL_FLOOR_PCT = 1.5, MAX_LEGS = 6;
-export const VCP_METHOD = Object.freeze({ lookback: VCP_LOOKBACK, atrSessions: ATR_SESSIONS, atrMultiple: ATR_MULTIPLE, depthFraction: DEPTH_FRACTION, finalFloorPct: FINAL_FLOOR_PCT, maxLegs: MAX_LEGS });
+// max(1.5×ATR20, 30% of the previous contraction's depth). A lower high followed by a lower low is the
+// same decline, not a new contraction: it is merged back into every earlier contraction it undercuts,
+// so a base that deepened reads as one deeper first contraction. A pullback whose high is in the lower
+// half of the previous contraction's range is the base still repairing, not a contraction. The last
+// contraction needs only the noise floor, so a tight 2–4% final T is kept. Measurement stops where the
+// price first trades above the base high.
+const VCP_LOOKBACK = 150, ATR_SESSIONS = 20, ATR_MULTIPLE = 1.5, DEPTH_FRACTION = 0.3, FINAL_FLOOR_PCT = 1.5, MAX_LEGS = 6, REPAIR_FRACTION = 0.5;
+export const VCP_METHOD = Object.freeze({ lookback: VCP_LOOKBACK, atrSessions: ATR_SESSIONS, atrMultiple: ATR_MULTIPLE, depthFraction: DEPTH_FRACTION, finalFloorPct: FINAL_FLOOR_PCT, maxLegs: MAX_LEGS, repairFraction: REPAIR_FRACTION });
 
 /** ATR20 as a percent of each bar's close (trailing true ranges); null until 20 bars exist. */
 function atrPercent(bars) {
@@ -130,11 +133,16 @@ function automaticLegs(bars, setup) {
   while (stop < n && bars[stop].high <= bars[anchor].high) stop++;
   base.endDate = bars[stop - 1].date;
   base.brokeOut = stop < n;
+  if (base.brokeOut) base.breakoutDate = bars[stop].date;
   const legs = [];
   const push = (a, b) => {
+    let leg = { a, b };
+    // The same decline: merge back while the new low undercuts the (merged) previous contraction's low.
+    while (legs.length && bars[leg.b].low < bars[legs.at(-1).b].low && bars[leg.a].high <= bars[legs.at(-1).a].high) leg = { a: legs.pop().a, b: leg.b };
+    // A pullback from the lower half of the previous contraction's range: the base is still repairing.
     const previous = legs.at(-1);
-    if (previous && bars[b].low < bars[previous.b].low && bars[a].high <= bars[previous.a].high) { previous.b = b; previous.depth = drop(previous.a, b); return; }
-    legs.push({ a, b, depth: drop(a, b) });
+    if (previous && bars[leg.a].high < bars[previous.b].low + REPAIR_FRACTION * (bars[previous.a].high - bars[previous.b].low)) return;
+    legs.push({ ...leg, depth: drop(leg.a, leg.b) });
   };
   let mode = 'down', hi = anchor, lo = null;
   for (let i = anchor + 1; i < stop; i++) {
@@ -159,6 +167,7 @@ function contractions(bars, review, { row = null, date = null } = {}) {
     certification: false, source: 'algorithm', reviewer: null, errors: [], legs: [], base: null,
     limitations: ['ベース高値（直近150本で確定した最高のスイング高値、またはSetup Engineの現在のベース）からのジグザグ測定は独自近似',
       '反転幅は1.5×ATR20と直前の収縮の深さの3割の大きい方。最後の収縮は雑音下限（1.5%とATR20の大きい方）のみ',
+      '前の収縮の安値を割り込んだ押しは同じ下げとして前の収縮に含め、前の収縮の値幅の下半分からの押しは土台の修復中として数えない',
       '出来高区間平均は売り枯れの代理指標', 'ベース全体の位置・ステージ・買い場は別途確認'] };
   if (review != null) {
     result.source = 'reviewer-intervals';

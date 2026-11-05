@@ -43,19 +43,23 @@ export function rsLineNewHigh(rsLine, bars) {
 
 /**
  * VCP footprint from measured legs (独自近似), e.g. "VCP 14週 13/4 2T". The base's weeks run from the
- * base high (the first contraction's start) to the last bar. legs[0] is 「最初の押し」, and
- * 「最大の押し」 only when it really is the deepest; the last one is 「最後」.
+ * base high (the first contraction's start) to the last bar, or to the base's end when the price has
+ * since traded above the base high: the text then says 「・上抜け済み（MM/DD）」 and `brokeOut` is true.
+ * legs[0] is 「最初の押し」, and 「最大の押し」 only when it really is the deepest; the last one is 「最後の押し」.
  */
 export function footprint(evidence, bars) {
   const vcp = evidence?.vcp, legs = vcp?.legs || [];
   if (legs.length < 2 || !vcp.measurementsValid) return null;
-  const first = vcp.base?.startDate || legs[0].startDate, last = bars?.at?.(-1)?.date || legs.at(-1).endDate;
+  const brokeOut = vcp.base?.brokeOut === true && Boolean(vcp.base.endDate);
+  const first = vcp.base?.startDate || legs[0].startDate, last = brokeOut ? vcp.base.endDate : bars?.at?.(-1)?.date || legs.at(-1).endDate;
   const weeks = Math.max(1, Math.round((Date.parse(last) - Date.parse(first)) / DAY / 7));
   const deepest = legs.slice(1).every(leg => leg.depthPct <= legs[0].depthPct);
-  const firstLabel = vcp.droppedLegs > 0 ? '直近6回の最初の押し' : deepest ? '最大の押し' : '最初の押し';
-  return { weeks, first: legs[0].depthPct, last: legs.at(-1).depthPct, firstLabel, firstIsDeepest: deepest, count: legs.length,
+  const firstLabel = vcp.droppedLegs > 0 ? '直近6回のうち最初の押し' : deepest ? '最大の押し' : '最初の押し';
+  const breakoutDate = brokeOut ? vcp.base.breakoutDate ?? null : null;
+  const broke = brokeOut ? `・上抜け済み${breakoutDate ? `（${breakoutDate.slice(5).replace('-', '/')}）` : ''}` : '';
+  return { weeks, first: legs[0].depthPct, last: legs.at(-1).depthPct, firstLabel, firstIsDeepest: deepest, count: legs.length, brokeOut, breakoutDate,
     // Only progressively shallower contractions are called a VCP; otherwise say what was measured.
-    text: `${vcp.depthsContract === true ? 'VCP' : '収縮'} ${weeks}週 ${Math.round(legs[0].depthPct)}/${Math.round(legs.at(-1).depthPct)} ${legs.length}T${vcp.depthsContract === false ? '（縮小途切れ）' : vcp.depthsContract === true ? '' : '（縮小は未確認）'}`,
+    text: `${vcp.depthsContract === true ? 'VCP' : '収縮'} ${weeks}週 ${Math.round(legs[0].depthPct)}/${Math.round(legs.at(-1).depthPct)} ${legs.length}T${vcp.depthsContract === false ? '（縮小途切れ）' : vcp.depthsContract === true ? '' : '（縮小は未確認）'}${broke}`,
     contracting: vcp.depthsContract, volumeContracting: vcp.volumeContracts };
 }
 

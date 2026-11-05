@@ -19,7 +19,16 @@ describe('brief model', () => {
     expect(deepest).toMatchObject({ weeks: 14, firstLabel: '最大の押し', firstIsDeepest: true, text: 'VCP 14週 13/4 2T' });
     const widening = [legs[0], { ...legs[1], depthPct: 18 }];
     expect(footprint({ vcp: { legs: widening, measurementsValid: true, depthsContract: false } }, [{ date: '2026-10-02' }]).firstLabel).toBe('最初の押し');
-    expect(footprint({ vcp: { legs, measurementsValid: true, depthsContract: true, droppedLegs: 2 } }, [{ date: '2026-10-02' }]).firstLabel).toBe('直近6回の最初の押し');
+    expect(footprint({ vcp: { legs, measurementsValid: true, depthsContract: true, droppedLegs: 2 } }, [{ date: '2026-10-02' }]).firstLabel).toBe('直近6回のうち最初の押し');
+  });
+
+  it('ends a base that has been broken out of at its end and says so', () => {
+    const legs = [{ startDate: '2026-05-01', endDate: '2026-06-10', depthPct: 25 }, { startDate: '2026-06-20', endDate: '2026-07-10', depthPct: 12 }, { startDate: '2026-07-15', endDate: '2026-08-07', depthPct: 6 }];
+    const base = { startDate: '2026-05-01', endDate: '2026-08-20', brokeOut: true, breakoutDate: '2026-08-21' };
+    const print = footprint({ vcp: { legs, measurementsValid: true, depthsContract: true, base } }, [{ date: '2026-10-02' }]);
+    expect(print).toMatchObject({ weeks: 16, brokeOut: true, breakoutDate: '2026-08-21', text: 'VCP 16週 25/6 3T・上抜け済み（08/21）' });
+    const open = footprint({ vcp: { legs, measurementsValid: true, depthsContract: true, base: { ...base, brokeOut: false, breakoutDate: undefined } } }, [{ date: '2026-10-02' }]);
+    expect(open).toMatchObject({ weeks: 22, brokeOut: false, text: 'VCP 22週 25/6 3T' });
   });
 });
 

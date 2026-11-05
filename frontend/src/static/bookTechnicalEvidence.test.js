@@ -200,10 +200,36 @@ describe('VCP measurement from the base high', () => {
     expect(footprint(evidence, f.payload.bars)?.text ?? '').not.toMatch(/^VCP/);
   });
 
+  it('does not call a pullback in the lower half of an unrepaired base the final contraction', () => {
+    // 25% down, a 10% bounce, then a small pullback: the price is still about 19% under the base high.
+    const f = based([[25, 75.6], [10, 82.5], [3, 81.27]]);
+    const evidence = run(f), vcp = evidence.vcp;
+    expect(vcp.legs.map(l => Math.round(l.depthPct))).toEqual([25]);
+    expect(vcp.measurementsValid).toBe(false);
+    expect(footprint(evidence, f.payload.bars)).toBeNull();
+    // Once the price is back in the upper half of the first contraction's range, the next pullback counts.
+    const repaired = run(based([[25, 75.6], [10, 82.5], [3, 81.27], [12, 96], [6, 91.5], [5, 95]])).vcp;
+    expect(repaired.legs.map(l => Math.round(l.depthPct))).toEqual([25, 5]);
+  });
+
+  it('merges a deepening base back into its first contraction', () => {
+    // 20%, then 10%, then a pullback under the second low, then one under the first low: one decline of about 29%.
+    const f = based([[20, 80], [15, 96], [10, 86.4], [10, 94], [10, 80.6], [10, 95], [15, 71.4], [10, 76]]);
+    const vcp = run(f).vcp;
+    expect(vcp.legs[0].startDate).toBe(vcp.base.startDate);
+    expect(Math.round(vcp.legs[0].depthPct)).toBe(29);
+    expect(footprint(run(f), f.payload.bars)?.text ?? '').not.toMatch(/^VCP/);
+  });
+
   it('stops at a breakout above the base high and anchors on the Setup Engine base only when it is current', () => {
     const f = based([[25, 75.6], [20, 99], [15, 87.5], [12, 98], [8, 92.4], [4, 104], [2, 103]]);
     const vcp = run(f).vcp;
     expect(vcp.base.brokeOut).toBe(true);
+    expect(vcp.base.breakoutDate > vcp.base.endDate).toBe(true);
+    // The footprint counts the base's weeks to its end and says it has been broken out of.
+    const print = footprint(run(f), f.payload.bars);
+    expect(print.brokeOut).toBe(true);
+    expect(print.text).toMatch(new RegExp(`^VCP \\d+週 25/6 3T・上抜け済み（${vcp.base.breakoutDate.slice(5).replace('-', '/')}）$`));
     expect(vcp.legs.map(l => Math.round(l.depthPct))).toEqual([25, 12, 6]);
     const bars = f.payload.bars, second = bars.findIndex((b, i) => i > 250 && b.close === 99);
     const candidate = { pattern: 'vcp', timeframe: 'daily', start_date: bars[second].date, end_date: bars.at(-8).date };
