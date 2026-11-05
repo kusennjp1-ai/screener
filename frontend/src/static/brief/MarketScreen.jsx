@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import MarketCard from './MarketCard';
 import MarketSectors from './MarketSectors';
 import WhenNear from './WhenNear';
@@ -7,11 +7,40 @@ import MarketUpdateStatus from '../components/MarketUpdateStatus';
 import useMediaQuery from '../useMediaQuery';
 import { marketUpdateState } from '../marketUpdateState';
 import { bare, sentence, trendsStatus } from './briefModel';
+import { Expander, Parts } from './briefPrimitives';
 import { jumpTo } from './jump';
 import { historyTakeaway } from './marketTabModel';
 import useSessionState from './useSessionState';
+import referenceData from '../reference/market-regime-reference-v1.json' with { type: 'json' };
+import { validReference } from '../reference/marketRegimeReference.js';
+import { marketTabStudy } from '../reference/marketTabStudy.js';
 
 const EXPLORER_TITLE = 'brief-history-explorer-title';
+/** The versioned market-regime study reference (tools/market-regime-reference.mjs); an invalid one shows nothing. */
+const REFERENCE = validReference(referenceData) ? referenceData : null;
+
+/**
+ * 「過去の傾向」: one fold at the end of the 指数 panel (open by default on the desktop), one line per index state with
+ * the study's share for that state, its comparator, its tags and its own date, the key to the tags shown, then what
+ * the numbers are not. A comparator and each tag stay whole on a line. On a phone the Nasdaq's published position
+ * (`nasdaq`, nasdaqFigures) is the first line of its block; the desktop shows it in place above the chart.
+ * Never in the verdict or the warning summary.
+ */
+export function RegimeContext({ context, wide, nasdaq = null }) {
+  return <Expander id={`market-regime-ref${wide ? '-wide' : ''}`} className="brief-regime-ref" summary={context.summary} defaultOpen={wide}>
+    {!context.available ? <p className="brief-regime-foot">{context.reason}</p> : <>
+      {context.indices.map(block => <div key={block.symbol} className="brief-regime-index">
+        <h4>{block.name}</h4>
+        {!wide && block.symbol === '^IXIC' && nasdaq && <p className="brief-regime-nas"><span className="numeric">{nasdaq.close}</span><Parts text={nasdaq.text} /></p>}
+        <ul>{block.items.map(item => <li key={item.indicator} className={item.reason ? 'is-reason' : undefined}>{item.parts
+          ? <>{item.parts.body}{item.parts.comparator && <span className="brief-regime-keep">{item.parts.comparator}</span>}{item.parts.tags.map(tag => <span key={tag} className="brief-regime-keep">{tag}</span>)}</>
+          : item.text}</li>)}</ul>
+      </div>)}
+      {context.key && <p className="brief-regime-key">{context.key.split(/(〔[^〕]+〕)/).map((part, i) => i % 2 ? <span key={i} className="brief-regime-keep">{part}</span> : part)}</p>}
+      <p className="brief-regime-foot">{context.footer}</p>
+    </>}
+  </Expander>;
+}
 
 /**
  * The market tab: the verdict, the warning summary and today's evidence (MarketCard detail), then the
@@ -24,6 +53,8 @@ export default function MarketScreen({ brief }) {
   const trends = brief.trends;
   const history = trends?.data?.long_history || null, status = trendsStatus(trends);
   const wide = useMediaQuery('(min-width:1024px)');
+  // The study parts of the 地合い card (tags, 分配日 detail, Nasdaq note and position, 過去の傾向), from this chunk.
+  const study = useMemo(() => marketTabStudy({ trends, reference: REFERENCE, date: brief.date }), [trends, brief.date]);
   const [section, setSection] = useSessionState('market-section', 'index');
   const [request, setRequest] = useState(null);
   const openMetric = useCallback(metric => { setSection('history'); setRequest(previous => ({ metric, seq: (previous?.seq || 0) + 1 })); }, [setSection]);
@@ -58,7 +89,8 @@ export default function MarketScreen({ brief }) {
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date || '日付未確認'} 引け・米国株</small><h1>市場</h1></header>
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={trends} date={brief.date} detail onOpenMetric={openMetric}
-      switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} historyUnknown={historyUnknown} />
+      switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} historyUnknown={historyUnknown}
+      study={study} studyBlock={<RegimeContext context={study.regime} wide={wide} nasdaq={study.nasdaqPosition?.state ? study.nasdaqFigures : null} />} />
     {wide && historySection}
   </>;
 }

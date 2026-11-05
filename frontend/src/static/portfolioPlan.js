@@ -6,6 +6,18 @@ import { entryReadiness } from './entryReadiness.js';
 const centsUp = v => Math.ceil(v * 100 - 1e-8) / 100;
 const centsDown = v => Math.floor(v * 100 + 1e-8) / 100;
 
+/**
+ * The exposure guide's caps by the backend regime, this app's own (独自判定): modelMarket reads them and the market
+ * tab prints its disclosure from them (exposureRuleText), so the two cannot drift. `otherwise` is every known state
+ * that is not one of the two uptrends (新規購入を抑制, 長期トレンド警戒, 50日線割れ); an unknown market is always 0.
+ */
+export const MARKET_CAPS = Object.freeze({ confirmed_uptrend: .5, uptrend_under_pressure: .25, otherwise: 0 });
+const capText = cap => cap > 0 ? `最大${Math.round(cap * 100)}%` : '0%';
+/** The disclosure of the exposure guide, generated from the caps (never hand-typed beside them). */
+export function exposureRuleText(caps = MARKET_CAPS) {
+  return `独自の目安：上昇トレンド ${capText(caps.confirmed_uptrend)}・上昇に圧力 ${capText(caps.uptrend_under_pressure)}・それ以外 ${capText(caps.otherwise)}（S&P 500（SPY）の50日線・200日線と局面判定から。バックエンドの局面判定の目安とは別）。注意サインも指数の過去の傾向も目安を変えません。`;
+}
+
 // Deliberately a disclosed research model, not IBD's proprietary exposure scale.
 export function modelMarket(rows) {
   const us = rows.filter(r => r.market === 'US' && r.currency === 'USD');
@@ -14,14 +26,14 @@ export function modelMarket(rows) {
   // Market context is replicated on stock rows. Unscanned stocks have no context;
   // do not let those erase known observations, but reject conflicting regimes.
   if (!observed.length || regimes.length !== 1) return { label: '市場未確認', cap: 0, state: 'unknown' };
-  if (observed.some(r => r.market_above_200dma === false)) return { label: '長期トレンド警戒', cap: 0 };
+  if (observed.some(r => r.market_above_200dma === false)) return { label: '長期トレンド警戒', cap: MARKET_CAPS.otherwise };
   // A close below the 50-day line is a known weak state, not an unknown one; anything else that is
   // not an observed true stays explicitly unknown. Both keep new buying closed.
-  if (observed.some(r => r.market_above_50dma === false)) return { label: '50日線割れ（弱含み・独自判定）', cap: 0 };
+  if (observed.some(r => r.market_above_50dma === false)) return { label: '50日線割れ（弱含み・独自判定）', cap: MARKET_CAPS.otherwise };
   if (observed.some(r => r.market_above_50dma !== true)) return { label: '市場条件未確認', cap: 0, state: 'unknown' };
-  if (regimes[0] === 'confirmed_uptrend') return { label: '上昇トレンド（独自判定）', cap: .5 };
-  if (regimes[0] === 'uptrend_under_pressure') return { label: '上昇に圧力（独自判定）', cap: .25 };
-  return { label: '新規購入を抑制', cap: 0 };
+  if (regimes[0] === 'confirmed_uptrend') return { label: '上昇トレンド（独自判定）', cap: MARKET_CAPS.confirmed_uptrend };
+  if (regimes[0] === 'uptrend_under_pressure') return { label: '上昇に圧力（独自判定）', cap: MARKET_CAPS.uptrend_under_pressure };
+  return { label: '新規購入を抑制', cap: MARKET_CAPS.otherwise };
 }
 
 export function preparePortfolioRows(input, now = Date.now()) {

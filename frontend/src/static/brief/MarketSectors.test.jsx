@@ -10,11 +10,11 @@ describe('brief sector ranks', () => {
   it('ranks the newest frame with each value as published and the rank a month earlier, said in words', () => {
     const dates = days(30), earlier = [...SYMBOLS].reverse();
     render(<MarketSectors history={{ sectorRotation: { frames: dates.map((date, i) => frame(date, i < 9 ? earlier : SYMBOLS)) } }} date="2026-10-23" />);
-    expect(screen.getByRole('heading', { level: 3 }).closest('header')).toHaveTextContent('セクターの強さ対SPYの相対価格（126営業日・独自RS）◷ 10/23 引け');
-    const items = within(screen.getByRole('list', { name: '2026-10-23のセクター順位。126営業日の対SPY相対価格。' })).getAllByRole('listitem');
+    expect(screen.getByRole('heading', { level: 3 }).closest('header')).toHaveTextContent('セクターの強さ相対力（SPY比・126営業日・100基準・独自）◷ 10/23 引け');
+    const items = within(screen.getByRole('list', { name: '2026-10-23のセクター順位。126営業日の相対力（SPY比・100基準）。' })).getAllByRole('listitem');
     expect(items).toHaveLength(11);
     // XLB was 11th 21 frames earlier and is 1st now; XLY moved the other way.
-    expect(items[0]).toHaveAccessibleName('1位 素材 XLB 相対価格 120.0・1か月前は11位');
+    expect(items[0]).toHaveAccessibleName('1位 素材 XLB 相対力 120.0・1か月前は11位');
     expect(items[0]).toHaveTextContent('▲10');
     expect(items[10]).toHaveTextContent('▼10');
     // The value is the published one (100 = SPY), never relabelled as a return; the bar is that value against 100.

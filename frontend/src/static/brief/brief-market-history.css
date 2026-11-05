@@ -1,0 +1,50 @@
+/* Track B (market-history): the market tab's study block 「過去の傾向」, the exposure guide's basis, the study
+   tags on the warning summary, the index chart's 200-day line and FTD marks, the Nasdaq position row and the
+   survivorship caveat. Loaded after brief.css (BriefApp.jsx); an override here has equal or higher specificity. */
+
+/* Index chart (market tab only): HTML labels and marks over the stretched SVG keep their shape and 12px. */
+.brief-index-frame { position: relative; min-width: 0; }
+.brief-index-ma200 { fill: none; stroke: var(--text-3); stroke-width: 1.2; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.brief-index-legend .is-ma200::before { height: 0; border-top: 2px dashed var(--text-3); background: none; }
+.brief-index-legend .is-ftd::before { display: none; }
+/* The price labels keep a halo, not a filled pill, so the lines' starts stay visible under them. */
+.brief-index-scale { position: absolute; left: 4px; transform: translateY(-50%); padding: 0 2px; background: none; text-shadow: 0 0 2px var(--surface), 0 0 4px var(--surface), 0 0 4px var(--surface); font-size: 12px; line-height: 16px; color: var(--text-2); pointer-events: none; }
+.brief-index-mark { position: absolute; transform: translate(-50%, -50%); font-size: 12px; line-height: 1; color: var(--text); pointer-events: none; }
+.brief-index-mark.is-low { color: var(--text-2); }
+.brief-index-mark-label { position: absolute; bottom: calc(100% + 4px); left: 50%; padding: 0 4px; border-radius: 4px; background: color-mix(in srgb, var(--surface) 82%, transparent); font-size: 12px; line-height: 16px; white-space: nowrap; color: var(--text); }
+.brief-index-mark.is-end .brief-index-mark-label { left: auto; right: 50%; }
+/* A close near the frame's top: the label goes under its ◆, so it never leaves the frame. */
+.brief-index-mark.is-below .brief-index-mark-label { bottom: auto; top: calc(100% + 4px); }
+.brief-index-mark.is-failed { color: var(--text-2); }
+
+/* The 200-day distance sits under the 50-day one, so the stats row keeps its height. */
+.brief-index-stats > .is-ma { flex: 0 1 auto; }
+.brief-index-nas { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+.brief-index-nas b { color: var(--text); }
+.brief-index-nas .numeric { color: var(--text); }
+
+/* 「過去の傾向」 in the 指数 panel: one fold, open on the desktop. */
+.brief-regime-ref { border-top: 1px solid var(--line); }
+.brief-regime-ref .brief-expander-body { gap: 10px; }
+.brief-regime-index { display: grid; gap: 4px; min-width: 0; }
+.brief-regime-index h4 { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text); }
+.brief-regime-index ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.brief-regime-index li { font-size: 12px; line-height: 1.6; color: var(--text); text-wrap: pretty; }
+.brief-regime-index li.is-reason { color: var(--text-2); }
+/* A comparator (「（全期間 16%）」) and each tag (「〔Nasdaqのみ〕」) never break inside. */
+.brief-regime-keep { white-space: nowrap; }
+/* The Nasdaq's position on a phone: the first line of its block. */
+.brief-regime-nas { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 6px; margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+.brief-regime-nas .numeric { color: var(--text); }
+.brief-regime-key { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); text-wrap: pretty; }
+.brief-regime-foot { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-3); text-wrap: pretty; }
+
+/* The exposure guide's basis: a quiet fold under the meter on a phone, one line on the desktop. */
+.brief-exposure-basis, .brief-exposure-nasdaq { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+.brief-verdict .brief-exposure-basis > summary { padding: 0; font-size: 12px; font-weight: 400; color: var(--text-2); }
+.brief-verdict .brief-exposure-basis .brief-expander-body { padding: 0 0 4px; }
+.brief-verdict .brief-exposure-basis .brief-expander-body p { font-size: 12px; line-height: 1.6; color: var(--text-2); }
+
+/* Study tags on the warning summary and the groups' survivorship caveat. */
+.brief-signal-tag { margin-left: 4px; font-size: 12px; color: var(--text-2); white-space: nowrap; }
+.brief-env-caveat { margin: 0; font-size: 12px; line-height: 1.5; color: var(--text-3); }

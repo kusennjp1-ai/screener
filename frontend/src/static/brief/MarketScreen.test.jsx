@@ -19,6 +19,15 @@ afterEach(() => { cleanup(); delete window.matchMedia; sessionStorage.clear(); }
 describe('brief market screen on a phone', () => {
   beforeEach(() => atWidth(375));
 
+  it('hands the committed study reference to the 地合い card, so 過去の傾向 has its rows (closed on a phone)', () => {
+    show(history300());
+    const fold = document.querySelector('details.brief-regime-ref');
+    expect(fold).not.toHaveAttribute('open');
+    expect(fold.querySelector('summary')).toHaveTextContent('過去の傾向（1990〜2026年・予測ではありません）');
+    expect([...fold.querySelectorAll('h4')].map(h => h.textContent)).toEqual(['S&P 500', 'Nasdaq総合']);
+    expect(fold).toHaveTextContent('出典：market-regime-study-v2（CI run 41844557380）');
+  });
+
   it('puts the long history behind the 推移 tab, keeps the tab for the session, and a row link opens it', () => {
     show(history300());
     const tabs = screen.getByRole('tablist', { name: '市場タブの表示' });
@@ -65,7 +74,7 @@ describe('brief market screen', () => {
       long_history: { as_of_date: days.at(-1), retrieved_at: `${days.at(-1)}T21:00:00Z`, universe: { symbols: ['A'] }, breadth, sp500: [], sectorRotation: { frames: [{ date: days.at(-1), ranks }] } } } });
     const history = screen.getByRole('region', { name: '市場環境の推移' });
     // The history ends on 6/17, before the analysis date: each value carries its own session.
-    expect(within(history).getByText('先導株数（価格条件）は1年前の18から19銘柄（6/17時点・1年の範囲 10〜59）。セクターの上位は素材・通信サービス・エネルギー（6/17時点）。')).toBeInTheDocument();
+    expect(within(history).getByText('先導株数（価格条件）は1年前の18から19銘柄（6/17時点・1年の範囲 10〜59）。セクターの上位は素材・通信サービス・エネルギー（6/17時点）。参加度・リーダーの推移は現在の銘柄で過去をさかのぼった集計（上場廃止銘柄を含まない）。')).toBeInTheDocument();
   });
 
   it('opens a row\'s metric in the long-run chart and moves focus to its heading', () => {
