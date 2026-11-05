@@ -1,7 +1,7 @@
 // Daily brief market tab on phones: the verdict and the chart, the tab's secondary text and its words at
 // 320px, on synthetic data.
 import { test, expect } from '@playwright/test';
-import { openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
+import { date, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 
@@ -12,7 +12,9 @@ test.describe('the market tab on a phone keeps the verdict and the chart', () =>
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.locator('.brief-verdict')).toBeVisible();
     await expect(market.locator('.brief-index')).toBeVisible();
-    await expect(page.locator('.brief-hero small')).toBeVisible();
+    // The phone hides the hero's date line (Track E); the bar says the analysis date, with its weekday.
+    await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
+    await expect(page.locator('.brief-bar-title time')).toHaveAttribute('datetime', date);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
