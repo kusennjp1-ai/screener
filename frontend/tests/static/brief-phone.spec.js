@@ -44,7 +44,7 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
     await expect(market.locator('.brief-index-legend')).toBeHidden();
     expect(await market.evaluate(node => node.innerText)).toContain('独自判定');
     // Today's rows show RS推計: the card says the RS is the app's own, not IBD's.
-    await expect(market.locator('.brief-note').last()).toHaveText('地合いの判定・各集計・RSは公開日足からの独自判定・独自集計で、IBDの公式値ではありません。');
+    await expect(market.locator('.brief-note').last()).toHaveText('地合いの判定・各集計・RS推計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。');
     // The dated title stays the page heading for assistive tech; the bar shows the date.
     await expect(page.getByRole('heading', { level: 1, name: '10月2日（金）の判断' })).toBeAttached();
     await expect(market.locator('.brief-fact')).toHaveCount(4);
@@ -54,10 +54,11 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
     expect(tileText.filter(([, size]) => size < 12)).toEqual([]);
     expect(tileText.map(([text]) => text)).toEqual(expect.arrayContaining(['S&P', 'NAS', '高', '安']));
     const summary = page.getByTestId('brief-summary');
-    await expect(summary).toContainText('買い可・最大50%');
-    expect(await summary.locator('.brief-frag', { hasText: '最大50%' }).evaluate(node => node.getClientRects().length)).toBe(1);
-    await expect(page.locator('.brief-bar-title')).toContainText('2026-10-02');
-    await expect(page.locator('.brief-bar-title')).toContainText('引け');
+    await expect(summary).toContainText('検討可・目安≤50%');
+    expect(await summary.locator('.brief-frag', { hasText: '目安≤50%' }).evaluate(node => node.getClientRects().length)).toBe(1);
+    // The bar says the analysis session with its weekday, never today's date.
+    await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
+    await expect(page.locator('.brief-bar-title time')).toHaveAttribute('datetime', '2026-10-02');
     await expect(page.locator('.brief-hero small')).toBeHidden();
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
@@ -115,12 +116,12 @@ test.describe('a failed manifest on Today', () => {
     await openBrief(page, '#/brief', { fail: 'manifest', storage: { 'research-watch': ['ZZNV'] } });
     const summary = page.getByTestId('brief-summary');
     await expect(summary).toContainText('注目候補取得できません');
-    await expect(summary).toContainText('ウォッチの売り取得できません1銘柄を登録');
+    await expect(summary).toContainText('ウォッチの注意取得できません1銘柄を登録');
     await expect(summary).not.toContainText(/0銘柄|ゾーン0|接近0|未登録/);
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus).toContainText('候補データを取得できません。');
     await expect(focus).not.toContainText('選定銘柄はありません');
-    await expect(page.getByRole('region', { name: 'ウォッチの変化' })).toContainText('ウォッチ中の1銘柄は、候補データがないため確認できません。');
+    await expect(page.getByRole('region', { name: 'ウォッチの状況' })).toContainText('ウォッチ中の1銘柄は、候補データがないため確認できません。');
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
     await expect(page.getByRole('region', { name: '選定銘柄の一覧' })).toContainText('候補データを取得できません。');
     for (const count of await page.getByRole('group', { name: '絞り込み' }).locator('.numeric').allTextContents()) expect(count).toBe('—');
@@ -137,7 +138,14 @@ test.describe('Today on desktop is unchanged', () => {
     await expect(market.locator('.brief-index')).toBeVisible();
     await expect(market.locator('.brief-index-legend')).toBeVisible();
     await expect(page.locator('.brief-hero small')).toBeVisible();
-    await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 2026-10-02 引け・米国株');
+    await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
+    // Each screen's heading says the date the way the bar does, so one date reads one way on a screen.
+    await expect(page.locator('.brief-hero small')).toHaveText('10/2（金）引け・米国株');
+    const tabs = page.getByRole('navigation', { name: 'ブリーフの画面' });
+    await tabs.getByRole('link', { name: '市場' }).click();
+    await expect(page.locator('.brief-hero small')).toHaveText('10/2（金）引け・米国株');
+    await tabs.getByRole('link', { name: '候補' }).click();
+    await expect(page.locator('.brief-hero small')).toHaveText('10/2（金）引け');
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
@@ -188,7 +196,7 @@ test.describe('keyboard focus on a phone', () => {
   test('every focused control in main is clear of the top bar and the dock', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZSD', 'ZZKS'] } });
     await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
-    await expect(page.getByRole('region', { name: 'ウォッチの変化' }).getByRole('button')).toHaveCount(3);
+    await expect(page.getByRole('region', { name: 'ウォッチの状況' }).getByRole('button')).toHaveCount(3);
     await settled(page);
     const seen = [];
     for (let press = 0; press < 80; press++) {
@@ -362,6 +370,121 @@ test.describe('desktop rows keep still when a stock opens beside them', () => {
     await expect(page.getByTestId('brief-conclusion')).toBeVisible();
     const replayed = await focus.locator('li').evaluateAll(items => items.filter(li => li.className.includes('in') || li.getAnimations().some(animation => animation.animationName === 'brief-rise')).length);
     expect(replayed).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Today's three answers are links (44px or more, at their own height) to where each is explained.
+for (const [width, device] of Object.entries({ 320: phone(320, 640), 375: phone(375, 812), 390: VIEWPORTS.phone })) test.describe(`Today's tiles at ${width}px`, () => {
+  test.use(device);
+  test('each tile is a link of 44px or more, to the market tab, the focus pool and the watch tab', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief');
+    const summary = page.getByTestId('brief-summary');
+    await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
+    const tiles = summary.getByRole('link');
+    await expect(tiles).toHaveCount(3);
+    // Measure once the summary's entrance has finished: mid-slide, a tile reads 4.0000076px taller than its link.
+    await summary.evaluate(node => Promise.all(node.getAnimations({ subtree: true })
+      .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+      .map(animation => animation.finished.catch(() => null))));
+    for (const box of await tiles.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    // The link fills its tile, and the tile is as tall as before (its text sets it, not the link): 97px at 375
+    // with the default storage, as measured before the tiles became links (brief-watch.spec.js pins the tile
+    // with a watch list).
+    expect(await summary.locator('li').evaluateAll(items => items.every(li => Math.abs(li.getBoundingClientRect().height - li.querySelector('a').getBoundingClientRect().height) <= 4))).toBe(true);
+    if (width === '375') for (const height of await summary.locator('li').evaluateAll(items => items.map(li => li.getBoundingClientRect().height))) expect(Math.abs(height - 97)).toBeLessThanOrEqual(2);
+    await expect(tiles.nth(0)).toHaveAttribute('href', '#/brief/market');
+    await tiles.nth(0).click();
+    await expect(page).toHaveURL(/#\/brief\/market$/);
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
+    // 注目候補: the list of the same pool (zone and near), said as a chip that clears it; no segment is pressed.
+    await tiles.nth(1).click();
+    await expect(page).toHaveURL(/#\/brief\/list$/);
+    const chip = page.getByRole('button', { name: /^注目候補（ゾーン＋接近）\s*21/ });
+    await expect(chip).toBeVisible();
+    expect((await chip.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await expect(page.getByTestId('brief-candidate')).toHaveCount(20);
+    await expect(page.getByRole('button', { name: 'さらに表示（残り 1件）' })).toBeVisible();
+    for (const button of await page.getByRole('group', { name: '絞り込み' }).getByRole('button').all()) await expect(button).toHaveAttribute('aria-pressed', 'false');
+    await chip.click();
+    await expect(chip).toHaveCount(0);
+    await expect(page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ })).toHaveAttribute('aria-pressed', 'true');
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
+    await tiles.nth(2).click();
+    await expect(page).toHaveURL(/#\/brief\/watch$/);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`すべての候補 ${name}`, () => {
+  test.use(device);
+  test('opens every selected stock with no search, not the buy zone alone', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list');
+    await page.getByRole('searchbox', { name: '銘柄を検索' }).fill('ZZ');
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
+    await page.getByRole('region', { name: '注目候補' }).getByRole('link', { name: 'すべての候補' }).click();
+    await expect(page).toHaveURL(/#\/brief\/list$/);
+    await expect(page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて\s*21$/ })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('searchbox', { name: '銘柄を検索' })).toHaveValue('');
+    await expect(page.getByTestId('brief-candidate')).toHaveCount(name === 'phone' ? 20 : 21);
+    expect(errors).toEqual([]);
+  });
+});
+
+// One date on a phone's first screen: the bar's. The 候補, ウォッチ and 市場 headings stay for assistive tech only;
+// the tabs, the bar's second line and the watch count read at 12px.
+for (const [width, device] of Object.entries({ 320: phone(320, 640), 375: phone(375, 812), 390: VIEWPORTS.phone })) test.describe(`one date and the 12px chrome at ${width}px`, () => {
+  test.use(device);
+  test('the list, watch and market headings are visually hidden, never removed', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list', { storage: { 'research-watch': ['ZZNV', 'ZZSD'] } });
+    for (const [hash, heading] of [['#/brief/list', '候補'], ['#/brief/watch', 'ウォッチ'], ['#/brief/market', '市場']]) {
+      await page.goto(`/${hash}`);
+      const title = page.getByRole('heading', { level: 1, name: heading });
+      await expect(title).toBeAttached();
+      // Polled: read at once after the tab switch, the box was larger on some runs of a cold dev server.
+      await expect.poll(() => page.locator('.brief-hero').evaluate(node => { const box = node.getBoundingClientRect(); return box.width <= 1 && box.height <= 1; })).toBe(true);
+      await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
+    }
+    const sizes = await page.locator('.brief-tabs a, .brief-bar-title > span, .brief-count').evaluateAll(nodes => nodes.map(node => [node.textContent, parseFloat(getComputedStyle(node).fontSize)]));
+    expect(sizes.length).toBeGreaterThanOrEqual(6);
+    expect(sizes.filter(([, size]) => size < 12)).toEqual([]);
+    for (const box of await page.locator('.brief-tabs a').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))) expect(box.height).toBeGreaterThanOrEqual(44);
+    const chrome = await page.evaluate(() => document.querySelector('.brief-bar').getBoundingClientRect().height + document.querySelector('.brief-dock').getBoundingClientRect().height);
+    expect(chrome).toBeLessThanOrEqual(110);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('the stock dock: the list position and the ☆ beside it, 44px targets, the chrome within 110px', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZNV');
+    const dock = page.locator('.brief-dock');
+    await expect(dock.locator('.brief-dockpos .numeric')).toHaveText('1/5');
+    await expect(dock.locator('.brief-dockpos p')).toContainText('5件中1件目 注目候補');
+    for (const box of await dock.getByRole('button').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
+    expect(await dock.evaluate(node => node.getBoundingClientRect().height)).toBe(56);
+    const chrome = await page.evaluate(() => document.querySelector('.brief-bar').getBoundingClientRect().height + document.querySelector('.brief-dock').getBoundingClientRect().height);
+    expect(chrome).toBeLessThanOrEqual(110);
+    expect(await dock.locator('.brief-dockpos p').evaluate(node => parseFloat(getComputedStyle(node).fontSize))).toBeGreaterThanOrEqual(12);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a stock outside the stepped list says so in words, and the dock never cuts the list\'s name', async ({ page }) => {
+    const clipped = locator => locator.evaluate(node => [node, ...node.querySelectorAll('span:not(.sr-only)')].some(el => el.clientWidth > 0 && el.scrollWidth > el.clientWidth + 1));
+    // ZZSD is not among Today's top focus rows, which a direct link steps through.
+    const { errors } = await openBrief(page, '#/brief/stock/ZZSD');
+    const position = page.locator('.brief-dock .brief-dockpos p');
+    await expect(position).toHaveText('一覧外・注目候補の上位5件');
+    await expect(position.locator('[aria-hidden="true"], .sr-only')).toHaveCount(0);
+    expect(await clipped(position)).toBe(false);
+    // The next stock enters the list at its first row.
+    await page.locator('.brief-dock').getByRole('button', { name: '次の候補' }).click();
+    await expect(page).toHaveURL(/#\/brief\/stock\/ZZNV$/);
+    await expect(position).toContainText('1/5');
+    await expect(position).toContainText('注目候補（上位）');
+    expect(await clipped(position)).toBe(false);
+    for (const node of await position.locator('span:not(.sr-only)').all()) expect(await node.evaluate(el => parseFloat(getComputedStyle(el).fontSize))).toBeGreaterThanOrEqual(12);
     expect(errors).toEqual([]);
   });
 });

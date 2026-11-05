@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { distributionDays } from '../src/static/distributionDays.js';
 import { followThroughDay, FOLLOW_THROUGH_METHOD } from '../src/static/followThroughDay.js';
 import { validateLongHistory } from '../src/static/marketLongHistory.js';
+import { indexSummary } from '../src/static/reference/indexSummary.js';
 import { isGeneratedOutput, removeSupersededOutputs } from './superseded-export.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const isDay=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
@@ -14,6 +15,18 @@ export function verifyLongHistorySource(bytes,asOfDate){
  if(hash(JSON.stringify(history.universe.symbols))!==history.universe.sha256)throw Error('Long-history universe hash mismatch');
  if(history.classification&&hash(JSON.stringify(history.classification.memberships))!==history.classification.memberships_sha256)throw Error('Long-history classification hash mismatch');
  return history;
+}
+
+/**
+ * The index's position on the same validated bars and last date as its distribution count: indexSummary, the
+ * function the market tab and the market-regime study use. A distance needs its window (50 / 200 closes, a full
+ * 252-session year for the high); a short window leaves the field null, never 0.
+ */
+export function indexState(bars,lastDate){
+  const closes=bars.filter(bar=>bar.date<=lastDate).map(bar=>({date:bar.date,close:bar.close}));
+  const summary=indexSummary(closes),last=closes.at(-1);
+  if(!summary)return last?{date:last.date,close:last.close,vs50:null,vs200:null,fromHigh:null,fullYear:false}:null;
+  return {date:summary.date,close:summary.close,vs50:summary.vsMa,vs200:summary.vs200,fromHigh:summary.fullYear?summary.fromHigh:null,fullYear:summary.fullYear};
 }
 
 export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}) {
@@ -35,14 +48,14 @@ export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}
     const lastDate=input?.bars?.at(-1)?.date;
     if(!input?.bars?.length || !isDay(lastDate)||lastDate>asOfDate||!provenance(input.provenance,'query1.finance.yahoo.com',lastDate)){
       const reason=input?.unavailable_reason||'同じ基準日の出典付き指数履歴は未取得です。';
-      return {symbol,available:false,points:[],events:[],reason,lastObserved:null,followThrough:{available:false,method:FOLLOW_THROUGH_METHOD,reason}};
+      return {symbol,available:false,points:[],events:[],reason,lastObserved:null,followThrough:{available:false,method:FOLLOW_THROUGH_METHOD,reason},state:null};
     }
     const calculated=distributionDays({symbol,bars:input.bars,sessions:input.calendar_sessions||source.calendar?.sessions,halfDays:source.calendar?.half_days,asOfDate:lastDate});
     // Same validated bars and last date as the distribution count; a historical index keeps its own asOf.
     const followThrough=calculated.available?followThroughDay({symbol,bars:input.bars,asOfDate:lastDate,distributionEvents:calculated.events}):{available:false,method:FOLLOW_THROUGH_METHOD,reason:calculated.reason};
     // The last observed count always carries its own date; latest stays null for a historical index.
     const observed=calculated.points.filter(point=>Number.isSafeInteger(point.value)).at(-1);
-    return {...calculated,...(lastDate<asOfDate?{available:false,historical:true,latest:null,reason:`${asOfDate}は未取得。${lastDate}までの過去記録を表示しています。`}:{}),lastObserved:observed?{date:observed.date,value:observed.value}:null,followThrough,source:input.source,volumeBasis:input.volume_basis,provenance:input.provenance};
+    return {...calculated,state:calculated.available?indexState(input.bars,lastDate):null,...(lastDate<asOfDate?{available:false,historical:true,latest:null,reason:`${asOfDate}は未取得。${lastDate}までの過去記録を表示しています。`}:{}),lastObserved:observed?{date:observed.date,value:observed.value}:null,followThrough,source:input.source,volumeBasis:input.volume_basis,provenance:input.provenance};
   });
   const observations=sourceMatches?source.put_call?.observations:[];
   const seen=new Set();

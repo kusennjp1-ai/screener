@@ -47,6 +47,18 @@ export function useBriefData() {
   return { manifest, entry, version, bundle, ranked, date, market, marketLoading: !market && (manifest.isLoading || bundle.isLoading), trends };
 }
 
+/**
+ * The watched symbols this publication does not list (delisted, renamed, or missing from the data): kept
+ * as rows with their reason, never dropped and never counted as checked. Empty until the bundle is in,
+ * because before that nothing is known about any symbol.
+ */
+export function unlistedWatch(brief, watch) {
+  const rows = brief.bundle.data?.rankings?.minervini;
+  if (!rows) return [];
+  const listed = new Set(rows.map(item => item.row.symbol));
+  return watch.filter(symbol => !listed.has(symbol));
+}
+
 /** The watchlist shared with the research screens (same storage key). */
 export function useWatchlist() {
   const read = () => { try { const value = JSON.parse(localStorage.getItem(WATCH_KEY) || '[]'); return Array.isArray(value) ? value.filter(s => typeof s === 'string') : []; } catch { return []; } };
@@ -147,9 +159,10 @@ export const SELL_WATCH_LIMIT = 12;
 
 /**
  * Sell checks for watched stocks, from the same chart queries the stock screen uses (shared cache).
- * Returns { [symbol]: result } where a checked stock carries the sellSignals result and any other
+ * Returns { [symbol]: result } where a checked stock carries the stockSells result and any other
  * stock (beyond SELL_WATCH_LIMIT, failed chart, or bars not certified for the analysis date) carries
- * { unknown: true, reason }. Stocks whose chart is still loading are absent.
+ * { unknown: true, reason } (plus `limit` beyond the limit, said as visible text). Stocks whose chart is
+ * still loading are absent.
  */
 export function useWatchSellChecks(views, brief) {
   const { version, date } = brief;
@@ -168,7 +181,7 @@ export function useWatchSellChecks(views, brief) {
     const out = {};
     const checked = new Set(targets.map(view => view.symbol));
     for (const view of all) {
-      if (!checked.has(view.symbol)) out[view.symbol] = { unknown: true, reason: view.row?.chart_path ? `確認は先頭${SELL_WATCH_LIMIT}銘柄まで` : '日足チャート未配信' };
+      if (!checked.has(view.symbol)) out[view.symbol] = view.row?.chart_path ? { unknown: true, limit: SELL_WATCH_LIMIT, reason: `確認は先頭${SELL_WATCH_LIMIT}銘柄まで` } : { unknown: true, reason: '日足チャート未配信' };
     }
     targets.forEach((view, i) => {
       const result = results[i];

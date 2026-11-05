@@ -22,7 +22,7 @@ export const CAPTURES = Object.freeze([
   { screen: 'list-near', path: '#/brief/list', how: 'press the 「あと1条件」 filter' },
   { screen: 'market', path: '#/brief/market', how: 'open #/brief/market' },
   { screen: 'stock', path: '#/brief/stock/:SYMBOL', how: 'click the first candidate row' },
-  { screen: 'stock-weekly', path: '#/brief/stock/:SYMBOL', how: 'switch the chart range to 週足2年' },
+  { screen: 'stock-weekly', path: '#/brief/stock/:SYMBOL', how: 'switch the chart range to 週足' },
   { screen: 'watch', path: '#/brief/watch', how: 'add the opened stock with ☆, then open #/brief/watch' },
 ].map(Object.freeze));
 

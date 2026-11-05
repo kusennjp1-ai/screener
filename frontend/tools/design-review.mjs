@@ -227,13 +227,16 @@ function briefMetrics({ minTarget, fontSizes, radii }) {
   const fixedDock = [...document.querySelectorAll('.brief-dock')].find(element => shown(element) && getComputedStyle(element).position === 'fixed');
   const bar = height('.brief-bar'), dock = fixedDock ? fixedDock.getBoundingClientRect().height : 0;
   const barText = document.querySelector('.brief-bar')?.innerText || '';
+  // The bar shows the analysis date as 「10/2（金）」 inside <time datetime="2026-10-02">.
+  const barTime = document.querySelector('.brief-bar time[datetime]');
   return {
     theme: root.dataset.theme, documentTheme: document.documentElement.dataset.theme || null,
     smallTargets, fontIssues, radiusIssues, asciiMinus, invalidValues,
     horizontalOverflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > innerWidth,
     scrollWidth: document.documentElement.scrollWidth, viewport: { width: innerWidth, height: innerHeight }, pageHeight: document.documentElement.scrollHeight,
     chrome: { bar: Math.round(bar * 10) / 10, dock: Math.round(dock * 10) / 10, total: Math.round((bar + dock) * 10) / 10 },
-    analysisDate: barText.match(/分析基準日\s*(\S+)/)?.[1] || null,
+    analysisDate: barTime?.getAttribute('datetime') ?? barText.match(/分析基準日\s*(\d{4}-\d{2}-\d{2})/)?.[1] ?? null,
+    barDay: barTime?.textContent?.trim() ?? null,
     rows: root.querySelectorAll('[data-testid="brief-candidate"]').length,
     candles: root.querySelectorAll('[data-testid="brief-price-chart"] rect.bc-up, [data-testid="brief-price-chart"] rect.bc-down').length,
   };
@@ -247,6 +250,9 @@ async function runAxe(page) {
       nodes: violation.nodes.slice(0, 8).map(node => ({ target: node.target, summary: node.failureSummary })) }));
   }, AXE_TAGS);
 }
+
+/** The analysis date as the bar shows it on screen: 「10/2（金）」 (the session's own weekday). */
+const visibleDay = iso => { const day = new Date(`${iso}T12:00:00Z`); return `${day.getUTCMonth() + 1}/${day.getUTCDate()}（${'日月火水木金土'[day.getUTCDay()]}）`; };
 
 /** Capture one screen: settle, measure, axe, screenshot; every objective finding blocks. */
 async function capture(session, group, screen, path, { requireDate = true } = {}) {
@@ -277,6 +283,7 @@ async function capture(session, group, screen, path, { requireDate = true } = {}
   if (requireDate) {
     if (!expectedDate) flag('the published as-of date is unknown, so 分析基準日 cannot be verified');
     else if (metrics.analysisDate !== expectedDate) flag(`bar shows 分析基準日 ${metrics.analysisDate ?? '(missing)'}, published as-of date is ${expectedDate}`);
+    else if (metrics.barDay !== visibleDay(expectedDate)) flag(`bar shows 分析基準日 「${metrics.barDay ?? '(missing)'}」 on screen, expected 「${visibleDay(expectedDate)}」 for ${expectedDate}`);
   }
   console.log(`Captured ${key}; ${entry.failures.length} findings.`);
   await save();
@@ -386,11 +393,12 @@ try {
       functional(group, 'row-opens-stock', candles >= MIN_CANDLES, `#/brief/stock/${symbol} draws ${candles} candles, needs at least ${MIN_CANDLES}`);
       await capture(session, group, 'stock', `#/brief/stock/${symbol}`, { requireDate: !group.mobile });
       session.step = 'stock-weekly';
-      const weekly = page.locator('.brief-periods button', { hasText: '週足2年' });
-      if (!await weekly.count()) fail(`${group.key}: the chart has no 週足2年 range control; stock-weekly cannot be captured`);
+      // The weekly range names its real length (「週足（58週）」), so it is found by the leading 週足.
+      const weekly = page.locator('.brief-periods button', { hasText: /^週足/ });
+      if (!await weekly.count()) fail(`${group.key}: the chart has no 週足 range control; stock-weekly cannot be captured`);
       else {
         await weekly.first().click();
-        functional(group, 'weekly-range-pressed', await weekly.first().getAttribute('aria-pressed') === 'true', 'the 週足2年 range is not pressed after clicking it');
+        functional(group, 'weekly-range-pressed', await weekly.first().getAttribute('aria-pressed') === 'true', 'the 週足 range is not pressed after clicking it');
         await page.locator('.brief-legend', { hasText: '10週線' }).first().waitFor({ state: 'attached', timeout: 15000 });
         const weeklyCandles = await waitForCandles(page, 1);
         functional(group, 'weekly-chart-drawn', weeklyCandles > 0, `the weekly chart draws ${weeklyCandles} candles`);

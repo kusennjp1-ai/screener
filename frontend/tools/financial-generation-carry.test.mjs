@@ -1,12 +1,12 @@
 // @vitest-environment node
 import { createHash } from 'node:crypto';
-import { gzipSync } from 'node:zlib';
+import { gunzipSync, gzipSync } from 'node:zlib';
 import { execFileSync } from 'node:child_process';
 import { mkdtemp, mkdir, readFile, writeFile, rm, cp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { CORRECTION_FIELDS, overlayFinancialCorrection, overlayFinancialChart, validateCorrectionProjection } from './financial-correction-overlay.mjs';
 import { FINANCIAL_GENERATION_CARRY_SCHEMA, FINANCIAL_GENERATION_CARRY_ENV, createFinancialGenerationCarry, validateFinancialGenerationCarry, readFinancialGenerationCarry, loadFinancialGenerationCarry, verifyCarryCompatibility } from './financial-generation-carry.mjs';
 import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload, currentFinancialHistory, mergeFinancialDetail } from '../src/static/financialCurrent.js';
@@ -21,6 +21,7 @@ import { financialPublicationException } from '../src/static/financialPublicatio
 import { preparePortfolioRows, buildPortfolioPlan } from '../src/static/portfolioPlan.js';
 import { withAuditFixture } from '../src/static/testAuditFixture.js';
 import { exportWorkbench } from './export-workbench.mjs';
+import { runPublished } from './report-data-coverage.mjs';
 import { readCarryTargetBase, verifyCarriedBundle } from '../../.github/scripts/financial-generation-carry-controller.mjs';
 import { instrumentApplicability, instrumentIdentityEvidence } from '../src/static/instrumentApplicability.js';
 
@@ -391,6 +392,134 @@ it('keeps an admitted same-day SEC record through carry while every scalar stays
     await writeFile(detailPath, original);
     expect((await verifyCarryCompatibility({ root, carry, evaluatedAt: buildTime + 1000 })).counts.sec_admitted).toBe(1);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+// The UI-only republish of a published publication ("verified live input": the release restores the
+// live logical tree, runs no SEC fetch, and rebuilds with the new UI's exporter under a new carry at a later
+// evaluation instant), simulated through the same exporter, carry, controller comparator and coverage report.
+describe('a UI-only republish keeps the published same-day SEC records', () => {
+  const later = buildTime + 20 * 3600000; // the same publication date, the next morning UTC
+  const sourceFrontend = fileURLToPath(new URL('..', import.meta.url));
+  const run = (frontend, env) => execFileSync(process.execPath, [fileURLToPath(new URL('./export-research.mjs', import.meta.url))], { cwd: frontend, env: { ...env, GITHUB_STEP_SUMMARY: '' }, encoding: 'utf8' });
+  const ordinary = at => { const env = { ...process.env, FINANCIAL_EVALUATED_AT: new Date(at).toISOString() }; for (const key of Object.keys(env)) if (key.startsWith('FINANCIAL_CORRECTION_') || key.startsWith('FINANCIAL_GENERATION_CARRY_')) delete env[key]; return env; };
+  const report = async (root, args = []) => { const lines = []; const code = await runPublished(['--published', '--root', root, ...args], { env: {}, log: line => lines.push(line), now: later }); return { code, lines, text: lines.join('\n') }; };
+  // The live publication: the data release's carried export with today's SEC record for OWNED, plus its recorded daily observation.
+  async function livePublication(book) {
+    const fixture = await exportFixture(inputs(), { book });
+    execFileSync(process.execPath, [fileURLToPath(new URL('./record-candidate-history.mjs', import.meta.url))], { cwd: fixture.frontend, env: fixture.env, encoding: 'utf8' });
+    return fixture;
+  }
+  // The republish: restore the live logical tree verbatim, then prepare-carry's ordinary baseline export,
+  // a new carry of the same source onto the restored target, and the build's carried export.
+  async function republish(live, { mutateRestored } = {}) {
+    const frontend = join(live.directory, 'republish', 'frontend');
+    await cp(join(live.frontend, 'public'), join(frontend, 'public'), { recursive: true });
+    await mkdir(join(live.directory, 'republish', 'data/ibd_reference/ibd50'), { recursive: true });
+    if (mutateRestored) await mutateRestored(join(frontend, 'public/static-data'));
+    const baselineLog = run(frontend, ordinary(later));
+    const baselineRoot = join(live.directory, 'republish', 'carry-baseline'); await cp(join(frontend, 'public'), baselineRoot, { recursive: true });
+    const target = await readCarryTargetBase({ root: join(frontend, 'public'), frontendRoot: sourceFrontend });
+    const options = inputs(), carry = createFinancialGenerationCarry({ ...options, targetBase: target.bytes, targetBaseSha256: hash(target.bytes), evaluatedAt: later });
+    const path = join(live.directory, 'republish', 'carry.json'); await write(path, carry);
+    const buildLog = run(frontend, { ...ordinary(later), ...envFor(path, carry) });
+    return { frontend, root: join(frontend, 'public'), baselineRoot, carry, baselineLog, buildLog };
+  }
+  const detailOf = async (root, symbol) => {
+    const manifest = await read(join(root, 'static-data/manifest.json')), index = decodeResearchIndex(await read(join(root, 'static-data', manifest.markets.US.assets.research.path)));
+    return read(join(root, 'static-data', index.rows.find(row => row.symbol === symbol).research_detail_path));
+  };
+
+  it('restores, re-admits and publishes the exact records (same bytes, same as-of, provenance kept) and the release check passes', async () => {
+    const record = secRecord({ symbol: 'OWNED', asOfDate: targetDate, retrievedAt: '2026-10-05T10:00:00.000Z', quarters: SEC_QUARTERS });
+    const other = { ...secRecord({ symbol: 'OTHER', asOfDate: targetDate, retrievedAt: '2026-10-05T10:00:00.000Z', quarters: SEC_QUARTERS }) };
+    const live = await livePublication({ OWNED: record, MISMATCH: other });
+    try {
+      const livePublic = join(live.frontend, 'public'), previous = join(live.directory, 'live-coverage.json');
+      const snapshot = await report(livePublic, ['--json', previous]);
+      expect(snapshot.code).toBe(0);
+      const liveDetail = await detailOf(livePublic, 'OWNED');
+      expect(liveDetail.book_financials).toEqual(record);
+      const fileBefore = await readFile(join(livePublic, 'static-data/book-financials.json.gz'));
+      const next = await republish(live);
+      // The exporter logs each stage's admission (the overlay is the carry's).
+      expect(next.baselineLog).toContain(`SEC admission ${targetDate} (export): file_schema 2, records 2, admitted 1 of 6, refused {"symbol":1}`);
+      expect(next.buildLog).toContain(`SEC admission ${targetDate} (financial carry overlay): file_schema 2, records 2, admitted 1 of 6, refused {"symbol":1}`);
+      // Never refetched: the SEC input is the restored file, byte for byte; the record is the same object content.
+      expect((await readFile(join(next.root, 'static-data/book-financials.json.gz'))).equals(fileBefore)).toBe(true);
+      const detail = await detailOf(next.root, 'OWNED');
+      expect(detail.book_financials).toEqual(liveDetail.book_financials);
+      expect(detail.book_financials).toMatchObject({ as_of_date: targetDate, retrieved_at: '2026-10-05T10:00:00.000Z', source: record.source });
+      expect(detail.sec_admission).toEqual({ state: 'admitted', reason: null });
+      expect(detail.financial_evaluated_at).toBe(later);
+      // The release's own carry comparator accepts the rebuilt bundle (the coverage block and sec_admission are carry-invariant).
+      await verifyCarriedBundle({ baselineRoot: next.baselineRoot, root: next.root, frontendRoot: sourceFrontend, carry: next.carry, evaluatedAt: later + 1000 });
+      const manifest = await read(join(next.root, 'static-data/manifest.json'));
+      expect(manifest.markets.US.fundamentals_coverage).toMatchObject({ sec_fetch_ran: true, file_schema: 2, universe: 6, requested: 2, admitted: 1, with_quarters: 1, refused_by_reason: { symbol: 1 } });
+      // The release step: every same-day record of the replaced publication is still published unchanged.
+      const check = await report(next.root, ['--previous', previous, '--require-sec-carry-forward']);
+      expect(check.code).toBe(0);
+      expect(check.text).toContain(`SEC records carried forward unchanged in a UI-only republish: 1/1 for ${targetDate} (gained 0; input file byte-identical)`);
+    } finally { await rm(live.directory, { recursive: true, force: true }); }
+  });
+
+  it('refuses a UI-only republish that would publish fewer or different same-day records, unless explicitly allowed', async () => {
+    const record = secRecord({ symbol: 'OWNED', asOfDate: targetDate, retrievedAt: '2026-10-05T10:00:00.000Z', quarters: SEC_QUARTERS });
+    const live = await livePublication({ OWNED: record });
+    try {
+      const previous = join(live.directory, 'live-coverage.json');
+      expect((await report(join(live.frontend, 'public'), ['--json', previous])).code).toBe(0);
+      // A rebuild whose admission no longer accepts the restored records (here: the input reads as another schema).
+      const skewed = await republish(live, { mutateRestored: async data => {
+        const value = JSON.parse(gunzipSync(await readFile(join(data, 'book-financials.json.gz'))));
+        value.schema_version = 3; for (const item of Object.values(value.results)) item.schema_version = 3;
+        await writeFile(join(data, 'book-financials.json.gz'), gzipSync(JSON.stringify(value)));
+      } });
+      expect((await detailOf(skewed.root, 'OWNED')).sec_admission).toEqual({ state: 'refused', reason: 'schema' });
+      const refused = await report(skewed.root, ['--previous', previous, '--require-sec-carry-forward']);
+      expect(refused.code).toBe(1);
+      expect(refused.text).toContain('::error::SEC coverage dropped from 1 to 0 in a UI-only republish (lost 1: OWNED; changed 0)');
+      expect(refused.text).toContain('::warning::The SEC input file has schema 3, expected 2');
+      const allowed = await report(skewed.root, ['--previous', previous, '--require-sec-carry-forward', '--allow-sec-coverage-drop']);
+      expect(allowed.code).toBe(0);
+      expect(allowed.text).toContain('::warning::SEC coverage dropped from 1 to 0 in a UI-only republish');
+      // Without the replaced publication's report the release cannot verify the carry and fails closed.
+      expect((await report(skewed.root, ['--require-sec-carry-forward'])).code).toBe(1);
+      expect((await report(skewed.root, ['--previous', join(live.directory, 'absent.json'), '--require-sec-carry-forward'])).code).toBe(1);
+      // A diagnostic run (no requirement) only reports.
+      expect((await report(skewed.root, ['--previous', previous])).code).toBe(0);
+    } finally { await rm(live.directory, { recursive: true, force: true }); }
+  });
+
+  it('flags a record that changed in place (never relabelled) and passes a publication that had none (as 11-03 had)', async () => {
+    const record = secRecord({ symbol: 'OWNED', asOfDate: targetDate, retrievedAt: '2026-10-05T10:00:00.000Z', quarters: SEC_QUARTERS });
+    const live = await livePublication({ OWNED: record });
+    try {
+      const previous = join(live.directory, 'live-coverage.json');
+      await report(join(live.frontend, 'public'), ['--json', previous]);
+      const relabelled = await republish(live, { mutateRestored: async data => {
+        const value = JSON.parse(gunzipSync(await readFile(join(data, 'book-financials.json.gz'))));
+        value.results.OWNED.retrieved_at = '2026-10-05T11:00:00.000Z';
+        await writeFile(join(data, 'book-financials.json.gz'), gzipSync(JSON.stringify(value)));
+      } });
+      const check = await report(relabelled.root, ['--previous', previous, '--require-sec-carry-forward']);
+      expect(check.code).toBe(1);
+      expect(check.text).toContain('SEC coverage dropped from 1 to 0 in a UI-only republish (lost 0; changed 1: OWNED)');
+    } finally { await rm(live.directory, { recursive: true, force: true }); }
+    // The 11-03 shape: the live publication carried no admitted record (a schema-1 input), so nothing can drop.
+    const legacy = await livePublication(null);
+    try {
+      const schemaOne = { ...record, schema_version: 1 };
+      await writeFile(join(legacy.frontend, 'public/static-data/book-financials.json'), JSON.stringify({ schema_version: 1, as_of_date: targetDate, results: { OWNED: schemaOne } }));
+      const previous = join(legacy.directory, 'live-coverage.json');
+      await report(join(legacy.frontend, 'public'), ['--json', previous]);
+      const next = await republish(legacy);
+      expect((await detailOf(next.root, 'OWNED')).sec_admission).toEqual({ state: 'refused', reason: 'schema' });
+      const check = await report(next.root, ['--previous', previous, '--require-sec-carry-forward']);
+      expect(check.code).toBe(0);
+      expect(check.text).toContain('SEC records carried forward unchanged in a UI-only republish: 0/0');
+      expect(check.text).toContain('::warning::The SEC input file has schema 1, expected 2');
+    } finally { await rm(legacy.directory, { recursive: true, force: true }); }
+  });
 });
 
 it('detects annual-only expiry at recheck while quarterly history remains valid', async () => {

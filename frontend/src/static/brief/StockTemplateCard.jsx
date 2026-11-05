@@ -2,6 +2,8 @@ import { Expander } from './briefPrimitives';
 import { ruleEvidence } from './briefCandidate';
 
 const stateIcon = { pass: '✓', fail: '✕', unknown: '?', not_applicable: '–' };
+/** 「1項目が未達・2項目が未確認」, leaving out a part that is 0 (never 「0項目が未達」). */
+const summary = ({ failed, unknown }) => [failed ? `${failed}項目が未達` : '', unknown ? `${unknown}項目が未確認` : ''].filter(Boolean).join('・') || '未確認の項目があります';
 
 /** The trend-template card: the ring, then the unmet rules with the met ones folded on a phone. */
 export default function TemplateCard({ template, wide }) {
@@ -11,7 +13,7 @@ export default function TemplateCard({ template, wide }) {
   return <section className="brief-card in" style={{ '--i': 3 }} aria-labelledby="brief-tt-title">
     <div className="brief-ring-row">
       <div className="brief-ring" aria-hidden="true"><svg viewBox="0 0 68 68"><circle className="ring-bg" cx="34" cy="34" r="28" /><circle className="ring-fg" cx="34" cy="34" r="28" strokeDasharray={circumference} style={{ '--ring': circumference * (1 - template.passed / 8), '--full': circumference }} /></svg><b>{template.passed}/8</b></div>
-      <div><h2 id="brief-tt-title">トレンドテンプレート {template.passed}/8</h2><p className="brief-note">{template.passed === 8 ? 'すべての条件を満たしています' : `${template.failed}項目が未達${template.unknown ? `・${template.unknown}項目が未確認` : ''}`}</p></div>
+      <div><h2 id="brief-tt-title">トレンドテンプレート {template.passed}/8</h2><p className="brief-note">{template.passed === 8 ? 'すべての条件を満たしています' : summary(template)}</p></div>
     </div>
     {wide ? <RuleList rules={template.rules} /> : <>
       {open.length > 0 && <RuleList rules={open} />}

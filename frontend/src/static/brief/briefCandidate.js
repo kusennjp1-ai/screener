@@ -4,16 +4,29 @@
 import { assess, entryPlan, finite, highDistance } from '../researchEngine';
 import { canonicalPivot } from '../researchPresentation';
 import { stateKey, STATES } from '../positionGeometry';
-import { verifiedVolumeRatio } from '../qualificationAudit';
+import { auditValues, verifiedVolumeRatio } from '../qualificationAudit';
+import { conditionChipLabel, conditionText, conditionValueText, singleMissingCondition } from '../missingCondition';
+import { newYorkDate } from '../evidenceTime';
+import { isoDay, shortDate } from './briefShared';
 
 export const BREAKOUT_VOLUME_RATIO = 1.4;
+/** Calendar days before an earnings date at which every screen warns (the chips and the conclusion line). */
+export const EARNINGS_WARN_DAYS = 10;
 const ZONE_RANK = { zone: 0, wait: 1, ext: 3, low: 4, acq: 5, na: 6 };
 const DAY = 86400000;
+const positive = value => finite(value) && value > 0;
+
+/**
+ * The one table of position names every screen uses (rows, the conclusion, the meter, the filters).
+ * `wait` is split for display only: near is 5% or less below the pivot, base is further below.
+ */
+export const POSITION_NAMES = { zone: '買いゾーン', near: 'ピボット接近', base: '土台形成中', ext: '買いゾーン超過' };
 
 /** Trend-template rows (8 price/RS conditions) and the integrity rule, from the shared rule function. */
 export function trendTemplate(row, now = Date.now()) {
   const result = assess(row, 'minervini', now);
-  const rules = result.rules.slice(0, 8);
+  // The RS rule says what its number is: the app's own estimate, its universe and date, never IBD's.
+  const rules = result.rules.slice(0, 8).map(rule => /^RS 推計/.test(rule.label) ? { ...rule, evidence: rsEvidence(rule.value, row) } : rule);
   return {
     rules,
     integrity: result.rules[8],
@@ -24,21 +37,82 @@ export function trendTemplate(row, now = Date.now()) {
   };
 }
 
+/** A displayed RS estimate: the whole number below it (69.9 reads 69, never 70); thresholds use the raw value. */
+export const rsShown = value => finite(value) ? String(Math.floor(value)) : '未確認';
+
+function rsEvidence(value, row) {
+  const universe = Number.isInteger(row?.rs_universe_size) && row.rs_universe_size >= 0 ? `${row.rs_universe_size}銘柄中` : '母集団 未確認';
+  const day = typeof row?.rs_as_of_date === 'string' && row.rs_as_of_date ? row.rs_as_of_date : '基準日 未確認';
+  return `RS推計 ${rsShown(value)}（${universe}・${day}・独自推計・IBDの公式値ではない）`;
+}
+
 /** The value behind a trend-template rule when the rule carries no evidence text of its own. */
 export function ruleEvidence(rule) {
   if (rule?.evidence) return rule.evidence;
   if (!finite(rule?.value) || rule.unit !== '%') return '';
-  const v = Math.abs(rule.value).toFixed(1);
-  if (rule.label.startsWith('52週安値')) return `52週安値から +${v}%`;
-  if (rule.label.startsWith('52週高値')) return rule.value === 0 ? '52週高値と同値' : `52週高値から −${v}%`;
-  return `${rule.value < 0 ? '−' : ''}${v}%`;
+  // The number as the rule's own chip and title show it (rounded away from the threshold's passing side).
+  const shown = conditionValueText(rule), size = shown.replace(/^−/, ''), below = shown.startsWith('−');
+  if (rule.label.startsWith('52週安値')) return `52週安値から ${below ? '−' : '+'}${size}`;
+  if (rule.label.startsWith('52週高値')) return rule.value === 0 ? '52週高値と同値' : `52週高値から ${below ? '+' : '−'}${size}`;
+  return shown;
 }
 
+/** The earnings date and the calendar days to it from the analysis date, or null (unknown, or before that date). */
 export function earningsDays(row, date) {
   const value = row?.entry_evidence?.earnings?.date;
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value) || typeof date !== 'string') return null;
   const days = Math.round((Date.parse(value) - Date.parse(date)) / DAY);
   return Number.isFinite(days) && days >= 0 ? { date: value, days } : null;
+}
+
+/**
+ * The earnings date as a trader acting now reads it: the calendar days from the later of the analysis
+ * date and today's New York date (`now`), so a stale analysis never counts from its own day. Null for an
+ * unknown date. `days` below 0 means the date has passed since the analysis: the analysis predates the
+ * report. `soon` (EARNINGS_WARN_DAYS or nearer, or passed) gates the green call. `chip` is the one short
+ * form every chip uses (「決算まで3日」, 「決算当日」, 「決算日経過」); `line` the conclusion's line.
+ * Without a usable `now` the days count from the analysis date, as before.
+ */
+export function earningsCall(view, now) {
+  const earnings = view?.earnings;
+  if (!earnings || !finite(earnings.days)) return null;
+  const today = newYorkDate(now);
+  const lag = isoDay(view.asOf) && today && today > view.asOf ? Math.round((Date.parse(today) - Date.parse(view.asOf)) / DAY) : 0;
+  const days = earnings.days - (finite(lag) ? lag : 0), day = shortDate(earnings.date, view.asOf);
+  const chip = days > 0 ? `決算まで${days}日` : days === 0 ? '決算当日' : '決算日経過';
+  const line = days > 0 ? `決算まで${days}日（${day}）：新規買いは見送り候補（独自判定）`
+    : days === 0 ? `決算当日（${day}）：新規買いは見送り候補（独自判定）`
+      : `決算（${day}）後のデータ待ち：新規買いは保留（独自判定）`;
+  return { date: earnings.date, days, soon: days <= EARNINGS_WARN_DAYS, chip, line };
+}
+
+/** True when the earnings date is EARNINGS_WARN_DAYS calendar days away or nearer, or has passed since the analysis (an unknown date is not). */
+export const earningsSoon = (view, now) => Boolean(earningsCall(view, now)?.soon);
+
+/**
+ * The analysis day as the publisher verified it (technical_audit for this date only): the close, the
+ * change from the previous close, that previous close and the distance from the 50-day line. Anything
+ * not verified for this date is null; price_change_1d and the raw bars are never read.
+ */
+function verifiedDay(row, date) {
+  const none = { close: null, change: null, prevClose: null, fromSma50: null };
+  if (typeof date !== 'string' || row?.technical_audit?.as_of_date !== date) return none;
+  const v = auditValues(row);
+  if (!positive(v.close)) return none;
+  const change = finite(v.change) && v.change > -100 ? v.change : null;
+  return { close: v.close, change, prevClose: change === null ? null : v.close / (1 + change / 100), fromSma50: positive(v.sma50) ? (v.close / v.sma50 - 1) * 100 : null };
+}
+
+const signedWhole = value => `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.round(Math.abs(value))}%`;
+
+/** A pivot more than 25% from the price (canonicalPivot drops it): where it was, never a 「ベース崩れ」. */
+function stalePivot(row, reason) {
+  if (!reason.includes('25%超')) return null;
+  const raw = row?.se_pivot_price ?? row?.vcp_pivot, price = row?.current_price;
+  if (!positive(raw) || !positive(price)) return null;
+  const distance = (price / raw - 1) * 100, above = distance > 0;
+  const short = `旧ピボットから ${signedWhole(distance)}・有効な買い水準なし`;
+  return { distance, above, short, text: `${short}（${above ? '新しいベース待ち' : 'ベース再形成待ち'}）` };
 }
 
 /** One candidate as the brief shows it. */
@@ -47,29 +121,103 @@ export function candidateView(item, date) {
   const plan = entryPlan(row, null, 'minervini');
   const key = stateKey(plan.state);
   const volume = verifiedVolumeRatio(row, date);
+  const distance = finite(plan.distance) ? plan.distance : null;
+  const pivotSource = canonicalPivot(row).reason;
+  const stale = key === 'na' ? stalePivot(row, pivotSource) : null;
+  const position = key === 'wait' ? (distance >= -5 ? 'near' : 'base') : stale ? (stale.above ? 'staleAbove' : 'staleBelow') : key;
+  const assessment = item?.assessment;
+  const failed = assessment?.failed ?? null, unknown = assessment?.unknown ?? null;
   return {
     symbol: row.symbol,
+    // The analysis date every value here is as of (an event is that day's, never 「本日」's).
+    asOf: typeof date === 'string' ? date : null,
     name: row.company_name || row.name || '',
     sector: row.gics_sector || row.sector || '',
     price: finite(plan.price) ? plan.price : null,
     pivot: finite(plan.pivot) ? plan.pivot : null,
     upper: finite(plan.upper) ? plan.upper : null,
-    distance: finite(plan.distance) ? plan.distance : null,
+    distance,
     state: key,
-    stateLabel: STATES[key]?.[0] || plan.state || '判定不可',
-    stateGlyph: STATES[key]?.[1] || '?',
+    position,
+    stateLabel: POSITION_NAMES[position] || stale?.short || STATES[key]?.[0] || plan.state || '判定不可',
+    stateGlyph: stale ? (stale.above ? '▲' : '○') : STATES[key]?.[1] || '?',
+    stale,
     volumeRatio: finite(volume) ? volume : null,
+    ...verifiedDay(row, date),
     rs: finite(row.rs_rating) ? row.rs_rating : null,
     fromHigh: finite(highDistance(row)) ? highDistance(row) : null,
     rsLineHigh: row.se_rs_line_new_high === true,
-    qualified: Boolean(item?.assessment?.qualified),
-    passed: item?.assessment?.passed ?? null,
-    failed: item?.assessment?.failed ?? null,
-    unknown: item?.assessment?.unknown ?? null,
+    qualified: Boolean(assessment?.qualified),
+    passed: assessment?.passed ?? null,
+    failed,
+    unknown,
+    // The one unmet rule of an あと1条件 row, from the same rule function (only those rows pay for it).
+    missing: !assessment?.qualified && failed === 1 && unknown === 0 ? oneMissing(row) : null,
+    exclusion: assessment?.financial_exclusion?.label || assessment?.applicability_label || null,
     earnings: earningsDays(row, date),
-    pivotSource: canonicalPivot(row).reason,
+    pivotSource,
     row,
   };
+}
+
+/**
+ * The one unmet rule of an あと1条件 row: `chip` the row's one chip for it (「あと1条件：RS推計（61）」,
+ * 「あと1条件：高値から25%以内」, 「あと1条件：150日 > 200日」: only the RS rule keeps its value there, so the
+ * chip fits a 320px row's second line), `text` the full rule with its value (「未達：52週高値からの距離 ≤ 25%
+ * （30.2%）」: the chip's title and the row's label), `rs` whether it is the RS estimate's rule (the chip then
+ * carries the RS value and the row drops its RS chip).
+ */
+function oneMissing(row) {
+  const missing = singleMissingCondition(assess(row, 'minervini'));
+  if (missing?.state !== 'fail') return null;
+  const rs = /^RS 推計/.test(missing.label), value = rs ? conditionValueText(missing) : null;
+  return { chip: `あと1条件：${conditionChipLabel(missing)}${value === null ? '' : `（${value}）`}`, text: `未達：${conditionText(missing)}`, rs };
+}
+
+const cents = value => Math.round(value * 100);
+/** A volume ratio as an event title shows it: floored to 2 decimals, so 1.396 never reads 1.40× under a 1.4× bar. */
+export const ratioShown = value => `${(Math.floor(value * 100 + 1e-9) / 100).toFixed(2)}×`;
+
+/**
+ * The analysis day as an event, from the verified close, its change and the verified volume ratio only:
+ * a breakout is strictly previous close < pivot < close on an up day with BREAKOUT_VOLUME_RATIO or more.
+ * Only for a stock in the buy zone; null when any input (the analysis date too) is missing: nothing is said
+ * about a breakout. The titles name the analysis date (「10/2に上抜け」), never 「本日」: the data may be older than today.
+ * A crossing without the volume (or with it unknown) is not a breakout: tone 'wait', never the green call.
+ * `bars`, when given, are bars certified for the analysis date: they date a crossing 1–3 sessions back.
+ */
+export function breakoutEvent(view, bars = null) {
+  if (view?.state !== 'zone' || !isoDay(view.asOf) || !positive(view.pivot) || !positive(view.close) || !positive(view.prevClose) || !finite(view.change)) return null;
+  const { pivot, close, prevClose, change } = view, volume = finite(view.volumeRatio) ? view.volumeRatio : null;
+  const heavy = volume !== null && volume >= BREAKOUT_VOLUME_RATIO, day = shortDate(view.asOf);
+  if (change < 0 && heavy) return { kind: 'heavyDown', tone: 'ext', title: `下落日の大商い ${ratioShown(volume)}（要注意）` };
+  if (prevClose < pivot && cents(close) === cents(pivot)) return { kind: 'touch', tone: 'zone', title: 'ピボット到達' };
+  if (prevClose < pivot && close > pivot) {
+    if (change > 0 && heavy) return { kind: 'breakout', tone: 'zone', title: `${day}に上抜け・出来高${ratioShown(volume)}` };
+    // The ratio and the bar go in the call's line under the title (`note`), so the title stays one line on a phone.
+    return { kind: 'cross', tone: 'wait', title: volume === null ? `${day}に上抜け・出来高 未確認` : `${day}に上抜け・出来高不足`,
+      note: volume === null ? '出来高を確認できないため、上抜けの裏付けはありません。' : `出来高${ratioShown(volume)}は基準の${BREAKOUT_VOLUME_RATIO}×に届きません。` };
+  }
+  if (prevClose >= pivot) {
+    const crossed = pivotCrossing(bars, pivot);
+    return { kind: 'after', tone: 'zone', title: crossed ? `買いゾーン内（${shortDate(crossed.date, bars.at(-1)?.date)}に上抜け・${crossed.sessionsAgo}営業日前）` : '買いゾーン内（上抜け後）', crossed };
+  }
+  return null;
+}
+
+/**
+ * The session the close last crossed the pivot from below, when it was 1 to `sessions` sessions before
+ * the last bar and every close since is at or above the pivot; null otherwise (or with any close missing).
+ */
+export function pivotCrossing(bars, pivot, sessions = 3) {
+  if (!Array.isArray(bars) || !positive(pivot)) return null;
+  const n = bars.length, close = i => (positive(bars[i]?.close) ? bars[i].close : null);
+  for (let i = n - 1; i >= n - 1 - sessions && i >= 1; i--) {
+    const today = close(i), before = close(i - 1);
+    if (today === null || before === null || today < pivot) return null;
+    if (before < pivot) return i === n - 1 ? null : { date: bars[i].date, sessionsAgo: n - 1 - i };
+  }
+  return null;
 }
 
 /** Buy zone first, then within 5% below the pivot, then by the shared assessment score and RS. */
@@ -96,18 +244,33 @@ export function focusCounts(ranked, date) {
 }
 
 /**
- * The tone of Today's 注目候補 tile from the bundle state, the focus counts and the market verdict
- * (step 0: the market is not read yet).
+ * What the market verdict (prepared.market) means for a new buy: 'open' (a known state with a cap above
+ * 0), 'hold' (a known state with a cap of 0: 控える), 'unknown' (an unknown state, never 控える), or null
+ * for no verdict at all (not loaded yet: nothing is said, so nothing flashes while it loads).
  */
-export function focusTone(state, counts, market) {
-  void market;
-  return state === 'ready' && counts?.total ? 'zone' : '';
+export function candidateMarketGate(market) {
+  if (!market) return null;
+  if (market.state === 'unknown' || !finite(market.cap)) return 'unknown';
+  return market.cap > 0 ? 'open' : 'hold';
 }
 
-/** A note after Today's 注目候補 heading for the market verdict, or null (step 0: always null). */
-export function focusHeadingNote(market) {
-  void market;
-  return null;
+/**
+ * The tone of Today's 注目候補 tile: zone only for a ready bundle with focus candidates while the market
+ * verdict is open to new buying; neutral while it says to hold off or is unknown.
+ */
+export function focusTone(state, counts, market) {
+  return state === 'ready' && counts?.total && candidateMarketGate(market) === 'open' ? 'zone' : '';
+}
+
+/**
+ * A note after Today's 注目候補 heading for the market verdict, or null (open, or not loaded yet). With the
+ * bundle's `state`, a ready bundle that carries no verdict at all also reads 「（地合い未確認）」 (the verdict
+ * comes with the bundle, so once it is ready nothing is still loading); without it, nothing is said.
+ */
+export function focusHeadingNote(market, state) {
+  const gate = candidateMarketGate(market);
+  if (gate === null && state === 'ready') return '（地合い未確認）';
+  return gate === 'hold' ? '（地合い：買いは控える・監視のみ）' : gate === 'unknown' ? '（地合い未確認）' : null;
 }
 
 export const LIST_FILTERS = {
@@ -128,12 +291,27 @@ export const LIST_SORTS = {
   high: { label: '52週高値に近い順', compare: (a, b) => (a.fromHigh ?? 999) - (b.fromHigh ?? 999) || briefOrder(a, b) },
 };
 
-/** What changed for a watched stock, in the order a trader acts on it. */
-export function watchEvent(view) {
-  if (view.state === 'zone' && finite(view.volumeRatio) && view.volumeRatio >= BREAKOUT_VOLUME_RATIO) return { kind: 'breakout', tone: 'zone', title: 'ピボットを出来高を伴って上抜け' };
-  if (view.state === 'zone') return { kind: 'zone', tone: 'zone', title: '買いゾーン内' };
-  if (view.state === 'wait' && finite(view.distance) && view.distance >= -5) return { kind: 'near', tone: 'wait', title: `ピボットまで あと${Math.abs(view.distance).toFixed(1)}%` };
-  if (view.state === 'ext') return { kind: 'ext', tone: 'ext', title: '買いゾーンを超過' };
-  if (view.state === 'wait') return { kind: 'base', tone: 'neutral', title: '土台を形成中' };
+/** Why a stock is not a buy candidate by the trend template: 'TT未達', 'TT未確認' or '選定対象外'. */
+export const templateShort = view => Number.isInteger(view?.failed) && view.failed > 0 ? 'TT未達' : Number.isInteger(view?.unknown) && view.unknown > 0 ? 'TT未確認' : '選定対象外';
+
+/**
+ * What changed for a watched stock, in the order a trader acts on it. With `market` (prepared.market, or
+ * null when the bundle carries none), a market that is not open to new buying turns the green tones
+ * neutral, as Today's focus rows do; the titles stay. Without the argument, the tones are as before.
+ */
+export function watchEvent(view, market) {
+  // Not a buy candidate: the position stays visible, in a neutral tone, with the reason.
+  if (!view.qualified) return { kind: 'unqualified', tone: 'neutral', title: `${view.stateLabel}（${templateShort(view)}）` };
+  const held = market !== undefined && candidateMarketGate(market) !== 'open';
+  const tone = value => held && value === 'zone' ? 'neutral' : value;
+  const event = breakoutEvent(view);
+  if (event?.kind === 'breakout') return { kind: 'breakout', tone: tone('zone'), title: event.title };
+  if (event?.kind === 'heavyDown') return { kind: 'heavyDown', tone: 'ext', title: event.title };
+  // A crossing without the volume keeps the zone's ● but not its green (tone 'wait').
+  if (view.state === 'zone') return { kind: 'zone', tone: tone(event?.tone || 'zone'), title: event?.title || '買いゾーン内' };
+  if (view.position === 'near' || (view.state === 'wait' && finite(view.distance) && view.distance >= -5)) return { kind: 'near', tone: 'wait', title: `${POSITION_NAMES.near}（あと${Math.abs(view.distance).toFixed(1)}%）` };
+  if (view.state === 'ext') return { kind: 'ext', tone: 'ext', title: POSITION_NAMES.ext };
+  if (view.state === 'wait') return { kind: 'base', tone: 'neutral', title: POSITION_NAMES.base };
+  if (view.stale) return { kind: 'stale', tone: view.stale.above ? 'ext' : 'neutral', title: view.stale.short };
   return { kind: 'unknown', tone: 'neutral', title: view.stateLabel };
 }

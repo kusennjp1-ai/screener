@@ -147,6 +147,23 @@ jobs:
             head -c 900000 "$STUDY_OUT/results.md" >> "$GITHUB_STEP_SUMMARY" || return 1
           }
           study || echo '::warning title=Market-regime study unavailable::Diagnostic only; the Design result is unaffected.'
+      # Diagnostic only, never a gate: the drift between the committed market-regime reference (the market
+      # tab's 「過去の傾向」, built from run 41844557380's study) and this run's fresh study (a later as-of).
+      # Labels and mean directions equal, shares within ±1 pt, no 〔偏り〕 flip; the drift goes to the summary and artifact,
+      # and every failure becomes a warning.
+      - name: Diagnostic market-regime reference drift (never a gate)
+        shell: bash
+        env:
+          STUDY_OUT: ${{ runner.temp }}/market-regime-study
+        run: |
+          drift() {
+            if [ ! -s "$STUDY_OUT/results.json" ]; then
+              echo '::warning title=Market-regime reference drift::No fresh study results in this run; the drift is not measured.'
+              return 0
+            fi
+            env -u GH_TOKEN -u GITHUB_TOKEN node frontend/tools/market-regime-reference.mjs --results "$STUDY_OUT/results.json" --check frontend/src/static/reference/market-regime-reference-v1.json --summary "$GITHUB_STEP_SUMMARY" > "$STUDY_OUT/reference-drift.md"
+          }
+          drift || echo '::warning title=Market-regime reference drift::Outside tolerance, or the fresh study could not be read; diagnostic only, the Design result is unaffected.'
       - name: Build the current UI and verify its packed transport
         env:
           GH_TOKEN: ${{ github.token }}

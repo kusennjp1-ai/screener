@@ -13,6 +13,7 @@ import { encodeResearchIndex, decodeResearchIndex, RESEARCH_METHODS } from '../s
 import { prepareResearchBundle } from '../src/static/researchPreprocess.js';
 import { withAuditFixture } from '../src/static/testAuditFixture.js';
 import { withFinancialProof, FINANCIAL_TEST_DATE as date, FINANCIAL_TEST_NOW as now } from '../src/static/testFinancialFixture.js';
+import { secRecord } from '../src/test/fixtures/secRecord.js';
 import { researchEvaluation, validatePublishedSummaries, validateResearchListSummaries, validateResearchParity } from './research-quality.mjs';
 
 const metadata = { financial_evaluated_at: now, financial_semantics: 'current_at_evaluation_not_historical_publication', assessment_version: RULE_SUMMARY_VERSION };
@@ -78,6 +79,65 @@ describe('publication summaries and current canonical decisions', () => {
       expect(output).toContain('Workbench gate passed: 1 saved observations');
       const manifest = JSON.parse(await readFile(join(data, 'manifest.json'), 'utf8'));
       expect(manifest.markets.US.assets.research.financial_evaluated_at).toBe(now);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('accepts a valid or absent fundamentals coverage block and rejects one that disagrees with the published details', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'quality-coverage-block-'));
+    try {
+      const frontend = join(root, 'frontend'), data = join(frontend, 'public/static-data');
+      await mkdir(data, { recursive: true }); await mkdir(join(root, 'data/ibd_reference/ibd50'), { recursive: true });
+      const write = (name, value) => writeFile(join(data, name), JSON.stringify(value));
+      const days = calendarAt(date).sessions.slice(-280);
+      await write('trading-calendar.json', calendarAt(date));
+      const bars = days.map((day, index) => { const close = 50 + index * .25; return { date: day, open: close, close, low: close - 1, high: close + 1, volume: 1e6 }; });
+      const rows = ['TEST', 'NOREC', 'BAD'].map(symbol => sample({ symbol, current_price: bars.at(-1).close, se_pivot_price: null, vcp_pivot: null, se_setup_ready: false }));
+      await write('manifest.json', { generated_at: '2026-10-02T20:00:00Z', markets: { US: { market: 'US', as_of_date: date, pages: { scan: { path: 'scan.json' } }, assets: { charts: { path: 'charts-index.json' } } } } });
+      await write('scan.json', { as_of_date: date, initial_rows: rows, chunks: [{ path: 'chunk.json' }] });
+      await write('chunk.json', { as_of_date: date, rows });
+      await write('charts-index.json', { symbols: rows.map(row => ({ symbol: row.symbol, path: `chart-${row.symbol}.json` })) });
+      for (const row of rows) await write(`chart-${row.symbol}.json`, { symbol: row.symbol, as_of_date: date, bars });
+      await write('book-benchmark.json', { symbol: 'SPY', as_of_date: date, bars });
+      await write('sector-prices.json', { as_of_date: date, series: {} });
+      // The same-day SEC input: an admitted record, no record for NOREC and a record of another CIK URL for BAD.
+      const bad = secRecord({ symbol: 'BAD', asOfDate: date, retrievedAt: `${date}T10:00:00.000Z` }); bad.source = 'https://data.sec.gov/api/xbrl/companyfacts/CIK0000000002.json';
+      await writeFile(join(data, 'book-financials.json.gz'), gzipSync(JSON.stringify({ schema_version: 2, as_of_date: date, results: { TEST: secRecord({ symbol: 'TEST', asOfDate: date, retrievedAt: `${date}T10:00:00.000Z` }), BAD: bad } })));
+      const run = tool => execFileSync(process.execPath, [fileURLToPath(new URL(tool, import.meta.url))], { cwd: frontend,
+        env: { ...process.env, GITHUB_STEP_SUMMARY: '', FINANCIAL_EVALUATED_AT: new Date(now).toISOString() }, encoding: 'utf8', stdio: 'pipe' });
+      const exported = run('./export-research.mjs');
+      expect(exported).toContain(`SEC admission ${date} (export): file_schema 2, records 2, admitted 1 of 3, refused {"cik_url":1}`);
+      const manifestPath = join(data, 'manifest.json'), original = await readFile(manifestPath, 'utf8'), manifest = JSON.parse(original);
+      expect(manifest.markets.US.fundamentals_coverage).toEqual({ schema_version: 'fundamentals-coverage-v1', as_of_date: date, sec_fetch_ran: true, sec_as_of: date, file_schema: 2,
+        universe: 3, requested: 2, eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 1, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 } });
+      const index = decodeResearchIndex(JSON.parse(await readFile(join(data, manifest.markets.US.assets.research.path), 'utf8')));
+      const detail = async symbol => JSON.parse(await readFile(join(data, index.rows.find(row => row.symbol === symbol).research_detail_path), 'utf8'));
+      expect((await detail('TEST')).sec_admission).toEqual({ state: 'admitted', reason: null });
+      expect((await detail('NOREC')).sec_admission).toEqual({ state: 'not_requested', reason: null });
+      expect((await detail('BAD'))).toMatchObject({ book_financials: null, sec_admission: { state: 'refused', reason: 'cik_url' } });
+      // The admission state is detail-only: never in the list rows.
+      expect(index.rows.some(row => Object.hasOwn(row, 'sec_admission'))).toBe(false);
+      // Valid.
+      expect(run('./check-data-quality.mjs')).toContain(`Fundamentals coverage gate passed. SEC admission ${date} (financial gate): file_schema 2, records 2, admitted 1 of 3, refused {"cik_url":1}.`);
+      // Absent (an exporter without the block) stays valid.
+      const absent = JSON.parse(original); delete absent.markets.US.fundamentals_coverage; await writeFile(manifestPath, JSON.stringify(absent));
+      expect(run('./check-data-quality.mjs')).toContain('Fundamentals coverage block absent');
+      // Invalid: a count that disagrees with the details, a malformed block, and a detail whose state lies.
+      const fail = async (mutate, message) => {
+        const changed = JSON.parse(original); mutate(changed.markets.US.fundamentals_coverage); await writeFile(manifestPath, JSON.stringify(changed));
+        let error; try { run('./check-data-quality.mjs'); } catch (caught) { error = caught; }
+        expect(error?.status).toBe(1); expect(error.stderr.toString()).toContain(message);
+      };
+      await fail(block => { block.admitted = 2; block.not_requested = 0; }, 'fundamentals_coverage differs from the published details');
+      await fail(block => { block.admitted = 0; }, 'Invalid fundamentals_coverage block');
+      await fail(block => { block.requested = 0.5; }, 'Invalid fundamentals_coverage block');
+      await fail(block => { block.extra = 1; }, 'Invalid fundamentals_coverage block');
+      // A ticker-map state the SEC input does not show (it lists no errors, so the map state is unknown).
+      await fail(block => { block.ticker_map_ok = false; }, 'fundamentals_coverage differs from the published details');
+      await writeFile(manifestPath, original);
+      const detailPath = join(data, index.rows.find(row => row.symbol === 'NOREC').research_detail_path), detailBytes = await readFile(detailPath, 'utf8');
+      const lying = JSON.parse(detailBytes); lying.sec_admission = { state: 'refused', reason: 'schema' }; await writeFile(detailPath, JSON.stringify(lying));
+      let error; try { run('./check-data-quality.mjs'); } catch (caught) { error = caught; }
+      expect(error?.status).toBe(1); expect(error.stderr.toString()).toContain('sec_admission disagrees with the detail');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

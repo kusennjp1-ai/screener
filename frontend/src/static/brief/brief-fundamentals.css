@@ -1,0 +1,29 @@
+/* Track C (fundamentals card). brief.css is frozen in round 1: these rules only add or override, at equal
+   or higher specificity; the desktop (1024px and wider) keeps its layout. */
+.brief-fin-chart { display: grid; gap: 10px; min-width: 0; }
+/* Each growth row takes its bar's colour, so the legend's swatches name the rows. */
+.brief-q-axis .q-eps-t { color: var(--zone); } .brief-q-axis .q-sales-t { color: var(--wait); }
+.brief-q-axis .is-unknown { color: var(--text-3); }
+.brief-fin-quality { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.brief-fin-quality .brief-chip { white-space: normal; overflow-wrap: anywhere; }
+.brief-fin-scope { margin: 0; }
+.brief-fin-gaps .brief-expander-body, .brief-fin-missing .brief-expander-body { padding-inline: 0; }
+.brief-fin-gaps .brief-expander-summary small > span { white-space: nowrap; }
+@media (max-width: 1023.98px) {
+  /* The parts are said by the Code 33 text (only a 未達 keeps them). */
+  .brief-fin .brief-code33-parts.is-said { display: none; }
+  .brief-fin .brief-q-legend { margin: 0; }
+}
+@media (max-width: 520px) {
+  .brief-card.brief-fin { gap: 8px; }
+  .brief-fin .brief-fin-chart { gap: 6px; }
+  .brief-fin .brief-fin-source { line-height: 1.5; }
+  .brief-fin .brief-quarters { height: 56px; }
+  .brief-fin .brief-q-axis { margin-top: -2px; line-height: 1.2; }
+  .brief-fin .brief-facts.is-fin { gap: 4px; }
+  .brief-fin .brief-facts.is-fin .brief-fact { padding-block: 4px; }
+  .brief-fin .brief-q-legend { gap: 2px 10px; }
+  /* The 33 mark gives the text its width back on a phone; the title says Code 33. */
+  .brief-fin .brief-code33 { padding: 8px 10px; }
+  .brief-fin .brief-code33-mark { display: none; }
+}

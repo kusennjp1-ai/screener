@@ -3,6 +3,8 @@
 // it never replaces or populates the dated SEC evidence in bookFinancialEvidence.
 // Same rule: the latest four quarters must be consecutive and each of EPS growth,
 // sales growth (year over year) and net margin level must rise three times.
+import { risesDetail } from './bookFinancialEvidence.js';
+
 const finite = n => typeof n === 'number' && Number.isFinite(n);
 const days = (a, b) => (Date.parse(a) - Date.parse(b)) / 86400000;
 
@@ -11,8 +13,6 @@ function yoy(rows, row, key) {
   if (bases.length !== 1 || !finite(row[key]) || !finite(bases[0][key]) || bases[0][key] <= 0) return null;
   return (row[key] / bases[0][key] - 1) * 100;
 }
-const rises = values => values.every(finite) ? values.slice(1).every((v, i) => v > values[i]) : null;
-const state = value => value == null ? 'unknown' : value ? 'pass' : 'fail';
 
 /** history: the validated result of financialHistory(); returns unknown unless the data supports a judgement. */
 export function code33Reference(history, date, maxAgeDays = 190) {
@@ -24,9 +24,10 @@ export function code33Reference(history, date, maxAgeDays = 190) {
   if (!consecutive || !(days(date, last.at(-1).end) <= maxAgeDays)) return result;
   result.quarters = last.map(row => ({ end: row.end, epsYoY: yoy(rows, row, 'eps'), salesYoY: yoy(rows, row, 'revenue'),
     margin: finite(row.revenue) && row.revenue > 0 && finite(row.netIncome) ? row.netIncome / row.revenue * 100 : null }));
-  result.eps = state(rises(result.quarters.map(q => q.epsYoY)));
-  result.sales = state(rises(result.quarters.map(q => q.salesYoY)));
-  result.margin = state(rises(result.quarters.map(q => q.margin)));
+  // The same three-valued rule as the SEC evidence: a known fall fails even beside a missing quarter.
+  result.eps = risesDetail(result.quarters.map(q => q.epsYoY)).state;
+  result.sales = risesDetail(result.quarters.map(q => q.salesYoY)).state;
+  result.margin = risesDetail(result.quarters.map(q => q.margin)).state;
   // Three-valued AND, as for the SEC evidence: any known failure fails, a pass
   // needs three known passes, anything else stays unknown.
   const trio = [result.eps, result.sales, result.margin];

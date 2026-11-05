@@ -74,8 +74,9 @@ export async function verifyCandidateDerivedOutputs(root, frontendRoot, manifest
   equal(workbench.sectors, sectorStrength(canonical, prices, day, now), 'sector calculations');
   onStage('workbench_and_sectors_replayed');
   const compactBySymbol = new Map(canonical.map((row,index)=>{
-    const {book_diagnostics,book_technical_evidence,book_financials,...compact}=row;
-    void book_diagnostics;void book_technical_evidence;void book_financials;
+    // Detail-only fields, never in list rows or scan pages (sec_admission: the export's SEC admission state).
+    const {book_diagnostics,book_technical_evidence,book_financials,sec_admission,...compact}=row;
+    void book_diagnostics;void book_technical_evidence;void book_financials;void sec_admission;
     compact.research_detail_path=rows[index].research_detail_path;
     return [row.symbol,compact];
   }));

@@ -1,7 +1,8 @@
-// Chart-derived view model for the stock screen: the Weinstein stage, the RS line's new high, the VCP
-// footprint and the up/down volume ratio, each from the bars it is given (the caller passes only
-// certified bars where a value judges the stock). Unknown stays null.
+// Chart-derived view model for the stock screen: the Weinstein stage, the RS line's new high and its
+// leadership marks, the VCP footprint, the opening gaps and the up/down volume ratio, each from the bars
+// it is given (the caller passes only certified bars where a value judges the stock). Unknown stays null.
 import { finite } from '../researchEngine';
+import { shortDate } from './briefShared';
 
 const DAY = 86400000;
 /** The RS line leads when it is at a new high while the price is at least this % below its own high. */
@@ -41,16 +42,68 @@ export function rsLineNewHigh(rsLine, bars) {
   return last >= Math.max(...prior);
 }
 
-/** VCP footprint text from measured legs, e.g. "VCP 14週 24/3 4T". */
+/**
+ * VCP footprint from measured legs (独自近似), e.g. "VCP 14週 13/4 2T". The base's weeks run from the
+ * base high (the first contraction's start) to the last bar, or to the base's end when the price has
+ * since traded above the base high: the text then says 「・土台の高値を上抜け（M/D）」 and `brokeOut` is true.
+ * legs[0] is 「最初の押し」, and 「最大の押し」 only when it really is the deepest; the last one is 「最後の押し」.
+ */
 export function footprint(evidence, bars) {
-  const legs = evidence?.vcp?.legs || [];
-  if (legs.length < 2 || !evidence.vcp.measurementsValid) return null;
-  const first = legs[0].startDate, last = bars?.at?.(-1)?.date || legs.at(-1).endDate;
+  const vcp = evidence?.vcp, legs = vcp?.legs || [];
+  if (legs.length < 2 || !vcp.measurementsValid) return null;
+  const brokeOut = vcp.base?.brokeOut === true && Boolean(vcp.base.endDate);
+  const first = vcp.base?.startDate || legs[0].startDate, last = brokeOut ? vcp.base.endDate : bars?.at?.(-1)?.date || legs.at(-1).endDate;
   const weeks = Math.max(1, Math.round((Date.parse(last) - Date.parse(first)) / DAY / 7));
-  return { weeks, deepest: legs[0].depthPct, shallowest: legs.at(-1).depthPct, count: legs.length,
+  const deepest = legs.slice(1).every(leg => leg.depthPct <= legs[0].depthPct);
+  const firstLabel = vcp.droppedLegs > 0 ? '直近6回のうち最初の押し' : deepest ? '最大の押し' : '最初の押し';
+  const breakoutDate = brokeOut ? vcp.base.breakoutDate ?? null : null;
+  // Named by what was crossed, the base's own high: the conclusion's 「…に上抜け」 is the canonical pivot's crossing,
+  // which can be a different level on a different day.
+  const broke = brokeOut ? `・土台の高値を上抜け${breakoutDate ? `（${shortDate(breakoutDate)}）` : ''}` : '';
+  return { weeks, first: legs[0].depthPct, last: legs.at(-1).depthPct, firstLabel, firstIsDeepest: deepest, count: legs.length, brokeOut, breakoutDate,
     // Only progressively shallower contractions are called a VCP; otherwise say what was measured.
-    text: `${evidence.vcp.depthsContract === true ? 'VCP' : '収縮'} ${weeks}週 ${Math.round(legs[0].depthPct)}/${Math.round(legs.at(-1).depthPct)} ${legs.length}T${evidence.vcp.depthsContract === false ? '（縮小途切れ）' : evidence.vcp.depthsContract === true ? '' : '（縮小は未確認）'}`,
-    contracting: evidence.vcp.depthsContract, volumeContracting: evidence.vcp.volumeContracts };
+    text: `${vcp.depthsContract === true ? 'VCP' : '収縮'} ${weeks}週 ${Math.round(legs[0].depthPct)}/${Math.round(legs.at(-1).depthPct)} ${legs.length}T${vcp.depthsContract === false ? '（縮小途切れ）' : vcp.depthsContract === true ? '' : '（縮小は未確認）'}${broke}`,
+    contracting: vcp.depthsContract, volumeContracting: vcp.volumeContracts };
+}
+
+/** RS-line points aligned to the bars' dates, oldest first: [{ index (into bars), date, value }]. */
+function alignedRs(rsLine, bars) {
+  const byDate = new Map((rsLine || []).filter(p => finite(p?.value)).map(p => [p.time || p.date, p.value]));
+  return (bars || []).map((bar, index) => ({ index, date: bar?.date, value: byDate.get(bar?.date) })).filter(p => finite(p.value));
+}
+
+/**
+ * RS-line leadership on certified bars (pass only those): every bar from the 253rd aligned RS point on
+ * where the RS line is at or above the maximum of its previous 252 points while the close is at least
+ * RS_LEAD_FROM_HIGH_PERCENT below the bar's own 252-bar high. `eligible` is how many bars could be
+ * judged (the 注記's N), `threshold` the latest bar's previous-252 maximum. Null without bars.
+ */
+export function rsLeadMarks(rsLine, bars) {
+  if (!bars?.length) return null;
+  const points = alignedRs(rsLine, bars), dates = [];
+  for (let k = 252; k < points.length; k++) {
+    let prior = -Infinity;
+    for (let j = k - 252; j < k; j++) if (points[j].value > prior) prior = points[j].value;
+    const i = points[k].index, close = bars[i]?.close;
+    let high = -Infinity;
+    for (let j = Math.max(0, i - 251); j <= i; j++) if (finite(bars[j]?.high) && bars[j].high > high) high = bars[j].high;
+    if (i >= 251 && finite(close) && points[k].value >= prior && close <= high * (1 - RS_LEAD_FROM_HIGH_PERCENT / 100)) dates.push(points[k].date);
+  }
+  let threshold = null;
+  if (points.length >= 253) { threshold = -Infinity; for (const p of points.slice(-253, -1)) threshold = Math.max(threshold, p.value); }
+  return { dates, eligible: Math.max(0, points.length - 252), points: points.length, threshold };
+}
+
+/** Bars that open at least `percent` of the prior close beyond the prior high (up) or low (down): 独自判定. */
+export function gapDays(bars, percent = 2) {
+  const out = [];
+  for (let i = 1; i < (bars || []).length; i++) {
+    const a = bars[i - 1], b = bars[i];
+    if (![a?.high, a?.low, a?.close, b?.open].every(finite) || a.close <= 0) continue;
+    if (b.open >= a.high + a.close * percent / 100) out.push({ date: b.date, direction: 'up' });
+    else if (b.open <= a.low - a.close * percent / 100) out.push({ date: b.date, direction: 'down' });
+  }
+  return out;
 }
 
 /**

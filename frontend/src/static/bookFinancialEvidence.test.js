@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bookFinancialEvidence, yoyDetail } from './bookFinancialEvidence';
+import { bookFinancialEvidence, risesDetail, yoyDetail } from './bookFinancialEvidence';
 import { secPoint, secRecord } from '../test/fixtures/secRecord';
 function fixture() {
   const periods = ['2024-03-31','2024-06-30','2024-09-30','2024-12-31','2025-03-31','2025-06-30','2025-09-30','2025-12-31'];
@@ -144,5 +144,81 @@ describe('reasons, fiscal fourth quarters and three-valued Code 33', () => {
     expect(Object.fromEntries(keys.map(key => [key, b[key]]))).toEqual(Object.fromEntries(keys.map(key => [key, a[key]])));
     expect(a.rows).toHaveLength(8);
     expect(a.balanceWarnings.length).toBeGreaterThan(0);
+  });
+});
+
+describe('three-valued "rises" (Kleene)', () => {
+  it('fails on a known fall even beside a gap, passes only when every step is known and rising', () => {
+    expect(risesDetail([30, 20, null, 50])).toEqual({ state: 'fail', pair: [0, 1] });
+    expect(risesDetail([10, null, 30, 40])).toEqual({ state: 'unknown', pair: null });
+    expect(risesDetail([10, 20, 30, 40])).toEqual({ state: 'pass', pair: null });
+    expect(risesDetail([null, null, null, null])).toEqual({ state: 'unknown', pair: null });
+    // A fall across a gap still settles it: 40 then (unknown) then 35.
+    expect(risesDetail([10, 40, null, 35])).toEqual({ state: 'fail', pair: [1, 3] });
+    // Equal is not a rise.
+    expect(risesDetail([10, 20, 20, 30])).toEqual({ state: 'fail', pair: [1, 2] });
+  });
+
+  it('turns a known fall next to a missing quarter into 未達 and names the two quarters, never a new pass', () => {
+    const date = '2026-02-01', report = record => bookFinancialEvidence(record, 'TEST', date);
+    // EPS growth: +10, +20, (the newest EPS is missing), and sales growth falls from +60% to +30% with the margin missing in between.
+    const record = secRecord({ revenue: [100, 100, 100, 100, 110, 130, 160, 130], netIncome: [10, 10, 10, 10, 11, 14.3, null, 26] });
+    record.quarterly.eps.pop();
+    const value = report(record);
+    expect(value.rows.map(row => row.salesYoY?.toFixed(0))).toEqual([undefined, undefined, undefined, undefined, '10', '30', '60', '30']);
+    expect(value).toMatchObject({ epsAcceleration: 'unknown', salesAcceleration: 'fail', code33: 'fail' });
+    expect(value.settled.salesAcceleration).toEqual({ from: { end: '2025-09-30', value: expect.closeTo(60, 6) }, to: { end: '2025-12-31', value: expect.closeTo(30, 6) } });
+    expect(value.settled).not.toHaveProperty('epsAcceleration');
+    // The same quarters with nothing falling stay unknown (the gap is never bridged into a pass).
+    const open = secRecord({ netIncome: [10, 10, 10, 10, 11, 14.3, null, 26] });
+    expect(report(open)).toMatchObject({ marginImprovement: 'unknown', code33: 'unknown', settled: {} });
+    // The default fixture keeps its pass; no fixture gains one.
+    expect(report(secRecord())).toMatchObject({ code33: 'pass', settled: {} });
+  });
+});
+
+describe('the EPS floor and the annual record (three-valued, never a pass from a gap or a loss)', () => {
+  const date = '2026-02-01', report = record => bookFinancialEvidence(record, 'TEST', date);
+  const growth = values => secRecord({ eps: [1, 1, 1, 1, ...values.map(value => value === null ? null : 1 + value / 100)] });
+  // The rule before it was three-valued: all N quarters known, consecutive and current, and each at the level.
+  const before = (value, count, threshold) => {
+    const rows = value.rows.slice(-count);
+    return rows.length === count && !value.stale && rows.every(row => Number.isFinite(row.epsYoY)) && rows.every(row => row.epsYoY + 1e-9 >= threshold);
+  };
+
+  it('fails on a known quarter under the level even beside a missing one, and stays unknown otherwise', () => {
+    // The common 10-Q filer: +10, +20, +40 and a fiscal-Q4 EPS that is only annual.
+    const filer = report(growth([10, 20, 40, null]));
+    expect(filer.epsFloor[4]).toMatchObject({ at25: 'fail', at20: 'fail' });
+    expect(filer.epsFloor[4].below25.map(item => [item.end, Math.round(item.value)])).toEqual([['2025-03-31', 10], ['2025-06-30', 20]]);
+    expect(filer.epsFloor[4].below20.map(item => item.end)).toEqual(['2025-03-31']);
+    expect(filer.epsFloor[2]).toMatchObject({ at25: 'unknown', at20: 'unknown', below25: [] });
+    // Every known quarter is at the level, one is missing: unknown, never a pass.
+    const open = report(growth([30, null, 40, 50]));
+    expect(open.epsFloor[4]).toMatchObject({ at25: 'unknown', at20: 'unknown', below25: [], below20: [] });
+    expect(open.epsFloor[2]).toMatchObject({ at25: 'pass', at20: 'pass' });
+    // 22% is under 25 but not under 20: the two levels are settled separately.
+    const between = report(growth([22, 30, null, 40]));
+    expect(between.epsFloor[4]).toMatchObject({ at25: 'fail', at20: 'unknown' });
+    // A stale or broken window settles nothing.
+    const gap = growth([10, 20, 40, 50]); for (const key of ['eps', 'revenue', 'netIncome']) gap.quarterly[key].splice(6, 1);
+    expect(report(gap).epsFloor[4]).toMatchObject({ at25: 'unknown', at20: 'unknown', below25: [] });
+    expect(bookFinancialEvidence({ ...growth([10, 20, 40, 50]), as_of_date: '2026-09-25' }, 'TEST', '2026-09-25').epsFloor[4]).toMatchObject({ at25: 'unknown', below25: [] });
+  });
+
+  it('gives no fixture a pass the earlier rule did not give', () => {
+    const fixtures = [secRecord(), growth([10, 20, 40, null]), growth([30, null, 40, 50]), growth([25, 26, 30, 31]), growth([30, 40, 50, 24]), growth([null, null, null, null]), growth([-10, 30, 40, 50])];
+    for (const value of fixtures.map(report)) for (const count of [2, 4]) for (const threshold of [20, 25])
+      expect(value.epsFloor[count][`at${threshold}`] === 'pass').toBe(before(value, count, threshold));
+    expect(report(growth([25, 26, 30, 31])).epsFloor[4]).toMatchObject({ at25: 'pass', at20: 'pass' });
+  });
+
+  it('never calls a loss year a record, however much smaller the loss', () => {
+    const annual = values => { const record = secRecord(); record.annualEps = values.map((value, i) => secPoint('eps', [`${2022 + i}-01-01`, `${2022 + i}-12-31`], value)); return report(record).annualRecord; };
+    expect(annual([-3, -2, -1.5, -0.8])).toBe('fail');
+    expect(annual([1, 2, 0])).toBe('fail');
+    expect(annual([3, 3.5, 5.5])).toBe('pass');
+    expect(annual([-1, 2, 1])).toBe('fail');
+    expect(annual([3, 5.5])).toBe('unknown');
   });
 });

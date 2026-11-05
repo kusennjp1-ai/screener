@@ -1,31 +1,62 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sentence, shortDate, trendsAlert } from './briefModel';
-import { marketCardView, num, signedPercent } from './marketTabModel';
+import { marketCardView, num, signedPercent, SURVIVORSHIP_NOTE } from './marketTabModel';
 import { Expander, Parts, ScreenNotes } from './briefPrimitives';
+import { exposureRuleText } from '../portfolioPlan';
 
 const finite = Number.isFinite;
+const isDay = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 
-function IndexChart({ sp500, distribution, distributionEnd, status, detail }) {
+/** A simple moving average of `length` closes ending at each shown point (null until there are enough). */
+const sma = (all, offset, count, length) => Array.from({ length: count }, (_, i) => { const at = offset + i; if (at < length - 1) return null; let s = 0; for (let j = at - length + 1; j <= at; j++) s += all[j].close; return s / length; });
+
+function IndexChart({ sp500, distribution, distributionEnd, followThrough = null, status, detail }) {
   const points = (sp500 || []).filter(p => finite(p.close)).slice(-130);
   if (points.length < 60) return <p className="brief-note">{status === 'loading' ? '指数の履歴を読み込み中…' : status === 'error' ? '指数の履歴は整合性を確認できないため表示しません。' : status === 'fetch-error' ? '指数の履歴は取得できないため表示しません。' : status === 'history-error' ? '指数の履歴は長期集計の整合性を確認できないため表示しません。' : sp500?.length ? '指数の履歴が60営業日に満たないため表示しません。' : '指数の履歴は公開データに含まれていません。'}</p>;
   const all = (sp500 || []).filter(p => finite(p.close)), offset = all.length - points.length;
-  const ma = points.map((_, i) => { const at = offset + i; if (at < 49) return null; let s = 0; for (let j = at - 49; j <= at; j++) s += all[j].close; return s / 50; });
-  const values = [...points.map(p => p.close), ...ma.filter(finite)], lo = Math.min(...values), hi = Math.max(...values);
+  const ma = sma(all, offset, points.length, 50);
+  // The market tab adds the 200-day line, the FTD day and the rally low; Today keeps the 50-day line only.
+  const ma200 = detail ? sma(all, offset, points.length, 200) : [];
+  const values = [...points.map(p => p.close), ...ma.filter(finite), ...ma200.filter(finite)], lo = Math.min(...values), hi = Math.max(...values);
   const W = 600, H = 132, x = i => 4 + i * (W - 8) / (points.length - 1), y = v => 18 + (hi - v) * (H - 30) / (hi - lo || 1);
   const line = points.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.close).toFixed(1)}`).join('');
-  const line50 = ma.map((v, i) => v == null ? '' : `${ma[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+  const maPath = series => series.map((v, i) => v == null ? '' : `${series[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
+  const line50 = maPath(ma), line200 = ma200.some(finite) ? maPath(ma200) : '';
   const active = new Set((distribution?.events || []).filter(e => e.state === 'active').map(e => e.date));
   const marks = points.map((p, i) => active.has(p.date) ? i : -1).filter(i => i >= 0);
   // The ▲ marks come from the index series, which can end on another session than the closes.
   const chartEnd = points.at(-1).date;
+  // The exporter's follow-through record for the same index: a mark only for a day inside the window.
+  const ft = detail && followThrough?.available === true ? followThrough : null, find = day => isDay(day) ? points.findIndex(p => p.date === day) : -1;
+  const ftdAt = ft && ['confirmed', 'ftd_failed'].includes(ft.state) ? find(ft.ftd?.date) : -1;
+  // The rally low: during an attempt the record's own low; once an FTD stands (or failed) the record's low is a
+  // later pullback's, so the low the FTD confirmed comes from its ftd event. Without that date, no ○.
+  const rallyLow = !ft ? null : ['rally_attempt', 'attempt_expired'].includes(ft.state) ? ft.low?.date
+    : ['confirmed', 'ftd_failed'].includes(ft.state) ? (Array.isArray(ft.events) ? ft.events : []).find(e => e?.type === 'ftd' && e.date === ft.ftd?.date)?.lowDate : null;
+  const lowAt = find(rallyLow);
+  const at = i => ({ left: `${(100 * x(i) / W).toFixed(2)}%`, top: `${(100 * y(points[i].close) / H).toFixed(2)}%` });
+  // A failed FTD keeps its ◆ but says it failed, so the mark never reads as a standing follow-through.
+  const ftdWord = ftdAt >= 0 ? `FTD ${shortDate(points[ftdAt].date, chartEnd)}${ft.state === 'ftd_failed' && isDay(ft.failedDate) ? `（失敗 ${shortDate(ft.failedDate, chartEnd)}）` : ft.state === 'ftd_failed' ? '（失敗）' : ''}` : null;
+  const words = [ftdWord, lowAt >= 0 ? `反発の安値 ${shortDate(points[lowAt].date, chartEnd)}` : null].filter(Boolean);
+  const svg = <svg className={`brief-index${detail ? ' is-detail' : ''}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
+    aria-label={`S&P 500 の終値と50日線${line200 ? '・200日線' : ''}（${points[0].date}〜${chartEnd}）。有効な分配日 ${marks.length}日${words.length ? `。${words.join('、')}` : ''}${detail ? `。目盛り ${num(lo, 0)}〜${num(hi, 0)}` : ''}`}>
+    {line200 && <path d={line200} className="brief-index-ma200" />}
+    <path d={line50} className="brief-index-ma" />
+    <path d={line} className="brief-index-line" />
+    {marks.map((i, k) => <path key={i} d={`M${x(i) - 5},${y(points[i].close) + 14}h10l-5,-8z`} className="brief-index-dist" style={{ '--i': k }} />)}
+  </svg>;
   return <>
-    <svg className={`brief-index${detail ? ' is-detail' : ''}`} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label={`S&P 500 の終値と50日線（${points[0].date}〜${chartEnd}）。有効な分配日 ${marks.length}日`}>
-      <path d={line50} className="brief-index-ma" />
-      <path d={line} className="brief-index-line" />
-      {marks.map((i, k) => <path key={i} d={`M${x(i) - 5},${y(points[i].close) + 14}h10l-5,-8z`} className="brief-index-dist" style={{ '--i': k }} />)}
-    </svg>
-    <p className="brief-index-legend" aria-hidden="true"><span className="is-close">S&amp;P 500 終値（{detail ? `${shortDate(points[0].date, chartEnd)}〜${shortDate(chartEnd, chartEnd)}` : '半年'}）</span><span className="is-ma">50日線</span><span className="is-dist">▲ 分配日{detail && distributionEnd && distributionEnd !== chartEnd ? `（${shortDate(distributionEnd, chartEnd)}まで）` : ''}</span></p>
+    {detail ? <div className="brief-index-frame">
+      {svg}
+      {/* Labels and marks are HTML over the stretched SVG, so they keep their shape and the 12px floor. */}
+      <span className="brief-index-scale is-hi numeric" aria-hidden="true" style={{ top: `${(100 * y(hi) / H).toFixed(2)}%` }}>{num(hi, 0)}</span>
+      <span className="brief-index-scale is-lo numeric" aria-hidden="true" style={{ top: `${(100 * y(lo) / H).toFixed(2)}%` }}>{num(lo, 0)}</span>
+      {lowAt >= 0 && <span className="brief-index-mark is-low" aria-hidden="true" style={at(lowAt)}>○</span>}
+      {/* The FTD label sits above its ◆, or below it when the close is near the frame's top. */}
+      {ftdAt >= 0 && <span className={`brief-index-mark is-ftd${x(ftdAt) > W * 0.6 ? ' is-end' : ''}${y(points[ftdAt].close) < H * 0.3 ? ' is-below' : ''}${ft.state === 'ftd_failed' ? ' is-failed' : ''}`} aria-hidden="true" style={at(ftdAt)}>◆<span className="brief-index-mark-label">{ftdWord}</span></span>}
+    </div> : svg}
+    <p className="brief-index-legend" aria-hidden="true"><span className="is-close">S&amp;P 500 終値（{detail ? `${shortDate(points[0].date, chartEnd)}〜${shortDate(chartEnd, chartEnd)}` : '半年'}）</span><span className="is-ma">50日線</span>{line200 && <span className="is-ma200">200日線</span>}<span className="is-dist">▲ 分配日{detail && distributionEnd && distributionEnd !== chartEnd ? `（${shortDate(distributionEnd, chartEnd)}まで）` : ''}</span>{(ftdAt >= 0 || lowAt >= 0) && <span className="is-ftd">{ftdAt >= 0 ? `◆ FTD${ft.state === 'ftd_failed' ? '（失敗）' : ''}` : ''}{ftdAt >= 0 && lowAt >= 0 ? '・' : ''}{lowAt >= 0 ? '○ 反発の安値' : ''}</span>}</p>
   </>;
 }
 
@@ -35,13 +66,16 @@ const Label = ({ text }) => { const at = text.indexOf('（'); return at > 0 ? <>
 // A warning is never colour alone: the ▲ and the word travel with the amber value.
 const WarnMark = () => <span className="brief-warnmark"><span aria-hidden="true">▲</span><span className="sr-only">注意 </span></span>;
 
-/** Today's tile: a pair names each side (S&P / NAS, 高 / 安) and marks the side that fired. */
-const Fact = ({ fact }) => <div className={`brief-fact${fact.warn ? ' is-warn' : ''}`}>
+/**
+ * Today's tile: a pair names each side (S&P / NAS, 高 / 安) and marks the side that fired. `blockAsOf` is the
+ * one older session the card's note dates every source to: a tile of that session needs no date of its own.
+ */
+const Fact = ({ fact, blockAsOf = null }) => { const asOf = fact.asOf && fact.asOf !== blockAsOf ? fact.asOf : null; return <div className={`brief-fact${fact.warn ? ' is-warn' : ''}`}>
   <small><Label text={fact.label} /></small>
-  {fact.pairs ? <b className="brief-pairs">{fact.pairs.map(pair => <span key={pair.name} className={`brief-pair${pair.warn ? ' is-warn' : ''}`}><span className="brief-pair-name">{pair.name}</span>{pair.warn && <WarnMark />}{pair.value}</span>)}<AsOf value={fact.asOf} /></b>
-    : <b className={fact.warn ? 'is-warn' : ''}>{fact.warn && <WarnMark />}{fact.b}<AsOf value={fact.asOf} /></b>}
+  {fact.pairs ? <b className="brief-pairs">{fact.pairs.map(pair => <span key={pair.name} className={`brief-pair${pair.warn ? ' is-warn' : ''}`}><span className="brief-pair-name">{pair.name}</span>{pair.warn && <WarnMark />}{pair.value}</span>)}<AsOf value={asOf} /></b>
+    : <b className={fact.warn ? 'is-warn' : ''}>{fact.warn && <WarnMark />}{fact.b}<AsOf value={asOf} /></b>}
   {fact.em ? <em className={fact.warn ? 'is-warn' : ''}><Parts text={fact.em} /></em> : null}
-</div>;
+</div>; };
 
 // ---- market tab: rows that open to their rule, one-year line and long-history link ----------------
 
@@ -84,7 +118,7 @@ function EnvRow({ item, groupAsOf, onOpenMetric }) {
   const pair = Boolean(item.rows);
   const rowAsOf = item.asOf && item.asOf !== groupAsOf ? item.asOf : null;
   const note = [item.note, item.position].filter(Boolean).join('・') || (item.valued ? null : item.em) || null;
-  const details = [item.detail, pair ? item.note : null].filter(Boolean);
+  const details = [item.detail, pair ? item.note : null, ...(item.details || [])].filter(Boolean);
   return <div className={`brief-fact brief-env-row${item.className ? ` ${item.className}` : ''}${item.warn ? ' is-warn' : ''}${pair ? ' is-pair' : ''}`}>
     <button type="button" className="brief-env-toggle" aria-expanded={open} aria-controls={`${id}-d`} onClick={() => setOpen(value => !value)}>
       <span className="brief-env-status">{item.warn ? <><span aria-hidden="true">▲</span><span>注意</span></> : null}</span>
@@ -109,6 +143,7 @@ function EnvRow({ item, groupAsOf, onOpenMetric }) {
       {open && <>
         {details.map(text => <p key={text}>{text}</p>)}
         {item.range && <YearLine label={item.label} range={item.range} format={item.format} />}
+        {(item.yearLines || []).map(line => <YearLine key={line.label} label={line.label} range={line.range} format={line.format} />)}
         <p className="brief-env-rule"><b>基準</b>{item.rule}</p>
         {item.metric && onOpenMetric && <button type="button" className="brief-env-open" onClick={() => onOpenMetric(item.metric)}>市場環境の推移で見る <span aria-hidden="true">›</span></button>}
       </>}
@@ -116,7 +151,7 @@ function EnvRow({ item, groupAsOf, onOpenMetric }) {
   </div>;
 }
 
-function Group({ group, children }) {
+function Group({ group, caveat = null, children }) {
   const head = useId();
   return <div className={`brief-env-group is-${group.id}`} role="group" aria-labelledby={`brief-env-${group.id}${group.asOf ? ` ${head}-d` : ''}`}>
     <div className="brief-env-head">
@@ -126,6 +161,7 @@ function Group({ group, children }) {
         {group.asOf && <span className="brief-env-asof" id={`${head}-d`}>{group.asOf}時点の値</span>}
       </div>}
     </div>
+    {caveat && <p className="brief-env-caveat">{caveat}</p>}
     {group.unavailable ? <p className="brief-missing">{group.unavailable}</p> : children}
     {group.missing && <p className="brief-missing" data-testid={`brief-missing-${group.id}`}>{group.missing}</p>}
   </div>;
@@ -147,12 +183,14 @@ const unjudgedReasons = reasons => reasons.map(r => `${r.labels.join('・')}（$
  * before. Below 1024px the summary line names the unjudged checks and only their reasons fold.
  */
 function Signals({ signals, exposure, inline = true }) {
-  const { fired, unjudged, reasons, judged = [], asOf, historyMissing } = signals;
+  const { fired, unjudged, reasons, judged = [], asOf, historyMissing, legend, tagNote } = signals;
   // 「なし」 only when at least one check was judged: nothing judged is 判定できません, never an all-clear.
   const headline = fired.length ? <><span aria-hidden="true">▲</span> 注意サイン {fired.length}件</> : judged.length ? '注意サインなし' : '注意サインを判定できません';
   return <div className={`brief-signals${fired.length ? ' is-warn' : ''}`} role="group" aria-label="注意サイン（独自判定）">
     <b>{headline}<small>（{asOf ? `${asOf}時点・` : ''}独自判定）</small></b>
-    {fired.length > 0 && <ul>{fired.map(s => <li key={s.key}><span aria-hidden="true">▲</span><span>{s.text}{s.itemAsOf ? `（${s.itemAsOf}時点）` : ''}</span></li>)}</ul>}
+    {fired.length > 0 && <ul>{fired.map(s => <li key={s.key}><span aria-hidden="true">▲</span><span>{s.text}{s.itemAsOf ? `（${s.itemAsOf}時点）` : ''}{s.tags?.length ? <span className="brief-signal-tag">{s.tags.join('')}</span> : null}</span></li>)}</ul>}
+    {/* The study tags' key: on a phone the short 〔参考〕 legend (the full sentence is in the 注記), on the desktop the sentence itself. */}
+    {inline ? tagNote && <p className="brief-signals-tags">{tagNote}</p> : legend && <p className="brief-signals-tags">{legend}</p>}
     {historyMissing && <p>{historyScope(judged)}</p>}
     {unjudged.length > 0 && (inline ? <p className="brief-signals-unjudged">判定していない項目 {unjudged.length}件：{unjudgedReasons(reasons)}</p>
       : <Expander id="market-unjudged" className="brief-signals-unjudged" summary={`判定していない項目 ${unjudged.length}件：${unjudged.map(c => c.label).join('・')}`}>
@@ -193,9 +231,12 @@ function SectionTabs({ panels, active, onSelect }) {
  * Every value shows a number (an older one only with its own date) or the precise reason it has none.
  * Today (compact) keeps four tiles; the market tab (detail) leads with the verdict and the warning
  * summary, then the evidence in three groups whose rows open to their rule and one-year line.
+ * The market tab's study parts come from MarketScreen, so the study's code and data stay in its lazy chunk:
+ * `study` (reference/marketTabStudy.js: the warning summary's tags, the 分配日 detail, the Nasdaq note and position)
+ * and `studyBlock`, the 「過去の傾向」 fold it renders at the end of the 指数 panel. Today passes neither.
  */
-export default function MarketCard({ market, marketLoading = false, trends, date, detail = false, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null }) {
-  const view = marketCardView({ market, marketLoading, trends, date });
+export default function MarketCard({ market, marketLoading = false, trends, date, detail = false, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, study = null, studyBlock = null }) {
+  const view = marketCardView({ market, marketLoading, trends, date, study: detail ? study : null });
   const { status, verdict, dating, signals, summary, conflict, groups, chart } = view;
   const chartStatus = view.longError ? 'history-error' : status.state === 'error' && status.kind === 'fetch' ? 'fetch-error' : status.state;
   const verdictMark = <span className="brief-verdict-mark" aria-hidden="true">{verdict.pending ? '…' : verdict.tone === 'zone' ? '●' : verdict.tone === 'ext' ? '▲' : verdict.tone === 'neg' ? '⊘' : '?'}</span>;
@@ -203,7 +244,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
     : status.state === 'error' ? <p className="brief-alert" role="alert" data-failure={status.kind}>{trendsAlert(status)}数値は表示しません。</p>
       : status.state === 'none' ? <p className="brief-note">市場推移データはこの公開に含まれていません。</p>
         : view.longError ? <p className="brief-alert" role="alert" data-check={trends.data.long_history_error_key || undefined}>{sentence(view.longError)}{detail ? '分配日・フォロースルーデー' : '分配日'}は指数データから表示しています。</p> : null;
-  const chartEl = <IndexChart sp500={chart.sp500} distribution={chart.distribution} distributionEnd={chart.distributionEnd} status={chartStatus} detail={detail} />;
+  const chartEl = <IndexChart sp500={chart.sp500} distribution={chart.distribution} distributionEnd={chart.distributionEnd} followThrough={chart.followThrough} status={chartStatus} detail={detail} />;
   // Phone (switcher): a sticky row of section tabs under the verdict shows one group, or the long
   // history passed in as `history`, at a time; each tab carries its group's ▲ count, and a neutral 「?」
   // when the section holds a value or check that is not confirmed (`historyUnknown`: the long history's
@@ -230,9 +271,15 @@ export default function MarketCard({ market, marketLoading = false, trends, date
   }, [active]);
   const panel = (id, child) => switcher ? <div key={id} role="tabpanel" id={`brief-panel-${id}`} aria-labelledby={`brief-tab-${id}`} className="brief-panel" hidden={active !== id}>{child}</div> : child;
   const notes = [
-    summary && !conflict ? 'S&P 500の終値・1年高値からの位置・50日線比は、長期履歴の^GSPC終値から計算しています。' : null,
+    switcher ? dating.lagDetail : null,
+    summary && !conflict ? 'S&P 500の終値・1年高値からの位置・50日線比・200日線比は、長期履歴の^GSPC終値から計算しています。' : null,
     '各行を開くと、その値の基準（しきい値）と直近1年の推移を表示します。',
+    `参加度・リーダーの値は、${SURVIVORSHIP_NOTE}です。`,
+    signals?.tagNote ? `注意サインの印：${signals.tagNote}` : null,
+    summary && !finite(summary.vs200) ? '200日線比は、長期履歴に200日分の終値がないため未算出です。' : null,
   ];
+  // The Nasdaq's published position: in place on the desktop, inside 過去の傾向 on a phone (the screen's budget).
+  const nas = switcher ? null : view.nasdaqFigures;
 
   if (!detail) {
     return <section className="brief-card brief-market in" style={{ '--i': 1 }} aria-labelledby="brief-market-title">
@@ -240,49 +287,72 @@ export default function MarketCard({ market, marketLoading = false, trends, date
       <div className={`brief-verdict tone-${verdict.tone}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}>{verdictMark}<div><strong>{verdict.label}</strong><p>{verdict.text}</p></div></div>
       {chartEl}
       {statusAlert}
-      <div className="brief-facts">{view.today.map(fact => <Fact key={fact.key} fact={fact} />)}</div>
+      <div className="brief-facts">{view.today.map(fact => <Fact key={fact.key} fact={fact} blockAsOf={dating.blockAsOf} />)}</div>
       {view.distReasons.length > 0 && <ul className="brief-factnotes">{view.distReasons.map(text => <li key={text}>{text}</li>)}</ul>}
       {dating.todayNote && <p className="brief-note brief-asof" role="note">{dating.todayNote}</p>}
       {view.warnings.length > 0 && <ul className="brief-warnings" aria-label="地合いの悪化サイン（独自判定）">{view.warnings.map(w => <li key={w.key}><span aria-hidden="true">▲</span> {w.text}（独自判定）</li>)}</ul>}
       {view.split?.warning && <p className="brief-alert" role="note">▲ {view.split.fromHigh > -0.05 ? '指数は1年高値の水準にありますが' : `指数は1年高値まであと${Math.abs(view.split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{num(view.split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
       {/* The phone's Today hides the verdict, so the card itself still says the judgement is the app's own,
           and Today's candidate rows show RS推計: the RS is the app's own too, never IBD's. */}
-      <p className="brief-note">地合いの判定・各集計・RSは公開日足からの独自判定・独自集計で、IBDの公式値ではありません。</p>
+      <p className="brief-note">地合いの判定・各集計・RS推計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。</p>
     </section>;
   }
 
   return <section className="brief-card brief-market is-detail in" style={{ '--i': 1 }} aria-labelledby="brief-market-title">
-    <div className="brief-step"><h2 id="brief-market-title">地合い</h2>{dating.stamp && <span className="brief-stamp numeric"><span aria-hidden="true">◷</span> {dating.stamp}</span>}</div>
-    {dating.lagNote && <p className="brief-note brief-asof brief-lag" role="note">{dating.lagNote}</p>}
+    {/* On a phone a lag is said in the stamp slot (the rest is in the 注記); the desktop keeps the full line. */}
+    <div className="brief-step"><h2 id="brief-market-title">地合い</h2>{dating.stamp ? <span className="brief-stamp numeric"><span aria-hidden="true">◷</span> {dating.stamp}</span>
+      : switcher && dating.lagStamp ? <span className="brief-stamp numeric is-older brief-lagstamp" role="note"><span aria-hidden="true">◷</span> {dating.lagStamp}</span> : null}</div>
+    {dating.lagNote && !switcher && <p className="brief-note brief-asof brief-lag" role="note">{dating.lagNote}</p>}
     <div className="brief-lead">
       <div className={`brief-verdict is-lead tone-${verdict.tone}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}>
         <div className="brief-verdict-head">{verdictMark}<div><strong><Label text={verdict.label} /></strong>{verdict.date && <span className="brief-verdict-date numeric">{verdict.date}</span>}<p>{verdict.lead}</p></div></div>
         {/* On a narrow phone the label breaks before の目安, never leaving 「安」 alone. */}
         {verdict.exposure !== null && <div className="brief-exposure"><small><span className="brief-frag">エクスポージャー</span><span className="brief-frag">の目安</span></small><b className="numeric">{verdict.exposure > 0 ? `最大 ${verdict.exposure}%` : '0%'}</b><span className="brief-exposure-track" aria-hidden="true"><i style={{ width: `${verdict.exposure}%` }} /></span></div>}
-        {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
+        {/* 目安と判定の基準, in the same order on both: the verdict's basis, while the verdict is positive the Nasdaq's
+            own state, then how the guide is set (from MARKET_CAPS). One fold under the meter on a phone, whose summary
+            names the fold and, when it applies, the Nasdaq note's short form; in place on the desktop. */}
+        {switcher && (verdict.exposure !== null || verdict.basis)
+          ? <Expander id="market-exposure-rule" className="brief-exposure-basis" summary={verdict.nasdaq ? <Parts text={`目安と判定の基準・${verdict.nasdaq.short}`} /> : '目安と判定の基準'}>
+            {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
+            {verdict.nasdaq && <p>{verdict.nasdaq.long}</p>}
+            {verdict.exposure !== null && <p>{exposureRuleText()}</p>}
+          </Expander>
+          : <>
+            {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
+            {verdict.nasdaq && <p className="brief-exposure-nasdaq">{verdict.nasdaq.long}</p>}
+            {verdict.exposure !== null && <p className="brief-exposure-basis">{exposureRuleText()}</p>}
+          </>}
       </div>
       {signals && <Signals signals={signals} exposure={verdict.exposure} inline={!switcher} />}
     </div>
     {statusAlert}
     {switcher && panels.length > 0 && <div ref={tabsRef} className="brief-switchbar"><SectionTabs panels={panels} active={active} onSelect={select} /></div>}
     <div className="brief-env-groups">
-      {groups.map(group => panel(group.id, <Group key={group.id} group={group}>
+      {groups.map(group => panel(group.id, <Group key={group.id} group={group} caveat={!switcher && (group.id === 'breadth' || group.id === 'leaders') ? SURVIVORSHIP_NOTE : null}>
         {group.id === 'index' && <div className="brief-index-block">
           {summary && <div className="brief-index-stats" role="group" aria-label={`S&P 500（長期履歴の^GSPC終値、${shortDate(summary.date, date)}）`}>
             <div><small>S&amp;P 500</small><b className="numeric">{num(summary.close, 2)}</b><span>{shortDate(summary.date, date)}終値</span></div>
             <div><small>{summary.fullYear ? '1年高値から' : '期間内高値から'}</small><b className="numeric">{signedPercent(summary.fromHigh)}</b></div>
-            <div><small>50日線比</small><b className="numeric">{signedPercent(summary.vsMa)}</b></div>
+            {/* The 200-day distance is the cell's second line, so the row keeps its height. */}
+            {/* Without 200 closes a dash keeps the cell as narrow as a value (the row never wraps); the words are read
+                out and the reason is in the 注記 and in 過去の傾向. */}
+            <div className="is-ma"><small>50日線比</small><b className="numeric">{signedPercent(summary.vsMa)}</b>{finite(summary.vs200) ? <span>200日線比 {signedPercent(summary.vs200)}</span>
+              : <><span aria-hidden="true">200日線比 —</span><span className="sr-only">200日線比 未算出（200日分の終値なし）</span></>}</div>
           </div>}
+          {/* The Nasdaq's position, only from a publication whose exporter recorded it (older ones never did). */}
+          {nas && <p className="brief-index-nas"><b>Nasdaq総合</b><span className="numeric">{nas.close}</span><Parts text={nas.text} /></p>}
           {/* A disagreement with the verdict's scan input is always said here; the plain source line is in
               place on the desktop and in the 注記 below 1024px. */}
-          {summary && (conflict || !switcher) && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || '3つの数値は長期履歴の^GSPC終値から計算しています。'}</p>}
+          {summary && (conflict || !switcher) && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || <span>4つの数値（終値・1年高値から・50日線比・200日線比）は長期履歴の^GSPC終値から計算しています。</span>}</p>}
           {chartEl}
         </div>}
         <div className="brief-env-rows">{group.items.map(item => <EnvRow key={item.key} item={item} groupAsOf={group.asOf} onOpenMetric={view.history ? onOpenMetric : null} />)}</div>
+        {group.id === 'index' && studyBlock}
       </Group>))}
     </div>
     {switcher && history && panel('history', history)}
-    <p className="brief-note">分配日・フォロースルーデー・ステージ・トレンドテンプレート数・RSは公開日足からの独自集計で、IBDの公式値ではありません。注意サインの基準もこのアプリの独自判定です。</p>
+    {/* TT達成数 is the row's own name; the line keeps three lines at 375px in a full-width (CJK) font. */}
+    <p className="brief-note">分配日・フォロースルーデー・ステージ・TT達成数・RS推計は公開日足からの独自集計で、IBDの公式値ではありません。注意サインの基準も独自判定です。</p>
     <ScreenNotes id="market" wide={!switcher} notes={notes} />
   </section>;
 }

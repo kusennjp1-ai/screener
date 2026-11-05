@@ -1,9 +1,12 @@
 // Daily brief on phones, compacted: each screen's height at 375×812 stays within its budget, every
 // expander and the market tab's section tabs work by keyboard and keep their state for the session,
 // the section tabs stay under the bar while the page scrolls without covering a focused control,
-// the new controls keep the 12px text floor and 44px targets, and nothing overflows at 320/375/414 px.
+// the new controls keep the 12px text floor and 44px targets, every visible text on a phone reads at 12px or
+// more (SVG at its rendered size) and at a size of the type scale (Design Acceptance's check, on phones and the
+// desktop), and nothing overflows at 320/375/414 px.
 import { test, expect } from '@playwright/test';
 import { openBrief, horizontalOverflow, SEC_SYMBOL } from './brief-fixture.js';
+import { FONT_SIZES } from '../../tools/brief-design-contract.mjs';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const WATCH = ['ZZNV', 'ZZZF', 'ZZSD', 'ZZKS'];
@@ -149,6 +152,10 @@ test.describe('text floor and targets of the compact controls', () => {
     const { errors } = await openBrief(page, '#/brief/market');
     await expect(tabs(page)).toHaveCount(4);
     const check = async () => {
+      // Measure once every finite entrance animation has finished: a strip still scaling in reads 43.9999px.
+      await page.evaluate(() => Promise.all(document.getAnimations()
+        .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
+        .map(animation => animation.finished.catch(() => null))));
       const small = await page.locator('.brief-expander summary, .brief-switch button, .brief-switch-flag, .brief-screen-notes li, .brief-dl dt, .brief-dl small, .brief-focusfoot .brief-note, .brief-groups-label, .brief-groups .brief-chip')
         .evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).filter(node => parseFloat(getComputedStyle(node).fontSize) < 12).map(node => node.textContent.slice(0, 30)));
       expect(small).toEqual([]);
@@ -162,6 +169,112 @@ test.describe('text floor and targets of the compact controls', () => {
       await expect(page.locator('.brief-screen-notes')).toBeVisible();
       for (const summary of await page.locator('.brief-expander > summary').all()) await summary.click();
       await check();
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+// The round-1 text floor on phones: every visible text in the main area, the bar and the dock reads at 12px
+// or more, SVG text at its rendered size (font size × the SVG's scale), on every screen, every market section,
+// every opened fold and the stock's weekly chart, at 320, 375 and 390 px.
+const smallText = page => page.evaluate(() => {
+  const clipped = element => {
+    for (let node = element; node && node !== document.documentElement; node = node.parentElement) {
+      const style = getComputedStyle(node);
+      if (style.visibility === 'hidden' || Number(style.opacity) === 0) return true;
+      // .sr-only: read by screen readers, not on screen.
+      if (style.position === 'absolute' && style.overflow === 'hidden' && parseFloat(style.width) <= 1 && parseFloat(style.height) <= 1) return true;
+    }
+    return false;
+  };
+  const found = [];
+  for (const root of document.querySelectorAll('#brief-main, .brief-bar, .brief-dock')) {
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const text = node.textContent.trim(), element = node.parentElement;
+      if (!text || !element) continue;
+      const range = document.createRange();
+      range.selectNodeContents(node);
+      if (![...range.getClientRects()].some(rect => rect.width > 0 && rect.height > 0) || clipped(element)) continue;
+      let size = parseFloat(getComputedStyle(element).fontSize);
+      if (element instanceof SVGGraphicsElement) { const matrix = element.getScreenCTM(); if (matrix) size *= Math.hypot(matrix.a, matrix.b); }
+      if (size < 11.95) found.push(`${element.closest('[class]')?.className?.baseVal ?? element.closest('[class]')?.className ?? element.tagName} ${size.toFixed(1)}px “${text.slice(0, 24)}”`);
+    }
+  }
+  return [...new Set(found)];
+});
+
+// Design Acceptance's type-scale check (design-review.mjs briefMetrics fontIssues): every shown element under
+// .brief with text of its own has a computed font size of the scale (tokens.fontSizes). SVG text counts at its
+// CSS size, as there.
+const offScale = page => page.evaluate(sizes => {
+  const shown = element => {
+    const box = element.getBoundingClientRect();
+    return box.width > 1 && box.height > 1 && box.right > 0 && box.bottom + scrollY > 0 && element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
+  };
+  const own = element => [...element.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join('').trim();
+  const root = document.querySelector('.brief');
+  return [...new Set([root, ...root.querySelectorAll('*')].filter(element => own(element) && shown(element)).flatMap(element => {
+    const size = parseFloat(getComputedStyle(element).fontSize);
+    return sizes.some(value => Math.abs(value - size) < 0.1) ? [] : [`${element.closest('[class]')?.className?.baseVal ?? element.closest('[class]')?.className ?? element.tagName} ${size}px “${own(element).slice(0, 24)}”`];
+  }))];
+}, FONT_SIZES);
+
+for (const width of [320, 375, 390]) test.describe(`text floor at ${width}px`, () => {
+  test.use({ ...phone(width, width === 390 ? 844 : 812), contextOptions: { reducedMotion: 'reduce' } });
+  test('every visible text in the main area, the bar and the dock is 12px or more (SVG scaled)', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': WATCH } });
+    const openFolds = async () => { for (const summary of await page.locator('#brief-main .brief-expander > summary').all()) if (await summary.isVisible() && !await summary.evaluate(node => node.parentElement.open)) await summary.click(); };
+    for (const [name, [hash, ready]] of Object.entries(SCREENS)) {
+      await page.goto(`/${hash}`);
+      await ready(page);
+      const check = async label => {
+        expect(await smallText(page), label).toEqual([]);
+        expect(await offScale(page), `${label}: type scale`).toEqual([]);
+      };
+      await check(name);
+      await openFolds();
+      await check(`${name} opened`);
+      if (name === 'market') for (const tab of await tabs(page).all()) {
+        await tab.click();
+        await openFolds();
+        await check(`market ${await tab.textContent()}`);
+      }
+      if (name === 'stock') {
+        await page.locator('.brief-periods button', { hasText: /^週足/ }).click();
+        await expect(page.locator('.brief-legend', { hasText: '10週線' }).first()).toBeAttached();
+        await check('stock weekly');
+      }
+    }
+    expect(errors).toEqual([]);
+  });
+
+  test('a stock without a chart: its VCP card says 未確認 at a size of the type scale', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZMO', { mutate: { rows: served => { served.find(row => row.symbol === 'ZZMO').chart_path = null; } } });
+    await expect(page.getByText('この銘柄の日足チャートは未配信です。')).toBeVisible();
+    await expect(page.locator('.brief-footprint')).toHaveText('VCP 未確認');
+    expect(await smallText(page)).toEqual([]);
+    expect(await offScale(page)).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Design Acceptance's type-scale check on the desktop too: every screen, the stock's weekly chart and every opened fold.
+test.describe('the type scale at 1440px', () => {
+  test.use({ viewport: { width: 1440, height: 900 }, contextOptions: { reducedMotion: 'reduce' } });
+  test('every shown text in the brief has a font size of the type scale', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': WATCH } });
+    for (const [name, [hash, ready]] of Object.entries(SCREENS)) {
+      await page.goto(`/${hash}`);
+      await ready(page);
+      expect(await offScale(page), name).toEqual([]);
+      for (const summary of await page.locator('.brief-expander > summary').all()) if (await summary.isVisible() && !await summary.evaluate(node => node.parentElement.open)) await summary.click();
+      expect(await offScale(page), `${name} opened`).toEqual([]);
+      if (name === 'stock') {
+        await page.locator('.brief-periods button', { hasText: /^週足/ }).click();
+        await expect(page.locator('.brief-legend', { hasText: '10週線' }).first()).toBeAttached();
+        expect(await offScale(page), 'stock weekly').toEqual([]);
+      }
     }
     expect(errors).toEqual([]);
   });
@@ -201,7 +314,7 @@ test.describe('the desktop keeps every footnote in place', () => {
     await expect(page.getByRole('region', { name: '選定銘柄の一覧' }).getByText(/^選定銘柄＝トレンドテンプレート8条件/)).toBeVisible();
     await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
-    await expect(page.getByText('3つの数値は長期履歴の^GSPC終値から計算しています。')).toBeVisible();
+    await expect(page.getByText('4つの数値（終値・1年高値から・50日線比・200日線比）は長期履歴の^GSPC終値から計算しています。')).toBeVisible();
     await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
     expect(errors).toEqual([]);
   });

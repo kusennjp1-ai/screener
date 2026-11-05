@@ -82,7 +82,8 @@ export function assess(input, method = 'minervini', now = Date.now()) {
   const rs = Object.keys(v).length && row.rs_method === RS_METHOD && row.rs_universe_size >= 100 && row.rs_as_of_date === row.technical_audit?.as_of_date ? rating(row.rs_rating) : null;
   const display = n => finite(n) ? n.toFixed(2) : '未確認';
   const integrity = rule('日足の銘柄・取引所営業日・価格整合性（252本以上）', Object.keys(v).length ? true : row.technical_audit?.status === 'unknown' ? null : row.technical_audit?.errors?.length ? false : null, x => x, '', true);
-  integrity.evidence = row.technical_audit?.errors?.join(' / ') || `基準日 ${row.technical_audit?.as_of_date || '未確認'}・${row.technical_audit?.bars || 0}本`;
+  // An absent count reads 本数 未確認 / 母集団 未確認, never 0本 / 0銘柄.
+  integrity.evidence = row.technical_audit?.errors?.join(' / ') || `基準日 ${row.technical_audit?.as_of_date || '未確認'}・${Number.isInteger(row.technical_audit?.bars) && row.technical_audit.bars >= 0 ? `${row.technical_audit.bars}本` : '本数 未確認'}`;
   const trend = [
     compoundComparison('株価 > SMA150・SMA200', [[v.close, v.sma150], [v.close, v.sma200]], `${display(v.close)} > ${display(v.sma150)} / ${display(v.sma200)}`),
     comparison('SMA150 > SMA200', [v.sma150, v.sma200], (a, b) => a > b, `${display(v.sma150)} > ${display(v.sma200)}`),
@@ -91,7 +92,7 @@ export function assess(input, method = 'minervini', now = Date.now()) {
     comparison('株価 > SMA50', [v.close, v.sma50], (a, b) => a > b, `${display(v.close)} > ${display(v.sma50)}`),
     rule(`52週安値から ≥ ${lowThreshold}%（日中安値）`, v.aboveLow, x => x >= lowThreshold, '%'),
     rule('52週高値からの距離 ≤ 25%（日中高値）', v.belowHigh, x => x >= 0 && x <= 25, '%'),
-    { ...rule('RS 推計 ≥ 70（公開日足の共通母集団）', rs, x => x >= 70), evidence: `${row.rs_universe_size || 0}銘柄・${row.rs_as_of_date || '基準日未確認'} / 独自推計` },
+    { ...rule('RS 推計 ≥ 70（公開日足の共通母集団）', rs, x => x >= 70), evidence: `${Number.isInteger(row.rs_universe_size) && row.rs_universe_size >= 0 ? `${row.rs_universe_size}銘柄` : '母集団 未確認'}・${row.rs_as_of_date || '基準日未確認'} / 独自推計` },
   ];
   // Three annual YoY rates, not an endpoint CAGR that can hide a down year.
   const currentHistory = !method.startsWith('minervini') && row.financial_history ? currentFinancialHistory(row.financial_history, row.symbol, row.technical_audit?.as_of_date, now, row) : null;

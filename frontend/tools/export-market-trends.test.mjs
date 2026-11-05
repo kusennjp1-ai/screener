@@ -5,7 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
-import { buildMarketTrends,exportMarketTrends,verifyLongHistorySource,selectLongHistorySource,selectRuntimeLongHistorySource } from './export-market-trends.mjs';
+import { buildMarketTrends,exportMarketTrends,indexState,verifyLongHistorySource,selectLongHistorySource,selectRuntimeLongHistorySource } from './export-market-trends.mjs';
+import { indexSummary } from '../src/static/reference/indexSummary.js';
 import { FOLLOW_THROUGH_METHOD } from '../src/static/followThroughDay.js';
 import { readMarketTrends } from '../src/static/marketTrendAsset.js';
 const source=()=>JSON.parse(readFileSync(resolve('data/market-trend-source-2026-10-23.json'),'utf8'));
@@ -121,6 +122,34 @@ describe('market trend source projection',()=>{
   expect(nasdaq.followThrough.events.filter(event=>event.type==='ftd').map(event=>event.date)).toEqual(['2026-04-14']);
   for(const index of out.indices)expect(index.lastObserved).toEqual({date:index.latest.date,value:index.latest.value});
   expect(readMarketTrends(out,{as_of_date:input.as_of_date}).indices.map(index=>index.followThrough.state)).toEqual(['confirmed','no_correction']);
+ });
+ it('records each index position with indexSummary on the same validated bars and last date as its count',()=>{
+  const input=source(),out=buildMarketTrends(input,{asOfDate:input.as_of_date});
+  for(const index of out.indices){
+   const bars=input.indices.find(item=>item.symbol===index.symbol).bars,summary=indexSummary(bars.map(bar=>({date:bar.date,close:bar.close})));
+   expect(index.state).toEqual({date:'2026-10-23',close:summary.close,vs50:summary.vsMa,vs200:summary.vs200,fromHigh:summary.fromHigh,fullYear:true});
+   expect(index.state.date).toBe(index.points.at(-1).date);
+   for(const field of ['vs50','vs200','fromHigh'])expect(index.state[field]).toEqual(expect.any(Number));
+  }
+  // The reader passes the field through as published.
+  expect(readMarketTrends(out,{as_of_date:input.as_of_date}).indices[1].state).toEqual(out.indices[1].state);
+  // A historical index keeps its own last session; no source, or bars that fail validation, record no position.
+  const late=source();late.indices[0].bars.pop();
+  expect(buildMarketTrends(late,{asOfDate:late.as_of_date}).indices[0].state).toMatchObject({date:'2026-10-22',fullYear:true});
+  for(const index of buildMarketTrends(source(),{asOfDate:'2026-10-26'}).indices)expect(index.state).toBeNull();
+  const broken=source();broken.indices[1].bars[100].volume=0;
+  expect(buildMarketTrends(broken,{asOfDate:broken.as_of_date}).indices[1].state).toBeNull();
+ });
+ it('leaves a distance null when its window is short, never 0',()=>{
+  const short=source();short.calendar.sessions=short.calendar.sessions.slice(-120);for(const index of short.indices)index.bars=index.bars.slice(-120);
+  const [sp]=buildMarketTrends(short,{asOfDate:short.as_of_date}).indices;
+  expect(sp.available).toBe(true);
+  expect(sp.state).toMatchObject({date:'2026-10-23',vs200:null,fromHigh:null,fullYear:false});
+  expect(sp.state.vs50).toEqual(expect.any(Number));
+  const bars=source().indices[0].bars;
+  expect(indexState(bars.slice(-230),bars.at(-1).date)).toMatchObject({vs200:expect.any(Number),fromHigh:null,fullYear:false});
+  expect(indexState(bars.slice(-30),bars.at(-1).date)).toEqual({date:'2026-10-23',close:bars.at(-1).close,vs50:null,vs200:null,fromHigh:null,fullYear:false});
+  expect(indexState([],'2026-10-23')).toBeNull();
  });
  it('dates a historical index count and follow-through to its own last session while latest stays null',()=>{
   const input=source();input.indices[0].bars.pop();

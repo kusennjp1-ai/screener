@@ -166,6 +166,8 @@ const RESOLVE_HOOK = "export async function resolve(specifier,context,next){try{
 if (!process.env.VITEST) register(`data:text/javascript,${encodeURIComponent(RESOLVE_HOOK)}`);
 const { environmentRules, ENV_RULES } = await import('../src/static/brief/briefModel.js');
 const { DISTRIBUTION_WARN, indexSummary } = await import('../src/static/brief/marketTabModel.js');
+/** The app rules the study runs with (results.json method.appRules); the reference builder refuses any other. */
+export const APP_RULES = Object.freeze({ DISTRIBUTION_WARN, DISTRIBUTION_METHOD, FOLLOW_THROUGH_METHOD, SPLIT_RULE, ENV_RULES });
 
 export const STUDY_VERSION = 'market-regime-study-v2';
 export const WINDOWS = Object.freeze([5, 10, 21, 63]);
@@ -740,7 +742,7 @@ const bin = flag => flag === null || flag === undefined ? null : flag ? 0 : 1;
 const above = value => value === null || value === undefined ? null : value > 0;
 const quad = state => state && state.vsMa !== null && state.vs200 !== null ? (state.vs200 > 0 ? (state.vsMa > 0 ? 0 : 1) : (state.vsMa > 0 ? 2 : 3)) : null;
 const nearHigh = state => state && state.fromHigh !== null ? state.fromHigh >= -SPLIT_RULE.nearHighPercent : null;
-const MA_QUADRANT = ['50日線・200日線の上 (above both)', '200日線の上・50日線の下 (above 200, below 50)', '200日線の下・50日線の上 (below 200, above 50)', '50日線・200日線の下 (below both)'];
+export const MA_QUADRANT = Object.freeze(['50日線・200日線の上 (above both)', '200日線の上・50日線の下 (above 200, below 50)', '200日線の下・50日線の上 (below 200, above 50)', '50日線・200日線の下 (below both)']);
 
 function maIndicators(panel, prefix, name, ma, outcome) {
   return [
@@ -921,7 +923,7 @@ export function runStudy({ history = null, historyMeta = {}, indices = null, cal
   return { schema_version: STUDY_VERSION, label: runLabel, generated_at: new Date().toISOString(), as_of_date: asOfDate,
     method: { windows: WINDOWS, drawdownLevels: [DRAWDOWN.primary, DRAWDOWN.deep], quintiles: QUANTILES, changeSessions: CHANGE_SESSIONS, ftdWindowSessions: FTD_WINDOW_SESSIONS,
       placebo: { ...PLACEBO, shifts: shiftCount, margin: placeboMargin(), rotation: 'state_t <- state_((t + k) mod n), one k per panel' }, minSessions: MIN_SESSIONS, minEpisodes: MIN_EPISODES, minBlocks: MIN_BLOCKS, block: 'max(2h, 21)',
-      appRules: { DISTRIBUTION_WARN, DISTRIBUTION_METHOD, FOLLOW_THROUGH_METHOD, SPLIT_RULE, ENV_RULES } },
+      appRules: { ...APP_RULES } },
     inputs, notes, survivorship: diagnostics,
     tests: { indicators: results.length, available: tested.length, buckets: tested.reduce((a, r) => a + r.buckets.length, 0),
       contrasts: tested.reduce((a, r) => a + (r.buckets.length === 2 ? 1 : r.buckets.length), 0), tests, indicatorLevel: tested.length * WINDOWS.length * STATS.length,

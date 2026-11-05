@@ -8,3 +8,7 @@
 *.yml text eol=lf
 *.yaml text eol=lf
 *.sh text eol=lf
+
+# The market-regime reference's source is pinned by its sha256 (docs/brief-and-market-environment.md):
+# keep its bytes exactly as committed on every checkout.
+frontend/tools/reference-sources/** -text

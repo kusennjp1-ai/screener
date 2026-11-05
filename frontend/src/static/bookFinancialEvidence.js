@@ -36,14 +36,26 @@ export function yoyDetail(points, end, instant = false) {
   const bases = points.filter(p => days(end, p.end) >= 345 && days(end, p.end) <= 385);
   if (!bases.length) return { value: null, reason: 'no_base' };
   if (bases.length !== 1) return { value: null, reason: 'ambiguous_base' };
-  if (bases[0].value <= 0) return { value: null, reason: 'nonpositive_base' };
+  if (bases[0].value <= 0) return { value: null, reason: 'nonpositive_base', base: bases[0] };
   // Equal end months do not make a 70-day transition period comparable with a
   // 105-day quarter. Allow a 53-week retailer's one extra week, not extra months.
   if (!instant && Math.abs(days(now.end, now.start) - days(bases[0].end, bases[0].start)) > 7) return { value: null, reason: 'period_mismatch' };
   return { value: (now.value / bases[0].value - 1) * 100, reason: null, base: bases[0] };
 }
 const yoy = (points, end, instant = false) => yoyDetail(points, end, instant).value;
-function rises(values) { return values.every(finite) ? values.slice(1).every((v, i) => v > values[i]) : null; }
+/**
+ * Three-valued "rises three times" over consecutive values (Kleene logic): fail as soon as any known
+ * later value is at or below a known earlier one (a missing value in between cannot rescue it), pass
+ * only when every value is known and each one is above the one before, otherwise unknown. `pair` names
+ * the two indices that settled a fail (the earliest later value, against the nearest earlier one).
+ */
+export function risesDetail(values) {
+  for (let j = 1; j < values.length; j++) {
+    if (!finite(values[j])) continue;
+    for (let i = j - 1; i >= 0; i--) if (finite(values[i]) && values[j] <= values[i]) return { state: 'fail', pair: [i, j] };
+  }
+  return { state: values.every(finite) ? 'pass' : 'unknown', pair: null };
+}
 function marginDetail(revenue, income) {
   if (!revenue || !income) return { value: null, reason: 'not_reported' };
   if (!(revenue.value > 0)) return { value: null, reason: 'nonpositive_revenue' };
@@ -67,6 +79,8 @@ export function bookFinancialEvidence(data, symbol, date) {
     const salesDerived = revenue?.derived === DERIVED_Q4, salesBaseDerived = salesGrowth.base?.derived === DERIVED_Q4;
     return { end, derived, salesDerived, salesBaseDerived, eps: eps?.value ?? null, revenue: revenue?.value ?? null, margin: margin.value, epsYoY: epsGrowth.value, salesYoY: salesGrowth.value,
       epsYoYReason: epsGrowth.reason, salesYoYReason: salesGrowth.reason, marginReason: margin.reason,
+      // The year-ago EPS behind a loss or zero base, so a swing to a profit is told as a fact, never a rate.
+      epsBase: epsGrowth.reason === 'nonpositive_base' ? epsGrowth.base.value : null,
       // A fiscal fourth quarter: the 10-K's fiscal-year end, or a Q4 derived from it.
       fiscalQ4: fiscalYearEnds.has(end) || derived, form: eps?.form ?? revenue?.form ?? income?.form ?? null,
       filed: [eps?.filed, revenue?.filed, income?.filed].filter(Boolean).sort().at(-1), accession: eps?.accession ?? revenue?.accession, inventoryYoY: yoy(q.inventory, end, true), receivablesYoY: yoy(q.receivables, end, true) };
@@ -77,21 +91,39 @@ export function bookFinancialEvidence(data, symbol, date) {
   const consecutive = last.length === 4 && last.slice(1).every((p, i) => days(p.end, last[i].end) >= 70 && days(p.end, last[i].end) <= 110);
   result.consecutive = consecutive;
   const comparable = consecutive && !result.stale;
-  result.epsAcceleration = state(comparable ? rises(last.map(p => p.epsYoY)) : null);
-  result.salesAcceleration = state(comparable ? rises(last.map(p => p.salesYoY)) : null);
+  // `settled` names the two quarters behind each known failure (their period ends and values).
+  result.settled = {};
+  const judge = (name, key) => {
+    const value = comparable ? risesDetail(last.map(p => p[key])) : { state: 'unknown', pair: null };
+    if (value.pair) result.settled[name] = { from: { end: last[value.pair[0]].end, value: last[value.pair[0]][key] }, to: { end: last[value.pair[1]].end, value: last[value.pair[1]][key] } };
+    return value.state;
+  };
+  result.epsAcceleration = judge('epsAcceleration', 'epsYoY');
+  result.salesAcceleration = judge('salesAcceleration', 'salesYoY');
   // Original Figure 8.10 shows NET MARGIN LEVELS, not margin YoY growth.
-  result.marginImprovement = state(comparable ? rises(last.map(p => p.margin)) : null);
+  result.marginImprovement = judge('marginImprovement', 'margin');
   // Three-valued AND: one known failure fails Code 33; a pass needs all three
   // known passes; anything else stays unknown. Missing data never passes.
   const trio = [result.epsAcceleration, result.salesAcceleration, result.marginImprovement];
   result.code33 = trio.includes('fail') ? 'fail' : trio.every(s => s === 'pass') ? 'pass' : 'unknown';
+  // "EPS growth of N% or more in each of the latest `count` quarters", three-valued within one consecutive,
+  // current window: fail as soon as a known quarter is below the level (a missing one cannot rescue it),
+  // pass only when all of them are known and at or above it, otherwise unknown. `below` names the known
+  // quarters under each level.
   result.epsFloor = Object.fromEntries([2, 4].map(count => {
     const selected = result.rows.slice(-count);
-    const ready = selected.length === count && !result.stale && selected.every(p => finite(p.epsYoY)) && selected.slice(1).every((p, i) => days(p.end, selected[i].end) >= 70 && days(p.end, selected[i].end) <= 110);
-    return [count, { at20: state(ready ? selected.every(p => p.epsYoY + 1e-9 >= 20) : null), at25: state(ready ? selected.every(p => p.epsYoY + 1e-9 >= 25) : null) }];
+    const window = selected.length === count && !result.stale && selected.slice(1).every((p, i) => days(p.end, selected[i].end) >= 70 && days(p.end, selected[i].end) <= 110);
+    const level = threshold => {
+      const below = window ? selected.filter(p => finite(p.epsYoY) && p.epsYoY + 1e-9 < threshold).map(p => ({ end: p.end, value: p.epsYoY })) : [];
+      return { state: !window ? 'unknown' : below.length ? 'fail' : selected.every(p => finite(p.epsYoY)) ? 'pass' : 'unknown', below };
+    };
+    const [at20, at25] = [level(20), level(25)];
+    return [count, { at20: at20.state, at25: at25.state, below20: at20.below, below25: at25.below }];
   }));
+  // A record year needs a profit: a smaller loss than every earlier year is never a new high.
   const annualRecent = result.annual.length >= 3 && days(date, result.annual.at(-1).end) <= 550;
-  result.annualRecord = annualRecent ? state(result.annual.at(-1).value > Math.max(...result.annual.slice(0, -1).map(p => p.value))) : 'unknown';
+  const latestAnnual = result.annual.at(-1)?.value;
+  result.annualRecord = annualRecent ? latestAnnual <= 0 ? 'fail' : state(latestAnnual > Math.max(...result.annual.slice(0, -1).map(p => p.value))) : 'unknown';
   result.balanceCoverage = result.rows.filter(p => finite(p.salesYoY) && (finite(p.inventoryYoY) || finite(p.receivablesYoY))).length;
   result.balanceWarnings = result.rows.filter(p => finite(p.salesYoY)).flatMap(p => ['inventoryYoY', 'receivablesYoY'].filter(k => finite(p[k]) && p[k] > p.salesYoY).map(k => ({ end: p.end, metric: k, growth: p[k], salesGrowth: p.salesYoY })));
   result.source = data.source;
