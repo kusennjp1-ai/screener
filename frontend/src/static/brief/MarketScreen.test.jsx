@@ -65,7 +65,7 @@ describe('brief market screen', () => {
       long_history: { as_of_date: days.at(-1), retrieved_at: `${days.at(-1)}T21:00:00Z`, universe: { symbols: ['A'] }, breadth, sp500: [], sectorRotation: { frames: [{ date: days.at(-1), ranks }] } } } });
     const history = screen.getByRole('region', { name: '市場環境の推移' });
     // The history ends on 6/17, before the analysis date: each value carries its own session.
-    expect(within(history).getByText('先導株数（価格条件）は1年前の18から19銘柄（6/17時点・1年の範囲 10〜59）。セクターの上位は素材・通信サービス・エネルギー（6/17時点）。')).toBeInTheDocument();
+    expect(within(history).getByText('先導株数（価格条件）は1年前の18から19銘柄（6/17時点・1年の範囲 10〜59）。セクターの上位は素材・通信サービス・エネルギー（6/17時点）。参加度・リーダーの推移は現在の銘柄で過去をさかのぼった集計（上場廃止銘柄を含まない）。')).toBeInTheDocument();
   });
 
   it('opens a row\'s metric in the long-run chart and moves focus to its heading', () => {

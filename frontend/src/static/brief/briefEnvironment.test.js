@@ -131,6 +131,10 @@ describe('market tab helpers', () => {
     expect(view({ state: 'no_correction', declinePct: 4.5, attempt: null, peakAtWindowStart: true })).toMatchObject({ b: '判定保留', em: '集計期間の初日が高値・それ以前は期間外' });
     expect(view({ state: 'no_correction', declinePct: 4.5, attempt: null, peakAtWindowStart: false }).b).toBe('不要');
     expect(view({ state: 'confirmed', asOf: '2026-10-01', ftd: { date: '2026-08-07' } })).toMatchObject({ b: '確認 8/7', asOf: '10/1' });
+    // A confirmed FTD is never drawn green (no 'zone' tone): the 1990-2026 study found no established edge for it.
+    // Only a failed FTD carries a tone (the amber warning).
+    for (const state of ['confirmed', 'rally_attempt', 'correction', 'attempt_expired', 'no_correction']) expect([state, view({ state, ftd: { date: '2026-08-07' } }).tone]).toEqual([state, undefined]);
+    expect(view({ state: 'ftd_failed', failedDate: '2026-10-01', ftd: { date: '2026-09-25' } }).tone).toBe('ext');
     expect(followThroughView({ available: false, method: 'x', reason: '指数OHLCVに欠測・重複・不正値があります。' }, '2026-10-02')).toMatchObject({ b: '算出不可', em: '指数OHLCVに欠測・重複・不正値があります。' });
     expect(followThroughView(undefined, '2026-10-02')).toMatchObject({ b: '未集計', em: '旧形式の公開データ' });
     for (const state of ['confirmed', 'rally_attempt', 'correction', 'attempt_expired', 'ftd_failed', 'no_correction']) {

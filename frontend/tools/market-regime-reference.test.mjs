@@ -65,7 +65,7 @@ describe('the committed source and reference', () => {
     expect(ref.indicators['^GSPC.high.near'].states.below).toMatchObject({ labelDd5: 'robust', labelMean: 'unstable' });
     expect(ref.indicators['^GSPC.high.near'].states.near).toMatchObject({ labelDd5: 'robust', labelMean: 'unstable' });
     expect(ref.indicators['^IXIC.dd.binary'].states.below_warn).toMatchObject({ labelDd5: 'weak', comparatorState: 'warn', comparatorPDd5: 30 });
-    for (const [key, indicator] of Object.entries(ref.indicators)) expect(Object.keys(indicator.states), key).toEqual([...STATE_IDS[key.replace(/^\^(GSPC|IXIC)\./, '')]]);
+    for (const [key, indicator] of Object.entries(ref.indicators)) expect([key, Object.keys(indicator.states)]).toEqual([key, [...STATE_IDS[key.replace(/^\^(GSPC|IXIC)\./, '')]]]);
   });
 });
 
