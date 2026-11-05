@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
+import { AUDIT_VERSION } from '../qualificationAudit';
 
 const DATE = '2026-10-02';
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -85,5 +86,63 @@ describe('brief stock chart card', () => {
     cleanup();
     render(<StockView data={{ ...data(false), bars: gapped() }} />);
     expect(screen.getByTestId('brief-price-chart').querySelectorAll('.bc-gap')).toHaveLength(0);
+  });
+
+  it('draws the 52-week high and reads the distance from it only from an audit of the analysis date', () => {
+    const list = bars(), close = list.at(-1).close;
+    const audit = asOf => ({ version: AUDIT_VERSION, symbol: 'AAA', as_of_date: asOf, valid: true, status: 'verified', errors: [], values: { close, high: close * 1.03 } });
+    const audited = asOf => ({ ...data(true), view: { ...view, pivot: close * 0.99, upper: close * 1.04 }, row: { symbol: 'AAA', chart_path: 'AAA.json', current_price: close, technical_audit: audit(asOf) } });
+    render(<StockView data={audited(DATE)} />);
+    expect(screen.getByTestId('brief-price-chart').querySelector('.bc-high52')).not.toBeNull();
+    // On screen 「高値から」 (52週 for screen readers and in the title), so the line fits a phone.
+    expect(screen.getByRole('group', { name: '最新の足の値' })).toHaveTextContent('52週高値から−2.9%');
+    expect(screen.getByTitle('52週高値から')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: '最新の足の値' })).toHaveTextContent('対ピボット+1.0%');
+    cleanup();
+    // An older audit is never today's 52-week high.
+    render(<StockView data={audited('2026-10-01')} />);
+    expect(screen.getByTestId('brief-price-chart').querySelector('.bc-high52')).toBeNull();
+    expect(screen.getByRole('group', { name: '最新の足の値' })).not.toHaveTextContent('52週高値');
+  });
+
+  it('names the contraction marks only when they are drawn, shortly on a phone, with ▼▲ explained in the 注記', () => {
+    const legsOf = high => [{ startDate: day(150), endDate: day(160), depthPct: 9, high, low: high * 0.91, bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.8 } },
+      { startDate: day(170), endDate: day(180), depthPct: 4, high, low: high * 0.96, bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.7 } }];
+    const legend = () => document.querySelector('.brief-legend').textContent;
+    render(<StockView data={data(true)} />);
+    expect(legend()).not.toContain('収縮');
+    cleanup();
+    const measured = { ...data(true), technical: { version: 'book-technical-evidence-v2', vcp: { source: 'algorithm', legs: legsOf(bars()[150].high), measurementsValid: true, depthsContract: true } } };
+    render(<StockView data={measured} />);
+    expect(legend()).toContain('収縮の安値');
+    expect(legend()).toContain('枠＝収縮');
+    cleanup();
+    render(<StockView data={measured} wide />);
+    expect(legend()).toContain('枠＝値幅の収縮');
+  });
+
+  it('keeps the 10-day and 21-day lines and their values to 1024px and wider, and prices from 1,000 without decimals below it', () => {
+    render(<StockView data={data(true)} />);
+    expect(screen.getByTestId('brief-price-chart').querySelector('.bc-ma10, .bc-ema21')).toBeNull();
+    expect(screen.getByRole('group', { name: '最新の足の値' })).not.toHaveTextContent(/10日|21日/);
+    cleanup();
+    render(<StockView data={data(true)} wide />);
+    expect(screen.getByTestId('brief-price-chart').querySelectorAll('.bc-ma10, .bc-ema21')).toHaveLength(2);
+    expect(screen.getByRole('group', { name: '最新の足の値' })).not.toHaveTextContent(/10日|21日/);
+    cleanup();
+    const scaled = bars().map(b => ({ ...b, open: b.open * 20, high: b.high * 20, low: b.low * 20, close: b.close * 20 }));
+    render(<StockView data={{ ...data(true), bars: scaled }} />);
+    const close = scaled.at(-1).close;
+    expect(screen.getByRole('group', { name: '最新の足の値' })).toHaveTextContent(`終${Math.round(close).toLocaleString('en-US')}`);
+    cleanup();
+    render(<StockView data={{ ...data(true), bars: scaled }} wide />);
+    expect(screen.getByRole('group', { name: '最新の足の値' })).toHaveTextContent(`終${close.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+  });
+
+  it('names a week by its first session on screen and spells out its sessions for screen readers', () => {
+    render(<StockView data={data(true)} />);
+    fireEvent.click(within(screen.getByRole('group', { name: '表示期間' })).getByRole('button', { name: /^週足/ }));
+    const readout = screen.getByRole('group', { name: /^最新の足（\d\d\/\d\d〜\d\d\/\d\dの週）の値$/ });
+    expect(readout.querySelector('.ro-date').textContent).toMatch(/^\d\d\/\d\d週$/);
   });
 });

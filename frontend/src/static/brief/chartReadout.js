@@ -1,6 +1,8 @@
 // The stock chart's numbers, shared by the drawing (priceChart.js) and the readout row above it: the
 // bars on the chart's interval, every moving average it draws and the volume average, then one bar's
 // values as the readout shows them. Pure; a value whose window is short is null (shown as —), never 0.
+import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
+
 const DAY = 86400000;
 const finite = Number.isFinite;
 
@@ -79,18 +81,28 @@ export function chartSeries(model) {
     .map(([length, key]) => ({ key, length, label: `${length}${unit}`, short: false, values: sma(closes, length) }));
   if (!weekly && model.short) averages.unshift({ key: 'ma10', length: 10, label: '10日', short: true, values: sma(closes, 10) }, { key: 'ema21', length: 21, label: '21日', short: true, ema: true, values: ema(closes, 21) });
   const volumeLength = weekly ? 10 : 50, average = sma(volumes, volumeLength);
-  const series = { weekly, unit, all, averages, volumeLength, vavg: average.map((_, i) => (i ? average[i - 1] : null)), latestAverage: average.at(-1) ?? null };
+  const vavg = average.map((_, i) => (i ? average[i - 1] : null));
+  // The volume axis's 平均 is the drawn line's last point: the average of the bars before the latest one.
+  const series = { weekly, unit, all, averages, volumeLength, vavg, latestAverage: vavg.at(-1) ?? null };
   cache.set(model, series);
   return series;
 }
 
 const grouped = (value, digits) => value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits });
-/** A price with 2 decimals (thousands grouped), or — when unknown. */
-export const formatPrice = value => (finite(value) ? grouped(value, 2) : '—');
+/**
+ * A price with 2 decimals (thousands grouped), or — when unknown. `compact` (a phone or tablet) drops
+ * the decimals from 1,000 up, as the chart's price tags do.
+ */
+export const formatPrice = (value, { compact = false } = {}) => (finite(value) ? grouped(value, compact && Math.abs(value) >= 1000 ? 0 : 2) : '—');
 /** A signed percent, e.g. +2.2% / −0.8% / ±0.0%, or — when unknown. */
 export const formatPercent = (value, digits = 1) => (finite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.abs(value).toFixed(digits)}%` : '—');
+// The unit is chosen after rounding, so 999,600 reads 1M, never 1000K.
 const scaled = (value, significant) => {
-  for (const [size, suffix] of [[1e9, 'B'], [1e6, 'M'], [1e3, 'K']]) if (Math.abs(value) >= size) return `${Number((value / size).toPrecision(significant))}${suffix}`;
+  const units = [[1e9, 'B'], [1e6, 'M'], [1e3, 'K'], [1, '']];
+  for (let k = units.length - 1; k >= 0; k--) {
+    const [size, suffix] = units[k], rounded = size === 1 ? Math.round(value) : Number((value / size).toPrecision(significant));
+    if (Math.abs(rounded) < 1000 || k === 0) return `${rounded}${suffix}`;
+  }
   return String(Math.round(value));
 };
 /** Volume as shares with 3 significant figures, e.g. 2.13M株 / 850K株; — when unknown. */
@@ -116,7 +128,8 @@ export function chartReadout(model, index, { certified = false, pivot = null, au
   const short = date => date.slice(5).replace('-', '/');
   return {
     index: i, latest, weekly,
-    date: weekly ? `${short(bar.start)}〜${short(bar.date)}` : short(bar.date), isoDate: bar.date,
+    // On screen a week is named by its first session (09/28週); `range` spells out its sessions.
+    date: weekly ? `${short(bar.start)}週` : short(bar.date), range: weekly ? `${short(bar.start)}〜${short(bar.date)}` : short(bar.date), isoDate: bar.date,
     open: finite(bar.open) ? bar.open : null, high: finite(bar.high) ? bar.high : null, low: finite(bar.low) ? bar.low : null, close: finite(bar.close) ? bar.close : null,
     change: previous && finite(previous.close) && previous.close > 0 && finite(bar.close) ? (bar.close / previous.close - 1) * 100 : null,
     volume: finite(bar.volume) ? bar.volume : null, volumeText: formatShares(bar.volume),
@@ -136,19 +149,22 @@ export function weeklyRangeLabel(bars) {
 /**
  * The chart's footnotes for the screen's 注記 (in place on the card at 1024px and wider). Each one is
  * stated once and only when it applies; every N is counted from the data.
- * @param {object} p { bars, interval, period, rsLead (rsLeadMarks of the certified bars, or null), gaps (shown gap days) }
+ * @param {object} p { bars, interval, period, short (the 10/21-day lines are drawn), rsLead (rsLeadMarks of
+ *   the certified bars, or null), gaps (shown gap days), sellMarks (the phone legend names ▼▲ without their meaning) }
  */
-export function chartNotes({ bars, interval, period, rsLead = null, gaps = [] }) {
+export function chartNotes({ bars, interval, period, short = shortAveragesDrawn(interval, period), rsLead = null, gaps = [], sellMarks = false }) {
   if (!bars?.length) return [];
-  const series = chartSeries({ bars, interval, short: shortAveragesDrawn(interval, period) });
+  const series = chartSeries({ bars, interval, short });
   const n = Math.min(period, series.all.length), from = series.all.length - n;
   const notes = ['—＝必要な本数に足りない値（移動平均・出来高の倍率）'];
   if (series.averages.some(a => a.short)) notes.push('10日線・21日EMAは独自計算です。');
   const partial = series.averages.filter(a => !a.short).map(a => ({ a, count: a.values.slice(from).filter(v => v !== null).length })).filter(({ count }) => count < n);
-  if (partial.length) notes.push(`${partial.map(({ a, count }) => (count ? `${a.label}線は直近${count}本のみ` : `${a.label}線は描けません`)).join('・')}（${series.weekly ? '週足' : '日足'}が足りないため）`);
+  if (partial.length) notes.push(`${partial.map(({ a, count }) => (count ? `${a.label}線は直近${count}本のみ` : `${a.label}線は描けません`)).join('・')}（${series.weekly ? '週足' : '日足'}が足りないため）。`);
+  // The lead is judged on daily bars, also under the weekly chart.
   if (rsLead?.points > 1) notes.push(rsLead.eligible > 0
-    ? `RS線の●は先行の独自判定です（RS線が直前252本の最高値以上、株価は自身の252本高値から2%以上下）。先行判定は直近${rsLead.eligible}本のみ`
-    : `RS線が${rsLead.points}本で252本に満たないため、RS線の先行（●）は判定していません。`);
-  if (gaps.length) notes.push('価格欄の淡い縦帯は窓（前日の高値・安値から前日終値の2%以上離れて始まった日・独自判定）です。');
+    ? `RS線の●は先行の独自判定です（RS線が直前252日の最高値以上、株価は自身の252日高値から${RS_LEAD_FROM_HIGH_PERCENT}%以上下）。先行判定は直近${rsLead.eligible}日のみです。`
+    : `RS線が${rsLead.points}日分で252日に満たないため、RS線の先行（●）は判定していません。`);
+  if (gaps.length) notes.push('株価チャートの淡い縦帯は窓（前日の高値・安値から前日終値の2%以上離れて始まった日・独自判定）です。');
+  if (sellMarks) notes.push('▼＝上昇の加速、▲＝崩れ（売りのサイン）。');
   return notes;
 }

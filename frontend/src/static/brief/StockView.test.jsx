@@ -65,9 +65,10 @@ describe('brief stock view shell', () => {
     render(<StockView data={data(true)} />);
     const notes = document.querySelector('.brief-screen-notes');
     expect(notes).toHaveTextContent('—＝必要な本数に足りない値');
-    expect(notes).toHaveTextContent('10日線・21日EMAは独自計算です。');
+    // The 10-day and 21-day lines are drawn at 1024px and wider only.
+    expect(notes).not.toHaveTextContent('10日線・21日EMA');
     // 200 bars: the 200-day line exists on its last bar only.
-    expect(notes).toHaveTextContent('200日線は直近1本のみ（日足が足りないため）');
+    expect(notes).toHaveTextContent('200日線は直近1本のみ（日足が足りないため）。');
     cleanup();
     render(<StockView data={data(true)} wide />);
     expect(document.querySelector('.brief-screen-notes')).toBeNull();

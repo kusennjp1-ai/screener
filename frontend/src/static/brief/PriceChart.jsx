@@ -6,12 +6,20 @@ let introducedOnce = false;
 /**
  * Large daily chart. Animates once per symbol/period; resizes redraw without animation. `onScrub` gets the
  * bar index (into the chart interval's bars) a touch, drag or the mouse selects, or null for the latest
- * bar; `selected` places the crosshair. The handle moves the stop, emphasises a contraction and selects a bar.
+ * bar; `selected` places the crosshair. While a past bar is selected, 「最新足」 (`onLatest`) sits in the
+ * plot corner with the fewest candles. The handle moves the stop, emphasises a contraction and selects a bar.
  */
-const PriceChart = forwardRef(function PriceChart({ model, period, className = '', onScrub = null, selected = null }, ref) {
+const PriceChart = forwardRef(function PriceChart({ model, period, className = '', onScrub = null, selected = null, onLatest = null }, ref) {
   const element = useRef(null), controller = useRef(null), introduced = useRef(null), stopRef = useRef(model?.stop);
-  const scrubRef = useRef(onScrub), selectedRef = useRef(selected), legRef = useRef(null);
+  const scrubRef = useRef(onScrub), selectedRef = useRef(selected), legRef = useRef(null), latest = useRef(null);
   stopRef.current = model?.stop; scrubRef.current = onScrub; selectedRef.current = selected;
+  // 「最新足」 takes the free corner of the drawn chart (its size is measured once it is shown).
+  const placeLatest = () => {
+    const button = latest.current;
+    if (!button || button.hidden) return;
+    const corner = controller.current?.freeCorner?.(button.offsetWidth || 72, button.offsetHeight || 44);
+    if (corner) { button.style.left = `${corner.x}px`; button.style.top = `${corner.y}px`; }
+  };
   const key = model ? `${model.symbol}|${model.interval || 'day'}|${period}|${model.bars?.length}|${model.bars?.at(-1)?.date}` : null;
   // Levels and overlays can arrive after the bars (detail merge); they redraw without replaying the intro.
   const content = model ? `${key}|${model.pivot}|${model.upper}|${model.entry}|${model.r2}|${model.r3}|${model.structuralLow}|${model.auditHigh}|${model.rsNewHigh}|${model.rsLine?.length}|${model.rsReason}|${model.rsLead?.dates?.length}|${model.legs?.length}|${model.legsValid}|${model.dryUpLeg?.startDate}|${(model.gaps || []).length}|${model.earnings?.date}|${model.earnings?.days}|${(model.sellMarks || []).map(m => m.date).join(',')}` : null;
@@ -30,6 +38,7 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     const abort = new AbortController();
     const animate = introduced.current !== key;
     controller.current = draw({ animate, fast: animate && introducedOnce, signal: abort.signal });
+    placeLatest();
     let painted = false;
     const frame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => { painted = true; if (animate) introducedOnce = true; }) : null;
     if (animate) introduced.current = key;
@@ -42,7 +51,7 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     // The stop moves through the controller; content changes redraw, identity changes animate.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, period]);
-  useEffect(() => { controller.current?.select(selected); }, [selected]);
+  useLayoutEffect(() => { controller.current?.select(selected); placeLatest(); }, [selected]);
   useEffect(() => {
     const target = element.current;
     if (!target || typeof ResizeObserver !== 'function' || !model?.bars?.length) return undefined;
@@ -50,13 +59,16 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     const observer = new ResizeObserver(() => {
       if (Math.abs(target.clientWidth - width) < 2) return;
       width = target.clientWidth; clearTimeout(timer);
-      timer = setTimeout(() => { controller.current = draw({ animate: false }); }, 120);
+      timer = setTimeout(() => { controller.current = draw({ animate: false }); placeLatest(); }, 120);
     });
     observer.observe(target);
     return () => { clearTimeout(timer); observer.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, period]);
-  return <div ref={element} className={`brief-chart ${className}`} data-testid="brief-price-chart" />;
+  return <div className="brief-chartbox">
+    <div ref={element} className={`brief-chart ${className}`} data-testid="brief-price-chart" />
+    {onLatest ? <button ref={latest} type="button" className="brief-latest" hidden={selected === null} onClick={onLatest}>最新足</button> : null}
+  </div>;
 });
 
 export default memo(PriceChart);

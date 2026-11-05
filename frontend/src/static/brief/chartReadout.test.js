@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { chartNotes, chartReadout, chartSeries, ema, formatPercent, formatPrice, formatShares, formatVolume, shortAveragesDrawn, weeklyBars, weeklyRangeLabel } from './chartReadout';
+import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 
 // Weekdays only, so weekly bars are whole Monday-to-Friday weeks.
 const sessions = count => { const out = []; for (let i = 0; out.length < count; i++) { const d = new Date(Date.UTC(2026, 0, 5) + i * 86400000); if (d.getUTCDay() % 6) out.push(d.toISOString().slice(0, 10)); } return out; };
@@ -20,13 +21,16 @@ describe('chart readout', () => {
     expect(readout.averages[0].value).toBeCloseTo(list.slice(-50).reduce((sum, b) => sum + b.close, 0) / 50);
     expect(chartReadout(model, 10).latest).toBe(false);
     expect(chartReadout(model, 999).index).toBe(259);
+    // The volume axis's 平均 is the same basis as the ratio: the 50 bars before the latest one.
+    expect(chartSeries(model).latestAverage).toBeCloseTo(previous50);
   });
 
-  it('labels a weekly bar with its first and last session', () => {
+  it('names a weekly bar by its first session and spells out its sessions in the range', () => {
     const list = bars(60), readout = chartReadout({ bars: list, interval: 'week' }, 0);
     const first = weeklyBars(list)[0];
     expect(readout.weekly).toBe(true);
-    expect(readout.date).toBe(`${first.start.slice(5).replace('-', '/')}〜${first.date.slice(5).replace('-', '/')}`);
+    expect(readout.date).toBe(`${first.start.slice(5).replace('-', '/')}週`);
+    expect(readout.range).toBe(`${first.start.slice(5).replace('-', '/')}〜${first.date.slice(5).replace('-', '/')}`);
     expect(readout.averages.map(a => a.label)).toEqual(['10週', '30週', '40週']);
     expect(readout.volumeBasis).toBe('10週');
   });
@@ -76,10 +80,20 @@ describe('chart readout', () => {
     expect(formatShares(1_234_567_890)).toBe('1.23B株');
     expect(formatShares(512)).toBe('512株');
     expect(formatShares(null)).toBe('—');
+    // The unit is chosen after rounding: never 1000K or 1000M.
+    expect(formatShares(999_600)).toBe('1M株');
+    expect(formatShares(999_960_000)).toBe('1B株');
+    expect(formatShares(999_400)).toBe('999K株');
+    expect(formatShares(999.6)).toBe('1K株');
+    expect(formatVolume(995_000)).not.toMatch(/1000K/);
+    expect(formatVolume(999_000)).toBe('1M');
     expect(formatVolume(4_210_000)).toBe('4.2M');
     expect(formatVolume(undefined)).toBe('—');
     expect(formatPrice(1234.5)).toBe('1,234.50');
     expect(formatPrice(null)).toBe('—');
+    // Compact (below 1024px) drops the decimals from 1,000 up, as the price tags do.
+    expect(formatPrice(1331.42, { compact: true })).toBe('1,331');
+    expect(formatPrice(999.42, { compact: true })).toBe('999.42');
     expect(formatPercent(2.234)).toBe('+2.2%');
     expect(formatPercent(-0.8)).toBe('−0.8%');
     expect(formatPercent(0)).toBe('±0.0%');
@@ -102,12 +116,17 @@ describe('the chart footnotes', () => {
     const notes = chartNotes({ bars: list, interval: 'day', period: 130, rsLead: { points: 280, eligible: 28 }, gaps: [{ date: list.at(-1).date }] });
     expect(notes[0]).toBe('—＝必要な本数に足りない値（移動平均・出来高の倍率）');
     expect(notes).toContain('10日線・21日EMAは独自計算です。');
-    expect(notes).toContain('200日線は直近81本のみ（日足が足りないため）');
-    expect(notes.some(note => note.includes('先行判定は直近28本のみ'))).toBe(true);
-    expect(notes.some(note => note.includes('窓'))).toBe(true);
+    expect(notes).toContain('200日線は直近81本のみ（日足が足りないため）。');
+    expect(notes).toContain(`RS線の●は先行の独自判定です（RS線が直前252日の最高値以上、株価は自身の252日高値から${RS_LEAD_FROM_HIGH_PERCENT}%以上下）。先行判定は直近28日のみです。`);
+    expect(notes).toContain('株価チャートの淡い縦帯は窓（前日の高値・安値から前日終値の2%以上離れて始まった日・独自判定）です。');
+    expect(notes.every(note => note.endsWith('。') || note.startsWith('—'))).toBe(true);
+    // Without the short lines (below 1024px) their note goes; the phone legend's ▼▲ get their meaning here.
+    const phone = chartNotes({ bars: list, interval: 'day', period: 130, short: false, sellMarks: true });
+    expect(phone).not.toContain('10日線・21日EMAは独自計算です。');
+    expect(phone).toContain('▼＝上昇の加速、▲＝崩れ（売りのサイン）。');
     const year = chartNotes({ bars: bars(460), interval: 'day', period: 250 });
     expect(year).toEqual(['—＝必要な本数に足りない値（移動平均・出来高の倍率）']);
-    expect(chartNotes({ bars: list, interval: 'day', period: 130, rsLead: { points: 200, eligible: 0 } }).some(note => note.includes('252本に満たない'))).toBe(true);
+    expect(chartNotes({ bars: list, interval: 'day', period: 130, rsLead: { points: 200, eligible: 0 } })).toContain('RS線が200日分で252日に満たないため、RS線の先行（●）は判定していません。');
     expect(chartNotes({ bars: [], interval: 'day', period: 130 })).toEqual([]);
   });
 });

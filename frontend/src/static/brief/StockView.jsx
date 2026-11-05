@@ -3,8 +3,8 @@ import { BOOK_TECHNICAL_VERSION, buildBookTechnicalEvidence } from '../bookTechn
 import { ScreenNotes } from './briefPrimitives';
 import useSessionState from './useSessionState';
 import { gapDays, rsLeadMarks, rsLineNewHigh, stageFromBars } from './briefChartModel';
-import { CHART_RANGES as RANGES, chartNotes } from './chartReadout';
-import { stockSells } from './briefSell';
+import { CHART_RANGES as RANGES, chartNotes, shortAveragesDrawn } from './chartReadout';
+import { sellMarks, stockSells } from './briefSell';
 import { planLevels } from './positionSizing';
 import StockVerdict from './StockVerdict';
 import TemplateCard from './StockTemplateCard';
@@ -61,8 +61,9 @@ export default function StockView({ data, header = null, wide = false, market = 
   const notes = useMemo(() => {
     if (!bars?.length) return [];
     const shown = interval === 'day' ? new Set(bars.slice(-period).map(b => b.date)) : null;
-    return chartNotes({ bars, interval, period, rsLead, gaps: shown ? gaps.filter(g => shown.has(g.date)) : [] });
-  }, [bars, interval, period, rsLead, gaps]);
+    // The 10/21-day lines are drawn at 1024px and wider only; below that the legend names ▼▲ without their meaning.
+    return chartNotes({ bars, interval, period, short: wide && shortAveragesDrawn(interval, period), rsLead, gaps: shown ? gaps.filter(g => shown.has(g.date)) : [], sellMarks: !wide && sellMarks(sells).length > 0 });
+  }, [bars, interval, period, rsLead, gaps, wide, sells]);
   if (!view) return <p className="brief-note brief-pad" role="status">銘柄データを読み込み中…</p>;
   return <div className="brief-stock">
     {header}

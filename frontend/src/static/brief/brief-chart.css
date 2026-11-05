@@ -1,35 +1,44 @@
 /* Track A (the stock chart). Loaded after brief.css; an existing rule changes only by an override here
    with equal or higher specificity. */
 
-/* The card: the period segment and the readout above the chart. */
-.brief-chartcard-head { display: flex; align-items: center; gap: 8px 12px; min-width: 0; }
+/* The card's head: the period segment, then the readout (beside it at 1024px and wider, under it below). */
+.brief-chartcard-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; }
 .brief-chartcard .brief-periods { padding-top: 0; flex-wrap: nowrap; }
 .brief-chartcard .brief-periods button { min-height: 32px; padding: 0 14px; white-space: nowrap; }
-.brief-chartcard .brief-periods-hint { display: none; margin-left: auto; }
-@media (hover: hover) and (min-width: 1024px) { .brief-chartcard .brief-periods-hint { display: inline; } }
 @media (max-width: 1023px) {
-  .brief-chartcard .brief-periods { flex: 1 1 auto; min-width: 0; }
+  .brief-chartcard-head { margin-bottom: -4px; }
+  .brief-chartcard .brief-periods { flex: 1 1 100%; min-width: 0; }
   .brief-chartcard .brief-periods button { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 4px; font-size: 12px; }
+  /* The weekly button carries its week count: a larger share of the row. */
+  .brief-chartcard .brief-periods button.brief-period-week { flex-grow: 1.4; }
+}
+/* On the narrowest phones the week count takes a second line, without its brackets. */
+@media (max-width: 359px) {
+  .brief-chartcard .brief-periods button.brief-period-week { line-height: 14px; white-space: normal; }
+  .brief-chartcard .brief-weeks { display: block; }
+  .brief-chartcard .brief-paren { display: none; }
 }
 
-.brief-readout-row { position: relative; min-width: 0; margin: -4px 0; }
-.brief-readout { margin: 0; display: grid; gap: 0; min-width: 0; font-size: 12px; line-height: 16px; color: var(--text); font-variant-numeric: tabular-nums; }
-.brief-readout .ro-line { display: flex; flex-wrap: wrap; column-gap: 5px; min-width: 0; }
-.brief-readout .ro-item { white-space: nowrap; }
+.brief-readout { margin: 0; display: grid; gap: 0; flex: 1 1 100%; min-width: 0; font-size: 12px; line-height: 16px; color: var(--text); font-variant-numeric: tabular-nums; }
+.brief-readout .ro-line { display: flex; flex-wrap: wrap; column-gap: 4px; min-width: 0; }
+.brief-readout .ro-item, .brief-readout .ro-group { white-space: nowrap; }
+.brief-readout .ro-group { display: inline-flex; column-gap: 4px; }
 .brief-readout i { font-style: normal; color: var(--text-3); }
 .brief-readout .ro-date { font-weight: 700; }
 .brief-readout .ro-change { font-weight: 700; }
 .brief-readout .ro-change.is-up { color: color-mix(in srgb, var(--up) 72%, var(--text)); }
 .brief-readout .ro-change.is-down { color: color-mix(in srgb, var(--down) 72%, var(--text)); }
 .brief-readout .ro-ma50 i { color: var(--wait); }
-.brief-readout .ro-ma10 i { color: var(--ext); }
-.brief-readout .ro-ema21 i { color: var(--accent); }
 @media (min-width: 1024px) {
-  .brief-readout { display: flex; flex-wrap: wrap; column-gap: 10px; }
+  /* Beside the periods: two rows of 16px fit the 32px buttons, so the chart starts right under them. */
+  .brief-readout { display: flex; flex-wrap: wrap; flex: 1 1 0; column-gap: 10px; }
+  .brief-readout .ro-line { display: contents; }
 }
 @media (max-width: 520px) { .brief-card.brief-chartcard { padding: 12px; } }
-/* 「最新足」 returns the readout to the latest bar: over the chart's top-right corner, clear of the axis. */
-.brief-latest { position: absolute; z-index: 3; top: calc(100% + 12px); right: 70px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 14%, transparent); }
+/* 「最新足」 returns the readout to the latest bar: in the plot corner with the fewest candles (PriceChart places it). */
+.brief-chartbox { position: relative; min-width: 0; }
+.brief-latest { position: absolute; z-index: 3; top: 12px; left: 4px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 14%, transparent); }
+.brief-latest[hidden] { display: none; }
 .brief-latest:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (min-width: 1024px) { .brief-latest { min-height: 28px; } }
 
@@ -44,7 +53,7 @@
 .brief-legend i.lg-pivot { border-top-color: var(--zone); }
 .brief-legend i.lg-stop { border-top-color: var(--neg); }
 .brief-legend i.lg-lows { border-top-color: var(--text-2); border-top-style: dotted; }
-@media (max-width: 1023px) { .brief-legend .lg-shortitem { display: none; } }
+.brief-legend .lg-sellglyph { margin-right: 3px; font-weight: 400; color: var(--ext); letter-spacing: 1px; }
 .brief-chart-notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; font-size: 12px; line-height: 1.6; color: var(--text-3); }
 
 /* The chart's lines and marks. */
@@ -69,6 +78,9 @@
 .bc-high52 { stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 6 3; opacity: .8; }
 .bc-malabel-ma50 { fill: var(--wait); } .bc-malabel-ma150, .bc-malabel-ma200 { fill: var(--text-3); }
 .bc-malabel-ma10 { fill: var(--ext); } .bc-malabel-ema21 { fill: var(--accent); }
+.bc-maleader { stroke-width: 1; opacity: .7; } .bc-maleader-ma50 { stroke: var(--wait); } .bc-maleader-ma150, .bc-maleader-ma200 { stroke: var(--text-3); }
+.bc-maleader-ma10 { stroke: var(--ext); } .bc-maleader-ema21 { stroke: var(--accent); }
+.bc-volkey { fill: var(--up); }
 .bc-ttext { fill: var(--text-2); }
 .bc-leader { stroke: var(--text-3); stroke-width: 1; }
 .bc-lasttag-fill { fill: var(--surface); stroke: var(--text); stroke-width: 1; }
