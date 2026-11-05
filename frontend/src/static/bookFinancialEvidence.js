@@ -43,7 +43,19 @@ export function yoyDetail(points, end, instant = false) {
   return { value: (now.value / bases[0].value - 1) * 100, reason: null, base: bases[0] };
 }
 const yoy = (points, end, instant = false) => yoyDetail(points, end, instant).value;
-function rises(values) { return values.every(finite) ? values.slice(1).every((v, i) => v > values[i]) : null; }
+/**
+ * Three-valued "rises three times" over consecutive values (Kleene logic): fail as soon as any known
+ * later value is at or below a known earlier one (a missing value in between cannot rescue it), pass
+ * only when every value is known and each one is above the one before, otherwise unknown. `pair` names
+ * the two indices that settled a fail (the earliest later value, against the nearest earlier one).
+ */
+export function risesDetail(values) {
+  for (let j = 1; j < values.length; j++) {
+    if (!finite(values[j])) continue;
+    for (let i = j - 1; i >= 0; i--) if (finite(values[i]) && values[j] <= values[i]) return { state: 'fail', pair: [i, j] };
+  }
+  return { state: values.every(finite) ? 'pass' : 'unknown', pair: null };
+}
 function marginDetail(revenue, income) {
   if (!revenue || !income) return { value: null, reason: 'not_reported' };
   if (!(revenue.value > 0)) return { value: null, reason: 'nonpositive_revenue' };
@@ -77,10 +89,17 @@ export function bookFinancialEvidence(data, symbol, date) {
   const consecutive = last.length === 4 && last.slice(1).every((p, i) => days(p.end, last[i].end) >= 70 && days(p.end, last[i].end) <= 110);
   result.consecutive = consecutive;
   const comparable = consecutive && !result.stale;
-  result.epsAcceleration = state(comparable ? rises(last.map(p => p.epsYoY)) : null);
-  result.salesAcceleration = state(comparable ? rises(last.map(p => p.salesYoY)) : null);
+  // `settled` names the two quarters behind each known failure (their period ends and values).
+  result.settled = {};
+  const judge = (name, key) => {
+    const value = comparable ? risesDetail(last.map(p => p[key])) : { state: 'unknown', pair: null };
+    if (value.pair) result.settled[name] = { from: { end: last[value.pair[0]].end, value: last[value.pair[0]][key] }, to: { end: last[value.pair[1]].end, value: last[value.pair[1]][key] } };
+    return value.state;
+  };
+  result.epsAcceleration = judge('epsAcceleration', 'epsYoY');
+  result.salesAcceleration = judge('salesAcceleration', 'salesYoY');
   // Original Figure 8.10 shows NET MARGIN LEVELS, not margin YoY growth.
-  result.marginImprovement = state(comparable ? rises(last.map(p => p.margin)) : null);
+  result.marginImprovement = judge('marginImprovement', 'margin');
   // Three-valued AND: one known failure fails Code 33; a pass needs all three
   // known passes; anything else stays unknown. Missing data never passes.
   const trio = [result.epsAcceleration, result.salesAcceleration, result.marginImprovement];

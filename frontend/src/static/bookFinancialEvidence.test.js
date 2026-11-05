@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bookFinancialEvidence, yoyDetail } from './bookFinancialEvidence';
+import { bookFinancialEvidence, risesDetail, yoyDetail } from './bookFinancialEvidence';
 import { secPoint, secRecord } from '../test/fixtures/secRecord';
 function fixture() {
   const periods = ['2024-03-31','2024-06-30','2024-09-30','2024-12-31','2025-03-31','2025-06-30','2025-09-30','2025-12-31'];
@@ -144,5 +144,35 @@ describe('reasons, fiscal fourth quarters and three-valued Code 33', () => {
     expect(Object.fromEntries(keys.map(key => [key, b[key]]))).toEqual(Object.fromEntries(keys.map(key => [key, a[key]])));
     expect(a.rows).toHaveLength(8);
     expect(a.balanceWarnings.length).toBeGreaterThan(0);
+  });
+});
+
+describe('three-valued "rises" (Kleene)', () => {
+  it('fails on a known fall even beside a gap, passes only when every step is known and rising', () => {
+    expect(risesDetail([30, 20, null, 50])).toEqual({ state: 'fail', pair: [0, 1] });
+    expect(risesDetail([10, null, 30, 40])).toEqual({ state: 'unknown', pair: null });
+    expect(risesDetail([10, 20, 30, 40])).toEqual({ state: 'pass', pair: null });
+    expect(risesDetail([null, null, null, null])).toEqual({ state: 'unknown', pair: null });
+    // A fall across a gap still settles it: 40 then (unknown) then 35.
+    expect(risesDetail([10, 40, null, 35])).toEqual({ state: 'fail', pair: [1, 3] });
+    // Equal is not a rise.
+    expect(risesDetail([10, 20, 20, 30])).toEqual({ state: 'fail', pair: [1, 2] });
+  });
+
+  it('turns a known fall next to a missing quarter into 未達 and names the two quarters, never a new pass', () => {
+    const date = '2026-02-01', report = record => bookFinancialEvidence(record, 'TEST', date);
+    // EPS growth: +10, +20, (the newest EPS is missing), and sales growth falls from +60% to +30% with the margin missing in between.
+    const record = secRecord({ revenue: [100, 100, 100, 100, 110, 130, 160, 130], netIncome: [10, 10, 10, 10, 11, 14.3, null, 26] });
+    record.quarterly.eps.pop();
+    const value = report(record);
+    expect(value.rows.map(row => row.salesYoY?.toFixed(0))).toEqual([undefined, undefined, undefined, undefined, '10', '30', '60', '30']);
+    expect(value).toMatchObject({ epsAcceleration: 'unknown', salesAcceleration: 'fail', code33: 'fail' });
+    expect(value.settled.salesAcceleration).toEqual({ from: { end: '2025-09-30', value: expect.closeTo(60, 6) }, to: { end: '2025-12-31', value: expect.closeTo(30, 6) } });
+    expect(value.settled).not.toHaveProperty('epsAcceleration');
+    // The same quarters with nothing falling stay unknown (the gap is never bridged into a pass).
+    const open = secRecord({ netIncome: [10, 10, 10, 10, 11, 14.3, null, 26] });
+    expect(report(open)).toMatchObject({ marginImprovement: 'unknown', code33: 'unknown', settled: {} });
+    // The default fixture keeps its pass; no fixture gains one.
+    expect(report(secRecord())).toMatchObject({ code33: 'pass', settled: {} });
   });
 });

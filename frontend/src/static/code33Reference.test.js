@@ -38,4 +38,13 @@ describe('Yahoo reference Code 33', () => {
     expect(code33Layered({ valid: true, code33: 'unknown' }, accelerating(), '2026-02-01')).toMatchObject({ state: 'pass', source: 'yahoo', label: '参考：Yahoo四半期値' });
     expect(code33Layered(null, null, '2026-02-01')).toEqual({ state: 'unknown', source: null, label: null });
   });
+
+  it('fails a known fall beside a missing quarter (three-valued), and never gains a pass', () => {
+    // Sales growth +10, +30, +60, then +30: a known fall, although the newest EPS is missing.
+    const fall = history([1, 1, 1, 1, 1.1, 1.2, 1.4, null], [100, 100, 100, 100, 110, 130, 160, 130], [10, 10, 10, 10, 11, 14.3, 19.2, 26]);
+    expect(code33Reference(fall, '2026-02-01')).toMatchObject({ state: 'fail', eps: 'unknown', sales: 'fail' });
+    // Margin levels 10, 11, (missing), 20: nothing known falls, so it stays unknown.
+    const open = history([1, 1, 1, 1, 1.1, 1.2, 1.4, 1.8], [100, 100, 100, 100, 110, 130, 160, 200], [10, 10, 10, 10, 11, 14.3, null, 26]);
+    expect(code33Reference(open, '2026-02-01')).toMatchObject({ state: 'unknown', margin: 'unknown', eps: 'pass', sales: 'pass' });
+  });
 });
