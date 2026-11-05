@@ -76,11 +76,11 @@ describe('the conclusion says why there is no buy', () => {
   };
   // The analysis day's afternoon in New York: the earnings countdown runs from the analysis date.
   const NOW = Date.parse(`${DAY}T19:00:00Z`);
-  const conclusionOf = ({ row = audited(), assessment, market = OPEN, plan, template, judged = null, now = NOW } = {}) => {
+  const conclusionOf = ({ row = audited(), assessment, market = OPEN, plan, template, judged = null, now = NOW, technical = null, sells = null } = {}) => {
     const t = template === undefined ? trendTemplate(row) : template;
     const a = assessment || { qualified: t.qualified, passed: t.passed + (t.integrity?.state === 'pass' ? 1 : 0), failed: t.failed, unknown: t.unknown, total: 9 };
     const view = candidateView({ row, assessment: a }, DAY);
-    render(<StockVerdict view={view} plan={plan === undefined ? positionPlan(view, {}, { market, template: t }) : plan} stage={null} technical={null} bars={null} judged={judged} template={t} rsHigh={false} financial={null} row={row} sells={null} diagnostics={null} market={market} now={now} />);
+    render(<StockVerdict view={view} plan={plan === undefined ? positionPlan(view, {}, { market, template: t }) : plan} stage={null} technical={technical} bars={null} judged={judged} template={t} rsHigh={false} financial={null} row={row} sells={sells} diagnostics={null} market={market} now={now} />);
     return screen.getByTestId('brief-conclusion');
   };
   const title = card => card.querySelector('strong').textContent, sub = card => card.querySelector('.brief-call-status p').textContent;
@@ -231,5 +231,21 @@ describe('the conclusion says why there is no buy', () => {
     expect(title(conclusionOf({ row: audited({ price: 103, change: 1.5 }), judged: bars }))).toBe('買いゾーン内（9/30に上抜け・2営業日前）');
     cleanup();
     expect(title(conclusionOf({ row: audited({ price: 103, change: 1.5 }) }))).toBe('買いゾーン内（上抜け後）');
+  });
+
+  // Track A's footprint says when the base was already broken out of (I4, requested by Track A).
+  it('keeps the VCP chip green only while the base still contracts, or for a breakout on the analysis date', () => {
+    const vcp = base => ({ vcp: { measurementsValid: true, depthsContract: true, volumeContracts: true, droppedLegs: 0,
+      legs: [{ depthPct: 25, startDate: '2026-07-01', endDate: '2026-07-31' }, { depthPct: 12, startDate: '2026-08-01', endDate: '2026-08-31' }, { depthPct: 6, startDate: '2026-09-01', endDate: '2026-09-25' }],
+      base: { startDate: '2026-07-01', endDate: '2026-09-28', ...base } } });
+    const chip = card => [...card.querySelectorAll('.brief-tags .brief-chip')].find(node => node.textContent.startsWith('VCP'));
+    const contracting = chip(conclusionOf({ technical: vcp({ brokeOut: false }) }));
+    expect([contracting.textContent, contracting.classList.contains('tone-zone')]).toEqual(['VCP 12週 25/6 3T', true]);
+    cleanup();
+    const broken = chip(conclusionOf({ technical: vcp({ brokeOut: true, breakoutDate: '2026-09-28' }) }));
+    expect([broken.textContent, broken.classList.contains('tone-zone')]).toEqual(['VCP 13週 25/6 3T・上抜け済み（9/28）', false]);
+    cleanup();
+    const today = chip(conclusionOf({ technical: vcp({ brokeOut: true, endDate: DAY, breakoutDate: DAY }) }));
+    expect([today.textContent, today.classList.contains('tone-zone')]).toEqual(['VCP 13週 25/6 3T・上抜け済み（10/2）', true]);
   });
 });

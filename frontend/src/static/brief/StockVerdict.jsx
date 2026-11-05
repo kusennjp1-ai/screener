@@ -130,7 +130,9 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
   const shareNote = underOne ? (levels.binding === 'cap' ? '1銘柄の上限超' : 'リスク上限超') : <>リスク {risk || DASH}</>;
   const chips = [
     [stage ? `ステージ${stage.value}${stage.computed ? '（日足から算出）' : ''}` : 'ステージ 未確認', stage?.value === 2 ? 'zone' : stage ? 'ext' : ''],
-    [print ? print.text : 'VCP 未確認', print?.contracting === true ? 'zone' : ''],
+    // Green only while the base still contracts: a base already broken out of is history (「・上抜け済み（M/D）」),
+    // unless the breakout is the analysis day's own event.
+    [print ? print.text : 'VCP 未確認', print?.contracting === true && (!print.brokeOut || print.breakoutDate === view.asOf) ? 'zone' : ''],
     [`RS推計 ${rsShown(view.rs)}`, finite(view.rs) && view.rs >= 70 ? 'zone' : ''],
     // RS line at a new high while the price is still below its own high: the RS line is leading.
     ...(rsHigh ? [[finite(view.fromHigh) && view.fromHigh >= RS_LEAD_FROM_HIGH_PERCENT ? `RS線 新高値（株価に先行・高値の${view.fromHigh.toFixed(0)}%下）` : 'RS線 新高値', 'zone']] : []),
