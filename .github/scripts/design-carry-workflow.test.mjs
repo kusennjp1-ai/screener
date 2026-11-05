@@ -141,7 +141,6 @@ test('every stage keeps its exact condition',()=>{
     ['name: Prepare the certified financial candidate',null],['name: Refuse a financial candidate without a brief financial-display contract',"steps.financial.outputs.candidate == 'true'"],
     ['name: Restore checked input and prepare the carry comparison data',null],
     ['name: Diagnostic market-regime study (never a gate)',null],
-    ['name: Retain the market-regime study output for 90 days',null],
     ['name: Build the current UI and verify its packed transport',null],['name: Measure the brief screens, accessibility and CPU 4x',null],
     ['name: Require every capture, no objective failure, and reviewed scores or the owner waiver','(always())'],
     ['name: Package UNAPPROVED financial diagnostics after unsuccessful Design',"((failure() || cancelled()) && steps.financial.outcome == 'success' && steps.financial.outputs.candidate == 'true')"],
@@ -150,7 +149,7 @@ test('every stage keeps its exact condition',()=>{
     ['name: Retain the exact tested financial candidate',"(success() && steps.financial.outputs.candidate == 'true' && env.DESIGN_CARRY_PREVIEW_PROVENANCE == '')"],
     ['name: Preserve all results even when a budget fails','(always())'],
   ];
-  assert.equal(guards.length,18);
+  assert.equal(guards.length,17);
   for(const [header,expected]of guards)expectCondition(header,expected);
   assert.equal(stepBlocks.filter(block=>/^      - name: /.test(block)).length,guards.length-2);
 });
@@ -178,15 +177,12 @@ test('the market-regime study is a diagnostic: restored input only, runner-temp 
   for(const match of targets)assert.match(match[1],/^"\$(?:STUDY_OUT\/|GITHUB_STEP_SUMMARY")/,match[0]);
   assert.match(body,/^          study \|\| echo '::warning title=Market-regime study unavailable::Diagnostic only; the Design result is unaffected\.'$/m);
   assert.match(step('name: Preserve all results even when a budget fails'),/^            \$\{\{ runner.temp \}\}\/market-regime-study\/$/m);
-  // The study files alone, in their own 90-day artifact, right after the study;
-  // the one preserved Design artifact keeps its copy and its 14 days.
-  const retain=step('name: Retain the market-regime study output for 90 days');
-  assert.equal(retain,['      - name: Retain the market-regime study output for 90 days','        uses: actions/upload-artifact@v4','        with:',
-    '          name: market-regime-study-${{ github.run_id }}-${{ github.run_attempt }}','          path: ${{ runner.temp }}/market-regime-study/','          retention-days: 90','          if-no-files-found: warn'].join('\n'));
-  assert.ok(workflow.indexOf('      - name: Retain the market-regime study output for 90 days')>study&&workflow.indexOf('      - name: Retain the market-regime study output for 90 days')<build);
-  assert.equal(stepBlocks[stepBlocks.indexOf(body)+1],retain,'immediately after the study step');
-  assert.match(step('name: Preserve all results even when a budget fails'),/\n          retention-days: 14\n?$/);
-  assert.equal((workflow.match(/\$\{\{ runner.temp \}\}\/market-regime-study\//g)||[]).length,2,'the Design artifact and the study artifact');
+  // The one preserved Design artifact is the study's only upload (no new failure
+  // point before the build); it is kept 90 days so market-study-archive.yml can
+  // copy the study to a release.
+  assert.match(step('name: Preserve all results even when a budget fails'),/\n          retention-days: 90\n?$/);
+  assert.equal((workflow.match(/\$\{\{ runner.temp \}\}\/market-regime-study\//g)||[]).length,1,'only the Design artifact holds the study');
+  assert.equal(stepBlocks[stepBlocks.indexOf(body)+1].split('\n')[0],'      - name: Build the current UI and verify its packed transport','no upload between the study and the build');
   // Shell-only fixture with the runner's bash flags: stub node/python executables, no provider request.
   const script=body.slice(body.indexOf('        run: |\n')+'        run: |\n'.length).replace(/^          /gm,'');
   const dir=mkdtempSync(join(tmpdir(),'market-regime-step-'));

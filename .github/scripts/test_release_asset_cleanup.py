@@ -110,6 +110,16 @@ class ReleaseAssetCleanupGuard(unittest.TestCase):
         self.assertTrue("market-regime-study-v2-run-".startswith("market-regime-study-"))
         self.assertNotIn("delete-asset", archive)
 
+    def test_study_archive_contracts_stay_registered_in_ci(self):
+        # ci.yml runs design-carry-workflow.test.mjs, whose import is the only way
+        # market-study-archive-workflow.test.mjs runs; the guard sits here, in a
+        # file ci.yml lists itself, so deleting the import fails CI.
+        carry = (REPO / ".github/scripts/design-carry-workflow.test.mjs").read_text()
+        self.assertIn("import './market-study-archive-workflow.test.mjs';", carry.splitlines())
+        self.assertTrue((REPO / ".github/scripts/market-study-archive-workflow.test.mjs").is_file())
+        ci = (REPO / ".github/workflows/ci.yml").read_text()
+        self.assertRegex(ci, r"node --test [^\n]*\.github/scripts/design-carry-workflow\.test\.mjs")
+
     def test_guard_is_registered_in_exact_main_ci(self):
         ci = (REPO / ".github/workflows/ci.yml").read_text()
         self.assertIn("python3 -m unittest discover -s .github/scripts -p test_release_asset_cleanup.py", ci)
