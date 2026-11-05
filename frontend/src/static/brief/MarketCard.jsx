@@ -351,7 +351,8 @@ export default function MarketCard({ market, marketLoading = false, trends, date
       </Group>))}
     </div>
     {switcher && history && panel('history', history)}
-    <p className="brief-note">分配日・フォロースルーデー・ステージ・トレンドテンプレート数・RS推計は公開日足からの独自集計で、IBDの公式値ではありません。注意サインの基準もこのアプリの独自判定です。</p>
+    {/* TT達成数 is the row's own name; the line keeps three lines at 375px in a full-width (CJK) font. */}
+    <p className="brief-note">分配日・フォロースルーデー・ステージ・TT達成数・RS推計は公開日足からの独自集計で、IBDの公式値ではありません。注意サインの基準も独自判定です。</p>
     <ScreenNotes id="market" wide={!switcher} notes={notes} />
   </section>;
 }

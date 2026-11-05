@@ -35,7 +35,7 @@ describe('brief market card: market tab', () => {
     expect(screen.getAllByRole('heading', { level: 3 }).map(h => h.textContent)).toEqual(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
     expect(screen.queryByRole('note')).toBeNull();
     expect(document.querySelector('.brief-fact-asof')).toBeNull();
-    expect(screen.getByText(/独自集計で、IBDの公式値ではありません。注意サインの基準もこのアプリの独自判定です。/)).toBeInTheDocument();
+    expect(screen.getByText(/^分配日・フォロースルーデー・ステージ・TT達成数・RS推計は公開日足からの独自集計で、IBDの公式値ではありません。注意サインの基準も独自判定です。$/)).toBeInTheDocument();
   });
 
   it('shows each row as a value, its one-month change and a status slot that is empty unless a rule fired', () => {
