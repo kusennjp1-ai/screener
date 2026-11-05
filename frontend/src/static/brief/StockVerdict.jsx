@@ -3,7 +3,7 @@ import { conditionCompactLabel, conditionCompactText } from '../missingCondition
 import { code33ChipView } from '../fundamentalsExplain.js';
 import { meterPercent } from './briefNav';
 import { footprint, RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
-import { sellChipView } from './briefSell';
+import { isBreakdown, sellChipView } from './briefSell';
 import { breakoutEvent, candidateMarketGate, earningsCall, POSITION_NAMES, rsShown } from './briefCandidate';
 
 const finite = Number.isFinite;
@@ -64,10 +64,14 @@ function templateGate(view, template) {
  * `reference` marks the meter and the three tiles 参考 (the card never says hold off and gives an order size
  * in the same glance). `now` dates the earnings line from the later of the analysis date and today.
  */
-function conclusion(view, template, market, judged, now) {
+function conclusion(view, template, market, judged, now, sells) {
   const call = positionCall(view, judged);
   const tt = templateGate(view, template);
   if (tt) return { tone: 'neutral', title: tt.title, sub: <>{tt.note}{positionLine(view)}</>, reference: true };
+  // A broken buy setup (a heavy-volume 50-day break still under the line, or the book's combined warning) is
+  // never a buy-side call, whatever the position: a neutral line names the check, the position moves under it.
+  const broken = Array.isArray(sells?.weakness) ? sells.weakness.find(isBreakdown) : null;
+  if (broken) return { tone: 'neutral', title: '買いの前提が崩れた（独自判定）', sub: <><Unit>{broken.headline || broken.label}</Unit>。{positionLine(view)}</>, reference: true };
   // The market and the earnings date only stop what would otherwise invite a buy: the buy zone and near the pivot.
   if (view.position !== 'zone' && view.position !== 'near') return call;
   const gate = candidateMarketGate(market), earnings = earningsCall(view, now);
@@ -116,7 +120,7 @@ const Qualifier = ({ text }) => text ? <span className="brief-tilequal">{text}</
  * its rules) and `market` the market verdict (prepared.market).
  */
 export default function StockVerdict({ view, plan, stage, technical, bars, judged = null, template = null, rsHigh, financial, row, sells, diagnostics, market = null, now = Date.now() }) {
-  const { tone, title, sub, reference = false } = conclusion(view, template, market, judged, now);
+  const { tone, title, sub, reference = false } = conclusion(view, template, market, judged, now, sells);
   const print = footprint(technical, bars);
   const code33 = code33ChipView(financial), sell = sellChipView(sells);
   const levels = plan && !plan.blocked ? plan : null;
@@ -142,7 +146,8 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
     ...(rsHigh ? [[finite(view.fromHigh) && view.fromHigh >= RS_LEAD_FROM_HIGH_PERCENT ? `RS線 新高値（株価に先行・高値の${view.fromHigh.toFixed(0)}%下）` : 'RS線 新高値', 'zone']] : []),
     [code33.text, code33.tone],
     ...(Number.isInteger(row?.ibd_group_rank) ? [[`業種 ${row.ibd_group_rank}位（推計）`, row.ibd_group_rank <= 40 ? 'zone' : '']] : []),
-    ...(sell ? [[sell.text, sell.tone]] : []),
+    // The conclusion has the room for the full sentence (the rows show its short form).
+    ...(sell ? [[sell.full ?? sell.text, sell.tone]] : []),
     ...(diagnostics?.valid && diagnostics.powerPlay?.mechanicalMatch ? [['パワープレー候補（機械的探索）', 'wait']] : []),
     [earnings ? earnings.chip : '決算日 未確認', earnings?.soon ? 'ext' : ''],
   ];

@@ -241,6 +241,27 @@ describe('the conclusion says why there is no buy', () => {
     expect(title(conclusionOf({ row: audited({ price: 103, change: 1.5 }) }))).toBe('買いゾーン内（上抜け後）');
   });
 
+  // Track E's sell checks (I4, requested by Track E): a broken setup is never a buy-side call, and the chip says it in full.
+  it('calls a broken setup neutral whatever the position, names its check, and gives the chip its full sentence', () => {
+    const ma50 = state => ({ key: 'ma50', label: '出来高を伴う50日線割れ（1.4倍以上）', state, date: '2026-09-22', detail: '9/22 に出来高 2.2倍で割れ、以降50日線の下（9営業日）', ...(state === 'hit' ? { headline: '50日線割れ（9/22・出来高2.2倍）' } : {}) });
+    const sells = state => ({ strength: [], weakness: [ma50(state)], hits: state === 'hit' ? 1 : 0, breakdownHits: state === 'hit' ? 1 : 0, cautions: state === 'caution' ? 1 : 0, unknowns: 0 });
+    const card = conclusionOf({ sells: sells('hit') });
+    expect(card.className).toContain('tone-neutral');
+    expect([title(card), sub(card)]).toEqual(['買いの前提が崩れた（独自判定）', '50日線割れ（9/22・出来高2.2倍）。位置は参考：買いゾーン・ピボット比 +1.0%。']);
+    expect(quals(card)).toEqual(['参考', '参考', '参考']);
+    expect(meter(card).classList.contains('is-reference')).toBe(true);
+    expect([...card.querySelectorAll('.brief-tags .brief-chip')].map(node => node.textContent)).toContain('買いの前提が崩れた／保有なら売りのサイン（独自判定）');
+    cleanup();
+    // The book's combined warning is a broken setup too; it is named by its label.
+    const book = { key: 'book', label: '20日線割れ・3日連続の安値切り下げ・大商い（書籍の複合警告）', state: 'hit', detail: '20日線割れ' };
+    expect(sub(conclusionOf({ sells: { ...sells('clear'), weakness: [ma50('clear'), book] } }))).toBe('20日線割れ・3日連続の安値切り下げ・大商い（書籍の複合警告）。位置は参考：買いゾーン・ピボット比 +1.0%。');
+    cleanup();
+    // A light break still under the line is a caution: the buy call stays, the chip says 50日線の下.
+    const caution = conclusionOf({ sells: sells('caution') });
+    expect([title(caution), caution.className.includes('tone-zone')]).toEqual(['10/2に上抜け・出来高1.60×', true]);
+    expect([...caution.querySelectorAll('.brief-tags .brief-chip')].map(node => node.textContent)).toContain('50日線の下（大商いの割れは未確認）');
+  });
+
   // Track A's footprint says when the base was already broken out of (I4, requested by Track A).
   it('keeps the VCP chip green only while the base still contracts, or for a breakout on the analysis date', () => {
     const vcp = base => ({ vcp: { measurementsValid: true, depthsContract: true, volumeContracts: true, droppedLegs: 0,
