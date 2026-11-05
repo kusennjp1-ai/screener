@@ -1,0 +1,17 @@
+// Daily brief buy decision: the stock's conclusion, on synthetic data.
+import { test, expect } from '@playwright/test';
+import { openBrief, VIEWPORTS } from './brief-fixture.js';
+
+for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} ${device.viewport.width}px`, () => {
+  test.use(device);
+  const phone = name === 'phone';
+
+  test('a focus candidate at the pivot with 1.6× volume is a breakout in the buy zone', async ({ page }) => {
+    const target = phone ? 'ZZNV' : 'ZZKS';
+    const { errors } = await openBrief(page, `#/brief/stock/${target}`);
+    // The verdict: price at the pivot with 1.6× volume (synthetic audit) is a breakout in the buy zone.
+    await expect(page.getByTestId('brief-conclusion')).toHaveClass(/tone-zone/);
+    await expect(page.getByTestId('brief-conclusion')).toContainText('ピボットを出来高を伴って上抜け');
+    expect(errors).toEqual([]);
+  });
+});
