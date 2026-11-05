@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { secPoint, secRecord, secUnavailable } from '../src/test/fixtures/secRecord.js';
-import { briefRows, compareSecCarryForward, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, publishedCoverage, runPublished, secAdmissionState, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
+import { briefRows, compareSecCarryForward, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, publishedCoverage, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
 
 const write = async (path, value) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(value)); };
 
@@ -50,7 +50,7 @@ describe('data coverage report', () => {
       const audit = row => ({ symbol: row, methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } });
       await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: [...Object.keys(details).map(audit), { symbol: 'NOTLISTED', methods: { minervini: { qualified: false, failed: 3, unknown: 0 } } }] });
       const report = await publishedCoverage({ root, now });
-      expect(report).toMatchObject({ as_of_date: date, listed: 6, sec_record: 5, tiles: { eps: 3, sales: 3, margin: 4 }, code33: { pass: 1, fail: 1, unknown: 4 },
+      expect(report).toMatchObject({ as_of_date: date, listed: 6, sec_record: 5, with_quarters_listed: 4, tiles: { eps: 3, sales: 3, margin: 4 }, code33: { pass: 1, fail: 1, unknown: 4 },
         code33_unknown_reason: { q4_eps: 1, few_quarters: 1, gap: 0, stale: 0, no_sec: 2, other: 0 }, listed_without_sec: ['NONE'] });
       expect(report.sec_state).toMatchObject({ ok: 4, no_quarterly: 1, not_published: 1 });
     } finally { await rm(root, { recursive: true, force: true }); }
@@ -91,18 +91,18 @@ describe('the publication SEC coverage block and the published report', () => {
   const date = '2026-02-01', now = Date.parse('2026-02-01T12:00:00Z');
   const record = symbol => secRecord({ symbol, asOfDate: date });
   // A small publication: the listed rows' details (with their admission), the SEC input and the manifest block.
-  async function bundle({ listed = 5, withRecord = 5, file = 'current', refusals = {}, block = true, schema = 2 } = {}) {
+  async function bundle({ listed = 5, withRecord = 5, file = 'current', refusals = {}, block = true, schema = 2, make = record, errors = undefined, unreached = 0 } = {}) {
     const root = await mkdtemp(join(tmpdir(), 'published-report-'));
     const symbols = Array.from({ length: listed }, (_, i) => `S${i}`), results = {}, states = [];
     const refusedSymbols = Object.entries(refusals).flatMap(([reason, n]) => Array.from({ length: n }, () => reason));
     for (const [i, symbol] of symbols.entries()) {
       const has = i < withRecord, reason = !has ? refusedSymbols[i - withRecord] : undefined;
-      if (file && (has || reason)) results[symbol] = { ...record(symbol), schema_version: schema };
+      if (file && (has || reason)) results[symbol] = { ...make(symbol), schema_version: schema };
       const state = has ? { state: 'admitted', reason: null } : reason ? { state: 'refused', reason } : file ? { state: 'not_requested', reason: null } : { state: 'not_fetched', reason: 'no_file' };
-      states.push({ symbol, ...state, status: has ? 'available' : null });
+      states.push({ symbol, ...state, status: has ? results[symbol].status : null });
       await write(join(root, `static-data/research-details/${symbol}.json`), { symbol, market: 'US', as_of_date: date, book_financials: has ? results[symbol] : null, sec_admission: state });
     }
-    const input = file ? { schema_version: schema, as_of_date: file === 'stale' ? '2026-01-30' : date, results, coverage: { eligible: listed + 3, requested: Object.keys(results).length, truncated: 3, deadline: { unreached: 0 } } } : null;
+    const input = file ? { schema_version: schema, as_of_date: file === 'stale' ? '2026-01-30' : date, results, ...(errors ? { errors } : {}), coverage: { eligible: listed + 3, requested: Object.keys(results).length, truncated: 3, deadline: { unreached } } } : null;
     if (input) await writeFile(join(root, 'static-data/book-financials.json.gz'), gzipSync(JSON.stringify(input)));
     const rows = symbols.map(symbol => ({ symbol, market: 'US', as_of_date: date, research_detail_path: `research-details/${symbol}.json` }));
     await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows }));
@@ -119,19 +119,26 @@ describe('the publication SEC coverage block and the published report', () => {
     const file = { schema_version: 2, as_of_date: date, results: { A: {}, B: {}, C: {} } };
     const block = fundamentalsCoverageBlock({ file, asOfDate: date, states });
     expect(block).toEqual({ schema_version: 'fundamentals-coverage-v1', as_of_date: date, sec_fetch_ran: true, sec_as_of: date, file_schema: 2, universe: 4, requested: 3,
-      eligible: null, truncated: null, deadline_unreached: null, admitted: 2, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 } });
+      eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 2, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 } });
     expect(validFundamentalsCoverageBlock(block)).toBe(true);
+    // The ticker map is known only from a file that lists its errors.
+    expect(fundamentalsCoverageBlock({ file: { ...file, errors: [] }, asOfDate: date, states }).ticker_map_ok).toBe(true);
+    expect(fundamentalsCoverageBlock({ file: { ...file, errors: ['SEC ticker map unavailable: URLError'] }, asOfDate: date, states }).ticker_map_ok).toBe(false);
+    expect(fundamentalsCoverageBlock({ file: { ...file, as_of_date: '2026-01-30', errors: [] }, asOfDate: date, states: [] }).ticker_map_ok).toBeNull();
     // No same-day input: nothing about the fetch is counted as zero.
     const none = fundamentalsCoverageBlock({ file: null, asOfDate: date, states: [{ symbol: 'A', state: 'not_fetched', reason: 'no_file' }] });
     expect(none).toMatchObject({ sec_fetch_ran: false, sec_as_of: null, file_schema: null, requested: null, eligible: null, admitted: 0, not_fetched: 1 });
     const stale = fundamentalsCoverageBlock({ file: { ...file, as_of_date: '2026-01-30' }, asOfDate: date, states: [{ symbol: 'A', state: 'not_fetched', reason: 'other_date' }] });
     expect(stale).toMatchObject({ sec_fetch_ran: false, sec_as_of: '2026-01-30', file_schema: 2, requested: null });
     expect(validFundamentalsCoverageBlock(undefined)).toBe(true);
-    for (const broken of [{ ...block, admitted: 3 }, { ...block, extra: 1 }, { ...block, requested: -1 }, { ...block, refused_by_reason: { cik_url: 2 } }, { ...block, sec_as_of: '2026-01-30' }, null, []])
+    for (const broken of [{ ...block, admitted: 3 }, { ...block, extra: 1 }, { ...block, requested: -1 }, { ...block, refused_by_reason: { cik_url: 2 } }, { ...block, sec_as_of: '2026-01-30' }, null, [],
+      { ...block, ticker_map_ok: 'yes' }, { ...none, ticker_map_ok: true }, (({ ticker_map_ok, ...rest }) => { void ticker_map_ok; return rest; })(block)])
       expect(validFundamentalsCoverageBlock(broken)).toBe(false);
     expect(secAdmissionState({ file, asOfDate: date, symbol: 'Z', published: false })).toEqual({ state: 'not_requested', reason: null });
     expect(secAdmissionState({ file, asOfDate: date, symbol: 'C', published: false, refusal: 'cik_url' })).toEqual({ state: 'refused', reason: 'cik_url' });
     expect(secAdmissionState({ file: null, asOfDate: date, symbol: 'A', published: false })).toEqual({ state: 'not_fetched', reason: 'no_file' });
+    // A record admission accepted that the published row lost is never labelled as a wrong key set.
+    expect(secAdmissionState({ file, asOfDate: date, symbol: 'C', published: false })).toEqual({ state: 'refused', reason: 'projection' });
     expect(formatSecAdmission(date, { stage: 'export', file, admitted: 2, refused: { cik_url: 1 }, universe: 4 })).toBe(`SEC admission ${date} (export): file_schema 2, records 3, admitted 2 of 4, refused {"cik_url":1}`);
     expect(formatSecAdmission(date, { file: null, admitted: 0 })).toBe(`SEC admission ${date}: file_schema none, records 0, admitted 0, refused {}`);
   });
@@ -160,8 +167,9 @@ describe('the publication SEC coverage block and the published report', () => {
         const report = JSON.parse(await readFile(join(root, 'report.json'), 'utf8'));
         expect(report.coverage.listed).toBe(5);
         expect(Object.keys(report.records)).toHaveLength(options.withRecord ?? 5);
-        if (options.file === null) expect(table).toContain('| records in the input for this date | 未計測 (eligible 未計測, truncated 未計測, deadline unreached 未計測) |');
-        else expect(table).toContain('(eligible 8, truncated 3, deadline unreached 0)');
+        if (options.file === null) expect(table).toContain('| records in the input for this date | 未計測 (eligible 未計測, truncated 未計測, deadline unreached 未計測; ticker map 未計測) |');
+        else expect(table).toContain('(eligible 8, truncated 3, deadline unreached 0; ticker map 未計測)');
+        expect(table).toContain(`| with an SEC record / with SEC quarters | ${options.withRecord ?? 5} (`);
       } finally { await rm(root, { recursive: true, force: true }); }
     }
     // An input for another day is said so, and the block is checked against the details.
@@ -172,6 +180,39 @@ describe('the publication SEC coverage block and the published report', () => {
     const empty = await mkdtemp(join(tmpdir(), 'published-report-empty-'));
     try { expect(await published(empty)).toMatchObject({ code: 0, lines: ['::warning::Published fundamentals coverage unavailable: No published static-data bundle'] }); }
     finally { await rm(empty, { recursive: true, force: true }); }
+  });
+
+  it('warns when the admitted records carry no quarters: an SEC outage, the deadline, a missing ticker map', async () => {
+    // Every requested listed row carries a transient record: sec_record is 5/5, the schema is 2 and nothing is refused.
+    const outage = await bundle({ make: symbol => secUnavailable({ symbol, asOfDate: date, reason: 'transient', error: 'SEC deadline reached' }), unreached: 5 });
+    try {
+      const result = await published(outage, ['--json', join(outage, 'report.json')]);
+      expect(result.code).toBe(0);
+      const warnings = result.lines.filter(line => line.startsWith('::warning::'));
+      expect(warnings).toEqual(['::warning::SEC quarters (available or partial records) cover 0/5 brief-listed rows (0.0%, below 80%)',
+        '::warning::The SEC input holds 5 records for this date, but no published row carries SEC quarters (0/5)',
+        '::warning::The SEC fetch ran out of its time budget: 5 symbols were not reached (transient, unknown)']);
+      const report = JSON.parse(await readFile(join(outage, 'report.json'), 'utf8'));
+      expect(report.coverage).toMatchObject({ listed: 5, sec_record: 5, sec_record_ratio: 1, with_quarters_listed: 0, with_quarters_ratio: 0 });
+      expect(report.fundamentals_coverage).toMatchObject({ requested: 5, admitted: 5, with_quarters: 0, deadline_unreached: 5 });
+    } finally { await rm(outage, { recursive: true, force: true }); }
+    // No ticker map: every symbol is an admitted no_cik record, which is a delivery failure.
+    const noMap = await bundle({ make: symbol => secUnavailable({ symbol, asOfDate: date, reason: 'no_cik', error: 'SEC識別子未取得' }), errors: ['SEC ticker map unavailable: URLError'] });
+    try {
+      const summary = join(noMap, 'summary.md'); await writeFile(summary, '');
+      const result = await published(noMap, ['--json', join(noMap, 'report.json')], { GITHUB_STEP_SUMMARY: summary });
+      expect(result.text).toContain('::warning::The SEC ticker map was unavailable');
+      expect(JSON.parse(await readFile(join(noMap, 'report.json'), 'utf8')).fundamentals_coverage.ticker_map_ok).toBe(false);
+      expect(await readFile(summary, 'utf8')).toContain('ticker map unavailable) |');
+    } finally { await rm(noMap, { recursive: true, force: true }); }
+  });
+
+  it('names an observed reason when a record both admissions accepted is missing from the published row', () => {
+    expect(secRefusalReason({ exported: { value: null, reason: 'cik_url' } })).toBe('cik_url');
+    expect(secRefusalReason({ exported: { value: {}, reason: null }, overlay: { value: null, reason: 'retrieved_window' } })).toBe('retrieved_window');
+    // Both accepted it: the final row's instrument says why (the projection nulls a non-corporate row's record), else a later step.
+    expect(secRefusalReason({ exported: { value: {}, reason: null }, overlay: { value: {}, reason: null }, corporate: false })).toBe('not_corporate');
+    expect(secRefusalReason({ exported: { value: {}, reason: null }, overlay: null, corporate: true })).toBe('projection');
   });
 
   it('says when a UI-only republish drops SEC coverage, and refuses it only when required and not allowed', async () => {

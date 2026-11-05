@@ -108,7 +108,7 @@ describe('publication summaries and current canonical decisions', () => {
       expect(exported).toContain(`SEC admission ${date} (export): file_schema 2, records 2, admitted 1 of 3, refused {"cik_url":1}`);
       const manifestPath = join(data, 'manifest.json'), original = await readFile(manifestPath, 'utf8'), manifest = JSON.parse(original);
       expect(manifest.markets.US.fundamentals_coverage).toEqual({ schema_version: 'fundamentals-coverage-v1', as_of_date: date, sec_fetch_ran: true, sec_as_of: date, file_schema: 2,
-        universe: 3, requested: 2, eligible: null, truncated: null, deadline_unreached: null, admitted: 1, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 } });
+        universe: 3, requested: 2, eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 1, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 } });
       const index = decodeResearchIndex(JSON.parse(await readFile(join(data, manifest.markets.US.assets.research.path), 'utf8')));
       const detail = async symbol => JSON.parse(await readFile(join(data, index.rows.find(row => row.symbol === symbol).research_detail_path), 'utf8'));
       expect((await detail('TEST')).sec_admission).toEqual({ state: 'admitted', reason: null });
@@ -131,6 +131,8 @@ describe('publication summaries and current canonical decisions', () => {
       await fail(block => { block.admitted = 0; }, 'Invalid fundamentals_coverage block');
       await fail(block => { block.requested = 0.5; }, 'Invalid fundamentals_coverage block');
       await fail(block => { block.extra = 1; }, 'Invalid fundamentals_coverage block');
+      // A ticker-map state the SEC input does not show (it lists no errors, so the map state is unknown).
+      await fail(block => { block.ticker_map_ok = false; }, 'fundamentals_coverage differs from the published details');
       await writeFile(manifestPath, original);
       const detailPath = join(data, index.rows.find(row => row.symbol === 'NOREC').research_detail_path), detailBytes = await readFile(detailPath, 'utf8');
       const lying = JSON.parse(detailBytes); lying.sec_admission = { state: 'refused', reason: 'schema' }; await writeFile(detailPath, JSON.stringify(lying));

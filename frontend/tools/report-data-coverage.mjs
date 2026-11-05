@@ -15,7 +15,7 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
-import { admitBookFinancialsDetailed, SEC_RECORD_SCHEMA, SEC_REFUSAL_REASONS } from '../src/static/bookFinancialAdmission.js';
+import { admitBookFinancialsDetailed, SEC_PUBLICATION_REFUSAL_REASONS, SEC_RECORD_SCHEMA } from '../src/static/bookFinancialAdmission.js';
 import { bookFinancialCurrent } from '../src/static/bookFinancialCurrent.js';
 import { financialHistory } from '../src/static/financialHistory.js';
 import { code33Layered } from '../src/static/code33Reference.js';
@@ -78,12 +78,16 @@ export const FUNDAMENTALS_COVERAGE_SCHEMA = 'fundamentals-coverage-v1';
 export const SEC_ADMISSION_STATES = Object.freeze(['admitted', 'not_requested', 'refused', 'not_fetched']);
 
 /** What the SEC input file (tools/sec-financials.py, as readBookFinancials returns it) says for one publication date. */
+// The error sec-financials.py records when the SEC ticker map could not be read (every symbol is then no_cik).
+const TICKER_MAP_ERROR = 'SEC ticker map unavailable';
 export function secInputSummary(file, asOfDate) {
-  if (!plainObject(file)) return { present: false, schema: null, as_of: null, same_day: false, records: null, eligible: null, requested: null, truncated: null, deadline_unreached: null };
+  if (!plainObject(file)) return { present: false, schema: null, as_of: null, same_day: false, records: null, eligible: null, requested: null, truncated: null, deadline_unreached: null, ticker_map_ok: null };
   const results = plainObject(file.results) ? file.results : null, coverage = plainObject(file.coverage) ? file.coverage : {};
   return { present: true, schema: Number.isSafeInteger(file.schema_version) ? file.schema_version : null, as_of: day(file.as_of_date) ? file.as_of_date : null,
     same_day: day(asOfDate) && file.as_of_date === asOfDate, records: results ? Object.keys(results).length : null,
-    eligible: count(coverage.eligible), requested: count(coverage.requested), truncated: count(coverage.truncated), deadline_unreached: count(coverage.deadline?.unreached) };
+    eligible: count(coverage.eligible), requested: count(coverage.requested), truncated: count(coverage.truncated), deadline_unreached: count(coverage.deadline?.unreached),
+    // Known only from a file that lists its errors; an older file without the list says nothing about the map.
+    ticker_map_ok: Array.isArray(file.errors) ? !file.errors.some(error => typeof error === 'string' && error.startsWith(TICKER_MAP_ERROR)) : null };
 }
 
 /**
@@ -97,7 +101,18 @@ export function secAdmissionState({ file, asOfDate, symbol, published, refusal =
   if (!plainObject(file)) return { state: 'not_fetched', reason: 'no_file' };
   if (file.as_of_date !== asOfDate) return { state: 'not_fetched', reason: 'other_date' };
   if (!plainObject(file.results) || !Object.hasOwn(file.results, symbol)) return { state: 'not_requested', reason: null };
-  return { state: 'refused', reason: refusal || 'keys' };
+  // Admission accepted a record the published row does not carry: a later publication step removed it.
+  return { state: 'refused', reason: refusal || 'projection' };
+}
+
+/**
+ * Why a published row lost the same-day SEC record of its input, as observed (never a guess): the export's
+ * own admission reason, else the carry/correction overlay's re-admission reason, else, when both admitted
+ * it, what the final row shows: an instrument the overlay or the projection made non-corporate
+ * (not_corporate, the projection then nulls book_financials), or another later step (projection).
+ */
+export function secRefusalReason({ exported = null, overlay = null, corporate = true } = {}) {
+  return exported?.reason || overlay?.reason || (corporate ? 'projection' : 'not_corporate');
 }
 
 /**
@@ -114,11 +129,12 @@ export function fundamentalsCoverageBlock({ file, asOfDate, states }) {
   return { schema_version: FUNDAMENTALS_COVERAGE_SCHEMA, as_of_date: asOfDate,
     sec_fetch_ran: same, sec_as_of: input.as_of, file_schema: input.schema, universe: states.length,
     requested: same ? input.records : null, eligible: same ? input.eligible : null, truncated: same ? input.truncated : null, deadline_unreached: same ? input.deadline_unreached : null,
+    ticker_map_ok: same ? input.ticker_map_ok : null,
     admitted: tally('admitted'), with_quarters: states.filter(item => item.state === 'admitted' && ['available', 'partial'].includes(item.status)).length,
     not_requested: tally('not_requested'), not_fetched: tally('not_fetched'), refused: tally('refused'), refused_by_reason: sortedCounts(refused) };
 }
 
-const BLOCK_KEYS = ['schema_version', 'as_of_date', 'sec_fetch_ran', 'sec_as_of', 'file_schema', 'universe', 'requested', 'eligible', 'truncated', 'deadline_unreached',
+const BLOCK_KEYS = ['schema_version', 'as_of_date', 'sec_fetch_ran', 'sec_as_of', 'file_schema', 'universe', 'requested', 'eligible', 'truncated', 'deadline_unreached', 'ticker_map_ok',
   'admitted', 'with_quarters', 'not_requested', 'not_fetched', 'refused', 'refused_by_reason'];
 /** Structural check of a published block (an absent block is valid: older publications carry none). */
 export function validFundamentalsCoverageBlock(block) {
@@ -128,6 +144,7 @@ export function validFundamentalsCoverageBlock(block) {
   if (!(block.sec_as_of === null || day(block.sec_as_of)) || !(block.file_schema === null || Number.isSafeInteger(block.file_schema))) return false;
   if (['universe', 'admitted', 'with_quarters', 'not_requested', 'not_fetched', 'refused'].some(key => count(block[key]) === null)) return false;
   if (['requested', 'eligible', 'truncated', 'deadline_unreached'].some(key => !(block[key] === null || count(block[key]) !== null))) return false;
+  if (![null, true, false].includes(block.ticker_map_ok) || (!block.sec_fetch_ran && block.ticker_map_ok !== null)) return false;
   if (block.admitted + block.not_requested + block.not_fetched + block.refused !== block.universe || block.with_quarters > block.admitted) return false;
   if (!plainObject(block.refused_by_reason) || Object.values(block.refused_by_reason).some(value => !(count(value) > 0)) || Object.values(block.refused_by_reason).reduce((a, b) => a + b, 0) !== block.refused) return false;
   return !block.sec_fetch_ran || block.sec_as_of === block.as_of_date;
@@ -172,7 +189,7 @@ export async function publishedSecInventory({ root = 'public' } = {}) {
       // A declared admission must be the one its inputs give: the record in the detail and the same-day input.
       const expected = secAdmissionState({ file, asOfDate: date, symbol: summary.symbol, published: Boolean(record), refusal: state?.reason });
       if (!plainObject(state) || Object.keys(state).sort().join() !== 'reason,state' || state.state !== expected.state || state.reason !== expected.reason
-        || (state.state === 'refused' && !SEC_REFUSAL_REASONS.includes(state.reason))) problems.push(summary.symbol);
+        || (state.state === 'refused' && !SEC_PUBLICATION_REFUSAL_REASONS.includes(state.reason))) problems.push(summary.symbol);
     }
     if (!SEC_ADMISSION_STATES.includes(state?.state)) {
       // A detail written before the admission state existed: derive it from the same inputs (diagnostic).
@@ -224,7 +241,9 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
   const date = index.as_of_date, audit = await read(resolve(root, 'qualification-audit.json'));
   const rows = new Map(index.rows.map(row => [row.symbol, row]));
   const listed = briefRows(audit, date);
-  const out = { as_of_date: date, listed: listed.length, sec_record: 0, tiles: { eps: 0, sales: 0, margin: 0 },
+  // sec_record counts any admitted record (an unavailable one too: no CIK, an SEC outage, the deadline);
+  // with_quarters_listed only those that carry quarters (available or partial).
+  const out = { as_of_date: date, listed: listed.length, sec_record: 0, with_quarters_listed: 0, tiles: { eps: 0, sales: 0, margin: 0 },
     sec_state: Object.fromEntries(SEC_STATES.map(state => [state, 0])), code33: { pass: 0, fail: 0, unknown: 0 },
     code33_unknown_reason: Object.fromEntries(UNKNOWN_KINDS.map(kind => [kind, 0])),
     sec_conditions: { eps: { pass: 0, fail: 0, unknown: 0 }, sales: { pass: 0, fail: 0, unknown: 0 }, margin: { pass: 0, fail: 0, unknown: 0 } },
@@ -241,6 +260,7 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
     const sec = secStatus(row, book, { coverage }), code33 = code33Layered(report, history, date), explain = code33Explain(report, sec, code33);
     if (row.book_financials) out.sec_record++;
     else if (out.listed_without_sec.length < limit) out.listed_without_sec.push(symbol);
+    if (['available', 'partial'].includes(row.book_financials?.status)) out.with_quarters_listed++;
     out.sec_state[sec.state] = (out.sec_state[sec.state] || 0) + 1;
     if (report) fundamentalTiles(report).forEach((tile, i) => { if (tile.value !== null) out.tiles[['eps', 'sales', 'margin'][i]]++; });
     if (report?.valid) { out.sec_conditions.eps[report.epsAcceleration]++; out.sec_conditions.sales[report.salesAcceleration]++; out.sec_conditions.margin[report.marginImprovement]++; }
@@ -263,8 +283,14 @@ export async function publishedFundamentalsReport({ root = 'public', now = Date.
   const { block, manifest_block: manifestBlock } = inventory;
   const warnings = [];
   const ratio = coverage.listed > 0 ? coverage.sec_record / coverage.listed : null;
+  const quartersRatio = coverage.listed > 0 ? coverage.with_quarters_listed / coverage.listed : null;
   if (ratio !== null && ratio < 0.8) warnings.push(`SEC records cover ${coverage.sec_record}/${coverage.listed} brief-listed rows (${(ratio * 100).toFixed(1)}%, below 80%)`);
   if (coverage.listed > 0 && coverage.sec_record === 0) warnings.push(`No brief-listed row carries an SEC record (0/${coverage.listed})`);
+  // An admitted record can be an unavailable one (an SEC outage, the deadline, no CIK): only quarters show results.
+  if (quartersRatio !== null && quartersRatio < 0.8) warnings.push(`SEC quarters (available or partial records) cover ${coverage.with_quarters_listed}/${coverage.listed} brief-listed rows (${(quartersRatio * 100).toFixed(1)}%, below 80%)`);
+  if (block.requested > 0 && block.with_quarters === 0) warnings.push(`The SEC input holds ${block.requested} records for this date, but no published row carries SEC quarters (0/${block.universe})`);
+  if (block.deadline_unreached > 0) warnings.push(`The SEC fetch ran out of its time budget: ${block.deadline_unreached} symbols were not reached (transient, unknown)`);
+  if (block.ticker_map_ok === false) warnings.push('The SEC ticker map was unavailable: every symbol reads as without a CIK, a delivery failure rather than the stocks\' own state');
   if (block.file_schema !== SEC_RECORD_SCHEMA) warnings.push(block.file_schema === null ? `The SEC input file is ${inventory.file.present ? 'missing its schema version' : 'absent'} (expected schema ${SEC_RECORD_SCHEMA})` : `The SEC input file has schema ${block.file_schema}, expected ${SEC_RECORD_SCHEMA}`);
   if (inventory.file.present && !block.sec_fetch_ran) warnings.push(`The SEC input file is for ${block.sec_as_of ?? '未計測'}, not for this publication (${inventory.as_of_date})`);
   const refusals = Object.entries(block.refused_by_reason).filter(([reason]) => reason !== 'not_corporate');
@@ -272,18 +298,19 @@ export async function publishedFundamentalsReport({ root = 'public', now = Date.
   if (manifestBlock !== null && JSON.stringify(canonical(manifestBlock)) !== JSON.stringify(canonical(block))) warnings.push('The manifest fundamentals_coverage block differs from the published details');
   const carry = previous ? compareSecCarryForward(previous, inventory) : null;
   return { schema_version: 'published-fundamentals-report-v1', as_of_date: coverage.as_of_date, ui_only_republish: uiOnlyRepublish,
-    coverage: { ...coverage, sec_record_ratio: ratio }, fundamentals_coverage: block, file: inventory.file, derived_states: inventory.derived_states,
+    coverage: { ...coverage, sec_record_ratio: ratio, with_quarters_ratio: quartersRatio }, fundamentals_coverage: block, file: inventory.file, derived_states: inventory.derived_states,
     records: inventory.records, carry_forward: carry, warnings };
 }
 
 const cell = value => value === null || value === undefined ? '未計測' : typeof value === 'object' ? (Object.keys(value).length ? Object.entries(value).map(([key, n]) => `${key} ${n}`).join(', ') : 'none') : String(value);
+const percent = ratio => ratio === null || ratio === undefined ? '未計測' : `${(ratio * 100).toFixed(1)}%`;
 /** The job-summary table of one report. */
 export function fundamentalsSummaryTable(report) {
   const c = report.coverage, b = report.fundamentals_coverage, f = report.file, carry = report.carry_forward;
   const lines = [`### Published fundamentals coverage ${report.as_of_date}`, '', '| measure | value |', '| --- | --- |',
-    `| brief-listed rows | ${cell(c.listed)} |`, `| with an SEC record | ${cell(c.sec_record)} (${c.sec_record_ratio === null ? '未計測' : `${(c.sec_record_ratio * 100).toFixed(1)}%`}) |`,
+    `| brief-listed rows | ${cell(c.listed)} |`, `| with an SEC record / with SEC quarters | ${cell(c.sec_record)} (${percent(c.sec_record_ratio)}) / ${cell(c.with_quarters_listed)} (${percent(c.with_quarters_ratio)}) |`,
     `| SEC input file | ${f.present ? `${cell(f.name)}, schema ${cell(f.schema)}, for ${cell(f.as_of)}` : 'absent'} |`,
-    `| records in the input for this date | ${cell(b.requested)} (eligible ${cell(b.eligible)}, truncated ${cell(b.truncated)}, deadline unreached ${cell(b.deadline_unreached)}) |`,
+    `| records in the input for this date | ${cell(b.requested)} (eligible ${cell(b.eligible)}, truncated ${cell(b.truncated)}, deadline unreached ${cell(b.deadline_unreached)}; ticker map ${b.ticker_map_ok === null ? '未計測' : b.ticker_map_ok ? 'read' : 'unavailable'}) |`,
     `| published rows / admitted / with quarters | ${cell(b.universe)} / ${cell(b.admitted)} / ${cell(b.with_quarters)} |`,
     `| not requested / no same-day input | ${cell(b.not_requested)} / ${cell(b.not_fetched)} |`, `| refused by reason | ${cell(b.refused_by_reason)} |`,
     `| SEC states (listed) | ${cell(Object.fromEntries(Object.entries(c.sec_state).filter(([, n]) => n)))} |`,

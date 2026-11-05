@@ -1,7 +1,7 @@
 import { loadFinancialGenerationCarry } from './financial-generation-carry.mjs';
 import { exportMarketTrends } from './export-market-trends.mjs';
 import { orderResearchExportRows } from './research-export-order.mjs';
-import { applicabilityUniverse } from '../src/static/instrumentApplicability.js';
+import { applicabilityUniverse, corporateFinancialsAllowed } from '../src/static/instrumentApplicability.js';
 import { loadFinancialCorrection, correctionMetadata, CORRECTION_METADATA_FIELDS, overlayFinancialCorrection, overlayFinancialChart, rewriteCorrectionChartAliases, writeCorrectionHistory } from './financial-correction-overlay.mjs';
 import { FINANCIAL_FIELDS, projectFinancialRow, projectFinancialPayload, financialNextExpiry } from '../src/static/financialCurrent.js';
 import { filterStaticScanRows, sortStaticScanRows } from '../src/static/scanClient.js';
@@ -14,7 +14,7 @@ import { setupEvidence } from './setup-evidence.mjs';
 import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
 import { admitBookFinancialsDetailed } from '../src/static/bookFinancialAdmission.js';
 import { readBookFinancials } from './book-financials-input.mjs';
-import { appendStepSummary, formatSecAdmission, fundamentalsCoverageBlock, secAdmissionState } from './report-data-coverage.mjs';
+import { appendStepSummary, formatSecAdmission, fundamentalsCoverageBlock, secAdmissionState, secRefusalReason } from './report-data-coverage.mjs';
 // Daily, reproducible candidate snapshots use the exact same rules as the UI.
 import { readFile, writeFile, readdir, mkdir, unlink } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -138,7 +138,10 @@ for (const row of merged) {
   const published = rows.get(row.symbol), raw = secFile?.results?.[row.symbol];
   // A record the export admitted but the overlay did not: the overlay's own (carry or correction) admission names why.
   const overlay = correction && raw !== undefined && !published.book_financials && secExport.get(row.symbol)?.value ? admitBookFinancialsDetailed(raw, {symbol:row.symbol,asOfDate:scan.as_of_date,evaluatedAt:typeof correction.financial_evaluated_at === 'number' ? correction.financial_evaluated_at : Date.parse(correction.financial_evaluated_at),row}) : null;
-  secStates.set(row.symbol, secAdmissionState({file:financials,asOfDate:scan.as_of_date,symbol:row.symbol,published:Boolean(published.book_financials),refusal:overlay?.reason ?? secExport.get(row.symbol)?.reason ?? null}));
+  // A record both admissions accepted but the final row lost names what the row shows (not_corporate after the
+  // overlay or projection marked the instrument, else projection), never a guessed admission reason.
+  secStates.set(row.symbol, secAdmissionState({file:financials,asOfDate:scan.as_of_date,symbol:row.symbol,published:Boolean(published.book_financials),
+    refusal:published.book_financials ? null : secRefusalReason({exported:secExport.get(row.symbol),overlay,corporate:corporateFinancialsAllowed(published)})}));
 }
 function secAdmitted(row) {
   const result = secFile ? admitBookFinancialsDetailed(secFile.results?.[row.symbol], {symbol:row.symbol,asOfDate:scan.as_of_date,evaluatedAt,row}) : null;

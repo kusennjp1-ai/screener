@@ -54,6 +54,9 @@ function admitSeries(points, field, asOfDate, annual = false) {
 // quarterly or annual series (`series:<field>`, annual EPS is `series:annualEps`), or an instrument
 // that never carries company financials (`not_corporate`).
 export const SEC_REFUSAL_REASONS = Object.freeze(['schema', 'symbol', 'as_of', 'retrieved_window', 'keys', 'cik_url', ...QUARTERLY_FIELDS.map(field => `series:${field}`), 'series:annualEps', 'not_corporate']);
+// The reasons a published row's sec_admission may name: every admission reason, and `projection` for a record
+// that admission accepted but a later publication step removed from the row (never returned by admission).
+export const SEC_PUBLICATION_REFUSAL_REASONS = Object.freeze([...SEC_REFUSAL_REASONS, 'projection']);
 const refuse = reason => ({ value: null, reason });
 
 /**
