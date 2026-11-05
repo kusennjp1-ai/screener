@@ -17,11 +17,18 @@ import { institutionalGrowth } from '../institutionalEvidence';
 import { code33Layered } from '../code33Reference';
 import { diagnoseBookChart } from '../bookChartDiagnostics';
 import { auditDailyBars } from '../qualificationAudit';
-import { candidateView, secStatus, sellSignals, trendTemplate, withBookWarning } from './briefModel';
+import { secStatus, fundamentalsCoverage } from '../fundamentalsExplain.js';
+import { candidateView, trendTemplate } from './briefCandidate';
+import { stockSells } from './briefSell';
 
 export const WATCH_KEY = 'research-watch';
 // The brief ranks only the trend template; the worker skips the other methods' rankings.
 const BRIEF_METHODS = ['minervini'];
+
+/** Where the research bundle stands before anything is counted from it: never a 0 for missing data. */
+export const bundleState = brief => brief.bundle.data ? 'ready' : brief.bundle.isLoading || brief.manifest.isLoading ? 'loading' : brief.bundle.isError || brief.manifest.isError ? 'error' : 'none';
+export const BUNDLE_TEXT = { loading: '候補を読み込み中…', error: '候補データを取得できません。', none: '候補データはこの公開に含まれていません。' };
+export const BUNDLE_SHORT = { loading: '読込中', error: '取得できません', none: '未配信' };
 
 export function useBriefData() {
   const manifest = useStaticManifest();
@@ -111,17 +118,19 @@ export function useStockData(symbol, brief) {
   // The SEC record is only in the detail: until the detail has arrived (or after it failed) the record is
   // unknown, never 未配信.
   const detailState = !summary?.research_detail_path ? 'none' : detail.data ? 'loaded' : detail.isError ? 'error' : 'loading';
+  // The publication's SEC coverage (fundamentalsCoverage), for secStatus' wording.
+  const coverage = useMemo(() => fundamentalsCoverage(entry), [entry]);
   const financial = useMemo(() => {
     if (!row) return null;
     const book = row.book_financials ? bookFinancialCurrent(row.book_financials, row.symbol, date, financialNow, row) : null;
-    const sec = secStatus(row, book, { detail: detailState });
+    const sec = secStatus(row, book, { detail: detailState, coverage });
     // While the detail loads, no Yahoo reference stands in for an SEC record that may still arrive.
     const history = row.financial_history && sec.state !== 'detail_loading' ? financialHistory(row.financial_history, row.symbol, date, financialNow) : null;
     // Stale or unverifiable SEC rows never reach the tiles; secStatus says why.
     const report = book?.current ? book.report : null;
     const historyRetrievedAt = row.financial_history?.quarterly_retrieved_at || row.financial_history?.retrieved_at || null;
     return { report, sec, history, historyRetrievedAt, code33: code33Layered(report, history, date) };
-  }, [row, date, financialNow, detailState]);
+  }, [row, date, financialNow, detailState, coverage]);
   // The publisher's diagnostics win, including an invalid verdict; the client recomputes only certified bars.
   const diagnostics = useMemo(() => {
     if (row?.book_diagnostics && row.book_diagnostics.as_of_date === date) return row.book_diagnostics;
@@ -168,7 +177,7 @@ export function useWatchSellChecks(views, brief) {
       if (!certified) { out[view.symbol] = { unknown: true, reason }; return; }
       let diagnostics = null;
       try { diagnostics = diagnoseBookChart(view.row, payload, date); } catch { diagnostics = null; }
-      out[view.symbol] = withBookWarning(sellSignals(payload.bars), diagnostics) || { unknown: true, reason: '日足が不足' };
+      out[view.symbol] = stockSells({ judged: payload.bars, diagnostics, view }) || { unknown: true, reason: '日足が不足' };
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps

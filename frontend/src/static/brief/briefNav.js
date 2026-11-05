@@ -2,6 +2,9 @@ import { flushSync } from 'react-dom';
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
+// A phone: 520px and narrower, where rows are compacted and lists page by 20.
+export const PHONE_QUERY = '(max-width:520px)';
+
 export const reducedMotion = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 /** Navigate inside a View Transition (when the browser has one), with a direction for the CSS. */

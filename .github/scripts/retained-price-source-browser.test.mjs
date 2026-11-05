@@ -54,7 +54,9 @@ test('quarantined prices cannot regain measured values or verified status',()=>{
  for(const key of ['current_price','rs_rating','se_pivot_price'])assert.throws(()=>requireUnknownPrice({...row,[key]:1}));assert.throws(()=>requireUnknownPrice({...row,technical_audit:{valid:true}}));
 });
 import {BRIEF_UI_MARKERS,BRIEF_CHART_SESSIONS,FALLBACK_FONT_SELECTORS,detectApprovedUi,requireBriefUi,parseBriefChartLabel,requireBriefChart,briefStockUrl,retainedHistoryNote} from './retained-price-source-browser.mjs';
-const briefSources=()=>{const files={};for(const [path,marker]of BRIEF_UI_MARKERS)files[path]=(files[path]||'')+'\n'+marker;return files;};
+// `layout` 0 puts each marker in its current file, -1 in the oldest file it may be in (before the stock screen's split).
+const markerPath=(paths,layout=0)=>[].concat(paths).at(layout);
+const briefSources=(layout=0)=>{const files={};for(const [paths,marker]of BRIEF_UI_MARKERS){const path=markerPath(paths,layout);files[path]=(files[path]||'')+'\n'+marker;}return files;};
 const reader=files=>path=>Object.hasOwn(files,path)?files[path]:null;
 test('approved UI detection accepts only a checkout that carries the brief stock screen',()=>{
  const brief=detectApprovedUi(reader(briefSources()));assert.deepEqual(brief,{kind:'brief',retired_workspace_present:false,missing:[]});assert.equal(requireBriefUi(brief,'a'.repeat(40)),brief);
@@ -67,10 +69,13 @@ test('the retired research workspace or an unknown UI fails closed with a clear 
  assert.equal(workspace.kind,'research-workspace');assert(workspace.missing.some(item=>item.startsWith('src/static/StaticAppShell.jsx: path="/brief/*"')));
  assert.throws(()=>requireBriefUi(workspace,'1e1943e1d5f78a738a05baa69eb9f2e8508e32ac'),/Approved UI 1e1943e1d5f78a738a05baa69eb9f2e8508e32ac is the retired research workspace .*#\/brief\/stock\/SYMBOL/);
  for(const [path,marker]of BRIEF_UI_MARKERS){
-  const files=briefSources();files[path]=files[path].replace(marker,'');const detection=detectApprovedUi(reader(files));
-  assert.equal(detection.kind,'unknown',path+' '+marker);assert.throws(()=>requireBriefUi(detection,'c'.repeat(40)),/not a recognised daily brief/);
+  for(const layout of [0,-1]){const files=briefSources(layout),at=markerPath(path,layout);files[at]=files[at].replace(marker,'');const detection=detectApprovedUi(reader(files));
+  assert.equal(detection.kind,'unknown',path+' '+marker);assert.throws(()=>requireBriefUi(detection,'c'.repeat(40)),/not a recognised daily brief/);}
  }
  for(const value of [null,{},{kind:'brief'},{kind:'brief',missing:['x']}])assert.throws(()=>requireBriefUi(value,'d'.repeat(40)),/Approved UI/);
+});
+test('an approved UI from before the stock screen\'s split (header in BriefApp.jsx, chart card in StockView.jsx) is still the brief',()=>{
+ assert.deepEqual(detectApprovedUi(reader(briefSources(-1))),{kind:'brief',retired_workspace_present:false,missing:[]});
 });
 test('brief markers match this checkout\'s own brief sources',()=>{
  const frontend=new URL('../../frontend/',import.meta.url),read=path=>{try{return readFileSync(new URL(path,frontend),'utf8');}catch{return null;}};

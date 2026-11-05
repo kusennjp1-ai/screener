@@ -37,7 +37,8 @@ const SEC_STATUS = {
  * `book` is the bookFinancialCurrent() result for the row (null when there is no record).
  * `detail` is the state of the row's research detail, which carries the record: 'loading' or
  * 'error' while the record cannot have arrived yet. Only an absent record from a loaded detail (or a
- * row without a detail) is 未配信.
+ * row without a detail) is 未配信. `coverage` is the publication's fundamentalsCoverage() block (step 0:
+ * always null, and not read yet).
  */
 export function secStatus(row, book, { detail = null } = {}) {
   const make = (state, extra = {}) => ({ state, short: SEC_STATUS[state][0], long: SEC_STATUS[state][1], latestEnd: null, ...extra });
@@ -147,4 +148,23 @@ export function code33Explain(report, sec, code33 = null) {
 function reasonFor(report, key) {
   const row = report.rows.slice(-4).find(item => quarterReason(item, PART_METRIC[key]));
   return row ? `${ym(row.end)}は${quarterReason(row, PART_METRIC[key])}` : '値がそろわない期があります';
+}
+
+/**
+ * The Code 33 chip of the stock conclusion from the stock's financial view (useStockData's `financial`):
+ * { text, tone }, where tone is '' when neutral.
+ */
+export function code33ChipView(financial) {
+  const state = financial?.code33?.state;
+  return { text: `Code 33 ${state === 'pass' ? '達成' : state === 'fail' ? '未達' : financial?.sec?.state === 'detail_loading' ? '読み込み中' : '未確認'}${financial?.code33?.source === 'yahoo' ? '（参考）' : ''}`,
+    tone: state === 'pass' ? 'zone' : '' };
+}
+
+/**
+ * The publication's SEC fundamentals coverage for a market entry of the manifest, or null when the
+ * publication carries none (step 0: always null).
+ */
+export function fundamentalsCoverage(entry) {
+  void entry;
+  return null;
 }

@@ -1,5 +1,5 @@
 // Sell-side checks for the daily-brief screens, from certified daily bars: the climax and breakdown
-// checks, the book's combined warning and the chart marks. Unknown stays unknown.
+// checks, the book's combined warning, the chart marks and the sell chip. Unknown stays unknown.
 import { finite } from '../researchEngine';
 import { signed, times } from '../positionGeometry';
 import { BREAKOUT_VOLUME_RATIO } from './briefCandidate';
@@ -98,4 +98,23 @@ export function sellMarks(sells) {
     for (const check of checks) if (check.state === 'hit' && typeof check.date === 'string' && !marks.has(check.date)) marks.set(check.date, kind);
   }
   return [...marks].map(([date, kind]) => ({ date, kind })).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+/**
+ * Every sell check one stock gets: the checks on its certified bars (`judged`, or null) plus the book's
+ * combined warning. Null when the bars cannot be judged. `view` is the candidate (step 0: not read).
+ */
+export function stockSells({ judged, diagnostics, view }) {
+  void view;
+  return withBookWarning(sellSignals(judged), diagnostics);
+}
+
+/**
+ * The sell chip a row or the stock conclusion shows for a sell result: { text, tone, title } or null
+ * (nothing to say). A result that could not be checked carries its reason as the title.
+ */
+export function sellChipView(sell) {
+  if (sell?.hits) return { text: `売りのサイン ${sell.hits}件`, tone: 'ext', title: undefined };
+  if (sell?.unknown) return { text: '売りのサイン 未確認', tone: '', title: sell.reason || undefined };
+  return null;
 }

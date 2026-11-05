@@ -95,11 +95,28 @@ export function focusCounts(ranked, date) {
   return { zone, near: pool.length - zone, total: pool.length };
 }
 
+/**
+ * The tone of Today's 注目候補 tile from the bundle state, the focus counts and the market verdict
+ * (step 0: the market is not read yet).
+ */
+export function focusTone(state, counts, market) {
+  void market;
+  return state === 'ready' && counts?.total ? 'zone' : '';
+}
+
+/** A note after Today's 注目候補 heading for the market verdict, or null (step 0: always null). */
+export function focusHeadingNote(market) {
+  void market;
+  return null;
+}
+
 export const LIST_FILTERS = {
   zone: { label: '買いゾーン', test: view => view.qualified && inZone(view) },
   near: { label: 'ピボット接近', test: view => view.qualified && nearPivot(view) },
   all: { label: '選定すべて', test: view => view.qualified },
   one: { label: 'あと1条件', test: view => !view.qualified && view.failed === 1 && view.unknown === 0 },
+  // Today's focus pool (the zone and near filters together). Hidden: never a segment button.
+  focus: { label: '注目候補', hidden: true, test: view => view.qualified && (inZone(view) || nearPivot(view)) },
 };
 /** Case-insensitive ticker or company-name match. */
 export const matchesSearch = (view, query) => !query || `${view.symbol} ${view.name}`.toUpperCase().includes(query.trim().toUpperCase());

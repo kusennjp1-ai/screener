@@ -120,20 +120,23 @@ export const FALLBACK_FONT_SELECTORS=Object.freeze([BRIEF_SYMBOL_SELECTOR,BRIEF_
 
 // Source markers (in the git-verified approved checkout) of the one screen this proof drives.
 // Every marker is present in both brief-carrying approved UIs (c5d1884 and the brief-only app).
+// A marker whose code moved names every file it may be in, newest first: the stock header moved from
+// BriefApp.jsx to StockScreen.jsx and the chart card from StockView.jsx to StockChartCard.jsx, and an
+// approved UI from before that move still carries them in the old file.
 export const BRIEF_UI_MARKERS=Object.freeze([
   ['src/static/StaticAppShell.jsx','path="/brief/*"'],
   ['src/static/brief/BriefApp.jsx',String.raw`/^\/brief\/stock\/([^/]+)$/`],
-  ['src/static/brief/BriefApp.jsx','className="brief-stockhead"'],
+  [Object.freeze(['src/static/brief/StockScreen.jsx','src/static/brief/BriefApp.jsx']),'className="brief-stockhead"'],
   ['src/static/brief/PriceChart.jsx','data-testid="brief-price-chart"'],
   ['src/static/brief/priceChart.js','足チャート（${bars[0].date}〜${bars[n - 1].date}）'],
-  ['src/static/brief/StockView.jsx','brief-chartcard'],
-  ['src/static/brief/StockView.jsx','の日足は未取得'],
+  [Object.freeze(['src/static/brief/StockChartCard.jsx','src/static/brief/StockView.jsx']),'brief-chartcard'],
+  [Object.freeze(['src/static/brief/StockChartCard.jsx','src/static/brief/StockView.jsx']),'の日足は未取得'],
   ['tools/design-static-assets.mjs','export async function createDesignAssetObserver'],
 ].map(Object.freeze));
 const RESEARCH_WORKSPACE_PAGE='src/static/pages/ResearchPage.jsx';
 /** `read(path)` returns the approved checkout's text for a frontend-relative path, or null when absent. */
 export function detectApprovedUi(read){
-  const missing=BRIEF_UI_MARKERS.filter(([path,marker])=>{const text=read(path);return typeof text!=='string'||!text.includes(marker);}).map(([path,marker])=>`${path}: ${marker}`);
+  const missing=BRIEF_UI_MARKERS.filter(([paths,marker])=>![].concat(paths).some(path=>{const text=read(path);return typeof text==='string'&&text.includes(marker);})).map(([paths,marker])=>`${[].concat(paths).join(' or ')}: ${marker}`);
   const workspace=typeof read(RESEARCH_WORKSPACE_PAGE)==='string';
   return {kind:missing.length?(workspace?'research-workspace':'unknown'):'brief',retired_workspace_present:workspace,missing};
 }

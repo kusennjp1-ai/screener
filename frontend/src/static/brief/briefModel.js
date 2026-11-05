@@ -15,4 +15,4 @@ export * from './briefEnvironment';
 export { shortDate, latestKnown, sentence, bare } from './briefShared';
 
 // The fundamentals card's view model lives beside the rules so node tools can use it too.
-export { code33Parts, code33Explain, fundamentalTiles, fundamentalsSource, quarterReason, secStatus } from '../fundamentalsExplain.js';
+export { code33Parts, code33Explain, code33ChipView, fundamentalTiles, fundamentalsCoverage, fundamentalsSource, quarterReason, secStatus } from '../fundamentalsExplain.js';

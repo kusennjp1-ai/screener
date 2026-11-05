@@ -4,6 +4,8 @@
 import { finite } from '../researchEngine';
 
 const DAY = 86400000;
+/** The RS line leads when it is at a new high while the price is at least this % below its own high. */
+export const RS_LEAD_FROM_HIGH_PERCENT = 2;
 
 /**
  * Weinstein stage for the latest bar with the scanner's rules (backend stage_analysis.py):
