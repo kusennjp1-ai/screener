@@ -337,7 +337,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
           {nas && <p className="brief-index-nas"><b>Nasdaq総合</b><span className="numeric">{nas.close}</span><Parts text={nas.text} /></p>}
           {/* A disagreement with the verdict's scan input is always said here; the plain source line is in
               place on the desktop and in the 注記 below 1024px. */}
-          {summary && (conflict || !switcher) && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || <><span>3つの数値は長期履歴の^GSPC終値から計算しています。</span><span>200日線比も同じ終値からです。</span></>}</p>}
+          {summary && (conflict || !switcher) && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || <span>4つの数値（終値・1年高値から・50日線比・200日線比）は長期履歴の^GSPC終値から計算しています。</span>}</p>}
           {chartEl}
         </div>}
         <div className="brief-env-rows">{group.items.map(item => <EnvRow key={item.key} item={item} groupAsOf={group.asOf} onOpenMetric={view.history ? onOpenMetric : null} />)}</div>

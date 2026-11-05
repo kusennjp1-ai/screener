@@ -201,7 +201,7 @@ test.describe('the desktop keeps every footnote in place', () => {
     await expect(page.getByRole('region', { name: '選定銘柄の一覧' }).getByText(/^選定銘柄＝トレンドテンプレート8条件/)).toBeVisible();
     await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
-    await expect(page.getByText('3つの数値は長期履歴の^GSPC終値から計算しています。')).toBeVisible();
+    await expect(page.getByText('4つの数値（終値・1年高値から・50日線比・200日線比）は長期履歴の^GSPC終値から計算しています。')).toBeVisible();
     await expect(page.locator('.brief-screen-notes')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
