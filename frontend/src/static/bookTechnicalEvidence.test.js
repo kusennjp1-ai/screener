@@ -170,7 +170,7 @@ describe('VCP measurement from the base high', () => {
     expect(nv.vcp.legs[0].startDate).toBe('2026-06-23');
     expect(nv.vcp.legs[0].depthPct).toBeCloseTo(13, 0);
     expect(footprint(nv, charts['ZZNV.json'].bars).weeks).toBe(14);
-    for (const symbol of ['ZZAR', 'ZZZF']) expect(measure(symbol).vcp.legs[0].depthPct, symbol).toBeCloseTo(19, 0);
+    expect(['ZZAR', 'ZZZF'].map(symbol => Math.round(measure(symbol).vcp.legs[0].depthPct))).toEqual([19, 19]);
   });
 
   it('reads a 25/12/6 base as 「VCP n週 25/6 3T」', () => {
