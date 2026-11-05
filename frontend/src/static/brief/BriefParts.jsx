@@ -2,7 +2,7 @@ import { money, signed, times } from '../positionGeometry';
 import { sellChipView } from './briefSell';
 import { meterPercent } from './briefNav';
 import { useEntrance } from './briefPrimitives';
-import { BREAKOUT_VOLUME_RATIO, breakoutEvent, candidateMarketGate, earningsSoon, rsShown } from './briefCandidate';
+import { BREAKOUT_VOLUME_RATIO, candidateMarketGate, earningsSoon, rsShown } from './briefCandidate';
 
 // The layout primitives every track uses (Expander, ScreenNotes, Parts, RiseItem, Toast) live in the
 // frozen briefPrimitives.jsx; they are re-exported here so the old import path keeps working.
@@ -45,12 +45,12 @@ const dayChangeText = view => finite(view?.change) ? `前日比 ${signed(view.ch
 const chip = (key, tone, children, title) => <span key={key} className={`brief-chip${tone ? ` tone-${tone}` : ''}`} title={title}>{tone === 'ext' && <><span aria-hidden="true">▲</span> </>}{children}</span>;
 
 /**
- * The volume chip of a row: green only on an up day, ▲ on a down day with heavy volume (a warning), and
- * neutral when the day's direction is not verified. Null below BREAKOUT_VOLUME_RATIO.
+ * The volume chip's tone: green only on a verified up day, ▲ on a down day with heavy volume (a warning, as
+ * breakoutEvent's 下落日の大商い), neutral when the day's direction is not verified. Null below BREAKOUT_VOLUME_RATIO.
  */
 function volumeTone(view) {
   if (!finite(view.volumeRatio) || view.volumeRatio < BREAKOUT_VOLUME_RATIO) return null;
-  if (breakoutEvent(view)?.kind === 'heavyDown' || (finite(view.change) && view.change < 0)) return 'ext';
+  if (finite(view.change) && view.change < 0) return 'ext';
   return finite(view.change) && view.change > 0 ? 'zone' : '';
 }
 
