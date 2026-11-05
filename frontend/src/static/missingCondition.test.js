@@ -4,7 +4,7 @@ import { withAuditFixture } from './testAuditFixture';
 import { assess, rankCandidates, researchCsv, RULE_SUMMARY_VERSION } from './researchEngine';
 import { encodeAssessment } from './assessmentEncoding';
 import { filterRanked } from './researchPresentation';
-import { singleMissingCondition } from './missingCondition';
+import { conditionShortLabel, conditionText, conditionValueText, singleMissingCondition } from './missingCondition';
 
 const date = '2026-09-29';
 function sample(symbol, extra = {}) {
@@ -57,5 +57,26 @@ describe('one-condition-away is a distinct watch view', () => {
     expect(oneil).toContain('未確認：I：13F報告運用会社の保有社数が増加');
     expect(singleMissingCondition(assess(rows[0], 'oneil',now))).toBeNull();
     expect(singleMissingCondition({ passed: 7, total: 9, rules: [] })).toBeNull();
+  });
+});
+
+describe('a rule in a few words, with the value that settled it', () => {
+  it('shortens the rule labels the same way the あと1条件 view does', () => {
+    expect(conditionShortLabel({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）' })).toBe('RS ≥ 70');
+    expect(conditionShortLabel({ label: 'SMA200が21営業日前より上（1か月の上向き判定）' })).toBe('SMA200の21営業日上昇');
+    expect(conditionShortLabel({ label: '52週高値からの距離 ≤ 25%（日中高値）' })).toBe('52週高値からの距離 ≤ 25%');
+    expect(conditionShortLabel({ label: '株価 > SMA50' })).toBe('株価 > SMA50');
+    const rows = [sample('FAIL', { rs_rating: 69 })];
+    const missing = singleMissingCondition(assess(rows[0], 'minervini', now));
+    expect(missing.shortLabel).toBe(conditionShortLabel(missing));
+  });
+  it('gives an RS estimate as the whole number below it and a percentage to one decimal, nothing for a comparison or an unknown', () => {
+    expect(conditionValueText({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: 69.9 })).toBe('69');
+    expect(conditionValueText({ label: '52週高値からの距離 ≤ 25%（日中高値）', value: 30.25, unit: '%' })).toBe('30.3%');
+    expect(conditionValueText({ label: '52週安値から ≥ 30%（日中安値）', value: -2, unit: '%' })).toBe('−2.0%');
+    expect(conditionValueText({ label: '株価 > SMA50', value: false, unit: '' })).toBeNull();
+    expect(conditionValueText({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: null })).toBeNull();
+    expect(conditionText({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: 61.2 })).toBe('RS ≥ 70（61）');
+    expect(conditionText({ label: '株価 > SMA50', value: false })).toBe('株価 > SMA50');
   });
 });
