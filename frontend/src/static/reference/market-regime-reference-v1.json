@@ -1,0 +1,811 @@
+{
+ "schema_version": "market-regime-reference-v1",
+ "study_version": "market-regime-study-v2",
+ "study_as_of": "2026-11-03",
+ "source": {
+  "kind": "ci-markdown",
+  "sha256": "4fc7dcbee932df388e16990b178bf704e1c710b76ae2e33e5afe4c57ce9bb0c6",
+  "ci_run": 41844557380,
+  "artifact": 13331791935,
+  "precision": "rounded-1pt",
+  "path": "frontend/tools/reference-sources/market-regime-study-v2/ci-results-run41844557380.md"
+ },
+ "methods": {
+  "distribution": "index-down-strictly-over-0.2-higher-volume-age25-high5-v1",
+  "followThrough": "rally-attempt-gain1.2-day4-15-decline6-v1",
+  "followThroughWindowSessions": 280
+ },
+ "outcome": {
+  "horizonSessions": 21,
+  "drawdownPercent": -5,
+  "statistic": "share of sessions whose worst close within the next 21 sessions was 5% or more below the observed close"
+ },
+ "samples": {
+  "^GSPC": {
+   "first": "1990-01-02",
+   "last": "2026-11-03",
+   "sessions": 9278,
+   "basis": "Yahoo Finance index OHLCV; calendar independent"
+  },
+  "^IXIC": {
+   "first": "1990-01-02",
+   "last": "2026-11-03",
+   "sessions": 9278,
+   "basis": "Yahoo Finance index OHLCV; calendar independent"
+  },
+  "breadth": {
+   "first": "2021-10-14",
+   "last": "2026-11-03",
+   "sessions": 1269,
+   "basis": "current-published-universe-retrospective"
+  }
+ },
+ "chance": {
+  "all": {
+   "actual": 121,
+   "median": 51,
+   "p95": 102.5
+  },
+  "index:^GSPC": {
+   "actual": 58,
+   "median": 5,
+   "p95": 21.9
+  },
+  "index:^IXIC": {
+   "actual": 50,
+   "median": 5,
+   "p95": 26.9
+  },
+  "breadth": {
+   "actual": 13,
+   "median": 32,
+   "p95": 91.5
+  }
+ },
+ "buckets": {
+  "ddGrades": [
+   [
+    0,
+    2
+   ],
+   [
+    3,
+    4
+   ],
+   [
+    5,
+    6
+   ],
+   [
+    7,
+    null
+   ]
+  ],
+  "ddWarn": 5,
+  "nearHighPercent": 5,
+  "ftdRecentSessions": 25,
+  "states": {
+   "ma.quadrant": [
+    "above_both",
+    "above200_below50",
+    "below200_above50",
+    "below_both"
+   ],
+   "high.near": [
+    "near",
+    "below"
+   ],
+   "dd.graded": [
+    "0-2",
+    "3-4",
+    "5-6",
+    "7+"
+   ],
+   "dd.binary": [
+    "warn",
+    "below_warn"
+   ],
+   "ftd.state": [
+    "no_correction",
+    "no_correction_pending",
+    "correction",
+    "rally_attempt",
+    "attempt_expired",
+    "confirmed",
+    "ftd_failed"
+   ],
+   "combo.ftd_recent": [
+    "recent",
+    "other"
+   ]
+  }
+ },
+ "indicators": {
+  "^GSPC.dd.binary": {
+   "judged": {
+    "sessions": 9227,
+    "first": "1990-02-06",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 9206,
+    "pDd5": 17
+   },
+   "states": {
+    "warn": {
+     "label": "5日以上 (warning)",
+     "n": 3754,
+     "episodes": 105,
+     "pDd5": 20,
+     "firstHalfShare": 50,
+     "labelDd5": "robust",
+     "labelMean": "weak",
+     "comparator": "other_state",
+     "comparatorState": "below_warn",
+     "comparatorPDd5": 14
+    },
+    "below_warn": {
+     "label": "4日以下",
+     "n": 5452,
+     "episodes": 72,
+     "pDd5": 14,
+     "firstHalfShare": 50,
+     "labelDd5": "robust",
+     "labelMean": "weak",
+     "comparator": "other_state",
+     "comparatorState": "warn",
+     "comparatorPDd5": 20
+    }
+   }
+  },
+  "^GSPC.dd.graded": {
+   "judged": {
+    "sessions": 9227,
+    "first": "1990-02-06",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 9206,
+    "pDd5": 17
+   },
+   "states": {
+    "0-2": {
+     "label": "0-2",
+     "n": 2310,
+     "episodes": 120,
+     "pDd5": 14,
+     "firstHalfShare": 49,
+     "labelDd5": "unstable",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 17
+    },
+    "3-4": {
+     "label": "3-4",
+     "n": 3142,
+     "episodes": 104,
+     "pDd5": 15,
+     "firstHalfShare": 50,
+     "labelDd5": "weak",
+     "labelMean": "weak",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 17
+    },
+    "5-6": {
+     "label": "5-6",
+     "n": 2533,
+     "episodes": 120,
+     "pDd5": 17,
+     "firstHalfShare": 53,
+     "labelDd5": "unstable",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 17
+    },
+    "7+": {
+     "label": "7+",
+     "n": 1221,
+     "episodes": 89,
+     "pDd5": 26,
+     "firstHalfShare": 45,
+     "labelDd5": "robust",
+     "labelMean": "weak",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 17
+    }
+   }
+  },
+  "^GSPC.ftd.state": {
+   "judged": {
+    "sessions": 8719,
+    "first": "1991-02-07",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 8698,
+    "pDd5": 16
+   },
+   "states": {
+    "no_correction": {
+     "label": "不要 (no 6% correction)",
+     "n": 3478,
+     "episodes": 20,
+     "pDd5": 9,
+     "firstHalfShare": 58,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    },
+    "no_correction_pending": {
+     "label": "判定保留 (window opens on the peak)",
+     "n": 0,
+     "episodes": 0,
+     "pDd5": null,
+     "firstHalfShare": null,
+     "labelDd5": "insufficient",
+     "labelMean": "insufficient",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    },
+    "correction": {
+     "label": "調整中 (correction)",
+     "n": 398,
+     "episodes": 60,
+     "pDd5": 34,
+     "firstHalfShare": 48,
+     "labelDd5": "robust",
+     "labelMean": "robust",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    },
+    "rally_attempt": {
+     "label": "反発中 (rally attempt)",
+     "n": 829,
+     "episodes": 59,
+     "pDd5": 27,
+     "firstHalfShare": 48,
+     "labelDd5": "robust",
+     "labelMean": "weak",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    },
+    "attempt_expired": {
+     "label": "15日以内のFTDなし (attempt expired)",
+     "n": 301,
+     "episodes": 10,
+     "pDd5": 5,
+     "firstHalfShare": 21,
+     "labelDd5": "weak",
+     "labelMean": "weak",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    },
+    "confirmed": {
+     "label": "確認 (FTD confirmed)",
+     "n": 2754,
+     "episodes": 39,
+     "pDd5": 19,
+     "firstHalfShare": 38,
+     "labelDd5": "unstable",
+     "labelMean": "weak",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    },
+    "ftd_failed": {
+     "label": "FTD失敗 (failed)",
+     "n": 938,
+     "episodes": 29,
+     "pDd5": 26,
+     "firstHalfShare": 66,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    }
+   }
+  },
+  "^GSPC.ma.quadrant": {
+   "judged": {
+    "sessions": 9079,
+    "first": "1990-10-15",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 9058,
+    "pDd5": 16
+   },
+   "states": {
+    "above_both": {
+     "label": "50日線・200日線の上 (above both)",
+     "n": 5500,
+     "episodes": 40,
+     "pDd5": 10,
+     "firstHalfShare": 47,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    },
+    "above200_below50": {
+     "label": "200日線の上・50日線の下 (above 200, below 50)",
+     "n": 1401,
+     "episodes": 84,
+     "pDd5": 15,
+     "firstHalfShare": 50,
+     "labelDd5": "unstable",
+     "labelMean": "robust",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    },
+    "below200_above50": {
+     "label": "200日線の下・50日線の上 (below 200, above 50)",
+     "n": 629,
+     "episodes": 27,
+     "pDd5": 25,
+     "firstHalfShare": 57,
+     "labelDd5": "weak",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    },
+    "below_both": {
+     "label": "50日線・200日線の下 (below both)",
+     "n": 1528,
+     "episodes": 51,
+     "pDd5": 35,
+     "firstHalfShare": 59,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 16
+    }
+   }
+  },
+  "^GSPC.high.near": {
+   "judged": {
+    "sessions": 9027,
+    "first": "1990-12-28",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 9006,
+    "pDd5": 16
+   },
+   "states": {
+    "near": {
+     "label": "1年高値から5%以内 (near high)",
+     "n": 6237,
+     "episodes": 20,
+     "pDd5": 11,
+     "firstHalfShare": 49,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "other_state",
+     "comparatorState": "below",
+     "comparatorPDd5": 29
+    },
+    "below": {
+     "label": "5%超の下 (further below)",
+     "n": 2769,
+     "episodes": 57,
+     "pDd5": 29,
+     "firstHalfShare": 52,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "other_state",
+     "comparatorState": "near",
+     "comparatorPDd5": 11
+    }
+   }
+  },
+  "^GSPC.combo.ftd_recent": {
+   "judged": {
+    "sessions": 8719,
+    "first": "1991-02-07",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 8698,
+    "pDd5": 16
+   },
+   "states": {
+    "recent": {
+     "label": "FTD確認から25日以内",
+     "n": 1023,
+     "episodes": 52,
+     "pDd5": 26,
+     "firstHalfShare": 52,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "other_state",
+     "comparatorState": "other",
+     "comparatorPDd5": 15
+    },
+    "other": {
+     "label": "それ以外 (any other judged state)",
+     "n": 7675,
+     "episodes": 35,
+     "pDd5": 15,
+     "firstHalfShare": 50,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "other_state",
+     "comparatorState": "recent",
+     "comparatorPDd5": 26
+    }
+   }
+  },
+  "^IXIC.dd.binary": {
+   "judged": {
+    "sessions": 9253,
+    "first": "1990-02-06",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 9232,
+    "pDd5": 26
+   },
+   "states": {
+    "warn": {
+     "label": "5日以上 (warning)",
+     "n": 3311,
+     "episodes": 103,
+     "pDd5": 30,
+     "firstHalfShare": 48,
+     "labelDd5": "weak",
+     "labelMean": "unstable",
+     "comparator": "other_state",
+     "comparatorState": "below_warn",
+     "comparatorPDd5": 24
+    },
+    "below_warn": {
+     "label": "4日以下",
+     "n": 5921,
+     "episodes": 70,
+     "pDd5": 24,
+     "firstHalfShare": 51,
+     "labelDd5": "weak",
+     "labelMean": "unstable",
+     "comparator": "other_state",
+     "comparatorState": "warn",
+     "comparatorPDd5": 30
+    }
+   }
+  },
+  "^IXIC.dd.graded": {
+   "judged": {
+    "sessions": 9253,
+    "first": "1990-02-06",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 9232,
+    "pDd5": 26
+   },
+   "states": {
+    "0-2": {
+     "label": "0-2",
+     "n": 3139,
+     "episodes": 109,
+     "pDd5": 25,
+     "firstHalfShare": 54,
+     "labelDd5": "unstable",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "3-4": {
+     "label": "3-4",
+     "n": 2782,
+     "episodes": 123,
+     "pDd5": 23,
+     "firstHalfShare": 48,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "5-6": {
+     "label": "5-6",
+     "n": 2004,
+     "episodes": 114,
+     "pDd5": 28,
+     "firstHalfShare": 50,
+     "labelDd5": "unstable",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "7+": {
+     "label": "7+",
+     "n": 1307,
+     "episodes": 79,
+     "pDd5": 34,
+     "firstHalfShare": 44,
+     "labelDd5": "robust",
+     "labelMean": "weak",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    }
+   }
+  },
+  "^IXIC.ftd.state": {
+   "judged": {
+    "sessions": 8999,
+    "first": "1991-02-07",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 8978,
+    "pDd5": 26
+   },
+   "states": {
+    "no_correction": {
+     "label": "不要 (no 6% correction)",
+     "n": 2082,
+     "episodes": 30,
+     "pDd5": 22,
+     "firstHalfShare": 39,
+     "labelDd5": "weak",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "no_correction_pending": {
+     "label": "判定保留 (window opens on the peak)",
+     "n": 0,
+     "episodes": 0,
+     "pDd5": null,
+     "firstHalfShare": null,
+     "labelDd5": "insufficient",
+     "labelMean": "insufficient",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "correction": {
+     "label": "調整中 (correction)",
+     "n": 646,
+     "episodes": 87,
+     "pDd5": 39,
+     "firstHalfShare": 67,
+     "labelDd5": "robust",
+     "labelMean": "robust",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "rally_attempt": {
+     "label": "反発中 (rally attempt)",
+     "n": 1257,
+     "episodes": 81,
+     "pDd5": 32,
+     "firstHalfShare": 59,
+     "labelDd5": "weak",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "attempt_expired": {
+     "label": "15日以内のFTDなし (attempt expired)",
+     "n": 374,
+     "episodes": 15,
+     "pDd5": 17,
+     "firstHalfShare": 47,
+     "labelDd5": "weak",
+     "labelMean": "weak",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "confirmed": {
+     "label": "確認 (FTD confirmed)",
+     "n": 3474,
+     "episodes": 54,
+     "pDd5": 23,
+     "firstHalfShare": 53,
+     "labelDd5": "weak",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "ftd_failed": {
+     "label": "FTD失敗 (failed)",
+     "n": 1145,
+     "episodes": 42,
+     "pDd5": 30,
+     "firstHalfShare": 44,
+     "labelDd5": "weak",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    }
+   }
+  },
+  "^IXIC.ma.quadrant": {
+   "judged": {
+    "sessions": 9079,
+    "first": "1990-10-15",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 9058,
+    "pDd5": 26
+   },
+   "states": {
+    "above_both": {
+     "label": "50日線・200日線の上 (above both)",
+     "n": 5373,
+     "episodes": 43,
+     "pDd5": 19,
+     "firstHalfShare": 45,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "above200_below50": {
+     "label": "200日線の上・50日線の下 (above 200, below 50)",
+     "n": 1363,
+     "episodes": 76,
+     "pDd5": 26,
+     "firstHalfShare": 51,
+     "labelDd5": "weak",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "below200_above50": {
+     "label": "200日線の下・50日線の上 (below 200, above 50)",
+     "n": 642,
+     "episodes": 30,
+     "pDd5": 30,
+     "firstHalfShare": 61,
+     "labelDd5": "weak",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    },
+    "below_both": {
+     "label": "50日線・200日線の下 (below both)",
+     "n": 1680,
+     "episodes": 44,
+     "pDd5": 46,
+     "firstHalfShare": 60,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "baseline",
+     "comparatorState": null,
+     "comparatorPDd5": 26
+    }
+   }
+  },
+  "^IXIC.high.near": {
+   "judged": {
+    "sessions": 9027,
+    "first": "1990-12-28",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 9006,
+    "pDd5": 26
+   },
+   "states": {
+    "near": {
+     "label": "1年高値から5%以内 (near high)",
+     "n": 5080,
+     "episodes": 31,
+     "pDd5": 19,
+     "firstHalfShare": 44,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "other_state",
+     "comparatorState": "below",
+     "comparatorPDd5": 35
+    },
+    "below": {
+     "label": "5%超の下 (further below)",
+     "n": 3926,
+     "episodes": 63,
+     "pDd5": 35,
+     "firstHalfShare": 57,
+     "labelDd5": "robust",
+     "labelMean": "unstable",
+     "comparator": "other_state",
+     "comparatorState": "near",
+     "comparatorPDd5": 19
+    }
+   }
+  },
+  "^IXIC.combo.ftd_recent": {
+   "judged": {
+    "sessions": 8999,
+    "first": "1991-02-07",
+    "last": "2026-11-03"
+   },
+   "baseline": {
+    "n": 8978,
+    "pDd5": 26
+   },
+   "states": {
+    "recent": {
+     "label": "FTD確認から25日以内",
+     "n": 1401,
+     "episodes": 67,
+     "pDd5": 31,
+     "firstHalfShare": 58,
+     "labelDd5": "weak",
+     "labelMean": "weak",
+     "comparator": "other_state",
+     "comparatorState": "other",
+     "comparatorPDd5": 25
+    },
+    "other": {
+     "label": "それ以外 (any other judged state)",
+     "n": 7577,
+     "episodes": 39,
+     "pDd5": 25,
+     "firstHalfShare": 49,
+     "labelDd5": "weak",
+     "labelMean": "weak",
+     "comparator": "other_state",
+     "comparatorState": "recent",
+     "comparatorPDd5": 31
+    }
+   }
+  }
+ },
+ "breadth": {
+  "rule.split": {
+   "labelDd5": "insufficient",
+   "labelMean": "insufficient"
+  },
+  "rule.lows": {
+   "labelDd5": "insufficient",
+   "labelMean": "insufficient"
+  },
+  "rule.template": {
+   "labelDd5": "insufficient",
+   "labelMean": "insufficient"
+  },
+  "rule.stage": {
+   "labelDd5": "insufficient",
+   "labelMean": "insufficient"
+  },
+  "rule.leaders": {
+   "labelDd5": "insufficient",
+   "labelMean": "insufficient"
+  },
+  "rule.breakout": {
+   "labelDd5": "insufficient",
+   "labelMean": "insufficient"
+  }
+ }
+}
