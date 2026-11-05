@@ -264,6 +264,14 @@ describe('brief fundamentals card', () => {
     expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent(/未配信|配信されていません/);
   });
 
+  it('writes a negative margin with U+2212, never the ASCII hyphen', () => {
+    const history = { symbol: 'AAA', as_of_date: DATE, status: 'available', basis: 'reported_diluted_eps', currency: 'USD', retrieved_at: '2026-10-02T20:15:00Z', annual: [],
+      quarterly: [['2025-06-30', -1, 100, -900], ['2025-09-30', -1.1, 110, -1000], ['2025-12-31', -1.2, 120, -1100], ['2026-03-31', -1.3, 130, -1200], ['2026-06-30', -1.5, 150, -2052.9]].map(([end, eps, revenue, netIncome]) => ({ end, eps, revenue, netIncome })) };
+    const scope = card(financial(null, { history }));
+    expect(tile(scope, '純利益率')).toHaveTextContent('−1368.6%');
+    expect(screen.getByTestId('brief-fundamentals').textContent).not.toMatch(/(^|[^\w])-\d/);
+  });
+
   it('labels Yahoo quarterly values as a reference only when that history is current', () => {
     const history = { symbol: 'AAA', as_of_date: DATE, status: 'available', basis: 'reported_diluted_eps', currency: 'USD', retrieved_at: '2026-10-02T20:15:00Z', annual: [],
       quarterly: [['2025-06-30', 1, 100, 10], ['2025-09-30', 1.1, 110, 12], ['2025-12-31', 1.2, 120, 13], ['2026-03-31', 1.3, 130, 15], ['2026-06-30', 1.5, 150, 18]].map(([end, eps, revenue, netIncome]) => ({ end, eps, revenue, netIncome })) };

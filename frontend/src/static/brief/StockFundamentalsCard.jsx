@@ -1,5 +1,5 @@
 import { signed } from '../positionGeometry';
-import { code33Explain, code33Parts, fundamentalTiles, fundamentalsSource, quarterReason, secStatus } from '../fundamentalsExplain.js';
+import { code33Explain, code33Parts, fixedMinus, fundamentalTiles, fundamentalsSource, quarterReason, secStatus } from '../fundamentalsExplain.js';
 import { Expander } from './briefPrimitives';
 
 const finite = Number.isFinite;
@@ -35,7 +35,7 @@ function quarterGaps(rows) {
   return lines.sort((a, b) => a.indices[0] - b.indices[0]).map(line => `${line.names.join('・')} 前年比：${periodList(rows, line.indices)}期は${line.reason}`);
 }
 // A margin in at most four characters so each quarter's column stays readable at 12px on a 320px phone.
-const marginShort = value => !finite(value) ? '—' : value.toFixed(Math.abs(value) >= 10 ? 0 : 1).replace('-', '−');
+const marginShort = value => !finite(value) ? '—' : fixedMinus(value, Math.abs(value) >= 10 ? 0 : 1);
 // A growth rate in at most four characters (+120, −35, >999, <−99). A loss-to-profit quarter says 黒字 and a
 // profit-to-loss one 赤字: facts, not rates (an EPS rate below −100% only says the quarter is a loss).
 const growthShort = (value, row, metric) => {
@@ -88,13 +88,17 @@ function QuarterBars({ rows, wide, notes = null }) {
   </div>;
 }
 
-const usd = value => !finite(value) ? '—' : Math.abs(value) >= 1e9 ? `$${(value / 1e9).toFixed(2)}B` : Math.abs(value) >= 1e6 ? `$${(value / 1e6).toFixed(1)}M` : `$${Math.round(value).toLocaleString('en-US')}`;
+const usd = value => {
+  if (!finite(value)) return '—';
+  const size = Math.abs(value), sign = value < 0 ? '−' : '';
+  return `${sign}${size >= 1e9 ? `$${(size / 1e9).toFixed(2)}B` : size >= 1e6 ? `$${(size / 1e6).toFixed(1)}M` : `$${Math.round(size).toLocaleString('en-US')}`}`;
+};
 
 /** The quarters themselves when no year-over-year comparison exists yet (few quarters or no comparable base). */
 function QuarterTable({ rows }) {
   return <table className="brief-qtable">
     <thead><tr><th scope="col">期</th><th scope="col">EPS</th><th scope="col">売上</th><th scope="col">純利益率</th></tr></thead>
-    <tbody>{rows.map(r => <tr key={r.end}><th scope="row">{r.end.slice(0, 7)}{r.derived ? '（Q4算出）' : ''}</th><td>{finite(r.eps) ? r.eps.toFixed(2) : '—'}</td><td>{usd(r.revenue)}</td><td>{finite(r.margin) ? `${r.margin.toFixed(1)}%` : '—'}</td></tr>)}</tbody>
+    <tbody>{rows.map(r => <tr key={r.end}><th scope="row">{r.end.slice(0, 7)}{r.derived ? '（Q4算出）' : ''}</th><td>{finite(r.eps) ? fixedMinus(r.eps, 2) : '—'}</td><td>{usd(r.revenue)}</td><td>{finite(r.margin) ? `${fixedMinus(r.margin, 1)}%` : '—'}</td></tr>)}</tbody>
   </table>;
 }
 
@@ -112,7 +116,7 @@ function yahooTiles(history) {
   return [
     { label: 'EPS 前年比', value: finite(history.epsYoY) ? signed(history.epsYoY, 0) : null, short: '—', note: finite(history.epsYoY) ? period(latest) : why(history.epsYoYReason) },
     { label: '売上 前年比', value: finite(history.salesYoY) ? signed(history.salesYoY, 0) : null, short: '—', note: finite(history.salesYoY) ? period(latest) : why(history.salesYoYReason) },
-    { label: '純利益率', value: marginRow ? `${(marginRow.netIncome / marginRow.revenue * 100).toFixed(1)}%` : null, short: '—', note: period(marginRow) },
+    { label: '純利益率', value: marginRow ? `${fixedMinus(marginRow.netIncome / marginRow.revenue * 100, 1)}%` : null, short: '—', note: period(marginRow) },
   ];
 }
 const utcStamp = value => { const time = Date.parse(value); return Number.isFinite(time) ? new Date(time).toISOString().slice(5, 16).replace('T', ' ') : null; };
@@ -131,13 +135,13 @@ function Code33Parts({ report, explained, hidden }) {
 // The two quarters behind each known 未達 (bookFinancialEvidence's settled), named by the series they compare.
 const SETTLED = [['epsAcceleration', 'EPS 前年比'], ['salesAcceleration', '売上 前年比'], ['marginImprovement', '純利益率']];
 const periodOf = end => `${end.slice(0, 7)}期`;
-const epsText = value => value.toFixed(2).replace('-', '−');
+const epsText = value => fixedMinus(value, 2);
 function settledText(report) {
   const sentences = SETTLED.filter(([key]) => report?.[key] === 'fail' && report.settled?.[key]).map(([key, name]) => {
     const { from, to } = report.settled[key], margin = key === 'marginImprovement';
     // Two rates that round alike keep one decimal, so the sentence never reads 「+30% → +30%と鈍化」.
     const digits = !margin && signed(from.value, 0) === signed(to.value, 0) && from.value !== to.value ? 1 : 0;
-    const format = value => margin ? `${value.toFixed(1)}%` : signed(value, digits);
+    const format = value => margin ? `${fixedMinus(value, 1)}%` : signed(value, digits);
     const quarter = report.rows?.find(row => row.end === to.end);
     if (key === 'epsAcceleration' && finite(quarter?.eps) && quarter.eps < 0) return `${name}が${periodOf(from.end)} ${format(from.value)} → ${periodOf(to.end)}は赤字（EPS ${epsText(quarter.eps)}）です。`;
     const change = to.value < from.value ? margin ? 'と下がっています' : 'と伸びが鈍化しています' : 'と横ばいです';
@@ -209,7 +213,7 @@ export default function FundamentalsCard({ financial, wide }) {
   const details = quality?.map(chip => chip.detail).filter(Boolean) || [];
   const qualityNotes = details.length > 0 && <ul className="brief-q-gaps brief-fin-quality-notes" aria-label="業績の質の根拠">{details.map(text => <li key={text}>{text}</li>)}</ul>;
   const facts = <div className="brief-facts is-fin">{tiles.map(t => <div className="brief-fact" key={t.label}><small>{t.label}</small>
-    {t.turnaround ? <><b>黒字転換</b><em>{`${t.turnaround.end.slice(0, 7)}期・前年 ${t.turnaround.from.toFixed(2).replace('-', '−')} → ${t.turnaround.to.toFixed(2)}`}</em></>
+    {t.turnaround ? <><b>黒字転換</b><em>{`${t.turnaround.end.slice(0, 7)}期・前年 ${fixedMinus(t.turnaround.from, 2)} → ${fixedMinus(t.turnaround.to, 2)}`}</em></>
       : <><b>{t.value ?? t.short}</b><em>{t.note}</em></>}</div>)}</div>;
   const box = <div className={`brief-code33 tone-${tone}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>{explain.title}</strong><p>{explain.text}</p>{settled && <p>{settled}</p>}</div></div>;
   // On a phone the parts are hidden where the Code 33 text names each one (達成, Q4 EPS, other) or none is known;

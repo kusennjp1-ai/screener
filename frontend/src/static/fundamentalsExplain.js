@@ -6,6 +6,8 @@ import { signed } from './positionGeometry.js';
 import { SEC_RECORD_SCHEMA } from './bookFinancialAdmission.js';
 
 const finite = value => typeof value === 'number' && Number.isFinite(value);
+/** A fixed-point number with U+2212 for a negative sign (never the ASCII hyphen), as every brief figure reads. */
+export const fixedMinus = (value, digits) => value.toFixed(digits).replace('-', '−');
 
 /** The three Code 33 conditions from the SEC rows, so a partly known Code 33 still shows what is known. */
 export function code33Parts(report) {
@@ -118,7 +120,7 @@ export function quarterReason(row, metric) {
   const reason = metric === 'eps' ? row.epsYoYReason : row.salesYoYReason;
   if (!reason) return null;
   if (reason === 'not_reported') return metric === 'eps' ? (row.fiscalQ4 ? 'Q4のEPSは年次報告のみ' : 'EPS未報告') : '売上未報告';
-  if (reason === 'nonpositive_base' && metric === 'eps' && finite(row.eps)) return `${EPS_REASON.nonpositive_base}（EPS ${row.eps.toFixed(2).replace('-', '−')}）`;
+  if (reason === 'nonpositive_base' && metric === 'eps' && finite(row.eps)) return `${EPS_REASON.nonpositive_base}（EPS ${fixedMinus(row.eps, 2)}）`;
   return EPS_REASON[reason] || '比較できません';
 }
 const shortReason = (row, metric) => SHORT_REASON[metric === 'eps' ? row.epsYoYReason : metric === 'sales' ? row.salesYoYReason : row.marginReason] || '—';
@@ -146,7 +148,7 @@ export function fundamentalTiles(report) {
     const derived = metric === 'sales' ? (row.salesDerived ?? row.derived) === true || baseDerived : metric === 'margin' && row.derived === true;
     return { label, value: format(row[key]), short: null, note, end: row.end, derived, ...(turnaround ? { turnaround } : {}) };
   };
-  return [tile('EPS 前年比', 'eps', 'epsYoY', v => signed(v, 0)), tile('売上 前年比', 'sales', 'salesYoY', v => signed(v, 0)), tile('純利益率', 'margin', 'margin', v => `${v.toFixed(1)}%`)];
+  return [tile('EPS 前年比', 'eps', 'epsYoY', v => signed(v, 0)), tile('売上 前年比', 'sales', 'salesYoY', v => signed(v, 0)), tile('純利益率', 'margin', 'margin', v => `${fixedMinus(v, 1)}%`)];
 }
 
 /** The source line under 業績の加速: the filing behind the newest quarter. */
