@@ -2,7 +2,7 @@
 // bars on the chart's interval, every moving average it draws and the volume average, then one bar's
 // values as the readout shows them. Pure; a value whose window is short is null (shown as —), never 0.
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
-import { BREAKOUT_VOLUME_RATIO } from './briefCandidate';
+import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
 import { ADR_SESSIONS, adrState } from './positionSizing';
 import { lastPivotCrossing } from './breakoutHistory';
 
@@ -232,16 +232,32 @@ export function weeklyRangeLabel(bars) {
   return !count ? '週足（本数 未確認）' : count >= 104 ? '週足2年' : `週足（${count}週）`;
 }
 
+/** Why a drawn crossing is grey, not green (chartCrossing's `reason`), for the 注記. */
+const CROSSING_REASONS = {
+  volume_unknown: 'その日の出来高倍率は未確認',
+  volume_below: ratio => `その日の出来高は${ratio}で${BREAKOUT_VOLUME_RATIO}×未満`,
+  below_pivot: 'その後の終値がピボットを割り込んだ',
+  close_unknown: '直近の終値が未確認',
+};
+/** The 注記's key for the drawn crossing mark (chartCrossing's tone and reason), or null. */
+export function crossingNote(crossing) {
+  if (!crossing) return null;
+  if (crossing.tone === 'zone') return `緑の矢印＝終値がピボットを上抜けた日（出来高${BREAKOUT_VOLUME_RATIO}×以上、直近の終値もピボット以上。検証済みの日足）`;
+  const reason = CROSSING_REASONS[crossing.reason] ?? CROSSING_REASONS.volume_unknown;
+  return `灰色の矢印＝終値がピボットを上抜けた日（${typeof reason === 'function' ? reason(ratioShown(crossing.volumeRatio)) : reason}。検証済みの日足）`;
+}
+
 /**
  * The chart's footnotes for the screen's 注記 (in place on the card at 1024px and wider). Each one is
  * stated once and only when it applies; every N is counted from the data.
  * @param {object} p { bars, interval, period, short (the 10/21-day lines are drawn), rsLead (rsLeadMarks of
  *   the certified bars, or null), gaps (shown gap days), sellMarks (the phone legend names ▼▲ without their
- *   meaning), adr (the readout shows ADR and the distance from the 50-day line), marks (below 1024px, the
- *   marks drawn whose legend item may be folded to keep the legend on two lines: { breakout, heavyDown,
- *   structuralLow, legs }) }
+ *   meaning), adr (the readout shows ADR and the distance from the 50-day line), crossing (chartCrossing of
+ *   the drawn crossing mark, at every width: what its colour means), marks (below 1024px, the marks drawn
+ *   whose legend item may be folded to keep the legend on two lines: { heavyDown, legs, structuralLow (its
+ *   price), short, pivot, stop, earnings (earningsMarker of the drawn flag) }) }
  */
-export function chartNotes({ bars, interval, period, short = shortAveragesDrawn(interval, period), rsLead = null, gaps = [], sellMarks = false, adr = false, marks = null }) {
+export function chartNotes({ bars, interval, period, short = shortAveragesDrawn(interval, period), rsLead = null, gaps = [], sellMarks = false, adr = false, crossing = null, marks = null }) {
   if (!bars?.length) return [];
   const series = chartSeries({ bars, interval, short });
   const n = Math.min(period, series.all.length), from = series.all.length - n;
@@ -258,26 +274,36 @@ export function chartNotes({ bars, interval, period, short = shortAveragesDrawn(
   if (sellMarks) notes.push('▼＝上昇の加速、▲＝崩れ（売りのサイン）。');
   // Below 1024px the legend keeps two lines: every mark it may fold is explained here once.
   const keys = [
-    marks?.breakout ? '緑の▲＝終値がピボットを上抜けた日（認証済みの日足）' : null,
+    crossingNote(crossing),
+    marks?.short ? '10＝10日線、21＝21日EMA（3か月のみ）' : null,
+    marks?.pivot && marks?.stop ? '緑の破線＝ピボット、赤の点線＝損切り' : marks?.pivot ? '緑の破線＝ピボット' : marks?.stop ? '赤の点線＝損切り' : null,
     marks?.heavyDown ? `■＝下落日の大商い（${BREAKOUT_VOLUME_RATIO}×以上・独自判定）` : null,
     marks?.legs ? '点線＝収縮の安値を結んだ線、枠＝値幅の収縮' : null,
-    marks?.structuralLow ? '「安値」＝最後の収縮の安値' : null,
+    finite(marks?.structuralLow) ? `「安値」＝最後の収縮の安値 ${formatPrice(marks.structuralLow)}` : null,
+    marks?.earnings ? `${marks.earnings.short}＝${marks.earnings.text}` : null,
   ].filter(Boolean);
   if (keys.length) notes.push(`チャートの印：${keys.join('、')}。`);
   return notes;
 }
 
+/** A price in whole cents: the app's rule for 「ピボット到達」 (the same cents as the pivot is a touch, not a breakout). */
+const cents = value => Math.round(value * 100);
 /**
  * The pivot crossing the chart marks: lastPivotCrossing (the conclusion's own helper) on bars certified for
- * the analysis date only, or null. A crossing on the analysis day counts; a close exactly at the pivot is a
- * touch, not a breakout, so it is not marked. A crossing followed by a close back under the pivot is still
- * marked (it is where the failed breakout began; the conclusion names the failure). `volumeRatio` is the
- * helper's (null when it supplies none, never 0).
+ * the analysis date only, or null. A crossing on the analysis day counts; a close at the pivot's cents is a
+ * touch, not a breakout, so it is not marked (briefCandidate's cents rule). A crossing followed by a close
+ * back under the pivot is still marked (it is where the failed breakout began; the conclusion names the
+ * failure). `volumeRatio` is the helper's (null when it supplies none, never 0). `tone` is 'zone' (green)
+ * only when that ratio is BREAKOUT_VOLUME_RATIO× or more and the latest certified close is still at or above
+ * the pivot (cents); otherwise 'neutral', with the `reason` the 注記 states.
  */
 export function chartCrossing(judged, pivot) {
-  if (!Array.isArray(judged) || !Number.isFinite(pivot) || pivot <= 0) return null;
+  if (!Array.isArray(judged) || !finite(pivot) || pivot <= 0) return null;
   const crossing = lastPivotCrossing(judged, pivot);
   const bar = crossing && Number.isInteger(crossing.index) ? judged[crossing.index] : null;
-  if (!bar || !Number.isFinite(bar.close) || !(bar.close > pivot)) return null;
-  return { date: bar.date, sessionsAgo: crossing.sessionsAgo, volumeRatio: Number.isFinite(crossing.volumeRatio) && crossing.volumeRatio > 0 ? crossing.volumeRatio : null };
+  if (!bar || !finite(bar.close) || !(cents(bar.close) > cents(pivot))) return null;
+  const volumeRatio = finite(crossing.volumeRatio) && crossing.volumeRatio > 0 ? crossing.volumeRatio : null;
+  const close = judged.at(-1)?.close;
+  const reason = !finite(close) ? 'close_unknown' : cents(close) < cents(pivot) ? 'below_pivot' : volumeRatio === null ? 'volume_unknown' : volumeRatio < BREAKOUT_VOLUME_RATIO ? 'volume_below' : null;
+  return { date: bar.date, sessionsAgo: crossing.sessionsAgo, volumeRatio, tone: reason ? 'neutral' : 'zone', reason };
 }

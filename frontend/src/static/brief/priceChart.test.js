@@ -479,6 +479,37 @@ describe('brief price chart', () => {
     }
   });
 
+  it('draws the crossing as a hollow arrow, never the filled ▲ of the 崩れ sell sign, green only when confirmed', () => {
+    // A crossing and a breakdown on one chart: two shapes, not two colours of one shape.
+    const both = container(1000, 470);
+    renderPriceChart(both, { ...busy(1), crossing: { date: bars.at(-12).date, volumeRatio: 1.83, tone: 'zone' }, sellMarks: [{ date: bars.at(-5).date, kind: 'weakness' }] }, { period: 130, animate: false });
+    const arrow = both.querySelector('.bc-breakoutmark'), sell = both.querySelector('.bc-sell-weak');
+    expect(arrow).not.toBeNull();
+    expect(sell).not.toBeNull();
+    const shape = d => d.replace(/^M[\d.-]+,[\d.-]+/, '');
+    expect(shape(arrow.getAttribute('d'))).not.toBe(shape(sell.getAttribute('d')));
+    expect(shape(arrow.getAttribute('d'))).toBe('l4.5,5h-2.75v5h-3.5v-5h-2.75z');
+    expect(shape(sell.getAttribute('d'))).toBe('h10l-5,-8z');
+    // The arrow is drawn hollow (its class), the sell sign filled (bc-sell): different classes, different fills.
+    expect(arrow.getAttribute('class')).toBe('bc-breakoutmark');
+    expect(sell.getAttribute('class')).toContain('bc-sell');
+    expect(both.querySelector('.bc-breakout').classList.contains('is-zone')).toBe(true);
+    expect(both.querySelector('.bc-breakout').dataset.tone).toBe('zone');
+    // Unconfirmed (no tone, or neutral): grey.
+    for (const tone of [undefined, 'neutral']) {
+      const grey = container(1000, 470);
+      renderPriceChart(grey, { ...busy(1), crossing: { date: bars.at(-12).date, volumeRatio: null, tone } }, { period: 130, animate: false });
+      expect(grey.querySelector('.bc-breakout').classList.contains('is-zone')).toBe(false);
+      expect(grey.querySelector('.bc-breakout').dataset.tone).toBe('neutral');
+    }
+    // On the same bar as a 崩れ mark, the arrow goes below it.
+    const same = container(1000, 470);
+    renderPriceChart(same, { ...busy(1), crossing: { date: bars.at(-12).date, volumeRatio: null }, sellMarks: [{ date: bars.at(-12).date, kind: 'weakness' }] }, { period: 130, animate: false });
+    const tip = Number(same.querySelector('.bc-breakoutmark').getAttribute('d').match(/^M[\d.-]+,([\d.-]+)/)[1]);
+    const base = Number(same.querySelector('.bc-sell-weak').getAttribute('d').match(/^M[\d.-]+,([\d.-]+)/)[1]);
+    expect(tip).toBeGreaterThanOrEqual(base);
+  });
+
   it('keys the heavy down bars (■ 下落日) in the volume caption on a narrow chart only when one is drawn', () => {
     const heavyDown = bars.map((b, i) => (i === bars.length - 4 ? { ...b, close: bars[i - 1].close - 2, volume: 5000 } : b));
     const phone = container(332, 340), quiet = container(332, 340), desk = container(1000, 470);

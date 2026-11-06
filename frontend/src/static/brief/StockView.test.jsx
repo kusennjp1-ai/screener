@@ -83,6 +83,8 @@ describe('brief stock view shell', () => {
     expect(notes).not.toHaveTextContent('10日線・21日EMA');
     // 200 bars: the 200-day line exists on its last bar only.
     expect(notes).toHaveTextContent('200日線は直近1本のみ（日足が足りないため）。');
+    // The phone legend may fold the pivot's line: its key is here.
+    expect(notes).toHaveTextContent('緑の破線＝ピボット');
     cleanup();
     render(<StockView data={data(true)} wide />);
     expect(document.querySelector('.brief-screen-notes')).toBeNull();

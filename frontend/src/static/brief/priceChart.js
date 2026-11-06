@@ -283,8 +283,8 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const stopLabel = value => `損切り${finite(model.entry) && model.entry > 0 && finite(value) ? ` ${signed((value / model.entry - 1) * 100)}` : ''}`;
   // In-plot labels: each takes the first of its positions that overlaps no box already taken (labels, the
   // right-axis tags, the last-price dot) and no candle; a label with no free position is left out, never
-  // drawn over another. Notices first, then the averages' names, the contractions' labels right-first, the
-  // breakout mark, the zone, the pivot and the stop, the other levels.
+  // drawn over another. Notices first, then the contractions' labels right-first, the averages' names, the
+  // crossing's ratio, the zone, the pivot and the stop, the other levels.
   const boxes = [];
   const take = (x0, x1, y0, y1) => boxes.push({ x0, x1, y0, y1 });
   const clampX = (x0, w) => Math.min(Math.max(4, x0), pw - w - 4);
@@ -302,9 +302,26 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   // A label's first free spot among [x, yc] pairs (fits() and overCandle()), or null.
   const spot = (w, spots) => spots.find(([lx, yc]) => free(lx, w, yc)) ?? null;
   const lines = [model.pivot, model.upper, model.stop, model.auditHigh].filter(inRange).map(y);
-  // The right-axis tags and the last price's dot are taken before any label.
+  // The right-axis tags, the last price's dot, the sell marks and the crossing's arrow are taken before any label.
   for (const tag of tags) take(pw + 2, pw + 2 + (tag.text ? Math.round(width(tag.text) + 10) : tagWidth(tag.value)), tag.at - TAG_H / 2, tag.at + TAG_H / 2);
   if (finite(lastY)) take(lastX - 5, lastX + 5, lastY - 5, lastY + 5);
+  const sells = (model.sellMarks || []).map(mark => ({ mark, i: barOf(mark.date) })).filter(({ i }) => i !== undefined).map(({ mark, i }) => {
+    const mx = x(i), top = Math.max(padT + 2, y(bars[i].high) - 14), bottom = Math.min(plotBottom - 2, y(bars[i].low) + 14);
+    if (mark.kind === 'weakness') take(mx - 5, mx + 5, bottom - 8, bottom); else take(mx - 5, mx + 5, top, top + 8);
+    return { mark, i, mx, top, bottom };
+  });
+  // The pivot crossing (certified daily bars only, the conclusion's own helper): a hollow upward arrow under the
+  // crossing bar (its week on the weekly chart), never the filled ▲ of the 崩れ sell sign. It is green only for a
+  // crossing chartCrossing confirms (1.4× or more, the latest close still at or above the pivot), grey otherwise.
+  const crossingBar = model.crossing?.date ? barOf(model.crossing.date) : undefined;
+  let arrow = null;
+  if (crossingBar !== undefined && finite(bars[crossingBar]?.low)) {
+    // Under a 崩れ mark on the same bar, the arrow goes below it.
+    const under = sells.some(sell => sell.i === crossingBar && sell.mark.kind === 'weakness');
+    const mx = x(crossingBar), top = Math.min(plotBottom - 11, y(bars[crossingBar].low) + (under ? 16 : 4));
+    take(mx - 5.5, mx + 5.5, top - 1, top + 11);
+    arrow = { mx, top, zone: model.crossing.tone === 'zone' };
+  }
   let noticeBox = null;
   const notices = [];
   if (weekly && all.length < 104) notices.push(`週足は直近${all.length}週分（${(all[0].start || all[0].date).slice(0, 7).replace('-', '/')}〜）。`, '2年分はありません');
@@ -361,21 +378,18 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     if (Math.abs(at - label.y) > 3) B.push(`<line x1="${pw - 1.5}" x2="${pw - 1.5}" y1="${label.y.toFixed(1)}" y2="${(at + (label.y > at ? 6 : -6)).toFixed(1)}" class="bc-maleader bc-maleader-${label.key}"/>`);
     F.push(text((pw - 3).toFixed(1), (at + 4).toFixed(1), label.body, `bc-malabel bc-malabel-${label.key}`, `text-anchor="end" font-weight="700" ${mono}`));
   }
-  // The pivot crossing (certified daily bars only, the conclusion's own helper): a zone-coloured ▲ under the
-  // crossing bar (its week on the weekly chart), and 「上抜け 1.80×」 beside it when there is room, right first.
+  // The crossing's arrow, and 「上抜け 1.80×」 beside it when the helper gives the ratio and there is room, right first.
   let breakout = null;
-  const crossingBar = model.crossing?.date ? barOf(model.crossing.date) : undefined;
-  if (crossingBar !== undefined && finite(bars[crossingBar]?.low)) {
-    const mx = x(crossingBar), top = Math.min(plotBottom - 9, y(bars[crossingBar].low) + 4);
-    take(mx - 5, mx + 5, top, top + 8);
+  if (arrow) {
+    const { mx, top } = arrow;
     breakout = { date: bars[crossingBar].date };
     let label = '';
     if (finite(model.crossing.volumeRatio)) {
-      const body = `上抜け ${ratioShown(model.crossing.volumeRatio)}`, w = width(body), yc = top + 4;
-      const at = spot(w, [[mx + 7, yc], [mx - 7 - w, yc], [mx - w / 2, yc + 14], [mx + 7, yc + 14], [mx - 7 - w, yc + 14], [mx - w / 2, yc + 28]].filter(([lx]) => lx >= 4 && lx + w <= pw - 4));
+      const body = `上抜け ${ratioShown(model.crossing.volumeRatio)}`, w = width(body), yc = top + 5;
+      const at = spot(w, [[mx + 8, yc], [mx - 8 - w, yc], [mx - w / 2, yc + 15], [mx + 8, yc + 15], [mx - 8 - w, yc + 15], [mx - w / 2, yc + 29]].filter(([lx]) => lx >= 4 && lx + w <= pw - 4));
       if (at) { take(at[0], at[0] + w, at[1] - 7, at[1] + 7); label = text(at[0].toFixed(1), (at[1] + 4).toFixed(1), body, 'bc-breakouttext', 'font-weight="700"'); breakout.label = body; }
     }
-    F.push(`<g class="bc-breakout" data-date="${bars[crossingBar].date}"><path d="M${(mx - 5).toFixed(1)},${(top + 8).toFixed(1)}h10l-5,-8z" class="bc-breakoutmark"/>${label}</g>`);
+    F.push(`<g class="bc-breakout${arrow.zone ? ' is-zone' : ''}" data-date="${bars[crossingBar].date}" data-tone="${arrow.zone ? 'zone' : 'neutral'}"><path d="M${mx.toFixed(1)},${top.toFixed(1)}l4.5,5h-2.75v5h-3.5v-5h-2.75z" class="bc-breakoutmark"/>${label}</g>`);
   }
   if (zone && zone.height > 14) {
     const body = `買いゾーン${finite(model.upper) ? ` 〜${fmt(model.upper)}` : ''}`, zx = clampX(Math.min(zone.x + 6, pw - width(body) - 30), width(body));
@@ -411,9 +425,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   };
   F.push(`<g class="bc-tags">${tags.map(tagMarkup).join('')}</g>`);
   F.push(`<g class="bc-last"><circle cx="${lastX}" cy="${lastY}" r="9" class="bc-pulse"/><circle cx="${lastX}" cy="${lastY}" r="3.6" class="bc-lastdot"/></g>`);
-  for (const mark of model.sellMarks || []) {
-    const i = barOf(mark.date); if (i === undefined) continue;
-    const mx = x(i), top = Math.max(padT + 2, y(bars[i].high) - 14), bottom = Math.min(plotBottom - 2, y(bars[i].low) + 14);
+  for (const { mark, mx, top, bottom } of sells) {
     F.push(mark.kind === 'weakness'
       ? `<path d="M${mx - 5},${bottom}h10l-5,-8z" class="bc-sell bc-sell-weak"/>`
       : `<path d="M${mx - 5},${top}h10l-5,8z" class="bc-sell bc-sell-strong"/>`);

@@ -65,6 +65,13 @@ const collisions = page => page.getByTestId('brief-price-chart').evaluate(chart 
   labels.forEach((a, i) => { for (const b of [...labels.slice(i + 1), ...solid]) if (hit(a, b)) out.push(`${a.name} × ${b.name}`); });
   return out;
 });
+/** The 注記 key of each foldable legend item (chartNotes): a folded item's mark is still explained. */
+const NOTE_KEYS = { low: '「安値」＝最後の収縮の安値 ', breakout: 'の矢印＝終値がピボットを上抜けた日', heavydown: '■＝下落日の大商い', sell: '▼＝上昇の加速、▲＝崩れ', lows: '点線＝収縮の安値を結んだ線', boxes: '枠＝値幅の収縮', pivot: '緑の破線＝ピボット', stop: '赤の点線＝損切り', ma10: '10＝10日線', ema21: '21＝21日EMA' };
+/** Folded legend items whose key the 注記 does not give. */
+const unexplainedFolds = page => page.evaluate(keys => {
+  const notes = document.querySelector('.brief-screen-notes')?.textContent ?? '';
+  return [...document.querySelectorAll('.brief-legend > span[hidden]')].map(item => item.dataset.key).filter(key => !keys[key] || !notes.includes(keys[key]));
+}, NOTE_KEYS);
 /** The last contraction's depth on the chart (under its box, or combined 「T2 −7%」 above it): null when it is missing, undefined without contractions. */
 const finalDepth = page => page.getByTestId('brief-price-chart').evaluate(chart => {
   const last = Math.max(...[...chart.querySelectorAll('.bc-leg')].map(node => Number(node.dataset.leg)));
@@ -203,6 +210,8 @@ test.describe('390×844 phone', () => {
       await expect(page.locator('.bc-structural-text')).toHaveCount(0);
       const high = page.locator('.bc-high52-text');
       if (await high.count()) await expect(high).toHaveText(/^52週高 [\d,.]+$/);
+      // A folded legend item's mark is keyed in the 注記.
+      expect(await unexplainedFolds(page), `${what}: folded legend items without a 注記 key`).toEqual([]);
       await withinBudget(page, what);
       for (const slack of await readoutSlack(page)) expect(slack, `${what}: readout slack`).toBeGreaterThanOrEqual(6);
       expect(await asciiMinus(page), `${what}: U+2212`).toEqual([]);
@@ -250,7 +259,20 @@ test.describe('390×844 phone', () => {
     const day = await chart.locator('.bc-breakout').getAttribute('data-date');
     expect(day < date).toBe(true);
     await expect(chart).toHaveAttribute('aria-label', new RegExp(`ピボットを上抜けた日 ${day}`));
-    await expect(page.locator('.brief-legend [data-key="breakout"]')).toHaveText('▲上抜け');
+    // Today's helper gives no volume ratio, so the crossing is unconfirmed: a grey hollow arrow, never the filled ▲
+    // of the 崩れ sell sign, keyed (visibly) in the legend by the same grey glyph and explained in the 注記.
+    const item = page.locator('.brief-legend [data-key="breakout"]');
+    await expect(item).toBeVisible();
+    await expect(item).toHaveText('上抜け');
+    await expect(chart.locator('.bc-breakout')).toHaveAttribute('data-tone', 'neutral');
+    await expect(item.locator('svg.lg-breakoutglyph')).not.toHaveClass(/is-zone/);
+    const mark = await chart.locator('.bc-breakoutmark').evaluate(node => ({ d: node.getAttribute('d'), fill: getComputedStyle(node).fill, stroke: getComputedStyle(node).stroke, surface: getComputedStyle(node.closest('.brief-chartcard')).getPropertyValue('--surface').trim() }));
+    expect(mark.d).not.toMatch(/h10l-5,-8z$/);
+    expect(mark.stroke).not.toBe(mark.fill);
+    const glyph = await item.locator('svg path').evaluate(node => getComputedStyle(node).stroke);
+    expect(glyph).toBe(mark.stroke);
+    await expect(page.locator('.brief-screen-notes')).toContainText('灰色の矢印＝終値がピボットを上抜けた日（その日の出来高倍率は未確認。検証済みの日足）');
+    expect(await collisions(page)).toEqual([]);
     // The weekly chart marks the crossing's week.
     await page.getByRole('group', { name: '表示期間' }).getByRole('button', { name: /^週足/ }).click();
     await chartReady(page);

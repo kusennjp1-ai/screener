@@ -3,7 +3,7 @@ import { BOOK_TECHNICAL_VERSION, buildBookTechnicalEvidence } from '../bookTechn
 import { ScreenNotes } from './briefPrimitives';
 import useSessionState from './useSessionState';
 import { gapDays, publishedRsLineHigh, rsLeadMarks, rsLineNewHigh, stageFromBars, stagePhase } from './briefChartModel';
-import { CHART_RANGES as RANGES, chartCrossing, chartNotes, heavyVolumeBars, shortAveragesShown, weeklyBars } from './chartReadout';
+import { CHART_RANGES as RANGES, chartCrossing, chartNotes, earningsMarker, heavyVolumeBars, priceInRange, shortAveragesShown, weeklyBars } from './chartReadout';
 import { isBreakdown, sellMarks, stockSells } from './briefSell';
 import { earningsCall } from './briefCandidate';
 import { planLevels } from './positionSizing';
@@ -77,20 +77,27 @@ export default function StockView({ data, header = null, wide = false, market = 
   const notes = useMemo(() => {
     if (!bars?.length) return [];
     const shown = interval === 'day' ? new Set(bars.slice(-period).map(b => b.date)) : null;
-    // Below 1024px the legend names ▼▲ without their meaning and keeps two lines: the marks it may fold are explained here.
+    // The crossing's colour is explained at every width, when its bar is drawn.
+    const visible = interval === 'day' ? bars.slice(-period) : weeklyBars(bars).slice(-period);
+    const crossing = chartCrossing(judged, view?.pivot);
+    const crossingShown = crossing && visible.some(bar => (bar.start ?? bar.date) <= crossing.date && crossing.date <= bar.date) ? crossing : null;
+    // Below 1024px the legend names ▼▲ without their meaning and keeps two lines: every mark it may fold is explained
+    // here (only marks the chart draws: the structural low inside the price panel's range, the earnings flag in its window).
     let marks = null;
     if (!wide) {
-      const visible = interval === 'day' ? bars.slice(-period) : weeklyBars(bars).slice(-period);
-      const crossing = chartCrossing(judged, view?.pivot);
+      const range = { bars, interval, pivot: view?.pivot, upper: view?.upper, stop: levels?.stop };
       marks = {
-        breakout: Boolean(crossing && visible.some(bar => (bar.start ?? bar.date) <= crossing.date && crossing.date <= bar.date)),
+        short: shortAveragesShown(interval, period, wide),
+        pivot: Number.isFinite(view?.pivot), stop: Number.isFinite(levels?.stop),
         heavyDown: heavyVolumeBars({ bars, interval }, period).some(bar => bar.direction === 'down'),
         legs: legsValid && legs.length > 0,
-        structuralLow: Number.isFinite(levels?.structuralLow),
+        structuralLow: priceInRange(range, period, levels?.structuralLow) ? levels.structuralLow : null,
+        earnings: earningsMarker(call),
       };
     }
-    return chartNotes({ bars, interval, period, short: shortAveragesShown(interval, period, wide), rsLead, gaps: shown ? gaps.filter(g => shown.has(g.date)) : [], sellMarks: !wide && sellMarks(sells).length > 0, adr: interval === 'day', marks });
-  }, [bars, judged, view?.pivot, interval, period, rsLead, gaps, wide, sells, legsValid, legs, levels?.structuralLow]);
+    return chartNotes({ bars, interval, period, short: shortAveragesShown(interval, period, wide), rsLead, gaps: shown ? gaps.filter(g => shown.has(g.date)) : [], sellMarks: !wide && sellMarks(sells).length > 0, adr: interval === 'day', crossing: crossingShown, marks });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the call is read by its date and days (recomputed each render)
+  }, [bars, judged, view?.pivot, view?.upper, interval, period, rsLead, gaps, wide, sells, legsValid, legs, levels?.structuralLow, levels?.stop, call?.date, call?.days, call?.soon]);
   if (!view) return <p className="brief-note brief-pad" role="status">銘柄データを読み込み中…</p>;
   return <div className="brief-stock">
     {header}

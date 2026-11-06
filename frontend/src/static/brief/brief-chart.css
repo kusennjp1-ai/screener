@@ -65,8 +65,12 @@
 .brief-legend i.lg-ma10 { border-top-color: var(--ma10); }
 .brief-legend i.lg-ema21 { border-top-color: var(--ema21); }
 .brief-legend i.lg-rs { border-top-color: var(--accent); }
-.brief-legend i.lg-structural { border-top-color: var(--text-3); border-top-style: dotted; }
-.brief-legend .lg-breakoutglyph { margin-right: 3px; font-weight: 400; color: var(--zone); }
+/* The last contraction's low is dashed, apart from the dotted line joining the contraction lows. */
+.brief-legend i.lg-structural { border-top-color: var(--text-3); border-top-style: dashed; }
+/* The crossing's glyph is the chart's hollow arrow, in the colour of the drawn mark. */
+.brief-legend .lg-breakoutglyph { display: inline-block; width: 10px; height: 11px; margin-right: 3px; vertical-align: -1px; overflow: visible; }
+.brief-legend .lg-breakoutglyph path { fill: var(--surface); stroke: var(--text-2); stroke-width: 1.5; stroke-linejoin: round; }
+.brief-legend .lg-breakoutglyph.is-zone path { stroke: var(--zone); }
 .brief-legend .lg-heavydown { display: inline-block; width: 8px; height: 10px; margin-right: 4px; vertical-align: -1px; background: var(--ext); }
 .brief-legend > span[hidden] { display: none; }
 .brief-legend i.lg-pivot { border-top-color: var(--zone); }
@@ -120,10 +124,13 @@
 /* The last contraction's low as a tag on a narrow chart (its price in the legend). */
 .bc-lowtag-fill { fill: var(--surface); stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 2 2; }
 .brief-chart .bc-tagtext.bc-lowtagtext { fill: var(--text-2); }
-.bc-structural { stroke: var(--text-3); stroke-dasharray: 1 2.5; }
-/* The pivot crossing (certified bars only). */
-.bc-breakoutmark { fill: var(--zone); }
-.bc-breakouttext { fill: var(--zone); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.bc-structural { stroke: var(--text-3); stroke-dasharray: 4 3; }
+/* The pivot crossing (certified bars only): a hollow arrow, never the filled ▲ of the 崩れ sell sign; green only
+   for a confirmed crossing (1.4× and the close still at or above the pivot), grey otherwise. */
+.bc-breakoutmark { fill: var(--surface); stroke: var(--text-2); stroke-width: 1.5; stroke-linejoin: round; }
+.bc-breakout.is-zone .bc-breakoutmark { stroke: var(--zone); }
+.bc-breakouttext { fill: var(--text-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.bc-breakout.is-zone .bc-breakouttext { fill: var(--zone); }
 /* The phone's compact earnings flag in the RS panel's axis column. */
 .bc-earnflag-fill { fill: var(--surface); stroke: var(--line-2); stroke-width: 1; }
 .bc-earnflag.bc-earnings-soon .bc-earnflag-fill { stroke: var(--ext); }

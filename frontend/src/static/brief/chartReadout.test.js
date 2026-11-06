@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { chartCrossing, chartNotes, chartReadout, chartSeries, ema, formatPercent, formatPrice, formatShares, formatVolume, heavyVolumeBars, shortAveragesDrawn, shortAveragesShown, weeklyBars, weeklyRangeLabel } from './chartReadout';
+import { chartContentKey, chartCrossing, chartNotes, chartReadout, crossingNote, earningsMarker, chartSeries, ema, formatPercent, formatPrice, formatShares, formatVolume, heavyVolumeBars, shortAveragesDrawn, shortAveragesShown, priceInRange, weeklyBars, weeklyRangeLabel } from './chartReadout';
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { ADR_SESSIONS, adrPercent } from './positionSizing';
 import { lastPivotCrossing } from './breakoutHistory';
@@ -137,9 +137,16 @@ describe('the chart footnotes', () => {
     // ADR and the 50-day distance are 独自計算 (daily charts); below 1024px every mark the legend may fold is explained once.
     expect(chartNotes({ bars: list, interval: 'day', period: 130, adr: true })).toContain(`ADR（直近${ADR_SESSIONS}日の高値÷安値−1の平均）・50日線からの乖離は独自計算です。`);
     expect(chartNotes({ bars: list, interval: 'week', period: 104, adr: true }).join('')).not.toContain('ADR');
-    const marks = chartNotes({ bars: list, interval: 'day', period: 130, marks: { breakout: true, heavyDown: true, legs: true, structuralLow: true } });
-    expect(marks).toContain('チャートの印：緑の▲＝終値がピボットを上抜けた日（認証済みの日足）、■＝下落日の大商い（1.4×以上・独自判定）、点線＝収縮の安値を結んだ線、枠＝値幅の収縮、「安値」＝最後の収縮の安値。');
-    expect(chartNotes({ bars: list, interval: 'day', period: 130, marks: { breakout: false, heavyDown: false, legs: false, structuralLow: false } }).join('')).not.toContain('チャートの印');
+    // Every key a folded legend item names (the short lines, the pivot and stop lines, ■, the contraction lines,
+    // the 「安値」 tag with its price, the earnings flag), and the crossing's colour at every width.
+    const crossing = { date: list.at(-2).date, sessionsAgo: 1, volumeRatio: null, tone: 'neutral', reason: 'volume_unknown' };
+    const flag = earningsMarker({ date: '2026-10-06', days: -1, soon: false });
+    const marks = chartNotes({ bars: list, interval: 'day', period: 65, crossing, marks: { short: true, pivot: true, stop: true, heavyDown: true, legs: true, structuralLow: 109.47, earnings: flag } });
+    expect(marks).toContain('チャートの印：灰色の矢印＝終値がピボットを上抜けた日（その日の出来高倍率は未確認。検証済みの日足）、10＝10日線、21＝21日EMA（3か月のみ）、緑の破線＝ピボット、赤の点線＝損切り、■＝下落日の大商い（1.4×以上・独自判定）、点線＝収縮の安値を結んだ線、枠＝値幅の収縮、「安値」＝最後の収縮の安値 109.47、E 10/6＝決算 10/6 経過。');
+    expect(chartNotes({ bars: list, interval: 'day', period: 130, marks: { stop: true } })).toContain('チャートの印：赤の点線＝損切り。');
+    expect(chartNotes({ bars: list, interval: 'day', period: 130, marks: { heavyDown: false, legs: false, structuralLow: null } }).join('')).not.toContain('チャートの印');
+    // At 1024px and wider (no marks) the crossing's colour is still explained.
+    expect(chartNotes({ bars: list, interval: 'day', period: 130, crossing: { ...crossing, tone: 'zone', reason: null } })).toContain('チャートの印：緑の矢印＝終値がピボットを上抜けた日（出来高1.4×以上、直近の終値もピボット以上。検証済みの日足）。');
     expect(chartNotes({ bars: [], interval: 'day', period: 130 })).toEqual([]);
   });
 });
@@ -200,23 +207,69 @@ describe('the readout in round 2', () => {
 
 describe('the pivot crossing the chart marks', () => {
   const list = bars(120), pivot = list.at(-3).close;
-  it('reads lastPivotCrossing on certified bars only, never a touch at the pivot, with its ratio or null', () => {
+  it('reads lastPivotCrossing on certified bars only, never a touch at the pivot\'s cents, with its ratio or null', () => {
     lastPivotCrossing.mockReturnValue({ index: 117, date: list[117].date, sessionsAgo: 2, volumeRatio: 1.83 });
-    expect(chartCrossing(list, pivot - 0.5)).toEqual({ date: list[117].date, sessionsAgo: 2, volumeRatio: 1.83 });
+    expect(chartCrossing(list, pivot - 0.5)).toEqual({ date: list[117].date, sessionsAgo: 2, volumeRatio: 1.83, tone: 'zone', reason: null });
     expect(lastPivotCrossing).toHaveBeenLastCalledWith(list, pivot - 0.5);
     // Bars not certified (null), or no pivot: no crossing, and the helper is not asked.
     lastPivotCrossing.mockClear();
     expect(chartCrossing(null, pivot)).toBeNull();
     expect(chartCrossing(list, null)).toBeNull();
     expect(lastPivotCrossing).not.toHaveBeenCalled();
-    // A close exactly at the pivot is a touch, not a breakout: not marked.
+    // A close at the pivot's cents is a touch (「ピボット到達」), not a breakout: not marked, even a fraction above.
     expect(chartCrossing(list, list[117].close)).toBeNull();
+    const fraction = list.map((bar, i) => (i === 117 ? { ...bar, close: 100.004 } : bar));
+    expect(chartCrossing(fraction, 100)).toBeNull();
+    const tenth = list.map((bar, i) => (i === 117 ? { ...bar, close: 110.744 } : bar));
+    expect(chartCrossing(tenth, 110.74)).toBeNull();
     // A crossing on the analysis day (sessionsAgo 0) and one followed by a close back under are marked.
     lastPivotCrossing.mockReturnValue({ index: 119, date: list[119].date, sessionsAgo: 0, volumeRatio: null });
-    expect(chartCrossing(list, list[119].close - 1)).toEqual({ date: list[119].date, sessionsAgo: 0, volumeRatio: null });
+    expect(chartCrossing(list, list[119].close - 1)).toEqual({ date: list[119].date, sessionsAgo: 0, volumeRatio: null, tone: 'neutral', reason: 'volume_unknown' });
     lastPivotCrossing.mockReturnValue({ index: 110, date: list[110].date, sessionsAgo: 9, volumeRatio: 0 });
-    expect(chartCrossing(list, list[110].close - 0.01)).toEqual({ date: list[110].date, sessionsAgo: 9, volumeRatio: null });
+    expect(chartCrossing(list, list[110].close - 0.01)).toMatchObject({ date: list[110].date, sessionsAgo: 9, volumeRatio: null });
     lastPivotCrossing.mockReturnValue(null);
     expect(chartCrossing(list, pivot)).toBeNull();
+  });
+
+  it('is green only on a 1.4× crossing whose latest certified close is still at or above the pivot, grey otherwise', () => {
+    const at = { index: 117, date: list[117].date, sessionsAgo: 2 };
+    // Unknown ratio (today's helper body never gives one): grey.
+    lastPivotCrossing.mockReturnValue({ ...at, volumeRatio: null });
+    expect(chartCrossing(list, pivot - 0.5)).toMatchObject({ tone: 'neutral', reason: 'volume_unknown' });
+    // 1.62× with the close still above the pivot: green.
+    lastPivotCrossing.mockReturnValue({ ...at, volumeRatio: 1.62 });
+    expect(chartCrossing(list, pivot - 0.5)).toMatchObject({ tone: 'zone', reason: null, volumeRatio: 1.62 });
+    // Under 1.4×: grey, with the ratio.
+    lastPivotCrossing.mockReturnValue({ ...at, volumeRatio: 1.2 });
+    expect(chartCrossing(list, pivot - 0.5)).toMatchObject({ tone: 'neutral', reason: 'volume_below', volumeRatio: 1.2 });
+    // The close back under the pivot (a failed breakout): grey, whatever the ratio.
+    lastPivotCrossing.mockReturnValue({ ...at, volumeRatio: 1.62 });
+    const back = list.map((bar, i) => (i === 119 ? { ...bar, close: pivot - 0.6 } : bar));
+    expect(chartCrossing(back, pivot - 0.5)).toMatchObject({ tone: 'neutral', reason: 'below_pivot' });
+    // The latest close at the pivot's cents is still at the pivot: green.
+    const level = list.map((bar, i) => (i === 119 ? { ...bar, close: pivot - 0.5 + 0.004 } : bar));
+    expect(chartCrossing(level, pivot - 0.5)).toMatchObject({ tone: 'zone' });
+    // A missing latest close: grey, never green.
+    const missing = list.map((bar, i) => (i === 119 ? { ...bar, close: null } : bar));
+    expect(chartCrossing(missing, pivot - 0.5)).toMatchObject({ tone: 'neutral', reason: 'close_unknown' });
+    // The 注記 says why a mark is grey.
+    expect(crossingNote({ tone: 'neutral', reason: 'volume_below', volumeRatio: 1.2 })).toBe('灰色の矢印＝終値がピボットを上抜けた日（その日の出来高は1.20×で1.4×未満。検証済みの日足）');
+    expect(crossingNote({ tone: 'neutral', reason: 'below_pivot', volumeRatio: 1.62 })).toBe('灰色の矢印＝終値がピボットを上抜けた日（その後の終値がピボットを割り込んだ。検証済みの日足）');
+    expect(crossingNote(null)).toBeNull();
+  });
+});
+
+describe('the chart helpers the card and the screen share', () => {
+  it('keeps the earnings marker\'s days, 当日 and 経過, with past for a passed report', () => {
+    expect(earningsMarker({ date: '2026-10-10', days: 7, soon: true })).toEqual({ text: '決算 10/10 あと7日', short: 'E 10/10', warn: true, past: false });
+    expect(earningsMarker({ date: '2026-10-10', days: 0, soon: true })).toMatchObject({ text: '決算 10/10 当日', warn: true, past: false });
+    expect(earningsMarker({ date: '2026-10-06', days: -1, soon: true })).toMatchObject({ text: '決算 10/6 経過', warn: false, past: true });
+  });
+  it('tells whether a level is inside the price panel, and keys the drawing by the crossing\'s tone', () => {
+    const model = { symbol: 'X', bars: bars(130), interval: 'day', pivot: 112 };
+    expect(priceInRange(model, 65, 111)).toBe(true);
+    expect(priceInRange(model, 65, 50)).toBe(false);
+    expect(priceInRange(model, 65, null)).toBe(false);
+    expect(chartContentKey({ ...model, crossing: { date: 'd', tone: 'zone' } }, 65)).not.toBe(chartContentKey({ ...model, crossing: { date: 'd', tone: 'neutral' } }, 65));
   });
 });

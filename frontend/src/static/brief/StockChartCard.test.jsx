@@ -195,11 +195,22 @@ describe('brief stock chart card', () => {
   it('marks the pivot crossing only on certified bars, and names it in the legend only when drawn', () => {
     const list = bars();
     lastPivotCrossing.mockImplementation(judged => ({ index: judged.length - 3, date: judged.at(-3).date, sessionsAgo: 2, volumeRatio: 1.62 }));
-    const crossed = certified => ({ ...data(certified), bars: list, view: { ...view, pivot: list.at(-3).close * 0.99 } });
+    // The pivot under the latest close (which drops 10% on the last bar), so the crossing still holds.
+    const crossed = certified => ({ ...data(certified), bars: list, view: { ...view, pivot: list.at(-1).close * 0.99 } });
     render(<StockView data={crossed(true)} />);
     const mark = screen.getByTestId('brief-price-chart').querySelector('.bc-breakout');
     expect(mark?.dataset.date).toBe(list.at(-3).date);
-    expect(document.querySelector('.brief-legend [data-key="breakout"]')).toHaveTextContent('▲上抜け');
+    // 1.62× with the latest close still above the pivot: the green arrow, keyed by the same green glyph.
+    expect(mark.classList.contains('is-zone')).toBe(true);
+    const item = document.querySelector('.brief-legend [data-key="breakout"]');
+    expect(item).toHaveTextContent(/^上抜け$/);
+    expect(item.querySelector('svg.lg-breakoutglyph').classList.contains('is-zone')).toBe(true);
+    cleanup();
+    // The ratio unknown (today's helper body): grey, in the chart and in the legend.
+    lastPivotCrossing.mockImplementation(judged => ({ index: judged.length - 3, date: judged.at(-3).date, sessionsAgo: 2, volumeRatio: null }));
+    render(<StockView data={crossed(true)} />);
+    expect(screen.getByTestId('brief-price-chart').querySelector('.bc-breakout').classList.contains('is-zone')).toBe(false);
+    expect(document.querySelector('.brief-legend [data-key="breakout"] svg').classList.contains('is-zone')).toBe(false);
     cleanup();
     lastPivotCrossing.mockClear();
     render(<StockView data={crossed(false)} />);

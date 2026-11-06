@@ -57,11 +57,15 @@ function Readout({ readout, compact, reason }) {
   </div>;
 }
 
+/** The crossing's glyph in the legend: the chart's hollow arrow, green or grey as the drawn mark. */
+const BreakoutGlyph = ({ zone }) => <svg className={`lg-breakoutglyph${zone ? ' is-zone' : ''}`} viewBox="0 0 10 11" aria-hidden="true" focusable="false"><path d="M5,0.75l4.5,5h-2.75v5h-3.5v-5h-2.75z" /></svg>;
+
 /**
- * The legend's items, each the colour (and dash) of what it names: [key, swatch class ('b:' a glyph), text,
- * fold rank]. Below 1024px the legend keeps two lines: the averages and the RS line's meaning always stay
- * (no rank), and the other items are kept by rank while they fit (every mark they name is also explained in
- * the screen's 注記).
+ * The legend's items, each the colour (and dash) of what it names: [key, swatch class ('b:' a glyph) or a node,
+ * text, fold rank]. Below 1024px the legend keeps two lines: the averages and the RS line's meaning always stay
+ * (no rank), and the other items are kept by rank while they fit; every foldable item's key is also in the
+ * screen's 注記 (chartNotes: the crossing, the short lines, the pivot and stop lines, ■, the contraction lines,
+ * the 「安値」 tag with its price, the sell marks).
  */
 function legendItems({ weekly, short, wide, rsShown, structuralLow, drawnLegs, crossing, heavyDown, sellMarks: sells, pivot, stop }) {
   // Below 1024px the daily averages share one item (「50 150 200日線」, each number after its own swatch).
@@ -70,15 +74,16 @@ function legendItems({ weekly, short, wide, rsShown, structuralLow, drawnLegs, c
   if (rsShown) rows.push(['rs', 'lg-rs', `${wide ? 'RS線＝' : ''}株価÷S&P 500・RS推計やIBD RSとは別`]);
   // The last contraction's low (a 「安値」 tag on a narrow chart, a dotted line on every chart): its price.
   if (Number.isFinite(structuralLow)) rows.push(['low', 'lg-structural', `最後の収縮の安値 ${formatPrice(structuralLow)}`, 1]);
-  if (crossing) rows.push(['breakout', 'b:lg-breakoutglyph:▲', '上抜け', 2]);
+  if (crossing) rows.push(['breakout', <BreakoutGlyph key="glyph" zone={crossing.tone === 'zone'} />, '上抜け', 2]);
   // Below 1024px the volume panel's caption also keys ■ (下落日), beside the bars.
   if (heavyDown) rows.push(['heavydown', 'b:lg-heavydown:', '下落日の大商い', wide ? 3 : 6]);
   if (sells) rows.push(wide ? ['sell', 'lg-sell', '売りのサイン（▼上昇の加速・▲崩れ）', 4] : ['sell', 'b:lg-sellglyph:▼▲', '売りのサイン', 4]);
   if (short) rows.push(['ma10', 'lg-ma10', '10日線', 8], ['ema21', 'lg-ema21', '21日EMA', 8]);
   if (Number.isFinite(pivot)) rows.push(['pivot', 'lg-pivot', 'ピボット', 7]);
   if (Number.isFinite(stop)) rows.push(['stop', 'lg-stop', '損切り', 7]);
-  if (drawnLegs) rows.push(['lows', 'lg-lows', '収縮の安値', 5], ['boxes', null, wide ? '枠＝値幅の収縮' : '枠＝収縮', 6]);
+  if (drawnLegs) rows.push(['lows', 'lg-lows', '収縮の安値を結ぶ線', 5], ['boxes', null, wide ? '枠＝値幅の収縮' : '枠＝収縮', 6]);
   return rows.map(([key, swatch, text, rank]) => {
+    if (swatch && typeof swatch !== 'string') return { key, rank, node: <>{swatch}{text}</> };
     const [glyph, cls, mark] = swatch?.startsWith('b:') ? swatch.split(':') : [];
     return { key, rank, node: <>{glyph ? <b className={cls}>{mark}</b> : swatch ? <i className={swatch} /> : null}{text}</> };
   });
@@ -191,7 +196,7 @@ export default function StockChartCard({ data, view, earningsCall = null, legs, 
   // The crossing's bar must be on screen for its legend item (and the structural low in the y-range for its tag).
   const crossingShown = Boolean(crossing && bars && (weekly ? weeklyBars(bars).slice(-period) : bars.slice(-period)).some(bar => (weekly ? bar.start <= crossing.date && crossing.date <= bar.date : bar.date === crossing.date)));
   const rsShown = (data.chart.data?.rs_line || []).filter(point => Number.isFinite(point?.value)).length > 1;
-  const items = legendItems({ weekly, short, wide, rsShown, structuralLow: model && priceInRange(model, period, levels?.structuralLow) ? levels.structuralLow : null, drawnLegs, crossing: crossingShown, heavyDown, sellMarks: model?.sellMarks?.length > 0, pivot: view?.pivot, stop: levels?.stop });
+  const items = legendItems({ weekly, short, wide, rsShown, structuralLow: model && priceInRange(model, period, levels?.structuralLow) ? levels.structuralLow : null, drawnLegs, crossing: crossingShown ? crossing : null, heavyDown, sellMarks: model?.sellMarks?.length > 0, pivot: view?.pivot, stop: levels?.stop });
   const legendRef = useRef(null);
   useTwoLineLegend(legendRef, wide, items.map(item => item.key).join('|') + (levels?.structuralLow ?? ''));
   return <section ref={card} className="brief-card brief-chartcard in" style={{ '--i': 1 }} aria-label="株価チャート">
