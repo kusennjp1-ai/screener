@@ -230,4 +230,14 @@ describe('the 条件 menu and its empty states, honestly', () => {
   it('keeps the search placeholder in the app\'s word for a ticker', () => {
     expect(show('zone', [audited('BRK1', 101)]).container.querySelector('.brief-search input').getAttribute('placeholder')).toBe('ティッカー・社名');
   });
+
+  it('says 並び順 in the sort\'s first option on the desktop\'s narrow column (its label for assistive tech), and as a label on a tablet', () => {
+    const { container } = show('zone', [audited('BRK1', 101)], { wide: true });
+    expect(options(container, '並び順')[0][0]).toBe('並び順：優先度');
+    expect(container.querySelector('.brief-sort-name')).toHaveClass('sr-only');
+    cleanup();
+    const tablet = show('zone', [audited('BRK1', 101)], { wide: false }).container;
+    expect(options(tablet, '並び順')[0][0]).toBe('優先度');
+    expect(tablet.querySelector('.brief-sort-name')).not.toHaveClass('sr-only');
+  });
 });

@@ -556,3 +556,28 @@ for (const width of [320, 375, 390, 414]) test.describe(`the 注目候補 tile a
     expect(errors).toEqual([]);
   });
 });
+
+// The 候補 filter line: the search's placeholder is never cut (the box leaves room for the clear button), and the sort
+// says 並び順 where its label is for assistive tech only (a phone and the desktop's left column).
+for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.desktop })) test.describe(`the 候補 filter line at ${width}px`, () => {
+  test.use(device);
+  test('the search placeholder fits its box and the sort reads 並び順 in its first option', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list');
+    await expect(candidates(page).first()).toBeVisible();
+    const fit = await page.locator('.brief-search input').evaluate(input => {
+      const style = getComputedStyle(input), probe = document.createElement('span');
+      probe.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${style.font};letter-spacing:${style.letterSpacing}`;
+      probe.textContent = input.placeholder;
+      document.body.append(probe);
+      const text = probe.getBoundingClientRect().width;
+      probe.remove();
+      return { text, room: input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) };
+    });
+    // 16px for the search field's clear button, which Chrome reserves beside the text.
+    expect(fit.text + 16, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+    await expect(page.getByRole('combobox', { name: '並び順' }).locator('option').first()).toHaveText('並び順：優先度');
+    expect(await page.getByRole('group', { name: '絞り込み' }).locator('xpath=..').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(0);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});

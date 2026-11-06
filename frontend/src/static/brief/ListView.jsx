@@ -124,10 +124,11 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
         {HIDDEN_FILTER_TEXT[hidden] || filterLabel(hidden, brief.date)}<span className="numeric">{countText(hidden)}</span><span aria-hidden="true">×</span><span className="sr-only">（絞り込みを解除）</span>
       </button>}
       <label className="brief-search"><span className="sr-only">銘柄を検索</span><input type="search" inputMode="search" placeholder={phone ? 'コード・社名' : 'ティッカー・社名'} value={query} onChange={e => { update({ query: e.target.value }); restart(); }} /></label>
-      {/* A phone reads the sort's name in its first option (the label is for assistive tech there). A sort by a field
-          this publication does not carry is not offered (the 条件 menu says 未収録), so no sort says what it does not do. */}
-      <label className="brief-sort"><span className="brief-sort-name">並び順</span><select value={listState.sort} onChange={e => update({ sort: e.target.value })}>{Object.entries(LIST_SORTS)
-        .filter(([, value]) => !(value.filter && unpublished(value.filter))).map(([key, value]) => <option key={key} value={key}>{phone && key === 'priority' ? `並び順：${value.label}` : value.label}</option>)}</select></label>
+      {/* The narrow columns (a phone, the desktop's left column) read the sort's name in its first option, so the search
+          keeps the room for its placeholder (the label is for assistive tech there). A sort by a field this publication
+          does not carry is not offered (the 条件 menu says 未収録), so no sort says what it does not do. */}
+      <label className="brief-sort"><span className={`brief-sort-name${phone || wide ? ' sr-only' : ''}`}>並び順</span><select value={listState.sort} onChange={e => update({ sort: e.target.value })}>{Object.entries(LIST_SORTS)
+        .filter(([, value]) => !(value.filter && unpublished(value.filter))).map(([key, value]) => <option key={key} value={key}>{(phone || wide) && key === 'priority' ? `並び順：${value.label}` : value.label}</option>)}</select></label>
       {/* The hidden filters by name with their counts (the day's breakouts, the SEC EPS change). A menu: it always
           reads 条件, and the filter it chose is said by its chip above, which clears it. */}
       <label className="brief-sort brief-cond"><span className="sr-only">条件で絞り込む</span><select value="" onChange={e => e.target.value && choose(e.target.value)}>
