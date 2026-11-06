@@ -16,6 +16,13 @@ export const DISTRIBUTION_WARN = 5;
  * under the 参加度 and リーダー headers on the desktop, in the 注記 on a phone and in the long history's takeaway.
  */
 export const SURVIVORSHIP_NOTE = '現在の銘柄で過去をさかのぼった集計（上場廃止銘柄を含まない）';
+/**
+ * The warning-summary checks whose rule the market-regime study could not confirm (〔参考〕: every breadth rule of the
+ * committed reference, market-regime-reference-v1.json). They are counted apart from the warnings and marked with a
+ * neutral ○, never a ▲. The market tab reads them from the reference itself (marketTabStudy's referenceKeys); Today,
+ * which never loads the reference, reads this list, and a test keeps the two equal, so the screens mark one rule alike.
+ */
+export const REFERENCE_CHECKS = Object.freeze(['split', 'lows', 'template', 'stage', 'leaders', 'breakout']);
 const STAGE_FIELDS = ['stage1Percent', 'stage2Percent', 'stage3Percent', 'stage4Percent'];
 export const STAGE_NAMES = ['底固め', '上昇', '天井圏', '下降'];
 const sectorNames = Object.fromEntries(SECTORS.map(([, label, symbol]) => [symbol, label]));
@@ -178,6 +185,8 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const known = field => latestKnown(rows, field);
   const hasField = key => rows.some(row => key in row);
   const pending = !market && marketLoading;
+  // The checks counted as 参考 (a neutral ○): the market tab's from the study reference, Today's from REFERENCE_CHECKS.
+  const referenceKeys = study ? study.referenceKeys || [] : REFERENCE_CHECKS, isReference = key => referenceKeys.includes(key);
 
   // Why a long-history value is missing, most specific first. A fetch failure is not an integrity failure.
   const failed = status.state === 'error' ? { b: status.kind === 'fetch' ? '取得できません' : '確認できません', em: status.tile } : null;
@@ -284,13 +293,15 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   // A fired check the study tags 〔参考〕 (a breadth rule it could not confirm) is counted apart from the warnings, with a
   // neutral ○: never a ▲, never in a group's or a tab's count. Its rule and its threshold are unchanged.
   const fired = checks.filter(c => c.fired).map(c => ({ ...c, itemAsOf: !boxDate && c.asOf && date && c.asOf < date ? shortDate(c.asOf, date) : null, tags: study?.signalTags?.[c.key] || [],
-    reference: Boolean(study?.referenceKeys?.includes(c.key)) }));
+    reference: isReference(c.key) }));
   const unjudged = checks.filter(c => !c.judged);
   const reasons = [...new Set(unjudged.map(c => c.reason))].map(reason => ({ reason, labels: unjudged.filter(c => c.reason === reason).map(c => c.label) }));
-  // The checks that were judged at all: with none, the summary can never say 「なし」.
+  // The checks that were judged at all: with none, the summary can never say 「なし」. `warnable` counts the judged checks
+  // that can raise a warning (not 参考): with none of them judged, the summary says the warnings could not be judged.
   const judged = checks.filter(c => c.judged).map(({ key, group, label }) => ({ key, group, label }));
   const tagText = study?.tagText ? study.tagText(fired) : { legend: null, note: null };
-  const signals = ready ? { fired, warnings: fired.filter(c => !c.reference).length, references: fired.filter(c => c.reference).length, unjudged, reasons, judged, asOf: boxDate, historyMissing: !history, legend: tagText.legend, tagNote: tagText.note } : null;
+  const signals = ready ? { fired, warnings: fired.filter(c => !c.reference).length, references: fired.filter(c => c.reference).length, warnable: judged.filter(c => !isReference(c.key)).length,
+    unjudged, reasons, judged, asOf: boxDate, historyMissing: !history, legend: tagText.legend, tagNote: tagText.note } : null;
   const firedIn = group => fired.filter(c => c.group === group && !c.reference).length;
   const referencesIn = group => fired.filter(c => c.group === group && c.reference).length;
   // The evidence row of each check, so a 〔参考〕 check's row reads ○ 参考 instead of ▲ 注意.
@@ -320,11 +331,14 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const todayDist = !ready ? { key: 'dist', label: '分配日（25日）', ...absent('') }
     : dist.every(d => !d.hit) ? { key: 'dist', label: '分配日（25日）', b: '算出不可', em: 'S&P・NAS' }
       : { key: 'dist', label: '分配日（25日）', valued: true, pairs: distPairs, asOf: distAsOf, warn: distWarn, em: distWarn ? `注意：${heavy.join('・')}が${DISTRIBUTION_WARN}日以上` : `${DISTRIBUTION_WARN}日以上で注意` };
-  const todayTT = leaderSubstitute ? { ...leaderSubstitute, em: 'TT達成数は旧形式で未収録' } : { ...tt, em: tt.valued ? (tt.change === null ? '8条件すべて達成' : `1か月で ${tt.change}`) : tt.em, ...(tt.warn ? { em: `注意：${tt.flag}` } : {}) };
+  // A fired rule the study could not confirm reads 参考 on Today too, in the warning's place and length, never amber.
+  const todayMark = (key, warn) => !warn ? { warn: false, word: null } : isReference(key) ? { warn: false, word: '参考' } : { warn: true, word: '注意' };
+  const ttMark = todayMark('template', tt.warn), a200Mark = todayMark('split', a200.warn), lowsMark = todayMark('lows', lowsLead);
+  const todayTT = leaderSubstitute ? { ...leaderSubstitute, em: 'TT達成数は旧形式で未収録' } : { ...tt, em: tt.valued ? (tt.change === null ? '8条件すべて達成' : `1か月で ${tt.change}`) : tt.em, warn: ttMark.warn, ...(ttMark.word ? { em: `${ttMark.word}：${tt.flag}` } : {}) };
   const a50Today = a50.valued ? { ...a50, em: '200日線は旧形式で未収録' } : null;
-  const todayA200 = a200.missing && a50Today ? a50Today : { ...a200, em: a200.valued ? (a200.warn ? '注意：指数と個別株の乖離' : a200.detail) : a200.em };
-  const todayExtremes = highsLows ? { key: 'extremes', label: '52週の新高値・新安値', valued: true, asOf: extremesAsOf, warn: lowsLead,
-    pairs: [{ name: '高', value: num(highsLows.value.newHighs) }, { name: '安', value: num(highsLows.value.newLows), warn: lowsLead }], em: lowsLead ? '注意：新安値が新高値より多い' : `差 ${delta(highsLows.value.newHighs - highsLows.value.newLows)}` }
+  const todayA200 = a200.missing && a50Today ? a50Today : { ...a200, warn: a200Mark.warn, em: a200.valued ? (a200Mark.word ? `${a200Mark.word}：指数と個別株の乖離` : a200.detail) : a200.em };
+  const todayExtremes = highsLows ? { key: 'extremes', label: '52週の新高値・新安値', valued: true, asOf: extremesAsOf, warn: lowsMark.warn,
+    pairs: [{ name: '高', value: num(highsLows.value.newHighs) }, { name: '安', value: num(highsLows.value.newLows), warn: lowsMark.warn }], em: lowsMark.word ? `${lowsMark.word}：新安値が新高値より多い` : `差 ${delta(highsLows.value.newHighs - highsLows.value.newLows)}` }
     : { key: 'extremes', label: '52週の新高値・新安値', ...absent('newHighs') };
   const today = [todayDist, todayTT, todayA200, todayExtremes];
 
@@ -384,7 +398,8 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
       summary: study?.nasdaqPosition?.state || indexSummary(ndxCloses) }] : null;
   return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons, series,
     nasdaqFigures: ready && study?.nasdaqPosition?.state ? study.nasdaqFigures : null,
-    warnings: rules.filter(r => r.fired).map(({ key, text }) => ({ key, text })), split, chart: { sp500: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null } };
+    // Today's deterioration notes and its split alert: a rule the study could not confirm is marked 参考 (○), never ▲.
+    warnings: rules.filter(r => r.fired).map(({ key, text }) => ({ key, text, reference: isReference(key) })), split: split ? { ...split, reference: isReference('split') } : split, chart: { sp500: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null } };
 }
 
 // ---- the long-history section -----------------------------------------------------------------

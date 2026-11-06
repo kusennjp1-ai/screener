@@ -104,3 +104,6 @@
   .brief-market.is-detail > .brief-regime-ref { padding-top: 4px; }
   .brief-regime-indices { grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; }
 }
+
+/* Today's 地合い card: a rule the study could not confirm keeps its sentence with a neutral ○ and 参考, never amber. */
+.brief-warnings li.is-reference, .brief-alert.is-reference { border-color: var(--line-2); color: var(--text-2); }

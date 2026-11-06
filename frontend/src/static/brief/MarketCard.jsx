@@ -82,8 +82,10 @@ export default function MarketCard({ market, marketLoading = false, trends, date
     <div className="brief-facts">{view.today.map(fact => <Fact key={fact.key} fact={fact} blockAsOf={dating.blockAsOf} />)}</div>
     {view.distReasons.length > 0 && <ul className="brief-factnotes">{view.distReasons.map(text => <li key={text}>{text}</li>)}</ul>}
     {dating.todayNote && <p className="brief-note brief-asof" role="note">{dating.todayNote}</p>}
-    {view.warnings.length > 0 && <ul className="brief-warnings" aria-label="地合いの悪化サイン（独自判定）">{view.warnings.map(w => <li key={w.key}><span aria-hidden="true">▲</span> {w.text}（独自判定）</li>)}</ul>}
-    {view.split?.warning && <p className="brief-alert" role="note">▲ {view.split.fromHigh > -0.05 ? '指数は1年高値の水準にありますが' : `指数は1年高値まであと${Math.abs(view.split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{num(view.split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
+    {/* A rule the market-regime study could not confirm (REFERENCE_CHECKS: 〔参考〕 on the market tab) keeps its sentence
+        with a neutral ○ and 「参考：」 in the ▲'s place, never amber, as the market tab and Today's tiles mark it. */}
+    {view.warnings.length > 0 && <ul className="brief-warnings" aria-label="地合いの悪化サイン（独自判定）">{view.warnings.map(w => <li key={w.key} className={w.reference ? 'is-reference' : undefined}><span aria-hidden="true">{w.reference ? '○' : '▲'}</span> {w.reference ? '参考：' : ''}{w.text}（独自判定）</li>)}</ul>}
+    {view.split?.warning && <p className={`brief-alert${view.split.reference ? ' is-reference' : ''}`} role="note">{view.split.reference ? <><span aria-hidden="true">○</span> 参考：</> : '▲ '}{view.split.fromHigh > -0.05 ? '指数は1年高値の水準にありますが' : `指数は1年高値まであと${Math.abs(view.split.fromHigh).toFixed(1)}%の位置ですが`}、200日線より上の銘柄は{num(view.split.above200Percent, 1)}%。指数と個別株が乖離しています（独自判定）。</p>}
     {/* The phone's Today hides the verdict, so the card itself still says the judgement is the app's own,
         and Today's candidate rows show RS推計: the RS is the app's own too, never IBD's. */}
     <p className="brief-note">地合いの判定・各集計・RS推計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。</p>

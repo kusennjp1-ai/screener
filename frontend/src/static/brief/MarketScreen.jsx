@@ -188,20 +188,32 @@ function historyScope(judged) {
 const unjudgedReasons = reasons => reasons.map(r => `${r.labels.join('・')}（${r.reason}）`).join('／');
 
 /**
+ * The warning summary's headline. Only a judged check that can raise a warning (`warnable`: judged and not 参考) can make
+ * 「注意 0件」 or 「注意サインなし」 true; a 〔参考〕 sign is counted apart (「・参考 M件」) and never stands in for them.
+ *  - warnings fired: 「▲ 注意 N件・参考 M件」, or 「▲ 注意サイン N件」 with no 参考 sign (as before round 2)
+ *  - none fired, a warnable check judged: 「注意 0件・参考 M件」, or 「注意サインなし」 with no 参考 sign
+ *  - no warnable check judged: 「注意サインを判定できません」, or with a 参考 sign 「注意 判定不可・参考 M件」 (never 0件,
+ *    never なし). The count's short form (「注意 N件・参考 M件」) reads like the groups' marks (「▲ 注意 1」「○ 参考 1」) and
+ *    keeps the line one line on a 375px phone with its date, so 判定不可 takes the count's place in it.
+ */
+function signalsHeadline({ warnings, references, warnable }) {
+  const more = references > 0 ? `・参考 ${references}件` : '';
+  if (warnings > 0) return { mark: true, text: references > 0 ? `注意 ${warnings}件${more}` : `注意サイン ${warnings}件` };
+  if (warnable > 0) return { mark: false, text: references > 0 ? `注意 0件${more}` : '注意サインなし' };
+  return { mark: false, text: references > 0 ? `注意 判定不可${more}` : '注意サインを判定できません' };
+}
+
+/**
  * The warning summary. `inline` (the desktop): every unjudged check and its reason on one line, as
  * before. Below 1024px the summary line names the unjudged checks and only their reasons fold. A check the study
- * tags 〔参考〕 is counted apart (「注意 0件・参考 1件」) with a neutral ○, never a ▲. That the signs do not change the
+ * tags 〔参考〕 is counted apart with a neutral ○, never a ▲ (signalsHeadline). That the signs do not change the
  * guide is said once, in the guide's own disclosure (exposureRuleText).
  */
 function Signals({ signals, inline = true }) {
   const { fired, unjudged, reasons, judged = [], asOf, historyMissing, legend, tagNote } = signals;
   const warnings = signals.warnings ?? fired.length, references = signals.references ?? 0;
-  // With 〔参考〕 signs the two counts read like the groups' marks (「▲ 注意 1」「○ 参考 1」), so the line stays one line on a
-  // 375px phone even with its date (「注意 0件・参考 1件（10/1時点・独自判定）」); the box itself is named 注意サイン.
-  const counts = `注意 ${warnings}件・参考 ${references}件`;
-  // 「なし」 only when at least one check was judged: nothing judged is 判定できません, never an all-clear.
-  const headline = references ? (warnings ? <><span aria-hidden="true">▲</span> {counts}</> : counts)
-    : warnings ? <><span aria-hidden="true">▲</span> 注意サイン {warnings}件</> : judged.length ? '注意サインなし' : '注意サインを判定できません';
+  const head = signalsHeadline({ warnings, references, warnable: signals.warnable ?? judged.length });
+  const headline = head.mark ? <><span aria-hidden="true">▲</span> {head.text}</> : head.text;
   return <div className={`brief-signals${warnings ? ' is-warn' : ''}`} role="group" aria-label="注意サイン（独自判定）">
     <b>{headline}<small>（{asOf ? `${asOf}時点・` : ''}独自判定）</small></b>
     {fired.length > 0 && <ul>{fired.map(s => <li key={s.key} className={s.reference ? 'is-reference' : undefined}><span aria-hidden="true">{s.reference ? '○' : '▲'}</span><span>{s.text}{s.itemAsOf ? `（${s.itemAsOf}時点）` : ''}{s.tags?.length ? <span className="brief-signal-tag">{s.tags.join('')}</span> : null}</span></li>)}</ul>}
