@@ -162,6 +162,6 @@ export function buyGate({ view, template = null, market = null, sells = null, br
   if (view.position === 'near') return result(positionCall(view));
   // In the buy zone: the day's event (breakoutEvent's, its 'after' dated by crossingEvent).
   if (day?.kind === 'heavyDown') return result({ kind: 'heavyDown', tone: day.tone, title: day.title, note: HEAVY_DOWN_NOTE, reference: true });
-  if (day?.kind === 'stale') return result({ kind: 'stale', tone: 'wait', title: day.title, note: day.note, reference: true });
+  if (day?.kind === 'stale') return result({ kind: 'stale', tone: 'wait', title: day.title, note: day.note, units: day.units ?? [], reference: true });
   return result({ kind: day?.kind || 'zone', tone: day?.tone || 'zone', title: day?.title || '買いゾーン内', note: day?.note ?? null });
 }

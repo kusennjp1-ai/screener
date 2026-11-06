@@ -146,6 +146,9 @@ describe('the conclusion\'s event (crossingEvent)', () => {
     const pulled = crossingEvent(after(), run);
     expect(pulled).toMatchObject({ kind: 'stale', tone: 'wait', title: '上抜けから15営業日・押し戻し（次のピボット待ち）' });
     expect(pulled.note).toBe(`新規の買いは見送り。${md(run.at(-16).date)}に上抜け、ピボット比 +15.0%まで伸びた後に買いゾーンへ戻りました（10営業日超・独自判定）。`);
+    // The run's height and the rule with its label are the parts a phone line never splits.
+    expect(pulled.units).toEqual(['ピボット比 +15.0%', '（10営業日超・独自判定）']);
+    expect(event.units).toEqual([]);
     // A caller's window (the owner's setting) moves the switch.
     expect(crossingEvent(after(), crossedAgo(11), { staleSessions: 15 }).kind).toBe('after');
   });

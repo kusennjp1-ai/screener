@@ -99,9 +99,11 @@ export function crossingEvent(view, bars = null, { staleSessions = STALE_BREAKOU
     const peak = Math.max(...bars.slice(crossed ? crossed.index : -span).map(bar => bar.close));
     const back = finite(view.upper) && cents(peak) > cents(view.upper);
     const since = above ? `${CROSSING_LOOKBACK_SESSIONS}営業日超` : `${n}営業日`, lead = above ? `${CROSSING_LOOKBACK_SESSIONS}営業日を超えてピボットの上にあり、` : `${day}に上抜け、`;
+    // `units`: the note's parts a phone line never splits (the run's height and the rule with its label).
+    const height = `ピボット比 ${signed((peak / view.pivot - 1) * 100)}`, rule = `（${above ? '' : `${staleSessions}営業日超・`}独自判定）`;
     return { ...event, kind: 'stale', tone: 'wait', title: `上抜けから${since}・${back ? '押し戻し' : '停滞'}（次のピボット待ち）`,
-      note: `新規の買いは見送り。${lead}${back ? `ピボット比 ${signed((peak / view.pivot - 1) * 100)}まで伸びた後に買いゾーンへ戻りました（${above ? '' : `${staleSessions}営業日超・`}独自判定）。`
-        : `${above ? '' : `${staleSessions}営業日を超えて`}伸びないため停滞（独自判定）。`}`, crossed };
+      note: `新規の買いは見送り。${lead}${back ? `${height}まで伸びた後に買いゾーンへ戻りました${rule}。` : `${above ? '' : `${staleSessions}営業日を超えて`}伸びないため停滞（独自判定）。`}`,
+      units: back ? [height, rule] : [], crossed };
   }
   const ratio = crossed.volumeRatio;
   // The crossing day's own forms (breakoutEvent's on that day), dated: each one line on a 375px phone.
