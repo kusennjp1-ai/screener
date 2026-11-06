@@ -32,7 +32,7 @@ function Readout({ readout, compact, reason }) {
   const label = readout.latest ? (readout.weekly ? `最新の足（${readout.range}の週）の値` : '最新の足の値') : `選んだ足（${readout.weekly ? `${readout.range}の週` : readout.date}）の値`;
   const unverified = readout.unverified;
   const change = <span className={`ro-item ro-change ${unverified ? 'is-unverified' : tone}`}>{readout.change === null ? <Missing word="前の足なし" /> : <>{formatPercent(readout.change)}{unverified ? <Unverified /> : null}</>}</span>;
-  const chipTitle = `日足を分析基準日で検証できていません${reason ? `（${reason}）` : ''}。前日比・出来高の倍率は参考です。`;
+  const chipTitle = `日足を分析基準日で検証できていません${reason ? `（${reason}）` : ''}`;
   return <div className={`brief-readout${unverified ? ' is-unverified' : ''}`} role="group" aria-label={label}>
     <span className="ro-line">
       {unverified ? <span className="ro-item ro-unverified" title={chipTitle}>未検証の足<span className="sr-only">：{chipTitle}</span></span> : null}
@@ -59,29 +59,30 @@ function Readout({ readout, compact, reason }) {
 }
 
 /**
- * The legend's items, each the colour (and dash) of what it names. Below 1024px the legend keeps two lines:
- * the averages and the RS line's meaning always stay, and the other items are kept in their priority order
- * while they fit (every mark they name is also explained in the screen's 注記). `fold` marks an item that may
- * be left out; `rank` orders the foldable ones (lower first).
+ * The legend's items, each the colour (and dash) of what it names: [key, swatch class ('b:' a glyph), text,
+ * fold rank]. Below 1024px the legend keeps two lines: the averages and the RS line's meaning always stay
+ * (no rank), and the other items are kept by rank while they fit (every mark they name is also explained in
+ * the screen's 注記).
  */
 function legendItems({ weekly, short, wide, rsShown, structuralLow, drawnLegs, crossing, heavyDown, sellMarks: sells, pivot, stop }) {
   // Below 1024px the daily averages share one item (「50 150 200日線」, each number after its own swatch).
-  const items = !wide && !weekly
-    ? [{ key: 'mas', className: 'lg-mas', node: <><i className="lg-ma50" />50 <i className="lg-ma150" />150 <i className="lg-ma200" />200日線</> }]
-    : (weekly ? [['ma50', '10週線'], ['ma150', '30週線'], ['ma200', '40週線']] : [['ma50', '50日線'], ['ma150', '150日線'], ['ma200', '200日線']])
-      .map(([key, label]) => ({ key, node: <><i className={`lg-${key}`} />{label}</> }));
-  if (rsShown) items.push({ key: 'rs', node: <><i className="lg-rs" />{wide ? 'RS線＝' : ''}株価÷S&amp;P 500・RS推計やIBD RSとは別</> });
+  const rows = !wide && !weekly ? [['mas', null, <><i className="lg-ma50" />50 <i className="lg-ma150" />150 <i className="lg-ma200" />200日線</>]]
+    : (weekly ? ['10週線', '30週線', '40週線'] : ['50日線', '150日線', '200日線']).map((text, i) => [['ma50', 'ma150', 'ma200'][i], `lg-${['ma50', 'ma150', 'ma200'][i]}`, text]);
+  if (rsShown) rows.push(['rs', 'lg-rs', `${wide ? 'RS線＝' : ''}株価÷S&P 500・RS推計やIBD RSとは別`]);
   // The last contraction's low (a 「安値」 tag on a narrow chart, a dotted line on every chart): its price.
-  if (Number.isFinite(structuralLow)) items.push({ key: 'low', fold: true, rank: 1, node: <><i className="lg-structural" />最後の収縮の安値 {formatPrice(structuralLow)}</> });
-  if (crossing) items.push({ key: 'breakout', fold: true, rank: 2, node: <><b className="lg-breakoutglyph">▲</b>上抜け</> });
+  if (Number.isFinite(structuralLow)) rows.push(['low', 'lg-structural', `最後の収縮の安値 ${formatPrice(structuralLow)}`, 1]);
+  if (crossing) rows.push(['breakout', 'b:lg-breakoutglyph:▲', '上抜け', 2]);
   // Below 1024px the volume panel's caption also keys ■ (下落日), beside the bars.
-  if (heavyDown) items.push({ key: 'heavydown', fold: true, rank: wide ? 3 : 6, node: <><b className="lg-heavydown" aria-hidden="true" />下落日の大商い</> });
-  if (sells) items.push({ key: 'sell', fold: true, rank: 4, node: wide ? <><i className="lg-sell" />売りのサイン（▼上昇の加速・▲崩れ）</> : <><b className="lg-sellglyph">▼▲</b>売りのサイン</> });
-  if (short) items.push({ key: 'ma10', fold: true, rank: 8, node: <><i className="lg-ma10" />10日線</> }, { key: 'ema21', fold: true, rank: 8, node: <><i className="lg-ema21" />21日EMA</> });
-  if (Number.isFinite(pivot)) items.push({ key: 'pivot', fold: true, rank: 7, node: <><i className="lg-pivot" />ピボット</> });
-  if (Number.isFinite(stop)) items.push({ key: 'stop', fold: true, rank: 7, node: <><i className="lg-stop" />損切り</> });
-  if (drawnLegs) items.push({ key: 'lows', fold: true, rank: 5, node: <><i className="lg-lows" />収縮の安値</> }, { key: 'boxes', fold: true, rank: 6, node: wide ? '枠＝値幅の収縮' : '枠＝収縮' });
-  return items;
+  if (heavyDown) rows.push(['heavydown', 'b:lg-heavydown:', '下落日の大商い', wide ? 3 : 6]);
+  if (sells) rows.push(wide ? ['sell', 'lg-sell', '売りのサイン（▼上昇の加速・▲崩れ）', 4] : ['sell', 'b:lg-sellglyph:▼▲', '売りのサイン', 4]);
+  if (short) rows.push(['ma10', 'lg-ma10', '10日線', 8], ['ema21', 'lg-ema21', '21日EMA', 8]);
+  if (Number.isFinite(pivot)) rows.push(['pivot', 'lg-pivot', 'ピボット', 7]);
+  if (Number.isFinite(stop)) rows.push(['stop', 'lg-stop', '損切り', 7]);
+  if (drawnLegs) rows.push(['lows', 'lg-lows', '収縮の安値', 5], ['boxes', null, wide ? '枠＝値幅の収縮' : '枠＝収縮', 6]);
+  return rows.map(([key, swatch, text, rank]) => {
+    const [glyph, cls, mark] = swatch?.startsWith('b:') ? swatch.split(':') : [];
+    return { key, rank, node: <>{glyph ? <b className={cls}>{mark}</b> : swatch ? <i className={swatch} /> : null}{text}</> };
+  });
 }
 
 /**
@@ -202,7 +203,7 @@ export default function StockChartCard({ data, view, earningsCall = null, legs, 
     {model ? <PriceChart ref={chartRef} model={model} period={period} onScrub={onScrub} selected={index} onLatest={onLatest} /> : <p className="brief-note brief-chart-placeholder" role="status">{data.chart.isError ? '日足チャートを取得できません。' : row?.chart_path ? '日足チャートを読み込み中…' : 'この銘柄の日足チャートは未配信です。'}</p>}
     {bars && data.date && bars.at(-1)?.date !== data.date ? <p className="brief-note brief-asof" role="note">日足は {bars.at(-1)?.date} までです（分析基準日 {data.date} の日足は未取得）。チャートから算出する判定は未確認にしています。</p> : null}
     <div ref={legendRef} className="brief-legend" aria-hidden="true">
-      {items.map(item => <span key={item.key} className={item.className} data-key={item.key} data-fold={item.fold ? 'true' : undefined} data-rank={item.rank}>{item.node}</span>)}
+      {items.map(item => <span key={item.key} className={item.key === 'mas' ? 'lg-mas' : undefined} data-key={item.key} data-fold={item.rank ? 'true' : undefined} data-rank={item.rank}>{item.node}</span>)}
     </div>
     {wide && notes.length ? <ul className="brief-chart-notes">{notes.map(note => <li key={note}>{note}</li>)}</ul> : null}
   </section>;
