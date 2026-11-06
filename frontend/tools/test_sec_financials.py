@@ -348,6 +348,119 @@ class PublishedWindow(unittest.TestCase):
         self.assertEqual(sec.series(facts([entry(accn=None)]), "eps", "2026-03-01"), [])
         self.assertEqual(len(sec.series(facts([entry(accn="0001-25-1")]), "eps", "2026-03-01")), 1)
 
+class InvalidPayloadCause(unittest.TestCase):
+    """An invalid_payload record says what failed and which CIK came back (plan DT1); retries are unchanged."""
+
+    def fetch(self, payload):
+        return sec.fetch_symbol("BAD", {"BAD": 6}, "2026-10-02", get=lambda url: payload)
+
+    def test_a_cik_mismatch_records_both_ciks(self):
+        record = self.fetch({"cik": 999, "facts": {}})
+        self.assertEqual((record["status"], record["reason"]), ("unavailable", "invalid_payload"))
+        self.assertEqual(record["invalid_detail"], {"class": "PayloadMismatch", "message": "companyfacts cik does not match the requested cik", "requested_cik": 6, "received_cik": 999})
+        self.assertEqual(sec.invalid_cause(record), "cik_mismatch")
+
+    def test_another_exception_records_its_class_and_a_short_message(self):
+        record = self.fetch({"cik": 6, "facts": []})
+        detail = record["invalid_detail"]
+        self.assertEqual((detail["class"], detail["requested_cik"], detail["received_cik"]), ("AttributeError", 6, 6))
+        self.assertIn("has no attribute", detail["message"])
+        self.assertEqual(sec.invalid_cause(record), "AttributeError")
+        # A payload that is not an object names no CIK it received.
+        self.assertIsNone(self.fetch(["not", "an", "object"])["invalid_detail"]["received_cik"])
+
+    def test_the_message_carries_no_url_address_header_or_user_agent_and_stays_short(self):
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"SEC_USER_AGENT": "Ops Desk ops@example.org"}):
+            text = sec.safe_message("failed for Ops Desk ops@example.org at https://data.sec.gov/x?k=1 Authorization: Bearer abc\nnext " + "x" * 400, "ValueError")
+        for secret in ("ops@example.org", "Ops Desk", "https://", "Bearer", "\n"):
+            self.assertNotIn(secret, text)
+        self.assertLessEqual(len(text), sec.INVALID_MESSAGE_MAX)
+        self.assertEqual(sec.safe_message("", "KeyError"), "KeyError")
+
+    def test_counts_by_cause_and_the_first_ten_symbols(self):
+        results = {f"S{i:02d}": {"reason": "invalid_payload", "invalid_detail": {"class": "PayloadMismatch", "message": "m", "requested_cik": 1, "received_cik": 2 if i % 2 else 1}} for i in range(12)}
+        results["OK"] = {"status": "available", "quarterly": {"revenue": [{"derived": False}]}}
+        results["OLD"] = {"reason": "invalid_payload"}
+        summary = sec.invalid_summary(results)
+        self.assertEqual(summary["count"], 13)
+        self.assertEqual(summary["by_cause"], {"PayloadMismatch": 6, "cik_mismatch": 6, "unrecorded": 1})
+        self.assertEqual(summary["symbols"], [f"S{i:02d}" for i in range(10)])
+        self.assertEqual(sec.coverage(results, 14, 14)["invalid_payload_by_cause"], summary["by_cause"])
+
+def annual_entry(start, end, val, accn, filed=None):
+    return {"start": start, "end": end, "val": val, "filed": filed or f"{int(end[:4]) + 1}-02-20", "form": "10-K", "accn": accn}
+
+class SameConceptFourthQuarter(unittest.TestCase):
+    """A Q4 comes from the annual value of the quarterly series' own concept (audit2 earnings/q4tag.py)."""
+
+    def mixed_tags(self, legacy=True):
+        quarters = []
+        for year in (2023, 2024, 2025, 2026):
+            for s, e, f in ((f"{year}-01-01", f"{year}-03-31", f"{year}-05-01"), (f"{year}-04-01", f"{year}-06-30", f"{year}-08-01"), (f"{year}-07-01", f"{year}-09-30", f"{year}-10-30")):
+                if e <= "2026-09-30":
+                    quarters.append(quarter(s, e, 100 + (year - 2023) * 20, f, accn=f"q-{e}"))
+        asc606 = [annual_entry(f"{y}-01-01", f"{y}-12-31", 500 + (y - 2023) * 80, f"k-{y}") for y in (2023, 2024, 2025)]
+        # The 10-K also tags the legacy total, whose annual history is longer (tagged since before 2018).
+        legacy_total = [annual_entry(f"{y}-01-01", f"{y}-12-31", 520 + (y - 2016) * 80, f"k-{y}") for y in range(2016, 2026)]
+        concepts = {"RevenueFromContractWithCustomerExcludingAssessedTax": {"units": {"USD": quarters + asc606}},
+                    "EarningsPerShareDiluted": {"units": {"USD/shares": [dict(q, val=1.0) for q in quarters]}}}
+        if legacy:
+            concepts["Revenues"] = {"units": {"USD": legacy_total}}
+        return {"cik": 7, "facts": {"us-gaap": concepts}}
+
+    def test_a_legacy_annual_total_under_another_concept_no_longer_blocks_the_derivation(self):
+        for legacy in (True, False):
+            record = sec.normalize(self.mixed_tags(legacy), "ZZT", 7, "2026-11-04", "2026-11-04T20:00:00.000Z")
+            revenue = record["quarterly"]["revenue"]
+            derived = [p for p in revenue if p["derived"]]
+            self.assertEqual([p["end"] for p in derived], ["2023-12-31", "2024-12-31", "2025-12-31"])
+            self.assertEqual({p["tag"] for p in revenue}, {"RevenueFromContractWithCustomerExcludingAssessedTax"})
+            self.assertEqual(derived[-1]["value"], 660 - 3 * 140)
+            self.assertEqual(derived[-1]["components"][0], "k-2025")
+            self.assertEqual(record["derivation_gaps"], [])
+            # EPS is never derived: its fiscal fourth quarters stay absent.
+            self.assertFalse(any(p["end"].endswith("12-31") for p in record["quarterly"]["eps"]))
+
+class DerivationGaps(unittest.TestCase):
+    """Each fiscal year whose Q4 stays unknown is listed with why (tag_mismatch, broken_chain, no_annual)."""
+
+    def gaps(self, concepts, as_of="2026-03-01"):
+        return sec.normalize({"cik": 1, "facts": {"us-gaap": concepts}}, "T", 1, as_of)["derivation_gaps"]
+
+    def test_each_reason(self):
+        eps = {"EarningsPerShareDiluted": {"units": {"USD/shares": [dict(q, val=1.0) for q in FY]}}}
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": FY[:3]}}, "SalesRevenueNet": {"units": {"USD": FY[3:]}}}),
+            [{"fiscal_year": 2025, "metric": "revenue", "reason": "tag_mismatch"}])
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": [FY[0], FY[2], FY[3]]}}}), [{"fiscal_year": 2025, "metric": "revenue", "reason": "broken_chain"}])
+        # The fiscal year is known from the annual EPS only: the revenue has no annual value at all.
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": FY[:3]}}, **eps}), [{"fiscal_year": 2025, "metric": "revenue", "reason": "no_annual"}])
+        net = {"NetIncomeLoss": {"units": {"USD": [FY[0], FY[2], FY[3]]}}}
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": FY}}, **net}), [{"fiscal_year": 2025, "metric": "netIncome", "reason": "broken_chain"}])
+
+    def test_no_gap_when_derived_before_the_10k_or_for_eps(self):
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": FY}}}), [])
+        # Before the 10-K is filed the fiscal year has no annual value yet: nothing is missing.
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": FY}}}, as_of="2026-01-15"), [])
+        eps_only = {"EarningsPerShareDiluted": {"units": {"USD/shares": [dict(q, val=q["val"] / 100) for q in FY]}}}
+        self.assertEqual(self.gaps(eps_only), [])
+
+    def test_a_bank_without_a_revenue_concept_is_flagged_not_gapped(self):
+        """audit2 earnings/bank.py: EPS and net income in standard tags, revenue as net interest income."""
+        q, ni = [], []
+        for year in (2024, 2025):
+            for s, e, f in ((f"{year}-01-01", f"{year}-03-31", f"{year}-05-01"), (f"{year}-04-01", f"{year}-06-30", f"{year}-08-01"), (f"{year}-07-01", f"{year}-09-30", f"{year}-10-30")):
+                q.append(quarter(s, e, 1.5, f, accn=f"q-{e}")); ni.append(quarter(s, e, 100, f, accn=f"q-{e}"))
+        annual = lambda value: [annual_entry(f"{y}-01-01", f"{y}-12-31", value, f"k-{y}") for y in (2024, 2025)]
+        facts = {"cik": 9, "facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": q + annual(6.5)}}, "NetIncomeLoss": {"units": {"USD": ni + annual(450)}},
+                 "InterestIncomeExpenseNet": {"units": {"USD": ni + annual(1700)}}}}}
+        record = sec.normalize(facts, "ZZBK", 9, "2026-03-01")
+        self.assertEqual((record["status"], record["quarterly"]["revenue"]), ("partial", []))
+        self.assertEqual([p["end"] for p in record["quarterly"]["netIncome"] if p["derived"]], ["2024-12-31", "2025-12-31"])
+        self.assertEqual(record["derivation_gaps"], [])
+        self.assertEqual(sec.coverage({"ZZBK": record}, 1, 1)["no_revenue_concept"], 1)
+
 ADMIT_SCRIPT = """
 import { admitBookFinancials } from './src/static/bookFinancialAdmission.js';
 let input = '';

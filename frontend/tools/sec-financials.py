@@ -52,39 +52,41 @@ def valid_date(s):
     except ValueError:
         return False
 
-def series(facts, field, as_of, annual=False):
-    tags, unit = TAGS[field]
+def concept_points(facts, field, tag, as_of, annual=False):
+    """One concept's points for a field: the latest filing of each period end, as of the date."""
+    unit = TAGS[field][1]
     instant = field in ("inventory", "receivables")
-    candidates = []
-    for tag in tags:
-        points = {}
-        for e in facts.get("facts", {}).get("us-gaap", {}).get(tag, {}).get("units", {}).get(unit, []):
-            end, start, filed, value, accession = e.get("end"), e.get("start"), e.get("filed"), e.get("val"), e.get("accn")
-            if not valid_date(end) or not valid_date(filed) or filed > as_of or end > as_of or filed < end:
+    points = {}
+    for e in facts.get("facts", {}).get("us-gaap", {}).get(tag, {}).get("units", {}).get(unit, []):
+        end, start, filed, value, accession = e.get("end"), e.get("start"), e.get("filed"), e.get("val"), e.get("accn")
+        if not valid_date(end) or not valid_date(filed) or filed > as_of or end > as_of or filed < end:
+            continue
+        if isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value):
+            continue
+        # Every fact must name its filing; an unnamed one cannot be audited.
+        if not isinstance(accession, str) or not accession.strip() or len(accession) > 64:
+            continue
+        if not instant:
+            if not valid_date(start):
                 continue
-            if isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value):
+            duration = (date.fromisoformat(end) - date.fromisoformat(start)).days + 1
+            lo, hi = (330, 400) if annual else (70, 105)
+            if not lo <= duration <= hi:
                 continue
-            # Every fact must name its filing; an unnamed one cannot be audited.
-            if not isinstance(accession, str) or not accession.strip() or len(accession) > 64:
-                continue
-            if not instant:
-                if not valid_date(start):
-                    continue
-                duration = (date.fromisoformat(end) - date.fromisoformat(start)).days + 1
-                lo, hi = (330, 400) if annual else (70, 105)
-                if not lo <= duration <= hi:
-                    continue
-            if e.get("form") not in ("10-K", "10-Q", "10-K/A", "10-Q/A"):
-                continue
-            item = {"end": end, "start": None if instant else start, "filed": filed, "value": value, "tag": tag, "unit": unit, "accession": accession, "form": e["form"], "derived": False}
-            prior = points.get(end)
-            if prior is None or filed > prior["filed"]:
-                points[end] = item
-            elif filed == prior["filed"] and (value != prior["value"] or start != prior["start"]):
-                prior["conflict"] = True
-        ordered = [points[k] for k in sorted(points) if not points[k].get("conflict")]
-        if ordered:
-            candidates.append(ordered)
+        if e.get("form") not in ("10-K", "10-Q", "10-K/A", "10-Q/A"):
+            continue
+        item = {"end": end, "start": None if instant else start, "filed": filed, "value": value, "tag": tag, "unit": unit, "accession": accession, "form": e["form"], "derived": False}
+        prior = points.get(end)
+        if prior is None or filed > prior["filed"]:
+            points[end] = item
+        elif filed == prior["filed"] and (value != prior["value"] or start != prior["start"]):
+            prior["conflict"] = True
+    return [points[k] for k in sorted(points) if not points[k].get("conflict")]
+
+def series(facts, field, as_of, annual=False, tags=None):
+    """The field's series in one concept. `tags` limits the concepts considered (the annual values a
+    fourth quarter is derived from must be the quarterly series' own concept)."""
+    candidates = [points for points in (concept_points(facts, field, tag, as_of, annual) for tag in (tags or TAGS[field][0])) if points]
     # Stay in one concept, without undocumented changes in revenue definition.
     return max(candidates, key=lambda x: (x[-1]["end"], len(x)), default=[])[-24:]
 
@@ -123,11 +125,11 @@ def derive_fourth_quarters(quarters, annual):
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
-# Round-2 record contract (plan section 2.3), implemented by the data track; older records lack both fields.
+# Round-2 record contract (plan section 2.3); older records lack both fields, and the browser admission accepts either.
 # - invalid_detail {class, message, requested_cik, received_cik} on a record whose reason is invalid_payload:
 #   the exception class, a message of at most 200 characters with no headers or secrets, and both CIKs.
 # - derivation_gaps [{fiscal_year, metric, reason}] with reason tag_mismatch, broken_chain or no_annual: each
-#   fiscal year whose fourth quarter could not be derived (see DERIVED_Q4). EPS is never derived.
+#   fiscal year whose fourth quarter could not be derived (see DERIVED_Q4 and derivation_gaps). EPS is never derived.
 # Examples: frontend/src/test/fixtures/publishedContracts.js.
 def unavailable(symbol, as_of, reason, error, retrieved_at, forms=None):
     assert reason in UNAVAILABLE_REASONS
@@ -148,14 +150,53 @@ def filed_forms(facts, limit=5):
                         counts[form] += 1
     return [form for form, _ in sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:limit]]
 
+class PayloadMismatch(ValueError):
+    """The companyfacts payload is not the one requested (another CIK) or the analysis date is invalid."""
+
+DERIVATION_GAP_REASONS = ("tag_mismatch", "broken_chain", "no_annual")
+
+def derivation_gaps(facts, field, quarters, as_of):
+    """Each fiscal year whose fourth quarter of `field` stays unknown after derivation, with why.
+
+    `quarters` is the field's series after derivation (one concept). A fiscal year is known from an
+    annual value of the field in any of its concepts or from the annual EPS; only years after the
+    series' first quarter and without a quarter ending on the fiscal-year end are listed:
+    tag_mismatch (only another concept has the annual value), broken_chain (the annual value is in
+    the series' own concept, but its three quarters do not tile the year) or no_annual (no annual
+    value of the field at all). A field without any quarterly series has no gaps (no concept)."""
+    if not quarters:
+        return []
+    concept = quarters[0]["tag"]
+    own = {p["end"] for p in concept_points(facts, field, concept, as_of, annual=True)}
+    others = {p["end"] for tag in TAGS[field][0] if tag != concept for p in concept_points(facts, field, tag, as_of, annual=True)}
+    fiscal_ends = own | others | {p["end"] for p in series(facts, "eps", as_of, annual=True)}
+    have = {p["end"] for p in quarters}
+    gaps, seen = [], set()
+    for end in sorted(fiscal_ends):
+        if end <= quarters[0]["end"] or end in have:
+            continue
+        reason = "broken_chain" if end in own else "tag_mismatch" if end in others else "no_annual"
+        key = (int(end[:4]), field)
+        if key not in seen:
+            seen.add(key)
+            gaps.append({"fiscal_year": key[0], "metric": field, "reason": reason, "end": end})
+    return gaps
+
 def normalize(facts, symbol, cik, as_of, retrieved_at=None):
-    if not valid_date(as_of) or facts.get("cik") != cik:
-        raise ValueError("CIK or as-of mismatch")
+    if not valid_date(as_of):
+        raise PayloadMismatch("analysis date is not a valid date")
+    if facts.get("cik") != cik:
+        raise PayloadMismatch("companyfacts cik does not match the requested cik")
     retrieved_at = retrieved_at or now_iso()
     fields = {key: series(facts, key, as_of) for key in TAGS}
+    gaps = []
     for key in DERIVABLE:
-        # Derivation always sees the full 24-point series; trimming comes after.
-        fields[key] = derive_fourth_quarters(fields[key], series(facts, key, as_of, annual=True))
+        # Derivation always sees the full 24-point series; trimming comes after. The annual values are
+        # those of the quarterly series' own concept (a 10-K that also tags a legacy total under another
+        # concept never decides which annual value a fourth quarter comes from).
+        concept = [fields[key][0]["tag"]] if fields[key] else None
+        fields[key] = derive_fourth_quarters(fields[key], series(facts, key, as_of, annual=True, tags=concept) if concept else [])
+        gaps += derivation_gaps(facts, key, fields[key], as_of)
     annual_eps = series(facts, "eps", as_of, annual=True)
     if not (fields["eps"] or fields["revenue"] or fields["netIncome"] or annual_eps):
         return unavailable(symbol, as_of, "no_quarterly", "SEC四半期報告なし", retrieved_at, filed_forms(facts))
@@ -163,12 +204,44 @@ def normalize(facts, symbol, cik, as_of, retrieved_at=None):
     if ends:
         cutoff = (date.fromisoformat(max(ends)) - timedelta(days=TRIM_DAYS)).isoformat()
         fields = {key: [p for p in points if p["end"] >= cutoff] for key, points in fields.items()}
+        gaps = [gap for gap in gaps if gap["end"] >= cutoff]
     # Annual EPS stays complete: the annual record compares against every prior year.
     return {"schema_version": SCHEMA_VERSION, "symbol": symbol, "cik": cik, "as_of_date": as_of, "retrieved_at": retrieved_at,
         "source": f"https://data.sec.gov/api/xbrl/companyfacts/CIK{cik:010d}.json",
         "status": "available" if fields["eps"] and fields["revenue"] else "partial",
         "quarterly": fields, "annualEps": annual_eps,
-        "limitations": ["US GAAP標準タグ・USDの報告値。調整後EPSと同一ではない", "EPSは直接報告された四半期だけを使用。年間EPSからQ4を差し引き推計しない", "売上高・純利益のQ4が年度値だけで報告される場合は、同じ科目の年度値から3四半期を差し引いて算出（算出元を記録）", "提出日までの情報。同日中の発表時刻・決算発表日そのものは未確認", "一時利益・予想値・修正履歴・企業材料は未検証"]}
+        "limitations": ["US GAAP標準タグ・USDの報告値。調整後EPSと同一ではない", "EPSは直接報告された四半期だけを使用。年間EPSからQ4を差し引き推計しない", "売上高・純利益のQ4が年度値だけで報告される場合は、同じ科目の年度値から3四半期を差し引いて算出（算出元を記録）", "提出日までの情報。同日中の発表時刻・決算発表日そのものは未確認", "一時利益・予想値・修正履歴・企業材料は未検証"],
+        "derivation_gaps": [{key: gap[key] for key in ("fiscal_year", "metric", "reason")} for gap in sorted(gaps, key=lambda gap: (gap["end"], gap["metric"]))]}
+
+INVALID_MESSAGE_MAX = 200
+_SECRET_PATTERNS = (re.compile(r"https?://\S+"), re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),
+    re.compile(r"(?i)\b(?:authorization|cookie|set-cookie|user-agent|x-[a-z-]+)\s*[:=]\s*\S+"))
+
+def safe_message(text, fallback):
+    """An exception message fit to publish: no URL, address, header or the User-Agent, one line, at most 200 characters."""
+    text = str(text or "")
+    agent = user_agent()
+    if agent:
+        text = text.replace(agent, " ")
+    for pattern in _SECRET_PATTERNS:
+        text = pattern.sub(" ", text)
+    text = re.sub(r"\s+", " ", "".join(ch if ch.isprintable() else " " for ch in text)).strip()
+    return (text or fallback)[:INVALID_MESSAGE_MAX]
+
+def invalid_detail(error, cik, facts):
+    """Why a payload could not be read: the exception class, a short message and the CIKs requested and received."""
+    received = facts.get("cik") if isinstance(facts, dict) else None
+    name = type(error).__name__
+    return {"class": name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name) else "Exception", "message": safe_message(error, name),
+        "requested_cik": cik, "received_cik": received if isinstance(received, int) and not isinstance(received, bool) and received >= 0 else None}
+
+def invalid_cause(record):
+    """The cause key of an invalid_payload record for the counts: cik_mismatch, or the exception class."""
+    detail = record.get("invalid_detail") if isinstance(record.get("invalid_detail"), dict) else {}
+    requested, received = detail.get("requested_cik"), detail.get("received_cik")
+    if isinstance(requested, int) and isinstance(received, int) and requested != received:
+        return "cik_mismatch"
+    return detail.get("class") or "unrecorded"
 
 def user_agent():
     # SEC asks for a contactable User-Agent; CI passes the repository secret.
@@ -293,7 +366,8 @@ def fetch_symbol(symbol, tickers, as_of, get=None, deadline=None):
     try:
         return normalize(facts, symbol, cik, as_of, retrieved_at)
     except Exception as e:
-        return unavailable(symbol, as_of, "invalid_payload", f"{TRANSIENT_ERROR}: {type(e).__name__}", retrieved_at)
+        # The cause is recorded (never the record's values): what failed, and which CIK came back.
+        return {**unavailable(symbol, as_of, "invalid_payload", f"{TRANSIENT_ERROR}: {type(e).__name__}", retrieved_at), "invalid_detail": invalid_detail(e, cik, facts)}
 
 def fetch_all(symbols, tickers, as_of, get, workers=WORKERS, deadline=None):
     """Results in the order of `symbols`; the shared limiter bounds the total rate."""
@@ -384,10 +458,29 @@ def main():
     output["coverage"] = {**coverage(output["results"], len(ordered), len(symbols), brief), "second_pass": output.pop("second_pass"), "deadline": output.pop("deadline")}
     write_output(root, output)
     print(f"SEC evidence {as_of}: " + json.dumps(output["coverage"], ensure_ascii=False) + "; missing remains unknown", flush=True)
+    summary = invalid_summary(output["results"])
+    print(f"SEC invalid_payload {as_of}: " + json.dumps(summary, ensure_ascii=False), flush=True)
+    append_step_summary(f"- SEC evidence {as_of}: {output['coverage']['available']} available, {output['coverage']['partial']} partial, {output['coverage']['unavailable']} unavailable of {len(symbols)} requested; "
+        f"invalid_payload {summary['count']} by cause {json.dumps(summary['by_cause'], ensure_ascii=False)}; first symbols {' '.join(summary['symbols']) or 'none'}")
     if output["coverage"]["truncated"] > 0:
         print(f"::warning::SEC evidence covers {len(symbols)} of {len(ordered)} eligible symbols; {output['coverage']['truncated']} stay unfetched (unknown)", flush=True)
     if output["coverage"]["deadline"]["unreached"] > 0:
         print(f"::warning::SEC budget of {output['coverage']['deadline']['seconds']:.0f}s ran out; {output['coverage']['deadline']['unreached']} symbols stay unfetched (transient, unknown)", flush=True)
+
+def invalid_summary(results, limit=10):
+    """invalid_payload records by cause (cik_mismatch or the exception class) and the first `limit` symbols."""
+    invalid = [(symbol, record) for symbol, record in results.items() if record.get("reason") == "invalid_payload"]
+    return {"count": len(invalid), "by_cause": dict(sorted(Counter(invalid_cause(record) for _, record in invalid).items())), "symbols": [symbol for symbol, _ in invalid[:limit]]}
+
+def append_step_summary(text):
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(text + "\n")
+    except OSError:
+        pass
 
 def coverage(results, eligible, requested, brief=()):
     values = list(results.values())
@@ -398,7 +491,11 @@ def coverage(results, eligible, requested, brief=()):
         "available": sum(r.get("status") == "available" for r in values), "partial": sum(r.get("status") == "partial" for r in values),
         "unavailable": sum(r.get("status") == "unavailable" for r in values),
         "reasons": {reason: sum(r.get("reason") == reason for r in values) for reason in UNAVAILABLE_REASONS},
-        "q4_revenue_derived": derived("revenue"), "q4_net_income_derived": derived("netIncome")}
+        "q4_revenue_derived": derived("revenue"), "q4_net_income_derived": derived("netIncome"),
+        # Records with quarters but no revenue concept in TAGS (banks, insurers): a scope limit, never a gap.
+        "no_revenue_concept": sum(r.get("status") in ("available", "partial") and not (r.get("quarterly") or {}).get("revenue") for r in values),
+        "derivation_gaps": dict(sorted(Counter(f"{gap['metric']}:{gap['reason']}" for r in values for gap in r.get("derivation_gaps") or []).items())),
+        "invalid_payload_by_cause": dict(sorted(Counter(invalid_cause(r) for r in values if r.get("reason") == "invalid_payload").items()))}
 
 if __name__ == "__main__":
     main()
