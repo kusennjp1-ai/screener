@@ -66,11 +66,12 @@ export const PLAN_DEFAULTS = Object.freeze({ stopPercent: STOP_DEFAULT_PERCENT, 
  *   positions of the same size the guide holds, floor(guide ÷ weight) (holdings are not registered, so
  *   none is counted); each null when unknown.
  * @property {boolean} reference The plan is shown for reference only (参考): buyGate names a reason.
- * @property {'TT未達'|'TT未確認'|'選定対象外'|'崩れ'|'土台未確認'|'地合い'|'地合い未確認'|'決算前'|'下落日の大商い'|'停滞'|null} referenceReason
+ * @property {'TT未達'|'TT未確認'|'選定対象外'|'崩れ'|'土台未確認'|'地合い'|'地合い未確認'|'決算前'|'決算当日'|'決算後'|'決算'|'下落日の大商い'|'停滞'|null} referenceReason
  *   buyGate's reason, in the conclusion's order: the trend template (TT未達, TT未確認, 選定対象外); 崩れ (a broken
  *   setup: the 50-day check, the failed breakout or the book's combined warning fired, 独自判定); 土台未確認 (the
  *   Setup Engine base is not current or below its confidence floor); 地合い (a known market with a guide of 0%)
- *   or 地合い未確認; 決算前 (earnings within EARNINGS_WARN_DAYS); 下落日の大商い or 停滞 (the buy zone's day);
+ *   or 地合い未確認; 決算前, 決算当日 or 決算後 (earnings within EARNINGS_WARN_DAYS, or passed since the analysis;
+ *   決算 when only `earningsSoon` is known); 下落日の大商い or 停滞 (the buy zone's day);
  *   null when none applies.
  * @property {boolean|null} stopInsideBase The stop in use sits above the last measured contraction's low (inside
  *   the contraction, easily hit by its normal swings: 独自判定); null when that low is unknown or at the entry.
@@ -193,12 +194,13 @@ export function structuralStop({ technical, judged, entry, pivot }) {
  * that stop sets the width while it is usable; every other stock keeps the stop setting. `context` holds
  * the market verdict (brief.market), the trend template, the technical evidence, `judged` (the bars
  * certified for the analysis date, or null: the only bars the structural stop and ADR are computed from),
- * `sells` (the sell checks) or `broken` (a broken buy setup, from them) and `earningsSoon` (earnings within
- * EARNINGS_WARN_DAYS). The reference reason is buyGate's for the same inputs (or `gate`, when the caller has
+ * `sells` (the sell checks) or `broken` (a broken buy setup, from them) and `earnings` (the stock view's earningsCall,
+ * whose days name the phase: 決算前, 決算当日, 決算後) or, without it, `earningsSoon` (earnings within
+ * EARNINGS_WARN_DAYS: the reason is then 決算). The reference reason is buyGate's for the same inputs (or `gate`, when the caller has
  * it), so the plan and the conclusion read one decision.
  * @returns {PositionPlan|{blocked: string}|null}
  */
-export function positionPlan(view, settings = {}, { market = null, template = null, technical = null, judged = null, broken = false, earningsSoon = false, sells = null, gate = null } = {}) {
+export function positionPlan(view, settings = {}, { market = null, template = null, technical = null, judged = null, broken = false, earningsSoon = false, earnings = null, sells = null, gate = null } = {}) {
   if (view && PLAN_BLOCKED[view.state]) return { blocked: PLAN_BLOCKED[view.state] };
   const input = { ...PLAN_DEFAULTS, ...settings };
   const { account } = input;
@@ -227,7 +229,7 @@ export function positionPlan(view, settings = {}, { market = null, template = nu
   const cost = shares === null ? null : shares * entry;
   const weight = cost === null ? null : cost / account * 100;
   const maxPercent = marketGuidePercent(market);
-  const decision = gate ?? buyGate({ view, template, market, sells, broken, earnings: earningsSoon === true ? { soon: true } : null, judged });
+  const decision = gate ?? buyGate({ view, template, market, sells, broken, earnings: earnings ?? (earningsSoon === true ? { soon: true } : null), judged });
   const referenceReason = decision.reason;
   const adr = adrState(judged);
   const usedPercent = maxPercent > 0 ? weight : null;

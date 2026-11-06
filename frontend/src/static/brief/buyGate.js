@@ -50,7 +50,7 @@ export function templateReference(template) {
  * Whether the stock's Setup Engine base is current for the analysis date and above the confidence floor
  * (VD4), as { current, note }: not current when setup_recalculation is not 'calculated' or is of another
  * day, when its reason names SE_BELOW_FLOOR_CHECK, or when se_pattern_confidence is under
- * SE_CONFIDENCE_FLOOR or missing (信頼度 未確認, never 0). `note` says which, for the conclusion's line. A
+ * SE_CONFIDENCE_FLOOR or missing (土台の信頼度 未確認, never 0). `note` says which, for the conclusion's line. A
  * certified VCP footprint never overrides it (the default of owner decision §9-13).
  */
 export function baseCheck(view) {
@@ -60,9 +60,10 @@ export function baseCheck(view) {
   if (calculation.status !== 'calculated') return no(calculation.status === 'unavailable' ? '土台の再計算不可' : '土台の再計算 未確認');
   if (typeof view.asOf !== 'string' || calculation.as_of_date !== view.asOf) return no(`土台の再計算が分析日のものではありません（${shortDate(calculation.as_of_date, view.asOf)}）`);
   const confidence = row.se_pattern_confidence;
-  if (!finite(confidence)) return no('信頼度 未確認');
-  if (confidence < SE_CONFIDENCE_FLOOR) return no(`信頼度 ${Math.floor(confidence)}（基準${SE_CONFIDENCE_FLOOR}）`);
-  if (typeof calculation.reason === 'string' && calculation.reason.includes(SE_BELOW_FLOOR_CHECK)) return no(`信頼度が基準${SE_CONFIDENCE_FLOOR}未満`);
+  if (!finite(confidence)) return no('土台の信頼度 未確認');
+  if (confidence < SE_CONFIDENCE_FLOOR) return no(`土台の信頼度 ${Math.floor(confidence)}（基準${SE_CONFIDENCE_FLOOR}）`);
+  // The published confidence may clear the floor while the engine names its primary pattern below it: say that, not the number.
+  if (typeof calculation.reason === 'string' && calculation.reason.includes(SE_BELOW_FLOOR_CHECK)) return no(`主パターンが信頼度の基準${SE_CONFIDENCE_FLOOR}未満（Setup Engine）`);
   return { current: true, note: null };
 }
 
@@ -105,8 +106,11 @@ function positionCall(view) {
   }
 }
 
+/** The plan heading's earnings reason, by the call's phase: before, on or after the date (決算 when the days are not given). */
+const earningsReason = call => (!finite(call.days) ? '決算' : call.days > 0 ? '決算前' : call.days === 0 ? '決算当日' : '決算後');
+
 /** The line under a heavy down day in the zone: no buy range is printed with it (VD3). */
-export const HEAVY_DOWN_NOTE = `下落日の大商い（出来高${ratioShown(SELL_RULES.breakVolumeRatio)}以上）のため、新規の買いは見送ります（独自判定）。`;
+export const HEAVY_DOWN_NOTE = `このため新規の買いは見送ります（出来高${ratioShown(SELL_RULES.breakVolumeRatio)}以上の下落日・独自判定）。`;
 
 /**
  * The one buy gate: `{ kind, tone, title, note, units, reference, reason, moved, blocked, trialOnly, event }`.
@@ -115,12 +119,13 @@ export const HEAVY_DOWN_NOTE = `下落日の大商い（出来高${ratioShown(SE
  * - `reference`: the call is no buy now, so the meter and the three tiles read 参考.
  * - `reason`: the plan heading's 参考 reason, for every position that gets a plan, in the conclusion's order:
  *   TT未達 / TT未確認 / 選定対象外, 崩れ (a broken setup or a failed breakout), 土台未確認 (VD4), 地合い (a known
- *   market with a cap of 0) / 地合い未確認, 決算前, 下落日の大商い, 停滞 (VD1); null when none applies.
+ *   market with a cap of 0) / 地合い未確認, 決算前 / 決算当日 / 決算後 (決算 without the days), 下落日の大商い, 停滞
+ *   (VD1); null when none applies.
  * - `blocked`: PLAN_BLOCKED's reason for a position that gets no plan, else null. `trialOnly`: the market
  *   guide allows no new position or is unknown (試算のみ).
  * Inputs: `view` (candidateView), `template` (trendTemplate), `market` (prepared.market), `sells` (the
  * stock's sell checks; `broken: true` stands for a broken setup when the caller has only that), `earnings`
- * (earningsCall's `{ soon, line }`, or null), `event` (crossingEvent's, computed from `judged`, the certified
+ * (earningsCall's `{ days, soon, line }`, or null), `event` (crossingEvent's, computed from `judged`, the certified
  * bars, when it is not given) and `base` (baseCheck's, computed from the view when not given).
  */
 export function buyGate({ view, template = null, market = null, sells = null, broken = false, earnings = null, event, base, judged = null } = {}) {
@@ -134,7 +139,7 @@ export function buyGate({ view, template = null, market = null, sells = null, br
   const gate = candidateMarketGate(market);
   const zoneReason = view.position === 'zone' ? (day?.kind === 'heavyDown' ? '下落日の大商い' : day?.kind === 'stale' ? '停滞' : null) : null;
   const reason = tt?.reason ?? (isBroken ? '崩れ' : null) ?? (footing?.current === false ? '土台未確認' : null)
-    ?? (gate === 'hold' ? '地合い' : gate !== 'open' ? '地合い未確認' : null) ?? (earnings?.soon ? '決算前' : null) ?? zoneReason;
+    ?? (gate === 'hold' ? '地合い' : gate !== 'open' ? '地合い未確認' : null) ?? (earnings?.soon ? earningsReason(earnings) : null) ?? zoneReason;
   const result = (call, extra = {}) => ({ note: null, units: [], reference: false, moved: false, ...call, ...extra, reason, blocked, trialOnly, event: day ?? null });
 
   const moved = { reference: true, moved: true };

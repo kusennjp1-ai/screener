@@ -164,10 +164,13 @@ describe('position plan: gating (F2)', () => {
     expect(templateReference(PASS)).toBeNull();
     // A selected stock the template does not select (an exclusion) is no candidate either.
     expect([positionPlan(view({ qualified: false }), PLAN_DEFAULTS, { template: PASS, market: UP })].map(p => [p.reference, p.referenceReason])).toEqual([[true, '選定対象外']]);
-    // A broken setup (崩れ) or near earnings (決算前) also leaves the plan a reference; the template's reason leads.
+    // A broken setup (崩れ) or near earnings also leaves the plan a reference; the template's reason leads. The stock
+    // view's earnings call names the phase (決算前, 決算当日, 決算後); with the flag alone it is 決算.
     const more = (template, context) => { const plan = positionPlan(view(), PLAN_DEFAULTS, { template, market: UP, ...context }); return [plan.reference, plan.referenceReason]; };
     expect(more(PASS, { broken: true })).toEqual([true, '崩れ']);
-    expect(more(PASS, { earningsSoon: true })).toEqual([true, '決算前']);
+    expect(more(PASS, { earningsSoon: true })).toEqual([true, '決算']);
+    expect([3, 0, -2].map(days => more(PASS, { earnings: { days, soon: true } })[1])).toEqual(['決算前', '決算当日', '決算後']);
+    expect(more(PASS, { earnings: { days: 20, soon: false } })).toEqual([false, null]);
     expect(more(PASS, { broken: true, earningsSoon: true })).toEqual([true, '崩れ']);
     expect(more({ ...PASS, passed: 7, failed: 1 }, { broken: true })).toEqual([true, 'TT未達']);
   });

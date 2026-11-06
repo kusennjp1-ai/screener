@@ -31,7 +31,7 @@ const measured = (low = 96) => {
 };
 /** The plan card with its hook, as the stock view wires them. */
 function Harness({ planView = view, market = UP, template = PASS, technical = null, judged = null, certified = true, broken = false, earningsSoon = false, chartRef = { current: null }, wide = false, call = null }) {
-  const { plan, settings, update } = usePositionPlan({ view: planView, template, market, technical, certified, judged, broken, earningsSoon, chartRef });
+  const { plan, settings, update } = usePositionPlan({ view: planView, template, market, technical, certified, judged, broken, earningsSoon, earningsCall: call, chartRef });
   return <PlanCard view={planView} plan={plan} settings={settings} onChange={update} earningsCall={call} judged={judged} wide={wide} />;
 }
 const card = () => screen.getByRole('region', { name: /建て玉と損切りの計画/ });
@@ -172,8 +172,15 @@ describe('the plan card', () => {
     expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（崩れ）');
     unmount();
     const { unmount: next } = render(<Harness earningsSoon />);
-    expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（決算前）');
+    // The flag alone (no earnings call handed in) cannot tell the phase: 決算.
+    expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（決算）');
     next();
+    // The stock view's one earnings call names it, as the rule under the plan does: before, on, or after the date.
+    for (const [days, reason] of [[3, '決算前'], [0, '決算当日'], [-2, '決算後']]) {
+      const phase = render(<Harness call={{ date: '2026-10-05', days, soon: true, chip: '', line: '' }} />);
+      expect(heading()).toHaveTextContent(`ピボット 100.00 で買う場合・参考（${reason}）`);
+      phase.unmount();
+    }
     // The template's reason leads, in the conclusion's order.
     render(<Harness template={{ ...PASS, passed: 7, failed: 1 }} broken earningsSoon />);
     expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（TT未達）');
@@ -291,41 +298,55 @@ describe('the structural stop and ADR come from certified bars only', () => {
     unmount();
     const edge = measured(90.5);
     render(<Harness judged={edge.judged} technical={edge.technical} />);
-    // Over the 9.5% the inputs allow: a depth problem, never an input limit.
-    expect(card()).toHaveTextContent('（買値比 −9.95%）深すぎる（9.5%超・見送り候補）');
+    // Over the 9.5% the inputs allow: a depth problem past the 8% warning, never an input limit.
+    expect(card()).toHaveTextContent('（買値比 −9.95%）深すぎる（8%超・見送り候補・独自設定）');
+    expect(card()).not.toHaveTextContent('9.5%');
     expect(card()).not.toHaveTextContent('入力の上限');
     expect(card().querySelector('.brief-structural')).toHaveClass('tone-ext');
     expect(screen.queryByRole('button', { name: 'この位置を使う' })).toBeNull();
   });
 
-  it('warns, one ext line each, when the stop sits inside the last contraction and when the structural stop is deeper than 8% (never moving the stop)', () => {
+  it('warns in one ext line when the stop sits inside the last contraction, and on the structural stop\'s own line when it is deeper than 8% (never moving the stop)', () => {
     const warnings = () => [...card().querySelectorAll('.brief-plan-warn li')].map(li => [li.dataset.warn, li.textContent]);
+    const structural = () => card().querySelector('.brief-structural');
     // Waiting below the pivot (entry 100), the 7% stop (93.00) above a 91.80 low; the structural stop 91.34 is 8.66% deep.
     const both = measured(91.8);
     const { unmount } = render(<Harness judged={both.judged} technical={both.technical} />);
-    expect(warnings()).toEqual([
-      ['inside', '損切り 93.00 は最後の収縮の安値 91.80 より上（収縮の中）：通常の値動きで刈られやすい位置（独自判定）'],
-      ['deep', '構造上の損切りが−8.7%：ピボットでの買いはリスクが大きい・見送り候補（8%超・独自設定）'],
-    ]);
+    // The why is read out and in the title, so the line stays one line on a phone.
+    expect(warnings()).toEqual([['inside', '損切りが収縮の中（安値 91.80 より上・独自判定）。通常の値動きで刈られやすい位置です']]);
+    expect(card().querySelector('.brief-plan-warn li').title).toBe('通常の値動きで刈られやすい位置です');
     expect(within(card()).getByRole('group', { name: 'R倍数の価格' })).toHaveTextContent('−1R 93.00');
+    // The depth warning replaces where the stop sits on a phone, in the ext tone, with no line of its own.
+    expect(structural()).toHaveClass('tone-ext');
+    expect(structural().querySelector('small')).toHaveTextContent('−8.7%：8%超で見送り候補（独自設定）（ピボットでの買いはリスクが大きい）');
+    expect(structural().querySelector('small .sr-only')).toHaveTextContent('（ピボットでの買いはリスクが大きい）');
+    expect(screen.getByRole('button', { name: 'この位置を使う' })).toBeInTheDocument();
     unmount();
+    // Wide, it keeps where the stop sits too.
+    const wide = render(<Harness judged={both.judged} technical={both.technical} wide />);
+    expect(structural().querySelector('small')).toHaveTextContent('買値比 −8.7%・最後の収縮の安値 91.80 の0.5%下・8%超で見送り候補（独自設定）');
+    wide.unmount();
     // Applied, the structural stop is under the low: only the depth warning stays.
     localStorage.setItem('brief-plan', JSON.stringify({ ...PLAN_DEFAULTS, structuralSymbols: ['AAA'] }));
     const applied = render(<Harness judged={both.judged} technical={both.technical} />);
-    expect(warnings().map(([key]) => key)).toEqual(['deep']);
+    expect(card().querySelector('.brief-plan-warn')).toBeNull();
+    expect(structural()).toHaveClass('tone-ext');
     applied.unmount();
     localStorage.clear();
-    // A shallow base: no warning.
+    // A shallow base: no warning, and the line says where the stop sits.
     const shallow = measured(96);
     const quiet = render(<Harness judged={shallow.judged} technical={shallow.technical} />);
     expect(card().querySelector('.brief-plan-warn')).toBeNull();
+    expect(structural()).not.toHaveClass('tone-ext');
+    expect(structural().querySelector('small')).toHaveTextContent(/^買値比 −4\.5%・収縮の安値の0\.5%下$/);
     quiet.unmount();
-    // In the buy zone the entry is the close: 終値での買い. Deeper than 9.5% already says 深すぎる on its own line.
+    // In the buy zone the entry is the close: 終値での買い.
     const zone = { ...view, state: 'zone', position: 'zone', price: 100, distance: 0 };
     const deep = measured(91.6);
     const inZone = render(<Harness planView={zone} judged={deep.judged} technical={deep.technical} />);
-    expect(warnings().map(([, text]) => text.split('：')[1])).toEqual(['通常の値動きで刈られやすい位置（独自判定）', '終値での買いはリスクが大きい・見送り候補（8%超・独自設定）']);
+    expect(structural().querySelector('small .sr-only')).toHaveTextContent('（終値での買いはリスクが大きい）');
     inZone.unmount();
+    // Deeper than 9.5% already says 深すぎる on its own line; the stop inside the contraction is still warned about.
     const tooDeep = measured(85);
     render(<Harness judged={tooDeep.judged} technical={tooDeep.technical} />);
     expect(warnings().map(([key]) => key)).toEqual(['inside']);

@@ -27,21 +27,32 @@ const gateOf = (over = {}, context = {}) => {
 };
 const check = (key, extra = {}) => ({ key, label: key, state: 'hit', detail: `${key} の詳細`, ...extra });
 const sells = (...weakness) => ({ strength: [], weakness });
-/** Certified bars ending on DAY: under 100, then above it for `ago` sessions before DAY's 103. */
-const crossed = ago => {
+/**
+ * Certified bars ending on DAY: under 100, then above it for `ago` sessions before DAY's 103, the crossing bar on
+ * `ratio` times the 50 sessions before it (1.6× by default: a breakout on the volume; null leaves its volume unknown).
+ */
+const crossed = (ago, ratio = 1.6) => {
   const day = i => new Date(Date.UTC(2026, 6, 1) + i * 86400000).toISOString().slice(0, 10);
-  const closes = [...Array(60 - ago).fill(95), ...Array(ago).fill(102)];
-  return [...closes.map((close, i) => ({ date: day(i), close })), { date: DAY, close: 103 }];
+  const closes = [...Array(60 - ago).fill(95), ...Array(ago).fill(102)], at = 60 - ago;
+  return [...closes.map((close, i) => ({ date: day(i), close, volume: i === at ? (ratio === null ? null : 10000 * ratio) : 10000 })), { date: DAY, close: 103, volume: 10000 }];
 };
 
 describe('the one buy gate', () => {
   it('keeps the green case exactly as it is: a qualified TT 8/8 stock, an open market, the day\'s breakout, a current base, no warnings', () => {
     const { view } = subject();
     expect(gateOf()).toEqual({ kind: 'breakout', tone: 'zone', title: breakoutEvent(view).title, note: null, units: [], reference: false, moved: false, reason: null, blocked: null, trialOnly: false, event: breakoutEvent(view) });
-    // A breakout dated from certified bars within 10 sessions is green too, with the conclusion's dated title.
-    const after = subject({ price: 103, change: 1 });
-    const dated = buyGate({ view: after.view, template: after.template, market: OPEN, earnings: null, judged: crossed(4) });
-    expect(dated).toMatchObject({ kind: 'after', tone: 'zone', reference: false, reason: null, moved: false, note: null, title: crossingEvent(after.view, crossed(4)).title });
+  });
+
+  it('keeps a breakout dated within 10 sessions on the volume green, as the day\'s breakout is (VD3\'s snapshot)', () => {
+    const after = subject({ price: 103, change: 1 }), bars = crossed(2), event = crossingEvent(after.view, bars);
+    expect(event).toMatchObject({ kind: 'after', tone: 'zone' });
+    expect(buyGate({ view: after.view, template: after.template, market: OPEN, earnings: null, judged: bars })).toEqual({
+      kind: 'after', tone: 'zone', title: event.title, note: null, units: [], reference: false, moved: false, reason: null, blocked: null, trialOnly: false, event });
+    // On lighter volume, or with it unknown, the crossing is no breakout: it waits, with no plan reason (as on the crossing day).
+    for (const ratio of [0.8, null]) {
+      const light = crossed(2, ratio), call = buyGate({ view: after.view, template: after.template, market: OPEN, judged: light });
+      expect(call).toMatchObject({ kind: ratio === null ? 'afterUnconfirmed' : 'afterLight', tone: 'wait', title: crossingEvent(after.view, light).title, note: crossingEvent(after.view, light).note, reference: false, reason: null });
+    }
   });
 
   it('a heavy down day in the zone is a reference with its reason, and never the buy range', () => {
@@ -86,10 +97,11 @@ describe('the one buy gate', () => {
 
   it('checks the Setup Engine base after a broken setup and before the market: weak, missing, stale or failed-check confidence is 参考 (土台未確認)', () => {
     const weak = gateOf({ se_pattern_confidence: 31 });
-    expect(weak).toMatchObject({ kind: 'baseCheck', tone: 'neutral', title: '土台を確認できない — ピボットは参考（独自判定）', note: `信頼度 31（基準${SE_CONFIDENCE_FLOOR}）。`, reference: true, moved: true, reason: '土台未確認' });
-    expect(gateOf({ se_pattern_confidence: null }).note).toBe('信頼度 未確認。');
-    expect(gateOf({ se_pattern_confidence: 54.9 }).note).toBe('信頼度 54（基準55）。');
-    expect(gateOf({ setup_recalculation: { status: 'calculated', as_of_date: DAY, reason: `${SE_BELOW_FLOOR_CHECK} / missing_detector` } }).note).toBe('信頼度が基準55未満。');
+    expect(weak).toMatchObject({ kind: 'baseCheck', tone: 'neutral', title: '土台を確認できない — ピボットは参考（独自判定）', note: `土台の信頼度 31（基準${SE_CONFIDENCE_FLOOR}）。`, reference: true, moved: true, reason: '土台未確認' });
+    expect(gateOf({ se_pattern_confidence: null }).note).toBe('土台の信頼度 未確認。');
+    expect(gateOf({ se_pattern_confidence: 54.9 }).note).toBe('土台の信頼度 54（基準55）。');
+    // A confidence at or above the floor while the engine names its primary pattern below it: the pattern, not the number.
+    expect(gateOf({ setup_recalculation: { status: 'calculated', as_of_date: DAY, reason: `${SE_BELOW_FLOOR_CHECK} / missing_detector` } }).note).toBe('主パターンが信頼度の基準55未満（Setup Engine）。');
     expect(gateOf({ setup_recalculation: { status: 'calculated', as_of_date: '2026-10-01' } }).note).toBe('土台の再計算が分析日のものではありません（10/1）。');
     expect(gateOf({ setup_recalculation: { status: 'unavailable', as_of_date: DAY, reason: 'No validated history' } }).note).toBe('土台の再計算不可。');
     expect(gateOf({ setup_recalculation: undefined }).note).toBe('土台の再計算 未確認。');
@@ -106,18 +118,26 @@ describe('the one buy gate', () => {
     expect(baseCheck(null)).toEqual({ current: false, note: '土台の再計算 未確認' });
   });
 
-  it('earnings within 10 days stop the green call (決算前), after the market', () => {
+  it('earnings within 10 days stop the green call, after the market; the plan names the phase (決算前, 決算当日, 決算後)', () => {
     const row = { entry_evidence: { earnings: { date: '2026-10-05' } } };
     const { view } = subject(row);
     const call = earningsCall(view, NOW);
     expect(gateOf(row)).toMatchObject({ kind: 'earnings', tone: 'neutral', title: call.line, reference: true, moved: true, reason: '決算前' });
     expect(gateOf(row, { market: HOLD })).toMatchObject({ kind: 'marketHold', reason: '地合い' });
+    // On the day and once it has passed (the analysis predates the report): never 決算前.
+    expect(gateOf(row, { earnings: earningsCall(view, Date.parse('2026-10-05T15:00:00Z')) })).toMatchObject({ kind: 'earnings', reason: '決算当日' });
+    const after = earningsCall(view, Date.parse('2026-10-07T15:00:00Z'));
+    expect(after.days).toBeLessThan(0);
+    expect(gateOf(row, { earnings: after })).toMatchObject({ kind: 'earnings', title: after.line, reason: '決算後' });
+    // A caller with only the flag (no days): 決算.
+    expect(gateOf(row, { earnings: { soon: true } }).reason).toBe('決算');
   });
 
   it('a breakout still in the zone after 10 sessions waits for the next pivot (停滞); one it cannot date waits too, without 参考', () => {
     const after = subject({ price: 103, change: 1 });
     const stale = buyGate({ view: after.view, template: after.template, market: OPEN, judged: crossed(12) });
-    expect(stale).toMatchObject({ kind: 'stale', tone: 'wait', title: '上抜けから12営業日・伸びずに停滞（新規は次のピボット待ち）', reference: true, reason: '停滞', moved: false });
+    expect(stale).toMatchObject({ kind: 'stale', tone: 'wait', title: crossingEvent(after.view, crossed(12)).title, note: crossingEvent(after.view, crossed(12)).note, reference: true, reason: '停滞', moved: false });
+    expect(stale.title).toBe('上抜けから12営業日・停滞（次のピボット待ち）');
     const undated = buyGate({ view: after.view, template: after.template, market: OPEN, judged: null });
     expect(undated).toMatchObject({ kind: 'undated', tone: 'wait', title: '買いゾーン内（上抜け日 未確認）', reference: false, reason: null });
   });

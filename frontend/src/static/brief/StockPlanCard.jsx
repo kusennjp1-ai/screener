@@ -24,16 +24,19 @@ const Fold = ({ wide, id, summary, children }) => wide ? children : <Expander id
  * stop, moves the chart's stop line through `chartRef`; `update('structural', true)` uses this stock's
  * own structural stop (kept for this symbol only: every other stock keeps the stop setting, and a stop
  * typed or slid on this stock replaces it); `moveStop(price)` moves that line. The plan reads the market
- * verdict (地合いの目安, 試算のみ), the trend template (参考) and, from the bars certified for the analysis
+ * verdict (地合いの目安, 試算のみ), the trend template (参考), the earnings call (`earningsCall`, else `earningsSoon`)
+ * and, from the bars certified for the analysis
  * date only (`judged` with `certified`), the structural stop and ADR. A position that gets no new plan
  * (買いゾーン超過, 低変動, 買収, 判定不可) hands the screen a null plan, so the conclusion's tiles read —
  * and the chart draws no stop; the plan card names the reason.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- the plan's hook lives beside its card (one owner)
-export function usePositionPlan({ view, template = null, market = null, technical = null, certified = false, judged = null, broken = false, earningsSoon = false, sells = null, chartRef }) {
+export function usePositionPlan({ view, template = null, market = null, technical = null, certified = false, judged = null, broken = false, earningsSoon = false, earningsCall = null, sells = null, chartRef }) {
   const [settings, setSettings] = useState(readPlan);
   const bars = certified === true ? judged : null;
-  const context = useMemo(() => ({ market, template, technical, judged: bars, broken, earningsSoon, sells }), [market, template, technical, bars, broken, earningsSoon, sells]);
+  // The stock view's earnings call (a new object each render) is read by its days and soon only: the plan's 決算 reason.
+  const days = earningsCall?.days, soon = earningsCall?.soon;
+  const context = useMemo(() => ({ market, template, technical, judged: bars, broken, earningsSoon, earnings: soon === undefined ? null : { days, soon }, sells }), [market, template, technical, bars, broken, earningsSoon, days, soon, sells]);
   const plan = useMemo(() => {
     const result = view ? positionPlan(view, settings, context) : null;
     return result?.blocked ? null : result;
@@ -91,21 +94,21 @@ function MarketTile({ plan }) {
 /** Why a structural stop that was measured cannot be applied, by state. */
 const STRUCTURAL_WHY = {
   tooDeep: `深すぎる（${STOP_MAX_PERCENT}%以上・見送り候補）`,
-  // A depth problem, never an input limit: a stop this deep leaves the loss at the edge of the 10% rule.
-  overLimit: `深すぎる（${STOP_LIMIT_PERCENT}%超・見送り候補）`,
+  // A depth problem, never an input limit: every stop past the inputs' limit is past the 8% warning too (独自設定).
+  overLimit: `深すぎる（${STOP_WARN_PERCENT}%超・見送り候補・独自設定）`,
   tooShallow: `損切り幅の下限${STOP_MIN_PERCENT}%より浅いため使えません`,
 };
 
 /**
- * The stop's warnings against the base (VD5), one ext-tone line each: the stop in use above the last
- * contraction's low (inside it: 独自判定), and a usable structural stop deeper than STOP_WARN_PERCENT (独自設定;
- * a deeper one already says 深すぎる on its own line). The stop is never moved by itself.
+ * The stop's warning against the base (VD5): the stop in use above the last contraction's low (inside it, 独自判定),
+ * one ext-tone line from 375px up; why it matters is in its title and read out. A usable structural stop deeper than
+ * STOP_WARN_PERCENT says so on its own line (StructuralStop). The stop is never moved by itself.
  */
 function StopWarnings({ plan }) {
-  const s = plan.structural, lines = [];
-  if (plan.stopInsideBase === true) lines.push(['inside', `損切り ${price(plan.stop)} は最後の収縮の安値 ${price(s.low)} より上（収縮の中）：通常の値動きで刈られやすい位置（独自判定）`]);
-  if (plan.structuralDeep === true && s.state === 'ok') lines.push(['deep', `構造上の損切りが−${s.percent.toFixed(1)}%：${plan.basis === 'pivot' ? 'ピボット' : '終値'}での買いはリスクが大きい・見送り候補（${STOP_WARN_PERCENT}%超・独自設定）`]);
-  return lines.length ? <ul className="brief-plan-warn" data-testid="brief-plan-warn">{lines.map(([key, text]) => <li key={key} data-warn={key}>{text}</li>)}</ul> : null;
+  if (plan.stopInsideBase !== true) return null;
+  const why = '通常の値動きで刈られやすい位置です';
+  return <ul className="brief-plan-warn" data-testid="brief-plan-warn"><li data-warn="inside" title={why}>
+    {`損切りが収縮の中（安値 ${price(plan.structural.low)} より上・独自判定）`}<span className="sr-only">。{why}</span></li></ul>;
 }
 
 /**
@@ -131,10 +134,13 @@ function StructuralStop({ plan, onUse, wide }) {
   // Just over the input limit, two decimals: a 9.95% stop is under 10% and must not read as 10.0%.
   const depth = `買値比 −${s.percent.toFixed(s.state === 'overLimit' ? 2 : 1)}%`;
   if (s.state === 'ok') {
-    const applied = plan.stopSource === 'structural';
+    const applied = plan.stopSource === 'structural', deep = plan.structuralDeep === true;
     const where = wide ? `最後の収縮の安値 ${price(s.low)} の${STRUCTURAL_STOP_BUFFER_PERCENT}%下` : `収縮の安値の${STRUCTURAL_STOP_BUFFER_PERCENT}%下`;
-    return <div className="brief-structural" data-state="ok">
-      <p><span>構造上の損切り目安 <b className="numeric">{price(s.stop)}</b></span><small><Parts text={`${depth}・${where}`} /></small></p>
+    // Deeper than STOP_WARN_PERCENT (独自設定): the line under the stop says so in the ext tone; on a phone in place of
+    // where it sits (in the terms), so it keeps one line beside the button from 390px.
+    const note = deep ? (wide ? `${depth}・${where}・${STOP_WARN_PERCENT}%超で見送り候補（独自設定）` : `−${s.percent.toFixed(1)}%：${STOP_WARN_PERCENT}%超で見送り候補（独自設定）`) : `${depth}・${where}`;
+    return <div className={`brief-structural${deep ? ' tone-ext' : ''}`} data-state="ok" data-deep={deep || undefined}>
+      <p><span>構造上の損切り目安 <b className="numeric">{price(s.stop)}</b></span><small><Parts text={note} />{deep ? <span className="sr-only">（{plan.basis === 'pivot' ? 'ピボット' : '終値'}での買いはリスクが大きい）</span> : null}</small></p>
       <button type="button" aria-disabled={applied || undefined} onClick={() => { if (!applied) onUse(); }}>{applied ? '適用済み' : 'この位置を使う'}</button>
     </div>;
   }
