@@ -34,8 +34,10 @@ function stageDetail(bars) {
   const daily = sxy / sxx / ym * 100, up = daily > 0.05, down = daily < -0.05, above = closes.at(-1) > ma;
   if (above && rising && up) return { stage: 2, phase: null };
   if (above && rising && !up && !down) {
-    const highs = bars.slice(-252).map(b => b?.high);
-    const high = highs.length === 252 && highs.every(finite) ? Math.max(...highs) : null;
+    // The 52-week high as the scanner reads it (minervini_scanner: the intraday High of the last 252 sessions, or of
+    // as many as there are, missing values skipped); null when no high in that window is known.
+    const highs = bars.slice(-252).map(b => b?.high).filter(finite);
+    const high = highs.length ? Math.max(...highs) : null;
     const close = closes.at(-1);
     if (high !== null && close > ma150 && ma150 > ma && close >= high * (1 - STAGE2_BASE_MAX_BELOW_HIGH_PERCENT / 100)) return { stage: 2, phase: 'base' };
   }

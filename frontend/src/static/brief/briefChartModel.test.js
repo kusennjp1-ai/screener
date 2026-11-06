@@ -126,11 +126,29 @@ describe('stage from daily bars', () => {
     // The same closes with a 52-week high 40% above the last close: not a base.
     const spiked = vcpBase().map((bar, i, all) => (i === all.length - 100 ? { ...bar, high: all.at(-1).close * 1.4 } : bar));
     expect(stageFromBars(spiked)).toBe(3);
-    // Without 252 known highs the base is not claimed (as before: 3).
+    // Without any known high the base is not claimed (as before: 3).
     const noHighs = vcpBase().map(bar => ({ close: bar.close }));
     expect(stageFromBars(noHighs)).toBe(3);
     expect(stagePhase(noHighs)).toBeNull();
     for (const bars of [[], null, undefined, series(() => 50).slice(0, 100)]) expect(stagePhase(bars)).toBeNull();
+  });
+
+  it('reads the 52-week high over the bars there are (up to 252), as the scanner does', async () => {
+    const { stageFromBars, stagePhase } = await import('./briefChartModel');
+    // 230 sessions: 195 of advance at +0.35%/day, then a 7-week base contracting 15/8/4% (scanner: tail(252).max()).
+    const closes = []; let p = 50;
+    for (let i = 0; i < 195; i++) { p *= 1.0035; closes.push(p); }
+    const top = p;
+    for (const d of [15, 8, 4]) for (let j = 0; j < 11; j++) closes.push(top * (1 - d / 100 * Math.sin(Math.PI * j / 11)));
+    while (closes.length < 230) closes.push(top * 0.99);
+    closes[closes.length - 1] = top * 0.99;
+    const short = closes.map(close => ({ close, high: close * 1.005 }));
+    expect(short).toHaveLength(230);
+    expect(stageFromBars(short)).toBe(2);
+    expect(stagePhase(short)).toBe('base');
+    // A missing high inside the window is skipped, not a reason to drop the base.
+    const gap = short.map((bar, i) => (i === 100 ? { close: bar.close } : bar));
+    expect(stagePhase(gap)).toBe('base');
   });
 
   // The one reader of the published rs_line_high (plan §2.2), for the rows and the stock view alike.
