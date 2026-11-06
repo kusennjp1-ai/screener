@@ -9,7 +9,7 @@ import { exportWorkbench } from './export-workbench.mjs';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
-import { scanListRow } from './scan-list-payload.mjs';
+import { marketContextBlock, rsLineHighSummary, scanListRow } from './scan-list-payload.mjs';
 import { setupEvidence } from './setup-evidence.mjs';
 import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
 import { admitBookFinancialsDetailed } from '../src/static/bookFinancialAdmission.js';
@@ -28,6 +28,14 @@ import { buildBookMarketEvidence } from '../src/static/bookMarketEvidence.js';
 import { auditDailyBars, mergeScanRows, rankVerifiedUniverse, AUDIT_VERSION } from '../src/static/qualificationAudit.js';
 import { producerHistoryCoverage } from './producer-history-coverage.mjs';
 import { VERIFIED_CHART_OMITTED } from './verified-chart-fields.mjs';
+import { buildSecSummary } from '../src/static/fundamentalsExplain.js';
+import { register } from 'node:module';
+
+// briefChartModel.js (the chart track's frozen RS-line rules) uses extensionless relative imports that Vite resolves.
+// Plain Node gets a resolve hook that retries such a specifier with '.js', so rs_line_high uses the app's own rules.
+const RESOLVE_HOOK = "export async function resolve(specifier,context,next){try{return await next(specifier,context);}catch(error){if(error&&error.code==='ERR_MODULE_NOT_FOUND'&&/^\\.\\.?\\//.test(specifier)&&!/\\.(?:[cm]?js|json)$/.test(specifier))return next(specifier+'.js',context);throw error;}}";
+register(`data:text/javascript,${encodeURIComponent(RESOLVE_HOOK)}`);
+const { rsLineNewHigh, rsLeadMarks } = await import('../src/static/brief/briefChartModel.js');
 
 const root = resolve('public/static-data');
 const evaluatedAt = process.env.FINANCIAL_EVALUATED_AT ? Date.parse(process.env.FINANCIAL_EVALUATED_AT) : Date.now();
@@ -79,6 +87,8 @@ let rows = new Map();
 // detail-only sec_admission, the manifest's coverage block and the logs. Nothing here changes a value.
 const secFile = financials?.as_of_date === scan.as_of_date ? financials : null;
 const secExport = new Map(), secStates = new Map();
+// rs_line_high from each row's certified chart (research-index summary only; gated again by the final audit below).
+const rsHighs = new Map();
 for (const row of merged) {
   row.se_explain=row.setup_engine?.explain || null;
   row.se_candidates=row.setup_engine?.candidates || null;
@@ -109,6 +119,7 @@ for (const row of merged) {
     chart.rs_line = chart.bars.filter(b=>comparison.get(b.date)>0).map(b=>({time:b.date,value:b.close/comparison.get(b.date)}));
   }
   if (chart) await writeFile(resolve(root, paths.get(row.symbol)), JSON.stringify(chart));
+  rsHighs.set(row.symbol, audit.valid ? rsLineHighSummary({ rsLineNewHigh, rsLeadMarks }, { audit, chart, date: scan.as_of_date }) : null);
   const recent60 = audit.valid ? chart.bars.slice(-60) : [];
   const range60 = recent60.length === 60 ? (Math.max(...recent60.map(b=>b.high))/Math.min(...recent60.map(b=>b.low))-1)*100 : null;
   row.price_activity = {range60pct:range60,lowRange:range60 != null && range60 < 5};
@@ -174,10 +185,17 @@ if (breadthCurrent) {
 }
 await exportMarketTrends({root,entry,asOfDate:scan.as_of_date,bookEvidence:breadthCurrent ? breadth.payload.book_market_evidence : undefined,evaluatedAt});
 if (breadthCurrent) await writeFile(resolve(root, entry.pages.breadth.path), JSON.stringify(breadth));
+// The publication's SEC coverage, from the SEC input and every row's final admission (report-data-coverage
+// computes the same block from the published files; the quality gate requires the two to agree). The row
+// summaries below word a delivery failure with it, so it is computed before them and written last.
+const fundamentalsCoverage = fundamentalsCoverageBlock({file:financials, asOfDate:scan.as_of_date,
+  states:[...rows.values()].map(row => ({symbol:row.symbol, ...secStates.get(row.symbol), status:row.book_financials?.status ?? null}))});
 // Details are fetched only when a symbol is opened. Keep rule inputs in the index.
 await mkdir(resolve(root, 'research-details'), {recursive:true});
 await mkdir(resolve(root, 'verified-charts'), {recursive:true});
 const compactRows = new Map();
+// Round-2 list summaries (index rows only): the SEC summary of the admitted record and the RS-line high of the certified chart.
+const listSummaries = new Map();
 const currentDetails=new Set();
 const currentCharts=new Set();
 for (const row of rows.values()) {
@@ -202,6 +220,9 @@ for (const [symbol, row] of rows) {
     row.chart_path=`verified-charts/${encodeURIComponent(symbol)}-${chartHash}.json`;
     paths.set(symbol,row.chart_path);currentCharts.add(row.chart_path);
   }
+  const certified = row.technical_audit?.valid === true && row.technical_audit.as_of_date === scan.as_of_date;
+  listSummaries.set(symbol, { rs_line_high: certified ? rsHighs.get(symbol) ?? null : null,
+    sec_summary: buildSecSummary(row, {date:scan.as_of_date, now:evaluatedAt, coverage:fundamentalsCoverage}) });
   const { book_diagnostics, book_technical_evidence, book_financials, sec_admission: previousAdmission, research_detail_path: previousDetailPath, ...compact } = row;
   void previousDetailPath; void previousAdmission;
   // sec_admission is detail-only, beside the record it describes (never in the list rows or the scan pages).
@@ -248,7 +269,7 @@ scan.charts={...scan.charts,...correctionMeta,path:chartIndexPath};
  * @property {'backend-market-regime-v1'} method
  * @property {'scan-rows'} source
  */
-const listFields = ([...FINANCIAL_FIELDS,...CORRECTION_METADATA_FIELDS].join(' ')+' name product_name quoteType quote_type cusip isin cik issuer_cik instrument_identity instrument_applicability financial_identity financial_current financial_publication_input as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
+const listFields = ([...FINANCIAL_FIELDS,...CORRECTION_METADATA_FIELDS].join(' ')+' name product_name quoteType quote_type cusip isin cik issuer_cik instrument_identity instrument_applicability financial_identity financial_current financial_publication_input as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_pattern_primary se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
 const researchIndex = {...currentEvaluation,summary_storage:'canonical-detail-v1',as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => {
   const summary=Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]]));
   // Transport retains only the two original scalar inputs used by the five
@@ -257,8 +278,18 @@ const researchIndex = {...currentEvaluation,summary_storage:'canonical-detail-v1
   // Full provenance remains in detail; readiness reasons are also CSV inputs.
   if(row.price_quality) summary.price_quality={status:row.price_quality.status,as_of_date:row.price_quality.as_of_date};
   if(row.setup_recalculation) summary.setup_recalculation={status:row.setup_recalculation.status,as_of_date:row.setup_recalculation.as_of_date,reason:row.setup_recalculation.reason};
+  // Computed into the index summary only (rule 10), never onto the canonical rows: the alias replay is unchanged.
+  Object.assign(summary, listSummaries.get(row.symbol));
   return summary;
 })};
+{
+  const summaries = [...listSummaries.values()], tally = values => Object.fromEntries([...new Set(values)].map(value => [String(value), values.filter(item => item === value).length]));
+  const rsLine = summaries.map(item => item.rs_line_high), sec = summaries.map(item => item.sec_summary);
+  const line = `Research list summaries ${scan.as_of_date}: rs_line_high ${rsLine.filter(Boolean).length}/${summaries.length} certified (value ${JSON.stringify(tally(rsLine.filter(Boolean).map(item => item.value)))}, leading ${JSON.stringify(tally(rsLine.filter(Boolean).map(item => item.leading)))}); `
+    + `sec_summary ${sec.filter(Boolean).length}/${summaries.length} admitted (states ${JSON.stringify(tally(sec.filter(Boolean).map(item => item.sec_state)))}, eps_yoy ${sec.filter(item => item?.eps_yoy).length}, sales_yoy ${sec.filter(item => item?.sales_yoy).length}); `
+    + `se_pattern_primary ${[...compactRows.values()].filter(row => typeof row.se_pattern_primary === 'string' && row.se_pattern_primary).length}/${compactRows.size}`;
+  console.log(line); appendStepSummary(`- ${line}`);
+}
 // Runtime orders are rebuilt from current inputs at each evaluation epoch.
 // Omit ignored cached permutations and list summaries. Canonical detail keeps
 // its independently checked publication summaries; every exact input remains.
@@ -268,6 +299,7 @@ const researchContent = JSON.stringify(encodeResearchIndex(researchIndex, undefi
 if (Buffer.byteLength(researchContent) > 8000000 || gzipSync(researchContent).length > 1000000) {
   throw Error(`Research index exceeds its unchanged 8 MB raw / 1 MB gzip budget: ${Buffer.byteLength(researchContent)} raw / ${gzipSync(researchContent).length} gzip bytes`);
 }
+console.log(`Research index ${scan.as_of_date}: ${Buffer.byteLength(researchContent)} raw / ${gzipSync(researchContent).length} gzip bytes (budget 8000000 / 1000000).`);
 // The scan list has all global filter/sort values, but no full detector reports.
 await mkdir(resolve(root,'scan-list'),{recursive:true});
 const scanRows=[...compactRows.values()].map(scanListRow), scanChunks=[];
@@ -346,9 +378,13 @@ const producerCoverage=await producerHistoryCoverage({root,entry,rows:[...rows.v
 await writeFile(resolve(root,'data-quality.json'),JSON.stringify({as_of_date:scan.as_of_date,total:producerCoverage?.total ?? liquid.length,verified:producerCoverage?.verified ?? liquid.filter(r=>r.technical_audit.valid).length,reasons:producerCoverage?.missing?.reasons ?? failures,rs_universe:[...rows.values()][0]?.rs_universe_size,minimum_target:.9}));
 
 await exportWorkbench({root,rows:[...rows.values()],manifest,entry,researchContent,now:evaluatedAt,financialCorrection:correctionMeta});
-// The publication's SEC coverage, from the SEC input and every row's final admission (report-data-coverage
-// computes the same block from the published files; the quality gate requires the two to agree).
-entry.fundamentals_coverage = fundamentalsCoverageBlock({file:financials, asOfDate:scan.as_of_date,
-  states:[...rows.values()].map(row => ({symbol:row.symbol, ...secStates.get(row.symbol), status:row.book_financials?.status ?? null}))});
+entry.fundamentals_coverage = fundamentalsCoverage;
+// The backend's market regime for the analysis date, only when every US row that carries it agrees (else null and why).
+{
+  const context = marketContextBlock([...rows.values()], scan.as_of_date);
+  entry.market_context = context.block;
+  const line = `Market context ${scan.as_of_date}: ${context.block ? `emitted from ${context.rows} rows (${context.block.regime})` : `null (${context.reason}${context.reason === 'disagree' ? `: ${context.versions} versions across ${context.rows} rows` : ''})`}`;
+  console.log(line); appendStepSummary(`- ${line}`);
+}
 // Publish the manifest pointer only after every referenced asset is complete.
 await writeFile(resolve(root, 'manifest.json'), JSON.stringify(manifest));

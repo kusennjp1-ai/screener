@@ -143,6 +143,29 @@ describe('publication summaries and current canonical decisions', () => {
       const lying = JSON.parse(detailBytes); lying.sec_admission = { state: 'refused', reason: 'schema' }; await writeFile(detailPath, JSON.stringify(lying));
       let error; try { run('./check-data-quality.mjs'); } catch (caught) { error = caught; }
       expect(error?.status).toBe(1); expect(error.stderr.toString()).toContain('sec_admission disagrees with the detail');
+      await writeFile(detailPath, detailBytes);
+      // Round 2: the list summaries and the market context, each valid, absent and invalid (plan DT5, DT6).
+      const indexPath = join(data, manifest.markets.US.assets.research.path), wireBytes = await readFile(indexPath, 'utf8');
+      const rewrite = async change => { const value = decodeResearchIndex(JSON.parse(wireBytes)); change(value.rows); await writeFile(indexPath, JSON.stringify(encodeResearchIndex(value))); };
+      expect(index.rows.find(row => row.symbol === 'TEST').sec_summary).toMatchObject({ sec_state: 'stale', eps_yoy: null, as_of_date: date });
+      expect(index.rows.find(row => row.symbol === 'NOREC').sec_summary).toBeNull();
+      expect(run('./check-data-quality.mjs')).toContain('List summary gate passed: rs_line_high 3, sec_summary 3, se_pattern_primary 0 of 3 rows; market_context null.');
+      const refuse = async (change, message) => {
+        let caught; try { await change(); run('./check-data-quality.mjs'); } catch (failure) { caught = failure; }
+        expect(caught?.status).toBe(1); expect(caught.stderr.toString()).toContain(message);
+        await writeFile(indexPath, wireBytes); await writeFile(manifestPath, original);
+      };
+      await refuse(() => rewrite(rows => { rows[0].rs_line_high = { value: 'yes', leading: null, as_of_date: date }; }), 'Invalid rs_line_high');
+      await refuse(() => rewrite(rows => { rows[0].rs_line_high = { value: true, leading: false, as_of_date: '2026-10-01' }; }), 'Invalid rs_line_high');
+      await refuse(() => rewrite(rows => { const test = rows.find(row => row.symbol === 'TEST'); test.sec_summary = { ...test.sec_summary, eps_yoy: { value: 99, end: '2025-12-31' } }; }), 'sec_summary differs from the admitted SEC record: TEST');
+      await refuse(() => rewrite(rows => { rows.find(row => row.symbol === 'NOREC').sec_summary = { sec_state: 'ok' }; }), 'Invalid sec_summary: NOREC');
+      await refuse(() => rewrite(rows => { rows[0].se_pattern_primary = 7; }), 'Invalid se_pattern_primary');
+      await refuse(async () => { const changed = JSON.parse(original); changed.markets.US.market_context = { regime: 'x' }; await writeFile(manifestPath, JSON.stringify(changed)); }, 'Invalid market_context block');
+      await refuse(async () => { const changed = JSON.parse(original); changed.markets.US.market_context = { as_of_date: date, regime: 'confirmed_uptrend', distribution_days: null, ftd_date: null, ftd_days_since: null, exposure_pct: null, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' }; await writeFile(manifestPath, JSON.stringify(changed)); }, 'market_context differs from the canonical rows');
+      // Absent everywhere (an older exporter): valid.
+      await rewrite(rows => { for (const row of rows) { delete row.rs_line_high; delete row.sec_summary; } });
+      const withoutContext = JSON.parse(original); delete withoutContext.markets.US.market_context; await writeFile(manifestPath, JSON.stringify(withoutContext));
+      expect(run('./check-data-quality.mjs')).toContain('List summary gate passed: rs_line_high 0, sec_summary 0, se_pattern_primary 0 of 3 rows; market_context absent.');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
