@@ -19,21 +19,27 @@ export function exposureRuleText(caps = MARKET_CAPS) {
 }
 
 // Deliberately a disclosed research model, not IBD's proprietary exposure scale.
+// Besides the label and cap it returns the raw backend regime (`regime`, null when the rows carry none or disagree)
+// and `ftdUpgraded`: the backend regime is confirmed_uptrend while SPY is under a moving average, which only its
+// follow-through-day upgrade produces (backend market_regime.py). The label and the cap never read either.
 export function modelMarket(rows) {
   const us = rows.filter(r => r.market === 'US' && r.currency === 'USD');
   const regimes = [...new Set(us.map(r => r.market_regime).filter(Boolean))];
   const observed = us.filter(r => r.market_regime && typeof r.market_above_50dma === 'boolean' && typeof r.market_above_200dma === 'boolean');
+  const regime = regimes.length === 1 ? regimes[0] : null;
   // Market context is replicated on stock rows. Unscanned stocks have no context;
   // do not let those erase known observations, but reject conflicting regimes.
-  if (!observed.length || regimes.length !== 1) return { label: '市場未確認', cap: 0, state: 'unknown' };
-  if (observed.some(r => r.market_above_200dma === false)) return { label: '長期トレンド警戒', cap: MARKET_CAPS.otherwise };
+  if (!observed.length || regimes.length !== 1) return { label: '市場未確認', cap: 0, state: 'unknown', regime, ftdUpgraded: false };
+  const below200 = observed.some(r => r.market_above_200dma === false), below50 = observed.some(r => r.market_above_50dma === false);
+  const known = { regime, ftdUpgraded: regime === 'confirmed_uptrend' && (below200 || below50) };
+  if (below200) return { label: '長期トレンド警戒', cap: MARKET_CAPS.otherwise, ...known };
   // A close below the 50-day line is a known weak state, not an unknown one; anything else that is
   // not an observed true stays explicitly unknown. Both keep new buying closed.
-  if (observed.some(r => r.market_above_50dma === false)) return { label: '50日線割れ（弱含み・独自判定）', cap: MARKET_CAPS.otherwise };
-  if (observed.some(r => r.market_above_50dma !== true)) return { label: '市場条件未確認', cap: 0, state: 'unknown' };
-  if (regimes[0] === 'confirmed_uptrend') return { label: '上昇トレンド（独自判定）', cap: MARKET_CAPS.confirmed_uptrend };
-  if (regimes[0] === 'uptrend_under_pressure') return { label: '上昇に圧力（独自判定）', cap: MARKET_CAPS.uptrend_under_pressure };
-  return { label: '新規購入を抑制', cap: MARKET_CAPS.otherwise };
+  if (below50) return { label: '50日線割れ（弱含み・独自判定）', cap: MARKET_CAPS.otherwise, ...known };
+  if (observed.some(r => r.market_above_50dma !== true)) return { label: '市場条件未確認', cap: 0, state: 'unknown', ...known };
+  if (regime === 'confirmed_uptrend') return { label: '上昇トレンド（独自判定）', cap: MARKET_CAPS.confirmed_uptrend, ...known };
+  if (regime === 'uptrend_under_pressure') return { label: '上昇に圧力（独自判定）', cap: MARKET_CAPS.uptrend_under_pressure, ...known };
+  return { label: '新規購入を抑制', cap: MARKET_CAPS.otherwise, ...known };
 }
 
 export function preparePortfolioRows(input, now = Date.now()) {
