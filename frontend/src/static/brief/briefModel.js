@@ -2,12 +2,14 @@
 // module (one owner each) and this barrel only re-exports them, so `./briefModel` keeps working for
 // every screen, test and node tool that imports it.
 //   briefCandidate   the trend template, a candidate's position, the order, the focus pool, the list filters
+//   breakoutHistory  when the close crossed the pivot (the dated conclusion event, the crossing helpers)
 //   positionSizing   the position plan
 //   briefSell        the sell checks and the sell chip
 //   briefChartModel  the stage, the RS line's new high, the VCP footprint, the up/down volume
 //   briefEnvironment the market-environment rules, the verdict tone, the market-trends state, FTD wording
 //   briefShared      the helpers every module shares
 export * from './briefCandidate';
+export * from './breakoutHistory';
 export * from './positionSizing';
 export * from './briefSell';
 export * from './briefChartModel';

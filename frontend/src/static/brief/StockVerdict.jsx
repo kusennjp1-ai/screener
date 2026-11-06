@@ -4,7 +4,8 @@ import { code33ChipView } from '../fundamentalsExplain.js';
 import { meterPercent } from './briefNav';
 import { footprint, RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { isBreakdown, sellChipView } from './briefSell';
-import { breakoutEvent, candidateMarketGate, earningsCall, POSITION_NAMES, rsShown } from './briefCandidate';
+import { candidateMarketGate, earningsCall, POSITION_NAMES, rsShown } from './briefCandidate';
+import { crossingEvent } from './breakoutHistory';
 
 const finite = Number.isFinite;
 // A value that is not there reads — on screen and 未計算 to a screen reader (as DayChange says 前日比 未確認).
@@ -22,7 +23,7 @@ function positionCall(view, judged) {
   const pivot = <Unit>{`ピボット比 ${signed(view.distance)}`}</Unit>;
   switch (view.position) {
     case 'zone': {
-      const event = breakoutEvent(view, judged);
+      const event = crossingEvent(view, judged);
       // A crossing without the volume says why in place of the buy range (the range is the first tile).
       return { tone: event?.tone || 'zone', title: event?.title || '買いゾーン内', sub: <>{pivot}・{fromSma50(view)}。{event?.note || <>ピボットから<Unit>＋5%</Unit>までが買いの範囲です。</>}</> };
     }

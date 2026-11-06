@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { briefOrder, breakoutEvent, candidateMarketGate, candidateView, EARNINGS_WARN_DAYS, earningsCall, earningsSoon, focusCandidates, focusCounts, focusHeadingNote, focusTone, pivotCrossing, POSITION_NAMES, ratioShown, rsShown, ruleEvidence, matchesSearch, trendTemplate, watchEvent, LIST_FILTERS, LIST_SORTS } from './briefCandidate';
+import { briefOrder, breakoutEvent, candidateMarketGate, candidateView, EARNINGS_WARN_DAYS, earningsCall, earningsSoon, focusCandidates, focusCounts, focusHeadingNote, focusTone, POSITION_NAMES, ratioShown, rsShown, ruleEvidence, matchesSearch, trendTemplate, watchEvent, LIST_FILTERS, LIST_SORTS } from './briefCandidate';
 import { withAuditFixture } from '../testAuditFixture';
 
 const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, qualified: true, ...over });
@@ -117,16 +117,6 @@ describe('the analysis day as an event (verified change and volume only)', () =>
     }
     // price_change_1d is never the source.
     expect(verdict(audited('G', { price: 101, change: 2, price_change_1d: 9 })).change).toBe(2);
-  });
-  it('dates a crossing 1 to 3 sessions back from certified bars, and nothing older or broken', () => {
-    const bars = closes => closes.map((close, i) => ({ date: `2026-09-${String(20 + i).padStart(2, '0')}`, close }));
-    expect(pivotCrossing(bars([98, 99, 101, 102, 103]), 100)).toEqual({ date: '2026-09-22', sessionsAgo: 2 });
-    expect(pivotCrossing(bars([98, 101, 102, 103, 104, 105]), 100)).toBeNull();
-    expect(pivotCrossing(bars([98, 99, 101, 99, 102]), 100)).toBeNull();
-    expect(pivotCrossing(bars([98, 99, 101, null, 102]), 100)).toBeNull();
-    expect(pivotCrossing(null, 100)).toBeNull();
-    const v = verdict(audited('H', { price: 103, change: 1 }));
-    expect(breakoutEvent(v, bars([98, 99, 101, 102, 103])).title).toBe('買いゾーン内（9/22に上抜け・2営業日前）');
   });
   it('gives the conclusion the distance from the 50-day line from the verified audit', () => {
     expect(verdict(audited('S', { price: 100 })).fromSma50).toBeCloseTo(100 / 90 * 100 - 100, 6);
