@@ -6,6 +6,7 @@ import { distributionDays } from '../src/static/distributionDays.js';
 import { followThroughDay, FOLLOW_THROUGH_METHOD } from '../src/static/followThroughDay.js';
 import { validateLongHistory } from '../src/static/marketLongHistory.js';
 import { indexSummary } from '../src/static/reference/indexSummary.js';
+import { INDEX_CLOSES_MAX } from '../src/static/marketTrendAsset.js';
 import { isGeneratedOutput, removeSupersededOutputs } from './superseded-export.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const isDay=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
@@ -29,8 +30,9 @@ export function indexState(bars,lastDate){
   return {date:summary.date,close:summary.close,vs50:summary.vsMa,vs200:summary.vs200,fromHigh:summary.fullYear?summary.fromHigh:null,fullYear:summary.fullYear};
 }
 
-/** The most closes an index series carries (plan §2.3): the market tab charts its last 130 with their 50/200-day lines. */
-export const INDEX_CLOSES_MAX=300;
+// The most closes an index series carries (plan §2.3): one constant, the reader's (marketTrendAsset.js), which also
+// refuses a longer series. The market tab charts the last 130 with their 50/200-day lines.
+export { INDEX_CLOSES_MAX };
 /**
  * An index's closes for the market tab's chart, [{date, close}]: the last INDEX_CLOSES_MAX of the same validated bars
  * (the distribution count's input, up to its own last date), so the line, its marks and its position share one series.

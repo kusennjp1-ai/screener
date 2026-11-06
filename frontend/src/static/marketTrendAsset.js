@@ -32,7 +32,7 @@ export function longHistoryCheck(error){
  const key=message.slice('長期市場履歴: '.length);
  return {key,label:CHECK_LABELS.find(([pattern])=>pattern.test(key))?.[1]||'集計値の整合'};
 }
-// An index's chart closes (round 2, plan §2.3): at most 300 points, strictly increasing days up to the analysis date,
+// An index's chart closes (round 2, plan §2.3): at most INDEX_CLOSES_MAX points (the one constant; the exporter imports it), strictly increasing days up to the analysis date,
 // positive closes, and the last days of the same bars as its distribution series (points). Older assets lack it.
 export const INDEX_CLOSES_MAX=300;
 function closesValid(closes,points,asOfDate){
