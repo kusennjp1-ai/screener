@@ -6,18 +6,17 @@
 // positionSizing imports this module and nothing here imports it back, so there is no cycle.
 import { finite } from '../researchEngine';
 import { conditionCompactLabel, conditionCompactText, conditionNote, conditionNoteValue } from '../missingCondition';
-import { candidateMarketGate, POSITION_NAMES, ratioShown } from './briefCandidate';
+import { candidateMarketGate, POSITION_NAMES, ratioShown, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR } from './briefCandidate';
 import { crossingEvent } from './breakoutHistory';
 import { isBreakdown, SELL_RULES } from './briefSell';
 import { shortDate } from './briefShared';
 
 /**
- * The Setup Engine's pattern-confidence floor (the backend aggregator's default, 55.0): a primary pattern
- * below it is a fallback, so its pivot is only a reference (独自判定 on screen).
+ * The Setup Engine's pattern-confidence floor (the backend aggregator's default, 55.0) and the check it names
+ * (setup_recalculation.reason) for a primary pattern below it: a fallback, so its pivot is only a reference
+ * (独自判定 on screen). One constant, the rows' pivot source's (briefCandidate), re-exported here.
  */
-export const SE_CONFIDENCE_FLOOR = 55;
-/** The check the Setup Engine names (setup_recalculation.reason) for a primary pattern below that floor. */
-export const SE_BELOW_FLOOR_CHECK = 'primary_pattern_below_confidence_floor';
+export { SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR };
 
 /** Why no new plan is made, by position (the zone and the wait state get a plan). */
 export const PLAN_BLOCKED = Object.freeze({
