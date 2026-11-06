@@ -32,16 +32,27 @@ describe('brief stock view', () => {
     expect(screen.getByTestId('brief-sell')).toHaveTextContent(/に出来高 3\.00×で割れ、以降50日線の下（1営業日）/);
   });
 
-  it('judges the climax checks only beyond +20% from the pivot and says so on the card', () => {
+  it('judges the climax checks only beyond +20% from the pivot (or +25% from the 50-day line) and says why not on the card', () => {
     render(<StockView data={data(true)} />);
     const sell = screen.getByTestId('brief-sell');
-    expect(sell).toHaveTextContent('上昇の加速はピボット比 +20%以上でのみ判定します。');
+    // The gate's own reason (the 注記 gives both bars): below the pivot, the 50-day alternative never judges either.
+    expect(sell).toHaveTextContent('上昇の加速は判定せず（ピボットより下）。');
     // The advance's 起点 is said as a short date, like every date on the card.
     expect(sell).toHaveTextContent(/起点（直近1年の安値）2025\/1\/1 の /);
     // A stock below its pivot: the four climax checks are folded as 判定せず with the reason (never 対象外).
-    expect(within(sell).getByText('判定せず 4件').closest('summary')).toBeTruthy();
+    expect(within(sell).getByText('サインなし 1件・判定せず 4件').closest('summary')).toBeTruthy();
     expect(sell).not.toHaveTextContent('対象外');
     expect(sell).toHaveTextContent('ピボットより下（ブレイク前）のため判定しません');
+  });
+
+  it('says 判定していない項目 n件 while a check is not judged, never 「いま出ているサインはありません」', () => {
+    // A steady advance below its pivot, the book's diagnostics in and clear: nothing fired, the four climax checks not judged.
+    const steady = Array.from({ length: 200 }, (_, i) => { const close = 50 * 1.003 ** i; return { date: i === 199 ? DATE : day(i), open: close, high: close * 1.005, low: close * 0.995, close, volume: 10000 }; });
+    const diagnostics = { valid: true, as_of_date: DATE, priceWarnings: { below20: false, threeLowerLows: false, currentVolumeRatio: 1, combinedWarning: false, recoveryInUpperHalf: false } };
+    render(<StockView data={{ ...data(true), bars: steady, diagnostics }} />);
+    const sell = screen.getByTestId('brief-sell');
+    expect(sell).toHaveTextContent('判定していない項目 4件。');
+    expect(sell).not.toHaveTextContent('いま出ているサインはありません');
   });
 
   it('keeps everything computed from uncertified or lagging bars unknown and says why (the sell checks)', () => {

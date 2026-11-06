@@ -6,9 +6,11 @@ import { shortDate } from './briefShared';
 const finite = Number.isFinite;
 const price = value => finite(value) ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 // The desktop (1024px and wider) keeps this qualifier in place in full; a phone keeps a short one.
-const SELL_INLINE = '保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。';
+// The sources' closing sentences, shared by the desktop qualifier and the phone's 注記.
+const SOURCES = '複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。';
+const SELL_INLINE = `保有中の判断材料です。${SOURCES}`;
 /** The sell card's sources, in the stock screen's 注記 below 1024px. */
-export const SELL_NOTE = `売りのサインは保有中の判断材料です。上昇の加速はピボット比 +${SELL_RULES.climaxFromPivotPercent}%以上の買いゾーン超過で、ピボット上抜けから${SELL_RULES.climaxSessions}営業日以上の銘柄でのみ判定し、50日線は割れた日の出来高で判定します。複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。`;
+export const SELL_NOTE = `売りのサインは保有中の判断材料です。上昇の加速は、ピボット比 +${SELL_RULES.climaxFromPivotPercent}%以上の買いゾーン超過でピボット上抜けから${SELL_RULES.climaxSessions}営業日以上の銘柄か、終値が50日線から +${SELL_RULES.climaxFrom50dPercent}%以上の銘柄でのみ判定し、50日線は割れた日の出来高で、ブレイク失敗は出来高${SELL_RULES.breakVolumeRatio}倍以上の上抜けから${SELL_RULES.failedBreakoutSessions}営業日以内のピボット割れで判定します。${SOURCES}`;
 
 // A check that is not judged for this stock (its reason says why: 「…のため判定しません」) reads 判定せず, never 対象外,
 // which the brief keeps for SEC, funds and unlisted watch symbols (CONTEXT.md).
@@ -24,11 +26,28 @@ function SellChecks({ title, checks }) {
   </>;
 }
 
-/** Where the strength checks start, or why they are not judged. */
+/** Where the strength checks start, or why they are not judged (the gate's own reason, in short). */
 function strengthNote(sells) {
-  if (sells.run) return `上昇の加速は、ピボット ${money(sells.run.pivot)} を上抜けた ${shortDate(sells.run.startDate, sells.asOf)} 以降（${sells.run.sessions}営業日）で判定（ピボット比 ${signed(sells.run.distance)}・判定は +${SELL_RULES.climaxFromPivotPercent}%以上かつ上抜けから${SELL_RULES.climaxSessions}営業日以上、独自判定）。`;
-  // One of the conditions, kept to the card's length; the 注記 and each check's reason give the rest.
-  return `上昇の加速はピボット比 +${SELL_RULES.climaxFromPivotPercent}%以上でのみ判定します。`;
+  const run = sells.run;
+  if (run?.basis === 'ma50') return `上昇の加速は、50日線の上に出た ${shortDate(run.startDate, sells.asOf)} 以降（${run.sessions}営業日）で判定（50日線から ${signed(run.fromSma50)}・判定は +${SELL_RULES.climaxFrom50dPercent}%以上、独自判定）。`;
+  if (run) return `上昇の加速は、ピボット ${money(run.pivot)} を上抜けた ${shortDate(run.startDate, sells.asOf)} 以降（${run.sessions}営業日）で判定（ピボット比 ${signed(run.distance)}・判定は +${SELL_RULES.climaxFromPivotPercent}%以上かつ上抜けから${SELL_RULES.climaxSessions}営業日以上、独自判定）。`;
+  // One line on a phone: the gate's reason with the close against its 50-day line; the 注記 gives both bars.
+  const why = sells.runShort, parts = [why?.reason, Number.isFinite(why?.fromSma50) ? `50日線から ${signed(why.fromSma50)}` : null].filter(Boolean);
+  return parts.length ? `上昇の加速は判定せず（${parts.join('・')}）。` : `上昇の加速はピボット比 +${SELL_RULES.climaxFromPivotPercent}%以上でのみ判定します。`;
+}
+
+/**
+ * The card's status after the notes: the hits, else a caution on the 50-day line, else unknown checks, else
+ * the checks not judged (判定せず: never 「いま出ているサインはありません」 while one is not judged), else none.
+ */
+function statusLine(sells) {
+  if (!sells) return '';
+  const all = [...sells.strength, ...sells.weakness];
+  if (sells.hits) return ` ${sells.hits}件のサインが出ています。`;
+  if (all.some(c => c.state === 'caution')) return ' 50日線の下にあります（大商いの割れは未確認）。';
+  if (all.some(c => c.state === 'unknown')) return ' 出ているサインはありませんが、未確認の項目があります。';
+  const na = all.filter(c => c.state === 'na').length;
+  return na ? ` 判定していない項目 ${na}件。` : ' いま出ているサインはありません。';
 }
 
 /** The sell card: fired, cautioned and unknown checks listed, the quiet ones folded on a phone. */
@@ -38,9 +57,7 @@ export default function SellCard({ sells, reason, wide }) {
   const shown = groups.map(([title, checks]) => [title, wide ? checks : checks.filter(loud)]).filter(([, checks]) => checks.length);
   const quiet = wide ? [] : groups.map(([title, checks]) => [title, checks.filter(check => !loud(check))]).filter(([, checks]) => checks.length);
   const count = state => quiet.flatMap(([, checks]) => checks).filter(check => check.state === state).length;
-  const all = sells ? [...sells.strength, ...sells.weakness] : [];
-  const status = !sells ? '' : sells.hits ? ` ${sells.hits}件のサインが出ています。` : all.some(c => c.state === 'caution') ? ' 50日線の下にあります（大商いの割れは未確認）。'
-    : all.some(c => c.state === 'unknown') ? ' 出ているサインはありませんが、未確認の項目があります。' : ' いま出ているサインはありません。';
+  const status = statusLine(sells);
   return <section className="brief-card in" style={{ '--i': 8 }} aria-labelledby="brief-sell-title" data-testid="brief-sell">
     {/* The qualifier stays on the card at every width, next to any fired check; the 注記 keeps only the sources. */}
     <h2 id="brief-sell-title">売りのサイン<small>（独自判定）</small></h2>

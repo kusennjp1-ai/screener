@@ -82,3 +82,20 @@ export function conditionChipLabel(rule) {
   if (/^RS推計 ≥ \d+$/.test(compact)) return 'RS推計';
   return CHIP_LABELS.find(([pattern]) => pattern.test(compact))?.[1] || compact;
 }
+
+/**
+ * A rule as the conclusion's line under its title names it: the RS estimate with its value and threshold
+ * (「RS推計 57（基準70）」: a whole number, never rounded up past the threshold; 「RS推計 未確認（基準70）」
+ * without a value), every other rule as its compact text (「高値から25%以内（30.2%）」).
+ */
+export function conditionNoteValue(rule) {
+  const label = typeof rule?.label === 'string' ? rule.label : '';
+  const rs = label.match(/^RS 推計 ≥ (\d+)/);
+  if (!rs) return conditionCompactText(rule);
+  return `RS推計 ${conditionValueText(rule) ?? '未確認'}（基準${rs[1]}）`;
+}
+
+/** 「未達：RS推計 57（基準70）」 (a failed rule) or 「未確認：…」 (any other non-passing rule): conditionNoteValue with its state. */
+export function conditionNote(rule) {
+  return `${rule?.state === 'fail' ? '未達' : '未確認'}：${conditionNoteValue(rule)}`;
+}

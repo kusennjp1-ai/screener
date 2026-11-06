@@ -2,8 +2,12 @@ import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
 import StockVerdict from './StockVerdict';
-import { candidateView, trendTemplate } from './briefCandidate';
+import { breakoutEvent, candidateView, earningsCall, trendTemplate } from './briefCandidate';
+import { HEAVY_DOWN_NOTE, SE_CONFIDENCE_FLOOR } from './buyGate';
+import { WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
+import { code33ChipView } from '../fundamentalsExplain.js';
 import { positionPlan } from './positionSizing';
+import { conditionNote } from '../missingCondition';
 import { withAuditFixture } from '../testAuditFixture';
 
 // The round-2 earnings seams the conclusion calls (data's, plan §2.2): each answers as its owner's module
@@ -79,18 +83,29 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
 describe('the conclusion says why there is no buy', () => {
   const DAY = '2026-10-02';
   const OPEN = { label: '上昇トレンド（独自判定）', cap: 0.5 };
+  // Every row's Setup Engine base is current for the analysis day at a confidence of 60 (over the floor of 55), as published.
+  const BASE = { setup_recalculation: { status: 'calculated', as_of_date: DAY }, se_pattern_confidence: 60 };
   const audited = ({ price = 101, pivot = 100, change = 2, volume = 1.6, rs = 90, ...extra } = {}) => {
-    const row = withAuditFixture({ symbol: 'AAA', market: 'US', currency: 'USD', company_name: 'Alpha', current_price: price, se_pivot_price: pivot, rs_rating: rs, ...extra }, DAY);
+    const row = withAuditFixture({ symbol: 'AAA', market: 'US', currency: 'USD', company_name: 'Alpha', current_price: price, se_pivot_price: pivot, rs_rating: rs, ...BASE, ...extra }, DAY);
     Object.assign(row.technical_audit.values, { change, volumeRatio: volume });
     return row;
   };
   // The analysis day's afternoon in New York: the earnings countdown runs from the analysis date.
   const NOW = Date.parse(`${DAY}T19:00:00Z`);
-  const conclusionOf = ({ row = audited(), assessment, market = OPEN, plan, template, judged = null, now = NOW, technical = null, sells = null } = {}) => {
+  /**
+   * Certified daily bars ending on DAY (one a calendar day), under the pivot of 100 until `ago` sessions back, then
+   * 100.5, 101.5 … to DAY's 103; the crossing bar trades `ratio` times the 50 before it (1.6×; null: unknown).
+   */
+  const crossing = (ago = 2, ratio = 1.6) => {
+    const at = 60 - ago, date = i => new Date(Date.parse(DAY) - (60 - i) * 86400000).toISOString().slice(0, 10);
+    return Array.from({ length: 61 }, (_, i) => ({ date: date(i), close: i < at ? 99 : i === 60 ? 103 : 100.5 + (i - at),
+      volume: i === at ? (ratio === null ? null : 10000 * ratio) : 10000 }));
+  };
+  const conclusionOf = ({ row = audited(), assessment, market = OPEN, plan, template, judged = null, now = NOW, technical = null, sells = null, financial = null } = {}) => {
     const t = template === undefined ? trendTemplate(row) : template;
     const a = assessment || { qualified: t.qualified, passed: t.passed + (t.integrity?.state === 'pass' ? 1 : 0), failed: t.failed, unknown: t.unknown, total: 9 };
     const view = candidateView({ row, assessment: a }, DAY);
-    render(<StockVerdict view={view} plan={plan === undefined ? positionPlan(view, {}, { market, template: t }) : plan} stage={null} technical={technical} bars={null} judged={judged} template={t} rsHigh={false} financial={null} row={row} sells={sells} diagnostics={null} market={market} now={now} />);
+    render(<StockVerdict view={view} plan={plan === undefined ? positionPlan(view, {}, { market, template: t }) : plan} stage={null} technical={technical} bars={null} judged={judged} template={t} rsHigh={false} financial={financial} row={row} sells={sells} diagnostics={null} market={market} now={now} />);
     return screen.getByTestId('brief-conclusion');
   };
   const title = card => card.querySelector('strong').textContent, sub = card => card.querySelector('.brief-call-status p').textContent;
@@ -116,16 +131,21 @@ describe('the conclusion says why there is no buy', () => {
     expect(quals(card)).toEqual(['既定条件', '既定条件']);
   });
 
-  it('names the failed template rule with its value, in a neutral tone, and marks the position and the prices 参考', () => {
-    const card = conclusionOf({ row: audited({ rs: 61.4 }) });
+  it('counts an unmet RS estimate in the one-line title and names it with its value and threshold under it, marking the position and the prices 参考', () => {
+    const row = audited({ rs: 61.4 });
+    const card = conclusionOf({ row });
     expect(card.className).toContain('tone-neutral');
-    expect(title(card)).toBe('トレンドテンプレート未達（未達：RS推計 ≥ 70（61））— 買いの対象外');
-    expect(sub(card)).toBe('位置は参考：買いゾーン・ピボット比 +1.0%。');
+    expect(title(card)).toBe('TT 1条件未達 — 買いの対象外');
+    const rule = trendTemplate(row).rules.find(r => /^RS 推計/.test(r.label));
+    expect(sub(card)).toBe(`${conditionNote(rule)}。位置は参考：買いゾーン・ピボット比 +1.0%。`);
+    expect(conditionNote(rule)).toBe('未達：RS推計 61（基準70）');
     expect(meter(card).getAttribute('aria-label')).toBe('ピボットからの位置（参考） +1.0%');
     expect(meter(card).classList.contains('is-reference')).toBe(true);
     expect(tiles(card)).toEqual([['買いの範囲', '100.00', '〜105.00', '参考'], ['損切り −7.0%', '93.93', '買値 101.00', '参考'], ['株数', '88株', 'リスク $625', '参考']]);
-    // The rule and its value are one unit a line never splits.
-    expect(card.querySelector('strong .brief-nowrap').textContent).toBe('RS推計 ≥ 70（61）');
+    // The rule, its value and its threshold are one unit a line never splits.
+    expect(card.querySelector('.brief-call-status p .brief-nowrap').textContent).toBe('RS推計 61（基準70）');
+    // The title's closing phrase is one too, so a 320px phone never breaks 「対／象外」.
+    expect([...card.querySelectorAll('strong .brief-nowrap')].map(node => node.textContent)).toEqual(['買いの対象外']);
   });
 
   it('counts any other unmet rule, or several, in a one-line title and names the first in the line under it', () => {
@@ -241,14 +261,47 @@ describe('the conclusion says why there is no buy', () => {
     expect(tiles(conclusionOf({ plan: { ...base, binding: 'cap', capPercent: 25, actualRisk: null } }))[2]).toEqual(['株数', '88株', `上限25%・実リスク ${DASH}`]);
   });
 
-  it('calls a heavy down day in the zone a warning and dates a recent crossing from certified bars', () => {
-    const down = conclusionOf({ row: audited({ change: -1 }) });
-    expect([title(down), down.className.includes('tone-ext')]).toEqual(['下落日の大商い 1.60×（要注意）', true]);
+  it('calls a heavy down day in the zone a warning with no buy range, and its tiles 参考', () => {
+    const row = audited({ change: -1 });
+    const down = conclusionOf({ row });
+    // The title is breakoutEvent's (rows'): asserted through it.
+    const event = breakoutEvent(candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, DAY));
+    expect([event.kind, title(down), down.className.includes('tone-ext')]).toEqual(['heavyDown', event.title, true]);
+    expect(sub(down)).toBe(`ピボット比 +1.0%・50日線から +11.1%。${HEAVY_DOWN_NOTE}`);
+    expect(down.textContent).not.toContain('買いの範囲です');
+    expect(quals(down)).toEqual(['参考', '参考', '参考']);
+    expect(meter(down).classList.contains('is-reference')).toBe(true);
+  });
+
+  it('dates a crossing from certified bars, waits when it cannot or on light volume, and stops the green call once it stalls', () => {
+    const dated = conclusionOf({ row: audited({ price: 103, change: 1.5 }), judged: crossing() });
+    expect([title(dated), dated.className.includes('tone-zone')]).toEqual(['9/30に上抜け・2営業日前', true]);
+    expect(sub(dated)).toMatch(/^ピボット比 \+3\.0%・50日線から \+[\d.]+%。ピボットから＋5%までが買いの範囲です。$/);
+    expect(quals(dated)).toEqual(['既定条件', '既定条件']);
+    // The crossing date with its verb never splits on a 320px phone.
+    expect([...dated.querySelectorAll('strong .brief-nowrap')].map(node => node.textContent)).toEqual(['9/30に上抜け']);
     cleanup();
-    const bars = [['2026-09-28', 98], ['2026-09-29', 99], ['2026-09-30', 100.5], ['2026-10-01', 101.5], ['2026-10-02', 103]].map(([date, close]) => ({ date, close }));
-    expect(title(conclusionOf({ row: audited({ price: 103, change: 1.5 }), judged: bars }))).toBe('買いゾーン内（9/30に上抜け・2営業日前）');
+    // The crossing day on 0.8× or with its volume unknown: no breakout, so it waits, with the tiles as for a light crossing.
+    for (const [ratio, text] of [[0.8, '出来高不足'], [null, '出来高 未確認']]) {
+      const light = conclusionOf({ row: audited({ price: 103, change: 1.5 }), judged: crossing(2, ratio) });
+      expect([title(light), light.className.includes('tone-wait')]).toEqual([`9/30に上抜け・${text}`, true]);
+      expect(light.textContent).not.toContain('買いの範囲です');
+      expect(quals(light)).toEqual(['既定条件', '既定条件']);
+      cleanup();
+    }
+    // Without certified bars the crossing is never dated: not green, and the tiles stay as for a crossing without its volume.
+    const undated = conclusionOf({ row: audited({ price: 103, change: 1.5 }) });
+    expect([title(undated), undated.className.includes('tone-wait')]).toEqual(['買いゾーン内（上抜け日 未確認）', true]);
+    expect(sub(undated)).toMatch(/^ピボット比 \+3\.0%・50日線から \+[\d.]+%。上抜けの日を検証済みの日足で確認できないため、買いの裏付けはありません。$/);
     cleanup();
-    expect(title(conclusionOf({ row: audited({ price: 103, change: 1.5 }) }))).toBe('買いゾーン内（上抜け後）');
+    // Still in the zone 13 sessions after the crossing: wait for the next pivot, the tiles 参考.
+    const day = i => new Date(Date.UTC(2026, 8, 1) + i * 86400000).toISOString().slice(0, 10);
+    const long = Array.from({ length: 32 }, (_, i) => ({ date: day(i), close: i < 19 ? 98 : 102 })).concat([{ date: DAY, close: 103 }]);
+    const stalled = conclusionOf({ row: audited({ price: 103, change: 1.5 }), judged: long });
+    expect([title(stalled), stalled.className.includes('tone-wait')]).toEqual(['上抜けから13営業日・停滞（次のピボット待ち）', true]);
+    expect(sub(stalled)).toMatch(/^ピボット比 \+3\.0%・50日線から \+[\d.]+%。新規の買いは見送り。9\/20に上抜け、10営業日を超えて伸びないため停滞（独自判定）。$/);
+    expect(stalled.textContent).not.toContain('買いの範囲です');
+    expect(quals(stalled)).toEqual(['参考', '参考', '参考']);
   });
 
   // Track E's sell checks (I4, requested by Track E): a broken setup is never a buy-side call, and the chip says it in full.
@@ -260,7 +313,10 @@ describe('the conclusion says why there is no buy', () => {
     expect([title(card), sub(card)]).toEqual(['買いの前提が崩れた（独自判定）', '50日線割れ（9/22・出来高2.20×）。位置は参考：買いゾーン・ピボット比 +1.0%。']);
     expect(quals(card)).toEqual(['参考', '参考', '参考']);
     expect(meter(card).classList.contains('is-reference')).toBe(true);
-    expect([...card.querySelectorAll('.brief-tags .brief-chip')].map(node => node.textContent)).toContain('買いの前提が崩れた／保有なら売りのサイン（独自判定）');
+    // The title already says the setup broke: the chip is the short form, its sentence in its title.
+    const chip = [...card.querySelectorAll('.brief-tags .brief-chip')].find(node => node.textContent === WEAKNESS_ROW_CHIP);
+    expect(chip.title).toBe(`${WEAKNESS_CHIP}：出来高を伴う50日線割れ（1.40×以上）`);
+    expect(card.textContent).not.toContain(WEAKNESS_CHIP);
     cleanup();
     // The book's combined warning is a broken setup too; it is named by its label.
     const book = { key: 'book', label: '20日線割れ・3日連続の安値切り下げ・大商い（書籍の複合警告）', state: 'hit', detail: '20日線割れ' };
@@ -290,20 +346,22 @@ describe('the conclusion says why there is no buy', () => {
 
   // The VCP base's high is not always the canonical pivot: two crossings of two levels on two days.
   it('names which level each breakout crossed when the base high is not the pivot, so the two dates never contradict', () => {
-    const bars = [['2026-09-25', 96], ['2026-09-28', 98.5], ['2026-09-29', 99], ['2026-09-30', 100.5], ['2026-10-01', 101.5], ['2026-10-02', 103]].map(([date, close]) => ({ date, close }));
+    const bars = crossing();
+    // 9/28 closes above the base's high (98) but under the pivot.
+    Object.assign(bars.at(-5), { close: 98.5 });
     // The base's high was crossed on 9/28 (below the pivot of 100); the pivot itself on 9/30.
     const technical = { vcp: { measurementsValid: true, depthsContract: true, volumeContracts: true, droppedLegs: 0,
       legs: [{ depthPct: 25, startDate: '2026-07-01', endDate: '2026-07-31' }, { depthPct: 12, startDate: '2026-08-01', endDate: '2026-08-31' }, { depthPct: 6, startDate: '2026-09-01', endDate: '2026-09-25' }],
       base: { startDate: '2026-07-01', endDate: '2026-09-25', brokeOut: true, breakoutDate: '2026-09-28' } } };
     const card = conclusionOf({ row: audited({ price: 103, change: 1.5 }), judged: bars, technical });
-    expect(title(card)).toBe('買いゾーン内（9/30に上抜け・2営業日前）');
+    expect(title(card)).toBe('9/30に上抜け・2営業日前');
     const vcpChip = [...card.querySelectorAll('.brief-tags .brief-chip')].find(node => node.textContent.startsWith('VCP'));
     expect(vcpChip.textContent).toBe('VCP 12週 25/6 3T・土台の高値を上抜け（9/28）');
     // The chip never claims a pivot crossing of its own.
     expect(vcpChip.textContent).not.toMatch(/ピボット|上抜け済み/);
   });
   // The data track's earnings chip and caution line: asked with the stock's financial view, nothing shown while null.
-  it('asks the earnings seams with the financial view, and places a chip before Code 33 and a caution line under the call', () => {
+  it('asks the earnings seams with the financial view: the chip is the first fundamentals chip, the caution a line under a green call only', () => {
     const chips = card => [...card.querySelectorAll('.brief-tags .brief-chip')];
     onTestFinished(() => Object.assign(seams, { chip: undefined, caution: undefined, asked: [] }));
     let card = conclusionOf();
@@ -315,10 +373,93 @@ describe('the conclusion says why there is no buy', () => {
     seams.caution = { text: '〈caution〉' };
     card = conclusionOf();
     const after = chips(card);
-    const code33 = after.findIndex(node => node.textContent.startsWith('Code 33'));
-    expect([after[code33 - 1].textContent, after[code33 - 1].className, after[code33 - 1].getAttribute('title')]).toEqual(['〈earnings〉', 'brief-chip tone-zone', '〈title〉']);
+    // Right after the RS estimate's chip, where the fundamentals start.
+    const rs = after.findIndex(node => node.textContent.startsWith('RS推計'));
+    expect([after[rs + 1].textContent, after[rs + 1].className, after[rs + 1].getAttribute('title')]).toEqual(['〈earnings〉', 'brief-chip tone-zone', '〈title〉']);
     expect(after.map(node => node.textContent).filter(text => text !== '〈earnings〉')).toEqual(before);
+    // The caution never stops the green call: it is one wait-tone line under it.
     const lines = card.querySelectorAll('.brief-call-status p');
-    expect([lines.length, lines[1].textContent]).toEqual([2, '〈caution〉']);
+    expect([card.className.includes('tone-zone'), lines.length, lines[1].textContent, lines[1].className]).toEqual([true, 2, '〈caution〉', 'brief-call-caution']);
+    cleanup();
+    // Under a call that is no buy anyway, no caution line.
+    card = conclusionOf({ market: { label: '50日線割れ（弱含み・独自判定）', cap: 0 } });
+    expect(card.querySelectorAll('.brief-call-status p')).toHaveLength(1);
+    expect(card.querySelector('.brief-call-caution')).toBeNull();
+  });
+
+  it('shows the Code 33 chip only when it is met; a miss or an unknown stays in the fundamentals card', () => {
+    const code33 = financial => [...conclusionOf({ financial }).querySelectorAll('.brief-tags .brief-chip')].filter(node => node.textContent.startsWith('Code 33'));
+    const pass = { code33: { state: 'pass' } };
+    expect(code33(pass).map(node => [node.textContent, node.className])).toEqual([[code33ChipView(pass).text, `brief-chip tone-${code33ChipView(pass).tone}`]]);
+    cleanup();
+    for (const financial of [{ code33: { state: 'fail' } }, { code33: { state: 'unknown' } }, null]) {
+      expect(code33(financial)).toEqual([]);
+      cleanup();
+    }
+  });
+
+  it('names the base check when the Setup Engine base is not current or below its floor: neutral, 参考, never 0', () => {
+    const calc = (over = {}) => ({ setup_recalculation: { status: 'calculated', as_of_date: DAY, ...over } });
+    const cases = [
+      [{ ...calc(), se_pattern_confidence: 31 }, `土台の信頼度 31（基準${SE_CONFIDENCE_FLOOR}）`],
+      [{ ...calc(), se_pattern_confidence: null }, '土台の信頼度 未確認'],
+      [{ ...calc({ as_of_date: '2026-10-01' }), se_pattern_confidence: 60 }, '土台の再計算が分析日のものではありません（10/1）'],
+      [{ setup_recalculation: { status: 'unavailable', as_of_date: DAY }, se_pattern_confidence: 60 }, '土台の再計算不可'],
+      [{ ...calc({ reason: 'primary_pattern_below_confidence_floor / other' }), se_pattern_confidence: 60 }, '主パターンが信頼度の基準55未満（Setup Engine）'],
+    ];
+    for (const [over, note] of cases) {
+      const card = conclusionOf({ row: audited(over) });
+      expect([card.className.includes('tone-neutral'), title(card), sub(card)]).toEqual([true, '土台を確認できない — ピボットは参考（独自判定）', `${note}。位置は参考：買いゾーン・ピボット比 +1.0%。`]);
+      expect(quals(card)).toEqual(['参考', '参考', '参考']);
+      expect(meter(card).classList.contains('is-reference')).toBe(true);
+      expect(card.textContent).not.toMatch(/信頼度 0\b/);
+      cleanup();
+    }
+    // A certified VCP footprint does not override it (owner decision §9-13's default); its chip still shows.
+    const vcp = { vcp: { measurementsValid: true, depthsContract: true, volumeContracts: true, droppedLegs: 0,
+      legs: [{ depthPct: 25, startDate: '2026-07-01', endDate: '2026-07-31' }, { depthPct: 12, startDate: '2026-08-01', endDate: '2026-08-31' }, { depthPct: 6, startDate: '2026-09-01', endDate: '2026-09-25' }],
+      base: { startDate: '2026-07-01', endDate: '2026-09-28', brokeOut: false } } };
+    const card = conclusionOf({ row: audited({ se_pattern_confidence: 31 }), technical: vcp });
+    expect(title(card)).toBe('土台を確認できない — ピボットは参考（独自判定）');
+    expect([...card.querySelectorAll('.brief-tags .brief-chip')].some(node => node.textContent.startsWith('VCP 12週'))).toBe(true);
+  });
+
+  it('labels the stage: ステージ2（ベース形成中） for a stage-2 base, green for 2, the ext tone for 3 and 4, neutral otherwise', () => {
+    const chip = stage => { const view = candidateView({ row: audited(), assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, DAY);
+      render(<StockVerdict view={view} plan={null} stage={stage} technical={null} bars={null} template={trendTemplate(audited())} rsHigh={false} financial={null} row={audited()} sells={null} diagnostics={null} market={OPEN} now={NOW} />);
+      const node = [...screen.getByTestId('brief-conclusion').querySelectorAll('.brief-chip')][0];
+      cleanup();
+      return [node.textContent, node.className];
+    };
+    expect(chip({ value: 2, computed: false, phase: 'base' })).toEqual(['ステージ2（ベース形成中）', 'brief-chip tone-zone']);
+    expect(chip({ value: 2, computed: true, phase: 'base' })).toEqual(['ステージ2（ベース形成中・日足から算出）', 'brief-chip tone-zone']);
+    // A published 3 that the certified bars show as a stage-2 base: the 2 is from the bars.
+    expect(chip({ value: 3, computed: false, phase: 'base' })).toEqual(['ステージ2（ベース形成中・日足から算出）', 'brief-chip tone-zone']);
+    expect(chip({ value: 2, computed: false })).toEqual(['ステージ2', 'brief-chip tone-zone']);
+    expect(chip({ value: 3, computed: true })).toEqual(['ステージ3（日足から算出）', 'brief-chip tone-ext']);
+    expect(chip({ value: 4, computed: false })).toEqual(['ステージ4', 'brief-chip tone-ext']);
+    expect(chip({ value: 1, computed: false })).toEqual(['ステージ1', 'brief-chip']);
+    expect(chip(null)).toEqual(['ステージ 未確認', 'brief-chip']);
+  });
+
+  it('keeps the industry rank neutral and says its date is unknown (no as-of date is exported)', () => {
+    const card = conclusionOf({ row: audited({ ibd_group_rank: 12 }) });
+    const node = [...card.querySelectorAll('.brief-chip')].find(chip => chip.textContent.startsWith('業種'));
+    expect([node.textContent, node.className]).toEqual(['業種 12位（推計・基準日未確認）', 'brief-chip']);
+  });
+
+  it('reads the stock view\'s one earnings call when it is given, never its own clock', () => {
+    const row = audited({ entry_evidence: { earnings: { date: '2026-10-05' } } });
+    const view = candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, DAY);
+    // The call as of 10/4 (a day before earnings), whatever `now` says.
+    const call = earningsCall(view, Date.parse('2026-10-04T15:00:00Z'));
+    render(<StockVerdict view={view} plan={null} stage={null} technical={null} bars={null} template={trendTemplate(row)} rsHigh={false} financial={null} row={row} sells={null} diagnostics={null} market={OPEN} now={NOW} earningsCall={call} />);
+    const card = screen.getByTestId('brief-conclusion');
+    expect(title(card)).toBe(call.line);
+    expect([...card.querySelectorAll('.brief-chip')].at(-1).textContent).toBe(call.chip);
+    cleanup();
+    // A null call is an unknown date.
+    render(<StockVerdict view={view} plan={null} stage={null} technical={null} bars={null} template={trendTemplate(row)} rsHigh={false} financial={null} row={row} sells={null} diagnostics={null} market={OPEN} now={NOW} earningsCall={null} />);
+    expect([...screen.getByTestId('brief-conclusion').querySelectorAll('.brief-chip')].at(-1).textContent).toBe('決算日 未確認');
   });
 });

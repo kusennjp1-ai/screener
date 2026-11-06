@@ -3,6 +3,7 @@
 import { finite } from '../researchEngine';
 import { signed } from '../positionGeometry';
 import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
+import { pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
 import { shortDate } from './briefShared';
 
 // Sell-side checks after an advance. The ideas (selling into strength on a climax run,
@@ -20,42 +21,81 @@ export const SELL_RULES = {
   // The strength (climax) checks judge only a stock that is extended: beyond the buy zone and at least
   // this far above its pivot (独自判定, shown on screen). Below it a breakout's own big day is a buy point.
   climaxFromPivotPercent: 20,
+  // …or, whatever the pivot (real rows lose a pivot more than 25% away), a certified close at least this far
+  // above its 50-day line (独自判定). Not a finite positive number: the alternative is off.
+  climaxFrom50dPercent: 25,
+  // A stock still in the buy zone this many sessions after its dated crossing has not advanced (独自判定). Read when
+  // asked, not when this module loads, so a test that mocks breakoutHistory with only the export it needs can load it.
+  get staleBreakoutSessions() { return STALE_BREAKOUT_SESSIONS; },
+  // A crossing on breakVolumeRatio or more followed, within this many sessions, by a close back under the
+  // pivot is a failed breakout (ブレイク失敗, 独自判定).
+  failedBreakoutSessions: 10,
 };
 
-// The strength checks start at the pivot breakout (the first close of the current run above the pivot); the
-// weakness side's 起点 stays the lowest low of the last year, as the sell card says.
+// The strength checks start at the pivot breakout (the first close of the current run above the pivot), or,
+// through the 50-day alternative, at the first close of the current run above the 50-day line; the weakness
+// side's 起点 stays the lowest low of the last year, as the sell card says.
+const SINCE = { pivot: 'ピボット上抜け以降', ma50: '50日線の上に出て以降' };
 const STRENGTH = [
-  ['day-up', 'ピボット上抜け以降で最大の1日の上昇（直近5営業日）'],
-  ['week-up', 'ピボット上抜け以降で最大の5営業日の上昇（直近5営業日）'],
-  ['up-days', rules => `直近${rules.upDaysWindow}営業日のうち${rules.upDaysMin}日以上が上昇`],
-  ['climax', rules => `${rules.climaxSessions}営業日以内に +${rules.climaxPercent}%以上の急騰`],
+  ['day-up', since => `${since}で最大の1日の上昇（直近5営業日）`],
+  ['week-up', since => `${since}で最大の5営業日の上昇（直近5営業日）`],
+  ['up-days', (_, rules) => `直近${rules.upDaysWindow}営業日のうち${rules.upDaysMin}日以上が上昇`],
+  ['climax', (_, rules) => `${rules.climaxSessions}営業日以内に +${rules.climaxPercent}%以上の急騰`],
 ];
-const label = (entry, rules) => typeof entry === 'function' ? entry(rules) : entry;
+const label = (entry, rules, basis = 'pivot') => entry(SINCE[basis], rules);
 // A volume ratio as every screen prints it (ratioShown: floored to 2 decimals, in ×), so a ratio under the 1.4×
 // bar never reads 1.4 and the readout, the chips and both checks print the same value for the same day.
 const ratioText = ratioShown;
+/** The 50-day simple average of the closes ending at bar i (i ≥ 49). */
+const sma50 = (list, i) => { let s = 0; for (let k = i - 49; k <= i; k++) s += list[k].close; return s / 50; };
 
 /**
- * Whether the strength checks may run for this stock today, and from where. They run only when the
- * stock is beyond the buy zone (`view.state === 'ext'`), its close is at least
- * `rules.climaxFromPivotPercent` above the pivot, and the current run of closes above that pivot (its
- * origin, the breakout) is at least `rules.climaxSessions` sessions old: a fresh breakout's fast gain is a
- * reason to hold, not a climax. Otherwise they are 'na' with the reason. Dated breakouts come later.
+ * The pivot band: the strength checks run when the stock is beyond the buy zone (`view.state === 'ext'`),
+ * its close is at least `rules.climaxFromPivotPercent` above the pivot, and the current run of closes above
+ * that pivot (its origin, the breakout) is at least `rules.climaxSessions` sessions old: a fresh breakout's
+ * fast gain is a reason to hold, not a climax. Otherwise 'na' with the reason, `short` for the card's line,
+ * and `alternative` when the 50-day alternative may still judge it: without a usable pivot (a real row drops
+ * one beyond 25%), for an unjudged position, or beyond the zone but under the band. Never for the buy zone,
+ * below the pivot, a fresh breakout, a low-volatility or an acquisition position.
  */
-function climaxGate(list, view, rules) {
+function pivotGate(list, view, rules) {
   const pivot = view?.pivot, distance = view?.distance;
-  if (!view || !finite(distance) || !finite(pivot) || pivot <= 0) return { on: false, reason: 'ピボット比が未確認のため判定しません' };
-  if (view.state === 'wait' || distance < 0) return { on: false, reason: 'ピボットより下（ブレイク前）のため判定しません' };
-  // A position that is neither the buy zone nor beyond it (low volatility, an acquisition, unjudged) is never judged.
-  if (view.state !== 'ext' && view.state !== 'zone') return { on: false, reason: `買いゾーン超過の銘柄ではないため判定しません（位置：${view.stateLabel || '判定不可'}）` };
-  if (view.state !== 'ext' || distance < rules.climaxFromPivotPercent) return { on: false, reason: `ブレイク後の上昇が小さいため判定しません（ピボット比 ${signed(distance)}・判定は +${rules.climaxFromPivotPercent}%以上）` };
+  const unjudged = view?.state !== 'low' && view?.state !== 'acq';
+  if (!view || !finite(distance) || !finite(pivot) || pivot <= 0) return { on: false, reason: 'ピボット比が未確認のため判定しません', short: 'ピボット比 未確認', alternative: unjudged };
+  if (view.state === 'wait' || distance < 0) return { on: false, reason: 'ピボットより下（ブレイク前）のため判定しません', short: 'ピボットより下' };
+  // A position that is neither the buy zone nor beyond it (low volatility, an acquisition, unjudged) is never judged by the band.
+  if (view.state !== 'ext' && view.state !== 'zone') return { on: false, reason: `買いゾーン超過の銘柄ではないため判定しません（位置：${view.stateLabel || '判定不可'}）`, short: `位置：${view.stateLabel || '判定不可'}`, alternative: unjudged };
+  if (view.state !== 'ext' || distance < rules.climaxFromPivotPercent) return { on: false, reason: `ブレイク後の上昇が小さいため判定しません（ピボット比 ${signed(distance)}・判定は +${rules.climaxFromPivotPercent}%以上）`, short: `ピボット比 ${signed(distance)}・+${rules.climaxFromPivotPercent}%未満`, alternative: view.state === 'ext' };
   const n = list.length;
-  if (!(list[n - 1].close > pivot)) return { on: false, reason: '日足の終値がピボットを上回っていないため判定しません' };
+  if (!(list[n - 1].close > pivot)) return { on: false, reason: '日足の終値がピボットを上回っていないため判定しません', short: '終値がピボット以下' };
   let origin = n - 1;
   while (origin > 0 && list[origin - 1].close > pivot) origin--;
   const age = n - 1 - origin;
-  if (age < rules.climaxSessions) return { on: false, reason: `${age ? `ピボット上抜けから${age}営業日` : 'ピボット上抜けの当日'}のため判定しません（判定は上抜けから${rules.climaxSessions}営業日以上・独自判定）` };
-  return { on: true, origin, pivot, distance };
+  if (age < rules.climaxSessions) return { on: false, reason: `${age ? `ピボット上抜けから${age}営業日` : 'ピボット上抜けの当日'}のため判定しません（判定は上抜けから${rules.climaxSessions}営業日以上・独自判定）`, short: age ? `上抜けから${age}営業日` : '上抜けの当日' };
+  return { on: true, basis: 'pivot', origin, pivot, distance };
+}
+
+/**
+ * Whether the strength checks may run for this stock today, and from where: the pivot band first, then
+ * the 50-day alternative (VD6) where the band allows it: a certified close at least
+ * `rules.climaxFrom50dPercent` above its 50-day line, whatever the pivot. Its origin is the session after the
+ * last close at or below the 50-day line, within the bars (up to 252; with none, the first session with a
+ * 50-day line), and, as for the band, that run must be `rules.climaxSessions` sessions old. Otherwise 'na'
+ * with the reason; `fromSma50` is the close against its 50-day line for the card's line where the
+ * alternative could have judged the stock (else null: the pivot's reason is the whole reason).
+ */
+function climaxGate(list, view, rules) {
+  const band = pivotGate(list, view, rules);
+  if (band.on) return band;
+  const n = list.length, fromSma50 = (list[n - 1].close / sma50(list, n - 1) - 1) * 100;
+  const bar = rules.climaxFrom50dPercent;
+  // The 50-day distance is part of the reason only where the alternative could have judged the stock.
+  if (!band.alternative || !(finite(bar) && bar > 0) || fromSma50 < bar) return { ...band, fromSma50: band.alternative ? fromSma50 : null };
+  let origin = 49;
+  for (let i = n - 1; i >= 49; i--) if (list[i].close <= sma50(list, i)) { origin = Math.min(i + 1, n - 1); break; }
+  const age = n - 1 - origin;
+  if (age < rules.climaxSessions) return { on: false, reason: `50日線の上に出て${age ? `${age}営業日` : 'の当日'}のため判定しません（判定は${rules.climaxSessions}営業日以上・独自判定）`, short: `50日線の上に出て${age}営業日`, fromSma50 };
+  return { on: true, basis: 'ma50', origin, pivot: finite(view?.pivot) && view.pivot > 0 ? view.pivot : null, distance: finite(view?.distance) ? view.distance : null, fromSma50 };
 }
 
 /**
@@ -66,8 +106,7 @@ function climaxGate(list, view, rules) {
  * line: 'clear'.
  */
 function ma50State(list, rules) {
-  const n = list.length;
-  const sma = i => { let s = 0; for (let k = i - 49; k <= i; k++) s += list[k].close; return s / 50; };
+  const n = list.length, sma = i => sma50(list, i);
   const base = { key: 'ma50', label: `出来高を伴う50日線割れ（${ratioText(rules.breakVolumeRatio)}以上）` };
   const line = sma(n - 1), position = (list[n - 1].close / line - 1) * 100;
   if (list[n - 1].close >= line) return { ...base, state: 'clear', detail: `終値は50日線から ${signed(position)}` };
@@ -83,6 +122,44 @@ function ma50State(list, rules) {
   // `headline` is the short form a watch row leads with; the sell card keeps the full detail.
   if (ratio >= rules.breakVolumeRatio) return { ...base, date: list[at].date, ratio, sessions, state: 'hit', detail: `${day} に出来高 ${ratioText(ratio)}で割れ、以降50日線の下（${sessions}営業日）`, headline: `50日線割れ（${day}・出来高${ratioText(ratio)}）` };
   return { ...base, date: list[at].date, ratio, sessions, state: 'caution', detail: `50日線の下（大商いの割れは未確認）・${day} に出来高 ${ratioText(ratio)}で割れ、以降${sessions}営業日` };
+}
+
+const cents = value => Math.round(value * 100);
+
+/**
+ * The failed breakout (VD2, ブレイク失敗, 独自判定): a crossing of the pivot on `rules.breakVolumeRatio` or
+ * more of the prior 50-day average (lastPivotCrossing's volumeRatio), within `rules.failedBreakoutSessions`
+ * sessions, followed by a last close back under the pivot: 'hit', dated from the first close of the current run
+ * under the pivot (a re-cross above it after the crossing starts the run again). A last close at or above the pivot, or no
+ * crossing in the window, or crossings all on lighter volume: 'clear'. A crossing whose volume (or the 50
+ * sessions before it) is missing, with no heavy one: 'unknown', never clear. Without a pivot there is no
+ * breakout to fail: null, and sellSignals lists no such check (the strength checks say why for the pivot). The
+ * hit's date is the chart's mark; it carries the crossing's date and ratio, and `headline` is the watch row's short form.
+ */
+function failedBreakoutCheck(list, view, rules) {
+  const base = { key: 'failedBreakout', label: `出来高を伴う上抜け後のピボット割れ（${ratioText(rules.breakVolumeRatio)}以上・${rules.failedBreakoutSessions}営業日以内・ブレイク失敗）` };
+  const pivot = view?.pivot, n = list.length, last = list[n - 1];
+  if (!finite(pivot) || pivot <= 0) return null;
+  const distance = (last.close / pivot - 1) * 100;
+  if (cents(last.close) >= cents(pivot)) return { ...base, state: 'clear', detail: `終値はピボットの上（ピボット比 ${signed(distance)}）` };
+  const crossings = pivotCrossings(list, pivot, { lookback: rules.failedBreakoutSessions });
+  const day = i => shortDate(list[i].date, last.date);
+  if (!crossings.length) return { ...base, state: 'clear', detail: `直近${rules.failedBreakoutSessions}営業日にピボットの上抜けなし（終値はピボット比 ${signed(distance)}）` };
+  const heavy = crossings.find(c => finite(c.volumeRatio) && c.volumeRatio >= rules.breakVolumeRatio);
+  if (heavy) {
+    // The current run under the pivot: a re-cross after the first close back under it moves the date on.
+    let back = n - 1;
+    while (back > heavy.index + 1 && cents(list[back - 1].close) < cents(pivot)) back--;
+    const crossDay = day(heavy.index), sessions = n - back;
+    return { ...base, state: 'hit', date: list[back].date, crossDate: heavy.date, ratio: heavy.volumeRatio, sessions,
+      detail: `${crossDay} に出来高 ${ratioText(heavy.volumeRatio)}で上抜け、${day(back)} にピボットの下へ（以降${sessions}営業日・ピボット比 ${signed(distance)}）`,
+      // As short as the 50-day headline, so it replaces a watch row's title without a line more at 320px.
+      headline: `ブレイク失敗（${crossDay}上抜け）` };
+  }
+  const missing = crossings.find(c => !finite(c.volumeRatio));
+  if (missing) return { ...base, state: 'unknown', date: missing.date, detail: `${day(missing.index)} の上抜けの出来高（または直前50日の出来高）が未取得` };
+  const latest = crossings[0];
+  return { ...base, state: 'clear', detail: `${day(latest.index)} の上抜けは出来高 ${ratioText(latest.volumeRatio)}（基準 ${ratioText(rules.breakVolumeRatio)}未満）・終値はピボット比 ${signed(distance)}` };
 }
 
 /**
@@ -108,24 +185,25 @@ export function sellSignals(bars, rules = SELL_RULES, { view = null } = {}) {
   const gate = climaxGate(list, view, rules);
   const na = (key, text, detail) => ({ key, label: text, state: 'na', detail });
   if (gate.on) {
-    const o = gate.origin;
+    const o = gate.origin, basis = gate.basis, since = basis === 'ma50' ? '50日線の上に出て以降' : '上抜け以降';
     let up = null, week = null;
     for (let i = o + 1; i < n; i++) if (up === null || change(i) > change(up)) up = i;
     for (let j = Math.max(o + 5, 5); j < n; j++) { const v = (list[j].close / list[j - 5].close - 1) * 100; if (!week || v > week.v) week = { j, v }; }
-    const short = '上抜け以降の日足が不足のため判定しません';
-    strength.push(up === null ? na('day-up', label(STRENGTH[0][1], rules), short)
-      : { key: 'day-up', label: label(STRENGTH[0][1], rules), date: list[up].date, state: up >= recent && change(up) > 0 ? 'hit' : 'clear', detail: `最大は ${on(up)} の ${signed(change(up))}` });
-    strength.push(week ? { key: 'week-up', label: label(STRENGTH[1][1], rules), date: list[week.j].date, state: week.j >= recent && week.v > 0 ? 'hit' : 'clear', detail: `最大は ${on(week.j)} までの ${signed(week.v)}` }
-      : na('week-up', label(STRENGTH[1][1], rules), short));
-    // Only sessions after the breakout count: the base before it says nothing about a climax run.
+    const short = `${since}の日足が不足のため判定しません`;
+    strength.push(up === null ? na('day-up', label(STRENGTH[0][1], rules, basis), short)
+      : { key: 'day-up', label: label(STRENGTH[0][1], rules, basis), date: list[up].date, state: up >= recent && change(up) > 0 ? 'hit' : 'clear', detail: `最大は ${on(up)} の ${signed(change(up))}` });
+    strength.push(week ? { key: 'week-up', label: label(STRENGTH[1][1], rules, basis), date: list[week.j].date, state: week.j >= recent && week.v > 0 ? 'hit' : 'clear', detail: `最大は ${on(week.j)} までの ${signed(week.v)}` }
+      : na('week-up', label(STRENGTH[1][1], rules, basis), short));
+    // Only sessions after the origin count: the base before it says nothing about a climax run.
     const span = Array.from({ length: rules.upDaysWindow }, (_, k) => n - rules.upDaysWindow + k).filter(i => i > o);
     const ups = span.filter(i => change(i) > 0).length;
-    strength.push({ key: 'up-days', label: label(STRENGTH[2][1], rules), date: last.date, state: ups >= rules.upDaysMin ? 'hit' : 'clear', detail: `上昇 ${ups}日 / ${span.length}日` });
+    strength.push(span.length ? { key: 'up-days', label: label(STRENGTH[2][1], rules, basis), date: last.date, state: ups >= rules.upDaysMin ? 'hit' : 'clear', detail: `上昇 ${ups}日 / ${span.length}日` }
+      : na('up-days', label(STRENGTH[2][1], rules, basis), short));
     const window = list.slice(Math.max(o, n - 1 - rules.climaxSessions), n - 1).map(b => b.close);
     if (window.length) {
       const run = (last.close / Math.min(...window) - 1) * 100;
-      strength.push({ key: 'climax', label: label(STRENGTH[3][1], rules), date: last.date, state: run >= rules.climaxPercent ? 'hit' : 'clear', detail: `直近${rules.climaxSessions}営業日（上抜け以降）の最安終値から ${signed(run)}` });
-    } else strength.push(na('climax', label(STRENGTH[3][1], rules), short));
+      strength.push({ key: 'climax', label: label(STRENGTH[3][1], rules, basis), date: last.date, state: run >= rules.climaxPercent ? 'hit' : 'clear', detail: `直近${rules.climaxSessions}営業日（${since}）の最安終値から ${signed(run)}` });
+    } else strength.push(na('climax', label(STRENGTH[3][1], rules, basis), short));
   } else for (const [key, text] of STRENGTH) strength.push(na(key, label(text, rules), gate.reason));
 
   if (inAdvance) {
@@ -134,17 +212,22 @@ export function sellSignals(bars, rules = SELL_RULES, { view = null } = {}) {
     weakness.push({ key: 'day-down', label: '起点以来で最大の1日の下落（直近5営業日）', date: list[down].date, state: down >= recent && change(down) < 0 ? 'hit' : 'clear', detail: `最大は ${on(down)} の ${signed(change(down))}` });
   } else weakness.push(na('day-down', '起点以来で最大の1日の下落（直近5営業日）', `起点（直近1年の安値）から +${rules.advanceMinPercent}%・${rules.advanceMinSessions}営業日以上の上昇局面でのみ判定`));
   weakness.push(ma50State(list, rules));
+  const failed = failedBreakoutCheck(list, view, rules);
+  if (failed) weakness.push(failed);
 
-  const run = gate.on ? { startDate: list[gate.origin].date, startClose: list[gate.origin].close, pivot: gate.pivot, distance: gate.distance, sessions: n - 1 - gate.origin } : null;
-  return tally({ asOf: last.date, advance: inAdvance ? advance : null, run, runReason: gate.on ? null : gate.reason, strength, weakness });
+  const run = gate.on ? { basis: gate.basis, startDate: list[gate.origin].date, startClose: list[gate.origin].close, pivot: gate.pivot, distance: gate.distance, fromSma50: gate.fromSma50 ?? null, sessions: n - 1 - gate.origin } : null;
+  return tally({ asOf: last.date, advance: inAdvance ? advance : null, run, runReason: gate.on ? null : gate.reason,
+    runShort: gate.on ? null : { reason: gate.short, fromSma50: gate.fromSma50 }, strength, weakness });
 }
 
+/** The weakness checks that break a buy setup when they hit. */
+const BREAKDOWN_KEYS = new Set(['ma50', 'failedBreakout', 'book']);
 /**
- * A broken buy setup: the 50-day check or the book's combined warning fired. The largest down day of the
- * advance is a holder's sell-into-weakness rule (a VCP's first contraction is often that sharp), so it is
- * not one.
+ * A broken buy setup: the 50-day check, the failed breakout (ブレイク失敗) or the book's combined warning
+ * fired. The largest down day of the advance is a holder's sell-into-weakness rule (a VCP's first
+ * contraction is often that sharp), so it is not one.
  */
-export const isBreakdown = check => (check.key === 'ma50' || check.key === 'book') && check.state === 'hit';
+export const isBreakdown = check => BREAKDOWN_KEYS.has(check?.key) && check.state === 'hit';
 
 /**
  * The counts every caller reads: all hits (the sell card), the weakness and strength sides, the broken
