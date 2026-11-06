@@ -14,17 +14,20 @@
 //                               previous report is missing or changed, or the check cannot be made (only
 //                               when the owner turns it on; see research-ui-release.yml)
 //   --allow-sec-coverage-drop   explicit approval: report such a drop as a warning instead
+//   --sec-evidence              also print the SEC input file's evidence line (counts by cause; a UI-only republish
+//                               runs no SEC fetch of its own)
 // Every other finding is a ::warning:: and a $GITHUB_STEP_SUMMARY table; the report never fails a build.
 import { createHash } from 'node:crypto';
 import { appendFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { admitBookFinancialsDetailed, SEC_PUBLICATION_REFUSAL_REASONS, SEC_RECORD_SCHEMA } from '../src/static/bookFinancialAdmission.js';
 import { bookFinancialCurrent } from '../src/static/bookFinancialCurrent.js';
 import { financialHistory } from '../src/static/financialHistory.js';
 import { code33Layered } from '../src/static/code33Reference.js';
-import { code33Explain, code33Parts, COVERAGE_WARNINGS, fundamentalTiles, secStatus } from '../src/static/fundamentalsExplain.js';
+import { code33Explain, code33Parts, COVERAGE_WARNINGS, fundamentalTiles, secStatus, secSummary } from '../src/static/fundamentalsExplain.js';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { setupReadiness } from '../src/static/setupReadiness.js';
 import { environmentPoint } from '../src/static/marketLongHistory.js';
@@ -247,8 +250,66 @@ export function compareSecCarryForward(previous, current) {
     file_unchanged: Boolean(previous.file?.sha256) && previous.file.sha256 === current.file?.sha256 };
 }
 
-const SEC_STATES = ['ok', 'stale', 'not_published', 'not_requested', 'refused', 'no_cik', 'no_companyfacts', 'no_quarterly', 'no_quarterly_values', 'transient', 'not_applicable', 'invalid'];
-const UNKNOWN_KINDS = ['q4_eps', 'few_quarters', 'gap', 'stale', 'no_sec', 'other'];
+const SEC_STATES = ['ok', 'stale', 'q4_annual_only', 'not_published', 'not_requested', 'refused', 'no_cik', 'no_companyfacts', 'no_quarterly', 'no_quarterly_values', 'transient', 'not_applicable', 'invalid_payload', 'invalid'];
+const UNKNOWN_KINDS = ['q4_eps', 'q4_row', 'few_quarters', 'gap', 'stale', 'no_sec', 'other'];
+
+// ---- Round-2 measurements (plan DT4, DT9): diagnostic only, never a gate; a value the publication cannot give is
+// null (未計測), never 0.
+/** The Setup Engine's confidence floor (backend aggregator, pinned by its TestConfidenceFloorContract): measurement only. */
+export const SETUP_CONFIDENCE_FLOOR = 55;
+export const FLOOR_CHECK = 'primary_pattern_below_confidence_floor';
+/** Why EPS acceleration stays unknown, in the order a row's first cause is taken (DT4; §9-20 reads fiscal_q4_untagged). */
+export const EPS_UNKNOWN_CAUSES = Object.freeze(['under_8_quarters', 'gap', 'latest_row_fiscal_q4_without_eps', 'fiscal_q4_untagged', 'prior_year_loss_or_zero', 'period_mismatch']);
+/**
+ * Every cause behind an unknown EPS acceleration of a valid SEC report, independently of Code 33: fewer than 8 quarters,
+ * a gap in the latest four (a missing fiscal-Q4 row counts as fiscal_q4_untagged, not as a gap), the latest row a
+ * fiscal Q4 without EPS, an earlier fiscal Q4 without EPS, a loss or zero a year earlier, or periods that differ.
+ * `primary` is the first in EPS_UNKNOWN_CAUSES order, else 'other'. Null when EPS acceleration is known.
+ */
+export function epsUnknownCauses(report) {
+  if (!report?.valid || report.epsAcceleration !== 'unknown') return null;
+  const last = report.rows.slice(-4), causes = new Set();
+  if (report.rows.length < 8) causes.add('under_8_quarters');
+  if (report.consecutive === false) causes.add((report.fiscalQ4Missing || []).some(end => end > last[0].end && end < last.at(-1).end) ? 'fiscal_q4_untagged' : 'gap');
+  const q4WithoutEps = row => row.fiscalQ4 && row.epsYoYReason === 'not_reported';
+  if (last.length && q4WithoutEps(last.at(-1))) causes.add('latest_row_fiscal_q4_without_eps');
+  if (last.slice(0, -1).some(q4WithoutEps)) causes.add('fiscal_q4_untagged');
+  if (last.some(row => row.epsYoYReason === 'nonpositive_base')) causes.add('prior_year_loss_or_zero');
+  if (last.some(row => row.epsYoYReason === 'period_mismatch')) causes.add('period_mismatch');
+  const all = EPS_UNKNOWN_CAUSES.filter(cause => causes.has(cause));
+  return { primary: all[0] ?? 'other', all };
+}
+/** The cause key of an invalid_payload record (sec-financials.py's invalid_cause): cik_mismatch, the exception class, or unrecorded. */
+export function invalidCause(record) {
+  const detail = plainObject(record?.invalid_detail) ? record.invalid_detail : {};
+  if (Number.isSafeInteger(detail.requested_cik) && Number.isSafeInteger(detail.received_cik) && detail.requested_cik !== detail.received_cik) return 'cik_mismatch';
+  return typeof detail.class === 'string' && detail.class ? detail.class : 'unrecorded';
+}
+const quantile = (values, q) => {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.max(0, Math.ceil(q * sorted.length) - 1))];
+};
+const spread = values => values.length ? { p10: quantile(values, 0.1), p50: quantile(values, 0.5), p90: quantile(values, 0.9) } : null;
+/**
+ * The price-history window the publication's charts can hold, read statically (no fetch): the producer
+ * (tools/producer-price-history.mjs) preserves the published bars and names no window of its own, so the window is the
+ * static exporter's per-symbol chart fetch (the `period="Ny"` of the cache reads in `_chart_prices`). Null (未計測) when neither names one.
+ */
+export async function chartWindowSource({ producer = new URL('./producer-price-history.mjs', import.meta.url), exporter = new URL('../../backend/app/services/static_site_export_service.py', import.meta.url) } = {}) {
+  const text = async url => { try { return await readFile(url instanceof URL ? fileURLToPath(url) : url, 'utf8'); } catch { return null; } };
+  const years = value => { const match = /^(\d+)(y|mo)$/.exec(value || ''); return match ? Number(match[1]) / (match[2] === 'y' ? 1 : 12) : null; };
+  const producerText = await text(producer), exporterText = await text(exporter);
+  const producerPeriod = producerText ? /period\s*[:=]\s*['"](\d+(?:y|mo))['"]/.exec(producerText)?.[1] ?? null : null;
+  // The per-symbol chart fetch: the period of the cache reads inside the exporter's _chart_prices.
+  const at = exporterText ? exporterText.indexOf('def _chart_prices(') : -1;
+  const chartBlock = at < 0 ? '' : exporterText.slice(at, at + 1500).split(/\n\s*bounded\s*=/)[0];
+  const periods = [...chartBlock.matchAll(/period\s*=\s*"(\d+(?:y|mo))"/g)].map(match => match[1]);
+  const longest = periods.sort((a, b) => years(b) - years(a))[0] ?? null;
+  const period = producerPeriod ?? longest;
+  return { producer: producerText === null ? null : producerPeriod, exporter: exporterText === null ? null : longest, period, years: years(period), covers_3y: period ? years(period) >= 3 : null };
+}
+
 /**
  * What the brief can actually show for each row it lists, read from the published
  * research index and canonical details (the logical files, before transport packing).
@@ -269,10 +330,19 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
   const out = { as_of_date: date, listed: listed.length, sec_record: 0, with_quarters_listed: 0, tiles: { eps: 0, sales: 0, margin: 0 },
     sec_state: Object.fromEntries(SEC_STATES.map(state => [state, 0])), code33: { pass: 0, fail: 0, unknown: 0 },
     code33_unknown_reason: Object.fromEntries(UNKNOWN_KINDS.map(kind => [kind, 0])),
+    // A Yahoo-only Code 33 is a reference (参考), counted apart from the SEC result it never replaces.
+    code33_reference: { pass: 0, fail: 0 },
     sec_conditions: { eps: { pass: 0, fail: 0, unknown: 0 }, sales: { pass: 0, fail: 0, unknown: 0 }, margin: { pass: 0, fail: 0, unknown: 0 } },
     // Measurement only (no rule reads these here): readiness of the setup detector and the fill of base and group-rank fields.
     setup_ready: { pass: 0, fail: 0, unknown: 0 }, filled: { se_base_length_weeks: 0, se_base_depth_pct: 0, ibd_group_rank: 0 }, listed_without_sec: [] };
   const finite = value => typeof value === 'number' && Number.isFinite(value);
+  const failedChecks = new Map(), epsPrimary = Object.fromEntries([...EPS_UNKNOWN_CAUSES, 'other'].map(cause => [cause, 0])), epsAny = Object.fromEntries(EPS_UNKNOWN_CAUSES.map(cause => [cause, 0]));
+  const invalid = { count: 0, by_cause: {}, symbols: [] }, gaps = { fiscal_q4: 0, other: 0, derivation_gaps: {}, empty_revenue: 0 };
+  const withoutSec = { rows: 0, yahoo_tile: 0, ages: [] }, confidence = { below_floor: 0, missing: 0, floor_check_named: 0 };
+  const market = { distribution_days: 0, ftd_date: 0 }, asOfFields = new Set();
+  let epsUnknown = 0, epsNoCurrent = 0, qualified = 0;
+  const auditRows = new Map((audit?.results || []).map(row => [row.symbol, row]));
+  const qualifiedSet = new Set(briefRows(audit, date).filter(symbol => auditRows.get(symbol)?.methods?.minervini?.qualified));
   for (const symbol of listed) {
     const summary = rows.get(symbol);
     const detail = summary?.research_detail_path ? await read(inside(summary.research_detail_path)) : null;
@@ -288,10 +358,82 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
     if (report) fundamentalTiles(report).forEach((tile, i) => { if (tile.value !== null) out.tiles[['eps', 'sales', 'margin'][i]]++; });
     if (report?.valid) { out.sec_conditions.eps[report.epsAcceleration]++; out.sec_conditions.sales[report.salesAcceleration]++; out.sec_conditions.margin[report.marginImprovement]++; }
     out.code33[code33.state]++;
+    if (code33.source === 'yahoo' && code33.state !== 'unknown') out.code33_reference[code33.state]++;
     if (code33.state === 'unknown') out.code33_unknown_reason[explain.kind] = (out.code33_unknown_reason[explain.kind] || 0) + 1;
     out.setup_ready[setupReadiness(row).state]++;
     for (const key of Object.keys(out.filled)) if (finite(row[key])) out.filled[key]++;
+    if (qualifiedSet.has(symbol)) qualified++;
+    // (a) The failed setup checks the recalculation names.
+    if (setupReadiness(row).state === 'fail') for (const check of String(row.setup_recalculation?.reason || '').split(' / ').map(item => item.trim()).filter(Boolean)) failedChecks.set(check, (failedChecks.get(check) || 0) + 1);
+    // (b) A base under the Setup Engine's confidence floor.
+    if (!finite(row.se_pattern_confidence)) confidence.missing++; else if (row.se_pattern_confidence < SETUP_CONFIDENCE_FLOOR) confidence.below_floor++;
+    if (String(row.setup_recalculation?.reason || '').includes(FLOOR_CHECK)) confidence.floor_check_named++;
+    // (c) EPS acceleration unknown, by cause (DT4), with or without a current SEC report.
+    const anyReport = book?.report?.valid ? book.report : null;
+    if (report?.epsAcceleration === 'unknown') {
+      const causes = epsUnknownCauses(report); epsUnknown++; epsPrimary[causes.primary]++; for (const cause of causes.all) epsAny[cause]++;
+    } else if (!report?.valid) epsNoCurrent++;
+    // (d) Why a record could not be read.
+    if (row.book_financials?.reason === 'invalid_payload') {
+      const cause = invalidCause(row.book_financials); invalid.count++; invalid.by_cause[cause] = (invalid.by_cause[cause] || 0) + 1;
+      if (invalid.symbols.length < 10) invalid.symbols.push(symbol);
+    }
+    // (e) Gaps in the latest four quarters, a fiscal Q4 or another, the derivation gaps and records without a revenue concept.
+    if (anyReport?.consecutive === false) {
+      const last = anyReport.rows.slice(-4);
+      gaps[(anyReport.fiscalQ4Missing || []).some(end => end > last[0].end && end < last.at(-1).end) ? 'fiscal_q4' : 'other']++;
+    }
+    for (const gap of Array.isArray(row.book_financials?.derivation_gaps) ? row.book_financials.derivation_gaps : []) {
+      const key = `${gap.metric}:${gap.reason}`; gaps.derivation_gaps[key] = (gaps.derivation_gaps[key] || 0) + 1;
+    }
+    if (anyReport && anyReport.revenueConcept === false) gaps.empty_revenue++;
+    // (f) Without SEC quarters: is there a current Yahoo reference, and how old is its latest period?
+    if (!anyReport) {
+      withoutSec.rows++;
+      if (history?.valid && history.quarterly?.length) { withoutSec.yahoo_tile++; withoutSec.ages.push(Math.round((Date.parse(date) - Date.parse(history.quarterly.at(-1).end)) / 86400000)); }
+    }
+    // (i) The backend's market fields on the rows; (j) any as-of field for the group rank.
+    if (finite(row.market_distribution_days)) market.distribution_days++;
+    if (typeof row.market_ftd_date === 'string' && row.market_ftd_date) market.ftd_date++;
+    for (const key of Object.keys(row)) if (/^ibd_group.*(as_of|date)/.test(key) || /^group_rank.*(as_of|date)/.test(key)) asOfFields.add(key);
   }
+  const top = [...failedChecks.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 10);
+  // (g) Chart depth of every verified chart in the index.
+  const bars = index.rows.filter(row => row.technical_audit?.valid === true && Number.isSafeInteger(row.technical_audit.bars)).map(row => row.technical_audit.bars);
+  // (h) The long history's trend-template count on the analysis date (the market-trends asset), against the listed qualified rows.
+  let longTT = null;
+  try {
+    const ref = entry.assets?.market_trends;
+    const series = ref?.path ? await read(inside(ref.path)) : null;
+    const point = (series?.long_history?.breadth || []).find(item => item?.date === date);
+    longTT = Number.isSafeInteger(point?.trendTemplateCount) ? point.trendTemplateCount : null;
+  } catch { longTT = null; }
+  // (k) The round-2 list summaries on the listed rows (absent from older publications: 未計測).
+  const listedRows = listed.map(symbol => rows.get(symbol)).filter(Boolean);
+  const has = key => listedRows.some(row => Object.hasOwn(row, key));
+  const rsLine = listedRows.map(row => row.rs_line_high), secSummaries = listedRows.map(row => Object.hasOwn(row, 'sec_summary') ? secSummary(row) : undefined);
+  out.round2 = {
+    setup_readiness: { ...out.setup_ready, top_failed_checks: top },
+    setup_confidence: { floor: SETUP_CONFIDENCE_FLOOR, ...confidence },
+    eps_unknown: { with_current_report: epsUnknown, without_current_report: epsNoCurrent, primary: epsPrimary, any: epsAny,
+      fiscal_q4_share: epsUnknown ? (epsPrimary.fiscal_q4_untagged + epsPrimary.latest_row_fiscal_q4_without_eps) / epsUnknown : null },
+    invalid_payload: invalid,
+    gaps,
+    without_sec: { rows: withoutSec.rows, yahoo_tile: withoutSec.yahoo_tile, latest_period_age_days: withoutSec.ages.length ? { p50: quantile(withoutSec.ages, 0.5), max: Math.max(...withoutSec.ages) } : null,
+      older_than_190_days: withoutSec.ages.filter(age => age > 190).length },
+    chart_depth: { charts: bars.length, bars: spread(bars), weeks: spread(bars.map(count => Math.floor(count / 5))), window: await chartWindowSource() },
+    tt_population: { long_history_tt: longTT, listed_qualified: audit?.as_of_date === date ? qualified : null },
+    market_fields: { rows_with_distribution_days: market.distribution_days, rows_with_ftd_date: market.ftd_date,
+      market_context: !Object.hasOwn(entry, 'market_context') ? 'absent' : entry.market_context ? 'emitted' : 'null' },
+    group_rank: { filled: out.filled.ibd_group_rank, listed: listed.length, as_of_fields: [...asOfFields].sort() },
+    list_summaries: {
+      rs_line_high: has('rs_line_high') ? { rows: listedRows.filter(row => Object.hasOwn(row, 'rs_line_high')).length, certified: rsLine.filter(Boolean).length,
+        value_true: rsLine.filter(item => item?.value === true).length, value_unknown: rsLine.filter(item => item && item.value === null).length, leading_true: rsLine.filter(item => item?.leading === true).length } : null,
+      sec_summary: has('sec_summary') ? { rows: secSummaries.filter(item => item !== undefined).length, admitted: secSummaries.filter(Boolean).length,
+        eps_yoy: secSummaries.filter(item => item?.eps_yoy).length, sales_yoy: secSummaries.filter(item => item?.sales_yoy).length } : null,
+      se_pattern_primary: has('se_pattern_primary') ? listedRows.filter(row => typeof row.se_pattern_primary === 'string' && row.se_pattern_primary).length : null,
+    },
+  };
   return out;
 }
 
@@ -319,6 +461,12 @@ export async function publishedFundamentalsReport({ root = 'public', now = Date.
   const refusals = Object.entries(block.refused_by_reason).filter(([reason]) => reason !== 'not_corporate');
   if (refusals.length) warnings.push(`SEC records refused at admission: ${refusals.map(([reason, n]) => `${reason} ${n}`).join(', ')}`);
   const { warnings: blockWarnings, ...withoutWarnings } = block; void blockWarnings;
+  // Round-2 measurements: warnings only (plan DT9), never a failure.
+  const round2 = coverage.round2;
+  // Readiness measured on the listed rows and passing on none of them (an all-unknown population is 未計測, not a warning).
+  if (round2?.setup_readiness.pass === 0 && round2.setup_readiness.fail > 0) warnings.push(`Setup readiness passes on 0 of ${coverage.listed} brief-listed rows (fail ${round2.setup_readiness.fail}, unknown ${round2.setup_readiness.unknown}; top failed checks: ${round2.setup_readiness.top_failed_checks.slice(0, 3).map(([check, n]) => `${check} ${n}`).join(', ') || '未計測'})`);
+  const tt = round2?.tt_population;
+  if (Number.isSafeInteger(tt?.long_history_tt) && Number.isSafeInteger(tt?.listed_qualified) && tt.listed_qualified > tt.long_history_tt) warnings.push(`The brief lists ${tt.listed_qualified} trend-template qualified rows, more than the long history's ${tt.long_history_tt} for ${coverage.as_of_date}`);
   if (manifestBlock !== null && JSON.stringify(canonical(manifestBlock)) !== JSON.stringify(canonical(plainObject(manifestBlock) && !Object.hasOwn(manifestBlock, 'warnings') ? withoutWarnings : block))) warnings.push('The manifest fundamentals_coverage block differs from the published details');
   const carry = previous ? compareSecCarryForward(previous, inventory) : null;
   return { schema_version: 'published-fundamentals-report-v1', as_of_date: coverage.as_of_date, ui_only_republish: uiOnlyRepublish,
@@ -342,6 +490,22 @@ export function fundamentalsSummaryTable(report, { label = null } = {}) {
     `| SEC conditions (listed) | EPS ${cell(c.sec_conditions.eps)}; sales ${cell(c.sec_conditions.sales)}; margin ${cell(c.sec_conditions.margin)} |`,
     `| setup readiness (listed, measurement only) | ${cell(c.setup_ready)} |`,
     `| filled (listed, measurement only) | ${cell(c.filled)} of ${cell(c.listed)} |`];
+  const r = c.round2;
+  if (r) {
+    const pair = list => list?.length ? list.map(([key, n]) => `${key} ${n}`).join(', ') : 'none';
+    const range = value => value ? `p10 ${value.p10}, p50 ${value.p50}, p90 ${value.p90}` : '未計測';
+    lines.push(`| setup: top failed checks (listed) | ${pair(r.setup_readiness.top_failed_checks)} |`,
+      `| setup confidence under ${r.setup_confidence.floor} / missing / floor check named | ${r.setup_confidence.below_floor} / ${r.setup_confidence.missing} / ${r.setup_confidence.floor_check_named} |`,
+      `| EPS acceleration unknown (current SEC report) | ${r.eps_unknown.with_current_report}: ${cell(Object.fromEntries(Object.entries(r.eps_unknown.primary).filter(([, n]) => n)))}; fiscal-Q4 share ${percent(r.eps_unknown.fiscal_q4_share)}; without a current report ${r.eps_unknown.without_current_report} |`,
+      `| invalid_payload by cause | ${r.invalid_payload.count}: ${cell(r.invalid_payload.by_cause)}${r.invalid_payload.symbols.length ? ` (${r.invalid_payload.symbols.join(' ')})` : ''} |`,
+      `| quarter gaps: fiscal Q4 / other; derivation gaps; no revenue concept | ${r.gaps.fiscal_q4} / ${r.gaps.other}; ${cell(r.gaps.derivation_gaps)}; ${r.gaps.empty_revenue} |`,
+      `| without SEC quarters: rows / Yahoo tile / latest period age | ${r.without_sec.rows} / ${r.without_sec.yahoo_tile} / ${r.without_sec.latest_period_age_days ? `p50 ${r.without_sec.latest_period_age_days.p50}d, max ${r.without_sec.latest_period_age_days.max}d (${r.without_sec.older_than_190_days} over 190d)` : '未計測'} |`,
+      `| chart depth (verified charts) | ${r.chart_depth.charts} charts; bars ${range(r.chart_depth.bars)}; weeks ${range(r.chart_depth.weeks)}; fetch window ${cell(r.chart_depth.window?.period)} (3 years: ${r.chart_depth.window?.covers_3y === null || r.chart_depth.window?.covers_3y === undefined ? '未計測' : r.chart_depth.window.covers_3y ? 'yes' : 'no'}) |`,
+      `| trend template: long history / listed qualified | ${cell(r.tt_population.long_history_tt)} / ${cell(r.tt_population.listed_qualified)} |`,
+      `| market fields: distribution days / FTD date / market_context | ${r.market_fields.rows_with_distribution_days} / ${r.market_fields.rows_with_ftd_date} / ${r.market_fields.market_context} |`,
+      `| group rank filled / as-of fields | ${r.group_rank.filled} of ${r.group_rank.listed} / ${r.group_rank.as_of_fields.length ? r.group_rank.as_of_fields.join(', ') : 'none'} |`,
+      `| list summaries: rs_line_high / sec_summary / se_pattern_primary | ${cell(r.list_summaries.rs_line_high)} / ${cell(r.list_summaries.sec_summary)} / ${cell(r.list_summaries.se_pattern_primary)} |`);
+  }
   if (carry) lines.push(carry.comparable ? `| SEC records kept from the replaced publication | ${carry.kept}/${carry.before} (lost ${carry.lost}, changed ${carry.changed}, gained ${carry.gained}; input file ${carry.file_unchanged ? 'unchanged' : 'changed'}) |`
     : `| SEC records kept from the replaced publication | not comparable (${carry.reason}) |`);
   return lines.join('\n');
@@ -367,6 +531,22 @@ export function finalEnvironmentRow(history) {
   return { date: row.date ?? null, values: Object.fromEntries(FINAL_FIELDS.map(field => [field, Object.hasOwn(row, field) ? row[field] : 'absent'])),
     missing_environment_keys: LONG_HISTORY_ENVIRONMENT_KEYS.filter(key => !Object.hasOwn(row, key)),
     derived: { breakoutHoldPercent: point.breakoutHoldPercent, leaderHealthPercent: point.leaderHealthPercent } };
+}
+
+/**
+ * The SEC evidence line of a published (or carried) SEC input file, for a build that did not fetch it itself (a UI-only
+ * republish): the file's own coverage counts, and the invalid_payload causes and derivation gaps counted from its records
+ * (an older file carries neither count). Null when there is no file.
+ */
+export function secEvidenceLine(file) {
+  if (!plainObject(file)) return null;
+  const records = plainObject(file.results) ? Object.values(file.results).filter(plainObject) : [];
+  const tally = values => sortedCounts(values.reduce((counts, key) => ({ ...counts, [key]: (counts[key] || 0) + 1 }), {}));
+  const invalid = records.filter(record => record.reason === 'invalid_payload');
+  const counts = { ...(plainObject(file.coverage) ? file.coverage : {}), records: records.length,
+    invalid_payload_by_cause: tally(invalid.map(invalidCause)),
+    derivation_gaps: tally(records.flatMap(record => Array.isArray(record.derivation_gaps) ? record.derivation_gaps.map(gap => `${gap.metric}:${gap.reason}`) : [])) };
+  return `SEC evidence ${day(file.as_of_date) ? file.as_of_date : '未計測'} (published file): ${JSON.stringify(counts)}; first invalid_payload symbols ${Object.entries(file.results || {}).filter(([, record]) => record?.reason === 'invalid_payload').slice(0, 10).map(([symbol]) => symbol).join(' ') || 'none'}`;
 }
 
 /**
@@ -401,6 +581,13 @@ export async function runPublished(args, { env = process.env, log = console.log,
   if (previousPath && previousError && !report.carry_forward) report.carry_forward = { comparable: false, reason: previousError };
   const { records, ...shown } = report; void records;
   log('Published coverage (fundamentals): ' + JSON.stringify(shown));
+  // --sec-evidence: the SEC input's own evidence line, for a build that did not run sec-financials.py itself.
+  if (args.includes('--sec-evidence')) {
+    let line = null;
+    try { line = secEvidenceLine(await readBookFinancials(resolve(root, 'static-data'))); } catch (error) { line = `SEC evidence unavailable: ${String(error?.message || error).slice(0, 200)}`; }
+    log(line || 'SEC evidence: no SEC input file in this publication (未計測)');
+    if (line) appendStepSummary(`- ${line}`, env);
+  }
   for (const warning of report.warnings) log(`::warning::${warning}`);
   appendStepSummary(fundamentalsSummaryTable(report, { label }), env);
   const carry = report.carry_forward;

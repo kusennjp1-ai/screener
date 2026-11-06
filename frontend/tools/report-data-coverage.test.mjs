@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { secPoint, secRecord, secUnavailable } from '../src/test/fixtures/secRecord.js';
-import { briefRows, compareSecCarryForward, coverageWarnings, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, invokedAsCommand, publishedCoverage, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
+import { briefRows, compareSecCarryForward, coverageWarnings, EPS_UNKNOWN_CAUSES, epsUnknownCauses, secEvidenceLine, SETUP_CONFIDENCE_FLOOR, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, invokedAsCommand, publishedCoverage, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
 
 const write = async (path, value) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(value)); };
 
@@ -280,5 +280,99 @@ describe('the publication SEC coverage block and the published report', () => {
       await writeFile(previous, JSON.stringify({ unavailable: 'boom' }));
       expect((await published(before, ['--previous', previous, '--require-sec-carry-forward'])).text).toContain('cannot be verified: boom');
     } finally { await rm(before, { recursive: true, force: true }); await rm(after, { recursive: true, force: true }); }
+  });
+});
+
+describe('round-2 measurements in the published report (plan DT4, DT9): diagnostic only, 未計測 when missing', () => {
+  const date = '2026-02-01', now = Date.parse('2026-02-01T12:00:00Z');
+  const tenQ = symbol => { const value = secRecord({ symbol }); value.quarterly.eps = value.quarterly.eps.filter(p => !p.end.endsWith('12-31')); value.annualEps = [secPoint('eps', ['2024-01-01', '2024-12-31'], 4), secPoint('eps', ['2025-01-01', '2025-12-31'], 5.5)]; return value; };
+
+  it('names every cause behind an unknown EPS acceleration, independently of Code 33', async () => {
+    const { bookFinancialEvidence } = await import('../src/static/bookFinancialEvidence.js');
+    const causes = record => epsUnknownCauses(bookFinancialEvidence(record, record.symbol, date));
+    expect(EPS_UNKNOWN_CAUSES).toEqual(['under_8_quarters', 'gap', 'latest_row_fiscal_q4_without_eps', 'fiscal_q4_untagged', 'prior_year_loss_or_zero', 'period_mismatch']);
+    expect(causes(secRecord({ symbol: 'PASS' }))).toBeNull();
+    expect(causes(tenQ('Q4'))).toEqual({ primary: 'latest_row_fiscal_q4_without_eps', all: ['latest_row_fiscal_q4_without_eps'] });
+    expect(causes(secRecord({ symbol: 'YOUNG', quarters: [['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31']] }))).toMatchObject({ primary: 'under_8_quarters' });
+    const loss = secRecord({ symbol: 'LOSS' }); loss.quarterly.eps[0].value = -0.1;
+    expect(causes(loss)).toMatchObject({ primary: 'prior_year_loss_or_zero' });
+    const gap = secRecord({ symbol: 'GAP' }); for (const key of ['eps', 'revenue', 'netIncome']) gap.quarterly[key].splice(6, 1);
+    gap.quarterly.eps.unshift(secPoint('eps', ['2023-10-01', '2023-12-31'], 1)); gap.quarterly.revenue.unshift(secPoint('revenue', ['2023-10-01', '2023-12-31'], 100)); gap.quarterly.netIncome.unshift(secPoint('netIncome', ['2023-10-01', '2023-12-31'], 10));
+    expect(causes(gap)).toMatchObject({ primary: 'gap' });
+    // A missing fiscal-Q4 row inside the window is an untagged fiscal Q4, never a gap.
+    const quarters = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+      ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30'], ['2026-07-01', '2026-09-30']];
+    const missing = secRecord({ symbol: 'MISS', asOfDate: '2026-11-04', quarters, eps: [1, 1, 1, 1, 1, 1.1, 1.2, 1.4, 1.8], revenue: [100, 100, 100, 100, 100, 110, 130, 160, 200], netIncome: [10, 10, 10, 10, 10, 11, 14, 19, 26] });
+    for (const key of ['eps', 'revenue', 'netIncome']) missing.quarterly[key] = missing.quarterly[key].filter(p => p.end !== '2026-06-30');
+    missing.annualEps = [secPoint('eps', ['2025-07-01', '2026-06-30'], 5, { form: '10-K', filed: '2026-08-20', accession: 'k-26' })];
+    expect(epsUnknownCauses(bookFinancialEvidence(missing, 'MISS', '2026-11-04'))).toEqual({ primary: 'fiscal_q4_untagged', all: ['fiscal_q4_untagged'] });
+  });
+
+  it('counts readiness and its failed checks, the confidence floor, EPS unknowns, invalid payloads, gaps, Yahoo references, chart depth, the TT population, market fields, group rank and the list summaries', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'published-round2-'));
+    try {
+      const bank = secRecord({ symbol: 'BANK' }); bank.quarterly.revenue = []; bank.derivation_gaps = [{ fiscal_year: 2025, metric: 'netIncome', reason: 'broken_chain' }];
+      const yahoo = { symbol: 'YAHOO', as_of_date: date, status: 'available', basis: 'reported_diluted_eps', currency: 'USD', retrieved_at: '2026-02-01T08:00:00Z', annual: [],
+        quarterly: [['2024-09-30', 1, 100, 10], ['2024-12-31', 1, 100, 10], ['2025-03-31', 1.1, 110, 12], ['2025-06-30', 1.2, 120, 13], ['2025-09-30', 1.3, 130, 15]].map(([end, eps, revenue, netIncome]) => ({ end, eps, revenue, netIncome })) };
+      const cases = {
+        PASS: { book_financials: secRecord({ symbol: 'PASS' }), se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date }, se_pattern_confidence: 70, ibd_group_rank: 5, market_distribution_days: 3, market_ftd_date: '2025-12-01', se_pattern_primary: 'vcp' },
+        Q4: { book_financials: tenQ('Q4'), se_setup_ready: false, setup_recalculation: { status: 'calculated', as_of_date: date, reason: 'not_implemented / outside_early_zone' }, se_pattern_confidence: 40 },
+        BANK: { book_financials: bank, se_setup_ready: false, setup_recalculation: { status: 'calculated', as_of_date: date, reason: `not_implemented / ${'primary_pattern_below_confidence_floor'}` } },
+        BAD: { book_financials: secUnavailable({ symbol: 'BAD', reason: 'invalid_payload', invalid_detail: { class: 'PayloadMismatch', message: 'm', requested_cik: 1, received_cik: 2 } }) },
+        YAHOO: { book_financials: null, financial_history: yahoo },
+      };
+      const symbols = Object.keys(cases);
+      const rowsOut = symbols.map((symbol, i) => ({ symbol, market: 'US', as_of_date: date, research_detail_path: `research-details/${symbol}.json`,
+        technical_audit: { valid: i < 3, as_of_date: date, bars: [252, 300, 504][i] ?? 10 }, ...(cases[symbol].se_pattern_primary ? { se_pattern_primary: cases[symbol].se_pattern_primary } : {}),
+        rs_line_high: i < 3 ? { value: i === 0 ? true : i === 1 ? false : null, leading: i === 0, as_of_date: date } : null,
+        sec_summary: symbol === 'PASS' ? { sec_state: 'ok', eps_yoy: { value: 80, end: '2025-12-31' }, sales_yoy: { value: 100, end: '2025-12-31' }, code33: { state: 'pass', kind: null }, as_of_date: date } : null }));
+      for (const [i, row] of rowsOut.entries()) await write(join(root, `static-data/${row.research_detail_path}`), { ...row, ...cases[symbols[i]] });
+      await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows: rowsOut }));
+      await write(join(root, 'static-data/market-trends/series.json'), { long_history: { breadth: [{ date: '2026-01-30', trendTemplateCount: 9 }, { date, trendTemplateCount: 3 }] } });
+      await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: date, market_context: null, assets: { research: { path: 'research.json' }, market_trends: { path: 'market-trends/series.json' } } } } });
+      await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: symbols.map(symbol => ({ symbol, methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } })) });
+      const report = await publishedCoverage({ root, now });
+      expect(report.round2).toMatchObject({
+        setup_readiness: { pass: 1, fail: 2, unknown: 2, top_failed_checks: [['not_implemented', 2], ['outside_early_zone', 1], ['primary_pattern_below_confidence_floor', 1]] },
+        setup_confidence: { floor: SETUP_CONFIDENCE_FLOOR, below_floor: 1, missing: 3, floor_check_named: 1 },
+        eps_unknown: { with_current_report: 1, primary: { latest_row_fiscal_q4_without_eps: 1 }, fiscal_q4_share: 1 },
+        invalid_payload: { count: 1, by_cause: { cik_mismatch: 1 }, symbols: ['BAD'] },
+        gaps: { derivation_gaps: { 'netIncome:broken_chain': 1 }, empty_revenue: 1 },
+        without_sec: { rows: 2, yahoo_tile: 1, latest_period_age_days: { p50: 124, max: 124 }, older_than_190_days: 0 },
+        chart_depth: { charts: 3, bars: { p10: 252, p50: 300, p90: 504 }, weeks: { p10: 50, p50: 60, p90: 100 } },
+        tt_population: { long_history_tt: 3, listed_qualified: 5 },
+        market_fields: { rows_with_distribution_days: 1, rows_with_ftd_date: 1, market_context: 'null' },
+        group_rank: { filled: 1, listed: 5, as_of_fields: [] },
+        list_summaries: { rs_line_high: { rows: 5, certified: 3, value_true: 1, value_unknown: 1, leading_true: 1 }, sec_summary: { rows: 5, admitted: 1, eps_yoy: 1, sales_yoy: 1 }, se_pattern_primary: 1 },
+      });
+      expect(report.round2.chart_depth.window).toMatchObject({ producer: null, period: expect.stringMatching(/^\d+(y|mo)$/) });
+      // The warnings: readiness measured and passing nowhere is not this case (one passes); the listed population exceeds the long history's.
+      const lines = []; await runPublished(['--published', '--root', root], { env: {}, log: line => lines.push(line), now });
+      expect(lines.some(line => line.startsWith('::warning::The brief lists 5 trend-template qualified rows, more than the long history\'s 3'))).toBe(true);
+      expect(lines.some(line => line.includes('Setup readiness passes on 0'))).toBe(false);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('reads an older publication without the new fields as 未計測, and prints the SEC evidence line of the file on request', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'published-older-'));
+    try {
+      const rowsOut = [{ symbol: 'OLD', market: 'US', as_of_date: date, research_detail_path: 'research-details/OLD.json' }];
+      await write(join(root, 'static-data/research-details/OLD.json'), { ...rowsOut[0], book_financials: null, se_setup_ready: false, setup_recalculation: { status: 'calculated', as_of_date: date, reason: 'not_implemented' } });
+      await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows: rowsOut }));
+      await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' } } } } });
+      await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: [{ symbol: 'OLD', methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } }] });
+      const file = { schema_version: 2, as_of_date: date, coverage: { eligible: 1, requested: 1 }, results: { OLD: secUnavailable({ symbol: 'OLD', reason: 'invalid_payload' }) } };
+      await writeFile(join(root, 'static-data/book-financials.json.gz'), gzipSync(JSON.stringify(file)));
+      const report = await publishedCoverage({ root, now });
+      expect(report.round2).toMatchObject({ tt_population: { long_history_tt: null }, market_fields: { market_context: 'absent' }, list_summaries: { rs_line_high: null, sec_summary: null, se_pattern_primary: null },
+        chart_depth: { charts: 0, bars: null, weeks: null }, eps_unknown: { fiscal_q4_share: null } });
+      const lines = []; const code = await runPublished(['--published', '--root', root, '--sec-evidence'], { env: {}, log: line => lines.push(line), now });
+      expect(code).toBe(0);
+      expect(lines).toContain(secEvidenceLine(file));
+      expect(secEvidenceLine(file)).toBe(`SEC evidence ${date} (published file): {"eligible":1,"requested":1,"records":1,"invalid_payload_by_cause":{"unrecorded":1},"derivation_gaps":{}}; first invalid_payload symbols OLD`);
+      // Measured but all failing readiness is a warning; the table says 未計測 for what is missing.
+      expect(lines.some(line => line.startsWith('::warning::Setup readiness passes on 0 of 1 brief-listed rows (fail 1, unknown 0; top failed checks: not_implemented 1)'))).toBe(true);
+      expect(secEvidenceLine(null)).toBeNull();
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 });
