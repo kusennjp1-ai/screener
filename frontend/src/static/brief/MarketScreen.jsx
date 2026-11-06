@@ -30,9 +30,13 @@ const scale = value => num(value, 0).replace('-', '−');
 
 /**
  * The market tab's index chart: one index's closes with its 50-day and 200-day lines, its active distribution days, the
- * FTD day and the rally low, and its scale. `name` names the index (Today draws its own, MarketCard.jsx).
+ * FTD day and the rally low, and its scale. `name` names the index (Today draws its own, MarketCard.jsx). A moving
+ * average that starts inside the window (too few closes before it, e.g. the Nasdaq's 200-day line on its published
+ * closes) names its first day in the legend and the label (「200日線（6/12〜）」), so a shorter line never reads as
+ * covering the whole range. `legendName` false leaves the index's own legend entry out (a phone's S&P／Nasdaq switch
+ * already names the series; the label keeps the name and the range).
  */
-function IndexChart({ closes, name = 'S&P 500', distribution, distributionEnd, followThrough = null, status }) {
+function IndexChart({ closes, name = 'S&P 500', distribution, distributionEnd, followThrough = null, status, legendName = true }) {
   const points = (closes || []).filter(p => finite(p.close)).slice(-130);
   if (points.length < 60) return <ChartNote status={status} closes={closes} />;
   const all = (closes || []).filter(p => finite(p.close)), offset = all.length - points.length;
@@ -47,6 +51,10 @@ function IndexChart({ closes, name = 'S&P 500', distribution, distributionEnd, f
   const marks = points.map((p, i) => active.has(p.date) ? i : -1).filter(i => i >= 0);
   // The ▲ marks come from the index series, which can end on another session than the closes.
   const chartEnd = points.at(-1).date;
+  // A line's first day when it starts after the window's first session: 「（6/12〜）」, else nothing.
+  const startOf = series => { const at = series.findIndex(finite); return at > 0 ? `（${shortDate(points[at].date, chartEnd)}〜）` : ''; };
+  const from50 = startOf(ma), from200 = line200 ? startOf(ma200) : '';
+  const lineNames = `50日線${from50}${line200 ? `・200日線${from200}` : ''}`;
   // The exporter's follow-through record for the same index: a mark only for a day inside the window.
   const ft = followThrough?.available === true ? followThrough : null, find = day => isDay(day) ? points.findIndex(p => p.date === day) : -1;
   const ftdAt = ft && ['confirmed', 'ftd_failed'].includes(ft.state) ? find(ft.ftd?.date) : -1;
@@ -60,7 +68,7 @@ function IndexChart({ closes, name = 'S&P 500', distribution, distributionEnd, f
   const ftdWord = ftdAt >= 0 ? `FTD ${shortDate(points[ftdAt].date, chartEnd)}${ft.state === 'ftd_failed' && isDay(ft.failedDate) ? `（失敗 ${shortDate(ft.failedDate, chartEnd)}）` : ft.state === 'ftd_failed' ? '（失敗）' : ''}` : null;
   const words = [ftdWord, lowAt >= 0 ? `反発の安値 ${shortDate(points[lowAt].date, chartEnd)}` : null].filter(Boolean);
   const svg = <svg className="brief-index is-detail" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
-    aria-label={`${name} の終値と50日線${line200 ? '・200日線' : ''}（${points[0].date}〜${chartEnd}）。有効な分配日 ${marks.length}日${words.length ? `。${words.join('、')}` : ''}。目盛り ${scale(lo)}〜${scale(hi)}`}>
+    aria-label={`${name} の終値と${lineNames}（${points[0].date}〜${chartEnd}）。有効な分配日 ${marks.length}日${words.length ? `。${words.join('、')}` : ''}。目盛り ${scale(lo)}〜${scale(hi)}`}>
     {line200 && <path d={line200} className="brief-index-ma200" />}
     <path d={line50} className="brief-index-ma" />
     <path d={line} className="brief-index-line" />
@@ -77,7 +85,7 @@ function IndexChart({ closes, name = 'S&P 500', distribution, distributionEnd, f
       {/* The FTD label sits above its ◆, or below it when the close is near the frame's top. */}
       {ftdAt >= 0 && <span className={`brief-index-mark is-ftd${x(ftdAt) > W * 0.6 ? ' is-end' : ''}${y(points[ftdAt].close) < H * 0.3 ? ' is-below' : ''}${ft.state === 'ftd_failed' ? ' is-failed' : ''}`} aria-hidden="true" style={at(ftdAt)}>◆<span className="brief-index-mark-label">{ftdWord}</span></span>}
     </div>
-    <p className="brief-index-legend" aria-hidden="true"><span className="is-close">{name} 終値（{shortDate(points[0].date, chartEnd)}〜{shortDate(chartEnd, chartEnd)}）</span><span className="is-ma">50日線</span>{line200 && <span className="is-ma200">200日線</span>}<span className="is-dist">▲ 分配日{distributionEnd && distributionEnd !== chartEnd ? `（${shortDate(distributionEnd, chartEnd)}まで）` : ''}</span>{(ftdAt >= 0 || lowAt >= 0) && <span className="is-ftd">{ftdAt >= 0 ? `◆ FTD${ft.state === 'ftd_failed' ? '（失敗）' : ''}` : ''}{ftdAt >= 0 && lowAt >= 0 ? '・' : ''}{lowAt >= 0 ? '○ 反発の安値' : ''}</span>}</p>
+    <p className="brief-index-legend" aria-hidden="true">{legendName && <span className="is-close">{name} 終値（{shortDate(points[0].date, chartEnd)}〜{shortDate(chartEnd, chartEnd)}）</span>}<span className="is-ma">50日線{from50}</span>{line200 && <span className="is-ma200">200日線{from200}</span>}<span className="is-dist">▲ 分配日{distributionEnd && distributionEnd !== chartEnd ? `（${shortDate(distributionEnd, chartEnd)}まで）` : ''}</span>{(ftdAt >= 0 || lowAt >= 0) && <span className="is-ftd">{ftdAt >= 0 ? `◆ FTD${ft.state === 'ftd_failed' ? '（失敗）' : ''}` : ''}{ftdAt >= 0 && lowAt >= 0 ? '・' : ''}{lowAt >= 0 ? '○ 反発の安値' : ''}</span>}</p>
   </>;
 }
 
@@ -159,16 +167,22 @@ function EnvRow({ item, groupAsOf, onOpenMetric }) {
   </div>;
 }
 
-function Group({ group, caveat = null, children }) {
+/**
+ * One evidence group: its heading, its question, its marks and date, its rows. `control` (the phone's S&P／Nasdaq switch)
+ * takes the marks' slot beside the heading, and the marks and date, when there are any, take the question's line under
+ * the heading: the head keeps its two lines and the switch adds no row of its own.
+ */
+function Group({ group, caveat = null, control = null, children }) {
   const head = useId();
+  const meta = (group.fired > 0 || group.references > 0 || group.asOf) ? <>
+    {group.fired > 0 && <span className="brief-env-state"><span aria-hidden="true">▲</span> 注意 {group.fired}</span>}
+    {group.references > 0 && <span className="brief-env-state is-reference"><span aria-hidden="true">○</span> 参考 {group.references}</span>}
+    {group.asOf && <span className="brief-env-asof" id={`${head}-d`}>{group.asOf}時点の値</span>}
+  </> : null;
   return <div className={`brief-env-group is-${group.id}`} role="group" aria-labelledby={`brief-env-${group.id}${group.asOf ? ` ${head}-d` : ''}`}>
-    <div className="brief-env-head">
-      <div className="brief-env-title"><h3 id={`brief-env-${group.id}`} tabIndex={-1}>{group.title}</h3><span>{group.question}</span></div>
-      {(group.fired > 0 || group.references > 0 || group.asOf) && <div className="brief-env-meta">
-        {group.fired > 0 && <span className="brief-env-state"><span aria-hidden="true">▲</span> 注意 {group.fired}</span>}
-        {group.references > 0 && <span className="brief-env-state is-reference"><span aria-hidden="true">○</span> 参考 {group.references}</span>}
-        {group.asOf && <span className="brief-env-asof" id={`${head}-d`}>{group.asOf}時点の値</span>}
-      </div>}
+    <div className={`brief-env-head${control ? ' has-control' : ''}`}>
+      <div className="brief-env-title"><h3 id={`brief-env-${group.id}`} tabIndex={-1}>{group.title}</h3>{control && meta ? <span className="brief-env-meta is-inline">{meta}</span> : <span>{group.question}</span>}</div>
+      {control || (meta && <div className="brief-env-meta">{meta}</div>)}
     </div>
     {caveat && <p className="brief-env-caveat">{caveat}</p>}
     {group.unavailable ? <p className="brief-missing">{group.unavailable}</p> : children}
@@ -271,9 +285,16 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
   const [indexKey, setIndexKey] = useSessionState('market-index', 'spx');
   const shown = view.series ? view.series.find(entry => entry.key === indexKey) || view.series[0] : null;
   const summary = shown ? shown.summary : view.summary;
+  // On a phone the switch sits beside the 指数 group's heading, in the slot of its marks and date (Group's `control`), and
+  // its pressed button names the series, so the chart's legend and the figures' first label drop the index's name
+  // (`named` false): the switch replaces content and adds no row. On the desktop it sits above the figures, which keep
+  // their names. A phone's short label is read out whole.
+  const indexSwitch = view.series ? <div className="brief-index-switch" role="group" aria-label="表示する指数">{view.series.map(entry => <button key={entry.key} type="button" aria-pressed={shown.key === entry.key}
+    aria-label={switcher ? entry.spoken : undefined} onClick={() => setIndexKey(entry.key)}>{switcher ? entry.short : entry.name}</button>)}</div> : null;
+  const named = !(switcher && indexSwitch);
   const chartEl = shown && shown.key !== 'spx'
-    ? <IndexChart closes={shown.closes} name={shown.name} distribution={shown.distribution} distributionEnd={shown.distributionEnd} followThrough={shown.followThrough} status={chartStatus} />
-    : <IndexChart closes={chart.sp500} distribution={chart.distribution} distributionEnd={chart.distributionEnd} followThrough={chart.followThrough} status={chartStatus} />;
+    ? <IndexChart closes={shown.closes} name={shown.name} distribution={shown.distribution} distributionEnd={shown.distributionEnd} followThrough={shown.followThrough} status={chartStatus} legendName={named} />
+    : <IndexChart closes={chart.sp500} distribution={chart.distribution} distributionEnd={chart.distributionEnd} followThrough={chart.followThrough} status={chartStatus} legendName={named} />;
   // Phone (switcher): a sticky row of section tabs under the verdict shows one group, or the long
   // history passed in as `history`, at a time; each tab carries its group's ▲ count, and a neutral 「?」
   // when the section holds a value or check that is not confirmed (`historyUnknown`: the long history's
@@ -303,9 +324,12 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
     switcher ? dating.lagDetail : null,
     view.summary && !conflict ? 'S&P 500の終値・1年高値からの位置・50日線比・200日線比は、長期履歴の^GSPC終値から計算しています。' : null,
     view.series ? study?.nasdaqSource : null,
+    // Closes the reader withdrew (readMarketTrends' closes_error): why there is no S&P／Nasdaq switch.
+    !view.series && view.nasdaqClosesError ? 'Nasdaq総合の終値は形式を確認できないため、指数の切替を表示しません。' : null,
     '各行を開くと、その値の基準（しきい値）と直近1年の推移を表示します。',
     `参加度・リーダーの値は、${SURVIVORSHIP_NOTE}です。`,
-    study?.ttPopulation,
+    // Whom TT達成数 counts, only beside a TT達成数 row that shows a value (said once, here).
+    view.ttShown ? study?.ttPopulation : null,
     signals?.tagNote ? `注意サインの印：${signals.tagNote}` : null,
     // The S&P's own reason (the long history's ^GSPC closes), whichever index the switch shows.
     view.summary && !finite(view.summary.vs200) ? '200日線比は、長期履歴に200日分の終値がないため未算出です。' : null,
@@ -348,11 +372,13 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
     <StatusAlert view={view} trends={trends} detail />
     {switcher && panels.length > 0 && <div ref={tabsRef} className="brief-switchbar"><SectionTabs panels={panels} active={active} onSelect={select} /></div>}
     <div className="brief-env-groups">
-      {groups.map(group => panel(group.id, <Group key={group.id} group={group} caveat={!switcher && (group.id === 'breadth' || group.id === 'leaders') ? SURVIVORSHIP_NOTE : null}>
+      {groups.map(group => panel(group.id, <Group key={group.id} group={group} caveat={!switcher && (group.id === 'breadth' || group.id === 'leaders') ? SURVIVORSHIP_NOTE : null} control={group.id === 'index' && switcher ? indexSwitch : null}>
         {group.id === 'index' && <div className="brief-index-block">
-          {view.series && <div className="brief-index-switch" role="group" aria-label="表示する指数">{view.series.map(entry => <button key={entry.key} type="button" aria-pressed={shown.key === entry.key} onClick={() => setIndexKey(entry.key)}>{entry.name}</button>)}</div>}
+          {!switcher && indexSwitch}
           {summary && <div className="brief-index-stats" role="group" aria-label={shown && shown.key !== 'spx' ? `${shown.name}（^IXICの日足、${shortDate(summary.date, date)}）` : `S&P 500（長期履歴の^GSPC終値、${shortDate(summary.date, date)}）`}>
-            <div><small>{shown ? shown.name : 'S&P 500'}</small><b className="numeric">{num(summary.close, 2)}</b><span>{shortDate(summary.date, date)}終値</span></div>
+            {/* With a phone's switch its pressed button names the index (the group's label keeps the full name): the cell reads 終値. */}
+            {named ? <div><small>{shown ? shown.name : 'S&P 500'}</small><b className="numeric">{num(summary.close, 2)}</b><span>{shortDate(summary.date, date)}終値</span></div>
+              : <div><small>終値</small><b className="numeric">{num(summary.close, 2)}</b><span>{shortDate(summary.date, date)}</span></div>}
             {/* A distance without its window is a dash, read out as 未算出 (the published Nasdaq position never had one), never 0. */}
             <div><small>{summary.fullYear ? '1年高値から' : '期間内高値から'}</small>{finite(summary.fromHigh) ? <b className="numeric">{signedPercent(summary.fromHigh)}</b> : <><b className="numeric" aria-hidden="true">—</b><span className="sr-only">未算出</span></>}</div>
             {/* The 200-day distance is the cell's second line, so the row keeps its height. */}

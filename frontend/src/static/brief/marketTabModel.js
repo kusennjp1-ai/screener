@@ -252,7 +252,7 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const tt = { ...count('tt', 'TT達成数', 'trendTemplateCount', 'trendTemplateCount', RULE_TEXT.template), ...(templateRule?.fired ? { warn: true, flag: `${ENV_RULES.templateSessions}日で${ENV_RULES.templateDropPercent}%以上減少` } : {}) };
   // The count's population, in the 200-day row's form (「観測100中61銘柄」): the long history's observed names that day.
   const ttHit = known('trendTemplateCount'), ttBase = ttHit && finite(ttHit.row.coverage) ? ttHit.row.coverage : null;
-  if (tt.valued && ttBase !== null) Object.assign(tt, { note: `観測${num(ttBase)}中${num(ttHit.value)}`, detail: [`観測${num(ttBase)}中${num(ttHit.value)}銘柄`, tt.detail].filter(Boolean).join('・'), details: study?.ttPopulation ? [study.ttPopulation] : [] });
+  if (tt.valued && ttBase !== null) Object.assign(tt, { note: `観測${num(ttBase)}中${num(ttHit.value)}`, detail: [`観測${num(ttBase)}中${num(ttHit.value)}銘柄`, tt.detail].filter(Boolean).join('・') });
   const leaderSubstitute = tt.missing && leaderHit ? count('leaderCount', '先導株数（価格条件）', 'leaderCount', 'leaderCount', RULE_TEXT.leaderCount) : null;
 
   const a200 = share('a200', '200日線より上', 'above200Percent', 'above200', 'movingAverages', RULE_TEXT.above200);
@@ -389,14 +389,19 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   ];
 
   // The 指数 panel's S&P／Nasdaq switch (market tab): the Nasdaq only from a publication that carries its closes. Its
-  // figures are the exporter's (study.nasdaqPosition: indexSummary on the same bars) or, without them, indexSummary on
-  // those closes; its marks are its own index series'.
+  // figures are the exporter's (study.nasdaqPosition: indexSummary on the same bars) only when they describe the line's
+  // last bar (the same date and close), else indexSummary on those closes, so the figures and the chart never disagree;
+  // its marks are its own index series'.
   const ndxCloses = ready ? indexCloses(ndx) : null;
+  const ndxPosition = study?.nasdaqPosition?.state, ndxLast = ndxCloses?.at(-1);
   const series = ndxCloses ? [
-    { key: 'spx', name: 'S&P 500', closes: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null, summary },
-    { key: 'ndx', name: 'Nasdaq総合', closes: ndxCloses, distribution: ndx, distributionEnd: distributionCount(ndx)?.date || null, followThrough: ndx?.followThrough ?? null,
-      summary: study?.nasdaqPosition?.state || indexSummary(ndxCloses) }] : null;
+    { key: 'spx', name: 'S&P 500', short: 'S&P', spoken: 'S&P 500', closes: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null, summary },
+    { key: 'ndx', name: 'Nasdaq総合', short: 'NAS', spoken: 'Nasdaq総合（NAS）', closes: ndxCloses, distribution: ndx, distributionEnd: distributionCount(ndx)?.date || null, followThrough: ndx?.followThrough ?? null,
+      summary: ndxPosition && ndxPosition.date === ndxLast.date && ndxPosition.close === ndxLast.close ? ndxPosition : indexSummary(ndxCloses) }] : null;
   return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons, series,
+    // Whether the TT達成数 row shows a value (its population note belongs beside it only then), and why the Nasdaq's
+    // published closes were withdrawn (readMarketTrends' closes_error: the switch is then missing for that reason).
+    ttShown: tt.valued === true, nasdaqClosesError: ready && typeof ndx?.closes_error === 'string' && ndx.closes_error ? ndx.closes_error : null,
     nasdaqFigures: ready && study?.nasdaqPosition?.state ? study.nasdaqFigures : null,
     // Today's deterioration notes and its split alert: a rule the study could not confirm is marked 参考 (○), never ▲.
     warnings: rules.filter(r => r.fired).map(({ key, text }) => ({ key, text, reference: isReference(key) })), split: split ? { ...split, reference: isReference('split') } : split, chart: { sp500: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null } };

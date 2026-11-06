@@ -76,12 +76,17 @@
 /* A phone's market tab says a lag in the heading's stamp slot: it may wrap (right-aligned) on the narrowest phones. */
 .brief-step > .brief-stamp.brief-lagstamp { flex: 0 1 auto; min-width: 0; white-space: normal; text-align: right; line-height: 16px; }
 
-/* The 指数 panel's S&P／Nasdaq switch: one index at a time, 44px targets on phones; no padding of its own, so it costs one
-   row of targets and nothing more. */
+/* The 指数 panel's S&P／Nasdaq switch: one index at a time, 44px targets on phones. The pressed index is inverted, as the
+   brief's own segmented control (.brief-seg) shows it, so the choice reads at a glance in both themes. Below 1024px it sits
+   beside the 指数 group's heading, in the slot of the group's marks and date, which then take the question's line under
+   the heading (.brief-env-meta.is-inline): the head stays 44px tall and the switch adds no row of its own. */
 .brief-index-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; min-width: 0; }
-.brief-index-switch button { min-width: 0; min-height: 44px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: none; color: var(--text-2); font: inherit; font-size: 13px; font-weight: 700; line-height: 1.3; white-space: nowrap; cursor: pointer; }
-.brief-index-switch button[aria-pressed="true"] { border-color: var(--line-2); background: var(--surface-2); color: var(--text); }
-.brief-index-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.brief-index-switch button { min-width: 0; min-height: 44px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 400; line-height: 1.3; white-space: nowrap; cursor: pointer; }
+.brief-index-switch button[aria-pressed="true"] { border-color: var(--text); background: var(--text); color: var(--ground); font-weight: 700; }
+.brief-index-switch button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.brief-env-head.has-control { align-items: center; }
+.brief-env-head.has-control > .brief-index-switch { flex: none; grid-template-columns: repeat(2, minmax(52px, auto)); }
+.brief-env-meta.is-inline { flex-direction: row; flex-wrap: wrap; align-items: baseline; gap: 0 8px; padding-top: 0; }
 @media (min-width: 768px) {
   .brief-index-switch { justify-self: start; grid-template-columns: repeat(2, minmax(120px, auto)); }
   .brief-index-switch button { min-height: 32px; }
