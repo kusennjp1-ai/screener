@@ -83,10 +83,54 @@ describe('stage from daily bars', () => {
     expect(stageFromBars(series(() => 50).slice(0, 100))).toBeNull();
   });
 
-  // The round-2 seam (plan §2.2) as step 0 leaves it: no phase is known yet, whatever the bars (CH11 writes it).
-  it('stagePhase names no phase at step 0', async () => {
-    const { stagePhase } = await import('./briefChartModel');
-    for (const bars of [series(i => 50 * 1.004 ** i), series(() => 50), series(() => 50).slice(0, 100), [], null, undefined]) expect(stagePhase(bars)).toBeNull();
+  // Round 2 (CH11, with backend stage_analysis.py): a sideways base above a rising 200-day line is stage 2 ('base').
+  // The audit's probe: 250 sessions at +0.35%/day, then a 7-week base contracting 15/8/4% and ending 1% under its high
+  // (200-day +5% over 19 bars, 60-bar slope 0.043%/day).
+  const vcpBase = (weeks = 7, depths = [15, 8, 4], { high = c => c * 1.005 } = {}) => {
+    const closes = []; let p = 50;
+    for (let i = 0; i < 250; i++) { p *= 1.0035; closes.push(p); }
+    const top = p, seg = Math.floor(weeks * 5 / depths.length);
+    for (const d of depths) for (let j = 0; j < seg; j++) closes.push(top * (1 - d / 100 * Math.sin(Math.PI * j / seg)));
+    closes[closes.length - 1] = top * 0.99;
+    return closes.map(close => ({ close, high: high(close) }));
+  };
+  it('reads the audit probe and a flat base after an advance as stage 2 with phase base', async () => {
+    const { stageFromBars, stagePhase, STAGE2_BASE_MAX_BELOW_HIGH_PERCENT } = await import('./briefChartModel');
+    expect(STAGE2_BASE_MAX_BELOW_HIGH_PERCENT).toBe(25);
+    for (const bars of [vcpBase(), vcpBase(10, [20, 10, 5])]) {
+      expect(stageFromBars(bars)).toBe(2);
+      expect(stagePhase(bars)).toBe('base');
+    }
+    // An advance still rising is stage 2 without a phase.
+    expect(stageFromBars(series(i => 50 * 1.004 ** i))).toBe(2);
+    expect(stagePhase(series(i => 50 * 1.004 ** i))).toBeNull();
+  });
+
+  it('keeps stage 3 for a flat or falling 200-day line, a close under the 150-day line with swings, or a base far from its high', async () => {
+    const { stageFromBars, stagePhase } = await import('./briefChartModel');
+    // Topping: above a 200-day line that has flattened.
+    const topping = series(i => (i < 200 ? 50 * 1.004 ** i : 50 * 1.004 ** 200 * (1 - (i - 200) * 0.0005)));
+    expect(stageFromBars(topping)).toBe(3);
+    expect(stagePhase(topping)).toBeNull();
+    const flatAbove = Array.from({ length: 400 }, (_, i) => ({ close: i < 300 ? 100 + 0.002 * i : 101.5 + Math.sin(i / 5) * 0.3, high: 102 }));
+    expect(stageFromBars(flatAbove)).not.toBe(2);
+    // Swinging between the 150-day and the still-rising 200-day line, the last close under the 150-day line.
+    const base = vcpBase(10, [20, 10, 5]);
+    const mean = (list, n) => list.slice(-n).reduce((sum, b) => sum + b.close, 0) / n;
+    const middle = (mean(base, 150) + mean(base, 200)) / 2;
+    const swings = [...base, ...Array.from({ length: 25 }, (_, i) => ({ close: middle * (1 + 0.012 * Math.sin(i / 2)), high: middle * 1.02 }))];
+    for (let k = 0; k < 5; k++) swings[swings.length - 1] = { close: (mean(swings, 150) + mean(swings, 200)) / 2, high: middle };
+    expect(swings.at(-1).close).toBeLessThan(mean(swings, 150));
+    expect(stageFromBars(swings)).toBe(3);
+    expect(stagePhase(swings)).toBeNull();
+    // The same closes with a 52-week high 40% above the last close: not a base.
+    const spiked = vcpBase().map((bar, i, all) => (i === all.length - 100 ? { ...bar, high: all.at(-1).close * 1.4 } : bar));
+    expect(stageFromBars(spiked)).toBe(3);
+    // Without 252 known highs the base is not claimed (as before: 3).
+    const noHighs = vcpBase().map(bar => ({ close: bar.close }));
+    expect(stageFromBars(noHighs)).toBe(3);
+    expect(stagePhase(noHighs)).toBeNull();
+    for (const bars of [[], null, undefined, series(() => 50).slice(0, 100)]) expect(stagePhase(bars)).toBeNull();
   });
 
   // The one reader of the published rs_line_high (plan §2.2), for the rows and the stock view alike.
