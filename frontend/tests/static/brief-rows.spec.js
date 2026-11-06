@@ -63,7 +63,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const count = async label => Number(await filter(label).locator('.numeric').innerText());
     await expect(filter('買いゾーン')).toHaveAttribute('aria-pressed', 'true');
     await expect(candidates(page)).toHaveCount(await count('買いゾーン'));
-    await expect(candidates(page).first()).toContainText('買いゾーン');
+    // The first row's chip may say the day's event (ピボット到達, 上抜け); its label keeps the position.
+    await expect(candidates(page).first()).toHaveAttribute('aria-label', /買いゾーン/);
     const zone = await symbolsShown(page);
     expect(zone).toContain('ZZNV');
 
@@ -119,9 +120,9 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   });
 
   // The day's event titles (breakoutEvent's copy); the call's colour for them is brief-decision.spec.js's.
-  test('a focus candidate that closes exactly at its pivot reaches it: ピボット到達, in the buy zone, no breakout claimed', async ({ page }) => {
+  test('a focus candidate that closes exactly at its pivot reaches it on the analysis date: ピボット到達, in the buy zone, no breakout claimed', async ({ page }) => {
     const { errors } = await openFocus(page, phone);
-    await expect(conclusion(page).locator('strong')).toHaveText('ピボット到達');
+    await expect(conclusion(page).locator('strong')).toHaveText(`${DAY}にピボット到達`);
     await expect(conclusion(page)).not.toContainText('上抜け');
     expect(errors).toEqual([]);
   });
@@ -344,6 +345,238 @@ test.describe('the watch list at 320px', () => {
       expect(row.height, row.symbol).toBeLessThanOrEqual(100);
       expect(row.lines, row.symbol).toBeLessThanOrEqual(2);
     }
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 2 (rows): the day's event in the rows' chip and the order within the buy zone, the questionable-base chip,
+// the TT chip without 「あと0」, the hidden breakout and EPS filters, 選定すべて's population, the pivot source, and
+// the minus sign, on synthetic variants.
+// ZZKS crosses its pivot from below on the synthetic day (+2.0%, 1.6×); ZZOD falls 1.0% on 1.6×: a heavy down day.
+const DAY_EVENTS = { rows: rows => {
+  for (const row of rows) {
+    if (row.symbol === 'ZZKS') row.se_pivot_price = Math.round(row.current_price * 0.99 * 100) / 100;
+    if (row.symbol === 'ZZOD') row.technical_audit.values.change = -1;
+  }
+} };
+// Questionable bases (独自判定): ZZNV 40% deep, ZZAR two weeks long, ZZHE far above its 50-day line; ZZSD's base is deep
+// too (its row also carries the broken setup's chip and あと1条件 on the watch tab).
+const BASES = { rows: rows => {
+  for (const row of rows) {
+    if (row.symbol === 'ZZNV') Object.assign(row, { se_base_depth_pct: 40.2, se_base_length_weeks: 6 });
+    if (row.symbol === 'ZZAR') Object.assign(row, { se_base_depth_pct: 12, se_base_length_weeks: 2 });
+    if (row.symbol === 'ZZHE') row.technical_audit.values.sma50 = row.current_price / 1.3;
+    if (row.symbol === 'ZZSD') Object.assign(row, { se_base_depth_pct: 38, se_base_length_weeks: 4 });
+  }
+} };
+const both = (...variants) => ({ rows: rows => { for (const variant of variants) variant.rows(rows); }, ...(variants.find(v => v.charts) ? { charts: variants.find(v => v.charts).charts } : {}) });
+// Every chip that ends a line leaves 6px of slack to the chip box's edge (rule 9), required chips included.
+const chipLines = page => candidates(page).evaluateAll(nodes => nodes.map(row => {
+  const box = row.querySelector('.brief-reasons').getBoundingClientRect();
+  const chips = [...row.querySelectorAll('.brief-reasons .brief-chip')].filter(chip => chip.getClientRects().length);
+  const ends = chips.filter((chip, i) => !chips[i + 1] || chips[i + 1].offsetTop !== chip.offsetTop);
+  return { symbol: row.dataset.symbol, height: row.getBoundingClientRect().height, lines: new Set(chips.map(chip => chip.offsetTop)).size,
+    out: chips.filter(chip => chip.getBoundingClientRect().right > box.right + 0.5).map(chip => chip.textContent), chips: chips.map(chip => chip.textContent),
+    slack: Math.min(...ends.map(chip => box.right - chip.getBoundingClientRect().right)) };
+}));
+/** Visible text with an ASCII hyphen directly before a digit (ISO dates and tickers aside): a negative figure must use U+2212. */
+const asciiMinus = page => page.evaluate(() => [...document.querySelectorAll('#brief-main *, .brief-bar *')].flatMap(node => {
+  const own = [...node.childNodes].filter(child => child.nodeType === Node.TEXT_NODE).map(child => child.textContent).join('');
+  return node.getClientRects().length && /(?:^|[\s(（:：$＄=＝~〜、,])-\$?\d/.test(own) ? [own.trim().slice(0, 40)] : [];
+}));
+
+test.describe('the day on the rows (390px)', () => {
+  test.use(VIEWPORTS.phone);
+  test('a breakout ranks first in the zone and a heavy down day last, each in its short form, on Today and the list', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { mutate: DAY_EVENTS });
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    expect(await focus.getByTestId('brief-candidate').evaluateAll(nodes => nodes.map(node => node.dataset.symbol))).toEqual(['ZZKS', 'ZZNV', 'ZZNH', 'ZZDM', 'ZZOD']);
+    await expect(focus.locator('[data-symbol="ZZKS"] .brief-chip').first()).toHaveText(`↗ ${DAY}上抜け 1.60×`);
+    await expect(focus.locator('[data-symbol="ZZKS"] .brief-chip').first()).toHaveClass(/tone-zone/);
+    await expect(focus.locator('[data-symbol="ZZNV"] .brief-chip').first()).toHaveText(`● ${DAY}ピボット到達`);
+    await expect(focus.locator('[data-symbol="ZZOD"] .brief-chip').first()).toHaveText('▲ 下落日の大商い 1.60×');
+    await expect(focus.locator('[data-symbol="ZZOD"] .brief-chip', { hasText: '出来高' })).toHaveCount(0);
+    await expect(focus.locator('[data-symbol="ZZOD"] .brief-chip').first()).toHaveClass(/tone-ext/);
+    // The breakout's chip carries its volume: no second volume chip on its row.
+    await expect(focus.locator('[data-symbol="ZZKS"] .brief-chip', { hasText: '出来高' })).toHaveCount(0);
+    // The 注目候補 tile says the day's breakouts and opens them, under a 44px chip that clears the filter.
+    const link = page.getByTestId('brief-breakout-link');
+    await expect(link).toHaveText('うち上抜け1 ›');
+    expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await link.click();
+    await expect(page).toHaveURL(/#\/brief\/list$/);
+    expect(await symbolsShown(page)).toEqual(['ZZKS']);
+    const chip = page.getByRole('button', { name: new RegExp(`^${DAY}の上抜け\\s*該当1・未確認0`) });
+    expect((await chip.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await chip.click();
+    await expect(page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(await symbolsShown(page)).toEqual(['ZZKS', 'ZZNV', 'ZZNH', 'ZZDM', 'ZZOD']);
+    expect(await asciiMinus(page)).toEqual([]);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a watched stock with conditions unconfirmed reads TT未確認（N条件）, never あと0', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': ['ZZNV', 'ZZZF'] }, mutate: { rows: rows => { rows.find(row => row.symbol === 'ZZZF').rs_rating = null; } } });
+    const row = page.getByRole('region', { name: 'ウォッチ中の銘柄' }).locator('[data-symbol="ZZZF"]');
+    await expect(row.locator('.brief-chip', { hasText: 'TT未確認' })).toHaveText('TT未確認（1条件）');
+    await expect(page.locator('#brief-main')).not.toContainText('あと0');
+    expect(errors).toEqual([]);
+  });
+
+  test('the 条件 menu opens the EPS filter, which counts the stocks it cannot tell apart, and the EPS sort puts them last', async ({ page }) => {
+    const summary = value => ({ sec_state: 'ok', eps_yoy: value === null ? null : { value, end: '2026-06-30' }, sales_yoy: null, code33: null, as_of_date: date });
+    const { errors } = await openBrief(page, '#/brief/list', { mutate: { rows: rows => {
+      rows.find(row => row.symbol === 'ZZAR').sec_summary = summary(40);
+      rows.find(row => row.symbol === 'ZZHE').sec_summary = summary(10);
+      rows.find(row => row.symbol === 'ZZTR').sec_summary = summary(null);
+    } } });
+    await page.getByRole('combobox', { name: '条件で絞り込む' }).selectOption('eps');
+    const chip = page.locator('.brief-filterchip');
+    await expect(chip).toContainText('EPS前年比≥25%（直近・SEC）該当1・未確認19');
+    expect(await symbolsShown(page)).toEqual(['ZZAR']);
+    await chip.click();
+    await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて/ }).click();
+    await expect(page.locator('.brief-population')).toHaveText('選定すべて：TT 8/8＋株価$10以上・売買代金$2,000万以上');
+    await page.getByRole('combobox', { name: '並び順' }).selectOption({ label: 'EPS前年比' });
+    expect((await symbolsShown(page)).slice(0, 2)).toEqual(['ZZAR', 'ZZHE']);
+    expect(errors).toEqual([]);
+  });
+
+  test('the stock names its pivot source: the pattern and its confidence, 未確認 when unknown', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZAR', { mutate: onRow('ZZAR', row => { Object.assign(row, { se_pattern_primary: 'cup_with_handle', se_pattern_confidence: 72.4 }); }) });
+    await expect(page.getByText('カップ・ウィズ・ハンドル（SE信頼度72）')).toBeVisible();
+    await page.goto('/#/brief/stock/ZZKS');
+    await expect(page.getByText('SE信頼度60', { exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});
+
+for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.desktop })) test.describe(`round-2 chips at ${width}px`, () => {
+  test.use(device);
+  for (const [screen, hash] of [['the list (買いゾーン, then 選定すべて)', '#/brief/list'], ['the watch tab with a broken setup', '#/brief/watch'], ['Today', '#/brief']]) test(`rows with the day's events and questionable bases stay 100px or less on two chip lines on ${screen}`, async ({ page }) => {
+    const watch = ['ZZNV', 'ZZZF', 'ZZSD', 'ZZKS', 'ZZOD', 'ZZAR'];
+    const { errors } = await openBrief(page, hash, { storage: { 'research-watch': watch }, mutate: { ...both(DAY_EVENTS, BASES), charts: served => breakBelow50(served['ZZSD.json'].bars) } });
+    await expect(candidates(page).first()).toBeVisible();
+    if (hash.endsWith('watch')) await expect(page.locator('[data-symbol="ZZSD"] .brief-chip', { hasText: '崩れ' })).toBeVisible();
+    const check = async () => {
+      await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+      const rows = await chipLines(page);
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row.height, `${row.symbol} ${row.chips.join(' | ')}`).toBeLessThanOrEqual(100);
+        expect(row.lines, `${row.symbol} ${row.chips.join(' | ')}`).toBeLessThanOrEqual(2);
+        expect(row.out, row.symbol).toEqual([]);
+        expect(row.slack, `${row.symbol} ${row.chips.join(' | ')}`).toBeGreaterThanOrEqual(6);
+      }
+      return rows;
+    };
+    const rows = await check();
+    // The base chip shows on the rows (the 候補 list, Today); on a phone's Today in its short form in the RS chip's
+    // place, so the row keeps the lines of ZZNH's, a zone row with the same chips and a normal base.
+    const todayPhone = hash === '#/brief' && width !== '1440';
+    if (!hash.endsWith('watch')) expect(rows.find(row => row.symbol === 'ZZNV').chips).toContain(todayPhone ? '土台−40%' : '土台6週・−40%');
+    if (todayPhone) expect([rows.find(row => row.symbol === 'ZZNV').lines, rows.find(row => row.symbol === 'ZZNV').height]).toEqual([rows.find(row => row.symbol === 'ZZNH').lines, rows.find(row => row.symbol === 'ZZNH').height]);
+    expect(await page.locator('[data-symbol="ZZNV"]').first().getAttribute('aria-label')).toContain('土台6週・−40%（Setup Engineの土台が深さ35%超（独自判定））');
+    if (hash.endsWith('list')) { await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて/ }).click(); await check(); }
+    expect(await asciiMinus(page)).toEqual([]);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Data's secRowChip stubbed notable on every row (as the published chip will be on many): the SEC chip gives way first,
+// so a questionable base keeps its chip on the list, at every width. The stub replaces the seam's body in the served
+// module (as a unit test mocks it); the copy asserted here is rows' own.
+const SEC_STUB = `export function secRowChip(row) { return row && row.sec_summary ? { text: 'EPS +152%・売上 +48%（26-06）', tone: 'zone', title: 'stub', notable: true } : null; }`;
+async function stubSecChip(page) {
+  await page.route('**/src/static/fundamentalsExplain.js*', async route => {
+    const response = await route.fetch();
+    return route.fulfill({ response, body: (await response.text()).replace(/export function secRowChip\([^)]*\) \{[\s\S]*?\n\}\n/, `${SEC_STUB}\n`) });
+  });
+}
+const WITH_SEC = { rows: rows => { for (const row of rows) row.sec_summary = { sec_state: 'ok', eps_yoy: { value: 152, end: '2026-06-30' }, sales_yoy: { value: 48, end: '2026-06-30' }, code33: null, as_of_date: date }; } };
+for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.desktop })) test.describe(`a questionable base beside the SEC chip at ${width}px`, () => {
+  test.use(device);
+  test('the base chip keeps its place on the list; the SEC chip gives way first', async ({ page }) => {
+    await stubSecChip(page);
+    const { errors } = await openBrief(page, '#/brief/list', { mutate: both(BASES, WITH_SEC) });
+    await expect(page.locator('[data-symbol="ZZNV"] .brief-chip', { hasText: '土台6週・−40%' })).toBeVisible();
+    await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+    const zznv = (await chipLines(page)).find(row => row.symbol === 'ZZNV');
+    expect(zznv.chips).toContain('土台6週・−40%');
+    // The SEC chip is on the rows that have the room (a phone at 390 has it on every row's second line).
+    if (width === '390') expect((await chipLines(page)).every(row => row.chips.some(chip => chip.startsWith('EPS +152%')) || row.symbol === 'ZZNV')).toBe(true);
+    for (const row of await chipLines(page)) {
+      expect([row.lines <= 2, row.height <= 100, row.slack >= 6], `${row.symbol} ${row.chips.join(' | ')}`).toEqual([true, true, true]);
+    }
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// A phone's Today: a 40%-deep zone row says its caution in the RS chip's place, on the row's one line (no line more).
+for (const [width, device] of [[375, { ...VIEWPORTS.phone, viewport: { width: 375, height: 812 } }], [390, VIEWPORTS.phone]]) test.describe(`Today's caution at ${width}px`, () => {
+  test.use(device);
+  test('a 40%-deep zone row shows 土台−40% on Today, as one line like its neighbours', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { mutate: BASES });
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.locator('[data-symbol="ZZNV"] .brief-chip', { hasText: '土台−40%' })).toBeVisible();
+    await expect(focus.locator('[data-symbol="ZZNV"] .brief-chip', { hasText: 'RS推計' })).toHaveCount(0);
+    expect(await focus.locator('[data-symbol="ZZNV"]').getAttribute('aria-label')).toContain('RS推計 ');
+    await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+    const rows = await chipLines(page);
+    const zznv = rows.find(row => row.symbol === 'ZZNV');
+    expect([zznv.lines, zznv.slack >= 6]).toEqual([1, true]);
+    expect(errors).toEqual([]);
+  });
+});
+
+// The 注目候補 tile's 「うち上抜けN」 has a strip of its own: a tap on the tile's counts opens the 注目候補 list, never the
+// breakout filter, and at 320 the count and its arrow share a line.
+for (const width of [320, 375, 390, 414]) test.describe(`the 注目候補 tile at ${width}px`, () => {
+  test.use({ ...VIEWPORTS.phone, viewport: { width, height: 812 } });
+  test('every count of the tile is the tile\'s own target, and the breakout link is 44px', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { mutate: DAY_EVENTS });
+    const link = page.getByTestId('brief-breakout-link');
+    await expect(link).toBeVisible();
+    await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+    const hits = await page.evaluate(() => [...document.querySelectorAll('.brief-summary .brief-tile em .brief-frag')].map(frag => {
+      const box = frag.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return { text: frag.textContent, tile: Boolean(hit?.closest('.brief-tile')), sub: Boolean(hit?.closest('.brief-tile-sub')) };
+    }));
+    expect(hits.length).toBeGreaterThan(0);
+    for (const hit of hits) expect([hit.text, hit.tile, hit.sub]).toEqual([hit.text, true, false]);
+    expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    // 「上抜け1 ›」 is one unbroken run: the count and the arrow on one line (only 「うち」 may sit above them).
+    expect(await link.locator('.brief-nowrap').evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].map(rect => Math.round(rect.bottom))).size; })).toBe(1);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// The 候補 filter line: the search's placeholder is never cut (the box leaves room for the clear button), and the sort
+// says 並び順 where its label is for assistive tech only (a phone and the desktop's left column).
+for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.desktop })) test.describe(`the 候補 filter line at ${width}px`, () => {
+  test.use(device);
+  test('the search placeholder fits its box and the sort reads 並び順 in its first option', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/list');
+    await expect(candidates(page).first()).toBeVisible();
+    const fit = await page.locator('.brief-search input').evaluate(input => {
+      const style = getComputedStyle(input), probe = document.createElement('span');
+      probe.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font:${style.font};letter-spacing:${style.letterSpacing}`;
+      probe.textContent = input.placeholder;
+      document.body.append(probe);
+      const text = probe.getBoundingClientRect().width;
+      probe.remove();
+      return { text, room: input.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) };
+    });
+    // 16px for the search field's clear button, which Chrome reserves beside the text.
+    expect(fit.text + 16, JSON.stringify(fit)).toBeLessThanOrEqual(fit.room);
+    await expect(page.getByRole('combobox', { name: '並び順' }).locator('option').first()).toHaveText('並び順：優先度');
+    expect(await page.getByRole('group', { name: '絞り込み' }).locator('xpath=..').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(0);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
