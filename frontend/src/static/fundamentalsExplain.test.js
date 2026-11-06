@@ -193,7 +193,8 @@ describe('the round-2 seams', () => {
     const chip = summary => secRowChip({ symbol: 'AAA', market: 'US', as_of_date: CONTRACT_DATE, sec_summary: summary });
     const both = (eps, sales, epsEnd = '2026-06-30', salesEnd = '2026-06-30') => ({ ...secSummaryShape, eps_yoy: eps === null ? null : { value: eps, end: epsEnd }, sales_yoy: sales === null ? null : { value: sales, end: salesEnd } });
     expect(chip(both(40, 100))).toEqual({ text: 'EPS +40%・売上 +100%（26-06期）', tone: 'zone', title: expect.stringContaining('独自設定'), notable: true });
-    expect(chip(both(40, 100, '2026-03-31'))).toMatchObject({ text: 'EPS +40%（26-03）・売上 +100%（26-06）', tone: 'zone' });
+    expect(chip(both(40, 100, '2026-03-31'))).toMatchObject({ text: 'EPS 26-03 +40%・売上 26-06 +100%', tone: 'zone' });
+    expect(chip(both(-35, 100, '2026-03-31'))).toMatchObject({ text: 'EPS 26-03 −35%・売上 26-06 +100%', tone: '', notable: true });
     expect(chip(both(25, 25))).toMatchObject({ tone: 'zone', notable: true });
     expect(chip(both(24.9, 100))).toMatchObject({ text: 'EPS +25%・売上 +100%（26-06期）', tone: '', notable: false });
     // A falling EPS is notable, in the neutral tone, with U+2212.
@@ -220,7 +221,7 @@ describe('the round-2 seams', () => {
     const report = bookFinancialEvidence(secRecord(), 'TEST', date);
     expect(earningsChipView({ report, sec: { state: 'ok' }, code33: { state: 'pass' } })).toEqual({ text: 'EPS +80%・売上 +100%（25-12期）', tone: 'zone', title: expect.stringContaining('独自設定') });
     const tenQ = secRecord(); tenQ.quarterly.eps = tenQ.quarterly.eps.filter(p => !p.end.endsWith('12-31'));
-    expect(earningsChipView({ report: bookFinancialEvidence(tenQ, 'TEST', date), sec: { state: 'ok' } }).text).toBe('EPS +40%（25-09）・売上 +100%（25-12）');
+    expect(earningsChipView({ report: bookFinancialEvidence(tenQ, 'TEST', date), sec: { state: 'ok' } }).text).toBe('EPS 25-09 +40%・売上 25-12 +100%');
     expect(earningsChipView({ report: null, sec: { state: 'stale', short: '古い', long: '…' } })).toMatchObject({ text: '業績 未確認・古い', tone: '' });
     expect(earningsChipView({ report: null, sec: { state: 'not_published', short: 'SEC 未配信' } }).text).toBe('業績 未確認・SEC未配信');
     expect(earningsChipView({ report: null, sec: { state: 'invalid_payload', short: 'SEC 検証不可' } }).text).toBe('業績 未確認・SEC検証不可');
@@ -243,15 +244,15 @@ describe('the round-2 seams', () => {
 
   it('fundamentalsCoverageWarning: one line only when the block has warnings, no same-day fetch ran or its input is for another day', () => {
     const warn = (extra, day = DATE) => fundamentalsCoverageWarning(block(extra), { date: day });
-    const text = '業績データ：この公開のSEC記録は540/1200銘柄 — 業績の判定は未確認が多くなります';
+    const text = '業績データ：この公開のSEC記録は540/1200銘柄 — 業績の判定は未確認が多くなります', short = '業績データ：SEC記録は540/1200銘柄';
     // A block without problems (or an older one without the warnings list) says nothing.
     expect(warn({ warnings: [] })).toBeNull();
     expect(warn({})).toBeNull();
-    for (const code of COVERAGE_WARNINGS) expect(warn({ warnings: [code] })).toEqual({ text });
-    expect(warn({ sec_as_of: '2026-11-02' })).toEqual({ text });
-    expect(warn({ warnings: ['no_quarters'], with_quarters: 0 })).toEqual({ text: '業績データ：この公開のSEC記録は0/1200銘柄 — 業績の判定は未確認が多くなります' });
+    for (const code of COVERAGE_WARNINGS) expect(warn({ warnings: [code] })).toEqual({ text, short });
+    expect(warn({ sec_as_of: '2026-11-02' })).toEqual({ text, short });
+    expect(warn({ warnings: ['no_quarters'], with_quarters: 0 })).toEqual({ text: '業績データ：この公開のSEC記録は0/1200銘柄 — 業績の判定は未確認が多くなります', short: '業績データ：SEC記録は0/1200銘柄' });
     // No same-day fetch: no target count, so the publication's rows are the denominator.
-    expect(warn({ sec_fetch_ran: false, sec_as_of: null, eligible: null, requested: null, admitted: 0, with_quarters: 0, refused: 0, refused_by_reason: {} })).toEqual({ text: '業績データ：この公開のSEC記録は0/993銘柄 — 業績の判定は未確認が多くなります' });
+    expect(warn({ sec_fetch_ran: false, sec_as_of: null, eligible: null, requested: null, admitted: 0, with_quarters: 0, refused: 0, refused_by_reason: {} })).toEqual({ text: '業績データ：この公開のSEC記録は0/993銘柄 — 業績の判定は未確認が多くなります', short: '業績データ：SEC記録は0/993銘柄' });
     expect(fundamentalsCoverageWarning(null, { date: DATE })).toBeNull();
     expect(warn({ warnings: ['refused'] }).text).not.toMatch(/通常|いつも|普段/);
     // The block it reads comes through publishedFundamentalsCoverage, which accepts the list only with known codes.

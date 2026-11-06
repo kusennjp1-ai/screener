@@ -359,15 +359,17 @@ export const EARNINGS_CHIP_PERCENT = 25;
 const growth = value => signed(value, 0);
 /**
  * The facts of the two growth rates with each period: 「EPS +40%・売上 +100%（26-06期）」 when both quarters are the
- * same, else 「EPS +40%（26-03）・売上 +100%（26-06）」; an unknown one reads 未確認 beside the known one's period. Tone zone (and notable) only
- * when both are at EARNINGS_CHIP_PERCENT or more; a falling EPS is notable in the neutral tone.
+ * same, else each period before its value, as the card lists quarters (「EPS 26-03 +40%・売上 26-06 +100%」); an unknown
+ * one reads 未確認 beside the known one's period. Tone zone (and notable) only when both are at EARNINGS_CHIP_PERCENT or
+ * more; a falling EPS is notable in the neutral tone.
  */
 function earningsFacts(eps, sales) {
   if (!eps && !sales) return null;
-  // Two periods are named without 期 after each value, so the chip stays short on a phone.
-  const own = point => `（${point.end.slice(2, 7)}）`;
+  // Two periods go before their values without brackets or 期 (217px at 375, where the bracketed form took 259px and a
+  // chip line of its own beside RS推計 in the conclusion).
+  const own = point => point.end.slice(2, 7);
   const text = eps && sales && eps.end === sales.end ? `EPS ${growth(eps.value)}・売上 ${growth(sales.value)}（${yyMm(eps.end)}）`
-    : eps && sales ? `EPS ${growth(eps.value)}${own(eps)}・売上 ${growth(sales.value)}${own(sales)}`
+    : eps && sales ? `EPS ${own(eps)} ${growth(eps.value)}・売上 ${own(sales)} ${growth(sales.value)}`
       : `${eps ? `EPS ${growth(eps.value)}（${yyMm(eps.end)}）` : 'EPS 未確認'}・${sales ? `売上 ${growth(sales.value)}（${yyMm(sales.end)}）` : '売上 未確認'}`;
   const strong = Boolean(eps && sales && eps.value >= EARNINGS_CHIP_PERCENT && sales.value >= EARNINGS_CHIP_PERCENT);
   const title = `前年同期比（SEC XBRL・独自設定：EPS・売上とも${EARNINGS_CHIP_PERCENT}%以上で緑）`;
@@ -431,7 +433,8 @@ export function earningsCaution(financial) {
  * `coverage` is publishedFundamentalsCoverage's block (or null), `date` the analysis date. `{ text }` only when the
  * block has warnings (COVERAGE_WARNINGS, written by the export), no same-day SEC fetch ran, or its SEC input is for
  * another day; an older block without the warnings list is judged on the last two only. The counts are this
- * publication's own (records with quarters of the fetch's targets); no usual share is claimed.
+ * publication's own (records with quarters of the fetch's targets); no usual share is claimed. `short` is the same
+ * counts in one phone line (「業績データ：SEC記録は801/1024銘柄」, plan RW10), for a screen that keeps `text` in its title.
  */
 export function fundamentalsCoverageWarning(coverage, { date = null } = {}) {
   if (!coverage || typeof coverage !== 'object') return null;
@@ -439,5 +442,6 @@ export function fundamentalsCoverageWarning(coverage, { date = null } = {}) {
   if (!problem || !known(coverage.with_quarters)) return null;
   const total = known(coverage.eligible) && coverage.eligible > 0 ? coverage.eligible : coverage.universe;
   if (!known(total)) return null;
-  return { text: `業績データ：この公開のSEC記録は${coverage.with_quarters}/${total}銘柄 — 業績の判定は未確認が多くなります` };
+  const counts = `${coverage.with_quarters}/${total}銘柄`;
+  return { text: `業績データ：この公開のSEC記録は${counts} — 業績の判定は未確認が多くなります`, short: `業績データ：SEC記録は${counts}` };
 }
