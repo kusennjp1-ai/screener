@@ -65,22 +65,34 @@ describe('tags', () => {
 
   it('maps every warning-summary check to its study indicator (tested here, never by name matching)', () => {
     expect(Object.fromEntries(Object.entries(SIGNAL_INDICATORS).map(([key, map]) => [key, map.breadth || `${map.symbol}.${map.suffix}:${map.state}`]))).toEqual({
-      'dist-S&P': '^GSPC.dd.binary:warn', 'dist-NAS': '^IXIC.dd.binary:warn', 'ftd-S&P': '^GSPC.ftd.state:ftd_failed', 'ftd-NAS': '^IXIC.ftd.state:ftd_failed',
+      'dist-S&P': '^GSPC.dd.graded:count', 'dist-NAS': '^IXIC.dd.graded:count', 'ftd-S&P': '^GSPC.ftd.state:ftd_failed', 'ftd-NAS': '^IXIC.ftd.state:ftd_failed',
       split: 'rule.split', lows: 'rule.lows', template: 'rule.template', stage: 'rule.stage', leaders: 'rule.leaders', breakout: 'rule.breakout' });
-    expect(Object.fromEntries(Object.keys(SIGNAL_INDICATORS).map(key => [key, signalTags(reference, key, METHODS)]))).toEqual({
-      'dist-S&P': ['〔S&Pのみ〕'], 'dist-NAS': ['〔未確立〕'], 'ftd-S&P': ['〔S&Pのみ〕', '〔偏り〕'], 'ftd-NAS': ['〔未確立〕'],
+    expect(Object.fromEntries(Object.keys(SIGNAL_INDICATORS).map(key => [key, signalTags(reference, key, { ...METHODS, distributionCount: 5 })]))).toEqual({
+      'dist-S&P': ['〔未確立〕'], 'dist-NAS': ['〔未確立〕'], 'ftd-S&P': ['〔S&Pのみ〕', '〔偏り〕'], 'ftd-NAS': ['〔未確立〕'],
       split: ['〔参考〕'], lows: ['〔参考〕'], template: ['〔参考〕'], stage: ['〔参考〕'], leaders: ['〔参考〕'], breakout: ['〔参考〕'] });
     // An index check whose published method is not the study's, or unknown, gets no tag; nor a follow-through judged
-    // on another window than the study's.
-    expect(signalTags(reference, 'dist-S&P', { ...METHODS, distribution: 'other-v1' })).toEqual([]);
+    // on another window than the study's; nor a distribution check without its count.
+    expect(signalTags(reference, 'dist-S&P', { ...METHODS, distribution: 'other-v1', distributionCount: 7 })).toEqual([]);
+    expect(signalTags(reference, 'dist-S&P', METHODS)).toEqual([]);
+    expect(signalTags(reference, 'dist-S&P', { ...METHODS, distributionCount: null })).toEqual([]);
     expect(signalTags(reference, 'ftd-S&P', {})).toEqual([]);
     expect(signalTags(reference, 'ftd-S&P', { ...METHODS, followThroughWindow: 279 })).toEqual([]);
-    expect(signalTags(reference, 'dist-S&P', { ...METHODS, followThroughWindow: 279 })).toEqual(['〔S&Pのみ〕']);
+    expect(signalTags(reference, 'dist-S&P', { ...METHODS, followThroughWindow: 279, distributionCount: 7 })).toEqual(['〔S&P・Nasdaqとも〕']);
     expect(signalTags(reference, 'unknown-check', METHODS)).toEqual([]);
     expect(signalTags(null, 'lows', METHODS)).toEqual([]);
     // A breadth rule the study found robust is not 〔参考〕.
     const ref = copy(); ref.breadth['rule.lows'].labelDd5 = 'robust';
     expect([signalTags(ref, 'lows', METHODS), signalTags(ref, 'split', METHODS)]).toEqual([[], ['〔参考〕']]);
+  });
+
+  it('tags a fired distribution count by its graded bucket, as the 過去の傾向 line of that count (MK2)', () => {
+    // 5–6 days: the reference's 5-6 bucket is not established on either index; 7 or more is robust on both.
+    for (const [count, tag] of [[5, '〔未確立〕'], [6, '〔未確立〕'], [7, '〔S&P・Nasdaqとも〕'], [9, '〔S&P・Nasdaqとも〕']]) for (const [key, symbol] of [['dist-S&P', '^GSPC'], ['dist-NAS', '^IXIC']]) {
+      const state = ddGradeState(count, reference);
+      expect(signalTags(reference, key, { ...METHODS, distributionCount: count }), `${key} ${count}`)
+        .toEqual([stateTag(reference, 'dd.graded', symbol, state), biasTag(referenceState(reference, `${symbol}.dd.graded`, state))].filter(Boolean));
+      expect(signalTags(reference, key, { ...METHODS, distributionCount: count })[0], `${key} ${count}`).toBe(tag);
+    }
   });
 });
 

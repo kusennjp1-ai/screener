@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
-import { basisConflict, delta, groupDate, historyTakeaway, indexSummary, marketCardView, marketDating, pointChange, rangePosition, RULE_TEXT, sectorRanks, signedPercent, verdictBasis, yearRange } from './marketTabModel';
+import { basisConflict, delta, groupDate, historyTakeaway, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, regimeCause, REGIME_NAMES, RULE_TEXT, sectorRanks, signedPercent, TT_POPULATION, verdictBasis, yearRange } from './marketTabModel';
 import { marketRegimeContext, marketTabStudy, nasdaqNote, publishedIndexState, regimeKey, signalTagText, TAG_MEANINGS } from '../reference/marketTabStudy.js';
 import reference from '../reference/market-regime-reference-v1.json' with { type: 'json' };
 import exchange from '../__fixtures__/nyse-sessions-2024-2026.json' with { type: 'json' };
@@ -25,7 +25,8 @@ describe('market tab view model: a complete, current publication', () => {
       ['breadth', '市場の参加度', ['a200', 'a50', 'extremes', 'tt']],
       ['leaders', 'リーダーの健全性', ['rs90', 'breakout', 'health', 'stage']]]);
     for (const g of model.groups) expect([g.asOf, g.missing, g.unavailable, g.fired]).toEqual([null, null, null, 0]);
-    expect(item(model, 'tt')).toMatchObject({ b: '30銘柄', change: '+5', detail: '1か月前 25銘柄', asOf: null, rule: RULE_TEXT.template, metric: 'trendTemplateCount' });
+    // The count names its population in the 200-day row's form (MK10), and its opened row says whom it counts.
+    expect(item(model, 'tt')).toMatchObject({ b: '30銘柄', change: '+5', note: '観測200中30', detail: '観測200中30銘柄・1か月前 25銘柄', details: [TT_POPULATION], asOf: null, rule: RULE_TEXT.template, metric: 'trendTemplateCount' });
     expect(item(model, 'a200')).toMatchObject({ b: '45.0%', change: '+5.0pt', detail: '観測200中90銘柄・1か月前 40.0%', metric: 'movingAverages' });
     expect(item(model, 'rs90')).toMatchObject({ b: '8銘柄', change: '−2' });
     expect(item(model, 'breakout')).toMatchObject({ b: '75%', note: '8件で判定', detail: '10〜29営業日前の上抜け8件のうち6件が10日間で−7%に届かず', warn: false });
@@ -330,17 +331,19 @@ describe('market tab: 過去の傾向 (market-regime study block)', () => {
     const summary = indexSummary(fixtureCloses());
     expect([summary.vsMa, summary.vs200, summary.fromHigh].map(v => v.toFixed(2))).toEqual(['3.48', '1.73', '-5.29']);
     const ctx = context(regimeTrends());
-    expect(ctx.summary).toBe('過去の傾向（1990〜2026年・予測ではありません）');
+    // One line on what the lines say (MK5): the confirmed states whose share of declines was above or below their comparator.
+    expect(ctx.summary).toBe('過去の傾向：下げが多かった状態 1・少なかった状態 2（1990〜2026年）');
     const [quadrant, high, dd, ftd] = ctx.indices[0].items;
-    expect(quadrant).toMatchObject({ indicator: '^GSPC.ma.quadrant', state: 'above_both', stateDate: '2026-10-02', pDd5: 10, comparator: 'baseline', comparatorLabel: '全期間', comparatorPDd5: 16, tag: '〔S&P・Nasdaqとも〕', biasTag: null });
-    expect(high).toMatchObject({ indicator: '^GSPC.high.near', state: 'below', pDd5: 29, comparator: 'other_state', comparatorLabel: '5%以内', comparatorPDd5: 11, tag: '〔S&P・Nasdaqとも〕' });
+    expect(quadrant).toMatchObject({ indicator: '^GSPC.ma.quadrant', state: 'above_both', stateDate: '2026-10-02', pDd5: 10, comparator: 'baseline', comparatorLabel: '全期間', comparatorPDd5: 16, tag: '〔S&P・Nasdaqとも〕', biasTag: null, direction: 'lower' });
+    expect(high).toMatchObject({ indicator: '^GSPC.high.near', state: 'below', pDd5: 29, comparator: 'other_state', comparatorLabel: '5%以内', comparatorPDd5: 11, tag: '〔S&P・Nasdaqとも〕', direction: 'higher' });
     expect(high.edgeDistance).toBeCloseTo(0.29, 2);
-    expect(dd).toMatchObject({ indicator: '^GSPC.dd.graded', state: '3-4', pDd5: 15, comparatorPDd5: 17, tag: '〔未確立〕' });
-    expect(ftd).toMatchObject({ indicator: '^GSPC.ftd.state', state: 'confirmed', pDd5: 19, tag: '〔未確立〕', biasTag: '〔偏り〕' });
+    // A line that is not established on its own index says no direction (〔未確立〕).
+    expect(dd).toMatchObject({ indicator: '^GSPC.dd.graded', state: '3-4', pDd5: 15, comparatorPDd5: 17, tag: '〔未確立〕', direction: null });
+    expect(ftd).toMatchObject({ indicator: '^GSPC.ftd.state', state: 'confirmed', pDd5: 19, tag: '〔未確立〕', biasTag: '〔偏り〕', direction: null });
     expect(lines(ctx)).toEqual([
-      ['S&P 500', ['50日線・200日線の上（10/2時点）：21営業日以内に5%以上下げた割合 10%（全期間 16%）〔S&P・Nasdaqとも〕', '1年高値から5%超の下（10/2時点・境界まで0.3%）：29%（5%以内 11%）〔S&P・Nasdaqとも〕',
+      ['S&P 500', ['50日線・200日線の上（10/2時点）：21営業日以内に5%以上下げた割合 10%（全期間 16%より少ない）〔S&P・Nasdaqとも〕', '1年高値から5%超の下（10/2時点・境界まで0.3%）：29%（5%以内 11%より多い）〔S&P・Nasdaqとも〕',
         '分配日3〜4日（10/2時点）：15%（全期間 17%）〔未確立〕', 'FTD確認後（10/2時点）：19%（全期間 16%）〔未確立〕〔偏り〕']],
-      ['Nasdaq総合', ['50日線・200日線との位置：旧形式の公開データに未収録', '1年高値との位置：旧形式の公開データに未収録', '分配日3〜4日（10/2時点）：23%（全期間 26%）〔Nasdaqのみ〕', '反発中（FTD判定・10/2時点）：32%（全期間 26%）〔未確立〕']]]);
+      ['Nasdaq総合', ['50日線・200日線との位置：旧形式の公開データに未収録', '1年高値との位置：旧形式の公開データに未収録', '分配日3〜4日（10/2時点）：23%（全期間 26%より少ない）〔Nasdaqのみ〕', '反発中（FTD判定・10/2時点）：32%（全期間 26%）〔未確立〕']]]);
     // Each valued line keeps its comparator and its tags as parts, so neither breaks across lines on screen.
     expect(ftd.parts).toEqual({ body: 'FTD確認後（10/2時点）：19%', comparator: '（全期間 16%）', tags: ['〔未確立〕', '〔偏り〕'] });
     expect(ctx.indices.flatMap(block => block.items).filter(item => item.parts).every(item => item.text === `${item.parts.body}${item.parts.comparator || ''}${item.parts.tags.join('')}`)).toBe(true);
@@ -379,8 +382,8 @@ describe('market tab: 過去の傾向 (market-regime study block)', () => {
       expect(item.text.split('：')[1].match(/(?<![\d.])\d+%(?!以内|超|以上)/g)).toEqual([`${Math.round(row.pDd5)}%`, `${Math.round(row.comparatorPDd5)}%`]);
     }
     // FTD confirmed 12 sessions ago adds its own study row (combo.ftd_recent), compared with every other judged state.
-    expect(ctx.indices[0].items.at(-1)).toMatchObject({ indicator: '^GSPC.combo.ftd_recent', state: 'recent', pDd5: 26, comparatorLabel: 'それ以外', comparatorPDd5: 15, tag: '〔S&Pのみ〕' });
-    expect(ctx.indices[1].items.slice(0, 2).map(item => item.text)).toEqual(['50日線・200日線の下（10/2時点）：46%（全期間 26%）〔S&P・Nasdaqとも〕〔偏り〕', '1年高値から5%超の下（10/2時点・境界まで4.0%）：35%（5%以内 19%）〔S&P・Nasdaqとも〕']);
+    expect(ctx.indices[0].items.at(-1)).toMatchObject({ indicator: '^GSPC.combo.ftd_recent', state: 'recent', pDd5: 26, comparatorLabel: 'それ以外', comparatorPDd5: 15, tag: '〔S&Pのみ〕', direction: 'higher' });
+    expect(ctx.indices[1].items.slice(0, 2).map(item => item.text)).toEqual(['50日線・200日線の下（10/2時点）：46%（全期間 26%より多い）〔S&P・Nasdaqとも〕〔偏り〕', '1年高値から5%超の下（10/2時点・境界まで4.0%）：35%（5%以内 19%より多い）〔S&P・Nasdaqとも〕']);
     for (const text of [...lines(ctx).flatMap(([, items]) => items), ctx.summary, ctx.footer, ctx.key]) { expect(text).not.toMatch(BANNED); expect(text).not.toMatch(/今日|平常/); }
   });
 
@@ -413,10 +416,10 @@ describe('market tab: 過去の傾向 (market-regime study block)', () => {
     const ctx = context(regimeTrends({ follow: [recent, attempt('2026-10-02')], sessions: [WINDOW - 1, WINDOW + 1] }));
     expect(ctx.indices.map(block => block.items.slice(2).map(item => item.text))).toEqual([
       ['分配日3〜4日（10/2時点）：15%（全期間 17%）〔未確立〕', 'FTD判定（10/2時点）：判定期間が検証（280営業日）と異なるため表示しません'],
-      ['分配日3〜4日（10/2時点）：23%（全期間 26%）〔Nasdaqのみ〕', 'FTD判定（10/2時点）：判定期間が検証（280営業日）と異なるため表示しません']]);
-    // Nor the FTD-failure tag on the warning summary.
+      ['分配日3〜4日（10/2時点）：23%（全期間 26%より少ない）〔Nasdaqのみ〕', 'FTD判定（10/2時点）：判定期間が検証（280営業日）と異なるため表示しません']]);
+    // Nor the FTD-failure tag on the warning summary. The distribution check's tag is its count's graded bucket (3 days: 3–4).
     const failing = regimeTrends({ follow: [failed('2026-10-02'), failed('2026-10-02')], sessions: [WINDOW - 1, WINDOW] });
-    expect([study(failing).signalTags['ftd-S&P'], study(failing).signalTags['ftd-NAS'], study(failing).signalTags['dist-S&P']]).toEqual([[], ['〔未確立〕'], ['〔S&Pのみ〕']]);
+    expect([study(failing).signalTags['ftd-S&P'], study(failing).signalTags['ftd-NAS'], study(failing).signalTags['dist-S&P']]).toEqual([[], ['〔未確立〕'], ['〔未確立〕']]);
   });
 
   it('reads the Nasdaq position only from a published state, as 未収録 without one and never as 0', () => {
@@ -455,11 +458,14 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
   it('tags each fired check from the reference, with 〔偏り〕; the 〔参考〕 legend only when a 〔参考〕 tag is shown', () => {
     const value = failing();
     const model = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
-    expect(model.signals.fired.map(c => [c.key, c.tags])).toEqual([['dist-S&P', ['〔S&Pのみ〕']], ['dist-NAS', ['〔未確立〕']], ['ftd-S&P', ['〔S&Pのみ〕', '〔偏り〕']], ['ftd-NAS', ['〔未確立〕']], ['lows', ['〔参考〕']]]);
+    // A fired distribution check takes its count's graded bucket (MK2): S&P 6 days is 5–6, NAS 7 days is 7 or more.
+    expect(model.signals.fired.map(c => [c.key, c.tags])).toEqual([['dist-S&P', ['〔未確立〕']], ['dist-NAS', ['〔S&P・Nasdaqとも〕']], ['ftd-S&P', ['〔S&Pのみ〕', '〔偏り〕']], ['ftd-NAS', ['〔未確立〕']], ['lows', ['〔参考〕']]]);
     expect(model.signals.legend).toBe('〔参考〕＝2021〜26年の検証で関係未確認');
     expect(model.signals.tagNote).toBe('〔参考〕は、2021〜2026年の参加度データ（現在の銘柄で過去をさかのぼった集計・上場廃止銘柄を含まない）の検証で、その後の指数の下げとの関係を確認できなかった注意サインです（全体として偶然と区別できない結果）。'
-      + '〔S&Pのみ〕〔未確立〕は、1990〜2026年の指数の日足で、その状態のあと21営業日以内に5%以上下げた割合を調べた結果です（〔S&Pのみ〕はS&Pでのみ確認、〔未確立〕はその指数では確認できず、〔偏り〕はその状態の日の60%以上が検証期間の前半か後半に集中）。'
-      + '確認は、偶然では説明しにくい差（p≤0.05）が、期間の前半・後半とも同じ向きで出たことです。注意サインの基準と目安は変えていません。');
+      + '〔S&P・Nasdaqとも〕〔S&Pのみ〕〔未確立〕は、1990〜2026年の指数の日足で、その状態のあと21営業日以内に5%以上下げた割合を調べた結果です（〔S&P・Nasdaqとも〕は両指数で確認、〔S&Pのみ〕はS&Pでのみ確認、〔未確立〕はその指数では確認できず、〔偏り〕はその状態の日の60%以上が検証期間の前半か後半に集中）。'
+      + '確認は、偶然では説明しにくい差（p≤0.05）が、期間の前半・後半とも同じ向きで出たことです。');
+    // That the signs never change the guide is said once, in the guide's own disclosure (MK6), not after the tags.
+    expect(model.signals.tagNote).not.toContain('目安');
     // Index checks only: no 〔参考〕 legend.
     const indexOnly = { ...value, data: { ...value.data, long_history: { as_of_date: '2026-10-02', breadth: breadth('2026-10-02'), sp500: [] } } };
     const indexModel = marketCardView({ market: UP, trends: indexOnly, date: '2026-10-02', study: study(indexOnly) });
@@ -477,7 +483,8 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
 
   it('defines every tag the summary shows, whatever a rebuilt reference labels', () => {
     const ref = structuredClone(reference);
-    ref.indicators['^IXIC.dd.binary'].states.warn.labelDd5 = 'robust';
+    ref.indicators['^GSPC.dd.graded'].states['5-6'].labelDd5 = 'robust';
+    ref.indicators['^IXIC.dd.graded'].states['5-6'].labelDd5 = 'robust';
     ref.indicators['^IXIC.ftd.state'].states.ftd_failed.labelDd5 = 'insufficient';
     ref.breadth['rule.lows'].labelDd5 = 'robust';
     const value = failing(), model = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value, '2026-10-02', ref) });
@@ -520,5 +527,90 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
     const ftd = view(trends()).groups[0].items.find(i => i.key === 'ftd');
     expect(ftd.rows[0]).toMatchObject({ name: 'S&P', b: '確認 8/7' });
     expect(ftd.rows[0].tone).toBeUndefined();
+  });
+});
+
+// ---- Round 2: the judge side's cause, 参考 counted apart, the Nasdaq's closes ------------------------------------------
+describe('market tab: the basis line names the judge side\'s cause (MK1, MK4)', () => {
+  const DATE = '2026-10-02';
+  const block = (over = {}) => ({ as_of_date: DATE, regime: 'uptrend_under_pressure', distribution_days: 4, ftd_date: null, ftd_days_since: null, exposure_pct: 55, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows', ...over });
+  const manifest = context => ({ as_of_date: DATE, markets: { US: { as_of_date: DATE, ...(context === undefined ? {} : { market_context: context }) } } });
+  const below50 = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
+  const below200 = { label: '長期トレンド警戒', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
+  const verdict = (market, value) => marketCardView({ market, trends: trends(), date: DATE, manifest: value }).verdict;
+
+  it('says an FTD-upgraded uptrend keeps the guide at 0%, with the FTD\'s date only from the judge side', () => {
+    const upgraded = block({ regime: 'confirmed_uptrend', distribution_days: 1, ftd_date: '2026-09-18', ftd_days_since: 10, exposure_pct: 40 });
+    expect(verdict(below50, manifest(upgraded)).cause).toBe('局面判定はFTDによる上昇トレンド（9/18）。この目安はSPYが50日線の下のため0%（独自判定）');
+    expect(verdict(below200, manifest(upgraded)).cause).toBe('局面判定はFTDによる上昇トレンド（9/18）。この目安はSPYが200日線の下のため0%（独自判定）');
+    // Without the block (an older publication) or with a null date, the date is left out, never guessed from ^GSPC.
+    expect(verdict(below50, manifest()).cause).toBe('局面判定はFTDによる上昇トレンド。この目安はSPYが50日線の下のため0%（独自判定）');
+    expect(verdict(below50, null).cause).toBe('局面判定はFTDによる上昇トレンド。この目安はSPYが50日線の下のため0%（独自判定）');
+    expect(verdict(below200, manifest({ ...upgraded, ftd_date: null })).cause).toBe('局面判定はFTDによる上昇トレンド。この目安はSPYが200日線の下のため0%（独自判定）');
+    // A block of another regime than the verdict's rows is not read; the label and the cap never change.
+    expect(verdict(below50, manifest(block())).cause).toBe('局面判定はFTDによる上昇トレンド。この目安はSPYが50日線の下のため0%（独自判定）');
+    expect(verdict(below50, manifest(upgraded))).toMatchObject({ label: '50日線割れ（弱含み・独自判定）', exposure: 0, tone: 'neg' });
+  });
+
+  it('names the regime beside the judge side\'s own SPY count, kept apart from the ^GSPC/^IXIC counts; a null count reads 未収録', () => {
+    const pressure = { label: '上昇に圧力（独自判定）', cap: 0.25, regime: 'uptrend_under_pressure', ftdUpgraded: false };
+    expect(verdict(pressure, manifest(block())).cause).toBe('局面判定「上昇に圧力」：SPYの分配日 4日（ストーリング日を含む判定側の数え方）');
+    expect(verdict({ ...UP, regime: 'confirmed_uptrend', ftdUpgraded: false }, manifest(block({ regime: 'confirmed_uptrend', distribution_days: 2 }))).cause).toBe('局面判定「上昇トレンド」：SPYの分配日 2日（ストーリング日を含む判定側の数え方）');
+    expect(verdict(pressure, manifest(block({ distribution_days: null }))).cause).toBe('局面判定「上昇に圧力」：判定側のSPYの分配日は未収録');
+    expect(verdict(pressure, manifest(block({ distribution_days: 0 }))).cause).toBe('局面判定「上昇に圧力」：SPYの分配日 0日（ストーリング日を含む判定側の数え方）');
+    // Without the block, a block of another date or a malformed one: the basis line alone, as before.
+    for (const value of [manifest(), null, manifest(block({ as_of_date: '2026-10-01' })), manifest(block({ method: 'x' })), manifest(block({ distribution_days: -1 }))]) expect(verdict(pressure, value).cause).toBeNull();
+    // An unknown market says nothing about a cause.
+    expect(verdict({ label: '市場未確認', cap: 0, state: 'unknown' }, manifest(block())).cause).toBeNull();
+    expect(Object.keys(REGIME_NAMES)).toEqual(['confirmed_uptrend', 'uptrend_under_pressure', 'correction', 'downtrend']);
+    expect(regimeCause(null, block(), null, DATE)).toBeNull();
+  });
+});
+
+describe('market tab: 〔参考〕 signs are counted apart from the warnings (MK9)', () => {
+  const rows = breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30 } : {}));
+  const make = counts => { const value = trends({ rows }); value.data.indices = value.data.indices.map((item, i) => sessionsOf({ ...item, method: DD, points: [{ ...item.points[0], value: counts[i] }], latest: { ...item.latest, value: counts[i] }, lastObserved: { ...item.lastObserved, value: counts[i] } })); return value; };
+  it('counts a 〔参考〕 check apart, never in a group\'s or a tab\'s ▲, and marks its row 参考 instead of 注意', () => {
+    const value = make([3, 4]), model = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
+    expect(model.signals.fired.map(c => [c.key, c.reference])).toEqual([['lows', true]]);
+    expect([model.signals.warnings, model.signals.references]).toEqual([0, 1]);
+    expect(model.groups.map(g => [g.id, g.fired, g.references])).toEqual([['index', 0, 0], ['breadth', 0, 1], ['leaders', 0, 0]]);
+    const extremes = model.groups[1].items.find(item => item.key === 'extremes');
+    expect(extremes).toMatchObject({ warn: false, reference: true });
+    expect(extremes.rows.map(row => [row.name, row.warn, row.reference ?? false])).toEqual([['新高値', undefined, false], ['新安値', false, true]]);
+    // The rule, its threshold and its sentence are unchanged.
+    expect(model.signals.fired[0].text).toBe('新安値（30）が新高値（10）を上回る');
+  });
+  it('keeps an index warning a ▲ warning, and without the study (Today) nothing is 参考', () => {
+    const value = make([6, 4]), model = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
+    expect([model.signals.warnings, model.signals.references]).toEqual([1, 1]);
+    expect(model.groups.map(g => [g.id, g.fired, g.references])).toEqual([['index', 1, 0], ['breadth', 0, 1], ['leaders', 0, 0]]);
+    const today = marketCardView({ market: UP, trends: value, date: '2026-10-02' });
+    expect([today.signals.warnings, today.signals.references]).toEqual([2, 0]);
+    expect(today.groups.map(g => g.fired)).toEqual([1, 1, 0]);
+    expect(today.today.find(fact => fact.key === 'extremes')).toMatchObject({ warn: true });
+  });
+});
+
+describe('market tab: the S&P／Nasdaq switch from the Nasdaq\'s published closes (MK3)', () => {
+  const nasCloses = (end = '2026-10-02', n = 280) => days(end, n).map((date, i) => ({ date, close: 16000 + i * 10 }));
+  const withCloses = nas => { const value = trends({ sp500: closes('2026-10-02', 260) }); value.data.indices[1] = { ...value.data.indices[1], closes: nas }; return value; };
+  it('offers the switch only with at least the chart\'s 60 closes; an older publication has none', () => {
+    expect(indexCloses({ closes: nasCloses() })).toHaveLength(280);
+    expect(indexCloses({ closes: nasCloses('2026-10-02', 59) })).toBeNull();
+    expect(indexCloses({})).toBeNull();
+    expect(indexCloses(undefined)).toBeNull();
+    expect(marketCardView({ market: UP, trends: trends(), date: '2026-10-02' }).series).toBeNull();
+    expect(marketCardView({ market: UP, trends: withCloses(nasCloses('2026-10-02', 40)), date: '2026-10-02' }).series).toBeNull();
+  });
+  it('gives each index its own closes, marks and figures: the exporter\'s position first, else indexSummary on the same closes', () => {
+    const position = { date: '2026-10-02', close: 18234.56, vsMa: -1.4, vs200: 3.2, fromHigh: -7.25, fullYear: true };
+    const value = withCloses(nasCloses());
+    const plain = marketCardView({ market: UP, trends: value, date: '2026-10-02' });
+    expect(plain.series.map(entry => [entry.key, entry.name])).toEqual([['spx', 'S&P 500'], ['ndx', 'Nasdaq総合']]);
+    expect(plain.series[0]).toMatchObject({ closes: value.data.long_history.sp500, distribution: value.data.indices[0], followThrough: value.data.indices[0].followThrough, summary: plain.summary });
+    expect(plain.series[1]).toMatchObject({ closes: nasCloses(), distribution: value.data.indices[1], distributionEnd: '2026-10-02', followThrough: value.data.indices[1].followThrough, summary: indexSummary(nasCloses()) });
+    const published = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: { nasdaqPosition: { state: position } } });
+    expect(published.series[1].summary).toBe(position);
   });
 });

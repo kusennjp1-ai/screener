@@ -10,7 +10,7 @@ import { bare, sentence, trendsStatus } from './briefModel';
 import { Expander, Parts } from './briefPrimitives';
 import { jumpTo } from './jump';
 import { barDay } from './briefNav';
-import { historyTakeaway } from './marketTabModel';
+import { historyTakeaway, indexCloses } from './marketTabModel';
 import useSessionState from './useSessionState';
 import referenceData from '../reference/market-regime-reference-v1.json' with { type: 'json' };
 import { validReference } from '../reference/marketRegimeReference.js';
@@ -21,24 +21,28 @@ const EXPLORER_TITLE = 'brief-history-explorer-title';
 const REFERENCE = validReference(referenceData) ? referenceData : null;
 
 /**
- * 「過去の傾向」: one fold at the end of the 指数 panel (open by default on the desktop), one line per index state with
- * the study's share for that state, its comparator, its tags and its own date, the key to the tags shown, then what
- * the numbers are not. A comparator and each tag stay whole on a line. On a phone the Nasdaq's published position
- * (`nasdaq`, nasdaqFigures) is the first line of its block; the desktop shows it in place above the chart.
- * Never in the verdict or the warning summary.
+ * 「過去の傾向」: one fold at the end of the 指数 panel on a phone, and on the desktop open across the card under its three
+ * columns. Its summary is one line on what the lines say (how many states had more or fewer declines than their
+ * comparator), wrapping only between its 「・」 parts. Inside: one line per index state with the study's share for that
+ * state, its comparator (and, for a confirmed state, which way it differs), its tags and its own date; then a nested
+ * 「読み方と出典」 fold with the key to the tags shown and what the numbers are not (open on the desktop). A comparator and
+ * each tag stay whole on a line. On a phone without the S&P／Nasdaq switch, the Nasdaq's published position (`nasdaq`,
+ * nasdaqFigures) is the first line of its block. Never in the verdict or the warning summary.
  */
 export function RegimeContext({ context, wide, nasdaq = null }) {
-  return <Expander id={`market-regime-ref${wide ? '-wide' : ''}`} className="brief-regime-ref" summary={context.summary} defaultOpen={wide}>
+  return <Expander id={`market-regime-ref${wide ? '-wide' : ''}`} className="brief-regime-ref" summary={<Parts text={context.summary} />} defaultOpen={wide}>
     {!context.available ? <p className="brief-regime-foot">{context.reason}</p> : <>
-      {context.indices.map(block => <div key={block.symbol} className="brief-regime-index">
+      <div className="brief-regime-indices">{context.indices.map(block => <div key={block.symbol} className="brief-regime-index">
         <h4>{block.name}</h4>
         {!wide && block.symbol === '^IXIC' && nasdaq && <p className="brief-regime-nas"><span className="numeric">{nasdaq.close}</span><Parts text={nasdaq.text} /></p>}
         <ul>{block.items.map(item => <li key={item.indicator} className={item.reason ? 'is-reason' : undefined}>{item.parts
           ? <>{item.parts.body}{item.parts.comparator && <span className="brief-regime-keep">{item.parts.comparator}</span>}{item.parts.tags.map(tag => <span key={tag} className="brief-regime-keep">{tag}</span>)}</>
           : item.text}</li>)}</ul>
-      </div>)}
-      {context.key && <p className="brief-regime-key">{context.key.split(/(〔[^〕]+〕)/).map((part, i) => i % 2 ? <span key={i} className="brief-regime-keep">{part}</span> : part)}</p>}
-      <p className="brief-regime-foot">{context.footer}</p>
+      </div>)}</div>
+      <Expander id={`market-regime-howto${wide ? '-wide' : ''}`} className="brief-regime-howto" summary={<>読み方と出典<small>（予測ではありません）</small></>} defaultOpen={wide}>
+        {context.key && <p className="brief-regime-key">{context.key.split(/(〔[^〕]+〕)/).map((part, i) => i % 2 ? <span key={i} className="brief-regime-keep">{part}</span> : part)}</p>}
+        <p className="brief-regime-foot">{context.footer}</p>
+      </Expander>
     </>}
   </Expander>;
 }
@@ -65,6 +69,8 @@ export default function MarketScreen({ brief }) {
   const failure = status.state !== 'error' ? null : status.kind === 'fetch' ? `長期履歴を取得できません（${bare(status.reason)}）。`
     : status.kind === 'reader' ? `長期履歴を表示できません（${bare(status.reason)}）。` : '長期履歴の整合性を確認できません。';
   const takeaway = status.state === 'ready' ? historyTakeaway(history, brief.date) : null;
+  // With the Nasdaq's closes the 指数 panel switches between the indices and shows the Nasdaq's figures itself.
+  const nasdaqSwitch = status.state === 'ready' && Boolean(indexCloses((trends.data.indices || []).find(item => item?.symbol === '^IXIC')));
   const historyError = !history && typeof trends?.data?.long_history_error === 'string';
   // The 推移 tab's 「?」 on a phone: no long history to show, or one that is not the latest session's.
   const update = status.state === 'ready' && history ? marketUpdateState(trends.data).state : null;
@@ -91,7 +97,8 @@ export default function MarketScreen({ brief }) {
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け・米国株` : '日付未確認'}</small><h1>市場</h1></header>
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={trends} date={brief.date} detail onOpenMetric={openMetric}
       switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} historyUnknown={historyUnknown}
-      study={study} studyBlock={<RegimeContext context={study.regime} wide={wide} nasdaq={study.nasdaqPosition?.state ? study.nasdaqFigures : null} />} />
+      study={study} manifest={brief.manifest?.data ?? null}
+      studyBlock={<RegimeContext context={study.regime} wide={wide} nasdaq={study.nasdaqPosition?.state && !nasdaqSwitch ? study.nasdaqFigures : null} />} />
     {wide && historySection}
   </>;
 }

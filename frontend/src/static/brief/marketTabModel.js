@@ -5,7 +5,7 @@
 import { bifurcation, environmentPoint, BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT, SPLIT_RULE } from '../marketLongHistory';
 import { SECTORS } from '../sectorDefinitions';
 import { indexSummary } from '../reference/indexSummary.js';
-import { distributionCount, environmentRules, followThroughView, latestKnown, marketTone, shortDate, trendsStatus, ENV_RULES, FTD_TEXT } from './briefModel';
+import { distributionCount, environmentRules, followThroughView, latestKnown, marketTone, publishedMarketContext, shortDate, trendsStatus, ENV_RULES, FTD_TEXT } from './briefModel';
 
 const finite = Number.isFinite;
 const YEAR = 252, MONTH = 21;
@@ -16,6 +16,12 @@ export const DISTRIBUTION_WARN = 5;
  * under the 参加度 and リーダー headers on the desktop, in the 注記 on a phone and in the long history's takeaway.
  */
 export const SURVIVORSHIP_NOTE = '現在の銘柄で過去をさかのぼった集計（上場廃止銘柄を含まない）';
+/**
+ * Whom TT達成数 counts (the 注記 and its opened row): the long history's names, judged on their daily closes by the
+ * trend template's price conditions only (RS推計 included), not the candidate list's selection, which also asks a price
+ * and a traded value.
+ */
+export const TT_POPULATION = 'TT達成数は長期集計の値で、公開中の銘柄を日足の株価条件（RS推計70以上を含むトレンドテンプレート8条件）だけで判定した数です。候補一覧の選定銘柄（株価や売買代金の条件もあり）とは対象が異なります。';
 const STAGE_FIELDS = ['stage1Percent', 'stage2Percent', 'stage3Percent', 'stage4Percent'];
 export const STAGE_NAMES = ['底固め', '上昇', '天井圏', '下降'];
 const sectorNames = Object.fromEntries(SECTORS.map(([, label, symbol]) => [symbol, label]));
@@ -92,6 +98,39 @@ export function basisConflict(basis, summary, date) {
   return `判定の根拠はスキャン時点のSPY、この数値は長期履歴の^GSPC終値（${shortDate(summary.date, date)}）です。${fifty && long ? '50日線・200日線' : fifty ? '50日線' : '200日線'}との位置が一致していません。`;
 }
 
+/** The backend regimes (market_context.regime) in the app's words. */
+export const REGIME_NAMES = Object.freeze({ confirmed_uptrend: '上昇トレンド', uptrend_under_pressure: '上昇に圧力', correction: '調整', downtrend: '下降トレンド' });
+
+/**
+ * One line under the verdict's basis on why the judge side's regime reads as it does (inside 「目安と判定の基準」).
+ *  - An FTD-upgraded uptrend (modelMarket's ftdUpgraded): the regime is confirmed_uptrend through its follow-through day
+ *    while SPY is under a line, so the guide stays 0% (独自判定). The FTD's date comes only from the judge side's block
+ *    (`context`, publishedMarketContext); without it the date is left out, never guessed from the ^GSPC series.
+ *  - Otherwise, with the judge side's block for the analysis date: its regime beside its own SPY distribution count
+ *    (stalling days included), kept apart from the ^GSPC/^IXIC counts of the 分配日 row. A null count reads 未収録.
+ *  - Without the block (an older publication): null, the basis line alone as before.
+ * A block whose regime disagrees with the verdict's rows is not used.
+ */
+export function regimeCause(market, context, basis, date) {
+  if (!market || market.state === 'unknown') return null;
+  const block = context && (!market.regime || context.regime === market.regime) ? context : null;
+  if (market.ftdUpgraded === true) {
+    const ftd = block?.ftd_date ? `（${shortDate(block.ftd_date, date)}）` : '';
+    return `局面判定はFTDによる上昇トレンド${ftd}。この目安はSPYが${basis?.above200 === false ? '200日線' : '50日線'}の下のため0%（独自判定）`;
+  }
+  if (!block || !REGIME_NAMES[block.regime]) return null;
+  return `局面判定「${REGIME_NAMES[block.regime]}」：${block.distribution_days === null ? '判定側のSPYの分配日は未収録' : `SPYの分配日 ${num(block.distribution_days)}日（ストーリング日を含む判定側の数え方）`}`;
+}
+
+/**
+ * An index series of closes the market tab can chart (indices[i].closes, plan §2.3, validated by readMarketTrends):
+ * at least the chart's 60 sessions, else null. Older publications have none: then there is no S&P／Nasdaq switch.
+ */
+export function indexCloses(item) {
+  const closes = Array.isArray(item?.closes) ? item.closes.filter(point => finite(point?.close)) : [];
+  return closes.length >= 60 ? closes : null;
+}
+
 /** One index's follow-through state in a plain clause (the state is the exporter's; wording only). */
 function ftdSignal(name, ft, date) {
   if (!ft || ft.available !== true || ft.state !== 'ftd_failed') return null;
@@ -144,10 +183,12 @@ export function groupDate(items) {
  * An unknown is never 0 and never a bare 未取得: it carries the precise reason (loading, a failed fetch,
  * an integrity failure, a schema that never recorded the field, a sample too small for a rate).
  * `study` is the market tab's study parts (reference/marketTabStudy.js, computed by the lazily loaded MarketScreen):
- * the warning summary's study tags and their words, the opened 分配日 row's detail, the Nasdaq note and position.
- * Without it (Today) none of these is shown.
+ * the warning summary's study tags and their words, the 〔参考〕 checks counted apart, the opened 分配日 row's detail, the
+ * Nasdaq note and position. Without it (Today) none of these is shown. `manifest` (the market tab's published manifest)
+ * gives the judge side's block for the basis's cause line (regimeCause). `series` is the 指数 panel's S&P／Nasdaq switch,
+ * only from a publication with the Nasdaq's closes.
  */
-export function marketCardView({ market, marketLoading = false, trends, date, study = null }) {
+export function marketCardView({ market, marketLoading = false, trends, date, study = null, manifest = null }) {
   const status = trendsStatus(trends), ready = status.state === 'ready';
   const history = ready ? trends.data.long_history || null : null;
   const longError = ready && !history && typeof trends.data.long_history_error === 'string' ? trends.data.long_history_error : null;
@@ -226,6 +267,9 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const leaderHit = known('leaderCount');
   const templateRule = rule('template');
   const tt = { ...count('tt', 'TT達成数', 'trendTemplateCount', 'trendTemplateCount', RULE_TEXT.template), ...(templateRule?.fired ? { warn: true, flag: `${ENV_RULES.templateSessions}日で${ENV_RULES.templateDropPercent}%以上減少` } : {}) };
+  // The count's population, in the 200-day row's form (「観測100中61銘柄」): the long history's observed names that day.
+  const ttHit = known('trendTemplateCount'), ttBase = ttHit && finite(ttHit.row.coverage) ? ttHit.row.coverage : null;
+  if (tt.valued && ttBase !== null) Object.assign(tt, { note: `観測${num(ttBase)}中${num(ttHit.value)}`, detail: [`観測${num(ttBase)}中${num(ttHit.value)}銘柄`, tt.detail].filter(Boolean).join('・'), details: [TT_POPULATION] });
   const leaderSubstitute = tt.missing && leaderHit ? count('leaderCount', '先導株数（価格条件）', 'leaderCount', 'leaderCount', RULE_TEXT.leaderCount) : null;
 
   const a200 = share('a200', '200日線より上', 'above200Percent', 'above200', 'movingAverages', RULE_TEXT.above200);
@@ -263,14 +307,22 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const boxDate = judgedDates.length === 1 && date && judgedDates[0] < date ? shortDate(judgedDates[0], date) : null;
   // Each fired check carries the study's tags for its state (study.signalTags, from marketRegimeReference
   // SIGNAL_INDICATORS); an index check only when its published method and window are the study's. The order is the page's.
-  const fired = checks.filter(c => c.fired).map(c => ({ ...c, itemAsOf: !boxDate && c.asOf && date && c.asOf < date ? shortDate(c.asOf, date) : null, tags: study?.signalTags?.[c.key] || [] }));
+  // A fired check the study tags 〔参考〕 (a breadth rule it could not confirm) is counted apart from the warnings, with a
+  // neutral ○: never a ▲, never in a group's or a tab's count. Its rule and its threshold are unchanged.
+  const fired = checks.filter(c => c.fired).map(c => ({ ...c, itemAsOf: !boxDate && c.asOf && date && c.asOf < date ? shortDate(c.asOf, date) : null, tags: study?.signalTags?.[c.key] || [],
+    reference: Boolean(study?.referenceKeys?.includes(c.key)) }));
   const unjudged = checks.filter(c => !c.judged);
   const reasons = [...new Set(unjudged.map(c => c.reason))].map(reason => ({ reason, labels: unjudged.filter(c => c.reason === reason).map(c => c.label) }));
   // The checks that were judged at all: with none, the summary can never say 「なし」.
   const judged = checks.filter(c => c.judged).map(({ key, group, label }) => ({ key, group, label }));
   const tagText = study?.tagText ? study.tagText(fired) : { legend: null, note: null };
-  const signals = ready ? { fired, unjudged, reasons, judged, asOf: boxDate, historyMissing: !history, legend: tagText.legend, tagNote: tagText.note } : null;
-  const firedIn = group => fired.filter(c => c.group === group).length;
+  const signals = ready ? { fired, warnings: fired.filter(c => !c.reference).length, references: fired.filter(c => c.reference).length, unjudged, reasons, judged, asOf: boxDate, historyMissing: !history, legend: tagText.legend, tagNote: tagText.note } : null;
+  const firedIn = group => fired.filter(c => c.group === group && !c.reference).length;
+  const referencesIn = group => fired.filter(c => c.group === group && c.reference).length;
+  // The evidence row of each check, so a 〔参考〕 check's row reads ○ 参考 instead of ▲ 注意.
+  const ROW_OF = { lows: 'extremes', split: 'a200', template: 'tt', stage: 'stage', leaders: 'health', breakout: 'breakout' };
+  const referenceRows = new Set(fired.filter(c => c.reference && ROW_OF[c.key]).map(c => ROW_OF[c.key]));
+  const asReference = item => !referenceRows.has(item.key) ? item : { ...item, warn: false, reference: true, ...(item.rows ? { rows: item.rows.map(row => row.warn ? { ...row, warn: false, reference: true } : row) } : {}) };
 
   // ---- dating and verdict ----
   const dating = marketDating({ date, historyDate, indexDates: dist.filter(d => d.hit).map(d => ({ name: d.name, date: d.hit.date })) });
@@ -283,6 +335,7 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
     basis: verdictBasis(market, date), date: market && market.state !== 'unknown' ? dating.verdictDate : null,
     nasdaq: market?.cap > 0 ? study?.nasdaq ?? null : null,
   };
+  verdict.cause = regimeCause(market, publishedMarketContext(manifest?.markets?.US ?? null, { date }), verdict.basis, date);
   const summary = ready ? indexSummary(history?.sp500) : null;
   const conflict = basisConflict(verdict.basis, summary, date);
 
@@ -338,7 +391,7 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const makeGroup = (id, title, question, short, items, scope) => {
     const unavailable = groupUnavailable(scope);
     const unknown = status.state !== 'loading' && (Boolean(unavailable) || items.some(unvalued) || checks.some(c => c.group === id && !c.judged));
-    return { id, title, question, short, items: unavailable ? [] : items.filter(item => !item.missing), fired: firedIn(id), unknown, asOf: unavailable ? null : groupDate(items), missing: unavailable || !history ? null : missingLine(items), unavailable };
+    return { id, title, question, short, items: unavailable ? [] : items.filter(item => !item.missing).map(asReference), fired: firedIn(id), references: referencesIn(id), unknown, asOf: unavailable ? null : groupDate(items), missing: unavailable || !history ? null : missingLine(items), unavailable };
   };
   const groups = [
     makeGroup('index', '指数のトレンド', '上昇トレンドは続いているか', '指数', [ftdItem, distItem], 'index'),
@@ -346,7 +399,15 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
     makeGroup('leaders', 'リーダーの健全性', '先導株が崩れていないか', 'リーダー', [rs90, breakout, healthItem, stageItem], 'history'),
   ];
 
-  return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons,
+  // The 指数 panel's S&P／Nasdaq switch (market tab): the Nasdaq only from a publication that carries its closes. Its
+  // figures are the exporter's (study.nasdaqPosition: indexSummary on the same bars) or, without them, indexSummary on
+  // those closes; its marks are its own index series'.
+  const ndxCloses = ready ? indexCloses(ndx) : null;
+  const series = ndxCloses ? [
+    { key: 'spx', name: 'S&P 500', closes: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null, summary },
+    { key: 'ndx', name: 'Nasdaq総合', closes: ndxCloses, distribution: ndx, distributionEnd: distributionCount(ndx)?.date || null, followThrough: ndx?.followThrough ?? null,
+      summary: study?.nasdaqPosition?.state || indexSummary(ndxCloses) }] : null;
+  return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons, series,
     nasdaqFigures: ready && study?.nasdaqPosition?.state ? study.nasdaqFigures : null,
     warnings: rules.filter(r => r.fired).map(({ key, text }) => ({ key, text })), split, chart: { sp500: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null } };
 }

@@ -4,7 +4,7 @@
 // hands the result to the 地合い card (marketCardView's `study`). Every number comes from the published market-trends
 // asset or the generated reference (market-regime-reference-v1.json): nothing here types a percentage, changes a
 // rule, a threshold or the verdict.
-import { bare, distributionCount, followThroughView, shortDate, trendsStatus } from '../brief/briefModel';
+import { bare, distributionCount, followThroughView, nasdaqInCorrection, shortDate, trendsStatus } from '../brief/briefModel';
 import { DISTRIBUTION_WARN, num, signedPercent, SURVIVORSHIP_NOTE } from '../brief/marketTabModel';
 import { indexSummary } from './indexSummary.js';
 import { biasTag, ddGradeState, ftdRecent, ftdState, highState, meanLowerStates, quadrantState, referencePeriod, referenceState, signalTags, stateTag, validReference, BIAS_SHARE, SIGNAL_INDICATORS, TAGS } from './marketRegimeReference.js';
@@ -53,7 +53,7 @@ export function signalTagText(reference, fired) {
     parts.push(`${shown.filter(tag => tag !== TAGS.bias).join('')}は、${index.fromYear}〜${index.toYear}年の指数の日足で、その状態のあと${OUTCOME}を調べた結果です（${shown.map(tag => `${tag}は${TAG_MEANINGS[tag]}`).join('、')}）。`);
     if (shown.some(tag => CONFIRMED_TAGS.includes(tag))) parts.push(`確認は、${CONFIRMED}です。`);
   }
-  parts.push('注意サインの基準と目安は変えていません。');
+  // Whether the tags change the rules or the guide is said once, in the guide's own disclosure (exposureRuleText).
   return { legend, note: parts.join('') };
 }
 
@@ -69,10 +69,11 @@ export function regimeKey(tags) {
 
 /**
  * The verdict reads the S&P 500 (SPY) only. While it is positive and the Nasdaq's own follow-through state is a
- * correction, a rally attempt or a failed FTD, a neutral note says so (short: the phone's fold summary).
+ * correction, a rally attempt or a failed FTD (nasdaqInCorrection, the condition of Today's 「NAS調整中」 too), a neutral
+ * note says so (short: the phone's fold summary).
  */
 export function nasdaqNote(ft, date) {
-  if (ft?.available !== true || !['correction', 'rally_attempt', 'ftd_failed'].includes(ft.state)) return null;
+  if (!nasdaqInCorrection(ft)) return null;
   const view = followThroughView(ft, date), at = view.asOf ? `${view.asOf}時点・` : '';
   const short = ft.state === 'ftd_failed' ? 'FTD失敗' : view.b;
   return { long: `判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は${view.b}（${at}${ft.state === 'ftd_failed' ? '' : 'FTD未確認・'}独自判定）。`, short: `Nasdaqは${short}（${at}判定はSPYのみ）` };
@@ -102,7 +103,8 @@ export function nasdaqFigures(state, date) {
 
 /**
  * The opened 分配日 row: the method in one sentence, each index's active distribution days with the sessions
- * left on the oldest (a later high can remove a day earlier), and each index's last year of counts (gaps stay gaps).
+ * left on the oldest (a later high can remove a day earlier), and each index's last year of counts (gaps stay gaps),
+ * each named by its index (`name`) in its caption.
  */
 export function distributionDetail(indices, date) {
   const details = [`下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・${DISTRIBUTION_WARN}日以上で注意）`];
@@ -120,7 +122,7 @@ export function distributionDetail(indices, date) {
     }
     const series = (Array.isArray(item?.points) ? item.points : []).slice(-YEAR).map(point => Number.isSafeInteger(point?.value) && point.value >= 0 ? point.value : null);
     const values = series.filter(finite);
-    if (values.length >= 200 && Math.max(...values) > Math.min(...values)) yearLines.push({ label: `${name}の分配日`, range: { lo: Math.min(...values), hi: Math.max(...values), series }, format: value => `${num(value)}日` });
+    if (values.length >= 200 && Math.max(...values) > Math.min(...values)) yearLines.push({ label: `${name}の分配日`, name, range: { lo: Math.min(...values), hi: Math.max(...values), series }, format: value => `${num(value)}日` });
   }
   return { details, yearLines };
 }
@@ -151,6 +153,9 @@ function comparatorText(ref, suffix, row) {
   return null;
 }
 const share = value => `${num(Math.round(value))}%`;
+/** Whether a robust line's share of declines was higher or lower than its comparator's (equal: no direction). */
+const DIRECTION_WORDS = Object.freeze({ higher: '多い', lower: '少ない' });
+const direction = (value, comparator) => !finite(value) || !finite(comparator) || value === comparator ? null : value > comparator ? 'higher' : 'lower';
 
 /** The trailing run of known closes: a window never bridges an unknown close, as in the study. */
 function trailingRun(points) {
@@ -170,10 +175,13 @@ function trailingRun(points) {
  *  - follow-through state: only when its method id is the reference's and it was judged on the study's window
  *    (reference.methods.followThroughWindowSessions sessions: the series' points are its validated bars); FTD
  *    confirmed within ftdRecentSessions adds the combo.ftd_recent row.
- * Every item is { indicator, state, stateDate, pDd5, comparator, comparatorPDd5, tag, biasTag, edgeDistance } or
+ * Every item is { indicator, state, stateDate, pDd5, comparator, comparatorPDd5, tag, biasTag, direction, edgeDistance } or
  * { reason } (with whatever of indicator / state / date is known), each with its line `text` and, for a valued
- * line, its `parts` ({ body, comparator, tags }) so a tag or a comparator never breaks across lines. `key` names
- * the outcome, 全期間 and every tag shown; `footer` says what the numbers are not.
+ * line, its `parts` ({ body, comparator, tags }) so a tag or a comparator never breaks across lines. A line its own index
+ * confirmed (〔S&P・Nasdaqとも〕〔S&Pのみ〕〔Nasdaqのみ〕) carries its `direction` against its comparator ('higher' | 'lower',
+ * said in the comparator: 「（全期間 16%より少ない）」); any other line none. `summary` counts those directions in one line
+ * (「過去の傾向：下げが多かった状態 2・少なかった状態 1（1990〜2026年）」). `key` names the outcome, 全期間 and every tag
+ * shown; `footer` says what the numbers are not.
  */
 export function marketRegimeContext({ history, trends, reference, date = null }) {
   const status = trendsStatus(trends);
@@ -195,9 +203,12 @@ export function marketRegimeContext({ history, trends, reference, date = null })
       return { ...base, reason: '標本不足', tag: TAGS.insufficient, text: `${body}${TAGS.insufficient}`, parts: { body, comparator: null, tags: [TAGS.insufficient] } };
     }
     const comparator = comparatorText(reference, suffix, row), bias = biasTag(row);
-    const parts = { body: `${words.text}（${when}）：${lead ? `${OUTCOME} ` : ''}${share(row.pDd5)}`, comparator: comparator && finite(row.comparatorPDd5) ? `（${comparator} ${share(row.comparatorPDd5)}）` : null, tags: [tag, bias].filter(Boolean) };
+    // A robust line (its own index confirmed it: 〔S&P・Nasdaqとも〕〔S&Pのみ〕〔Nasdaqのみ〕) says which way its share differs from
+    // its comparator (「全期間 16%より少ない」); a line that is not established says no direction.
+    const dir = CONFIRMED_TAGS.includes(tag) && comparator ? direction(row.pDd5, row.comparatorPDd5) : null;
+    const parts = { body: `${words.text}（${when}）：${lead ? `${OUTCOME} ` : ''}${share(row.pDd5)}`, comparator: comparator && finite(row.comparatorPDd5) ? `（${comparator} ${share(row.comparatorPDd5)}${dir ? `より${DIRECTION_WORDS[dir]}` : ''}）` : null, tags: [tag, bias].filter(Boolean) };
     lead = false;
-    return { ...base, ...extra, pDd5: row.pDd5, comparator: row.comparator, comparatorLabel: comparator, comparatorPDd5: row.comparatorPDd5, tag, biasTag: bias,
+    return { ...base, ...extra, pDd5: row.pDd5, comparator: row.comparator, comparatorLabel: comparator, comparatorPDd5: row.comparatorPDd5, tag, biasTag: bias, direction: dir,
       text: `${parts.body}${parts.comparator || ''}${parts.tags.join('')}`, parts };
   };
   const reasonItem = (symbol, suffix, reason, stateDate = null) => ({ indicator: `${symbol}.${suffix}`, state: null, stateDate, reason, text: `${TOPICS[suffix]}${stateDate ? `（${md(stateDate)}時点）` : ''}：${reason}` });
@@ -237,19 +248,26 @@ export function marketRegimeContext({ history, trends, reference, date = null })
   const means = meanLowerStates(reference).length ? 'この欄は下げの割合だけを示します。' : 'この欄は下げの割合だけを示し、平均リターンが低かった状態はどちらの指数にもありません。';
   const footer = `状態ごとの過去の割合で、組み合わせた確率ではありません。これらは同じ事実（下げの最中・直後は値動きが荒い）を別の形で数えたもので、2指数は連動しているため独立の確認ではありません。${means}指数の結果で、個別銘柄の値ではありません。出典：${reference.study_version}${reference.source?.ci_run ? `（CI run ${reference.source.ci_run}）` : ''}、${sample}`;
   const key = regimeKey(blocks.flatMap(block => block.items.flatMap(entry => entry.parts?.tags || [])));
-  return { available: true, summary, key, footer, indices: blocks };
+  // One line on what the lines say: how many states had more declines than their comparator, how many fewer (robust
+  // lines only, both indices); the lines, the key and the footer say the rest. Never a combined probability.
+  const directions = blocks.flatMap(block => block.items.map(entry => entry.direction).filter(Boolean));
+  const higher = directions.filter(value => value === 'higher').length, lower = directions.length - higher;
+  const years = `（${period.fromYear}〜${period.toYear}年）`;
+  const line = directions.length ? `過去の傾向：下げが多かった状態 ${num(higher)}・少なかった状態 ${num(lower)}${years}` : `過去の傾向：差がはっきりした状態なし${years}`;
+  return { available: true, summary: line, key, footer, indices: blocks };
 }
 
 // ---- what MarketScreen hands the 地合い card ------------------------------------------------------------------
 
-/** The published inputs a check's study tag depends on: the index's method ids and its follow-through window. */
-const publishedInputs = item => ({ distribution: item?.method ?? null, followThrough: item?.followThrough?.method ?? null, followThroughWindow: Array.isArray(item?.points) ? item.points.length : null });
+/** The published inputs a check's study tag depends on: the index's method ids, its follow-through window and its distribution count (the warning's). */
+const publishedInputs = item => ({ distribution: item?.method ?? null, followThrough: item?.followThrough?.method ?? null, followThroughWindow: Array.isArray(item?.points) ? item.points.length : null,
+  distributionCount: distributionCount(item)?.value ?? null });
 
 /**
  * Everything of the study the market tab adds to the 地合い card, from the market-trends asset and the reference
  * (null or invalid: no tags, and 過去の傾向 says why it has no rows):
  *  - signalTags: each warning-summary check's study tags (marketRegimeReference SIGNAL_INDICATORS); tagText(fired)
- *    the legend and the sentence on the tags actually shown
+ *    the legend and the sentence on the tags actually shown; referenceKeys the checks tagged 〔参考〕
  *  - distribution: the opened 分配日 row's method, dates and year lines
  *  - nasdaq: the Nasdaq note beside the SPY verdict (the card shows it only while the verdict is positive)
  *  - nasdaqPosition / nasdaqFigures: the Nasdaq's published position, as data and in words
@@ -263,6 +281,8 @@ export function marketTabStudy({ trends, reference, date = null }) {
   const nasdaqPosition = ready ? publishedIndexState(byName.NAS) : null;
   return {
     signalTags: signalTagsByKey, tagText: fired => signalTagText(ref, fired),
+    // The checks whose tag is 〔参考〕: the card counts them apart from the warnings, with a neutral ○.
+    referenceKeys: Object.keys(signalTagsByKey).filter(key => signalTagsByKey[key].includes(TAGS.breadth)),
     distribution: ready ? distributionDetail(indices, date) : null,
     nasdaq: ready ? nasdaqNote(byName.NAS?.followThrough, date) : null,
     nasdaqPosition, nasdaqFigures: nasdaqFigures(nasdaqPosition?.state, date),
