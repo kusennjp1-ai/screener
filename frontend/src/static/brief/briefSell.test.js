@@ -326,6 +326,15 @@ describe('the failed breakout (ブレイク失敗, 独自判定)', () => {
     expect(check(make([...Array(200).fill(95), 102, 98, 101, 97], i => (i === 200 ? 22000 : 10000))).state).toBe('hit');
   });
 
+  it('dates the hit from the start of the current run under the pivot, after a re-cross above it', () => {
+    // Heavy crossing, under the next session, back above for three sessions, then under again for the last two.
+    const bars = failed([97, 101, 102, 101, 98, 97]);
+    const hit = check(bars);
+    expect(hit).toMatchObject({ state: 'hit', date: bars[205].date, crossDate: bars[200].date, sessions: 2 });
+    expect(hit.detail).toBe(`${short(bars[200].date)} に出来高 2.20×で上抜け、${short(bars[205].date)} にピボットの下へ（以降2営業日・ピボット比 −3.0%）`);
+    expect(sellMarks(stockSells({ judged: bars, diagnostics: null, view: view(bars) }))).toContainEqual({ date: bars[205].date, kind: 'weakness' });
+  });
+
   it('is clear when the close is back above the pivot, the crossing is older than 10 sessions, or its volume is under 1.4×', () => {
     expect(check(failed([101, 98, 103]))).toMatchObject({ state: 'clear', detail: '終値はピボットの上（ピボット比 +3.0%）' });
     // The same cents count as at the pivot.
@@ -390,6 +399,13 @@ describe('the strength checks\' 50-day alternative (VD6)', () => {
     expect(result.run).toBeNull();
     for (const check of result.strength) expect(check).toMatchObject({ state: 'na', detail: `50日線の上に出て3営業日のため判定しません（判定は${SELL_RULES.climaxSessions}営業日以上・独自判定）` });
     expect(result.runShort.reason).toBe('50日線の上に出て3営業日');
+  });
+
+  it('names the bar a buy-zone stock is under in the short reason (ピボット比 x・+20%未満)', () => {
+    const bars = extended(0.005), pivot = bars.at(-1).close / 1.03;
+    const result = sellSignals(bars, SELL_RULES, { view: { state: 'zone', pivot, distance: 3 } });
+    expect(result.run).toBeNull();
+    expect(result.runShort).toEqual({ reason: 'ピボット比 +3.0%・+20%未満', fromSma50: null });
   });
 
   it('keeps the pivot band first when both hold', () => {

@@ -45,13 +45,13 @@ describe('brief stock view', () => {
     expect(sell).toHaveTextContent('ピボットより下（ブレイク前）のため判定しません');
   });
 
-  it('says 判定していない項目があります (n件) while a check is not judged, never 「いま出ているサインはありません」', () => {
+  it('says 判定していない項目 n件 while a check is not judged, never 「いま出ているサインはありません」', () => {
     // A steady advance below its pivot, the book's diagnostics in and clear: nothing fired, the four climax checks not judged.
     const steady = Array.from({ length: 200 }, (_, i) => { const close = 50 * 1.003 ** i; return { date: i === 199 ? DATE : day(i), open: close, high: close * 1.005, low: close * 0.995, close, volume: 10000 }; });
     const diagnostics = { valid: true, as_of_date: DATE, priceWarnings: { below20: false, threeLowerLows: false, currentVolumeRatio: 1, combinedWarning: false, recoveryInUpperHalf: false } };
     render(<StockView data={{ ...data(true), bars: steady, diagnostics }} />);
     const sell = screen.getByTestId('brief-sell');
-    expect(sell).toHaveTextContent('判定していない項目があります（4件）。');
+    expect(sell).toHaveTextContent('判定していない項目 4件。');
     expect(sell).not.toHaveTextContent('いま出ているサインはありません');
   });
 

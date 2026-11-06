@@ -6,9 +6,11 @@ import { shortDate } from './briefShared';
 const finite = Number.isFinite;
 const price = value => finite(value) ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 // The desktop (1024px and wider) keeps this qualifier in place in full; a phone keeps a short one.
-const SELL_INLINE = '保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。';
+// The sources' closing sentences, shared by the desktop qualifier and the phone's 注記.
+const SOURCES = '複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。';
+const SELL_INLINE = `保有中の判断材料です。${SOURCES}`;
 /** The sell card's sources, in the stock screen's 注記 below 1024px. */
-export const SELL_NOTE = `売りのサインは保有中の判断材料です。上昇の加速は、ピボット比 +${SELL_RULES.climaxFromPivotPercent}%以上の買いゾーン超過でピボット上抜けから${SELL_RULES.climaxSessions}営業日以上の銘柄か、終値が50日線から +${SELL_RULES.climaxFrom50dPercent}%以上の銘柄でのみ判定し、50日線は割れた日の出来高で、ブレイク失敗は出来高${SELL_RULES.breakVolumeRatio}倍以上の上抜けから${SELL_RULES.failedBreakoutSessions}営業日以内のピボット割れで判定します。複合警告は『株式トレード 基本と原則』の観点（出来高1.4倍はアプリの代理閾値）、それ以外のしきい値はこのアプリ独自（独自判定）です。売買の推奨ではありません。`;
+export const SELL_NOTE = `売りのサインは保有中の判断材料です。上昇の加速は、ピボット比 +${SELL_RULES.climaxFromPivotPercent}%以上の買いゾーン超過でピボット上抜けから${SELL_RULES.climaxSessions}営業日以上の銘柄か、終値が50日線から +${SELL_RULES.climaxFrom50dPercent}%以上の銘柄でのみ判定し、50日線は割れた日の出来高で、ブレイク失敗は出来高${SELL_RULES.breakVolumeRatio}倍以上の上抜けから${SELL_RULES.failedBreakoutSessions}営業日以内のピボット割れで判定します。${SOURCES}`;
 
 // A check that is not judged for this stock (its reason says why: 「…のため判定しません」) reads 判定せず, never 対象外,
 // which the brief keeps for SEC, funds and unlisted watch symbols (CONTEXT.md).
@@ -45,7 +47,7 @@ function statusLine(sells) {
   if (all.some(c => c.state === 'caution')) return ' 50日線の下にあります（大商いの割れは未確認）。';
   if (all.some(c => c.state === 'unknown')) return ' 出ているサインはありませんが、未確認の項目があります。';
   const na = all.filter(c => c.state === 'na').length;
-  return na ? ` 判定していない項目があります（${na}件）。` : ' いま出ているサインはありません。';
+  return na ? ` 判定していない項目 ${na}件。` : ' いま出ているサインはありません。';
 }
 
 /** The sell card: fired, cautioned and unknown checks listed, the quiet ones folded on a phone. */

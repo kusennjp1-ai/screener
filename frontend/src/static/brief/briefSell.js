@@ -64,7 +64,7 @@ function pivotGate(list, view, rules) {
   if (view.state === 'wait' || distance < 0) return { on: false, reason: 'ピボットより下（ブレイク前）のため判定しません', short: 'ピボットより下' };
   // A position that is neither the buy zone nor beyond it (low volatility, an acquisition, unjudged) is never judged by the band.
   if (view.state !== 'ext' && view.state !== 'zone') return { on: false, reason: `買いゾーン超過の銘柄ではないため判定しません（位置：${view.stateLabel || '判定不可'}）`, short: `位置：${view.stateLabel || '判定不可'}`, alternative: unjudged };
-  if (view.state !== 'ext' || distance < rules.climaxFromPivotPercent) return { on: false, reason: `ブレイク後の上昇が小さいため判定しません（ピボット比 ${signed(distance)}・判定は +${rules.climaxFromPivotPercent}%以上）`, short: `ピボット比 ${signed(distance)}`, alternative: view.state === 'ext' };
+  if (view.state !== 'ext' || distance < rules.climaxFromPivotPercent) return { on: false, reason: `ブレイク後の上昇が小さいため判定しません（ピボット比 ${signed(distance)}・判定は +${rules.climaxFromPivotPercent}%以上）`, short: `ピボット比 ${signed(distance)}・+${rules.climaxFromPivotPercent}%未満`, alternative: view.state === 'ext' };
   const n = list.length;
   if (!(list[n - 1].close > pivot)) return { on: false, reason: '日足の終値がピボットを上回っていないため判定しません', short: '終値がピボット以下' };
   let origin = n - 1;
@@ -105,8 +105,7 @@ function climaxGate(list, view, rules) {
  * line: 'clear'.
  */
 function ma50State(list, rules) {
-  const n = list.length;
-  const sma = i => { let s = 0; for (let k = i - 49; k <= i; k++) s += list[k].close; return s / 50; };
+  const n = list.length, sma = i => sma50(list, i);
   const base = { key: 'ma50', label: `出来高を伴う50日線割れ（${ratioText(rules.breakVolumeRatio)}以上）` };
   const line = sma(n - 1), position = (list[n - 1].close / line - 1) * 100;
   if (list[n - 1].close >= line) return { ...base, state: 'clear', detail: `終値は50日線から ${signed(position)}` };
@@ -129,12 +128,12 @@ const cents = value => Math.round(value * 100);
 /**
  * The failed breakout (VD2, ブレイク失敗, 独自判定): a crossing of the pivot on `rules.breakVolumeRatio` or
  * more of the prior 50-day average (lastPivotCrossing's volumeRatio), within `rules.failedBreakoutSessions`
- * sessions, followed by a last close back under the pivot: 'hit'. A last close at or above the pivot, or no
+ * sessions, followed by a last close back under the pivot: 'hit', dated from the first close of the current run
+ * under the pivot (a re-cross above it after the crossing starts the run again). A last close at or above the pivot, or no
  * crossing in the window, or crossings all on lighter volume: 'clear'. A crossing whose volume (or the 50
  * sessions before it) is missing, with no heavy one: 'unknown', never clear. Without a pivot there is no
- * breakout to fail: null, and sellSignals lists no such check (the strength checks say why for the pivot). The hit
- * dates the first close back under the pivot (the chart's mark) and carries the crossing's date and ratio;
- * `headline` is the watch row's short form.
+ * breakout to fail: null, and sellSignals lists no such check (the strength checks say why for the pivot). The
+ * hit's date is the chart's mark; it carries the crossing's date and ratio, and `headline` is the watch row's short form.
  */
 function failedBreakoutCheck(list, view, rules) {
   const base = { key: 'failedBreakout', label: `出来高を伴う上抜け後のピボット割れ（${ratioText(rules.breakVolumeRatio)}以上・${rules.failedBreakoutSessions}営業日以内・ブレイク失敗）` };
@@ -147,8 +146,9 @@ function failedBreakoutCheck(list, view, rules) {
   if (!crossings.length) return { ...base, state: 'clear', detail: `直近${rules.failedBreakoutSessions}営業日にピボットの上抜けなし（終値はピボット比 ${signed(distance)}）` };
   const heavy = crossings.find(c => finite(c.volumeRatio) && c.volumeRatio >= rules.breakVolumeRatio);
   if (heavy) {
-    let back = heavy.index + 1;
-    while (back < n - 1 && cents(list[back].close) >= cents(pivot)) back++;
+    // The current run under the pivot: a re-cross after the first close back under it moves the date on.
+    let back = n - 1;
+    while (back > heavy.index + 1 && cents(list[back - 1].close) < cents(pivot)) back--;
     const crossDay = day(heavy.index), sessions = n - back;
     return { ...base, state: 'hit', date: list[back].date, crossDate: heavy.date, ratio: heavy.volumeRatio, sessions,
       detail: `${crossDay} に出来高 ${ratioText(heavy.volumeRatio)}で上抜け、${day(back)} にピボットの下へ（以降${sessions}営業日・ピボット比 ${signed(distance)}）`,
