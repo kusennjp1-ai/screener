@@ -223,6 +223,8 @@ for (const width of [320, 375, 414]) test.describe(`the study block and the Nasd
     const { errors } = await openBrief(page, '#/brief/market', { mutate: nasdaqState });
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.locator('.brief-index-nas')).toHaveCount(0);
+    // Read the boxes once the card's finite entrance has finished (mid-rise a box can read 43.99998px).
+    await page.evaluate(() => Promise.all(document.getAnimations().filter(a => a.effect?.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => null))));
     // The guide's fold keeps a 44–48px summary even with the Nasdaq note in it.
     const basis = (await market.locator('details.brief-exposure-basis > summary').boundingBox()).height;
     expect(basis).toBeGreaterThanOrEqual(44);
