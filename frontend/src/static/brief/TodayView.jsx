@@ -164,7 +164,7 @@ function TodaySummary({ market, marketLoading, suffix = null, counts, attention,
   // and then the suffix on a line of its own (「検討可」 is what the tile's tone and the cap already say).
   const showSuffix = Boolean(suffix) && !(!market && marketLoading);
   // Each tile is as of the analysis date: said to assistive tech after the tile's text (the bar shows it on screen).
-  const asOf = date ? <span className="sr-only">（{barDay(date)}引け時点）</span> : null;
+  const asOf = date ? <span className="sr-only">・{barDay(date)}引け時点</span> : null;
   const breakouts = state === 'ready' && counts?.breakout > 0 ? counts.breakout : 0;
   return <ul className="brief-summary in" style={{ '--i': 0 }} aria-label="今日の要点" data-testid="brief-summary">
     <li className={`tone-${tone}`}><Link className="brief-tile" to="/brief/market" onClick={follow(() => nav.market())}><small>地合い</small><b>{!market && marketLoading ? '読込中' : verdict}</b><em>{showSuffix ? <><Parts text={capNote} /><span className="sr-only">・</span><span className="brief-frag brief-tile-suffix">{suffix}</span></> : <Parts text={marketNote} />}</em>{asOf}</Link></li>

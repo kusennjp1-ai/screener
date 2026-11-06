@@ -249,6 +249,8 @@ test.describe('the 375×812 budgets with a broken setup', () => {
     if (mutate) await expect(region.getByTestId('brief-candidate').first().locator('.brief-chip', { hasText: WEAKNESS })).toBeVisible();
     await settled(page);
     expect(await contentHeight(page)).toBeLessThanOrEqual(520);
+    // Round 2: 12px of headroom under the budget (plan §3).
+    expect(await contentHeight(page)).toBeLessThanOrEqual(508);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
@@ -276,7 +278,7 @@ test.describe('the 375×812 budget one session behind', () => {
   const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
   const WATCH5 = ['ZZNV', 'ZZZF', 'QQQX', 'ZZSD', 'ZZKS'];
   const WATCH4 = ['ZZNV', 'ZZZF', 'ZZSD', 'ZZKS'];
-  for (const [name, watch, mutate] of [['five watched (one unlisted)', WATCH5, undefined], ['four watched and a broken setup', WATCH4, broken('ZZSD')]]) test(`Today with ${name} fits 1400`, async ({ page }) => {
+  for (const [name, watch, mutate] of [['five watched (one unlisted)', WATCH5, undefined], ['four watched and a broken setup', WATCH4, broken('ZZSD')], ['five watched and a broken setup', WATCH5, broken('ZZSD')]]) test(`Today with ${name} fits 1400`, async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': watch }, historyEnd: sessions.at(-2), mutate });
     await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
     const market = page.getByRole('region', { name: '地合い' });
@@ -287,7 +289,19 @@ test.describe('the 375×812 budget one session behind', () => {
     await settled(page);
     expect(await note.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size; })).toBe(1);
     expect(await contentHeight(page)).toBeLessThanOrEqual(1400);
+    // Round 2: 12px of headroom under the budget in every one of these, the tallest Today (plan §3).
+    expect(await contentHeight(page)).toBeLessThanOrEqual(1388);
     expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('Today\'s watch card counts an unlisted symbol among its first three rows', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': WATCH5 }, historyEnd: sessions.at(-2), mutate: broken('ZZSD') });
+    const card = page.getByRole('region', { name: 'ウォッチの状況' });
+    await expect(card.locator('.brief-sellchip')).toHaveCount(1);
+    // QQQX (unlisted) and ZZSD (broken, always shown) lead; one more row, then the rest fold.
+    await expect(card.locator('.brief-rows > li')).toHaveCount(3);
+    await expect(card.getByRole('button', { name: 'さらに表示（残り 2件）' })).toBeVisible();
     expect(errors).toEqual([]);
   });
 });

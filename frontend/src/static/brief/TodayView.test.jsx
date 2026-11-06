@@ -197,7 +197,7 @@ describe('round 2 on Today', () => {
 
   it('names the analysis date in each tile for assistive tech, the visible text unchanged', () => {
     show({ ranked: [audited('TCH1', 100)] });
-    for (const li of tiles()) expect(li.querySelector('a .sr-only')).toHaveTextContent('（10/2（金）引け時点）');
+    for (const li of tiles()) expect(li.querySelector('a .sr-only')).toHaveTextContent('・10/2（金）引け時点');
     expect(tiles()[1].querySelector('em').textContent).toBe('ゾーン1・接近0');
   });
 

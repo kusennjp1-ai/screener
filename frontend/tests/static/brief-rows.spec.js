@@ -349,3 +349,132 @@ test.describe('the watch list at 320px', () => {
     expect(errors).toEqual([]);
   });
 });
+
+// Round 2 (rows): the day's event in the rows' chip and the order within the buy zone, the questionable-base chip,
+// the TT chip without 「あと0」, the hidden breakout and EPS filters, 選定すべて's population, the pivot source, and
+// the minus sign, on synthetic variants.
+// ZZKS crosses its pivot from below on the synthetic day (+2.0%, 1.6×); ZZOD falls 1.0% on 1.6×: a heavy down day.
+const DAY_EVENTS = { rows: rows => {
+  for (const row of rows) {
+    if (row.symbol === 'ZZKS') row.se_pivot_price = Math.round(row.current_price * 0.99 * 100) / 100;
+    if (row.symbol === 'ZZOD') row.technical_audit.values.change = -1;
+  }
+} };
+// Questionable bases (独自判定): ZZNV 40% deep, ZZAR two weeks long, ZZHE far above its 50-day line; ZZSD's base is deep
+// too (its row also carries the broken setup's chip and あと1条件 on the watch tab).
+const BASES = { rows: rows => {
+  for (const row of rows) {
+    if (row.symbol === 'ZZNV') Object.assign(row, { se_base_depth_pct: 40.2, se_base_length_weeks: 6 });
+    if (row.symbol === 'ZZAR') Object.assign(row, { se_base_depth_pct: 12, se_base_length_weeks: 2 });
+    if (row.symbol === 'ZZHE') row.technical_audit.values.sma50 = row.current_price / 1.3;
+    if (row.symbol === 'ZZSD') Object.assign(row, { se_base_depth_pct: 38, se_base_length_weeks: 4 });
+  }
+} };
+const both = (...variants) => ({ rows: rows => { for (const variant of variants) variant.rows(rows); }, ...(variants.find(v => v.charts) ? { charts: variants.find(v => v.charts).charts } : {}) });
+const chipLines = page => candidates(page).evaluateAll(nodes => nodes.map(row => {
+  const box = row.querySelector('.brief-reasons').getBoundingClientRect();
+  const chips = [...row.querySelectorAll('.brief-reasons .brief-chip')].filter(chip => chip.getClientRects().length);
+  return { symbol: row.dataset.symbol, height: row.getBoundingClientRect().height, lines: new Set(chips.map(chip => chip.offsetTop)).size,
+    out: chips.filter(chip => chip.getBoundingClientRect().right > box.right + 0.5).map(chip => chip.textContent), chips: chips.map(chip => chip.textContent) };
+}));
+/** Visible text with an ASCII hyphen directly before a digit (ISO dates and tickers aside): a negative figure must use U+2212. */
+const asciiMinus = page => page.evaluate(() => [...document.querySelectorAll('#brief-main *, .brief-bar *')].flatMap(node => {
+  const own = [...node.childNodes].filter(child => child.nodeType === Node.TEXT_NODE).map(child => child.textContent).join('');
+  return node.getClientRects().length && /(?:^|[\s(（:：$＄=＝~〜、,])-\$?\d/.test(own) ? [own.trim().slice(0, 40)] : [];
+}));
+
+test.describe('the day on the rows (390px)', () => {
+  test.use(VIEWPORTS.phone);
+  test('a breakout ranks first in the zone and a heavy down day last, each in its short form, on Today and the list', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { mutate: DAY_EVENTS });
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    expect(await focus.getByTestId('brief-candidate').evaluateAll(nodes => nodes.map(node => node.dataset.symbol))).toEqual(['ZZKS', 'ZZNV', 'ZZNH', 'ZZDM', 'ZZOD']);
+    await expect(focus.locator('[data-symbol="ZZKS"] .brief-chip').first()).toHaveText(`↗ ${DAY}上抜け 1.60×`);
+    await expect(focus.locator('[data-symbol="ZZKS"] .brief-chip').first()).toHaveClass(/tone-zone/);
+    await expect(focus.locator('[data-symbol="ZZNV"] .brief-chip').first()).toHaveText(`● ${DAY}ピボット到達`);
+    await expect(focus.locator('[data-symbol="ZZOD"] .brief-chip').first()).toHaveText('▲ 下落日の大商い');
+    await expect(focus.locator('[data-symbol="ZZOD"] .brief-chip').first()).toHaveClass(/tone-ext/);
+    // The breakout's chip carries its volume: no second volume chip on its row.
+    await expect(focus.locator('[data-symbol="ZZKS"] .brief-chip', { hasText: '出来高' })).toHaveCount(0);
+    // The 注目候補 tile says the day's breakouts and opens them, under a 44px chip that clears the filter.
+    const link = page.getByTestId('brief-breakout-link');
+    await expect(link).toHaveText('うち上抜け1 ›');
+    expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await link.click();
+    await expect(page).toHaveURL(/#\/brief\/list$/);
+    expect(await symbolsShown(page)).toEqual(['ZZKS']);
+    const chip = page.getByRole('button', { name: new RegExp(`^${DAY}の上抜け\\s*1`) });
+    expect((await chip.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await chip.click();
+    await expect(page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(await symbolsShown(page)).toEqual(['ZZKS', 'ZZNV', 'ZZNH', 'ZZDM', 'ZZOD']);
+    expect(await asciiMinus(page)).toEqual([]);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a watched stock with conditions unconfirmed reads TT未確認（N条件）, never あと0', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': ['ZZNV', 'ZZZF'] }, mutate: { rows: rows => { rows.find(row => row.symbol === 'ZZZF').rs_rating = null; } } });
+    const row = page.getByRole('region', { name: 'ウォッチ中の銘柄' }).locator('[data-symbol="ZZZF"]');
+    await expect(row.locator('.brief-chip', { hasText: 'TT未確認' })).toHaveText('TT未確認（1条件）');
+    await expect(page.locator('#brief-main')).not.toContainText('あと0');
+    expect(errors).toEqual([]);
+  });
+
+  test('the 条件 menu opens the EPS filter, which counts the stocks it cannot tell apart, and the EPS sort puts them last', async ({ page }) => {
+    const summary = value => ({ sec_state: 'ok', eps_yoy: value === null ? null : { value, end: '2026-06-30' }, sales_yoy: null, code33: null, as_of_date: date });
+    const { errors } = await openBrief(page, '#/brief/list', { mutate: { rows: rows => {
+      rows.find(row => row.symbol === 'ZZAR').sec_summary = summary(40);
+      rows.find(row => row.symbol === 'ZZHE').sec_summary = summary(10);
+      rows.find(row => row.symbol === 'ZZTR').sec_summary = summary(null);
+    } } });
+    await page.getByRole('combobox', { name: '条件' }).selectOption('eps');
+    const chip = page.locator('.brief-filterchip');
+    await expect(chip).toContainText('EPS前年比≥25%（直近・SEC）該当1・未確認19');
+    expect(await symbolsShown(page)).toEqual(['ZZAR']);
+    await chip.click();
+    await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて/ }).click();
+    await expect(page.locator('.brief-population')).toHaveText('選定すべて：TT 8/8＋株価$10以上・売買代金$2,000万以上');
+    await page.getByRole('combobox', { name: '並び順' }).selectOption({ label: 'EPS前年比' });
+    expect((await symbolsShown(page)).slice(0, 2)).toEqual(['ZZAR', 'ZZHE']);
+    expect(errors).toEqual([]);
+  });
+
+  test('the stock names its pivot source: the pattern and its confidence, 未確認 when unknown', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZAR', { mutate: onRow('ZZAR', row => { Object.assign(row, { se_pattern_primary: 'cup_with_handle', se_pattern_confidence: 72.4 }); }) });
+    await expect(page.getByText('Setup Engine・カップ・ウィズ・ハンドル（信頼度72）')).toBeVisible();
+    await page.goto('/#/brief/stock/ZZKS');
+    await expect(page.getByText('Setup Engine（信頼度60）')).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});
+
+for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.desktop })) test.describe(`round-2 chips at ${width}px`, () => {
+  test.use(device);
+  for (const [screen, hash] of [['the list (買いゾーン, then 選定すべて)', '#/brief/list'], ['the watch tab with a broken setup', '#/brief/watch'], ['Today', '#/brief']]) test(`rows with the day's events and questionable bases stay 100px or less on two chip lines on ${screen}`, async ({ page }) => {
+    const watch = ['ZZNV', 'ZZZF', 'ZZSD', 'ZZKS', 'ZZOD', 'ZZAR'];
+    const { errors } = await openBrief(page, hash, { storage: { 'research-watch': watch }, mutate: { ...both(DAY_EVENTS, BASES), charts: served => breakBelow50(served['ZZSD.json'].bars) } });
+    await expect(candidates(page).first()).toBeVisible();
+    if (hash.endsWith('watch')) await expect(page.locator('[data-symbol="ZZSD"] .brief-chip', { hasText: '崩れ' })).toBeVisible();
+    const check = async () => {
+      await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+      const rows = await chipLines(page);
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) {
+        expect(row.height, `${row.symbol} ${row.chips.join(' | ')}`).toBeLessThanOrEqual(100);
+        expect(row.lines, `${row.symbol} ${row.chips.join(' | ')}`).toBeLessThanOrEqual(2);
+        expect(row.out, row.symbol).toEqual([]);
+      }
+      return rows;
+    };
+    const rows = await check();
+    // The base chip shows where it fits (ZZNV's normal row has the room), and the label says it in every case.
+    if (!hash.endsWith('watch')) expect(rows.find(row => row.symbol === 'ZZNV').chips).toContain('土台6週・−40%');
+    expect(await page.locator('[data-symbol="ZZNV"]').first().getAttribute('aria-label')).toContain('土台6週・−40%（Setup Engineの土台が深さ35%超（独自判定））');
+    if (hash.endsWith('list')) { await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて/ }).click(); await check(); }
+    expect(await asciiMinus(page)).toEqual([]);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
