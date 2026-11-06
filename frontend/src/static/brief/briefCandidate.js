@@ -25,12 +25,17 @@ const positive = value => finite(value) && value > 0;
 export const BASE_DEPTH_MAX_PERCENT = 35;
 export const BASE_LENGTH_MIN_WEEKS = 3;
 export const EXTENDED_FROM_SMA50_PERCENT = 25;
+/** The base chip's rule as the notes state it (the 候補 tab, and Today when a focus row carries the chip). */
+export const BASE_CAUTION_NOTE = `土台の注意：Setup Engineの土台が深さ${BASE_DEPTH_MAX_PERCENT}%超または${BASE_LENGTH_MIN_WEEKS}週未満、または終値が50日線より${EXTENDED_FROM_SMA50_PERCENT}%超上（独自判定）。`;
 /** The 候補 tab's EPS filter: the latest quarter's EPS change from the year-ago quarter, from the SEC summary (独自設定). */
 export const EPS_YOY_FILTER_PERCENT = 25;
-// The Setup Engine's confidence floor (the backend aggregator's primary_pattern_below_confidence_floor, 55.0).
-// The verdict track's buyGate.js names the same floor SE_CONFIDENCE_FLOOR; the pivot-source label reads it here
-// until the tracks are merged (one constant, then imported).
-const SE_CONFIDENCE_FLOOR = 55;
+/**
+ * The Setup Engine's confidence floor and the check it fails below it (the backend aggregator's
+ * primary_pattern_below_confidence_floor, 55.0): one constant for the pivot source here and the conclusion's
+ * base check (buyGate imports it from this module, which it already imports, so there is no cycle).
+ */
+export const SE_CONFIDENCE_FLOOR = 55;
+export const SE_BELOW_FLOOR_CHECK = 'primary_pattern_below_confidence_floor';
 
 /**
  * The one table of position names every screen uses (rows, the conclusion, the meter, the filters).
@@ -137,28 +142,26 @@ function currentSetup(row, date) {
   return calculation?.status === 'calculated' && isoDay(date) && calculation.as_of_date === date ? calculation : null;
 }
 
-/** Setup Engine pattern ids as the brief names them (one table; an unknown id is shown as it is). */
-const SE_PATTERN_NAMES = {
-  vcp: 'VCP', volatility_contraction_pattern: 'VCP', cup_with_handle: 'カップ・ウィズ・ハンドル', cup_and_handle: 'カップ・ウィズ・ハンドル',
-  double_bottom: 'ダブルボトム', flat_base: 'フラットベース', three_weeks_tight: '3週タイト', high_tight_flag: 'ハイ・タイト・フラッグ',
-  first_pullback: '初回の押し', nr7_inside_day: 'NR7・インサイドデイ',
-};
+/** The Setup Engine detectors' pattern ids (backend analysis/patterns) as the brief names them; an unknown id is shown as it is. */
+const SE_PATTERN_NAMES = { vcp: 'VCP', cup_with_handle: 'カップ・ウィズ・ハンドル', double_bottom: 'ダブルボトム', three_weeks_tight: '3週タイト',
+  high_tight_flag: 'ハイ・タイト・フラッグ', first_pullback: '初回の押し', nr7_inside_day: 'NR7・インサイドデイ' };
 /** The name of a Setup Engine pattern id (se_pattern_primary), the id itself when the table has none, or null. */
 export const setupPatternName = id => typeof id === 'string' && id.trim() ? SE_PATTERN_NAMES[id.trim()] || id.trim() : null;
 
 /**
- * Where the pivot comes from (RW14): a Setup Engine pivot names its pattern and confidence (「Setup Engine・
- * カップ・ウィズ・ハンドル（信頼度72）」, 「（信頼度31・基準55未満）」); the confidence reads 未確認 when it is not
- * published or the recalculation is not current for the analysis date, never 0. Any other source keeps
- * canonicalPivot's reason.
+ * Where the pivot comes from (RW14): a Setup Engine (SE) pivot names its pattern and confidence (「カップ・ウィズ・
+ * ハンドル（SE信頼度72）」, 「VCP（SE信頼度31・基準55未満）」, without a pattern 「SE信頼度60」: as short as step 0's
+ * 「Setup Engine（日次）」, so the VCP card keeps its lines on a phone). The pattern and the confidence are read only
+ * while the recalculation is current for the analysis date (a stale pattern is never named as today's), and the
+ * confidence reads 未確認 otherwise, never 0. Any other source keeps canonicalPivot's reason.
  */
 function pivotSourceLabel(row, reason, date) {
   if (reason !== 'Setup Engine（日次）') return reason;
   const current = currentSetup(row, date), confidence = current ? row.se_pattern_confidence : null;
-  const below = (finite(confidence) && confidence < SE_CONFIDENCE_FLOOR) || Boolean(current && String(current.reason || '').includes('primary_pattern_below_confidence_floor'));
-  const shown = finite(confidence) ? `信頼度${Math.floor(confidence)}` : '信頼度 未確認';
-  const pattern = setupPatternName(row?.se_pattern_primary);
-  return `Setup Engine${pattern ? `・${pattern}` : ''}（${shown}${below ? `・基準${SE_CONFIDENCE_FLOOR}未満` : ''}）`;
+  const below = (finite(confidence) && confidence < SE_CONFIDENCE_FLOOR) || Boolean(current && String(current.reason || '').includes(SE_BELOW_FLOOR_CHECK));
+  const shown = `SE信頼度${finite(confidence) ? Math.floor(confidence) : ' 未確認'}${below ? `・基準${SE_CONFIDENCE_FLOOR}未満` : ''}`;
+  const pattern = current ? setupPatternName(row?.se_pattern_primary) : null;
+  return pattern ? `${pattern}（${shown}）` : shown;
 }
 
 // A measure shown against a threshold it crossed (`over` it, or under it): whole when that keeps its side of the
@@ -172,7 +175,8 @@ const sideShown = (value, limit, over, crossed = true) => {
  * A questionable base (RW7, 独自判定): the current Setup Engine base deeper than BASE_DEPTH_MAX_PERCENT or
  * shorter than BASE_LENGTH_MIN_WEEKS (「土台3週・−38%」), else the verified close more than
  * EXTENDED_FROM_SMA50_PERCENT above the 50-day line (「50日線から+28%」). One neutral chip, or null for a normal
- * row (and for values not dated for the analysis date).
+ * row (and for values not dated for the analysis date). `short` names only the measure that crossed its bar
+ * (「土台−38%」, 「土台2週」): a phone's Today puts it in the RS chip's place without a line more.
  */
 function baseCaution(row, date, fromSma50) {
   const current = currentSetup(row, date);
@@ -182,11 +186,12 @@ function baseCaution(row, date, fromSma50) {
   if (deep || short) {
     const length = weeks === null ? '週数 未確認' : `${sideShown(weeks, BASE_LENGTH_MIN_WEEKS, false, short)}週`;
     const size = depth === null ? '深さ 未確認' : `−${sideShown(depth, BASE_DEPTH_MAX_PERCENT, true, deep)}%`;
-    return { kind: 'base', text: `土台${length}・${size}`,
+    return { kind: 'base', text: `土台${length}・${size}`, short: deep && short ? `土台${length}・${size}` : `土台${deep ? size : length}`,
       title: `Setup Engineの土台が${[deep ? `深さ${BASE_DEPTH_MAX_PERCENT}%超` : null, short ? `${BASE_LENGTH_MIN_WEEKS}週未満` : null].filter(Boolean).join('・')}（独自判定）` };
   }
   if (finite(fromSma50) && fromSma50 > EXTENDED_FROM_SMA50_PERCENT) {
-    return { kind: 'extended', text: `50日線から+${sideShown(fromSma50, EXTENDED_FROM_SMA50_PERCENT, true)}%`, title: `終値が50日線より${EXTENDED_FROM_SMA50_PERCENT}%超上（伸びすぎ・独自判定）` };
+    const text = `50日線から+${sideShown(fromSma50, EXTENDED_FROM_SMA50_PERCENT, true)}%`;
+    return { kind: 'extended', text, short: text, title: `終値が50日線より${EXTENDED_FROM_SMA50_PERCENT}%超上（伸びすぎ・独自判定）` };
   }
   return null;
 }
@@ -248,8 +253,10 @@ export function candidateView(item, date) {
     epsYoy: secEpsYoy(row, date),
     row,
   };
-  // The analysis day as an event (breakoutEvent), once per view: the rows' chip, the order and the filters read it.
+  // The analysis day as an event (breakoutEvent) and its rows' short form (rowEvent), once per view: the rows'
+  // chip and label, the order and the filters read them.
   view.event = breakoutEvent(view);
+  view.rowEvent = shortEvent(view, view.event);
   if (!assessment?.qualified && failed === 1 && unknown === 0) {
     Object.defineProperty(view, 'missing', { enumerable: true, configurable: true,
       get() { const value = oneMissing(row); Object.defineProperty(view, 'missing', { value, enumerable: true, writable: true, configurable: true }); return value; } });
@@ -325,8 +332,8 @@ const dayEvent = view => (view?.event === undefined ? breakoutEvent(view) : view
  * position (no event, or 'after': 「● 買いゾーン +x%」 as before). A crossing without the volume is never
  * green (tone 'wait'), and a heavy down day is a warning (tone 'ext').
  */
-export function rowEvent(view) {
-  const event = dayEvent(view);
+export const rowEvent = view => (view?.rowEvent === undefined ? shortEvent(view, dayEvent(view)) : view.rowEvent);
+function shortEvent(view, event) {
   if (!event) return null;
   const day = shortDate(view.asOf);
   if (event.kind === 'breakout') return { kind: 'breakout', glyph: '↗', text: `${day}上抜け ${ratioShown(view.volumeRatio)}`, tone: 'zone' };
@@ -418,30 +425,36 @@ export const LIST_FILTERS = {
   one: { label: 'あと1条件', test: view => !view.qualified && view.failed === 1 && view.unknown === 0 },
   // Today's focus pool (the zone and near filters together). Hidden: never a segment button.
   focus: { label: '注目候補', hidden: true, test: view => view.qualified && (inZone(view) || nearPivot(view)) },
-  // The analysis day's breakouts among the selected stocks (Today's 「うち上抜けN」 and the 条件 menu). Hidden.
-  breakout: { label: '上抜け', hidden: true, test: view => view.qualified && dayEvent(view)?.kind === 'breakout' },
+  // The analysis day's breakouts among the selected stocks (Today's 「うち上抜けN」 and the 条件 menu). Hidden. A
+  // selected stock in the zone whose day is not verified (no event) is counted apart (`unknown`), never as a miss.
+  breakout: { label: '上抜け', hidden: true, test: view => view.qualified && dayEvent(view)?.kind === 'breakout',
+    unknown: view => view.qualified && inZone(view) && !dayEvent(view), why: '分析基準日の値動き（終値・前日比）が未検証' },
   // The selected stocks whose latest SEC EPS change is EPS_YOY_FILTER_PERCENT or more; a stock whose SEC summary
   // is missing, not dated for the analysis date or without the value is counted apart (`unknown`), never as a miss.
-  eps: { label: `EPS前年比≥${EPS_YOY_FILTER_PERCENT}%（直近・SEC）`, hidden: true, test: view => view.qualified && finite(view.epsYoy) && view.epsYoy >= EPS_YOY_FILTER_PERCENT,
-    unknown: view => view.qualified && !finite(view.epsYoy) },
+  // `field`: the published row field it reads (absent from older publications: 未収録).
+  eps: { label: `EPS前年比≥${EPS_YOY_FILTER_PERCENT}%（直近・SEC）`, short: `EPS前年比≥${EPS_YOY_FILTER_PERCENT}%`, hidden: true, field: 'sec_summary',
+    test: view => view.qualified && finite(view.epsYoy) && view.epsYoy >= EPS_YOY_FILTER_PERCENT, unknown: view => view.qualified && !finite(view.epsYoy), why: 'SECのEPS前年比が未確認' },
 };
-/** A list filter's label as the screen shows it: the breakout filter names the analysis date (「10/2の上抜け」). */
+/** A list filter's label as the screen shows it: the breakout filter names the analysis date (「10/2の上抜け」); `short` is the 条件 menu's. */
 export const filterLabel = (key, date) => key === 'breakout' ? `${isoDay(date) ? `${shortDate(date)}の` : ''}上抜け` : LIST_FILTERS[key]?.label || '';
 /**
  * Every list filter's count over the same views in one pass, plus `unknown` counts for the filters that have
- * them ({ zone: 5, …, eps: 3 } and { eps: 18 }).
+ * them ({ zone: 5, …, eps: 3 } and { breakout: 0, eps: 18 }), and `unpublished`: for a filter that reads a
+ * published field, true when no selected row carries it (an older publication: 未収録, never 該当0).
  */
 export function filterCounts(views) {
-  const keys = Object.keys(LIST_FILTERS), tests = keys.map(key => LIST_FILTERS[key].test), unknowns = keys.map(key => LIST_FILTERS[key].unknown || null);
-  const hits = keys.map(() => 0), misses = keys.map(() => 0), list = views || [];
-  for (let v = 0; v < list.length; v++) {
-    const view = list[v];
+  const keys = Object.keys(LIST_FILTERS), filters = keys.map(key => LIST_FILTERS[key]);
+  const hits = keys.map(() => 0), misses = keys.map(() => 0), carried = keys.map(() => false), list = views || [];
+  for (const view of list) {
     for (let k = 0; k < keys.length; k++) {
-      if (tests[k](view)) hits[k] += 1;
-      else if (unknowns[k] !== null && unknowns[k](view)) misses[k] += 1;
+      const filter = filters[k];
+      if (filter.test(view)) hits[k] += 1;
+      else if (filter.unknown?.(view)) misses[k] += 1;
+      if (filter.field && !carried[k] && view.qualified && view.row && Object.hasOwn(view.row, filter.field)) carried[k] = true;
     }
   }
-  return { counts: Object.fromEntries(keys.map((key, k) => [key, hits[k]])), unknown: Object.fromEntries(keys.flatMap((key, k) => unknowns[k] ? [[key, misses[k]]] : [])) };
+  const pick = (when, value) => Object.fromEntries(keys.flatMap((key, k) => (when(filters[k]) ? [[key, value(k)]] : [])));
+  return { counts: pick(() => true, k => hits[k]), unknown: pick(filter => filter.unknown, k => misses[k]), unpublished: pick(filter => filter.field, k => !carried[k]) };
 }
 /** Case-insensitive ticker or company-name match. */
 export const matchesSearch = (view, query) => !query || `${view.symbol} ${view.name}`.toUpperCase().includes(query.trim().toUpperCase());
@@ -453,8 +466,9 @@ export const LIST_SORTS = {
   pivot: { label: 'ピボットに近い順', compare: (a, b) => (finite(a.distance) ? Math.abs(a.distance) : 99) - (finite(b.distance) ? Math.abs(b.distance) : 99) || briefOrder(a, b) },
   volume: { label: '出来高比', compare: (a, b) => (b.volumeRatio ?? -1) - (a.volumeRatio ?? -1) || briefOrder(a, b) },
   high: { label: '52週高値に近い順', compare: (a, b) => (a.fromHigh ?? 999) - (b.fromHigh ?? 999) || briefOrder(a, b) },
-  eps: { label: 'EPS前年比', compare: (a, b) => highFirst(a.epsYoy, b.epsYoy) || briefOrder(a, b) },
-  base: { label: '土台の質（SE信頼度・未確認は最後）', compare: (a, b) => highFirst(a.setupConfidence, b.setupConfidence) || briefOrder(a, b) },
+  eps: { label: 'EPS前年比', filter: 'eps', compare: (a, b) => highFirst(a.epsYoy, b.epsYoy) || briefOrder(a, b) },
+  // The Setup Engine confidence, an unknown last (the list's notes say so).
+  base: { label: '土台の質', compare: (a, b) => highFirst(a.setupConfidence, b.setupConfidence) || briefOrder(a, b) },
 };
 
 /**
@@ -481,17 +495,24 @@ export const templateShort = view => Number.isInteger(view?.failed) && view.fail
  * neutral, as Today's focus rows do; the titles stay. Without the argument, the tones are as before.
  */
 export function watchEvent(view, market) {
-  // Not a buy candidate: the position stays visible, in a neutral tone, with the reason.
-  if (!view.qualified) return { kind: 'unqualified', tone: 'neutral', title: `${view.stateLabel}（${templateShort(view)}）` };
-  const held = market !== undefined && candidateMarketGate(market) !== 'open';
-  const tone = value => held && value === 'zone' ? 'neutral' : value;
   // The day's event in the rows' short form (rowEvent), so Today says one stock one way.
   const event = rowEvent(view);
+  // Not a buy candidate: the day's event or the position stays visible with the reason, never green; a heavy
+  // down day keeps its warning.
+  if (!view.qualified) {
+    const why = `（${templateShort(view)}）`;
+    if (!event) return { kind: 'unqualified', tone: 'neutral', title: `${view.stateLabel}${why}` };
+    // The kind keeps the row chip's glyph (↗, ▲, or ● for a touch or a crossing).
+    return { kind: event.kind === 'breakout' || event.kind === 'heavyDown' ? event.kind : 'zone', tone: event.tone === 'ext' ? 'ext' : 'neutral', title: `${event.text}${why}` };
+  }
+  const held = market !== undefined && candidateMarketGate(market) !== 'open';
+  const tone = value => held && value === 'zone' ? 'neutral' : value;
   if (event?.kind === 'breakout') return { kind: 'breakout', tone: tone('zone'), title: event.text };
   if (event?.kind === 'heavyDown') return { kind: 'heavyDown', tone: 'ext', title: event.text };
   // A crossing without the volume keeps the zone's ● but not its green (tone 'wait').
   if (view.state === 'zone') return { kind: 'zone', tone: tone(event?.tone || 'zone'), title: event?.text || positionText(view) };
-  if (view.position === 'near' || (view.state === 'wait' && finite(view.distance) && view.distance >= -5)) return { kind: 'near', tone: 'wait', title: `${POSITION_NAMES.near}（あと${Math.abs(view.distance).toFixed(1)}%）` };
+  // Near the pivot: the focus row's chip text (positionText), so a watched focus candidate reads one way on Today.
+  if (view.position === 'near' || nearPivot(view)) return { kind: 'near', tone: 'wait', title: positionText(view) };
   if (view.state === 'ext') return { kind: 'ext', tone: 'ext', title: POSITION_NAMES.ext };
   if (view.state === 'wait') return { kind: 'base', tone: 'neutral', title: POSITION_NAMES.base };
   if (view.stale) return { kind: 'stale', tone: view.stale.above ? 'ext' : 'neutral', title: view.stale.short };
