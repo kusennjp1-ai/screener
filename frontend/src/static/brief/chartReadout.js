@@ -2,6 +2,9 @@
 // bars on the chart's interval, every moving average it draws and the volume average, then one bar's
 // values as the readout shows them. Pure; a value whose window is short is null (shown as —), never 0.
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
+import { BREAKOUT_VOLUME_RATIO } from './briefCandidate';
+import { ADR_SESSIONS, adrState } from './positionSizing';
+import { lastPivotCrossing } from './breakoutHistory';
 
 const DAY = 86400000;
 const finite = Number.isFinite;
@@ -64,6 +67,11 @@ export const CHART_RANGES = Object.freeze({ '3m': [65, 'day', '3か月'], '6m': 
 
 /** The short averages (a 10-day SMA and a 21-day EMA) are drawn on the 3- and 6-month daily charts only. */
 export const shortAveragesDrawn = (interval, period) => interval !== 'week' && period <= 130;
+/**
+ * Where the short averages are drawn on screen: on the 3- and 6-month daily charts at 1024px and wider,
+ * and on the 3-month chart only below that (about 4px per bar on a phone).
+ */
+export const shortAveragesShown = (interval, period, wide = false) => shortAveragesDrawn(interval, period) && (wide || period <= 65);
 
 const cache = new WeakMap();
 /**
@@ -111,12 +119,34 @@ export const formatShares = value => (finite(value) && value >= 0 ? `${scaled(va
 export const formatVolume = value => (finite(value) && value >= 0 ? scaled(value, 2) : '—');
 
 /**
+ * The heavy-volume bars of the visible period, as the volume panel draws them: volume at
+ * BREAKOUT_VOLUME_RATIO× the average of the bars before it or more, each with its direction against
+ * the previous close ('up', 'down', or 'flat' for the first bar of the data). One source for the
+ * drawing and for the legend's 「■下落日の大商い」 (shown only when such a bar is drawn).
+ */
+export function heavyVolumeBars(model, period) {
+  const series = chartSeries(model);
+  if (!series?.all.length) return [];
+  const { all, vavg } = series, n = Math.min(period ?? all.length, all.length), from = all.length - n, out = [];
+  for (let i = from; i < all.length; i++) {
+    const bar = all[i], previous = all[i - 1]?.close;
+    const direction = !finite(previous) || !finite(bar.close) ? 'flat' : bar.close > previous ? 'up' : bar.close < previous ? 'down' : bar.close >= bar.open ? 'up' : 'down';
+    if (finite(vavg[i]) && vavg[i] > 0 && finite(bar.volume) && bar.volume >= vavg[i] * BREAKOUT_VOLUME_RATIO) out.push({ date: bar.date, direction });
+  }
+  return out;
+}
+
+/**
  * One bar of the chart as the readout shows it. `index` is into chartSeries(model).all (the latest
  * bar when it is not a valid index). The change is against the previous bar's close (null for the
  * first bar of the data); the volume ratio against the average of the previous 50 bars (10 weeks on the
  * weekly chart; null when that window is short). The pivot ratio and the distance from the 52-week
  * high (`auditHigh`, the published audit's value) judge the stock, so they exist only for the latest
- * bar and only when the bars are certified for the analysis date.
+ * bar and only when the bars are certified for the analysis date. So do ADR (`adrPercent` over the
+ * certified daily bars, the plan's own function) and the distance from the 50-day line, on the daily
+ * chart's latest bar: `adr` and `fromSma50` are null (shown as —) on bars not certified, and absent
+ * (undefined) on a past bar or the weekly chart, where they do not apply. `unverified` is true when the
+ * bars are not certified: the readout names them 未検証の足 and qualifies the change and volume ratio.
  */
 export function chartReadout(model, index, { certified = false, pivot = null, auditHigh = null } = {}) {
   const series = chartSeries(model);
@@ -126,8 +156,13 @@ export function chartReadout(model, index, { certified = false, pivot = null, au
   const bar = all[i], previous = i > 0 ? all[i - 1] : null, latest = i === last, judge = latest && certified === true && finite(bar.close);
   const average = series.vavg[i];
   const short = date => date.slice(5).replace('-', '/');
+  const daily = latest && !weekly;
+  const ma50 = series.averages.find(a => a.key === 'ma50')?.values[i];
+  const adr = daily ? (certified === true ? adrState(model.bars) : { value: null, reason: '日足が分析日で未検証' }) : null;
   return {
-    index: i, latest, weekly,
+    index: i, latest, weekly, unverified: certified !== true,
+    adr: adr ? adr.value : undefined, adrReason: adr?.reason ?? null, adrSessions: ADR_SESSIONS,
+    fromSma50: daily ? (judge && finite(ma50) && ma50 > 0 ? (bar.close / ma50 - 1) * 100 : null) : undefined,
     // On screen a week is named by its first session (09/28週); `range` spells out its sessions.
     date: weekly ? `${short(bar.start)}週` : short(bar.date), range: weekly ? `${short(bar.start)}〜${short(bar.date)}` : short(bar.date), isoDate: bar.date,
     open: finite(bar.open) ? bar.open : null, high: finite(bar.high) ? bar.high : null, low: finite(bar.low) ? bar.low : null, close: finite(bar.close) ? bar.close : null,
@@ -153,9 +188,12 @@ export function weeklyRangeLabel(bars) {
  * The chart's footnotes for the screen's 注記 (in place on the card at 1024px and wider). Each one is
  * stated once and only when it applies; every N is counted from the data.
  * @param {object} p { bars, interval, period, short (the 10/21-day lines are drawn), rsLead (rsLeadMarks of
- *   the certified bars, or null), gaps (shown gap days), sellMarks (the phone legend names ▼▲ without their meaning) }
+ *   the certified bars, or null), gaps (shown gap days), sellMarks (the phone legend names ▼▲ without their
+ *   meaning), adr (the readout shows ADR and the distance from the 50-day line), marks (below 1024px, the
+ *   marks drawn whose legend item may be folded to keep the legend on two lines: { breakout, heavyDown,
+ *   structuralLow, legs }) }
  */
-export function chartNotes({ bars, interval, period, short = shortAveragesDrawn(interval, period), rsLead = null, gaps = [], sellMarks = false }) {
+export function chartNotes({ bars, interval, period, short = shortAveragesDrawn(interval, period), rsLead = null, gaps = [], sellMarks = false, adr = false, marks = null }) {
   if (!bars?.length) return [];
   const series = chartSeries({ bars, interval, short });
   const n = Math.min(period, series.all.length), from = series.all.length - n;
@@ -165,9 +203,33 @@ export function chartNotes({ bars, interval, period, short = shortAveragesDrawn(
   if (partial.length) notes.push(`${partial.map(({ a, count }) => (count ? `${a.label}線は直近${count}本のみ` : `${a.label}線は描けません`)).join('・')}（${series.weekly ? '週足' : '日足'}が足りないため）。`);
   // The lead is judged on daily bars, also under the weekly chart.
   if (rsLead?.points > 1) notes.push(rsLead.eligible > 0
-    ? `RS線の●は先行の独自判定です（RS線が直前252日の最高値以上、株価は自身の252日高値から${RS_LEAD_FROM_HIGH_PERCENT}%以上下）。先行判定は直近${rsLead.eligible}日のみです。`
-    : `RS線が${rsLead.points}日分で252日に満たないため、RS線の先行（●）は判定していません。`);
+    ? `RS線の下の太線は先行の独自判定です（RS線が直前252日の最高値以上、株価は自身の252日高値から${RS_LEAD_FROM_HIGH_PERCENT}%以上下。続いた日はひと続きの線）。先行判定は直近${rsLead.eligible}日のみです。`
+    : `RS線が${rsLead.points}日分で252日に満たないため、RS線の先行（下の太線）は判定していません。`);
+  if (adr && !series.weekly) notes.push(`ADR（直近${ADR_SESSIONS}日の高値÷安値−1の平均）・50日線からの乖離は独自計算です。`);
   if (gaps.length) notes.push('株価チャートの淡い縦帯は窓（前日の高値・安値から前日終値の2%以上離れて始まった日・独自判定）です。');
   if (sellMarks) notes.push('▼＝上昇の加速、▲＝崩れ（売りのサイン）。');
+  // Below 1024px the legend keeps two lines: every mark it may fold is explained here once.
+  const keys = [
+    marks?.breakout ? '緑の▲＝終値がピボットを上抜けた日（認証済みの日足）' : null,
+    marks?.heavyDown ? `■＝下落日の大商い（${BREAKOUT_VOLUME_RATIO}×以上・独自判定）` : null,
+    marks?.legs ? '点線＝収縮の安値を結んだ線、枠＝値幅の収縮' : null,
+    marks?.structuralLow ? '「安値」＝最後の収縮の安値' : null,
+  ].filter(Boolean);
+  if (keys.length) notes.push(`チャートの印：${keys.join('、')}。`);
   return notes;
+}
+
+/**
+ * The pivot crossing the chart marks: lastPivotCrossing (the conclusion's own helper) on bars certified for
+ * the analysis date only, or null. A crossing on the analysis day counts; a close exactly at the pivot is a
+ * touch, not a breakout, so it is not marked. A crossing followed by a close back under the pivot is still
+ * marked (it is where the failed breakout began; the conclusion names the failure). `volumeRatio` is the
+ * helper's (null when it supplies none, never 0).
+ */
+export function chartCrossing(judged, pivot) {
+  if (!Array.isArray(judged) || !Number.isFinite(pivot) || pivot <= 0) return null;
+  const crossing = lastPivotCrossing(judged, pivot);
+  const bar = crossing && Number.isInteger(crossing.index) ? judged[crossing.index] : null;
+  if (!bar || !Number.isFinite(bar.close) || !(bar.close > pivot)) return null;
+  return { date: bar.date, sessionsAgo: crossing.sessionsAgo, volumeRatio: Number.isFinite(crossing.volumeRatio) && crossing.volumeRatio > 0 ? crossing.volumeRatio : null };
 }
