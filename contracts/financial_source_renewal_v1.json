@@ -1,12 +1,14 @@
 {
   "schema_version": "financial-source-renewal-policy-v1",
-  "publication_enabled": false,
+  "publication_enabled": true,
   "ci_admission": {
-    "phase": "certify",
-    "reviewed_commit": "c3e2efe4de7aa33132bcdb46157adefc0276633c",
-    "reviewed_tree": "88fdc09143e69969db40c0517627a97990e24d5e",
+    "phase": "publish",
+    "reviewed_commit": "719966b7781acf238d72e691c0c06dbbc19fcd5d",
+    "reviewed_tree": "6451b5bd6a3eb9aa6d8c9b646863c461a5f62d25",
     "controls": {
-      "request": "9d2300d07c9b741969ef08119ba4bbef8e1c9f342b5a8c1bb684b5145d02b6bf"
+      "request": "9d2300d07c9b741969ef08119ba4bbef8e1c9f342b5a8c1bb684b5145d02b6bf",
+      "pin": "49a491c3e263d634b2d96fa1dffb7cc0c41b3514039ad65efeed297a5a4a31cb",
+      "intent": "9f3de8cc634de5c1a29d955cff16fad00e8ee98b8210e5d27b7c6639b05ea495"
     }
   },
   "request_path": ".github/financial-source-renewal-request.json",
@@ -26,7 +28,21 @@
   "maximum_current_receipts": 40000,
   "maximum_control_bytes": 65536,
   "maximum_proof_bytes": 16777216,
-  "reviewed_controllers": [],
+  "reviewed_controllers": [
+    {
+      "controller_sha": "719966b7781acf238d72e691c0c06dbbc19fcd5d",
+      "controller_tree": "6451b5bd6a3eb9aa6d8c9b646863c461a5f62d25",
+      "certification_sha": "22548890d0fe161edf7be3943b1775c4f293d0d9",
+      "certification_tree": "8245b42cdff76c1fe51c652227a0eb8d6809cf63",
+      "protected_code_sha256": "59f2aefe53cc1099604212562c11133253cdd40018b702095cec29a68b1e86ba",
+      "request_sha256": "63c211e8283a3b38fe135c530ae398e12c7a3343dbecafa6f0db04711d3d6448",
+      "pin_sha256": "41f157d8a2951838ecadc9fff19429f2dd2f78cd926b6ccf16ae977520e417c7",
+      "intent_sha256": "0c4aa4a04f570c1c13ad4668b272ac6d180774f36a064446b9dc06297d68a22f",
+      "request_raw_sha256": "9d2300d07c9b741969ef08119ba4bbef8e1c9f342b5a8c1bb684b5145d02b6bf",
+      "pin_raw_sha256": "49a491c3e263d634b2d96fa1dffb7cc0c41b3514039ad65efeed297a5a4a31cb",
+      "intent_raw_sha256": "9f3de8cc634de5c1a29d955cff16fad00e8ee98b8210e5d27b7c6639b05ea495"
+    }
+  ],
   "reviewed_consumer_transitions": [
     {
       "transition_id": "main135-close-price-guards-v1",
