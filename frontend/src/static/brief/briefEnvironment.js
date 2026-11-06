@@ -64,10 +64,12 @@ export function marketTone(market) {
 
 /**
  * The Nasdaq's own follow-through states that mean no FTD stands on it: a correction, a rally attempt that has not
- * confirmed, and a failed FTD (this app's own judgement on the exporter's record). While the SPY verdict is positive,
- * the market tab and Today's 地合い tile say the Nasdaq is in correction; the verdict, its tone and its cap stay SPY's.
+ * confirmed, a rally attempt that expired after 15 sessions without one (no undercut, no recovered peak: still a
+ * correction to O'Neil and Minervini) and a failed FTD (this app's own judgement on the exporter's record). While the SPY
+ * verdict is positive, the market tab and Today's 地合い tile say the Nasdaq is in correction; the verdict, its tone and
+ * its cap stay SPY's.
  */
-export const NASDAQ_CAUTION_STATES = Object.freeze(['correction', 'rally_attempt', 'ftd_failed']);
+export const NASDAQ_CAUTION_STATES = Object.freeze(['correction', 'rally_attempt', 'attempt_expired', 'ftd_failed']);
 /** The Nasdaq follow-through record (indices[^IXIC].followThrough) is one of NASDAQ_CAUTION_STATES. */
 export const nasdaqInCorrection = ft => ft?.available === true && NASDAQ_CAUTION_STATES.includes(ft.state);
 

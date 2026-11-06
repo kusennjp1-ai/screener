@@ -70,14 +70,20 @@ export function regimeKey(tags) {
 
 /**
  * The verdict reads the S&P 500 (SPY) only. While it is positive and the Nasdaq's own follow-through state is a
- * correction, a rally attempt or a failed FTD (nasdaqInCorrection, the condition of Today's 「NAS調整中」 too), a neutral
- * note says so (short: the phone's fold summary).
+ * correction, a rally attempt, an expired rally attempt or a failed FTD (nasdaqInCorrection, the condition of Today's
+ * 「NAS調整中」 too), a neutral note says so (short: the phone's fold summary).
  */
 export function nasdaqNote(ft, date) {
   if (!nasdaqInCorrection(ft)) return null;
   const view = followThroughView(ft, date), at = view.asOf ? `${view.asOf}時点・` : '';
-  const short = ft.state === 'ftd_failed' ? 'FTD失敗' : view.b;
-  return { long: `判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は${view.b}（${at}${ft.state === 'ftd_failed' ? '' : 'FTD未確認・'}独自判定）。`, short: `Nasdaqは${short}（${at}判定はSPYのみ）` };
+  // An expired rally attempt names the correction it is still in; its own words (「15日以内のFTDなし」) say there is no FTD,
+  // inside the fold. Its short form is a correction's, which keeps the fold's summary at 2 lines on a 320px phone.
+  const expired = ft.state === 'attempt_expired';
+  const short = ft.state === 'ftd_failed' ? 'FTD失敗' : expired ? '調整中' : view.b;
+  // 「FTD未確認」 only where the state's own words do not already say there is no FTD.
+  const unconfirmed = ft.state === 'ftd_failed' || expired ? '' : 'FTD未確認・';
+  return { long: `判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は${expired ? `調整中・${view.b}` : view.b}（${at}${unconfirmed}独自判定）。`,
+    short: `Nasdaqは${short}（${at}判定はSPYのみ）` };
 }
 
 /**
