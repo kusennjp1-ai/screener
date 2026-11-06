@@ -22,8 +22,8 @@ describe('the warning summary\'s study inputs', () => {
       const lines = marketRegimeContext({ history: value.data.long_history, trends: value, reference, date: DATE }).indices;
       for (const [key, symbol, block] of [['dist-S&P', '^GSPC', lines[0]], ['dist-NAS', '^IXIC', lines[1]]]) {
         const line = block.items.find(item => item.indicator === `${symbol}.dd.graded`);
-        expect(line.state, `${key} ${count}`).toBe(ddGradeState(count, reference));
-        expect(study.signalTags[key], `${key} ${count}`).toEqual(line.parts.tags);
+        expect(line.state).toBe(ddGradeState(count, reference));
+        expect(study.signalTags[key]).toEqual(line.parts.tags);
         expect(study.signalTags[key][0]).toBe(stateTag(reference, 'dd.graded', symbol, line.state));
       }
       // 5–6 days are not established on either index; 7 or more is the reference's own robust label.
@@ -48,7 +48,7 @@ describe('the warning summary\'s study inputs', () => {
 
   it('notes the Nasdaq by the condition Today\'s 「NAS調整中」 uses', () => {
     for (const state of ['correction', 'rally_attempt', 'ftd_failed', 'confirmed', 'no_correction', 'attempt_expired'])
-      expect(Boolean(nasdaqNote({ ...attempt(DATE), state, ...(state === 'ftd_failed' ? { failedDate: DATE, ftd: confirmed(DATE).ftd } : {}) }, DATE)), state).toBe(NASDAQ_CAUTION_STATES.includes(state));
+      expect(Boolean(nasdaqNote({ ...attempt(DATE), state, ...(state === 'ftd_failed' ? { failedDate: DATE, ftd: confirmed(DATE).ftd } : {}) }, DATE))).toBe(NASDAQ_CAUTION_STATES.includes(state));
     expect(nasdaqNote(failed(DATE), DATE).short).toBe('NasdaqはFTD失敗（判定はSPYのみ）');
   });
 });
@@ -62,7 +62,7 @@ describe('the 過去の傾向 block (MK5)', () => {
     for (const item of valued) {
       const confirmedLine = [TAGS.both, TAGS['^GSPC'], TAGS['^IXIC']].includes(item.tag);
       const expected = !confirmedLine || item.pDd5 === item.comparatorPDd5 ? null : item.pDd5 > item.comparatorPDd5 ? 'higher' : 'lower';
-      expect(item.direction, item.indicator).toBe(expected);
+      expect(item.direction).toBe(expected);
       expect(item.parts.comparator).toBe(`（${item.comparatorLabel} ${Math.round(item.comparatorPDd5)}%${expected ? `より${expected === 'higher' ? '多い' : '少ない'}` : ''}）`);
     }
     // An equal share says no direction, even on a confirmed line.

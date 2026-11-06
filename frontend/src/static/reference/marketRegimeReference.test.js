@@ -89,9 +89,9 @@ describe('tags', () => {
     // 5–6 days: the reference's 5-6 bucket is not established on either index; 7 or more is robust on both.
     for (const [count, tag] of [[5, '〔未確立〕'], [6, '〔未確立〕'], [7, '〔S&P・Nasdaqとも〕'], [9, '〔S&P・Nasdaqとも〕']]) for (const [key, symbol] of [['dist-S&P', '^GSPC'], ['dist-NAS', '^IXIC']]) {
       const state = ddGradeState(count, reference);
-      expect(signalTags(reference, key, { ...METHODS, distributionCount: count }), `${key} ${count}`)
+      expect(signalTags(reference, key, { ...METHODS, distributionCount: count }))
         .toEqual([stateTag(reference, 'dd.graded', symbol, state), biasTag(referenceState(reference, `${symbol}.dd.graded`, state))].filter(Boolean));
-      expect(signalTags(reference, key, { ...METHODS, distributionCount: count })[0], `${key} ${count}`).toBe(tag);
+      expect(signalTags(reference, key, { ...METHODS, distributionCount: count })[0]).toBe(tag);
     }
   });
 });

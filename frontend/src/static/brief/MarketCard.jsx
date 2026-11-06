@@ -98,7 +98,7 @@ const Spark = ({ range }) => <svg className="brief-env-spark" viewBox="0 0 64 20
 
 /**
  * The value's last 252 sessions on its own labelled scale; mounted only when its row is opened. `name` names the series
- * in its caption when a row draws more than one (「S&P　1年の最低 0日・最高 3日」).
+ * in its caption, before a full-width space, when a row draws more than one (「S&P」, then 「1年の最低 0日・最高 3日」).
  */
 function YearLine({ label, name = null, range, format }) {
   const lastValue = [...range.series].reverse().find(v => v !== null);
@@ -303,7 +303,8 @@ export default function MarketCard({ market, marketLoading = false, trends, date
     `参加度・リーダーの値は、${SURVIVORSHIP_NOTE}です。`,
     TT_POPULATION,
     signals?.tagNote ? `注意サインの印：${signals.tagNote}` : null,
-    summary && !finite(summary.vs200) ? '200日線比は、長期履歴に200日分の終値がないため未算出です。' : null,
+    // The S&P's own reason (the long history's ^GSPC closes), whichever index the switch shows.
+    view.summary && !finite(view.summary.vs200) ? '200日線比は、長期履歴に200日分の終値がないため未算出です。' : null,
   ];
   // The Nasdaq's published position: in place on the desktop, inside 過去の傾向 on a phone (the screen's budget). With the
   // S&P／Nasdaq switch, it is the Nasdaq's own figures in the panel instead.

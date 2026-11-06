@@ -77,9 +77,9 @@ describe('market tile suffix', () => {
 
   it('says NAS調整中 while the guide is open and the Nasdaq is in correction, on a rally attempt or after a failed FTD, judged today', async () => {
     const { marketTileSuffix } = await import('./briefEnvironment');
-    for (const state of ['correction', 'rally_attempt', 'ftd_failed']) expect(marketTileSuffix({ market: OPEN, trends: ready(ftd(state)), manifest }), state).toBe('NAS調整中');
+    for (const state of ['correction', 'rally_attempt', 'ftd_failed']) expect(marketTileSuffix({ market: OPEN, trends: ready(ftd(state)), manifest })).toBe('NAS調整中');
     expect(marketTileSuffix({ market: { ...OPEN, label: '上昇に圧力（独自判定）', cap: 0.25, regime: 'uptrend_under_pressure' }, trends: ready(ftd('correction')), manifest })).toBe('NAS調整中');
-    for (const state of ['confirmed', 'no_correction', 'attempt_expired']) expect(marketTileSuffix({ market: OPEN, trends: ready(ftd(state)), manifest }), state).toBeNull();
+    for (const state of ['confirmed', 'no_correction', 'attempt_expired']) expect(marketTileSuffix({ market: OPEN, trends: ready(ftd(state)), manifest })).toBeNull();
     // An older Nasdaq state (a series one session behind) is never shown as today's; an unknown one says nothing.
     expect(marketTileSuffix({ market: OPEN, trends: ready(ftd('correction', '2026-10-01')), manifest })).toBeNull();
     expect(marketTileSuffix({ market: OPEN, trends: ready({ available: false, reason: 'x' }), manifest })).toBeNull();
@@ -97,7 +97,7 @@ describe('market tile suffix', () => {
   it('keeps every suffix within 7 full-width characters (a half-width letter counts as half)', async () => {
     const { MARKET_TILE_SUFFIX } = await import('./briefEnvironment');
     const width = text => [...text].reduce((sum, ch) => sum + (/[\x20-\x7e]/.test(ch) ? 0.5 : 1), 0);
-    for (const text of Object.values(MARKET_TILE_SUFFIX)) expect(width(text), text).toBeLessThanOrEqual(7);
+    for (const text of Object.values(MARKET_TILE_SUFFIX)) expect(width(text)).toBeLessThanOrEqual(7);
   });
 
   it('names the Nasdaq correction by one condition, shared with the market tab\'s note', async () => {
@@ -125,9 +125,9 @@ describe('published market context', () => {
     expect(publishedMarketContext({ as_of_date: DATE }, { date: DATE })).toBeNull();
     expect(publishedMarketContext(null, { date: DATE })).toBeNull();
     expect(publishedMarketContext({ as_of_date: DATE, market_context: block })).toBeNull();
-    for (const [why, value] of [['another date', { ...block, as_of_date: '2026-10-01' }], ['an array', [block]], ['another method', { ...block, method: 'x' }], ['another source', { ...block, source: 'x' }],
+    for (const [, value] of [['another date', { ...block, as_of_date: '2026-10-01' }], ['an array', [block]], ['another method', { ...block, method: 'x' }], ['another source', { ...block, source: 'x' }],
       ['an unknown regime', { ...block, regime: 'bull' }], ['a negative count', { ...block, distribution_days: -1 }], ['a count of 0.5', { ...block, distribution_days: 0.5 }], ['a count as text', { ...block, distribution_days: '4' }],
-      ['a future FTD', { ...block, ftd_date: '2026-10-05' }], ['an FTD that is not a day', { ...block, ftd_date: '9/18' }], ['an exposure as text', { ...block, exposure_pct: '55' }]]) expect(read(value), why).toBeNull();
+      ['a future FTD', { ...block, ftd_date: '2026-10-05' }], ['an FTD that is not a day', { ...block, ftd_date: '9/18' }], ['an exposure as text', { ...block, exposure_pct: '55' }]]) expect(read(value)).toBeNull();
     expect(read(block, { as_of_date: '2026-10-01' })).toBeNull();
   });
 });
