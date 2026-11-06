@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { _test, chartContentKey, dateTicks, earningsMarker, EARNINGS_MARKER_DAYS, indexRuns, keepRightFirst, NARROW_CHART_WIDTH, renderPriceChart, RS_CAPTION, spread, weeklyBars } from './priceChart';
+import { _test, dateTicks, indexRuns, keepRightFirst, NARROW_CHART_WIDTH, renderPriceChart, RS_CAPTION, spread, weeklyBars } from './priceChart';
+import { chartContentKey, earningsMarker, EARNINGS_MARKER_DAYS } from './chartReadout';
 import { EARNINGS_WARN_DAYS, earningsCall } from './briefCandidate';
 
 function container(width = 600, height = 420) {

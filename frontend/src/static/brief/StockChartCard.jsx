@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import PriceChart from './PriceChart';
-import { priceInRange } from './priceChart';
 import { sellMarks } from './briefSell';
 import { auditValues } from '../qualificationAudit';
 import { newYorkDate } from '../evidenceTime';
 import { ratioShown } from './briefCandidate';
-import { CHART_RANGES as RANGES, chartCrossing, chartReadout, formatPercent, formatPrice, heavyVolumeBars, shortAveragesShown, weeklyBars, weeklyRangeLabel } from './chartReadout';
+import { CHART_RANGES as RANGES, chartCrossing, chartReadout, formatPercent, formatPrice, heavyVolumeBars, priceInRange, shortAveragesShown, weeklyBars, weeklyRangeLabel } from './chartReadout';
 
 /** The 上げ下げ出来高比 footnote, in the stock screen's 注記 below 1024px. */
 export const VCP_NOTE = '上げ下げ出来高比（50日）は、上げた日の出来高 ÷ 下げた日の出来高です。1超は買いが優勢です。';

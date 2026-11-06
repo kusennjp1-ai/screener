@@ -1,5 +1,6 @@
 import { forwardRef, memo, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react';
-import { chartContentKey, chartIdentityKey, renderPriceChart } from './priceChart';
+import { renderPriceChart } from './priceChart';
+import { chartContentKey, chartIdentityKey } from './chartReadout';
 
 let introducedOnce = false;
 

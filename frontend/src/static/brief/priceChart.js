@@ -4,7 +4,7 @@
 // compositor-only transforms) and front (levels and their labels, tags, last price,
 // marks, axes, scrub). Every text is 12px and the viewBox width is the display width.
 import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
-import { chartSeries, formatVolume, heavyVolumeBars, weeklyBars } from './chartReadout';
+import { chartSeries, earningsMarker, formatVolume, heavyVolumeBars, priceScale, weeklyBars } from './chartReadout';
 
 export { weeklyBars };
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -19,8 +19,6 @@ const FS = 12, TAG_H = 20, TAG_GAP = 20;
 export const NARROW_CHART_WIDTH = 480;
 /** The RS panel's caption: its meaning (株価÷S&P 500, neither RS推計 nor IBD RS) is in the always-visible legend. */
 export const RS_CAPTION = 'RS線';
-/** The earnings marker's window: a date this many calendar days away or nearer (or passed by as many) is drawn. */
-export const EARNINGS_MARKER_DAYS = 28;
 const mono = 'font-family="var(--font-mono)"';
 const text = (x, y, body, cls, extra = '') => `<text x="${x}" y="${y}" class="${cls}" font-size="${FS}" ${extra}>${body}</text>`;
 // Estimated width of a 12px label: CJK glyphs are 1em, mono digits 0.6em, other Latin about 0.56em.
@@ -51,20 +49,6 @@ function niceStep(lo, hi, count) {
 }
 const tagText = value => (value >= 1000 ? fmt(value, 0) : fmt(value, 2));
 const tagWidth = value => Math.round(width(tagText(value), true) + 10);
-const shortDay = day => `${Number(day.slice(5, 7))}/${Number(day.slice(8))}`;
-
-/**
- * The date axis's earnings marker from the screen's one earnings call (earningsCall of the row: the days
- * from today's New York date, so the chart, the chips and the plan count the same days), or null outside
- * EARNINGS_MARKER_DAYS. Upcoming 「決算 10/10 あと7日」, on the day 「決算 10/10 当日」, after it 「決算 10/10 経過」
- * (never 「あと」). `soon` (the call's EARNINGS_WARN_DAYS) gives the warning tone, only until the day itself;
- * `short` is the phone's compact flag 「E 10/10」 (the full text is in the chart's accessible name).
- */
-export function earningsMarker(call) {
-  if (!call || !finite(call.days) || typeof call.date !== 'string' || Math.abs(call.days) > EARNINGS_MARKER_DAYS) return null;
-  const day = shortDay(call.date);
-  return { text: `決算 ${day} ${call.days > 0 ? `あと${call.days}日` : call.days === 0 ? '当日' : '経過'}`, short: `E ${day}`, warn: call.soon === true && call.days >= 0 };
-}
 
 /** Consecutive bar indices as runs [first, last] (the RS line's lead days are drawn as one underline per run). */
 export function indexRuns(indices) {
@@ -115,28 +99,6 @@ export function dateTicks(bars, plotWidth, { dense = false } = {}) {
     const withYear = k === 0 || year !== ticks[k - 1].month.slice(0, 4);
     return { ...tick, label: tick.mid ? `${m}/${tick.day}` : withYear ? `${year}/${tick.month.slice(5)}` : `${m}月` };
   });
-}
-
-/**
- * The price panel's log scale for the shown bars: their highs and lows with the pivot, the zone's top and
- * the stop (never the other levels), padded 5% each side. `lo`/`hi` are the data range, `tlo`/`thi` the
- * padded log bounds.
- */
-function priceScale(bars, model) {
-  const levels = [model.pivot, model.upper, model.stop].filter(finite);
-  const values = bars.flatMap(b => [b.high, b.low]).filter(finite).concat(levels);
-  let lo = Math.min(...values), hi = Math.max(...values);
-  if (!(hi > lo)) { lo *= 0.99; hi *= 1.01; } // a flat range still gets a scale
-  const L = Math.log;
-  return { lo, hi, tlo: L(lo) - (L(hi) - L(lo)) * 0.05, thi: L(hi) + (L(hi) - L(lo)) * 0.05 };
-}
-
-/** Whether the price panel's y-range for this model and period holds `value` (a level drawn only inside it). */
-export function priceInRange(model, period, value) {
-  const series = chartSeries(model);
-  if (!finite(value) || !series?.all.length) return false;
-  const n = Math.min(period, series.all.length), { tlo, thi } = priceScale(series.all.slice(-n), model);
-  return value >= Math.exp(tlo) && value <= Math.exp(thi);
 }
 
 /**
@@ -619,14 +581,5 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   fade(all$(front, '.bc-last'), 300 * k, after + 340 * k).then(() => front.classList.add('bc-pulsing'));
   return controller;
 }
-
-/** What identifies a chart's intro: the symbol, the interval, the period and the bars (a new one animates). */
-export const chartIdentityKey = (model, period) => (model ? `${model.symbol}|${model.interval || 'day'}|${period}|${model.bars?.length}|${model.bars?.at(-1)?.date}` : null);
-/**
- * What the drawing shows: the identity plus every level and overlay, the earnings call (date, days, tone) and
- * today's New York date, so the date axis's 「あと7日」 redraws when the day changes. Levels and overlays can
- * arrive after the bars (detail merge); they redraw without replaying the intro.
- */
-export const chartContentKey = (model, period) => (model ? `${chartIdentityKey(model, period)}|${model.pivot}|${model.upper}|${model.entry}|${model.r2}|${model.r3}|${model.structuralLow}|${model.auditHigh}|${model.rsNewHigh}|${model.rsLine?.length}|${model.rsReason}|${model.rsLead?.dates?.length}|${model.legs?.length}|${model.legsValid}|${model.dryUpLeg?.startDate}|${(model.gaps || []).length}|${model.short}|${model.earnings?.date}|${model.earnings?.days}|${model.earnings?.soon}|${model.today}|${model.crossing?.date}|${model.crossing?.volumeRatio}|${(model.sellMarks || []).map(m => m.date).join(',')}` : null);
 
 export const _test = { niceStep, width };
