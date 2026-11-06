@@ -24,8 +24,9 @@ export const SELL_RULES = {
   // …or, whatever the pivot (real rows lose a pivot more than 25% away), a certified close at least this far
   // above its 50-day line (独自判定). Not a finite positive number: the alternative is off.
   climaxFrom50dPercent: 25,
-  // A stock still in the buy zone this many sessions after its dated crossing has not advanced (独自判定).
-  staleBreakoutSessions: STALE_BREAKOUT_SESSIONS,
+  // A stock still in the buy zone this many sessions after its dated crossing has not advanced (独自判定). Read when
+  // asked, not when this module loads, so a test that mocks breakoutHistory with only the export it needs can load it.
+  get staleBreakoutSessions() { return STALE_BREAKOUT_SESSIONS; },
   // A crossing on breakVolumeRatio or more followed, within this many sessions, by a close back under the
   // pivot is a failed breakout (ブレイク失敗, 独自判定).
   failedBreakoutSessions: 10,
