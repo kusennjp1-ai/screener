@@ -5,7 +5,7 @@
 // asset or the generated reference (market-regime-reference-v1.json): nothing here types a percentage, changes a
 // rule, a threshold or the verdict.
 import { bare, distributionCount, followThroughView, nasdaqInCorrection, shortDate, trendsStatus } from '../brief/briefModel';
-import { DISTRIBUTION_WARN, num, signedPercent, SURVIVORSHIP_NOTE } from '../brief/marketTabModel';
+import { DISTRIBUTION_WARN, num, signedPercent, SURVIVORSHIP_NOTE, verdictBasis } from '../brief/marketTabModel';
 import { indexSummary } from './indexSummary.js';
 import { biasTag, ddGradeState, ftdRecent, ftdState, highState, meanLowerStates, quadrantState, referencePeriod, referenceState, signalTags, stateTag, validReference, BIAS_SHARE, SIGNAL_INDICATORS, TAGS } from './marketRegimeReference.js';
 
@@ -257,6 +257,58 @@ export function marketRegimeContext({ history, trends, reference, date = null })
   return { available: true, summary: line, key, footer, indices: blocks };
 }
 
+// ---- the judge side's cause, the TT population and the Nasdaq's source (market tab only) ------------------------------
+
+const REGIMES = new Set(['confirmed_uptrend', 'uptrend_under_pressure', 'correction', 'downtrend']);
+const count = value => Number.isSafeInteger(value) && value >= 0;
+/**
+ * The judge side's market block, `manifest.markets.US.market_context` (plan §2.3, exported by the data track), read
+ * raw like publishedFundamentalsCoverage: returned only when it is in shape and dated for the analysis date `date`,
+ * else null (an older publication never has it). A null field stays null: a reader says 未収録, never 0.
+ */
+export function publishedMarketContext(marketEntry, { date = null } = {}) {
+  const block = marketEntry?.market_context;
+  if (!block || typeof block !== 'object' || Array.isArray(block) || !isDay(date) || block.as_of_date !== date) return null;
+  if (marketEntry.as_of_date !== undefined && marketEntry.as_of_date !== date) return null;
+  if (block.method !== 'backend-market-regime-v1' || block.source !== 'scan-rows' || !REGIMES.has(block.regime)) return null;
+  if (!(block.distribution_days === null || count(block.distribution_days)) || !(block.ftd_days_since === null || count(block.ftd_days_since))) return null;
+  if (!(block.ftd_date === null || (isDay(block.ftd_date) && block.ftd_date <= date)) || !(block.exposure_pct === null || finite(block.exposure_pct))) return null;
+  return block;
+}
+
+/**
+ * Whom TT達成数 counts (the 注記 and its opened row): the long history's names, judged on their daily closes by the
+ * trend template's price conditions only (RS推計 included), not the candidate list's selection, which also asks a price
+ * and a traded value.
+ */
+export const TT_POPULATION = 'TT達成数は長期集計の値で、公開中の銘柄を日足の株価条件（RS推計70以上を含むトレンドテンプレート8条件）だけで判定した数です。候補一覧の選定銘柄（株価や売買代金の条件もあり）とは対象が異なります。';
+/** The backend regimes (market_context.regime) in the app's words. */
+export const REGIME_NAMES = Object.freeze({ confirmed_uptrend: '上昇トレンド', uptrend_under_pressure: '上昇に圧力', correction: '調整', downtrend: '下降トレンド' });
+
+/**
+ * One line under the verdict's basis on why the judge side's regime reads as it does (inside 「目安と判定の基準」).
+ *  - An FTD-upgraded uptrend (modelMarket's ftdUpgraded): the regime is confirmed_uptrend through its follow-through day
+ *    while SPY is under a line, so the guide stays 0% (独自判定). The FTD's date comes only from the judge side's block
+ *    (`context`, publishedMarketContext); without it the date is left out, never guessed from the ^GSPC series.
+ *  - Otherwise, with the judge side's block for the analysis date: its regime beside its own SPY distribution count
+ *    (stalling days included), kept apart from the ^GSPC/^IXIC counts of the 分配日 row. A null count reads 未収録.
+ *  - Without the block (an older publication): null, the basis line alone as before.
+ * A block whose regime disagrees with the verdict's rows is not used.
+ */
+export function regimeCause(market, context, basis, date) {
+  if (!market || market.state === 'unknown') return null;
+  const block = context && (!market.regime || context.regime === market.regime) ? context : null;
+  if (market.ftdUpgraded === true) {
+    const ftd = block?.ftd_date ? `（${shortDate(block.ftd_date, date)}）` : '';
+    return `局面判定はFTDによる上昇トレンド${ftd}。この目安はSPYが${basis?.above200 === false ? '200日線' : '50日線'}の下のため0%（独自判定）`;
+  }
+  if (!block || !REGIME_NAMES[block.regime]) return null;
+  return `局面判定「${REGIME_NAMES[block.regime]}」：${block.distribution_days === null ? '判定側のSPYの分配日は未収録' : `SPYの分配日 ${num(block.distribution_days)}日（ストーリング日を含む判定側の数え方）`}`;
+}
+
+/** Where the Nasdaq's figures and line come from (the switch's source line on the desktop, the 注記 on a phone). */
+export const NASDAQ_SOURCE = 'Nasdaq総合の4つの数値と線は、分配日と同じ^IXICの日足（公開データ）から計算しています。';
+
 // ---- what MarketScreen hands the 地合い card ------------------------------------------------------------------
 
 /** The published inputs a check's study tag depends on: the index's method ids, its follow-through window and its distribution count (the warning's). */
@@ -272,8 +324,10 @@ const publishedInputs = item => ({ distribution: item?.method ?? null, followThr
  *  - nasdaq: the Nasdaq note beside the SPY verdict (the card shows it only while the verdict is positive)
  *  - nasdaqPosition / nasdaqFigures: the Nasdaq's published position, as data and in words
  *  - regime: the 過去の傾向 block
+ *  - cause: the judge side's cause under the verdict's basis (regimeCause, from `market` and the published `manifest`)
+ *  - ttPopulation, nasdaqSource: whom TT達成数 counts, and where the Nasdaq's figures come from
  */
-export function marketTabStudy({ trends, reference, date = null }) {
+export function marketTabStudy({ trends, reference, date = null, market = null, manifest = null }) {
   const ref = validReference(reference) ? reference : null, ready = trendsStatus(trends).state === 'ready';
   const indices = ready ? trends.data.indices || [] : [], find = symbol => indices.find(item => item?.symbol === symbol);
   const byName = { 'S&P': find('^GSPC'), NAS: find('^IXIC') };
@@ -287,5 +341,7 @@ export function marketTabStudy({ trends, reference, date = null }) {
     nasdaq: ready ? nasdaqNote(byName.NAS?.followThrough, date) : null,
     nasdaqPosition, nasdaqFigures: nasdaqFigures(nasdaqPosition?.state, date),
     regime: marketRegimeContext({ history: ready ? trends.data.long_history || null : null, trends, reference: ref, date }),
+    cause: regimeCause(market, publishedMarketContext(manifest?.markets?.US ?? null, { date }), verdictBasis(market, date), date),
+    ttPopulation: TT_POPULATION, nasdaqSource: NASDAQ_SOURCE,
   };
 }

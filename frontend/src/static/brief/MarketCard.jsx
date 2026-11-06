@@ -1,15 +1,13 @@
 import { useId, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { sentence, shortDate, trendsAlert } from './briefModel';
-import { marketCardView, num, signedPercent, SURVIVORSHIP_NOTE, TT_POPULATION } from './marketTabModel';
+import { marketCardView, num, signedPercent, SURVIVORSHIP_NOTE } from './marketTabModel';
 import { Expander, Parts, ScreenNotes } from './briefPrimitives';
 import useSessionState from './useSessionState';
 import { exposureRuleText } from '../portfolioPlan';
 
 const finite = Number.isFinite;
 const isDay = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
-/** Where the Nasdaq's figures and line come from (the switch's source line on the desktop, the 注記 on a phone). */
-const NASDAQ_SOURCE = 'Nasdaq総合の4つの数値と線は、分配日と同じ^IXICの日足（公開データ）から計算しています。';
 /** A scale label: a whole number, a negative one with U+2212 (never the ASCII hyphen). */
 const scale = value => num(value, 0).replace('-', '−');
 
@@ -250,11 +248,12 @@ function SectionTabs({ panels, active, onSelect }) {
  * Today (compact) keeps four tiles; the market tab (detail) leads with the verdict and the warning
  * summary, then the evidence in three groups whose rows open to their rule and one-year line.
  * The market tab's study parts come from MarketScreen, so the study's code and data stay in its lazy chunk:
- * `study` (reference/marketTabStudy.js: the warning summary's tags, the 分配日 detail, the Nasdaq note and position)
- * and `studyBlock`, the 「過去の傾向」 fold it renders at the end of the 指数 panel. Today passes neither.
+ * `study` (reference/marketTabStudy.js: the warning summary's tags, the 分配日 detail, the Nasdaq note and position, the
+ * judge side's cause under the basis and two notes) and `studyBlock`, the 「過去の傾向」 fold (at the end of the 指数 panel
+ * on a phone, across the card on the desktop). Today passes neither.
  */
-export default function MarketCard({ market, marketLoading = false, trends, date, detail = false, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, study = null, studyBlock = null, manifest = null }) {
-  const view = marketCardView({ market, marketLoading, trends, date, study: detail ? study : null, manifest: detail ? manifest : null });
+export default function MarketCard({ market, marketLoading = false, trends, date, detail = false, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, study = null, studyBlock = null }) {
+  const view = marketCardView({ market, marketLoading, trends, date, study: detail ? study : null });
   const { status, verdict, dating, signals, conflict, groups, chart } = view;
   const chartStatus = view.longError ? 'history-error' : status.state === 'error' && status.kind === 'fetch' ? 'fetch-error' : status.state;
   // The 指数 panel's S&P／Nasdaq switch (only with the Nasdaq's published closes): one index at a time, its figures, its
@@ -298,10 +297,10 @@ export default function MarketCard({ market, marketLoading = false, trends, date
   const notes = [
     switcher ? dating.lagDetail : null,
     view.summary && !conflict ? 'S&P 500の終値・1年高値からの位置・50日線比・200日線比は、長期履歴の^GSPC終値から計算しています。' : null,
-    view.series ? NASDAQ_SOURCE : null,
+    view.series ? study?.nasdaqSource : null,
     '各行を開くと、その値の基準（しきい値）と直近1年の推移を表示します。',
     `参加度・リーダーの値は、${SURVIVORSHIP_NOTE}です。`,
-    TT_POPULATION,
+    study?.ttPopulation,
     signals?.tagNote ? `注意サインの印：${signals.tagNote}` : null,
     // The S&P's own reason (the long history's ^GSPC closes), whichever index the switch shows.
     view.summary && !finite(view.summary.vs200) ? '200日線比は、長期履歴に200日分の終値がないため未算出です。' : null,
@@ -378,7 +377,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
           {nas && <p className="brief-index-nas"><b>Nasdaq総合</b><span className="numeric">{nas.close}</span><Parts text={nas.text} /></p>}
           {/* A disagreement with the verdict's scan input is always said here (the S&P's figures); the plain source line is in
               place on the desktop and in the 注記 below 1024px. */}
-          {shown && shown.key !== 'spx' ? !switcher && <p className="brief-index-source"><span>{NASDAQ_SOURCE}</span></p>
+          {shown && shown.key !== 'spx' ? !switcher && study?.nasdaqSource && <p className="brief-index-source"><span>{study.nasdaqSource}</span></p>
             : summary && (conflict || !switcher) && <p className={`brief-index-source${conflict ? ' is-conflict' : ''}`}>{conflict || <span>4つの数値（終値・1年高値から・50日線比・200日線比）は長期履歴の^GSPC終値から計算しています。</span>}</p>}
           {chartEl}
         </div>}

@@ -3,7 +3,7 @@
 // guide's disclosure (that is said once, in exposureRuleText).
 import { describe, expect, it } from 'vitest';
 import reference from './market-regime-reference-v1.json' with { type: 'json' };
-import { distributionDetail, marketRegimeContext, marketTabStudy, nasdaqNote, signalTagText } from './marketTabStudy.js';
+import { distributionDetail, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, signalTagText } from './marketTabStudy.js';
 import { ddGradeState, stateTag, TAGS } from './marketRegimeReference.js';
 import { exposureRuleText } from '../portfolioPlan.js';
 import { NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
@@ -97,3 +97,26 @@ describe('the opened 分配日 row (MK7)', () => {
   });
 });
 
+// The judge side's block (plan §2.3, the data track's export), read raw: only in shape and for the analysis date.
+describe('published market context', () => {
+  const DATE = '2026-10-02';
+  const block = { as_of_date: DATE, regime: 'uptrend_under_pressure', distribution_days: 4, ftd_date: null, ftd_days_since: null, exposure_pct: 55, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' };
+  it('returns a block of the analysis date, with its nulls kept null', () => {
+    
+    expect(publishedMarketContext({ as_of_date: DATE, market_context: block }, { date: DATE })).toBe(block);
+    const nulls = { ...block, distribution_days: null, exposure_pct: null };
+    expect(publishedMarketContext({ as_of_date: DATE, market_context: nulls }, { date: DATE })).toEqual(nulls);
+    expect(publishedMarketContext({ as_of_date: DATE, market_context: { ...block, regime: 'confirmed_uptrend', ftd_date: '2026-09-18', ftd_days_since: 10 } }, { date: DATE })).toMatchObject({ ftd_date: '2026-09-18' });
+  });
+  it('refuses an absent, older or malformed block (an older publication never has one)', () => {
+    
+    const read = (value, entry = {}) => publishedMarketContext({ as_of_date: DATE, ...entry, market_context: value }, { date: DATE });
+    expect(publishedMarketContext({ as_of_date: DATE }, { date: DATE })).toBeNull();
+    expect(publishedMarketContext(null, { date: DATE })).toBeNull();
+    expect(publishedMarketContext({ as_of_date: DATE, market_context: block })).toBeNull();
+    for (const [, value] of [['another date', { ...block, as_of_date: '2026-10-01' }], ['an array', [block]], ['another method', { ...block, method: 'x' }], ['another source', { ...block, source: 'x' }],
+      ['an unknown regime', { ...block, regime: 'bull' }], ['a negative count', { ...block, distribution_days: -1 }], ['a count of 0.5', { ...block, distribution_days: 0.5 }], ['a count as text', { ...block, distribution_days: '4' }],
+      ['a future FTD', { ...block, ftd_date: '2026-10-05' }], ['an FTD that is not a day', { ...block, ftd_date: '9/18' }], ['an exposure as text', { ...block, exposure_pct: '55' }]]) expect(read(value)).toBeNull();
+    expect(read(block, { as_of_date: '2026-10-01' })).toBeNull();
+  });
+});

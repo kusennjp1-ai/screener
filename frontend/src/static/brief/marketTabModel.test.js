@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
-import { basisConflict, delta, groupDate, historyTakeaway, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, regimeCause, REGIME_NAMES, RULE_TEXT, sectorRanks, signedPercent, TT_POPULATION, verdictBasis, yearRange } from './marketTabModel';
-import { marketRegimeContext, marketTabStudy, nasdaqNote, publishedIndexState, regimeKey, signalTagText, TAG_MEANINGS } from '../reference/marketTabStudy.js';
+import { basisConflict, delta, groupDate, historyTakeaway, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, RULE_TEXT, sectorRanks, signedPercent, verdictBasis, yearRange } from './marketTabModel';
+import { marketRegimeContext, marketTabStudy, nasdaqNote, publishedIndexState, regimeCause, regimeKey, signalTagText, REGIME_NAMES, TAG_MEANINGS, TT_POPULATION } from '../reference/marketTabStudy.js';
 import reference from '../reference/market-regime-reference-v1.json' with { type: 'json' };
 import exchange from '../__fixtures__/nyse-sessions-2024-2026.json' with { type: 'json' };
 import { referenceState, BIAS_SHARE, TAGS } from '../reference/marketRegimeReference.js';
@@ -25,8 +25,10 @@ describe('market tab view model: a complete, current publication', () => {
       ['breadth', '市場の参加度', ['a200', 'a50', 'extremes', 'tt']],
       ['leaders', 'リーダーの健全性', ['rs90', 'breakout', 'health', 'stage']]]);
     for (const g of model.groups) expect([g.asOf, g.missing, g.unavailable, g.fired]).toEqual([null, null, null, 0]);
-    // The count names its population in the 200-day row's form (MK10), and its opened row says whom it counts.
-    expect(item(model, 'tt')).toMatchObject({ b: '30銘柄', change: '+5', note: '観測200中30', detail: '観測200中30銘柄・1か月前 25銘柄', details: [TT_POPULATION], asOf: null, rule: RULE_TEXT.template, metric: 'trendTemplateCount' });
+    // The count names its population in the 200-day row's form (MK10); with the market tab's study its opened row says whom it counts.
+    expect(item(model, 'tt')).toMatchObject({ b: '30銘柄', change: '+5', note: '観測200中30', detail: '観測200中30銘柄・1か月前 25銘柄', details: [], asOf: null, rule: RULE_TEXT.template, metric: 'trendTemplateCount' });
+    const value = trends({ rows: breadth('2026-10-02', i => (i === 8 ? { trendTemplateCount: 25 } : {})) });
+    expect(item(marketCardView({ market: UP, trends: value, date: '2026-10-02', study: marketTabStudy({ trends: value, reference, date: '2026-10-02' }) }), 'tt').details).toEqual([TT_POPULATION]);
     expect(item(model, 'a200')).toMatchObject({ b: '45.0%', change: '+5.0pt', detail: '観測200中90銘柄・1か月前 40.0%', metric: 'movingAverages' });
     expect(item(model, 'rs90')).toMatchObject({ b: '8銘柄', change: '−2' });
     expect(item(model, 'breakout')).toMatchObject({ b: '75%', note: '8件で判定', detail: '10〜29営業日前の上抜け8件のうち6件が10日間で−7%に届かず', warn: false });
@@ -537,7 +539,8 @@ describe('market tab: the basis line names the judge side\'s cause (MK1, MK4)', 
   const manifest = context => ({ as_of_date: DATE, markets: { US: { as_of_date: DATE, ...(context === undefined ? {} : { market_context: context }) } } });
   const below50 = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
   const below200 = { label: '長期トレンド警戒', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
-  const verdict = (market, value) => marketCardView({ market, trends: trends(), date: DATE, manifest: value }).verdict;
+  // The cause is the study's (the market tab's lazy chunk), from the verdict's market and the published manifest.
+  const verdict = (market, value) => marketCardView({ market, trends: trends(), date: DATE, study: marketTabStudy({ trends: trends(), reference, date: DATE, market, manifest: value }) }).verdict;
 
   it('says an FTD-upgraded uptrend keeps the guide at 0%, with the FTD\'s date only from the judge side', () => {
     const upgraded = block({ regime: 'confirmed_uptrend', distribution_days: 1, ftd_date: '2026-09-18', ftd_days_since: 10, exposure_pct: 40 });
@@ -564,6 +567,8 @@ describe('market tab: the basis line names the judge side\'s cause (MK1, MK4)', 
     expect(verdict({ label: '市場未確認', cap: 0, state: 'unknown' }, manifest(block())).cause).toBeNull();
     expect(Object.keys(REGIME_NAMES)).toEqual(['confirmed_uptrend', 'uptrend_under_pressure', 'correction', 'downtrend']);
     expect(regimeCause(null, block(), null, DATE)).toBeNull();
+    // Today never reads the block: without the study there is no cause line.
+    expect(marketCardView({ market: pressure, trends: trends(), date: DATE }).verdict.cause).toBeNull();
   });
 });
 

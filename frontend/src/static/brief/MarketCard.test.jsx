@@ -13,8 +13,8 @@ import { followThroughDay } from '../followThroughDay';
 import { exposureRuleText } from '../portfolioPlan';
 
 /** The market tab's study parts as MarketScreen hands them to the card (Today passes none). */
-const studyProps = (value, date, ref, wide) => {
-  const study = marketTabStudy({ trends: value, reference: ref, date });
+const studyProps = (value, date, ref, wide, { market = null, manifest = null } = {}) => {
+  const study = marketTabStudy({ trends: value, reference: ref, date, market, manifest });
   return { study, studyBlock: <RegimeContext context={study.regime} wide={wide} nasdaq={study.nasdaqPosition?.state ? study.nasdaqFigures : null} /> };
 };
 const show = (value, { date = '2026-10-02', detail = true, market = UP, marketLoading = false, onOpenMetric, ref = reference } = {}) => render(<MemoryRouter><MarketCard market={market} marketLoading={marketLoading} trends={value} date={date} detail={detail} onOpenMetric={onOpenMetric} {...(detail ? studyProps(value, date, ref, true) : {})} /></MemoryRouter>);
@@ -668,7 +668,7 @@ describe('brief market card: round 2', () => {
     const market = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
     const manifest = { as_of_date: '2026-10-02', markets: { US: { as_of_date: '2026-10-02', market_context: { as_of_date: '2026-10-02', regime: 'confirmed_uptrend', distribution_days: 1, ftd_date: '2026-09-18', ftd_days_since: 10, exposure_pct: 40, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' } } } };
     const LINE = '局面判定はFTDによる上昇トレンド（9/18）。この目安はSPYが50日線の下のため0%（独自判定）';
-    render(<MemoryRouter><MarketCard market={market} trends={trends()} date="2026-10-02" detail switcher section="index" onSection={() => {}} manifest={manifest} {...studyProps(trends(), '2026-10-02', reference, false)} /></MemoryRouter>);
+    render(<MemoryRouter><MarketCard market={market} trends={trends()} date="2026-10-02" detail switcher section="index" onSection={() => {}} {...studyProps(trends(), '2026-10-02', reference, false, { market, manifest })} /></MemoryRouter>);
     const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
     expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', LINE, exposureRuleText()]);
     expect(fold).not.toHaveAttribute('open');
@@ -676,11 +676,11 @@ describe('brief market card: round 2', () => {
     expect(screen.getByTestId('brief-regime')).toHaveTextContent('50日線割れ（弱含み・独自判定）');
     expect(screen.getByTestId('brief-regime').querySelector('.brief-exposure b')).toHaveTextContent(/^0%$/);
     cleanup();
-    render(<MemoryRouter><MarketCard market={market} trends={trends()} date="2026-10-02" detail manifest={manifest} {...studyProps(trends(), '2026-10-02', reference, true)} /></MemoryRouter>);
+    render(<MemoryRouter><MarketCard market={market} trends={trends()} date="2026-10-02" detail {...studyProps(trends(), '2026-10-02', reference, true, { market, manifest })} /></MemoryRouter>);
     expect([...screen.getByTestId('brief-regime').querySelectorAll('.brief-verdict-why')].map(p => p.textContent)).toEqual(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', LINE]);
     cleanup();
-    // Today's card never shows it (no manifest is read there).
-    render(<MemoryRouter><MarketCard market={market} trends={trends()} date="2026-10-02" manifest={manifest} /></MemoryRouter>);
+    // Today's card never shows it (Today never loads the study that reads the manifest).
+    render(<MemoryRouter><MarketCard market={market} trends={trends()} date="2026-10-02" /></MemoryRouter>);
     expect(document.body).not.toHaveTextContent('局面判定は');
   });
 

@@ -93,23 +93,6 @@ export function marketTileSuffix({ market = null, trends = null, manifest = null
   return nasdaqInCorrection(ft) && ft.asOf === date ? MARKET_TILE_SUFFIX.nasdaq : null;
 }
 
-const REGIMES = new Set(['confirmed_uptrend', 'uptrend_under_pressure', 'correction', 'downtrend']);
-const count = value => Number.isSafeInteger(value) && value >= 0;
-/**
- * The judge side's market block, `manifest.markets.US.market_context` (plan §2.3, exported by the data track), read
- * raw like publishedFundamentalsCoverage: returned only when it is in shape and dated for the analysis date `date`,
- * else null (an older publication never has it). A null field stays null: a reader says 未収録, never 0.
- */
-export function publishedMarketContext(marketEntry, { date = null } = {}) {
-  const block = marketEntry?.market_context;
-  if (!block || typeof block !== 'object' || Array.isArray(block) || !isoDay(date) || block.as_of_date !== date) return null;
-  if (marketEntry.as_of_date !== undefined && marketEntry.as_of_date !== date) return null;
-  if (block.method !== 'backend-market-regime-v1' || block.source !== 'scan-rows' || !REGIMES.has(block.regime)) return null;
-  if (!(block.distribution_days === null || count(block.distribution_days)) || !(block.ftd_days_since === null || count(block.ftd_days_since))) return null;
-  if (!(block.ftd_date === null || (isoDay(block.ftd_date) && block.ftd_date <= date)) || !(block.exposure_pct === null || finite(block.exposure_pct))) return null;
-  return block;
-}
-
 /**
  * Why the market-trends asset failed, in short Japanese: kind fetch (network, HTTP, the manifest itself),
  * integrity (hash, transport or reference mismatch) or reader (readMarketTrends' own sentence).

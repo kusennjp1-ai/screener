@@ -58,8 +58,9 @@ export default function MarketScreen({ brief }) {
   const trends = brief.trends;
   const history = trends?.data?.long_history || null, status = trendsStatus(trends);
   const wide = useMediaQuery('(min-width:1024px)');
-  // The study parts of the 地合い card (tags, 分配日 detail, Nasdaq note and position, 過去の傾向), from this chunk.
-  const study = useMemo(() => marketTabStudy({ trends, reference: REFERENCE, date: brief.date }), [trends, brief.date]);
+  // The study parts of the 地合い card (tags, 分配日 detail, Nasdaq note and position, 過去の傾向, the judge side's cause), from this chunk.
+  const manifest = brief.manifest?.data ?? null;
+  const study = useMemo(() => marketTabStudy({ trends, reference: REFERENCE, date: brief.date, market: brief.market, manifest }), [trends, brief.date, brief.market, manifest]);
   const [section, setSection] = useSessionState('market-section', 'index');
   const [request, setRequest] = useState(null);
   const openMetric = useCallback(metric => { setSection('history'); setRequest(previous => ({ metric, seq: (previous?.seq || 0) + 1 })); }, [setSection]);
@@ -97,7 +98,7 @@ export default function MarketScreen({ brief }) {
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け・米国株` : '日付未確認'}</small><h1>市場</h1></header>
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={trends} date={brief.date} detail onOpenMetric={openMetric}
       switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} historyUnknown={historyUnknown}
-      study={study} manifest={brief.manifest?.data ?? null}
+      study={study}
       studyBlock={<RegimeContext context={study.regime} wide={wide} nasdaq={study.nasdaqPosition?.state && !nasdaqSwitch ? study.nasdaqFigures : null} />} />
     {wide && historySection}
   </>;
