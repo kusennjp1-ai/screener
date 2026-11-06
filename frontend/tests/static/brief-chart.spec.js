@@ -65,6 +65,9 @@ const collisions = page => page.getByTestId('brief-price-chart').evaluate(chart 
   labels.forEach((a, i) => { for (const b of [...labels.slice(i + 1), ...solid]) if (hit(a, b)) out.push(`${a.name} × ${b.name}`); });
   return out;
 });
+/** Every drawn level line (買値, 2R, 3R, 52週高, the wide chart's structural low) has its name drawn. */
+const unnamedLevels = page => page.getByTestId('brief-price-chart').evaluate(chart => ['bc-entry', 'bc-r2', 'bc-r3', 'bc-high52']
+  .filter(cls => chart.querySelectorAll(`line.${cls}`).length !== [...chart.querySelectorAll(`.${cls}-text`)].filter(node => node.textContent.trim() && node.getAttribute('visibility') !== 'hidden').length));
 /** The 注記 key of each foldable legend item (chartNotes): a folded item's mark is still explained. */
 const NOTE_KEYS = { low: '「安値」＝最後の収縮の安値 ', breakout: 'の矢印＝終値がピボットを上抜けた日', heavydown: '■＝下落日の大商い', sell: '▼＝上昇の加速、▲＝崩れ', lows: '点線＝収縮の安値を結んだ線', boxes: '枠＝値幅の収縮', pivot: '緑の破線＝ピボット', stop: '赤の点線＝損切り', ma10: '10＝10日線', ema21: '21＝21日EMA' };
 /** Folded legend items whose key the 注記 does not give. */
@@ -210,7 +213,8 @@ test.describe('390×844 phone', () => {
       await expect(page.locator('.bc-structural-text')).toHaveCount(0);
       const high = page.locator('.bc-high52-text');
       if (await high.count()) await expect(high).toHaveText(/^52週高 [\d,.]+$/);
-      // A folded legend item's mark is keyed in the 注記.
+      // A level line is never drawn unnamed, and a folded legend item's mark is keyed in the 注記.
+      expect(await unnamedLevels(page), `${what}: unnamed level lines`).toEqual([]);
       expect(await unexplainedFolds(page), `${what}: folded legend items without a 注記 key`).toEqual([]);
       await withinBudget(page, what);
       for (const slack of await readoutSlack(page)) expect(slack, `${what}: readout slack`).toBeGreaterThanOrEqual(6);
@@ -387,6 +391,23 @@ test.describe('1440×900 desktop', () => {
     await expect(readout).toHaveAttribute('aria-label', /^選んだ足/);
     await expect(readout.locator('.ro-dist, .ro-adr')).toHaveCount(0);
     expect(await asciiMinus(page)).toEqual([]);
+    expect(await collisions(page)).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  test('the zone\'s name takes a candle-free spot along its top on 6か月, and every level line is named', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZNV', { mutate: { charts: withRsLine } });
+    await chartReady(page);
+    await settled(page);
+    const over = await page.getByTestId('brief-price-chart').evaluate(chart => {
+      const label = chart.querySelector('.bc-zonetext');
+      if (!label) return 'no zone label';
+      const box = label.getBBox(), yc = Number(label.getAttribute('y')) - 4;
+      const candles = [...chart.querySelectorAll('line.bc-up, line.bc-down, rect.bc-up, rect.bc-down')].map(node => node.getBBox());
+      return candles.filter(c => c.x < box.x + box.width && c.x + Math.max(c.width, 1) > box.x && c.y < yc + 7 && c.y + c.height > yc - 7).length;
+    });
+    expect(over).toBe(0);
+    expect(await unnamedLevels(page)).toEqual([]);
     expect(await collisions(page)).toEqual([]);
     expect(errors).toEqual([]);
   });

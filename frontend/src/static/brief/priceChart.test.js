@@ -123,9 +123,13 @@ describe('brief price chart', () => {
     const inside = container(), outside = container();
     renderPriceChart(inside, { ...model, r2: 111, r3: 112, entry: 109, auditHigh: 112.5 }, { period: 130, animate: false });
     renderPriceChart(outside, { ...model, r2: 160, r3: 190, auditHigh: 300 }, { period: 130, animate: false });
-    expect(inside.querySelectorAll('.bc-r2, .bc-r3, .bc-entry, .bc-high52')).toHaveLength(4);
-    expect(texts(inside, '.bc-levelnote')).toEqual(expect.arrayContaining(['2R 111.00', '3R 112.00', '買値 109.00']));
-    expect(texts(inside, '.bc-high52-text')[0] ?? '52週高値 112.50（−0.0%）').toMatch(/^52週高値 112\.50（[−+±]\d+\.\d%）$/);
+    // Every level line is drawn with its name (never an unnamed dotted line): the 52-week high takes its spot first;
+    // a plan level with no free spot here (3R, crowded under the zone's top) is left out with its line.
+    const drawn = cls => inside.querySelectorAll(`line.${cls}`).length, named = cls => inside.querySelectorAll(`.${cls}-text`).length;
+    for (const cls of ['bc-r2', 'bc-r3', 'bc-entry', 'bc-high52']) expect({ cls, lines: drawn(cls) }).toEqual({ cls, lines: named(cls) });
+    expect(texts(inside, '.bc-high52-text')).toEqual([expect.stringMatching(/^52週高値 112\.50（[−+±]\d+\.\d%）$/)]);
+    expect(texts(inside, '.bc-levelnote')).toEqual(expect.arrayContaining(['2R 111.00', '買値 109.00']));
+    expect(drawn('bc-r2') + drawn('bc-r3') + drawn('bc-entry') + drawn('bc-high52')).toBeGreaterThanOrEqual(3);
     expect(collisions(inside)).toEqual([]);
     expect(outside.querySelectorAll('.bc-r2, .bc-r3, .bc-high52')).toHaveLength(0);
     expect(texts(outside, '.bc-axis:not(.bc-date):not(.bc-volmax):not(.bc-volavg)')).toEqual(texts(inside, '.bc-axis:not(.bc-date):not(.bc-volmax):not(.bc-volavg)'));
@@ -508,6 +512,16 @@ describe('brief price chart', () => {
     const tip = Number(same.querySelector('.bc-breakoutmark').getAttribute('d').match(/^M[\d.-]+,([\d.-]+)/)[1]);
     const base = Number(same.querySelector('.bc-sell-weak').getAttribute('d').match(/^M[\d.-]+,([\d.-]+)/)[1]);
     expect(tip).toBeGreaterThanOrEqual(base);
+  });
+
+  it('puts the zone\'s name on a candle-free spot along its top when one exists', () => {
+    const el = container(1000, 470);
+    renderPriceChart(el, busy(1), { period: 130, animate: false });
+    const label = el.querySelector('.bc-zonetext');
+    expect(label).not.toBeNull();
+    const lx = Number(label.getAttribute('x')), yc = Number(label.getAttribute('y')) - 4, w = _test.width(label.textContent);
+    const candles = [...el.querySelectorAll('line.bc-up, line.bc-down')].map(line => ({ x: Number(line.getAttribute('x1')), y0: Number(line.getAttribute('y1')), y1: Number(line.getAttribute('y2')) }));
+    expect(candles.filter(c => c.x > lx - 2 && c.x < lx + w + 2 && c.y0 < yc + 7 && c.y1 > yc - 7)).toEqual([]);
   });
 
   it('keys the heavy down bars (■ 下落日) in the volume caption on a narrow chart only when one is drawn', () => {

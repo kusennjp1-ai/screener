@@ -258,26 +258,26 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   // Levels: dotted plan lines (entry, 2R, 3R) and the structural low only inside the y-range; the 52-week high
   // (certified bars only, from the published audit). The y-axis is never widened for them.
   const levelLabels = [];
+  // A level's line is drawn only with its name (an unnamed dotted line would read as another level): its slot
+  // keeps the line's place in the layer and stays empty when the label finds no spot.
+  const levelLine = (markup, label) => { levelLabels.push({ ...label, slot: F.length, line: markup }); F.push(''); };
   const planLine = (value, cls, label) => {
     if (!inRange(value)) return;
-    F.push(`<line x1="0" x2="${pw}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}" class="bc-planline ${cls}"/>`);
-    levelLabels.push({ y: y(value), body: label, cls: `bc-levelnote ${cls}-text` });
+    levelLine(`<line x1="0" x2="${pw}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}" class="bc-planline ${cls}"/>`, { y: y(value), body: label, cls: `bc-levelnote ${cls}-text` });
   };
   const entryDistinct = finite(model.entry) && (!hasPivot || Math.abs(model.entry / model.pivot - 1) > 0.001);
   if (entryDistinct) planLine(model.entry, 'bc-entry', `買値 ${fmt(model.entry)}`);
   planLine(model.r2, 'bc-r2', `2R ${fmt(model.r2)}`);
   planLine(model.r3, 'bc-r3', `3R ${fmt(model.r3)}`);
   if (inRange(model.structuralLow)) {
-    const ys = y(model.structuralLow);
-    F.push(`<line x1="${(pw * 0.6).toFixed(1)}" x2="${pw}" y1="${ys.toFixed(1)}" y2="${ys.toFixed(1)}" class="bc-planline bc-structural"/>`);
+    const ys = y(model.structuralLow), line = `<line x1="${(pw * 0.6).toFixed(1)}" x2="${pw}" y1="${ys.toFixed(1)}" y2="${ys.toFixed(1)}" class="bc-planline bc-structural"/>`;
     // A narrow chart names it with its 「安値」 tag (the price is in the legend); a wide one with a label.
-    if (!lowTag) levelLabels.push({ y: ys, x: pw * 0.6, below: true, body: `最後の収縮の安値 ${fmt(model.structuralLow)}`, cls: 'bc-levelnote bc-structural-text' });
+    levelLine(line, lowTag ? { named: true } : { y: ys, x: pw * 0.6, below: true, body: `最後の収縮の安値 ${fmt(model.structuralLow)}`, cls: 'bc-levelnote bc-structural-text' });
   }
   if (inRange(model.auditHigh)) {
     const yh = y(model.auditHigh), distance = finite(last.close) ? (last.close / model.auditHigh - 1) * 100 : null;
-    F.push(`<line x1="0" x2="${pw}" y1="${yh.toFixed(1)}" y2="${yh.toFixed(1)}" class="bc-high52"/>`);
     // The readout gives the distance on a phone: the label keeps the short form there.
-    levelLabels.push({ y: yh, body: narrow ? `52週高 ${fmt(model.auditHigh)}` : `52週高値 ${fmt(model.auditHigh)}${finite(distance) ? `（${signed(distance)}）` : ''}`, cls: 'bc-levelnote bc-high52-text' });
+    levelLine(`<line x1="0" x2="${pw}" y1="${yh.toFixed(1)}" y2="${yh.toFixed(1)}" class="bc-high52"/>`, { y: yh, body: narrow ? `52週高 ${fmt(model.auditHigh)}` : `52週高値 ${fmt(model.auditHigh)}${finite(distance) ? `（${signed(distance)}）` : ''}`, cls: 'bc-levelnote bc-high52-text' });
   }
   if (hasPivot) F.push(`<line x1="0" x2="${pw}" y1="${y(model.pivot)}" y2="${y(model.pivot)}" class="bc-pivot"/>`);
   const stopLabel = value => `損切り${finite(model.entry) && model.entry > 0 && finite(value) ? ` ${signed((value / model.entry - 1) * 100)}` : ''}`;
@@ -391,10 +391,15 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     }
     F.push(`<g class="bc-breakout${arrow.zone ? ' is-zone' : ''}" data-date="${bars[crossingBar].date}" data-tone="${arrow.zone ? 'zone' : 'neutral'}"><path d="M${mx.toFixed(1)},${top.toFixed(1)}l4.5,5h-2.75v5h-3.5v-5h-2.75z" class="bc-breakoutmark"/>${label}</g>`);
   }
+  // The zone's name: the first candle-free spot along its top edge (from its left end, past the first T label,
+  // its centre), then above it or along its bottom; over candles only when no candle-free spot is left.
   if (zone && zone.height > 14) {
-    const body = `買いゾーン${finite(model.upper) ? ` 〜${fmt(model.upper)}` : ''}`, zx = clampX(Math.min(zone.x + 6, pw - width(body) - 30), width(body));
-    const yc = claim(zx, width(body), [zone.top + Math.min(zone.height - 4, 14) - 4, zone.top - 9, zone.top + zone.height - 10]);
-    if (yc !== null) F.push(`<g class="bc-zonelabel">${text(zx.toFixed(1), (yc + 4).toFixed(1), body, 'bc-zonetext', 'font-weight="700"')}</g>`);
+    const body = `買いゾーン${finite(model.upper) ? ` 〜${fmt(model.upper)}` : ''}`, w = width(body);
+    const xs = [...new Set([zone.x + 6, zone.x + 6 + width('T1') + 8, zone.x + (pw - zone.x) / 2 - w / 2, pw - 34 - w].map(lx => Math.round(clampX(Math.max(lx, zone.x + 2), w))))];
+    const ys = [zone.top + Math.min(zone.height - 4, 14) - 4, zone.top - 9, zone.top + zone.height - 10];
+    const spots = ys.flatMap(yc => xs.map(lx => [lx, yc]));
+    const at = spot(w, spots) ?? spots.find(([lx, yc]) => fits(lx, lx + w, yc)) ?? null;
+    if (at) { take(at[0], at[0] + w, at[1] - 7, at[1] + 7); F.push(`<g class="bc-zonelabel">${text(at[0].toFixed(1), (at[1] + 4).toFixed(1), body, 'bc-zonetext', 'font-weight="700"')}</g>`); }
   }
   // The pivot's and the stop's names next to their lines (their prices are the tags); left out when every spot is taken.
   // Over candles (with its halo) when no candle-free spot is left, never over another label or a tag.
@@ -406,13 +411,19 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   };
   if (hasPivot) { const at = nameSpot(model.pivot, 'ピボット', [11, -9, 25, -23]); if (at) F.push(text(4, (at[1] + 4).toFixed(1), 'ピボット', 'bc-levelnote bc-pivot-text')); }
   const stopText = finite(model.stop) ? { body: stopLabel(model.stop), at: nameSpot(model.stop, stopLabel(model.stop), [-9, 11, -23, 25]) } : null;
-  // A level's label sits just above or below its line, at the left or before the averages' names (clamped
-  // into the plot), and tries the other side of its line before it is left out.
+  // A level's label sits just above or below its line, at the left, before the averages' names or along the
+  // line (clamped into the plot), and tries the other side of its line; over candles (with its halo) when no
+  // candle-free spot is left, never over another label or a tag. With no spot at all the label and its line are
+  // both left out. The 52-week high (it judges the stock) takes its spot first, then the plan's levels.
+  levelLabels.sort((a, b) => Number(b.cls?.includes('bc-high52') ?? false) - Number(a.cls?.includes('bc-high52') ?? false));
   for (const label of levelLabels) {
+    if (label.named) { F[label.slot] = label.line; continue; }
     const w = width(label.body), offsets = label.below ? [11, -9] : [-9, 11];
-    const xs = (label.x !== undefined ? [label.x, pw * 0.3, 4] : [4, pw - 34 - w, pw * 0.3]).map(lx => clampX(lx, w));
-    const at = spot(w, offsets.flatMap(dy => xs.map(lx => [lx, label.y + dy])));
+    const xs = [...new Set((label.x !== undefined ? [label.x, pw * 0.3, 4, pw * 0.45] : [4, pw - 34 - w, pw * 0.3, pw * 0.55, pw * 0.15]).map(lx => Math.round(clampX(lx, w))))];
+    const spots = offsets.flatMap(dy => xs.map(lx => [lx, label.y + dy]));
+    const at = spot(w, spots) ?? spots.find(([lx, yc]) => fits(lx, lx + w, yc)) ?? null;
     if (!at) continue;
+    F[label.slot] = label.line;
     take(at[0], at[0] + w, at[1] - 7, at[1] + 7);
     F.push(text(at[0].toFixed(1), (at[1] + 4).toFixed(1), label.body, label.cls));
   }
@@ -549,7 +560,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     const score = ([x0, y0]) => {
       const x1 = x0 + w, y1 = y0 + h, across = (a0, a1, b0, b1) => a1 > b0 && a0 < b1;
       let total = bars.reduce((sum, b, i) => sum + (across(x(i) - bw / 2, x(i) + bw / 2, x0, x1) && across(y(b.high), y(b.low), y0, y1) ? 1 : 0), 0);
-      total += lines.filter(ly => ly >= y0 && ly <= y1).length * 4 + boxes.filter(b => across(b.x0, b.x1, x0, x1) && across(b.y - 6, b.y + 6, y0, y1)).length * 8;
+      total += lines.filter(ly => ly >= y0 && ly <= y1).length * 4 + boxes.filter(b => across(b.x0, b.x1, x0, x1) && across(b.y0, b.y1, y0, y1)).length * 8;
       if (noticeBox && across(noticeBox.x0, noticeBox.x1, x0, x1) && across(noticeBox.y0, noticeBox.y1, y0, y1)) total += 500;
       if (current !== null && across(x(current) - 6, x(current) + 6, x0, x1)) total += 1000;
       return total;
