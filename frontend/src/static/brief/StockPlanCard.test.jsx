@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { act, cleanup, fireEvent, render, renderHook, screen, within } from '@testing-library/react';
 import StockView from './StockView';
 import PlanCard, { usePositionPlan } from './StockPlanCard';
-import { PLAN_BLOCKED, positionPlan } from './positionSizing';
+import { PLAN_BLOCKED, PLAN_DEFAULTS, positionPlan } from './positionSizing';
+import { earningsCall, earningsDays } from './briefCandidate';
 
 const DATE = '2026-10-02';
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -11,7 +12,9 @@ const bars = (end = DATE) => {
   const last = { ...list.at(-1), date: end, open: list.at(-1).close * 0.9, close: list.at(-1).close * 0.9, low: list.at(-1).close * 0.89, volume: 30000 };
   return [...list.slice(0, -1), last];
 };
-const view = { symbol: 'AAA', name: 'Alpha', state: 'wait', stateLabel: 'ピボット待ち', distance: -3, pivot: 100, upper: 105, price: 97, rs: 80, volumeRatio: 1, fromHigh: 10, earnings: null, pivotSource: 'test' };
+// A selected stock near its pivot whose Setup Engine base is current for DATE (confidence 60, over the floor).
+const view = { symbol: 'AAA', name: 'Alpha', state: 'wait', position: 'near', stateLabel: 'ピボット待ち', asOf: DATE, qualified: true, distance: -3, pivot: 100, upper: 105, price: 97, rs: 80, volumeRatio: 1, fromHigh: 10, earnings: null, pivotSource: 'test',
+  row: { symbol: 'AAA', setup_recalculation: { status: 'calculated', as_of_date: DATE }, se_pattern_confidence: 60 } };
 const data = (certified, end) => ({
   view, row: { symbol: 'AAA', chart_path: 'AAA.json' }, template: null, technical: null, diagnostics: null, financial: null, institutional: null,
   bars: bars(end), date: DATE, certification: certified ? { certified: true, reason: null } : { certified: false, reason: '最終日足が分析日と不一致' },
@@ -27,9 +30,9 @@ const measured = (low = 96) => {
   return { judged: list, technical: { as_of_date: DATE, vcp: { measurementsValid: true, legs: [{ low: 80, lowDate: list[170].date }, { low, lowDate: list[190].date }] } } };
 };
 /** The plan card with its hook, as the stock view wires them. */
-function Harness({ planView = view, market = UP, template = PASS, technical = null, judged = null, certified = true, broken = false, earningsSoon = false, chartRef = { current: null }, wide = false }) {
+function Harness({ planView = view, market = UP, template = PASS, technical = null, judged = null, certified = true, broken = false, earningsSoon = false, chartRef = { current: null }, wide = false, call = null }) {
   const { plan, settings, update } = usePositionPlan({ view: planView, template, market, technical, certified, judged, broken, earningsSoon, chartRef });
-  return <PlanCard view={planView} plan={plan} settings={settings} onChange={update} earnings={null} judged={judged} wide={wide} />;
+  return <PlanCard view={planView} plan={plan} settings={settings} onChange={update} earningsCall={call} judged={judged} wide={wide} />;
 }
 const card = () => screen.getByRole('region', { name: /建て玉と損切りの計画/ });
 afterEach(cleanup);
@@ -65,9 +68,14 @@ describe('the plan card', () => {
     render(<Harness />);
     const tiles = [...card().querySelectorAll('.brief-kgrid > div')];
     expect(tiles.map(tile => tile.querySelector('small').textContent)).toEqual(['株数', '投資額', '地合いの目安']);
+    expect(tiles[2]).not.toHaveTextContent('うち');
     expect(tiles[0]).toHaveTextContent('リスク $625');
     expect(tiles[1]).toHaveTextContent('口座の 17.8%');
-    expect(tiles[2]).toHaveTextContent('最大50%うち 17.8%');
+    // The guide's part this position takes in short (the tile keeps its height), the whole sentence read out with it.
+    expect([...tiles[2].querySelectorAll('em .brief-frag')].map(part => part.textContent)).toEqual(['目安の36%']);
+    expect(tiles[2].querySelector('em .sr-only')).toHaveTextContent('この1銘柄で目安の36%・同じ大きさなら目安内に2銘柄（保有分は未登録のため含まず）');
+    // The whole sentence, with how many of the same size fit, is in the terms beside the inputs (holdings are not registered).
+    expect(screen.getByTestId('brief-plan-exposure')).toHaveTextContent('この1銘柄で目安の36%・同じ大きさなら目安内に2銘柄（保有分は未登録のため含まず）。');
   });
 
   it('the R bar shows the −1R, +2R and +3R prices; the heading names the entry', () => {
@@ -114,12 +122,15 @@ describe('the plan card', () => {
     expect(guide).toHaveTextContent('最大50%うち —（算出できません）');
   });
 
-  it('over the market guide, the note breaks between its parts (うち x% / （超過）)', () => {
+  it('over the market guide, the note breaks between its parts (目安の x% / （超過）), and no position of the same size fits', () => {
     localStorage.setItem('brief-plan', JSON.stringify({ account: 50000, riskPercent: 5, stopPercent: 1, capPercent: 100 }));
     render(<Harness market={{ label: '上昇トレンド（警戒）', cap: 0.25 }} />);
     const guide = card().querySelectorAll('.brief-kgrid > div')[2];
     expect(guide).toHaveClass('tone-ext');
-    expect([...guide.querySelectorAll('em .brief-frag')].map(part => part.textContent)).toEqual(['うち 100.0%', '（超過）']);
+    expect([...guide.querySelectorAll('em .brief-frag')].map(part => part.textContent)).toEqual(['目安の400%', '（超過）']);
+    // None of the same size fits: the count is left out, never 「0銘柄」.
+    expect(screen.getByTestId('brief-plan-exposure')).toHaveTextContent('この1銘柄で目安の400%（超過）（保有分は未登録のため含まず）。');
+    expect(card()).not.toHaveTextContent('0銘柄');
     expect([...guide.querySelectorAll('small .brief-frag')].map(part => part.textContent)).toEqual(['地合いの', '目安']);
   });
 
@@ -166,6 +177,37 @@ describe('the plan card', () => {
     // The template's reason leads, in the conclusion's order.
     render(<Harness template={{ ...PASS, passed: 7, failed: 1 }} broken earningsSoon />);
     expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（TT未達）');
+  });
+
+  it('names the market as the plan\'s 参考 reason when its guide is 0% (参考（地合い）) or unknown, as the conclusion does', () => {
+    const heading = () => screen.getByRole('heading', { level: 2 });
+    const { unmount } = render(<Harness market={{ label: '50日線割れ（弱含み・独自判定）', cap: 0 }} />);
+    expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（地合い）');
+    // The tile still says 試算のみ: the guide allows no new position.
+    expect(card().querySelectorAll('.brief-kgrid > div')[2]).toHaveTextContent('試算のみ');
+    unmount();
+    const { unmount: next } = render(<Harness market={{ label: '市場未確認', cap: 0, state: 'unknown' }} />);
+    expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（地合い未確認）');
+    next();
+    // A Setup Engine base under its floor.
+    render(<Harness planView={{ ...view, row: { ...view.row, se_pattern_confidence: 31 } }} />);
+    expect(heading()).toHaveTextContent('ピボット 100.00 で買う場合・参考（土台未確認）');
+  });
+
+  it('dates the earnings rule in the conclusion\'s forms (M/D, never ISO), from the stock view\'s one call', () => {
+    const rule = () => card().querySelectorAll('.brief-rules li')[3].textContent;
+    const earningsView = date => ({ ...view, earnings: earningsDays({ entry_evidence: { earnings: { date } } }, DATE) });
+    const at = iso => Date.parse(`${iso}T15:00:00Z`);
+    for (const [date, now, rest] of [['2026-10-05', at(DATE), '：決算をまたいで持つかどうかを事前に決めておく。'], [DATE, at(DATE), '：決算をまたいで持つかどうかを事前に決めておく。'], ['2026-10-03', at('2026-10-05'), '：発表後の数字がデータに反映されてから判断する。']]) {
+      const v = earningsView(date), call = earningsCall(v, now);
+      render(<Harness planView={v} call={call} />);
+      // The form is earningsCall's (rows'): its line before 「：」 (「決算まで3日（10/5）」, 「決算当日（10/2）」, 「決算（10/3）後のデータ待ち」).
+      expect(rule()).toBe(`${call.line.split('：')[0]}${rest}`);
+      expect(rule()).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+      cleanup();
+    }
+    render(<Harness />);
+    expect(rule()).toBe('決算日を確認し、またいで持つかどうかを事前に決めておく。');
   });
 
   it('in the buy zone the entry is the analysis date\'s close (終値), never called the current price', () => {
@@ -249,10 +291,44 @@ describe('the structural stop and ADR come from certified bars only', () => {
     unmount();
     const edge = measured(90.5);
     render(<Harness judged={edge.judged} technical={edge.technical} />);
-    expect(card()).toHaveTextContent('（買値比 −9.95%）入力の上限9.5%を超えるため、この位置は使えません');
-    expect(card()).not.toHaveTextContent('見送り候補');
-    expect(card().querySelector('.brief-structural')).not.toHaveClass('tone-ext');
+    // Over the 9.5% the inputs allow: a depth problem, never an input limit.
+    expect(card()).toHaveTextContent('（買値比 −9.95%）深すぎる（9.5%超・見送り候補）');
+    expect(card()).not.toHaveTextContent('入力の上限');
+    expect(card().querySelector('.brief-structural')).toHaveClass('tone-ext');
     expect(screen.queryByRole('button', { name: 'この位置を使う' })).toBeNull();
+  });
+
+  it('warns, one ext line each, when the stop sits inside the last contraction and when the structural stop is deeper than 8% (never moving the stop)', () => {
+    const warnings = () => [...card().querySelectorAll('.brief-plan-warn li')].map(li => [li.dataset.warn, li.textContent]);
+    // Waiting below the pivot (entry 100), the 7% stop (93.00) above a 91.80 low; the structural stop 91.34 is 8.66% deep.
+    const both = measured(91.8);
+    const { unmount } = render(<Harness judged={both.judged} technical={both.technical} />);
+    expect(warnings()).toEqual([
+      ['inside', '損切り 93.00 は最後の収縮の安値 91.80 より上（収縮の中）：通常の値動きで刈られやすい位置（独自判定）'],
+      ['deep', '構造上の損切りが−8.7%：ピボットでの買いはリスクが大きい・見送り候補（8%超・独自設定）'],
+    ]);
+    expect(within(card()).getByRole('group', { name: 'R倍数の価格' })).toHaveTextContent('−1R 93.00');
+    unmount();
+    // Applied, the structural stop is under the low: only the depth warning stays.
+    localStorage.setItem('brief-plan', JSON.stringify({ ...PLAN_DEFAULTS, structuralSymbols: ['AAA'] }));
+    const applied = render(<Harness judged={both.judged} technical={both.technical} />);
+    expect(warnings().map(([key]) => key)).toEqual(['deep']);
+    applied.unmount();
+    localStorage.clear();
+    // A shallow base: no warning.
+    const shallow = measured(96);
+    const quiet = render(<Harness judged={shallow.judged} technical={shallow.technical} />);
+    expect(card().querySelector('.brief-plan-warn')).toBeNull();
+    quiet.unmount();
+    // In the buy zone the entry is the close: 終値での買い. Deeper than 9.5% already says 深すぎる on its own line.
+    const zone = { ...view, state: 'zone', position: 'zone', price: 100, distance: 0 };
+    const deep = measured(91.6);
+    const inZone = render(<Harness planView={zone} judged={deep.judged} technical={deep.technical} />);
+    expect(warnings().map(([, text]) => text.split('：')[1])).toEqual(['通常の値動きで刈られやすい位置（独自判定）', '終値での買いはリスクが大きい・見送り候補（8%超・独自設定）']);
+    inZone.unmount();
+    const tooDeep = measured(85);
+    render(<Harness judged={tooDeep.judged} technical={tooDeep.technical} />);
+    expect(warnings().map(([key]) => key)).toEqual(['inside']);
   });
 
   it('shows ADR (20 days, 独自計算) beside the stop width, or why it is unknown', () => {

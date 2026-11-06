@@ -1,12 +1,11 @@
 import { useMemo, useState } from 'react';
 import { Expander, Parts } from './briefPrimitives';
 import { clampPlanSetting, PLAN_BLOCKED, PLAN_DEFAULTS, POSITION_CAP_MAX_PERCENT, positionPlan, readPlanSettings, RISK_MAX_PERCENT, STOP_LIMIT_PERCENT,
-  STOP_MAX_PERCENT, STOP_MIN_PERCENT, STRUCTURAL_STOP_BUFFER_PERCENT, withStructuralSymbol } from './positionSizing';
+  STOP_MAX_PERCENT, STOP_MIN_PERCENT, STOP_WARN_PERCENT, STRUCTURAL_STOP_BUFFER_PERCENT, withStructuralSymbol } from './positionSizing';
 
 const finite = Number.isFinite;
 const price = value => finite(value) ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—';
 const dollars = value => finite(value) ? `$${Math.round(value).toLocaleString('en-US')}` : '—';
-const percent = (value, digits = 1) => finite(value) ? `${value.toFixed(digits)}%` : '—';
 /** A setting as its input shows it: at most two decimals (a structural stop is kept exact). */
 const shown = value => finite(value) ? Math.round(value * 100) / 100 : '';
 /** A value that cannot be computed: — with its screen-reader word. */
@@ -31,10 +30,10 @@ const Fold = ({ wide, id, summary, children }) => wide ? children : <Expander id
  * and the chart draws no stop; the plan card names the reason.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- the plan's hook lives beside its card (one owner)
-export function usePositionPlan({ view, template = null, market = null, technical = null, certified = false, judged = null, broken = false, earningsSoon = false, chartRef }) {
+export function usePositionPlan({ view, template = null, market = null, technical = null, certified = false, judged = null, broken = false, earningsSoon = false, sells = null, chartRef }) {
   const [settings, setSettings] = useState(readPlan);
   const bars = certified === true ? judged : null;
-  const context = useMemo(() => ({ market, template, technical, judged: bars, broken, earningsSoon }), [market, template, technical, bars, broken, earningsSoon]);
+  const context = useMemo(() => ({ market, template, technical, judged: bars, broken, earningsSoon, sells }), [market, template, technical, bars, broken, earningsSoon, sells]);
   const plan = useMemo(() => {
     const result = view ? positionPlan(view, settings, context) : null;
     return result?.blocked ? null : result;
@@ -63,21 +62,61 @@ function sharesNote(plan) {
   return <Parts text={plan.binding === 'risk' ? `リスク ${dollars(plan.riskDollars)}` : `上限${plan.capPercent}%・実リスク ${dollars(plan.actualRisk)}`} />;
 }
 
-/** 地合いの目安 (独自判定, named in the terms): the market's exposure guide and the part of it this position takes, or 試算のみ. */
+/**
+ * The exposure sentence (「この1銘柄で目安の36%・同じ大きさなら目安内に2銘柄（保有分は未登録のため含まず）」): the
+ * part of the market's guide this position takes and how many positions of the same size the guide holds,
+ * floor(guide ÷ weight); holdings are not registered, so none is counted. Null without a share.
+ */
+function exposureText(plan) {
+  const guide = plan.marketGuide;
+  if (plan.trialOnly || !finite(guide?.share)) return null;
+  const fits = Number.isInteger(guide.fits) && guide.fits > 0 ? `・同じ大きさなら目安内に${guide.fits}銘柄` : '';
+  return `この1銘柄で目安の${Math.round(guide.share)}%${guide.over ? '（超過）' : ''}${fits}（保有分は未登録のため含まず）`;
+}
+
+/**
+ * 地合いの目安 (独自判定, named in the terms): the market's exposure guide and the part of it this position takes
+ * (「目安の36%」; the whole sentence, with the count, is in the terms and read out here), or 試算のみ. The tile
+ * keeps its height: a third of the card's width holds the short form only.
+ */
 function MarketTile({ plan }) {
   const guide = plan.marketGuide;
   const label = <small><span className="brief-frag">地合いの</span><span className="brief-frag">目安</span></small>;
   if (plan.trialOnly) return <div className="brief-plan-guide">{label}<b>試算のみ</b><em>{guide.known ? '目安 0%（新規は控える）' : '地合い 未確認'}</em></div>;
+  const share = finite(guide.share) ? Math.round(guide.share) : null, sentence = exposureText(plan);
   return <div className={`brief-plan-guide${guide.over ? ' tone-ext' : ''}`}>{label}<b className="numeric">最大{Math.round(guide.maxPercent)}%</b>
-    <em>{guide.usedPercent === null ? <>うち <Missing /></> : <><span className="brief-frag">うち {percent(guide.usedPercent)}</span>{guide.over ? <span className="brief-frag">（超過）</span> : null}</>}</em></div>;
+    <em>{share === null ? <>うち <Missing /></> : <><span className="brief-frag" aria-hidden="true">{`目安の${share}%`}</span>{guide.over ? <span className="brief-frag" aria-hidden="true">（超過）</span> : null}<span className="sr-only">{sentence}</span></>}</em></div>;
 }
 
 /** Why a structural stop that was measured cannot be applied, by state. */
 const STRUCTURAL_WHY = {
   tooDeep: `深すぎる（${STOP_MAX_PERCENT}%以上・見送り候補）`,
-  overLimit: `入力の上限${STOP_LIMIT_PERCENT}%を超えるため、この位置は使えません`,
+  // A depth problem, never an input limit: a stop this deep leaves the loss at the edge of the 10% rule.
+  overLimit: `深すぎる（${STOP_LIMIT_PERCENT}%超・見送り候補）`,
   tooShallow: `損切り幅の下限${STOP_MIN_PERCENT}%より浅いため使えません`,
 };
+
+/**
+ * The stop's warnings against the base (VD5), one ext-tone line each: the stop in use above the last
+ * contraction's low (inside it: 独自判定), and a usable structural stop deeper than STOP_WARN_PERCENT (独自設定;
+ * a deeper one already says 深すぎる on its own line). The stop is never moved by itself.
+ */
+function StopWarnings({ plan }) {
+  const s = plan.structural, lines = [];
+  if (plan.stopInsideBase === true) lines.push(['inside', `損切り ${price(plan.stop)} は最後の収縮の安値 ${price(s.low)} より上（収縮の中）：通常の値動きで刈られやすい位置（独自判定）`]);
+  if (plan.structuralDeep === true && s.state === 'ok') lines.push(['deep', `構造上の損切りが−${s.percent.toFixed(1)}%：${plan.basis === 'pivot' ? 'ピボット' : '終値'}での買いはリスクが大きい・見送り候補（${STOP_WARN_PERCENT}%超・独自設定）`]);
+  return lines.length ? <ul className="brief-plan-warn" data-testid="brief-plan-warn">{lines.map(([key, text]) => <li key={key} data-warn={key}>{text}</li>)}</ul> : null;
+}
+
+/**
+ * The plan's earnings rule, in the conclusion's forms (earningsCall's line before its 「：」): 「決算まで2日
+ * （10/5）」, 「決算当日（10/2）」, 「決算（10/3）後のデータ待ち」; M/D, never ISO. Without a known date it asks to check it.
+ */
+function earningsRule(call) {
+  const head = typeof call?.line === 'string' ? call.line.split('：')[0] : null;
+  if (!head) return '決算日を確認し、またいで持つかどうかを事前に決めておく。';
+  return call.days < 0 ? `${head}：発表後の数字がデータに反映されてから判断する。` : `${head}：決算をまたいで持つかどうかを事前に決めておく。`;
+}
 
 /**
  * The structural stop from the base's last measured contraction, with the button that applies it to this
@@ -99,7 +138,7 @@ function StructuralStop({ plan, onUse, wide }) {
       <button type="button" aria-disabled={applied || undefined} onClick={() => { if (!applied) onUse(); }}>{applied ? '適用済み' : 'この位置を使う'}</button>
     </div>;
   }
-  return <p className={`brief-structural${s.state === 'tooDeep' ? ' tone-ext' : ''}`} data-state={s.state}>
+  return <p className={`brief-structural${s.state === 'tooDeep' || s.state === 'overLimit' ? ' tone-ext' : ''}`} data-state={s.state}>
     <span>構造上の損切り目安 <b className="numeric">{price(s.stop)}</b>（{depth}）</span><small>{STRUCTURAL_WHY[s.state]}</small></p>;
 }
 
@@ -110,7 +149,7 @@ function StructuralStop({ plan, onUse, wide }) {
  * that gets no new plan shows the reason instead. `judged` is the bars certified for the analysis date, or
  * null (usePositionPlan computed the plan's structural stop and ADR from it; the card itself does not read it).
  */
-export default function PlanCard({ view, plan, settings, onChange, earnings, judged = null, wide }) {
+export default function PlanCard({ view, plan, settings, onChange, earningsCall = null, judged = null, wide }) {
   void judged;
   if (!plan) {
     const blocked = PLAN_BLOCKED[view?.state];
@@ -121,7 +160,7 @@ export default function PlanCard({ view, plan, settings, onChange, earnings, jud
   }
   // The stop fields show the width in use: this stock's structural stop when it is applied, else the setting.
   const input = (key, label, step, extra = {}, value = settings[key]) => <label>{label}<input type="number" inputMode="decimal" step={step} value={shown(value)} onChange={e => onChange(key, Number(e.target.value))} {...extra} /></label>;
-  const structuralStop = plan.stopSource === 'structural';
+  const structuralStop = plan.stopSource === 'structural', exposure = exposureText(plan);
   const heading = `${plan.basis === 'pivot' ? 'ピボット' : '終値'} ${price(plan.entry)} で買う場合${plan.reference ? `・参考（${plan.referenceReason}）` : ''}${wide && plan.defaults ? '・既定条件' : ''}`;
   return <section className="brief-card brief-plan in" style={{ '--i': 7 }} aria-labelledby="brief-plan-title">
     <h2 id="brief-plan-title">建て玉と損切りの計画 <small><Parts text={heading} /></small></h2>
@@ -136,7 +175,7 @@ export default function PlanCard({ view, plan, settings, onChange, earnings, jud
         {input('capPercent', '1銘柄の上限（%）', 5, { min: 0, max: POSITION_CAP_MAX_PERCENT })}
         <p className="brief-plan-terms">1銘柄に投じる額の上限です（独自設定・初期{PLAN_DEFAULTS.capPercent}%・最大{POSITION_CAP_MAX_PERCENT}%）。信用取引は試算しません。</p>
       </div>
-      <p className="brief-plan-terms">構造上の損切り目安は、最後の収縮の安値の{STRUCTURAL_STOP_BUFFER_PERCENT}%下です（独自設定）。地合いの目安は市場の判定によるエクスポージャーの目安（独自判定）です。</p>
+      <p className="brief-plan-terms">構造上の損切り目安は、最後の収縮の安値の{STRUCTURAL_STOP_BUFFER_PERCENT}%下です（独自設定）。地合いの目安は市場の判定によるエクスポージャーの目安（独自判定）です。{exposure ? <span data-testid="brief-plan-exposure">{exposure}。</span> : null}</p>
     </Fold>
     <div className="brief-kgrid">
       <div><small>株数</small><b className="numeric" data-testid="brief-shares">{finite(plan.shares) ? plan.shares.toLocaleString('en-US') : <Missing />}</b><em>{sharesNote(plan)}</em></div>
@@ -147,11 +186,12 @@ export default function PlanCard({ view, plan, settings, onChange, earnings, jud
       <i className="r-risk"><span className="sr-only">損切り </span>−1R {price(plan.stop)}</i><i className="r-2">+2R {price(plan.r2)}</i><i className="r-3">+3R {price(plan.r3)}</i>
     </div>
     <StructuralStop plan={plan} wide={wide} onUse={() => onChange('structural', true)} />
+    <StopWarnings plan={plan} />
     <Fold wide={wide} id="stock-plan-rules" summary="損切りと利益確保のルール（4項目）"><ul className="brief-rules">
       <li><span>損切りの位置は買う前に決め、その価格に来たら例外なく手仕舞う。</span></li>
       <li><span>損失は最大でも10%未満に抑え、平均の損失はそれより小さく保つ。</span></li>
       <li><span>株価が +2R（{price(plan.r2)}）まで進んだら、損切りを買値まで引き上げて利益を守る。</span></li>
-      <li><span>{earnings ? `決算をまたいで持つかどうかは、発表日（${earnings.date}・あと${earnings.days}日）の前に決めておく。` : '決算日を確認し、またいで持つかどうかを事前に決めておく。'}</span></li>
+      <li><span>{earningsRule(earningsCall)}</span></li>
     </ul></Fold>
     <p className="brief-note">{view.symbol} の試算です。売買の推奨ではありません。</p>
   </section>;

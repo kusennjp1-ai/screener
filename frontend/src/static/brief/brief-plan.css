@@ -40,6 +40,11 @@ p.brief-structural { display: block; }
 /* Applied (適用済み): inert but still focusable, so the keyboard focus stays in place. */
 .brief-structural button[aria-disabled="true"] { cursor: default; color: var(--text-2); background: none; }
 
+/* The stop's warnings against the base (StopWarnings): one ext-tone line each, close under the structural stop. */
+.brief-plan-warn { margin: -4px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; font-size: 12px; line-height: 1.5; color: var(--ext); font-weight: 700; }
+/* The exposure tile's note on holdings: in the secondary colour, on its own line part. */
+.brief-plan .brief-plan-guide .brief-plan-held { color: var(--text-3); }
+
 /* A position that gets no new plan: the reason only. */
 .brief-plan-blocked { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-2); }
 
