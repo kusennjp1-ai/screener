@@ -152,7 +152,8 @@ function failedBreakoutCheck(list, view, rules) {
     const crossDay = day(heavy.index), sessions = n - back;
     return { ...base, state: 'hit', date: list[back].date, crossDate: heavy.date, ratio: heavy.volumeRatio, sessions,
       detail: `${crossDay} に出来高 ${ratioText(heavy.volumeRatio)}で上抜け、${day(back)} にピボットの下へ（以降${sessions}営業日・ピボット比 ${signed(distance)}）`,
-      headline: `ブレイク失敗（${crossDay}上抜け・出来高${ratioText(heavy.volumeRatio)}）` };
+      // As short as the 50-day headline, so it replaces a watch row's title without a line more at 320px.
+      headline: `ブレイク失敗（${crossDay}上抜け）` };
   }
   const missing = crossings.find(c => !finite(c.volumeRatio));
   if (missing) return { ...base, state: 'unknown', date: missing.date, detail: `${day(missing.index)} の上抜けの出来高（または直前50日の出来高）が未取得` };

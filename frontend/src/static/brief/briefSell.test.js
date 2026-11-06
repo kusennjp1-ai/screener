@@ -312,7 +312,7 @@ describe('the failed breakout (ブレイク失敗, 独自判定)', () => {
     const hit = check(bars);
     expect(hit).toMatchObject({ state: 'hit', date: bars[202].date, crossDate: bars[200].date, sessions: 2 });
     expect(hit.ratio).toBeCloseTo(2.2, 9);
-    expect(hit.headline).toBe(`ブレイク失敗（${short(bars[200].date)}上抜け・出来高2.20×）`);
+    expect(hit.headline).toBe(`ブレイク失敗（${short(bars[200].date)}上抜け）`);
     expect(hit.detail).toBe(`${short(bars[200].date)} に出来高 2.20×で上抜け、${short(bars[202].date)} にピボットの下へ（以降2営業日・ピボット比 −3.0%）`);
     expect(hit.label).toBe('出来高を伴う上抜け後のピボット割れ（1.40×以上・10営業日以内・ブレイク失敗）');
     const sells = stockSells({ judged: bars, diagnostics: null, view: view(bars) });

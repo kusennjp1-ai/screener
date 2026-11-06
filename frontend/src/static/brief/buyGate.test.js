@@ -63,7 +63,7 @@ describe('the one buy gate', () => {
   it('a broken setup and a failed breakout are neutral calls that name the check, whatever the position (崩れ)', () => {
     const ma50 = check('ma50', { headline: '50日線割れ（9/22・出来高2.20×）' });
     expect(gateOf({}, { sells: sells(ma50) })).toMatchObject({ kind: 'broken', tone: 'neutral', title: '買いの前提が崩れた（独自判定）', note: '50日線割れ（9/22・出来高2.20×）。', units: ['50日線割れ（9/22・出来高2.20×）'], reference: true, moved: true, reason: '崩れ' });
-    const failed = check('failedBreakout', { crossDate: '2026-09-28', ratio: 2.1, headline: 'ブレイク失敗（9/28上抜け・出来高2.10×）' });
+    const failed = check('failedBreakout', { crossDate: '2026-09-28', ratio: 2.1, headline: 'ブレイク失敗（9/28上抜け）' });
     // Below the pivot again (near it): never the wait sentence of a stock that has not broken out yet.
     expect(gateOf({ price: 99 }, { sells: sells(failed) })).toMatchObject({ kind: 'failedBreakout', tone: 'neutral', title: 'ブレイク失敗（独自判定）', note: '9/28に出来高2.10×で上抜け、ピボットの下へ戻りました。', reference: true, moved: true, reason: '崩れ' });
     // The plan's caller has only the flag: the same reason.
