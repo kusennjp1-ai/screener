@@ -281,6 +281,16 @@ describe('Today after the review', () => {
     expect(watchTitle).not.toMatch(/あと/);
   });
 
+  it('keeps a heavy down day\'s ▲ on the watch card for a watched stock that is not TT 8/8, as its watch-tab row does', () => {
+    const heavy = audited('HVY1', 101, { change: -1, volume: 1.6 });
+    heavy.assessment = { qualified: false, passed: 7, failed: 1, unknown: 0, total: 9 };
+    show({ ranked: [heavy], watch: ['HVY1'] });
+    const row = screen.getByRole('region', { name: 'ウォッチの状況' }).querySelector('[data-symbol="HVY1"]');
+    expect(row.querySelector('.brief-event-icon')).toHaveClass('tone-ext');
+    expect(row.querySelector('.brief-event-icon').textContent).toBe('▲');
+    expect(row.textContent).toContain('HVY1 下落日の大商い 1.60×（TT未達）');
+  });
+
   it('draws 「うち上抜けN」 as one run that can break only after うち', () => {
     show({ ranked: [audited('BRK1', 101)] });
     const link = screen.getByTestId('brief-breakout-link');
