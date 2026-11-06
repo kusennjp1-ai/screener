@@ -470,24 +470,45 @@ def recent_listed(root, as_of, sessions=RECENT_SESSIONS, log=print):
         log(f"SEC targets: recently listed symbols skipped (candidate history unavailable: {type(error).__name__})", flush=True)
         return None
 
+# A strong row is near the template: at most this many failed conditions (and one unknown) beside RS推計 ≥ RS_TARGET.
+STRONG_MAX_FAILED = 2
+
 def strong_rows(audit, as_of):
-    """Same-day audit rows with RS推計 of RS_TARGET or more and at most one unknown trend-template condition."""
+    """Same-day audit rows near the trend template: RS推計 of RS_TARGET or more, at most STRONG_MAX_FAILED failed
+    and at most one unknown condition."""
     if not audit or audit.get("as_of_date") != as_of:
         return []
     out = []
     for row in audit.get("results") or []:
         method = (row.get("methods") or {}).get("minervini") or {}
         rs = next((rule.get("value") for rule in method.get("rules") or [] if isinstance(rule, dict) and str(rule.get("label", "")).startswith("RS 推計")), None)
-        if isinstance(rs, (int, float)) and not isinstance(rs, bool) and math.isfinite(rs) and rs >= RS_TARGET and isinstance(method.get("unknown"), int) and method["unknown"] <= 1:
+        counts = [method.get(key) for key in ("failed", "unknown")]
+        if not all(isinstance(n, int) and not isinstance(n, bool) for n in counts):
+            continue
+        if isinstance(rs, (int, float)) and not isinstance(rs, bool) and math.isfinite(rs) and rs >= RS_TARGET and counts[0] <= STRONG_MAX_FAILED and counts[1] <= 1:
             out.append(row["symbol"])
     return out
 
-def target_symbols(daily, audit, recent=None):
-    """Every row the brief can list comes first (qualified, then one condition short), then the
-    rows it listed in the last RECENT_SESSIONS publications, then the trend-template ranking the
-    brief uses and the other ranked lists, then strong rows near the template (RS推計 ≥ 80)."""
+def core_targets(daily, audit, recent=None):
+    """The rows the brief lists or listed and the ranked lists, in order: every row the brief can list first
+    (qualified, then one condition short), then the rows it listed in the last RECENT_SESSIONS publications, then
+    the trend-template ranking the brief uses and the other ranked lists. A cut among these is a coverage gap."""
     ranked = [r["symbol"] for method in ("minervini", "minervini2", "ibd", "oneil") for r in daily["candidates"].get(method, [])]
-    return list(dict.fromkeys(same_day_brief(daily, audit) + list((recent or {}).get("symbols") or []) + ranked + strong_rows(audit, daily["as_of_date"])))
+    return list(dict.fromkeys(same_day_brief(daily, audit) + list((recent or {}).get("symbols") or []) + ranked))
+
+def target_symbols(daily, audit, recent=None):
+    """core_targets, then the strong rows near the template (RS推計 ≥ 80) as a best-effort tail."""
+    return list(dict.fromkeys(core_targets(daily, audit, recent) + strong_rows(audit, daily["as_of_date"])))
+
+def target_counts(core, ordered, symbols):
+    """What the fetch committed to and what it cut. `eligible` is every core target plus the strong rows that were
+    requested (so the records with quarters never exceed it) and `truncated` the core targets the limit cut; the
+    strong rows the limit left out are best effort, counted apart (`strong_rows_unfetched`), never as truncation."""
+    core, chosen = set(core), set(symbols)
+    tail = [symbol for symbol in ordered if symbol not in core]
+    strong_requested = sum(symbol in chosen for symbol in tail)
+    return {"eligible": len(core) + strong_requested, "truncated": sum(symbol not in chosen for symbol in core),
+        "strong_rows_requested": strong_requested, "strong_rows_unfetched": len(tail) - strong_requested}
 
 def requested(ordered, limit):
     return ordered[:max(0, min(limit, MAX_SYMBOLS))]
@@ -508,13 +529,16 @@ def main():
     audit_path = Path("public/qualification-audit.json")
     audit = json.loads(audit_path.read_text(encoding="utf-8")) if audit_path.exists() else None
     recent = recent_listed(root, as_of)
+    core = core_targets(daily, audit, recent)
     ordered = target_symbols(daily, audit, recent)
     symbols = requested(ordered, args.limit)
     output = collect(symbols, as_of)
     brief = same_day_brief(daily, audit)
+    counts = target_counts(core, ordered, symbols)
     targets = {"listed": len(brief), "recent_listed": None if recent is None else len(set(recent["symbols"]) - set(brief)), "recent_sessions": None if recent is None else recent["sessions"],
-        "strong_rows": len(set(strong_rows(audit, as_of)) - set(brief) - set((recent or {}).get("symbols") or []))}
-    output["coverage"] = {**coverage(output["results"], len(ordered), len(symbols), brief), "targets": targets, "second_pass": output.pop("second_pass"), "deadline": output.pop("deadline")}
+        "strong_rows": len(set(strong_rows(audit, as_of)) - set(brief) - set((recent or {}).get("symbols") or [])),
+        "strong_rows_requested": counts["strong_rows_requested"], "strong_rows_unfetched": counts["strong_rows_unfetched"]}
+    output["coverage"] = {**coverage(output["results"], counts["eligible"], len(symbols), brief), "targets": targets, "second_pass": output.pop("second_pass"), "deadline": output.pop("deadline")}
     write_output(root, output)
     print(f"SEC evidence {as_of}: " + json.dumps(output["coverage"], ensure_ascii=False) + "; missing remains unknown", flush=True)
     summary = invalid_summary(output["results"])
@@ -522,7 +546,9 @@ def main():
     append_step_summary(f"- SEC evidence {as_of}: {output['coverage']['available']} available, {output['coverage']['partial']} partial, {output['coverage']['unavailable']} unavailable of {len(symbols)} requested; "
         f"invalid_payload {summary['count']} by cause {json.dumps(summary['by_cause'], ensure_ascii=False)}; first symbols {' '.join(summary['symbols']) or 'none'}")
     if output["coverage"]["truncated"] > 0:
-        print(f"::warning::SEC evidence covers {len(symbols)} of {len(ordered)} eligible symbols; {output['coverage']['truncated']} stay unfetched (unknown)", flush=True)
+        print(f"::warning::SEC evidence covers {len(symbols)} of {len(core)} listed, recent and ranked symbols; {output['coverage']['truncated']} of them stay unfetched (unknown)", flush=True)
+    if counts["strong_rows_unfetched"] > 0:
+        print(f"SEC targets: {counts['strong_rows_unfetched']} strong rows beyond the limit of {MAX_SYMBOLS} stay unfetched (best effort, unknown)", flush=True)
     if output["coverage"]["deadline"]["unreached"] > 0:
         print(f"::warning::SEC budget of {output['coverage']['deadline']['seconds']:.0f}s ran out; {output['coverage']['deadline']['unreached']} symbols stay unfetched (transient, unknown)", flush=True)
 

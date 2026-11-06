@@ -504,9 +504,35 @@ class WiderTargets(unittest.TestCase):
             logged = []
             self.assertIsNone(sec.recent_listed(Path(directory), days[11], log=lambda *args, **kwargs: logged.append(args[0])))
             self.assertEqual(len(logged), 1)
+        # A strong row far from the template (three failed conditions) is not a target.
+        far = {"as_of_date": days[11], "results": [audit_row("FAR", 95, 0, False, 3), audit_row("NEAR", 95, 0, False, 2)]}
+        self.assertEqual(sec.strong_rows(far, days[11]), ["NEAR"])
+        self.assertEqual(sec.STRONG_MAX_FAILED, 2)
         # Listed-first order and the cap are unchanged.
         self.assertEqual(sec.MAX_SYMBOLS, 1500)
         self.assertEqual(sec.target_symbols({"as_of_date": "2026-10-30", "candidates": {}}, {"as_of_date": "2026-10-30", "results": [audit_row("LST", 50, 0, True, 0)]}, {"symbols": ["LST", "REC"]}), ["LST", "REC"])
+
+    def test_strong_rows_beyond_the_limit_are_best_effort_never_truncation(self):
+        """Listed rows within MAX_SYMBOLS but listed plus strong rows above it: nothing listed is cut, so no truncation
+        (and no daily coverage warning); the strong rows left out are counted apart."""
+        audit_row = lambda symbol, rs, qualified: {"symbol": symbol, "methods": {"minervini": {"qualified": qualified, "failed": 0 if qualified else 1, "unknown": 0 if qualified else 1,
+            "rules": [{"label": "RS 推計 ≥ 70（公開日足の共通母集団）", "value": rs}]}}}
+        listed = [f"L{i}" for i in range(1400)]
+        strong = [f"S{i}" for i in range(300)]
+        audit = {"as_of_date": "2026-11-05", "results": [audit_row(s, 90, True) for s in listed] + [audit_row(s, 90, False) for s in strong]}
+        daily = {"as_of_date": "2026-11-05", "candidates": {}}
+        core = sec.core_targets(daily, audit, None)
+        ordered = sec.target_symbols(daily, audit, None)
+        symbols = sec.requested(ordered, sec.MAX_SYMBOLS)
+        self.assertEqual((len(core), len(ordered), len(symbols)), (1400, 1700, 1500))
+        counts = sec.target_counts(core, ordered, symbols)
+        self.assertEqual(counts, {"eligible": 1500, "truncated": 0, "strong_rows_requested": 100, "strong_rows_unfetched": 200})
+        cover = sec.coverage({}, counts["eligible"], len(symbols), listed)
+        self.assertEqual((cover["eligible"], cover["requested"], cover["truncated"]), (1500, 1500, 0))
+        # A limit that cuts listed rows is truncation, counted over the listed, recent and ranked targets only.
+        few = sec.requested(ordered, 1000)
+        self.assertEqual(sec.target_counts(core, ordered, few), {"eligible": 1400, "truncated": 400, "strong_rows_requested": 0, "strong_rows_unfetched": 300})
+        self.assertEqual(sec.coverage({}, 1400, len(few), listed)["truncated"], 400)
 
 ADMIT_SCRIPT = """
 import { admitBookFinancials } from './src/static/bookFinancialAdmission.js';

@@ -255,7 +255,11 @@ const UNKNOWN_KINDS = ['q4_eps', 'q4_row', 'few_quarters', 'gap', 'stale', 'no_s
 
 // ---- Round-2 measurements (plan DT4, DT9): diagnostic only, never a gate; a value the publication cannot give is
 // null (未計測), never 0.
-/** The Setup Engine's confidence floor (backend aggregator, pinned by its TestConfidenceFloorContract): measurement only. */
+/**
+ * The Setup Engine's confidence floor, mirrored here for measurement only (no rule reads it): the backend aggregator
+ * owns it and TestConfidenceFloorContract (backend/tests/unit/test_setup_engine_screener.py) pins its 55; the report
+ * says so beside the count it makes with it.
+ */
 export const SETUP_CONFIDENCE_FLOOR = 55;
 export const FLOOR_CHECK = 'primary_pattern_below_confidence_floor';
 /** Why EPS acceleration stays unknown, in the order a row's first cause is taken (DT4; §9-20 reads fiscal_q4_untagged). */
@@ -357,9 +361,11 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
     out.sec_state[sec.state] = (out.sec_state[sec.state] || 0) + 1;
     if (report) fundamentalTiles(report).forEach((tile, i) => { if (tile.value !== null) out.tiles[['eps', 'sales', 'margin'][i]]++; });
     if (report?.valid) { out.sec_conditions.eps[report.epsAcceleration]++; out.sec_conditions.sales[report.salesAcceleration]++; out.sec_conditions.margin[report.marginImprovement]++; }
-    out.code33[code33.state]++;
+    // Yahoo alone is never a pass (or a fail): a Yahoo-only result counts as unknown here (kind 'yahoo') and as a reference apart.
+    const secState = code33.source === 'yahoo' ? 'unknown' : code33.state;
+    out.code33[secState]++;
     if (code33.source === 'yahoo' && code33.state !== 'unknown') out.code33_reference[code33.state]++;
-    if (code33.state === 'unknown') out.code33_unknown_reason[explain.kind] = (out.code33_unknown_reason[explain.kind] || 0) + 1;
+    if (secState === 'unknown') out.code33_unknown_reason[explain.kind] = (out.code33_unknown_reason[explain.kind] || 0) + 1;
     out.setup_ready[setupReadiness(row).state]++;
     for (const key of Object.keys(out.filled)) if (finite(row[key])) out.filled[key]++;
     if (qualifiedSet.has(symbol)) qualified++;
@@ -463,8 +469,11 @@ export async function publishedFundamentalsReport({ root = 'public', now = Date.
   const { warnings: blockWarnings, ...withoutWarnings } = block; void blockWarnings;
   // Round-2 measurements: warnings only (plan DT9), never a failure.
   const round2 = coverage.round2;
-  // Readiness measured on the listed rows and passing on none of them (an all-unknown population is 未計測, not a warning).
-  if (round2?.setup_readiness.pass === 0 && round2.setup_readiness.fail > 0) warnings.push(`Setup readiness passes on 0 of ${coverage.listed} brief-listed rows (fail ${round2.setup_readiness.fail}, unknown ${round2.setup_readiness.unknown}; top failed checks: ${round2.setup_readiness.top_failed_checks.slice(0, 3).map(([check, n]) => `${check} ${n}`).join(', ') || '未計測'})`);
+  // Readiness passing on none of the listed rows is a data failure either way: failed somewhere, or unknown on every row.
+  const ready = round2?.setup_readiness;
+  if (ready && ready.pass === 0 && coverage.listed > 0) warnings.push(ready.fail > 0
+    ? `Setup readiness passes on 0 of ${coverage.listed} brief-listed rows (fail ${ready.fail}, unknown ${ready.unknown}; top failed checks: ${ready.top_failed_checks.slice(0, 3).map(([check, n]) => `${check} ${n}`).join(', ') || '未計測'})`
+    : `Setup readiness unknown on all ${coverage.listed} brief-listed rows (未計測)`);
   const tt = round2?.tt_population;
   if (Number.isSafeInteger(tt?.long_history_tt) && Number.isSafeInteger(tt?.listed_qualified) && tt.listed_qualified > tt.long_history_tt) warnings.push(`The brief lists ${tt.listed_qualified} trend-template qualified rows, more than the long history's ${tt.long_history_tt} for ${coverage.as_of_date}`);
   if (manifestBlock !== null && JSON.stringify(canonical(manifestBlock)) !== JSON.stringify(canonical(plainObject(manifestBlock) && !Object.hasOwn(manifestBlock, 'warnings') ? withoutWarnings : block))) warnings.push('The manifest fundamentals_coverage block differs from the published details');
@@ -486,7 +495,7 @@ export function fundamentalsSummaryTable(report, { label = null } = {}) {
     `| published rows / admitted / with quarters | ${cell(b.universe)} / ${cell(b.admitted)} / ${cell(b.with_quarters)} |`,
     `| not requested / no same-day input | ${cell(b.not_requested)} / ${cell(b.not_fetched)} |`, `| refused by reason | ${cell(b.refused_by_reason)} |`,
     `| SEC states (listed) | ${cell(Object.fromEntries(Object.entries(c.sec_state).filter(([, n]) => n)))} |`,
-    `| Code 33 (listed) | ${cell(c.code33)}; unknown: ${cell(Object.fromEntries(Object.entries(c.code33_unknown_reason).filter(([, n]) => n)))} |`,
+    `| Code 33 (listed, SEC only) | ${cell(c.code33)}; unknown: ${cell(Object.fromEntries(Object.entries(c.code33_unknown_reason).filter(([, n]) => n)))}${c.code33_reference ? `; Yahoo reference (counted unknown): ${cell(c.code33_reference)}` : ''} |`,
     `| SEC conditions (listed) | EPS ${cell(c.sec_conditions.eps)}; sales ${cell(c.sec_conditions.sales)}; margin ${cell(c.sec_conditions.margin)} |`,
     `| setup readiness (listed, measurement only) | ${cell(c.setup_ready)} |`,
     `| filled (listed, measurement only) | ${cell(c.filled)} of ${cell(c.listed)} |`];
@@ -495,7 +504,7 @@ export function fundamentalsSummaryTable(report, { label = null } = {}) {
     const pair = list => list?.length ? list.map(([key, n]) => `${key} ${n}`).join(', ') : 'none';
     const range = value => value ? `p10 ${value.p10}, p50 ${value.p50}, p90 ${value.p90}` : '未計測';
     lines.push(`| setup: top failed checks (listed) | ${pair(r.setup_readiness.top_failed_checks)} |`,
-      `| setup confidence under ${r.setup_confidence.floor} / missing / floor check named | ${r.setup_confidence.below_floor} / ${r.setup_confidence.missing} / ${r.setup_confidence.floor_check_named} |`,
+      `| setup confidence under ${r.setup_confidence.floor} (mirrors the backend floor test) / missing / floor check named | ${r.setup_confidence.below_floor} / ${r.setup_confidence.missing} / ${r.setup_confidence.floor_check_named} |`,
       `| EPS acceleration unknown (current SEC report) | ${r.eps_unknown.with_current_report}: ${cell(Object.fromEntries(Object.entries(r.eps_unknown.primary).filter(([, n]) => n)))}; fiscal-Q4 share ${percent(r.eps_unknown.fiscal_q4_share)}; without a current report ${r.eps_unknown.without_current_report} |`,
       `| invalid_payload by cause | ${r.invalid_payload.count}: ${cell(r.invalid_payload.by_cause)}${r.invalid_payload.symbols.length ? ` (${r.invalid_payload.symbols.join(' ')})` : ''} |`,
       `| quarter gaps: fiscal Q4 / other; derivation gaps; no revenue concept | ${r.gaps.fiscal_q4} / ${r.gaps.other}; ${cell(r.gaps.derivation_gaps)}; ${r.gaps.empty_revenue} |`,

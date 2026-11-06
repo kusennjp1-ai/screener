@@ -102,7 +102,9 @@ describe('the publication SEC coverage block and the published report', () => {
       if (file && (has || reason)) results[symbol] = { ...make(symbol), schema_version: schema };
       const state = has ? { state: 'admitted', reason: null } : reason ? { state: 'refused', reason } : file ? { state: 'not_requested', reason: null } : { state: 'not_fetched', reason: 'no_file' };
       states.push({ symbol, ...state, status: has ? results[symbol].status : null });
-      await write(join(root, `static-data/research-details/${symbol}.json`), { symbol, market: 'US', as_of_date: date, book_financials: has ? results[symbol] : null, sec_admission: state });
+      // A current setup readiness on the first row, so these SEC cases do not also warn that readiness is unknown everywhere.
+      const ready = i === 0 ? { se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date } } : {};
+      await write(join(root, `static-data/research-details/${symbol}.json`), { symbol, market: 'US', as_of_date: date, book_financials: has ? results[symbol] : null, sec_admission: state, ...ready });
     }
     const input = file ? { schema_version: schema, as_of_date: file === 'stale' ? '2026-01-30' : date, results, ...(errors ? { errors } : {}), coverage: { eligible: listed + 3, requested: Object.keys(results).length, truncated: 3, deadline: { unreached } } } : null;
     if (input) await writeFile(join(root, 'static-data/book-financials.json.gz'), gzipSync(JSON.stringify(input)));
@@ -346,6 +348,8 @@ describe('round-2 measurements in the published report (plan DT4, DT9): diagnost
         list_summaries: { rs_line_high: { rows: 5, certified: 3, value_true: 1, value_unknown: 1, leading_true: 1 }, sec_summary: { rows: 5, admitted: 1, eps_yoy: 1, sales_yoy: 1 }, se_pattern_primary: 1 },
       });
       expect(report.round2.chart_depth.window).toMatchObject({ producer: null, period: expect.stringMatching(/^\d+(y|mo)$/) });
+      // Code 33 counts SEC results only: the Yahoo-only 未達 (a falling Yahoo margin) is unknown there and a reference apart.
+      expect(report).toMatchObject({ code33: { pass: 1, fail: 0, unknown: 4 }, code33_reference: { pass: 0, fail: 1 }, code33_unknown_reason: { yahoo: 1, q4_eps: 1 } });
       // The warnings: readiness measured and passing nowhere is not this case (one passes); the listed population exceeds the long history's.
       const lines = []; await runPublished(['--published', '--root', root], { env: {}, log: line => lines.push(line), now });
       expect(lines.some(line => line.startsWith('::warning::The brief lists 5 trend-template qualified rows, more than the long history\'s 3'))).toBe(true);
@@ -372,6 +376,11 @@ describe('round-2 measurements in the published report (plan DT4, DT9): diagnost
       expect(secEvidenceLine(file)).toBe(`SEC evidence ${date} (published file): {"eligible":1,"requested":1,"records":1,"invalid_payload_by_cause":{"unrecorded":1},"derivation_gaps":{}}; first invalid_payload symbols OLD`);
       // Measured but all failing readiness is a warning; the table says 未計測 for what is missing.
       expect(lines.some(line => line.startsWith('::warning::Setup readiness passes on 0 of 1 brief-listed rows (fail 1, unknown 0; top failed checks: not_implemented 1)'))).toBe(true);
+      // Readiness unknown on every listed row is a data failure too, worded apart.
+      await write(join(root, 'static-data/research-details/OLD.json'), { ...rowsOut[0], book_financials: null });
+      const unknown = []; await runPublished(['--published', '--root', root], { env: {}, log: line => unknown.push(line), now });
+      expect(unknown).toContain('::warning::Setup readiness unknown on all 1 brief-listed rows (未計測)');
+      expect(unknown.some(line => line.includes('Setup readiness passes on 0'))).toBe(false);
       expect(secEvidenceLine(null)).toBeNull();
     } finally { await rm(root, { recursive: true, force: true }); }
   });

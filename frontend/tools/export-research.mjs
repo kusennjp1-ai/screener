@@ -251,7 +251,9 @@ scan.charts={...scan.charts,...correctionMeta,path:chartIndexPath};
  * Round-2 published contracts (plan §2.3), implemented by the data track; consumers read an absent field
  * (every older publication) as 未収録, never as 0 or false. Examples: src/test/fixtures/publishedContracts.js.
  * Research-index rows (the summary below, never the canonical rows, so the alias replay is unchanged):
- * @typedef {object} RsLineHigh `rs_line_high`, only when technical_audit.as_of_date is the analysis date and the chart is certified
+ * @typedef {object} RsLineHigh `rs_line_high`, an object only when technical_audit.as_of_date is the analysis date and the chart is
+ *   certified; null (present) when the chart is not certified for the analysis date, so a reader's hasOwn says 未確認; absent only
+ *   in older publications (未収録)
  * @property {boolean|null} value rsLineNewHigh (src/static/brief/briefChartModel.js) on the chart's rs_line
  * @property {boolean|null} leading the last bar's RS-lead rule
  * @property {string} as_of_date 'YYYY-MM-DD'
