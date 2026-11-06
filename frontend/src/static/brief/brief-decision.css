@@ -39,6 +39,10 @@
 .brief-call .brief-meter.is-reference .brief-meter-labels .is-zone { color: var(--text-2); }
 .brief-call .brief-kgrid > div { position: relative; }
 .brief-tilequal { position: absolute; top: -9px; right: 8px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); font-size: 12px; line-height: 16px; font-weight: 400; color: var(--text-2); white-space: nowrap; }
+/* The stop inside the last contraction (収縮の中, positionPlan's stopInsideBase): the stop tile's qualifier in the ext tone. */
+.brief-tilequal.tone-ext { border-color: var(--ext); color: var(--ext); font-weight: 700; }
+/* The latest-earnings caution under a green call (fundamentalsExplain's earningsCaution): one line in the wait tone. */
+.brief-call .brief-call-caution { margin-top: 2px; color: var(--wait); }
 /* Where a column is narrower than 「買いゾーン超過」 but the names still fit one line, the last column takes a
    little of the buy zone's width and its name ends at the track's end; narrower still, the names break
    between their words (土台／形成中, ピボット／接近, 買いゾーン／超過); narrower than a word, the short names. */
