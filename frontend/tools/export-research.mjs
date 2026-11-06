@@ -9,7 +9,7 @@ import { exportWorkbench } from './export-workbench.mjs';
 import { createHash } from 'node:crypto';
 import { gzipSync } from 'node:zlib';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
-import { marketContextBlock, rsLineHighSummary, scanListRow } from './scan-list-payload.mjs';
+import { fitResearchIndex, marketContextBlock, RESEARCH_SUMMARY_FIELDS, rsLineHighSummary, scanListRow } from './scan-list-payload.mjs';
 import { setupEvidence } from './setup-evidence.mjs';
 import { institutionalGrowth } from '../src/static/institutionalEvidence.js';
 import { admitBookFinancialsDetailed } from '../src/static/bookFinancialAdmission.js';
@@ -293,13 +293,19 @@ const researchIndex = {...currentEvaluation,summary_storage:'canonical-detail-v1
 // Runtime orders are rebuilt from current inputs at each evaluation epoch.
 // Omit ignored cached permutations and list summaries. Canonical detail keeps
 // its independently checked publication summaries; every exact input remains.
-const researchContent = JSON.stringify(encodeResearchIndex(researchIndex, undefined, {
-  columnBytes: column => gzipSync(JSON.stringify(column)).length,
-}));
-if (Buffer.byteLength(researchContent) > 8000000 || gzipSync(researchContent).length > 1000000) {
-  throw Error(`Research index exceeds its unchanged 8 MB raw / 1 MB gzip budget: ${Buffer.byteLength(researchContent)} raw / ${gzipSync(researchContent).length} gzip bytes`);
+// The budget is unchanged. The round-2 list summaries are optional: an index they alone would push over it is written
+// without them (an older publication's shape, 未収録 on screen) with a warning, never a failed publication.
+const fittedIndex = fitResearchIndex(researchIndex, { gzip: content => gzipSync(content).length,
+  encode: index => JSON.stringify(encodeResearchIndex(index, undefined, { columnBytes: column => gzipSync(JSON.stringify(column)).length })) });
+if (fittedIndex.over) {
+  throw Error(`Research index exceeds its unchanged 8 MB raw / 1 MB gzip budget: ${fittedIndex.raw} raw / ${fittedIndex.gzip} gzip bytes`);
 }
-console.log(`Research index ${scan.as_of_date}: ${Buffer.byteLength(researchContent)} raw / ${gzipSync(researchContent).length} gzip bytes (budget 8000000 / 1000000).`);
+const researchContent = fittedIndex.content;
+if (fittedIndex.dropped) {
+  const line = `Research index ${scan.as_of_date}: the round-2 list summaries (${RESEARCH_SUMMARY_FIELDS.join(', ')}) would exceed the 8 MB raw / 1 MB gzip budget (${fittedIndex.full.raw} raw / ${fittedIndex.full.gzip} gzip bytes); published without them, so the screens read 未収録`;
+  console.log(`::warning::${line}`); appendStepSummary(`- ${line}`);
+}
+console.log(`Research index ${scan.as_of_date}: ${fittedIndex.raw} raw / ${fittedIndex.gzip} gzip bytes (budget 8000000 / 1000000; with the list summaries ${fittedIndex.full.raw} / ${fittedIndex.full.gzip}${fittedIndex.dropped ? ', dropped' : ''}).`);
 // The scan list has all global filter/sort values, but no full detector reports.
 await mkdir(resolve(root,'scan-list'),{recursive:true});
 const scanRows=[...compactRows.values()].map(scanListRow), scanChunks=[];

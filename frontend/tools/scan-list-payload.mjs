@@ -18,6 +18,29 @@ const plain = value => Boolean(value) && typeof value === 'object' && !Array.isA
 /** The research-index summary fields round 2 adds beside listFields (absent from every older publication). */
 export const RESEARCH_SUMMARY_FIELDS = Object.freeze(['rs_line_high', 'sec_summary']);
 
+/** The research index's unchanged budget: 8 MB raw and 1 MB gzip. */
+export const RESEARCH_INDEX_BUDGET = Object.freeze({ raw: 8000000, gzip: 1000000 });
+/**
+ * The research index content within its unchanged budget. `encode` turns an index into its published text and `gzip`
+ * gives a text's gzip byte count. The round-2 list summaries are optional: when the index with them would exceed the
+ * budget and the same index without them fits, it is published without them, in an older publication's shape (the
+ * screens then read 未収録, never a guess) and `dropped` is true, so the export warns instead of failing the
+ * publication. When even that does not fit, `over` is true and the export fails as before.
+ * → { content, raw, gzip, dropped, over, full: { raw, gzip } }
+ */
+export function fitResearchIndex(index, { encode, gzip, budget = RESEARCH_INDEX_BUDGET }) {
+  const measure = content => ({ content, raw: Buffer.byteLength(content), gzip: gzip(content) });
+  const fits = size => size.raw <= budget.raw && size.gzip <= budget.gzip;
+  const full = measure(encode(index));
+  if (fits(full)) return { ...full, dropped: false, over: false, full: { raw: full.raw, gzip: full.gzip } };
+  const carries = (index.rows || []).some(row => RESEARCH_SUMMARY_FIELDS.some(field => Object.hasOwn(row, field)));
+  if (carries) {
+    const without = measure(encode({ ...index, rows: index.rows.map(row => Object.fromEntries(Object.entries(row).filter(([key]) => !RESEARCH_SUMMARY_FIELDS.includes(key)))) }));
+    if (fits(without)) return { ...without, dropped: true, over: false, full: { raw: full.raw, gzip: full.gzip } };
+  }
+  return { ...full, dropped: false, over: true, full: { raw: full.raw, gzip: full.gzip } };
+}
+
 /**
  * A row's `rs_line_high` from its certified chart: `rules` are briefChartModel's frozen rsLineNewHigh and
  * rsLeadMarks; `audit` the row's published technical_audit; `chart` the verified chart (bars and rs_line).

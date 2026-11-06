@@ -497,3 +497,23 @@ it('emits market_context only when every US row that carries the regime agrees, 
     expect(index.rows.map(row => row.sec_summary)).toEqual([null, null, null]);
   } finally { for (const item of [agree, disagree, uncertified]) await rm(item.directory, { recursive: true, force: true }); }
 });
+
+it('keeps the research index within its unchanged budget by leaving out only the optional list summaries, and fails as before when that is not enough', async () => {
+  const { fitResearchIndex, RESEARCH_INDEX_BUDGET, RESEARCH_SUMMARY_FIELDS } = await import('./scan-list-payload.mjs');
+  expect(RESEARCH_INDEX_BUDGET).toEqual({ raw: 8000000, gzip: 1000000 });
+  const summary = { rs_line_high: { value: true, leading: false, as_of_date: '2026-11-05' }, sec_summary: null };
+  const index = { as_of_date: '2026-11-05', rows: [{ symbol: 'AAA', se_pattern_primary: 'vcp', ...summary }, { symbol: 'BBB', se_pattern_primary: null }] };
+  const encode = value => JSON.stringify(value), gzip = content => content.length;
+  const full = encode(index).length, bare = encode({ ...index, rows: [{ symbol: 'AAA', se_pattern_primary: 'vcp' }, { symbol: 'BBB', se_pattern_primary: null }] }).length;
+  // Within the budget: the index as built.
+  expect(fitResearchIndex(index, { encode, gzip, budget: { raw: full, gzip: full } })).toMatchObject({ content: encode(index), dropped: false, over: false });
+  // Over it only because of the summaries: the same rows without them (an older publication's shape), never any other field.
+  const fitted = fitResearchIndex(index, { encode, gzip, budget: { raw: full, gzip: bare } });
+  expect(fitted).toMatchObject({ dropped: true, over: false, raw: bare, gzip: bare, full: { raw: full, gzip: full } });
+  const rows = JSON.parse(fitted.content).rows;
+  for (const row of rows) for (const field of RESEARCH_SUMMARY_FIELDS) expect(Object.hasOwn(row, field)).toBe(false);
+  expect(rows).toEqual([{ symbol: 'AAA', se_pattern_primary: 'vcp' }, { symbol: 'BBB', se_pattern_primary: null }]);
+  // Over it even without them, or with nothing to leave out: the export fails as it always has.
+  expect(fitResearchIndex(index, { encode, gzip, budget: { raw: full, gzip: bare - 1 } })).toMatchObject({ dropped: false, over: true });
+  expect(fitResearchIndex({ ...index, rows: [{ symbol: 'BBB' }] }, { encode, gzip, budget: { raw: 1, gzip: 1 } })).toMatchObject({ dropped: false, over: true });
+});
