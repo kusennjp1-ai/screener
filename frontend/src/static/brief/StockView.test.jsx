@@ -201,5 +201,11 @@ describe('the props StockView hands its cards in round 2', () => {
     cleanup();
     render(<StockView data={withRow(undefined, rising)} />);
     expect(seen.verdict.rsHigh).toBe(false);
+    cleanup();
+    // A dated published high on bars this screen cannot certify (e.g. a scan-price mismatch): neither the conclusion
+    // nor the chart claims it, so the two cards never give two answers.
+    render(<StockView data={{ ...withRow({ value: true, leading: false, as_of_date: DATE }, rising), certification: { certified: false, reason: 'スキャン価格と日足終値が不一致' } }} />);
+    expect(seen.verdict.rsHigh).toBe(false);
+    expect(seen.chart.rsHigh).toBe(false);
   });
 });

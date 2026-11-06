@@ -293,7 +293,8 @@ test.describe('390×844 phone', () => {
     await settled(page);
     const readout = page.locator('.brief-readout');
     await expect(readout.locator('.ro-unverified')).toHaveText(/^未検証の足/);
-    await expect(readout.locator('.ro-unverified')).toHaveAttribute('title', /スキャン価格と日足終値が不一致/);
+    // The chip's title is the chart's sentence with the certification's reason (not this spec's copy) in brackets.
+    await expect(readout.locator('.ro-unverified')).toHaveAttribute('title', /^分析基準日の日足として検証できていません（.+）$/);
     await expect(readout.locator('.ro-change')).toHaveText(/^[+−±]\d+\.\d%（未検証）$/);
     await expect(readout).toContainText(/\d\.\d{2}×（未検証）/);
     await expect(readout.locator('.ro-adr')).toHaveText(/^ADR —/);

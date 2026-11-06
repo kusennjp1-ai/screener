@@ -31,7 +31,7 @@ function Readout({ readout, compact, reason }) {
   const label = readout.latest ? (readout.weekly ? `最新の足（${readout.range}の週）の値` : '最新の足の値') : `選んだ足（${readout.weekly ? `${readout.range}の週` : readout.date}）の値`;
   const unverified = readout.unverified;
   const change = <span className={`ro-item ro-change ${unverified ? 'is-unverified' : tone}`}>{readout.change === null ? <Missing word="前の足なし" /> : <>{formatPercent(readout.change)}{unverified ? <Unverified /> : null}</>}</span>;
-  const chipTitle = `日足を分析基準日で検証できていません${reason ? `（${reason}）` : ''}`;
+  const chipTitle = `分析基準日の日足として検証できていません${reason ? `（${reason}）` : ''}`;
   return <div className={`brief-readout${unverified ? ' is-unverified' : ''}`} role="group" aria-label={label}>
     <span className="ro-line">
       {unverified ? <span className="ro-item ro-unverified" title={chipTitle}>未検証の足<span className="sr-only">：{chipTitle}</span></span> : null}

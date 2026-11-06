@@ -65,12 +65,14 @@ export default function StockView({ data, header = null, wide = false, market = 
     return phase ? { ...base, phase } : base;
   }, [row?.stage, judged]);
   const rsLine = data.chart.data?.rs_line;
-  // The RS line's new high: the published value dated for the analysis date (publishedRsLineHigh, the one reader the
-  // rows share), otherwise rsLineNewHigh on certified bars (the export's own function). Never the backend flag.
+  // The RS line's new high, computed once for the conclusion and the chart: the published value dated for the
+  // analysis date (publishedRsLineHigh, the one reader the rows share), otherwise rsLineNewHigh on certified bars
+  // (the export's own function); never the backend flag. Like every value judged from a chart it needs the bars
+  // certified here: a dated published high on bars this screen cannot certify is not claimed by either card.
   const rsHigh = useMemo(() => {
     const published = publishedRsLineHigh(row, data.date);
-    return published ? published.value === true : judged ? rsLineNewHigh(rsLine, judged) === true : false;
-  }, [row, data.date, rsLine, judged]);
+    return published ? certified && published.value === true : judged ? rsLineNewHigh(rsLine, judged) === true : false;
+  }, [row, data.date, rsLine, judged, certified]);
   const rsLead = useMemo(() => (judged ? rsLeadMarks(rsLine, judged) : null), [rsLine, judged]);
   const gaps = useMemo(() => (judged ? gapDays(judged) : []), [judged]);
   const levels = useMemo(() => planLevels(plan), [plan]);

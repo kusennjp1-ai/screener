@@ -225,6 +225,7 @@ describe('brief stock chart card', () => {
     const readout = screen.getByRole('group', { name: '最新の足の値' });
     const chip = readout.querySelector('.ro-unverified');
     expect(chip).toHaveTextContent(/^未検証の足/);
+    expect(chip.getAttribute('title')).toMatch(/^分析基準日の日足として検証できていません（.+）$/);
     expect(chip.getAttribute('title')).toContain('最終日足が分析日と不一致');
     expect(readout.querySelector('.ro-change')).toHaveTextContent(/^[+−±]\d+\.\d%（未検証）$/);
     expect(readout).toHaveTextContent(/\d\.\d{2}×（未検証）/);
