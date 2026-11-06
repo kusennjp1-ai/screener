@@ -6,6 +6,7 @@ import { distributionDays } from '../src/static/distributionDays.js';
 import { followThroughDay, FOLLOW_THROUGH_METHOD } from '../src/static/followThroughDay.js';
 import { validateLongHistory } from '../src/static/marketLongHistory.js';
 import { indexSummary } from '../src/static/reference/indexSummary.js';
+import { INDEX_CLOSES_MAX } from '../src/static/marketTrendAsset.js';
 import { isGeneratedOutput, removeSupersededOutputs } from './superseded-export.mjs';
 const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
 const isDay=value=>typeof value==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value)&&Number.isFinite(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value;
@@ -29,6 +30,17 @@ export function indexState(bars,lastDate){
   return {date:summary.date,close:summary.close,vs50:summary.vsMa,vs200:summary.vs200,fromHigh:summary.fullYear?summary.fromHigh:null,fullYear:summary.fullYear};
 }
 
+// The most closes an index series carries (plan §2.3): one constant, the reader's (marketTrendAsset.js), which also
+// refuses a longer series. The market tab charts the last 130 with their 50/200-day lines.
+export { INDEX_CLOSES_MAX };
+/**
+ * An index's closes for the market tab's chart, [{date, close}]: the last INDEX_CLOSES_MAX of the same validated bars
+ * (the distribution count's input, up to its own last date), so the line, its marks and its position share one series.
+ */
+export function indexClosesFrom(bars,lastDate){
+  return bars.filter(bar=>bar.date<=lastDate).slice(-INDEX_CLOSES_MAX).map(bar=>({date:bar.date,close:bar.close}));
+}
+
 export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}) {
   if(!isDay(asOfDate))throw Error('Invalid market trend date');
   const sourceMatches=source?.schema_version==='market-trend-source-v1'&&source.market==='US'&&source.as_of_date===asOfDate;
@@ -43,9 +55,10 @@ export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}
         !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.000)?Z$/.test(row.close_at)||Date.parse(row.close_at)>=Date.parse(schedule.valid_until)||(i>0&&row.date<=schedule.sessions[i-1].date)))throw Error('Invalid independent market refresh calendar');
     refreshSchedule=schedule;
   }
-  // Round-2 contract (plan §2.3), written by the market track: each index may carry `closes`, [{date, close}],
-  // at most 300 points taken from the same validated bars as its distribution count. Older assets lack it, and
-  // a reader treats that as 未収録 (src/test/fixtures/publishedContracts.js has the shape).
+  // Round-2 contract (plan §2.3): each index whose distribution count was computed carries `closes`, [{date, close}],
+  // at most INDEX_CLOSES_MAX points taken from the same validated bars (indexClosesFrom). Older assets lack it, and a
+  // reader treats that as 未収録: the market tab then has no S&P／Nasdaq switch (src/test/fixtures/publishedContracts.js
+  // has the shape).
   const indices=['^GSPC','^IXIC'].map(symbol=>{
     const input=sourceMatches?source.indices?.find(item=>item.symbol===symbol):null;
     const lastDate=input?.bars?.at(-1)?.date;
@@ -58,7 +71,7 @@ export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}
     const followThrough=calculated.available?followThroughDay({symbol,bars:input.bars,asOfDate:lastDate,distributionEvents:calculated.events}):{available:false,method:FOLLOW_THROUGH_METHOD,reason:calculated.reason};
     // The last observed count always carries its own date; latest stays null for a historical index.
     const observed=calculated.points.filter(point=>Number.isSafeInteger(point.value)).at(-1);
-    return {...calculated,state:calculated.available?indexState(input.bars,lastDate):null,...(lastDate<asOfDate?{available:false,historical:true,latest:null,reason:`${asOfDate}は未取得。${lastDate}までの過去記録を表示しています。`}:{}),lastObserved:observed?{date:observed.date,value:observed.value}:null,followThrough,source:input.source,volumeBasis:input.volume_basis,provenance:input.provenance};
+    return {...calculated,state:calculated.available?indexState(input.bars,lastDate):null,...(calculated.available?{closes:indexClosesFrom(input.bars,lastDate)}:{}),...(lastDate<asOfDate?{available:false,historical:true,latest:null,reason:`${asOfDate}は未取得。${lastDate}までの過去記録を表示しています。`}:{}),lastObserved:observed?{date:observed.date,value:observed.value}:null,followThrough,source:input.source,volumeBasis:input.volume_basis,provenance:input.provenance};
   });
   const observations=sourceMatches?source.put_call?.observations:[];
   const seen=new Set();

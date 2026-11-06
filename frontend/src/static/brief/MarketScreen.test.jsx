@@ -23,9 +23,16 @@ describe('brief market screen on a phone', () => {
     show(history300());
     const fold = document.querySelector('details.brief-regime-ref');
     expect(fold).not.toHaveAttribute('open');
-    expect(fold.querySelector('summary')).toHaveTextContent('過去の傾向（1990〜2026年・予測ではありません）');
+    // The summary says what the lines say (MK5); here every line is a reason (a short S&P history, index series without
+    // the study's method ids, no Nasdaq position), so it keeps the neutral summary, never a finding. The key and the
+    // source sit in a nested 「読み方と出典」 fold.
+    expect([...fold.querySelectorAll('li')].every(li => li.classList.contains('is-reason'))).toBe(true);
+    expect(fold.querySelector(':scope > summary')).toHaveTextContent(/^過去の傾向（1990〜2026年・予測ではありません）$/);
     expect([...fold.querySelectorAll('h4')].map(h => h.textContent)).toEqual(['S&P 500', 'Nasdaq総合']);
-    expect(fold).toHaveTextContent('出典：market-regime-study-v2（CI run 41844557380）');
+    const howto = fold.querySelector('details.brief-regime-howto');
+    expect(howto).not.toHaveAttribute('open');
+    expect(howto.querySelector('summary')).toHaveTextContent('読み方と出典（予測ではありません）');
+    expect(howto).toHaveTextContent('出典：market-regime-study-v2（CI run 41844557380）');
   });
 
   it('puts the long history behind the 推移 tab, keeps the tab for the session, and a row link opens it', () => {
