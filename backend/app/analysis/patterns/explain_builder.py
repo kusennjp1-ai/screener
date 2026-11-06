@@ -84,7 +84,8 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
     - Gate 3 (readiness_floor): readiness_score >= readiness_threshold_pct
     - Gate 4 (early_zone): distance in [min, max] — **non-permissive** (None fails)
     - Gate 5 (ATR14 cap): atr14_pct <= max — **permissive** (None passes)
-    - Gate 6 (volume dry-up): volume <= cap — **permissive** (None passes)
+    - Gate 6 (volume dry-up): volume <= cap — **permissive** (None passes);
+      a volume above the cap fails as ``volume_above_dryup_cap``
     - Gate 7 (RS leadership): rs_vs_spy > 0 or rs_line_new_high — **permissive** (both None passes)
     - Gate 8 (stage): stage in (1, 2) — **semi-permissive** (None passes, 3/4 fail)
     - Gate 9 (MA alignment): ma_alignment_score >= min — **permissive** (None passes)
@@ -152,7 +153,7 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
             if inp.volume_vs_50d <= params.volume_vs_50d_max_for_ready:
                 passed.append("volume_sufficient")
             else:
-                failed.append("volume_below_minimum")
+                failed.append("volume_above_dryup_cap")
         else:
             passed.append("volume_sufficient")
 

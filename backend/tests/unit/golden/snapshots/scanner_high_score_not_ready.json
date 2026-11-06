@@ -752,7 +752,7 @@
       ],
       "failed_checks": [
         "outside_early_zone",
-        "volume_below_minimum"
+        "volume_above_dryup_cap"
       ],
       "key_levels": {
         "pivot_price": 101.28822714509187

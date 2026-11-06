@@ -554,7 +554,7 @@
         "rs_rating_ok"
       ],
       "failed_checks": [
-        "volume_below_minimum"
+        "volume_above_dryup_cap"
       ],
       "key_levels": {
         "pivot_price": 120.15

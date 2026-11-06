@@ -829,7 +829,7 @@
         "ma_alignment_ok"
       ],
       "failed_checks": [
-        "volume_below_minimum",
+        "volume_above_dryup_cap",
         "rs_leadership_insufficient",
         "rs_rating_insufficient"
       ],

@@ -104,7 +104,7 @@ The explain builder evaluates 10 sequential gates. `setup_ready` is True only wh
 | 3 | Readiness Floor | `readiness_floor_ok` | `readiness_score_ready_min_pct` | 70.0 | No | `readiness_score ≥ 70.0` | Primary readiness threshold |
 | 4 | Early Zone | `in_early_zone` | `early_zone_*_min/max` | [-2.0, 3.0] | **No** (None → fail) | `min ≤ distance_to_pivot ≤ max` | Only non-permissive feature gate |
 | 5 | ATR14 Cap | `atr14_within_limit` | `atr14_pct_max_for_ready` | 8.0 | **Yes** (None → pass) | `atr14_pct ≤ 8.0` | Filters disorderly volatility |
-| 6 | Volume Floor | `volume_sufficient` | `volume_vs_50d_min_for_ready` | 1.0 | **Yes** (None → pass) | `volume_vs_50d ≥ 1.0` | Minimum liquidity participation |
+| 6 | Volume Dry-up Cap | `volume_sufficient` | `volume_vs_50d_max_for_ready` | 0.8 | **Yes** (None → pass) | `volume_vs_50d ≤ 0.8`; fails as `volume_above_dryup_cap` | Volume dries up in the base before the breakout |
 | 7 | RS Leadership | `rs_leadership_ok` | (implicit > 0) | N/A | **Yes** (both None → pass) | `rs_vs_spy_65d > 0` or `rs_line_new_high` | Confirms relative outperformance |
 | 8 | Stage | `stage_ok` | (implicit 1 or 2) | N/A | **Semi** (None → pass) | `stage ∈ {1, 2}` or `None` | Stage 3/4 explicitly fail |
 | 9 | MA Alignment | `ma_alignment_ok` | `context_ma_alignment_min_pct` | 60.0 | **Yes** (None → pass) | `ma_alignment_score ≥ 60.0` | Minervini MA stack (50>150>200) |

@@ -751,7 +751,7 @@
         "rs_rating_ok"
       ],
       "failed_checks": [
-        "volume_below_minimum",
+        "volume_above_dryup_cap",
         "rs_leadership_insufficient"
       ],
       "key_levels": {

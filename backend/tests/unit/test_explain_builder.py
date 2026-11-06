@@ -250,8 +250,12 @@ class TestGate6Volume:
         assert "volume_sufficient" in result.explain.to_payload()["passed_checks"]
 
     def test_above_maximum_fails(self):
+        # Named for what failed: the volume is above the dry-up cap (round 2; was the
+        # inverted volume_below_minimum).
         result = build_explain_payload(_default_input(volume_vs_50d=1.3))
-        assert "volume_below_minimum" in result.explain.to_payload()["failed_checks"]
+        failed = result.explain.to_payload()["failed_checks"]
+        assert "volume_above_dryup_cap" in failed
+        assert "volume_below_minimum" not in failed
 
     def test_none_passes_permissive(self):
         """Gate 6 is permissive: None volume -> volume_sufficient."""

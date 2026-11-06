@@ -105,12 +105,11 @@ def test_build_payload_defaults_and_bool_semantics():
 
 
 def test_build_payload_failed_checks_forces_not_ready():
-    payload = build_setup_engine_payload(
-        readiness_score=95.0,
-        failed_checks=["trend_break"],
-    )
-
+    ready = dict(setup_score=80.0, quality_score=80.0, readiness_score=95.0, distance_to_pivot_pct=0.0, pattern_primary="vcp", pattern_confidence=70.0)
+    assert build_setup_engine_payload(**ready)["setup_ready"] is True
+    payload = build_setup_engine_payload(**ready, failed_checks=["trend_break"])
     assert payload["setup_ready"] is False
+    assert "trend_break" in payload["explain"]["failed_checks"]
 
 
 def test_build_payload_rejects_non_snake_case_candidate_keys():
@@ -442,7 +441,7 @@ class TestSetupReadyGates:
         kwargs["volume_vs_50d"] = 1.5  # above default dry-up cap of 0.8
         payload = build_setup_engine_payload(**kwargs)
         assert payload["setup_ready"] is False
-        assert "volume_below_minimum" in payload["explain"]["failed_checks"]
+        assert "volume_above_dryup_cap" in payload["explain"]["failed_checks"]
 
     def test_setup_ready_stage_fails_when_topping(self):
         kwargs = _all_gates_pass_kwargs()
@@ -499,7 +498,7 @@ class TestGateExplainability:
             "readiness_floor_ok", "readiness_below_threshold",
             "in_early_zone", "outside_early_zone",
             "atr14_within_limit", "atr14_pct_exceeds_limit",
-            "volume_sufficient", "volume_below_minimum",
+            "volume_sufficient", "volume_above_dryup_cap",
             "rs_leadership_ok", "rs_leadership_insufficient",
             "stage_ok", "stage_not_ok",
             "ma_alignment_ok", "ma_alignment_insufficient",
