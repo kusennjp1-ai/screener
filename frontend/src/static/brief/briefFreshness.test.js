@@ -41,7 +41,9 @@ describe('the publication\'s age', () => {
     const two = freshness({ trends, date: DATE, now: at('2026-10-07T09:00:00Z') });
     expect(two.missing).toEqual(['2026-10-05', '2026-10-06']);
     expect(freshnessLine(two, DATE)).toEqual({ tone: 'warn', age: '2営業日前', detail: '（10/5・10/6 未反映）',
-      note: 'この公開は10/2引けの分析です。その後に取引を終えた10/5・10/6（2営業日）の値はまだ反映されていません（公開の遅れ）。' });
+      note: 'この公開は10/2引けの分析です。その後に取引を終えた10/5・10/6（2営業日）の値はまだ反映されていません（公開の遅れ：取引終了から28時間を過ぎても次の公開がないときに表示・独自設定）。' });
+    // The grace in the note is the constant (独自設定, rule 13), never a second number.
+    expect(freshnessLine(two, DATE).note).toContain(`取引終了から${FRESHNESS_GRACE_HOURS}時間`);
     const four = freshness({ trends, date: DATE, now: at('2026-10-09T09:00:00Z') });
     expect([four.missing.length, freshnessLine(four, DATE).detail]).toEqual([4, '（10/5〜10/8 未反映）']);
     expect(missingDays([], DATE)).toBe('');

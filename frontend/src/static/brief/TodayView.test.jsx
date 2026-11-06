@@ -216,10 +216,76 @@ describe('round 2 on Today', () => {
     const notes = [...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent);
     expect(notes[0]).toBe('〈age〉');
     expect(notes[1]).toMatch(/^注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8\/8）です。/);
-    expect(notes[1]).toContain('その日の上抜け → ピボット到達・出来高不足の上抜け → 上抜け後 → 下落日の大商い');
+    expect(notes[1]).toContain('その日の上抜け → ピボット到達・出来高の裏付けのない上抜け → 上抜け後（当日未検証を含む） → 下落日の大商い');
     expect(notes[1]).not.toContain('達成数');
     cleanup();
     show({ ranked: [audited('TCH1', 100)], wide: false });
     expect(document.querySelectorAll('.brief-screen-notes li')).toHaveLength(1);
+  });
+});
+
+// Review fixes: the coverage sentence in full on a wide screen, the base chip's rule on Today when a focus row carries
+// it, a watched focus candidate in its row's words, and the 「うち上抜けN」 strip's markup (the watch card's fold needs
+// every sell check in, so brief-watch.spec.js tests it in the browser).
+describe('Today after the review', () => {
+  const DATE = '2026-10-02';
+  const OPEN = { label: '上昇トレンド（独自判定）', state: 'confirmed_uptrend', cap: 0.5 };
+  const audited = (symbol, price, { change = 2, volume = 1.6, extra = {} } = {}) => {
+    const row = withAuditFixture({ symbol, company_name: symbol, market: 'US', currency: 'USD', current_price: price, se_pivot_price: 100, rs_rating: 90, ...extra }, DATE);
+    Object.assign(row.technical_audit.values, { change, volumeRatio: volume });
+    return { row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } };
+  };
+  const atPhone = phone => { window.matchMedia = query => ({ matches: /max-width:\s*520px/.test(query) ? phone : false, media: query, addEventListener() {}, removeEventListener() {} }); };
+  const show = ({ ranked, watch = [], wide = true }) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>
+    <TodayView brief={{ bundle: { data: { date: DATE, rankings: { minervini: ranked } }, isLoading: false, isError: false }, manifest: { isLoading: false, isError: false }, ranked, date: DATE, market: OPEN, marketLoading: false, trends: null, version: 'v1' }}
+      watch={watch} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false} wide={wide} nav={{ market() {}, list() {}, watch() {} }} onUnwatch={() => {}} />
+  </MemoryRouter></QueryClientProvider>);
+  afterEach(() => { cleanup(); delete window.matchMedia; sessionStorage.clear(); Object.assign(seams, { suffix: undefined, warning: undefined, suffixCalls: [], warningCalls: [] }); });
+
+  it('shows the coverage sentence in full on a wide screen and the short form on a phone, the sentence then in its title and notes', () => {
+    seams.warning = { text: '〈full sentence〉', short: '〈short〉' };
+    show({ ranked: [audited('TCH1', 100)] });
+    expect(document.querySelector('.brief-coverage-note').textContent).toBe('〈full sentence〉');
+    expect(document.querySelector('.brief-coverage-note').getAttribute('title')).toBeNull();
+    cleanup();
+    atPhone(true);
+    show({ ranked: [audited('TCH1', 100)], wide: false });
+    const line = document.querySelector('.brief-coverage-note');
+    expect([line.textContent, line.getAttribute('title')]).toEqual(['〈short〉', '〈full sentence〉']);
+    expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).toContain('〈full sentence〉');
+  });
+
+  it('states the base chip\'s rule (独自判定) with Today\'s notes only when a focus row carries the chip', () => {
+    const deep = audited('DEEP', 100, { extra: { se_base_depth_pct: 40, se_base_length_weeks: 6, setup_recalculation: { status: 'calculated', as_of_date: DATE } } });
+    show({ ranked: [deep] });
+    expect(screen.getByRole('region', { name: '注目候補' }).querySelector('p.brief-note:last-child').textContent).toContain('土台の注意：Setup Engineの土台が深さ35%超または3週未満、または終値が50日線より25%超上（独自判定）。');
+    cleanup();
+    show({ ranked: [audited('TCH1', 100)] });
+    expect(screen.getByRole('region', { name: '注目候補' }).textContent).not.toContain('土台の注意');
+  });
+
+  it('puts the caution in the RS chip\'s place on a phone\'s focus rows', () => {
+    atPhone(true);
+    const deep = audited('DEEP', 100, { extra: { se_base_depth_pct: 40.2, se_base_length_weeks: 6, setup_recalculation: { status: 'calculated', as_of_date: DATE } } });
+    show({ ranked: [deep], wide: false });
+    const chips = [...screen.getByRole('region', { name: '注目候補' }).querySelectorAll('[data-symbol="DEEP"] .brief-chip')].map(node => node.textContent);
+    expect(chips).toEqual(['● 10/2ピボット到達', '出来高 1.60×', '土台−40%']);
+  });
+
+  it('says a watched focus candidate near its pivot in its row\'s words', () => {
+    show({ ranked: [audited('NEA1', 98.8)], watch: ['NEA1'] });
+    const focusChip = screen.getByRole('region', { name: '注目候補' }).querySelector('[data-symbol="NEA1"] .brief-chip').textContent;
+    const watchTitle = screen.getByRole('region', { name: 'ウォッチの状況' }).querySelector('[data-symbol="NEA1"]').textContent;
+    expect(focusChip).toBe('◔ ピボット接近 −1.2%');
+    expect(watchTitle).toContain('NEA1 ピボット接近 −1.2%');
+    expect(watchTitle).not.toMatch(/あと/);
+  });
+
+  it('draws 「うち上抜けN」 as one run that can break only after うち', () => {
+    show({ ranked: [audited('BRK1', 101)] });
+    const link = screen.getByTestId('brief-breakout-link');
+    expect(link.innerHTML).toBe('<span>うち<span class="brief-nowrap">上抜け1<span aria-hidden="true"> ›</span></span></span>');
+    expect(link.closest('li').classList.contains('has-sub')).toBe(true);
+    expect(link.closest('li').querySelector('.brief-tile-room')).toBeNull();
   });
 });

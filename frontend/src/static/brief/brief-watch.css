@@ -70,22 +70,24 @@
 /* Round 2 (rows). The bar's date line: a late publication's age in the warning tone, and the missing sessions
    (「（10/5・10/6 未反映）」) only where they fit with 6px to spare: the line is one line high and a part that does
    not fit wraps under it, out of view (the page never scrolls sideways; the whole sentence stays in the text). */
-.brief-bar-title > .brief-bar-date { display: flex; flex-wrap: wrap; align-items: baseline; height: 1.3em; overflow: hidden; }
+.brief-bar-title > .brief-bar-date { display: flex; flex-wrap: wrap; align-items: baseline; row-gap: 4px; height: 1.3em; overflow: hidden; }
 .brief-bar-date > span { white-space: nowrap; }
 .brief-bar-date .brief-bar-age { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 .brief-bar-date .brief-bar-missing { flex: none; padding-right: 6px; }
-.brief-bar-date.is-warn, .brief-stockhead-age.is-warn { color: var(--ext); font-weight: 700; }
+.brief-bar-date.is-warn, .brief-stockhead-age.is-warn, .brief-bar-stale { color: var(--ext); font-weight: 700; }
 
 /* Today's SEC coverage line sits under the market card: the stack gap above it is cancelled, so it costs its line. */
 .brief-stack > .brief-coverage-note { margin-top: -12px; }
 
-/* The 注目候補 tile's 「うち上抜けN」: its own link over the tile's last line. The tile keeps that line for it with an
-   invisible copy of the text (the same font, so the same line), and the link is drawn over it, at least a target high. */
-.brief-summary li.has-sub { position: relative; }
-.brief-summary .brief-tile-room { display: block; visibility: hidden; font-weight: 700; }
-.brief-summary .brief-tile-sub { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; min-height: 24px; padding: 0 12px 10px; font-size: 11px; font-weight: 700; color: var(--accent); text-decoration: none; }
+/* The 注目候補 tile's 「うち上抜けN」: its own link in a strip at the tile's foot, a target high (44px below 768px). The
+   tile keeps the strip's height free under its text, so neither link covers the other; the count breaks only after うち. */
+.brief-summary li.has-sub { position: relative; --sub: 44px; }
+.brief-summary li.has-sub > .brief-tile { padding-bottom: var(--sub); }
+.brief-summary .brief-tile-sub { position: absolute; left: 0; right: 0; bottom: 0; height: var(--sub); display: flex; align-items: flex-end; padding: 0 12px 8px; font-size: 11px; font-weight: 700; line-height: 1.4; color: var(--accent); text-decoration: none; }
+.brief-tile-sub .brief-nowrap { white-space: nowrap; }
 .brief-summary .brief-tile-sub:hover { background: var(--surface-2); }
 .brief-summary .brief-tile-sub:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (min-width: 768px) { .brief-summary li.has-sub { --sub: 26px; } }
 
 /* The 地合い tile's suffix from the market track: a line of its own under the cap. */
 .brief-summary .brief-tile-suffix { display: block; }
@@ -101,9 +103,8 @@
 
 @media (max-width: 520px) {
   .brief-filters .brief-sort-name { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
-  .brief-stack > .brief-coverage-note { margin-top: -10px; }
-  .brief-summary .brief-tile-sub { min-height: 44px; padding: 0 10px 8px; font-size: 12px; }
-  .brief-stack > .brief-coverage-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brief-stack > .brief-coverage-note { margin-top: -10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brief-summary .brief-tile-sub { padding: 0 10px 8px; font-size: 12px; }
 }
 
 /* Every chip line of a row keeps 6px at its end: a chip that would leave less wraps (the rows' chip fit, BriefParts). */

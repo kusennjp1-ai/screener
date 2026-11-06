@@ -60,12 +60,13 @@ export function missingDays(missing, reference) {
 /**
  * What the bar's date line adds for this age: `{ tone, age, detail, note }` or null (current, pending or
  * loading: the line is unchanged). Stale: tone 'warn', `age` 「2営業日前」 (replacing 「米国株」), `detail`
- * 「（10/5・10/6 未反映）」 where it fits, and `note`, the full sentence for Today's notes. Unknown: 「鮮度未確認」.
+ * 「（10/5・10/6 未反映）」 where it fits, and `note`, the full sentence for Today's notes, with the grace it waits
+ * (FRESHNESS_GRACE_HOURS, 独自設定). Unknown: 「鮮度未確認」.
  */
 export function freshnessLine(value, date) {
   if (value?.state === 'unknown') return { tone: 'unknown', age: '鮮度未確認', detail: '', note: `この公開（${shortDate(date, date)}引け）より後の取引日を、取引所カレンダーで確認できません（鮮度未確認）。` };
   if (value?.state !== 'stale') return null;
   const days = missingDays(value.missing, date);
   return { tone: 'warn', age: `${value.missing.length}営業日前`, detail: `（${days} 未反映）`,
-    note: `この公開は${shortDate(date, date)}引けの分析です。その後に取引を終えた${days}（${value.missing.length}営業日）の値はまだ反映されていません（公開の遅れ）。` };
+    note: `この公開は${shortDate(date, date)}引けの分析です。その後に取引を終えた${days}（${value.missing.length}営業日）の値はまだ反映されていません（公開の遅れ：取引終了から${FRESHNESS_GRACE_HOURS}時間を過ぎても次の公開がないときに表示・独自設定）。` };
 }

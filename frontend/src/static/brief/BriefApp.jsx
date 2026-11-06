@@ -79,11 +79,10 @@ function useFreshness(trends, date) {
  * page: brief-watch.css), or 「…・鮮度未確認」 without a valid exchange calendar. The whole sentence stays in
  * the accessible text.
  */
-function BarDate({ brief, line, compact = false }) {
+function BarDate({ brief, line }) {
   if (!brief.date) return <span className="numeric">分析基準日 {brief.manifest.isLoading || brief.bundle.isLoading ? '取得中' : '未確認'}</span>;
-  // The stock bar (compact) names the session without the 「分析基準日」 lead, so its age fits a 320px phone.
   return <span className={`numeric brief-bar-date${line ? ` is-${line.tone}` : ''}`} data-testid="brief-bar-date">
-    <span className="brief-bar-age">{compact ? null : '分析基準日 '}<time dateTime={brief.date}>{barDay(brief.date)}</time>引け・{line ? line.age : '米国株'}</span>
+    <span className="brief-bar-age">分析基準日 <time dateTime={brief.date}>{barDay(brief.date)}</time>引け・{line ? line.age : '米国株'}</span>
     {line?.detail ? <span className="brief-bar-missing">{line.detail}</span> : null}
   </span>;
 }
@@ -240,9 +239,10 @@ export default function BriefApp() {
       {view === 'stock' && !wide ? <>
         <button type="button" className="brief-iconbutton" aria-label="戻る" onClick={() => back(from)}>{ICON.back}</button>
         {/* The ☆ lives in the dock, beside the list position. */}
-        {/* The second line names the stock, or, once the publication is late (or its age is unknown), carries the
-            date line every screen's bar carries then. */}
-        <div className="brief-bar-title"><b><span style={{ viewTransitionName: 'brief-ticker' }}>{symbol}</span><BarQuote view={barView} /></b>{ageLine && brief.date ? <BarDate brief={brief} line={ageLine} compact /> : <span>{barView ? `${barView.name}${barView.sector ? `・${barView.sector}` : ''}` : brief.bundle.data ? '分析対象外' : '読み込み中…'}</span>}</div>
+        {/* The second line names the stock; a late publication puts its age first, in the warning tone (the whole
+            sentence for assistive tech). An unknown age is said on the other screens' bars, not here. */}
+        <div className="brief-bar-title"><b><span style={{ viewTransitionName: 'brief-ticker' }}>{symbol}</span><BarQuote view={barView} /></b><span>{ageLine?.tone === 'warn' && brief.date
+          ? <><span className="brief-bar-stale">{ageLine.age}</span><span className="sr-only">（分析基準日 {barDay(brief.date)}引け、{ageLine.detail.slice(1, -1)}）</span>・</> : null}{barView ? `${barView.name}${barView.sector ? `・${barView.sector}` : ''}` : brief.bundle.data ? '分析対象外' : '読み込み中…'}</span></div>
       </> : <>
         {/* The phone's Today hides the hero date, so the bar alone says the analysis date (with its weekday), or
             one that could not be read: 未確認, never 取得中 for good. */}
