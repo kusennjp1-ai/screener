@@ -22,4 +22,28 @@ describe('the trend-template card', () => {
     render(<TemplateCard template={template(Array(8).fill('pass'))} />);
     expect(summary()).toBe('すべての条件を満たしています');
   });
+
+  it('adds the 200-day line\'s 4- and 5-month rise to its rule from the technical evidence; a missing one reads 未確認', () => {
+    const sma200 = { label: 'SMA200が21営業日前より上（1か月の上向き判定）', state: 'pass', evidence: '120.00 > 118.00' };
+    const rules = [sma200, ...Array.from({ length: 7 }, (_, i) => ({ label: `条件${i + 2}`, state: 'pass', evidence: '' }))];
+    const t = { passed: 8, failed: 0, unknown: 0, rules };
+    const line = technical => { render(<TemplateCard template={t} technical={technical} wide />); const text = screen.queryByTestId('brief-tt-sma200')?.textContent ?? null; cleanup(); return text; };
+    const evidence = (four, five) => ({ sma200: { oneMonth: { state: 'sustained-up' }, preferredFourMonths: four && { sessions: 84, state: four }, preferredFiveMonths: five && { sessions: 105, state: five } } });
+    expect(line(evidence('sustained-up', 'unknown'))).toBe('上向き：1か月 ✓・4か月 ✓・5か月 未確認');
+    expect(line(evidence('mixed', 'sustained-down'))).toBe('上向き：1か月 ✓・4か月 一部下落・5か月 ✕');
+    expect(line(evidence(null, null))).toBe('上向き：1か月 ✓・4か月 未確認・5か月 未確認');
+    expect(line(null)).toBe('上向き：1か月 ✓・4か月 未確認・5か月 未確認');
+    // The month is the rule's own state.
+    rules[0] = { ...sma200, state: 'unknown' };
+    expect(line(evidence('sustained-up', 'sustained-up'))).toBe('上向き：1か月 未確認・4か月 ✓・5か月 ✓');
+    rules[0] = { ...sma200, state: 'fail' };
+    expect(line(evidence('sustained-up', 'sustained-up'))).toBe('上向き：1か月 ✕・4か月 ✓・5か月 ✓');
+    // Without the evidence handed in, nothing is claimed; only the SMA200 rule carries the line.
+    render(<TemplateCard template={t} wide />);
+    expect(screen.queryByTestId('brief-tt-sma200')).toBeNull();
+    cleanup();
+    render(<TemplateCard template={t} technical={evidence('sustained-up', 'sustained-up')} wide />);
+    expect(screen.getAllByTestId('brief-tt-sma200')).toHaveLength(1);
+    expect(screen.getByTestId('brief-tt-sma200').closest('li')).toHaveTextContent('SMA200が21営業日前より上');
+  });
 });
