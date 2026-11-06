@@ -333,7 +333,7 @@ describe('round 2: the day on every row and the order within the buy zone', () =
       TCH: { kind: 'touch', glyph: '●', text: '10/2ピボット到達', tone: 'zone' },
       CRS: { kind: 'cross', glyph: '●', text: '上抜け・出来高不足', tone: 'wait' },
       AFT: null,
-      HVY: { kind: 'heavyDown', glyph: '▲', text: '下落日の大商い', tone: 'ext' },
+      HVY: { kind: 'heavyDown', glyph: '▲', text: '下落日の大商い 1.60×', tone: 'ext' },
     });
     expect(rowEvent(verdict(zone('UNK', { price: 101, change: 2, volume: null }))).text).toBe('上抜け・出来高 未確認');
     // candidateView carries the event once (breakoutEvent's), the order and the filters read it.

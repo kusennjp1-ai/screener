@@ -245,6 +245,12 @@ describe('the round-2 row chip', () => {
     const { container } = row({ view: view({ row: sample }) });
     expect(container.querySelector('.brief-row').getAttribute('aria-label')).toBe('1位 AAA Alpha、買いゾーン +1.2%、前日比 +2.0%、RS推計 88、〈sec〉');
     expect(container.querySelector('[data-optional]')).toHaveTextContent('〈sec〉');
+    cleanup();
+    // The seam's short form on the chip; the full text (with the periods) in its title and in the label.
+    seam.chip = { text: '〈sec・期〉', short: '〈sec〉', tone: 'zone', title: '〈title〉', notable: true };
+    const short = row({ view: view({ row: sample }) }).container;
+    expect([short.querySelector('[data-optional]').textContent, short.querySelector('[data-optional]').getAttribute('title')]).toEqual(['〈sec〉', '〈sec・期〉：〈title〉']);
+    expect(short.querySelector('.brief-row').getAttribute('aria-label')).toBe('1位 AAA Alpha、買いゾーン +1.2%、前日比 +2.0%、RS推計 88、〈sec・期〉');
   });
 
   it('puts a chip right after the RS chip, neutral on a row that is muted or not a buy candidate', () => {
@@ -264,17 +270,17 @@ describe('round 2 rows', () => {
   const day = over => view({ asOf: '2026-10-02', pivot: 100, close: 101, prevClose: 99, change: 2, volumeRatio: 1.6, ...over });
   const chips = props => { const { container } = row(props); const list = [...container.querySelectorAll('.brief-chip')].map(node => [node.textContent, toneOf(node)]); cleanup(); return list; };
 
-  it('puts the day\'s event in the state chip, in its own tone, and never repeats a breakout\'s volume', () => {
+  it('puts the day\'s event in the state chip, in its own tone, and never repeats the volume a breakout or a heavy down day carries', () => {
     expect(chips({ view: day() })).toEqual([['↗ 10/2上抜け 1.60×', 'tone-zone'], ['TT 8/8', 'tone-zone'], ['RS推計 88', null]]);
     expect(chips({ view: day({ close: 100 }) })[0]).toEqual(['● 10/2ピボット到達', 'tone-zone']);
     expect(chips({ view: day({ volumeRatio: 1.2 }) }).slice(0, 2)).toEqual([['● 上抜け・出来高不足', 'tone-wait'], ['TT 8/8', 'tone-zone']]);
-    expect(chips({ view: day({ change: -1, prevClose: 102 }) }).slice(0, 3)).toEqual([['▲ 下落日の大商い', 'tone-ext'], ['TT 8/8', 'tone-zone'], ['▲ 出来高 1.60×', 'tone-ext']]);
+    expect(chips({ view: day({ change: -1, prevClose: 102 }) }).slice(0, 3)).toEqual([['▲ 下落日の大商い 1.60×', 'tone-ext'], ['TT 8/8', 'tone-zone'], ['RS推計 88', null]]);
     // Already above the pivot the day before: the position chip, as before.
     expect(chips({ view: day({ close: 102, prevClose: 100.5 }) })[0]).toEqual(['● 買いゾーン +1.2%', 'tone-zone']);
     // Muted (the market holds new buying) or not a buy candidate: no green; a heavy down day keeps its warning.
     expect(chips({ view: day(), context: { market: { label: '50日線割れ（弱含み・独自判定）', cap: 0 } } })[0]).toEqual(['↗ 10/2上抜け 1.60×', 'tone-neutral']);
     expect(chips({ view: day({ qualified: false, failed: 1, unknown: 0 }) })[0]).toEqual(['↗ 10/2上抜け 1.60×', 'tone-neutral']);
-    expect(chips({ view: day({ qualified: false, failed: 1, unknown: 0, change: -1, prevClose: 102 }) })[0]).toEqual(['▲ 下落日の大商い', 'tone-ext']);
+    expect(chips({ view: day({ qualified: false, failed: 1, unknown: 0, change: -1, prevClose: 102 }) })[0]).toEqual(['▲ 下落日の大商い 1.60×', 'tone-ext']);
   });
 
   it('says the day\'s event and the position in the row\'s label', () => {

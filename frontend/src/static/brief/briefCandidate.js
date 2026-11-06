@@ -320,7 +320,8 @@ const dayEvent = view => (view?.event === undefined ? breakoutEvent(view) : view
 
 /**
  * The day's event in the one short form every row surface uses (RW1): Today's focus rows, the 候補 and
- * ウォッチ lists and Today's watch card. `{ kind, glyph, text, tone }`, or null when the row shows its plain
+ * ウォッチ lists and Today's watch card. `{ kind, glyph, text, tone }` (a breakout's and a heavy down day's text carry the
+ * volume ratio), or null when the row shows its plain
  * position (no event, or 'after': 「● 買いゾーン +x%」 as before). A crossing without the volume is never
  * green (tone 'wait'), and a heavy down day is a warning (tone 'ext').
  */
@@ -331,7 +332,8 @@ export function rowEvent(view) {
   if (event.kind === 'breakout') return { kind: 'breakout', glyph: '↗', text: `${day}上抜け ${ratioShown(view.volumeRatio)}`, tone: 'zone' };
   if (event.kind === 'touch') return { kind: 'touch', glyph: '●', text: `${day}ピボット到達`, tone: 'zone' };
   if (event.kind === 'cross') return { kind: 'cross', glyph: '●', text: finite(view.volumeRatio) ? '上抜け・出来高不足' : '上抜け・出来高 未確認', tone: 'wait' };
-  if (event.kind === 'heavyDown') return { kind: 'heavyDown', glyph: '▲', text: '下落日の大商い', tone: 'ext' };
+  // A heavy down day's chip carries its volume ratio, as a breakout's does (the row then shows no second volume chip).
+  if (event.kind === 'heavyDown') return { kind: 'heavyDown', glyph: '▲', text: `下落日の大商い ${ratioShown(view.volumeRatio)}`, tone: 'ext' };
   return null;
 }
 

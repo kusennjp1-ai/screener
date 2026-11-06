@@ -54,7 +54,8 @@ const chip = (key, tone, children, title, optional = false) => <span key={key} c
 /**
  * The SEC chip on the rows (data's secRowChip): measured with DT7's documented copy, an always-on chip takes the
  * rows to 3 chip lines (113px) at 320 and 1440 on the fixture, so the rows show it only when it is `notable`
- * (plan RW6); an unknown is explained on the stock view.
+ * (plan RW6); an unknown is explained on the stock view. The chip shows the seam's `short` form when it gives one
+ * (the facts without their periods); the full text, with the periods, is the chip's title and in the row's label.
  */
 const SEC_CHIP_ALWAYS = false;
 // Space every chip line keeps at its end (px): a chip that would leave less gives way, as on a 3rd line.
@@ -62,21 +63,24 @@ const CHIP_LINE_SLACK = 6;
 
 /**
  * The optional chips (the SEC chip, the questionable-base chip) give way, last first, when they would take a row's
- * chips past two lines or leave a line less than CHIP_LINE_SLACK at its end. They stay in the row's label. Only rows
- * that have one are measured.
+ * chips past two lines or leave a line less than CHIP_LINE_SLACK at its end; with `keepLines` (Today's focus rows on
+ * a phone: five rows under a fixed height budget) also when they would add a line to the row. They stay in the row's label.
+ * Only rows that have one are measured.
  */
-function fitOptionalChips(row) {
+function fitOptionalChips(row, keepLines = false) {
   const box = row?.querySelector('.brief-reasons'), optional = box ? [...box.querySelectorAll('[data-optional]')] : [];
   if (!optional.length) return;
-  for (const node of optional) node.style.display = '';
   // Not laid out (hidden, or no layout engine): nothing to measure.
-  if (!box.offsetWidth) return;
+  if (!box.offsetWidth) { for (const node of optional) node.style.display = ''; return; }
+  let without = Infinity;
+  if (keepLines) { for (const node of optional) node.style.display = 'none'; without = box.scrollHeight; }
+  for (const node of optional) node.style.display = '';
   const shown = () => [...box.children].filter(node => node.style.display !== 'none');
   const fits = () => {
     const chips = shown();
     if (!chips.length) return true;
     const line = Math.min(...chips.map(node => node.offsetHeight)), gap = parseFloat(getComputedStyle(box).rowGap) || 0;
-    if (box.scrollHeight > line * 2 + gap + 1) return false;
+    if (box.scrollHeight > Math.min(line * 2 + gap, without) + 1) return false;
     const right = box.getBoundingClientRect().right, from = chips.findIndex(node => node.hasAttribute('data-optional'));
     // From the first optional chip on, every chip that ends a line leaves the slack.
     return chips.slice(from).every((node, i, rest) => (rest[i + 1] && rest[i + 1].offsetTop === node.offsetTop) || node.getBoundingClientRect().right <= right - CHIP_LINE_SLACK + 0.5);
@@ -111,13 +115,14 @@ export function Reasons({ view, now, sell, hideTemplate = false, muted = false }
   const sellChip = sellChipView(sell);
   if (sellChip) chips.push(chip('sell', sellChip.tone, sellChip.text, sellChip.title));
   if (!view.missing && !hideTemplate) { const tt = templateChip(view); chips.push(chip('tt', zone(tt.zone ? 'zone' : ''), tt.text)); }
-  // A breakout's chip already carries its volume ratio (rowEvent): no second chip for it.
-  const volume = rowEvent(view)?.kind === 'breakout' ? null : volumeTone(view);
+  // A breakout's or a heavy down day's chip already carries its volume ratio (rowEvent): no second chip for it.
+  const carried = ['breakout', 'heavyDown'].includes(rowEvent(view)?.kind);
+  const volume = carried ? null : volumeTone(view);
   if (volume !== null) chips.push(chip('vol', zone(volume), `出来高 ${ratioShown(view.volumeRatio)}`));
   if (!view.missing?.rs) chips.push(chip('rs', '', `RS推計 ${rsShown(view.rs)}`));
   // The row's SEC earnings, from the data track's seam (secRowChip).
   const sec = shownSec(view);
-  if (sec) chips.push(chip('sec', zone(sec.tone), sec.text, sec.title, true));
+  if (sec) chips.push(chip('sec', zone(sec.tone), sec.short || sec.text, sec.short && sec.short !== sec.text ? `${sec.text}：${sec.title}` : sec.title, true));
   if (view.rsLineHigh) chips.push(chip('rsl', zone('zone'), 'RS線 新高値'));
   // A questionable base (独自判定): one neutral chip, its rule in the title.
   if (view.baseCaution) chips.push(chip('base', '', view.baseCaution.text, view.baseCaution.title, true));
@@ -134,9 +139,10 @@ export function Reasons({ view, now, sell, hideTemplate = false, muted = false }
  * green chips go neutral (a cap of 0, an unknown state, or no verdict: rows render only once the bundle
  * that carries the verdict has loaded, so a missing one is not still loading and nothing flashes). A broken
  * setup (`sell` with a 50-day hit or the book's combined warning) has no green chip either: its ▲ chip says
- * the buy setup is gone, as the stock conclusion does.
+ * the buy setup is gone, as the stock conclusion does. `keepLines` (Today's focus rows on a phone, under the
+ * screen's height budget): an optional chip (SEC, base) shows only where it fits in the lines the row has without it.
  */
-export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morph = false, sell = null, hideTemplate = false, context = null }) {
+export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morph = false, sell = null, hideTemplate = false, keepLines = false, context = null }) {
   const enter = useEntrance(animate);
   const sellChip = sellChipView(sell);
   const gate = candidateMarketGate(context?.market);
@@ -144,7 +150,7 @@ export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morp
   const sec = shownSec(view);
   const button = useRef(null);
   // After every render: an optional chip that does not fit gives way (it stays in the label below).
-  useLayoutEffect(() => fitOptionalChips(button.current));
+  useLayoutEffect(() => fitOptionalChips(button.current, keepLines));
   return <li className={enter ? 'in' : ''} style={{ '--i': index }}>
     <button ref={button} type="button" className={`brief-row${rank ? '' : ' is-unranked'}`} data-symbol={view.symbol} data-testid="brief-candidate" onClick={event => onOpen(view.symbol, event.currentTarget)}
       aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${positionLabel(view)}、${dayChangeText(view)}${view.missing ? `、${view.missing.text}` : ''}、RS推計 ${rsShown(view.rs)}${sec ? `、${sec.text}` : ''}${view.baseCaution ? `、${view.baseCaution.text}（${view.baseCaution.title}）` : ''}${sellChip ? `、${sellChip.text}` : ''}`}>

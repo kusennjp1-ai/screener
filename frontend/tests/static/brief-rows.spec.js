@@ -393,7 +393,8 @@ test.describe('the day on the rows (390px)', () => {
     await expect(focus.locator('[data-symbol="ZZKS"] .brief-chip').first()).toHaveText(`↗ ${DAY}上抜け 1.60×`);
     await expect(focus.locator('[data-symbol="ZZKS"] .brief-chip').first()).toHaveClass(/tone-zone/);
     await expect(focus.locator('[data-symbol="ZZNV"] .brief-chip').first()).toHaveText(`● ${DAY}ピボット到達`);
-    await expect(focus.locator('[data-symbol="ZZOD"] .brief-chip').first()).toHaveText('▲ 下落日の大商い');
+    await expect(focus.locator('[data-symbol="ZZOD"] .brief-chip').first()).toHaveText('▲ 下落日の大商い 1.60×');
+    await expect(focus.locator('[data-symbol="ZZOD"] .brief-chip', { hasText: '出来高' })).toHaveCount(0);
     await expect(focus.locator('[data-symbol="ZZOD"] .brief-chip').first()).toHaveClass(/tone-ext/);
     // The breakout's chip carries its volume: no second volume chip on its row.
     await expect(focus.locator('[data-symbol="ZZKS"] .brief-chip', { hasText: '出来高' })).toHaveCount(0);
@@ -469,8 +470,13 @@ for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.deskto
       return rows;
     };
     const rows = await check();
-    // The base chip shows where it fits (ZZNV's normal row has the room), and the label says it in every case.
-    if (!hash.endsWith('watch')) expect(rows.find(row => row.symbol === 'ZZNV').chips).toContain('土台6週・−40%');
+    // The base chip shows where it fits (ZZNV's normal row has the room), and the label says it in every case. On a
+    // phone's Today it adds no line to a focus row (the screen's height budget): at 390 the row is one line, so the
+    // chip stays in the label; at 320 it fits on the row's second line.
+    const todayPhone = hash === '#/brief' && width !== '1440';
+    if (!hash.endsWith('watch')) expect(rows.find(row => row.symbol === 'ZZNV').chips.includes('土台6週・−40%')).toBe(!(todayPhone && width === '390'));
+    // ZZNV's row keeps the lines of ZZNH's, a zone row with the same chips and a normal base.
+    if (todayPhone) expect([rows.find(row => row.symbol === 'ZZNV').lines, rows.find(row => row.symbol === 'ZZNV').height]).toEqual([rows.find(row => row.symbol === 'ZZNH').lines, rows.find(row => row.symbol === 'ZZNH').height]);
     expect(await page.locator('[data-symbol="ZZNV"]').first().getAttribute('aria-label')).toContain('土台6週・−40%（Setup Engineの土台が深さ35%超（独自判定））');
     if (hash.endsWith('list')) { await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて/ }).click(); await check(); }
     expect(await asciiMinus(page)).toEqual([]);

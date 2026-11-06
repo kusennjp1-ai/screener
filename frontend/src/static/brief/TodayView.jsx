@@ -112,7 +112,7 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
     {coverageWarning && <p className="brief-note brief-coverage-note" title={coverageWarning.text}>{coverageWarning.short || coverageWarning.text}</p>}
     <section className="brief-card in" style={{ '--i': 2 }} aria-labelledby="brief-focus-title">
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">2</span><h2 id="brief-focus-title">注目候補{headingNote && <small>{headingNote}</small>}</h2><Link className="brief-more" to="/brief/list" onClick={follow(() => nav.list('all'))}>すべての候補 <span aria-hidden="true">›</span></Link></div>
-      {focus.length ? <ol className="brief-rows">{focus.map((view, i) => <CandidateRow key={view.symbol} view={view} rank={i + 1} index={i} onOpen={open} now={now} animate={animate} hideTemplate context={{ market: brief.market }} />)}</ol>
+      {focus.length ? <ol className="brief-rows">{focus.map((view, i) => <CandidateRow key={view.symbol} view={view} rank={i + 1} index={i} onOpen={open} now={now} animate={animate} hideTemplate keepLines={phone} context={{ market: brief.market }} />)}</ol>
         : <p className="brief-note">{state === 'ready' ? '買いゾーンまたはピボット接近（−5%以内）の選定銘柄はありません。' : BUNDLE_TEXT[state]}</p>}
       {/* The count and the near-pivot link share one line where they fit, and wrap where they do not; from a 375px
           phone up the count takes two lines beside the link, breaking before its parenthesis (brief-watch.css). The
