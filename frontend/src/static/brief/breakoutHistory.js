@@ -3,7 +3,8 @@
 // certified for the analysis date (StockView's `judged`); anything missing is null, never a guess.
 // This module imports briefCandidate (the day's event) and nothing imports it back, so there is no cycle.
 import { finite } from '../researchEngine';
-import { breakoutEvent } from './briefCandidate';
+import { signed } from '../positionGeometry';
+import { BREAKOUT_VOLUME_RATIO, breakoutEvent, ratioShown } from './briefCandidate';
 import { shortDate } from './briefShared';
 
 /** How many sessions back the crossing is looked for (the current pivot only: it is re-detected daily). */
@@ -18,22 +19,6 @@ export const STALE_BREAKOUT_SESSIONS = 10;
 
 const positive = value => finite(value) && value > 0;
 const cents = value => Math.round(value * 100);
-
-/**
- * The session the close last crossed the pivot from below, when it was 1 to `sessions` sessions before
- * the last bar and every close since is at or above the pivot; null otherwise (or with any close missing).
- * Round 1's 3-session helper, kept for its callers; lastPivotCrossing is the round-2 crossing.
- */
-export function pivotCrossing(bars, pivot, sessions = 3) {
-  if (!Array.isArray(bars) || !positive(pivot)) return null;
-  const n = bars.length, close = i => (positive(bars[i]?.close) ? bars[i].close : null);
-  for (let i = n - 1; i >= n - 1 - sessions && i >= 1; i--) {
-    const today = close(i), before = close(i - 1);
-    if (today === null || before === null || today < pivot) return null;
-    if (before < pivot) return i === n - 1 ? null : { date: bars[i].date, sessionsAgo: n - 1 - i };
-  }
-  return null;
-}
 
 /** The crossing bar's volume over the average of the CROSSING_VOLUME_SESSIONS bars before it, or null (a 0 is a gap, never a quiet day). */
 function crossingVolumeRatio(bars, index) {
@@ -87,11 +72,16 @@ export function lastPivotCrossing(bars, pivot, options = {}) {
  * The conclusion's event for the analysis day: breakoutEvent(view) (rows'), with an `'after'` event (the
  * stock was already above the pivot the day before) dated from the certified `bars` by lastPivotCrossing
  * (60 sessions, the current pivot): `crossed` is that crossing, or null. Every other event is
- * breakoutEvent's, unchanged.
- * - Dated within `staleSessions` (STALE_BREAKOUT_SESSIONS by default): 「買いゾーン内（9/22に上抜け・2営業日前）」, green.
- * - Dated beyond it: kind 'stale', tone 'wait', 「上抜けから12営業日・伸びずに停滞（新規は次のピボット待ち）」.
- * - Without certified bars (or bars that end on another day), or with no crossing within 60 sessions: kind
- *   'undated', tone 'wait', 「買いゾーン内（上抜け日 未確認）」: never green.
+ * breakoutEvent's, unchanged. Only a dated crossing on BREAKOUT_VOLUME_RATIO or more stays green, as on the
+ * crossing day itself (breakoutEvent's 'cross').
+ * - Dated within `staleSessions` (STALE_BREAKOUT_SESSIONS by default) on the volume: 「9/22に上抜け・2営業日前」,
+ *   green. On lighter volume (kind 'afterLight': 「9/22に上抜け・出来高不足」) or with it unknown ('afterUnconfirmed':
+ *   「…・出来高 未確認」): tone 'wait', as breakoutEvent says it on the crossing day.
+ * - Dated beyond it, or every close of the window at or above the pivot (above it for more than 60 sessions):
+ *   kind 'stale', tone 'wait', 「上抜けから12営業日・停滞（次のピボット待ち）」, or 「…・押し戻し（…）」 when a close
+ *   since the crossing went above the buy zone (a pullback to the pivot, not a stall).
+ * - Without certified bars (or bars that end on another day), a close missing in the window, or bars too few
+ *   to tell: kind 'undated', tone 'wait', 「買いゾーン内（上抜け日 未確認）」: never green.
  */
 export function crossingEvent(view, bars = null, { staleSessions = STALE_BREAKOUT_SESSIONS } = {}) {
   const event = breakoutEvent(view);
@@ -100,11 +90,22 @@ export function crossingEvent(view, bars = null, { staleSessions = STALE_BREAKOU
   const crossing = usable ? lastPivotCrossing(bars, view.pivot) : null;
   // The day before was above the pivot, so a crossing on the analysis day itself contradicts it: undated.
   const crossed = crossing && crossing.sessionsAgo >= 1 ? crossing : null;
-  if (!crossed) return { ...event, kind: 'undated', tone: 'wait', title: '買いゾーン内（上抜け日 未確認）', note: '上抜けの日を検証済みの日足で確認できないため、買いの裏付けはありません。', crossed: null };
-  const day = shortDate(crossed.date, view.asOf), n = crossed.sessionsAgo;
-  if (Number.isInteger(staleSessions) && staleSessions > 0 && n > staleSessions) {
-    return { ...event, kind: 'stale', tone: 'wait', title: `上抜けから${n}営業日・伸びずに停滞（新規は次のピボット待ち）`,
-      note: `${day}に上抜け・停滞の判定は${staleSessions}営業日超（独自判定）。`, crossed };
+  // No crossing and every close of the whole window at or above the pivot: above it for more than 60 sessions.
+  const span = CROSSING_LOOKBACK_SESSIONS + 2, above = usable && !crossing && bars.length >= span
+    && bars.slice(-span).every(bar => positive(bar?.close) && cents(bar.close) >= cents(view.pivot));
+  if (!crossed && !above) return { ...event, kind: 'undated', tone: 'wait', title: '買いゾーン内（上抜け日 未確認）', note: '上抜けの日を検証済みの日足で確認できないため、買いの裏付けはありません。', crossed: null };
+  const day = crossed ? shortDate(crossed.date, view.asOf) : null, n = crossed?.sessionsAgo;
+  if (above || (Number.isInteger(staleSessions) && staleSessions > 0 && n > staleSessions)) {
+    const peak = Math.max(...bars.slice(crossed ? crossed.index : -span).map(bar => bar.close));
+    const back = finite(view.upper) && cents(peak) > cents(view.upper);
+    const since = above ? `${CROSSING_LOOKBACK_SESSIONS}営業日超` : `${n}営業日`, lead = above ? `${CROSSING_LOOKBACK_SESSIONS}営業日を超えてピボットの上にあり、` : `${day}に上抜け、`;
+    return { ...event, kind: 'stale', tone: 'wait', title: `上抜けから${since}・${back ? '押し戻し' : '停滞'}（次のピボット待ち）`,
+      note: `新規の買いは見送り。${lead}${back ? `ピボット比 ${signed((peak / view.pivot - 1) * 100)}まで伸びた後に買いゾーンへ戻りました（${above ? '' : `${staleSessions}営業日超・`}独自判定）。`
+        : `${above ? '' : `${staleSessions}営業日を超えて`}伸びないため停滞（独自判定）。`}`, crossed };
   }
-  return { ...event, title: `買いゾーン内（${day}に上抜け・${n}営業日前）`, crossed };
+  const ratio = crossed.volumeRatio;
+  // The crossing day's own forms (breakoutEvent's on that day), dated: each one line on a 375px phone.
+  if (ratio === null) return { ...event, kind: 'afterUnconfirmed', tone: 'wait', title: `${day}に上抜け・出来高 未確認`, note: '上抜けの日の出来高を確認できないため、上抜けの裏付けはありません。', crossed };
+  if (ratio < BREAKOUT_VOLUME_RATIO) return { ...event, kind: 'afterLight', tone: 'wait', title: `${day}に上抜け・出来高不足`, note: `上抜けの日の出来高${ratioShown(ratio)}は基準の${BREAKOUT_VOLUME_RATIO}×に届きません。`, crossed };
+  return { ...event, title: `${day}に上抜け・${n}営業日前`, crossed };
 }
