@@ -244,7 +244,8 @@ for (const theme of ['dark', 'light']) test.describe(`form fields in ${theme}`, 
     await expect(page.locator('.brief')).toHaveAttribute('data-theme', theme);
     await expect(candidates(page).first()).toBeVisible();
     const list = await fieldColours(page, '.brief-search input, .brief-sort select');
-    expect(list.map(item => item.field)).toEqual(['input', 'select']);
+    // The search, the sort and the 条件 menu.
+    expect(list.map(item => item.field)).toEqual(['input', 'select', 'select']);
     expect(list[0].placeholder).toBe(list[0].text3);
     await page.goto('/#/brief/stock/ZZNV');
     await expect(page.locator('.brief-inputs input')).toHaveCount(3);

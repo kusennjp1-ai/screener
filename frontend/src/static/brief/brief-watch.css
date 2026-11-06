@@ -66,3 +66,33 @@
   /* The 12px floor for the tabs, the bar's second line and the watch count. */
   .brief-tabs a, .brief-bar-title > span, .brief-count { font-size: 12px; }
 }
+
+/* Round 2 (rows). Today's SEC coverage line sits under the market card: the stack gap above it is cancelled, so it costs its line. */
+.brief-stack > .brief-coverage-note { margin-top: -12px; }
+
+/* The 注目候補 tile's 「うち上抜けN」: its own link over the tile's last line. The tile keeps that line for it with an
+   invisible copy of the text (the same font, so the same line), and the link is drawn over it, at least a target high. */
+.brief-summary li.has-sub { position: relative; }
+.brief-summary .brief-tile-room { display: block; visibility: hidden; font-weight: 700; }
+.brief-summary .brief-tile-sub { position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: flex-end; min-height: 24px; padding: 0 12px 10px; font-size: 11px; font-weight: 700; color: var(--accent); text-decoration: none; }
+.brief-summary .brief-tile-sub:hover { background: var(--surface-2); }
+.brief-summary .brief-tile-sub:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* The 地合い tile's suffix from the market track: a line of its own under the cap. */
+.brief-summary .brief-tile-suffix { display: block; }
+
+/* The 候補 tab: the search, the sort and the 条件 menu share one line (a phone's labels are read, not shown: each
+   select then shows its value); a select is never wider than its usual value, so a long option (the base sort, a
+   condition with its counts) is cut in the closed menu only, and the chip of an active condition says it in full.
+   選定すべて's population sits under the filters. */
+.brief-filters .brief-search { flex: 1 1 100px; }
+.brief-filters .brief-sort select { max-width: 9em; }
+.brief-filters .brief-cond select { max-width: 7.5em; }
+.brief-population { margin-top: -4px; }
+
+@media (max-width: 520px) {
+  .brief-filters .brief-sort-name { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+  .brief-stack > .brief-coverage-note { margin-top: -10px; }
+  .brief-summary .brief-tile-sub { min-height: 44px; padding: 0 10px 8px; font-size: 12px; }
+  .brief-stack > .brief-coverage-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}

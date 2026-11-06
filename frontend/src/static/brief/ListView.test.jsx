@@ -1,6 +1,7 @@
 // The candidate list's segment (ListView, E) against the filters briefCandidate (D) defines.
-import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render, within } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
+import { withAuditFixture } from '../testAuditFixture';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ListView, { listShown, watchOrder } from './ListView';
 import { candidateView, LIST_FILTERS } from './briefCandidate';
@@ -90,5 +91,73 @@ describe('the watch list', () => {
         limits={{}} setLimits={() => {}} origin={null} wide onUnwatch={() => {}} />
     </QueryClientProvider>);
     expect(getAllByTestId('brief-candidate')).toHaveLength(3);
+  });
+});
+
+// Round 2 (rows): the hidden breakout and EPS filters, chosen from the 条件 menu and said as a dismissible chip;
+// 選定すべて's population; and the desktop's first 20 rows before the rest.
+describe('round 2 filters on the 候補 list', () => {
+  const audited = (symbol, price, { change = 2, volume = 1.6, eps } = {}) => {
+    const row = withAuditFixture({ symbol, company_name: symbol, market: 'US', currency: 'USD', current_price: price, se_pivot_price: 100, rs_rating: 90,
+      ...(eps === undefined ? {} : { sec_summary: { sec_state: 'ok', eps_yoy: eps === null ? null : { value: eps, end: '2026-06-30' }, sales_yoy: null, code33: null, as_of_date: DATE } }) }, DATE);
+    Object.assign(row.technical_audit.values, { change, volumeRatio: volume });
+    return { row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } };
+  };
+  const rows = [audited('BRK1', 101, { eps: 40 }), audited('BRK2', 101.2, { eps: 10 }), audited('TCH1', 100, { eps: null }), audited('NEA1', 97)];
+  const day = { bundle: { data: { date: DATE, rankings: { minervini: rows } }, isLoading: false, isError: false }, manifest: { isLoading: false, isError: false }, ranked: rows, date: DATE, market: null, version: 'v1' };
+  const show = (filter, { setListState = () => {}, data = day, wide = true, sort = 'priority' } = {}) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    <ListView brief={data} kind="list" watch={[]} open={() => {}} now={0} animate={false} listState={{ filter, sort, query: '' }} setListState={setListState}
+      limits={{}} setLimits={() => {}} origin={null} wide={wide} onUnwatch={() => {}} />
+  </QueryClientProvider>);
+
+  it('offers the breakout and EPS filters in one 条件 menu, never as segment buttons, each with its count', () => {
+    const { getByRole } = show('zone');
+    const menu = getByRole('combobox', { name: '条件' });
+    expect([...menu.querySelectorAll('option')].map(option => [option.value, option.textContent])).toEqual([['', '条件：なし'], ['breakout', '10/2の上抜け（2）'], ['eps', 'EPS前年比≥25%（直近・SEC）（該当1・未確認2）']]);
+    expect(menu.value).toBe('');
+    expect(within(getByRole('group', { name: '絞り込み' })).getAllByRole('button')).toHaveLength(4);
+  });
+
+  it('lists the day\'s breakouts under a dismissible chip, and the menu shows the filter while it is on', () => {
+    let state = { filter: 'zone' };
+    const { getByRole, unmount } = show('zone', { setListState: update => { state = update(state); } });
+    fireEvent.change(getByRole('combobox', { name: '条件' }), { target: { value: 'breakout' } });
+    expect(state.filter).toBe('breakout');
+    unmount();
+    const shown = show('breakout', { setListState: update => { state = update(state); } });
+    expect(shown.getAllByTestId('brief-candidate').map(node => node.dataset.symbol)).toEqual(['BRK1', 'BRK2']);
+    expect(shown.getByRole('combobox', { name: '条件' }).value).toBe('breakout');
+    const chip = shown.getByRole('button', { name: '10/2の上抜け2（絞り込みを解除）' });
+    chip.click();
+    expect(state.filter).toBe('zone');
+  });
+
+  it('counts the EPS filter\'s matches and its unknowns apart, never an unknown as a miss', () => {
+    const { getByRole, getAllByTestId } = show('eps');
+    expect(getAllByTestId('brief-candidate').map(node => node.dataset.symbol)).toEqual(['BRK1']);
+    expect(getByRole('button', { name: 'EPS前年比≥25%（直近・SEC）該当1・未確認2（絞り込みを解除）' })).toBeTruthy();
+  });
+
+  it('says 選定すべて\'s population while it is on', () => {
+    expect(show('all').container.querySelector('.brief-population')).toHaveTextContent('選定すべて：TT 8/8＋株価$10以上・売買代金$2,000万以上');
+    cleanup();
+    expect(show('zone').container.querySelector('.brief-population')).toBeNull();
+  });
+
+  it('paints 20 rows first on the desktop and the rest once idle, in the same order; a phone gets its page at once', () => {
+    vi.useFakeTimers();
+    try {
+      const many = Array.from({ length: 30 }, (_, i) => audited(`Z${String(i).padStart(2, '0')}`, 100 + (i % 4) * 0.5));
+      const data = { ...day, bundle: { ...day.bundle, data: { date: DATE, rankings: { minervini: many } } }, ranked: many };
+      const { getAllByTestId } = show('all', { data });
+      const first = getAllByTestId('brief-candidate').map(node => node.dataset.symbol);
+      expect(first).toHaveLength(20);
+      act(() => { vi.runAllTimers(); });
+      const all = getAllByTestId('brief-candidate').map(node => node.dataset.symbol);
+      expect(all).toHaveLength(30);
+      expect(all.slice(0, 20)).toEqual(first);
+      cleanup();
+      expect(show('all', { data, wide: false }).getAllByTestId('brief-candidate')).toHaveLength(30);
+    } finally { vi.useRealTimers(); }
   });
 });
