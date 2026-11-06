@@ -75,17 +75,36 @@ export const nasdaqInCorrection = ft => ft?.available === true && NASDAQ_CAUTION
 export const MARKET_TILE_SUFFIX = Object.freeze({ ftd: 'FTD確認済み', nasdaq: 'NAS調整中' });
 
 /**
+ * The app's own ^GSPC follow-through record (indices[^GSPC].followThrough: the market tab's フォロースルーデー row and its
+ * ◆ mark) when it is available and judged on the analysis date's session, else null (an older or missing record is
+ * nothing to compare). The regime's FTD is SPY's (backend market_regime.py: its own low anchor and volume rule), so the
+ * two can legitimately differ on one day.
+ */
+export function gspcFollowThrough(trends) {
+  if (trendsStatus(trends).state !== 'ready') return null;
+  const ft = (trends.data.indices || []).find(item => item?.symbol === '^GSPC')?.followThrough;
+  return ft?.available === true && isoDay(ft.asOf) && ft.asOf === trends.data.as_of_date ? ft : null;
+}
+/** Whether that day's ^GSPC record reads anything but a confirmed FTD (true / false), or null with nothing to compare. */
+export function gspcFtdDisagrees(trends) {
+  const ft = gspcFollowThrough(trends);
+  return ft ? ft.state !== 'confirmed' : null;
+}
+
+/**
  * A short suffix for the 地合い tile on Today (plan MK11), from the market verdict (prepared.market), the market-trends
  * query (brief.trends) and the published manifest (brief.manifest.data, or null): at most one, else null.
- *  - 「FTD確認済み」 when the guide is 0% while the backend's regime is an FTD-upgraded uptrend (modelMarket's ftdUpgraded).
- *  - otherwise 「NAS調整中」 while the guide is open and the Nasdaq's own follow-through state is a correction, a rally
- *    attempt or a failed FTD, judged on the analysis date's session: an older state (series one session behind) is
- *    never shown as today's, so it gives no suffix.
+ *  - 「FTD確認済み」 when the guide is 0% while the backend's regime is an FTD-upgraded uptrend (modelMarket's ftdUpgraded),
+ *    unless the app's own ^GSPC record for that day reads no confirmed FTD (gspcFtdDisagrees): Today never asserts an FTD
+ *    the market tab's own index record contradicts (the tab still explains the 0%).
+ *  - otherwise 「NAS調整中」 while the guide is open and the Nasdaq's own follow-through state is one of
+ *    NASDAQ_CAUTION_STATES, judged on the analysis date's session: an older state (series one session behind) is never
+ *    shown as today's, so it gives no suffix.
  * Never a cap, a tone or a verdict of its own.
  */
 export function marketTileSuffix({ market = null, trends = null, manifest = null } = {}) {
   if (!market || market.state === 'unknown') return null;
-  if (market.ftdUpgraded === true && market.cap === 0) return MARKET_TILE_SUFFIX.ftd;
+  if (market.ftdUpgraded === true && market.cap === 0) return gspcFtdDisagrees(trends) === true ? null : MARKET_TILE_SUFFIX.ftd;
   if (!(market.cap > 0) || trendsStatus(trends).state !== 'ready') return null;
   const date = trends.data.as_of_date, published = manifest?.markets?.US?.as_of_date;
   if (!isoDay(date) || (published !== undefined && published !== date)) return null;

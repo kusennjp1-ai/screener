@@ -4,9 +4,10 @@
 // hands the result to the 地合い card (marketCardView's `study`). Every number comes from the published market-trends
 // asset or the generated reference (market-regime-reference-v1.json): nothing here types a percentage, changes a
 // rule, a threshold or the verdict.
-import { bare, distributionCount, followThroughView, nasdaqInCorrection, shortDate, trendsStatus } from '../brief/briefModel';
+import { bare, distributionCount, followThroughView, gspcFollowThrough, nasdaqInCorrection, shortDate, trendsStatus } from '../brief/briefModel';
 import { DISTRIBUTION_WARN, num, signedPercent, SURVIVORSHIP_NOTE, verdictBasis } from '../brief/marketTabModel';
 import { indexSummary } from './indexSummary.js';
+import { capText } from '../portfolioPlan';
 import { biasTag, ddGradeState, ftdRecent, ftdState, highState, meanLowerStates, quadrantState, referencePeriod, referenceState, signalTags, stateTag, validReference, BIAS_SHARE, SIGNAL_INDICATORS, TAGS } from './marketRegimeReference.js';
 
 const finite = Number.isFinite;
@@ -285,25 +286,52 @@ export const TT_POPULATION = 'TT達成数は長期集計の値で、公開中の
 /** The backend regimes (market_context.regime) in the app's words. */
 export const REGIME_NAMES = Object.freeze({ confirmed_uptrend: '上昇トレンド', uptrend_under_pressure: '上昇に圧力', correction: '調整', downtrend: '下降トレンド' });
 
+/** What the backend regime reads besides the count (market_regime.py: the 50/200-day lines and the breadth guard). */
+const REGIME_READS = '分配日のほか50日線・200日線と参加度も見ます';
+
 /**
- * One line under the verdict's basis on why the judge side's regime reads as it does (inside 「目安と判定の基準」).
- *  - An FTD-upgraded uptrend (modelMarket's ftdUpgraded): the regime is confirmed_uptrend through its follow-through day
- *    while SPY is under a line, so the guide stays 0% (独自判定). The FTD's date comes only from the judge side's block
- *    (`context`, publishedMarketContext); without it the date is left out, never guessed from the ^GSPC series.
- *  - Otherwise, with the judge side's block for the analysis date: its regime beside its own SPY distribution count
- *    (stalling days included), kept apart from the ^GSPC/^IXIC counts of the 分配日 row. A null count reads 未収録.
- *  - Without the block (an older publication): null, the basis line alone as before.
- * A block whose regime disagrees with the verdict's rows is not used.
+ * What the app's own ^GSPC record of the analysis date (gspcFollowThrough: the フォロースルーデー row and its ◆) reads
+ * beside the regime's SPY FTD, in words, only where the two differ: 「^GSPCの日足ではFTD未確認」 / 「…FTD失敗」 for a
+ * record that is not a confirmed FTD, 「^GSPCの日足ではFTD 8/13」 for a confirmed one dated otherwise than the regime's
+ * known FTD date; else null (the same reading, an unknown regime date, or no record of that day to compare).
  */
-export function regimeCause(market, context, basis, date) {
+export function gspcFtdWords(ft, ftdDate, date) {
+  if (!ft) return null;
+  if (ft.state === 'ftd_failed') return '^GSPCの日足ではFTD失敗';
+  if (ft.state !== 'confirmed') return '^GSPCの日足ではFTD未確認';
+  const own = ft.ftd?.date;
+  return ftdDate && isDay(own) && own !== ftdDate ? `^GSPCの日足ではFTD ${shortDate(own, date)}` : null;
+}
+
+/**
+ * One line under the verdict's basis on why the regime (局面判定, the backend's SPY read) reads as it does (inside
+ * 「目安と判定の基準」).
+ *  - An FTD-upgraded uptrend (modelMarket's ftdUpgraded) whose guide is 0%: the regime is confirmed_uptrend through SPY's
+ *    follow-through day while SPY is under a line. The FTD's date comes only from the regime's block (`context`,
+ *    publishedMarketContext); without it the date is left out, never guessed from the ^GSPC series. When the app's own
+ *    ^GSPC record of that day reads otherwise (`gspc`, gspcFollowThrough), the line says what it reads (gspcFtdWords),
+ *    so the two FTD reads on the screen are each attributed. The guide is printed from the cap (capText), never typed.
+ *  - Otherwise, with the regime's block for the analysis date: its SPY distribution count (stalling days included), kept
+ *    apart from the ^GSPC/^IXIC counts of the 分配日 row. The regime is named only where the basis line does not already
+ *    name it (it does for 上昇トレンド and 上昇に圧力). Under any regime but a confirmed uptrend the line adds that the
+ *    regime also reads the moving averages and the breadth (REGIME_READS), so a small count never reads as its cause.
+ *    A null count reads 未収録, never 0.
+ *  - Without the block (an older publication): null, the basis line alone as before.
+ * A block is used only when its regime is the verdict's rows' regime (a market without one borrows none).
+ */
+export function regimeCause(market, context, basis, date, { gspc = null } = {}) {
   if (!market || market.state === 'unknown') return null;
-  const block = context && (!market.regime || context.regime === market.regime) ? context : null;
-  if (market.ftdUpgraded === true) {
-    const ftd = block?.ftd_date ? `（${shortDate(block.ftd_date, date)}）` : '';
-    return `局面判定はFTDによる上昇トレンド${ftd}。この目安はSPYが${basis?.above200 === false ? '200日線' : '50日線'}の下のため0%（独自判定）`;
+  const block = context && market.regime && context.regime === market.regime ? context : null;
+  if (market.ftdUpgraded === true && market.cap === 0) {
+    const ftdDate = block?.ftd_date || null, other = gspcFtdWords(gspc, ftdDate, date);
+    return `局面判定はSPYのFTD${ftdDate ? `（${shortDate(ftdDate, date)}）` : ''}による上昇トレンド。${other ? `${other}。` : ''}この目安はSPYが${basis?.above200 === false ? '200日線' : '50日線'}の下のため${capText(market.cap)}（独自判定）`;
   }
-  if (!block || !REGIME_NAMES[block.regime]) return null;
-  return `局面判定「${REGIME_NAMES[block.regime]}」：${block.distribution_days === null ? '判定側のSPYの分配日は未収録' : `SPYの分配日 ${num(block.distribution_days)}日（ストーリング日を含む判定側の数え方）`}`;
+  const name = block ? REGIME_NAMES[block.regime] : null;
+  if (!name) return null;
+  const count = block.distribution_days === null ? '局面判定の分配日（SPY）は未収録' : `局面判定の分配日：SPY ${num(block.distribution_days)}日（ストーリング日を含む数え方）`;
+  const reads = block.regime !== 'confirmed_uptrend', named = Boolean(basis?.text?.includes(`「${name}」`));
+  const regime = named ? (reads ? `局面判定は${REGIME_READS}` : null) : `局面判定は「${name}」${reads ? `で、${REGIME_READS}` : ''}`;
+  return regime ? `${count}。${regime}` : count;
 }
 
 /** Where the Nasdaq's figures and line come from (the switch's source line on the desktop, the 注記 on a phone). */
@@ -324,7 +352,8 @@ const publishedInputs = item => ({ distribution: item?.method ?? null, followThr
  *  - nasdaq: the Nasdaq note beside the SPY verdict (the card shows it only while the verdict is positive)
  *  - nasdaqPosition / nasdaqFigures: the Nasdaq's published position, as data and in words
  *  - regime: the 過去の傾向 block
- *  - cause: the judge side's cause under the verdict's basis (regimeCause, from `market` and the published `manifest`)
+ *  - cause: the regime's cause under the verdict's basis (regimeCause, from `market`, the published `manifest` and the
+ *    ^GSPC record of the day)
  *  - ttPopulation, nasdaqSource: whom TT達成数 counts, and where the Nasdaq's figures come from
  */
 export function marketTabStudy({ trends, reference, date = null, market = null, manifest = null }) {
@@ -341,7 +370,7 @@ export function marketTabStudy({ trends, reference, date = null, market = null, 
     nasdaq: ready ? nasdaqNote(byName.NAS?.followThrough, date) : null,
     nasdaqPosition, nasdaqFigures: nasdaqFigures(nasdaqPosition?.state, date),
     regime: marketRegimeContext({ history: ready ? trends.data.long_history || null : null, trends, reference: ref, date }),
-    cause: regimeCause(market, publishedMarketContext(manifest?.markets?.US ?? null, { date }), verdictBasis(market, date), date),
+    cause: regimeCause(market, publishedMarketContext(manifest?.markets?.US ?? null, { date }), verdictBasis(market, date), date, { gspc: gspcFollowThrough(trends) }),
     ttPopulation: TT_POPULATION, nasdaqSource: NASDAQ_SOURCE,
   };
 }
