@@ -751,14 +751,6 @@
         "rs_rating_ok"
       ],
       "failed_checks": [
-        "not_detected",
-        "cup_structure_not_found",
-        "pole_return_below_threshold",
-        "vcp_contracting_depth_failed",
-        "vcp_volume_contraction_unconfirmed",
-        "vcp_right_edge_drying_unconfirmed",
-        "vcp_score_below_legacy_threshold",
-        "not_implemented",
         "volume_below_minimum",
         "stage_not_ok"
       ],
@@ -791,6 +783,15 @@
           "message": "missing or short benchmark history",
           "severity": "medium"
         }
+      ],
+      "diagnostics": [
+        "not_detected",
+        "cup_structure_not_found",
+        "pole_return_below_threshold",
+        "vcp_contracting_depth_failed",
+        "vcp_volume_contraction_unconfirmed",
+        "vcp_right_edge_drying_unconfirmed",
+        "vcp_score_below_legacy_threshold"
       ]
     }
   }

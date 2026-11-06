@@ -1,8 +1,9 @@
 """Self-contained explain payload builder for Setup Engine gate evaluation.
 
-Pure analysis-layer module: no pandas, no I/O. Encapsulates the 8 readiness
-gate evaluations, merges detector/policy checks, and returns a typed
-``ExplainPayload`` with a ``derived_ready`` flag.
+Pure analysis-layer module: no pandas, no I/O. Encapsulates the 10 readiness
+gate evaluations, merges the readiness-relevant detector/policy checks, and
+returns a typed ``ExplainPayload`` with a ``derived_ready`` flag and the
+detector-level ``diagnostics`` that do not decide readiness.
 
 Imports only from analysis layer: ``config``, ``readiness``, ``report``, ``trace``.
 """
@@ -18,6 +19,22 @@ from app.analysis.patterns.readiness import (
 )
 from app.analysis.patterns.report import ExplainPayload, KeyLevels
 from app.analysis.patterns.trace import build_score_trace
+
+#: The pre-existing failed checks that decide readiness besides the 10 gates: whether a
+#: primary pattern was selected (and not as a fallback below the confidence floor) and
+#: whether the data policy found the history insufficient. Every other pre-existing
+#: failed check is detector-level (``not_detected``, ``not_implemented``,
+#: ``cup_structure_not_found``, ``vcp_*_failed``, ``<detector>:error`` ...): one detector
+#: not finding its own pattern says nothing about the primary pattern another detector
+#: selected, so those move to ``diagnostics`` and never fail readiness.
+READINESS_PRE_EXISTING_CHECKS = frozenset({
+    "no_primary_pattern",
+    "primary_pattern_below_confidence_floor",
+    "insufficient_data",
+    "insufficient_daily_bars",
+    "insufficient_weekly_bars",
+    "insufficient_benchmark_bars",
+})
 
 
 @dataclass(frozen=True)
@@ -66,6 +83,7 @@ class ExplainResult:
 
     explain: ExplainPayload
     derived_ready: bool
+    diagnostics: tuple[str, ...] = ()
 
 
 def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
@@ -83,10 +101,21 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
     - Gate 9 (MA alignment): ma_alignment_score >= min — **permissive** (None passes)
     - Gate 10 (RS rating): rs_rating >= min — **permissive** (None passes)
 
-    ``derived_ready`` is True only when ALL checks (pre-existing + gates) pass.
+    ``derived_ready`` is True only when every gate passes and no readiness-relevant
+    pre-existing check (``READINESS_PRE_EXISTING_CHECKS``: the primary-pattern checks
+    and the data policy's insufficiency) failed. Every other pre-existing failed check
+    is a detector-level diagnostic: it is returned in ``diagnostics``, never in the
+    failed list, and never fails readiness.
     """
     passed: list[str] = list(inp.pre_existing_passed_checks)
-    failed: list[str] = list(inp.pre_existing_failed_checks)
+    failed: list[str] = []
+    diagnostics: list[str] = []
+    for check in inp.pre_existing_failed_checks:
+        if check in READINESS_PRE_EXISTING_CHECKS:
+            if check not in failed:
+                failed.append(check)
+        elif check and check not in diagnostics:
+            diagnostics.append(check)
     params = inp.parameters
 
     if inp.setup_score is None:
@@ -178,7 +207,7 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
         else:
             passed.append("rs_rating_ok")
 
-        # derived_ready = all gates passed (no failures from any source)
+        # derived_ready = every gate and every readiness-relevant pre-existing check passed
         derived_ready = len(failed) == 0
 
     # Build score trace if opted in
@@ -204,4 +233,4 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
         score_trace=score_trace,
     )
 
-    return ExplainResult(explain=explain, derived_ready=derived_ready)
+    return ExplainResult(explain=explain, derived_ready=derived_ready, diagnostics=tuple(diagnostics))

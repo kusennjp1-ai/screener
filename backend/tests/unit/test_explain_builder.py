@@ -103,7 +103,9 @@ class TestNoScoreFastPath:
         ))
         payload = result.explain.to_payload()
         assert "detector_a_ok" in payload["passed_checks"]
-        assert "detector_b_fail" in payload["failed_checks"]
+        # A detector-level failure is a diagnostic, kept but never a failed check.
+        assert "detector_b_fail" not in payload["failed_checks"]
+        assert result.diagnostics == ("detector_b_fail",)
 
     def test_no_score_no_gate_checks_in_passed(self):
         gate_checks = {
@@ -505,12 +507,62 @@ class TestDerivedReadySemantics:
         result = build_explain_payload(_default_input(setup_score=10.0))
         assert result.derived_ready is False
 
-    def test_pre_existing_failure_blocks_ready(self):
-        """Pre-existing failed checks count toward derived_ready."""
+    @pytest.mark.parametrize("check", [
+        "no_primary_pattern",
+        "primary_pattern_below_confidence_floor",
+        "insufficient_data",
+        "insufficient_daily_bars",
+        "insufficient_weekly_bars",
+        "insufficient_benchmark_bars",
+    ])
+    def test_readiness_pre_existing_failure_blocks_ready(self, check):
+        """The primary-pattern checks and the policy's insufficiency count toward derived_ready."""
+        result = build_explain_payload(_default_input(pre_existing_failed_checks=(check,)))
+        assert result.derived_ready is False
+        assert check in result.explain.to_payload()["failed_checks"]
+        assert result.diagnostics == ()
+
+
+class TestDetectorDiagnostics:
+    """Round 2 (setup-ready-always-false): detector-level checks never fail readiness."""
+
+    DETECTOR_LEVEL = (
+        "not_detected",
+        "not_implemented",
+        "cup_structure_not_found",
+        "vcp_contraction_sequence_failed",
+        "insufficient_data_for_handle",
+        "detector_x_fail",
+        "vcp:error",
+    )
+
+    def test_diagnostics_never_fail_readiness(self):
+        result = build_explain_payload(_default_input(pre_existing_failed_checks=self.DETECTOR_LEVEL))
+        payload = result.explain.to_payload()
+        assert result.derived_ready is True
+        assert payload["failed_checks"] == []
+        assert result.diagnostics == self.DETECTOR_LEVEL
+
+    def test_not_implemented_never_appears_in_the_failed_list(self):
         result = build_explain_payload(_default_input(
-            pre_existing_failed_checks=("detector_x_fail",),
+            setup_score=10.0,
+            pre_existing_failed_checks=("not_implemented", "no_primary_pattern", "not_implemented"),
+        ))
+        failed = result.explain.to_payload()["failed_checks"]
+        assert "not_implemented" not in failed
+        assert failed[0] == "no_primary_pattern"
+        assert "setup_score_below_threshold" in failed
+        assert result.diagnostics == ("not_implemented",)
+        assert result.derived_ready is False
+
+    def test_a_gate_failure_still_blocks_with_diagnostics_present(self):
+        result = build_explain_payload(_default_input(
+            distance_to_pivot_pct=6.0,
+            pre_existing_failed_checks=("not_detected",),
         ))
         assert result.derived_ready is False
+        assert result.explain.to_payload()["failed_checks"] == ["outside_early_zone"]
+        assert result.diagnostics == ("not_detected",)
 
     def test_multiple_failures_all_recorded(self):
         result = build_explain_payload(_default_input(

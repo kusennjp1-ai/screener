@@ -751,6 +751,14 @@
         "rs_rating_ok"
       ],
       "failed_checks": [
+        "outside_early_zone",
+        "volume_below_minimum"
+      ],
+      "key_levels": {
+        "pivot_price": 101.28822714509187
+      },
+      "invalidation_flags": [],
+      "diagnostics": [
         "not_detected",
         "cup_structure_not_found",
         "pole_return_below_threshold",
@@ -758,15 +766,8 @@
         "vcp_tight_near_highs_failed",
         "vcp_volume_contraction_unconfirmed",
         "vcp_right_edge_drying_unconfirmed",
-        "vcp_score_below_legacy_threshold",
-        "not_implemented",
-        "outside_early_zone",
-        "volume_below_minimum"
-      ],
-      "key_levels": {
-        "pivot_price": 101.28822714509187
-      },
-      "invalidation_flags": []
+        "vcp_score_below_legacy_threshold"
+      ]
     }
   }
 }

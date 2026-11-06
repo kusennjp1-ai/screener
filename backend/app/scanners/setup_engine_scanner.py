@@ -328,8 +328,9 @@ def build_setup_engine_payload(
 
     Bool semantics:
     - ``setup_ready`` is derived when not explicitly set.
-    - Derived readiness requires ``readiness_score >= readiness_threshold_pct``
-      and zero failed checks.
+    - Derived readiness requires ``readiness_score >= readiness_threshold_pct``,
+      every readiness gate and no failed primary-pattern or data-policy check.
+      Detector-level failed checks go to ``explain.diagnostics`` and never fail it.
 
     Date semantics:
     - ``pivot_date`` and candidate ``pivot_date`` use ``YYYY-MM-DD``.
@@ -563,6 +564,10 @@ def build_setup_engine_payload(
         readiness_trace_inputs=readiness_trace_inputs,
     )
     explain_result = build_explain_payload(explain_input)
+    # Detector-level checks that do not decide readiness (one detector not finding its own
+    # pattern, a stub, a detector error) stay inside the existing explain object.
+    explain_payload = explain_result.explain.to_payload()
+    explain_payload["diagnostics"] = list(explain_result.diagnostics)
 
     payload: SetupEnginePayload = {
         "schema_version": schema_version,
@@ -603,7 +608,7 @@ def build_setup_engine_payload(
             candidates,
             default_timeframe=timeframe,
         ),
-        "explain": explain_result.explain.to_payload(),
+        "explain": explain_payload,
     }
 
     assert_valid_setup_engine_payload(payload)

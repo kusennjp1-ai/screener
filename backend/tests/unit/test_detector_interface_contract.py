@@ -501,5 +501,8 @@ class TestAggregatorWithDetectSafe:
         result = agg.aggregate(
             _make_input(), parameters=DEFAULT_SETUP_ENGINE_PARAMETERS
         )
-        # Some detectors are still stubs, so "not_implemented" should be present.
-        assert "not_implemented" in result.failed_checks
+        # The default set holds no stub (the DoubleBottom stub left it in round 2), so no
+        # detector reports "not_implemented"; the detectors' own checks are still collected.
+        assert "not_implemented" not in result.failed_checks
+        assert "detector_pipeline_executed" in result.passed_checks
+        assert len(result.detector_traces) == len(default_pattern_detectors())

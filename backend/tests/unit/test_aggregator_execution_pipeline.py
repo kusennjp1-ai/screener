@@ -213,3 +213,22 @@ def test_aggregator_falls_back_when_no_candidate_meets_confidence_floor():
     assert result.pattern_primary == "detector_low_confidence"
     assert "primary_pattern_fallback_selected" in result.passed_checks
     assert "primary_pattern_below_confidence_floor" in result.failed_checks
+
+
+def test_default_detector_set_holds_no_double_bottom_stub():
+    """The DoubleBottom stub only reports not_implemented; it left the default set in round 2."""
+    from app.analysis.patterns.detectors import DoubleBottomDetector, default_pattern_detectors
+
+    detectors = default_pattern_detectors()
+    assert not any(isinstance(detector, DoubleBottomDetector) for detector in detectors)
+    assert "double_bottom" not in {detector.name for detector in detectors}
+    assert [type(detector).__name__ for detector in detectors] == [
+        "CupWithHandleDetector",
+        "ThreeWeeksTightDetector",
+        "HighTightFlagDetector",
+        "FirstPullbackDetector",
+        "VCPDetector",
+        "NR7InsideDayDetector",
+    ]
+    # The stub stays importable for when it is implemented.
+    assert DoubleBottomDetector().name == "double_bottom"

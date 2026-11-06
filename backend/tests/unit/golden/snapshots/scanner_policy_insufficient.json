@@ -69,7 +69,8 @@
           "message": "missing or short benchmark history",
           "severity": "medium"
         }
-      ]
+      ],
+      "diagnostics": []
     }
   }
 }

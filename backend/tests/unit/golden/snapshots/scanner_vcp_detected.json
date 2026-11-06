@@ -478,18 +478,19 @@
         "rs_rating_ok"
       ],
       "failed_checks": [
-        "not_detected",
-        "cup_structure_not_found",
-        "pole_return_below_threshold",
-        "nr7_inside_day_trigger_not_found",
-        "not_implemented",
         "readiness_below_threshold",
         "volume_below_minimum"
       ],
       "key_levels": {
         "pivot_price": 132.25
       },
-      "invalidation_flags": []
+      "invalidation_flags": [],
+      "diagnostics": [
+        "not_detected",
+        "cup_structure_not_found",
+        "pole_return_below_threshold",
+        "nr7_inside_day_trigger_not_found"
+      ]
     }
   }
 }

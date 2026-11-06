@@ -520,3 +520,93 @@ class TestConfidenceFloorContract:
 
         assert payload["pattern_confidence"] >= 55.0
         assert "primary_pattern_below_confidence_floor" not in payload["explain"]["failed_checks"]
+
+
+class TestSetupReadinessRegressions:
+    """Round 2 (setup-ready-always-false): readiness comes from the 10 gates and the
+    primary-pattern checks only. Before, every detector that did not find its own
+    pattern (``not_detected``, ``cup_structure_not_found``) and the DoubleBottom stub
+    (``not_implemented``) were counted as failures, so no stock could ever be ready.
+    """
+
+    @staticmethod
+    def _frames(num_days: int = 350) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """A steady leader (+0.3%/day, quiet last 10 sessions) against a flat benchmark."""
+        index = pd.bdate_range(end=pd.Timestamp("2025-12-19"), periods=num_days)
+        rng = np.random.default_rng(7)
+        close = 50 * 1.003 ** np.arange(num_days) * (1 + rng.normal(0, 0.002, num_days))
+        volume = np.full(num_days, 2_000_000.0)
+        volume[-10:] = 900_000.0
+        stock = pd.DataFrame(
+            {"Open": close * 0.998, "High": close * 1.008, "Low": close * 0.992, "Close": close, "Volume": volume},
+            index=index,
+        )
+        spy_close = 400 * (1 + rng.normal(0, 0.002, num_days))
+        spy = pd.DataFrame(
+            {"Open": spy_close, "High": spy_close * 1.004, "Low": spy_close * 0.996, "Close": spy_close,
+             "Volume": np.full(num_days, 5e7)},
+            index=index,
+        )
+        return stock, spy
+
+    def _payload(self, *, distance_pct: float, confidence: float = 0.8) -> dict:
+        from app.analysis.patterns.detectors import DoubleBottomDetector
+
+        stock, spy = self._frames()
+        pivot = float(stock["Close"].iloc[-1]) / (1 + distance_pct / 100)
+
+        class _IdealVcp(PatternDetector):
+            name = "vcp"
+
+            def detect(self, detector_input, parameters):
+                del detector_input, parameters
+                return PatternDetectorResult.detected(
+                    self.name,
+                    PatternCandidateModel(
+                        pattern="vcp", timeframe="daily", source_detector=self.name, pivot_price=pivot,
+                        pivot_type="vcp_pivot", quality_score=85.0, readiness_score=88.0, confidence=confidence,
+                    ),
+                )
+
+        class _NoCup(PatternDetector):
+            name = "cup_with_handle"
+
+            def detect(self, detector_input, parameters):
+                del detector_input, parameters
+                return PatternDetectorResult.no_detection(
+                    self.name, failed_checks=("not_detected", "cup_structure_not_found"),
+                )
+
+        scanner = SetupEngineScanner()
+        scanner._aggregator = SetupEngineAggregator(detectors=[_IdealVcp(), _NoCup(), DoubleBottomDetector()])
+        result = scanner.scan_stock("IDEAL", StockData(symbol="IDEAL", price_data=stock, benchmark_data=spy))
+        payload = result.details["setup_engine"]
+        assert result.passes is payload["setup_ready"]
+        return payload
+
+    def test_an_ideal_vcp_is_ready_whatever_the_other_detectors_found(self):
+        payload = self._payload(distance_pct=-1.0)
+        explain = payload["explain"]
+
+        assert payload["pattern_primary"] == "vcp"
+        assert payload["pattern_confidence"] >= 55.0
+        assert payload["setup_ready"] is True
+        assert explain["failed_checks"] == []
+        # The other detectors' misses and the stub are kept as diagnostics, inside explain.
+        assert set(explain["diagnostics"]) == {"not_detected", "cup_structure_not_found", "not_implemented"}
+        assert "not_implemented" not in explain["failed_checks"]
+
+    def test_the_same_vcp_six_percent_past_the_pivot_is_not_ready(self):
+        payload = self._payload(distance_pct=6.0)
+
+        assert payload["setup_ready"] is False
+        assert payload["explain"]["failed_checks"] == ["outside_early_zone"]
+        # The scores do not depend on readiness.
+        assert payload["setup_score"] == self._payload(distance_pct=-1.0)["setup_score"]
+
+    def test_a_below_floor_fallback_is_not_ready(self):
+        payload = self._payload(distance_pct=-1.0, confidence=0.2)
+
+        assert payload["pattern_confidence"] < 55.0
+        assert payload["setup_ready"] is False
+        assert payload["explain"]["failed_checks"] == ["primary_pattern_below_confidence_floor"]

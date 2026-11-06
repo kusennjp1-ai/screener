@@ -45,6 +45,11 @@
         "detector_pipeline_executed"
       ],
       "failed_checks": [
+        "no_primary_pattern"
+      ],
+      "key_levels": {},
+      "invalidation_flags": [],
+      "diagnostics": [
         "not_detected",
         "cup_structure_not_found",
         "tight_run_not_found",
@@ -56,12 +61,8 @@
         "vcp_right_edge_drying_unconfirmed",
         "vcp_score_below_legacy_threshold",
         "vcp_insufficient_bases",
-        "nr7_inside_day_trigger_not_found",
-        "not_implemented",
-        "no_primary_pattern"
-      ],
-      "key_levels": {},
-      "invalidation_flags": []
+        "nr7_inside_day_trigger_not_found"
+      ]
     }
   }
 }

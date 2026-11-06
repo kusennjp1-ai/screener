@@ -1106,15 +1106,6 @@
         "rs_rating_ok"
       ],
       "failed_checks": [
-        "not_detected",
-        "cup_structure_not_found",
-        "vcp_contracting_depth_failed",
-        "vcp_tight_near_highs_failed",
-        "vcp_volume_contraction_unconfirmed",
-        "vcp_right_edge_drying_unconfirmed",
-        "vcp_score_below_legacy_threshold",
-        "vcp_insufficient_bases",
-        "not_implemented",
         "volume_below_minimum",
         "rs_leadership_insufficient",
         "stage_not_ok",
@@ -1123,7 +1114,17 @@
       "key_levels": {
         "pivot_price": 113.12
       },
-      "invalidation_flags": []
+      "invalidation_flags": [],
+      "diagnostics": [
+        "not_detected",
+        "cup_structure_not_found",
+        "vcp_contracting_depth_failed",
+        "vcp_tight_near_highs_failed",
+        "vcp_volume_contraction_unconfirmed",
+        "vcp_right_edge_drying_unconfirmed",
+        "vcp_score_below_legacy_threshold",
+        "vcp_insufficient_bases"
+      ]
     }
   }
 }
