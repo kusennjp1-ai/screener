@@ -12,7 +12,7 @@ const finite = Number.isFinite;
 const DASH = <><span aria-hidden="true">—</span><span className="sr-only">未計算</span></>;
 const price = value => finite(value) ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : DASH;
 /**
- * A unit a line splits only when it is wider than the whole line (「RS ≥ 70（61）」, 「＋5%」): it moves to the
+ * A unit a line splits only when it is wider than the whole line (「RS推計 ≥ 70（61）」, 「＋5%」): it moves to the
  * next line whole instead, and at 200% zoom it still wraps inside rather than push the card wider.
  */
 const Unit = ({ children }) => <span className="brief-nowrap">{children}</span>;

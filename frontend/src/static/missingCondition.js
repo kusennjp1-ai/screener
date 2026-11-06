@@ -10,11 +10,11 @@ export function singleMissingCondition(assessment) {
   return { ...rule, stateLabel, shortLabel, text: `${stateLabel}：${shortLabel}`, csv: `${stateLabel}：${rule.label}` };
 }
 
-/** A rule's short name for a chip or a conclusion line (「RS ≥ 70」, 「株価 > SMA50」). */
+/** A rule's short name for a chip or a conclusion line (「RS推計 ≥ 70」: the estimate, never IBD's RS; 「株価 > SMA50」). */
 export function conditionShortLabel(rule) {
   const label = typeof rule?.label === 'string' ? rule.label : '';
   const rs = label.match(/^RS 推計 ≥ (\d+)/);
-  return rs ? `RS ≥ ${rs[1]}`
+  return rs ? `RS推計 ≥ ${rs[1]}`
     : label.startsWith('I：') ? '機関保有（I）'
       : label.includes('SMA200が21営業日前') ? 'SMA200の21営業日上昇'
         : label.startsWith('日足の銘柄') ? '日足の整合性・252本'
@@ -41,7 +41,7 @@ export function conditionValueText(rule) {
   return `${tenths < 0 ? '−' : ''}${(Math.abs(tenths) / 10).toFixed(1)}%`;
 }
 
-/** 「RS ≥ 70（61）」: the short label and, when the rule has one, the value that settled it. */
+/** 「RS推計 ≥ 70（61）」: the short label and, when the rule has one, the value that settled it. */
 export function conditionText(rule) {
   const value = conditionValueText(rule);
   return `${conditionShortLabel(rule)}${value === null ? '' : `（${value}）`}`;
@@ -57,7 +57,7 @@ export function conditionCompactLabel(rule) {
   return high ? `高値から${high[1]}%以内` : low ? `安値から${low[1]}%以上` : conditionShortLabel(rule);
 }
 
-/** 「高値から25%以内（30.2%）」, 「RS ≥ 70（61）」: the compact name and, when the rule has one, its value. */
+/** 「高値から25%以内（30.2%）」, 「RS推計 ≥ 70（61）」: the compact name and, when the rule has one, its value. */
 export function conditionCompactText(rule) {
   const value = conditionValueText(rule);
   return `${conditionCompactLabel(rule)}${value === null ? '' : `（${value}）`}`;
@@ -75,10 +75,10 @@ const CHIP_LABELS = [
  * with the moving-average comparisons in 日線 words (「150日 > 200日」), so the chip fits the row's second line.
  * The RS rule is named by the estimate, 「RS推計」: the row drops its own RS推計 chip for it, so this chip carries the
  * word and the value (「あと1条件：RS推計（61）」); its threshold is in the chip's title and the row's label, which
- * keep the full rule (「未達：RS ≥ 70（61）」), so a 320px row with a sell chip still keeps two chip lines.
+ * keep the full rule (「未達：RS推計 ≥ 70（61）」), so a 320px row with a sell chip still keeps two chip lines.
  */
 export function conditionChipLabel(rule) {
   const compact = conditionCompactLabel(rule);
-  if (/^RS ≥ \d+$/.test(compact)) return 'RS推計';
+  if (/^RS推計 ≥ \d+$/.test(compact)) return 'RS推計';
   return CHIP_LABELS.find(([pattern]) => pattern.test(compact))?.[1] || compact;
 }

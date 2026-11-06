@@ -62,7 +62,7 @@ describe('one-condition-away is a distinct watch view', () => {
 
 describe('a rule in a few words, with the value that settled it', () => {
   it('shortens the rule labels the same way the あと1条件 view does', () => {
-    expect(conditionShortLabel({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）' })).toBe('RS ≥ 70');
+    expect(conditionShortLabel({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）' })).toBe('RS推計 ≥ 70');
     expect(conditionShortLabel({ label: 'SMA200が21営業日前より上（1か月の上向き判定）' })).toBe('SMA200の21営業日上昇');
     expect(conditionShortLabel({ label: '52週高値からの距離 ≤ 25%（日中高値）' })).toBe('52週高値からの距離 ≤ 25%');
     expect(conditionShortLabel({ label: '株価 > SMA50' })).toBe('株価 > SMA50');
@@ -76,7 +76,7 @@ describe('a rule in a few words, with the value that settled it', () => {
     expect(conditionValueText({ label: '52週安値から ≥ 30%（日中安値）', value: -2, unit: '%' })).toBe('−2.0%');
     expect(conditionValueText({ label: '株価 > SMA50', value: false, unit: '' })).toBeNull();
     expect(conditionValueText({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: null })).toBeNull();
-    expect(conditionText({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: 61.2 })).toBe('RS ≥ 70（61）');
+    expect(conditionText({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: 61.2 })).toBe('RS推計 ≥ 70（61）');
     expect(conditionText({ label: '株価 > SMA50', value: false })).toBe('株価 > SMA50');
   });
   it('never rounds a value across its rule\'s threshold', () => {
@@ -91,7 +91,7 @@ describe('a rule in a few words, with the value that settled it', () => {
     expect(conditionCompactLabel(rule('52週安値から ≥ 30%（日中安値）'))).toBe('安値から30%以上');
     expect(conditionCompactLabel(rule('株価 > SMA50'))).toBe('株価 > SMA50');
     expect(conditionCompactText({ label: '52週高値からの距離 ≤ 25%（日中高値）', value: 30.25, unit: '%' })).toBe('高値から25%以内（30.3%）');
-    expect(conditionCompactText({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: 61.9 })).toBe('RS ≥ 70（61）');
+    expect(conditionCompactText({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: 61.9 })).toBe('RS推計 ≥ 70（61）');
     expect(['株価 > SMA150・SMA200', 'SMA150 > SMA200', 'SMA200が21営業日前より上（1か月の上向き判定）', 'SMA50 > SMA150・SMA200', '株価 > SMA50', '52週高値からの距離 ≤ 25%（日中高値）', 'RS 推計 ≥ 70（公開日足の共通母集団）']
       .map(label => conditionChipLabel(rule(label)))).toEqual(['株価 > 150・200日', '150日 > 200日', '200日線が上向き', '50日 > 150・200日', '株価 > 50日線', '高値から25%以内', 'RS推計']);
   });

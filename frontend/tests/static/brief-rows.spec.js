@@ -264,7 +264,7 @@ for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.deskto
     const reason = page.locator('[data-symbol="ZZZF"] .brief-chip', { hasText: 'あと1条件：' });
     await expect(reason).toHaveText('あと1条件：RS推計（61）');
     // Its threshold is in the chip's title (and the row's label), with the full rule.
-    await expect(reason).toHaveAttribute('title', '未達：RS ≥ 70（61）');
+    await expect(reason).toHaveAttribute('title', '未達：RS推計 ≥ 70（61）');
     await expect(reason).not.toHaveClass(/tone-/);
     // The named rule keeps an あと1条件 row within the same height and two chip lines.
     const oneShort = await candidates(page).evaluateAll(nodes => nodes.map(row => ({ symbol: row.dataset.symbol, height: row.getBoundingClientRect().height,

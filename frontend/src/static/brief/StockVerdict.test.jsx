@@ -119,13 +119,13 @@ describe('the conclusion says why there is no buy', () => {
   it('names the failed template rule with its value, in a neutral tone, and marks the position and the prices 参考', () => {
     const card = conclusionOf({ row: audited({ rs: 61.4 }) });
     expect(card.className).toContain('tone-neutral');
-    expect(title(card)).toBe('トレンドテンプレート未達（未達：RS ≥ 70（61））— 買いの対象外');
+    expect(title(card)).toBe('トレンドテンプレート未達（未達：RS推計 ≥ 70（61））— 買いの対象外');
     expect(sub(card)).toBe('位置は参考：買いゾーン・ピボット比 +1.0%。');
     expect(meter(card).getAttribute('aria-label')).toBe('ピボットからの位置（参考） +1.0%');
     expect(meter(card).classList.contains('is-reference')).toBe(true);
     expect(tiles(card)).toEqual([['買いの範囲', '100.00', '〜105.00', '参考'], ['損切り −7.0%', '93.93', '買値 101.00', '参考'], ['株数', '88株', 'リスク $625', '参考']]);
     // The rule and its value are one unit a line never splits.
-    expect(card.querySelector('strong .brief-nowrap').textContent).toBe('RS ≥ 70（61）');
+    expect(card.querySelector('strong .brief-nowrap').textContent).toBe('RS推計 ≥ 70（61）');
   });
 
   it('counts any other unmet rule, or several, in a one-line title and names the first in the line under it', () => {

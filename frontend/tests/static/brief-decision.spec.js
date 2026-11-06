@@ -51,7 +51,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   test('a stock below the trend template is no buy candidate: a neutral line names the unmet rule', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/stock/ZZZF');
     await expect(conclusion(page)).toHaveClass(/tone-neutral/);
-    await expect(conclusion(page).locator('strong')).toHaveText(`トレンドテンプレート未達（未達：RS ≥ 70（${Math.floor(rowBySymbol.ZZZF.rs_rating)}））— 買いの対象外`);
+    await expect(conclusion(page).locator('strong')).toHaveText(`トレンドテンプレート未達（未達：RS推計 ≥ 70（${Math.floor(rowBySymbol.ZZZF.rs_rating)}））— 買いの対象外`);
     await expect(conclusion(page).getByRole('img', { name: /^ピボットからの位置（参考）/ })).toHaveClass(/is-reference/);
     await expect(conclusion(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
     expect(errors).toEqual([]);
