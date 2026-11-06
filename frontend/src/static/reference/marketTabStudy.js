@@ -160,9 +160,16 @@ function comparatorText(ref, suffix, row) {
   return null;
 }
 const share = value => `${num(Math.round(value))}%`;
-/** Whether a robust line's share of declines was higher or lower than its comparator's (equal: no direction). */
+/**
+ * Whether a robust line's share of declines was higher or lower than its comparator's, on the whole percentages the line
+ * prints (share): equal once rounded is no direction, so a line never reads 「16%（全期間 16%より多い）」.
+ */
 const DIRECTION_WORDS = Object.freeze({ higher: '多い', lower: '少ない' });
-const direction = (value, comparator) => !finite(value) || !finite(comparator) || value === comparator ? null : value > comparator ? 'higher' : 'lower';
+const direction = (value, comparator) => {
+  if (!finite(value) || !finite(comparator)) return null;
+  const shown = Math.round(value), against = Math.round(comparator);
+  return shown === against ? null : shown > against ? 'higher' : 'lower';
+};
 
 /** The trailing run of known closes: a window never bridges an unknown close, as in the study. */
 function trailingRun(points) {
@@ -256,11 +263,22 @@ export function marketRegimeContext({ history, trends, reference, date = null })
   const footer = `状態ごとの過去の割合で、組み合わせた確率ではありません。これらは同じ事実（下げの最中・直後は値動きが荒い）を別の形で数えたもので、2指数は連動しているため独立の確認ではありません。${means}指数の結果で、個別銘柄の値ではありません。出典：${reference.study_version}${reference.source?.ci_run ? `（CI run ${reference.source.ci_run}）` : ''}、${sample}`;
   const key = regimeKey(blocks.flatMap(block => block.items.flatMap(entry => entry.parts?.tags || [])));
   // One line on what the lines say: how many states had more declines than their comparator, how many fewer (robust
-  // lines only, both indices); the lines, the key and the footer say the rest. Never a combined probability.
-  const directions = blocks.flatMap(block => block.items.map(entry => entry.direction).filter(Boolean));
+  // lines only); the lines, the key and the footer say the rest. Never a combined probability. A state both indices are
+  // in (the same indicator and state, the same direction) counts once: the two indices move together, so it is one
+  // state, never two confirmations.
+  const seen = new Set(), directions = [];
+  for (const entry of blocks.flatMap(block => block.items)) {
+    if (!entry.direction) continue;
+    const key = `${entry.indicator.replace(/^\^[A-Z]+\./, '')}|${entry.state}|${entry.direction}`;
+    if (!seen.has(key)) { seen.add(key); directions.push(entry.direction); }
+  }
   const higher = directions.filter(value => value === 'higher').length, lower = directions.length - higher;
   const years = `（${period.fromYear}〜${period.toYear}年）`;
-  const line = directions.length ? `過去の傾向：下げが多かった状態 ${num(higher)}・少なかった状態 ${num(lower)}${years}` : `過去の傾向：差がはっきりした状態なし${years}`;
+  // 「差がはっきりした状態なし」 is a finding only when some line was judged (a state joined to its study row, a 標本不足 row
+  // included); with every line a reason (e.g. an older publication without the long history), the neutral summary.
+  const judged = blocks.some(block => block.items.some(entry => entry.state !== null && (!entry.reason || entry.tag === TAGS.insufficient)));
+  const line = directions.length ? `過去の傾向：下げが多かった状態 ${num(higher)}・少なかった状態 ${num(lower)}${years}`
+    : judged ? `過去の傾向：差がはっきりした状態なし${years}` : summary;
   return { available: true, summary: line, key, footer, indices: blocks };
 }
 

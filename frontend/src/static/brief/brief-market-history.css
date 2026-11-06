@@ -27,7 +27,9 @@
 /* 「過去の傾向」 in the 指数 panel: one fold, open on the desktop. */
 .brief-regime-ref { border-top: 1px solid var(--line); }
 .brief-regime-ref .brief-expander-body { gap: 10px; }
-.brief-regime-index { display: grid; gap: 4px; min-width: 0; }
+/* Each index's block starts at its top: on the desktop the two columns share a row, and a shorter one never spreads its
+   lines down to the taller one's height. */
+.brief-regime-index { display: grid; gap: 4px; min-width: 0; align-content: start; }
 .brief-regime-index h4 { margin: 0; font-size: 13px; line-height: 1.5; color: var(--text); }
 .brief-regime-index ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .brief-regime-index li { font-size: 12px; line-height: 1.6; color: var(--text); text-wrap: pretty; }
