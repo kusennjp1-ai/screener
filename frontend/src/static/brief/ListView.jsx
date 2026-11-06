@@ -15,8 +15,7 @@ const PHONE_PAGE = 20;
 // paints the first screen first, and a click right after it is not held up by rows below the fold.
 const FIRST_ROWS = 20;
 const REST_DELAY_MS = 250;
-// Every row of a filter other than あと1条件 is TT 8/8, so its rows leave the constant chip out (said here).
-const LIST_NOTE = '選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄（行では「TT 8/8」の表示を省いています）。あと1条件＝未達が1つだけで未確認がない銘柄（流動性：株価$10以上・売買代金$2,000万以上）。';
+const LIST_NOTE = '選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄。あと1条件＝未達が1つだけで未確認がない銘柄（流動性：株価$10以上・売買代金$2,000万以上）。';
 // The rows' base chip, the 条件 menu and the base sort: thresholds of the app's own (独自判定・独自設定).
 const BASE_NOTE = `${BASE_CAUTION_NOTE}条件の${LIST_FILTERS.eps.short}はSECの直近四半期の値による独自設定の絞り込みで、値のない銘柄は未確認として別に数えます。並び順の「土台の質」はSetup Engineの信頼度の高い順で、未確認は最後です。`;
 // 選定すべて's population, said under the filters while it is on (the market tab's TT count is another population).
@@ -67,9 +66,11 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   const phone = useMediaQuery(PHONE_QUERY);
   const pageSize = phone ? PHONE_PAGE : 50;
   const { filter, query } = listState;
-  // Under a qualified-only filter every row is TT 8/8: the rows leave the constant chip out (the 注記 says so), which
-  // leaves room for the day's and the base's chips. あと1条件 and the watch list keep it.
-  const constantTemplate = kind !== 'watch' && filter !== 'one';
+  // Under a qualified-only filter every row is TT 8/8: a phone and the desktop's narrow column leave the constant chip
+  // out (the 注記 says so), which leaves room for the day's and the base's chips; a tablet's wide rows keep it, as do
+  // あと1条件 and the watch list.
+  const constantTemplate = (phone || wide) && kind !== 'watch' && filter !== 'one';
+  const ttNote = constantTemplate ? `買いゾーン・ピボット接近・選定すべての行はすべてTT 8/8のため、${phone ? 'スマホでは' : ''}「TT 8/8」の表示を省いています（あと1条件では未達・未確認の数を表示します）。` : null;
   const update = patch => setListState(state => ({ ...state, ...patch }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const views = useMemo(() => listSource(brief, kind, watch), [brief.bundle.data, brief.ranked, brief.date, kind, watch]);
@@ -143,8 +144,8 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
           // A filter that could not judge some stocks says so: no hit is not the same as no stock.
           : missing > 0 && !query ? `該当なし。ほか${missing}銘柄は${LIST_FILTERS[hidden].why}のため判定していません。` : 'この条件の選定銘柄はありません。'}</p>}
       {ordered.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + pageSize)}>さらに表示（残り {ordered.length - limit}件）</button>}
-      {kind !== 'watch' && wide && <><p className="brief-note">{LIST_NOTE}</p><p className="brief-note">{BASE_NOTE}</p></>}
+      {kind !== 'watch' && wide && [LIST_NOTE, BASE_NOTE, ttNote].map(note => note && <p key={note} className="brief-note">{note}</p>)}
     </section>
-    {kind !== 'watch' && <ScreenNotes id="list" wide={wide} notes={[LIST_NOTE, BASE_NOTE]} />}
+    {kind !== 'watch' && <ScreenNotes id="list" wide={wide} notes={[LIST_NOTE, BASE_NOTE, ttNote]} />}
   </>;
 }

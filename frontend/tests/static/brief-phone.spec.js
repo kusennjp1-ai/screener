@@ -68,7 +68,7 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
 for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip ${name}`, () => {
   test.use(device);
 
-  test('Today\'s focus rows omit the constant TT 8/8 chip; the desktop list keeps it, a phone keeps it where it varies', async ({ page }) => {
+  test('Today\'s focus rows and the qualified lists omit the constant TT 8/8 chip, which is kept where it varies', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief');
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
@@ -80,8 +80,14 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip $
     } else await expect(page.locator('.brief-screen-notes', { hasText: '注目候補はすべてトレンドテンプレート8条件を満たす銘柄' })).toHaveCount(1);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
     await expect(page).toHaveURL(/#\/brief\/list$/);
-    if (name === 'desktop') await expect(candidates(page).first()).toContainText('TT 8/8');
-    else {
+    if (name === 'desktop') {
+      // The desktop's narrow column leaves it out too (a tablet's wide rows keep it: brief-compact.spec.js), said in place.
+      for (const row of await candidates(page).all()) await expect(row).not.toContainText('TT 8/8');
+      await expect(page.getByText('買いゾーン・ピボット接近・選定すべての行はすべてTT 8/8のため、「TT 8/8」の表示を省いています（あと1条件では未達・未確認の数を表示します）。')).toBeVisible();
+      await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^あと1条件/ }).click();
+      for (const row of await candidates(page).all()) await expect(row).toContainText('あと1条件');
+      await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ }).click();
+    } else {
       // A qualified-only filter's rows are all TT 8/8: the phone says so once in the 注記 and keeps each row's chips on one line.
       for (const row of await candidates(page).all()) await expect(row).not.toContainText('TT 8/8');
       await expect(page.locator('.brief-screen-notes')).toContainText('スマホでは「TT 8/8」の表示を省いています');

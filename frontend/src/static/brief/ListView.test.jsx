@@ -208,12 +208,20 @@ describe('the 条件 menu and its empty states, honestly', () => {
     expect(none.querySelector('.brief-card .brief-note')).toHaveTextContent('該当なし。ほか1銘柄は分析基準日の値動き（終値・前日比）が未検証のため判定していません。');
   });
 
-  it('leaves the constant TT 8/8 chip out of the qualified lists at every width, and keeps it on あと1条件 and the watch list', () => {
-    for (const wide of [true, false]) {
-      const { container } = show('zone', [audited('BRK1', 101)], { wide });
-      expect([...container.querySelectorAll('.brief-chip')].map(node => node.textContent)).not.toContain('TT 8/8');
+  it('leaves the constant TT 8/8 chip out of the qualified lists on a phone and the desktop, keeps it on a tablet\'s wide rows', () => {
+    const chips = () => [...document.querySelectorAll('.brief-chip')].map(node => node.textContent);
+    show('zone', [audited('BRK1', 101)], { wide: true });
+    expect(chips()).not.toContain('TT 8/8');
+    expect(document.body.textContent).toContain('選定すべての行はすべてTT 8/8のため、「TT 8/8」の表示を省いています');
+    cleanup();
+    window.matchMedia = query => ({ matches: /max-width:\s*520px/.test(query), media: query, addEventListener() {}, removeEventListener() {} });
+    try {
+      show('zone', [audited('BRK1', 101)], { wide: false });
+      expect(chips()).not.toContain('TT 8/8');
       cleanup();
-    }
+    } finally { delete window.matchMedia; }
+    show('zone', [audited('BRK1', 101)], { wide: false });
+    expect(chips()).toContain('TT 8/8');
   });
 
   it('keeps the search placeholder in the app\'s word for a ticker', () => {
