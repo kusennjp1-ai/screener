@@ -1,8 +1,9 @@
-// Daily brief buy decision: the stock's conclusion, Today's focus tile under the market verdict and the
-// verified day change in the bar, on synthetic data. Green means the trend template, the market, the
-// earnings date and the day's event all allow a new buy; anything else is said in a neutral line.
+// Daily brief buy decision: the stock's conclusion, on synthetic data. Green means the trend template, the
+// market, the earnings date and the day's event all allow a new buy; anything else is said in a neutral line.
+// (The day's event titles, Today's focus tile under the market verdict and the verified day change in the bar
+// and the desktop header are brief-rows.spec.js's; here the call's colour for those events is asserted.)
 import { test, expect } from '@playwright/test';
-import { openBrief, VIEWPORTS, horizontalOverflow, rowBySymbol, SEC_SYMBOL, date } from './brief-fixture.js';
+import { openBrief, VIEWPORTS, rowBySymbol, SEC_SYMBOL, date } from './brief-fixture.js';
 
 const phoneDevice = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const conclusion = page => page.getByTestId('brief-conclusion');
@@ -36,21 +37,16 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   test.use(device);
   const phone = name === 'phone';
 
-  test('a focus candidate that closes exactly at its pivot reaches it: ピボット到達, in the buy zone, no breakout claimed', async ({ page }) => {
-    const { errors } = await openFocus(page, phone);
-    await expect(conclusion(page)).toHaveClass(/tone-zone/);
-    await expect(conclusion(page).locator('strong')).toHaveText('ピボット到達');
-    await expect(conclusion(page)).not.toContainText('上抜け');
-    expect(errors).toEqual([]);
-  });
-
-  test('a close above the pivot from below on the verified +2.0% day with 1.6× volume is a breakout on the analysis date', async ({ page }) => {
-    const { errors } = await openFocus(page, phone, { mutate: crossing(phone ? 'ZZNV' : 'ZZKS') });
-    await expect(conclusion(page)).toHaveClass(/tone-zone/);
-    await expect(conclusion(page).locator('strong')).toHaveText(`${DAY}に上抜け・出来高1.60×`);
-    await expect(conclusion(page)).not.toContainText('本日');
-    expect(errors).toEqual([]);
-  });
+  // The colour of the call for the day's event (its title is breakoutEvent's, asserted in brief-rows.spec.js): a
+  // close exactly at the pivot, and a close above it from below on the verified +2.0% day with 1.6× volume.
+  for (const [label, mutate] of [['closes exactly at its pivot', undefined], ['crosses its pivot on 1.6× volume', crossing(phone ? 'ZZNV' : 'ZZKS')]]) {
+    test(`a focus candidate that ${label} is a green call`, async ({ page }) => {
+      const { errors } = await openFocus(page, phone, mutate ? { mutate } : undefined);
+      await expect(conclusion(page)).toHaveClass(/tone-zone/);
+      await expect(conclusion(page).locator('.brief-tilequal', { hasText: '参考' })).toHaveCount(0);
+      expect(errors).toEqual([]);
+    });
+  }
 
   test('a stock below the trend template is no buy candidate: a neutral line names the unmet rule', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/stock/ZZZF');
@@ -61,15 +57,11 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     expect(errors).toEqual([]);
   });
 
-  test('under a market that holds off new buying, Today\'s focus tile and rows are neutral and the stock conclusion says why', async ({ page }) => {
+  // The Today half of this check (the focus tile and rows) is brief-rows.spec.js's. The stock opens from Today in
+  // the same document, as before the split, so the in-app path under a held market stays covered.
+  test('under a market that holds off new buying, the stock conclusion says why', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { mutate: HOLD_MARKET });
-    const focus = page.getByRole('region', { name: '注目候補' });
-    await expect(focus.getByTestId('brief-candidate').first()).toBeVisible();
-    await expect(page.locator('#brief-focus-title')).toHaveText('注目候補（地合い：買いは控える・監視のみ）');
-    const tile = page.getByTestId('brief-summary').locator('li').nth(1);
-    await expect(tile).toContainText('注目候補');
-    await expect(tile).not.toHaveClass(/tone-zone/);
-    await expect(focus.locator('.tone-zone')).toHaveCount(0);
+    await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate').first()).toBeVisible();
     await page.goto(`/#/brief/stock/${phone ? 'ZZNV' : 'ZZKS'}`);
     await expect(conclusion(page)).toHaveClass(/tone-neutral/);
     await expect(conclusion(page).locator('strong')).toHaveText('地合いが新規の買いを控える状態（独自判定）');
@@ -94,53 +86,6 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
       return out;
     });
     expect(small).toEqual([]);
-    expect(errors).toEqual([]);
-  });
-});
-
-// A four-digit price with a two-digit fall (the NFLX/AZO/BKNG class) as well as the fixture's ~$100 one.
-const BIG_PRICE = onRow('ZZNV', row => { row.current_price = 1234.56; Object.assign(row.technical_audit.values, { close: 1234.56, change: -12.34 }); });
-for (const width of [320, 390]) test.describe(`the bar at ${width}px`, () => {
-  test.use(phoneDevice(width, 844));
-
-  for (const [label, mutate, price, change, tone] of [['a three-digit price', undefined, /^\$\d{3}\.\d{2}$/, '前日比 +2.0%', /is-up/], ['a four-digit price and a two-digit fall', BIG_PRICE, /^\$1,235$/, '前日比 −12.3%', /is-down/]]) {
-    test(`carries ${label} and the verified day change, whole, and stays 48px or less`, async ({ page }) => {
-      const { errors } = await openBrief(page, '#/brief/stock/ZZNV', mutate ? { mutate } : {});
-      await expect(conclusion(page)).toBeVisible();
-      const quote = page.locator('.brief-bar .brief-bar-change');
-      await expect(quote).toHaveText(change);
-      await expect(quote).toHaveClass(tone);
-      expect((await page.locator('.brief-bar .brief-bar-price').innerText()).trim()).toMatch(price);
-      expect((await page.locator('.brief-bar').boundingBox()).height).toBeLessThanOrEqual(48);
-      // The ticker, the price and the change are all on screen: nothing overflows the title, and the change
-      // lies wholly inside it (only the price could give way, with an ellipsis).
-      const fit = await page.locator('.brief-bar-title b').evaluate(b => {
-        const box = b.getBoundingClientRect(), change = b.querySelector('.brief-bar-change').getBoundingClientRect(), price = b.querySelector('.brief-bar-price');
-        return { cut: b.scrollWidth > b.clientWidth + 0.5, inside: change.left >= box.left - 0.5 && change.right <= box.right + 0.5, price: price.scrollWidth > price.clientWidth + 0.5 };
-      });
-      expect(fit).toEqual({ cut: false, inside: true, price: false });
-      expect(await horizontalOverflow(page)).toBe(0);
-      expect(errors).toEqual([]);
-    });
-  }
-
-  test('says 前日比 未確認 without the verified audit of the analysis day, never 0%', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/stock/ZZNV', { mutate: { rows: rows => { delete rows.find(r => r.symbol === 'ZZNV').technical_audit.values.change; } } });
-    await expect(conclusion(page)).toBeVisible();
-    await expect(page.locator('.brief-bar .brief-bar-change')).toHaveText('—前日比 未確認');
-    await expect(page.locator('.brief-bar')).not.toContainText('0.0%');
-    // Nothing is said about a breakout either: the conclusion is the plain position.
-    await expect(conclusion(page).locator('strong')).toHaveText('買いゾーン内');
-    expect(errors).toEqual([]);
-  });
-});
-
-test.describe('the desktop header', () => {
-  test.use(VIEWPORTS.desktop);
-  test('shows the same verified day change as the rows', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/stock/ZZKS');
-    await expect(page.locator('.brief-stockhead h2 .brief-daychg')).toHaveText('前日比 +2.0%');
-    await expect(page.getByRole('region', { name: '注目候補' }).locator('[data-symbol="ZZKS"] .brief-daychg')).toHaveText('前日比 +2.0%');
     expect(errors).toEqual([]);
   });
 });

@@ -1,8 +1,8 @@
 // Daily brief watch list: Today's watch rows and their folding while the sell checks load, the watch tile
 // (only broken setups counted, 0件 only when every check is in, the 12-stock limit and unlisted symbols said), a
 // symbol this publication does not list, every watched stock listed whatever the 候補 tab's search, the 375×812
-// budgets and row heights with a broken setup, the list's rows across a stock round trip, and the sell card's
-// qualifier, on synthetic data.
+// budgets and row heights with a broken setup, and the list's rows across a stock round trip, on synthetic data.
+// (The sell card's qualifier is brief-sell.spec.js's.)
 import { test, expect } from '@playwright/test';
 import { openBrief, charts, rows, rowBySymbol, horizontalOverflow, sessions } from './brief-fixture.js';
 
@@ -343,23 +343,6 @@ test.describe('the list across a stock round trip', () => {
     await expect(page.locator('.brief-bar-title')).toContainText(last);
     await page.getByRole('button', { name: '戻る' }).click();
     await expect(page.locator(`[data-testid="brief-candidate"][data-symbol="${last}"]`)).toHaveCount(1);
-    expect(errors).toEqual([]);
-  });
-});
-
-// The sell card's qualifier is on the card at every width, next to a fired check, not only in the 注記.
-for (const [width, options] of [[375, phone(375)], [1440, { viewport: { width: 1440, height: 900 } }]]) test.describe(`sell card qualifier at ${width}px`, () => {
-  test.use(options);
-  test('独自判定 and 売買の推奨ではありません are visible on the card beside a fired check', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/stock/ZZSD', { mutate: broken('ZZSD') });
-    const sell = page.getByTestId('brief-sell');
-    await expect(sell.locator('.is-sell-hit').first()).toBeVisible();
-    await expect(sell.getByRole('heading', { level: 2 })).toHaveText('売りのサイン（独自判定）');
-    await expect(sell).toContainText(/に出来高 2\.20×で割れ、以降50日線の下（9営業日）/);
-    const qualifier = sell.getByTestId('brief-sell-qualifier');
-    await expect(qualifier).toBeVisible();
-    await expect(qualifier).toContainText('独自判定');
-    await expect(qualifier).toContainText('売買の推奨ではありません。');
     expect(errors).toEqual([]);
   });
 });
