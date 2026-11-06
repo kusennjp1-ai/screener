@@ -17,6 +17,8 @@
       "pivot_price": 99.99,
       "pivot_type": "handle_high",
       "pivot_date": "2022-12-30",
+      "start_date": null,
+      "end_date": null,
       "distance_to_pivot_pct": null,
       "setup_score": null,
       "quality_score": 100.0,
