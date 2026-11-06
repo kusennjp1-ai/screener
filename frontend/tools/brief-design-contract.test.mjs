@@ -56,6 +56,8 @@ describe('brief Design Acceptance contract', () => {
     expect(harness).toContain("if (process.argv.length > 2) throw Error('The brief Design harness takes no arguments');");
     expect(harness).toContain('if (process.env.FINANCIAL_CANDIDATE_DIR) {');
     expect(harness).toContain(`schema: REPORT_SCHEMA`);
+    // A stock is measured from the top of the page: the row click's scroll offset depends on the data.
+    expect(harness.match(/await fromTop\(page\);\n\s+await capture\(session, group, 'stock(-weekly)?'/g)).toHaveLength(2);
     expect(REPORT_SCHEMA).toBe('brief-design-review-v1');
     expect(checker).toContain('await requireObjectiveEvidence(actual, output, waiver)');
     expect(checker.indexOf('await requireObjectiveEvidence')).toBeLessThan(checker.indexOf('for (const name of reports)'));

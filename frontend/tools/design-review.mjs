@@ -320,6 +320,14 @@ async function waitForCandles(page, minimum, timeout = 30000) {
   return candleCount(page);
 }
 /** Click a row and wait for its stock screen; returns the symbol and the candles drawn. */
+/**
+ * Measure a stock from the top of the page, as every other capture is. Opening the row clicks it, and
+ * Playwright first scrolls the row into view; that offset depends on the published data. On the desktop
+ * it can leave a left-column target half under the sticky tab nav, and axe's target-size then counts
+ * only the uncovered part. The window scroll is reset only for the capture; the stock pane is unchanged.
+ */
+const fromTop = page => page.evaluate(() => window.scrollTo(0, 0));
+
 async function openRow(page, row) {
   const symbol = await row.getAttribute('data-symbol');
   await row.click();
@@ -391,6 +399,7 @@ try {
       const { symbol, candles } = await openRow(page, page.locator(ROWS).first());
       groupEntry.symbol = symbol;
       functional(group, 'row-opens-stock', candles >= MIN_CANDLES, `#/brief/stock/${symbol} draws ${candles} candles, needs at least ${MIN_CANDLES}`);
+      await fromTop(page);
       await capture(session, group, 'stock', `#/brief/stock/${symbol}`, { requireDate: !group.mobile });
       session.step = 'stock-weekly';
       // The weekly range names its real length (「週足（58週）」), so it is found by the leading 週足.
@@ -402,6 +411,7 @@ try {
         await page.locator('.brief-legend', { hasText: '10週線' }).first().waitFor({ state: 'attached', timeout: 15000 });
         const weeklyCandles = await waitForCandles(page, 1);
         functional(group, 'weekly-chart-drawn', weeklyCandles > 0, `the weekly chart draws ${weeklyCandles} candles`);
+        await fromTop(page);
         await capture(session, group, 'stock-weekly', `#/brief/stock/${symbol}`, { requireDate: !group.mobile });
       }
       session.step = 'watch';
