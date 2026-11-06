@@ -54,7 +54,7 @@ export default function StockView({ data, header = null, wide = false, market = 
   // The earnings call is computed once and handed to the cards that date earnings (the chart, the plan and the conclusion read it in round 2).
   const call = earningsCall(view, Date.now());
   const soon = Boolean(call?.soon);
-  const { plan, settings, update } = usePositionPlan({ view, template, market, technical: evidence, certified, judged, broken, earningsSoon: soon, chartRef });
+  const { plan, settings, update } = usePositionPlan({ view, template, market, technical: evidence, certified, judged, broken, earningsSoon: soon, earningsCall: call, chartRef });
   const legsValid = certified && evidence?.vcp?.measurementsValid === true;
   const legs = useMemo(() => (legsValid ? evidence.vcp.legs : []), [legsValid, evidence]);
   // The stage carries a phase only when stagePhase names one on certified bars, and only on a stage 2 (published
@@ -106,7 +106,7 @@ export default function StockView({ data, header = null, wide = false, market = 
     <StockVerdict view={view} plan={plan} stage={stage} technical={evidence} bars={bars} judged={judged} template={template} rsHigh={rsHigh} financial={financial} row={row} sells={sells} diagnostics={diagnostics} market={market} earningsCall={call} />
     <StockChartCard data={data} view={view} earningsCall={call} legs={legs} legsValid={vcpPending ? null : legsValid} rsHigh={rsHigh} rsLead={rsLead} gaps={gaps} sells={sells} levels={levels} chartRef={chartRef} range={range} onRange={setRange} notes={notes} wide={wide} />
     <div className="brief-grid">
-      <TemplateCard template={template} wide={wide} />
+      <TemplateCard template={template} wide={wide} technical={certified ? evidence : null} date={data.date} />
       <VcpCard technical={evidence} bars={bars} judged={judged} view={view} wide={wide} chartRef={chartRef} interval={interval} row={row} date={data.date}
         pending={vcpPending} uncertified={vcpPending || certified ? null : { reason: certification?.reason ?? null }} />
       <FundamentalsCard financial={financial} wide={wide} />
