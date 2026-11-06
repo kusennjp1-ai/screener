@@ -68,6 +68,12 @@ export function bookFinancialEvidence(data, symbol, date) {
   const q = Object.fromEntries(['eps', 'revenue', 'netIncome', 'inventory', 'receivables'].map(key => [key,
     safeSeries(data.quarterly[key], date, ['inventory', 'receivables'].includes(key) ? 'instant' : 'quarter', key === 'eps' ? 'USD/shares' : 'USD', DERIVABLE.has(key))]));
   result.annual = safeSeries(data.annualEps, date, 'annual', 'USD/shares');
+  // A series written out that the period checks refused as a whole (named, never repaired).
+  result.refusedSeries = ['eps', 'revenue', 'netIncome'].filter(key => Array.isArray(data.quarterly[key]) && data.quarterly[key].length > 0 && !q[key].length);
+  // Quarters written with no revenue concept the SEC tags cover (banks and insurers report interest or
+  // premium income): out of scope, never a missing quarter.
+  const noRevenueConcept = Array.isArray(data.quarterly.revenue) && data.quarterly.revenue.length === 0 && (q.eps.length > 0 || q.netIncome.length > 0);
+  result.revenueConcept = !noRevenueConcept;
   const fiscalYearEnds = new Set(result.annual.map(p => p.end));
   const ends = [...new Set([...q.eps, ...q.revenue].map(p => p.end))].sort();
   result.rows = ends.slice(-8).map(end => {
@@ -78,7 +84,7 @@ export function bookFinancialEvidence(data, symbol, date) {
     // Sales growth rests on this quarter's revenue and its year-ago base: either one may be a derived Q4.
     const salesDerived = revenue?.derived === DERIVED_Q4, salesBaseDerived = salesGrowth.base?.derived === DERIVED_Q4;
     return { end, derived, salesDerived, salesBaseDerived, eps: eps?.value ?? null, revenue: revenue?.value ?? null, margin: margin.value, epsYoY: epsGrowth.value, salesYoY: salesGrowth.value,
-      epsYoYReason: epsGrowth.reason, salesYoYReason: salesGrowth.reason, marginReason: margin.reason,
+      epsYoYReason: epsGrowth.reason, salesYoYReason: noRevenueConcept ? 'no_concept' : salesGrowth.reason, marginReason: noRevenueConcept ? 'no_concept' : margin.reason,
       // The year-ago EPS behind a loss or zero base, so a swing to a profit is told as a fact, never a rate.
       epsBase: epsGrowth.reason === 'nonpositive_base' ? epsGrowth.base.value : null,
       // A fiscal fourth quarter: the 10-K's fiscal-year end, or a Q4 derived from it.
@@ -87,6 +93,14 @@ export function bookFinancialEvidence(data, symbol, date) {
   });
   result.valid = result.rows.length > 0;
   result.stale = !result.rows.length || days(date, result.rows.at(-1).end) > BOOK_QUARTER_MAX_AGE_DAYS;
+  // Fiscal fourth quarters the 10-K reports only as a year (an annual EPS period) with no quarterly row at all:
+  // `fiscalQ4Missing` inside the rows' span, `fiscalQ4Pending` the newest one after the latest row. Never estimated.
+  const firstEnd = result.rows[0]?.end, lastEnd = result.rows.at(-1)?.end;
+  const rowEnds = new Set(result.rows.map(row => row.end));
+  result.fiscalQ4Missing = firstEnd ? result.annual.map(p => p.end).filter(end => end > firstEnd && end < lastEnd && !rowEnds.has(end)) : [];
+  result.fiscalQ4Pending = lastEnd ? result.annual.map(p => p.end).filter(end => end > lastEnd).at(-1) ?? null : null;
+  // The newest period any filing covers, a 10-K's year included: 古い applies only when even that is too old.
+  result.newestFilingEnd = [lastEnd, result.annual.at(-1)?.end].filter(Boolean).sort().at(-1) ?? null;
   const last = result.rows.slice(-4);
   const consecutive = last.length === 4 && last.slice(1).every((p, i) => days(p.end, last[i].end) >= 70 && days(p.end, last[i].end) <= 110);
   result.consecutive = consecutive;
@@ -120,10 +134,16 @@ export function bookFinancialEvidence(data, symbol, date) {
     const [at20, at25] = [level(20), level(25)];
     return [count, { at20: at20.state, at25: at25.state, below20: at20.below, below25: at25.below }];
   }));
-  // A record year needs a profit: a smaller loss than every earlier year is never a new high.
-  const annualRecent = result.annual.length >= 3 && days(date, result.annual.at(-1).end) <= 550;
-  const latestAnnual = result.annual.at(-1)?.value;
-  result.annualRecord = annualRecent ? latestAnnual <= 0 ? 'fail' : state(latestAnnual > Math.max(...result.annual.slice(0, -1).map(p => p.value))) : 'unknown';
+  // A record year needs a profit: a smaller loss than every earlier year is never a new high. The years compared
+  // are those the newest 10-K presents (one accession, so a stock split restated them alike); only a record whose
+  // newest 10-K presents fewer than three years compares every year it holds.
+  const newest = result.annual.at(-1);
+  const filing = newest ? result.annual.filter(p => p.accession === newest.accession) : [];
+  const basis = filing.length >= 3 ? filing : result.annual;
+  result.annualBasis = { kind: filing.length >= 3 ? 'filing' : 'record', years: basis.length };
+  const annualRecent = basis.length >= 3 && days(date, newest.end) <= 550;
+  const latestAnnual = newest?.value;
+  result.annualRecord = annualRecent ? latestAnnual <= 0 ? 'fail' : state(latestAnnual > Math.max(...basis.slice(0, -1).map(p => p.value))) : 'unknown';
   result.balanceCoverage = result.rows.filter(p => finite(p.salesYoY) && (finite(p.inventoryYoY) || finite(p.receivablesYoY))).length;
   result.balanceWarnings = result.rows.filter(p => finite(p.salesYoY)).flatMap(p => ['inventoryYoY', 'receivablesYoY'].filter(k => finite(p[k]) && p[k] > p.salesYoY).map(k => ({ end: p.end, metric: k, growth: p[k], salesGrowth: p.salesYoY })));
   result.source = data.source;

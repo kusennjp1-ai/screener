@@ -222,3 +222,55 @@ describe('the EPS floor and the annual record (three-valued, never a pass from a
     expect(annual([3, 5.5])).toBe('unknown');
   });
 });
+
+describe('round 2: the annual record across a split, missing fiscal-Q4 rows and the revenue concept (plan DT2, DT3)', () => {
+  const tenK = (year, value, filing) => secPoint('eps', [`${year}-01-01`, `${year}-12-31`], value, { form: '10-K', filed: `${filing + 1}-02-20`, accession: `k-${filing}` });
+  it('compares the newest 10-K\'s presented years only, so a split never hides a record (audit2 earnings/split.mjs)', () => {
+    // A 10:1 split in 2024. As sec-financials.py keeps the latest filing of each period, the FY2025 10-K owns the three
+    // years it presents (2023-2025, split-adjusted), FY2022 keeps the FY2024 10-K's restated value, and FY2019-2021 keep
+    // the pre-split values they were last filed with (the repro's values: 8, 10, 12 before, 1.4 to 2.6 after).
+    const record = secRecord({ asOfDate: '2026-03-01' });
+    record.annualEps = [tenK(2019, 8, 2019), tenK(2020, 10, 2020), tenK(2021, 12, 2021), tenK(2022, 1.4, 2024), tenK(2023, 1.6, 2025), tenK(2024, 2.0, 2025), tenK(2025, 2.6, 2025)];
+    const split = bookFinancialEvidence(record, 'TEST', '2026-03-01');
+    expect(split).toMatchObject({ annualRecord: 'pass', annualBasis: { kind: 'filing', years: 3 } });
+    // Within that 10-K a lower latest year is still no record, and a loss year never is.
+    record.annualEps[6] = tenK(2025, 1.9, 2025);
+    expect(bookFinancialEvidence(record, 'TEST', '2026-03-01').annualRecord).toBe('fail');
+    record.annualEps[6] = tenK(2025, -0.2, 2025);
+    expect(bookFinancialEvidence(record, 'TEST', '2026-03-01').annualRecord).toBe('fail');
+    // A record whose newest 10-K presents fewer than three years compares every year it holds (the rule before).
+    const own = secRecord({ asOfDate: '2026-03-01' });
+    own.annualEps = [3, 3.5, 5.5].map((value, i) => tenK(2023 + i, value, 2023 + i));
+    expect(bookFinancialEvidence(own, 'TEST', '2026-03-01')).toMatchObject({ annualRecord: 'pass', annualBasis: { kind: 'record', years: 3 } });
+  });
+
+  it('names a fiscal Q4 the 10-K reports only as a year, inside the rows or after the latest one, and never estimates it', () => {
+    // A June fiscal year whose fourth quarters have no quarterly value at all (EPS untagged, revenue not derived).
+    const quarters = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+      ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30']];
+    const record = secRecord({ asOfDate: '2026-11-04', quarters });
+    for (const key of ['eps', 'revenue', 'netIncome']) record.quarterly[key] = record.quarterly[key].filter(p => !p.end.endsWith('06-30'));
+    record.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4, { form: '10-K', filed: '2025-08-20', accession: 'k-25' }), secPoint('eps', ['2025-07-01', '2026-06-30'], 5, { form: '10-K', filed: '2026-08-20', accession: 'k-26' })];
+    const value = bookFinancialEvidence(record, 'TEST', '2026-11-04');
+    expect(value.rows.map(row => row.end)).toEqual(['2024-09-30', '2024-12-31', '2025-03-31', '2025-09-30', '2025-12-31', '2026-03-31']);
+    expect(value).toMatchObject({ fiscalQ4Missing: ['2025-06-30'], fiscalQ4Pending: '2026-06-30', newestFilingEnd: '2026-06-30', consecutive: false, stale: true, code33: 'unknown' });
+    expect(value.rows.some(row => row.end.endsWith('06-30'))).toBe(false);
+    // With every quarter present nothing is missing or pending.
+    expect(bookFinancialEvidence(secRecord(), 'TEST', '2026-02-01')).toMatchObject({ fiscalQ4Missing: [], fiscalQ4Pending: null, newestFilingEnd: '2025-12-31' });
+  });
+
+  it('marks sales and margin out of scope when the record has quarters but no revenue concept (audit2 earnings/bank.py)', () => {
+    const bank = secRecord();
+    bank.quarterly.revenue = [];
+    const value = bookFinancialEvidence(bank, 'TEST', '2026-02-01');
+    expect(value.revenueConcept).toBe(false);
+    expect(value.rows.every(row => row.salesYoYReason === 'no_concept' && row.marginReason === 'no_concept' && row.salesYoY === null && row.margin === null)).toBe(true);
+    expect(value.rows.at(-1).epsYoY).toBeCloseTo(80, 6);
+    expect(value).toMatchObject({ salesAcceleration: 'unknown', marginImprovement: 'unknown' });
+    // A record whose revenue series was written but refused by the period checks is named, never out of scope.
+    const refused = secRecord();
+    refused.quarterly.revenue[0].start = '2023-01-01';
+    expect(bookFinancialEvidence(refused, 'TEST', '2026-02-01')).toMatchObject({ revenueConcept: true, refusedSeries: ['revenue'] });
+    expect(bookFinancialEvidence(secRecord(), 'TEST', '2026-02-01')).toMatchObject({ revenueConcept: true, refusedSeries: [] });
+  });
+});
