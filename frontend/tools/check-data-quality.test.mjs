@@ -108,7 +108,7 @@ describe('publication summaries and current canonical decisions', () => {
       expect(exported).toContain(`SEC admission ${date} (export): file_schema 2, records 2, admitted 1 of 3, refused {"cik_url":1}`);
       const manifestPath = join(data, 'manifest.json'), original = await readFile(manifestPath, 'utf8'), manifest = JSON.parse(original);
       expect(manifest.markets.US.fundamentals_coverage).toEqual({ schema_version: 'fundamentals-coverage-v1', as_of_date: date, sec_fetch_ran: true, sec_as_of: date, file_schema: 2,
-        universe: 3, requested: 2, eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 1, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 } });
+        universe: 3, requested: 2, eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 1, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 }, warnings: ['refused'] });
       const index = decodeResearchIndex(JSON.parse(await readFile(join(data, manifest.markets.US.assets.research.path), 'utf8')));
       const detail = async symbol => JSON.parse(await readFile(join(data, index.rows.find(row => row.symbol === symbol).research_detail_path), 'utf8'));
       expect((await detail('TEST')).sec_admission).toEqual({ state: 'admitted', reason: null });
@@ -118,9 +118,11 @@ describe('publication summaries and current canonical decisions', () => {
       expect(index.rows.some(row => Object.hasOwn(row, 'sec_admission'))).toBe(false);
       // Valid.
       expect(run('./check-data-quality.mjs')).toContain(`Fundamentals coverage gate passed. SEC admission ${date} (financial gate): file_schema 2, records 2, admitted 1 of 3, refused {"cik_url":1}.`);
-      // Absent (an exporter without the block) stays valid.
+      // Absent (an exporter without the block) stays valid, and so does a block written before its warnings list.
       const absent = JSON.parse(original); delete absent.markets.US.fundamentals_coverage; await writeFile(manifestPath, JSON.stringify(absent));
       expect(run('./check-data-quality.mjs')).toContain('Fundamentals coverage block absent');
+      const older = JSON.parse(original); delete older.markets.US.fundamentals_coverage.warnings; await writeFile(manifestPath, JSON.stringify(older));
+      expect(run('./check-data-quality.mjs')).toContain('Fundamentals coverage gate passed.');
       // Invalid: a count that disagrees with the details, a malformed block, and a detail whose state lies.
       const fail = async (mutate, message) => {
         const changed = JSON.parse(original); mutate(changed.markets.US.fundamentals_coverage); await writeFile(manifestPath, JSON.stringify(changed));
@@ -131,6 +133,9 @@ describe('publication summaries and current canonical decisions', () => {
       await fail(block => { block.admitted = 0; }, 'Invalid fundamentals_coverage block');
       await fail(block => { block.requested = 0.5; }, 'Invalid fundamentals_coverage block');
       await fail(block => { block.extra = 1; }, 'Invalid fundamentals_coverage block');
+      // A warnings list that does not follow from the counts.
+      await fail(block => { block.warnings = []; }, 'fundamentals_coverage differs from the published details');
+      await fail(block => { block.warnings = ['late']; }, 'Invalid fundamentals_coverage block');
       // A ticker-map state the SEC input does not show (it lists no errors, so the map state is unknown).
       await fail(block => { block.ticker_map_ok = false; }, 'fundamentals_coverage differs from the published details');
       await writeFile(manifestPath, original);
@@ -138,6 +143,29 @@ describe('publication summaries and current canonical decisions', () => {
       const lying = JSON.parse(detailBytes); lying.sec_admission = { state: 'refused', reason: 'schema' }; await writeFile(detailPath, JSON.stringify(lying));
       let error; try { run('./check-data-quality.mjs'); } catch (caught) { error = caught; }
       expect(error?.status).toBe(1); expect(error.stderr.toString()).toContain('sec_admission disagrees with the detail');
+      await writeFile(detailPath, detailBytes);
+      // Round 2: the list summaries and the market context, each valid, absent and invalid (plan DT5, DT6).
+      const indexPath = join(data, manifest.markets.US.assets.research.path), wireBytes = await readFile(indexPath, 'utf8');
+      const rewrite = async change => { const value = decodeResearchIndex(JSON.parse(wireBytes)); change(value.rows); await writeFile(indexPath, JSON.stringify(encodeResearchIndex(value))); };
+      expect(index.rows.find(row => row.symbol === 'TEST').sec_summary).toMatchObject({ sec_state: 'stale', eps_yoy: null, as_of_date: date });
+      expect(index.rows.find(row => row.symbol === 'NOREC').sec_summary).toBeNull();
+      expect(run('./check-data-quality.mjs')).toContain('List summary gate passed: rs_line_high 3, sec_summary 3, se_pattern_primary 0 of 3 rows; market_context null.');
+      const refuse = async (change, message) => {
+        let caught; try { await change(); run('./check-data-quality.mjs'); } catch (failure) { caught = failure; }
+        expect(caught?.status).toBe(1); expect(caught.stderr.toString()).toContain(message);
+        await writeFile(indexPath, wireBytes); await writeFile(manifestPath, original);
+      };
+      await refuse(() => rewrite(rows => { rows[0].rs_line_high = { value: 'yes', leading: null, as_of_date: date }; }), 'Invalid rs_line_high');
+      await refuse(() => rewrite(rows => { rows[0].rs_line_high = { value: true, leading: false, as_of_date: '2026-10-01' }; }), 'Invalid rs_line_high');
+      await refuse(() => rewrite(rows => { const test = rows.find(row => row.symbol === 'TEST'); test.sec_summary = { ...test.sec_summary, eps_yoy: { value: 99, end: '2025-12-31' } }; }), 'sec_summary differs from the admitted SEC record: TEST');
+      await refuse(() => rewrite(rows => { rows.find(row => row.symbol === 'NOREC').sec_summary = { sec_state: 'ok' }; }), 'Invalid sec_summary: NOREC');
+      await refuse(() => rewrite(rows => { rows[0].se_pattern_primary = 7; }), 'Invalid se_pattern_primary');
+      await refuse(async () => { const changed = JSON.parse(original); changed.markets.US.market_context = { regime: 'x' }; await writeFile(manifestPath, JSON.stringify(changed)); }, 'Invalid market_context block');
+      await refuse(async () => { const changed = JSON.parse(original); changed.markets.US.market_context = { as_of_date: date, regime: 'confirmed_uptrend', distribution_days: null, ftd_date: null, ftd_days_since: null, exposure_pct: null, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' }; await writeFile(manifestPath, JSON.stringify(changed)); }, 'market_context differs from the canonical rows');
+      // Absent everywhere (an older exporter): valid.
+      await rewrite(rows => { for (const row of rows) { delete row.rs_line_high; delete row.sec_summary; } });
+      const withoutContext = JSON.parse(original); delete withoutContext.markets.US.market_context; await writeFile(manifestPath, JSON.stringify(withoutContext));
+      expect(run('./check-data-quality.mjs')).toContain('List summary gate passed: rs_line_high 0, sec_summary 0, se_pattern_primary 0 of 3 rows; market_context absent.');
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

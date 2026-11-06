@@ -214,7 +214,7 @@ jobs:
       - name: Record the live publication's SEC records before a UI-only republish
         if: steps.plan.outputs.publish == 'true' && steps.plan.outputs.published_input == 'true' && steps.plan.outputs.mode == 'ui' && steps.plan.outputs.limited_research_preview != 'true' && steps.restore.outputs.offline_recovery_verified != 'true'
         run: |
-          node frontend/tools/report-data-coverage.mjs --published --root release/frontend/public --label 'live, before republish' --json "$RUNNER_TEMP/live-fundamentals-coverage.json"
+          node frontend/tools/report-data-coverage.mjs --published --sec-evidence --root release/frontend/public --label 'live, before republish' --json "$RUNNER_TEMP/live-fundamentals-coverage.json"
           test -s "$RUNNER_TEMP/live-fundamentals-coverage.json"
       - uses: actions/setup-python@v5
         if: steps.restore.outputs.offline_session_calendar == 'true'
@@ -348,7 +348,8 @@ jobs:
           SEC_CARRY_FORWARD_REQUIRED: ${{ vars.SEC_CARRY_FORWARD_REQUIRED == 'true' }}
           ALLOW_SEC_COVERAGE_DROP: ${{ github.event_name == 'workflow_dispatch' && inputs.allow_sec_coverage_drop == true }}
         run: |
-          args=(--published --root release/frontend/public --json "$RUNNER_TEMP/published-fundamentals-coverage.json")
+          # --sec-evidence: a UI-only republish runs no SEC fetch, so the carried file's evidence line (counts by cause) is printed here.
+          args=(--published --sec-evidence --root release/frontend/public --json "$RUNNER_TEMP/published-fundamentals-coverage.json")
           if [ "$UI_ONLY_REPUBLISH" = true ]; then
             args+=(--previous "$RUNNER_TEMP/live-fundamentals-coverage.json" --ui-only-republish)
             if [ "$SEC_CARRY_FORWARD_REQUIRED" = true ]; then args+=(--require-sec-carry-forward); fi

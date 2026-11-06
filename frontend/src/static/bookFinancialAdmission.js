@@ -16,7 +16,13 @@ const QUARTERLY_FIELDS = Object.keys(SEC_FIELD_TAGS);
 const INSTANT_FIELDS = new Set(['inventory', 'receivables']);
 const DERIVABLE_FIELDS = new Set(['revenue', 'netIncome']);
 const RECORD_KEYS = ['schema_version', 'symbol', 'cik', 'as_of_date', 'retrieved_at', 'source', 'status', 'quarterly', 'annualEps', 'limitations'];
-const UNAVAILABLE_KEYS = new Set(['schema_version', 'symbol', 'as_of_date', 'status', 'reason', 'error', 'retrieved_at', 'forms']);
+// Round 2 (plan §2.3): a record may also list the fiscal years whose Q4 could not be derived, and an
+// invalid_payload record names its cause. Both are optional: older records lack them.
+const OPTIONAL_RECORD_KEYS = ['derivation_gaps'];
+const UNAVAILABLE_KEYS = new Set(['schema_version', 'symbol', 'as_of_date', 'status', 'reason', 'error', 'retrieved_at', 'forms', 'invalid_detail']);
+export const DERIVATION_GAP_REASONS = Object.freeze(['tag_mismatch', 'broken_chain', 'no_annual']);
+export const INVALID_DETAIL_MESSAGE_MAX = 200;
+const MAX_DERIVATION_GAPS = 24;
 const POINT_REQUIRED = ['end', 'filed', 'value', 'tag', 'unit', 'accession', 'form', 'derived'];
 const POINT_OPTIONAL = new Set(['start', 'components']);
 const FORBIDDEN_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
@@ -41,6 +47,25 @@ function admitPoint(point, field, asOfDate, annual) {
   else if (!day(start) || start > end) return false;
   if (derived === false) return components === undefined;
   return !annual && derived === DERIVED_Q4 && DERIVABLE_FIELDS.has(field) && Array.isArray(components) && components.length === 4 && components.every(item => text(item));
+}
+
+// `derivation_gaps`: [{ fiscal_year, metric, reason }], one per fiscal year and metric (revenue or net income).
+function admitGaps(gaps) {
+  if (!Array.isArray(gaps) || gaps.length > MAX_DERIVATION_GAPS) return false;
+  const seen = new Set();
+  return gaps.every(gap => {
+    if (!plain(gap) || !sameKeys(gap, ['fiscal_year', 'metric', 'reason'])) return false;
+    const key = `${gap.fiscal_year}:${gap.metric}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return Number.isSafeInteger(gap.fiscal_year) && gap.fiscal_year >= 1990 && gap.fiscal_year <= 2100 && DERIVABLE_FIELDS.has(gap.metric) && DERIVATION_GAP_REASONS.includes(gap.reason);
+  });
+}
+// `invalid_detail` on an invalid_payload record: the exception class, a short message, the CIKs requested and received.
+const cikValue = value => Number.isSafeInteger(value) && value >= 0;
+function admitInvalidDetail(detail) {
+  return plain(detail) && sameKeys(detail, ['class', 'message', 'requested_cik', 'received_cik']) && typeof detail.class === 'string' && /^[A-Za-z_][A-Za-z0-9_]{0,63}$/.test(detail.class)
+    && text(detail.message, INVALID_DETAIL_MESSAGE_MAX) && Number.isSafeInteger(detail.requested_cik) && detail.requested_cik > 0 && (detail.received_cik === null || cikValue(detail.received_cik));
 }
 
 function admitSeries(points, field, asOfDate, annual = false) {
@@ -79,9 +104,11 @@ export function admitBookFinancialsDetailed(value, { symbol, asOfDate, evaluated
     if (Object.keys(value).some(key => !UNAVAILABLE_KEYS.has(key)) || !SEC_UNAVAILABLE_REASONS.includes(value.reason)) return refuse('keys');
     if (Object.hasOwn(value, 'error') && !text(value.error, 200)) return refuse('keys');
     if (Object.hasOwn(value, 'forms') && !(Array.isArray(value.forms) && value.forms.length <= 5 && value.forms.every(form => typeof form === 'string' && /^[0-9A-Z-]{2,8}(\/A)?$/.test(form)))) return refuse('keys');
+    if (Object.hasOwn(value, 'invalid_detail') && !(value.reason === 'invalid_payload' && admitInvalidDetail(value.invalid_detail))) return refuse('keys');
     return { value, reason: null };
   }
-  if (!['available', 'partial'].includes(value.status) || !sameKeys(value, RECORD_KEYS)) return refuse('keys');
+  if (!['available', 'partial'].includes(value.status) || !sameKeys(value, [...RECORD_KEYS, ...OPTIONAL_RECORD_KEYS.filter(key => Object.hasOwn(value, key))])) return refuse('keys');
+  if (Object.hasOwn(value, 'derivation_gaps') && !admitGaps(value.derivation_gaps)) return refuse('keys');
   if (!Number.isSafeInteger(value.cik) || value.cik <= 0 || value.source !== `https://data.sec.gov/api/xbrl/companyfacts/CIK${String(value.cik).padStart(10, '0')}.json`) return refuse('cik_url');
   if (!plain(value.quarterly) || !sameKeys(value.quarterly, QUARTERLY_FIELDS)) return refuse('keys');
   const series = QUARTERLY_FIELDS.find(field => !admitSeries(value.quarterly[field], field, asOfDate));
