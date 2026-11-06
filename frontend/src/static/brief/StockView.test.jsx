@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import StockView from './StockView';
+import { loadPriceChart } from './PriceChart';
+
+// The renderer is a lazy chunk in the app (fetched on idle); the tests draw synchronously, so it is loaded first.
+beforeAll(async () => { await loadPriceChart(); });
 import { earningsCall } from './briefCandidate';
 
 // The shell measures the contractions again when the published evidence is of an earlier method; the

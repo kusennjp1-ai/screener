@@ -1,6 +1,11 @@
-import { forwardRef, memo, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react';
-import { renderPriceChart } from './priceChart';
+import { forwardRef, memo, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
 import { chartContentKey, chartIdentityKey } from './chartReadout';
+
+// The imperative renderer (priceChart.js) is its own chunk (owner option b, JS budget): fetched once the app is
+// idle, so opening a stock normally finds it loaded; the service worker precaches it like every built asset.
+let renderPriceChart = null, pending = null;
+export const loadPriceChart = () => (pending ??= import('./priceChart').then(module => { renderPriceChart = module.renderPriceChart; return renderPriceChart; }, error => { pending = null; throw error; }));
+if (typeof window !== 'undefined') (window.requestIdleCallback ?? (run => setTimeout(run, 200)))(() => { loadPriceChart().catch(() => null); });
 
 let introducedOnce = false;
 
@@ -21,9 +26,11 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     const corner = controller.current?.freeCorner?.(button.offsetWidth || 72, button.offsetHeight || 44);
     if (corner) { button.style.left = `${corner.x}px`; button.style.top = `${corner.y}px`; }
   };
+  const [ready, setReady] = useState(() => renderPriceChart !== null);
   const key = chartIdentityKey(model, period);
   const content = chartContentKey(model, period);
   const draw = options => {
+    if (!element.current || !renderPriceChart) return controller.current;
     const chart = renderPriceChart(element.current, { ...model, stop: stopRef.current }, { period, onScrub: index => scrubRef.current?.(index), selected: selectedRef.current, ...options });
     if (chart && legRef.current !== null) chart.highlightLeg(legRef.current);
     return chart;
@@ -35,6 +42,8 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
   }), []);
   useLayoutEffect(() => {
     if (!element.current || !model?.bars?.length) return undefined;
+    // Until the renderer's chunk arrives the box keeps its height (no layout shift); it draws when it lands.
+    if (!renderPriceChart) { let live = true; loadPriceChart().then(() => { if (live) setReady(true); }).catch(() => null); return () => { live = false; }; }
     const abort = new AbortController();
     const animate = introduced.current !== key;
     controller.current = draw({ animate, fast: animate && introducedOnce, signal: abort.signal });
@@ -50,11 +59,11 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     };
     // The stop moves through the controller; content changes redraw, identity changes animate.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, period]);
+  }, [content, period, ready]);
   useLayoutEffect(() => { controller.current?.select(selected); placeLatest(); }, [selected]);
   useEffect(() => {
     const target = element.current;
-    if (!target || typeof ResizeObserver !== 'function' || !model?.bars?.length) return undefined;
+    if (!target || typeof ResizeObserver !== 'function' || !model?.bars?.length || !ready) return undefined;
     let width = target.clientWidth, timer;
     const observer = new ResizeObserver(() => {
       if (Math.abs(target.clientWidth - width) < 2) return;
@@ -64,7 +73,7 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     observer.observe(target);
     return () => { clearTimeout(timer); observer.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, period]);
+  }, [content, period, ready]);
   return <div className="brief-chartbox">
     <div ref={element} className={`brief-chart ${className}`} data-testid="brief-price-chart" />
     {onLatest ? <button ref={latest} type="button" className="brief-latest" hidden={selected === null} onClick={onLatest}>最新足</button> : null}
