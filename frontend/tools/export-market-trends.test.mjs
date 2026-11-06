@@ -175,6 +175,9 @@ describe('market trend source projection',()=>{
   expect(sp.available).toBe(true);
   expect(sp.state).toMatchObject({date:'2026-10-23',vs200:null,fromHigh:null,fullYear:false});
   expect(sp.state.vs50).toEqual(expect.any(Number));
+  // A short window publishes the closes it has (the market tab draws no 200-day line under 200 of them), never padded.
+  expect(sp.closes).toHaveLength(120);
+  expect(sp.closes.at(-1).date).toBe('2026-10-23');
   const bars=source().indices[0].bars;
   expect(indexState(bars.slice(-230),bars.at(-1).date)).toMatchObject({vs200:expect.any(Number),fromHigh:null,fullYear:false});
   expect(indexState(bars.slice(-30),bars.at(-1).date)).toEqual({date:'2026-10-23',close:bars.at(-1).close,vs50:null,vs200:null,fromHigh:null,fullYear:false});
