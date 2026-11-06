@@ -3,7 +3,8 @@
 // round 2: no label over another label, a tag or the last price, the final contraction's depth, the date
 // ticks, the RS panel, one earnings count, the pivot crossing, ADR and the unverified readout.
 import { test, expect } from '@playwright/test';
-import { date, horizontalOverflow, openBrief, VIEWPORTS } from './brief-fixture.js';
+import { date, horizontalOverflow, openBrief, rowBySymbol, VIEWPORTS } from './brief-fixture.js';
+import { chartCrossing, crossingNote } from '../../src/static/brief/chartReadout.js';
 
 const DOCK_TOP = 788; // 844 − the 56px dock at 390×844
 // Measure only after the finite animations finish (the last price's pulse repeats for ever).
@@ -261,14 +262,19 @@ test.describe('390×844 phone', () => {
   });
 
   test('a pivot crossing on certified bars is marked under its bar and named in the legend; none on unverified bars', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/stock/ZZNV', { mutate: { charts: served => { withRsLine(served); crossOnZZNV(served); } } });
+    let bars = null;
+    const { errors } = await openBrief(page, '#/brief/stock/ZZNV', { mutate: { charts: served => { withRsLine(served); crossOnZZNV(served); bars = served['ZZNV.json'].bars; } } });
     await chartReady(page);
     const chart = page.getByTestId('brief-price-chart');
     await expect(chart.locator('.bc-breakout')).toHaveCount(1);
+    // The crossing as the chart's own helper reads it from the served bars (its volume ratio comes from the crossing
+    // helper, so the 注記 is asserted through crossingNote, never as a literal of another track's ratio).
+    const crossing = chartCrossing(bars, rowBySymbol.ZZNV.se_pivot_price);
+    expect(crossing?.tone).toBe('neutral');
     const day = await chart.locator('.bc-breakout').getAttribute('data-date');
     expect(day < date).toBe(true);
     await expect(chart).toHaveAttribute('aria-label', new RegExp(`ピボットを上抜けた日 ${day}`));
-    // Today's helper gives no volume ratio, so the crossing is unconfirmed: a grey hollow arrow, never the filled ▲
+    // The crossing day traded under 1.4× (or its ratio is unknown), so it is unconfirmed: a grey hollow arrow, never the filled ▲
     // of the 崩れ sell sign, keyed (visibly) in the legend by the same grey glyph and explained in the 注記.
     const item = page.locator('.brief-legend [data-key="breakout"]');
     await expect(item).toBeVisible();
@@ -280,7 +286,7 @@ test.describe('390×844 phone', () => {
     expect(mark.stroke).not.toBe(mark.fill);
     const glyph = await item.locator('svg path').evaluate(node => getComputedStyle(node).stroke);
     expect(glyph).toBe(mark.stroke);
-    await expect(page.locator('.brief-screen-notes')).toContainText('灰色の矢印＝終値がピボットを上抜けた日（その日の出来高倍率は未確認。検証済みの日足）');
+    await expect(page.locator('.brief-screen-notes')).toContainText(crossingNote(crossing));
     expect(await collisions(page)).toEqual([]);
     // The weekly chart marks the crossing's week.
     await page.getByRole('group', { name: '表示期間' }).getByRole('button', { name: /^週足/ }).click();
