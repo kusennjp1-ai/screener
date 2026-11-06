@@ -15,7 +15,8 @@ const price = value => finite(value) ? value.toLocaleString('en-US', { minimumFr
  * next line whole instead, and at 200% zoom it still wraps inside rather than push the card wider.
  */
 const Unit = ({ children }) => <span className="brief-nowrap">{children}</span>;
-const fromSma50 = v => <Unit>{finite(v.fromSma50) ? `50日線から ${signed(v.fromSma50)}` : '50日線比 未確認'}</Unit>;
+// With its full stop inside the unit, so a phone line never starts with 「。」.
+const fromSma50 = v => <Unit>{finite(v.fromSma50) ? `50日線から ${signed(v.fromSma50)}` : '50日線比 未確認'}。</Unit>;
 
 /** The gate's line with each of its `units` kept whole (each the first match, in order). */
 function withUnits(text, units) {
@@ -33,8 +34,11 @@ function withUnits(text, units) {
   return out;
 }
 
+/** The parts of a call's title a phone line never splits: a crossing date with its verb, the sessions since it and the closing phrases. */
+const TITLE_UNITS = /\d+\/\d+に上抜け|上抜けから\d+営業日超?|（次のピボット待ち）|買いの対象外|ピボットは参考（独自判定）/g;
+
 /** The position under a neutral call, on one phone line: its name and the distance from the pivot. */
-const positionLine = view => <>位置は参考：<Unit>{POSITION_NAMES[view.position] || view.stale?.short || view.stateLabel}</Unit>{view.stale || !finite(view.distance) ? '' : <>・<Unit>{`ピボット比 ${signed(view.distance)}`}</Unit></>}。</>;
+const positionLine = view => <><Unit>位置は参考：</Unit><Unit>{POSITION_NAMES[view.position] || view.stale?.short || view.stateLabel}</Unit>{view.stale || !finite(view.distance) ? '' : <>・<Unit>{`ピボット比 ${signed(view.distance)}`}</Unit></>}。</>;
 
 /**
  * The line under the call, by the gate's kind: a neutral call names its reason and moves the position
@@ -46,25 +50,29 @@ function callLine(view, gate) {
   if (gate.moved) return <>{note}{positionLine(view)}</>;
   const pivot = <Unit>{`ピボット比 ${signed(view.distance)}`}</Unit>;
   switch (gate.kind) {
-    case 'near': return <>{fromSma50(view)}。出来高を伴ってピボットを上抜けるまで待ちます。</>;
-    case 'basePosition': return <>{pivot}・{fromSma50(view)}。まだ買いの局面ではありません。</>;
-    case 'ext': return <>{pivot}・{fromSma50(view)}。追いかけ買いは避け、次の土台を待ちます。</>;
-    case 'stalePivot': return <>{fromSma50(view)}。ピボットが現在値から25%超離れた旧水準のため、買いの位置は判定しません。</>;
+    case 'near': return <>{fromSma50(view)}出来高を伴ってピボットを上抜けるまで待ちます。</>;
+    case 'basePosition': return <>{pivot}・{fromSma50(view)}まだ買いの局面ではありません。</>;
+    case 'ext': return <>{pivot}・{fromSma50(view)}追いかけ買いは避け、次の土台を待ちます。</>;
+    case 'stalePivot': return <>{fromSma50(view)}ピボットが現在値から25%超離れた旧水準のため、買いの位置は判定しません。</>;
     case 'unjudged': return '買い位置を判定できません。';
     // The buy zone: a crossing without the volume (or a stalled or undated one) says why in place of the buy range (the range is the first tile).
-    default: return <>{pivot}・{fromSma50(view)}。{note || <>ピボットから<Unit>＋5%</Unit>までが買いの範囲です。</>}</>;
+    default: return <>{pivot}・{fromSma50(view)}{note || <>ピボットから<Unit>＋5%</Unit>までが買いの範囲です。</>}</>;
   }
 }
 
 /**
- * The stage chip: 「ステージ2（ベース形成中）」 for a stage-2 base (stagePhase, from certified bars: 「・日足から
- * 算出」 when the stage was computed or the published stage was not 2), else the stage with 「（日足から算出）」 when
- * computed. Stage 2 is green, 3 and 4 the ext tone, anything else neutral.
+ * The stage chip as [text, tone, title, content]: 「ステージ2（ベース形成中）」 for a stage-2 base (stagePhase, from
+ * certified bars: 「・日足から算出」 when the stage was computed or the published stage was not 2), else the stage with
+ * 「（日足から算出）」 when computed. Below 768px the 日足から算出 part is in the chip's title and read out, not drawn
+ * (brief-decision.css), so the chips keep two lines on a phone. Stage 2 is green, 3 and 4 the ext tone, anything else neutral.
  */
 function stageChip(stage) {
   if (!stage) return ['ステージ 未確認', ''];
-  if (stage.phase === 'base') return [`ステージ2（ベース形成中${stage.computed || stage.value !== 2 ? '・日足から算出' : ''}）`, 'zone'];
-  return [`ステージ${stage.value}${stage.computed ? '（日足から算出）' : ''}`, stage.value === 2 ? 'zone' : stage.value === 3 || stage.value === 4 ? 'ext' : ''];
+  const computed = stage.phase === 'base' ? stage.computed || stage.value !== 2 : stage.computed;
+  const [head, aside, tail] = stage.phase === 'base' ? ['ステージ2（ベース形成中', '・日足から算出', '）'] : [`ステージ${stage.value}`, '（日足から算出）', ''];
+  const tone = stage.phase === 'base' || stage.value === 2 ? 'zone' : stage.value === 3 || stage.value === 4 ? 'ext' : '';
+  const text = `${head}${computed ? aside : ''}${tail}`;
+  return [text, tone, computed ? text : undefined, computed ? <>{head}<span className="brief-chip-aside">{aside}</span>{tail}</> : undefined];
 }
 
 // The meter's four segments use the position names; a narrow phone breaks a name only between its words.
@@ -143,19 +151,20 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
     ...(financial?.code33?.state === 'pass' ? [[code33.text, code33.tone]] : []),
     // An industry rank without an as-of date is never green (the export has none yet).
     ...(Number.isInteger(row?.ibd_group_rank) ? [[`業種 ${row.ibd_group_rank}位（推計・基準日未確認）`, '']] : []),
-    // The conclusion has the room for the full sentence (the rows show its short form).
-    ...(sell ? [[sell.full ?? sell.text, sell.tone]] : []),
+    // The conclusion has the room for the full sentence (the rows show its short form), except under a call that
+    // already says the setup broke: the short form, with the sentence in its title.
+    ...(sell ? [gate.kind === 'broken' || gate.kind === 'failedBreakout' ? [sell.text, sell.tone, sell.title ?? sell.full] : [sell.full ?? sell.text, sell.tone]] : []),
     ...(diagnostics?.valid && diagnostics.powerPlay?.mechanicalMatch ? [['パワープレー候補（機械的探索）', 'wait']] : []),
     [earnings ? earnings.chip : '決算日 未確認', earnings?.soon ? 'ext' : ''],
   ];
   return <section className={`brief-card brief-call tone-${tone} in`} style={{ '--i': 0 }} aria-label="結論" data-testid="brief-conclusion" data-gate={gate.kind}>
-    <div className="brief-call-status"><span className="brief-call-dot" aria-hidden="true" /><div><strong>{title}</strong><p>{sub}</p>{caution && <p className="brief-call-caution">{caution.text}</p>}</div></div>
+    <div className="brief-call-status"><span className="brief-call-dot" aria-hidden="true" /><div><strong>{withUnits(title, String(title ?? '').match(TITLE_UNITS) || [])}</strong><p>{sub}</p>{caution && <p className="brief-call-caution">{caution.text}</p>}</div></div>
     <Meter distance={view.distance} reference={reference} stale={Boolean(view.stale)} />
     <div className="brief-kgrid">
       <div><small>買いの範囲</small><b className="numeric">{price(view.pivot)}</b><em>〜{price(view.upper)}</em><Qualifier text={referenced ? '参考' : null} /></div>
       <div><small>{finite(levels?.stopPercent) ? `損切り −${levels.stopPercent.toFixed(1)}%` : '損切り'}</small><b className="numeric">{price(levels?.stop)}</b><em>買値 {price(levels?.entry)}</em><Qualifier text={stopQualifier[0]} tone={stopQualifier[1]} /></div>
       <div><small>株数</small><b className="numeric">{shares}</b><em>{shareNote}</em><Qualifier text={sizing} /></div>
     </div>
-    <div className="brief-tags">{chips.map(([text, t, chipTitle]) => <span key={text} className={`brief-chip${t ? ` tone-${t}` : ''}`} title={chipTitle}>{text}</span>)}</div>
+    <div className="brief-tags">{chips.map(([text, t, chipTitle, content]) => <span key={text} className={`brief-chip${t ? ` tone-${t}` : ''}`} title={chipTitle}>{content ?? text}</span>)}</div>
   </section>;
 }
