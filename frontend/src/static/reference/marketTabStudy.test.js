@@ -106,7 +106,7 @@ describe('the 過去の傾向 block (MK5)', () => {
   it('keeps the neutral summary when no line could be judged (a legacy publication without the long history)', () => {
     // No long history, no Nasdaq position, no method ids and no follow-through record: every line is a reason.
     const legacy = trends({ history: false });
-    legacy.data.indices = legacy.data.indices.map(({ method, followThrough, state, ...item }) => item);
+    legacy.data.indices = legacy.data.indices.map(item => { const old = { ...item }; for (const key of ['method', 'followThrough', 'state']) delete old[key]; return old; });
     const ctx = context(legacy);
     expect(ctx.indices.flatMap(block => block.items).every(item => item.reason && item.state === null)).toBe(true);
     expect(ctx.indices.flatMap(block => block.items)).toHaveLength(8);
