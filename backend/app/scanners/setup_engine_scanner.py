@@ -311,6 +311,7 @@ def build_setup_engine_payload(
     candidates: Sequence[Mapping[str, Any] | PatternCandidateModel] | None = None,
     passed_checks: Sequence[Any] | None = None,
     failed_checks: Sequence[Any] | None = None,
+    diagnostics: Sequence[Any] | None = None,
     key_levels: Mapping[str, Any] | None = None,
     invalidation_flags: Sequence[Any] | None = None,
     timeframe: str = "daily",
@@ -329,8 +330,9 @@ def build_setup_engine_payload(
     Bool semantics:
     - ``setup_ready`` is derived when not explicitly set.
     - Derived readiness requires ``readiness_score >= readiness_threshold_pct``,
-      every readiness gate and no failed primary-pattern or data-policy check.
-      Detector-level failed checks go to ``explain.diagnostics`` and never fail it.
+      every readiness gate and zero ``failed_checks`` (every one fails it).
+      ``diagnostics`` (the detectors' own checks, kept apart by the aggregator) go to
+      ``explain.diagnostics`` and never fail it.
 
     Date semantics:
     - ``pivot_date`` and candidate ``pivot_date`` use ``YYYY-MM-DD``.
@@ -354,6 +356,7 @@ def build_setup_engine_payload(
 
     normalized_passed = _normalize_text_list(passed_checks)
     normalized_failed = _normalize_text_list(failed_checks)
+    normalized_diagnostics = _normalize_text_list(diagnostics)
     normalized_flags = _normalize_invalidation_flags(invalidation_flags)
 
     normalized_setup_score = _to_float(setup_score)
@@ -562,10 +565,11 @@ def build_setup_engine_payload(
         include_score_trace=include_score_trace,
         readiness_features=normalized_readiness,
         readiness_trace_inputs=readiness_trace_inputs,
+        diagnostics=tuple(normalized_diagnostics),
     )
     explain_result = build_explain_payload(explain_input)
     # Detector-level checks that do not decide readiness (one detector not finding its own
-    # pattern, a stub, a detector error) stay inside the existing explain object.
+    # pattern, a stub, a detector short of history) stay inside the existing explain object.
     explain_payload = explain_result.explain.to_payload()
     explain_payload["diagnostics"] = list(explain_result.diagnostics)
 

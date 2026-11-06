@@ -64,6 +64,12 @@ class AggregatedPatternOutput:
     invalidation_flags: tuple[str, ...]
     diagnostics: tuple[str, ...]
     detector_traces: tuple[DetectorExecutionTrace, ...]
+    #: The detectors' own failed checks (one detector not finding its own pattern, a stub,
+    #: a detector short of history), each prefixed with its detector's name. They say
+    #: nothing about the primary pattern another detector selected, so they are kept apart
+    #: from ``failed_checks`` (the aggregator's primary-pattern checks, the data policy's
+    #: insufficiency and detector errors) and are reported as explain diagnostics.
+    detector_failed_checks: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -109,6 +115,7 @@ class SetupEngineAggregator:
         candidates: list[PatternCandidate] = []
         passed_checks: list[str] = []
         failed_checks: list[str] = []
+        detector_failed_checks: list[str] = []
         diagnostics: list[str] = []
         invalidation_flags: list[str] = []
         key_levels: dict[str, float | None] = {}
@@ -121,6 +128,7 @@ class SetupEngineAggregator:
             detector_workers=self._detector_workers,
         ):
             detector_traces.append(trace)
+            # A detector that raised never ran: its error stays a failed check (fail closed).
             if result.outcome == DetectorOutcome.ERROR:
                 failed_checks.append(
                     f"{trace.detector_name}:{DetectorOutcome.ERROR.value}"
@@ -133,7 +141,9 @@ class SetupEngineAggregator:
 
             diagnostics.extend(result.warnings)
             passed_checks.extend(result.passed_checks)
-            failed_checks.extend(result.failed_checks)
+            detector_failed_checks.extend(
+                f"{trace.detector_name}:{check}" for check in result.failed_checks if check
+            )
 
             # Candidates are already coerced by detect_safe().
             candidates.extend(result.candidates)
@@ -183,6 +193,7 @@ class SetupEngineAggregator:
             invalidation_flags=tuple(_stable_unique(invalidation_flags)),
             diagnostics=tuple(diagnostics),
             detector_traces=tuple(detector_traces),
+            detector_failed_checks=tuple(_stable_unique(detector_failed_checks)),
         )
 
 

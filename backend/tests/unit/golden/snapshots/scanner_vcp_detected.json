@@ -486,10 +486,12 @@
       },
       "invalidation_flags": [],
       "diagnostics": [
-        "not_detected",
-        "cup_structure_not_found",
-        "pole_return_below_threshold",
-        "nr7_inside_day_trigger_not_found"
+        "cup_with_handle:not_detected",
+        "cup_with_handle:cup_structure_not_found",
+        "high_tight_flag:not_detected",
+        "high_tight_flag:pole_return_below_threshold",
+        "nr7_inside_day:not_detected",
+        "nr7_inside_day:nr7_inside_day_trigger_not_found"
       ]
     }
   }

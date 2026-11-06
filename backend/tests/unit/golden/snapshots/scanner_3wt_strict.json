@@ -765,13 +765,15 @@
         }
       ],
       "diagnostics": [
-        "not_detected",
-        "cup_structure_not_found",
-        "pole_return_below_threshold",
-        "vcp_contracting_depth_failed",
-        "vcp_volume_contraction_unconfirmed",
-        "vcp_right_edge_drying_unconfirmed",
-        "vcp_score_below_legacy_threshold"
+        "cup_with_handle:not_detected",
+        "cup_with_handle:cup_structure_not_found",
+        "high_tight_flag:not_detected",
+        "high_tight_flag:pole_return_below_threshold",
+        "vcp:not_detected",
+        "vcp:vcp_contracting_depth_failed",
+        "vcp:vcp_volume_contraction_unconfirmed",
+        "vcp:vcp_right_edge_drying_unconfirmed",
+        "vcp:vcp_score_below_legacy_threshold"
       ]
     }
   }

@@ -9,18 +9,6 @@
     "detector_pipeline_executed"
   ],
   "failed_checks": [
-    "not_detected",
-    "cup_structure_not_found",
-    "tight_run_not_found",
-    "pole_return_below_threshold",
-    "no_ma_tests_detected",
-    "vcp_contracting_depth_failed",
-    "vcp_tight_near_highs_failed",
-    "vcp_volume_contraction_unconfirmed",
-    "vcp_right_edge_drying_unconfirmed",
-    "vcp_score_below_legacy_threshold",
-    "vcp_insufficient_bases",
-    "nr7_inside_day_trigger_not_found",
     "no_primary_pattern"
   ],
   "detector_trace_count": 6,
