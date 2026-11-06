@@ -1,8 +1,10 @@
-// Daily brief candidate rows: the list's filters and search, the rows' chips and heights on phones, and
-// the stock tiles at 200% zoom, on synthetic data. (Where the constant TT 8/8 chip is left out is the
-// screens' choice, Today's and the list's: brief-phone.spec.js.)
+// Daily brief candidate rows: the list's filters and search, the rows' chips and heights on phones, the
+// stock tiles at 200% zoom, the day's event as the conclusion titles it (breakoutEvent), Today's focus tile
+// and rows under a market that holds off new buying, and the verified day change in the phone bar and the
+// desktop header, on synthetic data. (Where the constant TT 8/8 chip is left out is the screens' choice,
+// Today's and the list's: brief-phone.spec.js.)
 import { test, expect } from '@playwright/test';
-import { openBrief, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
+import { openBrief, VIEWPORTS, horizontalOverflow, date } from './brief-fixture.js';
 
 const candidates = page => page.getByTestId('brief-candidate');
 const symbolsShown = page => candidates(page).evaluateAll(nodes => nodes.map(node => node.dataset.symbol));
@@ -26,6 +28,28 @@ function breakBelow50(bars) {
 const clippedTileText = (page, scope = '.brief-fact, .brief-kgrid, .brief-summary') => page.evaluate(selector => [...document.querySelectorAll(selector)]
   .flatMap(tile => [...tile.querySelectorAll('small, b, em')]).filter(node => node.getClientRects().length && node.scrollWidth > node.clientWidth)
   .map(node => `${node.tagName.toLowerCase()} “${node.textContent}” ${node.scrollWidth}>${node.clientWidth}`), scope);
+
+const conclusion = page => page.getByTestId('brief-conclusion');
+// The analysis date as the event titles name it (never 「本日」: the data may be older than today).
+const DAY = `${Number(date.slice(5, 7))}/${Number(date.slice(8))}`;
+/** A variant of one stock's row, and of its research detail when it has one (the stock screen merges the detail in). */
+const onRow = (symbol, fn) => ({ rows: rows => { fn(rows.find(r => r.symbol === symbol)); }, details: details => { for (const detail of Object.values(details)) if (detail.symbol === symbol) fn(detail); } });
+// A market that holds off new buying: every row's S&P 500 is below its 50-day line (modelMarket: cap 0, a known state).
+const HOLD_MARKET = { rows: rows => { for (const row of rows) row.market_above_50dma = false; } };
+// The opened focus row closes above its pivot instead of on it (the synthetic day is +2.0% on 1.6× volume).
+const crossing = symbol => onRow(symbol, row => { row.se_pivot_price = Math.round(row.current_price * 0.99 * 100) / 100; });
+
+/** Reached as a trader reaches it: Today's focus row (on a wide screen the stock opens beside the list). */
+async function openFocus(page, phone, options) {
+  const result = await openBrief(page, '#/brief', options);
+  const focus = page.getByRole('region', { name: '注目候補' });
+  await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+  const target = phone ? 'ZZNV' : 'ZZKS';
+  const row = focus.locator(`[data-symbol="${target}"]`);
+  if (phone) await row.tap(); else await row.click();
+  await expect(page).toHaveURL(new RegExp(`#/brief/stock/${target}$`));
+  return { ...result, target };
+}
 
 for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} ${device.viewport.width}px`, () => {
   test.use(device);
@@ -91,6 +115,81 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const rs = await candidates(page).evaluateAll(nodes => nodes.map(node => Number(node.getAttribute('aria-label').match(/RS推計 (\d+)/)[1])));
     expect(rs).toEqual([...rs].sort((a, b) => b - a));
     expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  // The day's event titles (breakoutEvent's copy); the call's colour for them is brief-decision.spec.js's.
+  test('a focus candidate that closes exactly at its pivot reaches it: ピボット到達, in the buy zone, no breakout claimed', async ({ page }) => {
+    const { errors } = await openFocus(page, phone);
+    await expect(conclusion(page).locator('strong')).toHaveText('ピボット到達');
+    await expect(conclusion(page)).not.toContainText('上抜け');
+    expect(errors).toEqual([]);
+  });
+
+  test('a close above the pivot from below on the verified +2.0% day with 1.6× volume is a breakout on the analysis date', async ({ page }) => {
+    const { errors } = await openFocus(page, phone, { mutate: crossing(phone ? 'ZZNV' : 'ZZKS') });
+    await expect(conclusion(page).locator('strong')).toHaveText(`${DAY}に上抜け・出来高1.60×`);
+    await expect(conclusion(page)).not.toContainText('本日');
+    expect(errors).toEqual([]);
+  });
+
+  // The stock half of this check (the conclusion under that market) is brief-decision.spec.js's.
+  test('under a market that holds off new buying, Today\'s focus tile and rows are neutral', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { mutate: HOLD_MARKET });
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate').first()).toBeVisible();
+    await expect(page.locator('#brief-focus-title')).toHaveText('注目候補（地合い：買いは控える・監視のみ）');
+    const tile = page.getByTestId('brief-summary').locator('li').nth(1);
+    await expect(tile).toContainText('注目候補');
+    await expect(tile).not.toHaveClass(/tone-zone/);
+    await expect(focus.locator('.tone-zone')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// A four-digit price with a two-digit fall (the NFLX/AZO/BKNG class) as well as the fixture's ~$100 one.
+const BIG_PRICE = onRow('ZZNV', row => { row.current_price = 1234.56; Object.assign(row.technical_audit.values, { close: 1234.56, change: -12.34 }); });
+for (const width of [320, 390]) test.describe(`the bar at ${width}px`, () => {
+  test.use(phoneDevice(width, 844));
+
+  for (const [label, mutate, price, change, tone] of [['a three-digit price', undefined, /^\$\d{3}\.\d{2}$/, '前日比 +2.0%', /is-up/], ['a four-digit price and a two-digit fall', BIG_PRICE, /^\$1,235$/, '前日比 −12.3%', /is-down/]]) {
+    test(`carries ${label} and the verified day change, whole, and stays 48px or less`, async ({ page }) => {
+      const { errors } = await openBrief(page, '#/brief/stock/ZZNV', mutate ? { mutate } : {});
+      await expect(conclusion(page)).toBeVisible();
+      const quote = page.locator('.brief-bar .brief-bar-change');
+      await expect(quote).toHaveText(change);
+      await expect(quote).toHaveClass(tone);
+      expect((await page.locator('.brief-bar .brief-bar-price').innerText()).trim()).toMatch(price);
+      expect((await page.locator('.brief-bar').boundingBox()).height).toBeLessThanOrEqual(48);
+      // The ticker, the price and the change are all on screen: nothing overflows the title, and the change
+      // lies wholly inside it (only the price could give way, with an ellipsis).
+      const fit = await page.locator('.brief-bar-title b').evaluate(b => {
+        const box = b.getBoundingClientRect(), change = b.querySelector('.brief-bar-change').getBoundingClientRect(), price = b.querySelector('.brief-bar-price');
+        return { cut: b.scrollWidth > b.clientWidth + 0.5, inside: change.left >= box.left - 0.5 && change.right <= box.right + 0.5, price: price.scrollWidth > price.clientWidth + 0.5 };
+      });
+      expect(fit).toEqual({ cut: false, inside: true, price: false });
+      expect(await horizontalOverflow(page)).toBe(0);
+      expect(errors).toEqual([]);
+    });
+  }
+
+  test('says 前日比 未確認 without the verified audit of the analysis day, never 0%', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZNV', { mutate: { rows: rows => { delete rows.find(r => r.symbol === 'ZZNV').technical_audit.values.change; } } });
+    await expect(conclusion(page)).toBeVisible();
+    await expect(page.locator('.brief-bar .brief-bar-change')).toHaveText('—前日比 未確認');
+    await expect(page.locator('.brief-bar')).not.toContainText('0.0%');
+    // Nothing is said about a breakout either: the conclusion is the plain position.
+    await expect(conclusion(page).locator('strong')).toHaveText('買いゾーン内');
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('the desktop header', () => {
+  test.use(VIEWPORTS.desktop);
+  test('shows the same verified day change as the rows', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZKS');
+    await expect(page.locator('.brief-stockhead h2 .brief-daychg')).toHaveText('前日比 +2.0%');
+    await expect(page.getByRole('region', { name: '注目候補' }).locator('[data-symbol="ZZKS"] .brief-daychg')).toHaveText('前日比 +2.0%');
     expect(errors).toEqual([]);
   });
 });
@@ -165,7 +264,7 @@ for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.deskto
     const reason = page.locator('[data-symbol="ZZZF"] .brief-chip', { hasText: 'あと1条件：' });
     await expect(reason).toHaveText('あと1条件：RS推計（61）');
     // Its threshold is in the chip's title (and the row's label), with the full rule.
-    await expect(reason).toHaveAttribute('title', '未達：RS ≥ 70（61）');
+    await expect(reason).toHaveAttribute('title', '未達：RS推計 ≥ 70（61）');
     await expect(reason).not.toHaveClass(/tone-/);
     // The named rule keeps an あと1条件 row within the same height and two chip lines.
     const oneShort = await candidates(page).evaluateAll(nodes => nodes.map(row => ({ symbol: row.dataset.symbol, height: row.getBoundingClientRect().height,

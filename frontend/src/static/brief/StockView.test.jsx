@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import StockView from './StockView';
+import { earningsCall } from './briefCandidate';
 
 // The shell measures the contractions again when the published evidence is of an earlier method; the
 // measurement itself is bookTechnicalEvidence.test.js's, so here it returns a known result.
@@ -9,6 +10,19 @@ vi.mock('../bookTechnicalEvidence', async importOriginal => {
   const actual = await importOriginal();
   return { ...actual, buildBookTechnicalEvidence: (...args) => { rebuilt.calls.push(args); return { ...actual.buildBookTechnicalEvidence(...args), vcp: rebuilt.vcp }; } };
 });
+
+// The props StockView hands its cards (the round-2 seams, plan §2.2): each card renders as it is, and the last props are kept.
+const { seen, recorded } = vi.hoisted(() => {
+  const seen = {};
+  const recorded = name => async importOriginal => {
+    const actual = await importOriginal(), { createElement } = await import('react');
+    return { ...actual, default: props => { seen[name] = props; return createElement(actual.default, props); } };
+  };
+  return { seen, recorded };
+});
+vi.mock('./StockChartCard', recorded('chart'));
+vi.mock('./StockPlanCard', recorded('plan'));
+vi.mock('./StockVerdict', recorded('verdict'));
 
 const DATE = '2026-10-02';
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -112,5 +126,34 @@ describe('brief stock view evidence', () => {
     expect(screen.getByText('日足を分析基準日で検証できないため（最終日足が分析日と不一致）、VCPは未確認です。')).toBeInTheDocument();
     expect(screen.getByTestId('brief-price-chart').querySelectorAll('.bc-legbox')).toHaveLength(0);
     expect([...screen.getByTestId('brief-price-chart').querySelectorAll('.bc-notice')].map(node => node.textContent)).toContain('収縮は未確認');
+  });
+});
+
+describe('the props StockView hands its cards in round 2', () => {
+  afterEach(() => { cleanup(); vi.useRealTimers(); sessionStorage.clear(); });
+
+  it('computes the earnings call once and passes it to the chart card, the plan card and the conclusion (unread at step 0)', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(`${DATE}T19:00:00Z`));
+    const near = { ...view, asOf: DATE, earnings: { date: '2026-10-05', days: 3 } };
+    render(<StockView data={{ ...data(true), view: near }} />);
+    const call = earningsCall(near, Date.now());
+    expect(call).toMatchObject({ date: '2026-10-05', days: 3, soon: true });
+    expect(seen.chart.earningsCall).toEqual(call);
+    expect(seen.plan.earningsCall).toEqual(call);
+    expect(seen.verdict.earningsCall).toEqual(call);
+    cleanup();
+    render(<StockView data={data(true)} />);
+    expect([seen.chart.earningsCall, seen.plan.earningsCall, seen.verdict.earningsCall]).toEqual([null, null, null]);
+  });
+
+  it('hands the conclusion a stage without a phase while stagePhase names none', () => {
+    render(<StockView data={{ ...data(true), row: { symbol: 'AAA', chart_path: 'AAA.json', stage: 2 } }} />);
+    expect(seen.verdict.stage).toEqual({ value: 2, computed: false });
+    expect('phase' in seen.verdict.stage).toBe(false);
+    cleanup();
+    // 200 bars are too few for the stage from bars: no stage, and no phase either.
+    render(<StockView data={data(true)} />);
+    expect(seen.verdict.stage).toBeNull();
   });
 });

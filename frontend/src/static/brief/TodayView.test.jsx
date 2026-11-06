@@ -1,11 +1,23 @@
 // Today's watch tile (TodayView, E): only a broken setup is counted (no holding is registered), 0件 only when
 // every check of every watched stock is in, and unlisted, unchecked, limited and partly checked stocks are said
 // (n/N, a third of the width), never counted as checked.
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TodayView, { watchAttention } from './TodayView';
+
+// The round-2 seams Today calls (plan §2.2): each records its arguments and answers as its owner's module does,
+// unless a test sets a value (undefined: the real body; null at step 0) to see where that value shows.
+const seams = vi.hoisted(() => ({ suffix: undefined, warning: undefined, suffixCalls: [], warningCalls: [] }));
+vi.mock('./briefEnvironment', async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual, marketTileSuffix: (...args) => { seams.suffixCalls.push(args); return seams.suffix === undefined ? actual.marketTileSuffix(...args) : seams.suffix; } };
+});
+vi.mock('../fundamentalsExplain.js', async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual, fundamentalsCoverageWarning: (...args) => { seams.warningCalls.push(args); return seams.warning === undefined ? actual.fundamentalsCoverageWarning(...args) : seams.warning; } };
+});
 
 const view = symbol => ({ symbol });
 const quiet = { strength: [], weakness: [], hits: 0, strengthHits: 0, weaknessHits: 0, breakdownHits: 0, unknowns: 0 };
@@ -101,5 +113,46 @@ describe('Today under the market verdict and the earnings date', () => {
     expect(line('NEA1')).toMatch(/・決算まで2日$/);
     expect(line('DAY1')).toMatch(/・決算当日$/);
     expect(line('FAR1')).not.toContain('決算');
+  });
+});
+
+// The 地合い tile's suffix (market's marketTileSuffix) and the SEC coverage line (data's fundamentalsCoverageWarning):
+// Today asks for both and shows nothing while they are null, as at step 0.
+describe('the round-2 seams on Today', () => {
+  const DATE = '2026-10-02';
+  const OPEN = { label: '上昇トレンド（独自判定）', state: 'confirmed_uptrend', cap: 0.5 };
+  const block = { schema_version: 'fundamentals-coverage-v1', as_of_date: DATE, sec_fetch_ran: true, sec_as_of: DATE, file_schema: 2, universe: 993, requested: 600,
+    eligible: 1200, truncated: 0, deadline_unreached: 0, ticker_map_ok: true, admitted: 580, with_quarters: 540, not_requested: 393, not_fetched: 0, refused: 20, refused_by_reason: { cik_url: 20 } };
+  const manifest = { as_of_date: DATE, markets: { US: { as_of_date: DATE, fundamentals_coverage: block } } };
+  const trends = { data: { indices: [] }, isLoading: false };
+  const show = () => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>
+    <TodayView brief={{ bundle: { data: { date: DATE, rankings: { minervini: [] } }, isLoading: false, isError: false }, manifest: { data: manifest, isLoading: false, isError: false }, ranked: [], date: DATE, market: OPEN, marketLoading: false, trends, version: 'v1' }}
+      watch={[]} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false} wide nav={{ market() {}, list() {}, watch() {} }} onUnwatch={() => {}} />
+  </MemoryRouter></QueryClientProvider>);
+  const note = () => screen.getByTestId('brief-summary').querySelector('li em').textContent;
+  afterEach(() => { cleanup(); Object.assign(seams, { suffix: undefined, warning: undefined, suffixCalls: [], warningCalls: [] }); });
+
+  it('asks for the 地合い suffix with the market, the trends and the manifest, and appends one only when there is one', () => {
+    show();
+    expect(seams.suffixCalls.at(-1)).toEqual([{ market: OPEN, trends, manifest }]);
+    expect(note()).toBe('検討可・目安≤50%');
+    cleanup();
+    seams.suffix = '〈suffix〉';
+    show();
+    expect(note()).toBe('検討可・目安≤50%・〈suffix〉');
+  });
+
+  it('asks for the coverage warning with this date\'s published block and shows it as one line under the market card', () => {
+    show();
+    expect(seams.warningCalls.at(-1)).toEqual([block, { date: DATE }]);
+    // Found by Today's own structure (the line just before the 注目候補 section), never through MarketCard's markup.
+    const beforeFocus = () => document.getElementById('brief-focus-title').closest('section').previousElementSibling;
+    expect(beforeFocus()?.matches('p.brief-note')).toBe(false);
+    expect(screen.queryByText('〈warning〉')).toBeNull();
+    cleanup();
+    seams.warning = { text: '〈warning〉' };
+    show();
+    const line = beforeFocus();
+    expect([line.tagName, line.className, line.textContent]).toEqual(['P', 'brief-note', '〈warning〉']);
   });
 });

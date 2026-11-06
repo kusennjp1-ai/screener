@@ -3,6 +3,7 @@ import { sellChipView } from './briefSell';
 import { meterPercent } from './briefNav';
 import { useEntrance } from './briefPrimitives';
 import { BREAKOUT_VOLUME_RATIO, candidateMarketGate, earningsCall, ratioShown, rsShown } from './briefCandidate';
+import { secRowChip } from '../fundamentalsExplain.js';
 
 // The layout primitives every track uses (Expander, ScreenNotes, Parts, RiseItem, Toast) live in the
 // frozen briefPrimitives.jsx; they are re-exported here so the old import path keeps working.
@@ -68,6 +69,9 @@ export function Reasons({ view, now, sell, hideTemplate = false, muted = false }
   const volume = volumeTone(view);
   if (volume !== null) chips.push(chip('vol', zone(volume), `出来高 ${ratioShown(view.volumeRatio)}`));
   if (!view.missing?.rs) chips.push(chip('rs', '', `RS推計 ${rsShown(view.rs)}`));
+  // The row's SEC earnings, when the data track's seam gives a chip (none yet).
+  const sec = secRowChip(view.row);
+  if (sec) chips.push(chip('sec', zone(sec.tone), sec.text, sec.title));
   if (view.rsLineHigh) chips.push(chip('rsl', zone('zone'), 'RS線 新高値'));
   const earnings = earningsCall(view, now);
   if (earnings?.soon) chips.push(chip('earn', 'ext', earnings.chip));

@@ -3,7 +3,8 @@ import { Link } from 'react-router-dom';
 import useMediaQuery from '../useMediaQuery';
 import { money, signed } from '../positionGeometry';
 import { briefOrder, candidateView, earningsCall, focusCandidates, focusCounts, focusHeadingNote, focusTone, watchEvent } from './briefCandidate';
-import { leadingGroups, marketTone } from './briefEnvironment';
+import { leadingGroups, marketTileSuffix, marketTone } from './briefEnvironment';
+import { fundamentalsCoverageWarning, publishedFundamentalsCoverage } from '../fundamentalsExplain.js';
 import { isBreakdown, sellChipView } from './briefSell';
 import MarketCard from './MarketCard';
 import { CandidateRow } from './BriefParts';
@@ -20,7 +21,7 @@ const WATCH_ROWS = 3;
 // Footnotes: in place at 1024px and wider, gathered into the screen's 注記 below that.
 const TODAY_NOTE = '注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。同じ位置なら判定の達成数、RS推計の順。';
 const DATE_JA = iso => { const d = new Date(`${iso}T12:00:00Z`); return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）` : '日付未確認'; };
-const EVENT_ICON = { breakout: '↗', ext: '▲', heavyDown: '▲', near: '◔', zone: '●', ma50: '↘', book: '▲' };
+const EVENT_ICON = { breakout: '↗', ext: '▲', heavyDown: '▲', near: '◔', zone: '●', ma50: '↘', book: '▲', failedBreakout: '▼' };
 // A broken setup leads its watch row (never the day's position event, which could be green): the 50-day hit's
 // own headline, or the book's combined warning by name.
 const BOOK_HEADLINE = '書籍の複合警告（20日線割れ・安値切り下げ・大商い）';
@@ -88,6 +89,10 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
   const state = bundleState(brief);
   // A ready bundle without a market verdict says so after the heading (the verdict comes with the bundle).
   const headingNote = focusHeadingNote(brief.market, state);
+  // The publication's SEC coverage (the manifest's block, for this date only) and its one-line warning, or none.
+  const coverage = useMemo(() => publishedFundamentalsCoverage(brief.manifest?.data?.markets?.US ?? null, { bundle: brief.bundle.data ?? null }), [brief.manifest?.data, brief.bundle.data]);
+  const coverageWarning = fundamentalsCoverageWarning(coverage, { date: brief.date });
+  const tileSuffix = marketTileSuffix({ market: brief.market, trends: brief.trends, manifest: brief.manifest?.data ?? null });
   // The first rows of the watch list, plus every row with a sell chip (a fired check, a caution or 未確認,
   // never folded away); the rest open in place and stay open for this session. Nothing folds or moves
   // until every row's check is in, so a row with a signal never appears late from behind the button.
@@ -98,8 +103,9 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
   const watchShown = watchAll ? ordered : watchFolded, watchHidden = ordered.length - watchFolded.length;
   return <>
     <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け・米国株` : '日付未確認'}</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
-    <TodaySummary market={brief.market} marketLoading={brief.marketLoading} counts={counts} attention={watchAttention({ state, watched, watchCount: watch.length, unlisted, sells })} state={state} nav={nav} open={open} />
+    <TodaySummary market={brief.market} marketLoading={brief.marketLoading} suffix={tileSuffix} counts={counts} attention={watchAttention({ state, watched, watchCount: watch.length, unlisted, sells })} state={state} nav={nav} open={open} />
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={brief.trends} date={brief.date} />
+    {coverageWarning && <p className="brief-note">{coverageWarning.text}</p>}
     <section className="brief-card in" style={{ '--i': 2 }} aria-labelledby="brief-focus-title">
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">2</span><h2 id="brief-focus-title">注目候補{headingNote && <small>{headingNote}</small>}</h2><Link className="brief-more" to="/brief/list" onClick={follow(() => nav.list('all'))}>すべての候補 <span aria-hidden="true">›</span></Link></div>
       {focus.length ? <ol className="brief-rows">{focus.map((view, i) => <CandidateRow key={view.symbol} view={view} rank={i + 1} index={i} onOpen={open} now={now} animate={animate} hideTemplate context={{ market: brief.market }} />)}</ol>
@@ -142,13 +148,14 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
  * link to where its answer is explained: the market tab, the focus pool as a list, the flagged stock (or
  * the watch tab, flagged rows first).
  */
-function TodaySummary({ market, marketLoading, counts, attention, state, nav, open }) {
+function TodaySummary({ market, marketLoading, suffix = null, counts, attention, state, nav, open }) {
   const tone = marketTone(market), focus = focusTone(state, counts, market);
   // The card below carries 独自判定; the summary keeps only the state (「50日線割れ（弱含み）」).
   const verdict = market?.label ? market.label.replace(/（(?:(.+)・)?独自判定）$/, (_, inner) => inner ? `（${inner}）` : '') : '市場未確認';
   const one = attention.flagged.length === 1 ? attention.flagged[0] : null;
+  const marketNote = !market && marketLoading ? '' : market?.cap > 0 ? `検討可・目安≤${Math.round(market.cap * 100)}%` : market?.state === 'unknown' || !market ? '買いは見送り' : '買いは控える';
   return <ul className="brief-summary in" style={{ '--i': 0 }} aria-label="今日の要点" data-testid="brief-summary">
-    <li className={`tone-${tone}`}><Link className="brief-tile" to="/brief/market" onClick={follow(() => nav.market())}><small>地合い</small><b>{!market && marketLoading ? '読込中' : verdict}</b><em><Parts text={!market && marketLoading ? '' : market?.cap > 0 ? `検討可・目安≤${Math.round(market.cap * 100)}%` : market?.state === 'unknown' || !market ? '買いは見送り' : '買いは控える'} /></em></Link></li>
+    <li className={`tone-${tone}`}><Link className="brief-tile" to="/brief/market" onClick={follow(() => nav.market())}><small>地合い</small><b>{!market && marketLoading ? '読込中' : verdict}</b><em><Parts text={[marketNote, suffix].filter(Boolean).join('・')} /></em></Link></li>
     <li className={focus ? `tone-${focus}` : ''}><Link className="brief-tile" to="/brief/list" onClick={follow(() => nav.list('focus'))}><small>注目候補</small><b>{state === 'ready' ? `${counts.total}銘柄` : BUNDLE_SHORT[state]}</b><em><Parts text={state === 'ready' ? `ゾーン${counts.zone}・接近${counts.near}` : ''} /></em></Link></li>
     <li className={attention.flagged.length ? 'tone-ext' : ''}><Link className="brief-tile" to={one ? `/brief/stock/${encodeURIComponent(one)}` : '/brief/watch'} onClick={follow(event => (one ? open(one, event.currentTarget, 'watch') : nav.watch()))}>
       <small>ウォッチの注意</small><b>{attention.value}</b><em><Parts text={attention.note} /></em></Link></li>

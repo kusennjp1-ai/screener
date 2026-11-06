@@ -184,9 +184,10 @@ export const ratioShown = value => `${(Math.floor(value * 100 + 1e-9) / 100).toF
  * Only for a stock in the buy zone; null when any input (the analysis date too) is missing: nothing is said
  * about a breakout. The titles name the analysis date (「10/2に上抜け」), never 「本日」: the data may be older than today.
  * A crossing without the volume (or with it unknown) is not a breakout: tone 'wait', never the green call.
- * `bars`, when given, are bars certified for the analysis date: they date a crossing 1–3 sessions back.
+ * A stock already above the pivot the day before is `'after'`, undated (「買いゾーン内（上抜け後）」): the
+ * conclusion dates it from certified bars through crossingEvent (breakoutHistory.js).
  */
-export function breakoutEvent(view, bars = null) {
+export function breakoutEvent(view) {
   if (view?.state !== 'zone' || !isoDay(view.asOf) || !positive(view.pivot) || !positive(view.close) || !positive(view.prevClose) || !finite(view.change)) return null;
   const { pivot, close, prevClose, change } = view, volume = finite(view.volumeRatio) ? view.volumeRatio : null;
   const heavy = volume !== null && volume >= BREAKOUT_VOLUME_RATIO, day = shortDate(view.asOf);
@@ -198,25 +199,7 @@ export function breakoutEvent(view, bars = null) {
     return { kind: 'cross', tone: 'wait', title: volume === null ? `${day}に上抜け・出来高 未確認` : `${day}に上抜け・出来高不足`,
       note: volume === null ? '出来高を確認できないため、上抜けの裏付けはありません。' : `出来高${ratioShown(volume)}は基準の${BREAKOUT_VOLUME_RATIO}×に届きません。` };
   }
-  if (prevClose >= pivot) {
-    const crossed = pivotCrossing(bars, pivot);
-    return { kind: 'after', tone: 'zone', title: crossed ? `買いゾーン内（${shortDate(crossed.date, bars.at(-1)?.date)}に上抜け・${crossed.sessionsAgo}営業日前）` : '買いゾーン内（上抜け後）', crossed };
-  }
-  return null;
-}
-
-/**
- * The session the close last crossed the pivot from below, when it was 1 to `sessions` sessions before
- * the last bar and every close since is at or above the pivot; null otherwise (or with any close missing).
- */
-export function pivotCrossing(bars, pivot, sessions = 3) {
-  if (!Array.isArray(bars) || !positive(pivot)) return null;
-  const n = bars.length, close = i => (positive(bars[i]?.close) ? bars[i].close : null);
-  for (let i = n - 1; i >= n - 1 - sessions && i >= 1; i--) {
-    const today = close(i), before = close(i - 1);
-    if (today === null || before === null || today < pivot) return null;
-    if (before < pivot) return i === n - 1 ? null : { date: bars[i].date, sessionsAgo: n - 1 - i };
-  }
+  if (prevClose >= pivot) return { kind: 'after', tone: 'zone', title: '買いゾーン内（上抜け後）' };
   return null;
 }
 

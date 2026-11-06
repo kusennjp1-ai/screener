@@ -1,10 +1,20 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
 import StockVerdict from './StockVerdict';
 import { candidateView, trendTemplate } from './briefCandidate';
 import { positionPlan } from './positionSizing';
 import { withAuditFixture } from '../testAuditFixture';
+
+// The round-2 earnings seams the conclusion calls (data's, plan §2.2): each answers as its owner's module
+// does unless a test sets a value (undefined: the real body; null at step 0), and records what it was given.
+const seams = vi.hoisted(() => ({ chip: undefined, caution: undefined, asked: [] }));
+vi.mock('../fundamentalsExplain.js', async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual,
+    earningsChipView: financial => { seams.asked.push(['chip', financial]); return seams.chip === undefined ? actual.earningsChipView(financial) : seams.chip; },
+    earningsCaution: financial => { seams.asked.push(['caution', financial]); return seams.caution === undefined ? actual.earningsCaution(financial) : seams.caution; } };
+});
 
 const DATE = '2026-10-02';
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -109,13 +119,13 @@ describe('the conclusion says why there is no buy', () => {
   it('names the failed template rule with its value, in a neutral tone, and marks the position and the prices 参考', () => {
     const card = conclusionOf({ row: audited({ rs: 61.4 }) });
     expect(card.className).toContain('tone-neutral');
-    expect(title(card)).toBe('トレンドテンプレート未達（未達：RS ≥ 70（61））— 買いの対象外');
+    expect(title(card)).toBe('トレンドテンプレート未達（未達：RS推計 ≥ 70（61））— 買いの対象外');
     expect(sub(card)).toBe('位置は参考：買いゾーン・ピボット比 +1.0%。');
     expect(meter(card).getAttribute('aria-label')).toBe('ピボットからの位置（参考） +1.0%');
     expect(meter(card).classList.contains('is-reference')).toBe(true);
     expect(tiles(card)).toEqual([['買いの範囲', '100.00', '〜105.00', '参考'], ['損切り −7.0%', '93.93', '買値 101.00', '参考'], ['株数', '88株', 'リスク $625', '参考']]);
     // The rule and its value are one unit a line never splits.
-    expect(card.querySelector('strong .brief-nowrap').textContent).toBe('RS ≥ 70（61）');
+    expect(card.querySelector('strong .brief-nowrap').textContent).toBe('RS推計 ≥ 70（61）');
   });
 
   it('counts any other unmet rule, or several, in a one-line title and names the first in the line under it', () => {
@@ -291,5 +301,24 @@ describe('the conclusion says why there is no buy', () => {
     expect(vcpChip.textContent).toBe('VCP 12週 25/6 3T・土台の高値を上抜け（9/28）');
     // The chip never claims a pivot crossing of its own.
     expect(vcpChip.textContent).not.toMatch(/ピボット|上抜け済み/);
+  });
+  // The data track's earnings chip and caution line: asked with the stock's financial view, nothing shown while null.
+  it('asks the earnings seams with the financial view, and places a chip before Code 33 and a caution line under the call', () => {
+    const chips = card => [...card.querySelectorAll('.brief-tags .brief-chip')];
+    onTestFinished(() => Object.assign(seams, { chip: undefined, caution: undefined, asked: [] }));
+    let card = conclusionOf();
+    expect(seams.asked.slice(-2)).toEqual([['chip', null], ['caution', null]]);
+    const before = chips(card).map(node => node.textContent);
+    expect(card.querySelectorAll('.brief-call-status p')).toHaveLength(1);
+    cleanup();
+    seams.chip = { text: '〈earnings〉', tone: 'zone', title: '〈title〉' };
+    seams.caution = { text: '〈caution〉' };
+    card = conclusionOf();
+    const after = chips(card);
+    const code33 = after.findIndex(node => node.textContent.startsWith('Code 33'));
+    expect([after[code33 - 1].textContent, after[code33 - 1].className, after[code33 - 1].getAttribute('title')]).toEqual(['〈earnings〉', 'brief-chip tone-zone', '〈title〉']);
+    expect(after.map(node => node.textContent).filter(text => text !== '〈earnings〉')).toEqual(before);
+    const lines = card.querySelectorAll('.brief-call-status p');
+    expect([lines.length, lines[1].textContent]).toEqual([2, '〈caution〉']);
   });
 });

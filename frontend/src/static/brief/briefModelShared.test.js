@@ -7,6 +7,7 @@ import { secPoint, secRecord, secUnavailable } from '../../test/fixtures/secReco
 import { code33Explain, code33Parts, fundamentalTiles, fundamentalsSource, secStatus } from './briefModel';
 import * as barrel from './briefModel';
 import * as briefCandidate from './briefCandidate';
+import * as breakoutHistory from './breakoutHistory';
 import * as positionSizing from './positionSizing';
 import * as briefSell from './briefSell';
 import * as briefChartModel from './briefChartModel';
@@ -125,10 +126,10 @@ describe('fundamentals card model', () => {
   });
 });
 
-// The barrel `export *`s five track modules that all grow in round 1: a name two of them export drops
+// The barrel `export *`s the track modules that all grow in rounds 1 and 2: a name two of them export drops
 // out of the barrel (Rollup only warns; native ESM in the dev server throws on the named import).
 describe('the briefModel barrel', () => {
-  const modules = { briefCandidate, positionSizing, briefSell, briefChartModel, briefEnvironment, fundamentalsExplain };
+  const modules = { briefCandidate, breakoutHistory, positionSizing, briefSell, briefChartModel, briefEnvironment, fundamentalsExplain };
   // Every name the barrel carried at eca9854, before the split.
   const BEFORE_SPLIT = ['BREAKOUT_VOLUME_RATIO', 'ENV_RULES', 'FTD_TEXT', 'LIST_FILTERS', 'LIST_SORTS', 'SELL_RULES', 'STOP_DEFAULT_PERCENT', 'STOP_MAX_PERCENT',
     'bare', 'bookWarningCheck', 'briefOrder', 'candidateView', 'code33Explain', 'code33Parts', 'distributionCount', 'earningsDays', 'environmentRules',

@@ -59,6 +59,10 @@ function bars(seed, finalPrice, tightness) {
   return out;
 }
 
+// Every row's Setup Engine base is current for the analysis date (recalculated that day, no failed check named)
+// with a pattern confidence of 60: over the base check's floor of 55 and under portfolioPlan's 70, so the plan's
+// candidates do not change. A spec builds a missing, stale or weak base with `mutate`.
+export const SETUP_CONFIDENCE = 60;
 export const rows = NAMES.map(([symbol, company, sector], index) => {
   const r = rng(index + 7), price = round(20 + r() * 380);
   return withAuditFixture({
@@ -66,6 +70,7 @@ export const rows = NAMES.map(([symbol, company, sector], index) => {
     market_regime: 'confirmed_uptrend', market_above_50dma: true, market_above_200dma: true,
     ibd_industry_group: `${SECTORS[sector]} group ${1 + (index % 4)}`,
     current_price: price, se_pivot_price: round(price * (1 + (index % 5) * 0.012)),
+    se_pattern_confidence: SETUP_CONFIDENCE, setup_recalculation: { status: 'calculated', as_of_date: date },
     adv_usd: Math.round(2.5e7 + r() * 4e8), rs_rating: Math.max(55, Math.round(99 - index * 1.4 - r() * 4)), chart_path: `charts/${symbol}.json`,
     eps_growth_yy: Math.round(15 + r() * 120), sales_growth_yy: Math.round(10 + r() * 80), market_cap: Math.round(1e9 + r() * 2e11),
   }, date);

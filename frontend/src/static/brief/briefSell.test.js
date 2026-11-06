@@ -269,3 +269,22 @@ describe('briefSell seams', () => {
     expect(stockSells({ judged: make(closes.slice(0, 59)), diagnostics: null, view })).toBeNull();
   });
 });
+
+// The weakness-check contract rows read (plan §2.2): { key, state, headline?, detail } with the five states, and the
+// broken setups isBreakdown counts. The key failedBreakout is reserved for verdict's VD2: at step 0 no check carries it.
+describe('the round-2 weakness-check contract', () => {
+  it('every weakness check has a key, one of the five states and a detail; only the 50-day line and the book break a setup', () => {
+    const closes = rising(200);
+    closes.push(closes.at(-1) * 0.9);
+    const bars = make(closes, i => (i === 200 ? 20000 : 10000));
+    const sells = stockSells({ judged: bars, diagnostics: null, view: { symbol: 'AAA', state: 'wait', distance: -3, pivot: closes.at(-1) * 1.03 } });
+    for (const check of sells.weakness) {
+      expect(typeof check.key).toBe('string');
+      expect(['hit', 'caution', 'clear', 'unknown', 'na']).toContain(check.state);
+      expect(check).toHaveProperty('detail');
+    }
+    expect(sells.weakness.map(check => check.key)).not.toContain('failedBreakout');
+    expect(['ma50', 'book', 'failedBreakout', 'day-down'].map(key => isBreakdown({ key, state: 'hit' }))).toEqual([true, true, false, false]);
+    expect(isBreakdown({ key: 'ma50', state: 'caution' })).toBe(false);
+  });
+});

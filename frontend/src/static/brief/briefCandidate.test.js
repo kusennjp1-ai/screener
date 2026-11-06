@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { briefOrder, breakoutEvent, candidateMarketGate, candidateView, EARNINGS_WARN_DAYS, earningsCall, earningsSoon, focusCandidates, focusCounts, focusHeadingNote, focusTone, pivotCrossing, POSITION_NAMES, ratioShown, rsShown, ruleEvidence, matchesSearch, trendTemplate, watchEvent, LIST_FILTERS, LIST_SORTS } from './briefCandidate';
+import { briefOrder, breakoutEvent, candidateMarketGate, candidateView, EARNINGS_WARN_DAYS, earningsCall, earningsSoon, focusCandidates, focusCounts, focusHeadingNote, focusTone, POSITION_NAMES, ratioShown, rsShown, ruleEvidence, matchesSearch, trendTemplate, watchEvent, LIST_FILTERS, LIST_SORTS } from './briefCandidate';
 import { withAuditFixture } from '../testAuditFixture';
 
 const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, qualified: true, ...over });
@@ -118,16 +118,6 @@ describe('the analysis day as an event (verified change and volume only)', () =>
     // price_change_1d is never the source.
     expect(verdict(audited('G', { price: 101, change: 2, price_change_1d: 9 })).change).toBe(2);
   });
-  it('dates a crossing 1 to 3 sessions back from certified bars, and nothing older or broken', () => {
-    const bars = closes => closes.map((close, i) => ({ date: `2026-09-${String(20 + i).padStart(2, '0')}`, close }));
-    expect(pivotCrossing(bars([98, 99, 101, 102, 103]), 100)).toEqual({ date: '2026-09-22', sessionsAgo: 2 });
-    expect(pivotCrossing(bars([98, 101, 102, 103, 104, 105]), 100)).toBeNull();
-    expect(pivotCrossing(bars([98, 99, 101, 99, 102]), 100)).toBeNull();
-    expect(pivotCrossing(bars([98, 99, 101, null, 102]), 100)).toBeNull();
-    expect(pivotCrossing(null, 100)).toBeNull();
-    const v = verdict(audited('H', { price: 103, change: 1 }));
-    expect(breakoutEvent(v, bars([98, 99, 101, 102, 103])).title).toBe('買いゾーン内（9/22に上抜け・2営業日前）');
-  });
   it('gives the conclusion the distance from the 50-day line from the verified audit', () => {
     expect(verdict(audited('S', { price: 100 })).fromSma50).toBeCloseTo(100 / 90 * 100 - 100, 6);
   });
@@ -190,7 +180,7 @@ describe('position names, RS and earnings, the same on every screen', () => {
   });
   it('names the one unmet rule of an あと1条件 row with its value', () => {
     const v = verdict(audited('ONE', { rs: 61.7 }), { qualified: false, passed: 8, failed: 1, unknown: 0, total: 9 });
-    expect(v.missing).toEqual({ chip: 'あと1条件：RS推計（61）', text: '未達：RS ≥ 70（61）', rs: true });
+    expect(v.missing).toEqual({ chip: 'あと1条件：RS推計（61）', text: '未達：RS推計 ≥ 70（61）', rs: true });
     const high = verdict(audited('HIGH', { rs: 80 }), { qualified: false, passed: 8, failed: 1, unknown: 0, total: 9 });
     expect(high.missing).toBeNull();
     const sma = audited('SMA', { rs: 80 });
@@ -291,5 +281,26 @@ describe('selection and order are unchanged by the round-1 wording', () => {
     expect(views.slice().sort(briefOrder).map(v => v.symbol)).toEqual(['Z1', 'Z2', 'Z3', 'U1', 'N2', 'N1', 'N3', 'B1', 'E1', 'S1']);
     expect(Object.fromEntries(Object.entries(LIST_FILTERS).map(([key, filter]) => [key, views.filter(filter.test).map(v => v.symbol)]))).toEqual({
       zone: ['Z1', 'Z2'], near: ['N1', 'N2'], all: ['Z1', 'Z2', 'N1', 'N2', 'B1', 'E1', 'S1'], one: ['Z3', 'N3'], focus: ['Z1', 'Z2', 'N1', 'N2'] });
+  });
+});
+
+// The rows' contracts other tracks read in round 2 (plan §2.2): breakoutEvent's shape with its undated 'after'
+// event, earningsCall's frozen shape and the candidateView fields (rows may add fields, never rename or remove one).
+describe('the round-2 contracts of the candidate view', () => {
+  it('breakoutEvent(view) is { kind, tone, title, note? } and its after event is undated, whatever else it is given', () => {
+    const after = verdict(audited('C', { price: 102, change: 1, volume: 2 }));
+    expect(breakoutEvent(after)).toEqual({ kind: 'after', tone: 'zone', title: '買いゾーン内（上抜け後）' });
+    const bars = [98, 99, 101, 102, 103].map((close, i) => ({ date: `2026-09-${20 + i}`, close }));
+    expect(breakoutEvent(after, bars)).toEqual(breakoutEvent(after));
+    for (const row of [audited('A', { price: 101, change: 2, volume: 1.6 }), audited('B', { price: 101, change: -1, volume: 1.6 }), audited('D', { price: 100 }), audited('T', { price: 101, volume: 1.2 })]) {
+      const keys = Object.keys(breakoutEvent(verdict(row)));
+      expect(keys.filter(key => !['kind', 'tone', 'title', 'note'].includes(key))).toEqual([]);
+    }
+  });
+
+  it('earningsCall keeps its five fields, and candidateView every field the conclusion and the chart read', () => {
+    const v = verdict(audited('E', { price: 101, entry_evidence: { earnings: { date: '2026-10-05' } } }));
+    expect(Object.keys(earningsCall(v, Date.parse('2026-10-02T19:00:00Z'))).sort()).toEqual(['chip', 'date', 'days', 'line', 'soon']);
+    expect(['pivot', 'upper', 'state', 'position', 'distance', 'close', 'change', 'prevClose', 'volumeRatio', 'fromSma50', 'earnings', 'asOf', 'row', 'pivotSource'].filter(key => !Object.hasOwn(v, key))).toEqual([]);
   });
 });

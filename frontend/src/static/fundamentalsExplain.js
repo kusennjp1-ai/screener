@@ -233,3 +233,74 @@ export function publishedFundamentalsCoverage(marketEntry, { bundle = null } = {
   if (![undefined, null, true, false].includes(block.ticker_map_ok)) return null;
   return block;
 }
+
+// ---- Round-2 seams (plan §2.2). Step 0 defines them; the data track writes their bodies. ----
+
+const isoDay = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+const plain = value => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+const yoyPoint = value => value === null || (plain(value) && finite(value.value) && isoDay(value.end));
+const CODE33_STATES = ['pass', 'fail', 'unknown'];
+
+/**
+ * A research-index row's SEC summary (plan §2.3), exported by tools/export-research.mjs from the admitted
+ * SEC record only, with the functions the fundamentals card uses. Older publications have none: a row
+ * without it reads 未収録, never 0 and never false.
+ * @typedef {object} SecSummary
+ * @property {string} sec_state the row's SEC state (secStatus' `state`: 'ok', 'stale', 'invalid', 'no_quarterly', …)
+ * @property {{ value: number, end: string } | null} eps_yoy the latest quarter's EPS change from the year-ago quarter (%) and that quarter's end ('YYYY-MM-DD'), or null
+ * @property {{ value: number, end: string } | null} sales_yoy the same for sales, or null
+ * @property {{ state: 'pass' | 'fail' | 'unknown', kind: string | null } | null} code33 Code 33's state and, for an unknown, code33Explain's `kind`, or null
+ * @property {string} as_of_date the analysis date ('YYYY-MM-DD')
+ */
+
+/**
+ * The row's `sec_summary` when it has the documented shape (SecSummary), as published; null when it is
+ * absent (an older publication) or malformed. Nothing is filled in: a null value stays null. Its
+ * `as_of_date` is returned as published; a consumer compares it with the analysis date itself.
+ * A null result has two reasons a consumer must not mix up: tell them apart with
+ * `Object.hasOwn(row, 'sec_summary')`. Absent is 未収録 (the publication predates the field); present but
+ * refused here is 未確認 (published, but not in the documented shape). Never 0 and never false.
+ * @param {object} row a research-index row
+ * @returns {SecSummary | null}
+ */
+export function secSummary(row) {
+  const value = row?.sec_summary;
+  if (!plain(value) || typeof value.sec_state !== 'string' || !value.sec_state || !isoDay(value.as_of_date)) return null;
+  if (!yoyPoint(value.eps_yoy) || !yoyPoint(value.sales_yoy)) return null;
+  const code33 = value.code33;
+  if (code33 !== null && !(plain(code33) && CODE33_STATES.includes(code33.state) && (code33.kind == null || typeof code33.kind === 'string'))) return null;
+  return value;
+}
+
+/**
+ * The list row's earnings chip, `secRowChip(row)` → `{ text, tone, title, notable }` or null (no chip).
+ * Step 0: always null, so rows render no chip (the data track's DT7 writes the body).
+ */
+export function secRowChip(_row) {
+  return null;
+}
+
+/**
+ * The stock conclusion's earnings chip, `earningsChipView(financial)` (useStockData's `financial`) →
+ * `{ text, tone, title }` or null (no chip). Step 0: always null.
+ */
+export function earningsChipView(_financial) {
+  return null;
+}
+
+/**
+ * The line under the stock conclusion's call about the latest earnings, `earningsCaution(financial)` →
+ * `{ text }` or null (no line). Step 0: always null.
+ */
+export function earningsCaution(_financial) {
+  return null;
+}
+
+/**
+ * Today's one-line warning about this publication's SEC coverage, `fundamentalsCoverageWarning(coverage,
+ * { date })`: `coverage` is publishedFundamentalsCoverage's block (or null), `date` the analysis date →
+ * `{ text }` or null (no line). Step 0: always null.
+ */
+export function fundamentalsCoverageWarning(_coverage, _options = {}) {
+  return null;
+}

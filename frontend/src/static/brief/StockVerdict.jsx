@@ -1,17 +1,18 @@
 import { signed } from '../positionGeometry';
 import { conditionCompactLabel, conditionCompactText } from '../missingCondition';
-import { code33ChipView } from '../fundamentalsExplain.js';
+import { code33ChipView, earningsCaution, earningsChipView } from '../fundamentalsExplain.js';
 import { meterPercent } from './briefNav';
 import { footprint, RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { isBreakdown, sellChipView } from './briefSell';
-import { breakoutEvent, candidateMarketGate, earningsCall, POSITION_NAMES, rsShown } from './briefCandidate';
+import { candidateMarketGate, earningsCall, POSITION_NAMES, rsShown } from './briefCandidate';
+import { crossingEvent } from './breakoutHistory';
 
 const finite = Number.isFinite;
 // A value that is not there reads — on screen and 未計算 to a screen reader (as DayChange says 前日比 未確認).
 const DASH = <><span aria-hidden="true">—</span><span className="sr-only">未計算</span></>;
 const price = value => finite(value) ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : DASH;
 /**
- * A unit a line splits only when it is wider than the whole line (「RS ≥ 70（61）」, 「＋5%」): it moves to the
+ * A unit a line splits only when it is wider than the whole line (「RS推計 ≥ 70（61）」, 「＋5%」): it moves to the
  * next line whole instead, and at 200% zoom it still wraps inside rather than push the card wider.
  */
 const Unit = ({ children }) => <span className="brief-nowrap">{children}</span>;
@@ -22,7 +23,7 @@ function positionCall(view, judged) {
   const pivot = <Unit>{`ピボット比 ${signed(view.distance)}`}</Unit>;
   switch (view.position) {
     case 'zone': {
-      const event = breakoutEvent(view, judged);
+      const event = crossingEvent(view, judged);
       // A crossing without the volume says why in place of the buy range (the range is the first tile).
       return { tone: event?.tone || 'zone', title: event?.title || '買いゾーン内', sub: <>{pivot}・{fromSma50(view)}。{event?.note || <>ピボットから<Unit>＋5%</Unit>までが買いの範囲です。</>}</> };
     }
@@ -124,6 +125,8 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
   const { tone, title, sub, reference = false } = conclusion(view, template, market, judged, now, sells);
   const print = footprint(technical, bars);
   const code33 = code33ChipView(financial), sell = sellChipView(sells);
+  // The data track's earnings chip and caution line (none yet).
+  const earningsChip = earningsChipView(financial), caution = earningsCaution(financial);
   const levels = plan && !plan.blocked ? plan : null;
   const sizing = reference || plan?.reference ? '参考' : plan?.trialOnly ? '試算のみ' : plan?.defaults ? '既定条件' : null;
   const risk = finite(levels?.riskDollars) ? `$${Math.round(levels.riskDollars).toLocaleString('en-US')}` : null;
@@ -145,6 +148,7 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
     [`RS推計 ${rsShown(view.rs)}`, finite(view.rs) && view.rs >= 70 ? 'zone' : ''],
     // RS line at a new high while the price is still below its own high: the RS line is leading.
     ...(rsHigh ? [[finite(view.fromHigh) && view.fromHigh >= RS_LEAD_FROM_HIGH_PERCENT ? `RS線 新高値（株価に先行・高値の${view.fromHigh.toFixed(0)}%下）` : 'RS線 新高値', 'zone']] : []),
+    ...(earningsChip ? [[earningsChip.text, earningsChip.tone, earningsChip.title]] : []),
     [code33.text, code33.tone],
     ...(Number.isInteger(row?.ibd_group_rank) ? [[`業種 ${row.ibd_group_rank}位（推計）`, row.ibd_group_rank <= 40 ? 'zone' : '']] : []),
     // The conclusion has the room for the full sentence (the rows show its short form).
@@ -153,13 +157,13 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
     [earnings ? earnings.chip : '決算日 未確認', earnings?.soon ? 'ext' : ''],
   ];
   return <section className={`brief-card brief-call tone-${tone} in`} style={{ '--i': 0 }} aria-label="結論" data-testid="brief-conclusion">
-    <div className="brief-call-status"><span className="brief-call-dot" aria-hidden="true" /><div><strong>{title}</strong><p>{sub}</p></div></div>
+    <div className="brief-call-status"><span className="brief-call-dot" aria-hidden="true" /><div><strong>{title}</strong><p>{sub}</p>{caution && <p className="brief-call-caution">{caution.text}</p>}</div></div>
     <Meter distance={view.distance} reference={reference} stale={Boolean(view.stale)} />
     <div className="brief-kgrid">
       <div><small>買いの範囲</small><b className="numeric">{price(view.pivot)}</b><em>〜{price(view.upper)}</em><Qualifier text={reference || plan?.reference ? '参考' : null} /></div>
       <div><small>{finite(levels?.stopPercent) ? `損切り −${levels.stopPercent.toFixed(1)}%` : '損切り'}</small><b className="numeric">{price(levels?.stop)}</b><em>買値 {price(levels?.entry)}</em><Qualifier text={sizing} /></div>
       <div><small>株数</small><b className="numeric">{shares}</b><em>{shareNote}</em><Qualifier text={sizing} /></div>
     </div>
-    <div className="brief-tags">{chips.map(([text, t]) => <span key={text} className={`brief-chip${t ? ` tone-${t}` : ''}`}>{text}</span>)}</div>
+    <div className="brief-tags">{chips.map(([text, t, chipTitle]) => <span key={text} className={`brief-chip${t ? ` tone-${t}` : ''}`} title={chipTitle}>{text}</span>)}</div>
   </section>;
 }
