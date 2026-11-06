@@ -60,6 +60,11 @@ export function yearRange(rows, hit, field) {
 export const rangePosition = range => !range ? null : range.at <= 0 ? '1年で最低' : range.at >= 1 ? '1年で最高' : null;
 const monthBefore = (rows, hit, field) => { const before = rows[hit.index - MONTH]; return finite(before?.[field]) ? before[field] : null; };
 
+/** A simple moving average of `length` closes ending at each shown point of an index chart (null until there are enough). */
+export const sma = (all, offset, count, length) => Array.from({ length: count }, (_, i) => { const at = offset + i; if (at < length - 1) return null; let s = 0; for (let j = at - length + 1; j <= at; j++) s += all[j].close; return s / length; });
+/** The 地合い card's chart status (trendsStatus's state): a failed long history, a failed fetch, or the asset's own state. */
+export const chartStatusOf = (view, status) => view.longError ? 'history-error' : status.state === 'error' && status.kind === 'fetch' ? 'fetch-error' : status.state;
+
 // The index position (reference/indexSummary.js, plain Node imports it from there): the study's own function.
 export { indexSummary };
 

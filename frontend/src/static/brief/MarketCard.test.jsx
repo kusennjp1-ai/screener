@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MarketCard from './MarketCard';
-import { RegimeContext } from './MarketScreen';
+import { MarketDetailCard, RegimeContext } from './MarketScreen';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
@@ -12,12 +12,14 @@ import { marketTabStudy } from '../reference/marketTabStudy.js';
 import { followThroughDay } from '../followThroughDay';
 import { exposureRuleText } from '../portfolioPlan';
 
+/** Today's card, or with `detail` the market tab's (MarketScreen.jsx, the tab's lazy chunk). */
+const Card = ({ detail = false, ...props }) => detail ? <MarketDetailCard {...props} /> : <MarketCard {...props} />;
 /** The market tab's study parts as MarketScreen hands them to the card (Today passes none). */
 const studyProps = (value, date, ref, wide, { market = null, manifest = null } = {}) => {
   const study = marketTabStudy({ trends: value, reference: ref, date, market, manifest });
   return { study, studyBlock: <RegimeContext context={study.regime} wide={wide} nasdaq={study.nasdaqPosition?.state ? study.nasdaqFigures : null} /> };
 };
-const show = (value, { date = '2026-10-02', detail = true, market = UP, marketLoading = false, onOpenMetric, ref = reference } = {}) => render(<MemoryRouter><MarketCard market={market} marketLoading={marketLoading} trends={value} date={date} detail={detail} onOpenMetric={onOpenMetric} {...(detail ? studyProps(value, date, ref, true) : {})} /></MemoryRouter>);
+const show = (value, { date = '2026-10-02', detail = true, market = UP, marketLoading = false, onOpenMetric, ref = reference } = {}) => render(<MemoryRouter><Card market={market} marketLoading={marketLoading} trends={value} date={date} detail={detail} onOpenMetric={onOpenMetric} {...(detail ? studyProps(value, date, ref, true) : {})} /></MemoryRouter>);
 const tiles = () => [...document.querySelectorAll('.brief-fact')];
 const tile = label => tiles().find(element => element.querySelector('small').textContent === label) || null;
 const toggle = label => within(tile(label)).getAllByRole('button')[0];
@@ -129,7 +131,7 @@ describe('brief market card: market tab', () => {
   it('shows one section at a time behind phone tabs that carry each group\'s ▲ count and move by arrow keys', () => {
     function Phone() {
       const [section, setSection] = useState('index');
-      return <MemoryRouter><MarketCard market={UP} trends={trends({ rows: breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30 } : {})) })} date="2026-10-02" detail switcher section={section} onSection={setSection}
+      return <MemoryRouter><Card market={UP} trends={trends({ rows: breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30 } : {})) })} date="2026-10-02" detail switcher section={section} onSection={setSection}
         history={<section aria-label="市場環境の推移">long history</section>} /></MemoryRouter>;
     }
     render(<Phone />);
@@ -165,7 +167,7 @@ describe('brief market card: market tab', () => {
   });
 
   it('marks a section tab with a neutral 「?」 when it holds a value or check that is not confirmed', () => {
-    const phone = (value, historyUnknown) => render(<MemoryRouter><MarketCard market={UP} trends={value} date="2026-10-02" detail switcher section="index" onSection={() => {}}
+    const phone = (value, historyUnknown) => render(<MemoryRouter><Card market={UP} trends={value} date="2026-10-02" detail switcher section="index" onSection={() => {}}
       history={<section aria-label="市場環境の推移">long history</section>} historyUnknown={historyUnknown} /></MemoryRouter>);
     const names = () => within(screen.getByRole('tablist', { name: '市場タブの表示' })).getAllByRole('tab').map(tab => tab.textContent);
     // An older long-history schema: participation and leaders show 未収録 rows; the history awaits its update.
@@ -194,7 +196,7 @@ describe('brief market card: market tab', () => {
   });
 
   it('moves the plain source line into the 注記 behind the phone tabs', () => {
-    render(<MemoryRouter><MarketCard market={UP} trends={trends({ sp500: closes('2026-10-02') })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
+    render(<MemoryRouter><Card market={UP} trends={trends({ sp500: closes('2026-10-02') })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
     expect(screen.getByRole('group', { name: /^S&P 500（長期履歴の\^GSPC終値/ })).toBeInTheDocument();
     expect(document.querySelector('.brief-index-source')).toBeNull();
     expect(document.querySelector('.brief-screen-notes')).toHaveTextContent('S&P 500の終値・1年高値からの位置・50日線比・200日線比は、長期履歴の^GSPC終値から計算しています。');
@@ -212,7 +214,7 @@ describe('brief market card: market tab', () => {
   });
 
   it('says an older block in the heading\'s stamp slot on a phone, and the rest in the 注記', () => {
-    render(<MemoryRouter><MarketCard market={UP} trends={trends({ asOf: '2026-10-01', date: '2026-10-02' })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
+    render(<MemoryRouter><Card market={UP} trends={trends({ asOf: '2026-10-01', date: '2026-10-02' })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
     const note = screen.getByRole('note');
     expect(note).toHaveClass('brief-stamp');
     expect(note).toHaveTextContent(/^◷ 10\/1引け・10\/2分は再集計待ち$/);
@@ -244,7 +246,7 @@ describe('brief market card: market tab', () => {
   });
 
   it('names the unjudged checks on the phone\'s summary line and folds only their reasons', () => {
-    const phone = rows => render(<MemoryRouter><MarketCard market={UP} trends={trends({ rows })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
+    const phone = rows => render(<MemoryRouter><Card market={UP} trends={trends({ rows })} date="2026-10-02" detail switcher section="index" onSection={() => {}} /></MemoryRouter>);
     phone(oldSchema(breadth('2026-10-02')));
     const fold = signals().querySelector('details');
     expect(fold.open).toBe(false);
@@ -384,7 +386,7 @@ describe('brief market card: Today', () => {
   });
 
   it('keeps unknown values unknown when nothing is published, never 0', () => {
-    render(<MemoryRouter><MarketCard market={{ state: 'unknown', label: '市場未確認', cap: 0 }} trends={{ data: null }} date="2026-10-02" /></MemoryRouter>);
+    render(<MemoryRouter><Card market={{ state: 'unknown', label: '市場未確認', cap: 0 }} trends={{ data: null }} date="2026-10-02" /></MemoryRouter>);
     expect(screen.getByText('市場未確認')).toBeInTheDocument();
     expect(screen.getByText('市場推移データはこの公開に含まれていません。')).toBeInTheDocument();
     for (const element of tiles()) expect(element).toHaveTextContent('未配信市場推移データなし');
@@ -397,7 +399,7 @@ const DD = reference.methods.distribution, WINDOW = reference.methods.followThro
 /** An index series of the study's window of sessions ending on its newest point (the exporter's points are its validated bars). */
 const sessionsOf = item => { const last = item.points.at(-1); return { ...item, points: [...days(last.date, WINDOW).slice(0, -1).map(date => ({ date, value: last.value, distribution: false, reason: null })), last] }; };
 const withMethods = value => { value.data.indices = value.data.indices.map(item => sessionsOf({ ...item, method: DD })); return value; };
-const phone = (value, { market = UP, date = '2026-10-02' } = {}) => render(<MemoryRouter><MarketCard market={market} trends={value} date={date} detail switcher section="index" onSection={() => {}} {...studyProps(value, date, reference, false)} /></MemoryRouter>);
+const phone = (value, { market = UP, date = '2026-10-02' } = {}) => render(<MemoryRouter><Card market={market} trends={value} date={date} detail switcher section="index" onSection={() => {}} {...studyProps(value, date, reference, false)} /></MemoryRouter>);
 const regime = () => document.querySelector('details.brief-regime-ref');
 const BANNED = /上がりやすい|下がりやすい|安全|底打ち|オールクリア|今日の確率/;
 
@@ -668,7 +670,7 @@ describe('brief market card: round 2', () => {
     const market = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
     const manifest = { as_of_date: '2026-10-02', markets: { US: { as_of_date: '2026-10-02', market_context: { as_of_date: '2026-10-02', regime: 'confirmed_uptrend', distribution_days: 1, ftd_date: '2026-09-18', ftd_days_since: 10, exposure_pct: 40, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' } } } };
     const LINE = '局面判定はFTDによる上昇トレンド（9/18）。この目安はSPYが50日線の下のため0%（独自判定）';
-    render(<MemoryRouter><MarketCard market={market} trends={trends()} date="2026-10-02" detail switcher section="index" onSection={() => {}} {...studyProps(trends(), '2026-10-02', reference, false, { market, manifest })} /></MemoryRouter>);
+    render(<MemoryRouter><Card market={market} trends={trends()} date="2026-10-02" detail switcher section="index" onSection={() => {}} {...studyProps(trends(), '2026-10-02', reference, false, { market, manifest })} /></MemoryRouter>);
     const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
     expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', LINE, exposureRuleText()]);
     expect(fold).not.toHaveAttribute('open');
@@ -676,11 +678,11 @@ describe('brief market card: round 2', () => {
     expect(screen.getByTestId('brief-regime')).toHaveTextContent('50日線割れ（弱含み・独自判定）');
     expect(screen.getByTestId('brief-regime').querySelector('.brief-exposure b')).toHaveTextContent(/^0%$/);
     cleanup();
-    render(<MemoryRouter><MarketCard market={market} trends={trends()} date="2026-10-02" detail {...studyProps(trends(), '2026-10-02', reference, true, { market, manifest })} /></MemoryRouter>);
+    render(<MemoryRouter><Card market={market} trends={trends()} date="2026-10-02" detail {...studyProps(trends(), '2026-10-02', reference, true, { market, manifest })} /></MemoryRouter>);
     expect([...screen.getByTestId('brief-regime').querySelectorAll('.brief-verdict-why')].map(p => p.textContent)).toEqual(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', LINE]);
     cleanup();
     // Today's card never shows it (Today never loads the study that reads the manifest).
-    render(<MemoryRouter><MarketCard market={market} trends={trends()} date="2026-10-02" /></MemoryRouter>);
+    render(<MemoryRouter><Card market={market} trends={trends()} date="2026-10-02" /></MemoryRouter>);
     expect(document.body).not.toHaveTextContent('局面判定は');
   });
 
