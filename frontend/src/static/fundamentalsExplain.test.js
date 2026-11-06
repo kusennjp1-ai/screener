@@ -193,7 +193,7 @@ describe('the round-2 seams', () => {
     const chip = summary => secRowChip({ symbol: 'AAA', market: 'US', as_of_date: CONTRACT_DATE, sec_summary: summary });
     const both = (eps, sales, epsEnd = '2026-06-30', salesEnd = '2026-06-30') => ({ ...secSummaryShape, eps_yoy: eps === null ? null : { value: eps, end: epsEnd }, sales_yoy: sales === null ? null : { value: sales, end: salesEnd } });
     expect(chip(both(40, 100))).toEqual({ text: 'EPS +40%・売上 +100%（26-06期）', tone: 'zone', title: expect.stringContaining('独自設定'), notable: true });
-    expect(chip(both(40, 100, '2026-03-31'))).toMatchObject({ text: 'EPS +40%（26-03期）・売上 +100%（26-06期）', tone: 'zone' });
+    expect(chip(both(40, 100, '2026-03-31'))).toMatchObject({ text: 'EPS +40%（26-03）・売上 +100%（26-06）', tone: 'zone' });
     expect(chip(both(25, 25))).toMatchObject({ tone: 'zone', notable: true });
     expect(chip(both(24.9, 100))).toMatchObject({ text: 'EPS +25%・売上 +100%（26-06期）', tone: '', notable: false });
     // A falling EPS is notable, in the neutral tone, with U+2212.
@@ -220,7 +220,7 @@ describe('the round-2 seams', () => {
     const report = bookFinancialEvidence(secRecord(), 'TEST', date);
     expect(earningsChipView({ report, sec: { state: 'ok' }, code33: { state: 'pass' } })).toEqual({ text: 'EPS +80%・売上 +100%（25-12期）', tone: 'zone', title: expect.stringContaining('独自設定') });
     const tenQ = secRecord(); tenQ.quarterly.eps = tenQ.quarterly.eps.filter(p => !p.end.endsWith('12-31'));
-    expect(earningsChipView({ report: bookFinancialEvidence(tenQ, 'TEST', date), sec: { state: 'ok' } }).text).toBe('EPS +40%（25-09期）・売上 +100%（25-12期）');
+    expect(earningsChipView({ report: bookFinancialEvidence(tenQ, 'TEST', date), sec: { state: 'ok' } }).text).toBe('EPS +40%（25-09）・売上 +100%（25-12）');
     expect(earningsChipView({ report: null, sec: { state: 'stale', short: '古い', long: '…' } })).toMatchObject({ text: '業績 未確認・古い', tone: '' });
     expect(earningsChipView({ report: null, sec: { state: 'not_published', short: 'SEC 未配信' } }).text).toBe('業績 未確認・SEC未配信');
     expect(earningsChipView({ report: null, sec: { state: 'invalid_payload', short: 'SEC 検証不可' } }).text).toBe('業績 未確認・SEC検証不可');
@@ -316,7 +316,7 @@ describe('round-2 reasons: the cause of an unusable record, a fiscal Q4 without 
     tenQ.quarterly.eps.splice(-3, 3, ...[['2025-01-01', '2025-03-31', 1.1], ['2025-04-01', '2025-06-30', 1.2], ['2025-07-01', '2025-09-30', 1.4]].map(([s, e, v]) => secPoint('eps', [s, e], v)));
     const q4 = bookFinancialEvidence(tenQ, 'TEST', '2026-02-01');
     const text = code33Explain(q4, { state: 'ok' }, code33Layered(q4, null, '2026-02-01'), { interim: true });
-    expect(text).toMatchObject({ state: 'unknown', kind: 'q4_eps', text: '売上の加速と純利益率の上昇は達成。EPS の加速は未確認：EPS前年比 +10%→+20%→+40%（Q4は10-Kのみで未確認・年間値から差し引く推計はしません）。' });
+    expect(text).toMatchObject({ state: 'unknown', kind: 'q4_eps', text: '売上の加速と純利益率の上昇は達成。EPS の加速は未確認：EPS前年比 +10→+20→+40（Q4は10-Kのみで未確認）。' });
     // Without the card's option the shared wording stays; the known rates never count as a pass.
     expect(code33Explain(q4, { state: 'ok' }, code33Layered(q4, null, '2026-02-01')).text).toContain('EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です');
     // A fiscal Q4 inside the window reads Q4未確認 among the known rates.
@@ -324,7 +324,7 @@ describe('round-2 reasons: the cause of an unusable record, a fiscal Q4 without 
     middle.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4, { form: '10-K', filed: '2025-08-20', accession: 'k-25' })];
     const mid = bookFinancialEvidence(middle, 'TEST', '2026-02-01');
     expect(code33Explain(mid, { state: 'ok' }, code33Layered(mid, null, '2026-02-01'), { interim: true })).toMatchObject({ kind: 'q4_eps',
-      text: expect.stringContaining('EPS前年比 +10%→Q4未確認→+40%→+80%（Q4は10-Kのみで未確認') });
+      text: expect.stringContaining('EPS前年比 +10→Q4未確認→+40→+80（Q4は10-Kのみで未確認）') });
   });
 
   it('a record without a revenue concept says the sales concept is out of scope, never 未報告', () => {

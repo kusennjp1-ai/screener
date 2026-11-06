@@ -228,15 +228,15 @@ export function code33Explain(report, sec, code33 = null, { interim = false } = 
   const others = open.filter(key => key !== 'epsAcceleration');
   const why = key => `${PART_NAMES[key]}は未確認です（${reasonFor(report, key)}）。`;
   // `interim` (the card): the EPS growth that is known, as facts, in place of the general sentence (plan DT4).
-  if (code33Parts(report)?.q4Eps) return unknown('q4_eps', `${achieved}${interim ? `EPS の加速は未確認：${epsSequence(report)}（Q4は10-Kのみで未確認・年間値から差し引く推計はしません）。` : 'EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です（年間値から差し引く推計はしません）。'}${others.map(why).join('')}`);
+  if (code33Parts(report)?.q4Eps) return unknown('q4_eps', `${achieved}${interim ? `EPS の加速は未確認：${epsSequence(report)}（Q4は10-Kのみで未確認）。` : 'EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です（年間値から差し引く推計はしません）。'}${others.map(why).join('')}`);
   return unknown('other', `${achieved}${open.map(why).join('')}`);
 }
-// The known EPS growth of the latest four quarters, oldest first, as facts (「EPS前年比 +10→+20→+40」): a trailing
-// fiscal Q4 without EPS is left to the sentence's own 「Q4は10-Kのみ」, any other unknown quarter reads 未確認.
+// The known EPS growth of the latest four quarters, oldest first, as facts in % (「EPS前年比 +10→+20→+40」, U+2212 for a
+// fall): a trailing fiscal Q4 without EPS is left to the sentence's own 「Q4は10-Kのみ」, any other unknown quarter reads 未確認.
 function epsSequence(report) {
   const rows = report.rows.slice(-4);
   while (rows.length && !finite(rows.at(-1).epsYoY) && rows.at(-1).fiscalQ4) rows.pop();
-  return `EPS前年比 ${rows.map(row => finite(row.epsYoY) ? signed(row.epsYoY, 0) : row.fiscalQ4 ? 'Q4未確認' : '未確認').join('→')}`;
+  return `EPS前年比 ${rows.map(row => finite(row.epsYoY) ? signed(row.epsYoY, 0).replace('%', '') : row.fiscalQ4 ? 'Q4未確認' : '未確認').join('→')}`;
 }
 function reasonFor(report, key) {
   const row = report.rows.slice(-4).find(item => quarterReason(item, PART_METRIC[key]));
@@ -359,13 +359,16 @@ export const EARNINGS_CHIP_PERCENT = 25;
 const growth = value => signed(value, 0);
 /**
  * The facts of the two growth rates with each period: 「EPS +40%・売上 +100%（26-06期）」 when both quarters are the
- * same, else 「EPS +40%（26-03期）・売上 +100%（26-06期）」; an unknown one reads 未確認. Tone zone (and notable) only
+ * same, else 「EPS +40%（26-03）・売上 +100%（26-06）」; an unknown one reads 未確認 beside the known one's period. Tone zone (and notable) only
  * when both are at EARNINGS_CHIP_PERCENT or more; a falling EPS is notable in the neutral tone.
  */
 function earningsFacts(eps, sales) {
   if (!eps && !sales) return null;
+  // Two periods are named without 期 after each value, so the chip stays short on a phone.
+  const own = point => `（${point.end.slice(2, 7)}）`;
   const text = eps && sales && eps.end === sales.end ? `EPS ${growth(eps.value)}・売上 ${growth(sales.value)}（${yyMm(eps.end)}）`
-    : `${eps ? `EPS ${growth(eps.value)}（${yyMm(eps.end)}）` : 'EPS 未確認'}・${sales ? `売上 ${growth(sales.value)}（${yyMm(sales.end)}）` : '売上 未確認'}`;
+    : eps && sales ? `EPS ${growth(eps.value)}${own(eps)}・売上 ${growth(sales.value)}${own(sales)}`
+      : `${eps ? `EPS ${growth(eps.value)}（${yyMm(eps.end)}）` : 'EPS 未確認'}・${sales ? `売上 ${growth(sales.value)}（${yyMm(sales.end)}）` : '売上 未確認'}`;
   const strong = Boolean(eps && sales && eps.value >= EARNINGS_CHIP_PERCENT && sales.value >= EARNINGS_CHIP_PERCENT);
   const title = `前年同期比（SEC XBRL・独自設定：EPS・売上とも${EARNINGS_CHIP_PERCENT}%以上で緑）`;
   return { text, tone: strong ? 'zone' : '', title, notable: strong || Boolean(eps && eps.value < 0) };

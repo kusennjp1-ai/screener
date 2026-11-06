@@ -55,7 +55,7 @@ describe('brief fundamentals card', () => {
     expect(scope.getByText('出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで')).toBeInTheDocument();
     expect(scope.getByText('Code 33 未確認')).toBeInTheDocument();
     // The EPS growth that is known is stated as facts; the fiscal-Q4 EPS stays unknown and is never estimated.
-    expect(scope.getByText(/EPS の加速は未確認：EPS前年比 \+10%→\+20%→\+40%（Q4は10-Kのみで未確認・年間値から差し引く推計はしません）/)).toBeInTheDocument();
+    expect(scope.getByText(/EPS の加速は未確認：EPS前年比 \+10→\+20→\+40（Q4は10-Kのみで未確認）/)).toBeInTheDocument();
     // A phone's legend stays on one line; the reasons are one fold away, with their count.
     expect(scope.getByText('値なし', { selector: '.brief-q-legend span' })).toBeInTheDocument();
     expect(scope.getByText('値なしの理由').closest('summary')).toHaveTextContent('値なしの理由3件・業績の質の根拠・対象外の項目');
