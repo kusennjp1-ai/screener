@@ -41,7 +41,7 @@ test.describe('screen heights at 375×812', () => {
 
   test('the market tab opens on the verdict and the index section; every section is a tab away', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/market');
-    await expect(tabs(page)).toHaveText(['指数', '参加度▲注意1?未確認あり', 'リーダー?未確認あり', '推移']);
+    await expect(tabs(page)).toHaveText(['指数', '参加度?未確認あり', 'リーダー?未確認あり', '推移']);
     await expect(tabs(page).first()).toHaveAttribute('aria-selected', 'true');
     // The verdict, the exposure guide and the warning summary are on the first screen, before any tab.
     for (const locator of [page.getByTestId('brief-regime'), page.getByRole('group', { name: '注意サイン（独自判定）' }), tabs(page).first()]) {
@@ -403,7 +403,7 @@ test.describe('market tab labels at 320px', () => {
   test.use(phone(320, 640));
   test('each label and its marks fit inside the tab, with clear space between neighbours', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/market');
-    await expect(tabs(page)).toHaveText(['指数', '参加度▲注意1?未確認あり', 'リーダー?未確認あり', '推移']);
+    await expect(tabs(page)).toHaveText(['指数', '参加度?未確認あり', 'リーダー?未確認あり', '推移']);
     const boxes = await tabs(page).evaluateAll(nodes => nodes.map(node => {
       const tab = node.getBoundingClientRect(), parts = [...node.querySelectorAll('.brief-switch-label, .brief-switch-marks > *')].map(part => part.getBoundingClientRect());
       return { label: node.textContent, tab: [tab.left, tab.right], text: [Math.min(...parts.map(part => part.left)), Math.max(...parts.map(part => part.right))], overflow: node.scrollWidth - node.clientWidth };
