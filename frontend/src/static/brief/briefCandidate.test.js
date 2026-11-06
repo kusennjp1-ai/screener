@@ -283,3 +283,24 @@ describe('selection and order are unchanged by the round-1 wording', () => {
       zone: ['Z1', 'Z2'], near: ['N1', 'N2'], all: ['Z1', 'Z2', 'N1', 'N2', 'B1', 'E1', 'S1'], one: ['Z3', 'N3'], focus: ['Z1', 'Z2', 'N1', 'N2'] });
   });
 });
+
+// The rows' contracts other tracks read in round 2 (plan §2.2): breakoutEvent's shape with its undated 'after'
+// event, earningsCall's frozen shape and the candidateView fields (rows may add fields, never rename or remove one).
+describe('the round-2 contracts of the candidate view', () => {
+  it('breakoutEvent(view) is { kind, tone, title, note? } and its after event is undated, whatever else it is given', () => {
+    const after = verdict(audited('C', { price: 102, change: 1, volume: 2 }));
+    expect(breakoutEvent(after)).toEqual({ kind: 'after', tone: 'zone', title: '買いゾーン内（上抜け後）' });
+    const bars = [98, 99, 101, 102, 103].map((close, i) => ({ date: `2026-09-${20 + i}`, close }));
+    expect(breakoutEvent(after, bars)).toEqual(breakoutEvent(after));
+    for (const row of [audited('A', { price: 101, change: 2, volume: 1.6 }), audited('B', { price: 101, change: -1, volume: 1.6 }), audited('D', { price: 100 }), audited('T', { price: 101, volume: 1.2 })]) {
+      const keys = Object.keys(breakoutEvent(verdict(row)));
+      expect(keys.filter(key => !['kind', 'tone', 'title', 'note'].includes(key))).toEqual([]);
+    }
+  });
+
+  it('earningsCall keeps its five fields, and candidateView every field the conclusion and the chart read', () => {
+    const v = verdict(audited('E', { price: 101, entry_evidence: { earnings: { date: '2026-10-05' } } }));
+    expect(Object.keys(earningsCall(v, Date.parse('2026-10-02T19:00:00Z'))).sort()).toEqual(['chip', 'date', 'days', 'line', 'soon']);
+    expect(['pivot', 'upper', 'state', 'position', 'distance', 'close', 'change', 'prevClose', 'volumeRatio', 'fromSma50', 'earnings', 'asOf', 'row', 'pivotSource'].filter(key => !Object.hasOwn(v, key))).toEqual([]);
+  });
+});

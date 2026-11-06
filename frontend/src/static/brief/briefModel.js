@@ -16,5 +16,6 @@ export * from './briefChartModel';
 export * from './briefEnvironment';
 export { shortDate, latestKnown, sentence, bare } from './briefShared';
 
-// The fundamentals card's view model lives beside the rules so node tools can use it too.
-export { code33Parts, code33Explain, code33ChipView, fundamentalTiles, fundamentalsSource, publishedFundamentalsCoverage, quarterReason, secStatus } from '../fundamentalsExplain.js';
+// The fundamentals card's view model lives beside the rules so node tools can use it too. Every export,
+// so a seam the data track adds reaches the barrel without editing it.
+export * from '../fundamentalsExplain.js';

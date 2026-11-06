@@ -2,7 +2,7 @@
 // leadership marks, the VCP footprint, the opening gaps and the up/down volume ratio, each from the bars
 // it is given (the caller passes only certified bars where a value judges the stock). Unknown stays null.
 import { finite } from '../researchEngine';
-import { shortDate } from './briefShared';
+import { isoDay, shortDate } from './briefShared';
 
 const DAY = 86400000;
 /** The RS line leads when it is at a new high while the price is at least this % below its own high. */
@@ -31,6 +31,31 @@ export function stageFromBars(bars) {
   if (above && rising) return 3;
   if (flat || (!above && rising)) return 1;
   return above ? 3 : 4;
+}
+
+/**
+ * The stage's phase from certified bars (round 2, plan §2.2): `'base'` for a stage 2 that is building a base
+ * (the chart track's CH11 rule), or null when no phase is known. Step 0: always null, so StockView leaves
+ * `stage.phase` undefined and no screen names a phase.
+ */
+export function stagePhase(_bars) {
+  return null;
+}
+
+const flag = value => value === true || value === false || value === null;
+
+/**
+ * The published RS-line high (`rs_line_high`, plan §2.3) as `{ value, leading }`, only when it is dated for
+ * the analysis date `date`; null when the field is absent (an older publication), malformed, or dated for
+ * another day. `value` and `leading` are each true, false or null, as published (null: the producer could
+ * not tell, so a reader shows 未確認, never false). The one reader of that field: the rows (RW5) and the
+ * stock view (CH10) both call it, so the two screens show one value. A consumer tells an absent field
+ * (未収録) from one that is present but refused (未確認) with `Object.hasOwn(row, 'rs_line_high')`.
+ */
+export function publishedRsLineHigh(row, date) {
+  const high = row?.rs_line_high;
+  if (!high || typeof high !== 'object' || Array.isArray(high) || !isoDay(date) || high.as_of_date !== date) return null;
+  return flag(high.value) && flag(high.leading) ? { value: high.value, leading: high.leading } : null;
 }
 
 /** RS line (price ÷ S&P 500) at or above its high of the prior 251 sessions; null when the history is too short. */

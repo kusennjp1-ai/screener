@@ -1,11 +1,12 @@
 // The seams C owns and other tracks call: the conclusion's Code 33 chip (D) and the published SEC
 // coverage block that useStockData (E) hands to secStatus; and secStatus's wording for each coverage state.
 import { describe, expect, it } from 'vitest';
-import { code33ChipView, publishedFundamentalsCoverage, secStatus } from './fundamentalsExplain.js';
+import { code33ChipView, earningsCaution, earningsChipView, fundamentalsCoverageWarning, publishedFundamentalsCoverage, secRowChip, secStatus, secSummary } from './fundamentalsExplain.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
 import { bookFinancialEvidence } from './bookFinancialEvidence.js';
 import { code33Layered } from './code33Reference.js';
 import { secPoint, secRecord, secUnavailable } from '../test/fixtures/secRecord.js';
+import { CONTRACT_DATE, SEC_SUMMARY_INVALID, secSummaryShape, secSummaryUnknown } from '../test/fixtures/publishedContracts.js';
 
 const DATE = '2026-11-03';
 const block = (extra = {}) => ({ schema_version: 'fundamentals-coverage-v1', as_of_date: DATE, sec_fetch_ran: true, sec_as_of: DATE, file_schema: 2, universe: 993, requested: 600,
@@ -146,5 +147,32 @@ describe('secStatus with the publication coverage', () => {
     expect([...new Set(results.map(result => result.state))].sort()).toEqual(['detail_error', 'detail_loading', 'invalid', 'no_cik', 'no_companyfacts', 'no_quarterly', 'no_quarterly_values',
       'not_applicable', 'not_published', 'not_requested', 'ok', 'refused', 'stale', 'transient']);
     for (const result of results) for (const text of [result.short, result.long]) expect(text).not.toMatch(/今後|反映されます|次回|再取得/);
+  });
+});
+
+// The round-2 seams other tracks call (plan §2.2), as step 0 leaves them: secSummary validates the published
+// field, and the four views are null, so no screen shows anything new until the data track writes them.
+describe('the round-2 seams at step 0', () => {
+  it('secSummary returns the documented sec_summary as published, and null when it is absent or malformed', () => {
+    expect(secSummary({ symbol: 'AAA', sec_summary: secSummaryShape })).toBe(secSummaryShape);
+    // Unknown values stay null: the summary is valid and nothing is filled in.
+    expect(secSummary({ symbol: 'AAA', sec_summary: secSummaryUnknown })).toBe(secSummaryUnknown);
+    expect(secSummary({ symbol: 'AAA', sec_summary: { ...secSummaryShape, code33: { state: 'pass', kind: null } } })).not.toBeNull();
+    // An older publication has no field: null (未収録), never an empty summary.
+    for (const value of [null, undefined, {}, { symbol: 'AAA' }, { symbol: 'AAA', sec_summary: null }]) expect(secSummary(value)).toBeNull();
+    expect(SEC_SUMMARY_INVALID.filter(([, value]) => secSummary({ symbol: 'AAA', sec_summary: value }) !== null).map(([why]) => why)).toEqual([]);
+  });
+
+  it('the row chip, the conclusion chip, the caution line and Today\'s coverage warning are null', () => {
+    const report = bookFinancialEvidence(secRecord(), 'AAA', '2026-02-01');
+    const financial = { report, sec: { state: 'ok' }, code33: { state: 'fail' } };
+    expect(secRowChip({ symbol: 'AAA', sec_summary: secSummaryShape })).toBeNull();
+    expect(secRowChip(null)).toBeNull();
+    expect(earningsChipView(financial)).toBeNull();
+    expect(earningsChipView(null)).toBeNull();
+    expect(earningsCaution(financial)).toBeNull();
+    expect(earningsCaution(null)).toBeNull();
+    expect(fundamentalsCoverageWarning(block({ sec_fetch_ran: false, warnings: ['sec_fetch_skipped'] }), { date: CONTRACT_DATE })).toBeNull();
+    expect(fundamentalsCoverageWarning(null, { date: DATE })).toBeNull();
   });
 });

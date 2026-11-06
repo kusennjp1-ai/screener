@@ -63,6 +63,15 @@ export function marketTone(market) {
 }
 
 /**
+ * A short suffix for the 地合い tile on Today (round 2, plan §2.2), from the market verdict (prepared.market),
+ * the market-trends query (brief.trends) and the published manifest (brief.manifest.data, or null): a string
+ * of at most 7 full-width characters, or null for none. Step 0: always null, so the tile is unchanged.
+ */
+export function marketTileSuffix(_inputs = {}) {
+  return null;
+}
+
+/**
  * Why the market-trends asset failed, in short Japanese: kind fetch (network, HTTP, the manifest itself),
  * integrity (hash, transport or reference mismatch) or reader (readMarketTrends' own sentence).
  * A raw English message, path or hash is never shown; tile is the two-word form for a tile.

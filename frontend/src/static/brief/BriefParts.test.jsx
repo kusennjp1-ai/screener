@@ -1,7 +1,15 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { BarQuote, CandidateRow, DayChange, Expander, Parts, Reasons, RiseItem, ScreenNotes, StateChip, Toast } from './BriefParts';
 import * as primitives from './briefPrimitives';
+
+// The round-2 row chip (data's secRowChip, plan §2.2): it answers as its owner's module does unless a test
+// sets a chip (undefined: the real body; null at step 0), and records the row it was asked about.
+const seam = vi.hoisted(() => ({ chip: undefined, rows: [] }));
+vi.mock('../fundamentalsExplain.js', async importOriginal => {
+  const actual = await importOriginal();
+  return { ...actual, secRowChip: row => { seam.rows.push(row); return seam.chip === undefined ? actual.secRowChip(row) : seam.chip; } };
+});
 
 afterEach(cleanup);
 
@@ -216,5 +224,26 @@ describe('BriefParts seams', () => {
 
   it('re-exports the frozen layout primitives under the old import path', () => {
     expect([Expander, ScreenNotes, Parts, RiseItem, Toast]).toEqual([primitives.Expander, primitives.ScreenNotes, primitives.Parts, primitives.RiseItem, primitives.Toast]);
+  });
+});
+
+describe('the round-2 row chip', () => {
+  afterEach(() => Object.assign(seam, { chip: undefined, rows: [] }));
+  const sample = { symbol: 'AAA', sec_summary: { sec_state: 'ok' } };
+
+  it('asks secRowChip about the row and adds no chip while it is null', () => {
+    const { container } = render(<Reasons view={view({ row: sample })} now={0} />);
+    expect(seam.rows.at(-1)).toBe(sample);
+    expect(chipTexts(container)).toEqual(['● 買いゾーン +1.2%', 'TT 8/8', '出来高 1.60×', 'RS推計 88']);
+  });
+
+  it('puts a chip right after the RS chip, neutral on a row that is muted or not a buy candidate', () => {
+    seam.chip = { text: '〈sec〉', tone: 'zone', title: '〈title〉', notable: true };
+    const shown = (props = {}) => { const { container } = render(<Reasons view={view({ row: sample, ...props.view })} now={0} muted={props.muted} />); const chips = [...container.querySelectorAll('.brief-chip')]; cleanup(); return chips; };
+    const chips = shown();
+    expect(chips.map(chip => chip.textContent)).toEqual(['● 買いゾーン +1.2%', 'TT 8/8', '出来高 1.60×', 'RS推計 88', '〈sec〉']);
+    expect([toneOf(chips.at(-1)), chips.at(-1).getAttribute('title')]).toEqual(['tone-zone', '〈title〉']);
+    expect(toneOf(shown({ muted: true }).at(-1))).toBeNull();
+    expect(toneOf(shown({ view: { qualified: false, failed: 1 } }).find(chip => chip.textContent === '〈sec〉'))).toBeNull();
   });
 });

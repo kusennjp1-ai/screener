@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { footprint, gapDays, RS_LEAD_FROM_HIGH_PERCENT, rsLeadMarks, rsLineNewHigh } from './briefChartModel';
+import { footprint, gapDays, publishedRsLineHigh, RS_LEAD_FROM_HIGH_PERCENT, rsLeadMarks, rsLineNewHigh } from './briefChartModel';
+import { CONTRACT_DATE, RS_LINE_HIGH_INVALID, rsLineHigh, rsLineHighUnknown } from '../../test/fixtures/publishedContracts';
 
 describe('brief model', () => {
   it('writes the VCP footprint only from valid, measured legs', () => {
@@ -80,6 +81,28 @@ describe('stage from daily bars', () => {
     expect(stageFromBars(series(i => 100 + Math.sin(i / 5)))).toBe(1);
     expect(stageFromBars(series(i => (i < 200 ? 50 * 1.004 ** i : 50 * 1.004 ** 200 * (1 - (i - 200) * 0.0005))))).toBe(3);
     expect(stageFromBars(series(() => 50).slice(0, 100))).toBeNull();
+  });
+
+  // The round-2 seam (plan §2.2) as step 0 leaves it: no phase is known yet, whatever the bars (CH11 writes it).
+  it('stagePhase names no phase at step 0', async () => {
+    const { stagePhase } = await import('./briefChartModel');
+    for (const bars of [series(i => 50 * 1.004 ** i), series(() => 50), series(() => 50).slice(0, 100), [], null, undefined]) expect(stagePhase(bars)).toBeNull();
+  });
+
+  // The one reader of the published rs_line_high (plan §2.2), for the rows and the stock view alike.
+  it('publishedRsLineHigh returns the value dated for the analysis date, and null for anything else', () => {
+    expect(publishedRsLineHigh({ rs_line_high: rsLineHigh }, CONTRACT_DATE)).toEqual({ value: true, leading: false });
+    // Unknown stays null (未確認), never false.
+    expect(publishedRsLineHigh({ rs_line_high: rsLineHighUnknown }, CONTRACT_DATE)).toEqual({ value: null, leading: null });
+    // Absent (an older publication: 未収録), another day's value, or no analysis date.
+    expect(publishedRsLineHigh({}, CONTRACT_DATE)).toBeNull();
+    expect(publishedRsLineHigh(null, CONTRACT_DATE)).toBeNull();
+    expect(publishedRsLineHigh({ rs_line_high: rsLineHigh }, '2026-10-05')).toBeNull();
+    expect(publishedRsLineHigh({ rs_line_high: rsLineHigh }, null)).toBeNull();
+    // Each malformed value, named by what is wrong with it, is refused.
+    expect(RS_LINE_HIGH_INVALID.map(([why, value]) => [why, publishedRsLineHigh({ rs_line_high: value }, CONTRACT_DATE)])).toEqual(RS_LINE_HIGH_INVALID.map(([why]) => [why, null]));
+    // A consumer tells absent from refused by the key itself.
+    expect([Object.hasOwn({}, 'rs_line_high'), Object.hasOwn({ rs_line_high: 'true' }, 'rs_line_high')]).toEqual([false, true]);
   });
 });
 

@@ -56,6 +56,17 @@ describe('market tone', () => {
   });
 });
 
+// The round-2 seam Today's 地合い tile calls (plan §2.2), as step 0 leaves it: no suffix, so the tile is unchanged (MK11 writes it).
+describe('market tile suffix', () => {
+  it('is null at step 0, for any market, trends and manifest', async () => {
+    const { marketTileSuffix } = await import('./briefEnvironment');
+    const manifest = { as_of_date: '2026-10-02', markets: { US: { as_of_date: '2026-10-02' } } };
+    for (const inputs of [{ market: { state: 'confirmed_uptrend', label: '上昇トレンド（独自判定）', cap: 0 }, trends: { data: { indices: [] } }, manifest },
+      { market: null, trends: { loading: true }, manifest: null }, {}]) expect(marketTileSuffix(inputs)).toBeNull();
+    expect(marketTileSuffix()).toBeNull();
+  });
+});
+
 describe('market tab helpers', () => {
   it('takes the distribution count from latest, then lastObserved, then the last finite point', async () => {
     const { distributionCount } = await import('./briefEnvironment');
