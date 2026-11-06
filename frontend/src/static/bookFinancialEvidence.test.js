@@ -214,7 +214,8 @@ describe('the EPS floor and the annual record (three-valued, never a pass from a
   });
 
   it('never calls a loss year a record, however much smaller the loss', () => {
-    const annual = values => { const record = secRecord(); record.annualEps = values.map((value, i) => secPoint('eps', [`${2022 + i}-01-01`, `${2022 + i}-12-31`], value)); return report(record).annualRecord; };
+    // The years as one 10-K presents them (one accession): a record compared within one filing.
+    const annual = values => { const record = secRecord(); record.annualEps = values.map((value, i) => secPoint('eps', [`${2022 + i}-01-01`, `${2022 + i}-12-31`], value, { accession: 'k-latest' })); return report(record).annualRecord; };
     expect(annual([-3, -2, -1.5, -0.8])).toBe('fail');
     expect(annual([1, 2, 0])).toBe('fail');
     expect(annual([3, 3.5, 5.5])).toBe('pass');
@@ -238,10 +239,25 @@ describe('round 2: the annual record across a split, missing fiscal-Q4 rows and 
     expect(bookFinancialEvidence(record, 'TEST', '2026-03-01').annualRecord).toBe('fail');
     record.annualEps[6] = tenK(2025, -0.2, 2025);
     expect(bookFinancialEvidence(record, 'TEST', '2026-03-01').annualRecord).toBe('fail');
-    // A record whose newest 10-K presents fewer than three years compares every year it holds (the rule before).
+    // A record whose newest 10-K presents fewer than three years compares every year it holds, across 10-Ks: a miss
+    // stays a miss, but a record is unknown, since a split between those 10-Ks is not restated alike.
     const own = secRecord({ asOfDate: '2026-03-01' });
     own.annualEps = [3, 3.5, 5.5].map((value, i) => tenK(2023 + i, value, 2023 + i));
-    expect(bookFinancialEvidence(own, 'TEST', '2026-03-01')).toMatchObject({ annualRecord: 'pass', annualBasis: { kind: 'record', years: 3 } });
+    expect(bookFinancialEvidence(own, 'TEST', '2026-03-01')).toMatchObject({ annualRecord: 'unknown', annualRecordReason: 'split_unverifiable', annualBasis: { kind: 'record', years: 3, filingYears: 1 } });
+    own.annualEps = [3, 5.5, 5].map((value, i) => tenK(2023 + i, value, 2023 + i));
+    expect(bookFinancialEvidence(own, 'TEST', '2026-03-01')).toMatchObject({ annualRecord: 'fail', annualRecordReason: null });
+  });
+
+  it('never makes a record from a reverse split in a filer whose 10-K presents two years (a smaller reporting company)', () => {
+    // A 1:10 reverse split in 2025. The FY2025 10-K presents 2024-2025 restated (×10); FY2023 keeps the unrestated 0.30
+    // it was filed with (3.00 restated). Compared across the two 10-Ks, 2.60 would beat 0.30 and 2.00: a fabricated record.
+    const record = secRecord({ asOfDate: '2026-03-01' });
+    record.annualEps = [tenK(2023, 0.3, 2023), tenK(2024, 2.0, 2025), tenK(2025, 2.6, 2025)];
+    const value = bookFinancialEvidence(record, 'TEST', '2026-03-01');
+    expect(value).toMatchObject({ annualRecord: 'unknown', annualRecordReason: 'split_unverifiable', annualBasis: { kind: 'record', years: 3, filingYears: 2 } });
+    // Fewer than three years in all: unknown for want of years, not for the split.
+    record.annualEps = record.annualEps.slice(1);
+    expect(bookFinancialEvidence(record, 'TEST', '2026-03-01')).toMatchObject({ annualRecord: 'unknown', annualRecordReason: 'insufficient_years' });
   });
 
   it('names a fiscal Q4 the 10-K reports only as a year, inside the rows or after the latest one, and never estimates it', () => {

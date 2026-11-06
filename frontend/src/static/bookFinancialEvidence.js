@@ -136,14 +136,19 @@ export function bookFinancialEvidence(data, symbol, date) {
   }));
   // A record year needs a profit: a smaller loss than every earlier year is never a new high. The years compared
   // are those the newest 10-K presents (one accession, so a stock split restated them alike); only a record whose
-  // newest 10-K presents fewer than three years compares every year it holds.
+  // newest 10-K presents fewer than three years compares every year it holds. Those years come from several 10-Ks,
+  // so a split between them is not restated alike: a record there stays unknown (`annualRecordReason`
+  // 'split_unverifiable'; a reverse split would make the older years look small), while a miss stays a miss.
   const newest = result.annual.at(-1);
   const filing = newest ? result.annual.filter(p => p.accession === newest.accession) : [];
   const basis = filing.length >= 3 ? filing : result.annual;
-  result.annualBasis = { kind: filing.length >= 3 ? 'filing' : 'record', years: basis.length };
+  result.annualBasis = { kind: filing.length >= 3 ? 'filing' : 'record', years: basis.length, filingYears: filing.length };
   const annualRecent = basis.length >= 3 && days(date, newest.end) <= 550;
   const latestAnnual = newest?.value;
-  result.annualRecord = annualRecent ? latestAnnual <= 0 ? 'fail' : state(latestAnnual > Math.max(...basis.slice(0, -1).map(p => p.value))) : 'unknown';
+  const record = annualRecent ? latestAnnual <= 0 ? 'fail' : state(latestAnnual > Math.max(...basis.slice(0, -1).map(p => p.value))) : 'unknown';
+  const unverifiable = record === 'pass' && result.annualBasis.kind === 'record';
+  result.annualRecord = unverifiable ? 'unknown' : record;
+  result.annualRecordReason = unverifiable ? 'split_unverifiable' : record === 'unknown' ? 'insufficient_years' : null;
   result.balanceCoverage = result.rows.filter(p => finite(p.salesYoY) && (finite(p.inventoryYoY) || finite(p.receivablesYoY))).length;
   result.balanceWarnings = result.rows.filter(p => finite(p.salesYoY)).flatMap(p => ['inventoryYoY', 'receivablesYoY'].filter(k => finite(p[k]) && p[k] > p.salesYoY).map(k => ({ end: p.end, metric: k, growth: p[k], salesGrowth: p.salesYoY })));
   result.source = data.source;

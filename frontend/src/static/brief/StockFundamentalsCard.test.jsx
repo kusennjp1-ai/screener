@@ -154,13 +154,24 @@ describe('brief fundamentals card', () => {
 
   it('passes the EPS floor and the annual record only on known values and names the quarters behind a 未達', () => {
     const strong = record({ eps: [1, 1, 1, 1, 1.3, 1.4, 1.6, 2] });
-    strong.annualEps = [secPoint('eps', ['2023-01-01', '2023-12-31'], 3), secPoint('eps', ['2024-01-01', '2024-12-31'], 3.5), secPoint('eps', ['2025-01-01', '2025-12-31'], 5.5)];
+    // The three years as the newest 10-K presents them (one accession).
+    const tenK = { form: '10-K', accession: 'k-2025' };
+    strong.annualEps = [secPoint('eps', ['2023-01-01', '2023-12-31'], 3, tenK), secPoint('eps', ['2024-01-01', '2024-12-31'], 3.5, tenK), secPoint('eps', ['2025-01-01', '2025-12-31'], 5.5, tenK)];
     let scope = card(financial(strong));
     expect([...document.querySelectorAll('.brief-fin-quality li')].map(chip => [chip.textContent, chip.className])).toEqual([
       ['EPS前年比≥25%（直近4期）達成', 'brief-chip tone-zone'], ['年間EPS最高 更新', 'brief-chip tone-zone']]);
     // The span the annual record compared is said in words, not only in a title.
-    expect(document.querySelectorAll('.brief-fin-quality li')[1]).toHaveAttribute('title', 'SEC年次報告のある3年度で最高');
-    expect(scope.getByRole('list', { name: '業績の質の根拠' })).toHaveTextContent('年間EPS：直近の年度（2025-12期）の 5.50 は、SEC 年次報告のある3年度で最高です。');
+    expect(document.querySelectorAll('.brief-fin-quality li')[1]).toHaveAttribute('title', '直近10-Kの3年度で最高');
+    expect(scope.getByRole('list', { name: '業績の質の根拠' })).toHaveTextContent('年間EPS：直近の年度（2025-12期）の 5.50 は、直近10-Kの3年度で最高です。');
+    cleanup();
+    // A newest 10-K with two years beside an older one: a split between them cannot be ruled out, so no record is claimed.
+    const twoYear = record({ eps: [1, 1, 1, 1, 1.3, 1.4, 1.6, 2] });
+    twoYear.annualEps = [secPoint('eps', ['2023-01-01', '2023-12-31'], 0.3, { accession: 'k-2023' }), secPoint('eps', ['2024-01-01', '2024-12-31'], 2, tenK), secPoint('eps', ['2025-01-01', '2025-12-31'], 2.6, tenK)];
+    scope = card(financial(twoYear));
+    expect(document.querySelectorAll('.brief-fin-quality li')[1]).toHaveTextContent('年間EPS最高 未確認');
+    expect(document.querySelectorAll('.brief-fin-quality li')[1]).toHaveAttribute('class', 'brief-chip');
+    expect(document.querySelectorAll('.brief-fin-quality li')[1]).toHaveAttribute('title', '直近10-Kが2年度分のみで、分割の影響を確かめられないため未確認');
+    expect(scope.getByRole('list', { name: '業績の質の根拠' })).toHaveTextContent('年間EPS：直近10-Kが2年度分のみで、分割の影響を確かめられないため未確認。');
     cleanup();
     // A lower latest annual EPS is 未更新; one growth rate under 25% in the latest four is 未達, and the 20% level
     // reached by every quarter is said on the chip itself.

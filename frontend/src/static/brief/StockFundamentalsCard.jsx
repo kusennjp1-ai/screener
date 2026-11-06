@@ -177,8 +177,12 @@ function qualityChips(report) {
   const basis = report.annualBasis?.kind === 'filing' ? `直近10-Kの${report.annualBasis.years}年度` : `SEC 年次報告のある${report.annualBasis?.years ?? annual.length}年度`;
   const annualDetail = record === 'unknown' || !latest ? null : loss ? `年間EPS：直近の年度（${periodOf(latest.end)}）は ${epsText(latest.value)} の赤字です（赤字の年度は最高と数えません）。`
     : `年間EPS：直近の年度（${periodOf(latest.end)}）の ${epsText(latest.value)} は、${basis}で${record === 'pass' ? '最高です' : '最高ではありません'}。`;
+  // A newest 10-K with fewer than three years compared with older 10-Ks: a split between them cannot be ruled out.
+  const unverifiable = record === 'unknown' && report.annualRecordReason === 'split_unverifiable'
+    ? `直近10-Kが${report.annualBasis?.filingYears ?? '2'}年度分のみで、分割の影響を確かめられないため未確認` : null;
   chips.push({ text: loss ? '年間EPS 赤字' : `年間EPS最高 ${{ pass: '更新', fail: '未更新', unknown: '未確認' }[record]}`, tone: loss ? 'ext' : tone[record],
-    title: record === 'unknown' ? '直近の年度を含む3年度分の SEC 年次報告がないため未確認' : `${basis.replace(/^SEC /, 'SEC')}で${record === 'pass' ? '最高' : loss ? '直近が赤字' : '最高ではありません'}`, detail: annualDetail });
+    title: record === 'unknown' ? unverifiable || '直近の年度を含む3年度分の SEC 年次報告がないため未確認' : `${basis.replace(/^SEC /, 'SEC')}で${record === 'pass' ? '最高' : loss ? '直近が赤字' : '最高ではありません'}`,
+    detail: unverifiable ? `年間EPS：${unverifiable}。` : annualDetail });
   if (report.balanceCoverage > 0) {
     const recent = new Set(report.rows.slice(-2).map(row => row.end));
     const seen = new Set();
