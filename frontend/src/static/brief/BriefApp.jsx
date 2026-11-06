@@ -117,7 +117,11 @@ export default function BriefApp() {
   // know; once the rows that came with the data are committed, the screen animates list changes again.
   const loaded = Boolean(brief.bundle.data);
   const [entrance, setEntrance] = useState({ view, loaded });
-  if (entrance.view !== view) setEntrance({ view, loaded });
+  // At 1024px and wider a tab switch changes only the left column (as briefNav skips the page transition there):
+  // once the screen has switched, a new column appears in place, without the rows' rise (brief-watch.css), so
+  // its first frames paint the rows and not an animation.
+  const [switched, setSwitched] = useState(false);
+  if (entrance.view !== view) { setEntrance({ view, loaded }); if (wide && !switched) setSwitched(true); }
   const animate = entrance.view === view ? entrance.loaded : loaded;
   useEffect(() => { if (loaded && entrance.view === view && !entrance.loaded) setEntrance({ view, loaded: true }); }, [loaded, entrance, view]);
   const [listState, setListState] = useState({ filter: 'zone', sort: 'priority', query: '' });
@@ -250,7 +254,7 @@ export default function BriefApp() {
     {wide ? view === 'market' ? <main id="brief-main" tabIndex={-1} className="brief-desk is-market">
       <div className="brief-left"><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
     </main> : <main id="brief-main" tabIndex={-1} className="brief-desk">
-      <div className="brief-left"><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
+      <div className={`brief-left${switched ? ' is-switched' : ''}`}><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
       <div className="brief-right" aria-label="選択中の銘柄">{selected ? <StockScreen brief={paneBrief} symbol={selected} watch={watch} onToggleWatch={toggleWatch} step={paneStep} wide ageLine={ageLine} /> : <p className="brief-note brief-pad">銘柄を選ぶと、ここに結論とチャートを表示します。</p>}</div>
     </main> : <main id="brief-main" tabIndex={-1} className="brief-main" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
       <div className="brief-stack">{view === 'stock' ? <StockScreen brief={brief} symbol={symbol} watch={watch} onToggleWatch={toggleWatch} step={step} /> : left}</div>

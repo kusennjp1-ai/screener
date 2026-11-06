@@ -163,6 +163,27 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
 
 // Going back from a stock on a phone: the browser's own back when the app pushed the stock (the list keeps its
 // place, and the history does not grow), a replace into the app after a direct link (never out of the app).
+// A desktop tab switch changes only the left column: after it the new column is in place at once (no rise), so its
+// first frames paint the rows (the 1440 tab-switch timing). The first screen keeps its entrance, and a phone keeps
+// the rise on every screen.
+const riseNames = page => page.locator('.brief-left .brief-stack .in, main.brief-main > .brief-stack .in').evaluateAll(nodes => [...new Set(nodes.map(node => getComputedStyle(node).animationName))]);
+for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`a tab switch at ${device.viewport.width}px`, () => {
+  test.use(device);
+  test(name === 'desktop' ? 'the new column is in place without the rise; the first screen rises in' : 'every screen keeps the rise', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief');
+    await expect(candidates(page).first()).toBeVisible();
+    expect(await riseNames(page)).toEqual(['brief-rise']);
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: '候補' })).toBeVisible();
+    await expect(candidates(page).first()).toBeVisible();
+    expect(await riseNames(page)).toEqual([name === 'desktop' ? 'none' : 'brief-rise']);
+    await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
+    await expect(candidates(page).first()).toBeVisible();
+    expect(await riseNames(page)).toEqual([name === 'desktop' ? 'none' : 'brief-rise']);
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('back and stepping on a phone', () => {
   test.use(VIEWPORTS.phone);
   const rows = page => page.getByTestId('brief-candidate');

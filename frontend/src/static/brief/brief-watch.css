@@ -105,3 +105,6 @@
   .brief-summary .brief-tile-sub { min-height: 44px; padding: 0 10px 8px; font-size: 12px; }
   .brief-stack > .brief-coverage-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* The desktop's left column after a tab switch (BriefApp): the new screen is in place at once, with no rise. */
+.brief-desk > .brief-left.is-switched .in { animation: none; }

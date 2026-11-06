@@ -10,9 +10,11 @@ import { bundleState, BUNDLE_TEXT, unlistedWatch, useWatchSellChecks } from './u
 // A phone (520px and narrower, where rows are compacted) lists this many rows per 「さらに表示」;
 // wider screens list 50.
 const PHONE_PAGE = 20;
-// The desktop renders this many rows at once and the rest of the page when the browser is idle (a tab switch
-// paints the first screen first).
+// The desktop renders this many rows at once (more than a 900px-high window shows) and the rest of the page once
+// the switch has painted: two frames, then REST_DELAY_MS, then the browser's next idle period. A tab switch
+// paints the first screen first, and a click right after it is not held up by rows below the fold.
 const FIRST_ROWS = 20;
+const REST_DELAY_MS = 250;
 const LIST_NOTE = '選定銘柄＝トレンドテンプレート8条件と日足の整合性をすべて満たす銘柄。あと1条件＝未達が1つだけで未確認がない銘柄（流動性：株価$10以上・売買代金$2,000万以上）。';
 // The rows' base chip and the EPS filter: thresholds of the app's own (独自判定・独自設定).
 const BASE_NOTE = `土台の注意：Setup Engineの土台が深さ${BASE_DEPTH_MAX_PERCENT}%超または${BASE_LENGTH_MIN_WEEKS}週未満、または終値が50日線より${EXTENDED_FROM_SMA50_PERCENT}%超上（独自判定）。EPS前年比≥${EPS_YOY_FILTER_PERCENT}%はSECの直近四半期の値による独自設定の絞り込みで、値のない銘柄は未確認として別に数えます。`;
@@ -85,8 +87,8 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   const unlisted = useMemo(() => (kind === 'watch' ? unlistedWatch(brief, watch) : []), [kind, brief, watch]);
   const state = bundleState(brief);
   const hidden = LIST_FILTERS[filter]?.hidden ? filter : null;
-  // The desktop paints FIRST_ROWS rows first and the rest of the page once those are on screen (two frames) and the
-  // browser is idle (each new list again), so a tab switch never waits for rows below the fold.
+  // The desktop paints FIRST_ROWS rows first and the rest of the page once those are on screen (two frames, then
+  // REST_DELAY_MS) and the browser is idle (each new list again), so a tab switch never waits for rows below the fold.
   const deferKey = `${kind}|${filter}|${query}|${listState.sort}|${brief.date}`;
   const [painted, setPainted] = useState(null);
   const defer = wide && painted !== deferKey;
@@ -94,9 +96,10 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
     if (!wide) return undefined;
     let frame = null, idle = null, timer = null;
     const done = () => setPainted(deferKey);
-    const whenIdle = () => { if (typeof window.requestIdleCallback === 'function') idle = window.requestIdleCallback(done, { timeout: 500 }); else timer = setTimeout(done, 50); };
-    if (typeof window.requestAnimationFrame === 'function') frame = window.requestAnimationFrame(() => { frame = window.requestAnimationFrame(whenIdle); });
-    else whenIdle();
+    const whenIdle = () => { timer = null; if (typeof window.requestIdleCallback === 'function') idle = window.requestIdleCallback(done, { timeout: 500 }); else timer = setTimeout(done, 50); };
+    const later = () => { frame = null; timer = setTimeout(whenIdle, REST_DELAY_MS); };
+    if (typeof window.requestAnimationFrame === 'function') frame = window.requestAnimationFrame(() => { frame = window.requestAnimationFrame(later); });
+    else later();
     return () => {
       if (frame !== null) window.cancelAnimationFrame(frame);
       if (idle !== null) window.cancelIdleCallback(idle);
