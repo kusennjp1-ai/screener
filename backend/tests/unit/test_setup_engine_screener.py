@@ -520,3 +520,158 @@ class TestConfidenceFloorContract:
 
         assert payload["pattern_confidence"] >= 55.0
         assert "primary_pattern_below_confidence_floor" not in payload["explain"]["failed_checks"]
+
+
+class TestSetupReadinessRegressions:
+    """Round 2 (setup-ready-always-false): readiness comes from the 10 gates and the
+    primary-pattern checks only. Before, every detector that did not find its own
+    pattern (``not_detected``, ``cup_structure_not_found``) and the DoubleBottom stub
+    (``not_implemented``) were counted as failures, so no stock could ever be ready.
+    """
+
+    @staticmethod
+    def _frames(num_days: int = 350) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """A steady leader (+0.3%/day, quiet last 10 sessions) against a flat benchmark."""
+        index = pd.bdate_range(end=pd.Timestamp("2025-12-19"), periods=num_days)
+        rng = np.random.default_rng(7)
+        close = 50 * 1.003 ** np.arange(num_days) * (1 + rng.normal(0, 0.002, num_days))
+        volume = np.full(num_days, 2_000_000.0)
+        volume[-10:] = 900_000.0
+        stock = pd.DataFrame(
+            {"Open": close * 0.998, "High": close * 1.008, "Low": close * 0.992, "Close": close, "Volume": volume},
+            index=index,
+        )
+        spy_close = 400 * (1 + rng.normal(0, 0.002, num_days))
+        spy = pd.DataFrame(
+            {"Open": spy_close, "High": spy_close * 1.004, "Low": spy_close * 0.996, "Close": spy_close,
+             "Volume": np.full(num_days, 5e7)},
+            index=index,
+        )
+        return stock, spy
+
+    def _scan(self, *, distance_pct: float = -1.0, confidence: float = 0.8, others=None) -> ScreenerResult:
+        from app.analysis.patterns.detectors import DoubleBottomDetector
+
+        stock, spy = self._frames()
+        pivot = float(stock["Close"].iloc[-1]) / (1 + distance_pct / 100)
+
+        class _IdealVcp(PatternDetector):
+            name = "vcp"
+
+            def detect(self, detector_input, parameters):
+                del detector_input, parameters
+                return PatternDetectorResult.detected(
+                    self.name,
+                    PatternCandidateModel(
+                        pattern="vcp", timeframe="daily", source_detector=self.name, pivot_price=pivot,
+                        pivot_type="vcp_pivot", quality_score=85.0, readiness_score=88.0, confidence=confidence,
+                    ),
+                )
+
+        class _NoCup(PatternDetector):
+            name = "cup_with_handle"
+
+            def detect(self, detector_input, parameters):
+                del detector_input, parameters
+                return PatternDetectorResult.no_detection(
+                    self.name, failed_checks=("not_detected", "cup_structure_not_found"),
+                )
+
+        detectors = [_IdealVcp(), *(others if others is not None else (_NoCup(), DoubleBottomDetector()))]
+        scanner = SetupEngineScanner()
+        scanner._aggregator = SetupEngineAggregator(detectors=detectors)
+        return scanner.scan_stock("IDEAL", StockData(symbol="IDEAL", price_data=stock, benchmark_data=spy))
+
+    def _payload(self, *, distance_pct: float, confidence: float = 0.8, others=None) -> dict:
+        result = self._scan(distance_pct=distance_pct, confidence=confidence, others=others)
+        payload = result.details["setup_engine"]
+        assert result.passes is payload["setup_ready"]
+        return payload
+
+    def test_an_ideal_vcp_is_ready_whatever_the_other_detectors_found(self):
+        payload = self._payload(distance_pct=-1.0)
+        explain = payload["explain"]
+
+        assert payload["pattern_primary"] == "vcp"
+        assert payload["pattern_confidence"] >= 55.0
+        assert payload["setup_ready"] is True
+        assert explain["failed_checks"] == []
+        # The other detectors' misses and the stub are kept as diagnostics, inside explain,
+        # each named after its detector.
+        assert explain["diagnostics"] == [
+            "cup_with_handle:not_detected",
+            "cup_with_handle:cup_structure_not_found",
+            "double_bottom:not_implemented",
+        ]
+        assert "not_implemented" not in explain["failed_checks"]
+
+    def test_the_same_vcp_six_percent_past_the_pivot_is_not_ready(self):
+        payload = self._payload(distance_pct=6.0)
+
+        assert payload["setup_ready"] is False
+        assert payload["explain"]["failed_checks"] == ["outside_early_zone"]
+        # The scores do not depend on readiness.
+        assert payload["setup_score"] == self._payload(distance_pct=-1.0)["setup_score"]
+
+    def test_a_below_floor_fallback_is_not_ready(self):
+        payload = self._payload(distance_pct=-1.0, confidence=0.2)
+
+        assert payload["pattern_confidence"] < 55.0
+        assert payload["setup_ready"] is False
+        assert payload["explain"]["failed_checks"] == ["primary_pattern_below_confidence_floor"]
+
+    def test_one_detector_short_of_history_does_not_block_a_ready_vcp(self):
+        """A detector reporting insufficient_data (its own history need, not the data policy's)
+        is a diagnostic: the policy passed, so a qualified VCP primary stays ready."""
+
+        class _NeedsMoreHistory(PatternDetector):
+            name = "needs_more_history"
+
+            def detect(self, detector_input, parameters):
+                del detector_input, parameters
+                return PatternDetectorResult.insufficient_data(self.name, failed_checks=("daily_bars_lt_400",))
+
+        payload = self._payload(distance_pct=-1.0, others=[_NeedsMoreHistory()])
+        explain = payload["explain"]
+
+        assert payload["setup_ready"] is True
+        assert explain["failed_checks"] == []
+        assert explain["diagnostics"] == [
+            "needs_more_history:insufficient_data",
+            "needs_more_history:daily_bars_lt_400",
+        ]
+
+    def test_a_detector_that_raises_makes_the_scan_an_error_not_a_ready_row(self):
+        """A crash means one detector never evaluated the stock: the scan is an Error (as at
+        db8e297, now stated explicitly), never a Strong Buy from the detectors that ran."""
+
+        class _Boom(PatternDetector):
+            name = "cup_with_handle"
+
+            def detect(self, detector_input, parameters):
+                del detector_input, parameters
+                raise RuntimeError("boom")
+
+        result = self._scan(distance_pct=-1.0, others=[_Boom()])
+
+        assert result.rating == "Error"
+        assert result.passes is False
+        assert "setup_engine" not in result.details
+        assert result.details["error"] == "cup_with_handle: RuntimeError: boom"
+
+    def test_a_caller_failed_check_fails_readiness_whatever_its_name(self):
+        """Fail closed: every failed check a caller passes blocks readiness; only the
+        aggregator's separated detector checks (``diagnostics``) never do."""
+        from app.scanners.setup_engine_scanner import build_setup_engine_payload
+
+        ready = dict(
+            setup_score=80, quality_score=80, readiness_score=95, distance_to_pivot_pct=0,
+            pattern_primary="vcp", pattern_confidence=70,
+        )
+        assert build_setup_engine_payload(**ready)["setup_ready"] is True
+        blocked = build_setup_engine_payload(**ready, failed_checks=["trend_break"])
+        assert blocked["setup_ready"] is False
+        assert blocked["explain"]["failed_checks"][0] == "trend_break"
+        noted = build_setup_engine_payload(**ready, diagnostics=["cup_with_handle:not_detected"])
+        assert noted["setup_ready"] is True
+        assert noted["explain"]["diagnostics"] == ["cup_with_handle:not_detected"]

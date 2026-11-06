@@ -383,7 +383,9 @@ class MinerviniScanner(BaseStockScreener):
                 ma_200,
                 ma_200_series,
                 prices,
-                volumes
+                volumes,
+                ma_150=ma_150,
+                high_52w=high_52w,
             )
 
             # 4. Check 52-week positioning

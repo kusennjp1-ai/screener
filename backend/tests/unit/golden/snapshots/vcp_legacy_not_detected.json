@@ -7,6 +7,7 @@
     "not_detected",
     "vcp_contracting_depth_failed",
     "vcp_tight_near_highs_failed",
+    "vcp_right_edge_drying_unconfirmed",
     "vcp_score_below_legacy_threshold",
     "vcp_insufficient_bases"
   ],

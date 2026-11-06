@@ -2,8 +2,8 @@ import { useMemo, useRef } from 'react';
 import { BOOK_TECHNICAL_VERSION, buildBookTechnicalEvidence } from '../bookTechnicalEvidence';
 import { ScreenNotes } from './briefPrimitives';
 import useSessionState from './useSessionState';
-import { gapDays, rsLeadMarks, rsLineNewHigh, stageFromBars, stagePhase } from './briefChartModel';
-import { CHART_RANGES as RANGES, chartNotes, shortAveragesDrawn } from './chartReadout';
+import { gapDays, publishedRsLineHigh, rsLeadMarks, rsLineNewHigh, stageFromBars, stagePhase } from './briefChartModel';
+import { CHART_RANGES as RANGES, chartCrossing, chartNotes, earningsMarker, heavyVolumeBars, priceInRange, shortAveragesShown, weeklyBars } from './chartReadout';
 import { isBreakdown, sellMarks, stockSells } from './briefSell';
 import { earningsCall } from './briefCandidate';
 import { planLevels } from './positionSizing';
@@ -57,24 +57,49 @@ export default function StockView({ data, header = null, wide = false, market = 
   const { plan, settings, update } = usePositionPlan({ view, template, market, technical: evidence, certified, judged, broken, earningsSoon: soon, chartRef });
   const legsValid = certified && evidence?.vcp?.measurementsValid === true;
   const legs = useMemo(() => (legsValid ? evidence.vcp.legs : []), [legsValid, evidence]);
-  // The stage carries a phase only when stagePhase names one on certified bars (none yet: `phase` stays undefined).
+  // The stage carries a phase only when stagePhase names one on certified bars, and only on a stage 2 (published
+  // or computed): a published stage 3 is never relabelled here; the next data run reclassifies it.
   const stage = useMemo(() => {
     const base = Number.isInteger(row?.stage) ? { value: row.stage, computed: false } : (() => { const value = stageFromBars(judged); return value ? { value, computed: true } : null; })();
-    const phase = base ? stagePhase(judged) : null;
+    const phase = base?.value === 2 ? stagePhase(judged) : null;
     return phase ? { ...base, phase } : base;
   }, [row?.stage, judged]);
   const rsLine = data.chart.data?.rs_line;
-  // The RS line's new high and its lead marks are judged from certified bars only (not the backend flag).
-  const rsHigh = useMemo(() => (judged ? rsLineNewHigh(rsLine, judged) === true : false), [rsLine, judged]);
+  // The RS line's new high, computed once for the conclusion and the chart: the published value dated for the
+  // analysis date (publishedRsLineHigh, the one reader the rows share), otherwise rsLineNewHigh on certified bars
+  // (the export's own function); never the backend flag. Like every value judged from a chart it needs the bars
+  // certified here: a dated published high on bars this screen cannot certify is not claimed by either card.
+  const rsHigh = useMemo(() => {
+    const published = publishedRsLineHigh(row, data.date);
+    return published ? certified && published.value === true : judged ? rsLineNewHigh(rsLine, judged) === true : false;
+  }, [row, data.date, rsLine, judged, certified]);
   const rsLead = useMemo(() => (judged ? rsLeadMarks(rsLine, judged) : null), [rsLine, judged]);
   const gaps = useMemo(() => (judged ? gapDays(judged) : []), [judged]);
   const levels = useMemo(() => planLevels(plan), [plan]);
   const notes = useMemo(() => {
     if (!bars?.length) return [];
     const shown = interval === 'day' ? new Set(bars.slice(-period).map(b => b.date)) : null;
-    // The 10/21-day lines are drawn at 1024px and wider only; below that the legend names ▼▲ without their meaning.
-    return chartNotes({ bars, interval, period, short: wide && shortAveragesDrawn(interval, period), rsLead, gaps: shown ? gaps.filter(g => shown.has(g.date)) : [], sellMarks: !wide && sellMarks(sells).length > 0 });
-  }, [bars, interval, period, rsLead, gaps, wide, sells]);
+    // The crossing's colour is explained at every width, when its bar is drawn.
+    const visible = interval === 'day' ? bars.slice(-period) : weeklyBars(bars).slice(-period);
+    const crossing = chartCrossing(judged, view?.pivot);
+    const crossingShown = crossing && visible.some(bar => (bar.start ?? bar.date) <= crossing.date && crossing.date <= bar.date) ? crossing : null;
+    // Below 1024px the legend names ▼▲ without their meaning and keeps two lines: every mark it may fold is explained
+    // here (only marks the chart draws: the structural low inside the price panel's range, the earnings flag in its window).
+    let marks = null;
+    if (!wide) {
+      const range = { bars, interval, pivot: view?.pivot, upper: view?.upper, stop: levels?.stop };
+      marks = {
+        short: shortAveragesShown(interval, period, wide),
+        pivot: Number.isFinite(view?.pivot), stop: Number.isFinite(levels?.stop),
+        heavyDown: heavyVolumeBars({ bars, interval }, period).some(bar => bar.direction === 'down'),
+        legs: legsValid && legs.length > 0,
+        structuralLow: priceInRange(range, period, levels?.structuralLow) ? levels.structuralLow : null,
+        earnings: earningsMarker(call),
+      };
+    }
+    return chartNotes({ bars, interval, period, short: shortAveragesShown(interval, period, wide), rsLead, gaps: shown ? gaps.filter(g => shown.has(g.date)) : [], sellMarks: !wide && sellMarks(sells).length > 0, adr: interval === 'day', crossing: crossingShown, marks });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the call is read by its date and days (recomputed each render)
+  }, [bars, judged, view?.pivot, view?.upper, interval, period, rsLead, gaps, wide, sells, legsValid, legs, levels?.structuralLow, levels?.stop, call?.date, call?.days, call?.soon]);
   if (!view) return <p className="brief-note brief-pad" role="status">銘柄データを読み込み中…</p>;
   return <div className="brief-stock">
     {header}

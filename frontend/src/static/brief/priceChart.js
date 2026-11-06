@@ -3,8 +3,8 @@
 // (moving averages, candles, RS line, volume — painted once and revealed with
 // compositor-only transforms) and front (levels and their labels, tags, last price,
 // marks, axes, scrub). Every text is 12px and the viewBox width is the display width.
-import { BREAKOUT_VOLUME_RATIO } from './briefCandidate';
-import { chartSeries, formatVolume, weeklyBars } from './chartReadout';
+import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
+import { chartSeries, earningsMarker, formatVolume, heavyVolumeBars, priceScale, weeklyBars } from './chartReadout';
 
 export { weeklyBars };
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -15,7 +15,10 @@ const fmt = (value, digits = 2) => (finite(value) ? value.toLocaleString('en-US'
 const signed = (value, digits = 1) => (finite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.abs(value).toFixed(digits)}%` : '—');
 const esc = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 const FS = 12, TAG_H = 20, TAG_GAP = 20;
-const RS_CAPTION = 'RS線（株価÷S&amp;P 500）・RS推計やIBD RSとは別', RS_CAPTION_NARROW = 'RS線（株価÷S&amp;P 500）・RS推計/IBD RSと別';
+/** Below this chart width (a phone or a narrow tablet, under about 520px of screen) the chart uses its compact forms. */
+export const NARROW_CHART_WIDTH = 480;
+/** The RS panel's caption: its meaning (株価÷S&P 500, neither RS推計 nor IBD RS) is in the always-visible legend. */
+export const RS_CAPTION = 'RS線';
 const mono = 'font-family="var(--font-mono)"';
 const text = (x, y, body, cls, extra = '') => `<text x="${x}" y="${y}" class="${cls}" font-size="${FS}" ${extra}>${body}</text>`;
 // Estimated width of a 12px label: CJK glyphs are 1em, mono digits 0.6em, other Latin about 0.56em.
@@ -47,6 +50,13 @@ function niceStep(lo, hi, count) {
 const tagText = value => (value >= 1000 ? fmt(value, 0) : fmt(value, 2));
 const tagWidth = value => Math.round(width(tagText(value), true) + 10);
 
+/** Consecutive bar indices as runs [first, last] (the RS line's lead days are drawn as one underline per run). */
+export function indexRuns(indices) {
+  const sorted = [...new Set(indices)].filter(Number.isInteger).sort((a, b) => a - b), runs = [];
+  for (const i of sorted) { const run = runs.at(-1); if (run && i === run[1] + 1) run[1] = i; else runs.push([i, i]); }
+  return runs;
+}
+
 /**
  * Spread labels so their centres are at least `gap` apart inside [top, bottom], keeping their order;
  * none is dropped. Items are { y } and gain `at` (the drawn centre).
@@ -72,16 +82,17 @@ export function keepRightFirst(items, gap) {
  * Month-start ticks for the date axis (mid-month ticks are added when there are too few): about 3–4 on
  * a phone and 6–12 on a desktop. The first tick and every tick where the year changes carry YYYY/MM.
  */
-export function dateTicks(bars, plotWidth) {
+export function dateTicks(bars, plotWidth, { dense = false } = {}) {
   const most = Math.max(3, Math.min(12, Math.floor(plotWidth / 72))), least = plotWidth >= 600 ? 6 : 3;
   const month = bar => (bar.start || bar.date).slice(0, 7);
   const starts = bars.map((bar, i) => ({ i, bar })).filter(({ i, bar }) => i > 0 && month(bar) !== month(bars[i - 1])).map(({ i, bar }) => ({ i, month: month(bar), mid: false }));
   let ticks = starts;
-  if (ticks.length < least) {
+  // `dense`: every month start and mid-month tick, for a caller that places them itself.
+  if (ticks.length < least || dense) {
     const mids = bars.map((bar, i) => ({ i, bar })).filter(({ i, bar }) => i > 0 && bar.date.slice(8) >= '16' && bars[i - 1].date.slice(8) < '16' && month(bar) === month(bars[i - 1])).map(({ i, bar }) => ({ i, month: month(bar), mid: true, day: bar.date.slice(8) }));
     ticks = [...starts, ...mids].sort((a, b) => a.i - b.i);
   }
-  const step = Math.max(1, Math.ceil(ticks.length / most));
+  const step = dense ? 1 : Math.max(1, Math.ceil(ticks.length / most));
   ticks = ticks.filter((_, k) => (ticks.length - 1 - k) % step === 0);
   return ticks.map((tick, k) => {
     const year = tick.month.slice(0, 4), m = Number(tick.month.slice(5));
@@ -94,7 +105,8 @@ export function dateTicks(bars, plotWidth) {
  * @param {HTMLElement} el container (position: relative)
  * @param {object} model { symbol, bars:[{date,open,high,low,close,volume}], interval, short, rsLine:[{time,value}], rsReason,
  *   rsNewHigh, rsLead:{dates,threshold}|null, legs:[{startDate,endDate,high,low,depthPct}], legsValid, dryUpLeg, pivot, upper,
- *   stop, entry, r2, r3, structuralLow, auditHigh, gaps:[{date,direction}], earnings:{date,days}|null, sellMarks }
+ *   stop, entry, r2, r3, structuralLow, auditHigh, gaps:[{date,direction}], earnings (earningsCall: {date,days,soon})|null,
+ *   crossing:{date,volumeRatio}|null (the pivot crossing on certified bars), sellMarks }
  * @param {object} options { period, animate, fast, signal, onScrub(index into the interval's bars | null), selected }
  */
 export function renderPriceChart(el, model, { period = 130, animate = true, fast = false, signal, onScrub, selected = null } = {}) {
@@ -110,12 +122,8 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const right = 66, pw = W - right - 2, padT = 8, axisB = 18, volH = Math.round(H * 0.15), rsH = Math.max(40, Math.round(H * 0.12)), gap = 8;
   const ph = H - padT - axisB - volH - rsH - gap * 2, rsTop = padT + ph + gap, volTop = rsTop + rsH + gap, plotBottom = padT + ph;
   const hasPivot = finite(model.pivot);
-  const levels = [model.pivot, model.upper, model.stop].filter(finite);
-  const values = bars.flatMap(b => [b.high, b.low]).filter(finite).concat(levels);
-  let lo = Math.min(...values), hi = Math.max(...values);
-  if (!(hi > lo)) { lo *= 0.99; hi *= 1.01; } // a flat range still gets a scale
+  const { lo, hi, tlo, thi } = priceScale(bars, model);
   const L = Math.log;
-  const tlo = L(lo) - (L(hi) - L(lo)) * 0.05, thi = L(hi) + (L(hi) - L(lo)) * 0.05;
   const inRange = v => finite(v) && v >= Math.exp(tlo) && v <= Math.exp(thi);
   const bw = pw / n, x = i => (i + 0.5) * bw, y = v => padT + (thi - L(v)) * ph / (thi - tlo);
   const uid = `brief-chart-${++sequence}`;
@@ -125,11 +133,16 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const markIndex = new Map(bars.map((b, i) => [b.date, i]));
   const barOf = day => { if (!weekly) return markIndex.get(day); const i = bars.findIndex(b => b.start <= day && day <= b.date); return i < 0 ? undefined : i; };
   const last = bars[n - 1], lastX = x(n - 1), lastY = y(last.close);
+  const narrow = W < NARROW_CHART_WIDTH;
+  // On a narrow chart the last contraction's low is a tag (「安値」, its price in the legend), not a long label.
+  const lowTag = narrow && inRange(model.structuralLow);
 
-  // Price tags on the right axis (pivot, stop, the current price); closer than 20px they stack with leaders.
+  // Price tags on the right axis (pivot, stop, the current price, and the last contraction's low on a narrow
+  // chart); closer than 20px they stack with leaders.
   const tagDefs = [
     hasPivot ? { key: 'pivot', value: model.pivot, cls: 'bc-pivottag' } : null,
     finite(model.stop) ? { key: 'stop', value: model.stop, cls: 'bc-stoptag' } : null,
+    lowTag ? { key: 'low', value: model.structuralLow, cls: 'bc-lowtag', text: '安値' } : null,
     finite(last.close) ? { key: 'last', value: last.close, cls: 'bc-lasttag' } : null,
   ].filter(Boolean);
   const layoutTags = () => spread(tagDefs.map(def => ({ ...def, y: y(def.value) })), TAG_GAP, padT + TAG_H / 2, plotBottom - TAG_H / 2);
@@ -181,7 +194,8 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   M.push('</g>');
   const rsByDate = new Map((model.rsLine || []).map(p => [p.time || p.date, p.value]));
   const rs = bars.map(b => rsByDate.get(b.date)).map(v => (finite(v) ? v : null));
-  const rsKnown = rs.filter(finite), rsLineTop = rsTop + 17, rsLineBottom = rsTop + rsH - 3;
+  // The line takes the panel's full height (its caption 「RS線」 sits in the corner the line leaves free).
+  const rsKnown = rs.filter(finite), rsLineTop = rsTop + 3, rsLineBottom = rsTop + rsH - 4;
   let rsLast = null, ry = null;
   if (rsKnown.length > 1) {
     const rlo = Math.min(...rsKnown), rhi = Math.max(...rsKnown);
@@ -189,7 +203,11 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     const threshold = model.rsLead?.threshold;
     if (finite(threshold) && threshold >= rlo && threshold <= rhi) M.push(`<line x1="0" x2="${pw}" y1="${ry(threshold).toFixed(1)}" y2="${ry(threshold).toFixed(1)}" class="bc-rsmax"/>`);
     M.push(`<path d="${rs.map((v, i) => (v == null ? '' : `${rs[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)},${ry(v).toFixed(1)}`)).join('')}" class="bc-rs" fill="none"/>`);
-    for (const day of model.rsLead?.dates || []) { const i = barOf(day); if (i !== undefined && rs[i] != null) M.push(`<circle cx="${x(i).toFixed(1)}" cy="${ry(rs[i]).toFixed(1)}" r="2.2" class="bc-rslead"/>`); }
+    // Lead days: one 2px underline per run of consecutive bars, along the panel's bottom edge.
+    for (const [a, b] of indexRuns((model.rsLead?.dates || []).map(barOf).filter(i => i !== undefined && rs[i] != null))) {
+      const x0 = Math.max(0, x(a) - bw / 2), x1 = Math.min(pw, Math.max(x(b) + bw / 2, x0 + 3));
+      M.push(`<line x1="${x0.toFixed(1)}" x2="${x1.toFixed(1)}" y1="${rsTop + rsH - 1}" y2="${rsTop + rsH - 1}" class="bc-rslead" data-from="${bars[a].date}" data-to="${bars[b].date}"/>`);
+    }
     if (rs.at(-1) != null) rsLast = ry(rs.at(-1));
   }
   // Volume: up, down or neutral against the previous close (the first bar of the data has none); a bar at
@@ -197,10 +215,11 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const vmax = Math.max(...bars.map(b => (finite(b.volume) ? b.volume : 0)), 1), vw = Math.max(1, bw * 0.7);
   const dry = model.dryUpLeg ? { a: firstOnOrAfter(model.dryUpLeg.startDate), b: lastOnOrBefore(model.dryUpLeg.endDate) } : null;
   const vy = v => volTop + volH - v / vmax * (volH - 5);
+  const heavyBars = heavyVolumeBars(model, period), heavyDays = new Set(heavyBars.map(h => h.date));
   bars.forEach((b, i) => {
     const previous = i ? bars[i - 1].close : all[from - 1]?.close;
     const direction = !finite(previous) || !finite(b.close) ? 'flat' : b.close > previous ? 'up' : b.close < previous ? 'down' : b.close >= b.open ? 'up' : 'down';
-    const heavy = finite(vavg[i]) && vavg[i] > 0 && finite(b.volume) && b.volume >= vavg[i] * BREAKOUT_VOLUME_RATIO;
+    const heavy = heavyDays.has(b.date);
     const top = finite(b.volume) ? vy(b.volume) : volTop + volH;
     M.push(`<rect x="${(x(i) - vw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${vw.toFixed(1)}" height="${(volTop + volH - top).toFixed(1)}" class="bc-vol bc-vol-${direction}${heavy ? ` bc-volhi${direction === 'down' ? ' bc-volhi-down' : ''}` : ''}" data-date="${b.date}"/>`);
     if (heavy) M.push(`<circle cx="${x(i).toFixed(1)}" cy="${(top - 3).toFixed(1)}" r="1.8" class="bc-voldot${direction === 'down' ? ' bc-voldot-down' : ''}"/>`);
@@ -208,12 +227,18 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   M.push(`<path d="${vavg.map((v, i) => (v == null ? '' : `${vavg[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)},${vy(v).toFixed(1)}`)).join('')}" class="bc-vavg" fill="none"/>`);
 
   // Front layer
-  // Panel captions. The RS caption sits in the panel's top margin, clear of the line.
-  // The RS line is not RS推計 (the 1–99 rating) and not IBD RS: the caption keeps the three apart at every width.
-  const rsCaption = rsKnown.length > 1 ? (W >= 300 ? RS_CAPTION : RS_CAPTION_NARROW) : `RS線 未配信${model.rsReason ? `（${esc(model.rsReason)}）` : ''}`;
-  F.push(text(4, rsTop + 12, rsCaption, 'bc-caption bc-rscaption'));
+  // Panel captions. The RS line's caption 「RS線」 takes the left corner (top or bottom) the line leaves free; what
+  // it is (株価÷S&P 500, neither RS推計 nor IBD RS) is in the legend, always visible under the chart.
+  if (rsKnown.length > 1) {
+    const w = width(RS_CAPTION) + 4, under = rs.map((v, i) => (v != null && x(i) <= 4 + w ? ry(v) : null)).filter(finite);
+    const topBand = under.filter(yy => yy < rsTop + 15).length, bottomBand = under.filter(yy => yy > rsTop + rsH - 15).length;
+    F.push(text(4, bottomBand < topBand ? rsTop + rsH - 3 : rsTop + 12, RS_CAPTION, 'bc-caption bc-rscaption'));
+  } else F.push(text(4, rsTop + 12, `RS線 未配信${model.rsReason ? `（${esc(model.rsReason)}）` : ''}`, 'bc-caption bc-rscaption'));
   const heavyLabel = `<tspan class="bc-volkey">●</tspan>${BREAKOUT_VOLUME_RATIO.toFixed(1)}×以上（独自判定）`;
-  const volumeCaption = pw >= 230 ? `出来高・${volumeLength}${unit}平均・${heavyLabel}` : `出来高・${heavyLabel}`;
+  // A narrow chart keys the heavy down bars (■ 下落日) in this caption, beside the bars (the legend keeps two lines).
+  const heavyDownDrawn = heavyBars.some(h => h.direction === 'down');
+  const volumeCaption = narrow && heavyDownDrawn ? `出来高・${heavyLabel}・<tspan class="bc-volkeydown">■</tspan>下落日`
+    : pw >= 230 ? `出来高・${volumeLength}${unit}平均・${heavyLabel}` : `出来高・${heavyLabel}`;
   F.push(text(4, volTop + 12, volumeCaption, 'bc-caption bc-volcaption'));
   const volumeCaptionRight = 4 + width(volumeCaption.replace(/<[^>]+>/g, ''));
   // The volume axis: the period's maximum and the latest average (— when its window is short).
@@ -233,41 +258,70 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   // Levels: dotted plan lines (entry, 2R, 3R) and the structural low only inside the y-range; the 52-week high
   // (certified bars only, from the published audit). The y-axis is never widened for them.
   const levelLabels = [];
+  // A level's line is drawn only with its name (an unnamed dotted line would read as another level): its slot
+  // keeps the line's place in the layer and stays empty when the label finds no spot.
+  const levelLine = (markup, label) => { levelLabels.push({ ...label, slot: F.length, line: markup }); F.push(''); };
   const planLine = (value, cls, label) => {
     if (!inRange(value)) return;
-    F.push(`<line x1="0" x2="${pw}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}" class="bc-planline ${cls}"/>`);
-    levelLabels.push({ y: y(value), body: label, cls: `bc-levelnote ${cls}-text` });
+    levelLine(`<line x1="0" x2="${pw}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}" class="bc-planline ${cls}"/>`, { y: y(value), body: label, cls: `bc-levelnote ${cls}-text` });
   };
   const entryDistinct = finite(model.entry) && (!hasPivot || Math.abs(model.entry / model.pivot - 1) > 0.001);
   if (entryDistinct) planLine(model.entry, 'bc-entry', `買値 ${fmt(model.entry)}`);
   planLine(model.r2, 'bc-r2', `2R ${fmt(model.r2)}`);
   planLine(model.r3, 'bc-r3', `3R ${fmt(model.r3)}`);
   if (inRange(model.structuralLow)) {
-    const ys = y(model.structuralLow);
-    F.push(`<line x1="${(pw * 0.6).toFixed(1)}" x2="${pw}" y1="${ys.toFixed(1)}" y2="${ys.toFixed(1)}" class="bc-planline bc-structural"/>`);
-    levelLabels.push({ y: ys, x: pw * 0.6, below: true, body: `最後の収縮の安値 ${fmt(model.structuralLow)}`, cls: 'bc-levelnote bc-structural-text' });
+    const ys = y(model.structuralLow), line = `<line x1="${(pw * 0.6).toFixed(1)}" x2="${pw}" y1="${ys.toFixed(1)}" y2="${ys.toFixed(1)}" class="bc-planline bc-structural"/>`;
+    // A narrow chart names it with its 「安値」 tag (the price is in the legend); a wide one with a label.
+    levelLine(line, lowTag ? { named: true } : { y: ys, x: pw * 0.6, below: true, body: `最後の収縮の安値 ${fmt(model.structuralLow)}`, cls: 'bc-levelnote bc-structural-text' });
   }
   if (inRange(model.auditHigh)) {
     const yh = y(model.auditHigh), distance = finite(last.close) ? (last.close / model.auditHigh - 1) * 100 : null;
-    F.push(`<line x1="0" x2="${pw}" y1="${yh.toFixed(1)}" y2="${yh.toFixed(1)}" class="bc-high52"/>`);
-    levelLabels.push({ y: yh, body: `52週高値 ${fmt(model.auditHigh)}${finite(distance) ? `（${signed(distance)}）` : ''}`, cls: 'bc-levelnote bc-high52-text', required: true });
+    // The readout gives the distance on a phone: the label keeps the short form there.
+    levelLine(`<line x1="0" x2="${pw}" y1="${yh.toFixed(1)}" y2="${yh.toFixed(1)}" class="bc-high52"/>`, { y: yh, body: narrow ? `52週高 ${fmt(model.auditHigh)}` : `52週高値 ${fmt(model.auditHigh)}${finite(distance) ? `（${signed(distance)}）` : ''}`, cls: 'bc-levelnote bc-high52-text' });
   }
   if (hasPivot) F.push(`<line x1="0" x2="${pw}" y1="${y(model.pivot)}" y2="${y(model.pivot)}" class="bc-pivot"/>`);
   const stopLabel = value => `損切り${finite(model.entry) && model.entry > 0 && finite(value) ? ` ${signed((value / model.entry - 1) * 100)}` : ''}`;
-  // In-plot labels: each takes the first of its positions that overlaps no label already placed (a
-  // required one takes its first position anyway). Notices first, then the averages' names, the
-  // contractions' T numbers right-first, the zone, the pivot and the stop, the other levels, the depths.
+  // In-plot labels: each takes the first of its positions that overlaps no box already taken (labels, the
+  // right-axis tags, the last-price dot) and no candle; a label with no free position is left out, never
+  // drawn over another. Notices first, then the contractions' labels right-first, the averages' names, the
+  // crossing's ratio, the zone, the pivot and the stop, the other levels.
   const boxes = [];
-  const fits = (x0, x1, yc) => yc - 6 >= padT && yc + 6 <= plotBottom && !boxes.some(b => x0 < b.x1 + 3 && x1 > b.x0 - 3 && Math.abs(yc - b.y) < 13);
+  const take = (x0, x1, y0, y1) => boxes.push({ x0, x1, y0, y1 });
+  const clampX = (x0, w) => Math.min(Math.max(4, x0), pw - w - 4);
+  // A 12px label's box is 14px tall (CJK glyphs reach below the baseline); the averages' digit names use 13px.
+  const fits = (x0, x1, yc, half = 7) => yc - 6 >= padT && yc + 6 <= plotBottom && !boxes.some(b => x0 < b.x1 + 3 && x1 > b.x0 - 3 && yc - half < b.y1 && yc + half > b.y0);
   // A label box over a candle (its whole high–low range, the body's width plus 1px).
   const overCandle = (x0, x1, yc) => bars.some((b, i) => x(i) + cw / 2 + 1 > x0 && x(i) - cw / 2 - 1 < x1 && y(b.high) < yc + 7 && y(b.low) > yc - 7);
+  const free = (x0, w, yc, half = 7) => fits(x0, x0 + w, yc, half) && !overCandle(x0, x0 + w, yc);
   const claim = (x0, w, candidates, required = false) => {
-    for (const yc of candidates) if (fits(x0, x0 + w, yc)) { boxes.push({ x0, x1: x0 + w, y: yc }); return yc; }
+    for (const yc of candidates) if (fits(x0, x0 + w, yc)) { take(x0, x0 + w, yc - 7, yc + 7); return yc; }
     if (!required) return null;
-    boxes.push({ x0, x1: x0 + w, y: candidates[0] });
+    take(x0, x0 + w, candidates[0] - 7, candidates[0] + 7);
     return candidates[0];
   };
+  // A label's first free spot among [x, yc] pairs (fits() and overCandle()), or null.
+  const spot = (w, spots) => spots.find(([lx, yc]) => free(lx, w, yc)) ?? null;
   const lines = [model.pivot, model.upper, model.stop, model.auditHigh].filter(inRange).map(y);
+  // The right-axis tags, the last price's dot, the sell marks and the crossing's arrow are taken before any label.
+  for (const tag of tags) take(pw + 2, pw + 2 + (tag.text ? Math.round(width(tag.text) + 10) : tagWidth(tag.value)), tag.at - TAG_H / 2, tag.at + TAG_H / 2);
+  if (finite(lastY)) take(lastX - 5, lastX + 5, lastY - 5, lastY + 5);
+  const sells = (model.sellMarks || []).map(mark => ({ mark, i: barOf(mark.date) })).filter(({ i }) => i !== undefined).map(({ mark, i }) => {
+    const mx = x(i), top = Math.max(padT + 2, y(bars[i].high) - 14), bottom = Math.min(plotBottom - 2, y(bars[i].low) + 14);
+    if (mark.kind === 'weakness') take(mx - 5, mx + 5, bottom - 8, bottom); else take(mx - 5, mx + 5, top, top + 8);
+    return { mark, i, mx, top, bottom };
+  });
+  // The pivot crossing (certified daily bars only, the conclusion's own helper): a hollow upward arrow under the
+  // crossing bar (its week on the weekly chart), never the filled ▲ of the 崩れ sell sign. It is green only for a
+  // crossing chartCrossing confirms (1.4× or more, the latest close still at or above the pivot), grey otherwise.
+  const crossingBar = model.crossing?.date ? barOf(model.crossing.date) : undefined;
+  let arrow = null;
+  if (crossingBar !== undefined && finite(bars[crossingBar]?.low)) {
+    // Under a 崩れ mark on the same bar, the arrow goes below it.
+    const under = sells.some(sell => sell.i === crossingBar && sell.mark.kind === 'weakness');
+    const mx = x(crossingBar), top = Math.min(plotBottom - 11, y(bars[crossingBar].low) + (under ? 16 : 4));
+    take(mx - 5.5, mx + 5.5, top - 1, top + 11);
+    arrow = { mx, top, zone: model.crossing.tone === 'zone' };
+  }
   let noticeBox = null;
   const notices = [];
   if (weekly && all.length < 104) notices.push(`週足は直近${all.length}週分（${(all[0].start || all[0].date).slice(0, 7).replace('-', '/')}〜）。`, '2年分はありません');
@@ -282,6 +336,33 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     noticeBox = { x0: nx, x1: nx + w, y0: ny - 8, y1: ny - 8 + h };
     notices.forEach((notice, i) => { const yc = claim(nx, width(notice), [ny + i * 16], true); F.push(text(nx.toFixed(1), (yc + 4).toFixed(1), notice, 'bc-notice')); });
   }
+  // Contractions, newest first: the last one always shows its T number and its depth (one combined
+  // 「T2 −7%」 above a box too narrow for the depth under it); older ones keep their T number, then their depth,
+  // while there is room, so the oldest depths are the first left out.
+  const legLabels = legs.map(leg => { const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2; return { leg, x: (x0 + x1) / 2, x0, x1 }; });
+  const lastLeg = legs.at(-1)?.index;
+  const tCentres = [], depthCentres = [];
+  const depthText = leg => `−${Math.round(leg.depthPct)}%`;
+  for (const { leg, x: cx, x0, x1 } of [...legLabels].reverse()) {
+    const isLast = leg.index === lastLeg, top = y(leg.high), low = y(leg.low), depth = depthText(leg), dw = width(depth, true);
+    const wide = x1 - x0 > Math.max(22, dw + 4);
+    if (isLast && !wide) {
+      const body = `T${leg.index + 1} ${depth}`, w = width(body), lx = clampX(cx - w / 2, w);
+      const yc = claim(lx, w, [top - 9, top - 23, top + 10, top + 24, low + 11, low + 25], true);
+      tCentres.push(cx);
+      F.push(`<g class="bc-tlabel" data-leg="${leg.index}">${text((lx + w / 2).toFixed(1), (yc + 4).toFixed(1), body, 'bc-ttext bc-tdepth', `text-anchor="middle" font-weight="700" data-depth="${leg.depthPct}"`)}</g>`);
+      continue;
+    }
+    const body = `T${leg.index + 1}`, w = width(body);
+    if (isLast || tCentres.every(c => Math.abs(c - cx) >= 18)) {
+      const yc = claim(cx - w / 2, w, isLast ? [top - 9, top + 10, top + 24, top - 23] : [top - 9, top + 10, top + 24], isLast);
+      if (yc !== null) { tCentres.push(cx); F.push(`<g class="bc-tlabel" data-leg="${leg.index}">${text(cx.toFixed(1), (yc + 4).toFixed(1), body, 'bc-ttext', 'text-anchor="middle" font-weight="700"')}</g>`); }
+    }
+    if (wide && (isLast || depthCentres.every(c => Math.abs(c - cx) >= 36))) {
+      const yc = claim(cx - dw / 2, dw, isLast ? [low + 11, low - 9, low + 25, low - 23] : [low + 11, low - 9], isLast);
+      if (yc !== null) { depthCentres.push(cx); F.push(text(cx.toFixed(1), (yc + 4).toFixed(1), depth, 'bc-legtext', `text-anchor="middle" font-weight="700" ${mono} data-depth="${leg.depthPct}" data-i="${leg.index}"`)); }
+    }
+  }
   // Moving-average names at their right ends, spread vertically so none overlaps and never over the newest
   // candles: one whose place is taken moves to the nearest free height (a 1px leader behind the candles
   // joins it to its line's end) and is left out when there is none within 72px.
@@ -290,77 +371,121 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     const w = width(label.body, true), x0 = pw - 3 - w;
     let at = null;
     for (let d = 0; d <= 72 && at === null; d += 2) {
-      for (const yc of d ? [label.at - d, label.at + d] : [label.at]) if (fits(x0, pw - 3, yc) && !overCandle(x0, pw - 3, yc)) { at = yc; break; }
+      for (const yc of d ? [label.at - d, label.at + d] : [label.at]) if (free(x0, w, yc, 6.5)) { at = yc; break; }
     }
     if (at === null) continue;
-    boxes.push({ x0, x1: pw - 3, y: at });
+    take(x0, pw - 3, at - 6.5, at + 6.5);
     if (Math.abs(at - label.y) > 3) B.push(`<line x1="${pw - 1.5}" x2="${pw - 1.5}" y1="${label.y.toFixed(1)}" y2="${(at + (label.y > at ? 6 : -6)).toFixed(1)}" class="bc-maleader bc-maleader-${label.key}"/>`);
     F.push(text((pw - 3).toFixed(1), (at + 4).toFixed(1), label.body, `bc-malabel bc-malabel-${label.key}`, `text-anchor="end" font-weight="700" ${mono}`));
   }
-  // Contraction labels: T1…Tn over the boxes (centres at least 18px apart, the newest kept first and the
-  // last always) and each depth under its box when the box is wide enough.
-  const legLabels = legs.map(leg => { const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2; return { leg, x: (x0 + x1) / 2, x0, x1 }; });
-  const lastLeg = legs.at(-1)?.index;
-  for (const { leg, x: cx } of keepRightFirst(legLabels, 18).reverse()) {
-    const body = `T${leg.index + 1}`, w = width(body), top = y(leg.high), yc = claim(cx - w / 2, w, [top - 9, top + 10, top + 24], leg.index === lastLeg);
-    if (yc !== null) F.push(`<g class="bc-tlabel" data-leg="${leg.index}">${text(cx.toFixed(1), (yc + 4).toFixed(1), body, 'bc-ttext', 'text-anchor="middle" font-weight="700"')}</g>`);
+  // The crossing's arrow, and 「上抜け 1.80×」 beside it when the helper gives the ratio and there is room, right first.
+  let breakout = null;
+  if (arrow) {
+    const { mx, top } = arrow;
+    breakout = { date: bars[crossingBar].date };
+    let label = '';
+    if (finite(model.crossing.volumeRatio)) {
+      const body = `上抜け ${ratioShown(model.crossing.volumeRatio)}`, w = width(body), yc = top + 5;
+      const at = spot(w, [[mx + 8, yc], [mx - 8 - w, yc], [mx - w / 2, yc + 15], [mx + 8, yc + 15], [mx - 8 - w, yc + 15], [mx - w / 2, yc + 29]].filter(([lx]) => lx >= 4 && lx + w <= pw - 4));
+      if (at) { take(at[0], at[0] + w, at[1] - 7, at[1] + 7); label = text(at[0].toFixed(1), (at[1] + 4).toFixed(1), body, 'bc-breakouttext', 'font-weight="700"'); breakout.label = body; }
+    }
+    F.push(`<g class="bc-breakout${arrow.zone ? ' is-zone' : ''}" data-date="${bars[crossingBar].date}" data-tone="${arrow.zone ? 'zone' : 'neutral'}"><path d="M${mx.toFixed(1)},${top.toFixed(1)}l4.5,5h-2.75v5h-3.5v-5h-2.75z" class="bc-breakoutmark"/>${label}</g>`);
   }
+  // The zone's name: the first candle-free spot along its top edge (from its left end, past the first T label,
+  // its centre), then above it or along its bottom; over candles only when no candle-free spot is left.
   if (zone && zone.height > 14) {
-    const body = `買いゾーン${finite(model.upper) ? ` 〜${fmt(model.upper)}` : ''}`, zx = Math.min(zone.x + 6, pw - width(body) - 30);
-    const yc = claim(zx, width(body), [zone.top + Math.min(zone.height - 4, 14) - 4, zone.top - 9, zone.top + zone.height - 10]);
-    if (yc !== null) F.push(`<g class="bc-zonelabel">${text(zx.toFixed(1), (yc + 4).toFixed(1), body, 'bc-zonetext', 'font-weight="700"')}</g>`);
+    const body = `買いゾーン${finite(model.upper) ? ` 〜${fmt(model.upper)}` : ''}`, w = width(body);
+    const xs = [...new Set([zone.x + 6, zone.x + 6 + width('T1') + 8, zone.x + (pw - zone.x) / 2 - w / 2, pw - 34 - w].map(lx => Math.round(clampX(Math.max(lx, zone.x + 2), w))))];
+    const ys = [zone.top + Math.min(zone.height - 4, 14) - 4, zone.top - 9, zone.top + zone.height - 10];
+    const spots = ys.flatMap(yc => xs.map(lx => [lx, yc]));
+    const at = spot(w, spots) ?? spots.find(([lx, yc]) => fits(lx, lx + w, yc)) ?? null;
+    if (at) { take(at[0], at[0] + w, at[1] - 7, at[1] + 7); F.push(`<g class="bc-zonelabel">${text(at[0].toFixed(1), (at[1] + 4).toFixed(1), body, 'bc-zonetext', 'font-weight="700"')}</g>`); }
   }
-  if (hasPivot) { const py = y(model.pivot), yc = claim(4, width('ピボット'), [py + 11, py - 9, py + 25, py - 23], true); F.push(text(4, (yc + 4).toFixed(1), 'ピボット', 'bc-levelnote bc-pivot-text')); }
-  let stopText = null;
-  if (finite(model.stop)) { const sy = y(model.stop), body = stopLabel(model.stop); stopText = { body, at: claim(4, width(body), [sy - 9, sy + 11, sy - 23, sy + 25], true) }; }
-  // A level's label sits just above or below its line, at the left or (when the left is taken) before the averages' names.
+  // The pivot's and the stop's names next to their lines (their prices are the tags); left out when every spot is taken.
+  // Over candles (with its halo) when no candle-free spot is left, never over another label or a tag.
+  const nameSpot = (value, body, offsets) => {
+    const w = width(body), spots = offsets.map(dy => [4, y(value) + dy]);
+    const at = spot(w, spots) ?? spots.find(([lx, yc]) => fits(lx, lx + w, yc)) ?? null;
+    if (at) take(4, 4 + w, at[1] - 7, at[1] + 7);
+    return at;
+  };
+  if (hasPivot) { const at = nameSpot(model.pivot, 'ピボット', [11, -9, 25, -23]); if (at) F.push(text(4, (at[1] + 4).toFixed(1), 'ピボット', 'bc-levelnote bc-pivot-text')); }
+  const stopText = finite(model.stop) ? { body: stopLabel(model.stop), at: nameSpot(model.stop, stopLabel(model.stop), [-9, 11, -23, 25]) } : null;
+  // A level's label sits just above or below its line, at the left, before the averages' names or along the
+  // line (clamped into the plot), and tries the other side of its line; over candles (with its halo) when no
+  // candle-free spot is left, never over another label or a tag. With no spot at all the label and its line are
+  // both left out. The 52-week high (it judges the stock) takes its spot first, then the plan's levels.
+  levelLabels.sort((a, b) => Number(b.cls?.includes('bc-high52') ?? false) - Number(a.cls?.includes('bc-high52') ?? false));
   for (const label of levelLabels) {
-    const w = width(label.body), offsets = label.below ? [11, -9] : [-9, 11], xs = label.x !== undefined ? [label.x] : [4, Math.max(4, pw - 34 - w)];
+    if (label.named) { F[label.slot] = label.line; continue; }
+    const w = width(label.body), offsets = label.below ? [11, -9] : [-9, 11];
+    const xs = [...new Set((label.x !== undefined ? [label.x, pw * 0.3, 4, pw * 0.45] : [4, pw - 34 - w, pw * 0.3, pw * 0.55, pw * 0.15]).map(lx => Math.round(clampX(lx, w))))];
     const spots = offsets.flatMap(dy => xs.map(lx => [lx, label.y + dy]));
-    const spot = spots.find(([lx, yc]) => fits(lx, lx + w, yc)) ?? (label.required ? spots[0] : null);
-    if (!spot) continue;
-    boxes.push({ x0: spot[0], x1: spot[0] + w, y: spot[1] });
-    F.push(text(spot[0].toFixed(1), (spot[1] + 4).toFixed(1), label.body, label.cls));
+    const at = spot(w, spots) ?? spots.find(([lx, yc]) => fits(lx, lx + w, yc)) ?? null;
+    if (!at) continue;
+    F[label.slot] = label.line;
+    take(at[0], at[0] + w, at[1] - 7, at[1] + 7);
+    F.push(text(at[0].toFixed(1), (at[1] + 4).toFixed(1), label.body, label.cls));
   }
-  if (finite(model.stop)) F.push(`<g class="bc-stopgroup"><line x1="0" x2="${pw}" y1="${y(model.stop)}" y2="${y(model.stop)}" class="bc-stop"/>${text(4, (stopText.at + 4).toFixed(1), stopText.body, 'bc-levelnote bc-stop-text')}</g>`);
-  for (const { leg, x: cx } of keepRightFirst(legLabels.filter(l => l.x1 - l.x0 > 22), 36).reverse()) {
-    const body = `−${Math.round(leg.depthPct)}%`, w = width(body, true), low = y(leg.low), yc = claim(cx - w / 2, w, [low + 11, low - 9]);
-    if (yc !== null) F.push(text(cx.toFixed(1), (yc + 4).toFixed(1), body, 'bc-legtext', `text-anchor="middle" font-weight="700" ${mono} data-depth="${leg.depthPct}" data-i="${leg.index}"`));
-  }
+  if (stopText) F.push(`<g class="bc-stopgroup"><line x1="0" x2="${pw}" y1="${y(model.stop)}" y2="${y(model.stop)}" class="bc-stop"/>${text(4, ((stopText.at?.[1] ?? y(model.stop) - 9) + 4).toFixed(1), stopText.body, 'bc-levelnote bc-stop-text', stopText.at ? '' : 'visibility="hidden"')}</g>`);
   // Tags.
   const tagMarkup = tag => {
-    const w = tagWidth(tag.value), leader = Math.abs(tag.at - tag.y) > 0.5;
-    return `<g class="bc-tag ${tag.cls}" data-tag="${tag.key}"><line x1="${pw - 4}" y1="${tag.y.toFixed(1)}" x2="${pw + 2}" y2="${tag.at.toFixed(1)}" class="bc-leader"${leader ? '' : ' visibility="hidden"'}/><rect x="${pw + 2}" y="${(tag.at - TAG_H / 2).toFixed(1)}" width="${w}" height="${TAG_H}" rx="4" class="${tag.cls}-fill"/>${text(pw + 7, (tag.at + 4).toFixed(1), esc(tagText(tag.value)), tag.key === 'last' ? 'bc-tagtext bc-lasttagtext' : 'bc-tagtext', `font-weight="700" ${mono}`)}</g>`;
+    const w = tag.text ? Math.round(width(tag.text) + 10) : tagWidth(tag.value), leader = Math.abs(tag.at - tag.y) > 0.5;
+    const body = tag.text ? text(pw + 7, (tag.at + 4).toFixed(1), tag.text, 'bc-tagtext bc-lowtagtext', 'font-weight="700"') : text(pw + 7, (tag.at + 4).toFixed(1), esc(tagText(tag.value)), tag.key === 'last' ? 'bc-tagtext bc-lasttagtext' : 'bc-tagtext', `font-weight="700" ${mono}`);
+    return `<g class="bc-tag ${tag.cls}" data-tag="${tag.key}"><line x1="${pw - 4}" y1="${tag.y.toFixed(1)}" x2="${pw + 2}" y2="${tag.at.toFixed(1)}" class="bc-leader"${leader ? '' : ' visibility="hidden"'}/><rect x="${pw + 2}" y="${(tag.at - TAG_H / 2).toFixed(1)}" width="${w}" height="${TAG_H}" rx="4" class="${tag.cls}-fill"/>${body}</g>`;
   };
   F.push(`<g class="bc-tags">${tags.map(tagMarkup).join('')}</g>`);
   F.push(`<g class="bc-last"><circle cx="${lastX}" cy="${lastY}" r="9" class="bc-pulse"/><circle cx="${lastX}" cy="${lastY}" r="3.6" class="bc-lastdot"/></g>`);
-  for (const mark of model.sellMarks || []) {
-    const i = barOf(mark.date); if (i === undefined) continue;
-    const mx = x(i), top = Math.max(padT + 2, y(bars[i].high) - 14), bottom = Math.min(plotBottom - 2, y(bars[i].low) + 14);
+  for (const { mark, mx, top, bottom } of sells) {
     F.push(mark.kind === 'weakness'
       ? `<path d="M${mx - 5},${bottom}h10l-5,-8z" class="bc-sell bc-sell-weak"/>`
       : `<path d="M${mx - 5},${top}h10l-5,8z" class="bc-sell bc-sell-strong"/>`);
   }
-  if (model.rsNewHigh && rsLast != null) F.push(`<g class="bc-rshigh"><circle cx="${lastX}" cy="${rsLast}" r="4" class="bc-rsdot"/>${text(lastX - 8, rsLast + 4, '新高値', 'bc-rstext', 'text-anchor="end" font-weight="700"')}</g>`);
-  // The date axis: month ticks with the year where it starts or changes, and the next earnings date outside its right edge.
-  const earnings = model.earnings && finite(model.earnings.days) && model.earnings.days <= 28 ? model.earnings : null;
-  const earningsText = earnings ? `決算 ${Number(earnings.date.slice(5, 7))}/${Number(earnings.date.slice(8))} ${earnings.days === 0 ? '当日' : `あと${earnings.days}日`}` : null;
-  const axisLimit = earningsText ? W - width(earningsText) - 10 : W;
-  let previousRight = -Infinity;
-  for (const tick of dateTicks(bars, pw)) {
-    const tx = x(tick.i), w = width(tick.label, true), left = Math.min(Math.max(0, tx - w / 2), pw - w);
-    F.push(`<line x1="${tx.toFixed(1)}" x2="${tx.toFixed(1)}" y1="${volTop + volH}" y2="${volTop + volH + 4}" class="bc-tick"/>`);
-    if (left < previousRight + 8 || left + w > axisLimit) continue;
-    previousRight = left + w;
-    F.push(text(left.toFixed(1), H - 4, tick.label, `bc-axis bc-date${tick.label.includes('/') && !tick.mid ? ' bc-date-year' : ''}`, mono));
+  // The RS line's new high: a dot on its last point and the tag 「RS新高値」 in the axis column beside it.
+  const rsColumn = [];
+  if (model.rsNewHigh && rsLast != null) {
+    const body = 'RS新高値', w = Math.round(width(body) + 10), at = Math.min(Math.max(rsLast, rsTop + TAG_H / 2), rsTop + rsH - TAG_H / 2);
+    rsColumn.push([at - TAG_H / 2, at + TAG_H / 2]);
+    F.push(`<g class="bc-rshigh"><circle cx="${lastX}" cy="${rsLast.toFixed(1)}" r="3" class="bc-rsdot"/><line x1="${(lastX + 3).toFixed(1)}" y1="${rsLast.toFixed(1)}" x2="${pw + 2}" y2="${at.toFixed(1)}" class="bc-leader bc-rsleader"/><rect x="${pw + 2}" y="${(at - TAG_H / 2).toFixed(1)}" width="${w}" height="${TAG_H}" rx="4" class="bc-rstag-fill"/>${text(pw + 7, (at + 4).toFixed(1), body, 'bc-rstext', 'font-weight="700"')}</g>`);
   }
-  if (earningsText) F.push(text(W - 2, H - 4, earningsText, `bc-earnings${earnings.days <= 10 ? ' bc-earnings-soon' : ''}`, 'text-anchor="end" font-weight="700"'));
+  // The date axis: month ticks with the year where it starts or changes, and the next earnings date: outside the
+  // axis's right edge on a wide chart, as a compact flag 「E 10/10」 in the RS panel's axis column on a narrow one.
+  const earnings = earningsMarker(model.earnings);
+  const axisLimit = earnings && !narrow ? W - width(earnings.text) - 10 : W;
+  // Labels left to right, each 8px clear of the one before; when fewer than 3 fit, every month start and
+  // mid-month tick is tried instead (a phone keeps 3 dates or more on 3か月, 6か月 and 週足).
+  const placeTicks = list => {
+    let previousRight = -Infinity;
+    return list.map(tick => {
+      const tx = x(tick.i), w = width(tick.label, true), left = Math.min(Math.max(0, tx - w / 2), pw - w);
+      const shown = !(left < previousRight + 8 || left + w > axisLimit);
+      if (shown) previousRight = left + w;
+      return { ...tick, tx, left, shown };
+    });
+  };
+  let ticks = placeTicks(dateTicks(bars, pw));
+  if (ticks.filter(t => t.shown).length < 3) {
+    const dense = placeTicks(dateTicks(bars, pw, { dense: true }));
+    if (dense.filter(t => t.shown).length > ticks.filter(t => t.shown).length) ticks = dense.filter(t => t.shown);
+  }
+  for (const tick of ticks) {
+    F.push(`<line x1="${tick.tx.toFixed(1)}" x2="${tick.tx.toFixed(1)}" y1="${volTop + volH}" y2="${volTop + volH + 4}" class="bc-tick"/>`);
+    if (tick.shown) F.push(text(tick.left.toFixed(1), H - 4, tick.label, `bc-axis bc-date${tick.label.includes('/') && !tick.mid ? ' bc-date-year' : ''}`, mono));
+  }
+  if (earnings && !narrow) F.push(text(W - 2, H - 4, earnings.text, `bc-earnings${earnings.warn ? ' bc-earnings-soon' : ''}`, 'text-anchor="end" font-weight="700"'));
+  if (earnings && narrow) {
+    const w = Math.round(width(earnings.short, true) + 8), fh = 18;
+    let top = rsTop + rsH - fh;
+    if (rsColumn.some(([a, b]) => top < b && top + fh > a)) top = rsTop;
+    // A passed report's flag is dimmed with a dashed border (its 注記 key reads 「E 10/6＝決算 10/6 経過」).
+    F.push(`<g class="bc-earnflag${earnings.warn ? ' bc-earnings-soon' : ''}${earnings.past ? ' is-past' : ''}" data-full="${esc(earnings.text)}"><title>${esc(earnings.text)}</title><rect x="${pw + 2}" y="${top}" width="${w}" height="${fh}" rx="4" class="bc-earnflag-fill"/>${text(pw + 6, top + 13, esc(earnings.short), 'bc-earnings', `font-weight="700" ${mono}`)}</g>`);
+  }
   F.push(`<g class="bc-scrub" opacity="0"><line class="bc-cross" y1="${padT}" y2="${volTop + volH}"/><circle r="4" class="bc-crossdot"/></g><g class="bc-hover" opacity="0"><line class="bc-crossh" x1="0" x2="${pw}"/><rect x="${pw + 2}" width="${right - 4}" height="${TAG_H}" rx="4" class="bc-ylabel-fill"/>${text(pw + 7, 0, '', 'bc-ylabel', `font-weight="700" ${mono}`)}</g><rect class="bc-hit" x="0" y="0" width="${pw}" height="${volTop + volH}" fill="transparent"/>`);
 
   const box = `viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false"`;
   const depths = (model.legs || []).map(leg => `${Math.round(leg.depthPct)}%`).join('→');
   el.setAttribute('role', 'img');
-  el.setAttribute('aria-label', `${model.symbol} の${unit}足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${hasPivot ? `、ピボット ${fmt(model.pivot)}` : '、ピボット 未確認'}${finite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : model.legsValid === false ? '、収縮は未確認' : ''}${(model.sellMarks || []).some(m => barOf(m.date) !== undefined) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => barOf(m.date) !== undefined).map(m => m.date).join('・')}` : ''}${rsKnown.length > 1 ? '。RS線（株価÷S&P 500。RS推計やIBD RSとは別）を表示' : `。RS線 未配信${model.rsReason ? `（${model.rsReason}）` : ''}`}${earningsText ? `。${earningsText}` : ''}。`);
+  el.setAttribute('aria-label', `${model.symbol} の${unit}足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${hasPivot ? `、ピボット ${fmt(model.pivot)}` : '、ピボット 未確認'}${finite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : model.legsValid === false ? '、収縮は未確認' : ''}${(model.sellMarks || []).some(m => barOf(m.date) !== undefined) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => barOf(m.date) !== undefined).map(m => m.date).join('・')}` : ''}${breakout ? `、ピボットを上抜けた日 ${breakout.date}${breakout.label ? `（${breakout.label}）` : ''}` : ''}${rsKnown.length > 1 ? `。RS線（株価÷S&P 500。RS推計やIBD RSとは別）を表示${model.rsNewHigh && rsLast != null ? '、RS新高値' : ''}` : `。RS線 未配信${model.rsReason ? `（${model.rsReason}）` : ''}`}${earnings ? `。${earnings.text}` : ''}。`);
   el.innerHTML = `<svg class="bc-layer" ${box}>${B.join('')}</svg><div class="bc-reveal"><svg class="bc-layer" ${box}>${M.join('')}</svg></div><svg class="bc-layer" ${box}>${F.join('')}</svg>`;
   const [back, reveal, front] = el.children, mid = reveal.firstChild;
 
@@ -436,7 +561,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     const score = ([x0, y0]) => {
       const x1 = x0 + w, y1 = y0 + h, across = (a0, a1, b0, b1) => a1 > b0 && a0 < b1;
       let total = bars.reduce((sum, b, i) => sum + (across(x(i) - bw / 2, x(i) + bw / 2, x0, x1) && across(y(b.high), y(b.low), y0, y1) ? 1 : 0), 0);
-      total += lines.filter(ly => ly >= y0 && ly <= y1).length * 4 + boxes.filter(b => across(b.x0, b.x1, x0, x1) && across(b.y - 6, b.y + 6, y0, y1)).length * 8;
+      total += lines.filter(ly => ly >= y0 && ly <= y1).length * 4 + boxes.filter(b => across(b.x0, b.x1, x0, x1) && across(b.y0, b.y1, y0, y1)).length * 8;
       if (noticeBox && across(noticeBox.x0, noticeBox.x1, x0, x1) && across(noticeBox.y0, noticeBox.y1, y0, y1)) total += 500;
       if (current !== null && across(x(current) - 6, x(current) + 6, x0, x1)) total += 1000;
       return total;
@@ -463,6 +588,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   legGroups.forEach((group, i) => {
     const rect = group.querySelector('rect'), height = Number(rect.dataset.h), leg = Number(group.dataset.leg), depth = legTexts.find(e => Number(e.dataset.i) === leg), label = tTexts.find(e => Number(e.dataset.leg) === leg);
     tween(420 * k, p => { group.style.opacity = Math.min(1, p * 2); rect.setAttribute('height', Math.max(1, height * p)); if (label) label.style.opacity = p; if (depth) { depth.style.opacity = p; depth.textContent = `−${Math.round(Number(depth.dataset.depth) * p)}%`; } }, { delay: legStart + i * legGap, signal });
+    // A combined 「T2 −7%」 keeps its text; it fades in with its box.
   });
   fade(all$(back, '.bc-lows'), 420 * k, legStart + legGroups.length * legGap + 120 * k);
   const pivot = front.querySelector('.bc-pivot'), after = sweepAt + sweep + 80 * k;
@@ -473,7 +599,8 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   all$(front, '.bc-tag').forEach((group, i) => tween(380 * k, t => { group.style.opacity = Math.min(1, t); group.style.transform = `translateX(${(1 - t) * 14}px)`; }, { delay: after + 200 * k + i * 90 * k, easing: easeBack, signal }));
   fade(all$(front, '.bc-stop, .bc-planline, .bc-high52, .bc-levelnote, .bc-malabel'), 360 * k, after + 160 * k);
   fade(all$(front, '.bc-note'), 380 * k, legStart + legGroups.length * legGap + 200 * k, 4);
-  fade(all$(front, '.bc-rshigh'), 380 * k, after + 420 * k);
+  fade(all$(front, '.bc-rshigh, .bc-earnflag'), 380 * k, after + 420 * k);
+  fade(all$(front, '.bc-breakout'), 300 * k, after + 480 * k);
   fade(all$(front, '.bc-sell'), 300 * k, after + 480 * k);
   fade(all$(front, '.bc-last'), 300 * k, after + 340 * k).then(() => front.classList.add('bc-pulsing'));
   return controller;

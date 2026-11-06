@@ -1,5 +1,6 @@
 import { forwardRef, memo, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react';
 import { renderPriceChart } from './priceChart';
+import { chartContentKey, chartIdentityKey } from './chartReadout';
 
 let introducedOnce = false;
 
@@ -20,9 +21,8 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     const corner = controller.current?.freeCorner?.(button.offsetWidth || 72, button.offsetHeight || 44);
     if (corner) { button.style.left = `${corner.x}px`; button.style.top = `${corner.y}px`; }
   };
-  const key = model ? `${model.symbol}|${model.interval || 'day'}|${period}|${model.bars?.length}|${model.bars?.at(-1)?.date}` : null;
-  // Levels and overlays can arrive after the bars (detail merge); they redraw without replaying the intro.
-  const content = model ? `${key}|${model.pivot}|${model.upper}|${model.entry}|${model.r2}|${model.r3}|${model.structuralLow}|${model.auditHigh}|${model.rsNewHigh}|${model.rsLine?.length}|${model.rsReason}|${model.rsLead?.dates?.length}|${model.legs?.length}|${model.legsValid}|${model.dryUpLeg?.startDate}|${(model.gaps || []).length}|${model.earnings?.date}|${model.earnings?.days}|${(model.sellMarks || []).map(m => m.date).join(',')}` : null;
+  const key = chartIdentityKey(model, period);
+  const content = chartContentKey(model, period);
   const draw = options => {
     const chart = renderPriceChart(element.current, { ...model, stop: stopRef.current }, { period, onScrub: index => scrubRef.current?.(index), selected: selectedRef.current, ...options });
     if (chart && legRef.current !== null) chart.highlightLeg(legRef.current);

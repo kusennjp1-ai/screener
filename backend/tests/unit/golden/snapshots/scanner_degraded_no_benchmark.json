@@ -36,8 +36,8 @@
     "up_down_volume_ratio_10d": 0.42857142857142855,
     "quiet_days_10d": 0,
     "rs": null,
-    "rs_line_blue_dot": false,
     "rs_line_new_high": false,
+    "rs_line_blue_dot": false,
     "rs_vs_spy_65d": null,
     "rs_vs_spy_trend_20d": null,
     "stage": 3,
@@ -751,14 +751,6 @@
         "rs_rating_ok"
       ],
       "failed_checks": [
-        "not_detected",
-        "cup_structure_not_found",
-        "pole_return_below_threshold",
-        "vcp_contracting_depth_failed",
-        "vcp_tight_near_highs_failed",
-        "vcp_score_below_legacy_threshold",
-        "vcp_insufficient_bases",
-        "not_implemented",
         "volume_below_minimum",
         "stage_not_ok"
       ],
@@ -791,6 +783,17 @@
           "message": "missing or short benchmark history",
           "severity": "medium"
         }
+      ],
+      "diagnostics": [
+        "cup_with_handle:not_detected",
+        "cup_with_handle:cup_structure_not_found",
+        "high_tight_flag:not_detected",
+        "high_tight_flag:pole_return_below_threshold",
+        "vcp:not_detected",
+        "vcp:vcp_contracting_depth_failed",
+        "vcp:vcp_volume_contraction_unconfirmed",
+        "vcp:vcp_right_edge_drying_unconfirmed",
+        "vcp:vcp_score_below_legacy_threshold"
       ]
     }
   }

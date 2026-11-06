@@ -83,6 +83,8 @@ describe('brief stock view shell', () => {
     expect(notes).not.toHaveTextContent('10日線・21日EMA');
     // 200 bars: the 200-day line exists on its last bar only.
     expect(notes).toHaveTextContent('200日線は直近1本のみ（日足が足りないため）。');
+    // The phone legend may fold the pivot's line: its key is here.
+    expect(notes).toHaveTextContent('緑の破線＝ピボット');
     cleanup();
     render(<StockView data={data(true)} wide />);
     expect(document.querySelector('.brief-screen-notes')).toBeNull();
@@ -132,7 +134,7 @@ describe('brief stock view evidence', () => {
 describe('the props StockView hands its cards in round 2', () => {
   afterEach(() => { cleanup(); vi.useRealTimers(); sessionStorage.clear(); });
 
-  it('computes the earnings call once and passes it to the chart card, the plan card and the conclusion (unread at step 0)', () => {
+  it('computes the earnings call once and passes it to the chart card, the plan card and the conclusion', () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(`${DATE}T19:00:00Z`));
     const near = { ...view, asOf: DATE, earnings: { date: '2026-10-05', days: 3 } };
@@ -147,13 +149,63 @@ describe('the props StockView hands its cards in round 2', () => {
     expect([seen.chart.earningsCall, seen.plan.earningsCall, seen.verdict.earningsCall]).toEqual([null, null, null]);
   });
 
-  it('hands the conclusion a stage without a phase while stagePhase names none', () => {
+  // The audit's probe as dated bars: 250 sessions at +0.35%/day, then a 7-week base ending 1% under its high.
+  const baseBars = () => {
+    const closes = []; let p = 50;
+    for (let i = 0; i < 250; i++) { p *= 1.0035; closes.push(p); }
+    const top = p;
+    for (const d of [15, 8, 4]) for (let j = 0; j < 11; j++) closes.push(top * (1 - d / 100 * Math.sin(Math.PI * j / 11)));
+    closes[closes.length - 1] = top * 0.99;
+    return closes.map((close, i) => ({ date: i === closes.length - 1 ? DATE : day(i), open: close, high: close * 1.005, low: close * 0.995, close, volume: 10000 }));
+  };
+
+  it('hands the conclusion stage 2 with phase base on certified bars of a flat base, published or computed, never a relabelled 3', () => {
+    const based = (row, certified = true) => ({ ...data(certified), bars: baseBars(), row: { symbol: 'AAA', chart_path: 'AAA.json', ...row } });
+    render(<StockView data={based({})} />);
+    expect(seen.verdict.stage).toEqual({ value: 2, computed: true, phase: 'base' });
+    cleanup();
+    render(<StockView data={based({ stage: 2 })} />);
+    expect(seen.verdict.stage).toEqual({ value: 2, computed: false, phase: 'base' });
+    cleanup();
+    // A published stage 3 (an older publication) is never relabelled here: the next data run reclassifies it.
+    render(<StockView data={based({ stage: 3 })} />);
+    expect(seen.verdict.stage).toEqual({ value: 3, computed: false });
+    cleanup();
+    // Bars not certified: no computed stage and no phase.
+    render(<StockView data={based({ stage: 2 }, false)} />);
+    expect(seen.verdict.stage).toEqual({ value: 2, computed: false });
+    cleanup();
+    // An advancing stage 2 has no phase; 200 bars are too few for the stage from bars.
     render(<StockView data={{ ...data(true), row: { symbol: 'AAA', chart_path: 'AAA.json', stage: 2 } }} />);
     expect(seen.verdict.stage).toEqual({ value: 2, computed: false });
-    expect('phase' in seen.verdict.stage).toBe(false);
     cleanup();
-    // 200 bars are too few for the stage from bars: no stage, and no phase either.
     render(<StockView data={data(true)} />);
     expect(seen.verdict.stage).toBeNull();
+  });
+
+  it('reads the RS line new high from the published value of the analysis date, else from the certified bars', () => {
+    const rising = bars().map((b, i) => ({ time: b.date, value: 1 + i / 1000 }));
+    const withRow = (rsLineHigh, rsLine = []) => ({ ...data(true), row: { symbol: 'AAA', chart_path: 'AAA.json', ...(rsLineHigh === undefined ? {} : { rs_line_high: rsLineHigh }) }, chart: { data: { rs_line: rsLine }, isError: false } });
+    // Published for the analysis date: its value, even without an RS line delivered.
+    render(<StockView data={withRow({ value: true, leading: false, as_of_date: DATE })} />);
+    expect(seen.verdict.rsHigh).toBe(true);
+    expect(seen.chart.rsHigh).toBe(true);
+    cleanup();
+    // Published but unknown (null): not a new high (the chip and the tag are not drawn), never computed over it.
+    render(<StockView data={withRow({ value: null, leading: null, as_of_date: DATE }, rising)} />);
+    expect(seen.verdict.rsHigh).toBe(false);
+    cleanup();
+    // Another day's value, or none (an older publication): rsLineNewHigh on the certified bars (200 aligned points: null, so false).
+    render(<StockView data={withRow({ value: true, leading: false, as_of_date: '2026-10-01' }, rising)} />);
+    expect(seen.verdict.rsHigh).toBe(false);
+    cleanup();
+    render(<StockView data={withRow(undefined, rising)} />);
+    expect(seen.verdict.rsHigh).toBe(false);
+    cleanup();
+    // A dated published high on bars this screen cannot certify (e.g. a scan-price mismatch): neither the conclusion
+    // nor the chart claims it, so the two cards never give two answers.
+    render(<StockView data={{ ...withRow({ value: true, leading: false, as_of_date: DATE }, rising), certification: { certified: false, reason: 'スキャン価格と日足終値が不一致' } }} />);
+    expect(seen.verdict.rsHigh).toBe(false);
+    expect(seen.chart.rsHigh).toBe(false);
   });
 });
