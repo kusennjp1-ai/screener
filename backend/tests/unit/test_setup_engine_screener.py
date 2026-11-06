@@ -21,8 +21,10 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from app.analysis.patterns.aggregator import DetectorExecutionTrace
-from app.analysis.patterns.models import validate_setup_engine_payload
+from app.analysis.patterns.aggregator import DetectorExecutionTrace, SetupEngineAggregator
+from app.analysis.patterns.config import DEFAULT_SETUP_ENGINE_PARAMETERS
+from app.analysis.patterns.detectors.base import PatternDetector, PatternDetectorResult
+from app.analysis.patterns.models import PatternCandidateModel, validate_setup_engine_payload
 from app.scanners.base_screener import DataRequirements, ScreenerResult, StockData
 from app.scanners.screener_registry import screener_registry
 from app.scanners.setup_engine_screener import SetupEngineScanner, _count_current_week_sessions
@@ -467,3 +469,54 @@ class TestOperationalFlagsIntegration:
             f["code"] for f in flags if f.get("code") in operational_flag_names
         ]
         assert operational_present == [], f"Unexpected operational flags: {operational_present}"
+
+
+class TestConfidenceFloorContract:
+    """The check name and floor the brief's base check reads (round 2, plan section 2.2).
+
+    ``frontend/tools/recalculate-setups.py`` writes ``setup_recalculation.reason`` as
+    ``' / '.join(payload['explain']['failed_checks'])`` from this scanner's payload, so the
+    name is pinned where that reason is built, not only in the aggregator's own list.
+    """
+
+    @staticmethod
+    def _payload(confidence: float) -> dict:
+        class _OneCandidateDetector(PatternDetector):
+            name = "detector_floor"
+
+            def detect(self, detector_input, parameters):
+                del detector_input, parameters
+                return PatternDetectorResult.detected(
+                    self.name,
+                    PatternCandidateModel(
+                        pattern="detector_floor",
+                        timeframe="daily",
+                        source_detector=self.name,
+                        quality_score=None,
+                        readiness_score=None,
+                        confidence=confidence,
+                    ),
+                )
+
+        scanner = SetupEngineScanner()
+        scanner._aggregator = SetupEngineAggregator(detectors=[_OneCandidateDetector()])
+        result = scanner.scan_stock("FLOOR", _make_stock_data(num_days=350))
+        return result.details["setup_engine"]
+
+    def test_floor_is_55(self):
+        assert DEFAULT_SETUP_ENGINE_PARAMETERS.pattern_confidence_min_pct == 55.0
+
+    def test_below_floor_fallback_names_the_check_in_the_explain_failed_checks(self):
+        payload = self._payload(0.20)
+        failed = payload["explain"]["failed_checks"]
+
+        assert payload["pattern_confidence"] < 55.0
+        assert payload["setup_ready"] is False
+        assert "primary_pattern_below_confidence_floor" in failed
+        assert "primary_pattern_below_confidence_floor" in " / ".join(failed)
+
+    def test_selected_primary_does_not_name_the_check(self):
+        payload = self._payload(0.95)
+
+        assert payload["pattern_confidence"] >= 55.0
+        assert "primary_pattern_below_confidence_floor" not in payload["explain"]["failed_checks"]
