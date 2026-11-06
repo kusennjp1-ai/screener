@@ -477,7 +477,8 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     const w = Math.round(width(earnings.short, true) + 8), fh = 18;
     let top = rsTop + rsH - fh;
     if (rsColumn.some(([a, b]) => top < b && top + fh > a)) top = rsTop;
-    F.push(`<g class="bc-earnflag${earnings.warn ? ' bc-earnings-soon' : ''}" data-full="${esc(earnings.text)}"><title>${esc(earnings.text)}</title><rect x="${pw + 2}" y="${top}" width="${w}" height="${fh}" rx="4" class="bc-earnflag-fill"/>${text(pw + 6, top + 13, esc(earnings.short), 'bc-earnings', `font-weight="700" ${mono}`)}</g>`);
+    // A passed report's flag is dimmed with a dashed border (its 注記 key reads 「E 10/6＝決算 10/6 経過」).
+    F.push(`<g class="bc-earnflag${earnings.warn ? ' bc-earnings-soon' : ''}${earnings.past ? ' is-past' : ''}" data-full="${esc(earnings.text)}"><title>${esc(earnings.text)}</title><rect x="${pw + 2}" y="${top}" width="${w}" height="${fh}" rx="4" class="bc-earnflag-fill"/>${text(pw + 6, top + 13, esc(earnings.short), 'bc-earnings', `font-weight="700" ${mono}`)}</g>`);
   }
   F.push(`<g class="bc-scrub" opacity="0"><line class="bc-cross" y1="${padT}" y2="${volTop + volH}"/><circle r="4" class="bc-crossdot"/></g><g class="bc-hover" opacity="0"><line class="bc-crossh" x1="0" x2="${pw}"/><rect x="${pw + 2}" width="${right - 4}" height="${TAG_H}" rx="4" class="bc-ylabel-fill"/>${text(pw + 7, 0, '', 'bc-ylabel', `font-weight="700" ${mono}`)}</g><rect class="bc-hit" x="0" y="0" width="${pw}" height="${volTop + volH}" fill="transparent"/>`);
 

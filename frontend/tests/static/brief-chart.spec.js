@@ -6,7 +6,8 @@ import { test, expect } from '@playwright/test';
 import { date, horizontalOverflow, openBrief, VIEWPORTS } from './brief-fixture.js';
 
 const DOCK_TOP = 788; // 844 − the 56px dock at 390×844
-const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+// Measure only after the finite animations finish (the last price's pulse repeats for ever).
+const settled = page => page.evaluate(() => Promise.all(document.getAnimations().filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => null))));
 const chartReady = page => expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down').first()).toBeAttached();
 /** Rows the readout takes (its items' distinct tops). */
 const readoutRows = page => page.locator('.brief-readout').evaluate(node => new Set([...node.querySelectorAll('.ro-item')].map(item => Math.round(item.getBoundingClientRect().top))).size);
@@ -52,17 +53,21 @@ const readoutSlack = page => page.locator('.brief-readout').evaluate(node => [..
 }));
 /**
  * Label collisions in the chart: every in-plot label's box (its text's width, 12px around its centre) against
- * every other label, every right-axis tag (price tags, 安値, RS新高値, the earnings flag) and the last price's dot.
+ * every other label, every right-axis tag (price tags, 安値, RS新高値, the earnings flag), the last price's dot and
+ * the marks (the crossing's arrow, the sell signs); and the axis column's own boxes (RS新高値 against the
+ * earnings flag) against each other.
  */
 const collisions = page => page.getByTestId('brief-price-chart').evaluate(chart => {
   const labels = [...chart.querySelectorAll('.bc-levelnote, .bc-malabel, .bc-ttext, .bc-legtext, .bc-zonetext, .bc-notice, .bc-breakouttext, .bc-rscaption')]
     .filter(node => node.getAttribute('visibility') !== 'hidden' && node.textContent.trim())
     .map(node => { const box = node.getBBox(), centre = Number(node.getAttribute('y')) - 4; return { name: node.textContent, x0: box.x, x1: box.x + box.width, y0: centre - 6, y1: centre + 6 }; });
-  const solid = [...chart.querySelectorAll('.bc-tag rect, .bc-rshigh rect, .bc-earnflag rect, .bc-lastdot')]
+  const solid = [...chart.querySelectorAll('.bc-tag rect, .bc-rshigh rect, .bc-earnflag rect, .bc-lastdot, .bc-breakoutmark, .bc-sell')]
     .map(node => { const box = node.getBBox(); return { name: node.closest('[data-tag]')?.dataset.tag || node.getAttribute('class'), x0: box.x, x1: box.x + box.width, y0: box.y, y1: box.y + box.height }; });
   const hit = (a, b) => a.x0 < b.x1 - 0.5 && a.x1 > b.x0 + 0.5 && a.y0 < b.y1 - 0.5 && a.y1 > b.y0 + 0.5;
   const out = [];
   labels.forEach((a, i) => { for (const b of [...labels.slice(i + 1), ...solid]) if (hit(a, b)) out.push(`${a.name} × ${b.name}`); });
+  const column = solid.filter(box => box.name === 'bc-rstag-fill' || box.name === 'bc-earnflag-fill');
+  column.forEach((a, i) => { for (const b of column.slice(i + 1)) if (hit(a, b)) out.push(`${a.name} × ${b.name}`); });
   return out;
 });
 /** Every drawn level line (買値, 2R, 3R, 52週高, the wide chart's structural low) has its name drawn. */
@@ -359,6 +364,11 @@ for (const [name, device] of [['phone', VIEWPORTS.phone], ['desktop', VIEWPORTS.
       await expect(chart.locator('.bc-earnflag')).toHaveAttribute('data-full', full);
       await expect(chart.locator('.bc-earnflag .bc-earnings')).toHaveText('E 10/6');
       await expect(chart.locator('.bc-earnflag.bc-earnings-soon')).toHaveCount(warn ? 1 : 0);
+      // A passed report's flag is dimmed with a dashed border, never like a coming date; its 注記 key says 経過.
+      await expect(chart.locator('.bc-earnflag.is-past')).toHaveCount(when === 'after' ? 1 : 0);
+      const dash = await chart.locator('.bc-earnflag-fill').evaluate(node => getComputedStyle(node).strokeDasharray);
+      expect(dash === 'none' || dash === '').toBe(when !== 'after');
+      await expect(page.locator('.brief-screen-notes')).toContainText(`E 10/6＝${full}`);
       for (const label of ['3か月', '6か月', /^週足/]) {
         await page.getByRole('group', { name: '表示期間' }).getByRole('button', { name: label }).click();
         await chartReady(page);
@@ -464,13 +474,33 @@ for (const theme of ['light', 'dark']) test.describe(`legend in ${theme}`, () =>
     const { errors } = await openBrief(page, '#/brief/stock/ZZNV', { storage: { 'screener:color-mode': theme } });
     await expect(page.locator('.brief')).toHaveAttribute('data-theme', theme);
     await chartReady(page);
-    const pairs = await page.evaluate(() => [['ma50', '.bc-ma50'], ['ma150', '.bc-ma150'], ['ma200', '.bc-ma200'], ['pivot', '.bc-pivot'], ['stop', '.bc-stop'], ['lows', '.bc-lows']].map(([key, line]) => {
+    // Only the items the legend shows (a folded one is keyed in the 注記, not by its swatch).
+    const pairs = await page.evaluate(() => [['ma50', '.bc-ma50'], ['ma150', '.bc-ma150'], ['ma200', '.bc-ma200'], ['pivot', '.bc-pivot'], ['stop', '.bc-stop'], ['lows', '.bc-lows'], ['structural', '.bc-structural']].map(([key, line]) => {
       const swatch = document.querySelector(`.brief-legend i.lg-${key}`), stroke = document.querySelector(`[data-testid="brief-price-chart"] ${line}`);
-      return { key, swatch: swatch && getComputedStyle(swatch).borderTopColor, stroke: stroke && getComputedStyle(stroke).stroke };
+      return { key, shown: Boolean(swatch && !swatch.closest('[hidden]') && swatch.getClientRects().length), swatch: swatch && getComputedStyle(swatch).borderTopColor, stroke: stroke && getComputedStyle(stroke).stroke };
     }));
-    for (const pair of pairs) {
-      expect(pair.swatch, pair.key).toBeTruthy();
+    expect(pairs.filter(pair => pair.shown).map(pair => pair.key)).toEqual(expect.arrayContaining(['ma50', 'ma150', 'ma200']));
+    for (const pair of pairs.filter(p => p.shown)) {
+      expect(pair.stroke, pair.key).toBeTruthy();
       expect(pair.swatch, pair.key).toBe(pair.stroke);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+// The card's 520px cap is tightest at 320 (the readout takes 6 rows there): every view keeps the 12px headroom under it.
+test.describe('the chart card at 320×640', () => {
+  test.use({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, contextOptions: { reducedMotion: 'reduce' } });
+  for (const [symbol, broken] of [['ZZNV', false], ['ZZSD', true]]) test(`${symbol}${broken ? ' (broken)' : ''} stays within 508px (12px under the 520 cap) on every period`, async ({ page }) => {
+    const charts = served => { withRsLine(served); if (broken) breakBelow50(served[`${symbol}.json`].bars); };
+    const { errors } = await openBrief(page, `#/brief/stock/${symbol}`, { mutate: { charts } });
+    await chartReady(page);
+    for (const label of ['3か月', '6か月', '1年', /^週足/]) {
+      await page.getByRole('group', { name: '表示期間' }).getByRole('button', { name: label }).click();
+      await chartReady(page);
+      await settled(page);
+      expect((await page.locator('.brief-chartcard').boundingBox()).height, `${symbol} ${label}: card height`).toBeLessThanOrEqual(CARD_LINE);
+      expect(await legendLines(page), `${symbol} ${label}: legend lines`).toBeLessThanOrEqual(2);
     }
     expect(errors).toEqual([]);
   });

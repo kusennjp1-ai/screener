@@ -514,6 +514,16 @@ describe('brief price chart', () => {
     expect(tip).toBeGreaterThanOrEqual(base);
   });
 
+  it('dims a passed report\'s flag on a narrow chart, so it never reads as a coming date', () => {
+    const coming = container(332, 340), passed = container(332, 340);
+    renderPriceChart(coming, { ...model, earnings: { date: '2026-11-12', days: 8, soon: false } }, { period: 130, animate: false });
+    renderPriceChart(passed, { ...model, earnings: { date: '2026-11-02', days: -2, soon: true } }, { period: 130, animate: false });
+    expect(coming.querySelector('.bc-earnflag').classList.contains('is-past')).toBe(false);
+    expect(passed.querySelector('.bc-earnflag').classList.contains('is-past')).toBe(true);
+    expect(passed.querySelector('.bc-earnflag').classList.contains('bc-earnings-soon')).toBe(false);
+    expect(passed.querySelector('.bc-earnflag').dataset.full).toBe('決算 11/2 経過');
+  });
+
   it('puts the zone\'s name on a candle-free spot along its top when one exists', () => {
     const el = container(1000, 470);
     renderPriceChart(el, busy(1), { period: 130, animate: false });

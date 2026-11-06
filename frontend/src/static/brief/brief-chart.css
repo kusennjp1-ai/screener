@@ -5,7 +5,9 @@
    (the RS line) and --ext (warnings and sell marks), defined for both themes. */
 .brief-chartcard { --ma10: #B4229B; --ema21: #0B6E8F; }
 .brief[data-theme="light"] .brief-chartcard { --ma10: #B4229B; --ema21: #0B6E8F; }
-.brief[data-theme="dark"] .brief-chartcard { --ma10: #F27FDB; --ema21: #4CC9F0; }
+/* Dark --ema21 is a light cyan: away from the 50-day line's --wait (ΔE2000 23 normal, 12 under deuteranopia, was 3
+   with #4CC9F0) and from --zone, the up candles' colour (19); 10.8:1 on --surface. */
+.brief[data-theme="dark"] .brief-chartcard { --ma10: #F27FDB; --ema21: #7FE3F0; }
 
 /* The card's head: the period segment, then the readout (beside it at 1024px and wider, under it below). */
 .brief-chartcard-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; }
@@ -18,8 +20,10 @@
   /* The weekly button carries its week count: a larger share of the row. */
   .brief-chartcard .brief-periods button.brief-period-week { flex-grow: 1.4; }
 }
-/* On the narrowest phones the week count takes a second line, without its brackets. */
+/* On the narrowest phones the week count takes a second line, without its brackets; the readout takes 6 rows
+   there, so the plot gives up 8px (300 → 292 at 320×640) and the card keeps 12px under its 520 cap. */
 @media (max-width: 359px) {
+  .brief-chartcard .brief-chart { min-height: 292px; }
   .brief-chartcard .brief-periods button.brief-period-week { line-height: 14px; white-space: normal; }
   .brief-chartcard .brief-weeks { display: block; }
   .brief-chartcard .brief-paren { display: none; }
@@ -136,6 +140,9 @@
 .bc-earnflag.bc-earnings-soon .bc-earnflag-fill { stroke: var(--ext); }
 .bc-earnflag .bc-earnings { stroke: none; }
 .bc-earnflag.bc-earnings-soon .bc-earnings { fill: var(--ext); }
+/* After the report the flag is dimmed with a dashed border, so it never reads as a coming date. */
+.bc-earnflag.is-past .bc-earnflag-fill { stroke: var(--text-3); stroke-dasharray: 3 2; }
+.bc-earnflag.is-past .bc-earnings { fill: var(--text-3); }
 .bc-rsmax { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; opacity: .6; }
 .bc-tick { stroke: var(--line-2); stroke-width: 1; }
 .bc-axis.bc-date-year { fill: var(--text-2); }
