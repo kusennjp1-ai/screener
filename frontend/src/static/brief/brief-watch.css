@@ -67,7 +67,16 @@
   .brief-tabs a, .brief-bar-title > span, .brief-count { font-size: 12px; }
 }
 
-/* Round 2 (rows). Today's SEC coverage line sits under the market card: the stack gap above it is cancelled, so it costs its line. */
+/* Round 2 (rows). The bar's date line: a late publication's age in the warning tone, and the missing sessions
+   (「（10/5・10/6 未反映）」) only where they fit with 6px to spare: the line is one line high and a part that does
+   not fit wraps under it, out of view (the page never scrolls sideways; the whole sentence stays in the text). */
+.brief-bar-title > .brief-bar-date { display: flex; flex-wrap: wrap; align-items: baseline; height: 1.3em; overflow: hidden; }
+.brief-bar-date > span { white-space: nowrap; }
+.brief-bar-date .brief-bar-age { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.brief-bar-date .brief-bar-missing { flex: none; padding-right: 6px; }
+.brief-bar-date.is-warn, .brief-stockhead-age.is-warn { color: var(--ext); font-weight: 700; }
+
+/* Today's SEC coverage line sits under the market card: the stack gap above it is cancelled, so it costs its line. */
 .brief-stack > .brief-coverage-note { margin-top: -12px; }
 
 /* The 注目候補 tile's 「うち上抜けN」: its own link over the tile's last line. The tile keeps that line for it with an
