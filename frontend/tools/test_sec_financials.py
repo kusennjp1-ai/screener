@@ -461,6 +461,53 @@ class DerivationGaps(unittest.TestCase):
         self.assertEqual(record["derivation_gaps"], [])
         self.assertEqual(sec.coverage({"ZZBK": record}, 1, 1)["no_revenue_concept"], 1)
 
+class WiderTargets(unittest.TestCase):
+    """Recently listed and strong rows join the targets after today's listed rows (plan DT8)."""
+
+    def history(self, root, snapshots):
+        import gzip, hashlib, json
+        refs = []
+        for as_of, records in snapshots:
+            raw = gzip.compress(json.dumps({"as_of": as_of, "records": records}).encode())
+            path = f"candidate-history/{as_of}-{hashlib.sha256(raw).hexdigest()[:16]}.json.gz"
+            (root / path).parent.mkdir(parents=True, exist_ok=True)
+            (root / path).write_bytes(raw)
+            refs.append({"path": path, "sha256": hashlib.sha256(raw).hexdigest(), "as_of": as_of})
+        (root / sec.HISTORY_INDEX).write_text(json.dumps({"schema_version": 1, "snapshots": refs}))
+
+    def test_order_listed_then_recent_then_ranked_then_strong(self):
+        import tempfile
+        record = lambda symbol, state, rules: {"symbol": symbol, "market": "US", "methods": {"minervini": {"state": state, "rules": [[r, None, None] for r in rules]}}}
+        old = [record("OLD", "pass", ["pass"] * 9)]
+        days = [f"2026-10-{d:02d}" for d in range(1, 13)]
+        snapshots = [(days[0], old)] + [(day, [record("AAA", "pass", ["pass"] * 9)]) for day in days[1:10]] + [(days[10], [record("WWW", "fail", ["fail"] + ["pass"] * 8), record("UNK", "fail", ["fail", "unknown"] + ["pass"] * 7), record("TWO", "fail", ["fail", "fail"] + ["pass"] * 7)])]
+        audit_row = lambda symbol, rs, unknown, qualified=False, failed=2: {"symbol": symbol, "methods": {"minervini": {"qualified": qualified, "failed": failed, "unknown": unknown, "rules": [{"label": "RS 推計 ≥ 70（公開日足の共通母集団）", "value": rs}]}}}
+        audit = {"as_of_date": days[11], "results": [audit_row("AAA", 90, 0, True, 0), audit_row("RSA", 85, 1), audit_row("RSB", 79.9, 0), audit_row("RSC", 95, 2), audit_row("WWW", 88, 0)]}
+        daily = {"as_of_date": days[11], "candidates": {"minervini": [{"symbol": "RNK"}]}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.history(root, snapshots)
+            recent = sec.recent_listed(root, days[11])
+            self.assertEqual(recent, {"symbols": ["AAA", "WWW"], "sessions": 10})
+            self.assertEqual(sec.target_symbols(daily, audit, recent), ["AAA", "WWW", "RNK", "RSA"])
+            # A snapshot on or after the analysis date is not a past publication.
+            self.assertEqual(sec.recent_listed(root, days[10])["symbols"], ["OLD", "AAA"])
+            # Without today's audit nothing is listed and no strong row is known; recent rows still come first.
+            self.assertEqual(sec.target_symbols(daily, None, recent), ["AAA", "WWW", "RNK"])
+            # A changed snapshot is never read: the recent rows are skipped and the skip is logged.
+            path = next((root / "candidate-history").glob("2026-10-11-*.json.gz"))
+            path.write_bytes(b"tampered")
+            logged = []
+            self.assertIsNone(sec.recent_listed(root, days[11], log=lambda *args, **kwargs: logged.append(args[0])))
+            self.assertIn("skipped", logged[0])
+        with tempfile.TemporaryDirectory() as directory:
+            logged = []
+            self.assertIsNone(sec.recent_listed(Path(directory), days[11], log=lambda *args, **kwargs: logged.append(args[0])))
+            self.assertEqual(len(logged), 1)
+        # Listed-first order and the cap are unchanged.
+        self.assertEqual(sec.MAX_SYMBOLS, 1500)
+        self.assertEqual(sec.target_symbols({"as_of_date": "2026-10-30", "candidates": {}}, {"as_of_date": "2026-10-30", "results": [audit_row("LST", 50, 0, True, 0)]}, {"symbols": ["LST", "REC"]}), ["LST", "REC"])
+
 ADMIT_SCRIPT = """
 import { admitBookFinancials } from './src/static/bookFinancialAdmission.js';
 let input = '';

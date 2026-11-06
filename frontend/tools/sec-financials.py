@@ -427,11 +427,67 @@ def same_day_brief(daily, audit):
     # A stale audit (another analysis date) never widens today's list.
     return brief_targets(audit) if audit and audit.get("as_of_date") == daily["as_of_date"] else []
 
-def target_symbols(daily, audit):
-    """Every row the brief can list comes first (qualified, then one condition short),
-    then the trend-template ranking the brief uses, then the other ranked lists."""
+# A stock the brief listed in any of the last RECENT_SESSIONS publications keeps its SEC record after it
+# drops off the list (a watched stock), and so does a strong row one condition from the template.
+RECENT_SESSIONS = 10
+RS_TARGET = 80
+HISTORY_INDEX = "candidate-history/index.json"
+HISTORY_PATH = re.compile(r"candidate-history/\d{4}-\d{2}-\d{2}-[a-f0-9]{16}\.json(?:\.gz)?")
+
+def snapshot_listed(snapshot):
+    """The symbols one published candidate snapshot listed for the trend template: qualified, or one
+    condition short with nothing unknown (the brief's rule, from the snapshot's minervini rule states)."""
+    listed = []
+    for record in (snapshot or {}).get("records") or []:
+        method = ((record or {}).get("methods") or {}).get("minervini") or {}
+        states = [rule[0] for rule in method.get("rules") or [] if isinstance(rule, list) and rule]
+        if not isinstance(record.get("symbol"), str):
+            continue
+        if method.get("state") == "pass" or (method.get("state") == "fail" and states.count("fail") == 1 and states.count("unknown") == 0):
+            listed.append(record["symbol"])
+    return listed
+
+def recent_listed(root, as_of, sessions=RECENT_SESSIONS, log=print):
+    """Symbols listed in any of the last `sessions` publications before `as_of`, from the restored
+    candidate history; None (logged) when it is absent or unreadable: nothing is guessed."""
+    import hashlib
+    try:
+        catalog = json.loads((root / HISTORY_INDEX).read_text(encoding="utf-8"))
+        refs = sorted((ref for ref in catalog.get("snapshots") or [] if isinstance(ref, dict) and isinstance(ref.get("as_of"), str) and ref["as_of"] < as_of), key=lambda ref: ref["as_of"])[-sessions:]
+        symbols = []
+        for ref in refs:
+            if not HISTORY_PATH.fullmatch(str(ref.get("path"))):
+                raise ValueError("unexpected history path")
+            raw = (root / ref["path"]).read_bytes()
+            if hashlib.sha256(raw).hexdigest() != ref.get("sha256"):
+                raise ValueError("history integrity")
+            snapshot = json.loads(gzip.decompress(raw) if ref["path"].endswith(".gz") else raw)
+            if snapshot.get("as_of") != ref["as_of"]:
+                raise ValueError("history date")
+            symbols += snapshot_listed(snapshot)
+        return {"symbols": list(dict.fromkeys(symbols)), "sessions": len(refs)}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        log(f"SEC targets: recently listed symbols skipped (candidate history unavailable: {type(error).__name__})", flush=True)
+        return None
+
+def strong_rows(audit, as_of):
+    """Same-day audit rows with RS推計 of RS_TARGET or more and at most one unknown trend-template condition."""
+    if not audit or audit.get("as_of_date") != as_of:
+        return []
+    out = []
+    for row in audit.get("results") or []:
+        method = (row.get("methods") or {}).get("minervini") or {}
+        rs = next((rule.get("value") for rule in method.get("rules") or [] if isinstance(rule, dict) and str(rule.get("label", "")).startswith("RS 推計")), None)
+        if isinstance(rs, (int, float)) and not isinstance(rs, bool) and math.isfinite(rs) and rs >= RS_TARGET and isinstance(method.get("unknown"), int) and method["unknown"] <= 1:
+            out.append(row["symbol"])
+    return out
+
+def target_symbols(daily, audit, recent=None):
+    """Every row the brief can list comes first (qualified, then one condition short), then the
+    rows it listed in the last RECENT_SESSIONS publications, then the trend-template ranking the
+    brief uses and the other ranked lists, then strong rows near the template (RS推計 ≥ 80)."""
     ranked = [r["symbol"] for method in ("minervini", "minervini2", "ibd", "oneil") for r in daily["candidates"].get(method, [])]
-    return list(dict.fromkeys(same_day_brief(daily, audit) + ranked))
+    return list(dict.fromkeys(same_day_brief(daily, audit) + list((recent or {}).get("symbols") or []) + ranked + strong_rows(audit, daily["as_of_date"])))
 
 def requested(ordered, limit):
     return ordered[:max(0, min(limit, MAX_SYMBOLS))]
@@ -451,11 +507,14 @@ def main():
     as_of = daily["as_of_date"]
     audit_path = Path("public/qualification-audit.json")
     audit = json.loads(audit_path.read_text(encoding="utf-8")) if audit_path.exists() else None
-    ordered = target_symbols(daily, audit)
+    recent = recent_listed(root, as_of)
+    ordered = target_symbols(daily, audit, recent)
     symbols = requested(ordered, args.limit)
     output = collect(symbols, as_of)
     brief = same_day_brief(daily, audit)
-    output["coverage"] = {**coverage(output["results"], len(ordered), len(symbols), brief), "second_pass": output.pop("second_pass"), "deadline": output.pop("deadline")}
+    targets = {"listed": len(brief), "recent_listed": None if recent is None else len(set(recent["symbols"]) - set(brief)), "recent_sessions": None if recent is None else recent["sessions"],
+        "strong_rows": len(set(strong_rows(audit, as_of)) - set(brief) - set((recent or {}).get("symbols") or []))}
+    output["coverage"] = {**coverage(output["results"], len(ordered), len(symbols), brief), "targets": targets, "second_pass": output.pop("second_pass"), "deadline": output.pop("deadline")}
     write_output(root, output)
     print(f"SEC evidence {as_of}: " + json.dumps(output["coverage"], ensure_ascii=False) + "; missing remains unknown", flush=True)
     summary = invalid_summary(output["results"])
