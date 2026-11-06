@@ -56,14 +56,79 @@ describe('market tone', () => {
   });
 });
 
-// The round-2 seam Today's 地合い tile calls (plan §2.2), as step 0 leaves it: no suffix, so the tile is unchanged (MK11 writes it).
+// The round-2 seam Today's 地合い tile calls (plan §2.2, MK11): at most one suffix of at most 7 full-width characters.
 describe('market tile suffix', () => {
-  it('is null at step 0, for any market, trends and manifest', async () => {
+  const DATE = '2026-10-02';
+  const OPEN = { label: '上昇トレンド（独自判定）', cap: 0.5, regime: 'confirmed_uptrend', ftdUpgraded: false };
+  const ftd = (state, asOf = DATE) => ({ available: true, method: 'm', asOf, state });
+  const ready = (nas, extra = {}) => ({ data: { as_of_date: DATE, indices: [{ symbol: '^GSPC', followThrough: ftd('confirmed') }, { symbol: '^IXIC', followThrough: nas }], ...extra } });
+  const manifest = { as_of_date: DATE, markets: { US: { as_of_date: DATE } } };
+
+  it('says FTD確認済み while the guide is 0% under an FTD-upgraded uptrend, before anything else', async () => {
+    const { marketTileSuffix, MARKET_TILE_SUFFIX } = await import('./briefEnvironment');
+    const upgraded = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
+    expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('correction')), manifest })).toBe('FTD確認済み');
+    // It needs no market-trends data: the verdict's rows carry the regime.
+    expect(marketTileSuffix({ market: upgraded, trends: { loading: true }, manifest: null })).toBe('FTD確認済み');
+    expect(marketTileSuffix({ market: { ...upgraded, label: '長期トレンド警戒' }, trends: null })).toBe(MARKET_TILE_SUFFIX.ftd);
+    // A 0% guide that is not an FTD upgrade has no suffix.
+    expect(marketTileSuffix({ market: { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'correction', ftdUpgraded: false }, trends: ready(ftd('correction')), manifest })).toBeNull();
+  });
+
+  it('says NAS調整中 while the guide is open and the Nasdaq is in correction, on a rally attempt or after a failed FTD, judged today', async () => {
     const { marketTileSuffix } = await import('./briefEnvironment');
-    const manifest = { as_of_date: '2026-10-02', markets: { US: { as_of_date: '2026-10-02' } } };
-    for (const inputs of [{ market: { state: 'confirmed_uptrend', label: '上昇トレンド（独自判定）', cap: 0 }, trends: { data: { indices: [] } }, manifest },
-      { market: null, trends: { loading: true }, manifest: null }, {}]) expect(marketTileSuffix(inputs)).toBeNull();
+    for (const state of ['correction', 'rally_attempt', 'ftd_failed']) expect(marketTileSuffix({ market: OPEN, trends: ready(ftd(state)), manifest }), state).toBe('NAS調整中');
+    expect(marketTileSuffix({ market: { ...OPEN, label: '上昇に圧力（独自判定）', cap: 0.25, regime: 'uptrend_under_pressure' }, trends: ready(ftd('correction')), manifest })).toBe('NAS調整中');
+    for (const state of ['confirmed', 'no_correction', 'attempt_expired']) expect(marketTileSuffix({ market: OPEN, trends: ready(ftd(state)), manifest }), state).toBeNull();
+    // An older Nasdaq state (a series one session behind) is never shown as today's; an unknown one says nothing.
+    expect(marketTileSuffix({ market: OPEN, trends: ready(ftd('correction', '2026-10-01')), manifest })).toBeNull();
+    expect(marketTileSuffix({ market: OPEN, trends: ready({ available: false, reason: 'x' }), manifest })).toBeNull();
+    expect(marketTileSuffix({ market: OPEN, trends: ready(undefined), manifest })).toBeNull();
+    // A manifest of another date, a series still loading or failed, or no verdict: none.
+    expect(marketTileSuffix({ market: OPEN, trends: ready(ftd('correction')), manifest: { markets: { US: { as_of_date: '2026-10-01' } } } })).toBeNull();
+    expect(marketTileSuffix({ market: OPEN, trends: { loading: true }, manifest })).toBeNull();
+    expect(marketTileSuffix({ market: OPEN, trends: { error: true, failureReason: new Error('x') }, manifest })).toBeNull();
+    expect(marketTileSuffix({ market: null, trends: ready(ftd('correction')), manifest })).toBeNull();
+    expect(marketTileSuffix({ market: { label: '市場未確認', cap: 0, state: 'unknown' }, trends: ready(ftd('correction')), manifest })).toBeNull();
     expect(marketTileSuffix()).toBeNull();
+    expect(marketTileSuffix({})).toBeNull();
+  });
+
+  it('keeps every suffix within 7 full-width characters (a half-width letter counts as half)', async () => {
+    const { MARKET_TILE_SUFFIX } = await import('./briefEnvironment');
+    const width = text => [...text].reduce((sum, ch) => sum + (/[\x20-\x7e]/.test(ch) ? 0.5 : 1), 0);
+    for (const text of Object.values(MARKET_TILE_SUFFIX)) expect(width(text), text).toBeLessThanOrEqual(7);
+  });
+
+  it('names the Nasdaq correction by one condition, shared with the market tab\'s note', async () => {
+    const { nasdaqInCorrection, NASDAQ_CAUTION_STATES } = await import('./briefEnvironment');
+    expect(NASDAQ_CAUTION_STATES).toEqual(['correction', 'rally_attempt', 'ftd_failed']);
+    expect(['correction', 'rally_attempt', 'ftd_failed', 'confirmed', 'no_correction', 'attempt_expired'].map(state => nasdaqInCorrection({ available: true, state }))).toEqual([true, true, true, false, false, false]);
+    expect([nasdaqInCorrection({ available: false, state: 'correction' }), nasdaqInCorrection(undefined), nasdaqInCorrection(null)]).toEqual([false, false, false]);
+  });
+});
+
+// The judge side's block (plan §2.3, the data track's export), read raw: only in shape and for the analysis date.
+describe('published market context', () => {
+  const DATE = '2026-10-02';
+  const block = { as_of_date: DATE, regime: 'uptrend_under_pressure', distribution_days: 4, ftd_date: null, ftd_days_since: null, exposure_pct: 55, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' };
+  it('returns a block of the analysis date, with its nulls kept null', async () => {
+    const { publishedMarketContext } = await import('./briefEnvironment');
+    expect(publishedMarketContext({ as_of_date: DATE, market_context: block }, { date: DATE })).toBe(block);
+    const nulls = { ...block, distribution_days: null, exposure_pct: null };
+    expect(publishedMarketContext({ as_of_date: DATE, market_context: nulls }, { date: DATE })).toEqual(nulls);
+    expect(publishedMarketContext({ as_of_date: DATE, market_context: { ...block, regime: 'confirmed_uptrend', ftd_date: '2026-09-18', ftd_days_since: 10 } }, { date: DATE })).toMatchObject({ ftd_date: '2026-09-18' });
+  });
+  it('refuses an absent, older or malformed block (an older publication never has one)', async () => {
+    const { publishedMarketContext } = await import('./briefEnvironment');
+    const read = (value, entry = {}) => publishedMarketContext({ as_of_date: DATE, ...entry, market_context: value }, { date: DATE });
+    expect(publishedMarketContext({ as_of_date: DATE }, { date: DATE })).toBeNull();
+    expect(publishedMarketContext(null, { date: DATE })).toBeNull();
+    expect(publishedMarketContext({ as_of_date: DATE, market_context: block })).toBeNull();
+    for (const [why, value] of [['another date', { ...block, as_of_date: '2026-10-01' }], ['an array', [block]], ['another method', { ...block, method: 'x' }], ['another source', { ...block, source: 'x' }],
+      ['an unknown regime', { ...block, regime: 'bull' }], ['a negative count', { ...block, distribution_days: -1 }], ['a count of 0.5', { ...block, distribution_days: 0.5 }], ['a count as text', { ...block, distribution_days: '4' }],
+      ['a future FTD', { ...block, ftd_date: '2026-10-05' }], ['an FTD that is not a day', { ...block, ftd_date: '9/18' }], ['an exposure as text', { ...block, exposure_pct: '55' }]]) expect(read(value), why).toBeNull();
+    expect(read(block, { as_of_date: '2026-10-01' })).toBeNull();
   });
 });
 
