@@ -102,16 +102,21 @@ function QuarterTable({ rows }) {
   </table>;
 }
 
-const noBaseOnly = rows => rows.every(r => [r.epsYoYReason, r.salesYoYReason].every(reason => !reason || ['no_base', 'ambiguous_base', 'not_reported'].includes(reason)));
+const noBaseOnly = rows => rows.every(r => [r.epsYoYReason, r.salesYoYReason].every(reason => !reason || ['no_base', 'ambiguous_base', 'not_reported', 'no_concept'].includes(reason)));
 const noYoYText = rows => noBaseOnly(rows) ? `前年同期の値がないため成長率は表示できません（${rows.length}期分のみ）。` : '前年同期と比較できないため（前年同期が赤字・ゼロ、期間の不一致など）成長率は表示できません。';
 
 // Why a Yahoo quarterly rate is unknown, from financialHistory()'s reason.
 const YAHOO_REASON = { no_quarter: '四半期の値なし', no_base: '前年同期の値なし', ambiguous_base: '前年同期を特定できず', nonpositive_base: '前年同期が赤字・ゼロ', not_reported: '未報告' };
-/** Reference tiles from the current Yahoo quarterly statements, only when they passed financialHistory(). */
-function yahooTiles(history) {
-  const latest = history.quarterly.at(-1);
+// The day the Yahoo statements were read (M/D UTC), or null when the time is unknown.
+const retrievedDay = value => { const time = Date.parse(value); return Number.isFinite(time) ? `${new Date(time).getUTCMonth() + 1}/${new Date(time).getUTCDate()}` : null; };
+/**
+ * Reference tiles from the current Yahoo quarterly statements, only when they passed financialHistory(): each says
+ * 参考・Yahoo with its period and the day it was read (「参考・Yahoo（2026-06期・11/4取得）」), never a current SEC value.
+ */
+function yahooTiles(history, retrievedAt) {
+  const latest = history.quarterly.at(-1), day = retrievedDay(retrievedAt);
   const marginRow = [...history.quarterly].reverse().find(q => finite(q.revenue) && q.revenue > 0 && finite(q.netIncome));
-  const period = row => row ? `参考・Yahoo ${row.end.slice(0, 7)}期` : '参考・Yahoo 値なし';
+  const period = row => row ? `参考・Yahoo（${row.end.slice(0, 7)}期${day ? `・${day}取得` : ''}）` : '参考・Yahoo 値なし';
   const why = reason => reason === 'stale_quarter' ? `${period(latest)}は190日超のため比較しません` : `参考・Yahoo ${YAHOO_REASON[reason] || '前年同期と比較不可'}`;
   return [
     { label: 'EPS 前年比', value: finite(history.epsYoY) ? signed(history.epsYoY, 0) : null, short: '—', note: finite(history.epsYoY) ? period(latest) : why(history.epsYoYReason) },
@@ -168,10 +173,12 @@ function qualityChips(report) {
     title: floorDetail || `EPS前年比が直近${count}期すべて25%以上か${levels.at25 === 'unknown' ? '（前年比がそろう四半期が足りず未確認）' : ''}`, detail: floorDetail }];
   const annual = report.annual || [], latest = annual.at(-1), record = report.annualRecord || 'unknown';
   const loss = record === 'fail' && finite(latest?.value) && latest.value < 0;
+  // The years compared: those the newest 10-K presents (a split restates them alike), else every year the record holds.
+  const basis = report.annualBasis?.kind === 'filing' ? `直近10-Kの${report.annualBasis.years}年度` : `SEC 年次報告のある${report.annualBasis?.years ?? annual.length}年度`;
   const annualDetail = record === 'unknown' || !latest ? null : loss ? `年間EPS：直近の年度（${periodOf(latest.end)}）は ${epsText(latest.value)} の赤字です（赤字の年度は最高と数えません）。`
-    : `年間EPS：直近の年度（${periodOf(latest.end)}）の ${epsText(latest.value)} は、SEC 年次報告のある${annual.length}年度で${record === 'pass' ? '最高です' : '最高ではありません'}。`;
+    : `年間EPS：直近の年度（${periodOf(latest.end)}）の ${epsText(latest.value)} は、${basis}で${record === 'pass' ? '最高です' : '最高ではありません'}。`;
   chips.push({ text: loss ? '年間EPS 赤字' : `年間EPS最高 ${{ pass: '更新', fail: '未更新', unknown: '未確認' }[record]}`, tone: loss ? 'ext' : tone[record],
-    title: record === 'unknown' ? '直近の年度を含む3年度分の SEC 年次報告がないため未確認' : `SEC年次報告のある${annual.length}年度で${record === 'pass' ? '最高' : loss ? '直近が赤字' : '最高ではありません'}`, detail: annualDetail });
+    title: record === 'unknown' ? '直近の年度を含む3年度分の SEC 年次報告がないため未確認' : `${basis.replace(/^SEC /, 'SEC')}で${record === 'pass' ? '最高' : loss ? '直近が赤字' : '最高ではありません'}`, detail: annualDetail });
   if (report.balanceCoverage > 0) {
     const recent = new Set(report.rows.slice(-2).map(row => row.end));
     const seen = new Set();
@@ -200,13 +207,16 @@ export default function FundamentalsCard({ financial, wide }) {
   const sec = financial?.sec || secStatus(null, null);
   const rows = report?.rows?.slice(-8) || [];
   // SEC first; the Yahoo reference only when SEC has no quarters and its history is current.
-  const yahoo = !rows.length && history?.valid && history.quarterly?.length ? yahooTiles(history) : null;
+  const yahoo = !rows.length && history?.valid && history.quarterly?.length ? yahooTiles(history, financial?.historyRetrievedAt) : null;
   const tiles = rows.length ? fundamentalTiles(report) : yahoo || ['EPS 前年比', '売上 前年比', '純利益率'].map(label => ({ label, value: null, short: '—', note: sec.short }));
   const stamp = utcStamp(financial?.historyRetrievedAt);
   const source = rows.length ? `${fundamentalsSource(report)}${tiles.some(t => t.derived) ? '・売上/純利益のQ4は10-K年度値−3四半期で算出' : ''}`
     : yahoo ? `出典：参考 Yahoo 四半期値（${stamp ? `取得 ${stamp} UTC・` : ''}提出日未確認）` : null;
-  const explain = code33Explain(report, sec, code33);
-  const tone = explain.state === 'pass' ? 'zone' : explain.state === 'fail' ? 'ext' : 'neutral';
+  // The card states the EPS growth it knows beside an untagged fiscal-Q4 EPS (interim), and marks a Yahoo-only result 参考.
+  const explain = code33Explain(report, sec, code33, { interim: true });
+  const boxTitle = explain.kind === 'yahoo' ? `${explain.title}（参考）` : explain.title;
+  // Only an SEC 達成 is coloured: a 未達 is said plainly (Code 33 is a bonus, never a gate) and a Yahoo reference is 参考.
+  const tone = explain.state === 'pass' && explain.kind !== 'yahoo' ? 'zone' : 'neutral';
   const yoyKnown = rows.some(r => finite(r.epsYoY) || finite(r.salesYoY));
   const settled = explain.state === 'fail' && code33?.source !== 'yahoo' ? settledText(report) : null;
   const quality = rows.length ? qualityChips(report) : null;
@@ -215,7 +225,7 @@ export default function FundamentalsCard({ financial, wide }) {
   const facts = <div className="brief-facts is-fin">{tiles.map(t => <div className="brief-fact" key={t.label}><small>{t.label}</small>
     {t.turnaround ? <><b>黒字転換</b><em>{`${t.turnaround.end.slice(0, 7)}期・前年 ${fixedMinus(t.turnaround.from, 2)} → ${fixedMinus(t.turnaround.to, 2)}`}</em></>
       : <><b>{t.value ?? t.short}</b><em>{t.note}</em></>}</div>)}</div>;
-  const box = <div className={`brief-code33 tone-${tone}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>{explain.title}</strong><p>{explain.text}</p>{settled && <p>{settled}</p>}</div></div>;
+  const box = <div className={`brief-code33 tone-${tone}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>{boxTitle}</strong><p>{explain.text}</p>{settled && <p>{settled}</p>}</div></div>;
   // On a phone the parts are hidden where the Code 33 text names each one (達成, Q4 EPS, other) or none is known;
   // a 未達, and a known part beside 8期未満・欠け・古い, stay visible.
   const partStates = code33Parts(report)?.parts.map(([, state]) => state) || [];

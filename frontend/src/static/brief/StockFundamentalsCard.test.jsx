@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
+import FundamentalsCard from './StockFundamentalsCard';
 import { secStatus } from '../fundamentalsExplain.js';
 import { bookFinancialCurrent } from '../bookFinancialCurrent';
 import { financialHistory } from '../financialHistory';
@@ -53,7 +54,8 @@ describe('brief fundamentals card', () => {
     expect(tile(scope, '売上 前年比')).toHaveTextContent('+100%2026-06期・前期 +60%');
     expect(scope.getByText('出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで')).toBeInTheDocument();
     expect(scope.getByText('Code 33 未確認')).toBeInTheDocument();
-    expect(scope.getByText(/EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です/)).toBeInTheDocument();
+    // The EPS growth that is known is stated as facts; the fiscal-Q4 EPS stays unknown and is never estimated.
+    expect(scope.getByText(/EPS の加速は未確認：EPS前年比 \+10%→\+20%→\+40%（Q4は10-Kのみで未確認・年間値から差し引く推計はしません）/)).toBeInTheDocument();
     // A phone's legend stays on one line; the reasons are one fold away, with their count.
     expect(scope.getByText('値なし', { selector: '.brief-q-legend span' })).toBeInTheDocument();
     expect(scope.getByText('値なしの理由').closest('summary')).toHaveTextContent('値なしの理由3件・業績の質の根拠・対象外の項目');
@@ -67,7 +69,7 @@ describe('brief fundamentals card', () => {
       ['25年', '9月', '+10', '+10', '10'], ['25年', '12月', '+20', '+30', '11'], ['26年', '3月', '+40', '+60', '12'], ['26年', '6月', '—', '+100', '13']]);
     expect([...document.querySelectorAll('.brief-q-axis .is-unknown')]).toHaveLength(9);
     // The Q4 EPS explanation is given once, in the Code 33 section (the parts it repeats are hidden on a phone).
-    expect(screen.getByTestId('brief-fundamentals').textContent.match(/年次報告（10-K）にしか無い/g)).toHaveLength(1);
+    expect(screen.getByTestId('brief-fundamentals').textContent.match(/Q4は10-Kのみで未確認|年次報告（10-K）にしか無い/g)).toHaveLength(1);
     expect(document.querySelector('.brief-code33-parts')).toHaveClass('is-said');
     // The quality row: three-valued. +10% and +20% are known and under 25%, so the missing fiscal-Q4 EPS cannot
     // rescue the rule: 未達, with the quarters named in the fold. Nothing passes from missing quarters.
@@ -232,7 +234,7 @@ describe('brief fundamentals card', () => {
     const later = record({ asOfDate: '2026-10-02' }); later.quarterly = { ...later.quarterly, eps: later.quarterly.eps.slice(0, 4), revenue: later.quarterly.revenue.slice(0, 4), netIncome: later.quarterly.netIncome.slice(0, 4) };
     const cases = [[null, 'この銘柄の当日分の SEC 四半期データは配信されていません'], [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'no_cik' }), 'SEC の銘柄コード表に該当がありません'],
       [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'no_companyfacts' }), 'SEC に XBRL の財務データがありません。'], [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'no_quarterly', forms: ['20-F'] }), '四半期報告（10-Q）を提出しない企業です（20-F）。'],
-      [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'transient' }), 'SEC からの取得が一時的に失敗しました（この公開には値がありません）。'], [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'invalid_payload' }), '提出日や期間を検証できないため使いません。'],
+      [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'transient' }), 'SEC からの取得が一時的に失敗しました（この公開には値がありません）。'], [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'invalid_payload' }), 'SECの記録を読み取れず（取得側の処理エラー・業績の良し悪しではありません）。'],
       [later, '直近の四半期（2025-06期）から180日を超えているため判定しません。']];
     for (const [value, text] of cases) {
       const scope = card(financial(value));
@@ -277,7 +279,7 @@ describe('brief fundamentals card', () => {
       quarterly: [['2025-06-30', 1, 100, 10], ['2025-09-30', 1.1, 110, 12], ['2025-12-31', 1.2, 120, 13], ['2026-03-31', 1.3, 130, 15], ['2026-06-30', 1.5, 150, 18]].map(([end, eps, revenue, netIncome]) => ({ end, eps, revenue, netIncome })) };
     let scope = card(financial(null, { history }));
     expect(scope.getByText('出典：参考 Yahoo 四半期値（取得 10-02 20:15 UTC・提出日未確認）')).toBeInTheDocument();
-    expect(tile(scope, 'EPS 前年比')).toHaveTextContent('+50%参考・Yahoo 2026-06期');
+    expect(tile(scope, 'EPS 前年比')).toHaveTextContent('+50%参考・Yahoo（2026-06期・10/2取得）');
     expect(tile(scope, '純利益率')).toHaveTextContent('12.0%');
     expect(scope.getByText(/配信されていません/)).toBeInTheDocument();
     cleanup();
@@ -289,9 +291,9 @@ describe('brief fundamentals card', () => {
     // the tiles say that, not 比較不可.
     const old = { ...history, quarterly: [['2024-12-31', 1, 100, 10], ['2025-03-31', 1, 100, 10], ['2025-06-30', 1.1, 110, 12], ['2025-09-30', 1.2, 120, 13], ['2025-12-31', 1.3, 130, 15]].map(([end, eps, revenue, netIncome]) => ({ end, eps, revenue, netIncome })) };
     scope = card(financial(null, { history: old }));
-    expect(tile(scope, 'EPS 前年比')).toHaveTextContent('—参考・Yahoo 2025-12期は190日超のため比較しません');
-    expect(tile(scope, '売上 前年比')).toHaveTextContent('—参考・Yahoo 2025-12期は190日超のため比較しません');
-    expect(tile(scope, '純利益率')).toHaveTextContent('11.5%参考・Yahoo 2025-12期');
+    expect(tile(scope, 'EPS 前年比')).toHaveTextContent('—参考・Yahoo（2025-12期・10/2取得）は190日超のため比較しません');
+    expect(tile(scope, '売上 前年比')).toHaveTextContent('—参考・Yahoo（2025-12期・10/2取得）は190日超のため比較しません');
+    expect(tile(scope, '純利益率')).toHaveTextContent('11.5%参考・Yahoo（2025-12期・10/2取得）');
     expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent('比較不可');
     cleanup();
     // A newest quarter with no year-ago quarter names that.
@@ -313,5 +315,62 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
   it('shows everything open on the desktop, each footnote in place on its card and no 注記 (the fundamentals card)', () => {
     render(<StockView data={{ ...data(true), template: allMet }} wide />);
     expect(within(screen.getByTestId('brief-fundamentals')).getByText(/^EPS は報告値（希薄化）で調整後EPSとは異なります。/)).toBeInTheDocument();
+  });
+});
+
+describe('round-2 card copy (plan DT1-DT4, DT7, DT10)', () => {
+  const DATE = '2026-11-04', now = Date.parse('2026-11-04T12:00:00Z');
+  const financial = (book_financials, extra = {}) => {
+    const row = { symbol: 'AAA', market: 'US', as_of_date: DATE, book_financials };
+    const book = book_financials ? bookFinancialCurrent(book_financials, 'AAA', DATE, now, row) : null;
+    const report = book?.current ? book.report : null;
+    return { report, sec: secStatus(row, book), history: null, historyRetrievedAt: null, code33: code33Layered(report, null, DATE), ...extra };
+  };
+  const show = (value, wide = false) => { render(<FundamentalsCard financial={value} wide={wide} />); return screen.getByTestId('brief-fundamentals'); };
+  const quarters = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+    ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30'], ['2026-07-01', '2026-09-30']];
+
+  it('says a fiscal Q4 without any quarterly value is in the annual report only, never 古い or 欠け', () => {
+    const value = secRecord({ symbol: 'AAA', asOfDate: DATE, quarters: quarters.slice(0, 8) });
+    for (const key of ['eps', 'revenue', 'netIncome']) value.quarterly[key] = value.quarterly[key].filter(p => !p.end.endsWith('06-30'));
+    value.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4, { form: '10-K', filed: '2025-08-20', accession: 'k-25' }), secPoint('eps', ['2025-07-01', '2026-06-30'], 5, { form: '10-K', filed: '2026-08-20', accession: 'k-26' })];
+    const card = show(financial(value));
+    expect(card.querySelector('.brief-fin-missing summary').textContent).toBe('業績：Q4年次のみ・Code 33 未確認');
+    expect(card).toHaveTextContent('第4四半期（26-06期）は年次報告のみで四半期の値がありません。');
+    expect(card).not.toHaveTextContent(/古い|欠け/);
+  });
+
+  it('says a bank\'s sales are out of scope, and an unreadable payload is a fetch-side error', () => {
+    const bank = secRecord({ symbol: 'AAA', asOfDate: DATE, quarters: quarters.slice(1) }); bank.quarterly.revenue = [];
+    const card = show(financial(bank));
+    expect(card.querySelector('.brief-fact:nth-child(2)')).toHaveTextContent('売上 前年比対象外売上の科目が対象外（銀行・保険などの収益科目）');
+    expect(card.querySelector('.brief-fact:nth-child(3)')).toHaveTextContent('純利益率対象外売上の科目が対象外（銀行・保険などの収益科目）');
+    expect(card.querySelector('.brief-facts')).not.toHaveTextContent('未報告');
+    cleanup();
+    const invalid = secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'invalid_payload', invalid_detail: { class: 'PayloadMismatch', message: 'companyfacts cik does not match the requested cik', requested_cik: 6, received_cik: 9 } });
+    const other = show(financial(invalid));
+    expect(other).toHaveTextContent('SECの記録を読み取れず（取得側の処理エラー・業績の良し悪しではありません）。返された記録の CIK 番号が要求と違いました。');
+    expect(other).not.toHaveTextContent('提出日や期間');
+  });
+
+  it('compares the annual record within the newest 10-K\'s years and says so', () => {
+    const value = secRecord({ symbol: 'AAA', asOfDate: DATE, quarters: quarters.slice(1) });
+    const tenK = (year, eps) => secPoint('eps', [`${year - 1}-07-01`, `${year}-06-30`], eps, { form: '10-K', filed: '2026-08-20', accession: 'k-2026' });
+    value.annualEps = [secPoint('eps', ['2022-07-01', '2023-06-30'], 12, { form: '10-K', filed: '2023-08-20', accession: 'k-2023' }), tenK(2024, 1.2), tenK(2025, 1.6), tenK(2026, 2.0)];
+    show(financial(value), true);
+    expect(screen.getByText('年間EPS最高 更新')).toHaveAttribute('title', '直近10-Kの3年度で最高');
+    expect(screen.getByRole('list', { name: '業績の質の根拠' })).toHaveTextContent('年間EPS：直近の年度（2026-06期）の 2.00 は、直近10-Kの3年度で最高です。');
+  });
+
+  it('colours only an SEC 達成: a 未達 and a Yahoo reference read in the neutral tone', () => {
+    const fail = secRecord({ symbol: 'AAA', asOfDate: DATE, quarters: quarters.slice(1) });
+    [12, 11, 10, 9, 12, 11, 10, 9].forEach((m, i) => { fail.quarterly.netIncome[i].value = fail.quarterly.revenue[i].value * m / 100; });
+    const card = show(financial(fail));
+    expect(card.querySelector('.brief-code33')).toHaveClass('tone-neutral');
+    expect(card.querySelector('.brief-code33 strong')).toHaveTextContent('Code 33 未達');
+    cleanup();
+    const reference = show({ report: null, sec: { state: 'no_quarterly', short: '四半期報告なし', long: '…' }, history: null, code33: { state: 'pass', source: 'yahoo', label: '参考：Yahoo四半期値' } });
+    expect(reference.querySelector('.brief-code33')).toHaveClass('tone-neutral');
+    expect(reference.querySelector('.brief-code33 strong')).toHaveTextContent('Code 33 達成（参考）');
   });
 });

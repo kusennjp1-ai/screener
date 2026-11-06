@@ -108,7 +108,7 @@ describe('publication summaries and current canonical decisions', () => {
       expect(exported).toContain(`SEC admission ${date} (export): file_schema 2, records 2, admitted 1 of 3, refused {"cik_url":1}`);
       const manifestPath = join(data, 'manifest.json'), original = await readFile(manifestPath, 'utf8'), manifest = JSON.parse(original);
       expect(manifest.markets.US.fundamentals_coverage).toEqual({ schema_version: 'fundamentals-coverage-v1', as_of_date: date, sec_fetch_ran: true, sec_as_of: date, file_schema: 2,
-        universe: 3, requested: 2, eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 1, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 } });
+        universe: 3, requested: 2, eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 1, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 }, warnings: ['refused'] });
       const index = decodeResearchIndex(JSON.parse(await readFile(join(data, manifest.markets.US.assets.research.path), 'utf8')));
       const detail = async symbol => JSON.parse(await readFile(join(data, index.rows.find(row => row.symbol === symbol).research_detail_path), 'utf8'));
       expect((await detail('TEST')).sec_admission).toEqual({ state: 'admitted', reason: null });
@@ -118,9 +118,11 @@ describe('publication summaries and current canonical decisions', () => {
       expect(index.rows.some(row => Object.hasOwn(row, 'sec_admission'))).toBe(false);
       // Valid.
       expect(run('./check-data-quality.mjs')).toContain(`Fundamentals coverage gate passed. SEC admission ${date} (financial gate): file_schema 2, records 2, admitted 1 of 3, refused {"cik_url":1}.`);
-      // Absent (an exporter without the block) stays valid.
+      // Absent (an exporter without the block) stays valid, and so does a block written before its warnings list.
       const absent = JSON.parse(original); delete absent.markets.US.fundamentals_coverage; await writeFile(manifestPath, JSON.stringify(absent));
       expect(run('./check-data-quality.mjs')).toContain('Fundamentals coverage block absent');
+      const older = JSON.parse(original); delete older.markets.US.fundamentals_coverage.warnings; await writeFile(manifestPath, JSON.stringify(older));
+      expect(run('./check-data-quality.mjs')).toContain('Fundamentals coverage gate passed.');
       // Invalid: a count that disagrees with the details, a malformed block, and a detail whose state lies.
       const fail = async (mutate, message) => {
         const changed = JSON.parse(original); mutate(changed.markets.US.fundamentals_coverage); await writeFile(manifestPath, JSON.stringify(changed));
@@ -131,6 +133,9 @@ describe('publication summaries and current canonical decisions', () => {
       await fail(block => { block.admitted = 0; }, 'Invalid fundamentals_coverage block');
       await fail(block => { block.requested = 0.5; }, 'Invalid fundamentals_coverage block');
       await fail(block => { block.extra = 1; }, 'Invalid fundamentals_coverage block');
+      // A warnings list that does not follow from the counts.
+      await fail(block => { block.warnings = []; }, 'fundamentals_coverage differs from the published details');
+      await fail(block => { block.warnings = ['late']; }, 'Invalid fundamentals_coverage block');
       // A ticker-map state the SEC input does not show (it lists no errors, so the map state is unknown).
       await fail(block => { block.ticker_map_ok = false; }, 'fundamentals_coverage differs from the published details');
       await writeFile(manifestPath, original);

@@ -1,7 +1,7 @@
 // The seams C owns and other tracks call: the conclusion's Code 33 chip (D) and the published SEC
 // coverage block that useStockData (E) hands to secStatus; and secStatus's wording for each coverage state.
 import { describe, expect, it } from 'vitest';
-import { code33ChipView, earningsCaution, earningsChipView, fundamentalsCoverageWarning, publishedFundamentalsCoverage, secRowChip, secStatus, secSummary } from './fundamentalsExplain.js';
+import { buildSecSummary, code33ChipView, code33Explain, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalTiles, publishedFundamentalsCoverage, quarterReason, secRowChip, secStatus, secSummary } from './fundamentalsExplain.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
 import { bookFinancialEvidence } from './bookFinancialEvidence.js';
 import { code33Layered } from './code33Reference.js';
@@ -16,9 +16,9 @@ const row = (extra = {}) => ({ symbol: 'AAA', market: 'US', as_of_date: DATE, bo
 describe('code33ChipView', () => {
   const financial = (code33, sec = { state: 'ok' }, report = null) => ({ code33, sec, report });
 
-  it('says 達成 in the zone tone and a known 未達 in the ext tone', () => {
+  it('says 達成 in the zone tone and a known 未達 plainly in the neutral tone (Code 33 is a bonus, never a gate)', () => {
     expect(code33ChipView(financial({ state: 'pass', source: 'sec' }))).toEqual({ text: 'Code 33 達成', tone: 'zone' });
-    expect(code33ChipView(financial({ state: 'fail', source: 'sec' }))).toEqual({ text: 'Code 33 未達', tone: 'ext' });
+    expect(code33ChipView(financial({ state: 'fail', source: 'sec' }))).toEqual({ text: 'Code 33 未達', tone: '' });
   });
 
   it('says 読み込み中 while the detail loads and names why anything else stays unknown, never a pass', () => {
@@ -43,9 +43,10 @@ describe('code33ChipView', () => {
     }
   });
 
-  it('marks a Yahoo reference judgement as （参考）', () => {
-    expect(code33ChipView(financial({ state: 'pass', source: 'yahoo' }))).toEqual({ text: 'Code 33 達成（参考）', tone: 'zone' });
-    expect(code33ChipView(financial({ state: 'fail', source: 'yahoo' }))).toEqual({ text: 'Code 33 未達（参考）', tone: 'ext' });
+  it('marks a Yahoo reference judgement as （参考） and never colours it: Yahoo alone is never a pass', () => {
+    expect(code33ChipView(financial({ state: 'pass', source: 'yahoo' }))).toEqual({ text: 'Code 33 達成（参考）', tone: '' });
+    expect(code33ChipView(financial({ state: 'fail', source: 'yahoo' }))).toEqual({ text: 'Code 33 未達（参考）', tone: '' });
+    expect(code33Explain(null, { state: 'no_quarterly' }, { state: 'pass', source: 'yahoo', label: '参考：Yahoo四半期値' })).toMatchObject({ kind: 'yahoo', text: expect.stringContaining('参考判定です') });
   });
 });
 
@@ -144,15 +145,15 @@ describe('secStatus with the publication coverage', () => {
         secStatus(row({ as_of_date: '2026-09-01', book_financials: stale }), bookFinancialCurrent(stale, 'AAA', '2026-09-01', Date.parse('2026-09-01T12:00:00Z'), row({ as_of_date: '2026-09-01', book_financials: stale })), { coverage }),
         secStatus({ symbol: 'BITU', market: 'US', company_name: 'ProShares Ultra Bitcoin ETF' }, null, { coverage }));
     }
-    expect([...new Set(results.map(result => result.state))].sort()).toEqual(['detail_error', 'detail_loading', 'invalid', 'no_cik', 'no_companyfacts', 'no_quarterly', 'no_quarterly_values',
+    expect([...new Set(results.map(result => result.state))].sort()).toEqual(['detail_error', 'detail_loading', 'invalid', 'invalid_payload', 'no_cik', 'no_companyfacts', 'no_quarterly', 'no_quarterly_values',
       'not_applicable', 'not_published', 'not_requested', 'ok', 'refused', 'stale', 'transient']);
     for (const result of results) for (const text of [result.short, result.long]) expect(text).not.toMatch(/今後|反映されます|次回|再取得/);
   });
 });
 
-// The round-2 seams other tracks call (plan §2.2), as step 0 leaves them: secSummary validates the published
-// field, and the four views are null, so no screen shows anything new until the data track writes them.
-describe('the round-2 seams at step 0', () => {
+// The round-2 seams other tracks call (plan §2.2): secSummary validates the published field; buildSecSummary
+// writes it; the row chip, the conclusion chip, the caution line and Today's coverage warning read it (DT7).
+describe('the round-2 seams', () => {
   it('secSummary returns the documented sec_summary as published, and null when it is absent or malformed', () => {
     expect(secSummary({ symbol: 'AAA', sec_summary: secSummaryShape })).toBe(secSummaryShape);
     // Unknown values stay null: the summary is valid and nothing is filled in.
@@ -163,16 +164,176 @@ describe('the round-2 seams at step 0', () => {
     expect(SEC_SUMMARY_INVALID.filter(([, value]) => secSummary({ symbol: 'AAA', sec_summary: value }) !== null).map(([why]) => why)).toEqual([]);
   });
 
-  it('the row chip, the conclusion chip, the caution line and Today\'s coverage warning are null', () => {
-    const report = bookFinancialEvidence(secRecord(), 'AAA', '2026-02-01');
-    const financial = { report, sec: { state: 'ok' }, code33: { state: 'fail' } };
-    expect(secRowChip({ symbol: 'AAA', sec_summary: secSummaryShape })).toBeNull();
+  const date = '2026-02-01', now = Date.parse('2026-02-01T12:00:00Z');
+  const published = (record, extra = {}) => row({ as_of_date: date, book_financials: record, ...extra });
+  it('buildSecSummary writes the card\'s numbers from the admitted record only, and validates as published', () => {
+    const value = buildSecSummary(published(secRecord({ symbol: 'AAA' })), { date, now });
+    expect(value).toEqual({ sec_state: 'ok', eps_yoy: { value: expect.closeTo(80, 6), end: '2025-12-31' }, sales_yoy: { value: expect.closeTo(100, 6), end: '2025-12-31' }, code33: { state: 'pass', kind: null }, as_of_date: date });
+    expect(secSummary({ sec_summary: value })).toBe(value);
+    // The EPS rate is the tile's: the newest quarter with a value, with its own period (a fiscal-Q4 EPS only in the 10-K falls back).
+    const tenQ = secRecord({ symbol: 'AAA' }); tenQ.quarterly.eps = tenQ.quarterly.eps.filter(p => !p.end.endsWith('12-31'));
+    tenQ.annualEps = [secPoint('eps', ['2024-01-01', '2024-12-31'], 4), secPoint('eps', ['2025-01-01', '2025-12-31'], 5.5)];
+    const q4 = buildSecSummary(published(tenQ), { date, now });
+    const report = bookFinancialEvidence(tenQ, 'AAA', date);
+    expect(q4.eps_yoy).toEqual({ value: expect.closeTo(40, 6), end: '2025-09-30' });
+    expect(fundamentalTiles(report)[0].value).toBe('+40%');
+    expect(q4.code33).toEqual({ state: 'unknown', kind: 'q4_eps' });
+    // No record, a stale record or an unavailable one: nothing is summarised as a value, and the state says why.
+    expect(buildSecSummary(published(null), { date, now })).toBeNull();
+    const stale = secRecord({ symbol: 'AAA', asOfDate: '2026-09-01' });
+    expect(buildSecSummary(published(stale, { as_of_date: '2026-09-01' }), { date: '2026-09-01', now: Date.parse('2026-09-01T12:00:00Z') })).toEqual({ sec_state: 'stale', eps_yoy: null, sales_yoy: null, code33: null, as_of_date: '2026-09-01' });
+    expect(buildSecSummary(published(secUnavailable({ symbol: 'AAA', asOfDate: date, reason: 'invalid_payload' })), { date, now })).toMatchObject({ sec_state: 'invalid_payload', eps_yoy: null, code33: null });
+    // A Yahoo history never enters the SEC summary.
+    const history = { symbol: 'AAA', as_of_date: date, status: 'available', quarterly: [{ end: '2025-12-31', eps: 9 }] };
+    expect(buildSecSummary(published(null, { financial_history: history }), { date, now })).toBeNull();
+  });
+
+  it('secRowChip: the facts with each period, green only when both reach the 独自設定 level, 未確認 with its reason, nothing for an older publication', () => {
+    expect(EARNINGS_CHIP_PERCENT).toBe(25);
+    const chip = summary => secRowChip({ symbol: 'AAA', market: 'US', as_of_date: CONTRACT_DATE, sec_summary: summary });
+    const both = (eps, sales, epsEnd = '2026-06-30', salesEnd = '2026-06-30') => ({ ...secSummaryShape, eps_yoy: eps === null ? null : { value: eps, end: epsEnd }, sales_yoy: sales === null ? null : { value: sales, end: salesEnd } });
+    expect(chip(both(40, 100))).toEqual({ text: 'EPS +40%・売上 +100%（26-06期）', tone: 'zone', title: expect.stringContaining('独自設定'), notable: true });
+    expect(chip(both(40, 100, '2026-03-31'))).toMatchObject({ text: 'EPS +40%（26-03期）・売上 +100%（26-06期）', tone: 'zone' });
+    expect(chip(both(25, 25))).toMatchObject({ tone: 'zone', notable: true });
+    expect(chip(both(24.9, 100))).toMatchObject({ text: 'EPS +25%・売上 +100%（26-06期）', tone: '', notable: false });
+    // A falling EPS is notable, in the neutral tone, with U+2212.
+    expect(chip(both(-35, 10))).toEqual({ text: 'EPS −35%・売上 +10%（26-06期）', tone: '', title: expect.any(String), notable: true });
+    expect(chip(both(-35, null))).toMatchObject({ text: 'EPS −35%（26-06期）・売上 未確認', notable: true });
+    expect(chip(both(30, null))).toMatchObject({ text: 'EPS +30%（26-06期）・売上 未確認', tone: '', notable: false });
+    // Nothing known: 業績 未確認 in grey with the reason in the title, never 0%.
+    expect(chip(secSummaryUnknown)).toEqual({ text: '業績 未確認', tone: '', title: expect.stringContaining('180日'), notable: false });
+    expect(chip(both(null, null))).toMatchObject({ text: '業績 未確認', title: expect.stringContaining('どちらも確認できません') });
+    expect(chip(null)).toMatchObject({ text: '業績 未確認', title: 'この公開にはこの銘柄の SEC 記録がありません。' });
+    // A summary outside the documented shape is refused by the quality gate before it can publish: no chip, never a guess.
+    expect(chip({ ...secSummaryShape, eps_yoy: { value: '40', end: '2026-06-30' } })).toBeNull();
+    expect(secRowChip({ symbol: 'AAA', sec_summary: { sec_state: 'ok' } })).toBeNull();
+    expect(chip({ ...secSummaryShape, as_of_date: '2026-10-01' })).toMatchObject({ text: '業績 未確認', title: 'SEC の業績要約が別の日付のものです。' });
+    // An older publication has no field: no chip (未収録), never 未確認 claimed for this day.
+    expect(secRowChip({ symbol: 'AAA', as_of_date: CONTRACT_DATE })).toBeNull();
     expect(secRowChip(null)).toBeNull();
-    expect(earningsChipView(financial)).toBeNull();
+    // A fund is out of scope, not unknown.
+    expect(secRowChip({ symbol: 'BITU', market: 'US', company_name: 'ProShares Ultra Bitcoin ETF', quoteType: 'ETF', sec_summary: null })).toMatchObject({ text: '業績 対象外', tone: '' });
+    for (const value of [both(40, 100), both(-35, 10), secSummaryUnknown, null]) expect(chip(value).text).not.toMatch(/[^\d]-\d|(^|[^\d.])0%|あと0/);
+  });
+
+  it('earningsChipView: the stock\'s own SEC facts with each period, or 業績 未確認 with the reason in the Code 33 chip\'s words', () => {
+    const report = bookFinancialEvidence(secRecord(), 'TEST', date);
+    expect(earningsChipView({ report, sec: { state: 'ok' }, code33: { state: 'pass' } })).toEqual({ text: 'EPS +80%・売上 +100%（25-12期）', tone: 'zone', title: expect.stringContaining('独自設定') });
+    const tenQ = secRecord(); tenQ.quarterly.eps = tenQ.quarterly.eps.filter(p => !p.end.endsWith('12-31'));
+    expect(earningsChipView({ report: bookFinancialEvidence(tenQ, 'TEST', date), sec: { state: 'ok' } }).text).toBe('EPS +40%（25-09期）・売上 +100%（25-12期）');
+    expect(earningsChipView({ report: null, sec: { state: 'stale', short: '古い', long: '…' } })).toMatchObject({ text: '業績 未確認・古い', tone: '' });
+    expect(earningsChipView({ report: null, sec: { state: 'not_published', short: 'SEC 未配信' } }).text).toBe('業績 未確認・SEC未配信');
+    expect(earningsChipView({ report: null, sec: { state: 'invalid_payload', short: 'SEC 検証不可' } }).text).toBe('業績 未確認・SEC検証不可');
+    expect(earningsChipView({ report: null, sec: { state: 'detail_loading' } }).text).toBe('業績 読み込み中');
+    expect(earningsChipView({ report: null, sec: { state: 'not_applicable' } }).text).toBe('業績 対象外');
+    // A Yahoo history alone never makes the chip.
+    expect(earningsChipView({ report: null, sec: { state: 'no_quarterly', short: '四半期報告なし' }, history: { valid: true, epsYoY: 50, salesYoY: 50 } }).text).toBe('業績 未確認・四半期報告なし');
     expect(earningsChipView(null)).toBeNull();
-    expect(earningsCaution(financial)).toBeNull();
+  });
+
+  it('earningsCaution: one line only for a falling latest EPS or a loss quarter, from SEC only', () => {
+    const date2 = '2026-02-01';
+    const withEps = eps => bookFinancialEvidence(secRecord({ eps }), 'TEST', date2);
+    expect(earningsCaution({ report: withEps([1, 1, 1, 1, 1.1, 1.2, 1.4, 0.65]) })).toEqual({ text: '業績：直近EPS −35%（25-12期・SEC）' });
+    expect(earningsCaution({ report: withEps([1, 1, 1, 1, 1.1, 1.2, 1.4, -0.5]) })).toEqual({ text: '業績：直近四半期は赤字（EPS −0.50・25-12期・SEC）' });
+    expect(earningsCaution({ report: withEps([1, 1, 1, 1, 1.1, 1.2, 1.4, 1.8]) })).toBeNull();
+    expect(earningsCaution({ report: null, history: { valid: true, epsYoY: -50 } })).toBeNull();
     expect(earningsCaution(null)).toBeNull();
-    expect(fundamentalsCoverageWarning(block({ sec_fetch_ran: false, warnings: ['sec_fetch_skipped'] }), { date: CONTRACT_DATE })).toBeNull();
+  });
+
+  it('fundamentalsCoverageWarning: one line only when the block has warnings, no same-day fetch ran or its input is for another day', () => {
+    const warn = (extra, day = DATE) => fundamentalsCoverageWarning(block(extra), { date: day });
+    const text = '業績データ：この公開のSEC記録は540/1200銘柄 — 業績の判定は未確認が多くなります';
+    // A block without problems (or an older one without the warnings list) says nothing.
+    expect(warn({ warnings: [] })).toBeNull();
+    expect(warn({})).toBeNull();
+    for (const code of COVERAGE_WARNINGS) expect(warn({ warnings: [code] })).toEqual({ text });
+    expect(warn({ sec_as_of: '2026-11-02' })).toEqual({ text });
+    expect(warn({ warnings: ['no_quarters'], with_quarters: 0 })).toEqual({ text: '業績データ：この公開のSEC記録は0/1200銘柄 — 業績の判定は未確認が多くなります' });
+    // No same-day fetch: no target count, so the publication's rows are the denominator.
+    expect(warn({ sec_fetch_ran: false, sec_as_of: null, eligible: null, requested: null, admitted: 0, with_quarters: 0, refused: 0, refused_by_reason: {} })).toEqual({ text: '業績データ：この公開のSEC記録は0/993銘柄 — 業績の判定は未確認が多くなります' });
     expect(fundamentalsCoverageWarning(null, { date: DATE })).toBeNull();
+    expect(warn({ warnings: ['refused'] }).text).not.toMatch(/通常|いつも|普段/);
+    // The block it reads comes through publishedFundamentalsCoverage, which accepts the list only with known codes.
+    expect(publishedFundamentalsCoverage({ as_of_date: DATE, fundamentals_coverage: block({ warnings: ['refused'] }) })).not.toBeNull();
+    expect(publishedFundamentalsCoverage({ as_of_date: DATE, fundamentals_coverage: block({ warnings: ['late'] }) })).toBeNull();
+  });
+});
+
+describe('round-2 reasons: the cause of an unusable record, a fiscal Q4 without a quarterly value, a revenue concept out of scope', () => {
+  const date = '2026-11-04', now = Date.parse('2026-11-04T12:00:00Z');
+  const judged = (record, extra = {}) => { const value = row({ as_of_date: date, book_financials: record, ...extra }); return secStatus(value, record ? bookFinancialCurrent(record, 'AAA', date, now, value) : null, {}); };
+
+  it('an invalid_payload record is a fetch-side processing error, with the CIK mismatch when recorded', () => {
+    const detail = { class: 'PayloadMismatch', message: 'companyfacts cik does not match the requested cik', requested_cik: 6, received_cik: 999 };
+    expect(judged(secUnavailable({ symbol: 'AAA', asOfDate: date, reason: 'invalid_payload', invalid_detail: detail }))).toMatchObject({ state: 'invalid_payload', short: 'SEC 検証不可',
+      long: 'SECの記録を読み取れず（取得側の処理エラー・業績の良し悪しではありません）。返された記録の CIK 番号が要求と違いました。' });
+    expect(judged(secUnavailable({ symbol: 'AAA', asOfDate: date, reason: 'invalid_payload' })).long).toBe('SECの記録を読み取れず（取得側の処理エラー・業績の良し悪しではありません）。');
+    expect(judged(secUnavailable({ symbol: 'AAA', asOfDate: date, reason: 'invalid_payload', invalid_detail: { ...detail, class: 'KeyError', received_cik: 6 } })).long).not.toContain('CIK');
+  });
+
+  it('提出日や期間 only when the date check failed; a refused series is named', () => {
+    const series = secRecord({ symbol: 'AAA', asOfDate: date, quarters: [['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30']] });
+    for (const point of series.quarterly.eps) point.start = '2025-01-01';
+    const named = judged(series);
+    expect(named.state).toBe('ok');
+    const eps = secRecord({ symbol: 'AAA', asOfDate: date, quarters: [['2026-04-01', '2026-06-30'], ['2026-07-01', '2026-09-30']] }); eps.quarterly.revenue = []; eps.quarterly.netIncome = [];
+    for (const point of eps.quarterly.eps) point.start = '2025-07-01';
+    expect(judged(eps)).toMatchObject({ state: 'invalid', long: 'EPSの系列（期間・順序）を確かめられないため使いません。' });
+    const otherDay = secRecord({ symbol: 'AAA', asOfDate: '2026-11-03' });
+    expect(judged(otherDay).long).toContain('提出日や期間を検証できない');
+    for (const state of [named, judged(eps)]) expect(state.long).not.toContain('提出日や期間');
+  });
+
+  it('a recent 10-K whose fiscal Q4 has no quarterly value is not 古い, and 古い stays for a truly old filing', () => {
+    // audit2 earnings card-q4_row_missing: a June fiscal year, the latest quarter 2026-03, the FY 2026-06 10-K filed in August.
+    const quarters = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+      ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30']];
+    const record = secRecord({ symbol: 'AAA', asOfDate: date, quarters });
+    for (const key of ['eps', 'revenue', 'netIncome']) record.quarterly[key] = record.quarterly[key].filter(p => !p.end.endsWith('06-30'));
+    record.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4, { form: '10-K', filed: '2025-08-20', accession: 'k-25' }), secPoint('eps', ['2025-07-01', '2026-06-30'], 5, { form: '10-K', filed: '2026-08-20', accession: 'k-26' })];
+    const status = judged(record);
+    expect(status).toMatchObject({ state: 'q4_annual_only', short: 'Q4 年次のみ', long: '第4四半期（26-06期）は年次報告のみで四半期の値がありません。', fiscalQ4: '2026-06-30' });
+    expect(code33ChipView({ sec: status, report: null, code33: { state: 'unknown', source: null } }).text).toBe('Code 33 未確認・Q4年次のみ');
+    // Without that 10-K the filing really is old: 古い.
+    record.annualEps = record.annualEps.slice(0, 1);
+    expect(judged(record).state).toBe('stale');
+  });
+
+  it('a missing fiscal-Q4 row inside the window is said as that, never 欠け; EPS growth is stated as known facts', () => {
+    const quarters = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+      ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30'], ['2026-07-01', '2026-09-30']];
+    const record = secRecord({ symbol: 'AAA', asOfDate: date, quarters, eps: [1, 1, 1, 1, 1, 1.1, 1.2, 1.4, 1.8], revenue: [100, 100, 100, 100, 100, 110, 130, 160, 200], netIncome: [10, 10, 10, 10, 10, 11, 14, 19, 26] });
+    for (const key of ['eps', 'revenue', 'netIncome']) record.quarterly[key] = record.quarterly[key].filter(p => p.end !== '2026-06-30');
+    record.annualEps = [secPoint('eps', ['2025-07-01', '2026-06-30'], 5, { form: '10-K', filed: '2026-08-20', accession: 'k-26' })];
+    const report = bookFinancialEvidence(record, 'AAA', date);
+    const explain = code33Explain(report, { state: 'ok' }, code33Layered(report, null, date));
+    expect(explain).toMatchObject({ state: 'unknown', kind: 'q4_row', text: '第4四半期（26-06期）は年次報告のみで四半期の値がありません。' });
+    expect(code33ChipView({ report, sec: { state: 'ok' }, code33: code33Layered(report, null, date) }).text).toBe('Code 33 未確認・Q4年次のみ');
+    // The 10-Q filer: +10, +20, +40 known, the fiscal Q4 EPS only in the 10-K, said as facts and never estimated.
+    const tenQ = secRecord(); tenQ.quarterly.eps = tenQ.quarterly.eps.filter(p => !p.end.endsWith('12-31'));
+    tenQ.annualEps = [secPoint('eps', ['2024-01-01', '2024-12-31'], 4), secPoint('eps', ['2025-01-01', '2025-12-31'], 5.5)];
+    tenQ.quarterly.eps.splice(-3, 3, ...[['2025-01-01', '2025-03-31', 1.1], ['2025-04-01', '2025-06-30', 1.2], ['2025-07-01', '2025-09-30', 1.4]].map(([s, e, v]) => secPoint('eps', [s, e], v)));
+    const q4 = bookFinancialEvidence(tenQ, 'TEST', '2026-02-01');
+    const text = code33Explain(q4, { state: 'ok' }, code33Layered(q4, null, '2026-02-01'), { interim: true });
+    expect(text).toMatchObject({ state: 'unknown', kind: 'q4_eps', text: '売上の加速と純利益率の上昇は達成。EPS の加速は未確認：EPS前年比 +10%→+20%→+40%（Q4は10-Kのみで未確認・年間値から差し引く推計はしません）。' });
+    // Without the card's option the shared wording stays; the known rates never count as a pass.
+    expect(code33Explain(q4, { state: 'ok' }, code33Layered(q4, null, '2026-02-01')).text).toContain('EPS の加速は第4四半期の EPS が年次報告（10-K）にしか無いため未確認です');
+    // A fiscal Q4 inside the window reads Q4未確認 among the known rates.
+    const middle = secRecord(); middle.quarterly.eps = middle.quarterly.eps.filter(p => p.end !== '2025-06-30');
+    middle.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4, { form: '10-K', filed: '2025-08-20', accession: 'k-25' })];
+    const mid = bookFinancialEvidence(middle, 'TEST', '2026-02-01');
+    expect(code33Explain(mid, { state: 'ok' }, code33Layered(mid, null, '2026-02-01'), { interim: true })).toMatchObject({ kind: 'q4_eps',
+      text: expect.stringContaining('EPS前年比 +10%→Q4未確認→+40%→+80%（Q4は10-Kのみで未確認') });
+  });
+
+  it('a record without a revenue concept says the sales concept is out of scope, never 未報告', () => {
+    const bank = secRecord(); bank.quarterly.revenue = [];
+    const report = bookFinancialEvidence(bank, 'TEST', '2026-02-01');
+    const [, sales, margin] = fundamentalTiles(report);
+    expect(sales).toMatchObject({ value: null, short: '対象外', note: '売上の科目が対象外（銀行・保険などの収益科目）' });
+    expect(margin).toMatchObject({ value: null, short: '対象外', note: '売上の科目が対象外（銀行・保険などの収益科目）' });
+    expect(quarterReason(report.rows.at(-1), 'sales')).toBe('売上の科目が対象外（銀行・保険などの収益科目）');
+    for (const tile of [sales, margin]) expect(`${tile.short}${tile.note}`).not.toContain('未報告');
   });
 });

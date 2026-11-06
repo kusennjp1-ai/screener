@@ -24,7 +24,7 @@ import { admitBookFinancialsDetailed, SEC_PUBLICATION_REFUSAL_REASONS, SEC_RECOR
 import { bookFinancialCurrent } from '../src/static/bookFinancialCurrent.js';
 import { financialHistory } from '../src/static/financialHistory.js';
 import { code33Layered } from '../src/static/code33Reference.js';
-import { code33Explain, code33Parts, fundamentalTiles, secStatus } from '../src/static/fundamentalsExplain.js';
+import { code33Explain, code33Parts, COVERAGE_WARNINGS, fundamentalTiles, secStatus } from '../src/static/fundamentalsExplain.js';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
 import { setupReadiness } from '../src/static/setupReadiness.js';
 import { environmentPoint } from '../src/static/marketLongHistory.js';
@@ -131,20 +131,38 @@ export function fundamentalsCoverageBlock({ file, asOfDate, states }) {
   const input = secInputSummary(file, asOfDate), same = input.same_day;
   const tally = state => states.filter(item => item.state === state).length, refused = {};
   for (const item of states) if (item.state === 'refused') refused[item.reason] = (refused[item.reason] || 0) + 1;
-  return { schema_version: FUNDAMENTALS_COVERAGE_SCHEMA, as_of_date: asOfDate,
+  const block = { schema_version: FUNDAMENTALS_COVERAGE_SCHEMA, as_of_date: asOfDate,
     sec_fetch_ran: same, sec_as_of: input.as_of, file_schema: input.schema, universe: states.length,
     requested: same ? input.records : null, eligible: same ? input.eligible : null, truncated: same ? input.truncated : null, deadline_unreached: same ? input.deadline_unreached : null,
     ticker_map_ok: same ? input.ticker_map_ok : null,
     admitted: tally('admitted'), with_quarters: states.filter(item => item.state === 'admitted' && ['available', 'partial'].includes(item.status)).length,
     not_requested: tally('not_requested'), not_fetched: tally('not_fetched'), refused: tally('refused'), refused_by_reason: sortedCounts(refused) };
+  return { ...block, warnings: coverageWarnings(block) };
+}
+
+/**
+ * The block's warnings (COVERAGE_WARNINGS, in that order), from its own counts only, for a same-day fetch: symbols cut
+ * by the limit or the time budget, an unread ticker map, another file schema, records refused at verification
+ * (funds aside), or records without any quarters. No same-day fetch is said by sec_fetch_ran itself.
+ */
+export function coverageWarnings(block) {
+  if (!block?.sec_fetch_ran) return [];
+  const refused = Object.entries(block.refused_by_reason || {}).some(([reason, n]) => reason !== 'not_corporate' && n > 0);
+  const found = { truncated: block.truncated > 0, deadline_unreached: block.deadline_unreached > 0, ticker_map_unavailable: block.ticker_map_ok === false,
+    file_schema: block.file_schema !== SEC_RECORD_SCHEMA, refused, no_quarters: block.requested > 0 && block.with_quarters === 0 };
+  return COVERAGE_WARNINGS.filter(code => found[code]);
 }
 
 const BLOCK_KEYS = ['schema_version', 'as_of_date', 'sec_fetch_ran', 'sec_as_of', 'file_schema', 'universe', 'requested', 'eligible', 'truncated', 'deadline_unreached', 'ticker_map_ok',
   'admitted', 'with_quarters', 'not_requested', 'not_fetched', 'refused', 'refused_by_reason'];
-/** Structural check of a published block (an absent block is valid: older publications carry none). */
+/** Structural check of a published block (an absent block is valid: older publications carry none, and older blocks no warnings). */
 export function validFundamentalsCoverageBlock(block) {
   if (block === undefined) return true;
-  if (!plainObject(block) || Object.keys(block).length !== BLOCK_KEYS.length || !BLOCK_KEYS.every(key => Object.hasOwn(block, key))) return false;
+  if (!plainObject(block)) return false;
+  const keys = Object.hasOwn(block, 'warnings') ? [...BLOCK_KEYS, 'warnings'] : BLOCK_KEYS;
+  if (Object.keys(block).length !== keys.length || !keys.every(key => Object.hasOwn(block, key))) return false;
+  // The list's content is checked against the published details by equality (the gate); here only its form.
+  if (Object.hasOwn(block, 'warnings') && !(Array.isArray(block.warnings) && block.warnings.every((code, i) => COVERAGE_WARNINGS.includes(code) && block.warnings.indexOf(code) === i))) return false;
   if (block.schema_version !== FUNDAMENTALS_COVERAGE_SCHEMA || !day(block.as_of_date) || typeof block.sec_fetch_ran !== 'boolean') return false;
   if (!(block.sec_as_of === null || day(block.sec_as_of)) || !(block.file_schema === null || Number.isSafeInteger(block.file_schema))) return false;
   if (['universe', 'admitted', 'with_quarters', 'not_requested', 'not_fetched', 'refused'].some(key => count(block[key]) === null)) return false;
@@ -300,7 +318,8 @@ export async function publishedFundamentalsReport({ root = 'public', now = Date.
   if (inventory.file.present && !block.sec_fetch_ran) warnings.push(`The SEC input file is for ${block.sec_as_of ?? '未計測'}, not for this publication (${inventory.as_of_date})`);
   const refusals = Object.entries(block.refused_by_reason).filter(([reason]) => reason !== 'not_corporate');
   if (refusals.length) warnings.push(`SEC records refused at admission: ${refusals.map(([reason, n]) => `${reason} ${n}`).join(', ')}`);
-  if (manifestBlock !== null && JSON.stringify(canonical(manifestBlock)) !== JSON.stringify(canonical(block))) warnings.push('The manifest fundamentals_coverage block differs from the published details');
+  const { warnings: blockWarnings, ...withoutWarnings } = block; void blockWarnings;
+  if (manifestBlock !== null && JSON.stringify(canonical(manifestBlock)) !== JSON.stringify(canonical(plainObject(manifestBlock) && !Object.hasOwn(manifestBlock, 'warnings') ? withoutWarnings : block))) warnings.push('The manifest fundamentals_coverage block differs from the published details');
   const carry = previous ? compareSecCarryForward(previous, inventory) : null;
   return { schema_version: 'published-fundamentals-report-v1', as_of_date: coverage.as_of_date, ui_only_republish: uiOnlyRepublish,
     coverage: { ...coverage, sec_record_ratio: ratio, with_quarters_ratio: quartersRatio }, fundamentals_coverage: block, file: inventory.file, derived_states: inventory.derived_states,

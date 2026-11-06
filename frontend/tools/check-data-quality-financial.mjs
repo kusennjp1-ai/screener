@@ -36,7 +36,9 @@ else {
   if(inventory.derived_states) throw Error(`fundamentals_coverage requires every detail's sec_admission: ${inventory.derived_states} missing`);
   if(inventory.admission_problems.length) throw Error(`sec_admission disagrees with the detail's record or the SEC input: ${inventory.admission_problems.slice(0,10).join(' ')}`);
   const sorted=value=>Array.isArray(value)?value.map(sorted):value&&typeof value==='object'?Object.fromEntries(Object.keys(value).sort().map(key=>[key,sorted(value[key])])):value;
-  if(JSON.stringify(sorted(inventory.block))!==JSON.stringify(sorted(declared))) throw Error('fundamentals_coverage differs from the published details and SEC input');
+  // A block written before its warnings list existed is compared without one (the list is derived from the counts).
+  const {warnings:derivedWarnings,...withoutWarnings}=inventory.block;void derivedWarnings;
+  if(JSON.stringify(sorted(Object.hasOwn(declared,'warnings')?inventory.block:withoutWarnings))!==JSON.stringify(sorted(declared))) throw Error('fundamentals_coverage differs from the published details and SEC input');
   const line=formatSecAdmission(index.as_of_date,{stage:'financial gate',input:{present:declared.file_schema!==null||declared.sec_as_of!==null,schema:declared.file_schema,as_of:declared.sec_as_of,same_day:declared.sec_fetch_ran,records:declared.requested},admitted:declared.admitted,refused:declared.refused_by_reason,universe:declared.universe});
   console.log(`Fundamentals coverage gate passed. ${line}.`);appendStepSummary(`- ${line}`);
 }

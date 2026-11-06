@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { secPoint, secRecord, secUnavailable } from '../src/test/fixtures/secRecord.js';
-import { briefRows, compareSecCarryForward, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, invokedAsCommand, publishedCoverage, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
+import { briefRows, compareSecCarryForward, coverageWarnings, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, invokedAsCommand, publishedCoverage, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
 
 const write = async (path, value) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(value)); };
 
@@ -121,8 +121,11 @@ describe('the publication SEC coverage block and the published report', () => {
     const file = { schema_version: 2, as_of_date: date, results: { A: {}, B: {}, C: {} } };
     const block = fundamentalsCoverageBlock({ file, asOfDate: date, states });
     expect(block).toEqual({ schema_version: 'fundamentals-coverage-v1', as_of_date: date, sec_fetch_ran: true, sec_as_of: date, file_schema: 2, universe: 4, requested: 3,
-      eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 2, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 } });
+      eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 2, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 }, warnings: ['refused'] });
     expect(validFundamentalsCoverageBlock(block)).toBe(true);
+    // An older block without the warnings list stays valid; a list of unknown codes or repeats does not.
+    expect(validFundamentalsCoverageBlock((({ warnings, ...rest }) => { void warnings; return rest; })(block))).toBe(true);
+    for (const warnings of [['late'], ['refused', 'refused'], 'refused', null]) expect(validFundamentalsCoverageBlock({ ...block, warnings })).toBe(false);
     // The ticker map is known only from a file that lists its errors.
     expect(fundamentalsCoverageBlock({ file: { ...file, errors: [] }, asOfDate: date, states }).ticker_map_ok).toBe(true);
     expect(fundamentalsCoverageBlock({ file: { ...file, errors: ['SEC ticker map unavailable: URLError'] }, asOfDate: date, states }).ticker_map_ok).toBe(false);
@@ -133,6 +136,14 @@ describe('the publication SEC coverage block and the published report', () => {
     const stale = fundamentalsCoverageBlock({ file: { ...file, as_of_date: '2026-01-30' }, asOfDate: date, states: [{ symbol: 'A', state: 'not_fetched', reason: 'other_date' }] });
     expect(stale).toMatchObject({ sec_fetch_ran: false, sec_as_of: '2026-01-30', file_schema: 2, requested: null });
     expect(validFundamentalsCoverageBlock(undefined)).toBe(true);
+    // Each warning from the block's own counts, only for a same-day fetch; funds refused as not corporate are no warning.
+    const clean = { ...block, refused: 0, refused_by_reason: {}, eligible: 3, truncated: 0, deadline_unreached: 0, ticker_map_ok: true };
+    expect(coverageWarnings(clean)).toEqual([]);
+    expect(coverageWarnings({ ...clean, refused: 2, refused_by_reason: { not_corporate: 2 } })).toEqual([]);
+    expect(coverageWarnings({ ...clean, truncated: 5, deadline_unreached: 2, ticker_map_ok: false, file_schema: 1, refused: 1, refused_by_reason: { 'series:eps': 1 }, with_quarters: 0 }))
+      .toEqual(['truncated', 'deadline_unreached', 'ticker_map_unavailable', 'file_schema', 'refused', 'no_quarters']);
+    expect(coverageWarnings({ ...none })).toEqual([]);
+    expect(none.warnings).toEqual([]);
     for (const broken of [{ ...block, admitted: 3 }, { ...block, extra: 1 }, { ...block, requested: -1 }, { ...block, refused_by_reason: { cik_url: 2 } }, { ...block, sec_as_of: '2026-01-30' }, null, [],
       { ...block, ticker_map_ok: 'yes' }, { ...none, ticker_map_ok: true }, (({ ticker_map_ok, ...rest }) => { void ticker_map_ok; return rest; })(block)])
       expect(validFundamentalsCoverageBlock(broken)).toBe(false);
