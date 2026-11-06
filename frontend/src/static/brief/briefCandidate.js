@@ -236,8 +236,9 @@ export function candidateView(item, date) {
     passed: assessment?.passed ?? null,
     failed,
     unknown,
-    // The one unmet rule of an あと1条件 row, from the same rule function (only those rows pay for it).
-    missing: !assessment?.qualified && failed === 1 && unknown === 0 ? oneMissing(row) : null,
+    // The one unmet rule of an あと1条件 row, from the same rule function: read on first use (below), so only the
+    // rows that show it pay for the rule evaluation.
+    missing: null,
     exclusion: assessment?.financial_exclusion?.label || assessment?.applicability_label || null,
     earnings: earningsDays(row, date),
     pivotSource: pivotSourceLabel(row, reason, date),
@@ -249,6 +250,10 @@ export function candidateView(item, date) {
   };
   // The analysis day as an event (breakoutEvent), once per view: the rows' chip, the order and the filters read it.
   view.event = breakoutEvent(view);
+  if (!assessment?.qualified && failed === 1 && unknown === 0) {
+    Object.defineProperty(view, 'missing', { enumerable: true, configurable: true,
+      get() { const value = oneMissing(row); Object.defineProperty(view, 'missing', { value, enumerable: true, writable: true, configurable: true }); return value; } });
+  }
   return view;
 }
 
@@ -425,13 +430,16 @@ export const filterLabel = (key, date) => key === 'breakout' ? `${isoDay(date) ?
  * them ({ zone: 5, …, eps: 3 } and { eps: 18 }).
  */
 export function filterCounts(views) {
-  const entries = Object.entries(LIST_FILTERS), counts = Object.fromEntries(entries.map(([key]) => [key, 0])), unknown = {};
-  for (const [key, filter] of entries) if (filter.unknown) unknown[key] = 0;
-  for (const view of views || []) for (const [key, filter] of entries) {
-    if (filter.test(view)) counts[key] += 1;
-    else if (filter.unknown?.(view)) unknown[key] += 1;
+  const keys = Object.keys(LIST_FILTERS), tests = keys.map(key => LIST_FILTERS[key].test), unknowns = keys.map(key => LIST_FILTERS[key].unknown || null);
+  const hits = keys.map(() => 0), misses = keys.map(() => 0), list = views || [];
+  for (let v = 0; v < list.length; v++) {
+    const view = list[v];
+    for (let k = 0; k < keys.length; k++) {
+      if (tests[k](view)) hits[k] += 1;
+      else if (unknowns[k] !== null && unknowns[k](view)) misses[k] += 1;
+    }
   }
-  return { counts, unknown };
+  return { counts: Object.fromEntries(keys.map((key, k) => [key, hits[k]])), unknown: Object.fromEntries(keys.flatMap((key, k) => unknowns[k] ? [[key, misses[k]]] : [])) };
 }
 /** Case-insensitive ticker or company-name match. */
 export const matchesSearch = (view, query) => !query || `${view.symbol} ${view.name}`.toUpperCase().includes(query.trim().toUpperCase());

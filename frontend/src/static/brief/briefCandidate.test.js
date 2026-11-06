@@ -194,6 +194,11 @@ describe('position names, RS and earnings, the same on every screen', () => {
     const low = audited('LOW', { rs: 80 });
     low.technical_audit.values.aboveLow = 25.3;
     expect(verdict(low, { qualified: false, passed: 8, failed: 1, unknown: 0, total: 9 }).missing).toEqual({ chip: 'あと1条件：安値から30%以上', text: '未達：52週安値から ≥ 30%（25.3%）', rs: false });
+    // The rule is evaluated on first use: an あと1条件 view carries it as an enumerable getter until read.
+    const lazy = verdict(audited('LAZ', { rs: 61.7 }), { qualified: false, passed: 8, failed: 1, unknown: 0, total: 9 });
+    expect(typeof Object.getOwnPropertyDescriptor(lazy, 'missing').get).toBe('function');
+    expect(lazy.missing).toEqual({ chip: 'あと1条件：RS推計（61）', text: '未達：RS推計 ≥ 70（61）', rs: true });
+    expect(Object.getOwnPropertyDescriptor(lazy, 'missing').value).toBe(lazy.missing);
     // Only those rows pay for the rule evaluation; a qualified or several-short row has none.
     expect(verdict(audited('OK')).missing).toBeNull();
     expect(verdict(audited('TWO', { rs: 61 }), { qualified: false, passed: 7, failed: 2, unknown: 0, total: 9 }).missing).toBeNull();

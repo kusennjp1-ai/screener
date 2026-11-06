@@ -85,16 +85,23 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   const unlisted = useMemo(() => (kind === 'watch' ? unlistedWatch(brief, watch) : []), [kind, brief, watch]);
   const state = bundleState(brief);
   const hidden = LIST_FILTERS[filter]?.hidden ? filter : null;
-  // The desktop paints FIRST_ROWS rows first and the rest of the page once the browser is idle (each new list again).
+  // The desktop paints FIRST_ROWS rows first and the rest of the page once those are on screen (two frames) and the
+  // browser is idle (each new list again), so a tab switch never waits for rows below the fold.
   const deferKey = `${kind}|${filter}|${query}|${listState.sort}|${brief.date}`;
   const [painted, setPainted] = useState(null);
   const defer = wide && painted !== deferKey;
   useEffect(() => {
     if (!wide) return undefined;
+    let frame = null, idle = null, timer = null;
     const done = () => setPainted(deferKey);
-    if (typeof window.requestIdleCallback === 'function') { const id = window.requestIdleCallback(done, { timeout: 300 }); return () => window.cancelIdleCallback(id); }
-    const id = setTimeout(done, 50);
-    return () => clearTimeout(id);
+    const whenIdle = () => { if (typeof window.requestIdleCallback === 'function') idle = window.requestIdleCallback(done, { timeout: 500 }); else timer = setTimeout(done, 50); };
+    if (typeof window.requestAnimationFrame === 'function') frame = window.requestAnimationFrame(() => { frame = window.requestAnimationFrame(whenIdle); });
+    else whenIdle();
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      if (idle !== null) window.cancelIdleCallback(idle);
+      if (timer !== null) clearTimeout(timer);
+    };
   }, [wide, deferKey]);
   const rendered = defer ? Math.min(limit, FIRST_ROWS) : limit;
   const choose = key => { update({ filter: key }); restart(); };
