@@ -1,8 +1,9 @@
+import { useLayoutEffect, useRef } from 'react';
 import { money, signed } from '../positionGeometry';
 import { sellChipView } from './briefSell';
 import { meterPercent } from './briefNav';
 import { useEntrance } from './briefPrimitives';
-import { BREAKOUT_VOLUME_RATIO, candidateMarketGate, earningsCall, ratioShown, rsShown } from './briefCandidate';
+import { BREAKOUT_VOLUME_RATIO, candidateMarketGate, earningsCall, positionText, ratioShown, rowEvent, rsShown, templateChip } from './briefCandidate';
 import { secRowChip } from '../fundamentalsExplain.js';
 
 // The layout primitives every track uses (Expander, ScreenNotes, Parts, RiseItem, Toast) live in the
@@ -24,16 +25,21 @@ const POSITION_TONE = { zone: 'zone', near: 'wait', ext: 'ext', staleAbove: 'ext
 
 /**
  * The position chip. An unknown pivot distance is said here too, because phones hide the mini meter.
- * A stock that is not a buy candidate (not selected by the trend template), or a row under a market
- * that holds off new buying (`muted`), keeps its position in a neutral tone.
+ * The analysis day's event (a breakout, a pivot touch, a crossing without the volume, a heavy down day)
+ * takes the chip's place in rowEvent's short form, on every row surface. A stock that is not a buy candidate
+ * (not selected by the trend template), or a row under a market that holds off new buying (`muted`), has no
+ * green here: the position and a crossing go neutral, a heavy down day keeps its warning.
  */
 export function StateChip({ view, muted = false }) {
+  const event = rowEvent(view);
   const position = view.position || (view.state === 'wait' ? 'near' : view.state);
-  const raw = POSITION_TONE[position] || 'neutral';
-  const tone = view.qualified === false || (muted && raw === 'zone') ? 'neutral' : raw;
-  const where = view.stale ? '' : finite(view.distance) ? ` ${signed(view.distance)}` : '・ピボット比 未確認';
-  return <span className={`brief-chip tone-${tone}${tone === 'zone' ? ' is-strong' : ''}`}><span aria-hidden="true">{view.stateGlyph}</span> {view.stateLabel}{where}</span>;
+  const raw = event ? event.tone : POSITION_TONE[position] || 'neutral';
+  const tone = view.qualified === false ? (event?.tone === 'ext' ? 'ext' : 'neutral') : muted && raw === 'zone' ? 'neutral' : raw;
+  return <span className={`brief-chip tone-${tone}${tone === 'zone' ? ' is-strong' : ''}`}><span aria-hidden="true">{event ? event.glyph : view.stateGlyph}</span> {event ? event.text : positionText(view)}</span>;
 }
+
+/** A row's position for assistive tech: the day's event with the position after it, or the position alone. */
+const positionLabel = view => { const event = rowEvent(view); return event ? `${event.text}（${positionText(view)}）` : positionText(view); };
 
 /** The day's change from the verified previous close (technical_audit for the analysis date), or — with its reason. */
 export function DayChange({ view, className = '' }) {
@@ -43,7 +49,40 @@ export function DayChange({ view, className = '' }) {
 }
 const dayChangeText = view => finite(view?.change) ? `前日比 ${signed(view.change)}` : '前日比 未確認';
 
-const chip = (key, tone, children, title) => <span key={key} className={`brief-chip${tone ? ` tone-${tone}` : ''}`} title={title}>{tone === 'ext' && <><span aria-hidden="true">▲</span> </>}{children}</span>;
+const chip = (key, tone, children, title, optional = false) => <span key={key} className={`brief-chip${tone ? ` tone-${tone}` : ''}`} title={title} data-optional={optional ? '' : undefined}>{tone === 'ext' && <><span aria-hidden="true">▲</span> </>}{children}</span>;
+
+/**
+ * The SEC chip on the rows (data's secRowChip): measured with DT7's documented copy, an always-on chip takes the
+ * rows to 3 chip lines (113px) at 320 and 1440 on the fixture, so the rows show it only when it is `notable`
+ * (plan RW6); an unknown is explained on the stock view.
+ */
+const SEC_CHIP_ALWAYS = false;
+// Space every chip line keeps at its end (px): a chip that would leave less gives way, as on a 3rd line.
+const CHIP_LINE_SLACK = 6;
+
+/**
+ * The optional chips (the SEC chip, the questionable-base chip) give way, last first, when they would take a row's
+ * chips past two lines or leave a line less than CHIP_LINE_SLACK at its end. They stay in the row's label. Only rows
+ * that have one are measured.
+ */
+function fitOptionalChips(row) {
+  const box = row?.querySelector('.brief-reasons'), optional = box ? [...box.querySelectorAll('[data-optional]')] : [];
+  if (!optional.length) return;
+  for (const node of optional) node.style.display = '';
+  // Not laid out (hidden, or no layout engine): nothing to measure.
+  if (!box.offsetWidth) return;
+  const shown = () => [...box.children].filter(node => node.style.display !== 'none');
+  const fits = () => {
+    const chips = shown();
+    if (!chips.length) return true;
+    const line = Math.min(...chips.map(node => node.offsetHeight)), gap = parseFloat(getComputedStyle(box).rowGap) || 0;
+    if (box.scrollHeight > line * 2 + gap + 1) return false;
+    const right = box.getBoundingClientRect().right, from = chips.findIndex(node => node.hasAttribute('data-optional'));
+    // From the first optional chip on, every chip that ends a line leaves the slack.
+    return chips.slice(from).every((node, i, rest) => (rest[i + 1] && rest[i + 1].offsetTop === node.offsetTop) || node.getBoundingClientRect().right <= right - CHIP_LINE_SLACK + 0.5);
+  };
+  for (let i = optional.length - 1; i >= 0 && !fits(); i--) optional[i].style.display = 'none';
+}
 
 /**
  * The volume chip's tone: green only on a verified up day, ▲ on a down day with heavy volume (a warning, as
@@ -53,6 +92,12 @@ function volumeTone(view) {
   if (!finite(view.volumeRatio) || view.volumeRatio < BREAKOUT_VOLUME_RATIO) return null;
   if (finite(view.change) && view.change < 0) return 'ext';
   return finite(view.change) && view.change > 0 ? 'zone' : '';
+}
+
+/** The row's SEC chip (secRowChip) when the rows show it (SEC_CHIP_ALWAYS, else only a notable one), or null. */
+function shownSec(view) {
+  const sec = secRowChip(view.row);
+  return sec && (SEC_CHIP_ALWAYS || sec.notable) ? sec : null;
 }
 
 /**
@@ -65,14 +110,17 @@ export function Reasons({ view, now, sell, hideTemplate = false, muted = false }
   const chips = [<StateChip key="state" view={view} muted={muted} />];
   const sellChip = sellChipView(sell);
   if (sellChip) chips.push(chip('sell', sellChip.tone, sellChip.text, sellChip.title));
-  if (!view.missing && !hideTemplate) chips.push(chip('tt', zone(view.qualified ? 'zone' : ''), view.qualified ? 'TT 8/8' : Number.isInteger(view.failed) ? `あと${view.failed}条件${view.unknown ? `・未確認${view.unknown}` : ''}` : '条件 未確認'));
-  const volume = volumeTone(view);
+  if (!view.missing && !hideTemplate) { const tt = templateChip(view); chips.push(chip('tt', zone(tt.zone ? 'zone' : ''), tt.text)); }
+  // A breakout's chip already carries its volume ratio (rowEvent): no second chip for it.
+  const volume = rowEvent(view)?.kind === 'breakout' ? null : volumeTone(view);
   if (volume !== null) chips.push(chip('vol', zone(volume), `出来高 ${ratioShown(view.volumeRatio)}`));
   if (!view.missing?.rs) chips.push(chip('rs', '', `RS推計 ${rsShown(view.rs)}`));
-  // The row's SEC earnings, when the data track's seam gives a chip (none yet).
-  const sec = secRowChip(view.row);
-  if (sec) chips.push(chip('sec', zone(sec.tone), sec.text, sec.title));
+  // The row's SEC earnings, from the data track's seam (secRowChip).
+  const sec = shownSec(view);
+  if (sec) chips.push(chip('sec', zone(sec.tone), sec.text, sec.title, true));
   if (view.rsLineHigh) chips.push(chip('rsl', zone('zone'), 'RS線 新高値'));
+  // A questionable base (独自判定): one neutral chip, its rule in the title.
+  if (view.baseCaution) chips.push(chip('base', '', view.baseCaution.text, view.baseCaution.title, true));
   const earnings = earningsCall(view, now);
   if (earnings?.soon) chips.push(chip('earn', 'ext', earnings.chip));
   // An あと1条件 row says which rule in one neutral chip, last, so a phone gives it the second line (the full
@@ -93,9 +141,13 @@ export function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morp
   const sellChip = sellChipView(sell);
   const gate = candidateMarketGate(context?.market);
   const muted = gate !== 'open' || sell?.breakdownHits > 0;
+  const sec = shownSec(view);
+  const button = useRef(null);
+  // After every render: an optional chip that does not fit gives way (it stays in the label below).
+  useLayoutEffect(() => fitOptionalChips(button.current));
   return <li className={enter ? 'in' : ''} style={{ '--i': index }}>
-    <button type="button" className={`brief-row${rank ? '' : ' is-unranked'}`} data-symbol={view.symbol} data-testid="brief-candidate" onClick={event => onOpen(view.symbol, event.currentTarget)}
-      aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${view.stateLabel}${!view.stale && finite(view.distance) ? ` ${signed(view.distance)}` : ''}、${dayChangeText(view)}${view.missing ? `、${view.missing.text}` : ''}、RS推計 ${rsShown(view.rs)}${sellChip ? `、${sellChip.text}` : ''}`}>
+    <button ref={button} type="button" className={`brief-row${rank ? '' : ' is-unranked'}`} data-symbol={view.symbol} data-testid="brief-candidate" onClick={event => onOpen(view.symbol, event.currentTarget)}
+      aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${positionLabel(view)}、${dayChangeText(view)}${view.missing ? `、${view.missing.text}` : ''}、RS推計 ${rsShown(view.rs)}${sec ? `、${sec.text}` : ''}${view.baseCaution ? `、${view.baseCaution.text}（${view.baseCaution.title}）` : ''}${sellChip ? `、${sellChip.text}` : ''}`}>
       <span className="brief-rank" aria-hidden="true">{rank || ''}</span>
       <span className="brief-row-main">
         <span className="brief-row-title"><b style={morph ? { viewTransitionName: 'brief-ticker' } : undefined}>{view.symbol}</b><DayChange view={view} /><span className="brief-row-name">{view.name}{view.sector ? `・${view.sector}` : ''}</span></span>

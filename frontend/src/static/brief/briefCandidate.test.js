@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { briefOrder, breakoutEvent, candidateMarketGate, candidateView, EARNINGS_WARN_DAYS, earningsCall, earningsSoon, focusCandidates, focusCounts, focusHeadingNote, focusTone, POSITION_NAMES, ratioShown, rsShown, ruleEvidence, matchesSearch, trendTemplate, watchEvent, LIST_FILTERS, LIST_SORTS } from './briefCandidate';
+import { BASE_DEPTH_MAX_PERCENT, BASE_LENGTH_MIN_WEEKS, briefOrder, breakoutEvent, candidateMarketGate, candidateView, EARNINGS_WARN_DAYS, earningsCall, earningsSoon, EPS_YOY_FILTER_PERCENT, EXTENDED_FROM_SMA50_PERCENT, filterCounts, filterLabel, focusCandidates, focusCounts, focusHeadingNote, focusTone, memoCandidateView, POSITION_NAMES, positionText, ratioShown, rowEvent, rsShown, ruleEvidence, matchesSearch, setupPatternName, templateChip, trendTemplate, watchEvent, LIST_FILTERS, LIST_SORTS } from './briefCandidate';
 import { withAuditFixture } from '../testAuditFixture';
 
-const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, qualified: true, ...over });
+const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', position: 'zone', stateLabel: '買いゾーン', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, qualified: true, ...over });
 
 describe('brief model', () => {
   it('shows the 52-week distances behind the trend-template rules and keeps unknowns blank', () => {
@@ -33,14 +33,15 @@ describe('brief model', () => {
   it('describes watch changes and calls a breakout only from the verified up day with 1.4x volume', () => {
     // A verified day: the close crossed the pivot (100) from a previous close of 99.02.
     const crossing = over => view({ asOf: '2026-10-02', close: 101, prevClose: 101 / 1.02, change: 2, ...over });
-    expect(watchEvent(crossing({ volumeRatio: 1.4 }))).toEqual({ kind: 'breakout', tone: 'zone', title: '10/2に上抜け・出来高1.40×' });
+    // Today's watch card says the day as the rows do (rowEvent's short form).
+    expect(watchEvent(crossing({ volumeRatio: 1.4 }))).toEqual({ kind: 'breakout', tone: 'zone', title: '10/2上抜け 1.40×' });
     // A crossing without the volume keeps the zone's ● (kind zone) but not its green.
-    expect(watchEvent(crossing({ volumeRatio: 1.39 }))).toEqual({ kind: 'zone', tone: 'wait', title: '10/2に上抜け・出来高不足' });
-    expect(watchEvent(crossing({ volumeRatio: null }))).toEqual({ kind: 'zone', tone: 'wait', title: '10/2に上抜け・出来高 未確認' });
-    // Without the analysis date nothing is said about a breakout.
-    expect(watchEvent(crossing({ asOf: null, volumeRatio: 1.6 }))).toEqual({ kind: 'zone', tone: 'zone', title: '買いゾーン内' });
+    expect(watchEvent(crossing({ volumeRatio: 1.39 }))).toEqual({ kind: 'zone', tone: 'wait', title: '上抜け・出来高不足' });
+    expect(watchEvent(crossing({ volumeRatio: null }))).toEqual({ kind: 'zone', tone: 'wait', title: '上抜け・出来高 未確認' });
+    // Without the analysis date nothing is said about a breakout: the position, as the row's chip says it.
+    expect(watchEvent(crossing({ asOf: null, volumeRatio: 1.6 }))).toEqual({ kind: 'zone', tone: 'zone', title: '買いゾーン +1.0%' });
     // No verified day change: nothing is said about a breakout, whatever the volume.
-    expect(watchEvent(view({ volumeRatio: 1.6 }))).toEqual({ kind: 'zone', tone: 'zone', title: '買いゾーン内' });
+    expect(watchEvent(view({ volumeRatio: 1.6 }))).toEqual({ kind: 'zone', tone: 'zone', title: '買いゾーン +1.0%' });
     expect(watchEvent(view({ state: 'wait', distance: -3.25 })).title).toBe('ピボット接近（あと3.3%）');
     expect(watchEvent(view({ state: 'ext', distance: 8 })).tone).toBe('ext');
     expect(watchEvent(view({ state: 'wait', distance: -9 }))).toEqual({ kind: 'base', tone: 'neutral', title: '土台形成中' });
@@ -49,10 +50,10 @@ describe('brief model', () => {
   it('turns the watch rows\' green neutral while the market is not open to new buying, keeping the titles', () => {
     const breakout = view({ asOf: '2026-10-02', close: 101, prevClose: 99, change: 2, volumeRatio: 1.6 });
     const OPEN = { label: '上昇トレンド（独自判定）', cap: 0.5 }, HOLD = { label: '50日線割れ（弱含み・独自判定）', cap: 0 };
-    expect(watchEvent(breakout, OPEN)).toEqual({ kind: 'breakout', tone: 'zone', title: '10/2に上抜け・出来高1.60×' });
+    expect(watchEvent(breakout, OPEN)).toEqual({ kind: 'breakout', tone: 'zone', title: '10/2上抜け 1.60×' });
     for (const market of [HOLD, { label: '市場未確認', cap: 0, state: 'unknown' }, null]) {
-      expect(watchEvent(breakout, market)).toEqual({ kind: 'breakout', tone: 'neutral', title: '10/2に上抜け・出来高1.60×' });
-      expect(watchEvent(view(), market)).toEqual({ kind: 'zone', tone: 'neutral', title: '買いゾーン内' });
+      expect(watchEvent(breakout, market)).toEqual({ kind: 'breakout', tone: 'neutral', title: '10/2上抜け 1.60×' });
+      expect(watchEvent(view(), market)).toEqual({ kind: 'zone', tone: 'neutral', title: '買いゾーン +1.0%' });
     }
     // Warnings and the other positions keep their tones; without the argument, the tones are as before.
     expect(watchEvent(view({ asOf: '2026-10-02', close: 101, prevClose: 102, change: -1, volumeRatio: 1.6 }), HOLD).tone).toBe('ext');
@@ -85,15 +86,15 @@ describe('the analysis day as an event (verified change and volume only)', () =>
     expect(v.asOf).toBe(DATE);
   });
   it('(b) a zone day that fell 1% on 1.6× volume is no breakout but a warning (ext tone)', () => {
-    expect(breakoutEvent(verdict(audited('B', { price: 101, change: -1, volume: 1.6 })))).toEqual({ kind: 'heavyDown', tone: 'ext', title: '下落日の大商い 1.60×（要注意）' });
+    expect(breakoutEvent(verdict(audited('B', { price: 101, change: -1, volume: 1.6 })))).toEqual({ kind: 'heavyDown', tone: 'ext', title: '10/2 下落日の大商い 1.60×（要注意）' });
   });
   it('(c) already above the pivot the day before: in the zone after the breakout, never 「本日上抜け」', () => {
     const event = breakoutEvent(verdict(audited('C', { price: 102, change: 1, volume: 2 })));
     expect(event).toMatchObject({ kind: 'after', tone: 'zone', title: '買いゾーン内（上抜け後）' });
     expect(event.title).not.toContain('本日');
   });
-  it('(d) a close exactly at the pivot reads ピボット到達', () => {
-    expect(breakoutEvent(verdict(audited('D', { price: 100, change: 2, volume: 1.6 })))).toEqual({ kind: 'touch', tone: 'zone', title: 'ピボット到達' });
+  it('(d) a close exactly at the pivot reads 10/2にピボット到達 (dated by the analysis date)', () => {
+    expect(breakoutEvent(verdict(audited('D', { price: 100, change: 2, volume: 1.6 })))).toEqual({ kind: 'touch', tone: 'zone', title: '10/2にピボット到達' });
   });
   it('a crossing without 1.4× volume says so, and an unknown volume stays unknown', () => {
     // Not a breakout: tone wait (never the green call), the ratio and the bar in the note.
@@ -103,7 +104,7 @@ describe('the analysis day as an event (verified change and volume only)', () =>
   it('shows a volume ratio floored to 2 decimals, so it never reads past the 1.4× bar it missed', () => {
     expect([ratioShown(1.396), ratioShown(1.4), ratioShown(1.6049), ratioShown(2)]).toEqual(['1.39×', '1.40×', '1.60×', '2.00×']);
     expect(breakoutEvent(verdict(audited('V', { price: 101, change: 2, volume: 1.396 })))).toMatchObject({ kind: 'cross', note: '出来高1.39×は基準の1.4×に届きません。' });
-    expect(breakoutEvent(verdict(audited('W', { price: 101, change: -1, volume: 1.4049 }))).title).toBe('下落日の大商い 1.40×（要注意）');
+    expect(breakoutEvent(verdict(audited('W', { price: 101, change: -1, volume: 1.4049 }))).title).toBe('10/2 下落日の大商い 1.40×（要注意）');
   });
   it('(e) without the verified audit of the analysis day the change is unknown, never 0%, and nothing is said about a breakout', () => {
     const missing = audited('E', { price: 101, price_change_1d: 5 });
@@ -210,7 +211,7 @@ describe('Today\'s focus counts', () => {
     item('EXT1', 107), // qualified, extended
   ];
   it('counts the whole focus pool, not the shown slice', () => {
-    expect(focusCounts(ranked, '2026-10-02')).toEqual({ zone: 2, near: 3, total: 5 });
+    expect(focusCounts(ranked, '2026-10-02')).toEqual({ zone: 2, near: 3, total: 5, breakout: 0 });
     expect(focusCandidates(ranked, '2026-10-02', 2)).toHaveLength(2);
     expect(focusCandidates(ranked, '2026-10-02', 5).length).toBeLessThanOrEqual(focusCounts(ranked, '2026-10-02').total);
     expect(focusCandidates(ranked, '2026-10-02', 5).map(view => view.symbol).sort()).toEqual(['NEA1', 'NEA2', 'NEA3', 'ZON1', 'ZON2']);
@@ -222,8 +223,8 @@ describe('Today\'s focus counts', () => {
     expect(near).toBe(views.filter(LIST_FILTERS.near.test).length);
   });
   it('is all zero without rows', () => {
-    expect(focusCounts([], '2026-10-02')).toEqual({ zone: 0, near: 0, total: 0 });
-    expect(focusCounts(undefined, '2026-10-02')).toEqual({ zone: 0, near: 0, total: 0 });
+    expect(focusCounts([], '2026-10-02')).toEqual({ zone: 0, near: 0, total: 0, breakout: 0 });
+    expect(focusCounts(undefined, '2026-10-02')).toEqual({ zone: 0, near: 0, total: 0, breakout: 0 });
   });
 });
 
@@ -276,11 +277,14 @@ describe('selection and order are unchanged by the round-1 wording', () => {
   ].map(([symbol, price, pivot, rs, assessment]) => ({ row: audited(symbol, { price, pivot, rs }), assessment }));
   it('keeps the focus pool, its counts, the order and the filter counts', () => {
     expect(focusCandidates(ranked, DATE).map(v => v.symbol)).toEqual(['Z1', 'Z2', 'N2', 'N1']);
-    expect(focusCounts(ranked, DATE)).toEqual({ zone: 2, near: 2, total: 4 });
+    // Z1 touches its pivot on the synthetic day (+2%, 1.6×) and Z2 was above it the day before: the touch first.
+    expect(focusCounts(ranked, DATE)).toEqual({ zone: 2, near: 2, total: 4, breakout: 0 });
     const views = ranked.map(item => candidateView(item, DATE));
     expect(views.slice().sort(briefOrder).map(v => v.symbol)).toEqual(['Z1', 'Z2', 'Z3', 'U1', 'N2', 'N1', 'N3', 'B1', 'E1', 'S1']);
     expect(Object.fromEntries(Object.entries(LIST_FILTERS).map(([key, filter]) => [key, views.filter(filter.test).map(v => v.symbol)]))).toEqual({
-      zone: ['Z1', 'Z2'], near: ['N1', 'N2'], all: ['Z1', 'Z2', 'N1', 'N2', 'B1', 'E1', 'S1'], one: ['Z3', 'N3'], focus: ['Z1', 'Z2', 'N1', 'N2'] });
+      zone: ['Z1', 'Z2'], near: ['N1', 'N2'], all: ['Z1', 'Z2', 'N1', 'N2', 'B1', 'E1', 'S1'], one: ['Z3', 'N3'], focus: ['Z1', 'Z2', 'N1', 'N2'], breakout: [], eps: [] });
+    // The one-pass counts agree with every filter's own test.
+    expect(filterCounts(views)).toEqual({ counts: { zone: 2, near: 2, all: 7, one: 2, focus: 4, breakout: 0, eps: 0 }, unknown: { eps: 7 } });
   });
 });
 
@@ -302,5 +306,176 @@ describe('the round-2 contracts of the candidate view', () => {
     const v = verdict(audited('E', { price: 101, entry_evidence: { earnings: { date: '2026-10-05' } } }));
     expect(Object.keys(earningsCall(v, Date.parse('2026-10-02T19:00:00Z'))).sort()).toEqual(['chip', 'date', 'days', 'line', 'soon']);
     expect(['pivot', 'upper', 'state', 'position', 'distance', 'close', 'change', 'prevClose', 'volumeRatio', 'fromSma50', 'earnings', 'asOf', 'row', 'pivotSource'].filter(key => !Object.hasOwn(v, key))).toEqual([]);
+  });
+});
+
+// Round 2 (rows): the day's event on every row, the order within the buy zone, the hidden filters and sorts, the
+// TT chip, the RS-line high, the base chip, the shared view memo and the pivot source.
+describe('round 2: the day on every row and the order within the buy zone', () => {
+  const zone = (symbol, over) => audited(symbol, { pivot: 100, rs: 90, ...over });
+  const rows = {
+    BRK: zone('BRK', { price: 101, change: 2, volume: 1.6 }), // crossed from below on 1.6×
+    TCH: zone('TCH', { price: 100, change: 2, volume: 1.6 }), // closed on the pivot
+    CRS: zone('CRS', { price: 101, change: 2, volume: 1.2 }), // crossed without the volume
+    AFT: zone('AFT', { price: 102, change: 1, volume: 2 }), // above the pivot the day before
+    HVY: zone('HVY', { price: 101, change: -1, volume: 1.6 }), // a down day on heavy volume
+  };
+  const views = Object.fromEntries(Object.entries(rows).map(([key, row]) => [key, verdict(row)]));
+
+  it('gives each event one short form and tone for the row chip, and none for after or an unverified day', () => {
+    expect(Object.fromEntries(Object.entries(views).map(([key, v]) => [key, rowEvent(v)]))).toEqual({
+      BRK: { kind: 'breakout', glyph: '↗', text: '10/2上抜け 1.60×', tone: 'zone' },
+      TCH: { kind: 'touch', glyph: '●', text: '10/2ピボット到達', tone: 'zone' },
+      CRS: { kind: 'cross', glyph: '●', text: '上抜け・出来高不足', tone: 'wait' },
+      AFT: null,
+      HVY: { kind: 'heavyDown', glyph: '▲', text: '下落日の大商い', tone: 'ext' },
+    });
+    expect(rowEvent(verdict(zone('UNK', { price: 101, change: 2, volume: null }))).text).toBe('上抜け・出来高 未確認');
+    // candidateView carries the event once (breakoutEvent's), the order and the filters read it.
+    expect(views.BRK.event).toEqual(breakoutEvent(views.BRK));
+    const missing = zone('MIS', { price: 101 });
+    delete missing.technical_audit;
+    expect([verdict(missing).event, rowEvent(verdict(missing))]).toEqual([null, null]);
+    // The after row keeps its position chip, as before.
+    expect(positionText(views.AFT)).toBe('買いゾーン +2.0%');
+  });
+
+  it('ranks a breakout, then a touch or a crossing, then after, then a heavy down day last, whatever the RS', () => {
+    const ranked = Object.entries(rows).map(([key, row], i) => verdict({ ...row, rs_rating: 95 - i * 0 + (key === 'HVY' ? 4 : key === 'AFT' ? 3 : 0) }));
+    expect(ranked.slice().reverse().sort(briefOrder).map(v => v.symbol)).toEqual(['BRK', 'CRS', 'TCH', 'AFT', 'HVY']);
+    // Touch and crossing share a rank: RS decides between them.
+    const higher = verdict({ ...rows.TCH, rs_rating: 99 });
+    expect([views.CRS, higher].sort(briefOrder).map(v => v.symbol)).toEqual(['TCH', 'CRS']);
+    // Other positions are as before: near, further below and extended keep their order by RS.
+    const others = [verdict(zone('EXT', { price: 108, rs: 99 })), verdict(zone('FAR', { price: 90, rs: 99 })), verdict(zone('NEA', { price: 97, rs: 80 })), verdict(zone('NEB', { price: 98, rs: 85 }))];
+    expect([...others, views.HVY].sort(briefOrder).map(v => v.symbol)).toEqual(['HVY', 'NEB', 'NEA', 'FAR', 'EXT']);
+    // A selected stock still ranks above one that is not, in the zone too.
+    const unqualified = verdict(rows.BRK, { qualified: false, passed: 8, failed: 1, unknown: 0, total: 9 });
+    expect([unqualified, views.HVY].sort(briefOrder).map(v => v.qualified)).toEqual([true, false]);
+  });
+
+  it('breaks a tie within the zone by a dated RS-line new high, then by RS', () => {
+    const dated = value => ({ value, leading: null, as_of_date: DATE });
+    const high = verdict({ ...rows.TCH, symbol: 'HIG', rs_rating: 80, rs_line_high: dated(true) });
+    const plain = verdict({ ...rows.TCH, symbol: 'PLN', rs_rating: 95, rs_line_high: dated(false) });
+    const old = verdict({ ...rows.TCH, symbol: 'OLD', rs_rating: 90, rs_line_high: { ...dated(true), as_of_date: '2026-10-01' } });
+    expect([plain, old, high].sort(briefOrder).map(v => v.symbol)).toEqual(['HIG', 'PLN', 'OLD']);
+    expect([high.rsLineHigh, plain.rsLineHigh, old.rsLineHigh]).toEqual([true, false, false]);
+    // Outside the zone the RS-line high does not reorder.
+    const nearHigh = verdict({ ...zone('NH', { price: 97, rs: 70 }), rs_line_high: dated(true) }), nearPlain = verdict(zone('NP', { price: 97, rs: 90 }));
+    expect([nearHigh, nearPlain].sort(briefOrder).map(v => v.symbol)).toEqual(['NP', 'NH']);
+  });
+
+  it('reads the RS-line high only through the published value dated for the analysis date (never se_rs_line_new_high)', () => {
+    const at = extra => verdict({ ...rows.TCH, ...extra }).rsLineHigh;
+    expect(at({ rs_line_high: { value: true, leading: false, as_of_date: DATE } })).toBe(true);
+    for (const extra of [{}, { se_rs_line_new_high: true }, { rs_line_high: { value: null, leading: null, as_of_date: DATE } }, { rs_line_high: { value: true, leading: true, as_of_date: '2026-10-01' } }, { rs_line_high: { value: 'yes', leading: null, as_of_date: DATE } }])
+      expect({ extra, high: at(extra) }).toEqual({ extra, high: false });
+  });
+
+  it('opens the breakout filter only for selected breakouts, and names it by the analysis date', () => {
+    expect(Object.entries(views).filter(([, v]) => LIST_FILTERS.breakout.test(v)).map(([key]) => key)).toEqual(['BRK']);
+    expect(LIST_FILTERS.breakout.test(verdict(rows.BRK, { qualified: false, passed: 8, failed: 1, unknown: 0, total: 9 }))).toBe(false);
+    expect([filterLabel('breakout', DATE), filterLabel('breakout', null), filterLabel('zone', DATE)]).toEqual(['10/2の上抜け', '上抜け', '買いゾーン']);
+    const items = Object.values(rows).map(row => ({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }));
+    expect(focusCounts(items, DATE)).toEqual({ zone: 5, near: 0, total: 5, breakout: 1 });
+    // The segment still shows exactly its four filters.
+    expect(Object.entries(LIST_FILTERS).filter(([, value]) => !value.hidden).map(([key]) => key)).toEqual(['zone', 'near', 'all', 'one']);
+  });
+});
+
+describe('round 2: the TT chip says unmet and unconfirmed apart, never あと0', () => {
+  it('follows the RW4 matrix', () => {
+    const chip = over => templateChip(view({ qualified: false, ...over }));
+    expect(templateChip(view())).toEqual({ text: 'TT 8/8', zone: true });
+    expect(chip({ failed: 0, unknown: 2 })).toEqual({ text: 'TT未確認（2条件）', zone: false });
+    expect(chip({ failed: 1, unknown: 2 })).toEqual({ text: '未達1・未確認2', zone: false });
+    expect(chip({ failed: 2, unknown: 0 })).toEqual({ text: 'あと2条件', zone: false });
+    expect(chip({ failed: 0, unknown: 0 })).toEqual({ text: '選定対象外', zone: false });
+    expect(chip({ failed: 0, unknown: 0, exclusion: '金融業の例外' })).toEqual({ text: '金融業の例外', zone: false });
+    expect(chip({ failed: null, unknown: null })).toEqual({ text: '条件 未確認', zone: false });
+    for (const failed of [0, 1, 2]) for (const unknown of [0, 1, 3]) expect(chip({ failed, unknown }).text).not.toMatch(/あと0/);
+  });
+});
+
+describe('round 2: the questionable-base chip (独自判定)', () => {
+  const based = extra => verdict(audited('BAS', { price: 101, ...extra, setup_recalculation: { status: 'calculated', as_of_date: DATE, ...extra.setup_recalculation } }));
+  it('flags a base deeper than 35% or shorter than 3 weeks, else a close more than 25% above the 50-day line', () => {
+    expect([BASE_DEPTH_MAX_PERCENT, BASE_LENGTH_MIN_WEEKS, EXTENDED_FROM_SMA50_PERCENT]).toEqual([35, 3, 25]);
+    expect(based({ se_base_length_weeks: 3, se_base_depth_pct: 38.2 }).baseCaution).toMatchObject({ kind: 'base', text: '土台3週・−38%' });
+    expect(based({ se_base_length_weeks: 2, se_base_depth_pct: 12 }).baseCaution).toMatchObject({ kind: 'base', text: '土台2週・−12%' });
+    // Shown on its side of the bar: 35.4% reads 35.4, 2.6 weeks reads 2.6.
+    expect(based({ se_base_length_weeks: 5, se_base_depth_pct: 35.4 }).baseCaution.text).toBe('土台5週・−35.4%');
+    expect(based({ se_base_length_weeks: 2.6, se_base_depth_pct: 10 }).baseCaution.text).toBe('土台2.6週・−10%');
+    expect(based({ se_base_length_weeks: 2, se_base_depth_pct: null }).baseCaution.text).toBe('土台2週・深さ 未確認');
+    expect(based({ se_base_length_weeks: 2 }).baseCaution.title).toBe('Setup Engineの土台が3週未満（独自判定）');
+    // Normal rows: no chip at the thresholds themselves.
+    expect(based({ se_base_length_weeks: 3, se_base_depth_pct: 35 }).baseCaution).toBeNull();
+    // A base that is not current for the analysis date is not read.
+    expect(based({ se_base_length_weeks: 2, se_base_depth_pct: 40, setup_recalculation: { as_of_date: '2026-10-01' } }).baseCaution).toBeNull();
+    // The verified close against the 50-day line (100 against 90 in the synthetic audit: +11%): extended above 25%.
+    const extended = audited('EXT', { price: 101 });
+    extended.technical_audit.values.sma50 = 78;
+    expect(verdict(extended).baseCaution).toMatchObject({ kind: 'extended', text: '50日線から+29%' });
+    expect(verdict(audited('OK', { price: 101 })).baseCaution).toBeNull();
+  });
+});
+
+describe('round 2: the EPS filter and sorts (secSummary, dated)', () => {
+  const summary = (eps, extra = {}) => ({ sec_summary: { sec_state: 'ok', eps_yoy: eps === null ? null : { value: eps, end: '2026-06-30' }, sales_yoy: null, code33: null, as_of_date: DATE, ...extra } });
+  const at = (symbol, extra) => verdict(audited(symbol, { price: 97, ...extra }));
+  it('counts the stocks at 25% or more, and those it cannot tell apart, never as a miss', () => {
+    expect(EPS_YOY_FILTER_PERCENT).toBe(25);
+    const views = [at('A', summary(40)), at('B', summary(25)), at('C', summary(24.9)), at('D', summary(null)), at('E', {}), at('F', summary(60, { as_of_date: '2026-10-01' })), at('G', { sec_summary: { sec_state: 'ok' } })];
+    expect(views.map(v => v.epsYoy)).toEqual([40, 25, 24.9, null, null, null, null]);
+    const { counts, unknown } = filterCounts(views);
+    expect([counts.eps, unknown.eps]).toEqual([2, 4]);
+    expect(views.filter(LIST_FILTERS.eps.test).map(v => v.symbol)).toEqual(['A', 'B']);
+    // Not a selected stock: neither counted nor 未確認.
+    expect(filterCounts([verdict(audited('H', { price: 97, ...summary(90) }), { qualified: false, passed: 8, failed: 1, unknown: 0, total: 9 })])).toMatchObject({ counts: { eps: 0 }, unknown: { eps: 0 } });
+    expect(views.slice().sort(LIST_SORTS.eps.compare).map(v => v.symbol)).toEqual(['A', 'B', 'C', ...['D', 'E', 'F', 'G'].sort((x, y) => briefOrder(views.find(v => v.symbol === x), views.find(v => v.symbol === y)))]);
+  });
+
+  it('sorts by the current Setup Engine confidence, an unknown or stale one last', () => {
+    const conf = (symbol, value, day = DATE) => verdict(audited(symbol, { price: 97, se_pattern_confidence: value, setup_recalculation: { status: 'calculated', as_of_date: day } }));
+    const views = [conf('L', 41), conf('H', 72), conf('U', null), conf('S', 99, '2026-10-01'), conf('M', 60)];
+    expect(views.map(v => v.setupConfidence)).toEqual([41, 72, null, null, 60]);
+    expect(views.slice().sort(LIST_SORTS.base.compare).map(v => v.symbol).slice(0, 3)).toEqual(['H', 'M', 'L']);
+    expect(LIST_SORTS.base.label).toBe('土台の質（SE信頼度・未確認は最後）');
+  });
+});
+
+describe('round 2: the pivot source names the pattern and its confidence', () => {
+  const pivot = extra => verdict(audited('PIV', { price: 101, setup_recalculation: { status: 'calculated', as_of_date: DATE }, ...extra })).pivotSource;
+  it('reads Setup Engine, the pattern from one table and the confidence, 未確認 when unknown, never 0', () => {
+    expect(pivot({ se_pattern_primary: 'cup_with_handle', se_pattern_confidence: 72.6 })).toBe('Setup Engine・カップ・ウィズ・ハンドル（信頼度72）');
+    expect(pivot({ se_pattern_primary: 'vcp', se_pattern_confidence: 31 })).toBe('Setup Engine・VCP（信頼度31・基準55未満）');
+    expect(pivot({ se_pattern_primary: 'vcp', se_pattern_confidence: 54.9 })).toBe('Setup Engine・VCP（信頼度54・基準55未満）');
+    expect(pivot({ se_pattern_primary: 'saucer_v9', se_pattern_confidence: 60 })).toBe('Setup Engine・saucer_v9（信頼度60）');
+    expect(pivot({ se_pattern_confidence: 60 })).toBe('Setup Engine（信頼度60）');
+    expect(pivot({ se_pattern_primary: 'vcp', se_pattern_confidence: null })).toBe('Setup Engine・VCP（信頼度 未確認）');
+    expect(pivot({ se_pattern_primary: 'vcp', se_pattern_confidence: 0, setup_recalculation: { status: 'calculated', as_of_date: '2026-10-01' } })).toBe('Setup Engine・VCP（信頼度 未確認）');
+    expect(pivot({ se_pattern_confidence: 70, setup_recalculation: { status: 'calculated', as_of_date: DATE, reason: 'primary_pattern_below_confidence_floor' } })).toBe('Setup Engine（信頼度70・基準55未満）');
+    expect([setupPatternName('double_bottom'), setupPatternName(''), setupPatternName(null)]).toEqual(['ダブルボトム', null, null]);
+    // Another source keeps canonicalPivot's reason, which the stale pivot still reads.
+    expect(verdict(audited('VC', { price: 101, se_pivot_price: undefined, vcp_pivot: 100 })).pivotSource).toBe('VCP（日次）');
+    const far = verdict(audited('FAR', { price: 132, pivot: 100 }));
+    expect([far.pivotSource, far.stale?.short]).toEqual(['現在値から25%超離れた旧水準・ベースの再形成待ち', '旧ピボットから +32%・有効な買い水準なし']);
+  });
+});
+
+describe('round 2: one view per item and bundle', () => {
+  it('returns the same view object for an item within one bundle and date, a new one for another bundle or date', () => {
+    const item = { row: audited('MEM', { price: 101 }), assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } };
+    const bundle = { date: DATE }, other = { date: DATE };
+    const first = memoCandidateView(item, DATE, bundle);
+    expect(memoCandidateView(item, DATE, bundle)).toBe(first);
+    expect(first).toEqual(candidateView(item, DATE));
+    expect(memoCandidateView(item, DATE, other)).not.toBe(first);
+    expect(memoCandidateView(item, '2026-10-01', bundle)).not.toBe(first);
+    // Without a bundle nothing is kept.
+    expect(memoCandidateView(item, DATE, null)).not.toBe(memoCandidateView(item, DATE, null));
+    // The focus helpers share it.
+    expect(focusCandidates([item], DATE, 5, bundle)[0]).toBe(memoCandidateView(item, DATE, bundle));
   });
 });

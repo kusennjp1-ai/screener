@@ -63,7 +63,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const count = async label => Number(await filter(label).locator('.numeric').innerText());
     await expect(filter('買いゾーン')).toHaveAttribute('aria-pressed', 'true');
     await expect(candidates(page)).toHaveCount(await count('買いゾーン'));
-    await expect(candidates(page).first()).toContainText('買いゾーン');
+    // The first row's chip may say the day's event (ピボット到達, 上抜け); its label keeps the position.
+    await expect(candidates(page).first()).toHaveAttribute('aria-label', /買いゾーン/);
     const zone = await symbolsShown(page);
     expect(zone).toContain('ZZNV');
 
@@ -119,9 +120,9 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   });
 
   // The day's event titles (breakoutEvent's copy); the call's colour for them is brief-decision.spec.js's.
-  test('a focus candidate that closes exactly at its pivot reaches it: ピボット到達, in the buy zone, no breakout claimed', async ({ page }) => {
+  test('a focus candidate that closes exactly at its pivot reaches it on the analysis date: ピボット到達, in the buy zone, no breakout claimed', async ({ page }) => {
     const { errors } = await openFocus(page, phone);
-    await expect(conclusion(page).locator('strong')).toHaveText('ピボット到達');
+    await expect(conclusion(page).locator('strong')).toHaveText(`${DAY}にピボット到達`);
     await expect(conclusion(page)).not.toContainText('上抜け');
     expect(errors).toEqual([]);
   });

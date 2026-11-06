@@ -237,6 +237,16 @@ describe('the round-2 row chip', () => {
     expect(chipTexts(container)).toEqual(['● 買いゾーン +1.2%', 'TT 8/8', '出来高 1.60×', 'RS推計 88']);
   });
 
+  it('shows only a notable chip on the rows (an unknown is explained on the stock view), and says it in the label', () => {
+    seam.chip = { text: '業績 未確認', tone: '', title: '〈reason〉', notable: false };
+    expect(chipTexts(render(<Reasons view={view({ row: sample })} now={0} />).container)).not.toContain('業績 未確認');
+    cleanup();
+    seam.chip = { text: '〈sec〉', tone: 'zone', title: '〈title〉', notable: true };
+    const { container } = row({ view: view({ row: sample }) });
+    expect(container.querySelector('.brief-row').getAttribute('aria-label')).toBe('1位 AAA Alpha、買いゾーン +1.2%、前日比 +2.0%、RS推計 88、〈sec〉');
+    expect(container.querySelector('[data-optional]')).toHaveTextContent('〈sec〉');
+  });
+
   it('puts a chip right after the RS chip, neutral on a row that is muted or not a buy candidate', () => {
     seam.chip = { text: '〈sec〉', tone: 'zone', title: '〈title〉', notable: true };
     const shown = (props = {}) => { const { container } = render(<Reasons view={view({ row: sample, ...props.view })} now={0} muted={props.muted} />); const chips = [...container.querySelectorAll('.brief-chip')]; cleanup(); return chips; };
@@ -245,5 +255,48 @@ describe('the round-2 row chip', () => {
     expect([toneOf(chips.at(-1)), chips.at(-1).getAttribute('title')]).toEqual(['tone-zone', '〈title〉']);
     expect(toneOf(shown({ muted: true }).at(-1))).toBeNull();
     expect(toneOf(shown({ view: { qualified: false, failed: 1 } }).find(chip => chip.textContent === '〈sec〉'))).toBeNull();
+  });
+});
+
+// Round 2 (rows): the day's event in the state chip, the TT chip without 「あと0」, the base chip, and a row that
+// keeps its chip count (no chip is added for an event).
+describe('round 2 rows', () => {
+  const day = over => view({ asOf: '2026-10-02', pivot: 100, close: 101, prevClose: 99, change: 2, volumeRatio: 1.6, ...over });
+  const chips = props => { const { container } = row(props); const list = [...container.querySelectorAll('.brief-chip')].map(node => [node.textContent, toneOf(node)]); cleanup(); return list; };
+
+  it('puts the day\'s event in the state chip, in its own tone, and never repeats a breakout\'s volume', () => {
+    expect(chips({ view: day() })).toEqual([['↗ 10/2上抜け 1.60×', 'tone-zone'], ['TT 8/8', 'tone-zone'], ['RS推計 88', null]]);
+    expect(chips({ view: day({ close: 100 }) })[0]).toEqual(['● 10/2ピボット到達', 'tone-zone']);
+    expect(chips({ view: day({ volumeRatio: 1.2 }) }).slice(0, 2)).toEqual([['● 上抜け・出来高不足', 'tone-wait'], ['TT 8/8', 'tone-zone']]);
+    expect(chips({ view: day({ change: -1, prevClose: 102 }) }).slice(0, 3)).toEqual([['▲ 下落日の大商い', 'tone-ext'], ['TT 8/8', 'tone-zone'], ['▲ 出来高 1.60×', 'tone-ext']]);
+    // Already above the pivot the day before: the position chip, as before.
+    expect(chips({ view: day({ close: 102, prevClose: 100.5 }) })[0]).toEqual(['● 買いゾーン +1.2%', 'tone-zone']);
+    // Muted (the market holds new buying) or not a buy candidate: no green; a heavy down day keeps its warning.
+    expect(chips({ view: day(), context: { market: { label: '50日線割れ（弱含み・独自判定）', cap: 0 } } })[0]).toEqual(['↗ 10/2上抜け 1.60×', 'tone-neutral']);
+    expect(chips({ view: day({ qualified: false, failed: 1, unknown: 0 }) })[0]).toEqual(['↗ 10/2上抜け 1.60×', 'tone-neutral']);
+    expect(chips({ view: day({ qualified: false, failed: 1, unknown: 0, change: -1, prevClose: 102 }) })[0]).toEqual(['▲ 下落日の大商い', 'tone-ext']);
+  });
+
+  it('says the day\'s event and the position in the row\'s label', () => {
+    const { container } = row({ view: day() });
+    expect(container.querySelector('.brief-row').getAttribute('aria-label')).toBe('1位 AAA Alpha、10/2上抜け 1.60×（買いゾーン +1.2%）、前日比 +2.0%、RS推計 88');
+  });
+
+  it('never reads あと0: unmet and unconfirmed conditions are said apart', () => {
+    const text = over => chips({ view: view({ qualified: false, ...over }) }).map(([t]) => t);
+    expect(text({ failed: 0, unknown: 2 })).toContain('TT未確認（2条件）');
+    expect(text({ failed: 1, unknown: 2 })).toContain('未達1・未確認2');
+    expect(text({ failed: 2, unknown: 0 })).toContain('あと2条件');
+    for (const [failed, unknown] of [[0, 1], [0, 3], [1, 1], [2, 0], [0, 0]]) expect(text({ failed, unknown }).join(' ')).not.toMatch(/あと0/);
+  });
+
+  it('adds one neutral chip for a questionable base, with its rule in the title and the label', () => {
+    const caution = { kind: 'base', text: '土台3週・−38%', title: 'Setup Engineの土台が深さ35%超（独自判定）' };
+    const { container } = row({ view: view({ baseCaution: caution }) });
+    const chip = [...container.querySelectorAll('.brief-chip')].find(node => node.textContent === '土台3週・−38%');
+    expect([toneOf(chip), chip.getAttribute('title')]).toEqual([null, caution.title]);
+    expect(container.querySelector('.brief-row').getAttribute('aria-label')).toContain('、土台3週・−38%（Setup Engineの土台が深さ35%超（独自判定））');
+    cleanup();
+    expect(chips({ view: view() }).map(([t]) => t)).toEqual(['● 買いゾーン +1.2%', 'TT 8/8', '出来高 1.60×', 'RS推計 88']);
   });
 });
