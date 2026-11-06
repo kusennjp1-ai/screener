@@ -90,14 +90,14 @@
 /* The 地合い tile's suffix from the market track: a line of its own under the cap. */
 .brief-summary .brief-tile-suffix { display: block; }
 
-/* The 候補 tab: the search, the sort and the 条件 menu share one line (a phone's labels are read, not shown: each
-   select then shows its value); a select is never wider than its usual value, so a long option (the base sort, a
-   condition with its counts) is cut in the closed menu only, and the chip of an active condition says it in full.
-   選定すべて's population sits under the filters. */
+/* The 候補 tab: the search, the sort and the 条件 menu share one line. The 条件 menu always reads 条件 (the condition
+   it chose is said by its chip, in full with its counts), so it is as narrow as that word; the sort shows its value
+   (a phone reads 並び順 in its first option), with room for the arrow. 選定すべて's population sits under the filters. */
 .brief-filters .brief-search { flex: 1 1 100px; }
-.brief-filters .brief-sort select { max-width: 9em; }
-.brief-filters .brief-cond select { max-width: 7.5em; }
+.brief-filters .brief-sort select { padding-right: 4px; }
+.brief-filters .brief-cond select { width: 4.6em; }
 .brief-population { margin-top: -4px; }
+@media (min-width: 1024px) { .brief-filters .brief-search { flex-basis: 160px; } }
 
 @media (max-width: 520px) {
   .brief-filters .brief-sort-name { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
@@ -105,6 +105,9 @@
   .brief-summary .brief-tile-sub { min-height: 44px; padding: 0 10px 8px; font-size: 12px; }
   .brief-stack > .brief-coverage-note { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
+
+/* Every chip line of a row keeps 6px at its end: a chip that would leave less wraps (the rows' chip fit, BriefParts). */
+.brief-row .brief-reasons { padding-right: 6px; }
 
 /* The desktop's left column after a tab switch (BriefApp): the new screen is in place at once, with no rise. */
 .brief-desk > .brief-left.is-switched .in { animation: none; }

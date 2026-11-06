@@ -20,7 +20,7 @@ const view = (over = {}) => ({
 const chipTexts = container => [...container.querySelectorAll('.brief-chip')].map(chip => chip.textContent);
 // prepared.market as modelMarket returns it: rows render with the screen's verdict (open unless a test says otherwise).
 const OPEN = { label: '上昇トレンド（独自判定）', cap: 0.5 };
-const row = (props = {}) => render(<ol><CandidateRow view={view()} rank={1} onOpen={() => {}} now={0} animate={false} context={{ market: OPEN }} {...props} /></ol>);
+const row = (props = {}) => render(<ol><CandidateRow view={view()} rank={1} onOpen={() => {}} now={0} animate={false} market={OPEN} {...props} /></ol>);
 const toneOf = node => [...node.classList].find(name => name.startsWith('tone-')) || null;
 
 describe('brief rows', () => {
@@ -201,8 +201,8 @@ describe('BriefParts seams', () => {
     expect(open.querySelectorAll('.tone-zone')).toHaveLength(4);
     cleanup();
     // Rows render only once the bundle (which carries the verdict) has loaded: no verdict is not still loading.
-    for (const context of [{ market: { label: '50日線割れ（弱含み・独自判定）', cap: 0 } }, { market: { label: '市場未確認', cap: 0, state: 'unknown' } }, { market: null }, null]) {
-      const { container } = row({ view: view({ rsLineHigh: true }), context });
+    for (const market of [{ label: '50日線割れ（弱含み・独自判定）', cap: 0 }, { label: '市場未確認', cap: 0, state: 'unknown' }, null, undefined]) {
+      const { container } = row({ view: view({ rsLineHigh: true }), market });
       expect(container.querySelectorAll('.tone-zone')).toHaveLength(0);
       expect(chipTexts(container)).toEqual(['● 買いゾーン +1.2%', 'TT 8/8', '出来高 1.60×', 'RS推計 88', 'RS線 新高値']);
       cleanup();
@@ -278,7 +278,7 @@ describe('round 2 rows', () => {
     // Already above the pivot the day before: the position chip, as before.
     expect(chips({ view: day({ close: 102, prevClose: 100.5 }) })[0]).toEqual(['● 買いゾーン +1.2%', 'tone-zone']);
     // Muted (the market holds new buying) or not a buy candidate: no green; a heavy down day keeps its warning.
-    expect(chips({ view: day(), context: { market: { label: '50日線割れ（弱含み・独自判定）', cap: 0 } } })[0]).toEqual(['↗ 10/2上抜け 1.60×', 'tone-neutral']);
+    expect(chips({ view: day(), market: { label: '50日線割れ（弱含み・独自判定）', cap: 0 } })[0]).toEqual(['↗ 10/2上抜け 1.60×', 'tone-neutral']);
     expect(chips({ view: day({ qualified: false, failed: 1, unknown: 0 }) })[0]).toEqual(['↗ 10/2上抜け 1.60×', 'tone-neutral']);
     expect(chips({ view: day({ qualified: false, failed: 1, unknown: 0, change: -1, prevClose: 102 }) })[0]).toEqual(['▲ 下落日の大商い 1.60×', 'tone-ext']);
   });
@@ -304,5 +304,49 @@ describe('round 2 rows', () => {
     expect(container.querySelector('.brief-row').getAttribute('aria-label')).toContain('、土台3週・−38%（Setup Engineの土台が深さ35%超（独自判定））');
     cleanup();
     expect(chips({ view: view() }).map(([t]) => t)).toEqual(['● 買いゾーン +1.2%', 'TT 8/8', '出来高 1.60×', 'RS推計 88']);
+  });
+});
+
+// Review fixes: a phone's Today puts a caution in the RS chip's place; the optional chips give way SEC first, then the
+// base; and every row of a list is fitted in one pass (a layout stub: each .brief-reasons line holds three 20px chips,
+// with no gap as jsdom computes none).
+describe('the rows\' cautions and the chip fit', () => {
+  afterEach(() => { Object.assign(seam, { chip: undefined, rows: [] }); vi.restoreAllMocks(); });
+  const base = { kind: 'base', text: '土台6週・−40%', short: '土台−40%', title: 'Setup Engineの土台が深さ35%超（独自判定）' };
+  const chipsOf = container => [...container.querySelectorAll('.brief-reasons > .brief-chip')].filter(node => node.style.display !== 'none').map(node => node.textContent);
+
+  it('on a phone\'s Today (compact), a questionable base or a falling EPS takes the RS chip\'s place; RS stays in the label', async () => {
+    const { container } = row({ view: view({ baseCaution: base }), compact: true, hideTemplate: true });
+    expect(chipsOf(container)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', '土台−40%']);
+    expect(container.querySelector('.brief-chip[title^="土台6週"]').getAttribute('title')).toBe('土台6週・−40%：Setup Engineの土台が深さ35%超（独自判定）');
+    expect(container.querySelector('.brief-row').getAttribute('aria-label')).toContain('RS推計 88');
+    cleanup();
+    seam.chip = { text: 'EPS −35%（26-06）・売上 未確認', tone: '', title: '〈title〉', notable: true };
+    const eps = row({ view: view({ row: { symbol: 'AAA' }, epsYoy: -35.4 }), compact: true, hideTemplate: true }).container;
+    expect(chipsOf(eps)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', 'EPS −35%']);
+    cleanup();
+    // A rising EPS is no caution: RS keeps its place, the SEC chip stays optional; off Today, nothing moves.
+    seam.chip = { text: 'EPS +40%・売上 +30%（26-06）', tone: 'zone', title: '〈title〉', notable: true };
+    expect(chipsOf(row({ view: view({ row: { symbol: 'AAA' }, epsYoy: 40 }), compact: true, hideTemplate: true }).container)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', 'RS推計 88', 'EPS +40%・売上 +30%（26-06）']);
+    cleanup();
+    seam.chip = null;
+    expect(chipsOf(row({ view: view({ baseCaution: base }), hideTemplate: true }).container)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', 'RS推計 88', '土台6週・−40%']);
+  });
+
+  it('gives way SEC first, then the base, and fits every row of a list together', async () => {
+    let reads = 0;
+    const lines = box => Math.ceil([...box.children].filter(node => node.style.display !== 'none').length / 3);
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(300);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(20);
+    vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockImplementation(function scrollHeight() { reads += 1; return lines(this) * 20; });
+    seam.chip = { text: '〈sec〉', tone: 'zone', title: '〈title〉', notable: true };
+    const views = ['AAA', 'BBB', 'CCC'].map(symbol => view({ symbol, row: { symbol }, rsLineHigh: true, baseCaution: base }));
+    const { container } = render(<ol>{views.map((v, i) => <CandidateRow key={v.symbol} view={v} rank={i + 1} onOpen={() => {}} now={0} animate={false} market={OPEN} />)}</ol>);
+    await Promise.resolve();
+    // Seven chips are three lines: the SEC chip gives way (drop order 1), the base (2) stays on the second line.
+    for (const li of container.querySelectorAll('li')) expect(chipsOf(li)).toEqual(['● 買いゾーン +1.2%', 'TT 8/8', '出来高 1.60×', 'RS推計 88', 'RS線 新高値', '土台6週・−40%']);
+    // One read per row per pass (two passes), not a layout per row in turn.
+    expect(reads).toBe(6);
+    expect([...container.querySelectorAll('[data-optional]')].map(node => node.dataset.optional)).toEqual(['1', '2', '1', '2', '1', '2']);
   });
 });
