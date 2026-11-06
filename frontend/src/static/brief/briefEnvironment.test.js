@@ -61,7 +61,7 @@ describe('market tile suffix', () => {
   const DATE = '2026-10-02';
   const OPEN = { label: '上昇トレンド（独自判定）', cap: 0.5, regime: 'confirmed_uptrend', ftdUpgraded: false };
   const ftd = (state, asOf = DATE) => ({ available: true, method: 'm', asOf, state });
-  const ready = (nas, extra = {}) => ({ data: { as_of_date: DATE, indices: [{ symbol: '^GSPC', followThrough: ftd('confirmed') }, { symbol: '^IXIC', followThrough: nas }], ...extra } });
+  const ready = (nas, extra = {}, gspc = ftd('confirmed')) => ({ data: { as_of_date: DATE, indices: [{ symbol: '^GSPC', followThrough: gspc }, { symbol: '^IXIC', followThrough: nas }], ...extra } });
   const manifest = { as_of_date: DATE, markets: { US: { as_of_date: DATE } } };
 
   it('says FTD確認済み while the guide is 0% under an FTD-upgraded uptrend, before anything else', async () => {
@@ -75,11 +75,31 @@ describe('market tile suffix', () => {
     expect(marketTileSuffix({ market: { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'correction', ftdUpgraded: false }, trends: ready(ftd('correction')), manifest })).toBeNull();
   });
 
-  it('says NAS調整中 while the guide is open and the Nasdaq is in correction, on a rally attempt or after a failed FTD, judged today', async () => {
+  it('never asserts an FTD that the app\'s own ^GSPC record of the same day contradicts', async () => {
+    const { gspcFollowThrough, gspcFtdDisagrees, marketTileSuffix, MARKET_TILE_SUFFIX } = await import('./briefEnvironment');
+    // The ^GSPC record of the analysis date, or null for an older one, an unavailable one, none, or no ready series.
+    expect(gspcFollowThrough(ready(ftd('confirmed'), {}, ftd('rally_attempt')))).toMatchObject({ state: 'rally_attempt', asOf: DATE });
+    for (const gspc of [ftd('confirmed', '2026-10-01'), { available: false, method: 'm', reason: 'x' }, null]) expect(gspcFollowThrough(ready(ftd('confirmed'), {}, gspc))).toBeNull();
+    expect(gspcFollowThrough(null)).toBeNull();
+    const upgraded = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
+    for (const state of ['rally_attempt', 'correction', 'attempt_expired', 'ftd_failed', 'no_correction']) {
+      expect(gspcFtdDisagrees(ready(ftd('confirmed'), {}, ftd(state)))).toBe(true);
+      expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('confirmed'), {}, ftd(state)), manifest })).toBeNull();
+    }
+    expect(gspcFtdDisagrees(ready(ftd('confirmed')))).toBe(false);
+    // An older ^GSPC record, an unavailable one or no series: nothing to compare, so the judge side's FTD stands.
+    for (const gspc of [ftd('rally_attempt', '2026-10-01'), { available: false, method: 'm', reason: 'x' }, null]) {
+      expect(gspcFtdDisagrees(ready(ftd('confirmed'), {}, gspc))).toBeNull();
+      expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('confirmed'), {}, gspc), manifest })).toBe(MARKET_TILE_SUFFIX.ftd);
+    }
+    expect(gspcFtdDisagrees({ loading: true })).toBeNull();
+  });
+
+  it('says NAS調整中 while the guide is open and the Nasdaq is in correction, on a rally attempt (or one that expired) or after a failed FTD, judged today', async () => {
     const { marketTileSuffix } = await import('./briefEnvironment');
-    for (const state of ['correction', 'rally_attempt', 'ftd_failed']) expect(marketTileSuffix({ market: OPEN, trends: ready(ftd(state)), manifest })).toBe('NAS調整中');
+    for (const state of ['correction', 'rally_attempt', 'attempt_expired', 'ftd_failed']) expect(marketTileSuffix({ market: OPEN, trends: ready(ftd(state)), manifest })).toBe('NAS調整中');
     expect(marketTileSuffix({ market: { ...OPEN, label: '上昇に圧力（独自判定）', cap: 0.25, regime: 'uptrend_under_pressure' }, trends: ready(ftd('correction')), manifest })).toBe('NAS調整中');
-    for (const state of ['confirmed', 'no_correction', 'attempt_expired']) expect(marketTileSuffix({ market: OPEN, trends: ready(ftd(state)), manifest })).toBeNull();
+    for (const state of ['confirmed', 'no_correction']) expect(marketTileSuffix({ market: OPEN, trends: ready(ftd(state)), manifest })).toBeNull();
     // An older Nasdaq state (a series one session behind) is never shown as today's; an unknown one says nothing.
     expect(marketTileSuffix({ market: OPEN, trends: ready(ftd('correction', '2026-10-01')), manifest })).toBeNull();
     expect(marketTileSuffix({ market: OPEN, trends: ready({ available: false, reason: 'x' }), manifest })).toBeNull();
@@ -102,8 +122,9 @@ describe('market tile suffix', () => {
 
   it('names the Nasdaq correction by one condition, shared with the market tab\'s note', async () => {
     const { nasdaqInCorrection, NASDAQ_CAUTION_STATES } = await import('./briefEnvironment');
-    expect(NASDAQ_CAUTION_STATES).toEqual(['correction', 'rally_attempt', 'ftd_failed']);
-    expect(['correction', 'rally_attempt', 'ftd_failed', 'confirmed', 'no_correction', 'attempt_expired'].map(state => nasdaqInCorrection({ available: true, state }))).toEqual([true, true, true, false, false, false]);
+    // Every state in which no FTD stands on the Nasdaq: an expired rally attempt (15 sessions, no FTD) is still a correction.
+    expect(NASDAQ_CAUTION_STATES).toEqual(['correction', 'rally_attempt', 'attempt_expired', 'ftd_failed']);
+    expect(['correction', 'rally_attempt', 'ftd_failed', 'confirmed', 'no_correction', 'attempt_expired'].map(state => nasdaqInCorrection({ available: true, state }))).toEqual([true, true, true, false, false, true]);
     expect([nasdaqInCorrection({ available: false, state: 'correction' }), nasdaqInCorrection(undefined), nasdaqInCorrection(null)]).toEqual([false, false, false]);
   });
 });

@@ -3,10 +3,12 @@
 // guide's disclosure (that is said once, in exposureRuleText).
 import { describe, expect, it } from 'vitest';
 import reference from './market-regime-reference-v1.json' with { type: 'json' };
-import { distributionDetail, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, signalTagText } from './marketTabStudy.js';
+import { distributionDetail, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, regimeCause, signalTagText } from './marketTabStudy.js';
+import { CONTRACT_DATE, marketContext, marketContextUnknown } from '../../test/fixtures/publishedContracts.js';
 import { ddGradeState, stateTag, TAGS } from './marketRegimeReference.js';
 import { exposureRuleText } from '../portfolioPlan.js';
 import { NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
+import { REFERENCE_CHECKS, verdictBasis } from '../brief/marketTabModel.js';
 import { attempt, confirmed, days, failed, trends } from '../../test/fixtures/marketTrends';
 
 const DATE = '2026-10-02', DD = reference.methods.distribution, WINDOW = reference.methods.followThroughWindowSessions;
@@ -34,6 +36,8 @@ describe('the warning summary\'s study inputs', () => {
   it('names the checks whose tag is 〔参考〕 so the card counts them apart (MK9)', () => {
     const study = marketTabStudy({ trends: make(), reference, date: DATE });
     expect(study.referenceKeys).toEqual(['split', 'lows', 'template', 'stage', 'leaders', 'breakout']);
+    // Today never loads the reference: its list (REFERENCE_CHECKS) is this one, so a rebuilt reference cannot drift apart.
+    expect(study.referenceKeys).toEqual([...REFERENCE_CHECKS]);
     expect(marketTabStudy({ trends: make(), reference: null, date: DATE }).referenceKeys).toEqual([]);
   });
 
@@ -50,6 +54,10 @@ describe('the warning summary\'s study inputs', () => {
     for (const state of ['correction', 'rally_attempt', 'ftd_failed', 'confirmed', 'no_correction', 'attempt_expired'])
       expect(Boolean(nasdaqNote({ ...attempt(DATE), state, ...(state === 'ftd_failed' ? { failedDate: DATE, ftd: confirmed(DATE).ftd } : {}) }, DATE))).toBe(NASDAQ_CAUTION_STATES.includes(state));
     expect(nasdaqNote(failed(DATE), DATE).short).toBe('NasdaqはFTD失敗（判定はSPYのみ）');
+    // An expired rally attempt is still a correction; its words already say there is no FTD (no 「FTD未確認」).
+    const expired = nasdaqNote({ ...attempt(DATE), state: 'attempt_expired' }, DATE);
+    expect(expired).toEqual({ long: '判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は調整中・15日以内のFTDなし（独自判定）。', short: 'Nasdaqは調整中（判定はSPYのみ）' });
+    expect(nasdaqNote(failed(DATE), DATE).long).not.toContain('FTD未確認');
   });
 });
 
@@ -61,7 +69,9 @@ describe('the 過去の傾向 block (MK5)', () => {
     expect(valued.length).toBeGreaterThan(0);
     for (const item of valued) {
       const confirmedLine = [TAGS.both, TAGS['^GSPC'], TAGS['^IXIC']].includes(item.tag);
-      const expected = !confirmedLine || item.pDd5 === item.comparatorPDd5 ? null : item.pDd5 > item.comparatorPDd5 ? 'higher' : 'lower';
+      // On the whole percentages the line prints.
+      const [shown, against] = [Math.round(item.pDd5), Math.round(item.comparatorPDd5)];
+      const expected = !confirmedLine || shown === against ? null : shown > against ? 'higher' : 'lower';
       expect(item.direction).toBe(expected);
       expect(item.parts.comparator).toBe(`（${item.comparatorLabel} ${Math.round(item.comparatorPDd5)}%${expected ? `より${expected === 'higher' ? '多い' : '少ない'}` : ''}）`);
     }
@@ -70,13 +80,20 @@ describe('the 過去の傾向 block (MK5)', () => {
     Object.assign(ref.indicators['^IXIC.dd.graded'].states['3-4'], { pDd5: 26, comparatorPDd5: 26 });
     const equal = context(make(), ref).indices[1].items.find(item => item.indicator === '^IXIC.dd.graded');
     expect([equal.tag, equal.direction, equal.parts.comparator]).toEqual([TAGS['^IXIC'], null, '（全期間 26%）']);
+    // Exact shares that differ but print alike (16.4% against 15.6%, both 16%) say no direction either.
+    Object.assign(ref.indicators['^IXIC.dd.graded'].states['3-4'], { pDd5: 16.4, comparatorPDd5: 15.6 });
+    const rounded = context(make(), ref).indices[1].items.find(item => item.indicator === '^IXIC.dd.graded');
+    expect([rounded.direction, rounded.text]).toEqual([null, '分配日3〜4日（10/2時点）：16%（全期間 16%）〔Nasdaqのみ〕']);
+    Object.assign(ref.indicators['^IXIC.dd.graded'].states['3-4'], { pDd5: 16.6, comparatorPDd5: 15.4 });
+    expect(context(make(), ref).indices[1].items.find(item => item.indicator === '^IXIC.dd.graded').parts.comparator).toBe('（全期間 15%より多い）');
   });
 
   it('sums the confirmed lines in one summary line, wrapping only between its parts, or says there is no clear difference', () => {
     const ctx = context(make());
-    const directions = ctx.indices.flatMap(block => block.items.map(item => item.direction)).filter(Boolean);
-    const higher = directions.filter(value => value === 'higher').length;
-    expect(ctx.summary).toBe(`過去の傾向：下げが多かった状態 ${higher}・少なかった状態 ${directions.length - higher}（1990〜2026年）`);
+    // A state both indices are in, confirmed the same way on each, is one state (the indices move together), never two.
+    const states = new Set(ctx.indices.flatMap(block => block.items.filter(item => item.direction).map(item => `${item.indicator.split('.').slice(1).join('.')}|${item.state}|${item.direction}`)));
+    const higher = [...states].filter(key => key.endsWith('|higher')).length;
+    expect(ctx.summary).toBe(`過去の傾向：下げが多かった状態 ${higher}・少なかった状態 ${states.size - higher}（1990〜2026年）`);
     expect(ctx.summary.split('・')).toHaveLength(2);
     // No confirmed line: no count, never 「0・0」 read as a finding.
     const ref = structuredClone(reference);
@@ -84,6 +101,37 @@ describe('the 過去の傾向 block (MK5)', () => {
     expect(context(make(), ref).summary).toBe('過去の傾向：差がはっきりした状態なし（1990〜2026年）');
     // Unavailable: the old summary, with 予測ではありません.
     expect(context(make(), null).summary).toBe('過去の傾向（予測ではありません）');
+  });
+
+  it('keeps the neutral summary when no line could be judged (a legacy publication without the long history)', () => {
+    // No long history, no Nasdaq position, no method ids and no follow-through record: every line is a reason.
+    const legacy = trends({ history: false });
+    legacy.data.indices = legacy.data.indices.map(({ method, followThrough, state, ...item }) => item);
+    const ctx = context(legacy);
+    expect(ctx.indices.flatMap(block => block.items).every(item => item.reason && item.state === null)).toBe(true);
+    expect(ctx.indices.flatMap(block => block.items)).toHaveLength(8);
+    expect(ctx.summary).toBe('過去の傾向（1990〜2026年・予測ではありません）');
+    expect(ctx.summary).not.toContain('差がはっきりした状態なし');
+  });
+
+  it('counts a state confirmed on both indices once, and the two indices\' different states apart', () => {
+    // Both indices above both moving averages on the same day: the S&P's and the Nasdaq's lines say the same thing.
+    const value = make();
+    const closes = days(DATE, 300).map((date, i) => ({ date, close: 5000 + i * 5 }));
+    value.data.long_history = { ...value.data.long_history, sp500: closes };
+    value.data.indices[1] = { ...value.data.indices[1], state: { date: DATE, close: 18000, vs50: 2, vs200: 8, fromHigh: -1, fullYear: true } };
+    const ctx = context(value);
+    const quadrants = ctx.indices.map(block => block.items.find(item => item.indicator.endsWith('.ma.quadrant')));
+    expect(quadrants.map(item => [item.state, item.direction])).toEqual([['above_both', 'lower'], ['above_both', 'lower']]);
+    const highs = ctx.indices.map(block => block.items.find(item => item.indicator.endsWith('.high.near')));
+    expect(highs.map(item => [item.state, item.direction])).toEqual([['near', 'lower'], ['near', 'lower']]);
+    // Two states, each on both indices, and the Nasdaq's own 3–4 distribution days: 3 states, never 5 votes.
+    expect(ctx.indices.flatMap(block => block.items.filter(item => item.direction))).toHaveLength(5);
+    expect(ctx.summary).toBe('過去の傾向：下げが多かった状態 0・少なかった状態 3（1990〜2026年）');
+    const lower = Number(/少なかった状態 (\d+)/.exec(ctx.summary)[1]), higher = Number(/多かった状態 (\d+)/.exec(ctx.summary)[1]);
+    const all = ctx.indices.flatMap(block => block.items.filter(item => item.direction));
+    expect(lower + higher).toBeLessThan(all.length);
+    expect(lower).toBe(new Set(all.filter(item => item.direction === 'lower').map(item => `${item.indicator.split('.').slice(1).join('.')}|${item.state}`)).size);
   });
 });
 
@@ -99,6 +147,21 @@ describe('the opened 分配日 row (MK7)', () => {
 
 // The judge side's block (plan §2.3, the data track's export), read raw: only in shape and for the analysis date.
 describe('published market context', () => {
+  it('reads the frozen contract the data track publishes against, nulls kept, and says 未収録 for its unknown count', () => {
+    const entry = value => ({ as_of_date: CONTRACT_DATE, market_context: value });
+    expect(publishedMarketContext(entry(marketContext), { date: CONTRACT_DATE })).toBe(marketContext);
+    const unknown = publishedMarketContext(entry(marketContextUnknown), { date: CONTRACT_DATE });
+    expect(unknown).toBe(marketContextUnknown);
+    expect([unknown.distribution_days, unknown.ftd_date, unknown.ftd_days_since, unknown.exposure_pct]).toEqual([null, null, null, null]);
+    const up = { label: '上昇トレンド（独自判定）', cap: 0.5, regime: marketContext.regime, ftdUpgraded: false }, basis = verdictBasis(up, CONTRACT_DATE);
+    expect(regimeCause(up, unknown, basis, CONTRACT_DATE)).toBe('局面判定の分配日（SPY）は未収録');
+    expect(regimeCause(up, publishedMarketContext(entry(marketContext), { date: CONTRACT_DATE }), basis, CONTRACT_DATE)).toBe(`局面判定の分配日：SPY ${marketContext.distribution_days}日（ストーリング日を含む数え方）`);
+    // Its FTD date only through the block; the unknown block leaves the date out, never 0 and never a guess.
+    const upgraded = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: marketContext.regime, ftdUpgraded: true }, below = verdictBasis(upgraded, CONTRACT_DATE);
+    expect(regimeCause(upgraded, marketContext, below, CONTRACT_DATE)).toBe('局面判定はSPYのFTD（9/18）による上昇トレンド。この目安はSPYが50日線の下のため0%（独自判定）');
+    expect(regimeCause(upgraded, unknown, below, CONTRACT_DATE)).toBe('局面判定はSPYのFTDによる上昇トレンド。この目安はSPYが50日線の下のため0%（独自判定）');
+  });
+
   const DATE = '2026-10-02';
   const block = { as_of_date: DATE, regime: 'uptrend_under_pressure', distribution_days: 4, ftd_date: null, ftd_days_since: null, exposure_pct: 55, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' };
   it('returns a block of the analysis date, with its nulls kept null', () => {
