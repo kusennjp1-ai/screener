@@ -110,9 +110,10 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   }, [wide, deferKey]);
   const rendered = defer ? Math.min(limit, FIRST_ROWS) : limit;
   const choose = key => { update({ filter: key }); restart(); };
-  const countText = key => state !== 'ready' ? '—' : LIST_FILTERS[key].unknown ? `該当${counts[key]}・未確認${tally.unknown[key]}` : String(counts[key]);
-  // A filter or sort that reads a field this publication does not carry: 未収録, never 該当0 (it cannot be chosen).
+  // A filter or sort that reads a field this publication does not carry: 未収録, never 該当0 (it cannot be chosen,
+  // and a chip left on from an earlier publication says so too).
   const unpublished = key => state === 'ready' && tally.unpublished[key] === true;
+  const countText = key => state !== 'ready' ? '—' : unpublished(key) ? '未収録' : LIST_FILTERS[key].unknown ? `該当${counts[key]}・未確認${tally.unknown[key]}` : String(counts[key]);
   const missing = state === 'ready' && hidden && LIST_FILTERS[hidden].unknown ? tally.unknown[hidden] : 0;
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け` : '日付未確認'}</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>

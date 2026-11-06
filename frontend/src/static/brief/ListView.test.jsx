@@ -187,6 +187,9 @@ describe('the 条件 menu and its empty states, honestly', () => {
     expect(options(container, '条件で絞り込む')).toContainEqual(['EPS前年比≥25%（この公開は未収録）', true]);
     expect(options(container, '条件で絞り込む').map(([text]) => text).join(' ')).not.toMatch(/該当0/);
     expect(options(container, '並び順').map(([text]) => text)).not.toContain('EPS前年比');
+    cleanup();
+    // A chip left on from an earlier publication that carried the field: 未収録, never 該当0.
+    expect(show('eps', [audited('BRK1', 101)]).container.querySelector('.brief-filterchip')).toHaveTextContent('EPS前年比≥25%（直近・SEC）未収録');
   });
 
   it('says why a filter with no hit judged nothing: the stocks it could not judge, never 「no such stock」 alone', () => {
