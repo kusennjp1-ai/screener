@@ -1,7 +1,7 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import StockView from './StockView';
-import { loadPriceChart } from './PriceChart';
+import { loadPriceChart } from './priceChartLoader';
 
 // The renderer is a lazy chunk in the app (fetched on idle); the tests draw synchronously, so it is loaded first.
 beforeAll(async () => { await loadPriceChart(); });
