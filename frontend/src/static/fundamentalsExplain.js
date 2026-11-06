@@ -154,16 +154,16 @@ export function quarterReason(row, metric) {
 }
 const shortReason = (row, metric) => SHORT_REASON[metric === 'eps' ? row.epsYoYReason : metric === 'sales' ? row.salesYoYReason : row.marginReason] || '—';
 
-/**
- * The three fundamentals tiles from SEC quarterly rows: the newest quarter that has a
- * value, its period, and why a newer quarter (or every quarter) has none.
- */
 /** The newest of the SEC quarterly rows whose `key` is known, with its index: the quarter a tile or a chip reports. */
 export function latestKnownQuarter(rows, key) {
   for (let index = (rows || []).length - 1; index >= 0; index--) if (finite(rows[index]?.[key])) return { index, row: rows[index], value: rows[index][key], end: rows[index].end };
   return null;
 }
 
+/**
+ * The three fundamentals tiles from SEC quarterly rows: the newest quarter that has a
+ * value, its period, and why a newer quarter (or every quarter) has none.
+ */
 export function fundamentalTiles(report) {
   const rows = report?.rows || [];
   const newest = rows.at(-1);
