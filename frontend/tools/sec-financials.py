@@ -123,6 +123,12 @@ def derive_fourth_quarters(quarters, annual):
 def now_iso():
     return datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
+# Round-2 record contract (plan section 2.3), implemented by the data track; older records lack both fields.
+# - invalid_detail {class, message, requested_cik, received_cik} on a record whose reason is invalid_payload:
+#   the exception class, a message of at most 200 characters with no headers or secrets, and both CIKs.
+# - derivation_gaps [{fiscal_year, metric, reason}] with reason tag_mismatch, broken_chain or no_annual: each
+#   fiscal year whose fourth quarter could not be derived (see DERIVED_Q4). EPS is never derived.
+# Examples: frontend/src/test/fixtures/publishedContracts.js.
 def unavailable(symbol, as_of, reason, error, retrieved_at, forms=None):
     assert reason in UNAVAILABLE_REASONS
     result = {"schema_version": SCHEMA_VERSION, "symbol": symbol, "as_of_date": as_of, "status": "unavailable", "reason": reason, "error": error, "retrieved_at": retrieved_at}

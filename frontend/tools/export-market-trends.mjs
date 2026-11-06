@@ -43,6 +43,9 @@ export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}
         !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.000)?Z$/.test(row.close_at)||Date.parse(row.close_at)>=Date.parse(schedule.valid_until)||(i>0&&row.date<=schedule.sessions[i-1].date)))throw Error('Invalid independent market refresh calendar');
     refreshSchedule=schedule;
   }
+  // Round-2 contract (plan §2.3), written by the market track: each index may carry `closes`, [{date, close}],
+  // at most 300 points taken from the same validated bars as its distribution count. Older assets lack it, and
+  // a reader treats that as 未収録 (src/test/fixtures/publishedContracts.js has the shape).
   const indices=['^GSPC','^IXIC'].map(symbol=>{
     const input=sourceMatches?source.indices?.find(item=>item.symbol===symbol):null;
     const lastDate=input?.bars?.at(-1)?.date;
