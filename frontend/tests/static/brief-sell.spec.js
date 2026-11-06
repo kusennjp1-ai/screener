@@ -77,13 +77,26 @@ for (const [width, options] of [[375, phone(375)], [1440, { viewport: { width: 1
     expect(errors).toEqual([]);
   });
 
-  test('says 判定していない項目があります (n件) while a check is not judged, never 「いま出ているサインはありません」', async ({ page }) => {
+  test('says 判定していない項目 n件 while a check is not judged, never 「いま出ているサインはありません」, and names the bar a check is under', async ({ page }) => {
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
     const sell = page.getByTestId('brief-sell');
-    await expect(sell.locator('.brief-note').first()).toContainText(/判定していない項目があります（\d+件）。$/);
+    const note = sell.locator('.brief-note').first();
+    await expect(note).toContainText(/判定していない項目 \d+件。$/);
     await expect(sell).not.toContainText('いま出ているサインはありません');
-    // The real reason, in short, where the strength checks are not judged.
-    await expect(sell.locator('.brief-note').first()).toContainText('上昇の加速は判定せず（');
+    // The real reason, in short, with the bar it is under (ZZNV sits at its pivot in the buy zone).
+    await expect(note).toContainText('上昇の加速は判定せず（ピボット比 ±0.0%・+20%未満）。');
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('round 2: the sell card\'s height at 375px', () => {
+  test.use({ ...phone(375), contextOptions: { reducedMotion: 'reduce' } });
+  // §3: the sell card grows 16px or less at 375 (step 0: 228.5 on ZZNV), with rule 9's 12px of headroom.
+  test('stays within its allowance with the bar named in its reason', async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
+    const sell = page.getByTestId('brief-sell');
+    await expect(sell.locator('.brief-note').first()).toContainText('・+20%未満）。');
+    expect(await sell.evaluate(node => node.getBoundingClientRect().height)).toBeLessThanOrEqual(228.5 + 16 - 12);
     expect(errors).toEqual([]);
   });
 });
@@ -91,14 +104,20 @@ for (const [width, options] of [[375, phone(375)], [1440, { viewport: { width: 1
 test.describe('round 2: a failed breakout on a watched stock', () => {
   test.use(phone(375));
   // The cross-surface invariant: the watch tile counts it (only the count is asserted: the tile is rows').
-  test('makes the watch tile read 1件 and the sell card name it among the broken setups', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZAR'] }, mutate: failedBreakout('ZZAR') });
-    const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
-    await expect(tile.locator('b')).toHaveText('1件');
+  test('makes the watch tile read 1件 (0件 without it) and the sell card show it as the fired check', async ({ page, context }) => {
+    const watch = { 'research-watch': ['ZZAR'] };
+    const tile = on => on.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ }).locator('b');
+    // The same watch list on the plain fixture, in a page of its own (each page routes its own publication).
+    const plain = await context.newPage(), quiet = await openBrief(plain, '#/brief', { storage: watch });
+    await expect(tile(plain)).toHaveText('0件');
+    expect(quiet.errors).toEqual([]);
+    await plain.close();
+    const { errors } = await openBrief(page, '#/brief', { storage: watch, mutate: failedBreakout('ZZAR') });
+    await expect(tile(page)).toHaveText('1件');
     await page.goto('/#/brief/stock/ZZAR');
     const sell = page.getByTestId('brief-sell');
-    await expect(sell.locator('.is-sell-hit').first()).toBeVisible();
-    await expect(sell).toContainText('出来高を伴う上抜け後のピボット割れ（1.40×以上・10営業日以内・ブレイク失敗）');
+    // The fired row itself is the failed breakout's (its label is this track's copy).
+    await expect(sell.locator('li').filter({ has: page.locator('.is-sell-hit') }).filter({ hasText: '出来高を伴う上抜け後のピボット割れ（1.40×以上・10営業日以内・ブレイク失敗）' })).toBeVisible();
     expect(errors).toEqual([]);
   });
 });
