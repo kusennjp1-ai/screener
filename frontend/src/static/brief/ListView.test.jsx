@@ -5,6 +5,7 @@ import { withAuditFixture } from '../testAuditFixture';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ListView, { listShown, watchOrder } from './ListView';
 import { candidateView, LIST_FILTERS } from './briefCandidate';
+import { EARNINGS_CHIP_NOTE } from '../fundamentalsExplain.js';
 
 afterEach(cleanup);
 
@@ -35,6 +36,16 @@ describe('candidate list segment', () => {
     const { getByRole } = list();
     const counts = within(getByRole('group', { name: '絞り込み' })).getAllByRole('button').map(button => button.lastChild.textContent);
     expect(counts).toEqual(['1', '1', '3', '1']);
+  });
+});
+
+// I4 (data's request, plan rule 13): the rows' green earnings chip is a 独自設定 threshold, so the list states it with
+// its notes (the producer's own sentence), and the watch tab, which carries no list notes, does not.
+describe('the list notes', () => {
+  it('state the earnings chip\'s rule beside the list\'s other notes', () => {
+    expect([...list().container.querySelectorAll('.brief-note')].map(note => note.textContent)).toContain(EARNINGS_CHIP_NOTE);
+    cleanup();
+    expect([...list('zone', { kind: 'watch' }).container.querySelectorAll('.brief-note')].map(note => note.textContent)).not.toContain(EARNINGS_CHIP_NOTE);
   });
 });
 

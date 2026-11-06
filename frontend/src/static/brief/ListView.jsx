@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import useMediaQuery from '../useMediaQuery';
 import { BASE_CAUTION_NOTE, briefOrder, filterCounts, filterLabel, LIST_FILTERS, LIST_SORTS, matchesSearch, memoCandidateView } from './briefCandidate';
 import { CandidateRow } from './BriefParts';
+import { EARNINGS_CHIP_NOTE } from '../fundamentalsExplain.js';
 import { ScreenNotes } from './briefPrimitives';
 import { barDay, PHONE_QUERY } from './briefNav';
 import { shortDate } from './briefShared';
@@ -146,8 +147,8 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
           // A filter that could not judge some stocks says so: no hit is not the same as no stock.
           : missing > 0 && !query ? `該当なし。ほか${missing}銘柄は${LIST_FILTERS[hidden].why}のため判定していません。` : 'この条件の選定銘柄はありません。'}</p>}
       {ordered.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + pageSize)}>さらに表示（残り {ordered.length - limit}件）</button>}
-      {kind !== 'watch' && wide && [LIST_NOTE, BASE_NOTE, ttNote].map(note => note && <p key={note} className="brief-note">{note}</p>)}
+      {kind !== 'watch' && wide && [LIST_NOTE, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote].map(note => note && <p key={note} className="brief-note">{note}</p>)}
     </section>
-    {kind !== 'watch' && <ScreenNotes id="list" wide={wide} notes={[LIST_NOTE, BASE_NOTE, ttNote]} />}
+    {kind !== 'watch' && <ScreenNotes id="list" wide={wide} notes={[LIST_NOTE, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]} />}
   </>;
 }
