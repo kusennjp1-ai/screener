@@ -141,3 +141,27 @@ def test_a_sideways_stretch_far_from_the_52_week_high_is_not_a_base():
     highs = chrono * 1.005
     highs.iloc[-100] = float(chrono.iloc[-1]) * 1.4
     assert _stage_of(chrono, highs=highs)["stage"] == 3
+
+
+def test_a_base_with_fewer_than_252_bars_reads_its_high_over_the_bars_there_are():
+    # The same 230-session vector as briefChartModel.test.js ('reads the 52-week high over the
+    # bars there are'): 195 sessions at +0.35%/day, then a base contracting 15/8/4%. The scanner
+    # takes the High of the last 252 sessions or of as many as exist (tail(252).max()), and the
+    # stock view takes the same window, so both read stage 2 (base) here.
+    closes, price = [], 50.0
+    for _ in range(195):
+        price *= 1.0035
+        closes.append(price)
+    top = price
+    for depth in (15, 8, 4):
+        for j in range(11):
+            closes.append(top * (1 - depth / 100 * np.sin(np.pi * j / 11)))
+    while len(closes) < 230:
+        closes.append(top * 0.99)
+    closes[-1] = top * 0.99
+    chrono = pd.Series(closes)
+    assert len(chrono) == 230
+    result = _stage_of(chrono)
+    assert result["ma_200_trend"] == "rising"
+    assert result["price_trend"] == "sideways"
+    assert result["stage"] == 2
