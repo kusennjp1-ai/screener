@@ -9,7 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 import re
-from typing import Any, Literal, Mapping, Sequence, TypedDict, cast
+from typing import Any, Literal, Mapping, NotRequired, Sequence, TypedDict, cast
 
 
 SETUP_ENGINE_DEFAULT_SCHEMA_VERSION = "v1"
@@ -86,6 +86,8 @@ class SetupEngineExplain(TypedDict):
     failed_checks: list[str]
     key_levels: dict[str, float | None]
     invalidation_flags: list[InvalidationFlagPayload]
+    # Detector-level checks ("<detector>:<check>"); they never decide setup_ready.
+    diagnostics: NotRequired[list[str]]
 
 
 class SetupEnginePayload(TypedDict):
@@ -609,6 +611,14 @@ SETUP_ENGINE_FIELD_SPECS: tuple[SetupEngineFieldSpec, ...] = (
         unit=None,
         source_module="backend/app/scanners/setup_engine_scanner.py",
         description="Reasons this setup should not be acted on.",
+    ),
+    SetupEngineFieldSpec(
+        name="explain.diagnostics",
+        type_name="list[str]",
+        nullable=True,
+        unit=None,
+        source_module="backend/app/analysis/patterns/explain_builder.py",
+        description='Detector-level checks, each "<detector>:<check>", that never decide setup_ready.',
     ),
     SetupEngineFieldSpec(
         name="explain.score_trace",
