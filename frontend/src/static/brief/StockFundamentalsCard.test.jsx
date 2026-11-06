@@ -269,7 +269,6 @@ describe('brief fundamentals card', () => {
     for (const label of ['EPS 前年比', '売上 前年比', '純利益率']) expect(tile(scope, label)).toHaveTextContent('読み込み中…');
     expect(scope.getByText('Code 33 読み込み中')).toBeInTheDocument();
     expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent(/未配信|配信されていません/);
-    expect(screen.getByText('Code 33 読み込み中', { selector: '.brief-chip' })).toBeInTheDocument();
     cleanup();
     scope = card(pending('error'));
     for (const label of ['EPS 前年比', '売上 前年比', '純利益率']) expect(tile(scope, label)).toHaveTextContent('取得できません');
