@@ -100,19 +100,27 @@ describe('the strength (climax) checks judge only an extended stock', () => {
     expect(stockSells({ judged: bars, diagnostics: null, view }).hits).toBe(0);
   });
 
-  it('is always na in the buy zone, below the pivot, below +20%, outside the zone states and without a position', () => {
+  it('the pivot band alone is always na in the buy zone, below the pivot, below +20%, outside the zone states and without a position', () => {
     const closes = rising(200);
     for (let k = 0; k < 9; k++) closes.push(closes.at(-1) * 1.03);
     closes.push(closes.at(-1) * 1.05);
     const bars = make(closes), last = closes.at(-1);
-    for (const view of [{ state: 'zone', pivot: last / 1.03, distance: 3 }, { state: 'wait', pivot: last * 1.02, distance: -2 },
-      { state: 'ext', pivot: last / 1.15, distance: 15 }, { state: 'unknown', pivot: null, distance: null }, null,
-      { state: 'low', stateLabel: '低変動・監視のみ', pivot: last / 1.3, distance: 30 }, { state: 'acq', stateLabel: '買収合意・対象外', pivot: last / 1.3, distance: 30 }, { state: 'na', pivot: last / 1.3, distance: 30 }]) {
-      const result = sellSignals(bars, SELL_RULES, { view });
+    // The 50-day alternative off (the owner's option): only the band judges.
+    const band = { ...SELL_RULES, climaxFrom50dPercent: null };
+    const views = { zone: { state: 'zone', pivot: last / 1.03, distance: 3 }, wait: { state: 'wait', pivot: last * 1.02, distance: -2 },
+      ext: { state: 'ext', pivot: last / 1.15, distance: 15 }, unknown: { state: 'unknown', pivot: null, distance: null }, none: null,
+      low: { state: 'low', stateLabel: '低変動・監視のみ', pivot: last / 1.3, distance: 30 }, acq: { state: 'acq', stateLabel: '買収合意・対象外', pivot: last / 1.3, distance: 30 }, na: { state: 'na', pivot: last / 1.3, distance: 30 } };
+    for (const view of Object.values(views)) {
+      const result = sellSignals(bars, band, { view });
       expect(result.strength.map(c => c.state)).toEqual(['na', 'na', 'na', 'na']);
       expect(result.strengthHits).toBe(0);
     }
-    const reason = view => sellSignals(bars, SELL_RULES, { view }).strength[0].detail;
+    // These bars close far above their 50-day line: the alternative judges a stock without a pivot, an unjudged
+    // position and one beyond the zone under the band; never the buy zone, below the pivot, low volatility or an acquisition.
+    expect((last / (closes.slice(-50).reduce((a, b) => a + b, 0) / 50) - 1) * 100).toBeGreaterThan(25);
+    const judged = Object.fromEntries(Object.entries(views).map(([key, view]) => [key, sellSignals(bars, SELL_RULES, { view }).run?.basis ?? null]));
+    expect(judged).toEqual({ zone: null, wait: null, ext: 'ma50', unknown: 'ma50', none: 'ma50', low: null, acq: null, na: 'ma50' });
+    const reason = view => sellSignals(bars, band, { view }).strength[0].detail;
     expect(reason({ state: 'wait', pivot: last * 1.02, distance: -2 })).toBe('ピボットより下（ブレイク前）のため判定しません');
     expect(reason({ state: 'ext', pivot: last / 1.15, distance: 15 })).toBe(`ブレイク後の上昇が小さいため判定しません（ピボット比 +15.0%・判定は +${SELL_RULES.climaxFromPivotPercent}%以上）`);
     // A position that is not beyond the buy zone never reads as a small rise, whatever its distance.
@@ -145,14 +153,14 @@ describe('the strength (climax) checks judge only an extended stock', () => {
     expect(view.distance).toBeGreaterThan(25);
     const bars = make(closes), result = sellSignals(bars, SELL_RULES, { view });
     expect(states(result.strength)).toEqual({ 'day-up': 'hit', 'week-up': 'hit', 'up-days': 'hit', climax: 'hit' });
-    expect(result.run).toMatchObject({ startDate: day(200), pivot, sessions: 15 });
+    expect(result.run).toMatchObject({ basis: 'pivot', startDate: day(200), pivot, sessions: 15 });
     expect(result.strength.map(c => c.label)).toEqual(['ピボット上抜け以降で最大の1日の上昇（直近5営業日）', 'ピボット上抜け以降で最大の5営業日の上昇（直近5営業日）', '直近10営業日のうち8日以上が上昇', '15営業日以内に +25%以上の急騰']);
     // Short dates, as the 50-day check gives them.
     const short = i => `${Number(bars[i].date.slice(5, 7))}/${Number(bars[i].date.slice(8))}`;
     expect(result.strength[0].detail).toBe(`最大は ${short(215)} の +6.0%`);
     expect(result.strength[1].detail).toMatch(new RegExp(`^最大は ${short(215)} までの \\+`));
     expect(result.strength[3].detail).toMatch(/^直近15営業日（上抜け以降）の最安終値から \+/);
-    expect(states(result.weakness)).toEqual({ 'day-down': 'clear', ma50: 'clear' });
+    expect(states(result.weakness)).toEqual({ 'day-down': 'clear', ma50: 'clear', failedBreakout: 'clear' });
     expect(result).toMatchObject({ hits: 4, strengthHits: 4, weaknessHits: 0, breakdownHits: 0, asOf: bars.at(-1).date });
     expect(sellMarks(result)).toEqual([{ date: result.strength[0].date, kind: 'strength' }]);
     expect(sellMarks(null)).toEqual([]);
@@ -271,9 +279,9 @@ describe('briefSell seams', () => {
 });
 
 // The weakness-check contract rows read (plan §2.2): { key, state, headline?, detail } with the five states, and the
-// broken setups isBreakdown counts. The key failedBreakout is reserved for verdict's VD2: at step 0 no check carries it.
+// broken setups isBreakdown counts: the 50-day line, the failed breakout (VD2) and the book.
 describe('the round-2 weakness-check contract', () => {
-  it('every weakness check has a key, one of the five states and a detail; only the 50-day line and the book break a setup', () => {
+  it('every weakness check has a key, one of the five states and a detail; the 50-day line, the failed breakout and the book break a setup', () => {
     const closes = rising(200);
     closes.push(closes.at(-1) * 0.9);
     const bars = make(closes, i => (i === 200 ? 20000 : 10000));
@@ -283,8 +291,114 @@ describe('the round-2 weakness-check contract', () => {
       expect(['hit', 'caution', 'clear', 'unknown', 'na']).toContain(check.state);
       expect(check).toHaveProperty('detail');
     }
-    expect(sells.weakness.map(check => check.key)).not.toContain('failedBreakout');
-    expect(['ma50', 'book', 'failedBreakout', 'day-down'].map(key => isBreakdown({ key, state: 'hit' }))).toEqual([true, true, false, false]);
+    expect(sells.weakness.map(check => check.key)).toEqual(['day-down', 'ma50', 'failedBreakout', 'book']);
+    expect(['ma50', 'book', 'failedBreakout', 'day-down'].map(key => isBreakdown({ key, state: 'hit' }))).toEqual([true, true, true, false]);
     expect(isBreakdown({ key: 'ma50', state: 'caution' })).toBe(false);
+    expect(isBreakdown({ key: 'failedBreakout', state: 'unknown' })).toBe(false);
+  });
+});
+
+describe('the failed breakout (ブレイク失敗, 独自判定)', () => {
+  // 200 sessions under a pivot of 100, a crossing to 102 on `ratio` × volume, then the closes after it.
+  const failed = (after, ratio = 2.2, { before = 200, volume = i => (i === before ? Math.round(10000 * ratio) : 10000) } = {}) =>
+    make([...Array(before).fill(95), 102, ...after], volume);
+  const view = (bars, pivot = 100) => ({ symbol: 'AAA', state: 'wait', pivot, distance: (bars.at(-1).close / pivot - 1) * 100 });
+  const check = (bars, rules = SELL_RULES, pivot = 100) => sellSignals(bars, rules, { view: view(bars, pivot) }).weakness.find(c => c.key === 'failedBreakout');
+  const short = d => `${Number(d.slice(5, 7))}/${Number(d.slice(8))}`;
+
+  it('hits a crossing on 1.4× or more within 10 sessions followed by a last close back under the pivot, and counts as a broken setup', () => {
+    expect(SELL_RULES.failedBreakoutSessions).toBe(10);
+    const bars = failed([101, 98, 97]);
+    const hit = check(bars);
+    expect(hit).toMatchObject({ state: 'hit', date: bars[202].date, crossDate: bars[200].date, sessions: 2 });
+    expect(hit.ratio).toBeCloseTo(2.2, 9);
+    expect(hit.headline).toBe(`ブレイク失敗（${short(bars[200].date)}上抜け・出来高2.20×）`);
+    expect(hit.detail).toBe(`${short(bars[200].date)} に出来高 2.20×で上抜け、${short(bars[202].date)} にピボットの下へ（以降2営業日・ピボット比 −3.0%）`);
+    expect(hit.label).toBe('出来高を伴う上抜け後のピボット割れ（1.40×以上・10営業日以内・ブレイク失敗）');
+    const sells = stockSells({ judged: bars, diagnostics: null, view: view(bars) });
+    expect(sells).toMatchObject({ breakdownHits: 1 });
+    expect(sellChipView(sells)).toMatchObject({ text: WEAKNESS_ROW_CHIP, tone: 'ext' });
+    expect(sellMarks(sells)).toContainEqual({ date: bars[202].date, kind: 'weakness' });
+    // Exactly 1.4× counts (the bar is the breakout's own).
+    expect(check(failed([98]), SELL_RULES).state).toBe('hit');
+    expect(check(failed([98], 1.4)).state).toBe('hit');
+    // An earlier heavy crossing in the window still counts when a later light one also failed.
+    expect(check(make([...Array(200).fill(95), 102, 98, 101, 97], i => (i === 200 ? 22000 : 10000))).state).toBe('hit');
+  });
+
+  it('is clear when the close is back above the pivot, the crossing is older than 10 sessions, or its volume is under 1.4×', () => {
+    expect(check(failed([101, 98, 103]))).toMatchObject({ state: 'clear', detail: '終値はピボットの上（ピボット比 +3.0%）' });
+    // The same cents count as at the pivot.
+    expect(check(failed([98, 100.004])).state).toBe('clear');
+    const old = failed([101, 101, 101, 101, 101, 101, 101, 101, 101, 101, 98]);
+    expect(check(old)).toMatchObject({ state: 'clear', detail: '直近10営業日にピボットの上抜けなし（終値はピボット比 −2.0%）' });
+    expect(check(failed([98], 1.39))).toMatchObject({ state: 'clear', detail: expect.stringMatching(/の上抜けは出来高 1\.39×（基準 1\.40×未満）/) });
+    // Never crossed at all.
+    expect(check(make(Array(220).fill(95))).state).toBe('clear');
+  });
+
+  it('is unknown, never clear, when the crossing day\'s volume (or the 50 before it) is missing; absent without a pivot', () => {
+    for (const volume of [i => (i === 200 ? null : 10000), i => (i === 200 ? 0 : 10000), i => (i === 180 ? null : 10000)]) {
+      const unknown = check(failed([98], 2.2, { volume }));
+      expect(unknown.state).toBe('unknown');
+      expect(unknown.detail).toMatch(/の上抜けの出来高（または直前50日の出来高）が未取得$/);
+    }
+    const sells = stockSells({ judged: failed([98], 2.2, { volume: i => (i === 200 ? null : 10000) }), diagnostics: null, view: view(failed([98])) });
+    expect(sells).toMatchObject({ breakdownHits: 0 });
+    expect(sells.unknowns).toBeGreaterThanOrEqual(1);
+    // Without a pivot there is no breakout to fail: no such check (the weakness side keeps its other checks).
+    expect(sellSignals(failed([98]), SELL_RULES, { view: null }).weakness.map(c => c.key)).toEqual(['day-down', 'ma50']);
+    expect(check(failed([98]), SELL_RULES, null)).toBeUndefined();
+  });
+});
+
+describe('the strength checks\' 50-day alternative (VD6)', () => {
+  // 200 flat sessions, then 40 rising 1.5% a day: far above the 50-day line, with no pivot (a real row drops one beyond 25%).
+  const extended = (rate = 0.015, days = 40) => make([...Array(200).fill(50), ...Array.from({ length: days }, (_, k) => 50 * (1 + rate) ** (k + 1))]);
+  const sma50 = bars => bars.slice(-50).reduce((sum, bar) => sum + bar.close, 0) / 50;
+
+  it('runs the strength checks at +25% or more from the 50-day line with a null pivot, from the session after the last close at or below the line', () => {
+    expect(SELL_RULES.climaxFrom50dPercent).toBe(25);
+    const bars = extended(), from = (bars.at(-1).close / sma50(bars) - 1) * 100;
+    expect(from).toBeGreaterThanOrEqual(25);
+    for (const view of [null, { state: 'na', stateLabel: '判定不可', pivot: null, distance: null }]) {
+      const result = sellSignals(bars, SELL_RULES, { view });
+      expect(result.run).toMatchObject({ basis: 'ma50', startDate: bars[200].date, sessions: 39, pivot: null });
+      expect(result.run.fromSma50).toBeCloseTo(from, 9);
+      expect(result.strength.map(c => c.label)).toEqual(['50日線の上に出て以降で最大の1日の上昇（直近5営業日）', '50日線の上に出て以降で最大の5営業日の上昇（直近5営業日）', '直近10営業日のうち8日以上が上昇', '15営業日以内に +25%以上の急騰']);
+      expect(result.strength.every(c => c.state === 'hit' || c.state === 'clear')).toBe(true);
+      expect(result.strength.find(c => c.key === 'climax').detail).toMatch(/^直近15営業日（50日線の上に出て以降）の最安終値から \+/);
+      // Informational: never a broken setup.
+      expect(result.breakdownHits).toBe(0);
+    }
+  });
+
+  it('stays 判定せず under +25%, when the owner turns it off, or for a low-volatility or acquisition position', () => {
+    const bars = extended(0.005);
+    expect((bars.at(-1).close / sma50(bars) - 1) * 100).toBeLessThan(25);
+    const under = sellSignals(bars, SELL_RULES, { view: null });
+    expect(under.strength.map(c => c.state)).toEqual(['na', 'na', 'na', 'na']);
+    expect(under.runShort.reason).toBe('ピボット比 未確認');
+    expect(under.runShort.fromSma50).toBeCloseTo((bars.at(-1).close / sma50(bars) - 1) * 100, 9);
+    for (const rules of [{ ...SELL_RULES, climaxFrom50dPercent: null }, { ...SELL_RULES, climaxFrom50dPercent: 0 }]) expect(sellSignals(extended(), rules, { view: null }).run).toBeNull();
+    for (const state of ['low', 'acq']) expect(sellSignals(extended(), SELL_RULES, { view: { state, stateLabel: state, pivot: null, distance: null } }).run).toBeNull();
+  });
+
+  it('never judges a fresh run above the 50-day line: under 15 sessions it is a reason to hold, as for the band', () => {
+    const fresh = make([...Array(200).fill(50), 58, 63, 67, 70]);
+    const result = sellSignals(fresh, SELL_RULES, { view: null });
+    expect(result.run).toBeNull();
+    for (const check of result.strength) expect(check).toMatchObject({ state: 'na', detail: `50日線の上に出て3営業日のため判定しません（判定は${SELL_RULES.climaxSessions}営業日以上・独自判定）` });
+    expect(result.runShort.reason).toBe('50日線の上に出て3営業日');
+  });
+
+  it('keeps the pivot band first when both hold', () => {
+    const closes = rising(200);
+    const pivot = closes.at(-1);
+    for (let k = 0; k < 10; k++) closes.push(closes.at(-1) * 1.008);
+    for (let k = 0; k < 5; k++) closes.push(closes.at(-1) * 1.035);
+    closes.push(closes.at(-1) * 1.06);
+    const view = { state: 'ext', pivot, distance: (closes.at(-1) / pivot - 1) * 100 };
+    expect(sellSignals(make(closes), SELL_RULES, { view }).run).toMatchObject({ basis: 'pivot', pivot, sessions: 15 });
   });
 });
