@@ -8,7 +8,7 @@ import * as primitives from './briefPrimitives';
 const seam = vi.hoisted(() => ({ chip: undefined, rows: [] }));
 vi.mock('../fundamentalsExplain.js', async importOriginal => {
   const actual = await importOriginal();
-  return { ...actual, secRowChip: row => { seam.rows.push(row); return seam.chip === undefined ? actual.secRowChip(row) : seam.chip; } };
+  return { ...actual, secRowChip: (row, options) => { seam.rows.push(row); return seam.chip === undefined ? actual.secRowChip(row, options) : seam.chip; } };
 });
 
 afterEach(cleanup);
@@ -251,6 +251,21 @@ describe('the round-2 row chip', () => {
     const short = row({ view: view({ row: sample }) }).container;
     expect([short.querySelector('[data-optional]').textContent, short.querySelector('[data-optional]').getAttribute('title')]).toEqual(['〈sec〉', '〈sec・期〉：〈title〉']);
     expect(short.querySelector('.brief-row').getAttribute('aria-label')).toBe('1位 AAA Alpha、買いゾーン +1.2%、前日比 +2.0%、RS推計 88、〈sec・期〉');
+  });
+
+  // I4 (data's request): the rows date the chip with the screen's now, as the stock view does, so a summary past the
+  // 180-day rule is an unknown chip (古い), which the rows do not show, never a current one.
+  it('dates the chip with the screen\'s now: a summary past the 180-day rule is not shown as current', async () => {
+    const { secRowChip } = await vi.importActual('../fundamentalsExplain.js');
+    const summary = { sec_state: 'ok', eps_yoy: { value: 40, end: '2026-06-30' }, sales_yoy: { value: 30, end: '2026-06-30' }, code33: null, as_of_date: '2026-10-02' };
+    const dated = { symbol: 'AAA', market: 'US', as_of_date: '2026-10-02', sec_summary: summary };
+    const within = Date.parse('2026-10-05T00:00:00Z'), past = Date.parse('2027-02-01T00:00:00Z');
+    const fresh = secRowChip(dated, { now: within }), stale = secRowChip(dated, { now: past });
+    expect([fresh?.notable, stale?.notable]).toEqual([true, false]);
+    const shown = now => { const { container } = render(<Reasons view={view({ row: dated })} now={now} />); const texts = chipTexts(container); cleanup(); return texts; };
+    expect(shown(within)).toContain(fresh.short || fresh.text);
+    expect(shown(past)).not.toContain(fresh.short || fresh.text);
+    expect(seam.rows.at(-1)).toBe(dated);
   });
 
   it('puts a chip right after the RS chip, neutral on a row that is muted or not a buy candidate', () => {

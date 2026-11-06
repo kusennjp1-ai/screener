@@ -121,10 +121,12 @@ function volumeTone(view) {
 /**
  * The row's SEC chip (data's secRowChip) when the rows show it: only a `notable` one (plan RW6: an always-on chip
  * took the rows to 3 chip lines at 320 and 1440 on the fixture); an unknown is explained on the stock view. The chip
- * shows the seam's `short` form when it gives one; the full text is its title and in the row's label.
+ * shows the seam's `short` form when it gives one; the full text is its title and in the row's label. `now` dates it,
+ * as the stock view does (data's secRowChip), so a summary past the 180-day rule is not shown as current.
  */
-function shownSec(view) {
-  const sec = secRowChip(view.row);
+function shownSec(view, now = null) {
+  // Dated like the stock view: a summary past the 180-day rule reads 古い (an unknown chip), never as current.
+  const sec = secRowChip(view.row, { now });
   return sec?.notable ? sec : null;
 }
 
@@ -157,7 +159,7 @@ export function Reasons({ view, now, sell, hideTemplate = false, muted = false, 
   const volume = carried ? null : volumeTone(view);
   if (volume !== null) chips.push(chip('vol', zone(volume), `出来高 ${ratioShown(view.volumeRatio)}`));
   // The row's SEC earnings, from the data track's seam (secRowChip).
-  const sec = shownSec(view), caution = compact ? cautionOf(view, sec) : null;
+  const sec = shownSec(view, now), caution = compact ? cautionOf(view, sec) : null;
   if (caution) chips.push(chip(caution.key, '', caution.text, caution.title));
   else if (!view.missing?.rs) chips.push(chip('rs', '', `RS推計 ${rsShown(view.rs)}`));
   const secTitle = sec && (sec.short && sec.short !== sec.text ? `${sec.text}：${sec.title}` : sec.title);
@@ -186,7 +188,7 @@ export const CandidateRow = memo(function CandidateRow({ view, rank, onOpen, now
   const enter = useEntrance(animate);
   const sellChip = sellChipView(sell);
   const muted = candidateMarketGate(market) !== 'open' || sell?.breakdownHits > 0;
-  const sec = shownSec(view);
+  const sec = shownSec(view, now);
   const button = useRef(null);
   // An optional chip that does not fit gives way (it stays in the label below): the list's rows are fitted together.
   useLayoutEffect(() => {
