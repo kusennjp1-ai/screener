@@ -304,6 +304,23 @@ test.describe('the 375×812 budget one session behind', () => {
     await expect(card.getByRole('button', { name: 'さらに表示（残り 2件）' })).toBeVisible();
     expect(errors).toEqual([]);
   });
+
+  test('three unlisted symbols take one row\'s place, not three, and a heavy down day always shows', async ({ page }) => {
+    // ZZOD falls 1.0% on 1.6× volume in the buy zone: the day's heavy down day, ranked last in the zone.
+    const heavy = { rows: rows => { rows.find(row => row.symbol === 'ZZOD').technical_audit.values.change = -1; } };
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['QQQX', 'QQQY', 'QQQZ', 'ZZNV', 'ZZZF', 'ZZKS', 'ZZAR', 'ZZOD'] }, mutate: heavy });
+    const card = page.getByRole('region', { name: 'ウォッチの状況' });
+    await expect(card.locator('.brief-unlisted')).toHaveCount(3);
+    await expect(card.locator('[data-symbol="ZZOD"]')).toContainText('▲');
+    await expect(card.locator('[data-symbol="ZZOD"]')).toContainText('下落日の大商い');
+    // Two listed rows (WATCH_ROWS 3 less one for the unlisted symbols), plus ZZOD wherever it ranks; the rest fold.
+    const listed = await card.locator('.brief-event').evaluateAll(nodes => nodes.map(node => node.dataset.symbol));
+    expect(listed.slice(0, 2)).toHaveLength(2);
+    expect(listed).toContain('ZZOD');
+    expect(listed.length).toBeLessThanOrEqual(3);
+    await expect(card.getByRole('button', { name: `さらに表示（残り ${5 - listed.length}件）` })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
 });
 
 // A broken setup's row keeps its chips on two lines and its height within 100px (the list rows' rule), and nothing

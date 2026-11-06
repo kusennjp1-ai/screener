@@ -371,11 +371,14 @@ const BASES = { rows: rows => {
   }
 } };
 const both = (...variants) => ({ rows: rows => { for (const variant of variants) variant.rows(rows); }, ...(variants.find(v => v.charts) ? { charts: variants.find(v => v.charts).charts } : {}) });
+// Every chip that ends a line leaves 6px of slack to the chip box's edge (rule 9), required chips included.
 const chipLines = page => candidates(page).evaluateAll(nodes => nodes.map(row => {
   const box = row.querySelector('.brief-reasons').getBoundingClientRect();
   const chips = [...row.querySelectorAll('.brief-reasons .brief-chip')].filter(chip => chip.getClientRects().length);
+  const ends = chips.filter((chip, i) => !chips[i + 1] || chips[i + 1].offsetTop !== chip.offsetTop);
   return { symbol: row.dataset.symbol, height: row.getBoundingClientRect().height, lines: new Set(chips.map(chip => chip.offsetTop)).size,
-    out: chips.filter(chip => chip.getBoundingClientRect().right > box.right + 0.5).map(chip => chip.textContent), chips: chips.map(chip => chip.textContent) };
+    out: chips.filter(chip => chip.getBoundingClientRect().right > box.right + 0.5).map(chip => chip.textContent), chips: chips.map(chip => chip.textContent),
+    slack: Math.min(...ends.map(chip => box.right - chip.getBoundingClientRect().right)) };
 }));
 /** Visible text with an ASCII hyphen directly before a digit (ISO dates and tickers aside): a negative figure must use U+2212. */
 const asciiMinus = page => page.evaluate(() => [...document.querySelectorAll('#brief-main *, .brief-bar *')].flatMap(node => {
@@ -405,7 +408,7 @@ test.describe('the day on the rows (390px)', () => {
     await link.click();
     await expect(page).toHaveURL(/#\/brief\/list$/);
     expect(await symbolsShown(page)).toEqual(['ZZKS']);
-    const chip = page.getByRole('button', { name: new RegExp(`^${DAY}の上抜け\\s*1`) });
+    const chip = page.getByRole('button', { name: new RegExp(`^${DAY}の上抜け\\s*該当1・未確認0`) });
     expect((await chip.boundingBox()).height).toBeGreaterThanOrEqual(44);
     await chip.click();
     await expect(page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ })).toHaveAttribute('aria-pressed', 'true');
@@ -430,7 +433,7 @@ test.describe('the day on the rows (390px)', () => {
       rows.find(row => row.symbol === 'ZZHE').sec_summary = summary(10);
       rows.find(row => row.symbol === 'ZZTR').sec_summary = summary(null);
     } } });
-    await page.getByRole('combobox', { name: '条件' }).selectOption('eps');
+    await page.getByRole('combobox', { name: '条件で絞り込む' }).selectOption('eps');
     const chip = page.locator('.brief-filterchip');
     await expect(chip).toContainText('EPS前年比≥25%（直近・SEC）該当1・未確認19');
     expect(await symbolsShown(page)).toEqual(['ZZAR']);
@@ -444,9 +447,9 @@ test.describe('the day on the rows (390px)', () => {
 
   test('the stock names its pivot source: the pattern and its confidence, 未確認 when unknown', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/stock/ZZAR', { mutate: onRow('ZZAR', row => { Object.assign(row, { se_pattern_primary: 'cup_with_handle', se_pattern_confidence: 72.4 }); }) });
-    await expect(page.getByText('Setup Engine・カップ・ウィズ・ハンドル（信頼度72）')).toBeVisible();
+    await expect(page.getByText('カップ・ウィズ・ハンドル（SE信頼度72）')).toBeVisible();
     await page.goto('/#/brief/stock/ZZKS');
-    await expect(page.getByText('Setup Engine（信頼度60）')).toBeVisible();
+    await expect(page.getByText('SE信頼度60', { exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   });
 });
@@ -466,20 +469,89 @@ for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.deskto
         expect(row.height, `${row.symbol} ${row.chips.join(' | ')}`).toBeLessThanOrEqual(100);
         expect(row.lines, `${row.symbol} ${row.chips.join(' | ')}`).toBeLessThanOrEqual(2);
         expect(row.out, row.symbol).toEqual([]);
+        expect(row.slack, `${row.symbol} ${row.chips.join(' | ')}`).toBeGreaterThanOrEqual(6);
       }
       return rows;
     };
     const rows = await check();
-    // The base chip shows where it fits (ZZNV's normal row has the room), and the label says it in every case. On a
-    // phone's Today it adds no line to a focus row (the screen's height budget): at 390 the row is one line, so the
-    // chip stays in the label; at 320 it fits on the row's second line.
+    // The base chip shows on the rows (the 候補 list, Today); on a phone's Today in its short form in the RS chip's
+    // place, so the row keeps the lines of ZZNH's, a zone row with the same chips and a normal base.
     const todayPhone = hash === '#/brief' && width !== '1440';
-    if (!hash.endsWith('watch')) expect(rows.find(row => row.symbol === 'ZZNV').chips.includes('土台6週・−40%')).toBe(!(todayPhone && width === '390'));
-    // ZZNV's row keeps the lines of ZZNH's, a zone row with the same chips and a normal base.
+    if (!hash.endsWith('watch')) expect(rows.find(row => row.symbol === 'ZZNV').chips).toContain(todayPhone ? '土台−40%' : '土台6週・−40%');
     if (todayPhone) expect([rows.find(row => row.symbol === 'ZZNV').lines, rows.find(row => row.symbol === 'ZZNV').height]).toEqual([rows.find(row => row.symbol === 'ZZNH').lines, rows.find(row => row.symbol === 'ZZNH').height]);
     expect(await page.locator('[data-symbol="ZZNV"]').first().getAttribute('aria-label')).toContain('土台6週・−40%（Setup Engineの土台が深さ35%超（独自判定））');
     if (hash.endsWith('list')) { await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて/ }).click(); await check(); }
     expect(await asciiMinus(page)).toEqual([]);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Data's secRowChip stubbed notable on every row (as the published chip will be on many): the SEC chip gives way first,
+// so a questionable base keeps its chip on the list, at every width. The stub replaces the seam's body in the served
+// module (as a unit test mocks it); the copy asserted here is rows' own.
+const SEC_STUB = `export function secRowChip(row) { return row && row.sec_summary ? { text: 'EPS +152%・売上 +48%（26-06）', tone: 'zone', title: 'stub', notable: true } : null; }`;
+async function stubSecChip(page) {
+  await page.route('**/src/static/fundamentalsExplain.js*', async route => {
+    const response = await route.fetch();
+    return route.fulfill({ response, body: (await response.text()).replace(/export function secRowChip\([^)]*\) \{[\s\S]*?\n\}\n/, `${SEC_STUB}\n`) });
+  });
+}
+const WITH_SEC = { rows: rows => { for (const row of rows) row.sec_summary = { sec_state: 'ok', eps_yoy: { value: 152, end: '2026-06-30' }, sales_yoy: { value: 48, end: '2026-06-30' }, code33: null, as_of_date: date }; } };
+for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.desktop })) test.describe(`a questionable base beside the SEC chip at ${width}px`, () => {
+  test.use(device);
+  test('the base chip keeps its place on the list; the SEC chip gives way first', async ({ page }) => {
+    await stubSecChip(page);
+    const { errors } = await openBrief(page, '#/brief/list', { mutate: both(BASES, WITH_SEC) });
+    await expect(page.locator('[data-symbol="ZZNV"] .brief-chip', { hasText: '土台6週・−40%' })).toBeVisible();
+    await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+    const zznv = (await chipLines(page)).find(row => row.symbol === 'ZZNV');
+    expect(zznv.chips).toContain('土台6週・−40%');
+    // The SEC chip is on the rows that have the room (a phone at 390 has it on every row's second line).
+    if (width === '390') expect((await chipLines(page)).every(row => row.chips.some(chip => chip.startsWith('EPS +152%')) || row.symbol === 'ZZNV')).toBe(true);
+    for (const row of await chipLines(page)) {
+      expect([row.lines <= 2, row.height <= 100, row.slack >= 6], `${row.symbol} ${row.chips.join(' | ')}`).toEqual([true, true, true]);
+    }
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// A phone's Today: a 40%-deep zone row says its caution in the RS chip's place, on the row's one line (no line more).
+for (const [width, device] of [[375, { ...VIEWPORTS.phone, viewport: { width: 375, height: 812 } }], [390, VIEWPORTS.phone]]) test.describe(`Today's caution at ${width}px`, () => {
+  test.use(device);
+  test('a 40%-deep zone row shows 土台−40% on Today, as one line like its neighbours', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { mutate: BASES });
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.locator('[data-symbol="ZZNV"] .brief-chip', { hasText: '土台−40%' })).toBeVisible();
+    await expect(focus.locator('[data-symbol="ZZNV"] .brief-chip', { hasText: 'RS推計' })).toHaveCount(0);
+    expect(await focus.locator('[data-symbol="ZZNV"]').getAttribute('aria-label')).toContain('RS推計 ');
+    await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+    const rows = await chipLines(page);
+    const zznv = rows.find(row => row.symbol === 'ZZNV');
+    expect([zznv.lines, zznv.slack >= 6]).toEqual([1, true]);
+    expect(errors).toEqual([]);
+  });
+});
+
+// The 注目候補 tile's 「うち上抜けN」 has a strip of its own: a tap on the tile's counts opens the 注目候補 list, never the
+// breakout filter, and at 320 the count and its arrow share a line.
+for (const width of [320, 375, 390, 414]) test.describe(`the 注目候補 tile at ${width}px`, () => {
+  test.use({ ...VIEWPORTS.phone, viewport: { width, height: 812 } });
+  test('every count of the tile is the tile\'s own target, and the breakout link is 44px', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { mutate: DAY_EVENTS });
+    const link = page.getByTestId('brief-breakout-link');
+    await expect(link).toBeVisible();
+    await page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
+    const hits = await page.evaluate(() => [...document.querySelectorAll('.brief-summary .brief-tile em .brief-frag')].map(frag => {
+      const box = frag.getBoundingClientRect(), hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+      return { text: frag.textContent, tile: Boolean(hit?.closest('.brief-tile')), sub: Boolean(hit?.closest('.brief-tile-sub')) };
+    }));
+    expect(hits.length).toBeGreaterThan(0);
+    for (const hit of hits) expect([hit.text, hit.tile, hit.sub]).toEqual([hit.text, true, false]);
+    expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    // 「上抜け1 ›」 is one unbroken run: the count and the arrow on one line (only 「うち」 may sit above them).
+    expect(await link.locator('.brief-nowrap').evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].map(rect => Math.round(rect.bottom))).size; })).toBe(1);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
