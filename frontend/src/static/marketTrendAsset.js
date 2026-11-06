@@ -32,6 +32,14 @@ export function longHistoryCheck(error){
  const key=message.slice('長期市場履歴: '.length);
  return {key,label:CHECK_LABELS.find(([pattern])=>pattern.test(key))?.[1]||'集計値の整合'};
 }
+// An index's chart closes (round 2, plan §2.3): at most 300 points, strictly increasing days up to the analysis date,
+// positive closes, and the last days of the same bars as its distribution series (points). Older assets lack it.
+export const INDEX_CLOSES_MAX=300;
+function closesValid(closes,points,asOfDate){
+ if(!Array.isArray(closes)||!closes.length||closes.length>INDEX_CLOSES_MAX||closes.length>points.length)return false;
+ const days=points.slice(-closes.length);
+ return closes.every((point,i)=>plain(point)&&validDay(point.date)&&point.date<=asOfDate&&(!i||point.date>closes[i-1].date)&&finite(point.close)&&point.close>0&&days[i]?.date===point.date);
+}
 // A malformed optional field is withdrawn with a reason; it never blanks the distribution count beside it.
 // Like lastObserved, a judgement belongs to its own index: computed on the same bars, so dated on their last point.
 function readIndex(index,asOfDate){
@@ -42,6 +50,8 @@ function readIndex(index,asOfDate){
   const last=points.filter(point=>count(point?.value)).at(-1),observed=index.lastObserved;
   if(!(plain(observed)&&validDay(observed.date)&&observed.date<=asOfDate&&count(observed.value)&&last?.date===observed.date&&last.value===observed.value))delete out.lastObserved;
  }
+ // Malformed closes are withdrawn alone (the market tab then has no S&P／Nasdaq switch); the counts beside them stay.
+ if('closes' in index&&!closesValid(index.closes,points,asOfDate)){delete out.closes;out.closes_error='指数の終値の形式を確認できません。';}
  return out;
 }
 export function readMarketTrends(value,entry){
