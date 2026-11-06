@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
-import FundamentalsCard from './StockFundamentalsCard';
-import { secStatus } from '../fundamentalsExplain.js';
+import FundamentalsCard, { EPS_NOTE } from './StockFundamentalsCard';
+import { EARNINGS_CHIP_NOTE, NO_REVENUE_CONCEPT, secStatus } from '../fundamentalsExplain.js';
 import { bookFinancialCurrent } from '../bookFinancialCurrent';
 import { financialHistory } from '../financialHistory';
 import { code33Layered } from '../code33Reference';
@@ -245,7 +245,7 @@ describe('brief fundamentals card', () => {
     const later = record({ asOfDate: '2026-10-02' }); later.quarterly = { ...later.quarterly, eps: later.quarterly.eps.slice(0, 4), revenue: later.quarterly.revenue.slice(0, 4), netIncome: later.quarterly.netIncome.slice(0, 4) };
     const cases = [[null, 'この銘柄の当日分の SEC 四半期データは配信されていません'], [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'no_cik' }), 'SEC の銘柄コード表に該当がありません'],
       [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'no_companyfacts' }), 'SEC に XBRL の財務データがありません。'], [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'no_quarterly', forms: ['20-F'] }), '四半期報告（10-Q）を提出しない企業です（20-F）。'],
-      [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'transient' }), 'SEC からの取得が一時的に失敗しました（この公開には値がありません）。'], [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'invalid_payload' }), 'SECの記録を読み取れず（取得側の処理エラー・業績の良し悪しではありません）。'],
+      [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'transient' }), 'SEC からの取得が一時的に失敗しました（この公開には値がありません）。'], [secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'invalid_payload' }), 'SEC の記録を読み取れませんでした（取得側の処理エラーで、業績の良し悪しではありません）。'],
       [later, '直近の四半期（2025-06期）から180日を超えているため判定しません。']];
     for (const [value, text] of cases) {
       const scope = card(financial(value));
@@ -290,7 +290,7 @@ describe('brief fundamentals card', () => {
       quarterly: [['2025-06-30', 1, 100, 10], ['2025-09-30', 1.1, 110, 12], ['2025-12-31', 1.2, 120, 13], ['2026-03-31', 1.3, 130, 15], ['2026-06-30', 1.5, 150, 18]].map(([end, eps, revenue, netIncome]) => ({ end, eps, revenue, netIncome })) };
     let scope = card(financial(null, { history }));
     expect(scope.getByText('出典：参考 Yahoo 四半期値（取得 10-02 20:15 UTC・提出日未確認）')).toBeInTheDocument();
-    expect(tile(scope, 'EPS 前年比')).toHaveTextContent('+50%参考・Yahoo（2026-06期・10/2取得）');
+    expect(tile(scope, 'EPS 前年比')).toHaveTextContent('+50%参考・Yahoo 2026-06期');
     expect(tile(scope, '純利益率')).toHaveTextContent('12.0%');
     expect(scope.getByText(/配信されていません/)).toBeInTheDocument();
     cleanup();
@@ -302,9 +302,9 @@ describe('brief fundamentals card', () => {
     // the tiles say that, not 比較不可.
     const old = { ...history, quarterly: [['2024-12-31', 1, 100, 10], ['2025-03-31', 1, 100, 10], ['2025-06-30', 1.1, 110, 12], ['2025-09-30', 1.2, 120, 13], ['2025-12-31', 1.3, 130, 15]].map(([end, eps, revenue, netIncome]) => ({ end, eps, revenue, netIncome })) };
     scope = card(financial(null, { history: old }));
-    expect(tile(scope, 'EPS 前年比')).toHaveTextContent('—参考・Yahoo（2025-12期・10/2取得）は190日超のため比較しません');
-    expect(tile(scope, '売上 前年比')).toHaveTextContent('—参考・Yahoo（2025-12期・10/2取得）は190日超のため比較しません');
-    expect(tile(scope, '純利益率')).toHaveTextContent('11.5%参考・Yahoo（2025-12期・10/2取得）');
+    expect(tile(scope, 'EPS 前年比')).toHaveTextContent('—参考・Yahoo 2025-12期は190日超のため比較しません');
+    expect(tile(scope, '売上 前年比')).toHaveTextContent('—参考・Yahoo 2025-12期は190日超のため比較しません');
+    expect(tile(scope, '純利益率')).toHaveTextContent('11.5%参考・Yahoo 2025-12期');
     expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent('比較不可');
     cleanup();
     // A newest quarter with no year-ago quarter names that.
@@ -354,13 +354,17 @@ describe('round-2 card copy (plan DT1-DT4, DT7, DT10)', () => {
   it('says a bank\'s sales are out of scope, and an unreadable payload is a fetch-side error', () => {
     const bank = secRecord({ symbol: 'AAA', asOfDate: DATE, quarters: quarters.slice(1) }); bank.quarterly.revenue = [];
     const card = show(financial(bank));
-    expect(card.querySelector('.brief-fact:nth-child(2)')).toHaveTextContent('売上 前年比対象外売上の科目が対象外（銀行・保険などの収益科目）');
-    expect(card.querySelector('.brief-fact:nth-child(3)')).toHaveTextContent('純利益率対象外売上の科目が対象外（銀行・保険などの収益科目）');
+    // One short line per tile; the full sentence is the tile's title (and the 値なしの理由 list's).
+    expect(card.querySelector('.brief-fact:nth-child(2)')).toHaveTextContent('売上 前年比対象外銀行・保険など');
+    expect(card.querySelector('.brief-fact:nth-child(3)')).toHaveTextContent('純利益率対象外売上の科目なし');
+    for (const n of [2, 3]) expect(card.querySelector(`.brief-fact:nth-child(${n})`)).toHaveAttribute('title', NO_REVENUE_CONCEPT);
+    // Every quarter is out of scope, so the reasons list says it once, without the periods.
+    expect(within(card).getByRole('list', { name: '値なしの理由' })).toHaveTextContent(`売上 前年比：${NO_REVENUE_CONCEPT}`);
     expect(card.querySelector('.brief-facts')).not.toHaveTextContent('未報告');
     cleanup();
     const invalid = secUnavailable({ symbol: 'AAA', asOfDate: DATE, reason: 'invalid_payload', invalid_detail: { class: 'PayloadMismatch', message: 'companyfacts cik does not match the requested cik', requested_cik: 6, received_cik: 9 } });
     const other = show(financial(invalid));
-    expect(other).toHaveTextContent('SECの記録を読み取れず（取得側の処理エラー・業績の良し悪しではありません）。返された記録の CIK 番号が要求と違いました。');
+    expect(other).toHaveTextContent('SEC の記録を読み取れませんでした（取得側の処理エラーで、業績の良し悪しではありません）。返された記録の CIK 番号が要求と違いました。');
     expect(other).not.toHaveTextContent('提出日や期間');
   });
 
@@ -383,5 +387,12 @@ describe('round-2 card copy (plan DT1-DT4, DT7, DT10)', () => {
     const reference = show({ report: null, sec: { state: 'no_quarterly', short: '四半期報告なし', long: '…' }, history: null, code33: { state: 'pass', source: 'yahoo', label: '参考：Yahoo四半期値' } });
     expect(reference.querySelector('.brief-code33')).toHaveClass('tone-neutral');
     expect(reference.querySelector('.brief-code33 strong')).toHaveTextContent('Code 33 達成（参考）');
+  });
+
+  it('says the green earnings chip\'s 独自設定 rule in the phone notes, and keeps the desktop card note as it was', () => {
+    expect(EPS_NOTE.endsWith(EARNINGS_CHIP_NOTE)).toBe(true);
+    const wide = show(financial(secRecord({ symbol: 'AAA', asOfDate: DATE })), true);
+    expect(wide).toHaveTextContent(/^.*EPS は報告値（希薄化）/);
+    expect(wide).not.toHaveTextContent('業績チップ');
   });
 });

@@ -2,7 +2,7 @@
 // failure states, the publication's SEC coverage (delivery failure, not requested, refused), the phone's
 // compact card and its text floor, on synthetic data.
 import { test, expect } from '@playwright/test';
-import { openBrief, sessions, VIEWPORTS, horizontalOverflow, SEC_SYMBOL, date, rowBySymbol } from './brief-fixture.js';
+import { openBrief, sessions, VIEWPORTS, horizontalOverflow, SEC_SYMBOL, date, now, rowBySymbol } from './brief-fixture.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 // How many line boxes a word of a node's text sits on (1: it never breaks); null when the word is absent.
@@ -298,22 +298,33 @@ test.describe('round-2 fundamentals copy', () => {
   // A hyphen right before a digit that is not part of a date or period (2026-06, 26-06): negatives use U+2212.
   const asciiMinus = page => card(page).evaluate(node => (node.innerText.match(/(?<![\d])-\d/g) || []));
   const tenK = (end, value, accession) => ({ end, start: `${Number(end.slice(0, 4)) - 1}-07-01`, filed: `${end.slice(0, 4)}-08-20`, value, tag: 'EarningsPerShareDiluted', unit: 'USD/shares', accession, form: '10-K', derived: false });
+  // An unreadable payload with its recorded cause, on ZZAR's detail.
+  const invalid = { rows: rows => { rows.find(row => row.symbol === 'ZZAR').research_detail_path = 'research-details/ZZAR-detail.json'; },
+    details: details => { details['ZZAR-detail.json'] = { ...rowBySymbol.ZZAR, research_detail_path: 'research-details/ZZAR-detail.json', as_of_date: date, sec_admission: { state: 'admitted', reason: null },
+      book_financials: { schema_version: 2, symbol: 'ZZAR', as_of_date: date, status: 'unavailable', reason: 'invalid_payload', error: 'SEC取得不可: PayloadMismatch', retrieved_at: `${date}T21:30:00.000Z`,
+        invalid_detail: { class: 'PayloadMismatch', message: 'companyfacts cik does not match the requested cik', requested_cik: 1000001, received_cik: 1000002 } } }; } };
+  // A bank: quarters of EPS and net income only (the June EPS too, so the record is current), and no revenue concept.
+  const bank = record(value => {
+    value.quarterly.revenue = []; value.status = 'partial';
+    value.quarterly.eps.push({ ...value.quarterly.eps.at(-1), end: '2026-06-30', start: '2026-04-01', filed: '2026-08-09', accession: '0000000001-26-063010', value: 1.5 });
+  });
+  // ZZAR without an SEC record and with current Yahoo quarters (read an hour before the fixture's clock).
+  const yahoo = { rows: rows => {
+    rows.find(row => row.symbol === 'ZZAR').financial_history = { symbol: 'ZZAR', as_of_date: date, status: 'available', basis: 'reported_diluted_eps', currency: 'USD', retrieved_at: new Date(now - 3600000).toISOString(), annual: [],
+      quarterly: ['2025-06-30', '2025-09-30', '2025-12-31', '2026-03-31', '2026-06-30'].map((end, i) => ({ end, eps: [1, 1.1, 1.2, 1.3, 1.5][i], revenue: [100, 105, 110, 120, 140][i], netIncome: [10, 11, 12, 14, 17][i] })) };
+  } };
 
   for (const [label, device] of [['375', { viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }], ['320', { viewport: { width: 320, height: 700 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 }]]) test.describe(label, () => {
     test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
 
     test('an unreadable SEC payload is a fetch-side error with its recorded cause, never a verdict on the results', async ({ page }) => {
-      const invalid = { schema_version: 2, symbol: 'ZZAR', as_of_date: date, status: 'unavailable', reason: 'invalid_payload', error: 'SEC取得不可: PayloadMismatch', retrieved_at: `${date}T21:30:00.000Z`,
-        invalid_detail: { class: 'PayloadMismatch', message: 'companyfacts cik does not match the requested cik', requested_cik: 1000001, received_cik: 1000002 } };
-      const { errors } = await openBrief(page, '#/brief/stock/ZZAR', { mutate: {
-        rows: rows => { rows.find(row => row.symbol === 'ZZAR').research_detail_path = 'research-details/ZZAR-detail.json'; },
-        details: details => { details['ZZAR-detail.json'] = { ...rowBySymbol.ZZAR, research_detail_path: 'research-details/ZZAR-detail.json', as_of_date: date, book_financials: invalid, sec_admission: { state: 'admitted', reason: null } }; } } });
+      const { errors } = await openBrief(page, '#/brief/stock/ZZAR', { mutate: invalid });
       const line = card(page).getByText('業績：SEC検証不可・Code 33 未確認');
       await expect(line).toBeVisible();
       await settled(page);
       expect(await height(page)).toBeLessThanOrEqual(140);
       await line.click();
-      await expect(card(page)).toContainText('SECの記録を読み取れず（取得側の処理エラー・業績の良し悪しではありません）。返された記録の CIK 番号が要求と違いました。');
+      await expect(card(page)).toContainText('SEC の記録を読み取れませんでした（取得側の処理エラーで、業績の良し悪しではありません）。返された記録の CIK 番号が要求と違いました。');
       await expect(card(page)).not.toContainText('提出日や期間');
       expect(await horizontalOverflow(page)).toBe(0);
       expect(errors).toEqual([]);
@@ -336,16 +347,33 @@ test.describe('round-2 fundamentals copy', () => {
     });
 
     test('a bank\'s sales are out of scope, and the card neither grows nor overflows', async ({ page }) => {
-      // Quarters of EPS and net income only (the June EPS too, so the record is current), and no revenue concept.
-      const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { mutate: record(value => {
-        value.quarterly.revenue = []; value.status = 'partial';
-        value.quarterly.eps.push({ ...value.quarterly.eps.at(-1), end: '2026-06-30', start: '2026-04-01', filed: '2026-08-09', accession: '0000000001-26-063010', value: 1.5 });
-      }) });
-      const sales = card(page).locator('.brief-fact').filter({ hasText: '売上 前年比' });
-      await expect(sales).toContainText('対象外売上の科目が対象外（銀行・保険などの収益科目）');
-      await expect(card(page).locator('.brief-fact').filter({ hasText: '純利益率' })).toContainText('売上の科目が対象外（銀行・保険などの収益科目）');
+      const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { mutate: bank });
+      const sales = card(page).locator('.brief-fact').filter({ hasText: '売上 前年比' }), margin = card(page).locator('.brief-fact').filter({ hasText: '純利益率' });
+      // One short line per tile (the full sentence is each tile's title and the reasons list's).
+      await expect(sales).toContainText('対象外銀行・保険など');
+      await expect(margin).toContainText('対象外売上の科目なし');
+      for (const tile of [sales, margin]) await expect(tile).toHaveAttribute('title', '売上の科目が対象外（銀行・保険などの収益科目）');
       await expect(card(page).locator('.brief-facts')).not.toContainText('未報告');
+      expect(await lineBoxes(sales.locator('em'), '銀行・保険など')).toBe(1);
+      expect(await lineBoxes(margin.locator('em'), '売上の科目なし')).toBe(1);
+      // The step-0 card of the same record (db8e297, CI-faithful): 588.1px at 375 and 655px at 320.
+      await settled(page);
+      expect(await height(page)).toBeLessThanOrEqual(label === '375' ? 588.1 : 655);
       expect(await asciiMinus(page)).toEqual([]);
+      expect(await horizontalOverflow(page)).toBe(0);
+      expect(errors).toEqual([]);
+    });
+
+    test('a Yahoo-only card says 参考・Yahoo with its period on one line per tile, and the retrieval day once', async ({ page }) => {
+      const { errors } = await openBrief(page, '#/brief/stock/ZZAR', { mutate: yahoo });
+      const tiles = card(page).locator('.brief-fact');
+      await expect(tiles.first()).toContainText('参考・Yahoo 2026-06期');
+      await expect(card(page).getByText(/^出典：参考 Yahoo 四半期値（取得 /)).toBeVisible();
+      await expect(card(page)).not.toContainText('取得）');
+      if (label === '375') for (const index of [0, 1, 2]) expect(await lineBoxes(tiles.nth(index).locator('em'), '参考・Yahoo 2026-06期')).toBe(1);
+      // The step-0 card of the same history (db8e297, CI-faithful): 285.8px at 375 and 349.3px at 320 (286 and 349.5 as height() rounds).
+      await settled(page);
+      expect(await height(page)).toBeLessThanOrEqual(label === '375' ? 286 : 349.5);
       expect(await horizontalOverflow(page)).toBe(0);
       expect(errors).toEqual([]);
     });
@@ -360,7 +388,9 @@ test.describe('round-2 fundamentals copy', () => {
       await expect(card(page).getByRole('list', { name: '業績の質の根拠' })).toContainText('年間EPS：直近の年度（2026-06期）の 2.00 は、直近10-Kの3年度で最高です。');
       expect(await horizontalOverflow(page)).toBe(0);
       expect(errors).toEqual([]);
-      // The base record's card (no split, folds closed) keeps its height: 657px at 375 and 712px at 320 (731.5 before round 2, CI-faithful).
+      // The base record's card (no split, folds closed) does not grow: step 0 measured 656.8px at 375 and 731.5px at 320
+      // (712 now), CI-faithful. These caps are the plan's 'the card does not grow' line against step 0, not a budget, so the
+      // 12px headroom of rule 9 is not read into them; the stock page's own budget is brief-compact.spec.js's.
       const base = await page.context().newPage();
       try {
         const second = await openBrief(base, `#/brief/stock/${SEC_SYMBOL}`);
@@ -373,8 +403,38 @@ test.describe('round-2 fundamentals copy', () => {
     });
   });
 
+  test.describe('390', () => {
+    test.use({ ...VIEWPORTS.phone, contextOptions: { reducedMotion: 'reduce' } });
+    for (const [kind, value, text] of [['loss', -0.5, '業績：26-03期は赤字（EPS −0.50・SEC）'], ['fall', 0.65, '業績：直近EPS −35%（26-03期・SEC）']]) test(`the ${kind} caution under the call stays on one line at 375 and 390`, async ({ page }) => {
+      const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { mutate: record(record => { record.quarterly.eps.find(item => item.end === '2026-03-31').value = value; }) });
+      const caution = page.getByTestId('brief-conclusion').getByText(text, { exact: true });
+      for (const width of [390, 375]) {
+        await page.setViewportSize({ width, height: 812 });
+        await expect(caution).toBeVisible();
+        await settled(page);
+        // One line box, with at least 6px of the line left over (rule 9).
+        const fit = await caution.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); const rects = [...range.getClientRects()];
+          return { lines: new Set(rects.map(rect => Math.round(rect.top))).size, slack: node.getBoundingClientRect().width - (Math.max(...rects.map(rect => rect.right)) - Math.min(...rects.map(rect => rect.left))) }; });
+        expect(fit.lines, `${width}px`).toBe(1);
+        expect(fit.slack, `${width}px`).toBeGreaterThanOrEqual(6);
+      }
+      expect(errors).toEqual([]);
+    });
+  });
+
   test.describe('1440', () => {
     test.use(VIEWPORTS.desktop);
+    // The 1440 card of each variant against the step-0 card of the same record (db8e297, CI-faithful): the bank and
+    // Yahoo cards do not grow; the unreadable payload's card is one line taller for the plan's DT1 sentence (321.8 → 341).
+    for (const [variant, symbol, mutate, cap] of [['an unreadable payload', 'ZZAR', invalid, 341], ['a bank', SEC_SYMBOL, bank, 872.7], ['a Yahoo-only stock', 'ZZAR', yahoo, 344.2]]) test(`the card of ${variant} keeps its step-0 height`, async ({ page }) => {
+      const { errors } = await openBrief(page, `#/brief/stock/${symbol}`, { mutate });
+      await expect(card(page).locator('.brief-fact').first()).toBeVisible();
+      await settled(page);
+      expect(await height(page)).toBeLessThanOrEqual(cap);
+      expect(await horizontalOverflow(page)).toBe(0);
+      expect(errors).toEqual([]);
+    });
+
     test('says the annual record\'s basis in place and keeps U+2212 for falls', async ({ page }) => {
       const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { mutate: record(value => {
         value.annualEps = [tenK('2023-06-30', 12, 'k-2023'), tenK('2024-06-30', 1.4, 'k-2026'), tenK('2025-06-30', 1.6, 'k-2026'), tenK('2026-06-30', 1.2, 'k-2026')];

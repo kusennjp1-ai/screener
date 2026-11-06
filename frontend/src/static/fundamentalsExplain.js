@@ -25,7 +25,8 @@ const yyMm = end => typeof end === 'string' ? `${end.slice(2, 7)}期` : '期 未
 const daysBetween = (a, b) => (Date.parse(a) - Date.parse(b)) / 86400000;
 /** A fiscal fourth quarter the 10-K reports only as a year: the sentence the card, the chips and the reasons share. */
 export const fiscalQ4Text = end => `第4四半期（${yyMm(end)}）は年次報告のみで四半期の値がありません`;
-const NO_REVENUE_CONCEPT = '売上の科目が対象外（銀行・保険などの収益科目）';
+/** Why a record without a revenue concept has no sales or margin (the reasons list, the tiles' titles and the copy share it). */
+export const NO_REVENUE_CONCEPT = '売上の科目が対象外（銀行・保険などの収益科目）';
 const SEC_STATUS = {
   ok: ['SEC XBRL', ''],
   not_published: ['SEC 未配信', 'この銘柄の当日分の SEC 四半期データは配信されていません。'],
@@ -42,7 +43,7 @@ const SEC_STATUS = {
   q4_annual_only: ['Q4 年次のみ', '第4四半期は年次報告のみで四半期の値がありません。'],
   // sec-financials.py could not read the SEC payload (its invalid_detail names the cause): a fetch-side error. The short
   // label stays the one the brief has always shown for it; the long text says what happened.
-  invalid_payload: ['SEC 検証不可', 'SECの記録を読み取れず（取得側の処理エラー・業績の良し悪しではありません）。'],
+  invalid_payload: ['SEC 検証不可', 'SEC の記録を読み取れませんでした（取得側の処理エラーで、業績の良し悪しではありません）。'],
   invalid: ['SEC 検証不可', 'SEC の記録を判定に使えません（理由は記録されていません）。'],
   no_quarterly_values: ['四半期の EPS・売上なし', 'SEC の XBRL に四半期の EPS・売上の報告がありません（年次の値や純利益だけの報告）。'],
   // The SEC record travels in the stock's research detail: until that file has arrived it is unknown.
@@ -154,10 +155,46 @@ export function quarterReason(row, metric) {
 }
 const shortReason = (row, metric) => SHORT_REASON[metric === 'eps' ? row.epsYoYReason : metric === 'sales' ? row.salesYoYReason : row.marginReason] || '—';
 
-/** The newest of the SEC quarterly rows whose `key` is known, with its index: the quarter a tile or a chip reports. */
+/**
+ * The newest of the SEC quarterly rows whose `key` is known, with its index: the quarter a card tile reports (the tile
+ * names its period and why the newer quarters have none). A chip or a caution, which is read as today's, uses chipQuarter.
+ */
 export function latestKnownQuarter(rows, key) {
   for (let index = (rows || []).length - 1; index >= 0; index--) if (finite(rows[index]?.[key])) return { index, row: rows[index], value: rows[index][key], end: rows[index].end };
   return null;
+}
+
+// Which reason says a quarterly value is missing, per row key: a fiscal Q4 whose value is only in the 10-K.
+const REASON_KEY = { eps: 'epsYoYReason', epsYoY: 'epsYoYReason', revenue: 'salesYoYReason', salesYoY: 'salesYoYReason' };
+// At most one quarter between two quarter ends (the 70-110 days bookFinancialEvidence takes as consecutive).
+const ONE_QUARTER_DAYS = 110;
+/**
+ * The quarter a chip, a caution or the row summary reports for `key` ('epsYoY', 'salesYoY' or 'eps'): `{ index, row, value,
+ * end }` from the newest SEC quarterly row only, so a year-old figure is never shown as the latest. One exception: when the
+ * newest row is a fiscal Q4 whose quarterly value for this metric is only in the 10-K (never derived for EPS), the quarter
+ * just before it, one quarter back at most. Null otherwise: the chip says 未確認 rather than reach further back.
+ */
+export function chipQuarter(rows, key) {
+  const list = rows || [], newest = list.at(-1);
+  if (!newest) return null;
+  const at = index => finite(list[index]?.[key]) ? { index, row: list[index], value: list[index][key], end: list[index].end } : null;
+  if (finite(newest[key])) return at(list.length - 1);
+  const previous = list.at(-2);
+  if (newest.fiscalQ4 && newest[REASON_KEY[key]] === 'not_reported' && previous && daysBetween(newest.end, previous.end) <= ONE_QUARTER_DAYS) return at(list.length - 2);
+  return null;
+}
+/** A loss (or zero) a year earlier and a profit in the newest quarter: `{ end, from, to }`, a fact and never a growth rate. */
+export function earningsTurnaround(row) {
+  return row && row.epsYoYReason === 'nonpositive_base' && finite(row.eps) && row.eps > 0 && finite(row.epsBase) ? { end: row.end, from: row.epsBase, to: row.eps } : null;
+}
+/**
+ * A growth rate as the brief prints it, a whole percent (half away from zero; −0.3% is ±0, never −0). Colours and
+ * thresholds compare this number, so a chip that reads +25% is judged as 25% and one that reads ±0% is not a fall.
+ */
+export function wholePercent(value) {
+  if (!finite(value)) return null;
+  const whole = Math.sign(value) * Math.round(Math.abs(value));
+  return whole === 0 ? 0 : whole;
 }
 
 /**
@@ -171,10 +208,12 @@ export function fundamentalTiles(report) {
     if (!newest) return { label, value: null, short: '—', note: '' };
     const index = latestKnownQuarter(rows, key)?.index ?? -1;
     // A loss (or zero) a year earlier and a profit now: the fact, never a growth rate.
-    const turnaround = metric === 'eps' && newest.epsYoYReason === 'nonpositive_base' && finite(newest.eps) && newest.eps > 0 && finite(newest.epsBase) ? { end: newest.end, from: newest.epsBase, to: newest.eps } : null;
-    // Sales and margin of a record without a revenue concept are out of scope in every quarter: no period to name.
+    const turnaround = metric === 'eps' ? earningsTurnaround(newest) : null;
+    // Sales and margin of a record without a revenue concept are out of scope in every quarter: no period to name. The
+    // tile keeps one short line (the full sentence is its title and the 値なしの理由 list's).
     const outOfScope = metric !== 'eps' && (metric === 'sales' ? newest.salesYoYReason : newest.marginReason) === 'no_concept';
-    if (index < 0) return { label, value: null, short: shortReason(newest, metric), note: outOfScope ? NO_REVENUE_CONCEPT : `${ym(newest.end)}・${quarterReason(newest, metric)}`, end: newest.end, ...(turnaround ? { turnaround } : {}) };
+    if (outOfScope) return { label, value: null, short: SHORT_REASON.no_concept, note: metric === 'sales' ? '銀行・保険など' : '売上の科目なし', title: NO_REVENUE_CONCEPT, end: newest.end };
+    if (index < 0) return { label, value: null, short: shortReason(newest, metric), note: `${ym(newest.end)}・${quarterReason(newest, metric)}`, end: newest.end, ...(turnaround ? { turnaround } : {}) };
     const row = rows[index], previous = rows[index - 1];
     // A sales rate compared with a derived Q4 base says so; the margin uses only its own quarter.
     const baseDerived = metric === 'sales' && row.salesBaseDerived === true;
@@ -335,10 +374,11 @@ export function secSummary(row) {
 
 /**
  * The row's `sec_summary` (SecSummary) from its admitted SEC record, with the functions the fundamentals card
- * uses: secStatus for the state, the tiles' newest known quarter for each growth rate and the SEC-only Code 33
- * (no Yahoo reference). `row` is a published row carrying `book_financials` (the record the export admitted),
- * `date` the analysis date, `now` the publication's evaluation instant and `coverage` the publication's
- * fundamentals_coverage block. Null without an admitted record: nothing is summarised from no record.
+ * uses: secStatus for the state, the chips' quarter (chipQuarter: the newest row, or the quarter before a fiscal Q4
+ * whose value is only in the 10-K) for each growth rate and the SEC-only Code 33 (no Yahoo reference). An older
+ * rate is never written as the latest: it is null. `row` is a published row carrying `book_financials` (the record the
+ * export admitted), `date` the analysis date, `now` the publication's evaluation instant and `coverage` the
+ * publication's fundamentals_coverage block. Null without an admitted record: nothing is summarised from no record.
  * Written into the research index summary only (tools/export-research.mjs), never into the canonical rows.
  * @returns {SecSummary | null}
  */
@@ -347,101 +387,140 @@ export function buildSecSummary(row, { date, now, coverage = null } = {}) {
   const book = bookFinancialCurrent(row.book_financials, row.symbol, date, now, row);
   const sec = secStatus(row, book, { coverage });
   const report = book.current ? book.report : null;
-  const point = key => { const known = report ? latestKnownQuarter(report.rows, key) : null; return known ? { value: known.value, end: known.end } : null; };
+  const point = key => { const known = report ? chipQuarter(report.rows, key) : null; return known ? { value: known.value, end: known.end } : null; };
   const code33 = report?.valid ? code33Layered(report, null, date) : null;
   return { sec_state: sec.state, eps_yoy: point('epsYoY'), sales_yoy: point('salesYoY'),
     code33: code33 ? { state: code33.state, kind: code33.state === 'unknown' ? code33Explain(report, sec, code33).kind : null } : null, as_of_date: date };
 }
 
 // Growth rates at or above this level in both EPS and sales make the earnings chip green (独自設定, the
-// Minervini/O'Neil 25% guide; the card's own EPS floor uses the same 25).
+// Minervini/O'Neil 25% guide; the card's own EPS floor uses the same 25). Compared as the chip prints it (wholePercent).
 export const EARNINGS_CHIP_PERCENT = 25;
-const growth = value => signed(value, 0);
+/** The rule of the green earnings chip in words, for a screen's notes (a phone never shows a chip's title). */
+export const EARNINGS_CHIP_NOTE = `業績チップ：EPS・売上の前年同期比がともに${EARNINGS_CHIP_PERCENT}%以上で緑（独自設定）。`;
+const growth = value => signed(wholePercent(value), 0);
+const CHIP_TITLE = `前年同期比（SEC XBRL・独自設定：EPS・売上とも${EARNINGS_CHIP_PERCENT}%以上で緑）`;
 /**
  * The facts of the two growth rates with each period: 「EPS +40%・売上 +100%（26-06期）」 when both quarters are the
  * same, else each period before its value, as the card lists quarters (「EPS 26-03 +40%・売上 26-06 +100%」); an unknown
- * one reads 未確認 beside the known one's period. Tone zone (and notable) only when both are at EARNINGS_CHIP_PERCENT or
- * more; a falling EPS is notable in the neutral tone.
+ * one reads 未確認 (`salesWord` 対象外 for a record without a revenue concept) beside the known one's period. A point may
+ * carry `word` in place of its rate (黒字転換). Tone zone (and notable) only when both printed rates are at
+ * EARNINGS_CHIP_PERCENT or more and their quarters are at most one apart; a printed EPS fall is notable in the neutral tone.
+ * The points come from chipQuarter (or the summary it wrote), so neither is older than the newest quarter's exception.
  */
-function earningsFacts(eps, sales) {
+function earningsFacts(eps, sales, { salesWord = '未確認' } = {}) {
   if (!eps && !sales) return null;
   // Two periods go before their values without brackets or 期 (217px at 375, where the bracketed form took 259px and a
   // chip line of its own beside RS推計 in the conclusion).
-  const own = point => point.end.slice(2, 7);
-  const text = eps && sales && eps.end === sales.end ? `EPS ${growth(eps.value)}・売上 ${growth(sales.value)}（${yyMm(eps.end)}）`
-    : eps && sales ? `EPS ${own(eps)} ${growth(eps.value)}・売上 ${own(sales)} ${growth(sales.value)}`
-      : `${eps ? `EPS ${growth(eps.value)}（${yyMm(eps.end)}）` : 'EPS 未確認'}・${sales ? `売上 ${growth(sales.value)}（${yyMm(sales.end)}）` : '売上 未確認'}`;
-  const strong = Boolean(eps && sales && eps.value >= EARNINGS_CHIP_PERCENT && sales.value >= EARNINGS_CHIP_PERCENT);
-  const title = `前年同期比（SEC XBRL・独自設定：EPS・売上とも${EARNINGS_CHIP_PERCENT}%以上で緑）`;
-  return { text, tone: strong ? 'zone' : '', title, notable: strong || Boolean(eps && eps.value < 0) };
+  const own = point => point.end.slice(2, 7), rate = point => point.word ?? growth(point.value);
+  const text = eps && sales && eps.end === sales.end ? `EPS ${rate(eps)}・売上 ${rate(sales)}（${yyMm(eps.end)}）`
+    : eps && sales ? `EPS ${own(eps)} ${rate(eps)}・売上 ${own(sales)} ${rate(sales)}`
+      : `${eps ? `EPS ${rate(eps)}（${yyMm(eps.end)}）` : 'EPS 未確認'}・${sales ? `売上 ${rate(sales)}（${yyMm(sales.end)}）` : `売上 ${salesWord}`}`;
+  const shown = point => point && !point.word ? wholePercent(point.value) : null;
+  const e = shown(eps), s = shown(sales);
+  const together = Boolean(eps && sales) && Math.abs(daysBetween(eps.end, sales.end)) <= ONE_QUARTER_DAYS;
+  const strong = together && e !== null && s !== null && e >= EARNINGS_CHIP_PERCENT && s >= EARNINGS_CHIP_PERCENT;
+  return { text, tone: strong ? 'zone' : '', title: CHIP_TITLE, notable: strong || (e !== null && e < 0) };
 }
 const unknownChip = (title, text = '業績 未確認') => ({ text, tone: '', title, notable: false });
+// A quarter is used for 180 days after it ends (bookFinancialCurrent's rule, its last day included).
+const expired = (end, now) => Date.parse(end) + (BOOK_QUARTER_MAX_AGE_DAYS + 1) * 86400000 - 1 < now;
 
 /**
- * The list row's earnings chip, `secRowChip(row)` → `{ text, tone, title, notable }`, or null (no chip) when the
- * publication carries no `sec_summary` field (an older publication: 未収録) or one that is not in the documented shape
- * (the quality gate refuses to publish that, so it never reaches a screen as today's). From the row's sec_summary
+ * The list row's earnings chip, `secRowChip(row, { now })` → `{ text, tone, title, notable }`, or null (no chip) when
+ * the publication carries no `sec_summary` field (an older publication: 未収録) or one that is not in the documented
+ * shape (the quality gate refuses to publish that, so it never reaches a screen as today's). From the row's sec_summary
  * only (secSummary): a null summary (no admitted SEC record), one for another date or one without either rate is
- * 「業績 未確認」 with the reason in `title`, and a fund or ETF is 「業績 対象外」. Never 0 and never a pass from a missing value.
+ * 「業績 未確認」 with the reason in `title`, and a fund or ETF is 「業績 対象外」.
+ * `now` (optional, the screen's clock, as the stock view's financial clock) turns a summary whose latest quarter is
+ * past the 180-day rule into 「業績 未確認」 (古い), as the stock view says of the same record; without it the summary is
+ * read as the export judged it. Never 0 and never a pass from a missing value.
  */
-export function secRowChip(row) {
+export function secRowChip(row, { now = null } = {}) {
   if (!row || typeof row !== 'object' || !Object.hasOwn(row, 'sec_summary')) return null;
   if (instrumentApplicability(row).status === 'not_applicable') return unknownChip(SEC_STATUS.not_applicable[1], '業績 対象外');
   if (row.sec_summary === null) return unknownChip('この公開にはこの銘柄の SEC 記録がありません。');
   const summary = secSummary(row);
+  // Published, but not in the documented shape: the quality gate refuses to publish one, so no chip (the step-0 contract
+  // rows pin in BriefParts.test.jsx; rows show only a notable chip, which an unknown one never is).
   if (!summary) return null;
   if (isoDay(row.as_of_date) && summary.as_of_date !== row.as_of_date) return unknownChip('SEC の業績要約が別の日付のものです。');
+  const latest = [summary.eps_yoy?.end, summary.sales_yoy?.end].filter(Boolean).sort().at(-1);
+  if (latest && Number.isFinite(now) && expired(latest, now)) return unknownChip(`${SEC_STATUS.stale[0]}：直近の四半期（${ym(latest)}）から180日を超えているため判定に使いません。`);
   const facts = earningsFacts(summary.eps_yoy, summary.sales_yoy);
   if (facts) return facts;
-  const reason = summary.sec_state === 'ok' ? 'EPS・売上の前年同期比をどちらも確認できません。' : SEC_STATUS[summary.sec_state]?.[1] || 'SEC の記録を判定に使えません。';
+  const reason = summary.sec_state === 'ok' ? '直近の四半期の EPS・売上の前年同期比をどちらも確認できません。' : SEC_STATUS[summary.sec_state]?.[1] || 'SEC の記録を判定に使えません。';
   return unknownChip(`${SEC_STATUS[summary.sec_state]?.[0] || 'SEC'}：${reason}`);
 }
 
 /**
  * The stock conclusion's earnings chip, `earningsChipView(financial)` (useStockData's `financial`) →
- * `{ text, tone, title }`: the same facts as the row chip from the stock's current SEC report, with each
- * period, or 「業績 未確認・<reason>」 (the reason in the Code 33 chip's words). Yahoo values never stand in.
+ * `{ text, tone, title }`: the same facts as the row chip from the stock's current SEC report (chipQuarter's quarters),
+ * with each period; a profit after a year-ago loss in the newest quarter is 「EPS 黒字転換」 (its two EPS in the title),
+ * and a record without a revenue concept says 売上 対象外. Otherwise 「業績 未確認・<reason>」: the newest quarter's
+ * reason in the card's tile words, or the Code 33 chip's words when there is no current report. Yahoo values never stand in.
  */
 export function earningsChipView(financial) {
   if (!financial) return null;
   const sec = financial.sec ?? null, report = financial.report?.valid ? financial.report : null;
   if (sec?.state === 'detail_loading') return { text: '業績 読み込み中', tone: '', title: SEC_STATUS.detail_loading[1] };
   if (sec?.state === 'not_applicable') return { text: '業績 対象外', tone: '', title: SEC_STATUS.not_applicable[1] };
-  const point = key => { const known = report ? latestKnownQuarter(report.rows, key) : null; return known ? { value: known.value, end: known.end } : null; };
-  const facts = earningsFacts(point('epsYoY'), point('salesYoY'));
-  if (facts) return { text: facts.text, tone: facts.tone, title: facts.title };
-  const word = !sec ? null : report ? 'EPS・売上' : CHIP_SEC[sec.state] || String(sec.short || '').replace(/\s+/g, '');
-  return { text: `業績 未確認${word ? `・${word}` : ''}`, tone: '', title: report ? 'EPS・売上の前年同期比をどちらも確認できません。' : sec?.long || 'SEC の記録はありません。' };
+  const rows = report?.rows || [], newest = rows.at(-1);
+  const point = key => { const known = chipQuarter(rows, key); return known ? { value: known.value, end: known.end } : null; };
+  const turnaround = earningsTurnaround(newest);
+  const eps = point('epsYoY') ?? (turnaround ? { word: '黒字転換', end: turnaround.end } : null), sales = point('salesYoY');
+  const facts = earningsFacts(eps, sales, { salesWord: report?.revenueConcept === false ? '対象外' : '未確認' });
+  if (facts) {
+    const turned = eps?.word ? `EPS は${yyMm(turnaround.end)}に黒字転換（前年同期 ${fixedMinus(turnaround.from, 2)} → ${fixedMinus(turnaround.to, 2)}）。` : '';
+    return { text: facts.text, tone: facts.tone, title: `${turned}${facts.title}` };
+  }
+  if (report && newest) {
+    // The newest quarter's own reason, in the tile's words (前年同期なし, 比較不可, 未報告…).
+    const word = [shortReason(newest, 'eps'), shortReason(newest, 'sales')].find(item => item !== '—');
+    const title = `${ym(newest.end)}：EPS ${quarterReason(newest, 'eps') || '前年比 未確認'}・売上 ${quarterReason(newest, 'sales') || '前年比 未確認'}`;
+    return { text: `業績 未確認${word ? `・${word}` : ''}`, tone: '', title };
+  }
+  const word = !sec ? null : CHIP_SEC[sec.state] || String(sec.short || '').replace(/\s+/g, '');
+  return { text: `業績 未確認${word ? `・${word}` : ''}`, tone: '', title: sec?.long || 'SEC の記録はありません。' };
 }
 
 /**
- * The line under the stock conclusion's call, `earningsCaution(financial)` → `{ text }`, only when the stock's
- * current SEC report shows a loss in its latest quarter with an EPS (「業績：直近四半期は赤字（EPS −0.50・26-03期・SEC）」)
- * or a falling latest known EPS growth (「業績：直近EPS −35%（26-06期・SEC）」); null otherwise. Never from Yahoo values.
+ * The line under the stock conclusion's call, `earningsCaution(financial)` → `{ text }`, only when the stock's current
+ * SEC report shows, in chipQuarter's quarter (the newest, or the one before a fiscal Q4 whose EPS is only in the 10-K),
+ * a loss (「業績：26-03期は赤字（EPS −0.50・SEC）」) or a printed EPS fall (「業績：直近EPS −35%（26-06期・SEC）」); null
+ * otherwise, an older quarter's fall included. Never from Yahoo values.
  */
 export function earningsCaution(financial) {
   const report = financial?.report?.valid ? financial.report : null;
   if (!report) return null;
-  const level = latestKnownQuarter(report.rows, 'eps'), rate = latestKnownQuarter(report.rows, 'epsYoY');
-  if (level && level.value < 0 && (!rate || level.end >= rate.end)) return { text: `業績：直近四半期は赤字（EPS ${fixedMinus(level.value, 2)}・${yyMm(level.end)}・SEC）` };
-  if (rate && rate.value < 0) return { text: `業績：直近EPS ${growth(rate.value)}（${yyMm(rate.end)}・SEC）` };
+  const level = chipQuarter(report.rows, 'eps'), rate = chipQuarter(report.rows, 'epsYoY');
+  if (level && level.value < 0) return { text: `業績：${yyMm(level.end)}は赤字（EPS ${fixedMinus(level.value, 2)}・SEC）` };
+  if (rate && wholePercent(rate.value) < 0) return { text: `業績：直近EPS ${growth(rate.value)}（${yyMm(rate.end)}・SEC）` };
   return null;
 }
 
 /**
  * Today's one-line warning about this publication's SEC coverage, `fundamentalsCoverageWarning(coverage, { date })`:
- * `coverage` is publishedFundamentalsCoverage's block (or null), `date` the analysis date. `{ text }` only when the
+ * `coverage` is publishedFundamentalsCoverage's block (or null), `date` the analysis date. Non-null only when the
  * block has warnings (COVERAGE_WARNINGS, written by the export), no same-day SEC fetch ran, or its SEC input is for
- * another day; an older block without the warnings list is judged on the last two only. The counts are this
- * publication's own (records with quarters of the fetch's targets); no usual share is claimed. `short` is the same
- * counts in one phone line (「業績データ：SEC記録は801/1024銘柄」, plan RW10), for a screen that keeps `text` in its title.
+ * another day; an older block without the warnings list is judged on the last two only.
+ * - No same-day SEC input: that fact, with the input's own day when known (「…当日分のSEC記録がありません（入力は1/30分）…」),
+ *   never a count over the whole universe.
+ * - A same-day fetch with problems: this publication's own counts (records with quarters of the fetch's targets); no
+ *   usual share is claimed.
+ * `short` is the same in one phone line with a word of the problem (「業績データ欠け：SEC記録は801/1024銘柄」), for a screen
+ * that keeps `text` in its title.
  */
 export function fundamentalsCoverageWarning(coverage, { date = null } = {}) {
   if (!coverage || typeof coverage !== 'object') return null;
-  const problem = coverage.sec_fetch_ran !== true || (isoDay(date) && coverage.sec_as_of !== date) || (Array.isArray(coverage.warnings) && coverage.warnings.length > 0);
-  if (!problem || !known(coverage.with_quarters)) return null;
+  if (coverage.sec_fetch_ran !== true || (isoDay(date) && coverage.sec_as_of !== date)) {
+    const input = monthDay(coverage.sec_as_of);
+    return { text: `業績データ：この公開には当日分のSEC記録がありません${input ? `（入力は${input}分）` : ''} — 業績の判定は未確認になります`,
+      short: `業績データ：当日分のSEC記録なし${input ? `（${input}分）` : ''}` };
+  }
+  if (!(Array.isArray(coverage.warnings) && coverage.warnings.length > 0) || !known(coverage.with_quarters)) return null;
   const total = known(coverage.eligible) && coverage.eligible > 0 ? coverage.eligible : coverage.universe;
   if (!known(total)) return null;
   const counts = `${coverage.with_quarters}/${total}銘柄`;
-  return { text: `業績データ：この公開のSEC記録は${counts} — 業績の判定は未確認が多くなります`, short: `業績データ：SEC記録は${counts}` };
+  return { text: `業績データ：この公開のSEC記録は${counts} — 業績の判定は未確認が多くなります`, short: `業績データ欠け：SEC記録は${counts}` };
 }

@@ -1,11 +1,14 @@
 import { fixedMinus, signed } from '../positionGeometry';
-import { code33Explain, code33Parts, fundamentalTiles, fundamentalsSource, quarterReason, secStatus } from '../fundamentalsExplain.js';
+import { code33Explain, code33Parts, EARNINGS_CHIP_NOTE, fundamentalTiles, fundamentalsSource, NO_REVENUE_CONCEPT, quarterReason, secStatus } from '../fundamentalsExplain.js';
 import { Expander } from './briefPrimitives';
 
 const finite = Number.isFinite;
 /** The EPS footnote: in place on the card at 1024px and wider, in the stock screen's 注記 below that. */
-export const EPS_NOTE = 'EPS は報告値（希薄化）で調整後EPSとは異なります。Q4 の売上・純利益が年度値でしか報告されていない場合は、年度値から3四半期を差し引いて算出し「Q4算出」と表示します。'
+const CARD_NOTE = 'EPS は報告値（希薄化）で調整後EPSとは異なります。Q4 の売上・純利益が年度値でしか報告されていない場合は、年度値から3四半期を差し引いて算出し「Q4算出」と表示します。'
   + '在庫・売掛金の注意は独自判定で、直近1〜2四半期の前年比の伸びが売上の伸びを20ポイント以上上回るときに表示します。';
+// The stock screen's 注記 below 1024px also says the rule of the conclusion's green earnings chip (EARNINGS_CHIP_NOTE,
+// 独自設定), since a phone never shows the chip's title; the desktop card keeps its note (the chip's title shows there).
+export const EPS_NOTE = CARD_NOTE + EARNINGS_CHIP_NOTE;
 // What the SEC quarters cannot tell (shown in the card's fold on phones, in place on the desktop).
 const OUT_OF_SCOPE = '対象外：予想・サプライズ・予想修正・調整後EPS';
 const CAUTION_POINTS = 20;
@@ -32,7 +35,8 @@ function quarterGaps(rows) {
       if (twin) twin.names.push(name); else lines.push({ names: [name], reason, indices });
     }
   }
-  return lines.sort((a, b) => a.indices[0] - b.indices[0]).map(line => `${line.names.join('・')} 前年比：${periodList(rows, line.indices)}期は${line.reason}`);
+  // A revenue concept out of scope covers every quarter: said once, without listing them.
+  return lines.sort((a, b) => a.indices[0] - b.indices[0]).map(line => `${line.names.join('・')} 前年比：${line.indices.length === rows.length && line.reason === NO_REVENUE_CONCEPT ? '' : `${periodList(rows, line.indices)}期は`}${line.reason}`);
 }
 // A margin in at most four characters so each quarter's column stays readable at 12px on a 320px phone.
 const marginShort = value => !finite(value) ? '—' : fixedMinus(value, Math.abs(value) >= 10 ? 0 : 1);
@@ -107,16 +111,15 @@ const noYoYText = rows => noBaseOnly(rows) ? `前年同期の値がないため�
 
 // Why a Yahoo quarterly rate is unknown, from financialHistory()'s reason.
 const YAHOO_REASON = { no_quarter: '四半期の値なし', no_base: '前年同期の値なし', ambiguous_base: '前年同期を特定できず', nonpositive_base: '前年同期が赤字・ゼロ', not_reported: '未報告' };
-// The day the Yahoo statements were read (M/D UTC), or null when the time is unknown.
-const retrievedDay = value => { const time = Date.parse(value); return Number.isFinite(time) ? `${new Date(time).getUTCMonth() + 1}/${new Date(time).getUTCDate()}` : null; };
 /**
  * Reference tiles from the current Yahoo quarterly statements, only when they passed financialHistory(): each says
- * 参考・Yahoo with its period and the day it was read (「参考・Yahoo（2026-06期・11/4取得）」), never a current SEC value.
+ * 参考・Yahoo with its period on one line (「参考・Yahoo 2026-06期」), never a current SEC value. The day the statements
+ * were read is said once, by the card's source line.
  */
-function yahooTiles(history, retrievedAt) {
-  const latest = history.quarterly.at(-1), day = retrievedDay(retrievedAt);
+function yahooTiles(history) {
+  const latest = history.quarterly.at(-1);
   const marginRow = [...history.quarterly].reverse().find(q => finite(q.revenue) && q.revenue > 0 && finite(q.netIncome));
-  const period = row => row ? `参考・Yahoo（${row.end.slice(0, 7)}期${day ? `・${day}取得` : ''}）` : '参考・Yahoo 値なし';
+  const period = row => row ? `参考・Yahoo ${row.end.slice(0, 7)}期` : '参考・Yahoo 値なし';
   const why = reason => reason === 'stale_quarter' ? `${period(latest)}は190日超のため比較しません` : `参考・Yahoo ${YAHOO_REASON[reason] || '前年同期と比較不可'}`;
   return [
     { label: 'EPS 前年比', value: finite(history.epsYoY) ? signed(history.epsYoY, 0) : null, short: '—', note: finite(history.epsYoY) ? period(latest) : why(history.epsYoYReason) },
@@ -211,7 +214,7 @@ export default function FundamentalsCard({ financial, wide }) {
   const sec = financial?.sec || secStatus(null, null);
   const rows = report?.rows?.slice(-8) || [];
   // SEC first; the Yahoo reference only when SEC has no quarters and its history is current.
-  const yahoo = !rows.length && history?.valid && history.quarterly?.length ? yahooTiles(history, financial?.historyRetrievedAt) : null;
+  const yahoo = !rows.length && history?.valid && history.quarterly?.length ? yahooTiles(history) : null;
   const tiles = rows.length ? fundamentalTiles(report) : yahoo || ['EPS 前年比', '売上 前年比', '純利益率'].map(label => ({ label, value: null, short: '—', note: sec.short }));
   const stamp = utcStamp(financial?.historyRetrievedAt);
   const source = rows.length ? `${fundamentalsSource(report)}${tiles.some(t => t.derived) ? '・売上/純利益のQ4は10-K年度値−3四半期で算出' : ''}`
@@ -226,7 +229,7 @@ export default function FundamentalsCard({ financial, wide }) {
   const quality = rows.length ? qualityChips(report) : null;
   const details = quality?.map(chip => chip.detail).filter(Boolean) || [];
   const qualityNotes = details.length > 0 && <ul className="brief-q-gaps brief-fin-quality-notes" aria-label="業績の質の根拠">{details.map(text => <li key={text}>{text}</li>)}</ul>;
-  const facts = <div className="brief-facts is-fin">{tiles.map(t => <div className="brief-fact" key={t.label}><small>{t.label}</small>
+  const facts = <div className="brief-facts is-fin">{tiles.map(t => <div className="brief-fact" key={t.label} title={t.title}><small>{t.label}</small>
     {t.turnaround ? <><b>黒字転換</b><em>{`${t.turnaround.end.slice(0, 7)}期・前年 ${fixedMinus(t.turnaround.from, 2)} → ${fixedMinus(t.turnaround.to, 2)}`}</em></>
       : <><b>{t.value ?? t.short}</b><em>{t.note}</em></>}</div>)}</div>;
   const box = <div className={`brief-code33 tone-${tone}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>{boxTitle}</strong><p>{explain.text}</p>{settled && <p>{settled}</p>}</div></div>;
@@ -256,7 +259,7 @@ export default function FundamentalsCard({ financial, wide }) {
         {box}
         {parts}
       </>}
-    {wide && <p className="brief-note">{EPS_NOTE}</p>}
+    {wide && <p className="brief-note">{CARD_NOTE}</p>}
   </section>;
 }
 
