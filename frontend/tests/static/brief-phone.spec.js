@@ -54,7 +54,12 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
     expect(tileText.filter(([, size]) => size < 12)).toEqual([]);
     expect(tileText.map(([text]) => text)).toEqual(expect.arrayContaining(['S&P', 'NAS', '高', '安']));
     const summary = page.getByTestId('brief-summary');
-    await expect(summary).toContainText('検討可・目安≤50%');
+    // The fixture's Nasdaq is in correction on the analysis day, so the market track's suffix (marketTileSuffix, its
+    // copy) follows the cap on a line of its own and 「検討可」 gives way (the tile's tone and the cap already say it).
+    // One session behind, the Nasdaq's record is not the analysis day's: no suffix, and the note reads 検討可・目安.
+    await expect(summary.locator('.brief-tile-suffix')).toHaveCount(lag ? 0 : 1);
+    if (lag) await expect(summary).toContainText('検討可・目安≤50%');
+    else { await expect(summary).toContainText('目安≤50%'); await expect(summary).not.toContainText('検討可'); }
     expect(await summary.locator('.brief-frag', { hasText: '目安≤50%' }).evaluate(node => node.getClientRects().length)).toBe(1);
     // The bar says the analysis session with its weekday, never today's date.
     await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
