@@ -147,11 +147,20 @@ The qualifiers on the stock's level tiles: 参考 when the stock is no buy candi
 ### Round 2 terms
 
 **ブレイク失敗（独自判定）**:
-A breakout of today's pivot on 1.4× or more of the prior 50-day volume, within `failedBreakoutSessions` (10, 独自判定) sessions, followed by a last close back under the pivot. A close at the pivot's cents is a touch (ピボット到達), not a breakout: the breakout is the first later close above the pivot, on that day's volume. It is a broken setup: the conclusion is neutral, the plan is 参考, the watch tile counts it, its headline leads the watch row and a watched focus row carries the same 崩れ chip (▲, the chart's weakness mark; ▼ there is 上昇の加速).
+A breakout of today's pivot on 1.4× or more of the prior 50-day volume, within `failedBreakoutSessions` (10, 独自判定) sessions of the breakout itself (a run of touches may begin earlier), followed by a last close back under the pivot. A close at the pivot's cents is a touch (ピボット到達), not a breakout: the breakout is the first later close above the pivot, on that day's volume. It is a broken setup: the conclusion is neutral, the plan is 参考, the watch tile counts it, its headline leads the watch row and a watched focus row carries the same 崩れ chip (▲, the app's caution mark: see ▲ / ▼).
 _Avoid_: 失敗ブレイク, だまし
 
 **上抜けからN営業日**:
-The sessions since the latest close that broke above today's pivot (`lastPivotCrossing`, up to 60 sessions back; after a touch at the pivot's cents, the first close above it), named in the stock conclusion as 「M/Dに上抜け・N営業日前」, or 「M/Dにピボット到達・N営業日前」 (wait) when a touch was never followed by a close above. 「上抜けから60営業日超」 when every close in that window is at or above the pivot. Without a dated crossing the stock conclusion reads 「上抜け日 未確認」 and is never green. The rows have no bars (owner decision §9-11): a row already above the pivot the day before keeps its plain 「● 買いゾーン +x%」, green while the market is open and the base is current, and ranks below the day's events. The chart's arrow turns grey once the breakout is older than `staleBreakoutSessions`.
+The sessions since the latest close that broke above today's pivot (`lastPivotCrossing`, up to 60 sessions back; after a touch at the pivot's cents, the first close above it), named in the stock conclusion as 「M/Dに上抜け・N営業日前」, or 「ピボット到達からN営業日」 (wait, the touch's date in the line under it) when a touch was never followed by a close above. 「上抜けから60営業日超」 when every close in that window is at or above the pivot. Without a dated crossing the stock conclusion reads 「上抜け日 未確認」 and is never green. The rows have no bars (owner decision §9-11) and compare the day's two closes with the pivot in whole cents, as the conclusion and the chart do: a row whose previous close was already above the pivot's cents keeps its plain 「● 買いゾーン +x%」, green while the market is open and the base is current, and ranks below the day's events. A previous close at the pivot's cents was a touch, not yet a breakout: the first close above it is that day's breakout (「↗ M/D上抜け」 on the volume) on the rows, in 「うち上抜け」 and in the conclusion alike, and a second close at the pivot's cents reads 「ピボット到達のまま」 (wait). The chart's arrow turns grey once the breakout is older than `staleBreakoutSessions`.
+
+**ピボット到達 / ピボット到達のまま**:
+A close at the pivot's cents after a close under it: 「M/Dにピボット到達」, green on that day only, as a stock arriving at its buy point. From the next close at the pivot's cents on it waits for a close above (「ピボット到達のまま」 on the rows, 「ピボット到達からN営業日」 in the conclusion; 緑はピボット到達の当日のみ, 独自判定), since no close has broken out yet.
+
+**±0.0% / +0.1%未満 / −0.1%未満**:
+The distance from the pivot to one decimal: 「±0.0%」 only at the pivot's cents (whichever side of the cent the float noise in a published pivot falls), 「+0.1%未満」 or 「−0.1%未満」 for a cent or more over or under the pivot that rounds to 0.0%; never 「+0.0%」 or 「−0.0%」. A close at the pivot's cents that the shared position rule still puts just under the pivot reads 「ピボット接近（ピボットと同値）」, never 「あと0.1%未満」.
+
+**▲ / ▼**:
+▲ is the app's amber caution mark wherever it appears: 買いゾーン超過, 下落日の大商い, 分配日, the market tab's 注意, and 崩れ / ブレイク失敗; the words beside it always name which. On the price chart ▼ is 上昇の加速 (a holder's sell-into-strength sign). On the sector table ▲N and ▼N are a rank that rose or fell N places, not a caution. The glyphs are hidden from assistive tech; the text names the event.
 
 **停滞 / 押し戻し**:
 A stock still in the buy zone `staleBreakoutSessions` (10, 独自判定) sessions after its crossing turns to wait: 停滞 when no certified close since the crossing went above the zone's top, 押し戻し when one did and the stock came back. New buying waits for the next pivot (次のピボット待ち).
@@ -160,7 +169,7 @@ A stock still in the buy zone `staleBreakoutSessions` (10, 独自判定) session
 A flat 60-session base above a rising 200-day line, with SMA150 above SMA200 and the price within 25% of its 52-week high: stage 2, never stage 3 (the backend's stage classifier and `stagePhase`, from certified bars only). 「・日足から算出」 when the stage was computed on the screen.
 
 **土台を確認できない / 土台未確認**:
-The Setup Engine base is not current for the analysis date, or its confidence is under 55 (`SE_CONFIDENCE_FLOOR`) or missing (信頼度 未確認, never 0): the pivot and the plan are 参考 (独自判定). A certified VCP footprint does not override it (§9-13).
+The Setup Engine base is not current for the analysis date, or its confidence is under 55 (`SE_CONFIDENCE_FLOOR`) or missing (信頼度 未確認, never 0): the pivot and the plan are 参考 (独自判定). A certified VCP footprint does not override it (§9-13). On every row surface a buy-zone or near-pivot row with such a base is grey and says 「土台未確認」 in the RS chip's place (the conclusion's reason in its title and the row's label; a broken setup's 崩れ leads instead); Today's 注目候補 tile is green only while one focus row has a current base, its 「うち上抜け」 and the 上抜け filter leave such a row out (counted as 未確認), and the notes say why the rows are grey.
 
 **収縮の中**:
 The stop sits above the last contraction's low, inside the base, where normal swings reach it (独自判定). The stop never moves by itself.

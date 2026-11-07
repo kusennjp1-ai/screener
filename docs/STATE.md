@@ -4,7 +4,7 @@
 
 ## 現在のサイクル（スキャナー）
 
-- 準備判定（setup_ready、CH12）: 10 の準備ゲートと主パターンの3条件だけで判定する。検出器レベルのチェックは `explain.diagnostics`（「<検出器>:<チェック>」）へ移し、準備判定を落とさない。DoubleBottom のスタブを既定の検出器から外した。検出器の例外は Error の結果（db8e297 でも同じく Error で、recalculate-setups.py は土台を消して unavailable と記録し、ピボットも消える。この挙動は round 2 で変えていない。変わったのは Error の理由の文言だけ）。その件数は data のカバレッジ報告が `setup_readiness.not_calculated`・`incomplete_report` として数え、掲載行の1%を超えると警告する。
+- 準備判定（setup_ready、CH12）: 10 の準備ゲートと主パターンの3条件だけで判定する。検出器レベルのチェックは `explain.diagnostics`（「<検出器>:<チェック>」）へ移し、準備判定を落とさない。DoubleBottom のスタブを既定の検出器から外した。検出器の例外は Error の結果（db8e297 でも同じく Error で、recalculate-setups.py は土台を消して unavailable と記録し、ピボットも消える。この挙動は round 2 で変えていない。変わったのは Error の理由の文言だけ）。data のカバレッジ報告は `setup_readiness.not_calculated`・`incomplete_report` を数え、掲載行の1%を超えると警告する。ただし `incomplete_report` は「Setup Engine が完全な報告を返さなかった」行の数で、検出器の例外（Error）だけでなく Insufficient Data の判定と payload なしを含む（recalculate-setups.py の理由文は3つを区別しない）。検出器の例外の件数そのものではない。
 - ゲート6: `volume_below_minimum` を `volume_above_dryup_cap` に改名（判定 volume_vs_50d ≤ 0.8 は不変）。旧公開の reason には旧名が残る。
 - ステージ（CH11）: 200日線が上向き・終値が上・SMA150 > SMA200・52週高値から25%以内なら、横ばいの60本でもステージ2（ベース形成中）。`minervini_scanner.py` と `/technical/{symbol}/stage` が SMA150 と52週高値を渡す。トレンドテンプレートは公開の8条件のまま。
 
