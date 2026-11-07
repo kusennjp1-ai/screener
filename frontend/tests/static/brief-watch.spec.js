@@ -255,6 +255,27 @@ test.describe('the 375×812 budgets with a broken setup', () => {
     expect(errors).toEqual([]);
   });
 
+  // The integration review: a watched row with a notable SEC chip or a questionable base brings the tab's 注記 (the chips'
+  // rules, 独自判定・独自設定); a phone's watch rows are compact (a caution in the RS chip's place, RS and then TT 8/8 give way
+  // rather than add a line), so the tab keeps its 12px of headroom with the fold under its 520 budget.
+  const onRow = (symbol, fn) => ({ rows: rows => { fn(rows.find(row => row.symbol === symbol)); }, details: details => { for (const detail of Object.values(details)) if (detail.symbol === symbol) fn(detail); } });
+  const secChip = onRow('ZZKS', row => { row.sec_summary = { sec_state: 'ok', eps_yoy: { value: 40, end: '2026-06-30' }, sales_yoy: { value: 30, end: '2026-06-30' }, code33: null, as_of_date: row.technical_audit.as_of_date }; });
+  const deepBase = onRow('ZZKS', row => { row.se_base_depth_pct = 40.2; row.se_base_length_weeks = 6; });
+  for (const [name, mutate] of [['a notable SEC chip', secChip], ['a questionable base', deepBase], ['a questionable base and a broken setup', { ...deepBase, ...broken('ZZSD') }]]) test(`the watch tab keeps its headroom with five symbols and ${name}, its 注記 folded`, async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': WATCH5 }, mutate });
+    await expect(page.getByRole('region', { name: 'ウォッチ中の銘柄' }).getByTestId('brief-candidate')).toHaveCount(4);
+    await expect(page.locator('.brief-screen-notes')).toHaveCount(1);
+    await settled(page);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(508);
+    // Each row stays within two chip lines, and the RS value it may leave out stays in its label.
+    for (const row of await page.getByTestId('brief-candidate').all()) {
+      expect(await row.locator('.brief-reasons').evaluate(box => new Set([...box.children].filter(chip => chip.style.display !== 'none').map(chip => Math.round(chip.getBoundingClientRect().top))).size)).toBeLessThanOrEqual(2);
+      await expect(row).toHaveAttribute('aria-label', /RS推計 \d+/);
+    }
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
   for (const [watch, budget] of [[WATCH4, 1326], [WATCH5, 1400]]) test(`Today with ${watch.length} watched and one broken setup fits ${budget}`, async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': watch }, mutate: broken('ZZSD') });
     await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
@@ -290,6 +311,23 @@ test.describe('the 375×812 budget one session behind', () => {
     expect(await note.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size; })).toBe(1);
     expect(await contentHeight(page)).toBeLessThanOrEqual(1400);
     // Round 2: 12px of headroom under the budget in every one of these, the tallest Today (plan §3).
+    expect(await contentHeight(page)).toBeLessThanOrEqual(1388);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  // The integration review: the governing variant with a broken watched focus row (ZZNV) and a focus row just under its pivot
+  // (ZZAR at −0.04%, its position chip the longer 「−0.1%未満」; ZZKS moved under its pivot too, so ZZAR is in the five): the
+  // compact rows let RS give way rather than add a line.
+  test('Today with five watched, a broken setup, a broken watched focus row and rows just under their pivot keeps its headroom', async ({ page }) => {
+    const under = rows => { for (const row of rows) if (['ZZKS', 'ZZAR'].includes(row.symbol)) row.se_pivot_price = Math.round(row.current_price * 1.0004 * 100) / 100; };
+    const both = { rows: under, charts: served => { broken('ZZSD').charts(served); broken('ZZNV').charts(served); } };
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': WATCH5 }, historyEnd: sessions.at(-2), mutate: both });
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    await expect(focus.locator('[data-testid="brief-candidate"][data-symbol="ZZNV"] .brief-reasons')).toContainText(WEAKNESS);
+    await expect(focus.locator('[data-testid="brief-candidate"][data-symbol="ZZAR"]')).toContainText('0.1%未満');
+    await settled(page);
     expect(await contentHeight(page)).toBeLessThanOrEqual(1388);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);

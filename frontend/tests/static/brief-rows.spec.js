@@ -478,10 +478,13 @@ for (const [width, device] of Object.entries({ ...PHONES, 1440: VIEWPORTS.deskto
     };
     const rows = await check();
     // The base chip shows on the rows (the 候補 list, Today); on a phone's Today in its short form in the RS chip's
-    // place, so the row keeps the lines of ZZNH's, a zone row with the same chips and a normal base.
+    // place, so the row keeps the lines of ZZNH's, a zone row with the same chips and a normal base. At 320 ZZNH's RS chip
+    // gives way rather than take a second line (it stays in the label, the integration review), while the caution in its
+    // place does not: there ZZNV may keep the second line RS took before, within the two lines and 100px checked above.
     const todayPhone = hash === '#/brief' && width !== '1440';
     if (!hash.endsWith('watch')) expect(rows.find(row => row.symbol === 'ZZNV').chips).toContain(todayPhone ? '土台−40%' : '土台6週・−40%');
-    if (todayPhone) expect([rows.find(row => row.symbol === 'ZZNV').lines, rows.find(row => row.symbol === 'ZZNV').height]).toEqual([rows.find(row => row.symbol === 'ZZNH').lines, rows.find(row => row.symbol === 'ZZNH').height]);
+    if (todayPhone && width !== '320') expect([rows.find(row => row.symbol === 'ZZNV').lines, rows.find(row => row.symbol === 'ZZNV').height]).toEqual([rows.find(row => row.symbol === 'ZZNH').lines, rows.find(row => row.symbol === 'ZZNH').height]);
+    if (todayPhone) expect(await page.locator('[data-symbol="ZZNH"]').first().getAttribute('aria-label')).toMatch(/RS推計 \d+/);
     expect(await page.locator('[data-symbol="ZZNV"]').first().getAttribute('aria-label')).toContain('土台6週・−40%（Setup Engineの土台が深さ35%超（独自判定））');
     if (hash.endsWith('list')) { await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて/ }).click(); await check(); }
     expect(await asciiMinus(page)).toEqual([]);

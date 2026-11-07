@@ -6,6 +6,7 @@ import { test, expect } from '@playwright/test';
 import { openBrief, VIEWPORTS, rowBySymbol, SEC_SYMBOL, date, now, charts, horizontalOverflow } from './brief-fixture.js';
 import { conditionNote } from '../../src/static/missingCondition.js';
 import { breakoutEvent, candidateView, earningsCall } from '../../src/static/brief/briefCandidate.js';
+import { crossingEvent } from '../../src/static/brief/breakoutHistory.js';
 
 const phoneDevice = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const conclusion = page => page.getByTestId('brief-conclusion');
@@ -326,6 +327,37 @@ test.describe('round 2: the one buy gate at 375×812', () => {
       expect(errors).toEqual([]);
       await page.close();
     }
+  });
+});
+
+// A touch at the pivot's cents never followed by a close above it (ZZNV's pivot is its price: three closes on it after one
+// under it): the conclusion dates the touch in tone wait, as crossingEvent words it on these bars, on one title line at 320
+// and 375, and the chart draws no breakout arrow (a touch is not a breakout).
+const heldBars = bars => {
+  const n = bars.length, pivot = rowBySymbol[SEC_SYMBOL].se_pivot_price;
+  Object.assign(bars[n - 4], { close: Math.round(pivot * 0.98 * 100) / 100 }); fit(bars[n - 4]);
+  for (const i of [n - 3, n - 2, n - 1]) { Object.assign(bars[i], { close: pivot }); fit(bars[i]); }
+  return bars;
+};
+const HELD_TOUCH = onChart(SEC_SYMBOL, heldBars);
+for (const width of [320, 375]) test.describe(`round 2: a touch never followed by a close above, at ${width}px`, () => {
+  test.use({ ...phoneDevice(width, width === 320 ? 640 : 812), contextOptions: { reducedMotion: 'reduce' } });
+  test('waits, dated from the touch, on one line, and the chart draws no arrow', async ({ page }) => {
+    const pivot = rowBySymbol[SEC_SYMBOL].se_pivot_price, bars = heldBars(structuredClone(charts[`${SEC_SYMBOL}.json`].bars));
+    const event = crossingEvent({ state: 'zone', asOf: date, pivot, upper: pivot * 1.05, close: pivot, prevClose: pivot, change: 0, volumeRatio: 1 }, bars);
+    expect(event.kind).toBe('afterTouch');
+    const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { mutate: HELD_TOUCH });
+    await expect(conclusion(page).locator('strong')).toHaveText(event.title);
+    await expect(conclusion(page)).toHaveClass(/tone-wait/);
+    await expect(conclusion(page)).toContainText(event.note);
+    await expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up').first()).toBeAttached();
+    await expect(page.getByTestId('brief-price-chart').locator('.bc-breakout')).toHaveCount(0);
+    await settled(page);
+    const title = await titleFit(page);
+    expect(title.lines).toBe(1);
+    expect(title.slack).toBeGreaterThanOrEqual(6);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
   });
 });
 

@@ -3,8 +3,9 @@
 // count. Each surface's copy belongs to its track; this spec compares the surfaces with each other and asserts no
 // track's wording as a literal (plan §1 rule 14), only counts and the absence of 「あと0」 and of 「あと」 after a date.
 import { test, expect } from '@playwright/test';
-import { openBrief, rowBySymbol, VIEWPORTS } from './brief-fixture.js';
+import { charts, openBrief, rowBySymbol, VIEWPORTS } from './brief-fixture.js';
 import { sellChipView } from '../../src/static/brief/briefSell.js';
+import { BASE_UNCHECKED_CHIP, BASE_UNCHECKED_NOTE } from '../../src/static/brief/briefCandidate.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const fit = bar => { bar.high = Math.max(bar.high, bar.open, bar.close); bar.low = Math.min(bar.low, bar.open, bar.close); };
@@ -93,8 +94,14 @@ test.describe('no green row beside a 参考 conclusion the row can read', () => 
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': WATCH }, mutate: weakBase });
     await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate').first()).toBeVisible();
     expect(await symbolsOf(page)).toEqual(order);
+    // The counts keep their text (membership is unchanged), but with every focus row 参考 the 注目候補 tile is not green.
     expect(await page.getByTestId('brief-summary').textContent()).toBe(tiles);
+    await expect(page.getByTestId('brief-summary').locator(':scope > li').nth(1)).not.toHaveClass(/tone-zone/);
     expect(await page.locator('[data-testid="brief-candidate"] .tone-zone, .brief-event-icon.tone-zone').count()).toBe(0);
+    // Each grey row says why in its own words (the rows' word, the conclusion's reason in its title), and Today's notes say it too.
+    const focusRows = page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate');
+    for (const row of await focusRows.all()) await expect(row.locator('.brief-reasons')).toContainText(BASE_UNCHECKED_CHIP);
+    expect(await page.locator('.brief-screen-notes li').allTextContents()).toContain(BASE_UNCHECKED_NOTE);
     for (const hash of ['#/brief/list', '#/brief/watch']) {
       await page.goto(`/${hash}`);
       await expect(page.getByTestId('brief-candidate').first()).toBeVisible();
@@ -123,9 +130,74 @@ test.describe('the analysis day reads one volume ratio', () => {
     const conclusion = page.getByTestId('brief-conclusion');
     await expect(conclusion).toBeVisible();
     expect(ratio(await conclusion.locator('strong').first().textContent())).toBe(rowRatio);
-    const readout = page.locator('.brief-chartcard .ro-item[title^="直前"]').first();
+    const readout = page.locator('.brief-chartcard .ro-ratio').first();
     await expect(readout).toBeVisible();
     expect(ratio(await readout.textContent())).toBe(rowRatio);
+    expect(errors).toEqual([]);
+  });
+});
+
+// A close at the pivot's cents the day before is a touch, so the first close above it on the volume is the analysis day's
+// breakout on every screen: the row's ↗ event chip, Today's 「うち上抜け」 and the 上抜け filter, the conclusion's green
+// call and the chart's arrow on that day (the rows compare the two closes in cents, as the conclusion and the chart do).
+test.describe('a touch the day before and a close above it read as one breakout', () => {
+  test.use(phone(375));
+  // ZZNV: the pivot at the close before the analysis day (the fixture's day is +2.0% on 1.6×), the close before that under it.
+  const touchedBefore = {
+    ...onRow('ZZNV', row => { row.se_pivot_price = Math.round(row.current_price / 1.02 * 100) / 100; }),
+    charts: served => { const bars = served['ZZNV.json'].bars, n = bars.length; Object.assign(bars[n - 3], { open: bars[n - 2].close * 0.98, close: Math.round(bars[n - 2].close * 0.98 * 100) / 100 }); fit(bars[n - 3]); },
+  };
+  test('the row, the 上抜け count and filter, the conclusion and the chart agree', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { mutate: touchedBefore });
+    const row = page.getByRole('region', { name: '注目候補' }).locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]');
+    await expect(row).toBeVisible();
+    const chip = row.locator('.brief-reasons > .brief-chip').first();
+    await expect(chip).toHaveClass(/tone-zone/);
+    const ratio = text => text.match(/(\d+\.\d\d)×/)?.[1] ?? null, day = text => text.match(/\d+\/\d+/)?.[0] ?? null;
+    const rowText = await chip.textContent();
+    expect(ratio(rowText), 'the event chip carries the day\'s ratio').not.toBeNull();
+    // Today counts it among the day's breakouts, and the link lists it.
+    const link = page.getByTestId('brief-breakout-link');
+    await expect(link).toHaveCount(1);
+    await link.click();
+    await expect(page.locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]')).toBeVisible();
+    await page.locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]').click();
+    const conclusion = page.getByTestId('brief-conclusion');
+    await expect(conclusion).toBeVisible();
+    await expect(conclusion).toHaveClass(/tone-zone/);
+    const title = await conclusion.locator('strong').first().textContent();
+    expect([day(title), ratio(title)]).toEqual([day(rowText), ratio(rowText)]);
+    // The chart marks the breakout on the analysis day (the last bar), green.
+    await expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up').first()).toBeAttached();
+    await expect(page.getByTestId('brief-price-chart').locator('.bc-breakout').first()).toBeAttached();
+    expect(errors).toEqual([]);
+  });
+});
+
+// A watched focus row whose sell checks are still loading holds its green (no chip, no layout change), so a broken setup never
+// reads as a buy first and flips to 崩れ when its check lands.
+test.describe('a watched focus row waits for its sell checks before any green', () => {
+  test.use(phone(390, 844));
+  test('a broken watched focus candidate has no green while its chart loads, then its 崩れ chip, at the same height', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market', { storage: { 'research-watch': WATCH }, mutate: broken('ZZNV') });
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const files = new Set(Object.keys(charts));
+    await page.route(url => files.has(url.pathname.split('/').pop()), async route => { await gate; await route.fallback(); });
+    await page.goto('/#/brief');
+    await page.reload();
+    const row = page.getByRole('region', { name: '注目候補' }).locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]');
+    await expect(row).toBeVisible();
+    await settled(page);
+    expect(await row.locator('.tone-zone').count(), 'no green while the check loads').toBe(0);
+    const before = (await row.boundingBox()).height;
+    release();
+    const brokenChip = sellChipView({ strength: [], weakness: [{ key: 'ma50', label: 'ma50', state: 'hit', detail: 'ma50' }] }).text;
+    await expect(row.locator('.brief-reasons')).toContainText(brokenChip);
+    expect(await row.locator('.tone-zone').count()).toBe(0);
+    expect(Math.abs((await row.boundingBox()).height - before)).toBeLessThan(0.5);
+    // An unwatched focus row, never checked, is not held.
+    expect(await page.getByRole('region', { name: '注目候補' }).locator('[data-testid="brief-candidate"]:not([data-symbol="ZZNV"]):not([data-symbol="ZZKS"]) .tone-zone').count()).toBeGreaterThan(0);
     expect(errors).toEqual([]);
   });
 });
