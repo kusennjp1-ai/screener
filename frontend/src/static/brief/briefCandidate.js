@@ -269,6 +269,24 @@ export function rowSecChip(view, now = view?.secNow ?? null) {
 }
 
 /**
+ * A grey row's 土台未確認 in the RS chip's place (the rows' Reasons): a buy candidate in the zone or near the pivot whose base
+ * is not current (baseMuted), unless a broken setup's ▲ chip leads (`sellTone`, the row's sell chip tone, 'ext').
+ */
+export const rowBaseHeld = (view, sellTone = null) => view?.qualified !== false && sellTone !== 'ext' && baseMuted(view);
+
+/**
+ * Whether a row draws its SEC chip (rowSecChip's), so a screen's 注記 states the chip's rule (data's EARNINGS_CHIP_NOTE) only
+ * while one is on screen. A full row draws every notable chip. A compact row (a phone's Today and watch tab, whose rows add
+ * no chip line under the screens' height budgets) draws only a falling EPS, in its short form in the RS chip's place, and
+ * not where the base takes that place (rowBaseHeld with the row's `sellTone`, or a questionable base): a notable rise never
+ * fits beside the day's chips there, so it is not drawn and stays in the row's label and on the stock view.
+ */
+export function rowSecChipDrawn(view, { compact = false, sellTone = null } = {}) {
+  if (!rowSecChip(view)) return false;
+  return !compact || (!rowBaseHeld(view, sellTone) && !view.baseCaution && finite(view.epsYoy) && view.epsYoy < 0);
+}
+
+/**
  * One candidate as the brief shows it. `now` (optional) is the clock its SEC summary is dated with: the bundle's
  * evaluation clock when the view comes from memoCandidateView; without it the summary is read as the export judged it.
  */

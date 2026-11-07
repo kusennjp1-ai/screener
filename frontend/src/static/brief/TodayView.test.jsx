@@ -338,18 +338,29 @@ describe('Today after the review', () => {
     expect(screen.getByRole('region', { name: '注目候補' }).textContent).not.toContain('土台の注意');
   });
 
-  it('states the earnings chip\'s rule (独自設定) with Today\'s notes only when a focus row carries a notable SEC chip', async () => {
+  it('states the earnings chip\'s rule (独自設定) with Today\'s notes only while a focus row draws a SEC chip', async () => {
     const { EARNINGS_CHIP_NOTE } = await import('../fundamentalsExplain.js');
-    const strong = audited('EPS1', 100, { extra: { sec_summary: { sec_state: 'ok', eps_yoy: { value: 40, end: '2026-06-30' }, sales_yoy: { value: 30, end: '2026-06-30' }, code33: null, as_of_date: DATE } } });
+    const summary = (eps, sales) => ({ sec_summary: { sec_state: 'ok', eps_yoy: { value: eps, end: '2026-06-30' }, sales_yoy: { value: sales, end: '2026-06-30' }, code33: null, as_of_date: DATE } });
+    const strong = audited('EPS1', 100, { extra: summary(40, 30) }), falling = audited('EPS2', 100, { extra: summary(-35, 10) });
+    const notes = () => [...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent);
+    const chips = symbol => [...document.querySelectorAll(`[data-symbol="${symbol}"] .brief-reasons > .brief-chip`)].map(chip => chip.textContent);
     show({ ranked: [strong] });
     expect(screen.getByRole('region', { name: '注目候補' }).querySelector('p.brief-note:last-child').textContent).toContain(EARNINGS_CHIP_NOTE);
     cleanup();
+    // A phone's compact focus rows draw no notable rise (it never fits beside the day's chips there; it stays in the row's
+    // label), so the 注記 does not explain a chip that is not on screen; a falling EPS is drawn in the RS chip's place.
     atPhone(true);
     show({ ranked: [strong], wide: false });
-    expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).toContain(EARNINGS_CHIP_NOTE);
+    expect(chips('EPS1').some(text => text.startsWith('EPS'))).toBe(false);
+    expect(document.querySelector('[data-symbol="EPS1"]').getAttribute('aria-label')).toMatch(/EPS \+40%/);
+    expect(notes()).not.toContain(EARNINGS_CHIP_NOTE);
+    cleanup();
+    show({ ranked: [falling], wide: false });
+    expect(chips('EPS2').some(text => text.startsWith('EPS'))).toBe(true);
+    expect(notes()).toContain(EARNINGS_CHIP_NOTE);
     cleanup();
     show({ ranked: [audited('TCH1', 100)], wide: false });
-    expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).not.toContain(EARNINGS_CHIP_NOTE);
+    expect(notes()).not.toContain(EARNINGS_CHIP_NOTE);
   });
 
   it('puts the caution in the RS chip\'s place on a phone\'s focus rows', () => {

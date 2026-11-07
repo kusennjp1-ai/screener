@@ -4,7 +4,9 @@
 // budgets and row heights with a broken setup, and the list's rows across a stock round trip, on synthetic data.
 // (The sell card's qualifier is brief-sell.spec.js's.)
 import { test, expect } from '@playwright/test';
-import { openBrief, charts, rows, rowBySymbol, horizontalOverflow, sessions } from './brief-fixture.js';
+import { openBrief, charts, date, rows, rowBySymbol, horizontalOverflow, sessions } from './brief-fixture.js';
+import { candidateView, rowSecChip } from '../../src/static/brief/briefCandidate.js';
+import { EARNINGS_CHIP_NOTE } from '../../src/static/fundamentalsExplain.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 // A broken setup's chip: its short form on the rows, its full sentence for assistive tech (Today) and as its title.
@@ -255,16 +257,29 @@ test.describe('the 375×812 budgets with a broken setup', () => {
     expect(errors).toEqual([]);
   });
 
-  // The integration review: a watched row with a notable SEC chip or a questionable base brings the tab's 注記 (the chips'
-  // rules, 独自判定・独自設定); a phone's watch rows are compact (a caution in the RS chip's place, RS and then TT 8/8 give way
-  // rather than add a line), so the tab keeps its 12px of headroom with the fold under its 520 budget.
+  // The integration review: a watched row with a questionable base brings the tab's 注記 (the chip's rule, 独自判定); a phone's
+  // watch rows are compact (a caution in the RS chip's place, RS and then TT 8/8 give way rather than add a line, and a
+  // notable rise in EPS is not drawn: rowSecChipDrawn), so the tab keeps its 12px of headroom with the fold under its 520
+  // budget. A notable SEC chip alone brings no 注記: the rule of a chip that is not on screen is not stated.
   const onRow = (symbol, fn) => ({ rows: rows => { fn(rows.find(row => row.symbol === symbol)); }, details: details => { for (const detail of Object.values(details)) if (detail.symbol === symbol) fn(detail); } });
   const secChip = onRow('ZZKS', row => { row.sec_summary = { sec_state: 'ok', eps_yoy: { value: 40, end: '2026-06-30' }, sales_yoy: { value: 30, end: '2026-06-30' }, code33: null, as_of_date: row.technical_audit.as_of_date }; });
   const deepBase = onRow('ZZKS', row => { row.se_base_depth_pct = 40.2; row.se_base_length_weeks = 6; });
-  for (const [name, mutate] of [['a notable SEC chip', secChip], ['a questionable base', deepBase], ['a questionable base and a broken setup', { ...deepBase, ...broken('ZZSD') }]]) test(`the watch tab keeps its headroom with five symbols and ${name}, its 注記 folded`, async ({ page }) => {
+  for (const [name, mutate, folded] of [['a notable SEC chip', secChip, 0], ['a questionable base', deepBase, 1], ['a questionable base and a broken setup', { ...deepBase, ...broken('ZZSD') }, 1]]) test(`the watch tab keeps its headroom with five symbols and ${name}, its 注記 folded`, async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': WATCH5 }, mutate });
     await expect(page.getByRole('region', { name: 'ウォッチ中の銘柄' }).getByTestId('brief-candidate')).toHaveCount(4);
-    await expect(page.locator('.brief-screen-notes')).toHaveCount(1);
+    await expect(page.locator('.brief-screen-notes')).toHaveCount(folded);
+    if (mutate === secChip) {
+      // ZZKS's chip (rowSecChip, the rows' own function, on the served row) stays in its label and is not drawn, and no 注記
+      // states its rule (EARNINGS_CHIP_NOTE).
+      const served = structuredClone(rowBySymbol.ZZKS);
+      secChip.rows([served]);
+      const sec = rowSecChip(candidateView({ row: served, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0 } }, date));
+      expect(sec?.tone).toBe('zone');
+      const row = page.locator('[data-testid="brief-candidate"][data-symbol="ZZKS"]');
+      await expect(row).toHaveAttribute('aria-label', new RegExp(sec.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+      expect(await row.locator('.brief-reasons > .brief-chip').evaluateAll((chips, text) => chips.filter(chip => chip.textContent === text).length, sec.short || sec.text)).toBe(0);
+      expect(await page.locator('body').textContent()).not.toContain(EARNINGS_CHIP_NOTE);
+    }
     await settled(page);
     expect(await contentHeight(page)).toBeLessThanOrEqual(508);
     // Each row stays within two chip lines, and the RS value it may leave out stays in its label.

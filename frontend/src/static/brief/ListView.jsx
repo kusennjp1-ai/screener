@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import useMediaQuery from '../useMediaQuery';
-import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, filterCounts, filterLabel, LIST_FILTERS, LIST_SORTS, matchesSearch, memoCandidateView, rowSecChip } from './briefCandidate';
+import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, filterCounts, filterLabel, LIST_FILTERS, LIST_SORTS, matchesSearch, memoCandidateView, rowSecChip, rowSecChipDrawn } from './briefCandidate';
+import { sellChipView } from './briefSell';
 import { CandidateRow } from './BriefParts';
 import { EARNINGS_CHIP_NOTE } from '../fundamentalsExplain.js';
 import { ScreenNotes } from './briefPrimitives';
@@ -125,7 +126,10 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   const compactRows = kind === 'watch' && phone;
   const greyForBase = view => view.qualified && baseMuted(view) && !(sells[view.symbol]?.breakdownHits > 0);
   const cautioned = view => view.qualified && (view.baseCaution || greyForBase(view) || (rowSecChip(view) && Number.isFinite(view.epsYoy) && view.epsYoy < 0));
-  const watchNotes = kind === 'watch' ? [ordered.some(view => view.baseCaution) ? BASE_CAUTION_NOTE : null, ordered.some(view => rowSecChip(view)) ? EARNINGS_CHIP_NOTE : null,
+  // The earnings chip's rule only while a row draws the chip (rowSecChipDrawn: a compact row draws no notable rise), so the
+  // 注記 never explains a chip that is not on screen.
+  const secDrawn = view => rowSecChipDrawn(view, { compact: compactRows, sellTone: sellChipView(sells[view.symbol])?.tone ?? null });
+  const watchNotes = kind === 'watch' ? [ordered.some(view => view.baseCaution) ? BASE_CAUTION_NOTE : null, ordered.some(secDrawn) ? EARNINGS_CHIP_NOTE : null,
     ordered.some(greyForBase) ? BASE_UNCHECKED_NOTE : null, compactRows && ordered.some(cautioned) ? WATCH_TT_NOTE : null].filter(Boolean) : [];
   // The 候補 tab says why a row is grey for its base while one shows the word.
   const uncheckedNote = kind !== 'watch' && ordered.some(view => view.qualified && baseMuted(view)) ? BASE_UNCHECKED_NOTE : null;

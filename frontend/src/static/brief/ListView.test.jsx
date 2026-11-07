@@ -53,9 +53,9 @@ describe('the list notes', () => {
 
   it('state the base and earnings chips\' rules on the watch tab only while one of its rows carries the chip (plan rule 13)', () => {
     const notes = view => [...view.container.querySelectorAll('.brief-note')].map(note => note.textContent);
-    const watchOf = rows => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    const watchOf = (rows, wide = true) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ListView brief={{ ...brief, bundle: { ...brief.bundle, data: { date: DATE, rankings: { minervini: rows } } }, ranked: rows }} kind="watch" watch={rows.map(r => r.row.symbol)} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false}
-        listState={{ filter: 'zone', sort: 'priority', query: '' }} setListState={() => {}} limits={{}} setLimits={() => {}} origin={null} wide onUnwatch={() => {}} />
+        listState={{ filter: 'zone', sort: 'priority', query: '' }} setListState={() => {}} limits={{}} setLimits={() => {}} origin={null} wide={wide} onUnwatch={() => {}} />
     </QueryClientProvider>);
     // Plain rows: no notes on the watch tab.
     expect(notes(watchOf([item('ZON1', 101)]))).toEqual([]);
@@ -70,6 +70,17 @@ describe('the list notes', () => {
     // A grey row for a base that is not current says why in the tab's notes, as on Today and 候補.
     const weak = { row: { ...item('WEAK', 101).row, se_pattern_confidence: 31 }, assessment: item('WEAK', 101).assessment };
     expect(notes(watchOf([weak]))).toEqual([BASE_UNCHECKED_NOTE]);
+    cleanup();
+    // A phone's compact watch rows draw no notable rise in EPS (rowSecChipDrawn; it stays in the row's label), so the tab's
+    // 注記 does not state the rule of a chip that is not on screen (and no 注記 is added for it).
+    window.matchMedia = query => ({ matches: /max-width:\s*520px/.test(query), media: query, addEventListener() {}, removeEventListener() {} });
+    try {
+      const phoneTab = watchOf([strong], false);
+      const row = phoneTab.container.querySelector('[data-symbol="EPS1"]');
+      expect([...row.querySelectorAll('.brief-reasons > .brief-chip')].some(chip => chip.textContent.startsWith('EPS'))).toBe(false);
+      expect(row.getAttribute('aria-label')).toMatch(/EPS \+40%/);
+      expect(phoneTab.container.querySelector('.brief-screen-notes')).toBeNull();
+    } finally { delete window.matchMedia; }
   });
 });
 

@@ -3,7 +3,7 @@ import { money, signed } from '../positionGeometry';
 import { sellChipView } from './briefSell';
 import { meterPercent } from './briefNav';
 import { useEntrance } from './briefPrimitives';
-import { BASE_UNCHECKED_CHIP, baseMuted, BREAKOUT_VOLUME_RATIO, candidateMarketGate, distanceText, earningsCall, pivotDistanceText, positionText, ratioShown, rowEvent, rowSecChip, rsShown, templateChip } from './briefCandidate';
+import { BASE_UNCHECKED_CHIP, baseMuted, BREAKOUT_VOLUME_RATIO, candidateMarketGate, distanceText, earningsCall, pivotDistanceText, positionText, ratioShown, rowBaseHeld, rowEvent, rowSecChip, rowSecChipDrawn, rsShown, templateChip } from './briefCandidate';
 
 // The layout primitives every track uses (Expander, ScreenNotes, Parts, RiseItem, Toast) live in the
 // frozen briefPrimitives.jsx; they are re-exported here so the old import path keeps working.
@@ -53,8 +53,9 @@ const chip = (key, tone, children, title, drop) => <span key={key} className={`b
 
 /*
  * The optional chips (the SEC chip, which gives way first, then the questionable base) give way when they would take
- * a row's chips past two lines; with `keepLines` (Today's focus rows on a phone: five rows under a fixed height
- * budget) when they would add a line to the row. They stay in the row's label. Every chip line keeps 6px at its end
+ * a row's chips past two lines; with `keepLines` (Today's focus rows and the watch tab's rows on a phone, under fixed
+ * height budgets) when they would add a line to the row (a compact row draws no notable rise in EPS at all:
+ * rowSecChipDrawn). They stay in the row's label. Every chip line keeps 6px at its end
  * by the chip box's padding (brief-watch.css), so a line that fits keeps the slack.
  * The rows of one commit are fitted together, before the paint: each row with an optional chip queues its chip box,
  * and one microtask shows every optional chip, reads every box, hides what does not fit and reads again only the
@@ -132,7 +133,7 @@ const shownSec = view => rowSecChip(view);
  * so a grey row is never unexplained and no row gets a line more. Not for a stock that is not a buy candidate (its
  * TT chip says why) or a broken setup (its 崩れ chip leads, as the conclusion's call does).
  */
-const baseHeld = (view, sellChip) => view.qualified !== false && sellChip?.tone !== 'ext' && baseMuted(view);
+const baseHeld = (view, sellChip) => rowBaseHeld(view, sellChip?.tone ?? null);
 /** Whether the volume chip shows (volumeTone, and no event chip already carries the ratio). */
 const volumeShown = view => volumeTone(view) !== null && !['breakout', 'heavyDown'].includes(rowEvent(view)?.kind);
 
@@ -152,8 +153,9 @@ function cautionOf(view, sec) {
  * `hideTemplate`: rows that are all TT 8/8 (Today's focus rows, the qualified lists), where 「TT 8/8」 would be
  * constant. `muted`: the market is not open to new buying. A row that is muted, or not a buy candidate, has no green
  * chip. `now` dates the earnings chip (the days from the later of the analysis date and today). `compact` (a phone's
- * Today and watch tab): a caution (cautionOf) takes the RS chip's place, and the RS chip, then a passed template's
- * 「TT 8/8」, give way after the other optional chips rather than add a line (both stay in the row's label). A grey row
+ * Today and watch tab): a caution (cautionOf) takes the RS chip's place, a notable rise in EPS is not drawn (rowSecChipDrawn),
+ * and the RS chip, then a passed template's 「TT 8/8」, give way after the other optional chips rather than add a line (all
+ * stay in the row's label). A grey row
  * for a base that is not current says 土台未確認 in the RS chip's place on every row surface (baseHeld).
  */
 export function Reasons({ view, now, sell, hideTemplate = false, muted = false, compact = false }) {
@@ -175,7 +177,9 @@ export function Reasons({ view, now, sell, hideTemplate = false, muted = false, 
   if (caution) chips.push(chip(caution.key, '', caution.text, caution.title));
   else if (!view.missing?.rs && !brokenCompact) chips.push(chip('rs', '', `RS推計 ${rsShown(view.rs)}`, undefined, compact ? 3 : undefined));
   const secTitle = sec && (sec.short && sec.short !== sec.text ? `${sec.text}：${sec.title}` : sec.title);
-  if (sec && caution?.key !== 'sec') chips.push(chip('sec', zone(sec.tone), sec.short || sec.text, secTitle, 1));
+  // A compact row draws only a falling EPS, as its caution above (rowSecChipDrawn, which the screens' 注記 read): a notable
+  // rise never fits beside the day's chips there, and it stays in the row's label.
+  if (sec && caution?.key !== 'sec' && rowSecChipDrawn(view, { compact, sellTone: sellChip?.tone ?? null })) chips.push(chip('sec', zone(sec.tone), sec.short || sec.text, secTitle, 1));
   if (view.rsLineHigh) chips.push(chip('rsl', zone('zone'), 'RS線 新高値'));
   // A questionable base (独自判定): one neutral chip, its rule in the title; it gives way after the SEC chip.
   if (view.baseCaution && caution?.key !== 'base') chips.push(chip('base', '', view.baseCaution.text, view.baseCaution.title, 2));

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import useMediaQuery from '../useMediaQuery';
 import { money } from '../positionGeometry';
-import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, earningsCall, focusCandidates, focusCounts, focusHeadingNote, focusTone, memoCandidateView, pivotDistanceText, rowSecChip, watchEvent } from './briefCandidate';
+import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, earningsCall, focusCandidates, focusCounts, focusHeadingNote, focusTone, memoCandidateView, pivotDistanceText, rowSecChipDrawn, watchEvent } from './briefCandidate';
 import { leadingGroups, marketTileNote, marketTileSuffix, marketTone } from './briefEnvironment';
 import { EARNINGS_CHIP_NOTE, fundamentalsCoverageWarning, publishedFundamentalsCoverage } from '../fundamentalsExplain.js';
 import { isBreakdown, sellChipView } from './briefSell';
@@ -119,7 +119,8 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
   // A focus row with the questionable-base chip or a notable SEC chip: its rule (独自判定・独自設定) is said with Today's notes too,
   // and a grey row for a base that is not current (土台未確認 in its RS chip's place) says why the row is grey.
   const baseNote = focus.some(view => view.baseCaution) ? BASE_CAUTION_NOTE : null;
-  const earningsNote = focus.some(view => rowSecChip(view)) ? EARNINGS_CHIP_NOTE : null;
+  // Only while a focus row draws the chip (rowSecChipDrawn: a phone's compact rows draw no notable rise).
+  const earningsNote = focus.some(view => rowSecChipDrawn(view, { compact: phone, sellTone: sellChipView(sells[view.symbol] ?? null)?.tone ?? null })) ? EARNINGS_CHIP_NOTE : null;
   const uncheckedNote = focus.some(view => baseMuted(view) && sellChipView(sells[view.symbol])?.tone !== 'ext') ? BASE_UNCHECKED_NOTE : null;
   return <>
     <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け・米国株` : '日付未確認'}</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>

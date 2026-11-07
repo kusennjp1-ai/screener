@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
 import { BarQuote, CandidateRow, DayChange, Expander, Parts, Reasons, RiseItem, ScreenNotes, StateChip, Toast } from './BriefParts';
+import { rowSecChipDrawn } from './briefCandidate';
 import * as primitives from './briefPrimitives';
 
 // The round-2 row chip (data's secRowChip, plan §2.2): it answers as its owner's module does unless a test
@@ -341,9 +342,16 @@ describe('the rows\' cautions and the chip fit', () => {
     const eps = row({ view: view({ row: { symbol: 'AAA' }, epsYoy: -35.4 }), compact: true, hideTemplate: true }).container;
     expect(chipsOf(eps)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', 'EPS −35%']);
     cleanup();
-    // A rising EPS is no caution: RS keeps its place, the SEC chip stays optional; off Today, nothing moves.
+    // A rising EPS is no caution: RS keeps its place, and a compact row does not draw the chip at all (it never fits
+    // beside the day's chips there; rowSecChipDrawn, which the 注記 read): it stays in the row's label. Off Today, it is drawn.
     seam.chip = { text: 'EPS +40%・売上 +30%（26-06）', tone: 'zone', title: '〈title〉', notable: true };
-    expect(chipsOf(row({ view: view({ row: { symbol: 'AAA' }, epsYoy: 40 }), compact: true, hideTemplate: true }).container)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', 'RS推計 88', 'EPS +40%・売上 +30%（26-06）']);
+    const rising = view({ row: { symbol: 'AAA' }, epsYoy: 40 });
+    const compactRow = row({ view: rising, compact: true, hideTemplate: true }).container;
+    expect(chipsOf(compactRow)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', 'RS推計 88']);
+    expect(compactRow.querySelector('.brief-row').getAttribute('aria-label')).toContain('EPS +40%・売上 +30%（26-06）');
+    expect([rowSecChipDrawn(rising, { compact: true }), rowSecChipDrawn(rising)]).toEqual([false, true]);
+    cleanup();
+    expect(chipsOf(row({ view: rising, hideTemplate: true }).container)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', 'RS推計 88', 'EPS +40%・売上 +30%（26-06）']);
     cleanup();
     seam.chip = null;
     expect(chipsOf(row({ view: view({ baseCaution: base }), hideTemplate: true }).container)).toEqual(['● 買いゾーン +1.2%', '出来高 1.60×', 'RS推計 88', '土台6週・−40%']);
@@ -423,10 +431,10 @@ describe('the rows after the integration review', () => {
   it('lets the RS chip give way last on a phone\'s Today (it stays in the label), never off Today', () => {
     seam.chip = { text: '〈sec〉', tone: 'zone', title: '〈title〉', notable: true };
     const optional = props => [...row({ view: view({ row: { symbol: 'AAA' }, baseCaution: base, epsYoy: 40 }), ...props }).container.querySelectorAll('[data-optional]')].map(node => [node.textContent, node.dataset.optional]);
-    // A caution in its place (the questionable base): RS is not drawn at all; the SEC chip stays the first to give way.
-    expect(optional({ compact: true, hideTemplate: true })).toEqual([['〈sec〉', '1']]);
+    // A caution in its place (the questionable base): RS is not drawn at all, nor a notable rise in EPS (rowSecChipDrawn).
+    expect(optional({ compact: true, hideTemplate: true })).toEqual([]);
     cleanup();
-    expect(optional({ compact: true, hideTemplate: true, view: view({ row: { symbol: 'AAA' }, epsYoy: 40 }) })).toEqual([['RS推計 88', '3'], ['〈sec〉', '1']]);
+    expect(optional({ compact: true, hideTemplate: true, view: view({ row: { symbol: 'AAA' }, epsYoy: 40 }) })).toEqual([['RS推計 88', '3']]);
     cleanup();
     expect(optional({})).toEqual([['〈sec〉', '1'], ['土台6週・−40%', '2']]);
   });
