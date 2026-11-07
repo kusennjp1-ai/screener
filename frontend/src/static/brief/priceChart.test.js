@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { _test, dateTicks, indexRuns, NARROW_CHART_WIDTH, renderPriceChart, RS_CAPTION, spread, weeklyBars } from './priceChart';
+import { _test, dateTicks, FEW_CANDLES, indexRuns, MA_SHIFT, NARROW_CHART_WIDTH, renderPriceChart, RS_CAPTION, spread, weeklyBars } from './priceChart';
 import { chartContentKey, earningsMarker, EARNINGS_MARKER_DAYS } from './chartReadout';
 import { EARNINGS_WARN_DAYS, earningsCall } from './briefCandidate';
 
@@ -399,13 +399,40 @@ describe('brief price chart', () => {
     }
   });
 
-  it('ends the averages\' names 7px left of the axis, clear of the tags and their leaders', () => {
+  it('ends the averages\' names 7px left of the axis (or up to MA_SHIFT further left), clear of the tags and their leaders', () => {
     const el = container(332, 340);
     renderPriceChart(el, busy(1), { period: 130, animate: false });
     const pw = 332 - 68, names = [...el.querySelectorAll('.bc-malabel')];
     expect(names.length).toBeGreaterThan(0);
-    for (const name of names) expect(Number(name.getAttribute('x'))).toBe(pw - 7);
+    for (const name of names) {
+      expect(Number(name.getAttribute('x'))).toBeLessThanOrEqual(pw - 7);
+      expect(Number(name.getAttribute('x'))).toBeGreaterThanOrEqual(pw - 7 - MA_SHIFT - 1);
+    }
     expect(collisions(el)).toEqual([]);
+  });
+
+  it('moves an average\'s name left or further up or down (with its leader) before putting it over the newest candles', () => {
+    // A flat finish the averages end in, and the last four bars spanning far above and below it: no candle-free
+    // height is left at the name's usual place, but there is one a few bars to the left.
+    const flat = bars.map((b, i) => (i > 200 ? { ...b, open: 90, high: 91.5, low: 88.5, close: 90 } : b));
+    const tall = flat.map((b, i) => (i >= bars.length - 4 ? { ...b, high: 112, low: 70 } : b));
+    for (const width of [390, 1000]) {
+      const el = container(width, 340);
+      renderPriceChart(el, { ...model, bars: tall, pivot: 92, upper: 96.6, stop: 85, legs: [] }, { period: 130, animate: false });
+      const pw = width - 68, names = [...el.querySelectorAll('.bc-malabel')];
+      const lines = [...el.querySelectorAll('path.bc-ma')].filter(path => !path.classList.contains('bc-mashort'));
+      expect({ width, names: names.length }).toEqual({ width, names: lines.length });
+      const candles = [...el.querySelectorAll('line.bc-up, line.bc-down')].map(line => ({ x: Number(line.getAttribute('x1')), y0: Number(line.getAttribute('y1')), y1: Number(line.getAttribute('y2')) }));
+      for (const name of names) {
+        const right = Number(name.getAttribute('x')), yc = Number(name.getAttribute('y')) - 4, w = _test.width(name.textContent, true);
+        const under = candles.filter(c => c.x > right - w - 4 && c.x < right + 4 && c.y0 < yc + 6.5 && c.y1 > yc - 6.5);
+        expect({ width, name: name.textContent, forced: name.dataset.forced, under: under.length }).toEqual({ width, name: name.textContent, forced: undefined, under: 0 });
+        expect(right).toBeGreaterThanOrEqual(pw - 7 - MA_SHIFT - 1);
+      }
+      // A name moved left and off its line's height is joined to the line's end by an elbow leader.
+      expect([...el.querySelectorAll('.bc-maleader')].some(leader => /H/.test(leader.getAttribute('d')))).toBe(true);
+      expect(collisions(el)).toEqual([]);
+    }
   });
 
   it('marks a label it had to put over candles (data-forced, with the spots it tried) and no other', () => {
@@ -413,8 +440,12 @@ describe('brief price chart', () => {
     const wall = bars.map(b => ({ ...b, open: 90, close: 91, high: 125, low: 60 }));
     const el = container(332, 340);
     renderPriceChart(el, { ...model, bars: wall, pivot: 100, upper: 110, stop: 93, legs: [] }, { period: 130, animate: false });
-    const forced = [...el.querySelectorAll('[data-forced="1"]')];
+    const wide = container(1000, 420);
+    renderPriceChart(wide, { ...model, bars: wall, pivot: 100, upper: 110, stop: 93, legs: [] }, { period: 130, animate: false });
+    const forced = [...el.querySelectorAll('[data-forced="1"]'), ...wide.querySelectorAll('[data-forced="1"]')];
     expect(forced.map(node => node.textContent)).toEqual(expect.arrayContaining(['ピボット', '買いゾーン 〜110.00', '50']));
+    // A narrow chart leaves the zone unnamed rather than cover the wall's candles with its name.
+    expect(el.querySelector('.bc-zonetext')).toBeNull();
     for (const node of forced) {
       expect(node.dataset.search).toMatch(/^\d+\.\d \d+\.\d \d+\|\d+\.\d( \d+\.\d)*$/);
       expect(node.dataset.box.split(' ').map(Number).every(Number.isFinite)).toBe(true);
@@ -585,6 +616,96 @@ describe('brief price chart', () => {
     const lx = Number(label.getAttribute('x')), yc = Number(label.getAttribute('y')) - 4, w = _test.width(label.textContent);
     const candles = [...el.querySelectorAll('line.bc-up, line.bc-down')].map(line => ({ x: Number(line.getAttribute('x1')), y0: Number(line.getAttribute('y1')), y1: Number(line.getAttribute('y2')) }));
     expect(candles.filter(c => c.x > lx - 2 && c.x < lx + w + 2 && c.y0 < yc + 7 && c.y1 > yc - 7)).toEqual([]);
+  });
+
+  it('on a narrow chart, names the zone without its price before covering candles, and over a few candles at most', () => {
+    // Candles fill the band and the row above it except over the last bars (`gap`): 「買いゾーン 〜113.40」 has no
+    // candle-free spot there, 「買いゾーン」 one; with no gap the band goes unnamed.
+    const pw = 332 - 68;
+    const crowded = bars.map((b, i) => (i > 170 ? { ...b, open: 108.5, close: 112.5, high: 116, low: 108.2 } : b));
+    for (const [gap, name] of [[40, '買いゾーン'], [0, null]]) {
+      const holed = crowded.map((b, i) => (i >= bars.length - gap ? { ...b, open: 102, close: 103, high: 103.5, low: 101.5 } : b));
+      const el = container(332, 340);
+      renderPriceChart(el, { ...model, bars: holed, legs: [] }, { period: 130, animate: false });
+      const label = el.querySelector('.bc-zonetext');
+      expect({ gap, name: label?.textContent ?? null }).toEqual({ gap, name });
+      if (label) {
+        const lx = Number(label.getAttribute('x')), yc = Number(label.getAttribute('y')) - 4, w = _test.width(label.textContent);
+        const over = [...el.querySelectorAll('line.bc-up, line.bc-down')].filter(c => { const cx = Number(c.getAttribute('x1')); return cx > lx - 3 && cx < lx + w + 3 && Number(c.getAttribute('y1')) < yc + 7 && Number(c.getAttribute('y2')) > yc - 7; });
+        expect(over.length).toBeLessThanOrEqual(FEW_CANDLES);
+        expect(lx + w).toBeLessThanOrEqual(pw);
+      }
+    }
+  });
+
+  it('never puts the pivot\'s name and the zone\'s on one row side by side, nor a depth beside an average\'s name', () => {
+    for (const [width, period] of [[290, 130], [332, 130], [332, 250], [1000, 130], [1000, 65]]) for (const k of [1, 50]) {
+      const el = container(width, 340);
+      renderPriceChart(el, busy(k), { period, animate: false });
+      const { labels } = chartBoxes(el), row = (a, b) => a.y0 < b.y1 && a.y1 > b.y0, gap = (a, b) => Math.max(a.x0 - b.x1, b.x0 - a.x1);
+      const pivot = labels.find(l => l.name === 'ピボット'), zone = labels.find(l => l.name.startsWith('買いゾーン'));
+      if (pivot && zone && row(pivot, zone)) expect({ width, period, k, apart: gap(pivot, zone) > 24 }).toEqual({ width, period, k, apart: true });
+      const figures = [...el.querySelectorAll('.bc-legtext, .bc-tdepth')].map(node => labels.find(l => l.name === node.textContent));
+      const names = [...el.querySelectorAll('.bc-malabel')].map(node => labels.find(l => l.name === node.textContent));
+      for (const depth of figures) for (const name of names) if (depth && name && row(depth, name)) expect({ width, period, k, pair: `${depth.name} ${name.name}`, apart: gap(depth, name) > 12 }).toEqual({ width, period, k, pair: `${depth.name} ${name.name}`, apart: true });
+    }
+  });
+
+  it('keeps a level line out of a contraction label\'s glyphs when a spot clear of it is near', () => {
+    // The 52-week high runs exactly where the last contraction's T number would sit (9px above its box).
+    const legs = [{ startDate: day(262), endDate: day(290), high: 108, low: 104.5, depthPct: 3.2 }];
+    for (const width of [332, 1000]) {
+      const probe = container(width, 340);
+      renderPriceChart(probe, { ...model, legs }, { period: 130, animate: false });
+      const box = probe.querySelector('.bc-legbox'), top = Number(box.getAttribute('y'));
+      // The price 9px above the box's top, on the chart's own log scale (the box's top and the stop line give it).
+      const line = Number(probe.querySelector('.bc-stopgroup line').getAttribute('y1'));
+      const auditHigh = Math.exp(Math.log(108) + (Math.log(model.stop) - Math.log(108)) * -9 / (line - top));
+      const el = container(width, 340);
+      renderPriceChart(el, { ...model, legs, auditHigh }, { period: 130, animate: false });
+      const high = Number(el.querySelector('line.bc-high52').getAttribute('y1'));
+      expect(Math.abs(high - (top - 9))).toBeLessThan(1.5);
+      for (const node of el.querySelectorAll('.bc-ttext, .bc-legtext')) {
+        const yc = Number(node.getAttribute('y')) - 4;
+        expect({ width, text: node.textContent, clear: Math.abs(high - yc) > 5 }).toEqual({ width, text: node.textContent, clear: true });
+      }
+    }
+  });
+
+  it('cuts a level line under a label it still runs through (no clear spot near its place), the stop\'s cut going when the stop moves', () => {
+    // Every bar spans the whole range: the T label goes over candles where it belongs, on the 52-week high's line.
+    const wall = bars.map(b => ({ ...b, open: 90, close: 91, high: 125, low: 60 }));
+    const legs = [{ startDate: day(262), endDate: day(290), high: 108, low: 95, depthPct: 12 }];
+    const wallModel = { ...model, bars: wall, pivot: 100, upper: 110, stop: 93, legs };
+    const probe = container(332, 340);
+    renderPriceChart(probe, wallModel, { period: 130, animate: false });
+    const top = Number(probe.querySelector('.bc-legbox').getAttribute('y')), line = Number(probe.querySelector('.bc-stopgroup line').getAttribute('y1'));
+    const auditHigh = Math.exp(Math.log(108) + (Math.log(93) - Math.log(108)) * -9 / (line - top));
+    const el = container(332, 340);
+    renderPriceChart(el, { ...wallModel, auditHigh }, { period: 130, animate: false });
+    const high = el.querySelector('line.bc-high52'), hy = Number(high.getAttribute('y1'));
+    const struck = [...el.querySelectorAll('.bc-ttext, .bc-legtext')].filter(node => Math.abs(Number(node.getAttribute('y')) - 4 - hy) <= 5.5);
+    expect(struck.length).toBeGreaterThan(0);
+    const mask = el.querySelector(high.getAttribute('mask').replace(/^url\((.*)\)$/, '$1'));
+    const holes = [...mask.querySelectorAll('rect[fill="#000"]')].map(r => ({ x0: Number(r.getAttribute('x')), x1: Number(r.getAttribute('x')) + Number(r.getAttribute('width')), y0: Number(r.getAttribute('y')), y1: Number(r.getAttribute('y')) + Number(r.getAttribute('height')) }));
+    for (const node of struck) {
+      const [x0, x1] = node.dataset.box.split(' ').map(Number);
+      expect(holes.some(h => h.x0 <= x0 && h.x1 >= x1 && h.y0 <= hy && h.y1 >= hy)).toBe(true);
+    }
+    // The stop's name struck on both sides of its line (2R above, 3R below): cut too, and the cut goes when the plan
+    // moves the stop.
+    const at = dy => Math.exp(Math.log(108) + (Math.log(93) - Math.log(108)) * (line + dy - top) / (line - top));
+    const moved = container(332, 340);
+    const chart = renderPriceChart(moved, { ...wallModel, pivot: 106, r2: at(-9), r3: at(11) }, { period: 130, animate: false });
+    expect(Math.abs(Number(moved.querySelector('line.bc-r2').getAttribute('y1')) - (line - 9))).toBeLessThan(1.5);
+    expect(moved.querySelectorAll('mask rect[data-for="stop"]')).toHaveLength(1);
+    chart.moveStop(90, false);
+    expect(moved.querySelectorAll('mask rect[data-for="stop"]')).toHaveLength(0);
+    // A chart with no struck label masks nothing.
+    const clear = container(1000, 420);
+    renderPriceChart(clear, model, { period: 130, animate: false });
+    expect(clear.querySelector('[mask]')).toBeNull();
+    expect(clear.innerHTML).not.toContain('data-cut');
   });
 
   it('shortens the volume caption to the plot\'s width on the narrowest phones, keeping ● and ■', () => {
