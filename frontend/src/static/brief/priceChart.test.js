@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { _test, dateTicks, indexRuns, keepRightFirst, NARROW_CHART_WIDTH, renderPriceChart, RS_CAPTION, spread, weeklyBars } from './priceChart';
+import { _test, dateTicks, indexRuns, NARROW_CHART_WIDTH, renderPriceChart, RS_CAPTION, spread, weeklyBars } from './priceChart';
 import { chartContentKey, earningsMarker, EARNINGS_MARKER_DAYS } from './chartReadout';
 import { EARNINGS_WARN_DAYS, earningsCall } from './briefCandidate';
 
@@ -87,34 +87,30 @@ describe('brief price chart', () => {
     expect(spread([{ y: 405 }, { y: 406 }], 20, 10, 410).map(item => item.at)).toEqual([390, 410]);
   });
 
-  it('keeps contraction T labels right-first, 18px apart, always with the last one and its depth', () => {
-    expect(keepRightFirst([{ x: 10 }, { x: 20 }, { x: 30 }, { x: 45 }], 18).map(item => item.x)).toEqual([20, 45]);
+  /** Each contraction's depth as drawn (under its box, or in a combined 「T2 −7%」), by its index. */
+  const drawnDepths = el => Object.fromEntries([...el.querySelectorAll('.bc-leg')].map(node => {
+    const k = node.dataset.leg, label = el.querySelector(`.bc-legtext[data-i="${k}"]`) || el.querySelector(`.bc-tlabel[data-leg="${k}"] .bc-tdepth`);
+    return [k, label?.textContent ?? null];
+  }));
+
+  it('shows every contraction\'s T number and depth, combined above a box too narrow for the depth under it', () => {
     const narrow = Array.from({ length: 6 }, (_, k) => ({ startDate: day(276 + k * 3), endDate: day(277 + k * 3), high: 112, low: 110, depthPct: 6 - k * 0.5 }));
     const el = container();
     renderPriceChart(el, { ...model, legs: narrow }, { period: 130, animate: false });
-    const labels = [...el.querySelectorAll('.bc-tlabel')];
-    // The last box is too narrow for its depth under it: one combined label above it.
-    expect(labels.map(node => node.textContent)).toContain('T6 −4%');
-    expect(labels.length).toBeLessThan(6);
-    const xs = labels.map(node => Number(node.querySelector('text').getAttribute('x'))).sort((a, b) => a - b);
-    for (let i = 1; i < xs.length; i++) expect(xs[i] - xs[i - 1]).toBeGreaterThanOrEqual(18);
+    const labels = [...el.querySelectorAll('.bc-tlabel')].map(node => node.textContent);
+    expect(labels).toHaveLength(6);
+    for (const [k, leg] of narrow.entries()) expect(labels).toContain(`T${k + 1} −${Math.round(leg.depthPct)}%`);
     expect(collisions(el)).toEqual([]);
   });
 
-  it('keeps the final contraction depth with 4 legs at 390, dropping older depths first and T(last−1) before T1', () => {
+  it('keeps every depth with 4 contractions at 390 on 6か月 and 1年 (none is dropped), each with its T number', () => {
     const four = [[150, 175, 108, 85, 21], [190, 215, 108, 95, 12], [230, 250, 108, 101, 6.5], [262, 290, 108, 104.5, 3.2]]
       .map(([a, b, high, low, depthPct]) => ({ startDate: day(a), endDate: day(b), high, low, depthPct }));
     for (const period of [130, 250]) {
       const el = container(332, 340);
       renderPriceChart(el, { ...model, legs: four }, { period, animate: false });
-      const last = el.querySelector('.bc-legtext[data-i="3"]') || el.querySelector('.bc-tlabel[data-leg="3"] .bc-tdepth');
-      expect({ period, depth: last?.textContent }).toEqual({ period, depth: expect.stringMatching(/−3%$/) });
-      const tIndices = [...el.querySelectorAll('.bc-tlabel')].map(node => Number(node.dataset.leg));
-      expect(tIndices).toContain(3);
-      if (tIndices.includes(0)) expect(tIndices).toContain(2);
-      // Older depths go first: a depth is shown only when every newer one is.
-      const depths = [...el.querySelectorAll('.bc-legtext')].map(node => Number(node.dataset.i));
-      for (const i of depths) for (let j = i + 1; j < 3; j++) expect({ i, j, newer: depths.includes(j) || el.querySelector(`.bc-tlabel[data-leg="${j}"] .bc-tdepth`) !== null }).toEqual({ i, j, newer: true });
+      expect({ period, depths: drawnDepths(el) }).toEqual({ period, depths: { 0: expect.stringMatching(/(^|T1 )−21%$/), 1: expect.stringMatching(/(^|T2 )−12%$/), 2: expect.stringMatching(/(^|T3 )−7%$/), 3: expect.stringMatching(/(^|T4 )−3%$/) } });
+      expect([...el.querySelectorAll('.bc-tlabel')].map(node => Number(node.dataset.leg)).sort()).toEqual([0, 1, 2, 3]);
       expect(collisions(el)).toEqual([]);
     }
   });
@@ -370,19 +366,76 @@ describe('brief price chart', () => {
     }
   });
 
-  it('writes 出来高の枯渇 inside the volume panel, clear of its caption', () => {
+  it('writes 出来高の枯渇 beside the caption when there is room, else clear of the caption and the bars', () => {
     const el = container(600, 420);
     renderPriceChart(el, { ...model, dryUpLeg: model.legs[1] }, { period: 130, animate: false });
     const note = el.querySelector('.bc-notetext'), caption = el.querySelector('.bc-volcaption');
     expect(note.textContent).toBe('出来高の枯渇');
-    expect(note.getAttribute('y')).toBe(caption.getAttribute('y'));
+    expect(Number(note.getAttribute('y'))).toBe(Number(caption.getAttribute('y')));
     expect(Number(note.getAttribute('x'))).toBeGreaterThan(4 + 12 * 14);
     expect(caption.querySelector('.bc-volkey').textContent).toBe('●');
-    // A phone has no room beside the caption: the name goes on the line under it, still in the panel.
-    const phone = container(390, 340);
-    renderPriceChart(phone, { ...model, dryUpLeg: model.legs[1] }, { period: 130, animate: false });
-    const under = phone.querySelector('.bc-notetext');
-    expect(Number(under.getAttribute('y'))).toBe(Number(phone.querySelector('.bc-volcaption').getAttribute('y')) + 14);
+    // A phone has no room beside the caption: the name takes a spot clear of the caption and of every bar.
+    for (const period of [130, 250]) {
+      const phone = container(390, 340);
+      renderPriceChart(phone, { ...model, dryUpLeg: model.legs[1] }, { period, animate: false });
+      const under = phone.querySelector('.bc-notetext'), x0 = Number(under.getAttribute('x')), yc = Number(under.getAttribute('y')) - 4;
+      expect(Math.abs(yc - (Number(phone.querySelector('.bc-volcaption').getAttribute('y')) - 4))).toBeGreaterThanOrEqual(14);
+      const over = [...phone.querySelectorAll('rect.bc-vol')].filter(bar => { const bx = Number(bar.getAttribute('x')), by = Number(bar.getAttribute('y')); return bx < x0 + 72 && bx + Number(bar.getAttribute('width')) > x0 && by < yc + 6 && by + Number(bar.getAttribute('height')) > yc - 6; });
+      expect({ period, over: over.length, forced: under.dataset.forced }).toEqual({ period, over: 0, forced: undefined });
+    }
+  });
+
+  it('names the 52-week high at the first candle-free spot from the left along its line, the pivot\'s name moving out of its way', () => {
+    // A rising chart: the 52-week high runs far above the period's first candles, with the pivot just under it.
+    for (const [width, interval, period] of [[332, 'day', 130], [332, 'week', 104], [1000, 'day', 130]]) {
+      const el = container(width, 340);
+      renderPriceChart(el, { ...model, interval, auditHigh: 110.5, pivot: 109.2, upper: 114.7 }, { period, animate: false });
+      const high = el.querySelector('.bc-high52-text'), line = Number(el.querySelector('line.bc-high52').getAttribute('y1'));
+      const what = `${width} ${interval}`;
+      expect({ what, x: Number(high.getAttribute('x')), forced: high.dataset.forced }).toEqual({ what, x: 4, forced: undefined });
+      expect([9, 11]).toContain(Math.round(Math.abs(Number(high.getAttribute('y')) - 4 - line)));
+      expect(el.querySelector('.bc-pivot-text')).not.toBeNull();
+      expect({ what, collisions: collisions(el) }).toEqual({ what, collisions: [] });
+    }
+  });
+
+  it('ends the averages\' names 7px left of the axis, clear of the tags and their leaders', () => {
+    const el = container(332, 340);
+    renderPriceChart(el, busy(1), { period: 130, animate: false });
+    const pw = 332 - 68, names = [...el.querySelectorAll('.bc-malabel')];
+    expect(names.length).toBeGreaterThan(0);
+    for (const name of names) expect(Number(name.getAttribute('x'))).toBe(pw - 7);
+    expect(collisions(el)).toEqual([]);
+  });
+
+  it('marks a label it had to put over candles (data-forced, with the spots it tried) and no other', () => {
+    // Every bar spans the whole range: no candle-free spot is left in the plot.
+    const wall = bars.map(b => ({ ...b, open: 90, close: 91, high: 125, low: 60 }));
+    const el = container(332, 340);
+    renderPriceChart(el, { ...model, bars: wall, pivot: 100, upper: 110, stop: 93, legs: [] }, { period: 130, animate: false });
+    const forced = [...el.querySelectorAll('[data-forced="1"]')];
+    expect(forced.map(node => node.textContent)).toEqual(expect.arrayContaining(['ピボット', '買いゾーン 〜110.00', '50']));
+    for (const node of forced) {
+      expect(node.dataset.search).toMatch(/^\d+\.\d \d+\.\d \d+\|\d+\.\d( \d+\.\d)*$/);
+      expect(node.dataset.box.split(' ').map(Number).every(Number.isFinite)).toBe(true);
+    }
+    const free = container(332, 340);
+    renderPriceChart(free, model, { period: 130, animate: false });
+    expect(free.querySelector('.bc-zonetext').dataset.forced).toBeUndefined();
+    expect(free.querySelector('.bc-zonetext').dataset.search).toBeUndefined();
+  });
+
+  it('keeps the volume caption on its own band: the tallest bar and a heavy bar\'s dot start under it', () => {
+    const heavy = bars.map((b, i) => (i === bars.length - 4 ? { ...b, volume: 5000 } : b));
+    for (const width of [332, 1000]) {
+      const el = container(width, 340);
+      renderPriceChart(el, { ...model, bars: heavy }, { period: 130, animate: false });
+      // The caption's glyphs end 2px under its baseline.
+      const bottom = Number(el.querySelector('.bc-volcaption').getAttribute('y')) + 2;
+      const tops = [...el.querySelectorAll('rect.bc-vol')].map(bar => Number(bar.getAttribute('y'))), dots = [...el.querySelectorAll('.bc-voldot')].map(dot => Number(dot.getAttribute('cy')) - 1.8);
+      expect(dots.length).toBeGreaterThan(0);
+      expect(Math.min(...tops, ...dots)).toBeGreaterThan(bottom);
+    }
   });
 
   it('offers the plot corner with the fewest candles for 最新足, never over the selected bar or the notices', () => {
