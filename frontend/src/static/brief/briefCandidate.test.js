@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { BASE_CAUTION_NOTE, BASE_DEPTH_MAX_PERCENT, BASE_LENGTH_MIN_WEEKS, briefOrder, breakoutEvent, candidateMarketGate, candidateView, EARNINGS_WARN_DAYS, earningsCall, earningsSoon, EPS_YOY_FILTER_PERCENT, EXTENDED_FROM_SMA50_PERCENT, filterCounts, filterLabel, focusCandidates, focusCounts, focusHeadingNote, focusTone, memoCandidateView, POSITION_NAMES, positionText, ratioShown, rowEvent, rsShown, ruleEvidence, matchesSearch, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, setupPatternName, templateChip, trendTemplate, watchEvent, LIST_FILTERS, LIST_SORTS } from './briefCandidate';
+import { baseCurrent, baseShortfall, distanceText, rowSecChip, underTenth, BASE_CAUTION_NOTE, BASE_DEPTH_MAX_PERCENT, BASE_LENGTH_MIN_WEEKS, briefOrder, breakoutEvent, candidateMarketGate, candidateView, EARNINGS_WARN_DAYS, earningsCall, earningsSoon, EPS_YOY_FILTER_PERCENT, EXTENDED_FROM_SMA50_PERCENT, filterCounts, filterLabel, focusCandidates, focusCounts, focusHeadingNote, focusTone, memoCandidateView, POSITION_NAMES, positionText, ratioShown, rowEvent, rsShown, ruleEvidence, matchesSearch, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, setupPatternName, templateChip, trendTemplate, watchEvent, LIST_FILTERS, LIST_SORTS } from './briefCandidate';
 import { withAuditFixture } from '../testAuditFixture';
+import { EARNINGS_CHIP_PERCENT } from '../fundamentalsExplain.js';
 
 const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', position: 'zone', stateLabel: '買いゾーン', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, qualified: true, ...over });
 
@@ -546,5 +547,58 @@ describe('round 2 review: unknowns, 未収録 and one wording per stock', () => 
   });
   it('states the base chip\'s rule once, with its thresholds (独自判定)', () => {
     expect(BASE_CAUTION_NOTE).toBe('土台の注意：Setup Engineの土台が深さ35%超または3週未満、または終値が50日線より25%超上（独自判定）。');
+  });
+});
+
+// Integration review: the rows read the conclusion's base check and the earnings chip's dating, and never print a gap of
+// nothing just under the pivot.
+describe('integration review: the base check, the dated SEC summary and the gap just under the pivot', () => {
+  const based = (symbol, base) => verdict(audited(symbol, { price: 101, ...base }));
+  it('marks a view whose Setup Engine base is not current or under the floor (baseCurrent false), the reasons apart', () => {
+    const current = { setup_recalculation: { status: 'calculated', as_of_date: DATE }, se_pattern_confidence: 60 };
+    expect(based('OK', current).baseCurrent).toBe(true);
+    expect(baseShortfall(based('OK', current).row, DATE)).toBeNull();
+    const cases = [
+      [{ ...current, se_pattern_confidence: 31 }, { kind: 'belowFloor', confidence: 31 }],
+      [{ ...current, se_pattern_confidence: null }, { kind: 'noConfidence' }],
+      [{ setup_recalculation: { status: 'calculated', as_of_date: '2026-10-01' }, se_pattern_confidence: 60 }, { kind: 'otherDay', date: '2026-10-01' }],
+      [{ setup_recalculation: { status: 'unavailable', as_of_date: DATE }, se_pattern_confidence: 60 }, { kind: 'unavailable' }],
+      [{ se_pattern_confidence: 60 }, { kind: 'unchecked' }],
+      [{ setup_recalculation: { ...current.setup_recalculation, reason: SE_BELOW_FLOOR_CHECK }, se_pattern_confidence: 70 }, { kind: 'primaryBelowFloor' }],
+    ];
+    for (const [base, short] of cases) {
+      const v = based('B', base);
+      expect(baseShortfall(v.row, DATE)).toEqual(short);
+      expect([v.baseCurrent, baseCurrent(v.row, DATE)]).toEqual([false, false]);
+    }
+  });
+
+  it('keeps a watched stock with a non-current base out of green, as its focus row, whatever the market', () => {
+    const zone = { kind: 'zone', tone: 'neutral', title: '買いゾーン +1.0%' };
+    expect(watchEvent(view({ baseCurrent: false }), { label: '上昇トレンド（独自判定）', state: 'confirmed_uptrend', cap: 0.5 })).toEqual(zone);
+    expect(watchEvent(view({ baseCurrent: false }))).toEqual(zone);
+    expect(watchEvent(view({ baseCurrent: true }))).toEqual({ ...zone, tone: 'zone' });
+  });
+
+  it('reads the SEC summary as current only by the bundle\'s evaluation clock, with the chip\'s 180-day rule and its 25% bar', () => {
+    expect(EPS_YOY_FILTER_PERCENT).toBe(EARNINGS_CHIP_PERCENT);
+    const summary = { sec_summary: { sec_state: 'ok', eps_yoy: { value: 40, end: '2026-06-30' }, sales_yoy: { value: 30, end: '2026-06-30' }, code33: null, as_of_date: DATE } };
+    const item = { row: audited('EPS', { price: 97, ...summary }), assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } };
+    expect(memoCandidateView(item, DATE, { date: DATE, evaluated_at: Date.parse(`${DATE}T20:00:00Z`) }).epsYoy).toBe(40);
+    // The same row evaluated after the quarter's 180 days: 未確認, counted apart, never a hit.
+    const late = memoCandidateView(item, DATE, { date: DATE, evaluated_at: Date.parse('2027-01-05T00:00:00Z') });
+    expect(late.epsYoy).toBeNull();
+    expect(filterCounts([late])).toMatchObject({ counts: { eps: 0 }, unknown: { eps: 1 } });
+    // The row's chip says the same of it, and of a summary of another day.
+    expect(rowSecChip(late, Date.parse('2027-01-05T00:00:00Z'))).toBeNull();
+    expect(rowSecChip(late, Date.parse(`${DATE}T20:00:00Z`))).toMatchObject({ tone: 'zone', notable: true });
+    const other = verdict(audited('OTH', { price: 97, sec_summary: { ...summary.sec_summary, as_of_date: '2026-10-01' } }));
+    expect([other.epsYoy, rowSecChip(other)]).toEqual([null, null]);
+  });
+
+  it('prints a close under the pivot by less than 0.05% as −0.1%未満, never −0.0%', () => {
+    expect([distanceText(-0.04), distanceText(-0.05), distanceText(0), distanceText(-3.25), distanceText(null)]).toEqual(['−0.1%未満', '−0.1%', '±0.0%', '−3.3%', '—']);
+    expect([underTenth(-0.049), underTenth(-0.05), underTenth(0.01)]).toEqual([true, false, false]);
+    expect(positionText(view({ state: 'wait', position: 'near', stateLabel: 'ピボット接近', distance: -0.04 }))).toBe('ピボット接近 −0.1%未満');
   });
 });

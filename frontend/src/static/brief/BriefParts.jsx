@@ -3,8 +3,7 @@ import { money, signed } from '../positionGeometry';
 import { sellChipView } from './briefSell';
 import { meterPercent } from './briefNav';
 import { useEntrance } from './briefPrimitives';
-import { BREAKOUT_VOLUME_RATIO, candidateMarketGate, earningsCall, positionText, ratioShown, rowEvent, rsShown, templateChip } from './briefCandidate';
-import { secRowChip } from '../fundamentalsExplain.js';
+import { BREAKOUT_VOLUME_RATIO, candidateMarketGate, distanceText, earningsCall, positionText, ratioShown, rowEvent, rowSecChip, rsShown, templateChip } from './briefCandidate';
 
 // The layout primitives every track uses (Expander, ScreenNotes, Parts, RiseItem, Toast) live in the
 // frozen briefPrimitives.jsx; they are re-exported here so the old import path keeps working.
@@ -17,7 +16,7 @@ export function MiniMeter({ distance, animate }) {
   return <span className="brief-minimeter" aria-hidden="true">
     <span className="brief-minimeter-track" /><span className="brief-minimeter-zone" /><span className="brief-minimeter-pivot" />
     <span className={`brief-marker${animate ? ' is-entering' : ''}`} style={{ '--p': meterPercent(distance) }} />
-    <span className="brief-minimeter-value">{signed(distance)}</span>
+    <span className="brief-minimeter-value">{distanceText(distance)}</span>
   </span>;
 }
 
@@ -119,16 +118,13 @@ function volumeTone(view) {
 }
 
 /**
- * The row's SEC chip (data's secRowChip) when the rows show it: only a `notable` one (plan RW6: an always-on chip
- * took the rows to 3 chip lines at 320 and 1440 on the fixture); an unknown is explained on the stock view. The chip
- * shows the seam's `short` form when it gives one; the full text is its title and in the row's label. `now` dates it,
- * as the stock view does (data's secRowChip), so a summary past the 180-day rule is not shown as current.
+ * The row's SEC chip (data's secRowChip, through briefCandidate's rowSecChip) when the rows show it: only a `notable`
+ * one (plan RW6: an always-on chip took the rows to 3 chip lines at 320 and 1440 on the fixture); an unknown is
+ * explained on the stock view. The chip shows the seam's `short` form when it gives one; the full text is its title and
+ * in the row's label. `now` and the analysis date date it, as the stock view does, so a summary past the 180-day rule
+ * or of another day is not shown as current.
  */
-function shownSec(view, now = null) {
-  // Dated like the stock view: a summary past the 180-day rule reads 古い (an unknown chip), never as current.
-  const sec = secRowChip(view.row, { now });
-  return sec?.notable ? sec : null;
-}
+const shownSec = (view, now = null) => rowSecChip(view, now);
 
 /**
  * The row's caution on a phone's Today (`compact`): the questionable base, else a notable SEC chip on a falling EPS
@@ -153,15 +149,18 @@ export function Reasons({ view, now, sell, hideTemplate = false, muted = false, 
   const chips = [<StateChip key="state" view={view} muted={muted} />];
   const sellChip = sellChipView(sell);
   if (sellChip) chips.push(chip('sell', sellChip.tone, sellChip.text, sellChip.title));
+  // A broken setup on a phone's Today (compact): its ▲ chip takes the volume and RS chips' place (both stay in the row's
+  // label and on the stock view), so a watched focus row says 崩れ without a line more under Today's height budget.
+  const brokenCompact = compact && sellChip?.tone === 'ext';
   if (!view.missing && !hideTemplate) { const tt = templateChip(view); chips.push(chip('tt', zone(tt.zone ? 'zone' : ''), tt.text)); }
   // A breakout's or a heavy down day's chip already carries its volume ratio (rowEvent): no second chip for it.
   const carried = ['breakout', 'heavyDown'].includes(rowEvent(view)?.kind);
   const volume = carried ? null : volumeTone(view);
-  if (volume !== null) chips.push(chip('vol', zone(volume), `出来高 ${ratioShown(view.volumeRatio)}`));
+  if (volume !== null && !brokenCompact) chips.push(chip('vol', zone(volume), `出来高 ${ratioShown(view.volumeRatio)}`));
   // The row's SEC earnings, from the data track's seam (secRowChip).
   const sec = shownSec(view, now), caution = compact ? cautionOf(view, sec) : null;
   if (caution) chips.push(chip(caution.key, '', caution.text, caution.title));
-  else if (!view.missing?.rs) chips.push(chip('rs', '', `RS推計 ${rsShown(view.rs)}`));
+  else if (!view.missing?.rs && !brokenCompact) chips.push(chip('rs', '', `RS推計 ${rsShown(view.rs)}`));
   const secTitle = sec && (sec.short && sec.short !== sec.text ? `${sec.text}：${sec.title}` : sec.title);
   if (sec && caution?.key !== 'sec') chips.push(chip('sec', zone(sec.tone), sec.short || sec.text, secTitle, 1));
   if (view.rsLineHigh) chips.push(chip('rsl', zone('zone'), 'RS線 新高値'));
@@ -179,15 +178,17 @@ export function Reasons({ view, now, sell, hideTemplate = false, muted = false, 
  * `market` is the screen's market verdict (prepared.market): unless it is open to new buying, the row's green
  * chips go neutral (a cap of 0, an unknown state, or no verdict: rows render only once the bundle that carries
  * the verdict has loaded, so a missing one is not still loading and nothing flashes). A broken setup (`sell` with
- * a 50-day hit or the book's combined warning) has no green chip either: its ▲ chip says the buy setup is gone, as
- * the stock conclusion does. `compact` (Today's focus rows on a phone, under the screen's height budget): a caution
+ * a 50-day hit, a failed breakout or the book's combined warning) has no green chip either: its ▲ chip says the buy
+ * setup is gone, as the stock conclusion does. Nor does a row whose Setup Engine base is not current or under the
+ * confidence floor (view.baseCurrent false: the conclusion reads 土台を確認できない — ピボットは参考 for it), with
+ * no change to the row's place, the order or the counts. `compact` (Today's focus rows on a phone, under the screen's height budget): a caution
  * takes the RS chip's place (Reasons), and the other optional chips show only where they add no line.
  * Memoized: a list that re-renders (its rows after the first screen arriving) leaves the rows it had alone.
  */
 export const CandidateRow = memo(function CandidateRow({ view, rank, onOpen, now, animate, index = 0, morph = false, sell = null, hideTemplate = false, compact = false, market = null }) {
   const enter = useEntrance(animate);
   const sellChip = sellChipView(sell);
-  const muted = candidateMarketGate(market) !== 'open' || sell?.breakdownHits > 0;
+  const muted = candidateMarketGate(market) !== 'open' || sell?.breakdownHits > 0 || view.baseCurrent === false;
   const sec = shownSec(view, now);
   const button = useRef(null);
   // An optional chip that does not fit gives way (it stays in the label below): the list's rows are fitted together.
@@ -199,7 +200,7 @@ export const CandidateRow = memo(function CandidateRow({ view, rank, onOpen, now
   }, [view, sell, hideTemplate, compact, market, now]);
   return <li className={enter ? 'in' : ''} style={{ '--i': index }}>
     <button ref={button} type="button" className={`brief-row${rank ? '' : ' is-unranked'}`} data-symbol={view.symbol} data-testid="brief-candidate" onClick={event => onOpen(view.symbol, event.currentTarget)}
-      aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${positionLabel(view)}、${dayChangeText(view)}${view.missing ? `、${view.missing.text}` : ''}、RS推計 ${rsShown(view.rs)}${sec ? `、${sec.text}` : ''}${view.baseCaution ? `、${view.baseCaution.text}（${view.baseCaution.title}）` : ''}${sellChip ? `、${sellChip.text}` : ''}`}>
+      aria-label={`${rank ? `${rank}位 ` : ''}${view.symbol} ${view.name}、${positionLabel(view)}、${dayChangeText(view)}${compact && sellChip?.tone === 'ext' && finite(view.volumeRatio) ? `、出来高 ${ratioShown(view.volumeRatio)}` : ''}${view.missing ? `、${view.missing.text}` : ''}、RS推計 ${rsShown(view.rs)}${sec ? `、${sec.text}` : ''}${view.baseCaution ? `、${view.baseCaution.text}（${view.baseCaution.title}）` : ''}${sellChip ? `、${sellChip.text}` : ''}`}>
       <span className="brief-rank" aria-hidden="true">{rank || ''}</span>
       <span className="brief-row-main">
         <span className="brief-row-title"><b style={morph ? { viewTransitionName: 'brief-ticker' } : undefined}>{view.symbol}</b><DayChange view={view} /><span className="brief-row-name">{view.name}{view.sector ? `・${view.sector}` : ''}</span></span>

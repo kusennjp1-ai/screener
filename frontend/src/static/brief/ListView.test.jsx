@@ -4,7 +4,7 @@ import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import { withAuditFixture } from '../testAuditFixture';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ListView, { listShown, watchOrder } from './ListView';
-import { candidateView, LIST_FILTERS } from './briefCandidate';
+import { BASE_CAUTION_NOTE, candidateView, LIST_FILTERS } from './briefCandidate';
 import { EARNINGS_CHIP_NOTE } from '../fundamentalsExplain.js';
 
 afterEach(cleanup);
@@ -46,6 +46,23 @@ describe('the list notes', () => {
     expect([...list().container.querySelectorAll('.brief-note')].map(note => note.textContent)).toContain(EARNINGS_CHIP_NOTE);
     cleanup();
     expect([...list('zone', { kind: 'watch' }).container.querySelectorAll('.brief-note')].map(note => note.textContent)).not.toContain(EARNINGS_CHIP_NOTE);
+  });
+
+  it('state the base and earnings chips\' rules on the watch tab only while one of its rows carries the chip (plan rule 13)', () => {
+    const notes = view => [...view.container.querySelectorAll('.brief-note')].map(note => note.textContent);
+    const watchOf = rows => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+      <ListView brief={{ ...brief, bundle: { ...brief.bundle, data: { date: DATE, rankings: { minervini: rows } } }, ranked: rows }} kind="watch" watch={rows.map(r => r.row.symbol)} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false}
+        listState={{ filter: 'zone', sort: 'priority', query: '' }} setListState={() => {}} limits={{}} setLimits={() => {}} origin={null} wide onUnwatch={() => {}} />
+    </QueryClientProvider>);
+    // Plain rows: no notes on the watch tab.
+    expect(notes(watchOf([item('ZON1', 101)]))).toEqual([]);
+    cleanup();
+    const current = { setup_recalculation: { status: 'calculated', as_of_date: DATE }, se_pattern_confidence: 60 };
+    const deep = { row: { ...item('DEEP', 101).row, ...current, se_base_depth_pct: 40, se_base_length_weeks: 6 }, assessment: item('DEEP', 101).assessment };
+    const strong = { row: { ...item('EPS1', 101).row, market: 'US', sec_summary: { sec_state: 'ok', eps_yoy: { value: 40, end: '2026-06-30' }, sales_yoy: { value: 30, end: '2026-06-30' }, code33: null, as_of_date: DATE } }, assessment: item('EPS1', 101).assessment };
+    const shown = notes(watchOf([deep, strong]));
+    expect(shown).toContain(BASE_CAUTION_NOTE);
+    expect(shown).toContain(EARNINGS_CHIP_NOTE);
   });
 });
 

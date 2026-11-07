@@ -1,7 +1,7 @@
 // The seams C owns and other tracks call: the conclusion's Code 33 chip (D) and the published SEC
 // coverage block that useStockData (E) hands to secStatus; and secStatus's wording for each coverage state.
 import { describe, expect, it } from 'vitest';
-import { buildSecSummary, chipQuarter, code33ChipView, code33Explain, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_NOTE, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalTiles, publishedFundamentalsCoverage, quarterReason, secRowChip, secStatus, secSummary, wholePercent } from './fundamentalsExplain.js';
+import { buildSecSummary, chipQuarter, code33ChipView, code33Explain, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_NOTE, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalTiles, publishedFundamentalsCoverage, quarterReason, secRowChip, secStatus, secSummary, secSummaryCurrent, wholePercent } from './fundamentalsExplain.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
 import { bookFinancialEvidence } from './bookFinancialEvidence.js';
 import { code33Layered } from './code33Reference.js';
@@ -231,6 +231,17 @@ describe('the round-2 seams', () => {
     expect(secRowChip({ symbol: 'AAA', market: 'US', as_of_date: CONTRACT_DATE, sec_summary: both(40, 100) }, { now: late })).toEqual({ text: '業績 未確認', tone: '', title: '古い：直近の四半期（2026-06期）から180日を超えているため判定に使いません。', notable: false });
     expect(secRowChip({ symbol: 'AAA', market: 'US', as_of_date: CONTRACT_DATE, sec_summary: both(40, 100) }, { now: inTime })).toMatchObject({ tone: 'zone' });
     expect(chip({ ...secSummaryShape, as_of_date: '2026-10-01' })).toMatchObject({ text: '業績 未確認', title: 'SEC の業績要約が別の日付のものです。' });
+    // The analysis date the rows pass dates a row without its own as_of_date (research index rows carry none).
+    expect(secRowChip({ symbol: 'AAA', market: 'US', sec_summary: { ...secSummaryShape, as_of_date: '2026-10-01' } }, { date: CONTRACT_DATE })).toMatchObject({ text: '業績 未確認', title: 'SEC の業績要約が別の日付のものです。' });
+    // secSummaryCurrent is the chip's predicate: the summary when the chip reads it as current, else null.
+    const row = summary => ({ symbol: 'AAA', market: 'US', sec_summary: summary });
+    expect(secSummaryCurrent(row(both(40, 100)), { date: CONTRACT_DATE, now: inTime })).toEqual(both(40, 100));
+    expect(secSummaryCurrent(row(both(40, 100)), { date: CONTRACT_DATE })).toEqual(both(40, 100));
+    for (const [value, options] of [[both(40, 100), { date: CONTRACT_DATE, now: late }], [{ ...both(40, 100), as_of_date: '2026-10-01' }, { date: CONTRACT_DATE }], [null, { date: CONTRACT_DATE }], [{ sec_state: 'ok' }, {}]]) {
+      expect(secSummaryCurrent(row(value), options)).toBeNull();
+    }
+    expect(secSummaryCurrent({ symbol: 'AAA' })).toBeNull();
+    expect(secSummaryCurrent({ symbol: 'BITU', market: 'US', company_name: 'ProShares Ultra Bitcoin ETF', quoteType: 'ETF', sec_summary: both(40, 100) }, { date: CONTRACT_DATE })).toBeNull();
     // An older publication has no field: no chip (未収録), never 未確認 claimed for this day.
     expect(secRowChip({ symbol: 'AAA', as_of_date: CONTRACT_DATE })).toBeNull();
     expect(secRowChip(null)).toBeNull();

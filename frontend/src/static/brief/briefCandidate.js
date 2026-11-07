@@ -7,7 +7,7 @@ import { signed, stateKey, STATES } from '../positionGeometry';
 import { auditValues, verifiedVolumeRatio } from '../qualificationAudit';
 import { conditionChipLabel, conditionText, conditionValueText, singleMissingCondition } from '../missingCondition';
 import { newYorkDate } from '../evidenceTime';
-import { secSummary } from '../fundamentalsExplain.js';
+import { EARNINGS_CHIP_PERCENT, secRowChip, secSummaryCurrent } from '../fundamentalsExplain.js';
 import { publishedRsLineHigh } from './briefChartModel';
 import { isoDay, shortDate } from './briefShared';
 
@@ -27,8 +27,11 @@ export const BASE_LENGTH_MIN_WEEKS = 3;
 export const EXTENDED_FROM_SMA50_PERCENT = 25;
 /** The base chip's rule as the notes state it (the 候補 tab, and Today when a focus row carries the chip). */
 export const BASE_CAUTION_NOTE = `土台の注意：Setup Engineの土台が深さ${BASE_DEPTH_MAX_PERCENT}%超または${BASE_LENGTH_MIN_WEEKS}週未満、または終値が50日線より${EXTENDED_FROM_SMA50_PERCENT}%超上（独自判定）。`;
-/** The 候補 tab's EPS filter: the latest quarter's EPS change from the year-ago quarter, from the SEC summary (独自設定). */
-export const EPS_YOY_FILTER_PERCENT = 25;
+/**
+ * The 候補 tab's EPS filter: the latest quarter's EPS change from the year-ago quarter, from the SEC summary (独自設定).
+ * The earnings chip's own bar (data's EARNINGS_CHIP_PERCENT), so the filter and the green chip use one number.
+ */
+export const EPS_YOY_FILTER_PERCENT = EARNINGS_CHIP_PERCENT;
 /**
  * The Setup Engine's confidence floor and the check it fails below it (the backend aggregator's
  * primary_pattern_below_confidence_floor, 55.0): one constant for the pivot source here and the conclusion's
@@ -196,14 +199,48 @@ function baseCaution(row, date, fromSma50) {
   return null;
 }
 
-/** The latest EPS change from the year-ago quarter (%) in the row's SEC summary for the analysis date, or null (未確認 or 未収録). */
-function secEpsYoy(row, date) {
-  const summary = secSummary(row);
-  return summary && summary.as_of_date === date && finite(summary.eps_yoy?.value) ? summary.eps_yoy.value : null;
+/**
+ * Why the stock's Setup Engine base is not current for the analysis date `date`, or null when it is (VD4's one
+ * predicate: the rows' tone and the conclusion's base check read it). `kind` is 'unchecked' (no recalculation
+ * record, or one in another state), 'unavailable', 'otherDay' (with its `date`), 'noConfidence' (未確認, never 0),
+ * 'belowFloor' (with its `confidence`) or 'primaryBelowFloor' (the reason names SE_BELOW_FLOOR_CHECK while the
+ * published confidence clears the floor).
+ */
+export function baseShortfall(row, date) {
+  const calculation = row?.setup_recalculation;
+  if (!calculation || typeof calculation !== 'object') return { kind: 'unchecked' };
+  if (calculation.status !== 'calculated') return { kind: calculation.status === 'unavailable' ? 'unavailable' : 'unchecked' };
+  if (typeof date !== 'string' || calculation.as_of_date !== date) return { kind: 'otherDay', date: calculation.as_of_date };
+  const confidence = row.se_pattern_confidence;
+  if (!finite(confidence)) return { kind: 'noConfidence' };
+  if (confidence < SE_CONFIDENCE_FLOOR) return { kind: 'belowFloor', confidence };
+  if (typeof calculation.reason === 'string' && calculation.reason.includes(SE_BELOW_FLOOR_CHECK)) return { kind: 'primaryBelowFloor' };
+  return null;
+}
+/** Whether the Setup Engine base is current for `date` and over the confidence floor (baseShortfall finds nothing). */
+export const baseCurrent = (row, date) => baseShortfall(row, date) === null;
+
+/**
+ * The latest EPS change from the year-ago quarter (%) in the row's SEC summary, or null (未確認 or 未収録): only a summary
+ * data's secSummaryCurrent reads as current for the analysis date at `now` (the bundle's evaluation clock), the rule the
+ * row's SEC chip applies, so a quarter past the 180-day rule is never counted or sorted as current.
+ */
+function secEpsYoy(row, date, now) {
+  const summary = secSummaryCurrent(row, { now, date });
+  return summary && finite(summary.eps_yoy?.value) ? summary.eps_yoy.value : null;
 }
 
-/** One candidate as the brief shows it. */
-export function candidateView(item, date) {
+/** The row's SEC chip as the rows show it (data's secRowChip, dated by `now` and the analysis date): a notable one only, else null. */
+export function rowSecChip(view, now = null) {
+  const sec = view?.row ? secRowChip(view.row, { now, date: view.asOf }) : null;
+  return sec?.notable ? sec : null;
+}
+
+/**
+ * One candidate as the brief shows it. `now` (optional) is the clock its SEC summary is dated with: the bundle's
+ * evaluation clock when the view comes from memoCandidateView; without it the summary is read as the export judged it.
+ */
+export function candidateView(item, date, { now = null } = {}) {
   const row = item?.row || item;
   const plan = entryPlan(row, null, 'minervini');
   const key = stateKey(plan.state);
@@ -250,7 +287,10 @@ export function candidateView(item, date) {
     // The Setup Engine pattern confidence, only while its recalculation is current for the analysis date.
     setupConfidence: current && finite(row.se_pattern_confidence) ? row.se_pattern_confidence : null,
     baseCaution: baseCaution(row, date, day.fromSma50),
-    epsYoy: secEpsYoy(row, date),
+    // The Setup Engine base is current and over the floor (baseCurrent): when it is not, the rows keep no green (the
+    // conclusion reads 土台を確認できない for the same stock); membership, order and counts do not change.
+    baseCurrent: baseCurrent(row, date),
+    epsYoy: secEpsYoy(row, date, now),
     row,
   };
   // The analysis day as an event (breakoutEvent) and its rows' short form (rowEvent), once per view: the rows'
@@ -274,7 +314,8 @@ export function memoCandidateView(item, date, bundle) {
   let memo = viewMemo.get(bundle);
   if (!memo || memo.date !== date) { memo = { date, views: new WeakMap() }; viewMemo.set(bundle, memo); }
   let view = memo.views.get(item);
-  if (!view) { view = candidateView(item, date); memo.views.set(item, view); }
+  // The bundle's evaluation clock dates the SEC summary (a new evaluation is a new bundle, so a new memo).
+  if (!view) { view = candidateView(item, date, { now: finite(bundle.evaluated_at) ? bundle.evaluated_at : null }); memo.views.set(item, view); }
   return view;
 }
 
@@ -344,8 +385,12 @@ function shortEvent(view, event) {
   return null;
 }
 
+/** A close under the pivot by less than 0.05%: one decimal would print a gap of 0.0% that does not exist. */
+export const underTenth = value => finite(value) && value < 0 && Math.abs(value).toFixed(1) === '0.0';
+/** A distance from the pivot as every screen prints it: signed, or 「−0.1%未満」 just under the pivot (never 「−0.0%」). */
+export const distanceText = value => (underTenth(value) ? '−0.1%未満' : signed(value));
 /** The position as a row chip says it, without its glyph: 「買いゾーン +1.2%」, 「ピボット接近・ピボット比 未確認」. */
-export const positionText = view => `${view.stateLabel}${view.stale ? '' : finite(view.distance) ? ` ${signed(view.distance)}` : '・ピボット比 未確認'}`;
+export const positionText = view => `${view.stateLabel}${view.stale ? '' : finite(view.distance) ? ` ${distanceText(view.distance)}` : '・ピボット比 未確認'}`;
 
 // Within the buy zone (RW2): the day's breakout first, then a touch or a crossing without the volume, then a
 // stock already above the pivot (or a day not verified), then a heavy down day last.
@@ -492,7 +537,8 @@ export const templateShort = view => Number.isInteger(view?.failed) && view.fail
 /**
  * What changed for a watched stock, in the order a trader acts on it. With `market` (prepared.market, or
  * null when the bundle carries none), a market that is not open to new buying turns the green tones
- * neutral, as Today's focus rows do; the titles stay. Without the argument, the tones are as before.
+ * neutral, as Today's focus rows do; the titles stay. Without the argument, the tones are as before. A view
+ * whose Setup Engine base is not current (baseCurrent false) has no green either, as its focus row.
  */
 export function watchEvent(view, market) {
   // The day's event in the rows' short form (rowEvent), so Today says one stock one way.
@@ -505,7 +551,7 @@ export function watchEvent(view, market) {
     // The kind keeps the row chip's glyph (↗, ▲, or ● for a touch or a crossing).
     return { kind: event.kind === 'breakout' || event.kind === 'heavyDown' ? event.kind : 'zone', tone: event.tone === 'ext' ? 'ext' : 'neutral', title: `${event.text}${why}` };
   }
-  const held = market !== undefined && candidateMarketGate(market) !== 'open';
+  const held = (market !== undefined && candidateMarketGate(market) !== 'open') || view.baseCurrent === false;
   const tone = value => held && value === 'zone' ? 'neutral' : value;
   if (event?.kind === 'breakout') return { kind: 'breakout', tone: tone('zone'), title: event.text };
   if (event?.kind === 'heavyDown') return { kind: 'heavyDown', tone: 'ext', title: event.text };

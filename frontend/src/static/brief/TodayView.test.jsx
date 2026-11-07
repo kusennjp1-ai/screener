@@ -87,7 +87,8 @@ describe('the watch tile', () => {
 describe('Today under the market verdict and the earnings date', () => {
   afterEach(cleanup);
   const DATE = '2026-10-02';
-  const item = (symbol, price, earnings) => ({ row: { symbol, company_name: symbol, current_price: price, se_pivot_price: 100, ...(earnings ? { entry_evidence: { earnings: { date: earnings } } } : {}) },
+  // A current Setup Engine base (recalculated for the date, confidence 60 over the floor of 55), as the fixture's rows.
+  const item = (symbol, price, earnings, base = { setup_recalculation: { status: 'calculated', as_of_date: DATE }, se_pattern_confidence: 60 }) => ({ row: { symbol, company_name: symbol, current_price: price, se_pivot_price: 100, ...base, ...(earnings ? { entry_evidence: { earnings: { date: earnings } } } : {}) },
     assessment: { qualified: true, passed: 8, failed: 0, unknown: 0, total: 8 } });
   const show = ({ market = null, ranked, watch = [], now = Date.parse(`${DATE}T20:00:00Z`) }) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>
     <TodayView brief={{ bundle: { data: { date: DATE, rankings: { minervini: ranked } }, isLoading: false, isError: false }, manifest: { isLoading: false, isError: false }, ranked, date: DATE, market, marketLoading: false, trends: null, version: 'v1' }}
@@ -106,6 +107,23 @@ describe('Today under the market verdict and the earnings date', () => {
     cleanup();
     show({ ranked: [item('ZON1', 101)], watch: ['ZON1'], market: { label: '上昇トレンド（独自判定）', state: 'confirmed_uptrend', cap: 0.5 } });
     expect(watchRow('ZON1').querySelector('.brief-event-icon').className).toContain('tone-zone');
+  });
+
+  it('keeps a stock whose Setup Engine base is under the floor or not current out of green on its focus row and watch row, in the same place', () => {
+    const open = { label: '上昇トレンド（独自判定）', state: 'confirmed_uptrend', cap: 0.5 };
+    const focusRows = () => [...screen.getByRole('region', { name: '注目候補' }).querySelectorAll('[data-testid="brief-candidate"]')];
+    show({ ranked: [item('ZON1', 101), item('ZON2', 101)], watch: ['ZON1'], market: open });
+    const order = focusRows().map(row => row.dataset.symbol);
+    for (const base of [{ setup_recalculation: { status: 'calculated', as_of_date: DATE }, se_pattern_confidence: 31 }, { setup_recalculation: { status: 'calculated', as_of_date: '2026-10-01' }, se_pattern_confidence: 60 }, {}]) {
+      cleanup();
+      show({ ranked: [item('ZON1', 101, undefined, base), item('ZON2', 101)], watch: ['ZON1'], market: open });
+      const row = focusRows().find(node => node.dataset.symbol === 'ZON1');
+      expect(row.querySelector('.tone-zone')).toBeNull();
+      expect(watchRow('ZON1').querySelector('.brief-event-icon').className).toContain('tone-neutral');
+      // The other row keeps its green, and neither row moves.
+      expect(focusRows().find(node => node.dataset.symbol === 'ZON2').querySelector('.tone-zone')).not.toBeNull();
+      expect(focusRows().map(node => node.dataset.symbol)).toEqual(order);
+    }
   });
 
   it('counts the earnings days from today when the analysis is older, and says 決算当日 on the day', () => {
@@ -143,6 +161,27 @@ describe('the round-2 seams on Today', () => {
     // The cap, then the suffix on its own line (a separator for assistive tech): two lines, as without it.
     expect(note()).toBe('目安≤50%・〈suffix〉');
     expect(screen.getByTestId('brief-summary').querySelector('li em .brief-tile-suffix')).toHaveTextContent('〈suffix〉');
+  });
+
+  it('explains 「NAS調整中」 in the tile\'s title, for assistive tech and in the notes, with the market track\'s own sentence', async () => {
+    const { marketTileNote } = await import('./briefEnvironment');
+    const nas = { data: { as_of_date: DATE, indices: [{ symbol: '^GSPC', followThrough: { available: true, method: 'm', asOf: DATE, state: 'confirmed' } },
+      { symbol: '^IXIC', followThrough: { available: true, method: 'm', asOf: DATE, state: 'rally_attempt', attempt: { startDate: '2026-09-29', day: 3 } } }] }, isLoading: false };
+    const sentence = marketTileNote({ market: OPEN, trends: nas, manifest });
+    expect(sentence).toMatch(/SPY/);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>
+      <TodayView brief={{ bundle: { data: { date: DATE, rankings: { minervini: [] } }, isLoading: false, isError: false }, manifest: { data: manifest, isLoading: false, isError: false }, ranked: [], date: DATE, market: OPEN, marketLoading: false, trends: nas, version: 'v1' }}
+        watch={[]} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false} wide={false} nav={{ market() {}, list() {}, watch() {} }} onUnwatch={() => {}} />
+    </MemoryRouter></QueryClientProvider>);
+    const tile = screen.getByTestId('brief-summary').querySelector('li a');
+    expect(tile.querySelector('.brief-tile-suffix')).toHaveTextContent('NAS調整中');
+    expect(tile.getAttribute('title')).toBe(sentence);
+    expect(tile.querySelector('em .sr-only:last-child')).toHaveTextContent(sentence);
+    expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).toContain(sentence);
+    cleanup();
+    // Without the suffix: no title and no note.
+    show();
+    expect(screen.getByTestId('brief-summary').querySelector('li a').getAttribute('title')).toBeNull();
   });
 
   it('asks for the coverage warning with this date\'s published block and shows it as one line under the market card', () => {
@@ -262,6 +301,20 @@ describe('Today after the review', () => {
     cleanup();
     show({ ranked: [audited('TCH1', 100)] });
     expect(screen.getByRole('region', { name: '注目候補' }).textContent).not.toContain('土台の注意');
+  });
+
+  it('states the earnings chip\'s rule (独自設定) with Today\'s notes only when a focus row carries a notable SEC chip', async () => {
+    const { EARNINGS_CHIP_NOTE } = await import('../fundamentalsExplain.js');
+    const strong = audited('EPS1', 100, { extra: { sec_summary: { sec_state: 'ok', eps_yoy: { value: 40, end: '2026-06-30' }, sales_yoy: { value: 30, end: '2026-06-30' }, code33: null, as_of_date: DATE } } });
+    show({ ranked: [strong] });
+    expect(screen.getByRole('region', { name: '注目候補' }).querySelector('p.brief-note:last-child').textContent).toContain(EARNINGS_CHIP_NOTE);
+    cleanup();
+    atPhone(true);
+    show({ ranked: [strong], wide: false });
+    expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).toContain(EARNINGS_CHIP_NOTE);
+    cleanup();
+    show({ ranked: [audited('TCH1', 100)], wide: false });
+    expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).not.toContain(EARNINGS_CHIP_NOTE);
   });
 
   it('puts the caution in the RS chip\'s place on a phone\'s focus rows', () => {

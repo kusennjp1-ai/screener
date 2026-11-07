@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import useMediaQuery from '../useMediaQuery';
-import { BASE_CAUTION_NOTE, briefOrder, filterCounts, filterLabel, LIST_FILTERS, LIST_SORTS, matchesSearch, memoCandidateView } from './briefCandidate';
+import { BASE_CAUTION_NOTE, briefOrder, filterCounts, filterLabel, LIST_FILTERS, LIST_SORTS, matchesSearch, memoCandidateView, rowSecChip } from './briefCandidate';
 import { CandidateRow } from './BriefParts';
 import { EARNINGS_CHIP_NOTE } from '../fundamentalsExplain.js';
 import { ScreenNotes } from './briefPrimitives';
@@ -116,6 +116,9 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   const unpublished = key => state === 'ready' && tally.unpublished[key] === true;
   const countText = key => state !== 'ready' ? '—' : unpublished(key) ? '未収録' : LIST_FILTERS[key].unknown ? `該当${counts[key]}・未確認${tally.unknown[key]}` : String(counts[key]);
   const missing = state === 'ready' && hidden && LIST_FILTERS[hidden].unknown ? tally.unknown[hidden] : 0;
+  // The watch tab has no filters and no 注記 of its own: its rows' base and SEC chips (独自判定・独自設定) state their rules
+  // here only while a row carries one, so a list without them keeps its height.
+  const watchNotes = kind === 'watch' ? [ordered.some(view => view.baseCaution) ? BASE_CAUTION_NOTE : null, ordered.some(view => rowSecChip(view, now)) ? EARNINGS_CHIP_NOTE : null].filter(Boolean) : [];
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け` : '日付未確認'}</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
     {kind !== 'watch' && <div className="brief-filters">
@@ -147,8 +150,8 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
           // A filter that could not judge some stocks says so: no hit is not the same as no stock.
           : missing > 0 && !query ? `該当なし。ほか${missing}銘柄は${LIST_FILTERS[hidden].why}のため判定していません。` : 'この条件の選定銘柄はありません。'}</p>}
       {ordered.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + pageSize)}>さらに表示（残り {ordered.length - limit}件）</button>}
-      {kind !== 'watch' && wide && [LIST_NOTE, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote].map(note => note && <p key={note} className="brief-note">{note}</p>)}
+      {wide && (kind === 'watch' ? watchNotes : [LIST_NOTE, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]).map(note => note && <p key={note} className="brief-note">{note}</p>)}
     </section>
-    {kind !== 'watch' && <ScreenNotes id="list" wide={wide} notes={[LIST_NOTE, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]} />}
+    <ScreenNotes id={kind === 'watch' ? 'watch' : 'list'} wide={wide} notes={kind === 'watch' ? watchNotes : [LIST_NOTE, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]} />
   </>;
 }

@@ -6,7 +6,7 @@
 // positionSizing imports this module and nothing here imports it back, so there is no cycle.
 import { finite } from '../researchEngine';
 import { conditionCompactLabel, conditionCompactText, conditionNote, conditionNoteValue } from '../missingCondition';
-import { candidateMarketGate, POSITION_NAMES, ratioShown, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR } from './briefCandidate';
+import { baseShortfall, candidateMarketGate, POSITION_NAMES, ratioShown, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, underTenth } from './briefCandidate';
 import { crossingEvent } from './breakoutHistory';
 import { isBreakdown, SELL_RULES } from './briefSell';
 import { shortDate } from './briefShared';
@@ -47,23 +47,24 @@ export function templateReference(template) {
 
 /**
  * Whether the stock's Setup Engine base is current for the analysis date and above the confidence floor
- * (VD4), as { current, note }: not current when setup_recalculation is not 'calculated' or is of another
- * day, when its reason names SE_BELOW_FLOOR_CHECK, or when se_pattern_confidence is under
- * SE_CONFIDENCE_FLOOR or missing (土台の信頼度 未確認, never 0). `note` says which, for the conclusion's line. A
- * certified VCP footprint never overrides it (the default of owner decision §9-13).
+ * (VD4), as { current, note }: the rows' predicate (briefCandidate's baseShortfall, so a row never stays green
+ * beside this check), with the conclusion's words for why not: setup_recalculation missing, not 'calculated' or of
+ * another day, se_pattern_confidence missing (土台の信頼度 未確認, never 0) or under SE_CONFIDENCE_FLOOR, or a reason
+ * naming SE_BELOW_FLOOR_CHECK. A certified VCP footprint never overrides it (the default of owner decision §9-13).
  */
 export function baseCheck(view) {
-  const row = view?.row, calculation = row?.setup_recalculation;
+  const short = baseShortfall(view?.row, view?.asOf);
+  if (!short) return { current: true, note: null };
   const no = note => ({ current: false, note });
-  if (!calculation || typeof calculation !== 'object') return no('土台の再計算 未確認');
-  if (calculation.status !== 'calculated') return no(calculation.status === 'unavailable' ? '土台の再計算不可' : '土台の再計算 未確認');
-  if (typeof view.asOf !== 'string' || calculation.as_of_date !== view.asOf) return no(`土台の再計算が分析日のものではありません（${shortDate(calculation.as_of_date, view.asOf)}）`);
-  const confidence = row.se_pattern_confidence;
-  if (!finite(confidence)) return no('土台の信頼度 未確認');
-  if (confidence < SE_CONFIDENCE_FLOOR) return no(`土台の信頼度 ${Math.floor(confidence)}（基準${SE_CONFIDENCE_FLOOR}）`);
-  // The published confidence may clear the floor while the engine names its primary pattern below it: say that, not the number.
-  if (typeof calculation.reason === 'string' && calculation.reason.includes(SE_BELOW_FLOOR_CHECK)) return no(`主パターンが信頼度の基準${SE_CONFIDENCE_FLOOR}未満（Setup Engine）`);
-  return { current: true, note: null };
+  switch (short.kind) {
+    case 'unavailable': return no('土台の再計算不可');
+    case 'otherDay': return no(`土台の再計算が分析日のものではありません（${shortDate(short.date, view.asOf)}）`);
+    case 'noConfidence': return no('土台の信頼度 未確認');
+    case 'belowFloor': return no(`土台の信頼度 ${Math.floor(short.confidence)}（基準${SE_CONFIDENCE_FLOOR}）`);
+    // The published confidence may clear the floor while the engine names its primary pattern below it: say that, not the number.
+    case 'primaryBelowFloor': return no(`主パターンが信頼度の基準${SE_CONFIDENCE_FLOOR}未満（Setup Engine）`);
+    default: return no('土台の再計算 未確認');
+  }
 }
 
 /** The first rule, then 「、ほかN件」 (one rule keeps its value), with the parts a line never splits. */
@@ -97,7 +98,8 @@ function templateCall(view, template) {
 /** The position call when nothing stops it: tone and title only (the conclusion writes the line under it). */
 function positionCall(view) {
   switch (view.position) {
-    case 'near': return { kind: 'near', tone: 'wait', title: `${POSITION_NAMES.near}（あと${Math.abs(view.distance).toFixed(1)}%）` };
+    // Just under the pivot the gap is 「0.1%未満」, never a 0.0% that does not exist.
+    case 'near': return { kind: 'near', tone: 'wait', title: `${POSITION_NAMES.near}（あと${underTenth(view.distance) ? '0.1%未満' : `${Math.abs(view.distance).toFixed(1)}%`}）` };
     case 'base': return { kind: 'basePosition', tone: 'neutral', title: POSITION_NAMES.base };
     case 'ext': return { kind: 'ext', tone: 'ext', title: POSITION_NAMES.ext };
     case 'staleAbove': case 'staleBelow': return { kind: 'stalePivot', tone: view.stale?.above ? 'ext' : 'neutral', title: view.stale?.text || view.stateLabel };

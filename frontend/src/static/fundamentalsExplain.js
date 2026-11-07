@@ -427,26 +427,56 @@ const unknownChip = (title, text = '業績 未確認') => ({ text, tone: '', tit
 const expired = (end, now) => Date.parse(end) + (BOOK_QUARTER_MAX_AGE_DAYS + 1) * 86400000 - 1 < now;
 
 /**
- * The list row's earnings chip, `secRowChip(row, { now })` → `{ text, tone, title, notable }`, or null (no chip) when
- * the publication carries no `sec_summary` field (an older publication: 未収録) or one that is not in the documented
+ * Where a row's sec_summary stands as of `date` (the analysis date; the row's own as_of_date when not given) and `now`:
+ * 'absent' (an older publication: 未収録), 'not_applicable' (a fund or ETF), 'none' (null: no admitted SEC record),
+ * 'invalid' (not in the documented shape), 'other_date', 'expired' (its latest quarter past the 180-day rule at a finite
+ * `now`; without one the summary is read as the export judged it) or 'current', with the summary and that quarter.
+ */
+function summaryStatus(row, { now = null, date = null } = {}) {
+  if (!row || typeof row !== 'object' || !Object.hasOwn(row, 'sec_summary')) return { status: 'absent' };
+  if (instrumentApplicability(row).status === 'not_applicable') return { status: 'not_applicable' };
+  if (row.sec_summary === null) return { status: 'none' };
+  const summary = secSummary(row);
+  if (!summary) return { status: 'invalid' };
+  const day = isoDay(date) ? date : isoDay(row.as_of_date) ? row.as_of_date : null;
+  if (day && summary.as_of_date !== day) return { status: 'other_date', summary };
+  const latest = [summary.eps_yoy?.end, summary.sales_yoy?.end].filter(Boolean).sort().at(-1);
+  if (latest && Number.isFinite(now) && expired(latest, now)) return { status: 'expired', summary, latest };
+  return { status: 'current', summary, latest };
+}
+
+/**
+ * The row's sec_summary when it may be read as current, `secSummaryCurrent(row, { now, date })`, else null: the one
+ * predicate the row's SEC chip (secRowChip) and the rows' EPS filter and sort share. Null for an absent, invalid or null
+ * summary, a fund or ETF, a summary of another date than `date`, and one whose latest quarter is past the 180-day rule at
+ * `now` (古い: 未確認, never counted as current).
+ */
+export function secSummaryCurrent(row, options = {}) {
+  const read = summaryStatus(row, options ?? {});
+  return read.status === 'current' ? read.summary : null;
+}
+
+/**
+ * The list row's earnings chip, `secRowChip(row, { now, date })` → `{ text, tone, title, notable }`, or null (no chip)
+ * when the publication carries no `sec_summary` field (an older publication: 未収録) or one that is not in the documented
  * shape (the quality gate refuses to publish that, so it never reaches a screen as today's). From the row's sec_summary
- * only (secSummary): a null summary (no admitted SEC record), one for another date or one without either rate is
- * 「業績 未確認」 with the reason in `title`, and a fund or ETF is 「業績 対象外」.
+ * only (secSummaryCurrent's rule): a null summary (no admitted SEC record), one for another date than `date` (the
+ * analysis date; the row's as_of_date when not given) or one without either rate is 「業績 未確認」 with the reason in
+ * `title`, and a fund or ETF is 「業績 対象外」.
  * `now` (optional, the screen's clock, as the stock view's financial clock) turns a summary whose latest quarter is
  * past the 180-day rule into 「業績 未確認」 (古い), as the stock view says of the same record; without it the summary is
  * read as the export judged it. Never 0 and never a pass from a missing value.
  */
-export function secRowChip(row, { now = null } = {}) {
-  if (!row || typeof row !== 'object' || !Object.hasOwn(row, 'sec_summary')) return null;
-  if (instrumentApplicability(row).status === 'not_applicable') return unknownChip(SEC_STATUS.not_applicable[1], '業績 対象外');
-  if (row.sec_summary === null) return unknownChip('この公開にはこの銘柄の SEC 記録がありません。');
-  const summary = secSummary(row);
+export function secRowChip(row, options = {}) {
+  const { status, summary, latest } = summaryStatus(row, options ?? {});
+  if (status === 'absent') return null;
+  if (status === 'not_applicable') return unknownChip(SEC_STATUS.not_applicable[1], '業績 対象外');
+  if (status === 'none') return unknownChip('この公開にはこの銘柄の SEC 記録がありません。');
   // Published, but not in the documented shape: the quality gate refuses to publish one, so no chip (the step-0 contract
   // rows pin in BriefParts.test.jsx; rows show only a notable chip, which an unknown one never is).
-  if (!summary) return null;
-  if (isoDay(row.as_of_date) && summary.as_of_date !== row.as_of_date) return unknownChip('SEC の業績要約が別の日付のものです。');
-  const latest = [summary.eps_yoy?.end, summary.sales_yoy?.end].filter(Boolean).sort().at(-1);
-  if (latest && Number.isFinite(now) && expired(latest, now)) return unknownChip(`${SEC_STATUS.stale[0]}：直近の四半期（${ym(latest)}）から180日を超えているため判定に使いません。`);
+  if (status === 'invalid') return null;
+  if (status === 'other_date') return unknownChip('SEC の業績要約が別の日付のものです。');
+  if (status === 'expired') return unknownChip(`${SEC_STATUS.stale[0]}：直近の四半期（${ym(latest)}）から180日を超えているため判定に使いません。`);
   const facts = earningsFacts(summary.eps_yoy, summary.sales_yoy);
   if (facts) return facts;
   const reason = summary.sec_state === 'ok' ? '直近の四半期の EPS・売上の前年同期比をどちらも確認できません。' : SEC_STATUS[summary.sec_state]?.[1] || 'SEC の記録を判定に使えません。';

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { breakoutEvent, candidateView, earningsCall, trendTemplate } from './briefCandidate';
+import { baseCurrent, breakoutEvent, candidateView, earningsCall, trendTemplate } from './briefCandidate';
 import { crossingEvent } from './breakoutHistory';
 import { baseCheck, buyGate, HEAVY_DOWN_NOTE, marketGuidePercent, PLAN_BLOCKED, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, templateReference } from './buyGate';
 import { conditionNote } from '../missingCondition';
@@ -116,6 +116,22 @@ describe('the one buy gate', () => {
     expect(gateOf({ price: 90, se_pattern_confidence: 31 })).toMatchObject({ kind: 'basePosition', tone: 'neutral', reference: false, reason: '土台未確認' });
     expect(baseCheck({ asOf: DAY, row: { setup_recalculation: { status: 'calculated', as_of_date: DAY }, se_pattern_confidence: 60 } })).toEqual({ current: true, note: null });
     expect(baseCheck(null)).toEqual({ current: false, note: '土台の再計算 未確認' });
+    // The conclusion and the rows read one predicate (briefCandidate's baseCurrent): a row never stays green beside this check.
+    for (const extra of [{ se_pattern_confidence: 31 }, { se_pattern_confidence: null }, { setup_recalculation: { status: 'calculated', as_of_date: '2026-10-01' } }, { setup_recalculation: undefined },
+      { setup_recalculation: { status: 'calculated', as_of_date: DAY, reason: SE_BELOW_FLOOR_CHECK } }, {}]) {
+      const { view } = subject(extra);
+      expect(view.baseCurrent).toBe(baseCheck(view).current);
+      expect(baseCurrent(view.row, view.asOf)).toBe(baseCheck(view).current);
+    }
+  });
+
+  it('says a close just under the pivot is less than 0.1% away, never あと0.0%', () => {
+    const near = gateOf({ price: 99.96, pivot: 100 });
+    expect(near.kind).toBe('near');
+    expect(near.title).toBe('ピボット接近（あと0.1%未満）');
+    // 「あと0」 only as a real tenth or more (あと0.1%), never a gap of nothing (あと0.0%, あと0%, あと0条件).
+    expect(near.title).not.toMatch(/あと0(?!\.\d*[1-9])/);
+    expect(gateOf({ price: 99.9, pivot: 100 }).title).toBe('ピボット接近（あと0.1%）');
   });
 
   it('earnings within 10 days stop the green call, after the market; the plan names the phase (決算前, 決算当日, 決算後)', () => {
