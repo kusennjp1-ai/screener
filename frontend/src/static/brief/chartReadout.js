@@ -278,7 +278,7 @@ export function chartNotes({ bars, interval, period, short = shortAveragesDrawn(
     crossingNote(crossing),
     marks?.short ? '10＝10日線、21＝21日EMA（3か月のみ）' : null,
     marks?.pivot && marks?.stop ? '緑の破線＝ピボット、赤の点線＝損切り' : marks?.pivot ? '緑の破線＝ピボット' : marks?.stop ? '赤の点線＝損切り' : null,
-    marks?.heavyDown ? `■＝下落日の大商い（${BREAKOUT_VOLUME_RATIO}×以上・独自判定）` : null,
+    marks?.heavyDown ? `●＝大商い、■＝下落日の大商い（どちらも${BREAKOUT_VOLUME_RATIO}×以上・独自判定）` : null,
     marks?.legs ? '点線＝収縮の安値を結んだ線、枠＝値幅の収縮' : null,
     finite(marks?.structuralLow) ? `「安値」＝最後の収縮の安値 ${formatPrice(marks.structuralLow)}` : null,
     marks?.earnings ? `${marks.earnings.short}＝${marks.earnings.text}` : null,

@@ -279,14 +279,18 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const lineOf = (from, to) => { const out = []; for (let v = from; v <= to; v += 2) out.push(v); return out; };
   take(4, 4 + width(rsCaption.body.replace(/&[a-z]+;/g, '_')), rsCaption.base - 11, rsCaption.base + 3);
 
-  const heavyLabel = `<tspan class="bc-volkey">●</tspan>${BREAKOUT_VOLUME_RATIO.toFixed(1)}×以上（独自判定）`;
-  // A narrow chart keys the heavy down bars (■ 下落日) in this caption, beside the bars (the legend keeps two lines).
+  const ratio = BREAKOUT_VOLUME_RATIO.toFixed(1), dotKey = '<tspan class="bc-volkey">●</tspan>', downKey = '<tspan class="bc-volkeydown">■</tspan>';
+  // A narrow chart keys the heavy down bars (■ 下落日) in this caption, beside the bars (the legend keeps two lines). The
+  // caption is the longest of its forms that fits the plot's width; the shortest leaves 「以上（独自判定）」 to the 注記
+  // (chartNotes keys ● and ■ with it).
   const heavyDownDrawn = heavyBars.some(h => h.direction === 'down');
-  const volumeCaption = narrow && heavyDownDrawn ? `出来高・${heavyLabel}・<tspan class="bc-volkeydown">■</tspan>下落日`
-    : pw >= 230 ? `出来高・${volumeLength}${unit}平均・${heavyLabel}` : `出来高・${heavyLabel}`;
+  const captionWidth = caption => width(caption.replace(/<[^>]+>/g, ''));
+  const captions = narrow && heavyDownDrawn ? [`出来高・${dotKey}${ratio}×以上（独自判定）・${downKey}下落日`, `出来高・${dotKey}${ratio}×・${downKey}下落日`]
+    : [`出来高・${volumeLength}${unit}平均・${dotKey}${ratio}×以上（独自判定）`, `出来高・${dotKey}${ratio}×以上（独自判定）`];
+  const volumeCaption = captions.find(caption => captionWidth(caption) <= pw - 8) ?? captions.at(-1);
   // The caption has the panel's top band to itself: the tallest bar starts under it (VOL_HEAD).
   F.push(text(4, volTop + 12, volumeCaption, 'bc-caption bc-volcaption'));
-  take(4, 4 + width(volumeCaption.replace(/<[^>]+>/g, '')), volTop + 1, volTop + 15);
+  take(4, 4 + captionWidth(volumeCaption), volTop + 1, volTop + 15);
   // The volume axis: the period's maximum beside the tallest bar's top, and the latest average (— when its window is short).
   const averageNow = series.latestAverage;
   F.push(text(pw + 6, volTop + VOL_HEAD + 4, formatVolume(vmax), 'bc-axis bc-volmax', mono));

@@ -142,7 +142,7 @@ describe('the chart footnotes', () => {
     const crossing = { date: list.at(-2).date, sessionsAgo: 1, volumeRatio: null, tone: 'neutral', reason: 'volume_unknown' };
     const flag = earningsMarker({ date: '2026-10-06', days: -1, soon: false });
     const marks = chartNotes({ bars: list, interval: 'day', period: 65, crossing, marks: { short: true, pivot: true, stop: true, heavyDown: true, legs: true, structuralLow: 109.47, earnings: flag } });
-    expect(marks).toContain('チャートの印：灰色の矢印＝終値がピボットを上抜けた日（その日の出来高倍率は未確認。検証済みの日足）、10＝10日線、21＝21日EMA（3か月のみ）、緑の破線＝ピボット、赤の点線＝損切り、■＝下落日の大商い（1.4×以上・独自判定）、点線＝収縮の安値を結んだ線、枠＝値幅の収縮、「安値」＝最後の収縮の安値 109.47、E 10/6＝決算 10/6 経過。');
+    expect(marks).toContain('チャートの印：灰色の矢印＝終値がピボットを上抜けた日（その日の出来高倍率は未確認。検証済みの日足）、10＝10日線、21＝21日EMA（3か月のみ）、緑の破線＝ピボット、赤の点線＝損切り、●＝大商い、■＝下落日の大商い（どちらも1.4×以上・独自判定）、点線＝収縮の安値を結んだ線、枠＝値幅の収縮、「安値」＝最後の収縮の安値 109.47、E 10/6＝決算 10/6 経過。');
     expect(chartNotes({ bars: list, interval: 'day', period: 130, marks: { stop: true } })).toContain('チャートの印：赤の点線＝損切り。');
     expect(chartNotes({ bars: list, interval: 'day', period: 130, marks: { heavyDown: false, legs: false, structuralLow: null } }).join('')).not.toContain('チャートの印');
     // At 1024px and wider (no marks) the crossing's colour is still explained.

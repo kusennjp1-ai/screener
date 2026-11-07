@@ -587,6 +587,17 @@ describe('brief price chart', () => {
     expect(candles.filter(c => c.x > lx - 2 && c.x < lx + w + 2 && c.y0 < yc + 7 && c.y1 > yc - 7)).toEqual([]);
   });
 
+  it('shortens the volume caption to the plot\'s width on the narrowest phones, keeping ● and ■', () => {
+    const heavyDown = bars.map((b, i) => (i === bars.length - 4 ? { ...b, close: bars[i - 1].close - 2, volume: 5000 } : b));
+    for (const [width, caption] of [[262, '出来高・●1.4×・■下落日'], [332, '出来高・●1.4×以上（独自判定）・■下落日']]) {
+      const el = container(width, 340);
+      renderPriceChart(el, { ...model, bars: heavyDown }, { period: 65, animate: false });
+      const node = el.querySelector('.bc-volcaption');
+      expect(node.textContent).toBe(caption);
+      expect(4 + _test.width(node.textContent)).toBeLessThanOrEqual(width - 68 - 4);
+    }
+  });
+
   it('keys the heavy down bars (■ 下落日) in the volume caption on a narrow chart only when one is drawn', () => {
     const heavyDown = bars.map((b, i) => (i === bars.length - 4 ? { ...b, close: bars[i - 1].close - 2, volume: 5000 } : b));
     const phone = container(332, 340), quiet = container(332, 340), desk = container(1000, 470);
