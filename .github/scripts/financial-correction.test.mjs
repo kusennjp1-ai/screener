@@ -214,6 +214,17 @@ for(const [path,change]of [
 ])test(`same-price correction rejects unauthorized mutation ${path}`,async()=>{const f=bundleFixture();try{f.change(path,change);await assert.rejects(f.check);}finally{f.cleanup();}});
 test('correction fails closed when approved UI lacks executed hook',async()=>{const f=bundleFixture();try{await assert.rejects(()=>verifyConsumerCapability(f.frontend),/lacks/);f.put(f.frontend,'tools/financial-correction-overlay.mjs',`export const FINANCIAL_CORRECTION_SCHEMA='financial-statement-projection-v1';export const verifyCorrectionCompatibility=()=>({});`);f.put(f.frontend,'tools/export-research.mjs','console.log("unapproved dependency injection is not compatibility");');await assert.rejects(()=>verifyConsumerCapability(f.frontend),/does not execute/);}finally{f.cleanup();}});
 
+test('a cohort row\'s SEC summary and admission follow its corrected SEC record; out of the cohort they stay bound',async()=>{const f=bundleFixture();try{
+  // As the round-2 exporter writes them: sec_summary on the index row (from the admitted SEC record, the evaluation
+  // clock and the applicability) and sec_admission on the detail, both derived from book_financials.
+  const summary=value=>({sec_state:'ok',eps_yoy:{value,end:'2026-06-30'},sales_yoy:{value:30,end:'2026-06-30'},code33:{state:'unknown',kind:null},as_of_date:'2026-10-02'});
+  const paths=['static-data/research-index-aaaaaaaaaaaaaaaa.json','static-data/research-details/AAA-aaaaaaaaaaaaaaaa.json'];
+  const at=(path,value)=>value.rows?.[0]||value;
+  for(const base of [f.before,f.after])for(const path of paths){const v=JSON.parse(readFileSync(join(base,path)));Object.assign(at(path,v),{book_financials:{status:'available',eps:[1]},sec_summary:summary(40),sec_admission:{state:'admitted',reason:null}});f.put(base,path,v);}
+  for(const path of paths)f.change(path,v=>Object.assign(at(path,v),{book_financials:null,sec_summary:null,sec_admission:{state:'refused',reason:'projection'}}));
+  await f.check();
+  await assert.rejects(()=>compareCorrectionData(f.before,f.after,f.frontend,{financial_generation:H,symbols:{}}),/sec_summary|sec_admission|book_financials/);
+  }finally{f.cleanup();}});
 test('out-of-cohort source financial values remain immutable',async()=>{const f=bundleFixture();try{f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>v.rows[0].eps_growth_yy=25);await assert.rejects(()=>compareCorrectionData(f.before,f.after,f.frontend,{financial_generation:H,symbols:{}}),{message:'Correction changed US research rows at $["rows"]["AAA"]["eps_growth_yy"]'});}finally{f.cleanup();}});
 test('out-of-cohort EPS chart series remain immutable',async()=>{const f=bundleFixture();try{for(const base of [f.before,f.after]){const p='static-data/charts/AAA.json',v=JSON.parse(readFileSync(join(base,p)));v.eps_line=[{time:'2026-10-02',value:1}];f.put(base,p,v);}f.change('static-data/charts/AAA.json',v=>v.eps_line=[]);await assert.rejects(()=>compareCorrectionData(f.before,f.after,f.frontend,{financial_generation:H,symbols:{}}),/full chart/);}finally{f.cleanup();}});
 test('a US cohort ticker does not authorize another market financials',async()=>{const f=bundleFixture();try{for(const base of [f.before,f.after]){const p='static-data/research-index-aaaaaaaaaaaaaaaa.json',v=JSON.parse(readFileSync(join(base,p)));v.rows[0].market='JP';f.put(base,p,v);}f.change('static-data/research-index-aaaaaaaaaaaaaaaa.json',v=>v.rows[0].eps_growth_yy=25);await assert.rejects(f.check,/research rows/);}finally{f.cleanup();}});

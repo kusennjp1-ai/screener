@@ -3,6 +3,7 @@ import contract from '../../contracts/static_financial_current_v1.json' with { t
 import { validClock, validEvidenceDay } from './evidenceTime.js';
 import { financialHistory, financialHistoryDeadlines } from './financialHistory.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
+import { BOOK_QUARTER_MAX_AGE_DAYS } from './bookFinancialEvidence.js';
 
 export const FINANCIAL_FIELDS = Object.freeze(contract.field_order);
 export const FINANCIAL_CURRENT_VERSION = contract.schema;
@@ -214,6 +215,13 @@ export function financialNextExpiry(rows, now = Date.now()) {
     }
     const book=bookFinancialCurrent(row.book_financials,row.symbol,row.technical_audit?.as_of_date || row.as_of_date,now,row);
     if (book.current && validClock(book.validUntil)) times.push(book.validUntil+1);
+    // A research index row's SEC summary: each growth point is read as current for BOOK_QUARTER_MAX_AGE_DAYS after its
+    // quarter ends (fundamentalsExplain's secSummaryCurrent, its last day included), so the rows are evaluated again
+    // when one passes that rule rather than shown as current past it.
+    for (const point of [row.sec_summary?.eps_yoy, row.sec_summary?.sales_yoy]) {
+      const end = typeof point?.end === 'string' && validEvidenceDay(point.end) ? Date.parse(point.end) + (BOOK_QUARTER_MAX_AGE_DAYS + 1) * 86400000 : NaN;
+      if (validClock(end) && end > now) times.push(end);
+    }
   }
   return minTime(times);
 }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildPortfolioPlan, exposureRuleText, modelMarket, MARKET_CAPS } from './portfolioPlan';
+import { buildPortfolioPlan, modelMarket, MARKET_CAPS } from './portfolioPlan';
+import { exposureRuleText } from './reference/marketTabStudy.js';
 import { marketTone } from './brief/briefModel';
 import { withAuditFixture } from './testAuditFixture';
 
@@ -60,7 +61,7 @@ it('does not let unscanned rows erase known market context, but blocks conflicts
 });
 it('names a close below the 50-day line as a known weak state and keeps missing context unknown, both closed to new buying', () => {
   const weak = modelMarket([fixture(), fixture('WEAK', { market_above_50dma: false })]);
-  expect(weak).toEqual({ label: '50日線割れ（弱含み・独自判定）', cap: 0 });
+  expect(weak).toEqual({ label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true });
   expect(marketTone(weak)).toBe('neg');
   const unknown = modelMarket([fixture('NULL', { market_above_50dma: null, market_above_200dma: null })]);
   expect(unknown).toMatchObject({ state: 'unknown', cap: 0 });
@@ -103,7 +104,9 @@ describe('the exposure guide\'s caps and their disclosure', () => {
       conflict: [fixture(), fixture('O', { market_regime: 'uptrend_under_pressure' })],
       nonUsd: [fixture('J', { currency: 'JPY' })],
     };
-    expect(Object.fromEntries(Object.entries(cases).map(([name, rows]) => [name, modelMarket(rows)]))).toEqual({
+    // The label, the cap and the unknown state are unchanged by round 2's additive fields (regime, ftdUpgraded).
+    const verdict = ({ label, cap, state }) => (state === undefined ? { label, cap } : { label, cap, state });
+    expect(Object.fromEntries(Object.entries(cases).map(([name, rows]) => [name, verdict(modelMarket(rows))]))).toEqual({
       confirmed: { label: '上昇トレンド（独自判定）', cap: 0.5 },
       pressure: { label: '上昇に圧力（独自判定）', cap: 0.25 },
       correction: { label: '新規購入を抑制', cap: 0 },
@@ -114,5 +117,26 @@ describe('the exposure guide\'s caps and their disclosure', () => {
       conflict: { label: '市場未確認', cap: 0, state: 'unknown' },
       nonUsd: { label: '市場未確認', cap: 0, state: 'unknown' },
     });
+  });
+});
+
+describe('the FTD-upgraded uptrend (MK1)', () => {
+  const regimeOf = rows => { const { regime, ftdUpgraded } = modelMarket(rows); return { regime, ftdUpgraded }; };
+  it('is set only for confirmed_uptrend while SPY is under its 50-day or 200-day line', () => {
+    expect(regimeOf([fixture('W', { market_above_50dma: false })])).toEqual({ regime: 'confirmed_uptrend', ftdUpgraded: true });
+    expect(regimeOf([fixture('L', { market_above_200dma: false })])).toEqual({ regime: 'confirmed_uptrend', ftdUpgraded: true });
+    expect(regimeOf([fixture('B', { market_above_50dma: false, market_above_200dma: false })])).toEqual({ regime: 'confirmed_uptrend', ftdUpgraded: true });
+    // Above both lines it is the ordinary uptrend; any other regime under a line is not an FTD upgrade.
+    expect(regimeOf([fixture()])).toEqual({ regime: 'confirmed_uptrend', ftdUpgraded: false });
+    expect(regimeOf([fixture('C', { market_regime: 'correction', market_above_50dma: false })])).toEqual({ regime: 'correction', ftdUpgraded: false });
+    expect(regimeOf([fixture('P', { market_regime: 'uptrend_under_pressure', market_above_200dma: false })])).toEqual({ regime: 'uptrend_under_pressure', ftdUpgraded: false });
+    // Unknown or conflicting markets claim nothing.
+    expect(regimeOf([fixture('U', { market_above_50dma: 'n/a', market_above_200dma: 'n/a' })])).toEqual({ regime: 'confirmed_uptrend', ftdUpgraded: false });
+    expect(regimeOf([fixture(), fixture('O', { market_regime: 'uptrend_under_pressure' })])).toEqual({ regime: null, ftdUpgraded: false });
+    expect(regimeOf([])).toEqual({ regime: null, ftdUpgraded: false });
+  });
+  it('leaves the label and the cap as they were: the guide stays 0% under either line', () => {
+    expect(modelMarket([fixture('W', { market_above_50dma: false })])).toMatchObject({ label: '50日線割れ（弱含み・独自判定）', cap: 0 });
+    expect(modelMarket([fixture('L', { market_above_200dma: false })])).toMatchObject({ label: '長期トレンド警戒', cap: 0 });
   });
 });

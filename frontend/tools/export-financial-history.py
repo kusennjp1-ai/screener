@@ -69,6 +69,43 @@ def needs_history(row):
     return bool(other_rules) and all(r.get('state') == 'pass' for r in other_rules)
 
 
+def listed(row):
+    """A row the daily brief lists for the trend template: qualified, or one condition short with nothing unknown."""
+    minervini = (row.get('methods') or {}).get('minervini') or {}
+    return bool(minervini.get('qualified')) or (minervini.get('failed') == 1 and minervini.get('unknown') == 0)
+
+
+def without_sec_quarters(sec, as_of):
+    """Symbols whose same-day SEC record carries no quarters (unavailable), or None when there is no same-day SEC file."""
+    if not isinstance(sec, dict) or sec.get('as_of_date') != as_of or not isinstance(sec.get('results'), dict):
+        return None
+    return {symbol for symbol, record in sec['results'].items() if not (isinstance(record, dict) and record.get('status') in ('available', 'partial'))}
+
+
+def ordered_targets(audit, sec):
+    """The rows that need a history, the brief's listed rows without SEC quarters first (their only
+    reference is Yahoo), then every other row in the audit's order. Without a same-day SEC file the
+    order is unchanged. A listed row missing from the SEC file has no SEC quarters either."""
+    as_of = audit['as_of_date']
+    eligible = [r for r in audit['results'] if needs_history(r)]
+    no_sec = without_sec_quarters(sec, as_of)
+    if no_sec is None:
+        return [r['symbol'] for r in eligible], 0
+    first = [r['symbol'] for r in eligible if listed(r) and (r['symbol'] in no_sec or r['symbol'] not in sec['results'])]
+    chosen = set(first)
+    return first + [r['symbol'] for r in eligible if r['symbol'] not in chosen], len(first)
+
+
+def read_sec(root):
+    import gzip
+    for name in ('book-financials.json.gz', 'book-financials.json'):
+        path = root / name
+        if path.exists():
+            raw = path.read_bytes()
+            return json.loads(gzip.decompress(raw) if name.endswith('.gz') else raw)
+    return None
+
+
 def fetch(symbol, as_of, ticker_factory, limiter):
     """One symbol; each of the three provider calls first takes a limiter slot."""
     item = {'symbol': symbol, 'as_of_date': as_of, 'retrieved_at': datetime.now(timezone.utc).isoformat(),
@@ -110,7 +147,13 @@ def main():
     root = Path('public/static-data')
     audit = json.loads(Path('public/qualification-audit.json').read_text(encoding='utf-8'))
     as_of = audit['as_of_date']
-    eligible = [r['symbol'] for r in audit['results'] if needs_history(r)]
+    try:
+        sec = read_sec(root)
+    except (OSError, ValueError) as error:
+        print(f'Current financial history: SEC file unreadable ({type(error).__name__}); the audit order is kept', flush=True)
+        sec = None
+    # Listed rows without SEC quarters first, within the same limit.
+    eligible, no_sec_first = ordered_targets(audit, sec)
     symbols = eligible[:max(0, min(args.limit, 500))]
     results = {}
     if symbols:
@@ -118,7 +161,8 @@ def main():
         results = collect(symbols, as_of, yf.Ticker, RateLimiter(YAHOO_RPS))
     payload = {'as_of_date': as_of, 'results': results, 'coverage': coverage(results, len(eligible), len(symbols))}
     (root/'financial-history.json').write_text(json.dumps(payload, ensure_ascii=False, allow_nan=False), encoding='utf-8')
-    print('Current financial history: ' + json.dumps({**payload['coverage'], 'quarterly_depth': quarterly_depth(results)}), flush=True)
+    print('Current financial history: ' + json.dumps({**payload['coverage'], 'listed_without_sec_first': no_sec_first, 'listed_without_sec_requested': min(no_sec_first, len(symbols)),
+        'quarterly_depth': quarterly_depth(results)}), flush=True)
 
 
 if __name__ == '__main__':

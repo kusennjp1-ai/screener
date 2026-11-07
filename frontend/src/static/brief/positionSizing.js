@@ -5,6 +5,10 @@
 // Values derived from the chart (the structural stop, ADR) come from certified bars only; unknown stays
 // unknown. The structural stop is chosen per stock: one stock's structure never sets another's stop.
 import { finite } from '../researchEngine';
+import { buyGate, marketGuidePercent, PLAN_BLOCKED, templateReference } from './buyGate';
+
+// The plan's gate is the conclusion's (buyGate.js); these two live there and keep their old import path.
+export { PLAN_BLOCKED, templateReference };
 
 export const STOP_DEFAULT_PERCENT = 7;
 export const STOP_MAX_PERCENT = 10;
@@ -19,20 +23,17 @@ export const POSITION_CAP_MAX_PERCENT = 100;
 export const RISK_MAX_PERCENT = 5;
 /** The structural stop sits this far below the last contraction's low (独自設定). */
 export const STRUCTURAL_STOP_BUFFER_PERCENT = 0.5;
+/**
+ * A structural stop deeper than this (% below the entry) makes a buy at the entry a large risk: the plan
+ * warns 見送り候補 (独自設定, owner decision §9-14). The input limit stays STOP_LIMIT_PERCENT.
+ */
+export const STOP_WARN_PERCENT = 8;
 /** ADR%: the mean daily range (high ÷ low − 1) over this many certified bars (独自計算). */
 export const ADR_SESSIONS = 20;
 /** How many stocks a viewer's structural-stop choice is kept for (the most recent ones). */
 export const STRUCTURAL_SYMBOLS_MAX = 50;
 /** The plan inputs and their defaults. */
 export const PLAN_DEFAULTS = Object.freeze({ stopPercent: STOP_DEFAULT_PERCENT, account: 50000, riskPercent: 1.25, capPercent: POSITION_CAP_DEFAULT_PERCENT });
-
-/** Why no new plan is made, by position (the zone and the wait state get a plan). */
-export const PLAN_BLOCKED = Object.freeze({
-  ext: '買いゾーン超過：新規の試算はしません（次の土台を待つ）',
-  low: '低変動・監視のみ：新規の試算はしません',
-  acq: '買収合意・対象外：新規の試算はしません',
-  na: '判定不可：新規の試算はしません（有効な買い水準が未確認）',
-});
 
 /**
  * The plan object. The first fields are what the plan carried in step 0; the others belong to the
@@ -59,14 +60,23 @@ export const PLAN_BLOCKED = Object.freeze({
  *   single-stock cap (null without a risk budget). The account never binds on its own (cap ≤ 100%).
  * @property {number|null} actualRisk Shares × risk: the loss at the stop, or null.
  * @property {boolean} trialOnly The market guide allows no new position (0%) or is unknown: 試算のみ.
- * @property {{known: boolean, maxPercent: number|null, usedPercent: number|null, over: boolean}} marketGuide
- *   The market's exposure guide (地合いの目安) and how much of it this position takes.
- * @property {boolean} reference The plan is shown for reference only (参考): the trend template is not passed,
- *   the buy setup is broken, or earnings are near.
- * @property {'TT未達'|'TT未確認'|'崩れ'|'決算前'|null} referenceReason Why, in the conclusion's order: TT未達 (a
- *   failed rule) or TT未確認 (no template, an unknown rule, or the daily-bar integrity rule not passed); 崩れ (a
- *   broken setup: the 50-day check or the book's combined warning fired, 独自判定); 決算前 (earnings within
- *   EARNINGS_WARN_DAYS); null when none applies.
+ * @property {{known: boolean, maxPercent: number|null, usedPercent: number|null, over: boolean, share: number|null, fits: number|null}} marketGuide
+ *   The market's exposure guide (地合いの目安) and how much of it this position takes: `usedPercent` the
+ *   position's weight, `share` that weight as a % of the guide (「この1銘柄で目安の71%」) and `fits` how many
+ *   positions of the same size the guide holds, floor(guide ÷ weight) (holdings are not registered, so
+ *   none is counted); each null when unknown.
+ * @property {boolean} reference The plan is shown for reference only (参考): buyGate names a reason.
+ * @property {'TT未達'|'TT未確認'|'選定対象外'|'崩れ'|'土台未確認'|'地合い'|'地合い未確認'|'決算前'|'決算当日'|'決算後'|'決算'|'下落日の大商い'|'停滞'|null} referenceReason
+ *   buyGate's reason, in the conclusion's order: the trend template (TT未達, TT未確認, 選定対象外); 崩れ (a broken
+ *   setup: the 50-day check, the failed breakout or the book's combined warning fired, 独自判定); 土台未確認 (the
+ *   Setup Engine base is not current or below its confidence floor); 地合い (a known market with a guide of 0%)
+ *   or 地合い未確認; 決算前, 決算当日 or 決算後 (earnings within EARNINGS_WARN_DAYS, or passed since the analysis;
+ *   決算 when only `earningsSoon` is known); 下落日の大商い or 停滞 (the buy zone's day);
+ *   null when none applies.
+ * @property {boolean|null} stopInsideBase The stop in use sits above the last measured contraction's low (inside
+ *   the contraction, easily hit by its normal swings: 独自判定); null when that low is unknown or at the entry.
+ * @property {boolean|null} structuralDeep The structural stop is deeper than STOP_WARN_PERCENT (独自設定); null when
+ *   it is unknown.
  * @property {boolean} defaults Every input (account, risk, stop, cap) is still at its default and the stop
  *   is not this stock's structural stop (既定条件).
  * @property {StructuralStop} structural The stop from the base's last measured contraction, or why there is none.
@@ -132,19 +142,6 @@ export function readPlanSettings(stored) {
 }
 
 /**
- * Why the trend template leaves the plan a reference only, as the conclusion's gate reads it: TT未達 when a
- * rule failed; TT未確認 without a template, with an unknown rule, or when the daily-bar integrity rule has
- * not passed; null when the template passes.
- * @returns {'TT未達'|'TT未確認'|null}
- */
-export function templateReference(template) {
-  if (!template) return 'TT未確認';
-  if (finite(template.failed) && template.failed > 0) return 'TT未達';
-  if (template.failed !== 0 || template.unknown !== 0 || template.integrity?.state !== 'pass') return 'TT未確認';
-  return null;
-}
-
-/**
  * ADR%: the mean of (high ÷ low − 1) over the last ADR_SESSIONS bars, in percent, as { value, reason }.
  * Only for bars certified for the analysis date (pass null otherwise); unknown says why: the bars are not
  * certified, there are fewer than ADR_SESSIONS of them, or one of them lacks a usable high or low.
@@ -190,12 +187,6 @@ export function structuralStop({ technical, judged, entry, pivot }) {
   return { state, low: leg.low, lowDate: leg.lowDate, stop, percent, buffer: STRUCTURAL_STOP_BUFFER_PERCENT, reason: null };
 }
 
-/** The market's exposure guide (modelMarket: cap 0.5, 0.25 or 0) as a percentage, or null if unknown. */
-function marketMax(market) {
-  if (!market || market.state === 'unknown' || !finite(market.cap) || market.cap < 0) return null;
-  return market.cap * 100;
-}
-
 /**
  * Position plan for the view's position, or { blocked } when no new plan is made (買いゾーン超過,
  * 低変動, 買収, 判定不可), or null without a usable entry. `settings` holds the inputs and
@@ -203,11 +194,13 @@ function marketMax(market) {
  * that stop sets the width while it is usable; every other stock keeps the stop setting. `context` holds
  * the market verdict (brief.market), the trend template, the technical evidence, `judged` (the bars
  * certified for the analysis date, or null: the only bars the structural stop and ADR are computed from),
- * `broken` (a broken buy setup, from the sell checks) and `earningsSoon` (earnings within EARNINGS_WARN_DAYS):
- * either makes the plan a reference only, as the conclusion does.
+ * `sells` (the sell checks) or `broken` (a broken buy setup, from them) and `earnings` (the stock view's earningsCall,
+ * whose days name the phase: 決算前, 決算当日, 決算後) or, without it, `earningsSoon` (earnings within
+ * EARNINGS_WARN_DAYS: the reason is then 決算). The reference reason is buyGate's for the same inputs (or `gate`, when the caller has
+ * it), so the plan and the conclusion read one decision.
  * @returns {PositionPlan|{blocked: string}|null}
  */
-export function positionPlan(view, settings = {}, { market = null, template = null, technical = null, judged = null, broken = false, earningsSoon = false } = {}) {
+export function positionPlan(view, settings = {}, { market = null, template = null, technical = null, judged = null, broken = false, earningsSoon = false, earnings = null, sells = null, gate = null } = {}) {
   if (view && PLAN_BLOCKED[view.state]) return { blocked: PLAN_BLOCKED[view.state] };
   const input = { ...PLAN_DEFAULTS, ...settings };
   const { account } = input;
@@ -235,15 +228,21 @@ export function positionPlan(view, settings = {}, { market = null, template = nu
   }
   const cost = shares === null ? null : shares * entry;
   const weight = cost === null ? null : cost / account * 100;
-  const maxPercent = marketMax(market);
-  const referenceReason = templateReference(template) ?? (broken === true ? '崩れ' : earningsSoon === true ? '決算前' : null);
+  const maxPercent = marketGuidePercent(market);
+  const decision = gate ?? buyGate({ view, template, market, sells, broken, earnings: earnings ?? (earningsSoon === true ? { soon: true } : null), judged });
+  const referenceReason = decision.reason;
   const adr = adrState(judged);
+  const usedPercent = maxPercent > 0 ? weight : null;
+  const low = structural.low;
   return {
     entry, basis, stop, stopPercent: pct, stopSource, risk, r2: entry + 2 * risk, r3: entry + 3 * risk, riskDollars, shares, cost, weight,
     capPercent, binding, actualRisk: shares === null ? null : shares * risk,
     trialOnly: !(maxPercent > 0),
-    marketGuide: { known: maxPercent !== null, maxPercent, usedPercent: maxPercent > 0 ? weight : null, over: maxPercent > 0 && weight !== null && weight > maxPercent + 1e-9 },
+    marketGuide: { known: maxPercent !== null, maxPercent, usedPercent, over: maxPercent > 0 && weight !== null && weight > maxPercent + 1e-9,
+      share: usedPercent !== null ? usedPercent / maxPercent * 100 : null, fits: usedPercent > 0 ? Math.floor(maxPercent / usedPercent + 1e-9) : null },
     reference: referenceReason !== null, referenceReason,
+    stopInsideBase: finite(low) && low < entry ? stop > low : null,
+    structuralDeep: finite(structural.percent) ? structural.percent > STOP_WARN_PERCENT : null,
     defaults: stopSource === 'setting' && Object.entries(PLAN_DEFAULTS).every(([key, value]) => input[key] === value),
     structural, adrPercent: adr.value, adrReason: adr.reason,
   };

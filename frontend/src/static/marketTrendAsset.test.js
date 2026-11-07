@@ -3,14 +3,15 @@ import { describe,it,expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { buildMarketTrends } from '../../tools/export-market-trends.mjs';
-import { readMarketTrends, longHistoryCheck } from './marketTrendAsset';
+import { readMarketTrends, longHistoryCheck, INDEX_CLOSES_MAX } from './marketTrendAsset';
+import { INDEX_CLOSES_MAX as CONTRACT_CLOSES_MAX } from '../test/fixtures/publishedContracts.js';
 import { validateLongHistory } from './marketLongHistory';
 const date='2026-10-23',entry={as_of_date:date};
 const trendSource=JSON.parse(readFileSync(resolve('data/market-trend-source-2026-10-23.json'),'utf8'));
 const historySource=readFileSync(resolve('data/market-history-source-2026-10-23.json'),'utf8');
 const payload=({history=false}={})=>{const value=buildMarketTrends(structuredClone(trendSource),{asOfDate:date});if(history)value.long_history={...JSON.parse(historySource),source_sha256:'a'.repeat(64)};return value;};
 // An older publication predates followThrough/lastObserved.
-const legacy=()=>{const value=payload();for(const index of value.indices){delete index.followThrough;delete index.lastObserved;}return value;};
+const legacy=()=>{const value=payload();for(const index of value.indices){delete index.followThrough;delete index.lastObserved;delete index.closes;}return value;};
 
 describe('market trend reader: optional follow-through and last observed count',()=>{
  it('accepts an older publication without the new fields unchanged',()=>{const value=legacy();expect(readMarketTrends(structuredClone(value),entry)).toEqual(value);});
@@ -65,6 +66,35 @@ describe('market trend reader: optional follow-through and last observed count',
  it('still rejects a payload whose identity or index dates are wrong',()=>{
   expect(()=>readMarketTrends(payload(),{as_of_date:'2026-10-22'})).toThrow();
   const value=payload();value.indices[0].points[3].date='2026-10-24';expect(()=>readMarketTrends(value,entry)).toThrow();
+ });
+});
+
+describe('market trend reader: the indices\' closes (round 2, plan §2.3)',()=>{
+ it('keeps valid closes and reads a publication without them as before (no closes, never an empty series)',()=>{
+  expect(INDEX_CLOSES_MAX).toBe(CONTRACT_CLOSES_MAX);
+  const out=readMarketTrends(payload(),entry);
+  for(const index of out.indices){expect(index.closes.length).toBeGreaterThanOrEqual(60);expect(Object.hasOwn(index,'closes_error')).toBe(false);}
+  const old=readMarketTrends(legacy(),entry);
+  for(const index of old.indices){expect(Object.hasOwn(index,'closes')).toBe(false);expect(Object.hasOwn(index,'closes_error')).toBe(false);}
+ });
+ it.each([
+  ['not an array',closes=>({date:closes[0].date})],
+  ['empty',()=>[]],
+  ['more than 300 points',closes=>[...Array.from({length:300-closes.length+1},(_,i)=>({date:`2025-01-${String(1+(i%28)).padStart(2,'0')}`,close:1})),...closes]],
+  ['a close of 0',closes=>closes.map((point,i)=>i===5?{...point,close:0}:point)],
+  ['a close as text',closes=>closes.map((point,i)=>i===5?{...point,close:'5800'}:point)],
+  ['a missing close',closes=>closes.map((point,i)=>i===5?{date:point.date}:point)],
+  ['a day out of order',closes=>closes.map((point,i)=>i===5?{...point,date:closes[3].date}:point)],
+  ['a day after the publication',closes=>[...closes.slice(1),{date:'2026-10-26',close:1}]],
+  ['days that are not the series\' own',closes=>closes.slice(0,-1)],
+ ])('withdraws malformed closes (%s) alone, keeping the counts and the follow-through',(_,mutate)=>{
+  const value=payload(),original=structuredClone(value.indices[1]);value.indices[1].closes=mutate(value.indices[1].closes);
+  const out=readMarketTrends(value,entry).indices[1];
+  expect(Object.hasOwn(out,'closes')).toBe(false);
+  expect(out.closes_error).toBe('指数の終値の形式を確認できません。');
+  expect(out.points).toEqual(original.points);
+  expect(out.followThrough).toEqual(original.followThrough);
+  expect(out.state).toEqual(original.state);
  });
 });
 

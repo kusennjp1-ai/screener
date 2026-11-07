@@ -16,7 +16,7 @@ import { financialHistory } from '../financialHistory';
 import { institutionalGrowth } from '../institutionalEvidence';
 import { code33Layered } from '../code33Reference';
 import { diagnoseBookChart } from '../bookChartDiagnostics';
-import { auditDailyBars } from '../qualificationAudit';
+import { auditDailyBars, auditValues } from '../qualificationAudit';
 import { publishedFundamentalsCoverage, secStatus } from '../fundamentalsExplain.js';
 import { candidateView, trendTemplate } from './briefCandidate';
 import { stockSells } from './briefSell';
@@ -79,20 +79,31 @@ export function useWatchlist() {
   return { watch, toggle, storageError };
 }
 
-/** Everything the stock screen shows for one symbol. Missing pieces stay null/unknown. */
+/**
+ * How far a published audit value may sit from the one recomputed on the delivered bars and still be the same
+ * reading: the screens print the day's change to 0.1% and the volume ratio to 0.01×, the close to the cent.
+ */
+const AUDIT_DRIFT = Object.freeze({ change: 0.05, volumeRatio: 0.005 });
 /**
  * Bars that may be judged as of the analysis date: the publisher certified this row's daily bars
- * (technical_audit) and this payload passes the same audit now (last bar on the analysis date,
- * every exchange session present, price matching the row). Anything else stays unknown.
+ * (technical_audit), this payload passes the same audit now (last bar on the analysis date, every exchange
+ * session present, price matching the row), and the audit's published close, day change and volume ratio (what
+ * the rows and the conclusion read) are the ones these bars give, within the screens' rounding: a chart and an
+ * audit that drifted apart are never shown side by side as verified. Anything else stays unknown.
  */
 export function certifyBars(row, payload, date) {
   if (!row || !payload) return { certified: false, reason: '日足データ未配信' };
   if (row.technical_audit?.valid !== true) return { certified: false, reason: '公開時の日足検証を通過していません' };
   let audit;
   try { audit = auditDailyBars(row, payload, date); } catch { return { certified: false, reason: '日足を検証できません' }; }
-  return audit.valid ? { certified: true, reason: null } : { certified: false, reason: audit.errors[0] || '日足を検証できません' };
+  if (!audit.valid) return { certified: false, reason: audit.errors[0] || '日足を検証できません' };
+  const published = auditValues(row), now = audit.values, finite = Number.isFinite;
+  const drifted = Object.entries(AUDIT_DRIFT).some(([key, limit]) => finite(published[key]) && !(finite(now[key]) && Math.abs(published[key] - now[key]) <= limit))
+    || (finite(published.close) && Math.abs(published.close - now.close) > Math.max(0.02, now.close * 0.0001));
+  return drifted ? { certified: false, reason: '公開時の検証値（終値・前日比・出来高倍率）と日足が一致しません' } : { certified: true, reason: null };
 }
 
+/** Everything the stock screen shows for one symbol. Missing pieces stay null/unknown. */
 export function useStockData(symbol, brief) {
   const { manifest, bundle, version, entry, date } = brief;
   const item = useMemo(() => (bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol) || null, [bundle.data, symbol]);

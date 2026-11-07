@@ -1,8 +1,9 @@
 """Self-contained explain payload builder for Setup Engine gate evaluation.
 
-Pure analysis-layer module: no pandas, no I/O. Encapsulates the 8 readiness
-gate evaluations, merges detector/policy checks, and returns a typed
-``ExplainPayload`` with a ``derived_ready`` flag.
+Pure analysis-layer module: no pandas, no I/O. Encapsulates the 10 readiness
+gate evaluations, merges the caller's failed checks (every one fails readiness),
+and returns a typed ``ExplainPayload`` with a ``derived_ready`` flag, plus the
+detector-level ``diagnostics`` the caller passes apart, which never decide it.
 
 Imports only from analysis layer: ``config``, ``readiness``, ``report``, ``trace``.
 """
@@ -29,7 +30,7 @@ class ExplainBuilderInput:
     opt-in controls.
     """
 
-    # Pre-existing checks from detectors/aggregator/policy
+    # Pre-existing checks from the aggregator/policy: every failed one fails readiness
     pre_existing_passed_checks: tuple[str, ...]
     pre_existing_failed_checks: tuple[str, ...]
     key_levels: KeyLevels
@@ -59,6 +60,11 @@ class ExplainBuilderInput:
     readiness_features: BreakoutReadinessFeatures | None = None
     readiness_trace_inputs: BreakoutReadinessTraceInputs | None = None
 
+    # Detector-level checks (one detector not finding its own pattern, a stub, a detector
+    # short of history), separated where they are produced (the aggregator's
+    # ``detector_failed_checks``). They are reported, never counted against readiness.
+    diagnostics: tuple[str, ...] = ()
+
 
 @dataclass(frozen=True)
 class ExplainResult:
@@ -66,6 +72,7 @@ class ExplainResult:
 
     explain: ExplainPayload
     derived_ready: bool
+    diagnostics: tuple[str, ...] = ()
 
 
 def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
@@ -77,16 +84,24 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
     - Gate 3 (readiness_floor): readiness_score >= readiness_threshold_pct
     - Gate 4 (early_zone): distance in [min, max] — **non-permissive** (None fails)
     - Gate 5 (ATR14 cap): atr14_pct <= max — **permissive** (None passes)
-    - Gate 6 (volume dry-up): volume <= cap — **permissive** (None passes)
+    - Gate 6 (volume dry-up): volume <= cap — **permissive** (None passes);
+      a volume above the cap fails as ``volume_above_dryup_cap``
     - Gate 7 (RS leadership): rs_vs_spy > 0 or rs_line_new_high — **permissive** (both None passes)
     - Gate 8 (stage): stage in (1, 2) — **semi-permissive** (None passes, 3/4 fail)
     - Gate 9 (MA alignment): ma_alignment_score >= min — **permissive** (None passes)
     - Gate 10 (RS rating): rs_rating >= min — **permissive** (None passes)
 
-    ``derived_ready`` is True only when ALL checks (pre-existing + gates) pass.
+    ``derived_ready`` is True only when every gate passes and no pre-existing check
+    failed: every caller-supplied failed check fails readiness (fail closed). The
+    detector-level checks arrive apart, in ``inp.diagnostics``; they are returned in
+    ``diagnostics``, never in the failed list, and never fail readiness.
     """
     passed: list[str] = list(inp.pre_existing_passed_checks)
     failed: list[str] = list(inp.pre_existing_failed_checks)
+    diagnostics: list[str] = []
+    for check in inp.diagnostics:
+        if check and check not in diagnostics:
+            diagnostics.append(check)
     params = inp.parameters
 
     if inp.setup_score is None:
@@ -138,7 +153,7 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
             if inp.volume_vs_50d <= params.volume_vs_50d_max_for_ready:
                 passed.append("volume_sufficient")
             else:
-                failed.append("volume_below_minimum")
+                failed.append("volume_above_dryup_cap")
         else:
             passed.append("volume_sufficient")
 
@@ -178,7 +193,7 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
         else:
             passed.append("rs_rating_ok")
 
-        # derived_ready = all gates passed (no failures from any source)
+        # derived_ready = every gate passed and no pre-existing check failed
         derived_ready = len(failed) == 0
 
     # Build score trace if opted in
@@ -204,4 +219,4 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
         score_trace=score_trace,
     )
 
-    return ExplainResult(explain=explain, derived_ready=derived_ready)
+    return ExplainResult(explain=explain, derived_ready=derived_ready, diagnostics=tuple(diagnostics))

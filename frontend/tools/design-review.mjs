@@ -315,10 +315,14 @@ async function returnTo(page, found) {
   await page.locator(ROWS).first().waitFor({ state: 'visible', timeout: 30000 });
 }
 const candleCount = page => page.locator(CANDLES).count();
+// The chart box's own message when its renderer chunk cannot be loaded (PriceChart.jsx): a stop, not a slow chart.
+const CHART_FAILED = '.brief-chart-failed';
 async function waitForCandles(page, minimum, timeout = 30000) {
-  await page.waitForFunction(([selector, count]) => document.querySelectorAll(selector).length >= count, [CANDLES, minimum], { timeout }).catch(() => {});
+  await page.waitForFunction(([selector, count, failed]) => document.querySelectorAll(selector).length >= count || document.querySelector(failed), [CANDLES, minimum, CHART_FAILED], { timeout }).catch(() => {});
   return candleCount(page);
 }
+/** The chart box's message when the renderer chunk failed to load, or null. */
+const chartFailure = page => page.locator(CHART_FAILED).first().textContent({ timeout: 1000 }).then(text => text.replace(/\s+/g, ' ').trim(), () => null);
 /** Click a row and wait for its stock screen; returns the symbol and the candles drawn. */
 /**
  * Measure a stock from the top of the page, as every other capture is. Opening the row clicks it, and
@@ -333,7 +337,8 @@ async function openRow(page, row) {
   await row.click();
   await hashIs(page, `#/brief/stock/${encodeURIComponent(symbol)}`);
   await page.locator('[data-testid="brief-conclusion"]').first().waitFor({ state: 'visible', timeout: 30000 });
-  return { symbol, candles: await waitForCandles(page, MIN_CANDLES) };
+  const candles = await waitForCandles(page, MIN_CANDLES);
+  return { symbol, candles, failure: candles ? null : await chartFailure(page) };
 }
 
 async function interrupted(session, group, step, error) {
@@ -396,8 +401,10 @@ try {
       }
       groupEntry.origin = candidates.origin + (candidates.filter ? ` (${candidates.filter})` : '');
       found[group.width] ||= candidates;
-      const { symbol, candles } = await openRow(page, page.locator(ROWS).first());
+      const { symbol, candles, failure } = await openRow(page, page.locator(ROWS).first());
       groupEntry.symbol = symbol;
+      // A renderer chunk that did not load is named by the box's own words, never only as a chart with 0 candles.
+      functional(group, 'chart-renderer-loaded', failure === null, `#/brief/stock/${symbol}: the chart box says 「${failure}」 (the priceChart chunk did not load)`);
       functional(group, 'row-opens-stock', candles >= MIN_CANDLES, `#/brief/stock/${symbol} draws ${candles} candles, needs at least ${MIN_CANDLES}`);
       await fromTop(page);
       await capture(session, group, 'stock', `#/brief/stock/${symbol}`, { requireDate: !group.mobile });
@@ -503,6 +510,7 @@ try {
       try { new PerformanceObserver(list => { for (const item of list.getEntries()) window.__briefLongTasks.push(item.duration); }).observe({ type: 'longtask', buffered: true }); } catch { /* unsupported */ }
     } });
     const { page } = session, runs = [], notes = [];
+    let cold = null;
     try {
       if (found[width]?.origin !== '#/brief') notes.push('no candidate rows on #/brief in this data; the first-candidate and stock-open timings cannot be measured');
       else {
@@ -541,11 +549,28 @@ try {
           runs.push(run);
           console.log(`CPU${TIMING.cpu_rate} ${width} run ${index + 1}: first candidate ${run.first_candidate_ms}ms, tab ${run.tab_switch_ms}ms, stock ${run.stock_open_ms}ms (${symbol}), long task ${Math.round(run.longest_initial_task_ms)}ms.`);
         }
+        // One cold open per width: a fresh page and its first row clicked as soon as it shows, before the idle-time prefetch of
+        // the chart's renderer chunk can be relied on, so stock_open_ms with the lazy chunk is measured cold as well as warm
+        // (the runs above open the stock after the tab round trip, when the prefetch has normally landed). Reported beside the
+        // runs, with whether the chunk had been requested by the click; it has no budget of its own.
+        session.step = 'cold stock open';
+        await page.goto('about:blank');
+        await go(page, '#/brief');
+        await page.locator(ROWS).first().waitFor({ state: 'visible', timeout: 60000 });
+        const coldRow = page.locator(ROWS).first(), coldSymbol = await coldRow.getAttribute('data-symbol');
+        const requested = await page.evaluate(() => performance.getEntriesByType('resource').some(entry => /\/priceChart[-.][^/]*\.js/.test(entry.name)));
+        const coldStart = Date.now();
+        await coldRow.click();
+        await page.waitForFunction(([ticker, selector]) => location.hash === `#/brief/stock/${encodeURIComponent(ticker)}`
+          && document.querySelector('[data-testid="brief-conclusion"]') && document.querySelectorAll(selector).length > 0, [coldSymbol, CANDLES], { timeout: 30000 });
+        await frames(page);
+        cold = { stock_open_cold_ms: Date.now() - coldStart, symbol: coldSymbol, chart_chunk_requested_before_click: requested };
+        console.log(`CPU${TIMING.cpu_rate} ${width} cold stock open ${cold.stock_open_cold_ms}ms (${coldSymbol}; chart chunk ${requested ? 'already requested' : 'not yet requested'} at the click).`);
         await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
       }
     } catch (error) { notes.push(`timing interrupted: ${error.message.split('\n')[0]}`); }
     const { medians, warnings } = summarizeTiming(width, runs);
-    report.timing.push({ width, theme: group.theme, cpu_rate: TIMING.cpu_rate, budgets_ms: TIMING.budgets_ms, runs, medians, notes });
+    report.timing.push({ width, theme: group.theme, cpu_rate: TIMING.cpu_rate, budgets_ms: TIMING.budgets_ms, runs, medians, cold_stock_open: cold, notes });
     report.timing_warnings.push(...notes.map(note => `${width}: ${note}`), ...warnings);
     await session.context.close();
     await save();

@@ -419,3 +419,101 @@ it('preserves calculated and unavailable setup reasons through actual export, co
     await rm(directory, { recursive: true, force: true });
   }
 });
+
+// Round 2 (plan DT5, DT6, rule 10): rs_line_high, sec_summary and se_pattern_primary reach the research index summary
+// only, never the canonical rows, details or scan pages; market_context reaches the manifest only when every row agrees.
+it('writes the round-2 list summaries into the index only, from certified charts and admitted SEC records, null otherwise', async () => {
+  const { gzipSync } = await import('node:zlib');
+  const { secRecord, secUnavailable } = await import('../src/test/fixtures/secRecord.js');
+  const { rsLineNewHigh, rsLeadMarks } = await import('../src/static/brief/briefChartModel.js');
+  const { secSummary, buildSecSummary } = await import('../src/static/fundamentalsExplain.js');
+  const { scanListRow, RESEARCH_SUMMARY_FIELDS } = await import('./scan-list-payload.mjs');
+  const { directory, root, rows, run, outputs } = await fixture({ withBreadth: true });
+  try {
+    for (const [index, row] of rows.entries()) Object.assign(row, { se_pattern_primary: index % 2 ? 'vcp' : null });
+    for (const path of ['scan.json', 'chunk.json']) {
+      const payload = await read(join(root, path)), key = path === 'scan.json' ? 'initial_rows' : 'rows';
+      for (const row of payload[key]) row.se_pattern_primary = rows.find(item => item.symbol === row.symbol).se_pattern_primary;
+      await write(join(root, path), payload);
+    }
+    const retrievedAt = `${date}T10:00:00.000Z`;
+    await writeFile(join(root, 'book-financials.json.gz'), gzipSync(JSON.stringify({ schema_version: 2, as_of_date: date, results: {
+      S000: secRecord({ symbol: 'S000', asOfDate: date, retrievedAt, quarters: [3, 4, 5, 6, 7, 8, 9, 10].map(i => { const year = 2024 + Math.floor((i - 1) / 4), q = (i - 1) % 4; return [`${year}-${['01-01', '04-01', '07-01', '10-01'][q]}`, `${year}-${['03-31', '06-30', '09-30', '12-31'][q]}`]; }) }), S001: secUnavailable({ symbol: 'S001', asOfDate: date, retrievedAt, reason: 'invalid_payload' }) } })));
+    const output = run();
+    const { index, details, charts, manifest } = await outputs();
+    const row = symbol => index.rows.find(item => item.symbol === symbol);
+    // se_pattern_primary is a list field, as published (null stays null).
+    expect(row('S001').se_pattern_primary).toBe('vcp');
+    expect(row('S000').se_pattern_primary).toBeNull();
+    // rs_line_high: the frozen RS-line rules on the certified chart, dated for the analysis date.
+    const s100 = index.rows.findIndex(item => item.symbol === 'S100');
+    const chart = charts[s100];
+    expect(row('S100').rs_line_high).toEqual({ value: rsLineNewHigh(chart.rs_line, chart.bars), leading: rsLeadMarks(chart.rs_line, chart.bars).dates.at(-1) === date, as_of_date: date });
+    expect(index.rows.every(item => item.technical_audit.valid ? item.rs_line_high?.as_of_date === date : item.rs_line_high === null)).toBe(true);
+    expect(index.rows.some(item => item.rs_line_high?.value === true) || index.rows.some(item => item.rs_line_high?.value === false)).toBe(true);
+    // sec_summary: from the admitted record only, with the card's functions; null without one.
+    expect(secSummary(row('S000'))).toEqual(buildSecSummary(details[index.rows.findIndex(item => item.symbol === 'S000')], { date, now, coverage: manifest.markets.US.fundamentals_coverage }));
+    expect(row('S000').sec_summary).toMatchObject({ sec_state: 'ok', eps_yoy: { end: '2026-06-30' }, sales_yoy: { end: '2026-06-30' }, code33: { state: 'pass', kind: null }, as_of_date: date });
+    expect(row('S001').sec_summary).toEqual({ sec_state: 'invalid_payload', eps_yoy: null, sales_yoy: null, code33: null, as_of_date: date });
+    expect(row('S002').sec_summary).toBeNull();
+    // Rule 10: never on the canonical details, the chart stock_data or the scan pages.
+    for (const detail of details) for (const field of RESEARCH_SUMMARY_FIELDS) expect(Object.hasOwn(detail, field)).toBe(false);
+    for (const value of charts) for (const field of RESEARCH_SUMMARY_FIELDS) expect(Object.hasOwn(value.stock_data, field)).toBe(false);
+    const scan = await read(join(root, manifest.markets.US.pages.scan.list_path));
+    for (const ref of scan.chunks) for (const item of (await read(join(root, ref.path))).rows) {
+      for (const field of RESEARCH_SUMMARY_FIELDS) expect(Object.hasOwn(item, field)).toBe(false);
+      expect(item).toEqual(scanListRow(details.find(detail => detail.symbol === item.symbol) && (({ book_diagnostics, book_technical_evidence, book_financials, sec_admission, ...compact }) => { void book_diagnostics; void book_technical_evidence; void book_financials; void sec_admission; return { ...compact, research_detail_path: index.rows.find(entry => entry.symbol === item.symbol).research_detail_path }; })(details.find(detail => detail.symbol === item.symbol))));
+    }
+    expect(output).toContain(`Research list summaries ${date}: rs_line_high 101/101 certified`);
+    expect(output).toContain('sec_summary 2/101 admitted');
+    expect(output).toMatch(new RegExp(`Research index ${date}: \\d+ raw / \\d+ gzip bytes`));
+    // No row carries the market regime: no block, and the log says why.
+    expect(manifest.markets.US.market_context).toBeNull();
+    expect(output).toContain(`Market context ${date}: null (no_rows)`);
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+it('emits market_context only when every US row that carries the regime agrees, and leaves rs_line_high null without a certified chart', async () => {
+  const context = { market_regime: 'confirmed_uptrend', market_distribution_days: 3, market_ftd_date: '2026-09-18', market_ftd_days_since: 10, market_exposure_pct: 50 };
+  const setRows = async (root, change) => {
+    for (const path of ['scan.json', 'chunk.json']) {
+      const payload = await read(join(root, path)), key = path === 'scan.json' ? 'initial_rows' : 'rows';
+      payload[key].forEach(change); await write(join(root, path), payload);
+    }
+  };
+  const agree = await fixture(), disagree = await fixture(), uncertified = await fixture({ withCalendar: false });
+  try {
+    await setRows(agree.root, row => Object.assign(row, context));
+    await setRows(disagree.root, (row, i) => Object.assign(row, context, i === 1 ? { market_distribution_days: 4 } : {}));
+    const agreed = agree.run();
+    expect((await agree.outputs()).manifest.markets.US.market_context).toEqual({ as_of_date: date, regime: 'confirmed_uptrend', distribution_days: 3, ftd_date: '2026-09-18', ftd_days_since: 10, exposure_pct: 50, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' });
+    expect(agreed).toContain(`Market context ${date}: emitted from 3 rows (confirmed_uptrend)`);
+    const disagreed = disagree.run();
+    expect((await disagree.outputs()).manifest.markets.US.market_context).toBeNull();
+    expect(disagreed).toContain(`Market context ${date}: null (disagree: 2 versions across 3 rows)`);
+    uncertified.run();
+    const { index } = await uncertified.outputs();
+    expect(index.rows.map(row => row.rs_line_high)).toEqual([null, null, null]);
+    expect(index.rows.map(row => row.sec_summary)).toEqual([null, null, null]);
+  } finally { for (const item of [agree, disagree, uncertified]) await rm(item.directory, { recursive: true, force: true }); }
+});
+
+it('keeps the research index within its unchanged budget by leaving out only the optional list summaries, and fails as before when that is not enough', async () => {
+  const { fitResearchIndex, RESEARCH_INDEX_BUDGET, RESEARCH_SUMMARY_FIELDS } = await import('./scan-list-payload.mjs');
+  expect(RESEARCH_INDEX_BUDGET).toEqual({ raw: 8000000, gzip: 1000000 });
+  const summary = { rs_line_high: { value: true, leading: false, as_of_date: '2026-11-05' }, sec_summary: null };
+  const index = { as_of_date: '2026-11-05', rows: [{ symbol: 'AAA', se_pattern_primary: 'vcp', ...summary }, { symbol: 'BBB', se_pattern_primary: null }] };
+  const encode = value => JSON.stringify(value), gzip = content => content.length;
+  const full = encode(index).length, bare = encode({ ...index, rows: [{ symbol: 'AAA', se_pattern_primary: 'vcp' }, { symbol: 'BBB', se_pattern_primary: null }] }).length;
+  // Within the budget: the index as built.
+  expect(fitResearchIndex(index, { encode, gzip, budget: { raw: full, gzip: full } })).toMatchObject({ content: encode(index), dropped: false, over: false });
+  // Over it only because of the summaries: the same rows without them (an older publication's shape), never any other field.
+  const fitted = fitResearchIndex(index, { encode, gzip, budget: { raw: full, gzip: bare } });
+  expect(fitted).toMatchObject({ dropped: true, over: false, raw: bare, gzip: bare, full: { raw: full, gzip: full } });
+  const rows = JSON.parse(fitted.content).rows;
+  for (const row of rows) for (const field of RESEARCH_SUMMARY_FIELDS) expect(Object.hasOwn(row, field)).toBe(false);
+  expect(rows).toEqual([{ symbol: 'AAA', se_pattern_primary: 'vcp' }, { symbol: 'BBB', se_pattern_primary: null }]);
+  // Over it even without them, or with nothing to leave out: the export fails as it always has.
+  expect(fitResearchIndex(index, { encode, gzip, budget: { raw: full, gzip: bare - 1 } })).toMatchObject({ dropped: false, over: true });
+  expect(fitResearchIndex({ ...index, rows: [{ symbol: 'BBB' }] }, { encode, gzip, budget: { raw: 1, gzip: 1 } })).toMatchObject({ dropped: false, over: true });
+});

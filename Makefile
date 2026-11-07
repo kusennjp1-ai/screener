@@ -31,7 +31,9 @@ GATE_1 = \
   tests/unit/test_setup_engine_report_schema.py \
   tests/unit/test_setup_engine_screener.py \
   tests/unit/test_setup_engine_parameters.py \
-  tests/unit/test_aggregator_execution_pipeline.py
+  tests/unit/test_aggregator_execution_pipeline.py \
+  tests/unit/test_explain_builder.py \
+  tests/unit/test_stage_analysis.py
 
 # ── Identity Invariants (Fail Fast) ──────────────────────────────────
 # Canonical-key uniqueness, alias-key integrity, and identity contracts.
@@ -147,7 +149,9 @@ gate-check: ## Verify all SE test files are assigned to a gate
 	  -name 'test_golden_*.py' -o \
 	  -name 'test_*temporal*.py' -o \
 	  -name 'test_*parity*.py' -o \
-	  -name 'test_*aggregator*.py' \
+	  -name 'test_*aggregator*.py' -o \
+	  -name 'test_explain_builder*.py' -o \
+	  -name 'test_stage_analysis*.py' \
 	\) | sed 's|^backend/||' | sort); do \
 	  FOUND=0; \
 	  for g in $(ALL_GATE_FILES); do \

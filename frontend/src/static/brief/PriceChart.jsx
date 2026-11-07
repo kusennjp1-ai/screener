@@ -1,7 +1,11 @@
-import { forwardRef, memo, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react';
-import { renderPriceChart } from './priceChart';
+import { forwardRef, memo, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { chartContentKey, chartIdentityKey } from './chartReadout';
+// The renderer is a lazy chunk (priceChartLoader.js): the box keeps its height until it lands.
+import { loadedPriceChart, loadPriceChart, priceChartFailed, subscribePriceChart } from './priceChartLoader';
 
 let introducedOnce = false;
+/** What the chart box says when the renderer's chunk cannot be loaded. */
+const CHART_FAILED_TEXT = 'チャートを読み込めません（通信状態を確認して、再読み込みしてください）';
 
 /**
  * Large daily chart. Animates once per symbol/period; resizes redraw without animation. `onScrub` gets the
@@ -20,10 +24,15 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     const corner = controller.current?.freeCorner?.(button.offsetWidth || 72, button.offsetHeight || 44);
     if (corner) { button.style.left = `${corner.x}px`; button.style.top = `${corner.y}px`; }
   };
-  const key = model ? `${model.symbol}|${model.interval || 'day'}|${period}|${model.bars?.length}|${model.bars?.at(-1)?.date}` : null;
-  // Levels and overlays can arrive after the bars (detail merge); they redraw without replaying the intro.
-  const content = model ? `${key}|${model.pivot}|${model.upper}|${model.entry}|${model.r2}|${model.r3}|${model.structuralLow}|${model.auditHigh}|${model.rsNewHigh}|${model.rsLine?.length}|${model.rsReason}|${model.rsLead?.dates?.length}|${model.legs?.length}|${model.legsValid}|${model.dryUpLeg?.startDate}|${(model.gaps || []).length}|${model.earnings?.date}|${model.earnings?.days}|${(model.sellMarks || []).map(m => m.date).join(',')}` : null;
+  const [ready, setReady] = useState(() => loadedPriceChart() !== null);
+  // The renderer's chunk failed to load (offline before the service worker had it, or a deploy replaced it): the box
+  // says so, never an empty frame. The browser keeps a failed module import for the page's life, so the retry reloads it.
+  const failed = useSyncExternalStore(subscribePriceChart, priceChartFailed, priceChartFailed);
+  const key = chartIdentityKey(model, period);
+  const content = chartContentKey(model, period);
   const draw = options => {
+    const renderPriceChart = loadedPriceChart();
+    if (!element.current || !renderPriceChart) return controller.current;
     const chart = renderPriceChart(element.current, { ...model, stop: stopRef.current }, { period, onScrub: index => scrubRef.current?.(index), selected: selectedRef.current, ...options });
     if (chart && legRef.current !== null) chart.highlightLeg(legRef.current);
     return chart;
@@ -35,6 +44,8 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
   }), []);
   useLayoutEffect(() => {
     if (!element.current || !model?.bars?.length) return undefined;
+    // Until the renderer's chunk arrives the box keeps its height (no layout shift); it draws when it lands.
+    if (!loadedPriceChart()) { let live = true; loadPriceChart().then(() => { if (live) setReady(true); }, () => null); return () => { live = false; }; }
     const abort = new AbortController();
     const animate = introduced.current !== key;
     controller.current = draw({ animate, fast: animate && introducedOnce, signal: abort.signal });
@@ -50,11 +61,11 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     };
     // The stop moves through the controller; content changes redraw, identity changes animate.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, period]);
+  }, [content, period, ready]);
   useLayoutEffect(() => { controller.current?.select(selected); placeLatest(); }, [selected]);
   useEffect(() => {
     const target = element.current;
-    if (!target || typeof ResizeObserver !== 'function' || !model?.bars?.length) return undefined;
+    if (!target || typeof ResizeObserver !== 'function' || !model?.bars?.length || !ready) return undefined;
     let width = target.clientWidth, timer;
     const observer = new ResizeObserver(() => {
       if (Math.abs(target.clientWidth - width) < 2) return;
@@ -64,9 +75,14 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     observer.observe(target);
     return () => { clearTimeout(timer); observer.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [content, period]);
+  }, [content, period, ready]);
+  const down = failed && !ready;
   return <div className="brief-chartbox">
     <div ref={element} className={`brief-chart ${className}`} data-testid="brief-price-chart" />
+    {/* The live region is there from the start, so its message is announced when it arrives; the box shows it with the button. */}
+    <p className="sr-only" role="status">{down ? CHART_FAILED_TEXT : ''}</p>
+    {down ? <div className="brief-chart-failed"><p aria-hidden="true">{CHART_FAILED_TEXT}</p>
+      <button type="button" onClick={() => window.location.reload()}>再読み込み</button></div> : null}
     {onLatest ? <button ref={latest} type="button" className="brief-latest" hidden={selected === null} onClick={onLatest}>最新足</button> : null}
   </div>;
 });

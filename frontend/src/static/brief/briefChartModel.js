@@ -8,38 +8,58 @@ const DAY = 86400000;
 /** The RS line leads when it is at a new high while the price is at least this % below its own high. */
 export const RS_LEAD_FROM_HIGH_PERCENT = 2;
 
+/** A stage-2 base stays within this % of its 52-week high: the trend template's own condition 6, not a new threshold. */
+export const STAGE2_BASE_MAX_BELOW_HIGH_PERCENT = 25;
+
 /**
- * Weinstein stage for the latest bar with the scanner's rules (backend stage_analysis.py):
- * 200-day SMA change over 20 bars (flat within ±1%), 60-bar least-squares close slope
- * (±0.05% per day) and close versus the 200-day SMA. The swing-pattern exception
- * (below a falling 200-day SMA without a downtrend) is not replayed and counts as 4.
+ * The stage and its phase from the bars, with the scanner's rules (backend stage_analysis.py, changed
+ * together in round 2): 200-day SMA change over 20 bars (flat within ±1%), 60-bar least-squares close slope
+ * (±0.05% per day) and close versus the 200-day SMA. A sideways 60 bars above a rising 200-day line is a
+ * base inside stage 2 (phase 'base') when the close is above the 150-day SMA, the 150-day is above the
+ * 200-day and the close is within STAGE2_BASE_MAX_BELOW_HIGH_PERCENT of the 252-bar high (which needs 252
+ * bars with known highs; otherwise it stays stage 3, as before). The swing-pattern exception (below a
+ * falling 200-day SMA without a downtrend) is not replayed and counts as 4. Null with fewer than 219 bars
+ * or any missing close.
  */
-export function stageFromBars(bars) {
+function stageDetail(bars) {
   const closes = (bars || []).map(b => b?.close).filter(finite);
   if (closes.length < 219 || closes.length !== (bars || []).length) return null;
   const mean = (from, to) => { let s = 0; for (let i = from; i < to; i++) s += closes[i]; return s / (to - from); };
-  const n = closes.length, ma = mean(n - 200, n), past = mean(n - 219, n - 19);
+  const n = closes.length, ma = mean(n - 200, n), past = mean(n - 219, n - 19), ma150 = mean(n - 150, n);
   const change = (ma - past) / past * 100;
   const rising = change >= 1, falling = change <= -1, flat = Math.abs(change) < 1;
   const window = closes.slice(-60), xm = 29.5, ym = window.reduce((a, b) => a + b, 0) / 60;
   let sxy = 0, sxx = 0;
   window.forEach((y, x) => { sxy += (x - xm) * (y - ym); sxx += (x - xm) ** 2; });
   const daily = sxy / sxx / ym * 100, up = daily > 0.05, down = daily < -0.05, above = closes.at(-1) > ma;
-  if (above && rising && up) return 2;
-  if (!above && falling && down) return 4;
-  if (above && (flat || falling)) return 3;
-  if (above && rising) return 3;
-  if (flat || (!above && rising)) return 1;
-  return above ? 3 : 4;
+  if (above && rising && up) return { stage: 2, phase: null };
+  if (above && rising && !up && !down) {
+    // The 52-week high as the scanner reads it (minervini_scanner: the intraday High of the last 252 sessions, or of
+    // as many as there are, missing values skipped); null when no high in that window is known.
+    const highs = bars.slice(-252).map(b => b?.high).filter(finite);
+    const high = highs.length ? Math.max(...highs) : null;
+    const close = closes.at(-1);
+    if (high !== null && close > ma150 && ma150 > ma && close >= high * (1 - STAGE2_BASE_MAX_BELOW_HIGH_PERCENT / 100)) return { stage: 2, phase: 'base' };
+  }
+  if (!above && falling && down) return { stage: 4, phase: null };
+  if (above && (flat || falling)) return { stage: 3, phase: null };
+  if (above && rising) return { stage: 3, phase: null };
+  if (flat || (!above && rising)) return { stage: 1, phase: null };
+  return { stage: above ? 3 : 4, phase: null };
+}
+
+/** Weinstein stage (1–4) for the latest bar (stageDetail's), or null when the bars cannot tell. */
+export function stageFromBars(bars) {
+  return stageDetail(bars)?.stage ?? null;
 }
 
 /**
- * The stage's phase from certified bars (round 2, plan §2.2): `'base'` for a stage 2 that is building a base
- * (the chart track's CH11 rule), or null when no phase is known. Step 0: always null, so StockView leaves
- * `stage.phase` undefined and no screen names a phase.
+ * The stage's phase from certified bars (plan §2.2): 'base' for a stage 2 that is building a base (a
+ * sideways 60 bars above a rising 200-day line, inside the template's structure; stageDetail), or null
+ * when no phase is known. StockView attaches it to a stage 2 only.
  */
-export function stagePhase(_bars) {
-  return null;
+export function stagePhase(bars) {
+  return stageDetail(bars)?.phase ?? null;
 }
 
 const flag = value => value === true || value === false || value === null;

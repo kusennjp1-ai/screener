@@ -54,7 +54,12 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
     expect(tileText.filter(([, size]) => size < 12)).toEqual([]);
     expect(tileText.map(([text]) => text)).toEqual(expect.arrayContaining(['S&P', 'NAS', '高', '安']));
     const summary = page.getByTestId('brief-summary');
-    await expect(summary).toContainText('検討可・目安≤50%');
+    // The fixture's Nasdaq is in correction on the analysis day, so the market track's suffix (marketTileSuffix, its
+    // copy) follows the cap on a line of its own and 「検討可」 gives way (the tile's tone and the cap already say it).
+    // One session behind, the Nasdaq's record is not the analysis day's: no suffix, and the note reads 検討可・目安.
+    await expect(summary.locator('.brief-tile-suffix')).toHaveCount(lag ? 0 : 1);
+    if (lag) await expect(summary).toContainText('検討可・目安≤50%');
+    else { await expect(summary).toContainText('目安≤50%'); await expect(summary).not.toContainText('検討可'); }
     expect(await summary.locator('.brief-frag', { hasText: '目安≤50%' }).evaluate(node => node.getClientRects().length)).toBe(1);
     // The bar says the analysis session with its weekday, never today's date.
     await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
@@ -68,7 +73,7 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
 for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip ${name}`, () => {
   test.use(device);
 
-  test('Today\'s focus rows omit the constant TT 8/8 chip; the desktop list keeps it, a phone keeps it where it varies', async ({ page }) => {
+  test('Today\'s focus rows and the qualified lists omit the constant TT 8/8 chip, which is kept where it varies', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief');
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
@@ -80,8 +85,14 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`TT chip $
     } else await expect(page.locator('.brief-screen-notes', { hasText: '注目候補はすべてトレンドテンプレート8条件を満たす銘柄' })).toHaveCount(1);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '候補' }).click();
     await expect(page).toHaveURL(/#\/brief\/list$/);
-    if (name === 'desktop') await expect(candidates(page).first()).toContainText('TT 8/8');
-    else {
+    if (name === 'desktop') {
+      // The desktop's narrow column leaves it out too (a tablet's wide rows keep it: brief-compact.spec.js), said in place.
+      for (const row of await candidates(page).all()) await expect(row).not.toContainText('TT 8/8');
+      await expect(page.getByText('買いゾーン・ピボット接近・選定すべての行はすべてTT 8/8のため、「TT 8/8」の表示を省いています（あと1条件では未達・未確認の数を表示します）。')).toBeVisible();
+      await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^あと1条件/ }).click();
+      for (const row of await candidates(page).all()) await expect(row).toContainText('あと1条件');
+      await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ }).click();
+    } else {
       // A qualified-only filter's rows are all TT 8/8: the phone says so once in the 注記 and keeps each row's chips on one line.
       for (const row of await candidates(page).all()) await expect(row).not.toContainText('TT 8/8');
       await expect(page.locator('.brief-screen-notes')).toContainText('スマホでは「TT 8/8」の表示を省いています');
@@ -244,7 +255,8 @@ for (const theme of ['dark', 'light']) test.describe(`form fields in ${theme}`, 
     await expect(page.locator('.brief')).toHaveAttribute('data-theme', theme);
     await expect(candidates(page).first()).toBeVisible();
     const list = await fieldColours(page, '.brief-search input, .brief-sort select');
-    expect(list.map(item => item.field)).toEqual(['input', 'select']);
+    // The search, the sort and the 条件 menu.
+    expect(list.map(item => item.field)).toEqual(['input', 'select', 'select']);
     expect(list[0].placeholder).toBe(list[0].text3);
     await page.goto('/#/brief/stock/ZZNV');
     await expect(page.locator('.brief-inputs input')).toHaveCount(3);

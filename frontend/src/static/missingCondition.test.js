@@ -4,7 +4,7 @@ import { withAuditFixture } from './testAuditFixture';
 import { assess, rankCandidates, researchCsv, RULE_SUMMARY_VERSION } from './researchEngine';
 import { encodeAssessment } from './assessmentEncoding';
 import { filterRanked } from './researchPresentation';
-import { conditionChipLabel, conditionCompactLabel, conditionCompactText, conditionShortLabel, conditionText, conditionValueText, singleMissingCondition } from './missingCondition';
+import { conditionChipLabel, conditionCompactLabel, conditionCompactText, conditionNote, conditionNoteValue, conditionShortLabel, conditionText, conditionValueText, singleMissingCondition } from './missingCondition';
 
 const date = '2026-09-29';
 function sample(symbol, extra = {}) {
@@ -94,5 +94,20 @@ describe('a rule in a few words, with the value that settled it', () => {
     expect(conditionCompactText({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: 61.9 })).toBe('RS推計 ≥ 70（61）');
     expect(['株価 > SMA150・SMA200', 'SMA150 > SMA200', 'SMA200が21営業日前より上（1か月の上向き判定）', 'SMA50 > SMA150・SMA200', '株価 > SMA50', '52週高値からの距離 ≤ 25%（日中高値）', 'RS 推計 ≥ 70（公開日足の共通母集団）']
       .map(label => conditionChipLabel(rule(label)))).toEqual(['株価 > 150・200日', '150日 > 200日', '200日線が上向き', '50日 > 150・200日', '株価 > 50日線', '高値から25%以内', 'RS推計']);
+  });
+});
+
+describe('a rule as the conclusion\'s line names it (conditionNote)', () => {
+  it('names the RS estimate with its value and threshold, never rounded up past it, and any other rule by its compact text', () => {
+    const rs = { label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: 57.9, state: 'fail' };
+    expect(conditionNoteValue(rs)).toBe('RS推計 57（基準70）');
+    expect(conditionNote(rs)).toBe('未達：RS推計 57（基準70）');
+    // 69.99 is under 70: it reads 69, never 70.
+    expect(conditionNote({ ...rs, value: 69.99 })).toBe('未達：RS推計 69（基準70）');
+    // A missing value is 未確認, never 0.
+    expect(conditionNote({ ...rs, value: null, state: 'unknown' })).toBe('未確認：RS推計 未確認（基準70）');
+    expect(conditionNote({ label: '52週高値からの距離 ≤ 25%（日中高値）', unit: '%', value: 30.25, state: 'fail' })).toBe('未達：高値から25%以内（30.3%）');
+    expect(conditionNote({ label: '株価 > SMA50', state: 'fail' })).toBe('未達：株価 > SMA50');
+    expect(conditionNote(null)).toBe('未確認：');
   });
 });

@@ -16,6 +16,8 @@
       "pivot_price": 110.595,
       "pivot_type": "resumption_high",
       "pivot_date": "2023-09-04",
+      "start_date": null,
+      "end_date": null,
       "distance_to_pivot_pct": null,
       "setup_score": null,
       "quality_score": 41.31937961575036,

@@ -4,7 +4,9 @@
 // budgets and row heights with a broken setup, and the list's rows across a stock round trip, on synthetic data.
 // (The sell card's qualifier is brief-sell.spec.js's.)
 import { test, expect } from '@playwright/test';
-import { openBrief, charts, rows, rowBySymbol, horizontalOverflow, sessions } from './brief-fixture.js';
+import { openBrief, charts, date, rows, rowBySymbol, horizontalOverflow, sessions } from './brief-fixture.js';
+import { candidateView, rowSecChip } from '../../src/static/brief/briefCandidate.js';
+import { EARNINGS_CHIP_NOTE } from '../../src/static/fundamentalsExplain.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 // A broken setup's chip: its short form on the rows, its full sentence for assistive tech (Today) and as its title.
@@ -249,6 +251,42 @@ test.describe('the 375×812 budgets with a broken setup', () => {
     if (mutate) await expect(region.getByTestId('brief-candidate').first().locator('.brief-chip', { hasText: WEAKNESS })).toBeVisible();
     await settled(page);
     expect(await contentHeight(page)).toBeLessThanOrEqual(520);
+    // Round 2: 12px of headroom under the budget (plan §3).
+    expect(await contentHeight(page)).toBeLessThanOrEqual(508);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  // The integration review: a watched row with a questionable base brings the tab's 注記 (the chip's rule, 独自判定); a phone's
+  // watch rows are compact (a caution in the RS chip's place, RS and then TT 8/8 give way rather than add a line, and a
+  // notable rise in EPS is not drawn: rowSecChipDrawn), so the tab keeps its 12px of headroom with the fold under its 520
+  // budget. A notable SEC chip alone brings no 注記: the rule of a chip that is not on screen is not stated.
+  const onRow = (symbol, fn) => ({ rows: rows => { fn(rows.find(row => row.symbol === symbol)); }, details: details => { for (const detail of Object.values(details)) if (detail.symbol === symbol) fn(detail); } });
+  const secChip = onRow('ZZKS', row => { row.sec_summary = { sec_state: 'ok', eps_yoy: { value: 40, end: '2026-06-30' }, sales_yoy: { value: 30, end: '2026-06-30' }, code33: null, as_of_date: row.technical_audit.as_of_date }; });
+  const deepBase = onRow('ZZKS', row => { row.se_base_depth_pct = 40.2; row.se_base_length_weeks = 6; });
+  for (const [name, mutate, folded] of [['a notable SEC chip', secChip, 0], ['a questionable base', deepBase, 1], ['a questionable base and a broken setup', { ...deepBase, ...broken('ZZSD') }, 1]]) test(`the watch tab keeps its headroom with five symbols and ${name}, its 注記 folded`, async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/watch', { storage: { 'research-watch': WATCH5 }, mutate });
+    await expect(page.getByRole('region', { name: 'ウォッチ中の銘柄' }).getByTestId('brief-candidate')).toHaveCount(4);
+    await expect(page.locator('.brief-screen-notes')).toHaveCount(folded);
+    if (mutate === secChip) {
+      // ZZKS's chip (rowSecChip, the rows' own function, on the served row) stays in its label and is not drawn, and no 注記
+      // states its rule (EARNINGS_CHIP_NOTE).
+      const served = structuredClone(rowBySymbol.ZZKS);
+      secChip.rows([served]);
+      const sec = rowSecChip(candidateView({ row: served, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0 } }, date));
+      expect(sec?.tone).toBe('zone');
+      const row = page.locator('[data-testid="brief-candidate"][data-symbol="ZZKS"]');
+      await expect(row).toHaveAttribute('aria-label', new RegExp(sec.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+      expect(await row.locator('.brief-reasons > .brief-chip').evaluateAll((chips, text) => chips.filter(chip => chip.textContent === text).length, sec.short || sec.text)).toBe(0);
+      expect(await page.locator('body').textContent()).not.toContain(EARNINGS_CHIP_NOTE);
+    }
+    await settled(page);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(508);
+    // Each row stays within two chip lines, and the RS value it may leave out stays in its label.
+    for (const row of await page.getByTestId('brief-candidate').all()) {
+      expect(await row.locator('.brief-reasons').evaluate(box => new Set([...box.children].filter(chip => chip.style.display !== 'none').map(chip => Math.round(chip.getBoundingClientRect().top))).size)).toBeLessThanOrEqual(2);
+      await expect(row).toHaveAttribute('aria-label', /RS推計 \d+/);
+    }
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
@@ -276,7 +314,7 @@ test.describe('the 375×812 budget one session behind', () => {
   const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
   const WATCH5 = ['ZZNV', 'ZZZF', 'QQQX', 'ZZSD', 'ZZKS'];
   const WATCH4 = ['ZZNV', 'ZZZF', 'ZZSD', 'ZZKS'];
-  for (const [name, watch, mutate] of [['five watched (one unlisted)', WATCH5, undefined], ['four watched and a broken setup', WATCH4, broken('ZZSD')]]) test(`Today with ${name} fits 1400`, async ({ page }) => {
+  for (const [name, watch, mutate] of [['five watched (one unlisted)', WATCH5, undefined], ['four watched and a broken setup', WATCH4, broken('ZZSD')], ['five watched and a broken setup', WATCH5, broken('ZZSD')]]) test(`Today with ${name} fits 1400`, async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': watch }, historyEnd: sessions.at(-2), mutate });
     await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
     const market = page.getByRole('region', { name: '地合い' });
@@ -287,7 +325,53 @@ test.describe('the 375×812 budget one session behind', () => {
     await settled(page);
     expect(await note.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size; })).toBe(1);
     expect(await contentHeight(page)).toBeLessThanOrEqual(1400);
+    // Round 2: 12px of headroom under the budget in every one of these, the tallest Today (plan §3).
+    expect(await contentHeight(page)).toBeLessThanOrEqual(1388);
     expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  // The integration review: the governing variant with a broken watched focus row (ZZNV) and a focus row just under its pivot
+  // (ZZAR at −0.04%, its position chip the longer 「−0.1%未満」; ZZKS moved under its pivot too, so ZZAR is in the five): the
+  // compact rows let RS give way rather than add a line.
+  test('Today with five watched, a broken setup, a broken watched focus row and rows just under their pivot keeps its headroom', async ({ page }) => {
+    const under = rows => { for (const row of rows) if (['ZZKS', 'ZZAR'].includes(row.symbol)) row.se_pivot_price = Math.round(row.current_price * 1.0004 * 100) / 100; };
+    const both = { rows: under, charts: served => { broken('ZZSD').charts(served); broken('ZZNV').charts(served); } };
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': WATCH5 }, historyEnd: sessions.at(-2), mutate: both });
+    const focus = page.getByRole('region', { name: '注目候補' });
+    await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
+    await expect(focus.locator('[data-testid="brief-candidate"][data-symbol="ZZNV"] .brief-reasons')).toContainText(WEAKNESS);
+    await expect(focus.locator('[data-testid="brief-candidate"][data-symbol="ZZAR"]')).toContainText('0.1%未満');
+    await settled(page);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(1388);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('Today\'s watch card counts an unlisted symbol among its first three rows', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': WATCH5 }, historyEnd: sessions.at(-2), mutate: broken('ZZSD') });
+    const card = page.getByRole('region', { name: 'ウォッチの状況' });
+    await expect(card.locator('.brief-sellchip')).toHaveCount(1);
+    // QQQX (unlisted) and ZZSD (broken, always shown) lead; one more row, then the rest fold.
+    await expect(card.locator('.brief-rows > li')).toHaveCount(3);
+    await expect(card.getByRole('button', { name: 'さらに表示（残り 2件）' })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+
+  test('three unlisted symbols take one row\'s place, not three, and a heavy down day always shows', async ({ page }) => {
+    // ZZOD falls 1.0% on 1.6× volume in the buy zone: the day's heavy down day, ranked last in the zone.
+    const heavy = { rows: rows => { rows.find(row => row.symbol === 'ZZOD').technical_audit.values.change = -1; } };
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['QQQX', 'QQQY', 'QQQZ', 'ZZNV', 'ZZZF', 'ZZKS', 'ZZAR', 'ZZOD'] }, mutate: heavy });
+    const card = page.getByRole('region', { name: 'ウォッチの状況' });
+    await expect(card.locator('.brief-unlisted')).toHaveCount(3);
+    await expect(card.locator('[data-symbol="ZZOD"]')).toContainText('▲');
+    await expect(card.locator('[data-symbol="ZZOD"]')).toContainText('下落日の大商い');
+    // Two listed rows (WATCH_ROWS 3 less one for the unlisted symbols), plus ZZOD wherever it ranks; the rest fold.
+    const listed = await card.locator('.brief-event').evaluateAll(nodes => nodes.map(node => node.dataset.symbol));
+    expect(listed.slice(0, 2)).toHaveLength(2);
+    expect(listed).toContain('ZZOD');
+    expect(listed.length).toBeLessThanOrEqual(3);
+    await expect(card.getByRole('button', { name: `さらに表示（残り ${5 - listed.length}件）` })).toBeVisible();
     expect(errors).toEqual([]);
   });
 });

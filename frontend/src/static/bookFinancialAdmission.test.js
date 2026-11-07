@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { admitBookFinancials, admitBookFinancialsDetailed, SEC_REFUSAL_REASONS, SEC_UNAVAILABLE_REASONS } from './bookFinancialAdmission';
+import { admitBookFinancials, admitBookFinancialsDetailed, DERIVATION_GAP_REASONS, INVALID_DETAIL_MESSAGE_MAX, SEC_REFUSAL_REASONS, SEC_UNAVAILABLE_REASONS } from './bookFinancialAdmission';
 import { DERIVED_Q4 } from './bookFinancialEvidence';
 import { secRecord, secUnavailable } from '../test/fixtures/secRecord';
+import { DERIVATION_GAP_REASONS as CONTRACT_GAP_REASONS, INVALID_DETAIL_MESSAGE_MAX as CONTRACT_MESSAGE_MAX, secDerivationGaps, secInvalidDetail } from '../test/fixtures/publishedContracts';
 
 const asOfDate = '2026-02-01', evaluatedAt = Date.parse('2026-02-01T12:00:00Z');
 const context = (extra = {}) => ({ symbol: 'TEST', asOfDate, evaluatedAt, row: { symbol: 'TEST', market: 'US', quoteType: 'EQUITY' }, ...extra });
@@ -132,6 +133,42 @@ describe('the reason a same-day SEC record was refused', () => {
     for (const [record, reason] of [[secUnavailable({ reason: 'unknown' }), 'keys'], [secUnavailable({ quarterly: secRecord().quarterly }), 'keys'], [secUnavailable({ forms: ['20-F', 'bad form'] }), 'keys']]) {
       expect(detailed(record)).toEqual({ value: null, reason });
       expect(admit(record)).toBeNull();
+    }
+  });
+});
+
+describe('the round-2 record additions (plan §2.3): optional, and admitted only in their documented shape', () => {
+  const gaps = [{ fiscal_year: 2024, metric: 'revenue', reason: 'tag_mismatch' }, { fiscal_year: 2025, metric: 'netIncome', reason: 'broken_chain' }, { fiscal_year: 2025, metric: 'revenue', reason: 'no_annual' }];
+  it('admits a record with or without derivation_gaps, and refuses a malformed list as keys', () => {
+    const record = secRecord();
+    expect(admit(record)).toBe(record);
+    const listed = { ...secRecord(), derivation_gaps: gaps };
+    expect(admit(listed)).toBe(listed);
+    expect(admit({ ...secRecord(), derivation_gaps: [] })).not.toBeNull();
+    for (const bad of [null, {}, [{ ...gaps[0], reason: 'gap' }], [{ ...gaps[0], metric: 'eps' }], [{ ...gaps[0], fiscal_year: '2024' }], [{ ...gaps[0], extra: 1 }], [gaps[0], gaps[0]],
+      Array.from({ length: 25 }, (_, i) => ({ fiscal_year: 2000 + i, metric: 'revenue', reason: 'no_annual' }))]) {
+      expect(admitBookFinancialsDetailed({ ...secRecord(), derivation_gaps: bad }, context())).toEqual({ value: null, reason: 'keys' });
+    }
+  });
+
+  const detail = { class: 'PayloadMismatch', message: 'companyfacts cik does not match the requested cik', requested_cik: 6, received_cik: 999 };
+  it('admits the published contract examples, with the contract reasons and message limit', () => {
+    expect(DERIVATION_GAP_REASONS).toEqual(CONTRACT_GAP_REASONS);
+    expect(INVALID_DETAIL_MESSAGE_MAX).toBe(CONTRACT_MESSAGE_MAX);
+    expect(admit({ ...secRecord(), derivation_gaps: structuredClone(secDerivationGaps) })).not.toBeNull();
+    expect(admit(secUnavailable({ reason: 'invalid_payload', invalid_detail: { ...secInvalidDetail } }))).not.toBeNull();
+  });
+
+  it('admits invalid_detail only on an invalid_payload record, in its shape', () => {
+    const value = secUnavailable({ reason: 'invalid_payload', invalid_detail: detail });
+    expect(admit(value)).toBe(value);
+    expect(admit(secUnavailable({ reason: 'invalid_payload', invalid_detail: { ...detail, received_cik: null } }))).not.toBeNull();
+    expect(admit(secUnavailable({ reason: 'invalid_payload' }))).not.toBeNull();
+    for (const bad of [{ reason: 'transient', invalid_detail: detail }, { reason: 'invalid_payload', invalid_detail: { ...detail, message: 'x'.repeat(201) } },
+      { reason: 'invalid_payload', invalid_detail: { ...detail, message: '' } }, { reason: 'invalid_payload', invalid_detail: { ...detail, class: 'bad class' } },
+      { reason: 'invalid_payload', invalid_detail: { ...detail, requested_cik: 0 } }, { reason: 'invalid_payload', invalid_detail: { ...detail, received_cik: '999' } },
+      { reason: 'invalid_payload', invalid_detail: { ...detail, headers: {} } }]) {
+      expect(admitBookFinancialsDetailed(secUnavailable(bad), context())).toEqual({ value: null, reason: 'keys' });
     }
   });
 });

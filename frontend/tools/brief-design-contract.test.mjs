@@ -59,6 +59,11 @@ describe('brief Design Acceptance contract', () => {
     // A stock is measured from the top of the page: the row click's scroll offset depends on the data.
     expect(harness.match(/await fromTop\(page\);\n\s+await capture\(session, group, 'stock(-weekly)?'/g)).toHaveLength(2);
     expect(REPORT_SCHEMA).toBe('brief-design-review-v1');
+    // A chart renderer chunk that did not load is a named functional failure (the box's own words), and the stock opens once
+    // cold (before the idle prefetch) beside the warm runs, reported with no budget of its own.
+    expect(harness).toContain("functional(group, 'chart-renderer-loaded', failure === null,");
+    expect(harness).toContain('cold_stock_open: cold');
+    expect(Object.keys(TIMING.budgets_ms)).not.toContain('stock_open_cold_ms');
     expect(checker).toContain('await requireObjectiveEvidence(actual, output, waiver)');
     expect(checker.indexOf('await requireObjectiveEvidence')).toBeLessThan(checker.indexOf('for (const name of reports)'));
   });

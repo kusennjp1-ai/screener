@@ -5,7 +5,8 @@ import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
-import { buildMarketTrends,exportMarketTrends,indexState,verifyLongHistorySource,selectLongHistorySource,selectRuntimeLongHistorySource } from './export-market-trends.mjs';
+import { buildMarketTrends,exportMarketTrends,indexClosesFrom,indexState,verifyLongHistorySource,selectLongHistorySource,selectRuntimeLongHistorySource,INDEX_CLOSES_MAX } from './export-market-trends.mjs';
+import { INDEX_CLOSES_MAX as CONTRACT_CLOSES_MAX, indexCloses as contractCloses } from '../src/test/fixtures/publishedContracts.js';
 import { indexSummary } from '../src/static/reference/indexSummary.js';
 import { FOLLOW_THROUGH_METHOD } from '../src/static/followThroughDay.js';
 import { readMarketTrends } from '../src/static/marketTrendAsset.js';
@@ -140,12 +141,43 @@ describe('market trend source projection',()=>{
   const broken=source();broken.indices[1].bars[100].volume=0;
   expect(buildMarketTrends(broken,{asOfDate:broken.as_of_date}).indices[1].state).toBeNull();
  });
+ it('writes each index\'s closes from the same validated bars as its count, at most 300 (plan §2.3)',()=>{
+  expect(INDEX_CLOSES_MAX).toBe(CONTRACT_CLOSES_MAX);
+  const input=source(),out=buildMarketTrends(input,{asOfDate:input.as_of_date});
+  for(const index of out.indices){
+   const bars=input.indices.find(item=>item.symbol===index.symbol).bars;
+   expect(index.closes).toEqual(bars.slice(-INDEX_CLOSES_MAX).map(bar=>({date:bar.date,close:bar.close})));
+   // The closes end on the count's own last session, day for day with its points.
+   expect(index.closes.map(point=>point.date)).toEqual(index.points.slice(-index.closes.length).map(point=>point.date));
+   expect(index.closes.at(-1)).toEqual({date:index.state.date,close:index.state.close});
+   expect(Object.keys(index.closes[0])).toEqual(Object.keys(contractCloses[0]));
+  }
+  // The reader passes valid closes through as published.
+  expect(readMarketTrends(out,{as_of_date:input.as_of_date}).indices[1].closes).toEqual(out.indices[1].closes);
+  // A longer window keeps its newest 300 bars; a historical index stops at its own last session.
+  const many=Array.from({length:320},(_,i)=>({date:new Date(Date.UTC(2025,0,1)+i*86400000).toISOString().slice(0,10),close:100+i}));
+  expect(indexClosesFrom(many,many.at(-1).date)).toHaveLength(INDEX_CLOSES_MAX);
+  expect(indexClosesFrom(many,many.at(-1).date)[0]).toEqual({date:many[20].date,close:many[20].close});
+  expect(indexClosesFrom(many,many[9].date)).toEqual(many.slice(0,10));
+  const late=source();late.indices[0].bars.pop();
+  expect(buildMarketTrends(late,{asOfDate:late.as_of_date}).indices[0].closes.at(-1).date).toBe('2026-10-22');
+ });
+ it('writes no closes when the index has no source of the date or its bars fail validation',()=>{
+  for(const index of buildMarketTrends(source(),{asOfDate:'2026-10-26'}).indices)expect('closes' in index).toBe(false);
+  const broken=source();broken.indices[1].bars[100].volume=0;
+  const out=buildMarketTrends(broken,{asOfDate:broken.as_of_date});
+  expect('closes' in out.indices[1]).toBe(false);
+  expect(out.indices[0].closes).toHaveLength(280);
+ });
  it('leaves a distance null when its window is short, never 0',()=>{
   const short=source();short.calendar.sessions=short.calendar.sessions.slice(-120);for(const index of short.indices)index.bars=index.bars.slice(-120);
   const [sp]=buildMarketTrends(short,{asOfDate:short.as_of_date}).indices;
   expect(sp.available).toBe(true);
   expect(sp.state).toMatchObject({date:'2026-10-23',vs200:null,fromHigh:null,fullYear:false});
   expect(sp.state.vs50).toEqual(expect.any(Number));
+  // A short window publishes the closes it has (the market tab draws no 200-day line under 200 of them), never padded.
+  expect(sp.closes).toHaveLength(120);
+  expect(sp.closes.at(-1).date).toBe('2026-10-23');
   const bars=source().indices[0].bars;
   expect(indexState(bars.slice(-230),bars.at(-1).date)).toMatchObject({vs200:expect.any(Number),fromHigh:null,fullYear:false});
   expect(indexState(bars.slice(-30),bars.at(-1).date)).toEqual({date:'2026-10-23',close:bars.at(-1).close,vs50:null,vs200:null,fromHigh:null,fullYear:false});

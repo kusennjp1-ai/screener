@@ -127,6 +127,63 @@ def test_scan_orchestrator():
     logger.info("\n✅ Orchestrator test passed!\n")
 
 
+def _probe_base_frames():
+    """The audit's stage probe as OHLCV: 250 sessions at +0.35%/day, then a 7-week base
+    contracting 15/8/4% and ending 1% under its high (200-day +5%, 60-bar slope 0.043%/day)."""
+    import numpy as np
+    import pandas as pd
+
+    closes, price = [], 50.0
+    for _ in range(250):
+        price *= 1.0035
+        closes.append(price)
+    top, segment = price, 35 // 3
+    for depth in (15, 8, 4):
+        for j in range(segment):
+            closes.append(top * (1 - depth / 100 * np.sin(np.pi * j / segment)))
+    closes[-1] = top * 0.99
+    close = np.array(closes)
+    index = pd.bdate_range(end=pd.Timestamp("2025-12-19"), periods=len(close))
+    stock = pd.DataFrame({"Open": close, "High": close * 1.005, "Low": close * 0.995, "Close": close,
+                          "Volume": np.full(len(close), 1_000_000.0)}, index=index)
+    spy_close = np.full(len(close), 400.0) * (1 + 0.0002 * np.arange(len(close)))
+    spy = pd.DataFrame({"Open": spy_close, "High": spy_close * 1.003, "Low": spy_close * 0.997, "Close": spy_close,
+                        "Volume": np.full(len(close), 5e7)}, index=index)
+    return stock, spy
+
+
+def test_a_sideways_base_above_a_rising_200_day_line_is_stage_2_without_touching_the_template():
+    """Round 2 (stage-3-on-flat-base): the scanner hands the analyzer the 150-day line and
+    the 52-week high, so a base inside the template structure reads as stage 2. The stage
+    stays a score overlay: passes_template is the 8 published conditions either way."""
+    from unittest.mock import patch
+
+    from app.scanners.base_screener import StockData
+    from app.scanners.criteria.stage_analysis import WeinsteinstageAnalyzer
+    from app.scanners.minervini_scanner import MinerviniScanner
+
+    stock, spy = _probe_base_frames()
+    data = StockData(symbol="BASE", price_data=stock, benchmark_data=spy, market="US")
+    details = MinerviniScanner().scan_stock("BASE", data).details
+    assert details["stage"] == 2
+    assert details["full_analysis"]["stage"]["price_trend"] == "sideways"
+    assert details["full_analysis"]["stage"]["ma_200_trend"] == "rising"
+
+    # The same stock with the earlier classifier (no structure inputs) reads stage 3, and
+    # the template verdict does not move: stage is never a 9th condition.
+    original = WeinsteinstageAnalyzer.determine_stage
+
+    def without_structure(self, *args, **kwargs):
+        kwargs.pop("ma_150", None)
+        kwargs.pop("high_52w", None)
+        return original(self, *args, **kwargs)
+
+    with patch.object(WeinsteinstageAnalyzer, "determine_stage", without_structure):
+        earlier = MinerviniScanner().scan_stock("BASE", data).details
+    assert earlier["stage"] == 3
+    assert earlier["passes_template"] == details["passes_template"]
+
+
 def main():
     """Run all tests."""
     logger.info("\n" + "🚀 " + "="*76)

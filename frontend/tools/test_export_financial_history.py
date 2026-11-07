@@ -40,4 +40,14 @@ class HistoryTest(unittest.TestCase):
         self.assertEqual([module.depth_bucket(n) for n in (0, 4, 5, 6, 7, 8)], ['0', '1-4', '5', '6-7', '6-7', '8+'])
         self.assertEqual(set(module.coverage(results, 3, 3)), {'eligible', 'requested', 'available', 'four_annual_eps'})
 
+    def test_listed_rows_without_sec_quarters_come_first(self):
+        row = lambda symbol, qualified=False, failed=2, unknown=0: {'symbol': symbol, 'methods': {'minervini': {'qualified': qualified, 'failed': failed, 'unknown': unknown}}}
+        audit = {'as_of_date': '2026-11-04', 'results': [row('AAA', True, 0), row('BBB', True, 0), row('CCC', False, 1, 0), row('DDD', False, 1, 0), row('EEE', False, 1, 1), row('FFF', False, 3, 0)]}
+        sec = {'as_of_date': '2026-11-04', 'results': {'AAA': {'status': 'available'}, 'BBB': {'status': 'unavailable', 'reason': 'no_cik'}, 'CCC': {'status': 'partial'}, 'EEE': {'status': 'unavailable'}}}
+        # DDD is listed and absent from the SEC file; EEE lacks SEC quarters but is not listed (one unknown).
+        self.assertEqual(module.ordered_targets(audit, sec), (['BBB', 'DDD', 'AAA', 'CCC'], 2))
+        # Another day's SEC file, or none, keeps the audit order.
+        self.assertEqual(module.ordered_targets(audit, {**sec, 'as_of_date': '2026-11-03'}), (['AAA', 'BBB', 'CCC', 'DDD'], 0))
+        self.assertEqual(module.ordered_targets(audit, None), (['AAA', 'BBB', 'CCC', 'DDD'], 0))
+
 if __name__ == '__main__': unittest.main()

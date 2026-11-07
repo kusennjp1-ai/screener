@@ -1028,9 +1028,11 @@ jobs:
             # Re-export so this session's SEC evidence, reported financial history and
             # earnings dates reach the rows (the tools read the first export's lists).
             node tools/export-research.mjs
-            # Diagnostic and non-blocking: the reports turn their findings into warnings and a job-summary table.
+            # Diagnostic and non-blocking: the reports turn their findings into warnings and a job-summary table
+            # (round 2: setup readiness, EPS unknowns by cause, invalid_payload causes, gaps, chart depth, the new
+            # list fields), and --sec-evidence repeats the published SEC file's evidence line with its causes.
             node tools/report-data-coverage.mjs
-            node tools/report-data-coverage.mjs --published --json "$RUNNER_TEMP/published-fundamentals-coverage.json"
+            node tools/report-data-coverage.mjs --published --sec-evidence --json "$RUNNER_TEMP/published-fundamentals-coverage.json"
             # The report writes its JSON even when the bundle cannot be read; no file means the tool never ran.
             test -s "$RUNNER_TEMP/published-fundamentals-coverage.json"
             npm run build

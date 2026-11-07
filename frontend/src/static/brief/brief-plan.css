@@ -40,13 +40,18 @@ p.brief-structural { display: block; }
 /* Applied (適用済み): inert but still focusable, so the keyboard focus stays in place. */
 .brief-structural button[aria-disabled="true"] { cursor: default; color: var(--text-2); background: none; }
 
+/* The stop's warning against the base (StopWarnings): one ext-tone line, close under the structural stop. */
+.brief-plan-warn { margin: -4px 0 0; padding: 0; list-style: none; font-size: 12px; line-height: 1.5; color: var(--ext); font-weight: 700; }
+
 /* A position that gets no new plan: the reason only. */
 .brief-plan-blocked { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-2); }
 
 /* Phones: the plan's small text at the 12px floor. */
 @media (max-width: 520px) {
   .brief-plan .brief-rbar, .brief-plan .brief-inputs label, .brief-plan-cap label, .brief-plan .brief-kgrid small, .brief-plan .brief-kgrid em { font-size: 12px; }
-  .brief-structural button { padding: 0 8px; font-size: 12px; }
+  /* Narrower sides, so a deep structural stop's warning keeps one line beside it at 390px (the target stays 44px tall). */
+  .brief-structural { gap: 6px; }
+  .brief-structural button { padding: 0 4px; font-size: 12px; }
 }
 /* The narrowest phones: the cap's terms take the full width under its field. */
 @media (max-width: 359px) {

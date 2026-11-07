@@ -3,8 +3,9 @@
 // (moving averages, candles, RS line, volume — painted once and revealed with
 // compositor-only transforms) and front (levels and their labels, tags, last price,
 // marks, axes, scrub). Every text is 12px and the viewBox width is the display width.
-import { BREAKOUT_VOLUME_RATIO } from './briefCandidate';
-import { chartSeries, formatVolume, weeklyBars } from './chartReadout';
+import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
+import { chartSeries, earningsMarker, formatVolume, heavyVolumeBars, priceScale, weeklyBars } from './chartReadout';
+import { labelPlacer, placedAttrs, segmentCrosses, spotList, spots } from './chartLabels';
 
 export { weeklyBars };
 const reduced = () => typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -14,8 +15,19 @@ const finite = Number.isFinite;
 const fmt = (value, digits = 2) => (finite(value) ? value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits }) : '—');
 const signed = (value, digits = 1) => (finite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.abs(value).toFixed(digits)}%` : '—');
 const esc = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-const FS = 12, TAG_H = 20, TAG_GAP = 20;
-const RS_CAPTION = 'RS線（株価÷S&amp;P 500）・RS推計やIBD RSとは別', RS_CAPTION_NARROW = 'RS線（株価÷S&amp;P 500）・RS推計/IBD RSと別';
+// VOL_HEAD: the volume panel's caption band (its tallest bar, and the dot over a heavy one, start under it, so the
+// caption never sits on a bar).
+const FS = 12, TAG_H = 20, TAG_GAP = 20, VOL_HEAD = 20;
+/**
+ * Where an average's name may go: its right end up to MA_SHIFT left of its place 7px from the axis, its centre within
+ * MA_NEAR of its line's end first, then within MA_FAR (with a leader). The test that checks a forced name searches
+ * inside this window. A narrow chart's zone name covers FEW_CANDLES candles at most.
+ */
+export const MA_SHIFT = 32, MA_NEAR = 24, MA_FAR = 72, FEW_CANDLES = 3;
+/** Below this chart width (a phone or a narrow tablet, under about 520px of screen) the chart uses its compact forms. */
+export const NARROW_CHART_WIDTH = 480;
+/** The RS panel's caption: its meaning (株価÷S&P 500, neither RS推計 nor IBD RS) is in the always-visible legend. */
+export const RS_CAPTION = 'RS線';
 const mono = 'font-family="var(--font-mono)"';
 const text = (x, y, body, cls, extra = '') => `<text x="${x}" y="${y}" class="${cls}" font-size="${FS}" ${extra}>${body}</text>`;
 // Estimated width of a 12px label: CJK glyphs are 1em, mono digits 0.6em, other Latin about 0.56em.
@@ -47,6 +59,13 @@ function niceStep(lo, hi, count) {
 const tagText = value => (value >= 1000 ? fmt(value, 0) : fmt(value, 2));
 const tagWidth = value => Math.round(width(tagText(value), true) + 10);
 
+/** Consecutive bar indices as runs [first, last] (the RS line's lead days are drawn as one underline per run). */
+export function indexRuns(indices) {
+  const sorted = [...new Set(indices)].filter(Number.isInteger).sort((a, b) => a - b), runs = [];
+  for (const i of sorted) { const run = runs.at(-1); if (run && i === run[1] + 1) run[1] = i; else runs.push([i, i]); }
+  return runs;
+}
+
 /**
  * Spread labels so their centres are at least `gap` apart inside [top, bottom], keeping their order;
  * none is dropped. Items are { y } and gain `at` (the drawn centre).
@@ -59,29 +78,20 @@ export function spread(items, gap, top, bottom) {
 }
 
 /**
- * Keep labels right-first: walking from the newest (right-most) label, keep one when its centre is at
- * least `gap` left of the last kept one. The right-most label is always kept.
- */
-export function keepRightFirst(items, gap) {
-  const kept = [];
-  for (const item of [...items].sort((a, b) => b.x - a.x)) if (!kept.length || kept.at(-1).x - item.x >= gap) kept.push(item);
-  return kept.reverse();
-}
-
-/**
  * Month-start ticks for the date axis (mid-month ticks are added when there are too few): about 3–4 on
  * a phone and 6–12 on a desktop. The first tick and every tick where the year changes carry YYYY/MM.
  */
-export function dateTicks(bars, plotWidth) {
+export function dateTicks(bars, plotWidth, { dense = false } = {}) {
   const most = Math.max(3, Math.min(12, Math.floor(plotWidth / 72))), least = plotWidth >= 600 ? 6 : 3;
   const month = bar => (bar.start || bar.date).slice(0, 7);
   const starts = bars.map((bar, i) => ({ i, bar })).filter(({ i, bar }) => i > 0 && month(bar) !== month(bars[i - 1])).map(({ i, bar }) => ({ i, month: month(bar), mid: false }));
   let ticks = starts;
-  if (ticks.length < least) {
+  // `dense`: every month start and mid-month tick, for a caller that places them itself.
+  if (ticks.length < least || dense) {
     const mids = bars.map((bar, i) => ({ i, bar })).filter(({ i, bar }) => i > 0 && bar.date.slice(8) >= '16' && bars[i - 1].date.slice(8) < '16' && month(bar) === month(bars[i - 1])).map(({ i, bar }) => ({ i, month: month(bar), mid: true, day: bar.date.slice(8) }));
     ticks = [...starts, ...mids].sort((a, b) => a.i - b.i);
   }
-  const step = Math.max(1, Math.ceil(ticks.length / most));
+  const step = dense ? 1 : Math.max(1, Math.ceil(ticks.length / most));
   ticks = ticks.filter((_, k) => (ticks.length - 1 - k) % step === 0);
   return ticks.map((tick, k) => {
     const year = tick.month.slice(0, 4), m = Number(tick.month.slice(5));
@@ -94,7 +104,8 @@ export function dateTicks(bars, plotWidth) {
  * @param {HTMLElement} el container (position: relative)
  * @param {object} model { symbol, bars:[{date,open,high,low,close,volume}], interval, short, rsLine:[{time,value}], rsReason,
  *   rsNewHigh, rsLead:{dates,threshold}|null, legs:[{startDate,endDate,high,low,depthPct}], legsValid, dryUpLeg, pivot, upper,
- *   stop, entry, r2, r3, structuralLow, auditHigh, gaps:[{date,direction}], earnings:{date,days}|null, sellMarks }
+ *   stop, entry, r2, r3, structuralLow, auditHigh, gaps:[{date,direction}], earnings (earningsCall: {date,days,soon})|null,
+ *   crossing:{date,volumeRatio}|null (the pivot crossing on certified bars), sellMarks }
  * @param {object} options { period, animate, fast, signal, onScrub(index into the interval's bars | null), selected }
  */
 export function renderPriceChart(el, model, { period = 130, animate = true, fast = false, signal, onScrub, selected = null } = {}) {
@@ -110,26 +121,29 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   const right = 66, pw = W - right - 2, padT = 8, axisB = 18, volH = Math.round(H * 0.15), rsH = Math.max(40, Math.round(H * 0.12)), gap = 8;
   const ph = H - padT - axisB - volH - rsH - gap * 2, rsTop = padT + ph + gap, volTop = rsTop + rsH + gap, plotBottom = padT + ph;
   const hasPivot = finite(model.pivot);
-  const levels = [model.pivot, model.upper, model.stop].filter(finite);
-  const values = bars.flatMap(b => [b.high, b.low]).filter(finite).concat(levels);
-  let lo = Math.min(...values), hi = Math.max(...values);
-  if (!(hi > lo)) { lo *= 0.99; hi *= 1.01; } // a flat range still gets a scale
+  const { lo, hi, tlo, thi } = priceScale(bars, model);
   const L = Math.log;
-  const tlo = L(lo) - (L(hi) - L(lo)) * 0.05, thi = L(hi) + (L(hi) - L(lo)) * 0.05;
   const inRange = v => finite(v) && v >= Math.exp(tlo) && v <= Math.exp(thi);
   const bw = pw / n, x = i => (i + 0.5) * bw, y = v => padT + (thi - L(v)) * ph / (thi - tlo);
   const uid = `brief-chart-${++sequence}`;
+  // Where a level line takes the mask that cuts it under a label it runs through (see the contractions' labels).
+  const CUT = ' data-cut';
   const B = [], M = [], F = [];
   const firstOnOrAfter = day => { const i = bars.findIndex(b => b.date >= day); return i < 0 ? null : i; };
   const lastOnOrBefore = day => { for (let i = n - 1; i >= 0; i--) if ((bars[i].start || bars[i].date) <= day) return i; return null; };
   const markIndex = new Map(bars.map((b, i) => [b.date, i]));
   const barOf = day => { if (!weekly) return markIndex.get(day); const i = bars.findIndex(b => b.start <= day && day <= b.date); return i < 0 ? undefined : i; };
   const last = bars[n - 1], lastX = x(n - 1), lastY = y(last.close);
+  const narrow = W < NARROW_CHART_WIDTH;
+  // On a narrow chart the last contraction's low is a tag (「安値」, its price in the legend), not a long label.
+  const lowTag = narrow && inRange(model.structuralLow);
 
-  // Price tags on the right axis (pivot, stop, the current price); closer than 20px they stack with leaders.
+  // Price tags on the right axis (pivot, stop, the current price, and the last contraction's low on a narrow
+  // chart); closer than 20px they stack with leaders.
   const tagDefs = [
     hasPivot ? { key: 'pivot', value: model.pivot, cls: 'bc-pivottag' } : null,
     finite(model.stop) ? { key: 'stop', value: model.stop, cls: 'bc-stoptag' } : null,
+    lowTag ? { key: 'low', value: model.structuralLow, cls: 'bc-lowtag', text: '安値' } : null,
     finite(last.close) ? { key: 'last', value: last.close, cls: 'bc-lasttag' } : null,
   ].filter(Boolean);
   const layoutTags = () => spread(tagDefs.map(def => ({ ...def, y: y(def.value) })), TAG_GAP, padT + TAG_H / 2, plotBottom - TAG_H / 2);
@@ -140,7 +154,8 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   B.push(`<defs><clipPath id="${uid}"><rect x="0" y="0" width="${pw}" height="${plotBottom}"/></clipPath></defs><g class="bc-grid">`);
   for (let v = Math.ceil(lo / step) * step; v <= hi; v += step) {
     const yy = y(v); B.push(`<line x1="0" x2="${pw}" y1="${yy}" y2="${yy}" class="bc-gridline"/>`);
-    if (tags.every(t => Math.abs(t.at - yy) > 14)) B.push(text(pw + 7, yy + 4, fmt(v, digits), 'bc-axis', mono));
+    // A grid value's text (12px around yy) clear of every tag (20px around its centre).
+    if (tags.every(t => Math.abs(t.at - yy) >= TAG_H / 2 + 6)) B.push(text(pw + 7, yy + 4, fmt(v, digits), 'bc-axis', mono));
   }
   B.push(`<line x1="0" x2="${pw}" y1="${rsTop - gap / 2}" y2="${rsTop - gap / 2}" class="bc-gridline"/><line x1="0" x2="${pw}" y1="${volTop - gap / 2}" y2="${volTop - gap / 2}" class="bc-gridline"/></g>`);
   // Opening gaps (certified daily bars only): a pale band behind the bar.
@@ -159,7 +174,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   B.push(`<g class="bc-legs" clip-path="url(#${uid})">`);
   for (const leg of legs) {
     const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2, top = y(leg.high), height = Math.max(1, y(leg.low) - top);
-    B.push(`<g class="bc-leg" data-leg="${leg.index}"><rect x="${x0}" y="${top}" width="${Math.max(1, x1 - x0)}" height="${height}" data-h="${height}" class="bc-legbox" rx="4"/></g>`);
+    B.push(`<g class="bc-leg" data-leg="${leg.index}"${finite(leg.depthPct) ? ` data-depth="${leg.depthPct}"` : ''}><rect x="${x0}" y="${top}" width="${Math.max(1, x1 - x0)}" height="${height}" data-h="${height}" class="bc-legbox" rx="4"/></g>`);
   }
   if (legs.length > 1) {
     const points = legs.map(leg => { let at = leg.a, low = Infinity; for (let i = leg.a; i <= leg.b; i++) if (bars[i].low < low) { low = bars[i].low; at = i; } return `${x(at).toFixed(1)},${y(low).toFixed(1)}`; });
@@ -181,187 +196,382 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   M.push('</g>');
   const rsByDate = new Map((model.rsLine || []).map(p => [p.time || p.date, p.value]));
   const rs = bars.map(b => rsByDate.get(b.date)).map(v => (finite(v) ? v : null));
-  const rsKnown = rs.filter(finite), rsLineTop = rsTop + 17, rsLineBottom = rsTop + rsH - 3;
+  // The line takes the panel's full height (its caption 「RS線」 sits in the corner the line leaves free).
+  const rsKnown = rs.filter(finite), rsLineTop = rsTop + 3, rsLineBottom = rsTop + rsH - 4;
   let rsLast = null, ry = null;
+  const leadBoxes = [];
   if (rsKnown.length > 1) {
     const rlo = Math.min(...rsKnown), rhi = Math.max(...rsKnown);
     ry = v => rsLineTop + (rhi - v) * (rsLineBottom - rsLineTop) / (rhi - rlo || 1);
     const threshold = model.rsLead?.threshold;
     if (finite(threshold) && threshold >= rlo && threshold <= rhi) M.push(`<line x1="0" x2="${pw}" y1="${ry(threshold).toFixed(1)}" y2="${ry(threshold).toFixed(1)}" class="bc-rsmax"/>`);
     M.push(`<path d="${rs.map((v, i) => (v == null ? '' : `${rs[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)},${ry(v).toFixed(1)}`)).join('')}" class="bc-rs" fill="none"/>`);
-    for (const day of model.rsLead?.dates || []) { const i = barOf(day); if (i !== undefined && rs[i] != null) M.push(`<circle cx="${x(i).toFixed(1)}" cy="${ry(rs[i]).toFixed(1)}" r="2.2" class="bc-rslead"/>`); }
+    // Lead days: one 2px underline per run of consecutive bars, along the panel's bottom edge.
+    for (const [a, b] of indexRuns((model.rsLead?.dates || []).map(barOf).filter(i => i !== undefined && rs[i] != null))) {
+      const x0 = Math.max(0, x(a) - bw / 2), x1 = Math.min(pw, Math.max(x(b) + bw / 2, x0 + 3));
+      M.push(`<line x1="${x0.toFixed(1)}" x2="${x1.toFixed(1)}" y1="${rsTop + rsH - 1}" y2="${rsTop + rsH - 1}" class="bc-rslead" data-from="${bars[a].date}" data-to="${bars[b].date}"/>`);
+      leadBoxes.push({ x0, x1, y0: rsTop + rsH - 2, y1: rsTop + rsH });
+    }
     if (rs.at(-1) != null) rsLast = ry(rs.at(-1));
   }
   // Volume: up, down or neutral against the previous close (the first bar of the data has none); a bar at
   // BREAKOUT_VOLUME_RATIO× its prior average or more is drawn strong with a dot on top.
   const vmax = Math.max(...bars.map(b => (finite(b.volume) ? b.volume : 0)), 1), vw = Math.max(1, bw * 0.7);
   const dry = model.dryUpLeg ? { a: firstOnOrAfter(model.dryUpLeg.startDate), b: lastOnOrBefore(model.dryUpLeg.endDate) } : null;
-  const vy = v => volTop + volH - v / vmax * (volH - 5);
+  const vy = v => volTop + volH - v / vmax * (volH - VOL_HEAD);
+  // Each bar's top (its dot's on a heavy bar; null for a bar not drawn), an obstacle for the panel's labels.
+  const volTops = bars.map(() => null);
+  const heavyBars = heavyVolumeBars(model, period), heavyDays = new Set(heavyBars.map(h => h.date));
   bars.forEach((b, i) => {
     const previous = i ? bars[i - 1].close : all[from - 1]?.close;
     const direction = !finite(previous) || !finite(b.close) ? 'flat' : b.close > previous ? 'up' : b.close < previous ? 'down' : b.close >= b.open ? 'up' : 'down';
-    const heavy = finite(vavg[i]) && vavg[i] > 0 && finite(b.volume) && b.volume >= vavg[i] * BREAKOUT_VOLUME_RATIO;
+    const heavy = heavyDays.has(b.date);
     const top = finite(b.volume) ? vy(b.volume) : volTop + volH;
+    if (finite(b.volume) && b.volume > 0) volTops[i] = heavy ? top - 5 : top;
     M.push(`<rect x="${(x(i) - vw / 2).toFixed(1)}" y="${top.toFixed(1)}" width="${vw.toFixed(1)}" height="${(volTop + volH - top).toFixed(1)}" class="bc-vol bc-vol-${direction}${heavy ? ` bc-volhi${direction === 'down' ? ' bc-volhi-down' : ''}` : ''}" data-date="${b.date}"/>`);
     if (heavy) M.push(`<circle cx="${x(i).toFixed(1)}" cy="${(top - 3).toFixed(1)}" r="1.8" class="bc-voldot${direction === 'down' ? ' bc-voldot-down' : ''}"/>`);
   });
   M.push(`<path d="${vavg.map((v, i) => (v == null ? '' : `${vavg[i - 1] == null ? 'M' : 'L'}${x(i).toFixed(1)},${vy(v).toFixed(1)}`)).join('')}" class="bc-vavg" fill="none"/>`);
 
   // Front layer
-  // Panel captions. The RS caption sits in the panel's top margin, clear of the line.
-  // The RS line is not RS推計 (the 1–99 rating) and not IBD RS: the caption keeps the three apart at every width.
-  const rsCaption = rsKnown.length > 1 ? (W >= 300 ? RS_CAPTION : RS_CAPTION_NARROW) : `RS線 未配信${model.rsReason ? `（${esc(model.rsReason)}）` : ''}`;
-  F.push(text(4, rsTop + 12, rsCaption, 'bc-caption bc-rscaption'));
-  const heavyLabel = `<tspan class="bc-volkey">●</tspan>${BREAKOUT_VOLUME_RATIO.toFixed(1)}×以上（独自判定）`;
-  const volumeCaption = pw >= 230 ? `出来高・${volumeLength}${unit}平均・${heavyLabel}` : `出来高・${heavyLabel}`;
+  // Panel captions. The RS line's caption 「RS線」 takes the left corner (top or bottom) the line leaves free; what
+  // it is (株価÷S&P 500, neither RS推計 nor IBD RS) is in the legend, always visible under the chart.
+  const rsCaption = (() => {
+    if (!(rsKnown.length > 1)) return { body: `RS線 未配信${model.rsReason ? `（${esc(model.rsReason)}）` : ''}`, base: rsTop + 12 };
+    const w = width(RS_CAPTION) + 4, under = rs.map((v, i) => (v != null && x(i) <= 4 + w ? ry(v) : null)).filter(finite);
+    const topBand = under.filter(yy => yy < rsTop + 15).length, bottomBand = under.filter(yy => yy > rsTop + rsH - 15).length;
+    return { body: RS_CAPTION, base: bottomBand < topBand ? rsTop + rsH - 3 : rsTop + 12 };
+  })();
+  F.push(text(4, rsCaption.base, rsCaption.body, 'bc-caption bc-rscaption'));
+
+  // Labels: one free-box search (chartLabels.js). In priority order (the right-axis tags and the marks are fixed and
+  // taken first; then the 52-week high, the pivot and the stop, the plan's other levels, the zone, the contractions'
+  // T numbers and depths, newest first, the averages' names, the crossing's ratio and the notices; in the volume panel
+  // its caption, then 出来高の枯渇), each takes its first spot that overlaps no box taken and no candle (volume bar),
+  // preferring one no line crosses (an average or a level). Only when no candle-free spot is left does it go over the
+  // fewest candles, with its halo (data-forced="1", data-search lists the spots it tried); never over a label, a tag or a mark.
+  const overlaps = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+  const barsUnder = box => [Math.max(0, Math.floor(box.x0 / bw) - 1), Math.min(n - 1, Math.ceil(box.x1 / bw) + 1)];
+  // A candle's box is its whole high–low range across its body's width, 2px wider each side (a bar's 1px): a label's
+  // glyphs may reach 1px past its estimated width.
+  // Each candle's top and bottom (null without a high or a low), worked out once for the thousands of spots tried.
+  const candleTop = bars.map(bar => (finite(bar.high) && finite(bar.low) ? y(bar.high) : null)), candleBottom = bars.map(bar => (finite(bar.low) ? y(bar.low) : null));
+  const solid = box => {
+    const [a, b] = barsUnder(box);
+    let count = 0;
+    for (let i = a; i <= b; i++) {
+      if (candleTop[i] !== null && overlaps(box, { x0: x(i) - cw / 2 - 2, x1: x(i) + cw / 2 + 2, y0: candleTop[i], y1: candleBottom[i] })) count++;
+      if (volTops[i] !== null && overlaps(box, { x0: x(i) - vw / 2 - 1, x1: x(i) + vw / 2 + 1, y0: volTops[i], y1: volTop + volH })) count++;
+      // In the RS panel, the RS line and its lead underlines.
+      if (ry && box.y1 > rsTop && box.y0 < rsTop + rsH && i < b && rs[i] != null && rs[i + 1] != null && segmentCrosses([x(i), ry(rs[i])], [x(i + 1), ry(rs[i + 1])], box)) count++;
+    }
+    return count + (box.y1 > rsTop + rsH - 2 && box.y0 < rsTop + rsH ? leadBoxes.filter(lead => overlaps(box, lead)).length : 0);
+  };
+  const entryDistinct = finite(model.entry) && (!hasPivot || Math.abs(model.entry / model.pivot - 1) > 0.001);
+  const levelYs = [model.pivot, model.stop, model.auditHigh, entryDistinct ? model.entry : null, model.r2, model.r3].filter(inRange).map(v => ({ x0: 0, y: y(v) }));
+  if (inRange(model.structuralLow)) levelYs.push({ x0: pw * 0.6, y: y(model.structuralLow) });
+  const soft = box => {
+    if (box.y0 >= plotBottom) return false;
+    if (levelYs.some(level => box.x1 > level.x0 && level.y > box.y0 && level.y < box.y1)) return true;
+    const [a, b] = barsUnder(box);
+    return averages.some(({ shown }) => {
+      for (let i = a; i < b; i++) if (shown[i] != null && shown[i + 1] != null && segmentCrosses([x(i), y(shown[i])], [x(i + 1), y(shown[i + 1])], box)) return true;
+      return false;
+    });
+  };
+  // A level line (or the zone's top edge) through a label's glyphs (5.5px or less from its centre) reads as struck through.
+  const struckBy = zone ? [...levelYs, { x0: zone.x, y: zone.top }] : levelYs;
+  const strike = box => { const yc = (box.y0 + box.y1) / 2; return struckBy.some(level => box.x1 > level.x0 && Math.abs(level.y - yc) <= 5.5); };
+  const placer = labelPlacer({ solid, soft, strike });
+  // A level line still through a label's glyphs (no clear spot near its place) is cut under them (the level lines' mask),
+  // so the label never reads as struck through. The stop's name moves with its line (moveStop), and its cut goes then.
+  const cuts = [];
+  const cut = (at, key = '') => { if (strike(at.box)) cuts.push({ ...at.box, key }); return ''; };
+  const take = (x0, x1, y0, y1) => placer.take({ x0, x1, y0, y1 });
+  const clampX = (x0, w) => Math.min(Math.max(4, x0), pw - w - 4);
+  // A label's centre stays in the plot (its top may use the padding above it).
+  const inPlot = yc => yc >= padT && yc + 6 <= plotBottom;
+  // Centres every `step` px (2 by default) from `from` to `to`.
+  const lineOf = (from, to, step = 2) => { const out = []; for (let v = from; v <= to; v += step) out.push(v); return out; };
+  take(4, 4 + width(rsCaption.body.replace(/&[a-z]+;/g, '_')), rsCaption.base - 11, rsCaption.base + 3);
+
+  const ratio = BREAKOUT_VOLUME_RATIO.toFixed(1), dotKey = '<tspan class="bc-volkey">●</tspan>', downKey = '<tspan class="bc-volkeydown">■</tspan>';
+  // A narrow chart keys the heavy down bars (■ 下落日) in this caption, beside the bars (the legend keeps two lines). The
+  // caption is the longest of its forms that fits the plot's width; the shortest leaves 「以上（独自判定）」 to the 注記
+  // (chartNotes keys ● and ■ with it).
+  const heavyDownDrawn = heavyBars.some(h => h.direction === 'down');
+  const captionWidth = caption => width(caption.replace(/<[^>]+>/g, ''));
+  const captions = narrow && heavyDownDrawn ? [`出来高・${dotKey}${ratio}×以上（独自判定）・${downKey}下落日`, `出来高・${dotKey}${ratio}×・${downKey}下落日`]
+    : [`出来高・${volumeLength}${unit}平均・${dotKey}${ratio}×以上（独自判定）`, `出来高・${dotKey}${ratio}×以上（独自判定）`];
+  const volumeCaption = captions.find(caption => captionWidth(caption) <= pw - 8) ?? captions.at(-1);
+  // The caption has the panel's top band to itself: the tallest bar starts under it (VOL_HEAD).
   F.push(text(4, volTop + 12, volumeCaption, 'bc-caption bc-volcaption'));
-  const volumeCaptionRight = 4 + width(volumeCaption.replace(/<[^>]+>/g, ''));
-  // The volume axis: the period's maximum and the latest average (— when its window is short).
+  take(4, 4 + captionWidth(volumeCaption), volTop + 1, volTop + 15);
+  // The volume axis: the period's maximum beside the tallest bar's top, and the latest average (— when its window is short).
   const averageNow = series.latestAverage;
-  F.push(text(pw + 6, volTop + 11, formatVolume(vmax), 'bc-axis bc-volmax', mono));
-  F.push(text(pw + 6, Math.min(volTop + volH, Math.max(volTop + 27, (finite(averageNow) && averageNow <= vmax ? vy(averageNow) : volTop + volH) + 4)), `平均 ${formatVolume(averageNow)}`, 'bc-axis bc-volavg'));
+  F.push(text(pw + 6, volTop + VOL_HEAD + 4, formatVolume(vmax), 'bc-axis bc-volmax', mono));
+  F.push(text(pw + 6, Math.min(volTop + volH, Math.max(volTop + VOL_HEAD + 18, (finite(averageNow) && averageNow <= vmax ? vy(averageNow) : volTop + volH) + 4)), `平均 ${formatVolume(averageNow)}`, 'bc-axis bc-volavg'));
   if (dry && Number.isInteger(dry.a) && Number.isInteger(dry.b) && dry.b - dry.a > 3) {
     const xa = Math.max(0, x(dry.a) - bw / 2), xb = x(dry.b) + bw / 2;
-    // Its name sits inside the volume panel, above the (low) dry-up bars: beside the caption when there is
-    // room, otherwise on the line under it; left out when the panel is too short for a second line.
-    const note = '出来高の枯渇', w = width(note), centre = (xa + xb) / 2 - w / 2;
-    const beside = Math.min(Math.max(centre, volumeCaptionRight + 8), pw - 4 - w), under = Math.min(Math.max(centre, 4), pw - 4 - w);
-    const label = beside >= volumeCaptionRight + 8 ? text(beside.toFixed(1), volTop + 12, note, 'bc-notetext', 'font-weight="700"')
-      : volH >= 40 ? text(under.toFixed(1), volTop + 26, note, 'bc-notetext', 'font-weight="700"') : '';
+    // Its name sits over the dry-up bars: in the caption's band beside the caption when there is room, else the nearest
+    // spot in the panel clear of the bars, else just above the bracket (the RS panel's foot, clear of the RS line).
+    const note = '出来高の枯渇', w = width(note), ax = clampX((xa + xb) / 2 - w / 2, w), above = volTop - 13;
+    const s = spots({ x0: clampX(xa - w + 8, w), x1: clampX(xb - 8, w), ys: [...lineOf(volTop + 8, volTop + volH - 7), ...(above - 7 >= rsTop ? [above] : [])], cost: (lx, yc) => Math.abs(lx - ax) + (yc === above ? 40 : 2 * Math.abs(yc - volTop - 8)) });
+    const at = placer.place(w, s, { slack: 0 });
+    const label = at ? text(at.x.toFixed(1), (at.yc + 4).toFixed(1), note, 'bc-notetext', `font-weight="700" ${placedAttrs(at, s.search)}`) : '';
     F.push(`<g class="bc-note"><path d="M${xa},${volTop - 1}v-4H${xb}v4" class="bc-bracket" fill="none"/><line x1="${xa}" x2="${xb}" y1="${volTop + volH + 1.5}" y2="${volTop + volH + 1.5}" class="bc-dryline"/>${label}</g>`);
   }
   // Levels: dotted plan lines (entry, 2R, 3R) and the structural low only inside the y-range; the 52-week high
   // (certified bars only, from the published audit). The y-axis is never widened for them.
   const levelLabels = [];
+  // A level's line is drawn only with its name (an unnamed dotted line would read as another level): its slot
+  // keeps the line's place in the layer and stays empty when the label finds no spot.
+  const levelLine = (markup, label) => { levelLabels.push({ ...label, slot: F.length, line: markup }); F.push(''); };
   const planLine = (value, cls, label) => {
     if (!inRange(value)) return;
-    F.push(`<line x1="0" x2="${pw}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}" class="bc-planline ${cls}"/>`);
-    levelLabels.push({ y: y(value), body: label, cls: `bc-levelnote ${cls}-text` });
+    levelLine(`<line x1="0" x2="${pw}" y1="${y(value).toFixed(1)}" y2="${y(value).toFixed(1)}" class="bc-planline ${cls}"${CUT}/>`, { y: y(value), body: label, cls: `bc-levelnote ${cls}-text` });
   };
-  const entryDistinct = finite(model.entry) && (!hasPivot || Math.abs(model.entry / model.pivot - 1) > 0.001);
   if (entryDistinct) planLine(model.entry, 'bc-entry', `買値 ${fmt(model.entry)}`);
   planLine(model.r2, 'bc-r2', `2R ${fmt(model.r2)}`);
   planLine(model.r3, 'bc-r3', `3R ${fmt(model.r3)}`);
   if (inRange(model.structuralLow)) {
-    const ys = y(model.structuralLow);
-    F.push(`<line x1="${(pw * 0.6).toFixed(1)}" x2="${pw}" y1="${ys.toFixed(1)}" y2="${ys.toFixed(1)}" class="bc-planline bc-structural"/>`);
-    levelLabels.push({ y: ys, x: pw * 0.6, below: true, body: `最後の収縮の安値 ${fmt(model.structuralLow)}`, cls: 'bc-levelnote bc-structural-text' });
+    const ys = y(model.structuralLow), line = `<line x1="${(pw * 0.6).toFixed(1)}" x2="${pw}" y1="${ys.toFixed(1)}" y2="${ys.toFixed(1)}" class="bc-planline bc-structural"${CUT}/>`;
+    // A narrow chart names it with its 「安値」 tag (the price is in the legend); a wide one with a label.
+    levelLine(line, lowTag ? { named: true } : { y: ys, x: pw * 0.6, below: true, body: `最後の収縮の安値 ${fmt(model.structuralLow)}`, cls: 'bc-levelnote bc-structural-text' });
   }
+  let high = null;
   if (inRange(model.auditHigh)) {
     const yh = y(model.auditHigh), distance = finite(last.close) ? (last.close / model.auditHigh - 1) * 100 : null;
-    F.push(`<line x1="0" x2="${pw}" y1="${yh.toFixed(1)}" y2="${yh.toFixed(1)}" class="bc-high52"/>`);
-    levelLabels.push({ y: yh, body: `52週高値 ${fmt(model.auditHigh)}${finite(distance) ? `（${signed(distance)}）` : ''}`, cls: 'bc-levelnote bc-high52-text', required: true });
+    // The readout gives the distance on a phone: the label keeps the short form there.
+    levelLine(`<line x1="0" x2="${pw}" y1="${yh.toFixed(1)}" y2="${yh.toFixed(1)}" class="bc-high52"${CUT}/>`, { y: yh, body: narrow ? `52週高 ${fmt(model.auditHigh)}` : `52週高値 ${fmt(model.auditHigh)}${finite(distance) ? `（${signed(distance)}）` : ''}`, cls: 'bc-levelnote bc-high52-text' });
+    high = levelLabels.at(-1);
   }
-  if (hasPivot) F.push(`<line x1="0" x2="${pw}" y1="${y(model.pivot)}" y2="${y(model.pivot)}" class="bc-pivot"/>`);
+  if (hasPivot) F.push(`<line x1="0" x2="${pw}" y1="${y(model.pivot)}" y2="${y(model.pivot)}" class="bc-pivot"${CUT}/>`);
   const stopLabel = value => `損切り${finite(model.entry) && model.entry > 0 && finite(value) ? ` ${signed((value / model.entry - 1) * 100)}` : ''}`;
-  // In-plot labels: each takes the first of its positions that overlaps no label already placed (a
-  // required one takes its first position anyway). Notices first, then the averages' names, the
-  // contractions' T numbers right-first, the zone, the pivot and the stop, the other levels, the depths.
-  const boxes = [];
-  const fits = (x0, x1, yc) => yc - 6 >= padT && yc + 6 <= plotBottom && !boxes.some(b => x0 < b.x1 + 3 && x1 > b.x0 - 3 && Math.abs(yc - b.y) < 13);
-  // A label box over a candle (its whole high–low range, the body's width plus 1px).
-  const overCandle = (x0, x1, yc) => bars.some((b, i) => x(i) + cw / 2 + 1 > x0 && x(i) - cw / 2 - 1 < x1 && y(b.high) < yc + 7 && y(b.low) > yc - 7);
-  const claim = (x0, w, candidates, required = false) => {
-    for (const yc of candidates) if (fits(x0, x0 + w, yc)) { boxes.push({ x0, x1: x0 + w, y: yc }); return yc; }
-    if (!required) return null;
-    boxes.push({ x0, x1: x0 + w, y: candidates[0] });
-    return candidates[0];
-  };
   const lines = [model.pivot, model.upper, model.stop, model.auditHigh].filter(inRange).map(y);
-  let noticeBox = null;
+  // The right-axis tags (and the leaders of those moved off their prices), the last price's dot, the sell marks and
+  // the crossing's arrow are taken before any label.
+  for (const tag of tags) {
+    take(pw + 2, pw + 2 + (tag.text ? Math.round(width(tag.text) + 10) : tagWidth(tag.value)), tag.at - TAG_H / 2, tag.at + TAG_H / 2);
+    if (Math.abs(tag.at - tag.y) > 0.5) take(pw - 4, pw + 2, Math.min(tag.y, tag.at) - 1, Math.max(tag.y, tag.at) + 1);
+  }
+  if (finite(lastY)) take(lastX - 5, lastX + 5, lastY - 5, lastY + 5);
+  const sells = (model.sellMarks || []).map(mark => ({ mark, i: barOf(mark.date) })).filter(({ i }) => i !== undefined).map(({ mark, i }) => {
+    const mx = x(i), top = Math.max(padT + 2, y(bars[i].high) - 14), bottom = Math.min(plotBottom - 2, y(bars[i].low) + 14);
+    if (mark.kind === 'weakness') take(mx - 5, mx + 5, bottom - 8, bottom); else take(mx - 5, mx + 5, top, top + 8);
+    return { mark, i, mx, top, bottom };
+  });
+  // The pivot crossing (certified daily bars only, the conclusion's own helper): a hollow upward arrow under the
+  // crossing bar (its week on the weekly chart), never the filled ▲ of the 崩れ sell sign. It is green only for a
+  // crossing chartCrossing confirms (1.4× or more, the latest close still at or above the pivot), grey otherwise.
+  const crossingBar = model.crossing?.date ? barOf(model.crossing.date) : undefined;
+  let arrow = null;
+  if (crossingBar !== undefined && finite(bars[crossingBar]?.low)) {
+    // Under a 崩れ mark on the same bar, the arrow goes below it.
+    const under = sells.some(sell => sell.i === crossingBar && sell.mark.kind === 'weakness');
+    const mx = x(crossingBar), top = Math.min(plotBottom - 11, y(bars[crossingBar].low) + (under ? 16 : 4));
+    take(mx - 5.5, mx + 5.5, top - 1, top + 11);
+    arrow = { mx, top, zone: model.crossing.tone === 'zone' };
+  }
+
+  // Every label is drawn once all are placed (a later label may move an earlier one out of its way): `show` keeps the
+  // label's place in its layer and `draw(at, search)` writes it there (at is null when it found no spot).
+  const shown = [];
+  const show = (label, draw, layer = F) => { shown.push({ label, draw, layer, slot: layer.length }); layer.push(''); return label; };
+  // A level's name sits just above or below its line at the first free spot along the whole line, from the left (the
+  // wide chart's structural low from where its line starts), one no other level line runs through when there is one.
+  // With no spot at all the label and its line are both left out. The 52-week high (it judges the stock) goes first,
+  // then the pivot and the stop, then the plan's levels.
+  const levelSpots = (yLine, w, dys, from) => spots({ x0: 4, x1: pw - w - 4, ys: dys.map(dy => yLine + dy), inside: inPlot, cost: from === undefined ? null : lx => Math.abs(lx - from) });
+  const placeLevel = level => {
+    if (level.named) { F[level.slot] = level.line; return; }
+    const w = width(level.body);
+    show(placer.put(w, levelSpots(level.y, w, level.below ? [11, -9] : [-9, 11], level.x), { hard: 60 }), (at, search) => {
+      if (!at) return '';
+      F[level.slot] = level.line;
+      return cut(at) + text(at.x.toFixed(1), (at.yc + 4).toFixed(1), level.body, level.cls, placedAttrs(at, search));
+    });
+  };
+  if (high) placeLevel(high);
+  // The pivot's and the stop's names next to their lines (their prices are the tags). The pivot's name and the zone's
+  // (both green) never sit side by side on one row (KIN_GAP.plan).
+  if (hasPivot) {
+    const w = width('ピボット');
+    show(placer.put(w, levelSpots(y(model.pivot), w, [11, -9]), { kin: 'plan', hard: 60 }), (at, search) => (at ? cut(at) + text(at.x.toFixed(1), (at.yc + 4).toFixed(1), 'ピボット', 'bc-levelnote bc-pivot-text', placedAttrs(at, search)) : ''));
+  }
+  if (finite(model.stop)) {
+    const body = stopLabel(model.stop), w = width(body);
+    // The plan moves the stop (moveStop): the label keeps its node, hidden when it found no spot.
+    show(placer.put(w, levelSpots(y(model.stop), w, [-9, 11]), { hard: 60 }), (at, search) => `<g class="bc-stopgroup"><line x1="0" x2="${pw}" y1="${y(model.stop)}" y2="${y(model.stop)}" class="bc-stop"${CUT}/>${at ? cut(at, 'stop') : ''}${text(at ? at.x.toFixed(1) : 4, ((at?.yc ?? y(model.stop) - 9) + 4).toFixed(1), body, 'bc-levelnote bc-stop-text', at ? placedAttrs(at, search) : 'visibility="hidden"')}</g>`);
+  }
+  for (const level of levelLabels) if (level !== high) placeLevel(level);
+  // The zone's name: inside the band along its top first, then its lower rows, then just above it; each row from the
+  // band's left end rightwards, then leftwards (still over the band by 20px or more where the band is short). A narrow
+  // chart never covers more than a few candles with it: without a candle-free spot for 「買いゾーン 〜116.28」 it tries
+  // 「買いゾーン」, over FEW_CANDLES candles at most, else the green band goes unnamed.
+  if (zone && zone.height > 14) {
+    const zoneSpots = w => {
+      const from = clampX(zone.x + 2, w), rows = [...lineOf(zone.top + 8, zone.top + zone.height - 8), zone.top - 9];
+      return spots({ x0: clampX(zone.x + 20 - w, w), x1: pw - w - 4, ys: rows, inside: inPlot, cost: (lx, yc) => rows.indexOf(yc) * 10000 + (lx >= from ? lx - from : 2000 + from - lx), near: { cost: 9999, x: [-Infinity, Infinity], y: [rows[0], rows[0]] } });
+    };
+    let body = `買いゾーン${finite(model.upper) ? ` 〜${fmt(model.upper)}` : ''}`, w = width(body);
+    let label = placer.put(w, zoneSpots(w), narrow ? { kin: 'plan', forced: false, repair: true } : { kin: 'plan' });
+    if (narrow && !label.at) {
+      body = '買いゾーン'; w = width(body);
+      label = placer.put(w, zoneSpots(w), { kin: 'plan' });
+      if (label.at?.forced && solid(label.at.box) > FEW_CANDLES) placer.drop(label);
+    }
+    show(label, (at, search) => (at ? `<g class="bc-zonelabel">${text(at.x.toFixed(1), (at.yc + 4).toFixed(1), body, 'bc-zonetext', `font-weight="700" ${placedAttrs(at, search)}`)}</g>` : ''));
+  }
+  // Contractions, newest first: every one shows its T number and its depth. The T number goes above its box and the
+  // depth under it; one combined 「T2 −7%」 above it when the box is too narrow for the depth under it or the pair finds
+  // no candle-free spots. Each takes the nearest spot around its box (inside it or beside it, accepting 24px more to
+  // keep clear of the lines, and 60px more to keep a level line out of its glyphs); a depth keeps more than a glyph from
+  // an average's name on its row (KIN_GAP.figure) and is never left out (over candles with its halo, or elsewhere in the
+  // plot when even its box's surroundings are taken).
+  const legLabels = legs.map(leg => { const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2; return { leg, x: (x0 + x1) / 2, x0, x1 }; });
+  const around = (w, ax, ay, { x0, x1, top, low }) => spots({ x0: clampX(x0 - w - 4, w), x1: clampX(x1 + 4, w), ys: lineOf(top - 30, low + 30), inside: inPlot, cost: (lx, yc) => Math.abs(lx - ax) + 2 * Math.abs(yc - ay), near: { cost: 64, x: [ax - 64, ax + 64], y: [ay - 32, ay + 32] } });
+  const tLabel = (leg, body, depth) => (at, search) => (at ? `<g class="bc-tlabel" data-leg="${leg.index}">${cut(at)}${text((at.x + width(body) / 2).toFixed(1), (at.yc + 4).toFixed(1), body, `bc-ttext${depth ? ' bc-tdepth' : ''}`, `text-anchor="middle" font-weight="700"${depth ? ` data-depth="${leg.depthPct}"` : ''} ${placedAttrs(at, search)}`)}</g>` : '');
+  for (const { leg, x: cx, x0, x1 } of [...legLabels].reverse()) {
+    const area = { x0, x1, top: y(leg.high), low: y(leg.low) };
+    if (!finite(area.top) || !finite(area.low)) continue;
+    const tBody = `T${leg.index + 1}`, tw = width(tBody), depth = finite(leg.depthPct) ? `−${Math.round(leg.depthPct)}%` : null, dw = depth ? width(depth, true) : 0;
+    if (depth && x1 - x0 > Math.max(22, dw + 4)) {
+      const t = placer.put(tw, around(tw, cx - tw / 2, area.top - 9, area), { forced: false, repair: true, slack: 24, hard: 60 });
+      const d = t.at ? placer.put(dw, around(dw, cx - dw / 2, area.low + 11, area), { forced: false, repair: true, slack: 24, hard: 60, kin: 'figure' }) : null;
+      if (d?.at) {
+        show(t, tLabel(leg, tBody, false));
+        show(d, (at, search) => (at ? cut(at) + text((at.x + dw / 2).toFixed(1), (at.yc + 4).toFixed(1), depth, 'bc-legtext', `text-anchor="middle" font-weight="700" ${mono} data-depth="${leg.depthPct}" data-i="${leg.index}" ${placedAttrs(at, search)}`) : ''));
+        continue;
+      }
+      placer.drop(t);
+    }
+    const body = depth ? `${tBody} ${depth}` : tBody, w = width(body);
+    const kin = depth ? 'figure' : null;
+    let label = placer.put(w, around(w, cx - w / 2, area.top - 9, area), { slack: 24, hard: 60, kin });
+    // The whole plot on a coarse grid (8px across, 4px down): only when even the box's surroundings are taken.
+    if (!label.at && depth) label = placer.put(w, spots({ x0: 4, x1: pw - w - 4, ys: lineOf(padT + 6, plotBottom - 6, 4), step: 8, cost: (lx, yc) => Math.abs(lx - cx + w / 2) + 2 * Math.abs(yc - area.top + 9) }), { hard: 60, kin });
+    show(label, tLabel(leg, body, depth));
+  }
+  // The averages' names at their lines' right ends, ending 7px left of the axis (clear of the tags and their leaders):
+  // the nearest candle-free spot within MA_NEAR of the end's height and up to MA_SHIFT further left, then within MA_FAR;
+  // a 1px leader behind the candles joins a moved name to its line's end. Over the candles (each counted as 6px
+  // further) only when that whole window has no candle-free spot; left out only when every spot in it is taken. A
+  // level line through a name is cut under it.
+  const ends = averages.map(a => ({ a, v: a.shown.at(-1) })).filter(({ v }) => finite(v) && inRange(v)).map(({ a, v }) => ({ key: a.key, y: y(v), body: String(a.length) }));
+  for (const end of spread(ends, 13, padT + 6, plotBottom - 6)) {
+    const w = width(end.body, true), lx = pw - 7 - w, lo = Math.floor(Math.min(end.at, end.y) - MA_FAR), hi = Math.ceil(Math.max(end.at, end.y) + MA_FAR);
+    const cost = (x0, yc) => { const d = Math.abs(yc - end.at); return (d > MA_NEAR ? 1000 : 0) + d + lx - x0; };
+    const near = { cost: MA_NEAR + MA_SHIFT, x: [lx - MA_SHIFT, lx], y: [end.at - MA_NEAR, end.at + MA_NEAR] };
+    const label = placer.put(w, spots({ x0: lx - MA_SHIFT, x1: lx, ys: lineOf(lo, hi, 1), inside: inPlot, cost, near }), { half: 6.5, slack: 0, perCandle: 6, kin: 'figure' });
+    show(label, at => {
+      if (!at || Math.abs(at.yc - end.y) <= 3) return '';
+      // Beside the line's end: straight down or up to the name; a name moved left: on to its right end.
+      const shifted = at.x < lx - 1, tip = shifted ? at.yc : at.yc + (end.y > at.yc ? 6 : -6);
+      return `<path d="M${pw - 1.5},${end.y.toFixed(1)}V${tip.toFixed(1)}${shifted ? `H${(at.x + w + 2).toFixed(1)}` : ''}" class="bc-maleader bc-maleader-${end.key}" fill="none"/>`;
+    }, B);
+    show(label, (at, search) => (at ? cut(at) + text((at.x + w).toFixed(1), (at.yc + 4).toFixed(1), end.body, `bc-malabel bc-malabel-${end.key}`, `text-anchor="end" font-weight="700" ${mono} ${placedAttrs(at, search)}`) : ''));
+  }
+  // The crossing's arrow, and 「上抜け 1.80×」 beside it when the helper gives the ratio and a candle-free spot is left, right first.
+  let breakout = null;
+  if (arrow) {
+    const { mx, top } = arrow, date = bars[crossingBar].date;
+    breakout = { date };
+    let label = { at: null, spots: { search: '' } }, body = '';
+    if (finite(model.crossing.volumeRatio)) {
+      body = `上抜け ${ratioShown(model.crossing.volumeRatio)}`;
+      const w = width(body), yc = top + 5;
+      const list = [[mx + 8, yc], [mx - 8 - w, yc], [mx - w / 2, yc + 15], [mx + 8, yc + 15], [mx - 8 - w, yc + 15], [mx - w / 2, yc + 29]].filter(([lx, c]) => lx >= 4 && lx + w <= pw - 4 && inPlot(c));
+      label = placer.put(w, spotList(list), { forced: false });
+      if (label.at) breakout.label = body;
+    }
+    show(label, at => `<g class="bc-breakout${arrow.zone ? ' is-zone' : ''}" data-date="${date}" data-tone="${arrow.zone ? 'zone' : 'neutral'}"><path d="M${mx.toFixed(1)},${top.toFixed(1)}l4.5,5h-2.75v5h-3.5v-5h-2.75z" class="bc-breakoutmark"/>${at ? text(at.x.toFixed(1), (at.yc + 4).toFixed(1), body, 'bc-breakouttext', `font-weight="700" ${placedAttrs(at, '')}`) : ''}</g>`);
+  }
+  // The notices (one block, a line each): a plot corner first (top-left, bottom-left, bottom-right, top-right), else the
+  // free spot nearest one on a coarse grid (8px across, 4px down), clear of the lines within 64px more; over the fewest
+  // candles when none is free.
+  let noticeLabel = null;
   const notices = [];
   if (weekly && all.length < 104) notices.push(`週足は直近${all.length}週分（${(all[0].start || all[0].date).slice(0, 7).replace('-', '/')}〜）。`, '2年分はありません');
   if (!hasPivot) notices.push('ピボット 未確認');
   if (model.legsValid === false) notices.push('収縮は未確認');
   if (notices.length) {
-    // The notices take the plot corner with the fewest candles and level lines under them (top-left first).
-    const w = Math.max(...notices.map(notice => width(notice))), h = notices.length * 16;
-    const corners = [[4, padT + 9], [4, plotBottom - h + 7], [Math.max(4, pw - 34 - w), plotBottom - h + 7], [Math.max(4, pw - 34 - w), padT + 9]];
-    const score = ([x0, top]) => bars.reduce((sum, b, i) => sum + (x(i) >= x0 && x(i) <= x0 + w && y(b.high) <= top + h && y(b.low) >= top - 8 ? 1 : 0), 0) + lines.filter(ly => ly >= top - 10 && ly <= top + h).length * 4;
-    const [nx, ny] = corners.reduce((best, corner) => (score(corner) < score(best) ? corner : best));
-    noticeBox = { x0: nx, x1: nx + w, y0: ny - 8, y1: ny - 8 + h };
-    notices.forEach((notice, i) => { const yc = claim(nx, width(notice), [ny + i * 16], true); F.push(text(nx.toFixed(1), (yc + 4).toFixed(1), notice, 'bc-notice')); });
+    // A line wider than the plot breaks before its parenthesis (「週足は直近58週分」「（2025/08〜）。」 at 320px).
+    const lines = notices.flatMap(notice => (width(notice) > pw - 8 && notice.indexOf('（') > 0 ? [notice.slice(0, notice.indexOf('（')), notice.slice(notice.indexOf('（'))] : [notice]));
+    notices.splice(0, notices.length, ...lines);
+    const w = Math.min(Math.max(...notices.map(notice => width(notice))), pw - 8), half = notices.length * 8 - 1;
+    const right = clampX(pw - 34 - w, w), yTop = padT + 2 + half, yBottom = plotBottom - 2 - half;
+    const corners = [[4, yTop], [4, yBottom], [right, yBottom], [right, yTop]];
+    const grid = spots({ x0: 4, x1: pw - w - 4, ys: lineOf(yTop, yBottom, 4), step: 8, first: corners.filter(([cx]) => cx >= 4).map(([cx, cy]) => [cx, cy, -1]), cost: (lx, yc) => { let near = Infinity; for (const [cx, cy] of corners) near = Math.min(near, Math.abs(lx - cx) + Math.abs(yc - cy)); return near; } });
+    const label = placer.put(w, grid, { half, slack: 64 });
+    // They are always drawn: with every spot taken, at the top-left corner.
+    label.at ??= { x: 4, yc: yTop, box: { x0: 4, x1: 4 + w, y0: yTop - half, y1: yTop + half }, forced: true };
+    noticeLabel = label;
+    notices.forEach((notice, i) => show(label, (at, search) => text(at.x.toFixed(1), (at.yc - half + 7 + i * 16 + 4).toFixed(1), notice, 'bc-notice', placedAttrs(at, search))));
   }
-  // Moving-average names at their right ends, spread vertically so none overlaps and never over the newest
-  // candles: one whose place is taken moves to the nearest free height (a 1px leader behind the candles
-  // joins it to its line's end) and is left out when there is none within 72px.
-  const ends = averages.map(a => ({ a, v: a.shown.at(-1) })).filter(({ v }) => finite(v) && inRange(v)).map(({ a, v }) => ({ key: a.key, y: y(v), body: String(a.length) }));
-  for (const label of spread(ends, 13, padT + 6, plotBottom - 6)) {
-    const w = width(label.body, true), x0 = pw - 3 - w;
-    let at = null;
-    for (let d = 0; d <= 72 && at === null; d += 2) {
-      for (const yc of d ? [label.at - d, label.at + d] : [label.at]) if (fits(x0, pw - 3, yc) && !overCandle(x0, pw - 3, yc)) { at = yc; break; }
-    }
-    if (at === null) continue;
-    boxes.push({ x0, x1: pw - 3, y: at });
-    if (Math.abs(at - label.y) > 3) B.push(`<line x1="${pw - 1.5}" x2="${pw - 1.5}" y1="${label.y.toFixed(1)}" y2="${(at + (label.y > at ? 6 : -6)).toFixed(1)}" class="bc-maleader bc-maleader-${label.key}"/>`);
-    F.push(text((pw - 3).toFixed(1), (at + 4).toFixed(1), label.body, `bc-malabel bc-malabel-${label.key}`, `text-anchor="end" font-weight="700" ${mono}`));
-  }
-  // Contraction labels: T1…Tn over the boxes (centres at least 18px apart, the newest kept first and the
-  // last always) and each depth under its box when the box is wide enough.
-  const legLabels = legs.map(leg => { const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2; return { leg, x: (x0 + x1) / 2, x0, x1 }; });
-  const lastLeg = legs.at(-1)?.index;
-  for (const { leg, x: cx } of keepRightFirst(legLabels, 18).reverse()) {
-    const body = `T${leg.index + 1}`, w = width(body), top = y(leg.high), yc = claim(cx - w / 2, w, [top - 9, top + 10, top + 24], leg.index === lastLeg);
-    if (yc !== null) F.push(`<g class="bc-tlabel" data-leg="${leg.index}">${text(cx.toFixed(1), (yc + 4).toFixed(1), body, 'bc-ttext', 'text-anchor="middle" font-weight="700"')}</g>`);
-  }
-  if (zone && zone.height > 14) {
-    const body = `買いゾーン${finite(model.upper) ? ` 〜${fmt(model.upper)}` : ''}`, zx = Math.min(zone.x + 6, pw - width(body) - 30);
-    const yc = claim(zx, width(body), [zone.top + Math.min(zone.height - 4, 14) - 4, zone.top - 9, zone.top + zone.height - 10]);
-    if (yc !== null) F.push(`<g class="bc-zonelabel">${text(zx.toFixed(1), (yc + 4).toFixed(1), body, 'bc-zonetext', 'font-weight="700"')}</g>`);
-  }
-  if (hasPivot) { const py = y(model.pivot), yc = claim(4, width('ピボット'), [py + 11, py - 9, py + 25, py - 23], true); F.push(text(4, (yc + 4).toFixed(1), 'ピボット', 'bc-levelnote bc-pivot-text')); }
-  let stopText = null;
-  if (finite(model.stop)) { const sy = y(model.stop), body = stopLabel(model.stop); stopText = { body, at: claim(4, width(body), [sy - 9, sy + 11, sy - 23, sy + 25], true) }; }
-  // A level's label sits just above or below its line, at the left or (when the left is taken) before the averages' names.
-  for (const label of levelLabels) {
-    const w = width(label.body), offsets = label.below ? [11, -9] : [-9, 11], xs = label.x !== undefined ? [label.x] : [4, Math.max(4, pw - 34 - w)];
-    const spots = offsets.flatMap(dy => xs.map(lx => [lx, label.y + dy]));
-    const spot = spots.find(([lx, yc]) => fits(lx, lx + w, yc)) ?? (label.required ? spots[0] : null);
-    if (!spot) continue;
-    boxes.push({ x0: spot[0], x1: spot[0] + w, y: spot[1] });
-    F.push(text(spot[0].toFixed(1), (spot[1] + 4).toFixed(1), label.body, label.cls));
-  }
-  if (finite(model.stop)) F.push(`<g class="bc-stopgroup"><line x1="0" x2="${pw}" y1="${y(model.stop)}" y2="${y(model.stop)}" class="bc-stop"/>${text(4, (stopText.at + 4).toFixed(1), stopText.body, 'bc-levelnote bc-stop-text')}</g>`);
-  for (const { leg, x: cx } of keepRightFirst(legLabels.filter(l => l.x1 - l.x0 > 22), 36).reverse()) {
-    const body = `−${Math.round(leg.depthPct)}%`, w = width(body, true), low = y(leg.low), yc = claim(cx - w / 2, w, [low + 11, low - 9]);
-    if (yc !== null) F.push(text(cx.toFixed(1), (yc + 4).toFixed(1), body, 'bc-legtext', `text-anchor="middle" font-weight="700" ${mono} data-depth="${leg.depthPct}" data-i="${leg.index}"`));
-  }
+  placer.settle();
+  for (const { label, draw, layer, slot } of shown) layer[slot] = draw(label.at, label.spots.search);
+  if (cuts.length) F.push(`<defs><mask id="${uid}-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="${W}" height="${H}"><rect width="${W}" height="${H}" fill="#fff"/>${cuts.map(c => `<rect x="${(c.x0 - 1).toFixed(1)}" y="${((c.y0 + c.y1) / 2 - 6).toFixed(1)}" width="${(c.x1 - c.x0 + 2).toFixed(1)}" height="12" fill="#000"${c.key ? ` data-for="${c.key}"` : ''}/>`).join('')}</mask></defs>`);
+  const noticeBox = noticeLabel?.at.box ?? null;
   // Tags.
   const tagMarkup = tag => {
-    const w = tagWidth(tag.value), leader = Math.abs(tag.at - tag.y) > 0.5;
-    return `<g class="bc-tag ${tag.cls}" data-tag="${tag.key}"><line x1="${pw - 4}" y1="${tag.y.toFixed(1)}" x2="${pw + 2}" y2="${tag.at.toFixed(1)}" class="bc-leader"${leader ? '' : ' visibility="hidden"'}/><rect x="${pw + 2}" y="${(tag.at - TAG_H / 2).toFixed(1)}" width="${w}" height="${TAG_H}" rx="4" class="${tag.cls}-fill"/>${text(pw + 7, (tag.at + 4).toFixed(1), esc(tagText(tag.value)), tag.key === 'last' ? 'bc-tagtext bc-lasttagtext' : 'bc-tagtext', `font-weight="700" ${mono}`)}</g>`;
+    const w = tag.text ? Math.round(width(tag.text) + 10) : tagWidth(tag.value), leader = Math.abs(tag.at - tag.y) > 0.5;
+    const body = tag.text ? text(pw + 7, (tag.at + 4).toFixed(1), tag.text, 'bc-tagtext bc-lowtagtext', 'font-weight="700"') : text(pw + 7, (tag.at + 4).toFixed(1), esc(tagText(tag.value)), tag.key === 'last' ? 'bc-tagtext bc-lasttagtext' : 'bc-tagtext', `font-weight="700" ${mono}`);
+    return `<g class="bc-tag ${tag.cls}" data-tag="${tag.key}"><line x1="${pw - 4}" y1="${tag.y.toFixed(1)}" x2="${pw + 2}" y2="${tag.at.toFixed(1)}" class="bc-leader"${leader ? '' : ' visibility="hidden"'}/><rect x="${pw + 2}" y="${(tag.at - TAG_H / 2).toFixed(1)}" width="${w}" height="${TAG_H}" rx="4" class="${tag.cls}-fill"/>${body}</g>`;
   };
   F.push(`<g class="bc-tags">${tags.map(tagMarkup).join('')}</g>`);
   F.push(`<g class="bc-last"><circle cx="${lastX}" cy="${lastY}" r="9" class="bc-pulse"/><circle cx="${lastX}" cy="${lastY}" r="3.6" class="bc-lastdot"/></g>`);
-  for (const mark of model.sellMarks || []) {
-    const i = barOf(mark.date); if (i === undefined) continue;
-    const mx = x(i), top = Math.max(padT + 2, y(bars[i].high) - 14), bottom = Math.min(plotBottom - 2, y(bars[i].low) + 14);
+  for (const { mark, mx, top, bottom } of sells) {
     F.push(mark.kind === 'weakness'
       ? `<path d="M${mx - 5},${bottom}h10l-5,-8z" class="bc-sell bc-sell-weak"/>`
       : `<path d="M${mx - 5},${top}h10l-5,8z" class="bc-sell bc-sell-strong"/>`);
   }
-  if (model.rsNewHigh && rsLast != null) F.push(`<g class="bc-rshigh"><circle cx="${lastX}" cy="${rsLast}" r="4" class="bc-rsdot"/>${text(lastX - 8, rsLast + 4, '新高値', 'bc-rstext', 'text-anchor="end" font-weight="700"')}</g>`);
-  // The date axis: month ticks with the year where it starts or changes, and the next earnings date outside its right edge.
-  const earnings = model.earnings && finite(model.earnings.days) && model.earnings.days <= 28 ? model.earnings : null;
-  const earningsText = earnings ? `決算 ${Number(earnings.date.slice(5, 7))}/${Number(earnings.date.slice(8))} ${earnings.days === 0 ? '当日' : `あと${earnings.days}日`}` : null;
-  const axisLimit = earningsText ? W - width(earningsText) - 10 : W;
-  let previousRight = -Infinity;
-  for (const tick of dateTicks(bars, pw)) {
-    const tx = x(tick.i), w = width(tick.label, true), left = Math.min(Math.max(0, tx - w / 2), pw - w);
-    F.push(`<line x1="${tx.toFixed(1)}" x2="${tx.toFixed(1)}" y1="${volTop + volH}" y2="${volTop + volH + 4}" class="bc-tick"/>`);
-    if (left < previousRight + 8 || left + w > axisLimit) continue;
-    previousRight = left + w;
-    F.push(text(left.toFixed(1), H - 4, tick.label, `bc-axis bc-date${tick.label.includes('/') && !tick.mid ? ' bc-date-year' : ''}`, mono));
+  // The RS line's new high: a dot on its last point and the tag 「RS新高値」 in the axis column beside it.
+  const rsColumn = [];
+  if (model.rsNewHigh && rsLast != null) {
+    const body = 'RS新高値', w = Math.round(width(body) + 10), at = Math.min(Math.max(rsLast, rsTop + TAG_H / 2), rsTop + rsH - TAG_H / 2);
+    rsColumn.push([at - TAG_H / 2, at + TAG_H / 2]);
+    F.push(`<g class="bc-rshigh"><circle cx="${lastX}" cy="${rsLast.toFixed(1)}" r="3" class="bc-rsdot"/><line x1="${(lastX + 3).toFixed(1)}" y1="${rsLast.toFixed(1)}" x2="${pw + 2}" y2="${at.toFixed(1)}" class="bc-leader bc-rsleader"/><rect x="${pw + 2}" y="${(at - TAG_H / 2).toFixed(1)}" width="${w}" height="${TAG_H}" rx="4" class="bc-rstag-fill"/>${text(pw + 7, (at + 4).toFixed(1), body, 'bc-rstext', 'font-weight="700"')}</g>`);
   }
-  if (earningsText) F.push(text(W - 2, H - 4, earningsText, `bc-earnings${earnings.days <= 10 ? ' bc-earnings-soon' : ''}`, 'text-anchor="end" font-weight="700"'));
+  // The date axis: month ticks with the year where it starts or changes, and the next earnings date: outside the
+  // axis's right edge on a wide chart, as a compact flag 「E 10/10」 in the RS panel's axis column on a narrow one.
+  const earnings = earningsMarker(model.earnings);
+  const axisLimit = earnings && !narrow ? W - width(earnings.text) - 10 : W;
+  // Labels left to right, each 8px clear of the one before; when fewer than 3 fit, every month start and
+  // mid-month tick is tried instead (a phone keeps 3 dates or more on 3か月, 6か月 and 週足).
+  const placeTicks = list => {
+    let previousRight = -Infinity;
+    return list.map(tick => {
+      const tx = x(tick.i), w = width(tick.label, true), left = Math.min(Math.max(0, tx - w / 2), pw - w);
+      const shown = !(left < previousRight + 8 || left + w > axisLimit);
+      if (shown) previousRight = left + w;
+      return { ...tick, tx, left, shown };
+    });
+  };
+  let ticks = placeTicks(dateTicks(bars, pw));
+  if (ticks.filter(t => t.shown).length < 3) {
+    const dense = placeTicks(dateTicks(bars, pw, { dense: true }));
+    if (dense.filter(t => t.shown).length > ticks.filter(t => t.shown).length) ticks = dense.filter(t => t.shown);
+  }
+  for (const tick of ticks) {
+    F.push(`<line x1="${tick.tx.toFixed(1)}" x2="${tick.tx.toFixed(1)}" y1="${volTop + volH}" y2="${volTop + volH + 4}" class="bc-tick"/>`);
+    if (tick.shown) F.push(text(tick.left.toFixed(1), H - 4, tick.label, `bc-axis bc-date${tick.label.includes('/') && !tick.mid ? ' bc-date-year' : ''}`, mono));
+  }
+  if (earnings && !narrow) F.push(text(W - 2, H - 4, earnings.text, `bc-earnings${earnings.warn ? ' bc-earnings-soon' : ''}`, 'text-anchor="end" font-weight="700"'));
+  if (earnings && narrow) {
+    const w = Math.round(width(earnings.short, true) + 8), fh = 18;
+    let top = rsTop + rsH - fh;
+    if (rsColumn.some(([a, b]) => top < b && top + fh > a)) top = rsTop;
+    // A passed report's flag is dimmed with a dashed border (its 注記 key reads 「E 10/6＝決算 10/6 経過」).
+    F.push(`<g class="bc-earnflag${earnings.warn ? ' bc-earnings-soon' : ''}${earnings.past ? ' is-past' : ''}" data-full="${esc(earnings.text)}"><title>${esc(earnings.text)}</title><rect x="${pw + 2}" y="${top}" width="${w}" height="${fh}" rx="4" class="bc-earnflag-fill"/>${text(pw + 6, top + 13, esc(earnings.short), 'bc-earnings', `font-weight="700" ${mono}`)}</g>`);
+  }
   F.push(`<g class="bc-scrub" opacity="0"><line class="bc-cross" y1="${padT}" y2="${volTop + volH}"/><circle r="4" class="bc-crossdot"/></g><g class="bc-hover" opacity="0"><line class="bc-crossh" x1="0" x2="${pw}"/><rect x="${pw + 2}" width="${right - 4}" height="${TAG_H}" rx="4" class="bc-ylabel-fill"/>${text(pw + 7, 0, '', 'bc-ylabel', `font-weight="700" ${mono}`)}</g><rect class="bc-hit" x="0" y="0" width="${pw}" height="${volTop + volH}" fill="transparent"/>`);
 
   const box = `viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false"`;
   const depths = (model.legs || []).map(leg => `${Math.round(leg.depthPct)}%`).join('→');
   el.setAttribute('role', 'img');
-  el.setAttribute('aria-label', `${model.symbol} の${unit}足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${hasPivot ? `、ピボット ${fmt(model.pivot)}` : '、ピボット 未確認'}${finite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : model.legsValid === false ? '、収縮は未確認' : ''}${(model.sellMarks || []).some(m => barOf(m.date) !== undefined) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => barOf(m.date) !== undefined).map(m => m.date).join('・')}` : ''}${rsKnown.length > 1 ? '。RS線（株価÷S&P 500。RS推計やIBD RSとは別）を表示' : `。RS線 未配信${model.rsReason ? `（${model.rsReason}）` : ''}`}${earningsText ? `。${earningsText}` : ''}。`);
-  el.innerHTML = `<svg class="bc-layer" ${box}>${B.join('')}</svg><div class="bc-reveal"><svg class="bc-layer" ${box}>${M.join('')}</svg></div><svg class="bc-layer" ${box}>${F.join('')}</svg>`;
+  el.setAttribute('aria-label', `${model.symbol} の${unit}足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${hasPivot ? `、ピボット ${fmt(model.pivot)}` : '、ピボット 未確認'}${finite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : model.legsValid === false ? '、収縮は未確認' : ''}${(model.sellMarks || []).some(m => barOf(m.date) !== undefined) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => barOf(m.date) !== undefined).map(m => m.date).join('・')}` : ''}${breakout ? `、ピボットを上抜けた日 ${breakout.date}${breakout.label ? `（${breakout.label}）` : ''}` : ''}${rsKnown.length > 1 ? `。RS線（株価÷S&P 500。RS推計やIBD RSとは別）を表示${model.rsNewHigh && rsLast != null ? '、RS新高値' : ''}` : `。RS線 未配信${model.rsReason ? `（${model.rsReason}）` : ''}`}${earnings ? `。${earnings.text}` : ''}。`);
+  el.innerHTML = `<svg class="bc-layer" ${box}>${B.join('')}</svg><div class="bc-reveal"><svg class="bc-layer" ${box}>${M.join('')}</svg></div><svg class="bc-layer" ${box}>${F.join('').replaceAll(CUT, cuts.length ? ` mask="url(#${uid}-cut)"` : '')}</svg>`;
   const [back, reveal, front] = el.children, mid = reveal.firstChild;
 
   // Scrubbing: a touch or a drag (or the mouse) selects the bar under the pointer; the readout above the chart
@@ -398,6 +608,8 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     if (!group || !tagGroup || !finite(value)) return;
     stopController?.abort(); stopController = new AbortController();
     const line = group.querySelector('line'), label = group.querySelector('text');
+    // The stop's name leaves its place: the cut under it goes too.
+    front.querySelector('mask rect[data-for="stop"]')?.remove();
     const def = tagDefs.find(d => d.key === 'stop'); def.value = Math.max(lo * 0.5, value);
     const placed = layoutTags();
     const targets = placed.map(tag => ({ tag, group: front.querySelector(`[data-tag="${tag.key}"]`) })).filter(t => t.group);
@@ -436,7 +648,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     const score = ([x0, y0]) => {
       const x1 = x0 + w, y1 = y0 + h, across = (a0, a1, b0, b1) => a1 > b0 && a0 < b1;
       let total = bars.reduce((sum, b, i) => sum + (across(x(i) - bw / 2, x(i) + bw / 2, x0, x1) && across(y(b.high), y(b.low), y0, y1) ? 1 : 0), 0);
-      total += lines.filter(ly => ly >= y0 && ly <= y1).length * 4 + boxes.filter(b => across(b.x0, b.x1, x0, x1) && across(b.y - 6, b.y + 6, y0, y1)).length * 8;
+      total += lines.filter(ly => ly >= y0 && ly <= y1).length * 4 + placer.boxes.filter(b => across(b.x0, b.x1, x0, x1) && across(b.y0, b.y1, y0, y1)).length * 8;
       if (noticeBox && across(noticeBox.x0, noticeBox.x1, x0, x1) && across(noticeBox.y0, noticeBox.y1, y0, y1)) total += 500;
       if (current !== null && across(x(current) - 6, x(current) + 6, x0, x1)) total += 1000;
       return total;
@@ -463,6 +675,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   legGroups.forEach((group, i) => {
     const rect = group.querySelector('rect'), height = Number(rect.dataset.h), leg = Number(group.dataset.leg), depth = legTexts.find(e => Number(e.dataset.i) === leg), label = tTexts.find(e => Number(e.dataset.leg) === leg);
     tween(420 * k, p => { group.style.opacity = Math.min(1, p * 2); rect.setAttribute('height', Math.max(1, height * p)); if (label) label.style.opacity = p; if (depth) { depth.style.opacity = p; depth.textContent = `−${Math.round(Number(depth.dataset.depth) * p)}%`; } }, { delay: legStart + i * legGap, signal });
+    // A combined 「T2 −7%」 keeps its text; it fades in with its box.
   });
   fade(all$(back, '.bc-lows'), 420 * k, legStart + legGroups.length * legGap + 120 * k);
   const pivot = front.querySelector('.bc-pivot'), after = sweepAt + sweep + 80 * k;
@@ -473,7 +686,8 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   all$(front, '.bc-tag').forEach((group, i) => tween(380 * k, t => { group.style.opacity = Math.min(1, t); group.style.transform = `translateX(${(1 - t) * 14}px)`; }, { delay: after + 200 * k + i * 90 * k, easing: easeBack, signal }));
   fade(all$(front, '.bc-stop, .bc-planline, .bc-high52, .bc-levelnote, .bc-malabel'), 360 * k, after + 160 * k);
   fade(all$(front, '.bc-note'), 380 * k, legStart + legGroups.length * legGap + 200 * k, 4);
-  fade(all$(front, '.bc-rshigh'), 380 * k, after + 420 * k);
+  fade(all$(front, '.bc-rshigh, .bc-earnflag'), 380 * k, after + 420 * k);
+  fade(all$(front, '.bc-breakout'), 300 * k, after + 480 * k);
   fade(all$(front, '.bc-sell'), 300 * k, after + 480 * k);
   fade(all$(front, '.bc-last'), 300 * k, after + 340 * k).then(() => front.classList.add('bc-pulsing'));
   return controller;

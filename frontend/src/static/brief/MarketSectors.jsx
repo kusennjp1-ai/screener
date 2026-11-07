@@ -1,6 +1,6 @@
 import MetricDisclosure from '../components/MetricDisclosure';
 import { shortDate } from './briefModel';
-import { sectorRanks } from './marketTabModel';
+import { sectorRanks } from './marketTabHistory';
 
 /**
  * Sector ETFs ranked by this app's own relative strength (相対力: never called RS, which on this app is the

@@ -16,7 +16,11 @@ from app.analysis.patterns.detectors.vcp import VCPDetector
 
 
 def default_pattern_detectors() -> tuple[PatternDetector, ...]:
-    """Return the default v1 detector set in stable execution order."""
+    """Return the default v1 detector set in stable execution order.
+
+    ``DoubleBottomDetector`` is a stub that only reports ``not_implemented``; it is
+    not part of the default set (it stays importable for when it is implemented).
+    """
     return (
         CupWithHandleDetector(),
         ThreeWeeksTightDetector(),
@@ -24,7 +28,6 @@ def default_pattern_detectors() -> tuple[PatternDetector, ...]:
         FirstPullbackDetector(),
         VCPDetector(),
         NR7InsideDayDetector(),
-        DoubleBottomDetector(),
     )
 
 

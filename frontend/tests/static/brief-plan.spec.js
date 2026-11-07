@@ -5,7 +5,7 @@
 // stock's structural stop, keeps the keyboard focus and never sets another stock's stop; a stock beyond
 // the buy zone gets no plan, and the chart draws no stop for it.
 import { test, expect } from '@playwright/test';
-import { openBrief, horizontalOverflow, SEC_SYMBOL } from './brief-fixture.js';
+import { openBrief, horizontalOverflow, rowBySymbol, SEC_SYMBOL } from './brief-fixture.js';
 
 const phone = (width, height = 844) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
@@ -15,6 +15,11 @@ const chartReady = page => expect(page.getByTestId('brief-price-chart').locator(
 // both measured 315.8). Round 1 lets it grow by at most 80px (the stock screen's position-plan allowance).
 const STEP0_PLAN_HEIGHT = 316;
 const PLAN_ALLOWANCE = 80;
+// Round 2: the plan card at 390×844 on db8e297 (the round-2 step 0, CI-faithful): ZZNV 368.8, ZZSD 391.2, ZZHW 391.2 (also
+// under DEEP's pivot). Verdict may grow it by at most 40px (plan §3), and keeps rule 9's 12px of headroom under that.
+const R2_STEP0_PLAN = { [SEC_SYMBOL]: 368.8, ZZSD: 391.2, ZZHW: 391.2 };
+const R2_PLAN_ALLOWANCE = 40;
+const HEADROOM = 12;
 const planHeight = page => plan(page).evaluate(node => node.getBoundingClientRect().height);
 /** Lines a text box takes at its line height. */
 const lineCount = locator => locator.evaluate(node => Math.round(node.getBoundingClientRect().height / parseFloat(getComputedStyle(node).lineHeight)));
@@ -59,6 +64,7 @@ test.describe('the plan card on a phone', () => {
     await expect(button).toBeVisible();
     await settled(page);
     expect(await planHeight(page), 'plan card height').toBeLessThanOrEqual(STEP0_PLAN_HEIGHT + PLAN_ALLOWANCE);
+    expect(await planHeight(page), 'plan card height, round 2').toBeLessThanOrEqual(R2_STEP0_PLAN[symbol] + R2_PLAN_ALLOWANCE - HEADROOM);
     // Shares, their limit, the cost, the market guide and the R bar's prices stay out of the folds.
     await expect(plan(page).locator('.brief-kgrid > div small')).toHaveText(['株数', '投資額', '地合いの目安']);
     await expect(plan(page).getByTestId('brief-shares')).toBeVisible();
@@ -185,6 +191,114 @@ test.describe('the plan card at 320px', () => {
     await expect(plan(page).locator('.brief-kgrid > div em').first()).toHaveText(/^上限25%・実リスク/);
     await settled(page);
     expect(await outside(page)).toEqual([]);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 2 (verdict): the stop against the base (VD5), the market as the plan's 参考 reason (VD3) and the
+// exposure tile (VD10). ZZHW waits under a pivot moved up 4.5% above its price, so its 7% stop sits inside the
+// last contraction and its structural stop is deeper than 8%; ZZNV with a 3% stop setting is green with its stop inside.
+const DEEP = { rows: rows => { const row = rows.find(r => r.symbol === 'ZZHW'); row.se_pivot_price = Math.round(rowBySymbol.ZZHW.current_price * 1.045 * 100) / 100; } };
+const TIGHT_STOP = { 'brief-plan': { account: 50000, riskPercent: 1.25, stopPercent: 3, capPercent: 25 } };
+const warnings = page => plan(page).locator('.brief-plan-warn li');
+const HOLD_MARKET = { rows: rows => { for (const row of rows) row.market_above_50dma = false; } };
+
+test.describe('round 2: the plan card on a phone', () => {
+  test.use({ ...phone(390), contextOptions: { reducedMotion: 'reduce' } });
+
+  /** Lines an element's visible text takes (assistive-only text skipped), and the slack after its widest line. */
+  const fitOf = locator => locator.evaluate(node => {
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT), lines = new Map();
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) {
+      if (text.parentElement.closest('.sr-only')) continue;
+      const range = document.createRange(); range.selectNodeContents(text);
+      for (const rect of range.getClientRects()) if (rect.width > 1) { const top = Math.round(rect.top), line = lines.get(top) || [Infinity, -Infinity]; lines.set(top, [Math.min(line[0], rect.left), Math.max(line[1], rect.right)]); }
+    }
+    const width = node.getBoundingClientRect().width;
+    return { lines: lines.size, slack: Math.min(...[...lines.values()].map(([left, right]) => width - (right - left))) };
+  });
+
+  test('warns in one ext line when the stop sits inside the last contraction, and on the structural stop\'s line when it is deeper than 8%', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZHW', { mutate: DEEP });
+    await chartReady(page);
+    await expect(warnings(page)).toHaveCount(1);
+    await expect(warnings(page)).toHaveText(/^損切りが収縮の中（安値 \d+\.\d{2} より上・独自判定）。通常の値動きで刈られやすい位置です$/);
+    const deep = plan(page).locator('.brief-structural[data-deep="true"]');
+    await expect(deep.locator('small')).toHaveText(/^−[89]\.\d%：8%超で見送り候補（独自設定）（ピボットでの買いはリスクが大きい）$/);
+    await expect(deep).toHaveClass(/tone-ext/);
+    await settled(page);
+    // Each one line at 390 with 6px of slack: the warning on the card's width, the depth beside the 44px button.
+    for (const [name, node] of [['inside', warnings(page)], ['deep', deep.locator('small')]]) {
+      const fit = await fitOf(node);
+      expect(fit.lines, name).toBe(1);
+      expect(fit.slack, `${name} slack`).toBeGreaterThanOrEqual(6);
+    }
+    // The ext tone at the 12px floor; the stop is never moved by itself.
+    const style = await plan(page).locator('.brief-plan-warn').evaluate(node => { const s = getComputedStyle(node), probe = document.createElement('span'); probe.style.color = 'var(--ext)'; node.append(probe); const ext = getComputedStyle(probe).color; probe.remove(); return [parseFloat(s.fontSize), s.color === ext]; });
+    expect(style).toEqual([12, true]);
+    await expect(plan(page).locator('summary').first()).toContainText('損切り 7.0%');
+    expect(await smallText(page)).toEqual([]);
+    expect(await shortTargets(page)).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  // §3's +40 for the plan card, with rule 9's 12px of headroom, in the states that warn: ZZHW's own 7% stop inside its
+  // last contraction (one warning) and DEEP (the warning and the deep structural stop).
+  for (const [name, mutate] of [['ZZHW', undefined], ['ZZHW under DEEP', DEEP]]) test(`${name}: the plan card grows at most ${R2_PLAN_ALLOWANCE - HEADROOM}px over step 0 at 390px with its warnings`, async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZHW', mutate ? { mutate } : {});
+    await chartReady(page);
+    await expect(warnings(page)).toHaveCount(1);
+    await settled(page);
+    expect(await planHeight(page)).toBeLessThanOrEqual(R2_STEP0_PLAN.ZZHW + R2_PLAN_ALLOWANCE - HEADROOM);
+    expect(errors).toEqual([]);
+  });
+
+  test('the conclusion\'s stop tile says 収縮の中 with no added height while the call stays green', async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { storage: TIGHT_STOP });
+    await chartReady(page);
+    const call = page.getByTestId('brief-conclusion');
+    await expect(call).toHaveClass(/tone-zone/);
+    await expect(warnings(page)).toHaveCount(1);
+    const tiles = call.locator('.brief-kgrid > div');
+    await expect(tiles.nth(1).locator('.brief-tilequal')).toHaveText('収縮の中');
+    await expect(tiles.nth(1).locator('.brief-tilequal')).toHaveClass(/tone-ext/);
+    const heights = await tiles.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
+    expect(new Set(heights).size).toBe(1);
+    expect(errors).toEqual([]);
+  });
+
+  test('a market that holds off new buying makes the plan 参考（地合い） and its guide 試算のみ', async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { mutate: HOLD_MARKET });
+    await chartReady(page);
+    await expect(plan(page).getByRole('heading', { level: 2 })).toContainText('・参考（地合い）');
+    await expect(plan(page).locator('.brief-kgrid > div').nth(2)).toContainText('試算のみ');
+    expect(errors).toEqual([]);
+  });
+
+  test('the exposure tile keeps its height: the share in short, the count in the terms', async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
+    await chartReady(page);
+    const tile = plan(page).locator('.brief-kgrid > div').nth(2);
+    await expect(tile.locator('em .brief-frag')).toHaveText([/^目安の\d+%$/]);
+    const heights = await plan(page).locator('.brief-kgrid > div').evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
+    expect(new Set(heights).size).toBe(1);
+    await plan(page).locator('summary').first().click();
+    await expect(plan(page).getByTestId('brief-plan-exposure')).toHaveText(/^この1銘柄で目安の\d+%・同じ大きさなら目安内に\d+銘柄（保有分は未登録のため含まず）。$/);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('round 2: the plan card at 320px', () => {
+  test.use({ ...phone(320, 760), contextOptions: { reducedMotion: 'reduce' } });
+  test('with both stop warnings, nothing leaves the card or is cut off, and text stays 12px or more', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZHW', { mutate: DEEP });
+    await chartReady(page);
+    await expect(warnings(page)).toHaveCount(1);
+    await expect(plan(page).locator('.brief-structural[data-deep="true"]')).toBeVisible();
+    await settled(page);
+    expect(await outside(page)).toEqual([]);
+    expect(await smallText(page)).toEqual([]);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

@@ -15,7 +15,8 @@ import './brief-decision.css';
 import './brief-plan.css';
 import './brief-watch.css';
 import { useBriefData, useWatchlist, useWatchSellChecks } from './useBriefData';
-import { candidateView, focusCandidates, LIST_FILTERS } from './briefCandidate';
+import { filterLabel, focusCandidates, memoCandidateView } from './briefCandidate';
+import { freshness, freshnessLine } from './briefFreshness';
 import TodayView from './TodayView';
 import ListView, { listShown, listSource, watchOrder } from './ListView';
 import StockScreen from './StockScreen';
@@ -55,9 +56,42 @@ function Tabs({ current, watchCount, go }) {
   </nav>;
 }
 
+/**
+ * The publication's age (briefFreshness) for the bar, re-read when it can next change (a session's close or
+ * the end of its grace), so an open page turns stale without a reload.
+ */
+function useFreshness(trends, date) {
+  const [tick, setTick] = useState(0);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- tick re-reads the clock
+  const value = useMemo(() => freshness({ trends, date, now: Date.now() }), [trends?.data, trends?.loading, date, tick]);
+  useEffect(() => {
+    if (!Number.isFinite(value.next)) return undefined;
+    // At most 6 hours ahead (setTimeout's range, and a sleeping device's clock).
+    const timer = setTimeout(() => setTick(count => count + 1), Math.min(Math.max(value.next - Date.now(), 0) + 1000, 6 * 3600000));
+    return () => clearTimeout(timer);
+  }, [value.next]);
+  return value;
+}
+
+/**
+ * The bar's date line: 「分析基準日 10/2（金）引け・米国株」, or once the publication is late 「…引け・2営業日前」 in
+ * the warning tone with 「（10/5・10/6 未反映）」 where it fits (the rest of the line is clipped, never the
+ * page: brief-watch.css), or 「…・鮮度未確認」 without a valid exchange calendar. The whole sentence stays in
+ * the accessible text.
+ */
+function BarDate({ brief, line }) {
+  if (!brief.date) return <span className="numeric">分析基準日 {brief.manifest.isLoading || brief.bundle.isLoading ? '取得中' : '未確認'}</span>;
+  return <span className={`numeric brief-bar-date${line ? ` is-${line.tone}` : ''}`} data-testid="brief-bar-date">
+    <span className="brief-bar-age">分析基準日 <time dateTime={brief.date}>{barDay(brief.date)}</time>引け・{line ? line.age : '米国株'}</span>
+    {line?.detail ? <span className="brief-bar-missing">{line.detail}</span> : null}
+  </span>;
+}
+
 export default function BriefApp() {
   const brief = useBriefData();
   const { watch, toggle, storageError } = useWatchlist();
+  const age = useFreshness(brief.trends, brief.date);
+  const ageLine = useMemo(() => freshnessLine(age, brief.date), [age, brief.date]);
   const location = useLocation();
   const wide = useMediaQuery('(min-width:1024px)');
   const go = useTransitionNavigate();
@@ -82,7 +116,11 @@ export default function BriefApp() {
   // know; once the rows that came with the data are committed, the screen animates list changes again.
   const loaded = Boolean(brief.bundle.data);
   const [entrance, setEntrance] = useState({ view, loaded });
-  if (entrance.view !== view) setEntrance({ view, loaded });
+  // At 1024px and wider a tab switch changes only the left column (as briefNav skips the page transition there):
+  // once the screen has switched, a new column appears in place, without the rows' rise (brief-watch.css), so
+  // its first frames paint the rows and not an animation.
+  const [switched, setSwitched] = useState(false);
+  if (entrance.view !== view) { setEntrance({ view, loaded }); if (wide && !switched) setSwitched(true); }
   const animate = entrance.view === view ? entrance.loaded : loaded;
   useEffect(() => { if (loaded && entrance.view === view && !entrance.loaded) setEntrance({ view, loaded: true }); }, [loaded, entrance, view]);
   const [listState, setListState] = useState({ filter: 'zone', sort: 'priority', query: '' });
@@ -93,13 +131,13 @@ export default function BriefApp() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const watchViews = useMemo(() => (from === 'watch' ? listShown(listSource(brief, 'watch', watch), 'watch', listState) : null), [from, brief.bundle.data, brief.date, watch, listState]);
   const watchSells = useWatchSellChecks(watchViews, brief);
-  const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date) : from === 'watch' ? watchOrder(watchViews, watchSells) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
+  const sequence = useMemo(() => (from === 'today' || from === 'market' ? focusCandidates(brief.ranked, brief.date, 5, brief.bundle.data) : from === 'watch' ? watchOrder(watchViews, watchSells) : listShown(listSource(brief, from, watch), from, listState)).map(v => v.symbol),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [from, brief.bundle.data, brief.ranked, brief.date, watch, listState, watchViews, watchSells]);
   // The list the stock screen steps through, as the dock (listName) and the end-of-list message (listCount)
   // name it. From Today (and the market tab) it is Today's top focus rows, never the whole focus pool.
   const focusTop = from === 'today' || from === 'market';
-  const listName = focusTop ? '注目候補（上位）' : from === 'watch' ? 'ウォッチ' : LIST_FILTERS[listState.filter]?.label || '候補';
+  const listName = focusTop ? '注目候補（上位）' : from === 'watch' ? 'ウォッチ' : filterLabel(listState.filter, brief.date) || '候補';
   const listCount = focusTop ? `注目候補の上位${sequence.length}件` : `${listName}${sequence.length}件`;
   // Desktop keeps the stock pane on the same stock across tab switches while that stock is in
   // the new list, so switching tabs does not redraw a different chart.
@@ -181,7 +219,7 @@ export default function BriefApp() {
     s.el.style.transition = ''; s.el.style.transform = ''; s.el.style.opacity = '';
     if (Math.abs(s.dx) > 80) step(s.dx < 0 ? 1 : -1);
   };
-  const barView = useMemo(() => { const item = symbol && (brief.bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol); return item ? candidateView(item, brief.date) : null; }, [symbol, brief.bundle.data, brief.date]);
+  const barView = useMemo(() => { const item = symbol && (brief.bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol); return item ? memoCandidateView(item, brief.date, brief.bundle.data) : null; }, [symbol, brief.bundle.data, brief.date]);
   // Today's links: a list with a filter and no search (「ピボット接近 N銘柄」 near, 「すべての候補」 all, the
   // 注目候補 tile the hidden focus filter), the market tab and the watch tab.
   const showList = useCallback(filter => { setListState(state => ({ ...state, filter, query: '' })); setListLimits(state => ({ ...state, list: undefined })); go('/brief/list', { kind: 'tab' }); }, [go]);
@@ -190,7 +228,7 @@ export default function BriefApp() {
     const idle = window.requestIdleCallback ? window.requestIdleCallback(() => loadMarketScreen().catch(() => {}), { timeout: 4000 }) : setTimeout(() => loadMarketScreen().catch(() => {}), 1500);
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
   }, []);
-  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} wide={wide} nav={todayNav} onUnwatch={toggleWatch} />
+  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} wide={wide} nav={todayNav} onUnwatch={toggleWatch} ageNote={ageLine?.note || null} />
     : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} limits={listLimits} setLimits={setListLimits} origin={kept} wide={wide} onUnwatch={toggleWatch} />;
   const watching = symbol && watch.includes(symbol);
   const at = selected ? sequence.indexOf(selected) : -1;
@@ -201,11 +239,14 @@ export default function BriefApp() {
       {view === 'stock' && !wide ? <>
         <button type="button" className="brief-iconbutton" aria-label="戻る" onClick={() => back(from)}>{ICON.back}</button>
         {/* The ☆ lives in the dock, beside the list position. */}
-        <div className="brief-bar-title"><b><span style={{ viewTransitionName: 'brief-ticker' }}>{symbol}</span><BarQuote view={barView} /></b><span>{barView ? `${barView.name}${barView.sector ? `・${barView.sector}` : ''}` : brief.bundle.data ? '分析対象外' : '読み込み中…'}</span></div>
+        {/* The second line names the stock; a late publication puts its age first, in the warning tone (the whole
+            sentence for assistive tech). An unknown age is said on the other screens' bars, not here. */}
+        <div className="brief-bar-title"><b><span style={{ viewTransitionName: 'brief-ticker' }}>{symbol}</span><BarQuote view={barView} /></b><span>{ageLine?.tone === 'warn' && brief.date
+          ? <><span className="brief-bar-stale">{ageLine.age}</span><span className="sr-only">（分析基準日 {barDay(brief.date)}引け、{ageLine.detail.slice(1, -1)}）</span>・</> : null}{barView ? `${barView.name}${barView.sector ? `・${barView.sector}` : ''}` : brief.bundle.data ? '分析対象外' : '読み込み中…'}</span></div>
       </> : <>
         {/* The phone's Today hides the hero date, so the bar alone says the analysis date (with its weekday), or
             one that could not be read: 未確認, never 取得中 for good. */}
-        <div className="brief-bar-title"><b>米国株スクリーナー</b><span className="numeric">分析基準日 {brief.date ? <><time dateTime={brief.date}>{barDay(brief.date)}</time>引け・米国株</> : brief.manifest.isLoading || brief.bundle.isLoading ? '取得中' : '未確認'}</span></div>
+        <div className="brief-bar-title"><b>米国株スクリーナー</b><BarDate brief={brief} line={ageLine} /></div>
       </>}
       <ThemeToggle />
     </header>
@@ -213,8 +254,8 @@ export default function BriefApp() {
     {wide ? view === 'market' ? <main id="brief-main" tabIndex={-1} className="brief-desk is-market">
       <div className="brief-left"><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
     </main> : <main id="brief-main" tabIndex={-1} className="brief-desk">
-      <div className="brief-left"><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
-      <div className="brief-right" aria-label="選択中の銘柄">{selected ? <StockScreen brief={paneBrief} symbol={selected} watch={watch} onToggleWatch={toggleWatch} step={paneStep} wide /> : <p className="brief-note brief-pad">銘柄を選ぶと、ここに結論とチャートを表示します。</p>}</div>
+      <div className={`brief-left${switched ? ' is-switched' : ''}`}><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
+      <div className="brief-right" aria-label="選択中の銘柄">{selected ? <StockScreen brief={paneBrief} symbol={selected} watch={watch} onToggleWatch={toggleWatch} step={paneStep} wide ageLine={ageLine} /> : <p className="brief-note brief-pad">銘柄を選ぶと、ここに結論とチャートを表示します。</p>}</div>
     </main> : <main id="brief-main" tabIndex={-1} className="brief-main" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
       <div className="brief-stack">{view === 'stock' ? <StockScreen brief={brief} symbol={symbol} watch={watch} onToggleWatch={toggleWatch} step={step} /> : left}</div>
     </main>}

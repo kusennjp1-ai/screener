@@ -213,3 +213,59 @@ def test_aggregator_falls_back_when_no_candidate_meets_confidence_floor():
     assert result.pattern_primary == "detector_low_confidence"
     assert "primary_pattern_fallback_selected" in result.passed_checks
     assert "primary_pattern_below_confidence_floor" in result.failed_checks
+
+
+def test_default_detector_set_holds_no_double_bottom_stub():
+    """The DoubleBottom stub only reports not_implemented; it left the default set in round 2."""
+    from app.analysis.patterns.detectors import DoubleBottomDetector, default_pattern_detectors
+
+    detectors = default_pattern_detectors()
+    assert not any(isinstance(detector, DoubleBottomDetector) for detector in detectors)
+    assert "double_bottom" not in {detector.name for detector in detectors}
+    assert [type(detector).__name__ for detector in detectors] == [
+        "CupWithHandleDetector",
+        "ThreeWeeksTightDetector",
+        "HighTightFlagDetector",
+        "FirstPullbackDetector",
+        "VCPDetector",
+        "NR7InsideDayDetector",
+    ]
+    # The stub stays importable for when it is implemented.
+    assert DoubleBottomDetector().name == "double_bottom"
+
+
+def test_detector_checks_are_kept_apart_from_the_readiness_checks():
+    """Round 2: a detector's own failed checks (named after it) go to detector_failed_checks;
+    failed_checks keeps the aggregator's primary-pattern checks, the policy's and detector errors."""
+
+    class _Miss(PatternDetector):
+        name = "detector_miss"
+
+        def detect(self, detector_input, parameters):
+            del detector_input, parameters
+            return PatternDetectorResult.no_detection(self.name, failed_checks=("beta_miss",))
+
+    class _Short(PatternDetector):
+        name = "detector_short"
+
+        def detect(self, detector_input, parameters):
+            del detector_input, parameters
+            return PatternDetectorResult.insufficient_data(self.name)
+
+    class _Broken(PatternDetector):
+        name = "detector_broken"
+
+        def detect(self, detector_input, parameters):
+            del detector_input, parameters
+            raise RuntimeError("boom")
+
+    agg = SetupEngineAggregator(detectors=[_Miss(), _Short(), _Broken()])
+    result = agg.aggregate(_detector_input(), parameters=DEFAULT_SETUP_ENGINE_PARAMETERS)
+
+    assert result.detector_failed_checks == (
+        "detector_miss:not_detected",
+        "detector_miss:beta_miss",
+        "detector_short:insufficient_data",
+    )
+    assert result.failed_checks == ("detector_broken:error", "no_primary_pattern")
+    assert "insufficient_data" not in result.failed_checks
