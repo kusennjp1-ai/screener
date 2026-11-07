@@ -2,11 +2,11 @@ import { describe, expect, it, vi } from 'vitest';
 import { chartContentKey, chartCrossing, chartNotes, chartReadout, crossingNote, earningsMarker, chartSeries, ema, formatPercent, formatPrice, formatShares, formatVolume, heavyVolumeBars, shortAveragesDrawn, shortAveragesShown, priceInRange, weeklyBars, weeklyRangeLabel } from './chartReadout';
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { ADR_SESSIONS, adrPercent } from './positionSizing';
-import { lastPivotCrossing } from './breakoutHistory';
+import { lastPivotCrossing, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
 
 // The crossing helper is verdict's (breakoutHistory.js, VD1/VD2 write its round-2 body): mocked here, so these
 // tests pin how the chart reads it whatever body it has (plan §2.2 step-0 amendment).
-vi.mock('./breakoutHistory', () => ({ lastPivotCrossing: vi.fn() }));
+vi.mock('./breakoutHistory', async importOriginal => ({ ...await importOriginal(), lastPivotCrossing: vi.fn() }));
 
 // Weekdays only, so weekly bars are whole Monday-to-Friday weeks.
 const sessions = count => { const out = []; for (let i = 0; out.length < count; i++) { const d = new Date(Date.UTC(2026, 0, 5) + i * 86400000); if (d.getUTCDay() % 6) out.push(d.toISOString().slice(0, 10)); } return out; };
@@ -216,12 +216,15 @@ describe('the pivot crossing the chart marks', () => {
     expect(chartCrossing(null, pivot)).toBeNull();
     expect(chartCrossing(list, null)).toBeNull();
     expect(lastPivotCrossing).not.toHaveBeenCalled();
-    // A close at the pivot's cents is a touch (「ピボット到達」), not a breakout: not marked, even a fraction above.
-    expect(chartCrossing(list, list[117].close)).toBeNull();
-    const fraction = list.map((bar, i) => (i === 117 ? { ...bar, close: 100.004 } : bar));
-    expect(chartCrossing(fraction, 100)).toBeNull();
-    const tenth = list.map((bar, i) => (i === 117 ? { ...bar, close: 110.744 } : bar));
-    expect(chartCrossing(tenth, 110.74)).toBeNull();
+    // A close at the pivot's cents is a touch (「ピボット到達」), not a breakout: not marked, even a fraction above, when
+    // every close since stays at or falls under the pivot.
+    const touchOnly = (level, close) => list.map((bar, i) => (i === 117 ? { ...bar, close } : i > 117 ? { ...bar, close: level - 1 } : bar));
+    expect(chartCrossing(touchOnly(list[117].close, list[117].close), list[117].close)).toBeNull();
+    expect(chartCrossing(touchOnly(100, 100.004), 100)).toBeNull();
+    expect(chartCrossing(touchOnly(110.74, 110.744), 110.74)).toBeNull();
+    // A touch followed by a close above the pivot: the mark goes on that close (breakoutBar), with its own ratio.
+    const touchThenAbove = list.map((bar, i) => (i === 117 ? { ...bar, close: 100 } : i > 117 ? { ...bar, close: 101 } : bar));
+    expect(chartCrossing(touchThenAbove, 100)).toMatchObject({ date: list[118].date, sessionsAgo: 1 });
     // A crossing on the analysis day (sessionsAgo 0) and one followed by a close back under are marked.
     lastPivotCrossing.mockReturnValue({ index: 119, date: list[119].date, sessionsAgo: 0, volumeRatio: null });
     expect(chartCrossing(list, list[119].close - 1)).toEqual({ date: list[119].date, sessionsAgo: 0, volumeRatio: null, tone: 'neutral', reason: 'volume_unknown' });
@@ -229,6 +232,16 @@ describe('the pivot crossing the chart marks', () => {
     expect(chartCrossing(list, list[110].close - 0.01)).toMatchObject({ date: list[110].date, sessionsAgo: 9, volumeRatio: null });
     lastPivotCrossing.mockReturnValue(null);
     expect(chartCrossing(list, pivot)).toBeNull();
+  });
+
+  it('turns the arrow grey once the breakout is older than the stale window (STALE_BREAKOUT_SESSIONS, the conclusion\'s 停滞), and says so in the 注記', () => {
+    const at = { index: 117, date: list[117].date, volumeRatio: 1.62 };
+    lastPivotCrossing.mockReturnValue({ ...at, sessionsAgo: STALE_BREAKOUT_SESSIONS });
+    expect(chartCrossing(list, pivot - 0.5)).toMatchObject({ tone: 'zone', reason: null });
+    lastPivotCrossing.mockReturnValue({ ...at, sessionsAgo: STALE_BREAKOUT_SESSIONS + 1 });
+    const stale = chartCrossing(list, pivot - 0.5);
+    expect(stale).toMatchObject({ tone: 'neutral', reason: 'stale', volumeRatio: 1.62 });
+    expect(crossingNote(stale)).toBe(`灰色の矢印＝終値がピボットを上抜けた日（上抜けから${STALE_BREAKOUT_SESSIONS}営業日を超えた（独自判定）。検証済みの日足）`);
   });
 
   it('is green only on a 1.4× crossing whose latest certified close is still at or above the pivot, grey otherwise', () => {

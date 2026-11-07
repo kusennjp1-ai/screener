@@ -3,7 +3,7 @@
 import { finite } from '../researchEngine';
 import { signed } from '../positionGeometry';
 import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
-import { pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
+import { breakoutBar, pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
 import { shortDate } from './briefShared';
 
 // Sell-side checks after an advance. The ideas (selling into strength on a climax run,
@@ -135,6 +135,8 @@ const cents = value => Math.round(value * 100);
  * sessions before it) is missing, with no heavy one: 'unknown', never clear. Without a pivot there is no
  * breakout to fail: null, and sellSignals lists no such check (the strength checks say why for the pivot). The
  * hit's date is the chart's mark; it carries the crossing's date and ratio, and `headline` is the watch row's short form.
+ * A crossing that closed at the pivot's cents is a touch: its breakout is the first later close above the pivot
+ * (breakoutBar), dated and judged on that bar; a touch that fell back without one is no breakout.
  */
 function failedBreakoutCheck(list, view, rules) {
   const base = { key: 'failedBreakout', label: `出来高を伴う上抜け後のピボット割れ（${ratioText(rules.breakVolumeRatio)}以上・${rules.failedBreakoutSessions}営業日以内・ブレイク失敗）` };
@@ -142,7 +144,9 @@ function failedBreakoutCheck(list, view, rules) {
   if (!finite(pivot) || pivot <= 0) return null;
   const distance = (last.close / pivot - 1) * 100;
   if (cents(last.close) >= cents(pivot)) return { ...base, state: 'clear', detail: `終値はピボットの上（ピボット比 ${signed(distance)}）` };
-  const crossings = pivotCrossings(list, pivot, { lookback: rules.failedBreakoutSessions });
+  // Each crossing's breakout (breakoutBar): a close at the pivot's cents is a touch, so the breakout is the first close
+  // above it, with that bar's volume; a touch that fell back under the pivot without one is no breakout to fail.
+  const crossings = pivotCrossings(list, pivot, { lookback: rules.failedBreakoutSessions }).map(c => breakoutBar(list, pivot, c)).filter(Boolean);
   const day = i => shortDate(list[i].date, last.date);
   if (!crossings.length) return { ...base, state: 'clear', detail: `直近${rules.failedBreakoutSessions}営業日にピボットの上抜けなし（終値はピボット比 ${signed(distance)}）` };
   const heavy = crossings.find(c => finite(c.volumeRatio) && c.volumeRatio >= rules.breakVolumeRatio);

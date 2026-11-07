@@ -346,6 +346,20 @@ describe('the failed breakout (ブレイク失敗, 独自判定)', () => {
     expect(check(make(Array(220).fill(95))).state).toBe('clear');
   });
 
+  it('takes a close at the pivot\'s cents as a touch: the breakout to fail is the first close above it, on its own volume', () => {
+    // A touch at exactly 100.00 on 2.2×, then back under: no breakout, so no failed breakout.
+    const touch = make([...Array(200).fill(95), 100, 98, 97], i => (i === 200 ? 22000 : 10000));
+    expect(check(touch)).toMatchObject({ state: 'clear', detail: '直近10営業日にピボットの上抜けなし（終値はピボット比 −3.0%）' });
+    // A heavy touch, a light close above, then back under: the breakout traded under 1.4×, so it is clear.
+    const light = make([...Array(200).fill(95), 100, 101, 98], i => (i === 200 ? 22000 : 10000));
+    expect(check(light)).toMatchObject({ state: 'clear', detail: expect.stringMatching(/の上抜けは出来高 0\.\d\d×（基準 1\.40×未満）/) });
+    // A light touch, then a heavy close above and back under: a failed breakout dated from that close.
+    const heavy = make([...Array(200).fill(95), 100, 102, 98], i => (i === 201 ? 22000 : 10000));
+    const hit = check(heavy);
+    expect(hit).toMatchObject({ state: 'hit', crossDate: heavy[201].date, date: heavy[202].date, sessions: 1 });
+    expect(hit.headline).toBe(`ブレイク失敗（${short(heavy[201].date)}上抜け）`);
+  });
+
   it('is unknown, never clear, when the crossing day\'s volume (or the 50 before it) is missing; absent without a pivot', () => {
     for (const volume of [i => (i === 200 ? null : 10000), i => (i === 200 ? 0 : 10000), i => (i === 180 ? null : 10000)]) {
       const unknown = check(failed([98], 2.2, { volume }));

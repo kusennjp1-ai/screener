@@ -4,7 +4,7 @@
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
 import { ADR_SESSIONS, adrState } from './positionSizing';
-import { lastPivotCrossing } from './breakoutHistory';
+import { breakoutBar, lastPivotCrossing, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
 
 const DAY = 86400000;
 const finite = Number.isFinite;
@@ -234,6 +234,7 @@ export function weeklyRangeLabel(bars) {
 
 /** Why a drawn crossing is grey, not green (chartCrossing's `reason`), for the 注記. */
 const CROSSING_REASONS = {
+  stale: `上抜けから${STALE_BREAKOUT_SESSIONS}営業日を超えた（独自判定）`,
   volume_unknown: 'その日の出来高倍率は未確認',
   volume_below: ratio => `その日の出来高は${ratio}で${BREAKOUT_VOLUME_RATIO}×未満`,
   below_pivot: 'その後の終値がピボットを割り込んだ',
@@ -291,19 +292,22 @@ const cents = value => Math.round(value * 100);
 /**
  * The pivot crossing the chart marks: lastPivotCrossing (the conclusion's own helper) on bars certified for
  * the analysis date only, or null. A crossing on the analysis day counts; a close at the pivot's cents is a
- * touch, not a breakout, so it is not marked (briefCandidate's cents rule). A crossing followed by a close
+ * touch, not a breakout (briefCandidate's cents rule), so the mark goes on the first later close above the pivot
+ * (breakoutBar, the bar the conclusion dates), or nowhere when there is none. A breakout followed by a close
  * back under the pivot is still marked (it is where the failed breakout began; the conclusion names the
- * failure). `volumeRatio` is the helper's (null when it supplies none, never 0). `tone` is 'zone' (green)
- * only when that ratio is BREAKOUT_VOLUME_RATIO× or more and the latest certified close is still at or above
- * the pivot (cents); otherwise 'neutral', with the `reason` the 注記 states.
+ * failure). `volumeRatio` is that bar's (null when the helper supplies none, never 0). `tone` is 'zone' (green)
+ * only when that ratio is BREAKOUT_VOLUME_RATIO× or more, the latest certified close is still at or above the
+ * pivot (cents) and the breakout is at most STALE_BREAKOUT_SESSIONS sessions old (the conclusion's 停滞 rule);
+ * otherwise 'neutral', with the `reason` the 注記 states.
  */
 export function chartCrossing(judged, pivot) {
   if (!Array.isArray(judged) || !finite(pivot) || pivot <= 0) return null;
-  const crossing = lastPivotCrossing(judged, pivot);
+  const crossing = breakoutBar(judged, pivot, lastPivotCrossing(judged, pivot));
   const bar = crossing && Number.isInteger(crossing.index) ? judged[crossing.index] : null;
   if (!bar || !finite(bar.close) || !(cents(bar.close) > cents(pivot))) return null;
   const volumeRatio = finite(crossing.volumeRatio) && crossing.volumeRatio > 0 ? crossing.volumeRatio : null;
   const close = judged.at(-1)?.close;
-  const reason = !finite(close) ? 'close_unknown' : cents(close) < cents(pivot) ? 'below_pivot' : volumeRatio === null ? 'volume_unknown' : volumeRatio < BREAKOUT_VOLUME_RATIO ? 'volume_below' : null;
+  const reason = !finite(close) ? 'close_unknown' : cents(close) < cents(pivot) ? 'below_pivot' : crossing.sessionsAgo > STALE_BREAKOUT_SESSIONS ? 'stale'
+    : volumeRatio === null ? 'volume_unknown' : volumeRatio < BREAKOUT_VOLUME_RATIO ? 'volume_below' : null;
   return { date: bar.date, sessionsAgo: crossing.sessionsAgo, volumeRatio, tone: reason ? 'neutral' : 'zone', reason };
 }
