@@ -396,6 +396,11 @@ export function buildSecSummary(row, { date, now, coverage = null } = {}) {
 // Growth rates at or above this level in both EPS and sales make the earnings chip green (独自設定, the
 // Minervini/O'Neil 25% guide; the card's own EPS floor uses the same 25). Compared as the chip prints it (wholePercent).
 export const EARNINGS_CHIP_PERCENT = 25;
+/**
+ * Whether a growth rate meets EARNINGS_CHIP_PERCENT as the chip prints it (wholePercent: 24.6 reads +25% and meets it),
+ * the one comparison the chip's green and the rows' EPS filter share. False for a missing value.
+ */
+export const meetsEarningsChipPercent = value => { const whole = wholePercent(value); return whole !== null && whole >= EARNINGS_CHIP_PERCENT; };
 /** The rule of the green earnings chip in words, for a screen's notes (a phone never shows a chip's title). */
 export const EARNINGS_CHIP_NOTE = `業績チップ：EPS・売上の前年同期比がともに${EARNINGS_CHIP_PERCENT}%以上で緑（独自設定）。`;
 const growth = value => signed(wholePercent(value), 0);
@@ -419,7 +424,7 @@ function earningsFacts(eps, sales, { salesWord = '未確認' } = {}) {
   const shown = point => point && !point.word ? wholePercent(point.value) : null;
   const e = shown(eps), s = shown(sales);
   const together = Boolean(eps && sales) && Math.abs(daysBetween(eps.end, sales.end)) <= ONE_QUARTER_DAYS;
-  const strong = together && e !== null && s !== null && e >= EARNINGS_CHIP_PERCENT && s >= EARNINGS_CHIP_PERCENT;
+  const strong = together && e !== null && s !== null && meetsEarningsChipPercent(e) && meetsEarningsChipPercent(s);
   return { text, tone: strong ? 'zone' : '', title: CHIP_TITLE, notable: strong || (e !== null && e < 0) };
 }
 const unknownChip = (title, text = '業績 未確認') => ({ text, tone: '', title, notable: false });
@@ -431,6 +436,9 @@ const expired = (end, now) => Date.parse(end) + (BOOK_QUARTER_MAX_AGE_DAYS + 1) 
  * 'absent' (an older publication: 未収録), 'not_applicable' (a fund or ETF), 'none' (null: no admitted SEC record),
  * 'invalid' (not in the documented shape), 'other_date', 'expired' (its latest quarter past the 180-day rule at a finite
  * `now`; without one the summary is read as the export judged it) or 'current', with the summary and that quarter.
+ * A 'current' summary carries each growth point only while that point's own quarter is within the rule: in
+ * chipQuarter's fiscal-Q4 exception the EPS quarter is one older than the sales quarter, so it passes the rule first
+ * and is then null (未確認), never read as current beside a current sales point.
  */
 function summaryStatus(row, { now = null, date = null } = {}) {
   if (!row || typeof row !== 'object' || !Object.hasOwn(row, 'sec_summary')) return { status: 'absent' };
@@ -442,14 +450,16 @@ function summaryStatus(row, { now = null, date = null } = {}) {
   if (day && summary.as_of_date !== day) return { status: 'other_date', summary };
   const latest = [summary.eps_yoy?.end, summary.sales_yoy?.end].filter(Boolean).sort().at(-1);
   if (latest && Number.isFinite(now) && expired(latest, now)) return { status: 'expired', summary, latest };
-  return { status: 'current', summary, latest };
+  const fresh = point => (point && Number.isFinite(now) && expired(point.end, now) ? null : point);
+  const eps = fresh(summary.eps_yoy), sales = fresh(summary.sales_yoy);
+  return { status: 'current', summary: eps === summary.eps_yoy && sales === summary.sales_yoy ? summary : { ...summary, eps_yoy: eps, sales_yoy: sales }, latest };
 }
 
 /**
  * The row's sec_summary when it may be read as current, `secSummaryCurrent(row, { now, date })`, else null: the one
  * predicate the row's SEC chip (secRowChip) and the rows' EPS filter and sort share. Null for an absent, invalid or null
  * summary, a fund or ETF, a summary of another date than `date`, and one whose latest quarter is past the 180-day rule at
- * `now` (古い: 未確認, never counted as current).
+ * `now` (古い: 未確認, never counted as current). A point whose own quarter is past the rule is null in it (summaryStatus).
  */
 export function secSummaryCurrent(row, options = {}) {
   const read = summaryStatus(row, options ?? {});

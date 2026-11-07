@@ -199,6 +199,17 @@ describe('financial projection ownership and expiry', () => {
     expect(input).toEqual(before);
   });
 
+  it('re-evaluates when a research index row\'s SEC summary point passes the 180-day rule (each point on its own quarter)', () => {
+    // A summary only (no proof, no history, no book record): its EPS quarter (25-09) passes the rule before its sales quarter (25-12).
+    const row = { symbol: 'SECS', market: 'US', as_of_date: '2026-03-02', sec_summary: { sec_state: 'ok', eps_yoy: { value: 40, end: '2025-09-30' }, sales_yoy: { value: 30, end: '2025-12-31' }, code33: null, as_of_date: '2026-03-02' } };
+    const day = 86400000, epsDeadline = Date.parse('2025-09-30') + 181 * day, salesDeadline = Date.parse('2025-12-31') + 181 * day;
+    expect(financialNextExpiry([row], Date.parse('2026-03-02T21:00:00Z'))).toBe(epsDeadline);
+    expect(financialNextExpiry([row], epsDeadline)).toBe(salesDeadline);
+    expect(financialNextExpiry([row], salesDeadline)).toBeNull();
+    // A row without a summary (or with a malformed end) adds nothing.
+    expect(financialNextExpiry([{ symbol: 'NONE', market: 'US', as_of_date: '2026-03-02', sec_summary: { eps_yoy: { value: 1, end: 'soon' } } }], Date.parse('2026-03-02T21:00:00Z'))).toBeNull();
+  });
+
   it('expires at one millisecond past the deadline and cannot revive values from retained proof/history', () => {
     const input = provenRow(-5);
     const current = project(input, { now: expiresAt });

@@ -1,7 +1,7 @@
 // The seams C owns and other tracks call: the conclusion's Code 33 chip (D) and the published SEC
 // coverage block that useStockData (E) hands to secStatus; and secStatus's wording for each coverage state.
 import { describe, expect, it } from 'vitest';
-import { buildSecSummary, chipQuarter, code33ChipView, code33Explain, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_NOTE, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalTiles, publishedFundamentalsCoverage, quarterReason, secRowChip, secStatus, secSummary, secSummaryCurrent, wholePercent } from './fundamentalsExplain.js';
+import { buildSecSummary, chipQuarter, code33ChipView, code33Explain, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_NOTE, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalTiles, meetsEarningsChipPercent, publishedFundamentalsCoverage, quarterReason, secRowChip, secStatus, secSummary, secSummaryCurrent, wholePercent } from './fundamentalsExplain.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
 import { bookFinancialEvidence } from './bookFinancialEvidence.js';
 import { code33Layered } from './code33Reference.js';
@@ -242,6 +242,15 @@ describe('the round-2 seams', () => {
     }
     expect(secSummaryCurrent({ symbol: 'AAA' })).toBeNull();
     expect(secSummaryCurrent({ symbol: 'BITU', market: 'US', company_name: 'ProShares Ultra Bitcoin ETF', quoteType: 'ETF', sec_summary: both(40, 100) }, { date: CONTRACT_DATE })).toBeNull();
+    // Each point is judged on its own quarter: in the fiscal-Q4 exception the EPS quarter (25-09) is one older than sales (25-12),
+    // so 202 days after it the EPS point is null (未確認) while the sales point is still current, and the chip is not green.
+    const q4 = row(both(40, 30, '2025-09-30', '2025-12-31')), april = Date.parse('2026-04-20T00:00:00Z');
+    expect(secSummaryCurrent(q4, { date: CONTRACT_DATE, now: april })).toEqual({ ...both(40, 30, '2025-09-30', '2025-12-31'), eps_yoy: null });
+    expect(secRowChip(q4.sec_summary && { ...q4, as_of_date: CONTRACT_DATE }, { now: april })).toEqual({ text: 'EPS 未確認・売上 +30%（25-12期）', tone: '', title: expect.any(String), notable: false });
+    // Within both quarters' 180 days, both points read as current.
+    expect(secSummaryCurrent(q4, { date: CONTRACT_DATE, now: Date.parse('2026-03-01T00:00:00Z') })).toEqual(both(40, 30, '2025-09-30', '2025-12-31'));
+    // The one 25% comparison the chip and the rows' EPS filter share: as printed (24.6 reads +25%).
+    expect([24.4, 24.5, 24.6, 25, null, undefined, NaN].map(meetsEarningsChipPercent)).toEqual([false, true, true, true, false, false, false]);
     // An older publication has no field: no chip (未収録), never 未確認 claimed for this day.
     expect(secRowChip({ symbol: 'AAA', as_of_date: CONTRACT_DATE })).toBeNull();
     expect(secRowChip(null)).toBeNull();
