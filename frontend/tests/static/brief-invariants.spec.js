@@ -3,9 +3,9 @@
 // count. Each surface's copy belongs to its track; this spec compares the surfaces with each other and asserts no
 // track's wording as a literal (plan §1 rule 14), only counts and the absence of 「あと0」 and of 「あと」 after a date.
 import { test, expect } from '@playwright/test';
-import { charts, openBrief, rowBySymbol, VIEWPORTS } from './brief-fixture.js';
+import { charts, date, openBrief, rowBySymbol, VIEWPORTS } from './brief-fixture.js';
 import { sellChipView } from '../../src/static/brief/briefSell.js';
-import { BASE_UNCHECKED_CHIP, BASE_UNCHECKED_NOTE } from '../../src/static/brief/briefCandidate.js';
+import { BASE_UNCHECKED_CHIP, BASE_UNCHECKED_NOTE, LIST_FILTERS, rowEvent, TOUCH_HELD_NOTE } from '../../src/static/brief/briefCandidate.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const fit = bar => { bar.high = Math.max(bar.high, bar.open, bar.close); bar.low = Math.min(bar.low, bar.open, bar.close); };
@@ -137,40 +137,99 @@ test.describe('the analysis day reads one volume ratio', () => {
   });
 });
 
-// A close at the pivot's cents the day before is a touch, so the first close above it on the volume is the analysis day's
-// breakout on every screen: the row's ↗ event chip, Today's 「うち上抜け」 and the 上抜け filter, the conclusion's green
-// call and the chart's arrow on that day (the rows compare the two closes in cents, as the conclusion and the chart do).
-test.describe('a touch the day before and a close above it read as one breakout', () => {
+// A close at the pivot's cents the day before is a touch only when the closes before it were under the pivot, and the rows
+// have no bars to tell it from a pullback onto the pivot after an earlier breakout. So the row is never green or dated there
+// (rowEvent's own short form), Today's 「うち上抜け」 leaves it out and the 上抜け filter counts it as 未確認, while the conclusion
+// and the chart read the bars: the analysis day's breakout after a touch from below, the earlier breakout after a pullback
+// (dated on the same bar, in the same tone), and never 「上回っていない」 after a close above the pivot.
+test.describe('a close at the pivot\'s cents the day before', () => {
   test.use(phone(375));
+  const md = iso => `${Number(iso.slice(5, 7))}/${Number(iso.slice(8))}`, cent = value => Math.round(value * 100) / 100;
+  const price = rowBySymbol.ZZNV.current_price, under = cent(price / 1.02);
+  const shortForm = kind => rowEvent({ asOf: date, event: { kind } });
   // ZZNV: the pivot at the close before the analysis day (the fixture's day is +2.0% on 1.6×), the close before that under it.
-  const touchedBefore = {
-    ...onRow('ZZNV', row => { row.se_pivot_price = Math.round(row.current_price / 1.02 * 100) / 100; }),
-    charts: served => { const bars = served['ZZNV.json'].bars, n = bars.length; Object.assign(bars[n - 3], { open: bars[n - 2].close * 0.98, close: Math.round(bars[n - 2].close * 0.98 * 100) / 100 }); fit(bars[n - 3]); },
+  const touched = {
+    ...onRow('ZZNV', row => { row.se_pivot_price = under; }),
+    charts: served => { const bars = served['ZZNV.json'].bars, n = bars.length; Object.assign(bars[n - 3], { open: cent(bars[n - 2].close * 0.98), close: cent(bars[n - 2].close * 0.98) }); fit(bars[n - 3]); },
   };
-  test('the row, the 上抜け count and filter, the conclusion and the chart agree', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief', { mutate: touchedBefore });
+  // A breakout `ago` sessions back on 2.0× the prior 50-day volume, closes above the pivot since, then the close before the
+  // analysis day back on the pivot's cent: with `pivot` under the price the analysis day closes above it again, with the
+  // price as the pivot (the fixture's own) it closes on the cent a second time.
+  const pulledBack = (ago, pivot) => ({
+    ...onRow('ZZNV', row => { row.se_pivot_price = pivot; }),
+    charts: served => {
+      const bars = served['ZZNV.json'].bars, n = bars.length, at = n - 1 - ago;
+      Object.assign(bars[at - 1], { open: cent(pivot * 0.98), close: cent(pivot * 0.98) }); fit(bars[at - 1]);
+      for (let i = at; i <= n - 3; i++) { Object.assign(bars[i], { open: cent(pivot * 1.015), close: cent(pivot * 1.02) }); fit(bars[i]); }
+      Object.assign(bars[n - 2], { close: pivot }); fit(bars[n - 2]);
+      bars[at].volume = Math.ceil(bars.slice(at - 50, at).reduce((sum, bar) => sum + bar.volume, 0) / 50 * 2);
+    },
+  });
+  /** Today's ZZNV focus row, the 上抜け link and filter, then the stock: its conclusion and the chart's breakout mark. */
+  async function surfaces(page, mutate) {
+    const { errors } = await openBrief(page, '#/brief', { mutate });
     const row = page.getByRole('region', { name: '注目候補' }).locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]');
     await expect(row).toBeVisible();
     const chip = row.locator('.brief-reasons > .brief-chip').first();
-    await expect(chip).toHaveClass(/tone-zone/);
-    const ratio = text => text.match(/(\d+\.\d\d)×/)?.[1] ?? null, day = text => text.match(/\d+\/\d+/)?.[0] ?? null;
-    const rowText = await chip.textContent();
-    expect(ratio(rowText), 'the event chip carries the day\'s ratio').not.toBeNull();
-    // Today counts it among the day's breakouts, and the link lists it.
-    const link = page.getByTestId('brief-breakout-link');
-    await expect(link).toHaveCount(1);
-    await link.click();
-    await expect(page.locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]')).toBeVisible();
-    await page.locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]').click();
+    const out = { errors, chip: stripGlyph(await chip.textContent()), chipClass: await chip.getAttribute('class'), link: await page.getByTestId('brief-breakout-link').count() };
+    await page.goto('/#/brief/list');
+    await page.getByRole('combobox', { name: '条件で絞り込む' }).selectOption('breakout');
+    out.filter = await page.locator('.brief-filterchip').textContent();
+    out.listed = await page.locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]').count();
+    out.listNote = await page.locator('.brief-card .brief-note').first().textContent();
+    await page.goto('/#/brief/stock/ZZNV');
     const conclusion = page.getByTestId('brief-conclusion');
     await expect(conclusion).toBeVisible();
-    await expect(conclusion).toHaveClass(/tone-zone/);
-    const title = await conclusion.locator('strong').first().textContent();
-    expect([day(title), ratio(title)]).toEqual([day(rowText), ratio(rowText)]);
-    // The chart marks the breakout on the analysis day (the last bar), green.
     await expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up').first()).toBeAttached();
-    await expect(page.getByTestId('brief-price-chart').locator('.bc-breakout').first()).toBeAttached();
-    expect(errors).toEqual([]);
+    // Every case here has one breakout mark (the chart's own reading of the same bars).
+    await expect(page.getByTestId('brief-price-chart').locator('.bc-breakout')).toHaveCount(1);
+    Object.assign(out, { conclusionClass: await conclusion.getAttribute('class'), title: await conclusion.locator('strong').first().textContent(), text: await conclusion.textContent(),
+      marks: await page.getByTestId('brief-price-chart').locator('.bc-breakout').evaluateAll(els => els.map(el => ({ date: el.dataset.date, tone: el.dataset.tone }))) });
+    return out;
+  }
+  /** The row: rowEvent's short form, never green; Today's 上抜け link absent; the 上抜け filter counts it as 未確認 and leaves it out. */
+  const rowUndated = (seen, kind) => {
+    expect(seen.chip).toBe(shortForm(kind).text);
+    expect(seen.chipClass).not.toMatch(/tone-zone/);
+    expect(seen.link, 'no 「うち上抜け」 for it').toBe(0);
+    expect(seen.listed).toBe(0);
+    if (kind === 'undated') {
+      expect(seen.filter).toMatch(/未確認[1-9]/);
+      expect(seen.listNote).toContain(LIST_FILTERS.breakout.why);
+    }
+  };
+
+  test('after a touch from below, the conclusion and the chart date the analysis day\'s breakout; the row says 未確認', async ({ page }) => {
+    const seen = await surfaces(page, touched);
+    rowUndated(seen, 'undated');
+    expect(seen.conclusionClass).toMatch(/tone-zone/);
+    expect(seen.title.startsWith(`${md(date)}に上抜け`)).toBe(true);
+    expect(seen.marks).toEqual([{ date, tone: 'zone' }]);
+    expect(seen.errors).toEqual([]);
+  });
+
+  for (const [ago, tone] of [[5, 'zone'], [12, 'neutral']]) test(`after a pullback onto the cent ${ago} sessions after a breakout, the conclusion dates the breakout the chart marks`, async ({ page }) => {
+    const seen = await surfaces(page, pulledBack(ago, under));
+    rowUndated(seen, 'undated');
+    expect(seen.marks).toHaveLength(1);
+    expect(seen.marks[0].tone).toBe(tone);
+    expect(seen.marks[0].date < date).toBe(true);
+    // Green only for the dated breakout on its volume within the stale window, as the arrow; never the analysis day's breakout.
+    expect(seen.conclusionClass.includes('tone-zone')).toBe(tone === 'zone');
+    expect(seen.title).not.toContain(md(date));
+    if (tone === 'zone') expect(seen.title.startsWith(`${md(seen.marks[0].date)}に上抜け`)).toBe(true);
+    else expect(seen.title).toMatch(new RegExp(`^上抜けから${ago}営業日`));
+    expect(seen.errors).toEqual([]);
+  });
+
+  test('two closes on the cent after a breakout: the conclusion dates that breakout, never that no close went above the pivot', async ({ page }) => {
+    const seen = await surfaces(page, pulledBack(4, price));
+    rowUndated(seen, 'touchHeld');
+    expect(seen.marks).toEqual([{ date: seen.marks[0].date, tone: 'zone' }]);
+    expect(seen.conclusionClass).toMatch(/tone-zone/);
+    expect(seen.title.startsWith(`${md(seen.marks[0].date)}に上抜け`)).toBe(true);
+    expect(seen.text).not.toContain(TOUCH_HELD_NOTE);
+    expect(seen.errors).toEqual([]);
   });
 });
 

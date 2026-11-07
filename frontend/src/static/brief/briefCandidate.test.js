@@ -367,6 +367,10 @@ describe('round 2: the day on every row and the order within the buy zone', () =
     expect([verdict(missing).event, rowEvent(verdict(missing))]).toEqual([null, null]);
     // The after row keeps its position chip, as before.
     expect(positionText(views.AFT)).toBe('買いゾーン +2.0%');
+    // A previous close at the pivot's cents: the rows cannot tell a touch from below from a pullback after an earlier
+    // breakout, so a close above it is undated and a second close on it is said as it is; neither is green.
+    expect(rowEvent(verdict(zone('CNT', { price: 101, change: 1, volume: 1.6 })))).toEqual({ kind: 'undated', glyph: '●', text: '上抜け日 未確認', tone: 'wait' });
+    expect(rowEvent(verdict(zone('HLD', { price: 100, change: 0, volume: 1.6 })))).toEqual({ kind: 'touchHeld', glyph: '●', text: 'ピボットと同値のまま', tone: 'wait' });
   });
 
   it('ranks a breakout, then a touch or a crossing, then after, then a heavy down day last, whatever the RS', () => {
@@ -375,6 +379,10 @@ describe('round 2: the day on every row and the order within the buy zone', () =
     // Touch and crossing share a rank: RS decides between them.
     const higher = verdict({ ...rows.TCH, rs_rating: 99 });
     expect([views.CRS, higher].sort(briefOrder).map(v => v.symbol)).toEqual(['TCH', 'CRS']);
+    // So does a close above the pivot after one at its cents (its breakout day not told on the rows): under the day's
+    // breakout, over a stock already above the pivot.
+    const cent = verdict(zone('CNT', { price: 101, change: 1, volume: 1.6, rs: 99 }));
+    expect([views.AFT, cent, views.BRK, views.CRS].sort(briefOrder).map(v => v.symbol)).toEqual(['BRK', 'CNT', 'CRS', 'AFT']);
     // Other positions are as before: near, further below and extended keep their order by RS.
     const others = [verdict(zone('EXT', { price: 108, rs: 99 })), verdict(zone('FAR', { price: 90, rs: 99 })), verdict(zone('NEA', { price: 97, rs: 80 })), verdict(zone('NEB', { price: 98, rs: 85 }))];
     expect([...others, views.HVY].sort(briefOrder).map(v => v.symbol)).toEqual(['HVY', 'NEB', 'NEA', 'FAR', 'EXT']);
@@ -526,7 +534,13 @@ describe('round 2 review: unknowns, 未収録 and one wording per stock', () => 
     const v = verdict(unverified);
     expect([v.state, v.event]).toEqual(['zone', null]);
     expect(filterCounts([verified, v])).toMatchObject({ counts: { breakout: 1 }, unknown: { breakout: 1 } });
-    expect(LIST_FILTERS.breakout.why).toBe('分析基準日の値動きが未検証か、Setup Engineの土台を確認できない');
+    // It ends in a noun: the list says 「…のため判定していません」 after it.
+    expect(LIST_FILTERS.breakout.why).toBe('分析基準日の値動きが未検証か、上抜けの日が未確認か、Setup Engineの土台が未確認');
+    // A close above the pivot after one at its cents: the day's breakout or a rise after an earlier one, which the rows
+    // cannot tell apart (the conclusion reads the bars), so 未確認 too, never a hit or a miss.
+    const cent = verdict(audited('CNT', { price: 101, pivot: 100, change: 1, volume: 1.6 }));
+    expect([cent.event.kind, LIST_FILTERS.breakout.test(cent), LIST_FILTERS.breakout.unknown(cent)]).toEqual(['undated', false, true]);
+    expect(filterCounts([verified, v, cent])).toMatchObject({ counts: { breakout: 1 }, unknown: { breakout: 2 } });
     // A breakout of a pivot that is only a reference (its base not current: the conclusion's 土台を確認できない) is 未確認 too.
     const weak = verdict(audited('WEK', { price: 101, pivot: 100, change: 2, volume: 1.6, se_pattern_confidence: 31 }));
     expect([weak.event.kind, LIST_FILTERS.breakout.test(weak), LIST_FILTERS.breakout.unknown(weak)]).toEqual(['breakout', false, true]);

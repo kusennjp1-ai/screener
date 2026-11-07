@@ -21,7 +21,7 @@ const finite = Number.isFinite;
 const WATCH_ROWS = 3;
 const ALWAYS_SHOWN = ['breakout', 'heavyDown'];
 // Footnotes: in place at 1024px and wider, gathered into the screen's 注記 below that.
-const TODAY_NOTE = '注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。買いゾーンの中は、その日の上抜け → ピボット到達・出来高の裏付けのない上抜け → 上抜け後（当日未検証を含む） → 下落日の大商いの順で、同じならRS線の新高値（公開値）、RS推計の順。';
+const TODAY_NOTE = '注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8/8）です。並び順：買いゾーン → ピボット接近（−5%以内）。買いゾーンの中は、その日の上抜け → ピボット到達・上抜け日 未確認・出来高の裏付けのない上抜け → 上抜け後（当日未検証を含む） → 下落日の大商いの順で、同じならRS線の新高値（公開値）、RS推計の順。';
 const DATE_JA = iso => { const d = new Date(`${iso}T12:00:00Z`); return Number.isFinite(d.getTime()) ? `${d.getUTCMonth() + 1}月${d.getUTCDate()}日（${'日月火水木金土'[d.getUTCDay()]}）` : '日付未確認'; };
 // A failed breakout is a weakness: the 崩れ glyph (▲), as the chart marks it (▼ there is 上昇の加速).
 const EVENT_ICON = { breakout: '↗', ext: '▲', heavyDown: '▲', near: '◔', zone: '●', ma50: '↘', book: '▲', failedBreakout: '▲' };

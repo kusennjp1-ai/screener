@@ -266,7 +266,7 @@ describe('round 2 on Today', () => {
     const notes = [...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent);
     expect(notes[0]).toBe('〈age〉');
     expect(notes[1]).toMatch(/^注目候補はすべてトレンドテンプレート8条件を満たす銘柄（TT 8\/8）です。/);
-    expect(notes[1]).toContain('その日の上抜け → ピボット到達・出来高の裏付けのない上抜け → 上抜け後（当日未検証を含む） → 下落日の大商い');
+    expect(notes[1]).toContain('その日の上抜け → ピボット到達・上抜け日 未確認・出来高の裏付けのない上抜け → 上抜け後（当日未検証を含む） → 下落日の大商い');
     expect(notes[1]).not.toContain('達成数');
     cleanup();
     show({ ranked: [audited('TCH1', 100)], wide: false });

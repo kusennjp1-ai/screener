@@ -373,40 +373,54 @@ const cents = value => Math.round(value * 100);
 /** A volume ratio as an event title shows it: floored to 2 decimals, so 1.396 never reads 1.40× under a 1.4× bar. */
 export const ratioShown = value => `${(Math.floor(value * 100 + 1e-9) / 100).toFixed(2)}×`;
 
-/** The line under a touch that holds (two closes at the pivot's cents): the green is the arrival's day only (独自判定). */
+/**
+ * The line under a touch that holds, once certified bars show the run at the pivot's cents began from below (crossingEvent's
+ * 'afterTouch'): no close above the pivot since, and the green is the arrival's day only (独自判定).
+ */
 export const TOUCH_HELD_NOTE = '終値でピボットを上回っていないため、上抜けの裏付けはありません（緑はピボット到達の当日のみ・独自判定）。';
+/** A stock already above the pivot's cents the day before, undated (breakoutEvent's `'after'`; crossingEvent dates it). */
+export const AFTER_EVENT = Object.freeze({ kind: 'after', tone: 'zone', title: '買いゾーン内（上抜け後）' });
+/**
+ * In the buy zone without a breakout day the screen can date (tone 'wait', never green): the rows' event for a close
+ * above the pivot's cents after a close at them, and the conclusion's when its certified bars cannot date the breakout.
+ */
+export const UNDATED_EVENT = Object.freeze({ kind: 'undated', tone: 'wait', title: '買いゾーン内（上抜け日 未確認）', note: '上抜けの日を検証済みの日足で確認できないため、買いの裏付けはありません。' });
 
 /**
  * The analysis day as an event, from the verified close, its change and the verified volume ratio only, in whole
  * cents as the touch rule and the bars' crossing compare them (the previous close is rebuilt from the close and the
- * change, so a raw comparison with the pivot would hang on float noise): a breakout is a previous close at or under
- * the pivot's cents and a close above them on an up day with BREAKOUT_VOLUME_RATIO or more. A previous close at the
- * pivot's cents was a touch, not yet a breakout, so the first close above it is the day's breakout (the conclusion
- * and the chart date it the same day). Only for a stock in the buy zone; null when any input (the analysis date too)
- * is missing: nothing is said about a breakout. The titles name the analysis date (「10/2に上抜け」, 「10/2にピボット
- * 到達」, 「10/2 下落日の大商い」), never 「本日」: the data may be older than today.
+ * change, so a raw comparison with the pivot would hang on float noise): a breakout is a previous close under the
+ * pivot's cents and a close above them on an up day with BREAKOUT_VOLUME_RATIO or more. Only for a stock in the buy
+ * zone; null when any input (the analysis date too) is missing: nothing is said about a breakout. The titles name the
+ * analysis date (「10/2に上抜け」, 「10/2にピボット到達」, 「10/2 下落日の大商い」), never 「本日」: the data may be older than today.
  * - A crossing without the volume (or with it unknown) is not a breakout: tone 'wait', never the green call.
- * - A close at the pivot's cents after a close under it is a touch (green, the day it arrives); one after a close at
- *   the pivot's cents too is `'touchHeld'` (「ピボット到達のまま」, the rows' chip, tone 'wait'): no close above the
- *   pivot yet, and the arrival was not this day. The conclusion dates it from certified bars (crossingEvent's
- *   'afterTouch').
- * - A stock already above the pivot's cents the day before is `'after'`, undated (「買いゾーン内（上抜け後）」): the
- *   conclusion dates it from certified bars through crossingEvent (breakoutHistory.js).
+ * - A close at the pivot's cents after a close under it is a touch (green, the day it arrives).
+ * - A previous close at the pivot's cents is a touch only when the closes before it were under the pivot, and the rows
+ *   have no bars to tell it from a pullback onto the pivot after an earlier breakout. So a close above the pivot's
+ *   cents after one at them is `'undated'` (UNDATED_EVENT: 「上抜け日 未確認」 on the rows, tone 'wait', counted as
+ *   未確認 by the 上抜け filter), and a second close at them is `'touchHeld'` (「ピボットと同値のまま」, tone 'wait'). The
+ *   conclusion tells them apart from certified bars (crossingEvent): a run at the cents that began from below gives
+ *   the day's breakout (`touched`, below) or 「ピボット到達からN営業日」; an earlier close above dates the breakout from it.
+ * - A stock already above the pivot's cents the day before is `'after'`, undated (AFTER_EVENT: 「買いゾーン内（上抜け後）」):
+ *   the conclusion dates it from certified bars through crossingEvent (breakoutHistory.js).
+ * `touched` (crossingEvent's only): certified bars show the run at the pivot's cents began from below, so a close above
+ * the cents after one at them is the day's breakout (or a crossing without the volume), as after a close under them.
  */
-export function breakoutEvent(view) {
+export function breakoutEvent(view, { touched = false } = {}) {
   if (view?.state !== 'zone' || !isoDay(view.asOf) || !positive(view.pivot) || !positive(view.close) || !positive(view.prevClose) || !finite(view.change)) return null;
   const pivot = cents(view.pivot), close = cents(view.close), before = cents(view.prevClose), change = view.change;
   const volume = finite(view.volumeRatio) ? view.volumeRatio : null, heavy = volume !== null && volume >= BREAKOUT_VOLUME_RATIO, day = shortDate(view.asOf);
   if (change < 0 && heavy) return { kind: 'heavyDown', tone: 'ext', title: `${day} 下落日の大商い ${ratioShown(volume)}（要注意）` };
   if (before < pivot && close === pivot) return { kind: 'touch', tone: 'zone', title: `${day}にピボット到達` };
-  if (before === pivot && close === pivot) return { kind: 'touchHeld', tone: 'wait', title: 'ピボット到達のまま', note: TOUCH_HELD_NOTE };
-  if (before <= pivot && close > pivot) {
+  if (before === pivot && close === pivot) return { kind: 'touchHeld', tone: 'wait', title: 'ピボットと同値のまま', note: 'ピボットに届いた日を検証済みの日足で確認できないため、買いの裏付けはありません。' };
+  if ((before < pivot || (touched === true && before === pivot)) && close > pivot) {
     if (change > 0 && heavy) return { kind: 'breakout', tone: 'zone', title: `${day}に上抜け・出来高${ratioShown(volume)}` };
     // The ratio and the bar go in the call's line under the title (`note`), so the title stays one line on a phone.
     return { kind: 'cross', tone: 'wait', title: volume === null ? `${day}に上抜け・出来高 未確認` : `${day}に上抜け・出来高不足`,
       note: volume === null ? '出来高を確認できないため、上抜けの裏付けはありません。' : `出来高${ratioShown(volume)}は基準の${BREAKOUT_VOLUME_RATIO}×に届きません。` };
   }
-  if (before > pivot) return { kind: 'after', tone: 'zone', title: '買いゾーン内（上抜け後）' };
+  if (before === pivot && close > pivot) return { ...UNDATED_EVENT };
+  if (before > pivot) return { ...AFTER_EVENT };
   return null;
 }
 /** The view's day event: the one candidateView computed, or breakoutEvent's for a view built elsewhere. */
@@ -425,8 +439,10 @@ function shortEvent(view, event) {
   const day = shortDate(view.asOf);
   if (event.kind === 'breakout') return { kind: 'breakout', glyph: '↗', text: `${day}上抜け ${ratioShown(view.volumeRatio)}`, tone: 'zone' };
   if (event.kind === 'touch') return { kind: 'touch', glyph: '●', text: `${day}ピボット到達`, tone: 'zone' };
-  // Still at the pivot's cents since the day before: no close above it yet, never green.
-  if (event.kind === 'touchHeld') return { kind: 'touchHeld', glyph: '●', text: 'ピボット到達のまま', tone: 'wait' };
+  // At the pivot's cents since the day before (a touch held, or a pullback onto the pivot: the rows cannot tell), never green.
+  if (event.kind === 'touchHeld') return { kind: 'touchHeld', glyph: '●', text: 'ピボットと同値のまま', tone: 'wait' };
+  // Above the pivot's cents after a close at them: the day's breakout or a rise after an earlier one, never green or dated here.
+  if (event.kind === 'undated') return { kind: 'undated', glyph: '●', text: '上抜け日 未確認', tone: 'wait' };
   if (event.kind === 'cross') return { kind: 'cross', glyph: '●', text: finite(view.volumeRatio) ? '上抜け・出来高不足' : '上抜け・出来高 未確認', tone: 'wait' };
   // A heavy down day's chip carries its volume ratio, as a breakout's does (the row then shows no second volume chip).
   if (event.kind === 'heavyDown') return { kind: 'heavyDown', glyph: '▲', text: `下落日の大商い ${ratioShown(view.volumeRatio)}`, tone: 'ext' };
@@ -452,9 +468,10 @@ export const pivotDistanceText = view => (atPivotCents(view) ? '±0.0%' : distan
 /** The position as a row chip says it, without its glyph: 「買いゾーン +1.2%」, 「ピボット接近・ピボット比 未確認」. */
 export const positionText = view => `${view.stateLabel}${view.stale ? '' : finite(view.distance) ? ` ${pivotDistanceText(view)}` : '・ピボット比 未確認'}`;
 
-// Within the buy zone (RW2): the day's breakout first, then a touch (still at the pivot included) or a crossing
-// without the volume, then a stock already above the pivot (or a day not verified), then a heavy down day last.
-const EVENT_RANK = { breakout: 0, touch: 1, touchHeld: 1, cross: 1, after: 2, heavyDown: 3 };
+// Within the buy zone (RW2): the day's breakout first, then a touch (still at the pivot included), a crossing without
+// the volume or a close above the pivot after one at its cents (its breakout day not told on the rows), then a stock
+// already above the pivot (or a day not verified), then a heavy down day last.
+const EVENT_RANK = { breakout: 0, touch: 1, touchHeld: 1, cross: 1, undated: 1, after: 2, heavyDown: 3 };
 const eventRank = view => EVENT_RANK[dayEvent(view)?.kind] ?? EVENT_RANK.after;
 
 /**
@@ -533,11 +550,13 @@ export const LIST_FILTERS = {
   // Today's focus pool (the zone and near filters together). Hidden: never a segment button.
   focus: { label: '注目候補', hidden: true, test: view => view.qualified && (inZone(view) || nearPivot(view)) },
   // The analysis day's breakouts among the selected stocks (Today's 「うち上抜けN」 and the 条件 menu). Hidden. A
-  // selected stock in the zone whose day is not verified (no event), or whose breakout is of a pivot that is only a
-  // reference (baseMuted: the conclusion reads 土台を確認できない), is counted apart (`unknown`), never as a miss.
+  // selected stock in the zone whose day is not verified (no event), whose close above the pivot follows one at its
+  // cents (breakoutEvent's 'undated': the rows cannot tell the day's breakout from a rise after an earlier one), or
+  // whose breakout is of a pivot that is only a reference (baseMuted: the conclusion reads 土台を確認できない), is counted
+  // apart (`unknown`), never as a miss. `why` ends in a noun: the list says 「…のため判定していません」 after it.
   breakout: { label: '上抜け', hidden: true, test: view => view.qualified && dayEvent(view)?.kind === 'breakout' && !baseMuted(view),
-    unknown: view => view.qualified && inZone(view) && (!dayEvent(view) || (dayEvent(view).kind === 'breakout' && baseMuted(view))),
-    why: '分析基準日の値動きが未検証か、Setup Engineの土台を確認できない' },
+    unknown: view => view.qualified && inZone(view) && (!dayEvent(view) || dayEvent(view).kind === 'undated' || (dayEvent(view).kind === 'breakout' && baseMuted(view))),
+    why: '分析基準日の値動きが未検証か、上抜けの日が未確認か、Setup Engineの土台が未確認' },
   // The selected stocks whose latest SEC EPS change is EPS_YOY_FILTER_PERCENT or more; a stock whose SEC summary
   // is missing, not dated for the analysis date or without the value is counted apart (`unknown`), never as a miss.
   // `field`: the published row field it reads (absent from older publications: 未収録).
