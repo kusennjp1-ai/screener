@@ -178,6 +178,10 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`a tab swi
     await expect(candidates(page).first()).toBeVisible();
     expect(await riseNames(page)).toEqual([name === 'desktop' ? 'none' : 'brief-rise']);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
+    // 候補's own rows stay visible while the view transition swaps the screens, so wait for Today's hero and for
+    // 候補's heading to leave: reading the rise before that reads 候補's outgoing (disconnected) nodes.
+    await expect(page.locator('.brief-hero.is-today')).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: '候補' })).toHaveCount(0);
     await expect(candidates(page).first()).toBeVisible();
     expect(await riseNames(page)).toEqual([name === 'desktop' ? 'none' : 'brief-rise']);
     expect(errors).toEqual([]);
