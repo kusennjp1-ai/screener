@@ -147,11 +147,11 @@ The qualifiers on the stock's level tiles: 参考 when the stock is no buy candi
 ### Round 2 terms
 
 **ブレイク失敗（独自判定）**:
-A crossing of today's pivot on 1.4× or more of the prior 50-day volume, within `failedBreakoutSessions` (10, 独自判定) sessions, followed by a last close back under the pivot. It is a broken setup: the conclusion is neutral, the plan is 参考, the watch tile counts it and its headline leads the watch row (▼).
+A breakout of today's pivot on 1.4× or more of the prior 50-day volume, within `failedBreakoutSessions` (10, 独自判定) sessions, followed by a last close back under the pivot. A close at the pivot's cents is a touch (ピボット到達), not a breakout: the breakout is the first later close above the pivot, on that day's volume. It is a broken setup: the conclusion is neutral, the plan is 参考, the watch tile counts it, its headline leads the watch row and a watched focus row carries the same 崩れ chip (▲, the chart's weakness mark; ▼ there is 上昇の加速).
 _Avoid_: 失敗ブレイク, だまし
 
 **上抜けからN営業日**:
-The sessions since the latest close that crossed today's pivot (`lastPivotCrossing`, up to 60 sessions back), named in the conclusion as 「M/Dに上抜け・N営業日前」. 「上抜けから60営業日超」 when every close in that window is at or above the pivot. Without a dated crossing the zone reads 「上抜け日 未確認」 and never green.
+The sessions since the latest close that broke above today's pivot (`lastPivotCrossing`, up to 60 sessions back; after a touch at the pivot's cents, the first close above it), named in the stock conclusion as 「M/Dに上抜け・N営業日前」, or 「M/Dにピボット到達・N営業日前」 (wait) when a touch was never followed by a close above. 「上抜けから60営業日超」 when every close in that window is at or above the pivot. Without a dated crossing the stock conclusion reads 「上抜け日 未確認」 and is never green. The rows have no bars (owner decision §9-11): a row already above the pivot the day before keeps its plain 「● 買いゾーン +x%」, green while the market is open and the base is current, and ranks below the day's events. The chart's arrow turns grey once the breakout is older than `staleBreakoutSessions`.
 
 **停滞 / 押し戻し**:
 A stock still in the buy zone `staleBreakoutSessions` (10, 独自判定) sessions after its crossing turns to wait: 停滞 when no certified close since the crossing went above the zone's top, 押し戻し when one did and the stock came back. New buying waits for the next pivot (次のピボット待ち).
@@ -199,7 +199,7 @@ The warning headline when no 注意 sign could be judged: 「注意サインを�
 A fiscal quarter named by its year and end month (YY-MM). It is a period, not a negative number, so the U+2212 rule does not apply to it.
 
 **RS線 新高値**:
-The RS line (never RS推計) at a new high on the analysis date, read only from the published `rs_line_high` dated for that day (`publishedRsLineHigh`); absent is 未収録, a published null is 未確認.
+The RS line (never RS推計) at a new high on the analysis date. The rows read only the published `rs_line_high` dated for that day (`publishedRsLineHigh`): absent is 未収録 there, a published null is 未確認. The stock view reads the same field and, when the row has none for that day (an older publication, such as a UI-only republish, or one dated for another day), falls back to `rsLineNewHigh` on the bars certified for that day; a published null stays 未確認.
 
 ## Relationships
 
