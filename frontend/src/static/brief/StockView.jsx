@@ -1,4 +1,4 @@
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useSyncExternalStore } from 'react';
 import { BOOK_TECHNICAL_VERSION, buildBookTechnicalEvidence } from '../bookTechnicalEvidence';
 import { ScreenNotes } from './briefPrimitives';
 import useSessionState from './useSessionState';
@@ -10,6 +10,7 @@ import { planLevels } from './positionSizing';
 import StockVerdict from './StockVerdict';
 import TemplateCard from './StockTemplateCard';
 import StockChartCard, { VCP_NOTE } from './StockChartCard';
+import { priceChartFailed, subscribePriceChart } from './priceChartLoader';
 import VcpCard from './StockVcpCard';
 import FundamentalsCard, { EPS_NOTE, InstitutionalCard } from './StockFundamentalsCard';
 import PlanCard, { usePositionPlan } from './StockPlanCard';
@@ -76,6 +77,7 @@ export default function StockView({ data, header = null, wide = false, market = 
   const rsLead = useMemo(() => (judged ? rsLeadMarks(rsLine, judged) : null), [rsLine, judged]);
   const gaps = useMemo(() => (judged ? gapDays(judged) : []), [judged]);
   const levels = useMemo(() => planLevels(plan), [plan]);
+  const chartFailed = useSyncExternalStore(subscribePriceChart, priceChartFailed, priceChartFailed);
   const notes = useMemo(() => {
     if (!bars?.length) return [];
     const shown = interval === 'day' ? new Set(bars.slice(-period).map(b => b.date)) : null;
@@ -101,6 +103,7 @@ export default function StockView({ data, header = null, wide = false, market = 
     // eslint-disable-next-line react-hooks/exhaustive-deps -- the call is read by its date and days (recomputed each render)
   }, [bars, judged, view?.pivot, view?.upper, interval, period, rsLead, gaps, wide, sells, legsValid, legs, levels?.structuralLow, levels?.stop, call?.date, call?.days, call?.soon]);
   if (!view) return <p className="brief-note brief-pad" role="status">銘柄データを読み込み中…</p>;
+  const chartDown = chartFailed && Boolean(bars?.length);
   return <div className="brief-stock">
     {header}
     <StockVerdict view={view} plan={plan} stage={stage} technical={evidence} bars={bars} judged={judged} template={template} rsHigh={rsHigh} financial={financial} row={row} sells={sells} diagnostics={diagnostics} market={market} earningsCall={call} />
@@ -115,6 +118,7 @@ export default function StockView({ data, header = null, wide = false, market = 
       {bars ? <SellCard sells={sells} reason={certification?.certified ? null : certification?.reason} wide={wide} /> : null}
     </div>
     <p className="brief-note brief-pad">候補は購入推奨ではありません。数値は分析基準日の公開データに基づきます。</p>
-    <ScreenNotes id="stock" wide={wide} notes={[...notes, VCP_NOTE, EPS_NOTE, bars ? SELL_NOTE : null]} />
+    {/* The chart's notes describe marks it draws: none while its renderer cannot be loaded (the chart box says so). */}
+    <ScreenNotes id="stock" wide={wide} notes={[...(chartDown ? [] : notes), VCP_NOTE, EPS_NOTE, bars ? SELL_NOTE : null]} />
   </div>;
 }

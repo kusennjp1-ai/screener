@@ -1,9 +1,11 @@
-import { forwardRef, memo, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from 'react';
+import { forwardRef, memo, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { chartContentKey, chartIdentityKey } from './chartReadout';
 // The renderer is a lazy chunk (priceChartLoader.js): the box keeps its height until it lands.
-import { loadedPriceChart, loadPriceChart } from './priceChartLoader';
+import { loadedPriceChart, loadPriceChart, priceChartFailed, subscribePriceChart } from './priceChartLoader';
 
 let introducedOnce = false;
+/** What the chart box says when the renderer's chunk cannot be loaded. */
+const CHART_FAILED_TEXT = 'チャートを読み込めません（通信状態を確認して、再読み込みしてください）';
 
 /**
  * Large daily chart. Animates once per symbol/period; resizes redraw without animation. `onScrub` gets the
@@ -25,7 +27,7 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
   const [ready, setReady] = useState(() => loadedPriceChart() !== null);
   // The renderer's chunk failed to load (offline before the service worker had it, or a deploy replaced it): the box
   // says so, never an empty frame. The browser keeps a failed module import for the page's life, so the retry reloads it.
-  const [failed, setFailed] = useState(false);
+  const failed = useSyncExternalStore(subscribePriceChart, priceChartFailed, priceChartFailed);
   const key = chartIdentityKey(model, period);
   const content = chartContentKey(model, period);
   const draw = options => {
@@ -43,7 +45,7 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
   useLayoutEffect(() => {
     if (!element.current || !model?.bars?.length) return undefined;
     // Until the renderer's chunk arrives the box keeps its height (no layout shift); it draws when it lands.
-    if (!loadedPriceChart()) { let live = true; loadPriceChart().then(() => { if (live) { setFailed(false); setReady(true); } }, () => { if (live) setFailed(true); }); return () => { live = false; }; }
+    if (!loadedPriceChart()) { let live = true; loadPriceChart().then(() => { if (live) setReady(true); }, () => null); return () => { live = false; }; }
     const abort = new AbortController();
     const animate = introduced.current !== key;
     controller.current = draw({ animate, fast: animate && introducedOnce, signal: abort.signal });
@@ -74,9 +76,12 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     return () => { clearTimeout(timer); observer.disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content, period, ready]);
+  const down = failed && !ready;
   return <div className="brief-chartbox">
     <div ref={element} className={`brief-chart ${className}`} data-testid="brief-price-chart" />
-    {failed && !ready ? <div className="brief-chart-failed" role="status"><p>チャートを読み込めません（通信状態を確認して、再読み込みしてください）</p>
+    {/* The live region is there from the start, so its message is announced when it arrives; the box shows it with the button. */}
+    <p className="sr-only" role="status">{down ? CHART_FAILED_TEXT : ''}</p>
+    {down ? <div className="brief-chart-failed"><p aria-hidden="true">{CHART_FAILED_TEXT}</p>
       <button type="button" onClick={() => window.location.reload()}>再読み込み</button></div> : null}
     {onLatest ? <button ref={latest} type="button" className="brief-latest" hidden={selected === null} onClick={onLatest}>最新足</button> : null}
   </div>;

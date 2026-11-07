@@ -534,24 +534,38 @@ for (const width of [320, 375, 414]) test.describe(`no overflow at ${width}px`, 
 // or a deploy replaced it), the chart's box says so with a 再読み込み button, never an empty frame. The browser keeps a
 // failed module import for the page's life, so the button reloads the page, which then draws the chart.
 test.describe('the chart when its renderer chunk fails to load', () => {
+  // Finite animations (the cards' entrance) done, so a box is read where it settles, never mid-rise. Read by play state:
+  // with no chart drawn, some entrances' `finished` promises never settle in this browser although they have finished.
+  const settled = page => page.waitForFunction(() => document.getAnimations().every(a => a.effect?.getComputedTiming().iterations === Infinity || a.playState !== 'running'));
   test.use(VIEWPORTS.phone);
   test('says it cannot load the chart, keeps the box, offers a 44px reload, and draws after it', async ({ page }) => {
     let blocked = true;
     await page.route(/\/priceChart(-[\w-]+)?\.js(\?.*)?$/, route => (blocked ? route.abort() : route.fallback()));
     const { errors } = await openBrief(page, '#/brief/stock/ZZNV');
     const card = page.locator('.brief-chartcard');
-    const status = card.locator('.brief-chart-failed[role="status"]');
-    await expect(status).toBeVisible();
-    await expect(status).toContainText('チャートを読み込めません');
+    const failed = card.locator('.brief-chart-failed');
+    await expect(failed).toBeVisible();
+    // The message is in a live region that was there before it (announced when it arrives); the box shows it with the button.
+    await expect(card.getByRole('status')).toHaveText(/チャートを読み込めません/);
+    await expect(failed).toContainText('チャートを読み込めません');
     const box = await card.getByTestId('brief-price-chart').boundingBox();
     expect(box.height).toBeGreaterThan(200);
-    const retry = status.getByRole('button');
-    expect((await retry.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    // Nothing describes marks that are not drawn: no legend, no chart notes in the 注記, and the period switch waits.
+    await expect(card.locator('.brief-legend')).toBeHidden();
+    for (const button of await card.getByRole('group', { name: '表示期間' }).getByRole('button').all()) await expect(button).toBeDisabled();
+    await expect(page.locator('.brief-screen-notes li', { hasText: 'チャートの印' })).toHaveCount(0);
+    const retry = failed.getByRole('button');
+    await settled(page);
+    // The CSS min-height is 44px; 0.1px of tolerance for sub-pixel layout, as Design Acceptance reads it.
+    expect((await retry.boundingBox()).height + 0.1).toBeGreaterThanOrEqual(44);
     blocked = false;
     await Promise.all([page.waitForEvent('load'), retry.click()]);
     await expect(card.getByTestId('brief-price-chart')).toBeVisible();
-    await expect(status).toHaveCount(0);
+    await expect(failed).toHaveCount(0);
     await expect(card.getByTestId('brief-price-chart').locator('svg').first()).toBeVisible();
+    await expect(card.locator('.brief-legend')).toBeVisible();
+    await expect(card.getByRole('group', { name: '表示期間' }).getByRole('button').first()).toBeEnabled();
+    await expect(page.locator('.brief-screen-notes li', { hasText: 'チャートの印' })).toHaveCount(1);
     expect(errors).toEqual([]);
   });
 });

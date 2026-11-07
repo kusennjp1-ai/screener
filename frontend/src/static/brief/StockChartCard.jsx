@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import PriceChart from './PriceChart';
+import { priceChartFailed, subscribePriceChart } from './priceChartLoader';
 import { sellMarks } from './briefSell';
 import { auditValues } from '../qualificationAudit';
 import { newYorkDate } from '../evidenceTime';
@@ -45,7 +46,7 @@ function Readout({ readout, compact, reason }) {
       {unverified ? change : null}
       <span className="ro-group">
         <span className="ro-item"><i>出来高</i>{readout.volume === null ? <Missing word="未取得" /> : readout.volumeText}</span>
-        <span className={`ro-item${unverified ? ' is-unverified' : ''}`} title={`直前${readout.volumeBasis}の平均出来高との比`}>{readout.volumeRatio === null ? <Missing /> : <>{ratioShown(readout.volumeRatio)}{unverified ? <Unverified /> : null}</>}<span className="sr-only">（直前{readout.volumeBasis}平均比）</span></span>
+        <span className={`ro-item ro-ratio${unverified ? ' is-unverified' : ''}`} title={`直前${readout.volumeBasis}の平均出来高との比`}>{readout.volumeRatio === null ? <Missing /> : <>{ratioShown(readout.volumeRatio)}{unverified ? <Unverified /> : null}</>}<span className="sr-only">（直前{readout.volumeBasis}平均比）</span></span>
       </span>
       {readout.pivotRatio !== null ? <span className="ro-item"><i>対ピボット</i>{formatPercent(readout.pivotRatio)}</span> : null}
       {readout.fromHigh !== null ? <span className="ro-item" title="52週高値から"><i>{compact ? <><span className="sr-only">52週</span>高値から</> : '52週高値から'}</i>{formatPercent(readout.fromHigh)}</span> : null}
@@ -199,16 +200,19 @@ export default function StockChartCard({ data, view, earningsCall = null, legs, 
   const items = legendItems({ weekly, short, wide, rsShown, structuralLow: model && priceInRange(model, period, levels?.structuralLow) ? levels.structuralLow : null, drawnLegs, crossing: crossingShown ? crossing : null, heavyDown, sellMarks: model?.sellMarks?.length > 0, pivot: view?.pivot, stop: levels?.stop });
   const legendRef = useRef(null);
   useTwoLineLegend(legendRef, wide, items.map(item => item.key).join('|') + (levels?.structuralLow ?? ''));
+  // The renderer's chunk could not be loaded (the chart box says so): no legend or chart notes for marks that are not drawn,
+  // and the period switch waits for the reload that draws the chart.
+  const undrawn = useSyncExternalStore(subscribePriceChart, priceChartFailed, priceChartFailed) && Boolean(model);
   return <section ref={card} className="brief-card brief-chartcard in" style={{ '--i': 1 }} aria-label="株価チャート">
     <div className="brief-chartcard-head">
-      <div className="brief-periods" role="group" aria-label="表示期間">{Object.keys(RANGES).map(key => <button key={key} type="button" className={key === '2yw' ? 'brief-period-week' : undefined} aria-pressed={range === key} aria-label={key === '2yw' ? weeklyRangeLabel(bars) : undefined} onClick={() => onRange?.(key)}>{key === '2yw' ? <WeeklyLabel bars={bars} /> : RANGES[key][2]}</button>)}</div>
+      <div className="brief-periods" role="group" aria-label="表示期間">{Object.keys(RANGES).map(key => <button key={key} type="button" className={key === '2yw' ? 'brief-period-week' : undefined} aria-pressed={range === key} aria-label={key === '2yw' ? weeklyRangeLabel(bars) : undefined} disabled={undrawn} onClick={() => onRange?.(key)}>{key === '2yw' ? <WeeklyLabel bars={bars} /> : RANGES[key][2]}</button>)}</div>
       {readout ? <Readout readout={readout} compact={!wide} reason={certification?.reason ?? null} /> : null}
     </div>
     {model ? <PriceChart ref={chartRef} model={model} period={period} onScrub={onScrub} selected={index} onLatest={onLatest} /> : <p className="brief-note brief-chart-placeholder" role="status">{data.chart.isError ? '日足チャートを取得できません。' : row?.chart_path ? '日足チャートを読み込み中…' : 'この銘柄の日足チャートは未配信です。'}</p>}
     {bars && data.date && bars.at(-1)?.date !== data.date ? <p className="brief-note brief-asof" role="note">日足は {bars.at(-1)?.date} までです（分析基準日 {data.date} の日足は未取得）。チャートから算出する判定は未確認にしています。</p> : null}
-    <div ref={legendRef} className="brief-legend" aria-hidden="true">
+    {undrawn ? null : <div ref={legendRef} className="brief-legend" aria-hidden="true">
       {items.map(item => <span key={item.key} className={item.key === 'mas' ? 'lg-mas' : undefined} data-key={item.key} data-fold={item.rank ? 'true' : undefined} data-rank={item.rank}>{item.node}</span>)}
-    </div>
-    {wide && notes.length ? <ul className="brief-chart-notes">{notes.map(note => <li key={note}>{note}</li>)}</ul> : null}
+    </div>}
+    {wide && notes.length && !undrawn ? <ul className="brief-chart-notes">{notes.map(note => <li key={note}>{note}</li>)}</ul> : null}
   </section>;
 }
