@@ -1,9 +1,10 @@
 // Daily brief stock chart on synthetic data: the period segment and the readout above the chart, the honest
 // weekly label, the touch scrub, the legend colours, the 12px floor, the 44px targets and the phone budgets;
 // round 2: no label over another label, a tag or the last price, the final contraction's depth, the date
-// ticks, the RS panel, one earnings count, the pivot crossing, ADR and the unverified readout.
+// ticks, the RS panel, one earnings count, the pivot crossing, ADR and the unverified readout; every label's box
+// on every fixture stock and period (no label over a candle unless the renderer proves it had no free box).
 import { test, expect } from '@playwright/test';
-import { date, horizontalOverflow, openBrief, rowBySymbol, VIEWPORTS } from './brief-fixture.js';
+import { date, horizontalOverflow, openBrief, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
 import { chartCrossing, crossingNote } from '../../src/static/brief/chartReadout.js';
 
 const DOCK_TOP = 788; // 844 − the 56px dock at 390×844
@@ -70,6 +71,73 @@ const collisions = page => page.getByTestId('brief-price-chart').evaluate(chart 
   const column = solid.filter(box => box.name === 'bc-rstag-fill' || box.name === 'bc-earnflag-fill');
   column.forEach((a, i) => { for (const b of column.slice(i + 1)) if (hit(a, b)) out.push(`${a.name} × ${b.name}`); });
   return out;
+});
+/**
+ * Every label's box in the chart (round 2, labels fix 1): each visible text (in-plot labels, captions, the axes' values,
+ * the tags' prices) against every candle (its whole high–low range across its body), every volume bar and its dot,
+ * every other text and every tag, mark and leader. A text may sit over candles or bars only when the renderer forced it
+ * (data-forced="1"): the test then re-runs the spots it tried (data-search "x0 x1 step|centres", the box from data-box)
+ * with the box 1px larger on each side and every obstacle at least as large as the renderer took it (candles 2px wider
+ * each side, bars 1px, texts 6px across and 1px up and down, marks 2px), so a spot clear here was clear for the renderer
+ * too; finding one fails. Also every contraction with a computed depth (data-depth on its box) shows that depth.
+ * Returns the failures and the forced labels.
+ */
+const labelAudit = page => page.getByTestId('brief-price-chart').evaluate(chart => {
+  const out = [];
+  const visible = node => !node.closest('.bc-hover, .bc-scrub') && node.getAttribute('visibility') !== 'hidden' && node.textContent.trim() !== '';
+  const groupOf = node => node.closest('g.bc-tag, g.bc-rshigh, g.bc-earnflag');
+  const hit = (a, b) => a.x0 < b.x1 - 0.5 && a.x1 > b.x0 + 0.5 && a.y0 < b.y1 - 0.5 && a.y1 > b.y0 + 0.5;
+  const grow = (box, dx, dy) => ({ x0: box.x0 - dx, x1: box.x1 + dx, y0: box.y0 - dy, y1: box.y1 + dy });
+  const texts = [...chart.querySelectorAll('svg text')].filter(visible).map(node => {
+    const box = node.getBBox(), centre = Number(node.getAttribute('y')) - 4, reserved = node.dataset.box?.split(' ').map(Number);
+    const own = { x0: box.x, x1: box.x + box.width, y0: centre - 6, y1: centre + 6 };
+    const outer = reserved ? { x0: Math.min(own.x0, reserved[0]), x1: Math.max(own.x1, reserved[1]), y0: Math.min(own.y0, reserved[2]), y1: Math.max(own.y1, reserved[3]) } : own;
+    return { node, name: node.textContent.trim(), group: groupOf(node), ...own, outer, reserved };
+  });
+  const solids = [...chart.querySelectorAll('.bc-tag rect, .bc-rshigh rect, .bc-earnflag rect, .bc-lastdot, .bc-breakoutmark, .bc-sell, line.bc-leader')]
+    .filter(node => node.getAttribute('visibility') !== 'hidden')
+    .map(node => { const box = node.getBBox(); return { name: node.closest('[data-tag]')?.dataset.tag || node.getAttribute('class'), group: groupOf(node), x0: box.x, x1: box.x + box.width, y0: box.y, y1: box.y + box.height }; });
+  // A candle: its wick (the high–low range) across its body's width.
+  const wicks = [...chart.querySelectorAll('line.bc-up, line.bc-down')], bodies = [...chart.querySelectorAll('rect.bc-up, rect.bc-down')];
+  const candles = wicks.map((wick, i) => { const w = wick.getBBox(), b = bodies[i].getBBox(); return { x0: Math.min(b.x, w.x), x1: Math.max(b.x + b.width, w.x), y0: Math.min(w.y, b.y), y1: Math.max(w.y + w.height, b.y + b.height) }; });
+  const volume = [...chart.querySelectorAll('rect.bc-vol, circle.bc-voldot')].map(node => node.getBBox()).filter(box => box.height > 0.2).map(box => ({ x0: box.x, x1: box.x + box.width, y0: box.y, y1: box.y + box.height }));
+  const solidUnder = (box, pad = 0) => candles.filter(c => hit(box, grow(c, 2 * pad, 0))).length + volume.filter(v => hit(box, grow(v, pad, 0))).length;
+  // The RS line and its lead underlines (obstacles of a label the renderer tried at the RS panel's foot).
+  const rsPoints = (chart.querySelector('path.bc-rs')?.getAttribute('d') || '').split(/[ML]/).filter(Boolean).map(pair => pair.split(',').map(Number));
+  const leads = [...chart.querySelectorAll('line.bc-rslead')].map(node => grow((({ x, y, width, height }) => ({ x0: x, x1: x + width, y0: y, y1: y + height }))(node.getBBox()), 1, 2));
+  const crossesRs = box => leads.some(lead => hit(box, lead)) || rsPoints.some((p, i) => {
+    const q = rsPoints[i + 1];
+    if (!q) return false;
+    const l = Math.max(p[0], box.x0), r = Math.min(q[0], box.x1);
+    if (l > r) return false;
+    const at = xx => (q[0] === p[0] ? p[1] : p[1] + (q[1] - p[1]) * (xx - p[0]) / (q[0] - p[0]));
+    return Math.min(at(l), at(r)) < box.y1 && Math.max(at(l), at(r)) > box.y0;
+  });
+  texts.forEach((a, i) => {
+    for (const b of texts.slice(i + 1)) if (!(a.group && a.group === b.group) && hit(a, b)) out.push(`${a.name} × ${b.name}`);
+    for (const b of solids) if (b.group !== a.group && hit(a, b)) out.push(`${a.name} × ${b.name}`);
+    const under = solidUnder(a);
+    if (!under) return;
+    if (a.node.dataset.forced !== '1') { out.push(`${a.name} over ${under} candles or bars, not forced`); return; }
+    // A forced label: none of the spots it tried may be clear.
+    const [range, centres] = (a.node.dataset.search || '').split('|');
+    if (!range || !a.reserved) { out.push(`${a.name}: forced without its search`); return; }
+    const [x0, x1, step] = range.split(' ').map(Number), w = a.reserved[1] - a.reserved[0], half = (a.reserved[3] - a.reserved[2]) / 2;
+    const others = [...texts.filter(t => t !== a && t.node.dataset.box !== a.node.dataset.box).map(t => grow(t.outer, 6, 1)), ...solids.map(s => grow(s, 2, 2))];
+    const xs = [];
+    for (let xx = x0; xx <= x1 + 1e-6; xx += step) xs.push(xx);
+    if (xs.at(-1) < x1) xs.push(x1);
+    for (const xx of xs) for (const yc of centres.split(' ').map(Number)) {
+      const box = { x0: xx - 1, x1: xx + w + 1, y0: yc - half - 1, y1: yc + half + 1 };
+      if (!others.some(o => hit(box, o)) && !solidUnder(box, 1) && !crossesRs(box)) { out.push(`${a.name}: forced, but the spot ${xx.toFixed(1)},${yc.toFixed(1)} was clear`); return; }
+    }
+  });
+  for (const leg of chart.querySelectorAll('.bc-leg[data-depth]')) {
+    const k = leg.dataset.leg, want = `−${Math.round(Number(leg.dataset.depth))}%`;
+    const node = chart.querySelector(`.bc-legtext[data-i="${k}"]`) || chart.querySelector(`.bc-tlabel[data-leg="${k}"] .bc-tdepth`);
+    if (!node || !visible(node) || !node.textContent.trim().endsWith(want)) out.push(`T${Number(k) + 1}: its depth ${want} is not shown`);
+  }
+  return { failures: out, forced: texts.filter(t => t.node.dataset.forced === '1').map(t => t.name) };
 });
 /** Every drawn level line (買値, 2R, 3R, 52週高, the wide chart's structural low) has its name drawn. */
 const unnamedLevels = page => page.getByTestId('brief-price-chart').evaluate(chart => ['bc-entry', 'bc-r2', 'bc-r3', 'bc-high52']
@@ -205,6 +273,7 @@ test.describe('390×844 phone', () => {
       await settled(page);
       const what = `${symbol} ${label}`;
       expect(await collisions(page), `${what}: collisions`).toEqual([]);
+      expect((await labelAudit(page)).failures, `${what}: label boxes (RS line drawn)`).toEqual([]);
       const depth = await finalDepth(page);
       if (symbol !== 'ZZMO') expect(depth, `${what}: contractions drawn`).not.toBeUndefined();
       if (depth !== undefined) expect(depth, `${what}: final depth`).toMatch(/−\d+%$/);
@@ -237,6 +306,7 @@ test.describe('390×844 phone', () => {
       await chartReady(page);
       await settled(page);
       expect(await collisions(page), String(label)).toEqual([]);
+      expect((await labelAudit(page)).failures, `${label}: label boxes`).toEqual([]);
       for (const slack of await readoutSlack(page)) expect(slack, `${label}: readout slack`).toBeGreaterThanOrEqual(6);
     }
     expect(errors).toEqual([]);
@@ -386,6 +456,40 @@ for (const [name, device] of [['phone', VIEWPORTS.phone], ['desktop', VIEWPORTS.
       await expect(chart.locator('.bc-earnings-soon')).toHaveCount(warn ? 1 : 0);
     }
     expect(await chart.textContent()).not.toMatch(when === 'after' ? /あと/ : /経過/);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Every fixture stock with a chart, on every period, at 390 and 1440: no label over a candle, a volume bar, another label,
+// a tag or a mark (over candles only when forced and no tried spot was clear), and every computed depth on the chart.
+for (const [name, device] of [['390', VIEWPORTS.phone], ['1440', VIEWPORTS.desktop]]) test.describe(`label boxes at ${name}`, () => {
+  test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
+  test('every fixture stock and period: no label over a candle or another label unless forced with no clear spot, every depth shown', async ({ page }) => {
+    test.setTimeout(240000);
+    const charted = rows.filter(row => row.chart_path);
+    expect(charted.length).toBeGreaterThan(20);
+    const { errors } = await openBrief(page, `#/brief/stock/${charted[0].symbol}`);
+    const failures = [];
+    let views = 0, forced = 0;
+    for (const { symbol } of charted) {
+      await page.goto(`/#/brief/stock/${symbol}`);
+      await chartReady(page);
+      for (const label of ['3か月', '6か月', '1年', /^週足/]) {
+        const button = page.getByRole('group', { name: '表示期間' }).getByRole('button', { name: label });
+        await button.click();
+        await expect(button).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.getByTestId('brief-price-chart')).toHaveAttribute('aria-label', new RegExp(`^${symbol} の${String(label).includes('週足') ? '週' : '日'}足チャート`));
+        await chartReady(page);
+        await settled(page);
+        const audit = await labelAudit(page);
+        views++;
+        forced += audit.forced.length;
+        failures.push(...audit.failures.map(failure => `${symbol} ${label}: ${failure}`));
+      }
+    }
+    test.info().annotations.push({ type: 'label boxes', description: `${views} views, ${forced} forced labels` });
+    expect(views).toBe(charted.length * 4);
+    expect(failures).toEqual([]);
     expect(errors).toEqual([]);
   });
 });
