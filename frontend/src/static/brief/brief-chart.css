@@ -57,6 +57,12 @@
 .brief-chartbox { position: relative; min-width: 0; }
 .brief-latest { position: absolute; z-index: 3; top: 12px; left: 4px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 14%, transparent); }
 .brief-latest[hidden] { display: none; }
+/* The renderer's chunk failed to load: the message and a retry over the empty box, which keeps its height. */
+.brief-chart-failed { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; text-align: center; color: var(--text-2); font-size: 13px; line-height: 1.6; }
+.brief-chart-failed p { margin: 0; }
+.brief-chart-failed button { min-height: 44px; padding: 0 16px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.brief-chart-failed button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (min-width: 1024px) { .brief-chart-failed button { min-height: 32px; } }
 .brief-latest:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (min-width: 1024px) { .brief-latest { min-height: 28px; } }
 

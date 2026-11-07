@@ -529,3 +529,29 @@ for (const width of [320, 375, 414]) test.describe(`no overflow at ${width}px`, 
     expect(errors).toEqual([]);
   });
 });
+
+// The renderer is a lazy chunk (priceChartLoader.js): when it cannot be loaded (offline before the service worker had it,
+// or a deploy replaced it), the chart's box says so with a 再読み込み button, never an empty frame. The browser keeps a
+// failed module import for the page's life, so the button reloads the page, which then draws the chart.
+test.describe('the chart when its renderer chunk fails to load', () => {
+  test.use(VIEWPORTS.phone);
+  test('says it cannot load the chart, keeps the box, offers a 44px reload, and draws after it', async ({ page }) => {
+    let blocked = true;
+    await page.route(/\/priceChart(-[\w-]+)?\.js(\?.*)?$/, route => (blocked ? route.abort() : route.fallback()));
+    const { errors } = await openBrief(page, '#/brief/stock/ZZNV');
+    const card = page.locator('.brief-chartcard');
+    const status = card.locator('.brief-chart-failed[role="status"]');
+    await expect(status).toBeVisible();
+    await expect(status).toContainText('チャートを読み込めません');
+    const box = await card.getByTestId('brief-price-chart').boundingBox();
+    expect(box.height).toBeGreaterThan(200);
+    const retry = status.getByRole('button');
+    expect((await retry.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    blocked = false;
+    await Promise.all([page.waitForEvent('load'), retry.click()]);
+    await expect(card.getByTestId('brief-price-chart')).toBeVisible();
+    await expect(status).toHaveCount(0);
+    await expect(card.getByTestId('brief-price-chart').locator('svg').first()).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});

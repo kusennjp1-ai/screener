@@ -23,6 +23,9 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     if (corner) { button.style.left = `${corner.x}px`; button.style.top = `${corner.y}px`; }
   };
   const [ready, setReady] = useState(() => loadedPriceChart() !== null);
+  // The renderer's chunk failed to load (offline before the service worker had it, or a deploy replaced it): the box
+  // says so, never an empty frame. The browser keeps a failed module import for the page's life, so the retry reloads it.
+  const [failed, setFailed] = useState(false);
   const key = chartIdentityKey(model, period);
   const content = chartContentKey(model, period);
   const draw = options => {
@@ -40,7 +43,7 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
   useLayoutEffect(() => {
     if (!element.current || !model?.bars?.length) return undefined;
     // Until the renderer's chunk arrives the box keeps its height (no layout shift); it draws when it lands.
-    if (!loadedPriceChart()) { let live = true; loadPriceChart().then(() => { if (live) setReady(true); }).catch(() => null); return () => { live = false; }; }
+    if (!loadedPriceChart()) { let live = true; loadPriceChart().then(() => { if (live) { setFailed(false); setReady(true); } }, () => { if (live) setFailed(true); }); return () => { live = false; }; }
     const abort = new AbortController();
     const animate = introduced.current !== key;
     controller.current = draw({ animate, fast: animate && introducedOnce, signal: abort.signal });
@@ -73,6 +76,8 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
   }, [content, period, ready]);
   return <div className="brief-chartbox">
     <div ref={element} className={`brief-chart ${className}`} data-testid="brief-price-chart" />
+    {failed && !ready ? <div className="brief-chart-failed" role="status"><p>チャートを読み込めません（通信状態を確認して、再読み込みしてください）</p>
+      <button type="button" onClick={() => window.location.reload()}>再読み込み</button></div> : null}
     {onLatest ? <button ref={latest} type="button" className="brief-latest" hidden={selected === null} onClick={onLatest}>最新足</button> : null}
   </div>;
 });
