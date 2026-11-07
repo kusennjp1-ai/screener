@@ -223,11 +223,13 @@ for (const width of [320, 375, 414]) test.describe(`the study block and the Nasd
     const { errors } = await openBrief(page, '#/brief/market', { mutate: nasdaqState });
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.locator('.brief-index-nas')).toHaveCount(0);
-    // Read the boxes once the card's finite entrance has finished (mid-rise a box can read 43.99998px).
+    // The card has mounted (its fold is on screen) before the finite entrance is awaited: awaited earlier, the wait finds no
+    // animation yet and the box is read mid-rise (43.99997px in a CI-faithful full run).
+    await expect(market.locator('details.brief-exposure-basis > summary')).toBeVisible();
     await page.evaluate(() => Promise.all(document.getAnimations().filter(a => a.effect?.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => null))));
-    // The guide's fold keeps a 44–48px summary even with the Nasdaq note in it.
+    // The guide's fold keeps a 44–48px summary even with the Nasdaq note in it (Design Acceptance's 0.1px tolerance).
     const basis = (await market.locator('details.brief-exposure-basis > summary').boundingBox()).height;
-    expect(basis).toBeGreaterThanOrEqual(44);
+    expect(basis + 0.1).toBeGreaterThanOrEqual(44);
     expect(basis).toBeLessThanOrEqual(48);
     for (const summary of await market.locator('details.brief-regime-ref > summary, details.brief-exposure-basis > summary, details.brief-regime-howto > summary').all()) await summary.click();
     await expect(market.locator('.brief-regime-nas')).toBeVisible();

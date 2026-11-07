@@ -404,7 +404,10 @@ test.describe('the day on the rows (390px)', () => {
     // The 注目候補 tile says the day's breakouts and opens them, under a 44px chip that clears the filter.
     const link = page.getByTestId('brief-breakout-link');
     await expect(link).toHaveText('うち上抜け1 ›');
-    expect((await link.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    // Read the box once the summary's finite entrance has finished (mid-rise it read 43.99998px in a CI-faithful full run),
+    // with Design Acceptance's 0.1px tolerance.
+    await page.evaluate(() => Promise.all(document.getAnimations().filter(a => a.effect?.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => null))));
+    expect((await link.boundingBox()).height + 0.1).toBeGreaterThanOrEqual(44);
     await link.click();
     await expect(page).toHaveURL(/#\/brief\/list$/);
     expect(await symbolsShown(page)).toEqual(['ZZKS']);

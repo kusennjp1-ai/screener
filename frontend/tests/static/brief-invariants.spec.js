@@ -4,6 +4,7 @@
 // track's wording as a literal (plan §1 rule 14), only counts and the absence of 「あと0」 and of 「あと」 after a date.
 import { test, expect } from '@playwright/test';
 import { openBrief, rowBySymbol, VIEWPORTS } from './brief-fixture.js';
+import { sellChipView } from '../../src/static/brief/briefSell.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const fit = bar => { bar.high = Math.max(bar.high, bar.open, bar.close); bar.low = Math.min(bar.low, bar.open, bar.close); };
@@ -55,6 +56,80 @@ test.describe('Today shows one wording per stock', () => {
   });
 });
 
+// A watched focus candidate whose setup broke (a failed breakout, a heavy 50-day break) reads the watch card's 崩れ chip on
+// its focus row too, with no green there, as on the watch card and the watch tab (the chip's text is sellChipView's).
+test.describe('Today shows a broken watched focus candidate one way', () => {
+  test.use(phone(390, 844));
+  const brokenChip = key => sellChipView({ strength: [], weakness: [{ key, label: key, state: 'hit', detail: key }] }).text;
+  for (const [name, mutate, key] of [['a failed breakout', failedBreakout('ZZNV'), 'failedBreakout'], ['a heavy 50-day break', broken('ZZNV'), 'ma50']]) test(`${name}: the focus row, the watch card and the watch tab carry the same chip, the focus row no green`, async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': WATCH }, mutate });
+    const focus = page.getByRole('region', { name: '注目候補' }), watch = page.getByRole('region', { name: 'ウォッチの状況' });
+    const row = focus.locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]');
+    await expect(row).toBeVisible();
+    await expect(row.locator('.brief-reasons')).toContainText(brokenChip(key));
+    expect(await row.locator('.tone-zone').count(), 'no green chip on a broken setup\'s focus row').toBe(0);
+    await expect(watch.locator('[data-symbol="ZZNV"]')).toContainText(brokenChip(key));
+    await page.goto('/#/brief/watch');
+    const tab = page.getByRole('region', { name: 'ウォッチ中の銘柄' }).locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]');
+    await expect(tab.locator('.brief-reasons')).toContainText(brokenChip(key));
+    expect(await tab.locator('.tone-zone').count()).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// A stock whose conclusion is 参考 for a reason the rows can read (its Setup Engine base under the floor or not current, or
+// a market that holds off new buying) has no green chip on any row, while the rows keep their place and the counts.
+test.describe('no green row beside a 参考 conclusion the row can read', () => {
+  test.use(phone(390, 844));
+  const weakBase = { rows: rows => { for (const row of rows) row.se_pattern_confidence = 31; } };
+  test('a Setup Engine base under the floor: Today, 候補 and ウォッチ rows have no green, in the same order, and the conclusion is 参考', async ({ page, context }) => {
+    const plain = await context.newPage(), quiet = await openBrief(plain, '#/brief', { storage: { 'research-watch': WATCH } });
+    const symbolsOf = on => on.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate').evaluateAll(nodes => nodes.map(node => node.dataset.symbol));
+    await expect(plain.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate').first()).toBeVisible();
+    const order = await symbolsOf(plain), tiles = await plain.getByTestId('brief-summary').textContent();
+    expect(await plain.locator('[data-testid="brief-candidate"] .tone-zone').count(), 'the fixture\'s current base keeps its green').toBeGreaterThan(0);
+    expect(quiet.errors).toEqual([]);
+    await plain.close();
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': WATCH }, mutate: weakBase });
+    await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate').first()).toBeVisible();
+    expect(await symbolsOf(page)).toEqual(order);
+    expect(await page.getByTestId('brief-summary').textContent()).toBe(tiles);
+    expect(await page.locator('[data-testid="brief-candidate"] .tone-zone, .brief-event-icon.tone-zone').count()).toBe(0);
+    for (const hash of ['#/brief/list', '#/brief/watch']) {
+      await page.goto(`/${hash}`);
+      await expect(page.getByTestId('brief-candidate').first()).toBeVisible();
+      expect(await page.locator('[data-testid="brief-candidate"] .tone-zone').count(), hash).toBe(0);
+    }
+    await page.goto(`/#/brief/stock/${order[0]}`);
+    const conclusion = page.getByTestId('brief-conclusion');
+    await expect(conclusion).toBeVisible();
+    await expect(conclusion).not.toHaveClass(/tone-zone/);
+    expect(errors).toEqual([]);
+  });
+});
+
+// The exporter computes a row's audit from the bars it publishes, so the analysis day's volume ratio is one number: the row's
+// chip, the conclusion's title and the chart readout read the same ratio (the fixture serves them consistently).
+test.describe('the analysis day reads one volume ratio', () => {
+  test.use(phone(390, 844));
+  test('a breakout on a focus candidate: the row, the conclusion and the readout name the same ratio', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { mutate: crossing('ZZNV') });
+    const row = page.getByRole('region', { name: '注目候補' }).locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]');
+    await expect(row).toBeVisible();
+    const ratio = text => text.match(/(\d+\.\d\d)×/)?.[1] ?? null;
+    const rowRatio = ratio(await row.locator('.brief-reasons > .brief-chip').first().textContent());
+    expect(rowRatio).not.toBeNull();
+    await row.click();
+    const conclusion = page.getByTestId('brief-conclusion');
+    await expect(conclusion).toBeVisible();
+    expect(ratio(await conclusion.locator('strong').first().textContent())).toBe(rowRatio);
+    const readout = page.locator('.brief-chartcard .ro-item[title^="直前"]').first();
+    await expect(readout).toBeVisible();
+    expect(ratio(await readout.textContent())).toBe(rowRatio);
+    expect(errors).toEqual([]);
+  });
+});
+
 test.describe('a failed breakout counts in the watch tile', () => {
   test.use(phone(375));
   test('the same watch list reads one more broken setup with a failed breakout than without it', async ({ page, context }) => {
@@ -75,10 +150,11 @@ test.describe('a failed breakout counts in the watch tile', () => {
 
 // Every screen, with unknown conditions (ZZZF), a broken setup and a failed breakout among the watched stocks.
 const NO_ZERO = { charts: served => { broken('ZZSD').charts(served); failedBreakout('ZZAR').charts(served); }, ...onRow('ZZAR', row => { row.se_pivot_price = Math.round(rowBySymbol.ZZAR.current_price * 1.02 * 100) / 100; }) };
+// 「あと0」 that claims nothing is left (あと0条件, あと0%, あと0.0%); a real gap of a tenth or more (あと0.1%) is a value.
 const zeroLeft = page => page.evaluate(() => {
-  const found = [];
-  if (/あと0/.test(document.body.textContent)) found.push(`text: ${document.body.textContent.match(/.{0,20}あと0.{0,10}/)[0]}`);
-  for (const node of document.querySelectorAll('[aria-label], [title]')) for (const attr of ['aria-label', 'title']) if (/あと0/.test(node.getAttribute(attr) || '')) found.push(`${attr}: ${node.getAttribute(attr).slice(0, 40)}`);
+  const found = [], zero = /あと0(?!\.\d*[1-9])/;
+  if (zero.test(document.body.textContent)) found.push(`text: ${document.body.textContent.match(/.{0,20}あと0(?!\.\d*[1-9]).{0,10}/)[0]}`);
+  for (const node of document.querySelectorAll('[aria-label], [title]')) for (const attr of ['aria-label', 'title']) if (zero.test(node.getAttribute(attr) || '')) found.push(`${attr}: ${node.getAttribute(attr).slice(0, 40)}`);
   return found;
 });
 for (const [name, device] of [['phone', phone(375)], ['desktop', VIEWPORTS.desktop]]) test.describe(`「あと0」 appears nowhere on the ${name}`, () => {
