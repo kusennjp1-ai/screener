@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { secPoint, secRecord, secUnavailable } from '../src/test/fixtures/secRecord.js';
-import { briefRows, compareSecCarryForward, coverageWarnings, EPS_UNKNOWN_CAUSES, epsUnknownCauses, secEvidenceLine, SETUP_CONFIDENCE_FLOOR, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, invokedAsCommand, publishedCoverage, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
+import { briefRows, compareSecCarryForward, coverageWarnings, EPS_UNKNOWN_CAUSES, epsUnknownCauses, secEvidenceLine, SETUP_CONFIDENCE_FLOOR, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, fundamentalsSummaryTable, invokedAsCommand, publishedCoverage, publishedFundamentalsReport, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
 
 const write = async (path, value) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(value)); };
 
@@ -354,6 +354,51 @@ describe('round-2 measurements in the published report (plan DT4, DT9): diagnost
       const lines = []; await runPublished(['--published', '--root', root], { env: {}, log: line => lines.push(line), now });
       expect(lines.some(line => line.startsWith('::warning::The brief lists 5 trend-template qualified rows, more than the long history\'s 3'))).toBe(true);
       expect(lines.some(line => line.includes('Setup readiness passes on 0'))).toBe(false);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('keeps the round-1 coverage when a round-2 measurement throws on a row shape the fixtures lack, and says so', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'published-round2-throws-'));
+    try {
+      // A derivation gap that is not an object: the round-2 gap count cannot read it.
+      const odd = { ...secRecord({ symbol: 'ODD' }), derivation_gaps: [null] };
+      const cases = { ODD: { book_financials: odd }, FINE: { book_financials: secRecord({ symbol: 'FINE' }), se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date } } };
+      const rowsOut = Object.keys(cases).map(symbol => ({ symbol, market: 'US', as_of_date: date, research_detail_path: `research-details/${symbol}.json` }));
+      for (const row of rowsOut) await write(join(root, `static-data/${row.research_detail_path}`), { ...row, ...cases[row.symbol] });
+      await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows: rowsOut }));
+      await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' } } } } });
+      await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: rowsOut.map(({ symbol }) => ({ symbol, methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } })) });
+      const report = await publishedCoverage({ root, now });
+      // Round 1 counted both rows (the SEC record of each, the readiness of FINE).
+      expect(report).toMatchObject({ listed: 2, sec_record: 2, setup_ready: { pass: 1 } });
+      expect(report.round2).toEqual({ unavailable: expect.stringMatching(/null/) });
+      const lines = []; const code = await runPublished(['--published', '--root', root], { env: {}, log: line => lines.push(line), now });
+      expect(code).toBe(0);
+      expect(lines.some(line => line.startsWith('::warning::Round-2 coverage measurements unavailable: '))).toBe(true);
+      const table = fundamentalsSummaryTable(await publishedFundamentalsReport({ root, now }));
+      expect(table).toContain('| brief-listed rows | 2 |');
+      expect(table).toMatch(/\| round-2 measurements \| 未計測 \(/);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('tallies why a setup was not recalculated and warns when the Setup Engine returned no complete report for more than 1% of the listed rows', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'published-round2-unavailable-'));
+    try {
+      const cases = {
+        OK: { se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date } },
+        ERR: { setup_recalculation: { status: 'unavailable', as_of_date: date, reason: 'Setup Engine did not return a complete report' } },
+        SPY: { setup_recalculation: { status: 'unavailable', as_of_date: date, reason: 'SPY benchmark unavailable; benchmark-dependent setup and RS remain unknown' } },
+      };
+      const rowsOut = Object.keys(cases).map(symbol => ({ symbol, market: 'US', as_of_date: date, research_detail_path: `research-details/${symbol}.json` }));
+      for (const row of rowsOut) await write(join(root, `static-data/${row.research_detail_path}`), { ...row, book_financials: null, ...cases[row.symbol] });
+      await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows: rowsOut }));
+      await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' } } } } });
+      await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: rowsOut.map(({ symbol }) => ({ symbol, methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } })) });
+      const report = await publishedCoverage({ root, now });
+      expect(report.round2.setup_readiness).toMatchObject({ pass: 1, unknown: 2, incomplete_report: 1,
+        not_calculated: [['unavailable: SPY benchmark unavailable; benchmark-dependent setup and RS remain unknown', 1], ['unavailable: Setup Engine did not return a complete report', 1]] });
+      const lines = []; await runPublished(['--published', '--root', root], { env: {}, log: line => lines.push(line), now });
+      expect(lines.some(line => line.startsWith('::warning::Setup Engine returned no complete report for 1 of 3 brief-listed rows (above 1%'))).toBe(true);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

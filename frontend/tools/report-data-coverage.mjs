@@ -262,6 +262,10 @@ const UNKNOWN_KINDS = ['q4_eps', 'q4_row', 'few_quarters', 'gap', 'stale', 'no_s
  */
 export const SETUP_CONFIDENCE_FLOOR = 55;
 export const FLOOR_CHECK = 'primary_pattern_below_confidence_floor';
+/** recalculate-setups.py's reason for an Error scan (a detector that raised, among others): the whole setup is cleared. */
+export const INCOMPLETE_REPORT = 'Setup Engine did not return a complete report';
+/** The share of listed rows with that reason above which the report warns (measurement only). */
+export const INCOMPLETE_REPORT_WARN_SHARE = 0.01;
 /** Why EPS acceleration stays unknown, in the order a row's first cause is taken (DT4; §9-20 reads fiscal_q4_untagged). */
 export const EPS_UNKNOWN_CAUSES = Object.freeze(['under_8_quarters', 'gap', 'latest_row_fiscal_q4_without_eps', 'fiscal_q4_untagged', 'prior_year_loss_or_zero', 'period_mismatch']);
 /**
@@ -344,7 +348,8 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
   const invalid = { count: 0, by_cause: {}, symbols: [] }, gaps = { fiscal_q4: 0, other: 0, derivation_gaps: {}, empty_revenue: 0 };
   const withoutSec = { rows: 0, yahoo_tile: 0, ages: [] }, confidence = { below_floor: 0, missing: 0, floor_check_named: 0 };
   const market = { distribution_days: 0, ftd_date: 0 }, asOfFields = new Set();
-  let epsUnknown = 0, epsNoCurrent = 0, qualified = 0;
+  let epsUnknown = 0, epsNoCurrent = 0, qualified = 0, round2Error = null;
+  const notCalculated = new Map();
   const auditRows = new Map((audit?.results || []).map(row => [row.symbol, row]));
   const qualifiedSet = new Set(briefRows(audit, date).filter(symbol => auditRows.get(symbol)?.methods?.minervini?.qualified));
   for (const symbol of listed) {
@@ -368,78 +373,93 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
     if (secState === 'unknown') out.code33_unknown_reason[explain.kind] = (out.code33_unknown_reason[explain.kind] || 0) + 1;
     out.setup_ready[setupReadiness(row).state]++;
     for (const key of Object.keys(out.filled)) if (finite(row[key])) out.filled[key]++;
-    if (qualifiedSet.has(symbol)) qualified++;
-    // (a) The failed setup checks the recalculation names.
-    if (setupReadiness(row).state === 'fail') for (const check of String(row.setup_recalculation?.reason || '').split(' / ').map(item => item.trim()).filter(Boolean)) failedChecks.set(check, (failedChecks.get(check) || 0) + 1);
-    // (b) A base under the Setup Engine's confidence floor.
-    if (!finite(row.se_pattern_confidence)) confidence.missing++; else if (row.se_pattern_confidence < SETUP_CONFIDENCE_FLOOR) confidence.below_floor++;
-    if (String(row.setup_recalculation?.reason || '').includes(FLOOR_CHECK)) confidence.floor_check_named++;
-    // (c) EPS acceleration unknown, by cause (DT4), with or without a current SEC report.
-    const anyReport = book?.report?.valid ? book.report : null;
-    if (report?.epsAcceleration === 'unknown') {
-      const causes = epsUnknownCauses(report); epsUnknown++; epsPrimary[causes.primary]++; for (const cause of causes.all) epsAny[cause]++;
-    } else if (!report?.valid) epsNoCurrent++;
-    // (d) Why a record could not be read.
-    if (row.book_financials?.reason === 'invalid_payload') {
-      const cause = invalidCause(row.book_financials); invalid.count++; invalid.by_cause[cause] = (invalid.by_cause[cause] || 0) + 1;
-      if (invalid.symbols.length < 10) invalid.symbols.push(symbol);
-    }
-    // (e) Gaps in the latest four quarters, a fiscal Q4 or another, the derivation gaps and records without a revenue concept.
-    if (anyReport?.consecutive === false) {
-      const last = anyReport.rows.slice(-4);
-      gaps[(anyReport.fiscalQ4Missing || []).some(end => end > last[0].end && end < last.at(-1).end) ? 'fiscal_q4' : 'other']++;
-    }
-    for (const gap of Array.isArray(row.book_financials?.derivation_gaps) ? row.book_financials.derivation_gaps : []) {
-      const key = `${gap.metric}:${gap.reason}`; gaps.derivation_gaps[key] = (gaps.derivation_gaps[key] || 0) + 1;
-    }
-    if (anyReport && anyReport.revenueConcept === false) gaps.empty_revenue++;
-    // (f) Without SEC quarters: is there a current Yahoo reference, and how old is its latest period?
-    if (!anyReport) {
-      withoutSec.rows++;
-      if (history?.valid && history.quarterly?.length) { withoutSec.yahoo_tile++; withoutSec.ages.push(Math.round((Date.parse(date) - Date.parse(history.quarterly.at(-1).end)) / 86400000)); }
-    }
-    // (i) The backend's market fields on the rows; (j) any as-of field for the group rank.
-    if (finite(row.market_distribution_days)) market.distribution_days++;
-    if (typeof row.market_ftd_date === 'string' && row.market_ftd_date) market.ftd_date++;
-    for (const key of Object.keys(row)) if (/^ibd_group.*(as_of|date)/.test(key) || /^group_rank.*(as_of|date)/.test(key)) asOfFields.add(key);
+    // The round-2 measurements (a)–(j) are diagnostic: one that throws on a row shape the fixtures lack stops them only
+    // (out.round2 then says why), never the round-1 coverage above or the SEC carry comparison that reads it.
+    if (round2Error) continue;
+    try {
+      if (qualifiedSet.has(symbol)) qualified++;
+      // (a) The failed setup checks the recalculation names, and why a recalculation is not 'calculated' (the reason
+      // recalculate-setups.py records: a detector error reads 'Setup Engine did not return a complete report').
+      if (setupReadiness(row).state === 'fail') for (const check of String(row.setup_recalculation?.reason || '').split(' / ').map(item => item.trim()).filter(Boolean)) failedChecks.set(check, (failedChecks.get(check) || 0) + 1);
+      if (row.setup_recalculation?.status !== 'calculated') {
+        const why = `${row.setup_recalculation?.status || 'absent'}: ${String(row.setup_recalculation?.reason || '理由なし').slice(0, 120)}`;
+        notCalculated.set(why, (notCalculated.get(why) || 0) + 1);
+      }
+      // (b) A base under the Setup Engine's confidence floor.
+      if (!finite(row.se_pattern_confidence)) confidence.missing++; else if (row.se_pattern_confidence < SETUP_CONFIDENCE_FLOOR) confidence.below_floor++;
+      if (String(row.setup_recalculation?.reason || '').includes(FLOOR_CHECK)) confidence.floor_check_named++;
+      // (c) EPS acceleration unknown, by cause (DT4), with or without a current SEC report.
+      const anyReport = book?.report?.valid ? book.report : null;
+      if (report?.epsAcceleration === 'unknown') {
+        const causes = epsUnknownCauses(report); epsUnknown++; epsPrimary[causes.primary]++; for (const cause of causes.all) epsAny[cause]++;
+      } else if (!report?.valid) epsNoCurrent++;
+      // (d) Why a record could not be read.
+      if (row.book_financials?.reason === 'invalid_payload') {
+        const cause = invalidCause(row.book_financials); invalid.count++; invalid.by_cause[cause] = (invalid.by_cause[cause] || 0) + 1;
+        if (invalid.symbols.length < 10) invalid.symbols.push(symbol);
+      }
+      // (e) Gaps in the latest four quarters, a fiscal Q4 or another, the derivation gaps and records without a revenue concept.
+      if (anyReport?.consecutive === false) {
+        const last = anyReport.rows.slice(-4);
+        gaps[(anyReport.fiscalQ4Missing || []).some(end => end > last[0].end && end < last.at(-1).end) ? 'fiscal_q4' : 'other']++;
+      }
+      for (const gap of Array.isArray(row.book_financials?.derivation_gaps) ? row.book_financials.derivation_gaps : []) {
+        const key = `${gap.metric}:${gap.reason}`; gaps.derivation_gaps[key] = (gaps.derivation_gaps[key] || 0) + 1;
+      }
+      if (anyReport && anyReport.revenueConcept === false) gaps.empty_revenue++;
+      // (f) Without SEC quarters: is there a current Yahoo reference, and how old is its latest period?
+      if (!anyReport) {
+        withoutSec.rows++;
+        if (history?.valid && history.quarterly?.length) { withoutSec.yahoo_tile++; withoutSec.ages.push(Math.round((Date.parse(date) - Date.parse(history.quarterly.at(-1).end)) / 86400000)); }
+      }
+      // (i) The backend's market fields on the rows; (j) any as-of field for the group rank.
+      if (finite(row.market_distribution_days)) market.distribution_days++;
+      if (typeof row.market_ftd_date === 'string' && row.market_ftd_date) market.ftd_date++;
+      for (const key of Object.keys(row)) if (/^ibd_group.*(as_of|date)/.test(key) || /^group_rank.*(as_of|date)/.test(key)) asOfFields.add(key);
+    } catch (error) { round2Error = error; }
   }
-  const top = [...failedChecks.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 10);
-  // (g) Chart depth of every verified chart in the index.
-  const bars = index.rows.filter(row => row.technical_audit?.valid === true && Number.isSafeInteger(row.technical_audit.bars)).map(row => row.technical_audit.bars);
-  // (h) The long history's trend-template count on the analysis date (the market-trends asset), against the listed qualified rows.
-  let longTT = null;
+  if (round2Error) { out.round2 = { unavailable: String(round2Error?.message || round2Error).slice(0, 200) }; return out; }
   try {
-    const ref = entry.assets?.market_trends;
-    const series = ref?.path ? await read(inside(ref.path)) : null;
-    const point = (series?.long_history?.breadth || []).find(item => item?.date === date);
-    longTT = Number.isSafeInteger(point?.trendTemplateCount) ? point.trendTemplateCount : null;
-  } catch { longTT = null; }
-  // (k) The round-2 list summaries on the listed rows (absent from older publications: 未計測).
-  const listedRows = listed.map(symbol => rows.get(symbol)).filter(Boolean);
-  const has = key => listedRows.some(row => Object.hasOwn(row, key));
-  const rsLine = listedRows.map(row => row.rs_line_high), secSummaries = listedRows.map(row => Object.hasOwn(row, 'sec_summary') ? secSummary(row) : undefined);
-  out.round2 = {
-    setup_readiness: { ...out.setup_ready, top_failed_checks: top },
-    setup_confidence: { floor: SETUP_CONFIDENCE_FLOOR, ...confidence },
-    eps_unknown: { with_current_report: epsUnknown, without_current_report: epsNoCurrent, primary: epsPrimary, any: epsAny,
-      fiscal_q4_share: epsUnknown ? (epsPrimary.fiscal_q4_untagged + epsPrimary.latest_row_fiscal_q4_without_eps) / epsUnknown : null },
-    invalid_payload: invalid,
-    gaps,
-    without_sec: { rows: withoutSec.rows, yahoo_tile: withoutSec.yahoo_tile, latest_period_age_days: withoutSec.ages.length ? { p50: quantile(withoutSec.ages, 0.5), max: Math.max(...withoutSec.ages) } : null,
-      older_than_190_days: withoutSec.ages.filter(age => age > 190).length },
-    chart_depth: { charts: bars.length, bars: spread(bars), weeks: spread(bars.map(count => Math.floor(count / 5))), window: await chartWindowSource() },
-    tt_population: { long_history_tt: longTT, listed_qualified: audit?.as_of_date === date ? qualified : null },
-    market_fields: { rows_with_distribution_days: market.distribution_days, rows_with_ftd_date: market.ftd_date,
-      market_context: !Object.hasOwn(entry, 'market_context') ? 'absent' : entry.market_context ? 'emitted' : 'null' },
-    group_rank: { filled: out.filled.ibd_group_rank, listed: listed.length, as_of_fields: [...asOfFields].sort() },
-    list_summaries: {
-      rs_line_high: has('rs_line_high') ? { rows: listedRows.filter(row => Object.hasOwn(row, 'rs_line_high')).length, certified: rsLine.filter(Boolean).length,
-        value_true: rsLine.filter(item => item?.value === true).length, value_unknown: rsLine.filter(item => item && item.value === null).length, leading_true: rsLine.filter(item => item?.leading === true).length } : null,
-      sec_summary: has('sec_summary') ? { rows: secSummaries.filter(item => item !== undefined).length, admitted: secSummaries.filter(Boolean).length,
-        eps_yoy: secSummaries.filter(item => item?.eps_yoy).length, sales_yoy: secSummaries.filter(item => item?.sales_yoy).length } : null,
-      se_pattern_primary: has('se_pattern_primary') ? listedRows.filter(row => typeof row.se_pattern_primary === 'string' && row.se_pattern_primary).length : null,
-    },
-  };
+    const top = [...failedChecks.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 10);
+    // (g) Chart depth of every verified chart in the index.
+    const bars = index.rows.filter(row => row.technical_audit?.valid === true && Number.isSafeInteger(row.technical_audit.bars)).map(row => row.technical_audit.bars);
+    // (h) The long history's trend-template count on the analysis date (the market-trends asset), against the listed qualified rows.
+    let longTT = null;
+    try {
+      const ref = entry.assets?.market_trends;
+      const series = ref?.path ? await read(inside(ref.path)) : null;
+      const point = (series?.long_history?.breadth || []).find(item => item?.date === date);
+      longTT = Number.isSafeInteger(point?.trendTemplateCount) ? point.trendTemplateCount : null;
+    } catch { longTT = null; }
+    // (k) The round-2 list summaries on the listed rows (absent from older publications: 未計測).
+    const listedRows = listed.map(symbol => rows.get(symbol)).filter(Boolean);
+    const has = key => listedRows.some(row => Object.hasOwn(row, key));
+    const rsLine = listedRows.map(row => row.rs_line_high), secSummaries = listedRows.map(row => Object.hasOwn(row, 'sec_summary') ? secSummary(row) : undefined);
+    out.round2 = {
+      setup_readiness: { ...out.setup_ready, top_failed_checks: top,
+        not_calculated: [...notCalculated.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 5),
+        incomplete_report: [...notCalculated.entries()].filter(([why]) => why.includes(INCOMPLETE_REPORT)).reduce((sum, [, n]) => sum + n, 0) },
+      setup_confidence: { floor: SETUP_CONFIDENCE_FLOOR, ...confidence },
+      eps_unknown: { with_current_report: epsUnknown, without_current_report: epsNoCurrent, primary: epsPrimary, any: epsAny,
+        fiscal_q4_share: epsUnknown ? (epsPrimary.fiscal_q4_untagged + epsPrimary.latest_row_fiscal_q4_without_eps) / epsUnknown : null },
+      invalid_payload: invalid,
+      gaps,
+      without_sec: { rows: withoutSec.rows, yahoo_tile: withoutSec.yahoo_tile, latest_period_age_days: withoutSec.ages.length ? { p50: quantile(withoutSec.ages, 0.5), max: Math.max(...withoutSec.ages) } : null,
+        older_than_190_days: withoutSec.ages.filter(age => age > 190).length },
+      chart_depth: { charts: bars.length, bars: spread(bars), weeks: spread(bars.map(count => Math.floor(count / 5))), window: await chartWindowSource() },
+      tt_population: { long_history_tt: longTT, listed_qualified: audit?.as_of_date === date ? qualified : null },
+      market_fields: { rows_with_distribution_days: market.distribution_days, rows_with_ftd_date: market.ftd_date,
+        market_context: !Object.hasOwn(entry, 'market_context') ? 'absent' : entry.market_context ? 'emitted' : 'null' },
+      group_rank: { filled: out.filled.ibd_group_rank, listed: listed.length, as_of_fields: [...asOfFields].sort() },
+      list_summaries: {
+        rs_line_high: has('rs_line_high') ? { rows: listedRows.filter(row => Object.hasOwn(row, 'rs_line_high')).length, certified: rsLine.filter(Boolean).length,
+          value_true: rsLine.filter(item => item?.value === true).length, value_unknown: rsLine.filter(item => item && item.value === null).length, leading_true: rsLine.filter(item => item?.leading === true).length } : null,
+        sec_summary: has('sec_summary') ? { rows: secSummaries.filter(item => item !== undefined).length, admitted: secSummaries.filter(Boolean).length,
+          eps_yoy: secSummaries.filter(item => item?.eps_yoy).length, sales_yoy: secSummaries.filter(item => item?.sales_yoy).length } : null,
+        se_pattern_primary: has('se_pattern_primary') ? listedRows.filter(row => typeof row.se_pattern_primary === 'string' && row.se_pattern_primary).length : null,
+      },
+    };
+  } catch (error) { out.round2 = { unavailable: String(error?.message || error).slice(0, 200) }; }
   return out;
 }
 
@@ -474,6 +494,8 @@ export async function publishedFundamentalsReport({ root = 'public', now = Date.
   if (ready && ready.pass === 0 && coverage.listed > 0) warnings.push(ready.fail > 0
     ? `Setup readiness passes on 0 of ${coverage.listed} brief-listed rows (fail ${ready.fail}, unknown ${ready.unknown}; top failed checks: ${ready.top_failed_checks.slice(0, 3).map(([check, n]) => `${check} ${n}`).join(', ') || '未計測'})`
     : `Setup readiness unknown on all ${coverage.listed} brief-listed rows (未計測)`);
+  if (round2?.unavailable) warnings.push(`Round-2 coverage measurements unavailable: ${round2.unavailable}`);
+  if (ready && coverage.listed > 0 && ready.incomplete_report > coverage.listed * INCOMPLETE_REPORT_WARN_SHARE) warnings.push(`Setup Engine returned no complete report for ${ready.incomplete_report} of ${coverage.listed} brief-listed rows (above ${INCOMPLETE_REPORT_WARN_SHARE * 100}%; their setup and pivot are cleared: ${ready.not_calculated.slice(0, 3).map(([why, n]) => `${why} ${n}`).join(', ')})`);
   const tt = round2?.tt_population;
   if (Number.isSafeInteger(tt?.long_history_tt) && Number.isSafeInteger(tt?.listed_qualified) && tt.listed_qualified > tt.long_history_tt) warnings.push(`The brief lists ${tt.listed_qualified} trend-template qualified rows, more than the long history's ${tt.long_history_tt} for ${coverage.as_of_date}`);
   if (manifestBlock !== null && JSON.stringify(canonical(manifestBlock)) !== JSON.stringify(canonical(plainObject(manifestBlock) && !Object.hasOwn(manifestBlock, 'warnings') ? withoutWarnings : block))) warnings.push('The manifest fundamentals_coverage block differs from the published details');
@@ -500,10 +522,12 @@ export function fundamentalsSummaryTable(report, { label = null } = {}) {
     `| setup readiness (listed, measurement only) | ${cell(c.setup_ready)} |`,
     `| filled (listed, measurement only) | ${cell(c.filled)} of ${cell(c.listed)} |`];
   const r = c.round2;
-  if (r) {
+  if (r?.unavailable) lines.push(`| round-2 measurements | 未計測 (${r.unavailable}) |`);
+  else if (r) {
     const pair = list => list?.length ? list.map(([key, n]) => `${key} ${n}`).join(', ') : 'none';
     const range = value => value ? `p10 ${value.p10}, p50 ${value.p50}, p90 ${value.p90}` : '未計測';
     lines.push(`| setup: top failed checks (listed) | ${pair(r.setup_readiness.top_failed_checks)} |`,
+      `| setup: not calculated, top reasons (listed) / no complete report | ${pair(r.setup_readiness.not_calculated)} / ${cell(r.setup_readiness.incomplete_report)} |`,
       `| setup confidence under ${r.setup_confidence.floor} (mirrors the backend floor test) / missing / floor check named | ${r.setup_confidence.below_floor} / ${r.setup_confidence.missing} / ${r.setup_confidence.floor_check_named} |`,
       `| EPS acceleration unknown (current SEC report) | ${r.eps_unknown.with_current_report}: ${cell(Object.fromEntries(Object.entries(r.eps_unknown.primary).filter(([, n]) => n)))}; fiscal-Q4 share ${percent(r.eps_unknown.fiscal_q4_share)}; without a current report ${r.eps_unknown.without_current_report} |`,
       `| invalid_payload by cause | ${r.invalid_payload.count}: ${cell(r.invalid_payload.by_cause)}${r.invalid_payload.symbols.length ? ` (${r.invalid_payload.symbols.join(' ')})` : ''} |`,
