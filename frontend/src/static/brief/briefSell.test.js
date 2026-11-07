@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { pivotDistanceText } from './briefCandidate';
 import { bookWarningCheck, HOLDING_CHIP, HOLDING_ROW_CHIP, isBreakdown, ma50Hit, sellChipView, sellMarks, sellSignals, SELL_RULES, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP, withBookWarning } from './briefSell';
 
 // Synthetic bars only: no test here leans on the browser fixture's last-bar jump.
@@ -123,6 +124,14 @@ describe('the strength (climax) checks judge only an extended stock', () => {
     const reason = view => sellSignals(bars, band, { view }).strength[0].detail;
     expect(reason({ state: 'wait', pivot: last * 1.02, distance: -2 })).toBe('ピボットより下（ブレイク前）のため判定しません');
     expect(reason({ state: 'ext', pivot: last / 1.15, distance: 15 })).toBe(`ブレイク後の上昇が小さいため判定しません（ピボット比 +15.0%・判定は +${SELL_RULES.climaxFromPivotPercent}%以上）`);
+    // In the buy zone a few cents over the pivot, or at its cents: the distance as every screen prints it (rows'
+    // pivotDistanceText: 「+0.1%未満」, 「±0.0%」), never 「+0.0%」, in the reason and in the card's short line alike.
+    for (const view of [{ state: 'zone', pivot: 100, price: 100.03, distance: 0.03 }, { state: 'zone', pivot: 100, price: 100.004, distance: 0.004 }]) {
+      const result = sellSignals(bars, band, { view }), shown = pivotDistanceText(view);
+      expect(result.strength[0].detail).toBe(`ブレイク後の上昇が小さいため判定しません（ピボット比 ${shown}・判定は +${SELL_RULES.climaxFromPivotPercent}%以上）`);
+      expect(result.runShort.reason).toBe(`ピボット比 ${shown}・+${SELL_RULES.climaxFromPivotPercent}%未満`);
+      expect(`${result.strength[0].detail}${result.runShort.reason}`).not.toMatch(/[+−-]0\.0%/);
+    }
     // A position that is not beyond the buy zone never reads as a small rise, whatever its distance.
     expect(reason({ state: 'low', stateLabel: '低変動・監視のみ', pivot: last / 1.3, distance: 30 })).toBe('買いゾーン超過の銘柄ではないため判定しません（位置：低変動・監視のみ）');
     expect(reason({ state: 'na', pivot: last / 1.3, distance: 30 })).toBe('買いゾーン超過の銘柄ではないため判定しません（位置：判定不可）');
