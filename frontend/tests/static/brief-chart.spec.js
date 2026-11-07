@@ -2,10 +2,13 @@
 // weekly label, the touch scrub, the legend colours, the 12px floor, the 44px targets and the phone budgets;
 // round 2: no label over another label, a tag or the last price, the final contraction's depth, the date
 // ticks, the RS panel, one earnings count, the pivot crossing, ADR and the unverified readout; every label's box
-// on every fixture stock and period (no label over a candle unless the renderer proves it had no free box).
+// on every fixture stock and period (no label over a candle unless the renderer proves it had no free box, no average's
+// name over candles while a clear spot is near its line's end, no two labels read as one phrase).
 import { test, expect } from '@playwright/test';
 import { date, horizontalOverflow, openBrief, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
 import { chartCrossing, crossingNote } from '../../src/static/brief/chartReadout.js';
+import { MA_SHIFT } from '../../src/static/brief/priceChart.js';
+import { KIN_GAP } from '../../src/static/brief/chartLabels.js';
 
 const DOCK_TOP = 788; // 844 − the 56px dock at 390×844
 // Measure only after the finite animations finish (the last price's pulse repeats for ever).
@@ -72,17 +75,23 @@ const collisions = page => page.getByTestId('brief-price-chart').evaluate(chart 
   column.forEach((a, i) => { for (const b of column.slice(i + 1)) if (hit(a, b)) out.push(`${a.name} × ${b.name}`); });
   return out;
 });
+/** How far from its line's end the test looks for a clear spot for a forced average's name (independent of data-search). */
+const MA_REACH = { left: MA_SHIFT, height: 48 };
 /**
- * Every label's box in the chart (round 2, labels fix 1): each visible text (in-plot labels, captions, the axes' values,
- * the tags' prices) against every candle (its whole high–low range across its body), every volume bar and its dot,
- * every other text and every tag, mark and leader. A text may sit over candles or bars only when the renderer forced it
- * (data-forced="1"): the test then re-runs the spots it tried (data-search "x0 x1 step|centres", the box from data-box)
- * with the box 1px larger on each side and every obstacle at least as large as the renderer took it (candles 2px wider
- * each side, bars 1px, texts 6px across and 1px up and down, marks 2px), so a spot clear here was clear for the renderer
- * too; finding one fails. Also every contraction with a computed depth (data-depth on its box) shows that depth.
+ * Every label's box in the chart (round 2, labels fixes 1 and 2): each visible text (in-plot labels, captions, the axes'
+ * values, the tags' prices) against every candle (its whole high–low range across its body), every volume bar and its
+ * dot, every other text and every tag, mark and leader. A text may sit over candles or bars only when the renderer
+ * forced it (data-forced="1"): the test then re-runs the spots it tried (data-search "x0 x1 step|centres", the box from
+ * data-box) with the box 1px larger on each side and every obstacle at least as large as the renderer took it (candles
+ * 2px wider each side, bars 1px, texts 6px across (KIN_GAP between two of one kin) and 1px up and down, marks 2px), so
+ * a spot clear here was clear for the renderer too; finding one fails. A forced average's name also fails when the test's own search finds a clear spot
+ * near its line's end (its right end up to MA_REACH.left left of where it ends unmoved, 7px from the axis, its centre
+ * within MA_REACH.height of the end's height, inside the plot), whatever spots the renderer tried. Two labels never read
+ * as one phrase: the pivot's name and the zone's never share a row closer than two glyphs, a depth and an average's name
+ * never closer than one. Also every contraction with a computed depth (data-depth on its box) shows that depth.
  * Returns the failures and the forced labels.
  */
-const labelAudit = page => page.getByTestId('brief-price-chart').evaluate(chart => {
+const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart, { reach, kinGap }) => {
   const out = [];
   const visible = node => !node.closest('.bc-hover, .bc-scrub') && node.getAttribute('visibility') !== 'hidden' && node.textContent.trim() !== '';
   const groupOf = node => node.closest('g.bc-tag, g.bc-rshigh, g.bc-earnflag');
@@ -123,7 +132,10 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate(chart 
     const [range, centres] = (a.node.dataset.search || '').split('|');
     if (!range || !a.reserved) { out.push(`${a.name}: forced without its search`); return; }
     const [x0, x1, step] = range.split(' ').map(Number), w = a.reserved[1] - a.reserved[0], half = (a.reserved[3] - a.reserved[2]) / 2;
-    const others = [...texts.filter(t => t !== a && t.node.dataset.box !== a.node.dataset.box).map(t => grow(t.outer, 6, 1)), ...solids.map(s => grow(s, 2, 2))];
+    // Labels of one kin (the plan's names; depths and averages' names) keep their wider gap (KIN_GAP) for the renderer too.
+    const kin = node => (node.matches('.bc-pivot-text, .bc-zonetext') ? 'plan' : node.matches('.bc-legtext, .bc-tdepth, .bc-malabel') ? 'figure' : null);
+    const gapTo = t => (kin(t.node) && kin(t.node) === kin(a.node) ? kinGap[kin(a.node)] : 6);
+    const others = [...texts.filter(t => t !== a && t.node.dataset.box !== a.node.dataset.box).map(t => grow(t.outer, gapTo(t), 1)), ...solids.map(s => grow(s, 2, 2))];
     const xs = [];
     for (let xx = x0; xx <= x1 + 1e-6; xx += step) xs.push(xx);
     if (xs.at(-1) < x1) xs.push(x1);
@@ -131,14 +143,30 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate(chart 
       const box = { x0: xx - 1, x1: xx + w + 1, y0: yc - half - 1, y1: yc + half + 1 };
       if (!others.some(o => hit(box, o)) && !solidUnder(box, 1) && !crossesRs(box)) { out.push(`${a.name}: forced, but the spot ${xx.toFixed(1)},${yc.toFixed(1)} was clear`); return; }
     }
+    // A forced average's name: no clear spot near its line's end, by the test's own search.
+    const key = [...a.node.classList].find(cls => cls.startsWith('bc-malabel-'))?.slice('bc-malabel-'.length);
+    if (!key) return;
+    const plot = chart.querySelector('svg clipPath rect'), pw = Number(plot.getAttribute('width')), bottom = Number(plot.getAttribute('height'));
+    const end = (chart.querySelector(`path.bc-ma.bc-${key}`)?.getAttribute('d') || '').split(/[ML]/).filter(Boolean).at(-1)?.split(',').map(Number);
+    if (!end) { out.push(`${a.name}: forced, with no line of its own`); return; }
+    for (let right = pw - 7; right >= pw - 7 - reach.left; right--) for (let yc = Math.ceil(end[1] - reach.height); yc <= end[1] + reach.height; yc++) {
+      if (yc - half < 8 || yc + 7 > bottom) continue;
+      const box = { x0: right - w - 1, x1: right + 1, y0: yc - half - 1, y1: yc + half + 1 };
+      if (!others.some(o => hit(box, o)) && !solidUnder(box, 1)) { out.push(`${a.name}: forced over candles, but ${right},${yc} near its line's end was clear`); return; }
+    }
   });
+  // Labels that would read as one phrase on one row: the pivot's and the zone's names (both green), a depth and an average's name.
+  const row = (a, b) => a.y0 < b.y1 && a.y1 > b.y0, apart = (a, b) => Math.max(a.x0 - b.x1, b.x0 - a.x1);
+  const named = cls => texts.filter(t => t.node.matches(cls));
+  for (const pivot of named('.bc-pivot-text')) for (const zone of named('.bc-zonetext')) if (row(pivot, zone) && apart(pivot, zone) < 24) out.push(`${pivot.name} and ${zone.name} on one row ${apart(pivot, zone).toFixed(1)}px apart`);
+  for (const depth of named('.bc-legtext, .bc-tdepth')) for (const name of named('.bc-malabel')) if (row(depth, name) && apart(depth, name) < 12) out.push(`${depth.name} and ${name.name} on one row ${apart(depth, name).toFixed(1)}px apart`);
   for (const leg of chart.querySelectorAll('.bc-leg[data-depth]')) {
     const k = leg.dataset.leg, want = `−${Math.round(Number(leg.dataset.depth))}%`;
     const node = chart.querySelector(`.bc-legtext[data-i="${k}"]`) || chart.querySelector(`.bc-tlabel[data-leg="${k}"] .bc-tdepth`);
     if (!node || !visible(node) || !node.textContent.trim().endsWith(want)) out.push(`T${Number(k) + 1}: its depth ${want} is not shown`);
   }
   return { failures: out, forced: texts.filter(t => t.node.dataset.forced === '1').map(t => t.name) };
-});
+}, { reach: MA_REACH, kinGap: KIN_GAP });
 /** Every drawn level line (買値, 2R, 3R, 52週高, the wide chart's structural low) has its name drawn. */
 const unnamedLevels = page => page.getByTestId('brief-price-chart').evaluate(chart => ['bc-entry', 'bc-r2', 'bc-r3', 'bc-high52']
   .filter(cls => chart.querySelectorAll(`line.${cls}`).length !== [...chart.querySelectorAll(`.${cls}-text`)].filter(node => node.textContent.trim() && node.getAttribute('visibility') !== 'hidden').length));
@@ -460,9 +488,11 @@ for (const [name, device] of [['phone', VIEWPORTS.phone], ['desktop', VIEWPORTS.
   });
 });
 
-// Every fixture stock with a chart, on every period, at 390 and 1440: no label over a candle, a volume bar, another label,
-// a tag or a mark (over candles only when forced and no tried spot was clear), and every computed depth on the chart.
-for (const [name, device] of [['390', VIEWPORTS.phone], ['1440', VIEWPORTS.desktop]]) test.describe(`label boxes at ${name}`, () => {
+// Every fixture stock with a chart, on every period, at 320, 390 and 1440: no label over a candle, a volume bar, another
+// label, a tag or a mark (over candles only when forced and no tried spot was clear; an average's name only when no spot
+// near its line's end was clear), no two labels read as one phrase, and every computed depth on the chart.
+const NARROWEST = { viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
+for (const [name, device] of [['320', NARROWEST], ['390', VIEWPORTS.phone], ['1440', VIEWPORTS.desktop]]) test.describe(`label boxes at ${name}`, () => {
   test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
   test('every fixture stock and period: no label over a candle or another label unless forced with no clear spot, every depth shown', async ({ page }) => {
     test.setTimeout(240000);
