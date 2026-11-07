@@ -56,6 +56,53 @@ function bars(seed, finalPrice, tightness) {
     out.push({ date: days[i], open: round(open), close: round(close), high: round(Math.max(open, close) * (1 + r() * 0.012)),
       low: round(Math.min(open, close) * (1 - r() * 0.012)), volume: Math.round(2e6 * (0.6 + r()) * (t > 0.85 ? 0.6 : 1)) });
   }
+  // The analysis day as every row's audit states it (withAuditFixture: +2.0% on 1.6× the prior 50 sessions), so the
+  // chart's readout and the rows read one day: the session before closes 2% under the row's price, and the last one
+  // trades 1.6 times their average (rounded up, so it reads 1.60×).
+  const [before, last] = out.slice(-2);
+  before.close = round(finalPrice / 1.02);
+  Object.assign(before, { high: Math.max(before.high, before.open, before.close), low: Math.min(before.low, before.open, before.close) });
+  last.volume = Math.ceil(out.slice(-51, -1).reduce((sum, bar) => sum + bar.volume, 0) / 50 * 1.6);
+  return out;
+}
+
+/** The analysis day's change and volume ratio from published bars, as the exporter's audit computes them (auditDailyBars). */
+function barsAudit(list) {
+  const last = list.at(-1), before = list.at(-2), average = list.slice(-51, -1).reduce((sum, bar) => sum + bar.volume, 0) / 50;
+  return { change: (last.close / before.close - 1) * 100, volumeRatio: average > 0 ? last.volume / average : null };
+}
+
+/**
+ * A variant served as the exporter would write it: a row's technical_audit and its chart describe the same bars
+ * (export-research.mjs computes one from the other, and certifyBars refuses a pair that drifted apart). When a spec
+ * changes a chart's last 51 sessions, the row's (and its detail's) day change and volume ratio follow those bars; when
+ * it changes only the row's day change or volume ratio, the chart's last two sessions follow the row. Bars whose last
+ * close is not the row's price are left as they are (they are not certified anyway).
+ */
+function consistent(served) {
+  const tail = list => JSON.stringify((list || []).slice(-52).map(bar => [bar?.date, bar?.close, bar?.volume]));
+  const day = row => [row?.technical_audit?.values?.change, row?.technical_audit?.values?.volumeRatio];
+  const fix = {};
+  for (const row of served.rows) {
+    const file = row.chart_path?.split('/').pop(), chart = served.charts[file], base = rowBySymbol[row.symbol];
+    if (!chart || !base || !Array.isArray(chart.bars) || chart.bars.length < 52 || Math.abs(chart.bars.at(-1).close - row.current_price) > 0.02 || row.technical_audit?.as_of_date !== date) continue;
+    if (tail(chart.bars) !== tail(charts[file]?.bars)) fix[row.symbol] = { audit: barsAudit(chart.bars) };
+    else if (JSON.stringify(day(row)) !== JSON.stringify(day(base))) fix[row.symbol] = { file, bars: day(row) };
+  }
+  if (!Object.keys(fix).length) return served;
+  const out = { rows: served.rows === rows ? structuredClone(rows) : served.rows, charts: served.charts === charts ? structuredClone(charts) : served.charts,
+    details: served.details === details ? structuredClone(details) : served.details };
+  const setAudit = (row, values) => { row.technical_audit = { ...row.technical_audit, values: { ...row.technical_audit.values, ...values } }; };
+  for (const row of [...out.rows, ...Object.values(out.details)]) if (fix[row?.symbol]?.audit) setAudit(row, fix[row.symbol].audit);
+  for (const { file, bars: values } of Object.values(fix)) {
+    if (!file) continue;
+    const list = out.charts[file].bars, [change, ratio] = values, [before, last] = list.slice(-2);
+    if (Number.isFinite(change) && change > -100) {
+      before.close = round(last.close / (1 + change / 100));
+      Object.assign(before, { high: Math.max(before.high, before.open, before.close), low: Math.min(before.low, before.open, before.close) });
+    }
+    if (Number.isFinite(ratio) && ratio >= 0) last.volume = Math.ceil(list.slice(-51, -1).reduce((sum, bar) => sum + bar.volume, 0) / 50 * ratio);
+  }
   return out;
 }
 
@@ -180,7 +227,7 @@ export function marketTrends({ historyEnd = date, schema = 'current', mutate } =
  */
 export async function routeBrief(page, { historyEnd = date, schema, fail, detailGate, mutate = {} } = {}) {
   const trends = marketTrends({ historyEnd, schema, mutate: mutate.trends });
-  const served = { rows: variant(rows, mutate.rows), charts: variant(charts, mutate.charts), details: variant(details, mutate.details) };
+  const served = consistent({ rows: variant(rows, mutate.rows), charts: variant(charts, mutate.charts), details: variant(details, mutate.details) });
   const manifest = variant({ as_of_date: date, generated_at: new Date(now).toISOString(), research_generation: 'brief-browser-fixture',
     default_market: 'US', supported_markets: ['US'], markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' }, market_trends: trends.ref }, pages: {} } } }, mutate.manifest);
   const external = [];
