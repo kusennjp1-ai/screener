@@ -3,7 +3,7 @@ import { code33ChipView, earningsCaution, earningsChipView } from '../fundamenta
 import { meterPercent } from './briefNav';
 import { footprint, RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { sellChipView } from './briefSell';
-import { distanceText, earningsCall as earningsCallOf, POSITION_NAMES, rsShown } from './briefCandidate';
+import { distanceText, earningsCall as earningsCallOf, pivotDistanceText, POSITION_NAMES, rsShown } from './briefCandidate';
 import { buyGate } from './buyGate';
 
 const finite = Number.isFinite;
@@ -38,7 +38,7 @@ function withUnits(text, units) {
 const TITLE_UNITS = /\d+\/\d+に上抜け|上抜けから\d+営業日超?|（次のピボット待ち）|買いの対象外|ピボットは参考（独自判定）/g;
 
 /** The position under a neutral call, on one phone line: its name and the distance from the pivot. */
-const positionLine = view => <><Unit>位置は参考：</Unit><Unit>{POSITION_NAMES[view.position] || view.stale?.short || view.stateLabel}</Unit>{view.stale || !finite(view.distance) ? '' : <>・<Unit>{`ピボット比 ${distanceText(view.distance)}`}</Unit></>}。</>;
+const positionLine = view => <><Unit>位置は参考：</Unit><Unit>{POSITION_NAMES[view.position] || view.stale?.short || view.stateLabel}</Unit>{view.stale || !finite(view.distance) ? '' : <>・<Unit>{`ピボット比 ${pivotDistanceText(view)}`}</Unit></>}。</>;
 
 /**
  * The line under the call, by the gate's kind: a neutral call names its reason and moves the position
@@ -48,7 +48,7 @@ const positionLine = view => <><Unit>位置は参考：</Unit><Unit>{POSITION_NA
 function callLine(view, gate) {
   const note = withUnits(gate.note, gate.units || []);
   if (gate.moved) return <>{note}{positionLine(view)}</>;
-  const pivot = <Unit>{`ピボット比 ${distanceText(view.distance)}`}</Unit>;
+  const pivot = <Unit>{`ピボット比 ${pivotDistanceText(view)}`}</Unit>;
   switch (gate.kind) {
     case 'near': return <>{fromSma50(view)}出来高を伴ってピボットを上抜けるまで待ちます。</>;
     case 'basePosition': return <>{pivot}・{fromSma50(view)}まだ買いの局面ではありません。</>;
@@ -87,10 +87,10 @@ const METER_SHORT = { base: '土台', near: '接近', zone: '買い', ext: '超�
  * The pivot meter. `reference`: the stock is no buy candidate now, so the buy zone is drawn in the neutral
  * line and the meter carries 参考. A stale pivot draws nothing (the call's line already says why).
  */
-function Meter({ distance, reference, stale }) {
+function Meter({ distance, text = distanceText(distance), reference, stale }) {
   if (stale) return null;
   if (!finite(distance)) return <p className="brief-note">ピボットを確認できないため位置は未確認です。</p>;
-  return <div className={`brief-meter${reference ? ' is-reference' : ''}`} role="img" aria-label={`ピボットからの位置${reference ? '（参考）' : ''} ${distanceText(distance)}`}>
+  return <div className={`brief-meter${reference ? ' is-reference' : ''}`} role="img" aria-label={`ピボットからの位置${reference ? '（参考）' : ''} ${text}`}>
     <span className="brief-meter-labels" aria-hidden="true">{METER_NAMES.map(([key, name]) => <span key={key} className={key === 'zone' ? 'is-zone' : undefined}><span className="brief-meter-name">{breakable(name)}</span><span className="brief-meter-short">{METER_SHORT[key]}</span></span>)}</span>
     <span className="brief-meter-track" aria-hidden="true"><i className="seg-base" /><i className="seg-near" /><i className="seg-zone" /><i className="seg-ext" /></span>
     <span className="brief-marker brief-meter-marker is-entering" style={{ '--p': meterPercent(distance) }} aria-hidden="true" />
@@ -159,7 +159,7 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
   ];
   return <section className={`brief-card brief-call tone-${tone} in`} style={{ '--i': 0 }} aria-label="結論" data-testid="brief-conclusion" data-gate={gate.kind}>
     <div className="brief-call-status"><span className="brief-call-dot" aria-hidden="true" /><div><strong>{withUnits(title, String(title ?? '').match(TITLE_UNITS) || [])}</strong><p>{sub}</p>{caution && <p className="brief-call-caution">{caution.text}</p>}</div></div>
-    <Meter distance={view.distance} reference={reference} stale={Boolean(view.stale)} />
+    <Meter distance={view.distance} text={pivotDistanceText(view)} reference={reference} stale={Boolean(view.stale)} />
     <div className="brief-kgrid">
       <div><small>買いの範囲</small><b className="numeric">{price(view.pivot)}</b><em>〜{price(view.upper)}</em><Qualifier text={referenced ? '参考' : null} /></div>
       <div><small>{finite(levels?.stopPercent) ? `損切り −${levels.stopPercent.toFixed(1)}%` : '損切り'}</small><b className="numeric">{price(levels?.stop)}</b><em>買値 {price(levels?.entry)}</em><Qualifier text={stopQualifier[0]} tone={stopQualifier[1]} /></div>

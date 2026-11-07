@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import useMediaQuery from '../useMediaQuery';
-import { BASE_CAUTION_NOTE, briefOrder, filterCounts, filterLabel, LIST_FILTERS, LIST_SORTS, matchesSearch, memoCandidateView, rowSecChip } from './briefCandidate';
+import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, filterCounts, filterLabel, LIST_FILTERS, LIST_SORTS, matchesSearch, memoCandidateView, rowSecChip } from './briefCandidate';
 import { CandidateRow } from './BriefParts';
 import { EARNINGS_CHIP_NOTE } from '../fundamentalsExplain.js';
 import { ScreenNotes } from './briefPrimitives';
@@ -26,6 +26,8 @@ const HIDDEN_FILTER_TEXT = { focus: '注目候補（ゾーン＋接近）' };
 // The hidden filters the 条件 menu offers, in its order.
 const CONDITION_FILTERS = ['breakout', 'eps'];
 const DEFAULT_FILTER = 'zone';
+// A phone's watch rows are compact (Today's focus rows' fit): said with the tab's notes while a row's caution can take TT 8/8's room.
+const WATCH_TT_NOTE = 'スマホのウォッチでは、行に収まらないときRS推計を省き、注意のチップがある行では「TT 8/8」も省くことがあります（どちらも銘柄の画面に表示）。';
 
 /** Every view a list screen can show, before its filter. */
 // eslint-disable-next-line react-refresh/only-export-components -- the stock pane steps through the same rows
@@ -116,9 +118,17 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   const unpublished = key => state === 'ready' && tally.unpublished[key] === true;
   const countText = key => state !== 'ready' ? '—' : unpublished(key) ? '未収録' : LIST_FILTERS[key].unknown ? `該当${counts[key]}・未確認${tally.unknown[key]}` : String(counts[key]);
   const missing = state === 'ready' && hidden && LIST_FILTERS[hidden].unknown ? tally.unknown[hidden] : 0;
-  // The watch tab has no filters and no 注記 of its own: its rows' base and SEC chips (独自判定・独自設定) state their rules
-  // here only while a row carries one, so a list without them keeps its height.
-  const watchNotes = kind === 'watch' ? [ordered.some(view => view.baseCaution) ? BASE_CAUTION_NOTE : null, ordered.some(view => rowSecChip(view, now)) ? EARNINGS_CHIP_NOTE : null].filter(Boolean) : [];
+  // The watch tab has no filters and no 注記 of its own: its rows' base and SEC chips (独自判定・独自設定) and a grey row's
+  // 土台未確認 state their rules here only while a row carries one. On a phone its rows are compact, as Today's focus rows:
+  // a caution takes the RS chip's place and RS gives way rather than add a line (it stays in the row's label), so the
+  // rows that carry those chips pay for the 注記 under the tab's height budget.
+  const compactRows = kind === 'watch' && phone;
+  const greyForBase = view => view.qualified && baseMuted(view) && !(sells[view.symbol]?.breakdownHits > 0);
+  const cautioned = view => view.qualified && (view.baseCaution || greyForBase(view) || (rowSecChip(view) && Number.isFinite(view.epsYoy) && view.epsYoy < 0));
+  const watchNotes = kind === 'watch' ? [ordered.some(view => view.baseCaution) ? BASE_CAUTION_NOTE : null, ordered.some(view => rowSecChip(view)) ? EARNINGS_CHIP_NOTE : null,
+    ordered.some(greyForBase) ? BASE_UNCHECKED_NOTE : null, compactRows && ordered.some(cautioned) ? WATCH_TT_NOTE : null].filter(Boolean) : [];
+  // The 候補 tab says why a row is grey for its base while one shows the word.
+  const uncheckedNote = kind !== 'watch' && ordered.some(view => view.qualified && baseMuted(view)) ? BASE_UNCHECKED_NOTE : null;
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け` : '日付未確認'}</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
     {kind !== 'watch' && <div className="brief-filters">
@@ -144,14 +154,14 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
     <section className={`brief-card in${kind === 'watch' ? ' brief-watchlist' : ''}`} style={{ '--i': 1 }} aria-label={kind === 'watch' ? 'ウォッチ中の銘柄' : '選定銘柄の一覧'}>
       {ordered.length || unlisted.length ? <ol className="brief-rows">
         {unlisted.map(symbol => <UnlistedWatchRow key={symbol} symbol={symbol} date={brief.date} onRemove={onUnwatch} />)}
-        {ordered.slice(0, rendered).map((view, i) => <CandidateRow key={view.symbol} view={view} rank={kind === 'watch' ? null : i + 1} index={Math.min(i, 12)} onOpen={open} now={now} animate={animate} sell={sells[view.symbol]} hideTemplate={constantTemplate} market={brief.market} />)}
+        {ordered.slice(0, rendered).map((view, i) => <CandidateRow key={view.symbol} view={view} rank={kind === 'watch' ? null : i + 1} index={Math.min(i, 12)} onOpen={open} now={now} animate={animate} sell={sells[view.symbol]} pending={kind === 'watch' && !sells[view.symbol]} hideTemplate={constantTemplate} compact={compactRows} market={brief.market} />)}
       </ol>
         : <p className="brief-note">{state !== 'ready' ? BUNDLE_TEXT[state] : kind === 'watch' ? '銘柄の画面で ☆ を押すと、ここに並びます。'
           // A filter that could not judge some stocks says so: no hit is not the same as no stock.
           : missing > 0 && !query ? `該当なし。ほか${missing}銘柄は${LIST_FILTERS[hidden].why}のため判定していません。` : 'この条件の選定銘柄はありません。'}</p>}
       {ordered.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + pageSize)}>さらに表示（残り {ordered.length - limit}件）</button>}
-      {wide && (kind === 'watch' ? watchNotes : [LIST_NOTE, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]).map(note => note && <p key={note} className="brief-note">{note}</p>)}
+      {wide && (kind === 'watch' ? watchNotes : [LIST_NOTE, uncheckedNote, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]).map(note => note && <p key={note} className="brief-note">{note}</p>)}
     </section>
-    <ScreenNotes id={kind === 'watch' ? 'watch' : 'list'} wide={wide} notes={kind === 'watch' ? watchNotes : [LIST_NOTE, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]} />
+    <ScreenNotes id={kind === 'watch' ? 'watch' : 'list'} wide={wide} notes={kind === 'watch' ? watchNotes : [LIST_NOTE, uncheckedNote, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]} />
   </>;
 }

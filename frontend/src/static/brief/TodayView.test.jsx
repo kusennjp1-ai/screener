@@ -7,6 +7,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TodayView, { watchAttention } from './TodayView';
 import { withAuditFixture } from '../testAuditFixture';
+// A Setup Engine base current for 2026-10-02 over the confidence floor (baseCurrent), as the fixture's rows carry; a test
+// that needs a base that is not current overrides it.
+const CURRENT_BASE = { setup_recalculation: { status: 'calculated', as_of_date: '2026-10-02' }, se_pattern_confidence: 60 };
 
 // The round-2 seams Today calls (plan §2.2): each records its arguments and answers as its owner's module does,
 // unless a test sets a value (undefined: the real body; null at step 0) to see where that value shows.
@@ -163,25 +166,33 @@ describe('the round-2 seams on Today', () => {
     expect(screen.getByTestId('brief-summary').querySelector('li em .brief-tile-suffix')).toHaveTextContent('〈suffix〉');
   });
 
-  it('explains 「NAS調整中」 in the tile\'s title, for assistive tech and in the notes, with the market track\'s own sentence', async () => {
-    const { marketTileNote } = await import('./briefEnvironment');
+  it('explains the market track\'s tile suffix in the tile\'s title, for assistive tech and in the notes, led by the tile\'s word', async () => {
+    const { marketTileNote, marketTileSuffix } = await vi.importActual('./briefEnvironment');
     const nas = { data: { as_of_date: DATE, indices: [{ symbol: '^GSPC', followThrough: { available: true, method: 'm', asOf: DATE, state: 'confirmed' } },
       { symbol: '^IXIC', followThrough: { available: true, method: 'm', asOf: DATE, state: 'rally_attempt', attempt: { startDate: '2026-09-29', day: 3 } } }] }, isLoading: false };
-    const sentence = marketTileNote({ market: OPEN, trends: nas, manifest });
-    expect(sentence).toMatch(/SPY/);
-    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>
+    // The words are the producer's (market's marketTileSuffix and marketTileNote), asserted through its functions.
+    const input = { market: OPEN, trends: nas, manifest }, suffix = marketTileSuffix(input), sentence = marketTileNote(input);
+    expect([typeof suffix, typeof sentence]).toEqual(['string', 'string']);
+    const today = wide => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><MemoryRouter>
       <TodayView brief={{ bundle: { data: { date: DATE, rankings: { minervini: [] } }, isLoading: false, isError: false }, manifest: { data: manifest, isLoading: false, isError: false }, ranked: [], date: DATE, market: OPEN, marketLoading: false, trends: nas, version: 'v1' }}
-        watch={[]} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false} wide={false} nav={{ market() {}, list() {}, watch() {} }} onUnwatch={() => {}} />
+        watch={[]} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false} wide={wide} nav={{ market() {}, list() {}, watch() {} }} onUnwatch={() => {}} />
     </MemoryRouter></QueryClientProvider>);
+    today(false);
     const tile = screen.getByTestId('brief-summary').querySelector('li a');
-    expect(tile.querySelector('.brief-tile-suffix')).toHaveTextContent('NAS調整中');
+    expect(tile.querySelector('.brief-tile-suffix')).toHaveTextContent(suffix);
     expect(tile.getAttribute('title')).toBe(sentence);
     expect(tile.querySelector('em .sr-only:last-child')).toHaveTextContent(sentence);
-    expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).toContain(sentence);
+    // The note names the tile's word first, so a reader can tell which note explains the tile.
+    expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).toContain(`${suffix}：${sentence}`);
+    cleanup();
+    // From 1024px the notes are in place: the same line under the market card, visible without a hover.
+    today(true);
+    expect([...document.querySelectorAll('.brief-tile-note')].map(node => node.textContent)).toEqual([`${suffix}：${sentence}`]);
     cleanup();
     // Without the suffix: no title and no note.
     show();
     expect(screen.getByTestId('brief-summary').querySelector('li a').getAttribute('title')).toBeNull();
+    expect(document.querySelector('.brief-tile-note')).toBeNull();
   });
 
   it('asks for the coverage warning with this date\'s published block and shows it as one line under the market card', () => {
@@ -207,7 +218,7 @@ describe('round 2 on Today', () => {
   const OPEN = { label: '上昇トレンド（独自判定）', state: 'confirmed_uptrend', cap: 0.5 };
   // A row audited for DATE: close `price` against a pivot of 100, the day's change and volume ratio.
   const audited = (symbol, price, change = 2, volume = 1.6) => {
-    const row = withAuditFixture({ symbol, company_name: symbol, market: 'US', currency: 'USD', current_price: price, se_pivot_price: 100, rs_rating: 90 }, DATE);
+    const row = withAuditFixture({ symbol, company_name: symbol, market: 'US', currency: 'USD', current_price: price, se_pivot_price: 100, rs_rating: 90, ...CURRENT_BASE }, DATE);
     Object.assign(row.technical_audit.values, { change, volumeRatio: volume });
     return { row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } };
   };
@@ -270,7 +281,7 @@ describe('Today after the review', () => {
   const DATE = '2026-10-02';
   const OPEN = { label: '上昇トレンド（独自判定）', state: 'confirmed_uptrend', cap: 0.5 };
   const audited = (symbol, price, { change = 2, volume = 1.6, extra = {} } = {}) => {
-    const row = withAuditFixture({ symbol, company_name: symbol, market: 'US', currency: 'USD', current_price: price, se_pivot_price: 100, rs_rating: 90, ...extra }, DATE);
+    const row = withAuditFixture({ symbol, company_name: symbol, market: 'US', currency: 'USD', current_price: price, se_pivot_price: 100, rs_rating: 90, ...CURRENT_BASE, ...extra }, DATE);
     Object.assign(row.technical_audit.values, { change, volumeRatio: volume });
     return { row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } };
   };
@@ -292,6 +303,30 @@ describe('Today after the review', () => {
     const line = document.querySelector('.brief-coverage-note');
     expect([line.textContent, line.getAttribute('title')]).toEqual(['〈short〉', '〈full sentence〉']);
     expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).toContain('〈full sentence〉');
+  });
+
+  it('keeps the 注目候補 tile neutral when every focus row is grey for its base, says 土台未確認 on the rows and why in the notes', async () => {
+    const { BASE_UNCHECKED_NOTE, focusCounts } = await vi.importActual('./briefCandidate');
+    const weak = { se_pattern_confidence: 31 };
+    const ranked = [audited('WK1', 101, { extra: weak }), audited('WK2', 98, { extra: weak }), audited('BRK1', 101, { extra: weak })];
+    expect(focusCounts(ranked, DATE)).toMatchObject({ total: 3, reference: 3, breakout: 0 });
+    show({ ranked });
+    const tiles = [...screen.getByTestId('brief-summary').querySelectorAll(':scope > li')];
+    expect(tiles[1].className).not.toContain('tone-zone');
+    // The breakout of a pivot that is only a reference is not one of the day's breakouts on Today.
+    expect(screen.queryByTestId('brief-breakout-link')).toBeNull();
+    const focus = screen.getByRole('region', { name: '注目候補' });
+    expect(focus.querySelectorAll('.tone-zone')).toHaveLength(0);
+    expect([...focus.querySelectorAll('[data-testid="brief-candidate"]')].every(node => node.textContent.includes('土台未確認'))).toBe(true);
+    expect(focus.querySelector('.brief-note:last-of-type').textContent).toContain(BASE_UNCHECKED_NOTE);
+    cleanup();
+    // One row with a current base: the tile is green again, the note stays while a grey row shows the word.
+    show({ ranked: [...ranked, audited('OK1', 101)] });
+    expect([...screen.getByTestId('brief-summary').querySelectorAll(':scope > li')][1].className).toContain('tone-zone');
+    expect(document.body.textContent).toContain(BASE_UNCHECKED_NOTE);
+    cleanup();
+    show({ ranked: [audited('OK1', 101)] });
+    expect(document.body.textContent).not.toContain(BASE_UNCHECKED_NOTE);
   });
 
   it('states the base chip\'s rule (独自判定) with Today\'s notes only when a focus row carries the chip', () => {

@@ -6,7 +6,7 @@
 // positionSizing imports this module and nothing here imports it back, so there is no cycle.
 import { finite } from '../researchEngine';
 import { conditionCompactLabel, conditionCompactText, conditionNote, conditionNoteValue } from '../missingCondition';
-import { baseShortfall, candidateMarketGate, POSITION_NAMES, ratioShown, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, underTenth } from './briefCandidate';
+import { atPivotCents, baseShortfall, baseShortfallNote, candidateMarketGate, POSITION_NAMES, ratioShown, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, underTenth } from './briefCandidate';
 import { crossingEvent } from './breakoutHistory';
 import { isBreakdown, SELL_RULES } from './briefSell';
 import { shortDate } from './briefShared';
@@ -54,17 +54,8 @@ export function templateReference(template) {
  */
 export function baseCheck(view) {
   const short = baseShortfall(view?.row, view?.asOf);
-  if (!short) return { current: true, note: null };
-  const no = note => ({ current: false, note });
-  switch (short.kind) {
-    case 'unavailable': return no('土台の再計算不可');
-    case 'otherDay': return no(`土台の再計算が分析日のものではありません（${shortDate(short.date, view.asOf)}）`);
-    case 'noConfidence': return no('土台の信頼度 未確認');
-    case 'belowFloor': return no(`土台の信頼度 ${Math.floor(short.confidence)}（基準${SE_CONFIDENCE_FLOOR}）`);
-    // The published confidence may clear the floor while the engine names its primary pattern below it: say that, not the number.
-    case 'primaryBelowFloor': return no(`主パターンが信頼度の基準${SE_CONFIDENCE_FLOOR}未満（Setup Engine）`);
-    default: return no('土台の再計算 未確認');
-  }
+  // The words are the rows' (baseShortfallNote: the title of their 土台未確認 chip), so the two say one reason.
+  return short ? { current: false, note: baseShortfallNote(short, view?.asOf) } : { current: true, note: null };
 }
 
 /** The first rule, then 「、ほかN件」 (one rule keeps its value), with the parts a line never splits. */
@@ -98,8 +89,9 @@ function templateCall(view, template) {
 /** The position call when nothing stops it: tone and title only (the conclusion writes the line under it). */
 function positionCall(view) {
   switch (view.position) {
-    // Just under the pivot the gap is 「0.1%未満」, never a 0.0% that does not exist.
-    case 'near': return { kind: 'near', tone: 'wait', title: `${POSITION_NAMES.near}（あと${underTenth(view.distance) ? '0.1%未満' : `${Math.abs(view.distance).toFixed(1)}%`}）` };
+    // Just under the pivot the gap is 「0.1%未満」, never a 0.0% that does not exist; at the pivot's cents (float noise in a
+    // published pivot puts it on the near side) there is no gap to the cent to name (the touch rule's own test).
+    case 'near': return { kind: 'near', tone: 'wait', title: `${POSITION_NAMES.near}（${atPivotCents(view) ? 'ピボットと同値' : `あと${underTenth(view.distance) ? '0.1%未満' : `${Math.abs(view.distance).toFixed(1)}%`}`}）` };
     case 'base': return { kind: 'basePosition', tone: 'neutral', title: POSITION_NAMES.base };
     case 'ext': return { kind: 'ext', tone: 'ext', title: POSITION_NAMES.ext };
     case 'staleAbove': case 'staleBelow': return { kind: 'stalePivot', tone: view.stale?.above ? 'ext' : 'neutral', title: view.stale?.text || view.stateLabel };

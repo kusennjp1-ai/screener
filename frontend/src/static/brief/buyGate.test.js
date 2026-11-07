@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { baseCurrent, breakoutEvent, candidateView, earningsCall, trendTemplate } from './briefCandidate';
+import { baseCurrent, breakoutEvent, candidateView, earningsCall, POSITION_NAMES, trendTemplate } from './briefCandidate';
 import { crossingEvent } from './breakoutHistory';
 import { baseCheck, buyGate, HEAVY_DOWN_NOTE, marketGuidePercent, PLAN_BLOCKED, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, templateReference } from './buyGate';
 import { conditionNote } from '../missingCondition';
@@ -125,13 +125,18 @@ describe('the one buy gate', () => {
     }
   });
 
-  it('says a close just under the pivot is less than 0.1% away, never あと0.0%', () => {
+  it('says a close just under the pivot is less than 0.1% away, never あと0.0%, and names no gap at the pivot\'s cents', () => {
+    // The position's name is the rows' (POSITION_NAMES, rows-owned); the gap is the conclusion's own words.
     const near = gateOf({ price: 99.96, pivot: 100 });
     expect(near.kind).toBe('near');
-    expect(near.title).toBe('ピボット接近（あと0.1%未満）');
+    expect(near.title).toBe(`${POSITION_NAMES.near}（あと0.1%未満）`);
     // 「あと0」 only as a real tenth or more (あと0.1%), never a gap of nothing (あと0.0%, あと0%, あと0条件).
     expect(near.title).not.toMatch(/あと0(?!\.\d*[1-9])/);
-    expect(gateOf({ price: 99.9, pivot: 100 }).title).toBe('ピボット接近（あと0.1%）');
+    expect(gateOf({ price: 99.9, pivot: 100 }).title).toBe(`${POSITION_NAMES.near}（あと0.1%）`);
+    // A close at the pivot's cent that float noise in the published pivot puts on the near side has no gap to the cent:
+    // 同値, never 「あと0.1%未満」 (the touch rule's own test; the position stays the shared rule's).
+    const atCent = gateOf({ price: 5.98, pivot: 5.980000019 });
+    expect([atCent.kind, atCent.title]).toEqual(['near', `${POSITION_NAMES.near}（ピボットと同値）`]);
   });
 
   it('earnings within 10 days stop the green call, after the market; the plan names the phase (決算前, 決算当日, 決算後)', () => {

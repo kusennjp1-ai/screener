@@ -79,7 +79,6 @@ export function useWatchlist() {
   return { watch, toggle, storageError };
 }
 
-/** Everything the stock screen shows for one symbol. Missing pieces stay null/unknown. */
 /**
  * How far a published audit value may sit from the one recomputed on the delivered bars and still be the same
  * reading: the screens print the day's change to 0.1% and the volume ratio to 0.01×, the close to the cent.
@@ -104,6 +103,7 @@ export function certifyBars(row, payload, date) {
   return drifted ? { certified: false, reason: '公開時の検証値（終値・前日比・出来高倍率）と日足が一致しません' } : { certified: true, reason: null };
 }
 
+/** Everything the stock screen shows for one symbol. Missing pieces stay null/unknown. */
 export function useStockData(symbol, brief) {
   const { manifest, bundle, version, entry, date } = brief;
   const item = useMemo(() => (bundle.data?.rankings?.minervini || []).find(r => r.row.symbol === symbol) || null, [bundle.data, symbol]);

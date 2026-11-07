@@ -4,7 +4,7 @@
 // This module imports briefCandidate (the day's event) and nothing imports it back, so there is no cycle.
 import { finite } from '../researchEngine';
 import { signed } from '../positionGeometry';
-import { BREAKOUT_VOLUME_RATIO, breakoutEvent, ratioShown } from './briefCandidate';
+import { BREAKOUT_VOLUME_RATIO, breakoutEvent, ratioShown, TOUCH_HELD_NOTE } from './briefCandidate';
 import { shortDate } from './briefShared';
 
 /** How many sessions back the crossing is looked for (the current pivot only: it is re-detected daily). */
@@ -88,10 +88,11 @@ export function breakoutBar(bars, pivot, crossing) {
 
 /**
  * The conclusion's event for the analysis day: breakoutEvent(view) (rows'), with an `'after'` event (the
- * stock was already above the pivot the day before) dated from the certified `bars` by lastPivotCrossing
+ * stock was already above the pivot's cents the day before) dated from the certified `bars` by lastPivotCrossing
  * (60 sessions, the current pivot): `crossed` is that crossing, or null. Every other event is
- * breakoutEvent's, unchanged. Only a dated crossing on BREAKOUT_VOLUME_RATIO or more stays green, as on the
- * crossing day itself (breakoutEvent's 'cross').
+ * breakoutEvent's, unchanged, so the analysis day's own breakout (a first close above the pivot after a close
+ * under it or at its cents) is the rows' event, said the same way on every screen. Only a dated crossing on
+ * BREAKOUT_VOLUME_RATIO or more stays green, as on the crossing day itself (breakoutEvent's 'cross').
  * - Dated within `staleSessions` (STALE_BREAKOUT_SESSIONS by default) on the volume: 「9/22に上抜け・2営業日前」,
  *   green. On lighter volume (kind 'afterLight': 「9/22に上抜け・出来高不足」) or with it unknown ('afterUnconfirmed':
  *   「…・出来高 未確認」): tone 'wait', as breakoutEvent says it on the crossing day.
@@ -102,11 +103,13 @@ export function breakoutBar(bars, pivot, crossing) {
  *   to tell: kind 'undated', tone 'wait', 「買いゾーン内（上抜け日 未確認）」: never green.
  * - A crossing that closed at the pivot's cents is a touch, not a breakout (rows' rule and the chart's): the breakout
  *   is the first later close above the pivot (breakoutBar), dated and judged on that bar's volume. A touch never
- *   followed by one: kind 'afterTouch', tone 'wait', 「9/28にピボット到達・4営業日前」.
+ *   followed by one (rows' 'touchHeld', or bars that say so): kind 'afterTouch', tone 'wait', 「ピボット到達から4営業日」
+ *   with the touch's date in the note (「9/28にピボットに届いた後、…」); the touch's own day is green (rows' 'touch'), and
+ *   the note says the green is that day's only. A 'touchHeld' the bars cannot date keeps the rows' words (tone 'wait').
  */
 export function crossingEvent(view, bars = null, { staleSessions = STALE_BREAKOUT_SESSIONS } = {}) {
   const event = breakoutEvent(view);
-  if (event?.kind !== 'after') return event;
+  if (event?.kind !== 'after' && event?.kind !== 'touchHeld') return event;
   const usable = Array.isArray(bars) && bars.length > 1 && bars.at(-1)?.date === view.asOf;
   const crossing = usable ? lastPivotCrossing(bars, view.pivot) : null;
   // A crossing that closed at the pivot's cents is a touch (rows' 「ピボット到達」, no arrow on the chart): the breakout is
@@ -114,12 +117,15 @@ export function crossingEvent(view, bars = null, { staleSessions = STALE_BREAKOU
   const broke = crossing ? breakoutBar(bars, view.pivot, crossing) : null;
   // A touch never followed by a close above the pivot: still on it (the analysis day's close is the pivot's cents).
   if (crossing && !broke && crossing.sessionsAgo >= 1) {
-    return { ...event, kind: 'afterTouch', tone: 'wait', title: `${shortDate(crossing.date, view.asOf)}にピボット到達・${crossing.sessionsAgo}営業日前`,
-      note: 'ピボットに届いた後、終値でピボットを上回っていないため、上抜けの裏付けはありません。', crossed: null };
+    // As short as 「上抜けから12営業日」 (one line on a 320px phone); the touch's date is the line under it.
+    return { ...event, kind: 'afterTouch', tone: 'wait', title: `ピボット到達から${crossing.sessionsAgo}営業日`,
+      note: `${shortDate(crossing.date, view.asOf)}にピボットに届いた後、${TOUCH_HELD_NOTE}`, crossed: null };
   }
-  // The day before was above the pivot, so a crossing on the analysis day itself contradicts it: undated. A touch the
-  // day before and the first close above it on the analysis day is that day's breakout (sessionsAgo 0, said as such).
-  const crossed = broke && (broke.sessionsAgo >= 1 || broke !== crossing) ? broke : null;
+  // Two closes at the pivot's cents that the bars cannot date as one touch: the rows' words, never green.
+  if (event.kind === 'touchHeld') return { ...event, crossed: null };
+  // The day before closed above the pivot's cents, so a breakout dated on the analysis day itself contradicts it: undated
+  // (the analysis day's own breakout is breakoutEvent's, never this branch's).
+  const crossed = broke && broke.sessionsAgo >= 1 ? broke : null;
   // No crossing and every close of the whole window at or above the pivot: above it for more than 60 sessions.
   const span = CROSSING_LOOKBACK_SESSIONS + 2, above = usable && !crossing && bars.length >= span
     && bars.slice(-span).every(bar => positive(bar?.close) && cents(bar.close) >= cents(view.pivot));
@@ -139,7 +145,5 @@ export function crossingEvent(view, bars = null, { staleSessions = STALE_BREAKOU
   // The crossing day's own forms (breakoutEvent's on that day), dated: each one line on a 375px phone.
   if (ratio === null) return { ...event, kind: 'afterUnconfirmed', tone: 'wait', title: `${day}に上抜け・出来高 未確認`, note: '上抜けの日の出来高を確認できないため、上抜けの裏付けはありません。', crossed };
   if (ratio < BREAKOUT_VOLUME_RATIO) return { ...event, kind: 'afterLight', tone: 'wait', title: `${day}に上抜け・出来高不足`, note: `上抜けの日の出来高${ratioShown(ratio)}は基準の${BREAKOUT_VOLUME_RATIO}×に届きません。`, crossed };
-  // The analysis day itself (after a touch the day before): breakoutEvent's breakout title, with the bars' ratio.
-  if (n === 0) return { ...event, title: `${day}に上抜け・出来高${ratioShown(ratio)}`, crossed };
   return { ...event, title: `${day}に上抜け・${n}営業日前`, crossed };
 }

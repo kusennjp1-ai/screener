@@ -234,7 +234,7 @@ export function weeklyRangeLabel(bars) {
 
 /** Why a drawn crossing is grey, not green (chartCrossing's `reason`), for the 注記. */
 const CROSSING_REASONS = {
-  stale: `上抜けから${STALE_BREAKOUT_SESSIONS}営業日を超えた（独自判定）`,
+  stale: `上抜けから${STALE_BREAKOUT_SESSIONS}営業日を超えた・独自判定`,
   volume_unknown: 'その日の出来高倍率は未確認',
   volume_below: ratio => `その日の出来高は${ratio}で${BREAKOUT_VOLUME_RATIO}×未満`,
   below_pivot: 'その後の終値がピボットを割り込んだ',

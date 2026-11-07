@@ -360,6 +360,22 @@ describe('the failed breakout (ブレイク失敗, 独自判定)', () => {
     expect(hit.headline).toBe(`ブレイク失敗（${short(heavy[201].date)}上抜け）`);
   });
 
+  it('dates the window from the breakout, not the touch: a run of touches that began more than 10 sessions back still counts', () => {
+    // A touch 12 sessions back, closes at the pivot's cents for two more sessions, the first close above it 9 sessions back
+    // on 2.2×, then back under: the breakout (CONTEXT.md: the first close above the pivot) is inside the 10 sessions.
+    const run = make([...Array(200).fill(95), 100, 100, 100, 102, 101, 101, 101, 101, 101, 101, 98, 97], i => (i === 203 ? 22000 : 10000));
+    expect(run.length - 1 - 200).toBe(11);
+    const hit = check(run);
+    expect(hit).toMatchObject({ state: 'hit', crossDate: run[203].date, date: run[210].date, sessions: 2 });
+    // The same breakout 11 sessions back is outside the window.
+    const late = make([...Array(200).fill(95), 100, 100, 102, 101, 101, 101, 101, 101, 101, 101, 101, 98, 97], i => (i === 202 ? 22000 : 10000));
+    expect(late.length - 1 - 202).toBe(10);
+    expect(check(late).state).toBe('hit');
+    const older = make([...Array(200).fill(95), 100, 102, 101, 101, 101, 101, 101, 101, 101, 101, 101, 101, 98], i => (i === 201 ? 22000 : 10000));
+    expect(older.length - 1 - 201).toBe(11);
+    expect(check(older)).toMatchObject({ state: 'clear', detail: '直近10営業日にピボットの上抜けなし（終値はピボット比 −2.0%）' });
+  });
+
   it('is unknown, never clear, when the crossing day\'s volume (or the 50 before it) is missing; absent without a pivot', () => {
     for (const volume of [i => (i === 200 ? null : 10000), i => (i === 200 ? 0 : 10000), i => (i === 180 ? null : 10000)]) {
       const unknown = check(failed([98], 2.2, { volume }));

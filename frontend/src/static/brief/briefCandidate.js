@@ -7,7 +7,7 @@ import { signed, stateKey, STATES } from '../positionGeometry';
 import { auditValues, verifiedVolumeRatio } from '../qualificationAudit';
 import { conditionChipLabel, conditionText, conditionValueText, singleMissingCondition } from '../missingCondition';
 import { newYorkDate } from '../evidenceTime';
-import { EARNINGS_CHIP_PERCENT, secRowChip, secSummaryCurrent } from '../fundamentalsExplain.js';
+import { EARNINGS_CHIP_PERCENT, meetsEarningsChipPercent, secRowChip, secSummaryCurrent, wholePercent } from '../fundamentalsExplain.js';
 import { publishedRsLineHigh } from './briefChartModel';
 import { isoDay, shortDate } from './briefShared';
 
@@ -219,19 +219,51 @@ export function baseShortfall(row, date) {
 }
 /** Whether the Setup Engine base is current for `date` and over the confidence floor (baseShortfall finds nothing). */
 export const baseCurrent = (row, date) => baseShortfall(row, date) === null;
+/**
+ * baseShortfall's reason in the conclusion's words (buyGate's baseCheck note, and the title of the rows' 土台未確認 chip),
+ * or null for a current base. `asOf` is the analysis date another day's recalculation is dated against.
+ */
+export function baseShortfallNote(short, asOf) {
+  if (!short) return null;
+  switch (short.kind) {
+    case 'unavailable': return '土台の再計算不可';
+    case 'otherDay': return `土台の再計算が分析日のものではありません（${shortDate(short.date, asOf)}）`;
+    case 'noConfidence': return '土台の信頼度 未確認';
+    case 'belowFloor': return `土台の信頼度 ${Math.floor(short.confidence)}（基準${SE_CONFIDENCE_FLOOR}）`;
+    // The published confidence may clear the floor while the engine names its primary pattern below it: say that, not the number.
+    case 'primaryBelowFloor': return `主パターンが信頼度の基準${SE_CONFIDENCE_FLOOR}未満（Setup Engine）`;
+    default: return '土台の再計算 未確認';
+  }
+}
+/** The rows' word for a base that is not current, in the RS chip's place on a grey row (the conclusion's 土台を確認できない). */
+export const BASE_UNCHECKED_CHIP = '土台未確認';
+/** The notes' line for those grey rows (Today and the lists, while a row shows the word). */
+export const BASE_UNCHECKED_NOTE = `${BASE_UNCHECKED_CHIP}：Setup Engineの土台が分析日のものでないか、信頼度が${SE_CONFIDENCE_FLOOR}未満または未確認のため、ピボットは参考（灰色の行・独自判定）。`;
+/**
+ * A buy-zone or near-pivot row whose Setup Engine base is not current (view.baseCurrent false): where the conclusion's
+ * base check decides the call (土台を確認できない — ピボットは参考), the row keeps no green and Today's counts set it apart.
+ * Other positions are judged by their position, as the conclusion does, so the base does not grey them.
+ */
+export const baseMuted = view => view?.baseCurrent === false && (view.position === 'zone' || view.position === 'near');
 
 /**
  * The latest EPS change from the year-ago quarter (%) in the row's SEC summary, or null (未確認 or 未収録): only a summary
  * data's secSummaryCurrent reads as current for the analysis date at `now` (the bundle's evaluation clock), the rule the
- * row's SEC chip applies, so a quarter past the 180-day rule is never counted or sorted as current.
+ * row's SEC chip applies with the same clock (rowSecChip), so an EPS quarter past the 180-day rule (each point is judged
+ * on its own quarter) is never counted or sorted as current. The bundle is evaluated again when a point passes the rule
+ * (financialNextExpiry reads the summaries' quarter ends).
  */
 function secEpsYoy(row, date, now) {
   const summary = secSummaryCurrent(row, { now, date });
   return summary && finite(summary.eps_yoy?.value) ? summary.eps_yoy.value : null;
 }
 
-/** The row's SEC chip as the rows show it (data's secRowChip, dated by `now` and the analysis date): a notable one only, else null. */
-export function rowSecChip(view, now = null) {
+/**
+ * The row's SEC chip as the rows show it (data's secRowChip, dated by the analysis date and the clock the view's EPS filter
+ * and sort read, `view.secNow`, so a row that shows a chip is the row the filter counts): a notable one only, else null.
+ * `now` overrides that clock (a test); a view built without one reads the summary as the export judged it.
+ */
+export function rowSecChip(view, now = view?.secNow ?? null) {
   const sec = view?.row ? secRowChip(view.row, { now, date: view.asOf }) : null;
   return sec?.notable ? sec : null;
 }
@@ -252,7 +284,7 @@ export function candidateView(item, date, { now = null } = {}) {
   const assessment = item?.assessment;
   const failed = assessment?.failed ?? null, unknown = assessment?.unknown ?? null;
   const day = verifiedDay(row, date);
-  const current = currentSetup(row, date);
+  const current = currentSetup(row, date), shortfall = baseShortfall(row, date);
   const view = {
     symbol: row.symbol,
     // The analysis date every value here is as of (an event is that day's, never 「本日」's).
@@ -287,10 +319,14 @@ export function candidateView(item, date, { now = null } = {}) {
     // The Setup Engine pattern confidence, only while its recalculation is current for the analysis date.
     setupConfidence: current && finite(row.se_pattern_confidence) ? row.se_pattern_confidence : null,
     baseCaution: baseCaution(row, date, day.fromSma50),
-    // The Setup Engine base is current and over the floor (baseCurrent): when it is not, the rows keep no green (the
-    // conclusion reads 土台を確認できない for the same stock); membership, order and counts do not change.
-    baseCurrent: baseCurrent(row, date),
+    // The Setup Engine base is current and over the floor (baseCurrent): when it is not, a zone or near row keeps no green
+    // and says 土台未確認 (baseMuted; the conclusion reads 土台を確認できない for the same stock), with `baseNote` the
+    // conclusion's reason; membership and order do not change.
+    baseCurrent: shortfall === null,
+    baseNote: baseShortfallNote(shortfall, date),
     epsYoy: secEpsYoy(row, date, now),
+    // The clock that dates the SEC summary for the filter, the sort and the row's chip (rowSecChip).
+    secNow: finite(now) ? now : null,
     row,
   };
   // The analysis day as an event (breakoutEvent) and its rows' short form (rowEvent), once per view: the rows'
@@ -337,32 +373,42 @@ const cents = value => Math.round(value * 100);
 /** A volume ratio as an event title shows it: floored to 2 decimals, so 1.396 never reads 1.40× under a 1.4× bar. */
 export const ratioShown = value => `${(Math.floor(value * 100 + 1e-9) / 100).toFixed(2)}×`;
 
+/** The line under a touch that holds (two closes at the pivot's cents): the green is the arrival's day only (独自判定). */
+export const TOUCH_HELD_NOTE = '終値でピボットを上回っていないため、上抜けの裏付けはありません（緑はピボット到達の当日のみ・独自判定）。';
+
 /**
- * The analysis day as an event, from the verified close, its change and the verified volume ratio only:
- * a breakout is strictly previous close < pivot < close on an up day with BREAKOUT_VOLUME_RATIO or more.
- * Only for a stock in the buy zone; null when any input (the analysis date too) is missing: nothing is said
- * about a breakout. The titles name the analysis date (「10/2に上抜け」, 「10/2にピボット到達」, 「10/2 下落日の大商い」),
- * never 「本日」: the data may be older than today.
- * A crossing without the volume (or with it unknown) is not a breakout: tone 'wait', never the green call.
- * A stock already above the pivot the day before is `'after'`, undated (「買いゾーン内（上抜け後）」): the
- * conclusion dates it from certified bars through crossingEvent (breakoutHistory.js).
+ * The analysis day as an event, from the verified close, its change and the verified volume ratio only, in whole
+ * cents as the touch rule and the bars' crossing compare them (the previous close is rebuilt from the close and the
+ * change, so a raw comparison with the pivot would hang on float noise): a breakout is a previous close at or under
+ * the pivot's cents and a close above them on an up day with BREAKOUT_VOLUME_RATIO or more. A previous close at the
+ * pivot's cents was a touch, not yet a breakout, so the first close above it is the day's breakout (the conclusion
+ * and the chart date it the same day). Only for a stock in the buy zone; null when any input (the analysis date too)
+ * is missing: nothing is said about a breakout. The titles name the analysis date (「10/2に上抜け」, 「10/2にピボット
+ * 到達」, 「10/2 下落日の大商い」), never 「本日」: the data may be older than today.
+ * - A crossing without the volume (or with it unknown) is not a breakout: tone 'wait', never the green call.
+ * - A close at the pivot's cents after a close under it is a touch (green, the day it arrives); one after a close at
+ *   the pivot's cents too is `'touchHeld'` (「ピボット到達のまま」, the rows' chip, tone 'wait'): no close above the
+ *   pivot yet, and the arrival was not this day. The conclusion dates it from certified bars (crossingEvent's
+ *   'afterTouch').
+ * - A stock already above the pivot's cents the day before is `'after'`, undated (「買いゾーン内（上抜け後）」): the
+ *   conclusion dates it from certified bars through crossingEvent (breakoutHistory.js).
  */
 export function breakoutEvent(view) {
   if (view?.state !== 'zone' || !isoDay(view.asOf) || !positive(view.pivot) || !positive(view.close) || !positive(view.prevClose) || !finite(view.change)) return null;
-  const { pivot, close, prevClose, change } = view, volume = finite(view.volumeRatio) ? view.volumeRatio : null;
-  const heavy = volume !== null && volume >= BREAKOUT_VOLUME_RATIO, day = shortDate(view.asOf);
+  const pivot = cents(view.pivot), close = cents(view.close), before = cents(view.prevClose), change = view.change;
+  const volume = finite(view.volumeRatio) ? view.volumeRatio : null, heavy = volume !== null && volume >= BREAKOUT_VOLUME_RATIO, day = shortDate(view.asOf);
   if (change < 0 && heavy) return { kind: 'heavyDown', tone: 'ext', title: `${day} 下落日の大商い ${ratioShown(volume)}（要注意）` };
-  if (prevClose < pivot && cents(close) === cents(pivot)) return { kind: 'touch', tone: 'zone', title: `${day}にピボット到達` };
-  if (prevClose < pivot && close > pivot) {
+  if (before < pivot && close === pivot) return { kind: 'touch', tone: 'zone', title: `${day}にピボット到達` };
+  if (before === pivot && close === pivot) return { kind: 'touchHeld', tone: 'wait', title: 'ピボット到達のまま', note: TOUCH_HELD_NOTE };
+  if (before <= pivot && close > pivot) {
     if (change > 0 && heavy) return { kind: 'breakout', tone: 'zone', title: `${day}に上抜け・出来高${ratioShown(volume)}` };
     // The ratio and the bar go in the call's line under the title (`note`), so the title stays one line on a phone.
     return { kind: 'cross', tone: 'wait', title: volume === null ? `${day}に上抜け・出来高 未確認` : `${day}に上抜け・出来高不足`,
       note: volume === null ? '出来高を確認できないため、上抜けの裏付けはありません。' : `出来高${ratioShown(volume)}は基準の${BREAKOUT_VOLUME_RATIO}×に届きません。` };
   }
-  if (prevClose >= pivot) return { kind: 'after', tone: 'zone', title: '買いゾーン内（上抜け後）' };
+  if (before > pivot) return { kind: 'after', tone: 'zone', title: '買いゾーン内（上抜け後）' };
   return null;
 }
-
 /** The view's day event: the one candidateView computed, or breakoutEvent's for a view built elsewhere. */
 const dayEvent = view => (view?.event === undefined ? breakoutEvent(view) : view.event);
 
@@ -379,6 +425,8 @@ function shortEvent(view, event) {
   const day = shortDate(view.asOf);
   if (event.kind === 'breakout') return { kind: 'breakout', glyph: '↗', text: `${day}上抜け ${ratioShown(view.volumeRatio)}`, tone: 'zone' };
   if (event.kind === 'touch') return { kind: 'touch', glyph: '●', text: `${day}ピボット到達`, tone: 'zone' };
+  // Still at the pivot's cents since the day before: no close above it yet, never green.
+  if (event.kind === 'touchHeld') return { kind: 'touchHeld', glyph: '●', text: 'ピボット到達のまま', tone: 'wait' };
   if (event.kind === 'cross') return { kind: 'cross', glyph: '●', text: finite(view.volumeRatio) ? '上抜け・出来高不足' : '上抜け・出来高 未確認', tone: 'wait' };
   // A heavy down day's chip carries its volume ratio, as a breakout's does (the row then shows no second volume chip).
   if (event.kind === 'heavyDown') return { kind: 'heavyDown', glyph: '▲', text: `下落日の大商い ${ratioShown(view.volumeRatio)}`, tone: 'ext' };
@@ -387,14 +435,26 @@ function shortEvent(view, event) {
 
 /** A close under the pivot by less than 0.05%: one decimal would print a gap of 0.0% that does not exist. */
 export const underTenth = value => finite(value) && value < 0 && Math.abs(value).toFixed(1) === '0.0';
-/** A distance from the pivot as every screen prints it: signed, or 「−0.1%未満」 just under the pivot (never 「−0.0%」). */
-export const distanceText = value => (underTenth(value) ? '−0.1%未満' : signed(value));
+/** A close over the pivot by less than 0.05%, the same on the other side (「+0.1%未満」, never 「+0.0%」). */
+export const overTenth = value => finite(value) && value > 0 && value.toFixed(1) === '0.0';
+/**
+ * A distance from the pivot as every screen prints it: signed, 「−0.1%未満」 just under the pivot and 「+0.1%未満」 just over
+ * it (never a 0.0% that does not exist), 「±0.0%」 for an exact zero.
+ */
+export const distanceText = value => (underTenth(value) ? '−0.1%未満' : overTenth(value) ? '+0.1%未満' : signed(value));
+/**
+ * The price at the pivot's cents (the touch rule's own test): its distance is none to the cent, whichever side of the
+ * cent the float noise in a published pivot falls. The position itself (zone or near) stays the shared rule's.
+ */
+export const atPivotCents = view => positive(view?.price) && positive(view?.pivot) && cents(view.price) === cents(view.pivot);
+/** A view's distance from the pivot as every screen prints it: 「±0.0%」 at the pivot's cents, else distanceText. */
+export const pivotDistanceText = view => (atPivotCents(view) ? '±0.0%' : distanceText(view?.distance));
 /** The position as a row chip says it, without its glyph: 「買いゾーン +1.2%」, 「ピボット接近・ピボット比 未確認」. */
-export const positionText = view => `${view.stateLabel}${view.stale ? '' : finite(view.distance) ? ` ${distanceText(view.distance)}` : '・ピボット比 未確認'}`;
+export const positionText = view => `${view.stateLabel}${view.stale ? '' : finite(view.distance) ? ` ${pivotDistanceText(view)}` : '・ピボット比 未確認'}`;
 
-// Within the buy zone (RW2): the day's breakout first, then a touch or a crossing without the volume, then a
-// stock already above the pivot (or a day not verified), then a heavy down day last.
-const EVENT_RANK = { breakout: 0, touch: 1, cross: 1, after: 2, heavyDown: 3 };
+// Within the buy zone (RW2): the day's breakout first, then a touch (still at the pivot included) or a crossing
+// without the volume, then a stock already above the pivot (or a day not verified), then a heavy down day last.
+const EVENT_RANK = { breakout: 0, touch: 1, touchHeld: 1, cross: 1, after: 2, heavyDown: 3 };
 const eventRank = view => EVENT_RANK[dayEvent(view)?.kind] ?? EVENT_RANK.after;
 
 /**
@@ -425,12 +485,13 @@ export function focusCandidates(ranked, date, limit = 5, bundle = null) {
 }
 
 /**
- * The whole focus pool, not the top-`limit` slice Today shows: in the buy zone, near the pivot, and both, and
- * `breakout`: the analysis day's breakouts among them (LIST_FILTERS.breakout).
+ * The whole focus pool, not the top-`limit` slice Today shows: in the buy zone, near the pivot, and both;
+ * `reference`: those whose Setup Engine base is not current (baseMuted: grey, their pivot a reference only); and
+ * `breakout`: the analysis day's breakouts among them (LIST_FILTERS.breakout, which leaves a 参考 pivot's out).
  */
 export function focusCounts(ranked, date, bundle = null) {
   const pool = focusPool(ranked, date, bundle), zone = pool.filter(inZone).length;
-  return { zone, near: pool.length - zone, total: pool.length, breakout: pool.filter(LIST_FILTERS.breakout.test).length };
+  return { zone, near: pool.length - zone, total: pool.length, reference: pool.filter(baseMuted).length, breakout: pool.filter(LIST_FILTERS.breakout.test).length };
 }
 
 /**
@@ -445,11 +506,12 @@ export function candidateMarketGate(market) {
 }
 
 /**
- * The tone of Today's 注目候補 tile: zone only for a ready bundle with focus candidates while the market
- * verdict is open to new buying; neutral while it says to hold off or is unknown.
+ * The tone of Today's 注目候補 tile: zone only for a ready bundle with a focus candidate whose base is current (not
+ * every one 参考, counts.reference) while the market verdict is open to new buying; neutral while it says to hold off
+ * or is unknown.
  */
 export function focusTone(state, counts, market) {
-  return state === 'ready' && counts?.total && candidateMarketGate(market) === 'open' ? 'zone' : '';
+  return state === 'ready' && counts?.total > (counts?.reference ?? 0) && candidateMarketGate(market) === 'open' ? 'zone' : '';
 }
 
 /**
@@ -471,14 +533,17 @@ export const LIST_FILTERS = {
   // Today's focus pool (the zone and near filters together). Hidden: never a segment button.
   focus: { label: '注目候補', hidden: true, test: view => view.qualified && (inZone(view) || nearPivot(view)) },
   // The analysis day's breakouts among the selected stocks (Today's 「うち上抜けN」 and the 条件 menu). Hidden. A
-  // selected stock in the zone whose day is not verified (no event) is counted apart (`unknown`), never as a miss.
-  breakout: { label: '上抜け', hidden: true, test: view => view.qualified && dayEvent(view)?.kind === 'breakout',
-    unknown: view => view.qualified && inZone(view) && !dayEvent(view), why: '分析基準日の値動き（終値・前日比）が未検証' },
+  // selected stock in the zone whose day is not verified (no event), or whose breakout is of a pivot that is only a
+  // reference (baseMuted: the conclusion reads 土台を確認できない), is counted apart (`unknown`), never as a miss.
+  breakout: { label: '上抜け', hidden: true, test: view => view.qualified && dayEvent(view)?.kind === 'breakout' && !baseMuted(view),
+    unknown: view => view.qualified && inZone(view) && (!dayEvent(view) || (dayEvent(view).kind === 'breakout' && baseMuted(view))),
+    why: '分析基準日の値動きが未検証か、Setup Engineの土台を確認できない' },
   // The selected stocks whose latest SEC EPS change is EPS_YOY_FILTER_PERCENT or more; a stock whose SEC summary
   // is missing, not dated for the analysis date or without the value is counted apart (`unknown`), never as a miss.
   // `field`: the published row field it reads (absent from older publications: 未収録).
   eps: { label: `EPS前年比≥${EPS_YOY_FILTER_PERCENT}%（直近・SEC）`, short: `EPS前年比≥${EPS_YOY_FILTER_PERCENT}%`, hidden: true, field: 'sec_summary',
-    test: view => view.qualified && finite(view.epsYoy) && view.epsYoy >= EPS_YOY_FILTER_PERCENT, unknown: view => view.qualified && !finite(view.epsYoy), why: 'SECのEPS前年比が未確認' },
+    // Compared as the chip prints it (meetsEarningsChipPercent: 24.6 reads +25%), so a row reading 「EPS +25%」 is in it.
+    test: view => view.qualified && meetsEarningsChipPercent(view.epsYoy), unknown: view => view.qualified && !finite(view.epsYoy), why: 'SECのEPS前年比が未確認' },
 };
 /** A list filter's label as the screen shows it: the breakout filter names the analysis date (「10/2の上抜け」); `short` is the 条件 menu's. */
 export const filterLabel = (key, date) => key === 'breakout' ? `${isoDay(date) ? `${shortDate(date)}の` : ''}上抜け` : LIST_FILTERS[key]?.label || '';
@@ -511,7 +576,8 @@ export const LIST_SORTS = {
   pivot: { label: 'ピボットに近い順', compare: (a, b) => (finite(a.distance) ? Math.abs(a.distance) : 99) - (finite(b.distance) ? Math.abs(b.distance) : 99) || briefOrder(a, b) },
   volume: { label: '出来高比', compare: (a, b) => (b.volumeRatio ?? -1) - (a.volumeRatio ?? -1) || briefOrder(a, b) },
   high: { label: '52週高値に近い順', compare: (a, b) => (a.fromHigh ?? 999) - (b.fromHigh ?? 999) || briefOrder(a, b) },
-  eps: { label: 'EPS前年比', filter: 'eps', compare: (a, b) => highFirst(a.epsYoy, b.epsYoy) || briefOrder(a, b) },
+  // By the value as the chip prints it (wholePercent), then the raw value, an unknown last.
+  eps: { label: 'EPS前年比', filter: 'eps', compare: (a, b) => highFirst(wholePercent(a.epsYoy), wholePercent(b.epsYoy)) || highFirst(a.epsYoy, b.epsYoy) || briefOrder(a, b) },
   // The Setup Engine confidence, an unknown last (the list's notes say so).
   base: { label: '土台の質', compare: (a, b) => highFirst(a.setupConfidence, b.setupConfidence) || briefOrder(a, b) },
 };
@@ -538,7 +604,7 @@ export const templateShort = view => Number.isInteger(view?.failed) && view.fail
  * What changed for a watched stock, in the order a trader acts on it. With `market` (prepared.market, or
  * null when the bundle carries none), a market that is not open to new buying turns the green tones
  * neutral, as Today's focus rows do; the titles stay. Without the argument, the tones are as before. A view
- * whose Setup Engine base is not current (baseCurrent false) has no green either, as its focus row.
+ * whose Setup Engine base is not current in the zone or near the pivot (baseMuted) has no green either, as its focus row.
  */
 export function watchEvent(view, market) {
   // The day's event in the rows' short form (rowEvent), so Today says one stock one way.
@@ -551,7 +617,7 @@ export function watchEvent(view, market) {
     // The kind keeps the row chip's glyph (↗, ▲, or ● for a touch or a crossing).
     return { kind: event.kind === 'breakout' || event.kind === 'heavyDown' ? event.kind : 'zone', tone: event.tone === 'ext' ? 'ext' : 'neutral', title: `${event.text}${why}` };
   }
-  const held = (market !== undefined && candidateMarketGate(market) !== 'open') || view.baseCurrent === false;
+  const held = (market !== undefined && candidateMarketGate(market) !== 'open') || baseMuted(view);
   const tone = value => held && value === 'zone' ? 'neutral' : value;
   if (event?.kind === 'breakout') return { kind: 'breakout', tone: tone('zone'), title: event.text };
   if (event?.kind === 'heavyDown') return { kind: 'heavyDown', tone: 'ext', title: event.text };

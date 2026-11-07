@@ -4,14 +4,17 @@ import { act, cleanup, fireEvent, render, within } from '@testing-library/react'
 import { withAuditFixture } from '../testAuditFixture';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import ListView, { listShown, watchOrder } from './ListView';
-import { BASE_CAUTION_NOTE, candidateView, LIST_FILTERS } from './briefCandidate';
+import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, candidateView, LIST_FILTERS } from './briefCandidate';
 import { EARNINGS_CHIP_NOTE } from '../fundamentalsExplain.js';
+// A Setup Engine base current for 2026-10-02 over the confidence floor (baseCurrent), as the fixture's rows carry; a test
+// that needs a base that is not current overrides it.
+const CURRENT_BASE = { setup_recalculation: { status: 'calculated', as_of_date: '2026-10-02' }, se_pattern_confidence: 60 };
 
 afterEach(cleanup);
 
 const DATE = '2026-10-02';
 // A row's state and pivot distance come from its price against its pivot (100).
-const item = (symbol, price, qualified = true) => ({ row: { symbol, current_price: price, se_pivot_price: 100 }, assessment: { qualified, passed: qualified ? 8 : 7, failed: qualified ? 0 : 1, unknown: 0, total: 8 } });
+const item = (symbol, price, qualified = true) => ({ row: { symbol, current_price: price, se_pivot_price: 100, ...CURRENT_BASE }, assessment: { qualified, passed: qualified ? 8 : 7, failed: qualified ? 0 : 1, unknown: 0, total: 8 } });
 const ranked = [item('ZON1', 101), item('NEA1', 97), item('FAR1', 90), item('ONE1', 99, false)];
 const brief = { bundle: { data: { date: DATE, rankings: { minervini: ranked } }, isLoading: false, isError: false }, manifest: { isLoading: false, isError: false }, ranked, date: DATE, market: null, version: 'v1' };
 
@@ -63,6 +66,10 @@ describe('the list notes', () => {
     const shown = notes(watchOf([deep, strong]));
     expect(shown).toContain(BASE_CAUTION_NOTE);
     expect(shown).toContain(EARNINGS_CHIP_NOTE);
+    cleanup();
+    // A grey row for a base that is not current says why in the tab's notes, as on Today and 候補.
+    const weak = { row: { ...item('WEAK', 101).row, se_pattern_confidence: 31 }, assessment: item('WEAK', 101).assessment };
+    expect(notes(watchOf([weak]))).toEqual([BASE_UNCHECKED_NOTE]);
   });
 });
 
@@ -126,7 +133,7 @@ describe('the watch list', () => {
 // 選定すべて's population; and the desktop's first 20 rows before the rest.
 describe('round 2 filters on the 候補 list', () => {
   const audited = (symbol, price, { change = 2, volume = 1.6, eps } = {}) => {
-    const row = withAuditFixture({ symbol, company_name: symbol, market: 'US', currency: 'USD', current_price: price, se_pivot_price: 100, rs_rating: 90,
+    const row = withAuditFixture({ symbol, company_name: symbol, market: 'US', currency: 'USD', current_price: price, se_pivot_price: 100, rs_rating: 90, ...CURRENT_BASE,
       ...(eps === undefined ? {} : { sec_summary: { sec_state: 'ok', eps_yoy: eps === null ? null : { value: eps, end: '2026-06-30' }, sales_yoy: null, code33: null, as_of_date: DATE } }) }, DATE);
     Object.assign(row.technical_audit.values, { change, volumeRatio: volume });
     return { row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } };
@@ -197,7 +204,7 @@ describe('round 2 filters on the 候補 list', () => {
 // and an unverified day is counted apart from the day's breakouts; the qualified lists leave TT 8/8 out at every width.
 describe('the 条件 menu and its empty states, honestly', () => {
   const audited = (symbol, price, { change = 2, volume = 1.6, eps, audit = true } = {}) => {
-    const row = withAuditFixture({ symbol, company_name: symbol, market: 'US', currency: 'USD', current_price: price, se_pivot_price: 100, rs_rating: 90,
+    const row = withAuditFixture({ symbol, company_name: symbol, market: 'US', currency: 'USD', current_price: price, se_pivot_price: 100, rs_rating: 90, ...CURRENT_BASE,
       ...(eps === undefined ? {} : { sec_summary: { sec_state: 'ok', eps_yoy: eps === null ? null : { value: eps, end: '2026-06-30' }, sales_yoy: null, code33: null, as_of_date: DATE } }) }, DATE);
     Object.assign(row.technical_audit.values, { change, volumeRatio: volume });
     if (!audit) delete row.technical_audit;
@@ -236,7 +243,7 @@ describe('the 条件 menu and its empty states, honestly', () => {
     cleanup();
     const none = show('breakout', [audited('UNV1', 101, { audit: false }), audited('AFT1', 102, { change: 1 })]).container;
     expect(none.querySelector('.brief-filterchip')).toHaveTextContent('10/2の上抜け該当0・未確認1');
-    expect(none.querySelector('.brief-card .brief-note')).toHaveTextContent('該当なし。ほか1銘柄は分析基準日の値動き（終値・前日比）が未検証のため判定していません。');
+    expect(none.querySelector('.brief-card .brief-note')).toHaveTextContent(`該当なし。ほか1銘柄は${LIST_FILTERS.breakout.why}のため判定していません。`);
   });
 
   it('leaves the constant TT 8/8 chip out of the qualified lists on a phone and the desktop, keeps it on a tablet\'s wide rows', () => {

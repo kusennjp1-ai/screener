@@ -241,7 +241,7 @@ describe('the pivot crossing the chart marks', () => {
     lastPivotCrossing.mockReturnValue({ ...at, sessionsAgo: STALE_BREAKOUT_SESSIONS + 1 });
     const stale = chartCrossing(list, pivot - 0.5);
     expect(stale).toMatchObject({ tone: 'neutral', reason: 'stale', volumeRatio: 1.62 });
-    expect(crossingNote(stale)).toBe(`灰色の矢印＝終値がピボットを上抜けた日（上抜けから${STALE_BREAKOUT_SESSIONS}営業日を超えた（独自判定）。検証済みの日足）`);
+    expect(crossingNote(stale)).toBe(`灰色の矢印＝終値がピボットを上抜けた日（上抜けから${STALE_BREAKOUT_SESSIONS}営業日を超えた・独自判定。検証済みの日足）`);
   });
 
   it('is green only on a 1.4× crossing whose latest certified close is still at or above the pivot, grey otherwise', () => {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { BREAKOUT_VOLUME_RATIO, breakoutEvent, candidateView, ratioShown } from './briefCandidate';
+import { BREAKOUT_VOLUME_RATIO, breakoutEvent, candidateView, LIST_FILTERS, ratioShown, rowEvent, TOUCH_HELD_NOTE } from './briefCandidate';
+import { chartCrossing } from './chartReadout';
 import { breakoutBar, crossingEvent, CROSSING_LOOKBACK_SESSIONS, lastPivotCrossing, pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
 import { SELL_RULES } from './briefSell';
 import { withAuditFixture } from '../testAuditFixture';
@@ -177,17 +178,52 @@ describe('the conclusion\'s event (crossingEvent)', () => {
     // A crossing that closed above the pivot is its own breakout.
     const plain = crossedAgo(2), crossing = lastPivotCrossing(plain, 100);
     expect(breakoutBar(plain, 100, crossing)).toBe(crossing);
-    // A touch the day before and the first close above on the analysis day: that day's breakout, said as the day's.
+    // A touch the day before and the first close above on the analysis day: that day's breakout, which is the rows' own
+    // event (breakoutEvent, in cents), so the conclusion says it as the rows do.
     const today = series([...Array(60).fill(95), 100, 103], i => (i === 61 ? 20480 : 10000));
-    expect(crossingEvent(after(), today)).toMatchObject({ kind: 'after', tone: 'zone', title: `${md(today[61].date)}に上抜け・出来高${ratioShown(20480 / 10000)}`, crossed: { sessionsAgo: 0 } });
+    const touchedBefore = verdict(audited('TB', { price: 103, change: 3, volume: 2.048 }));
+    expect(crossingEvent(touchedBefore, today)).toEqual(breakoutEvent(touchedBefore));
+    expect(crossingEvent(touchedBefore, today)).toMatchObject({ kind: 'breakout', tone: 'zone', title: `${md(today[61].date)}に上抜け・出来高${ratioShown(2.048)}` });
+    // An after event (the close before above the pivot's cents) whose bars date a breakout on the analysis day contradicts them: undated.
+    expect(crossingEvent(after(), today)).toMatchObject({ kind: 'undated', tone: 'wait', crossed: null });
+  });
+
+  it('says one thing for a touch followed by a close above the pivot: the rows\' ↗ chip, the 上抜け filter, the conclusion and the chart', () => {
+    // A pivot of 108.57, the close before it at that cent (a touch) and the analysis day's 110.74 on 2×: the previous
+    // close the rows rebuild from the close and the change sits a float's width either side of the pivot.
+    const pivot = 108.57, change = (110.74 / pivot - 1) * 100;
+    const list = series([...Array(60).fill(105), pivot, 110.74], i => (i === 61 ? 20000 : 10000));
+    const base = { setup_recalculation: { status: 'calculated', as_of_date: DATE }, se_pattern_confidence: 60 };
+    const v = verdict(audited('ZT', { price: 110.74, pivot, change, volume: 2, ...base }));
+    expect(Math.round(v.prevClose * 100)).toBe(10857);
+    expect(breakoutEvent(v)).toMatchObject({ kind: 'breakout', tone: 'zone' });
+    expect(rowEvent(v)).toMatchObject({ kind: 'breakout', glyph: '↗', tone: 'zone' });
+    expect(LIST_FILTERS.breakout.test(v)).toBe(true);
+    expect(crossingEvent(v, list)).toEqual(breakoutEvent(v));
+    expect(chartCrossing(list, pivot)).toMatchObject({ date: DATE, sessionsAgo: 0, tone: 'zone' });
+    // Whichever side of the cent the rebuilt close falls, the event is the same (it hung on that noise before).
+    for (const prevClose of [99.999, 100, 100.0000001, 100.004]) {
+      expect(breakoutEvent({ ...v, pivot: 100, close: 101, prevClose, change: 1, volumeRatio: 2 }).kind).toBe('breakout');
+    }
+    // A close before above the pivot's cents is an after event; under them it is a crossing too.
+    expect(breakoutEvent({ ...v, pivot: 100, close: 101, prevClose: 100.006, change: 1, volumeRatio: 2 }).kind).toBe('after');
+    expect(breakoutEvent({ ...v, pivot: 100, close: 101, prevClose: 99.99, change: 1, volumeRatio: 2 }).kind).toBe('breakout');
   });
 
   it('words a touch never followed by a close above the pivot as ピボット到達, in tone wait, never a breakout', () => {
+    // Two closes at the pivot's cents: the rows' touchHeld (never 'after', never green), dated by the conclusion.
     const resting = verdict(audited('R', { price: 100, change: 0, volume: 1 }));
-    expect(breakoutEvent(resting).kind).toBe('after');
+    expect(breakoutEvent(resting)).toEqual({ kind: 'touchHeld', tone: 'wait', title: 'ピボット到達のまま', note: TOUCH_HELD_NOTE });
+    expect(rowEvent(resting)).toEqual({ kind: 'touchHeld', glyph: '●', text: 'ピボット到達のまま', tone: 'wait' });
     const list = series([...Array(60).fill(95), 100, 100, 100], i => (i === 60 ? 22000 : 10000));
     expect(breakoutBar(list, 100, lastPivotCrossing(list, 100))).toBeNull();
-    expect(crossingEvent(resting, list)).toMatchObject({ kind: 'afterTouch', tone: 'wait', title: `${md(list[60].date)}にピボット到達・2営業日前`, crossed: null });
+    expect(crossingEvent(resting, list)).toMatchObject({ kind: 'afterTouch', tone: 'wait', title: 'ピボット到達から2営業日', crossed: null });
+    // The touch's own day is green (rows' touch); after it the note dates the touch and says that green was that day's only.
+    expect(crossingEvent(resting, list).note).toBe(`${md(list[60].date)}にピボットに届いた後、${TOUCH_HELD_NOTE}`);
+    expect(TOUCH_HELD_NOTE).toContain('緑はピボット到達の当日のみ・独自判定');
+    // Without bars that date the touch, the rows' own words, never green.
+    expect(crossingEvent(resting)).toMatchObject({ kind: 'touchHeld', tone: 'wait', title: 'ピボット到達のまま', crossed: null });
+    expect(chartCrossing(list, 100)).toBeNull();
     // A touch that fell back under the pivot has no breakout either.
     const back = series([...Array(60).fill(95), 100, 99, 98]);
     expect(breakoutBar(back, 100, lastPivotCrossing(back, 100))).toBeNull();

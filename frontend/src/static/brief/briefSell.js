@@ -2,8 +2,8 @@
 // checks, the book's combined warning, the chart marks and the sell chip. Unknown stays unknown.
 import { finite } from '../researchEngine';
 import { signed } from '../positionGeometry';
-import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
-import { breakoutBar, pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
+import { BREAKOUT_VOLUME_RATIO, distanceText, ratioShown } from './briefCandidate';
+import { breakoutBar, CROSSING_LOOKBACK_SESSIONS, pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
 import { shortDate } from './briefShared';
 
 // Sell-side checks after an advance. The ideas (selling into strength on a climax run,
@@ -142,13 +142,18 @@ function failedBreakoutCheck(list, view, rules) {
   const base = { key: 'failedBreakout', label: `出来高を伴う上抜け後のピボット割れ（${ratioText(rules.breakVolumeRatio)}以上・${rules.failedBreakoutSessions}営業日以内・ブレイク失敗）` };
   const pivot = view?.pivot, n = list.length, last = list[n - 1];
   if (!finite(pivot) || pivot <= 0) return null;
-  const distance = (last.close / pivot - 1) * 100;
-  if (cents(last.close) >= cents(pivot)) return { ...base, state: 'clear', detail: `終値はピボットの上（ピボット比 ${signed(distance)}）` };
+  // The last close's distance as the rows print it: none at the pivot's cents, never a 0.0% that does not exist.
+  const shown = cents(last.close) === cents(pivot) ? '±0.0%' : distanceText((last.close / pivot - 1) * 100);
+  if (cents(last.close) >= cents(pivot)) return { ...base, state: 'clear', detail: `終値はピボットの上（ピボット比 ${shown}）` };
   // Each crossing's breakout (breakoutBar): a close at the pivot's cents is a touch, so the breakout is the first close
-  // above it, with that bar's volume; a touch that fell back under the pivot without one is no breakout to fail.
-  const crossings = pivotCrossings(list, pivot, { lookback: rules.failedBreakoutSessions }).map(c => breakoutBar(list, pivot, c)).filter(Boolean);
+  // above it, with that bar's volume; a touch that fell back under the pivot without one is no breakout to fail. The
+  // window is the breakout's (CONTEXT.md: the first close above the pivot within failedBreakoutSessions), so the
+  // crossings are read over the conclusion's whole look-back: a run of touches that began before the window still
+  // dates a breakout inside it.
+  const crossings = pivotCrossings(list, pivot, { lookback: CROSSING_LOOKBACK_SESSIONS }).map(c => breakoutBar(list, pivot, c))
+    .filter(c => c && c.sessionsAgo <= rules.failedBreakoutSessions);
   const day = i => shortDate(list[i].date, last.date);
-  if (!crossings.length) return { ...base, state: 'clear', detail: `直近${rules.failedBreakoutSessions}営業日にピボットの上抜けなし（終値はピボット比 ${signed(distance)}）` };
+  if (!crossings.length) return { ...base, state: 'clear', detail: `直近${rules.failedBreakoutSessions}営業日にピボットの上抜けなし（終値はピボット比 ${shown}）` };
   const heavy = crossings.find(c => finite(c.volumeRatio) && c.volumeRatio >= rules.breakVolumeRatio);
   if (heavy) {
     // The current run under the pivot: a re-cross after the first close back under it moves the date on.
@@ -156,14 +161,14 @@ function failedBreakoutCheck(list, view, rules) {
     while (back > heavy.index + 1 && cents(list[back - 1].close) < cents(pivot)) back--;
     const crossDay = day(heavy.index), sessions = n - back;
     return { ...base, state: 'hit', date: list[back].date, crossDate: heavy.date, ratio: heavy.volumeRatio, sessions,
-      detail: `${crossDay} に出来高 ${ratioText(heavy.volumeRatio)}で上抜け、${day(back)} にピボットの下へ（以降${sessions}営業日・ピボット比 ${signed(distance)}）`,
+      detail: `${crossDay} に出来高 ${ratioText(heavy.volumeRatio)}で上抜け、${day(back)} にピボットの下へ（以降${sessions}営業日・ピボット比 ${shown}）`,
       // As short as the 50-day headline, so it replaces a watch row's title without a line more at 320px.
       headline: `ブレイク失敗（${crossDay}上抜け）` };
   }
   const missing = crossings.find(c => !finite(c.volumeRatio));
   if (missing) return { ...base, state: 'unknown', date: missing.date, detail: `${day(missing.index)} の上抜けの出来高（または直前50日の出来高）が未取得` };
   const latest = crossings[0];
-  return { ...base, state: 'clear', detail: `${day(latest.index)} の上抜けは出来高 ${ratioText(latest.volumeRatio)}（基準 ${ratioText(rules.breakVolumeRatio)}未満）・終値はピボット比 ${signed(distance)}` };
+  return { ...base, state: 'clear', detail: `${day(latest.index)} の上抜けは出来高 ${ratioText(latest.volumeRatio)}（基準 ${ratioText(rules.breakVolumeRatio)}未満）・終値はピボット比 ${shown}` };
 }
 
 /**

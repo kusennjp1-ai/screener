@@ -253,18 +253,19 @@ describe('the round-2 row chip', () => {
     expect(short.querySelector('.brief-row').getAttribute('aria-label')).toBe('1位 AAA Alpha、買いゾーン +1.2%、前日比 +2.0%、RS推計 88、〈sec・期〉');
   });
 
-  // I4 (data's request): the rows date the chip with the screen's now, as the stock view does, so a summary past the
-  // 180-day rule is an unknown chip (古い), which the rows do not show, never a current one.
-  it('dates the chip with the screen\'s now: a summary past the 180-day rule is not shown as current', async () => {
+  // I4 (data's request), then the integration review: the rows date the chip with the clock the EPS filter and sort read (the
+  // view's secNow, the bundle's evaluation clock), so a summary past the 180-day rule is an unknown chip (古い), which the
+  // rows do not show, and a row that shows a chip is one the filter counts, whatever the screen's own clock says.
+  it('dates the chip with the view\'s SEC clock (the filter\'s): a summary past the 180-day rule is not shown as current', async () => {
     const { secRowChip } = await vi.importActual('../fundamentalsExplain.js');
     const summary = { sec_state: 'ok', eps_yoy: { value: 40, end: '2026-06-30' }, sales_yoy: { value: 30, end: '2026-06-30' }, code33: null, as_of_date: '2026-10-02' };
     const dated = { symbol: 'AAA', market: 'US', as_of_date: '2026-10-02', sec_summary: summary };
     const within = Date.parse('2026-10-05T00:00:00Z'), past = Date.parse('2027-02-01T00:00:00Z');
     const fresh = secRowChip(dated, { now: within }), stale = secRowChip(dated, { now: past });
     expect([fresh?.notable, stale?.notable]).toEqual([true, false]);
-    const shown = now => { const { container } = render(<Reasons view={view({ row: dated })} now={now} />); const texts = chipTexts(container); cleanup(); return texts; };
-    expect(shown(within)).toContain(fresh.short || fresh.text);
-    expect(shown(past)).not.toContain(fresh.short || fresh.text);
+    const shown = (secNow, now) => { const { container } = render(<Reasons view={view({ row: dated, asOf: '2026-10-02', secNow })} now={now} />); const texts = chipTexts(container); cleanup(); return texts; };
+    expect(shown(within, past)).toContain(fresh.short || fresh.text);
+    expect(shown(past, within)).not.toContain(fresh.short || fresh.text);
     expect(seam.rows.at(-1)).toBe(dated);
   });
 
@@ -363,5 +364,70 @@ describe('the rows\' cautions and the chip fit', () => {
     // One read per row per pass (two passes), not a layout per row in turn.
     expect(reads).toBe(6);
     expect([...container.querySelectorAll('[data-optional]')].map(node => node.dataset.optional)).toEqual(['1', '2', '1', '2', '1', '2']);
+  });
+});
+
+// The integration review: a grey row says why, a pending check holds the green, and the label says only what the screen dropped.
+describe('the rows after the integration review', () => {
+  const base = { kind: 'base', text: '土台6週・−40%', short: '土台−40%', title: 'Setup Engineの土台が深さ35%超（独自判定）' };
+  const chipsOf = container => [...container.querySelectorAll('.brief-reasons > .brief-chip')].filter(node => node.style.display !== 'none').map(node => node.textContent);
+  const label = container => container.querySelector('.brief-row').getAttribute('aria-label');
+  const broken = { strength: [], weakness: [{ key: 'ma50', label: '出来高を伴う50日線割れ', state: 'hit', headline: '50日線割れ（9/30・出来高2.20×）' }], hits: 1, breakdownHits: 1 };
+  afterEach(() => { seam.chip = undefined; });
+
+  it('says 土台未確認 in the RS chip\'s place on a grey row whose base is not current, with the conclusion\'s reason in its title and the label', () => {
+    seam.chip = null;
+    const weak = view({ baseCurrent: false, baseNote: '土台の信頼度 31（基準55）' });
+    for (const props of [{}, { compact: true, hideTemplate: true }]) {
+      const { container } = row({ view: weak, ...props });
+      expect(container.querySelectorAll('.tone-zone')).toHaveLength(0);
+      const chips = chipsOf(container);
+      expect(chips).toContain('土台未確認');
+      expect(chips.some(text => text.startsWith('RS推計'))).toBe(false);
+      expect(container.querySelector('.brief-chip[title="土台の信頼度 31（基準55）"]')).toHaveTextContent('土台未確認');
+      expect(label(container)).toContain('RS推計 88、土台未確認（土台の信頼度 31（基準55））');
+      cleanup();
+    }
+    // Only where the base check decides the call: an extended row keeps its RS chip and no word; a broken setup's 崩れ leads.
+    expect(chipsOf(row({ view: view({ baseCurrent: false, state: 'ext', position: 'ext', stateLabel: '買いゾーン超過', distance: 7 }) }).container)).not.toContain('土台未確認');
+    cleanup();
+    expect(chipsOf(row({ view: weak, sell: broken, compact: true, hideTemplate: true }).container)).toEqual(['● 買いゾーン +1.2%', '▲ 崩れ（独自判定）']);
+    cleanup();
+    // Not a buy candidate: the TT chip says why it is grey, not the base.
+    expect(chipsOf(row({ view: view({ baseCurrent: false, qualified: false, failed: 1, unknown: 0 }) }).container)).not.toContain('土台未確認');
+  });
+
+  it('holds a watched row\'s green while its sell checks load, with no chip and nothing moved', () => {
+    seam.chip = null;
+    const pendingRow = row({ view: view({ rsLineHigh: true }), pending: true });
+    expect(pendingRow.container.querySelectorAll('.tone-zone')).toHaveLength(0);
+    expect(chipsOf(pendingRow.container)).toEqual(['● 買いゾーン +1.2%', 'TT 8/8', '出来高 1.60×', 'RS推計 88', 'RS線 新高値']);
+    expect(label(pendingRow.container)).toContain('売りのサイン 確認中');
+    cleanup();
+    expect(row({ view: view({ rsLineHigh: true }) }).container.querySelectorAll('.tone-zone').length).toBeGreaterThan(0);
+  });
+
+  it('says the volume a compact broken row gives way in its label only where its chip would have shown', () => {
+    seam.chip = null;
+    const compact = over => label(row({ view: view(over), sell: broken, compact: true, hideTemplate: true }).container);
+    expect(compact({})).toContain('、出来高 1.60×');
+    cleanup();
+    // Under 1.4×: no volume chip would show, so the label does not add one.
+    expect(compact({ volumeRatio: 1.2 })).not.toContain('出来高');
+    cleanup();
+    // A breakout's chip already carries the ratio (said by the position part of the label): not repeated.
+    const breakout = compact({ asOf: '2026-10-02', close: 101, prevClose: 99, change: 2, volumeRatio: 1.6, event: undefined, rowEvent: undefined });
+    expect(breakout.match(/1\.60×/g)).toHaveLength(1);
+  });
+
+  it('lets the RS chip give way last on a phone\'s Today (it stays in the label), never off Today', () => {
+    seam.chip = { text: '〈sec〉', tone: 'zone', title: '〈title〉', notable: true };
+    const optional = props => [...row({ view: view({ row: { symbol: 'AAA' }, baseCaution: base, epsYoy: 40 }), ...props }).container.querySelectorAll('[data-optional]')].map(node => [node.textContent, node.dataset.optional]);
+    // A caution in its place (the questionable base): RS is not drawn at all; the SEC chip stays the first to give way.
+    expect(optional({ compact: true, hideTemplate: true })).toEqual([['〈sec〉', '1']]);
+    cleanup();
+    expect(optional({ compact: true, hideTemplate: true, view: view({ row: { symbol: 'AAA' }, epsYoy: 40 }) })).toEqual([['RS推計 88', '3'], ['〈sec〉', '1']]);
+    cleanup();
+    expect(optional({})).toEqual([['〈sec〉', '1'], ['土台6週・−40%', '2']]);
   });
 });
