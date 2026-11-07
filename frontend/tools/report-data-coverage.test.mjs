@@ -398,7 +398,7 @@ describe('round-2 measurements in the published report (plan DT4, DT9): diagnost
       expect(report.round2.setup_readiness).toMatchObject({ pass: 1, unknown: 2, incomplete_report: 1,
         not_calculated: [['unavailable: SPY benchmark unavailable; benchmark-dependent setup and RS remain unknown', 1], ['unavailable: Setup Engine did not return a complete report', 1]] });
       const lines = []; await runPublished(['--published', '--root', root], { env: {}, log: line => lines.push(line), now });
-      expect(lines.some(line => line.startsWith('::warning::Setup Engine returned no complete report for 1 of 3 brief-listed rows (above 1%'))).toBe(true);
+      expect(lines.some(line => line.startsWith('::warning::Setup Engine returned no complete report (an Error or Insufficient Data rating, or no payload) for 1 of 3 brief-listed rows (above 1%'))).toBe(true);
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 

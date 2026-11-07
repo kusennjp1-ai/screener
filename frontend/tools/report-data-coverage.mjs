@@ -262,7 +262,11 @@ const UNKNOWN_KINDS = ['q4_eps', 'q4_row', 'few_quarters', 'gap', 'stale', 'no_s
  */
 export const SETUP_CONFIDENCE_FLOOR = 55;
 export const FLOOR_CHECK = 'primary_pattern_below_confidence_floor';
-/** recalculate-setups.py's reason for an Error scan (a detector that raised, among others): the whole setup is cleared. */
+/**
+ * recalculate-setups.py's reason when the Setup Engine returned no complete report: an Error rating (a detector that
+ * raised, among others), an Insufficient Data rating or no payload at all; the reason does not say which, so the count is
+ * of all three. The whole setup is cleared.
+ */
 export const INCOMPLETE_REPORT = 'Setup Engine did not return a complete report';
 /** The share of listed rows with that reason above which the report warns (measurement only). */
 export const INCOMPLETE_REPORT_WARN_SHARE = 0.01;
@@ -379,7 +383,8 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
     try {
       if (qualifiedSet.has(symbol)) qualified++;
       // (a) The failed setup checks the recalculation names, and why a recalculation is not 'calculated' (the reason
-      // recalculate-setups.py records: a detector error reads 'Setup Engine did not return a complete report').
+      // recalculate-setups.py records: an Error or Insufficient Data rating, or no payload, reads 'Setup Engine did not return a
+      // complete report', one reason for the three).
       if (setupReadiness(row).state === 'fail') for (const check of String(row.setup_recalculation?.reason || '').split(' / ').map(item => item.trim()).filter(Boolean)) failedChecks.set(check, (failedChecks.get(check) || 0) + 1);
       if (row.setup_recalculation?.status !== 'calculated') {
         const why = `${row.setup_recalculation?.status || 'absent'}: ${String(row.setup_recalculation?.reason || '理由なし').slice(0, 120)}`;
@@ -495,7 +500,7 @@ export async function publishedFundamentalsReport({ root = 'public', now = Date.
     ? `Setup readiness passes on 0 of ${coverage.listed} brief-listed rows (fail ${ready.fail}, unknown ${ready.unknown}; top failed checks: ${ready.top_failed_checks.slice(0, 3).map(([check, n]) => `${check} ${n}`).join(', ') || '未計測'})`
     : `Setup readiness unknown on all ${coverage.listed} brief-listed rows (未計測)`);
   if (round2?.unavailable) warnings.push(`Round-2 coverage measurements unavailable: ${round2.unavailable}`);
-  if (ready && coverage.listed > 0 && ready.incomplete_report > coverage.listed * INCOMPLETE_REPORT_WARN_SHARE) warnings.push(`Setup Engine returned no complete report for ${ready.incomplete_report} of ${coverage.listed} brief-listed rows (above ${INCOMPLETE_REPORT_WARN_SHARE * 100}%; their setup and pivot are cleared: ${ready.not_calculated.slice(0, 3).map(([why, n]) => `${why} ${n}`).join(', ')})`);
+  if (ready && coverage.listed > 0 && ready.incomplete_report > coverage.listed * INCOMPLETE_REPORT_WARN_SHARE) warnings.push(`Setup Engine returned no complete report (an Error or Insufficient Data rating, or no payload) for ${ready.incomplete_report} of ${coverage.listed} brief-listed rows (above ${INCOMPLETE_REPORT_WARN_SHARE * 100}%; their setup and pivot are cleared: ${ready.not_calculated.slice(0, 3).map(([why, n]) => `${why} ${n}`).join(', ')})`);
   const tt = round2?.tt_population;
   if (Number.isSafeInteger(tt?.long_history_tt) && Number.isSafeInteger(tt?.listed_qualified) && tt.listed_qualified > tt.long_history_tt) warnings.push(`The brief lists ${tt.listed_qualified} trend-template qualified rows, more than the long history's ${tt.long_history_tt} for ${coverage.as_of_date}`);
   if (manifestBlock !== null && JSON.stringify(canonical(manifestBlock)) !== JSON.stringify(canonical(plainObject(manifestBlock) && !Object.hasOwn(manifestBlock, 'warnings') ? withoutWarnings : block))) warnings.push('The manifest fundamentals_coverage block differs from the published details');
