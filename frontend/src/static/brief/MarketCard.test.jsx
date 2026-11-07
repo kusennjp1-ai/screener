@@ -10,7 +10,7 @@ import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, tr
 import reference from '../reference/market-regime-reference-v1.json' with { type: 'json' };
 import { marketTabStudy } from '../reference/marketTabStudy.js';
 import { followThroughDay } from '../followThroughDay';
-import { exposureRuleText } from '../portfolioPlan';
+import { exposureRuleText } from '../reference/marketTabStudy.js';
 import { num, signedPercent } from './marketTabModel';
 import { indexState } from '../../../tools/export-market-trends.mjs';
 

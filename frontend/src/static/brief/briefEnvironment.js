@@ -115,6 +115,35 @@ export function marketTileSuffix({ market = null, trends = null, manifest = null
 }
 
 /**
+ * The verdict reads the S&P 500 (SPY) only. While it is positive and the Nasdaq's own follow-through state is a
+ * correction, a rally attempt, an expired rally attempt or a failed FTD (nasdaqInCorrection, the condition of Today's
+ * 「NAS調整中」 too), a neutral note says so (short: the phone's fold summary).
+ */
+export function nasdaqNote(ft, date) {
+  if (!nasdaqInCorrection(ft)) return null;
+  const view = followThroughView(ft, date), at = view.asOf ? `${view.asOf}時点・` : '';
+  // An expired rally attempt names the correction it is still in; its own words (「15日以内のFTDなし」) say there is no FTD,
+  // inside the fold. Its short form is a correction's, which keeps the fold's summary at 2 lines on a 320px phone.
+  const expired = ft.state === 'attempt_expired';
+  const short = ft.state === 'ftd_failed' ? 'FTD失敗' : expired ? '調整中' : view.b;
+  // 「FTD未確認」 only where the state's own words do not already say there is no FTD.
+  const unconfirmed = ft.state === 'ftd_failed' || expired ? '' : 'FTD未確認・';
+  return { long: `判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は${expired ? `調整中・${view.b}` : view.b}（${at}${unconfirmed}独自判定）。`,
+    short: `Nasdaqは${short}（${at}判定はSPYのみ）` };
+}
+
+/**
+ * The explanation of Today's 地合い tile suffix (marketTileSuffix, same input), or null without one: for 「NAS調整中」 the
+ * market tab's own Nasdaq note (nasdaqNote's long form: the verdict reads the S&P 500 only, the Nasdaq's state is the
+ * app's own judgement), for the tile's title, assistive tech and Today's notes. 「FTD確認済み」 is explained on the market tab.
+ */
+export function marketTileNote(input = {}) {
+  if (marketTileSuffix(input) !== MARKET_TILE_SUFFIX.nasdaq) return null;
+  const ft = (input.trends.data.indices || []).find(item => item?.symbol === '^IXIC')?.followThrough;
+  return nasdaqNote(ft, input.trends.data.as_of_date)?.long ?? null;
+}
+
+/**
  * Why the market-trends asset failed, in short Japanese: kind fetch (network, HTTP, the manifest itself),
  * integrity (hash, transport or reference mismatch) or reader (readMarketTrends' own sentence).
  * A raw English message, path or hash is never shown; tile is the two-word form for a tile.

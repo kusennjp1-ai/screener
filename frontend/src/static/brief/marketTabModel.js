@@ -3,12 +3,12 @@
 // market-trends asset, the scan's market fields (modelMarket) and the existing rule functions: nothing
 // here adds a threshold, a status or a verdict. Each value keeps the session it describes.
 import { bifurcation, environmentPoint, BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT, SPLIT_RULE } from '../marketLongHistory';
-import { SECTORS } from '../sectorDefinitions';
 import { indexSummary } from '../reference/indexSummary.js';
 import { distributionCount, environmentRules, followThroughView, latestKnown, marketTone, shortDate, trendsStatus, ENV_RULES, FTD_TEXT } from './briefModel';
 
 const finite = Number.isFinite;
-const YEAR = 252, MONTH = 21;
+/** Sessions in a year and in a month, as the long history counts them (marketTabHistory.js reads the same). */
+export const YEAR = 252, MONTH = 21;
 /** The existing distribution warning: 5 or more active distribution days on an index. */
 export const DISTRIBUTION_WARN = 5;
 /**
@@ -23,9 +23,8 @@ export const SURVIVORSHIP_NOTE = '現在の銘柄で過去をさかのぼった�
  * which never loads the reference, reads this list, and a test keeps the two equal, so the screens mark one rule alike.
  */
 export const REFERENCE_CHECKS = Object.freeze(['split', 'lows', 'template', 'stage', 'leaders', 'breakout']);
-const STAGE_FIELDS = ['stage1Percent', 'stage2Percent', 'stage3Percent', 'stage4Percent'];
+export const STAGE_FIELDS = ['stage1Percent', 'stage2Percent', 'stage3Percent', 'stage4Percent'];
 export const STAGE_NAMES = ['底固め', '上昇', '天井圏', '下降'];
-const sectorNames = Object.fromEntries(SECTORS.map(([, label, symbol]) => [symbol, label]));
 
 // Only ever called with a finite number: a unit is never appended to an unknown value.
 export const num = (value, digits = 0) => value.toLocaleString('ja-JP', { minimumFractionDigits: digits, maximumFractionDigits: digits });
@@ -65,7 +64,7 @@ export function yearRange(rows, hit, field) {
 }
 /** 「1年で最低／最高」 only when the value is at an end of its one-year range. */
 export const rangePosition = range => !range ? null : range.at <= 0 ? '1年で最低' : range.at >= 1 ? '1年で最高' : null;
-const monthBefore = (rows, hit, field) => { const before = rows[hit.index - MONTH]; return finite(before?.[field]) ? before[field] : null; };
+export const monthBefore = (rows, hit, field) => { const before = rows[hit.index - MONTH]; return finite(before?.[field]) ? before[field] : null; };
 
 /** A simple moving average of `length` closes ending at each shown point of an index chart (null until there are enough). */
 export const sma = (all, offset, count, length) => Array.from({ length: count }, (_, i) => { const at = offset + i; if (at < length - 1) return null; let s = 0; for (let j = at - length + 1; j <= at; j++) s += all[j].close; return s / length; });
@@ -113,11 +112,6 @@ export function indexCloses(item) {
   return closes.length >= 60 ? closes : null;
 }
 
-/** One index's follow-through state in a plain clause (the state is the exporter's; wording only). */
-function ftdSignal(name, ft, date) {
-  if (!ft || ft.available !== true || ft.state !== 'ftd_failed') return null;
-  return `${name}のFTDが失敗${ft.failedDate ? `（${shortDate(ft.failedDate, date)}）` : ''}`;
-}
 
 // The behind sentence's second half: the phone's market tab keeps it in the screen's 注記.
 const PER_ITEM_DATES = '日付が異なる項目には個別に日付を付けています。';
@@ -169,7 +163,7 @@ export function groupDate(items) {
  * Nasdaq note and position, the judge side's cause under the basis and whom TT達成数 counts. Without it (Today) none of
  * these is shown. `series` is the 指数 panel's S&P／Nasdaq switch, only from a publication with the Nasdaq's closes.
  */
-export function marketCardView({ market, marketLoading = false, trends, date, study = null }) {
+export function marketCardView({ market, marketLoading = false, trends, date, study = null, tab = null }) {
   const status = trendsStatus(trends), ready = status.state === 'ready';
   const history = ready ? trends.data.long_history || null : null;
   const longError = ready && !history && typeof trends.data.long_history_error === 'string' ? trends.data.long_history_error : null;
@@ -261,54 +255,6 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
 
   const follow = [['S&P', spx], ['NAS', ndx]].map(([name, item]) => ({ name, item, view: status.state === 'loading' ? { b: '読み込み中…', em: '' } : status.state === 'error' ? failed : status.state === 'none' ? { b: '未配信', em: '市場推移データなし' } : followThroughView(item?.followThrough, date) }));
 
-  // ---- warning summary: every existing rule, fired or not, and the ones that could not be judged ----
-  const schemaReason = '旧形式の長期集計に未収録';
-  const envReason = (key, fields) => !history ? null : !last ? '長期集計に観測日なし' : fields.some(field => !hasField(field)) ? schemaReason
-    : key === 'leaders' && Number.isSafeInteger(last.leaderCohort) && last.leaderCohort < LEADER_MIN_COHORT ? `最新は対象${last.leaderCohort}銘柄（${LEADER_MIN_COHORT}銘柄未満）`
-      : key === 'breakout' && judgedNow !== null && judgedNow < BREAKOUT_MIN_SAMPLE ? `最新は判定${judgedNow}件（${BREAKOUT_MIN_SAMPLE}件未満）`
-        : key === 'template' && finite(last.trendTemplateCount) && !finite(rows.at(-1 - ENV_RULES.templateSessions)?.trendTemplateCount) ? `${ENV_RULES.templateSessions}営業日前の値なし`
-          : key === 'template' && finite(last.trendTemplateCount) && rows.at(-1 - ENV_RULES.templateSessions).trendTemplateCount < ENV_RULES.templateMinBase ? `${ENV_RULES.templateSessions}営業日前が${ENV_RULES.templateMinBase}銘柄未満`
-            : '最新の値なし';
-  const checks = [];
-  const check = (key, group, label, judged, firedText, asOf, reason) => checks.push({ key, group, label, judged, fired: Boolean(judged && firedText), text: judged ? firedText || null : null, asOf: judged ? asOf : null, reason: judged ? null : reason });
-  if (ready) {
-    for (const d of dist) check(`dist-${d.name}`, 'index', `${d.name}の分配日`, Boolean(d.hit), d.hit && d.hit.value >= DISTRIBUTION_WARN ? `${d.name}の分配日が25日間で${num(d.hit.value)}日` : null, d.hit?.date, '指数データを確認できません');
-    for (const f of follow) { const ft = f.item?.followThrough;
-      check(`ftd-${f.name}`, 'index', `${f.name}のFTD`, ft?.available === true, ftdSignal(f.name, ft, date), ft?.asOf || distributionCount(f.item)?.date, ft === undefined ? '旧形式の公開データ' : '指数データを確認できません'); }
-    if (history) {
-      const splitReason = !hasField('above200Percent') ? schemaReason : (history.sp500 || []).filter(p => finite(p.close)).length < YEAR ? '指数の履歴が1年に満たない' : '最新の値なし';
-      check('split', 'breadth', '指数と個別株の乖離', Boolean(split), split?.warning ? `指数は1年高値${split.fromHigh > -0.05 ? 'の水準' : `まで${Math.abs(split.fromHigh).toFixed(1)}%`}なのに、200日線より上の銘柄は${num(split.above200Percent, 1)}%（指数と個別株の乖離）` : null, split?.date, splitReason);
-      check('lows', 'breadth', '新高値・新安値', Boolean(highsLows), lowsLead ? `新安値（${num(highsLows.value.newLows)}）が新高値（${num(highsLows.value.newHighs)}）を上回る` : null, highsLows?.date, envReason('lows', ['newHighs']));
-      const env = [['template', 'breadth', 'TT達成数の急減', ['trendTemplateCount']], ['stage', 'leaders', 'ステージ構成', ['stage1']], ['leaders', 'leaders', 'リーダーの健全度', ['leaderCohort']], ['breakout', 'leaders', 'ブレイクアウト成功率', ['breakoutsJudged']]];
-      for (const [key, group, label, fields] of env) { const r = rule(key); check(key, group, label, r.judged, r.text, last?.date, envReason(key, fields)); }
-    }
-  }
-  // Order the summary by group (index → breadth → leaders), as on the page.
-  const order = ['index', 'breadth', 'leaders'];
-  checks.sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group));
-  const judgedDates = [...new Set(checks.filter(c => c.judged && c.asOf).map(c => c.asOf))];
-  const boxDate = judgedDates.length === 1 && date && judgedDates[0] < date ? shortDate(judgedDates[0], date) : null;
-  // Each fired check carries the study's tags for its state (study.signalTags, from marketRegimeReference
-  // SIGNAL_INDICATORS); an index check only when its published method and window are the study's. The order is the page's.
-  // A fired check the study tags 〔参考〕 (a breadth rule it could not confirm) is counted apart from the warnings, with a
-  // neutral ○: never a ▲, never in a group's or a tab's count. Its rule and its threshold are unchanged.
-  const fired = checks.filter(c => c.fired).map(c => ({ ...c, itemAsOf: !boxDate && c.asOf && date && c.asOf < date ? shortDate(c.asOf, date) : null, tags: study?.signalTags?.[c.key] || [],
-    reference: isReference(c.key) }));
-  const unjudged = checks.filter(c => !c.judged);
-  const reasons = [...new Set(unjudged.map(c => c.reason))].map(reason => ({ reason, labels: unjudged.filter(c => c.reason === reason).map(c => c.label) }));
-  // The checks that were judged at all: with none, the summary can never say 「なし」. `warnable` counts the judged checks
-  // that can raise a warning (not 参考): with none of them judged, the summary says the warnings could not be judged.
-  const judged = checks.filter(c => c.judged).map(({ key, group, label }) => ({ key, group, label }));
-  const tagText = study?.tagText ? study.tagText(fired) : { legend: null, note: null };
-  const signals = ready ? { fired, warnings: fired.filter(c => !c.reference).length, references: fired.filter(c => c.reference).length, warnable: judged.filter(c => !isReference(c.key)).length,
-    unjudged, reasons, judged, asOf: boxDate, historyMissing: !history, legend: tagText.legend, tagNote: tagText.note } : null;
-  const firedIn = group => fired.filter(c => c.group === group && !c.reference).length;
-  const referencesIn = group => fired.filter(c => c.group === group && c.reference).length;
-  // The evidence row of each check, so a 〔参考〕 check's row reads ○ 参考 instead of ▲ 注意.
-  const ROW_OF = { lows: 'extremes', split: 'a200', template: 'tt', stage: 'stage', leaders: 'health', breakout: 'breakout' };
-  const referenceRows = new Set(fired.filter(c => c.reference && ROW_OF[c.key]).map(c => ROW_OF[c.key]));
-  const asReference = item => !referenceRows.has(item.key) ? item : { ...item, warn: false, reference: true, ...(item.rows ? { rows: item.rows.map(row => row.warn ? { ...row, warn: false, reference: true } : row) } : {}) };
-
   // ---- dating and verdict ----
   const dating = marketDating({ date, historyDate, indexDates: dist.filter(d => d.hit).map(d => ({ name: d.name, date: d.hit.date })) });
   const tone = marketTone(market);
@@ -324,6 +270,9 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   verdict.cause = study?.cause ?? null;
   const summary = ready ? indexSummary(history?.sp500) : null;
   const conflict = basisConflict(verdict.basis, summary, date);
+  // The market tab's warning summary, its three groups and its index switch (`tab`: marketTabParts, marketTabGroups.js,
+  // which only the lazily loaded market screen passes), so Today, which reads none of them, never ships them.
+  const { signals = null, groups = null, series = null } = tab ? tab({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, judgedNow, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, breakout, distWarn, spx, ndx, summary }) : {};
 
   // ---- Today: exactly four facts ----
   const distPairs = dist.map(d => d.hit ? { name: d.name, value: `${num(d.hit.value)}日`, warn: d.hit.value >= DISTRIBUTION_WARN } : { name: d.name, value: '算出不可' });
@@ -342,62 +291,6 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
     : { key: 'extremes', label: '52週の新高値・新安値', ...absent('newHighs') };
   const today = [todayDist, todayTT, todayA200, todayExtremes];
 
-  // ---- market tab: three groups in decision order ----
-  const followRows = follow.map(f => ({ name: f.name, ...f.view, valued: ready && f.view.b !== '未集計' && f.view.b !== '算出不可', warn: f.view.tone === 'ext', flag: f.view.tone === 'ext' ? 'FTD失敗' : null }));
-  const ftdItem = { key: 'ftd', label: 'フォロースルーデー（独自判定）', className: 'brief-ftd', rows: followRows, rule: RULE_TEXT.ftd, warn: followRows.some(r => r.warn) };
-  const distItem = !ready ? { key: 'dist', label: '分配日（25日）', className: 'brief-dist', rule: RULE_TEXT.dist, ...absent('') }
-    : { key: 'dist', label: '分配日（25日）', className: 'brief-dist', rule: RULE_TEXT.dist, warn: distWarn, ...(study?.distribution || {}), rows: dist.map(d => d.hit
-      ? { name: d.name, valued: true, b: `${num(d.hit.value)}日`, asOf: date && d.hit.date < date ? shortDate(d.hit.date, date) : null, warn: d.hit.value >= DISTRIBUTION_WARN, flag: d.hit.value >= DISTRIBUTION_WARN ? `${DISTRIBUTION_WARN}日以上` : null }
-      : { name: d.name, b: '算出不可', em: d.item?.reason || '指数データを確認できません。' }) };
-  const extremesItem = highsLows ? { key: 'extremes', label: '52週の新高値・新安値', className: 'brief-dist', metric: 'highsLows', rule: RULE_TEXT.extremes, warn: lowsLead,
-    note: `差 ${delta(highsLows.value.newHighs - highsLows.value.newLows)}`, rows: [
-      { name: '新高値', valued: true, b: num(highsLows.value.newHighs), asOf: extremesAsOf },
-      { name: '新安値', valued: true, b: num(highsLows.value.newLows), asOf: extremesAsOf, warn: lowsLead, flag: lowsLead ? '新高値より多い' : null }] }
-    : { key: 'extremes', label: '52週の新高値・新安値', metric: 'highsLows', rule: RULE_TEXT.extremes, ...absent('newHighs') };
-
-  const rs90 = count('rs90', 'RS推計90以上のTT達成（独自）', 'rs90TemplateCount', 'trendTemplateCount', RULE_TEXT.rs90);
-  const leadersRule = rule('leaders'), stageRule = rule('stage');
-  const health = known('leaderHealthPercent');
-  const cohortNow = last && Number.isSafeInteger(last.leaderCohort) ? last.leaderCohort : null;
-  const healthBase = { key: 'health', label: 'リーダーの健全度', metric: 'leaderHealthPercent', rule: RULE_TEXT.leaders };
-  // A newest cohort too small for a rate is today's state; an older rate is not shown in its place.
-  const healthItem = cohortNow !== null && cohortNow < LEADER_MIN_COHORT ? { ...healthBase, valued: true, b: `${cohortNow}銘柄`, asOf: older(last.date), note: `20営業日前のTT達成が${LEADER_MIN_COHORT}銘柄未満のため率は非表示` }
-    : health ? (() => { const before = monthBefore(rows, health, 'leaderHealthPercent'), range = yearRange(rows, health, 'leaderHealthPercent');
-      return { ...healthBase, valued: true, b: `${num(health.value)}%`, asOf: older(health.date), change: before === null ? null : pointChange(health.value - before, 0), range, position: rangePosition(range), format: value => `${num(value)}%`,
-        note: `20営業日前のTT達成${num(health.row.leaderCohort)}銘柄が対象`, detail: `${num(health.row.leaderCohort)}銘柄のうち${num(health.row.leaderCohortAbove50)}銘柄が50日線の上`,
-        warn: Boolean(leadersRule?.fired), flag: leadersRule?.fired ? `${ENV_RULES.leaderHealthBelow}%未満` : null }; })()
-      : { ...healthBase, ...absent('leaderCohort') };
-  const stageHit = known(STAGE_FIELDS);
-  const stageItem = stageHit ? { key: 'stage', label: 'ステージ構成', className: 'is-stage', metric: 'stages', rule: RULE_TEXT.stage, valued: true, b: `ステージ2 ${num(stageHit.value.stage2Percent, 0)}%`, asOf: older(stageHit.date),
-    warn: Boolean(stageRule?.fired), flag: stageRule?.fired ? 'ステージ4がステージ2より多い' : null, stages: STAGE_FIELDS.map((field, i) => ({ k: i + 1, name: STAGE_NAMES[i], share: stageHit.value[field] })) }
-    : { key: 'stage', label: 'ステージ構成', className: 'is-stage', metric: 'stages', rule: RULE_TEXT.stage, ...absent('stage1') };
-
-  // Values a former long-history schema did not record are named once per group, not row by row.
-  const missingLine = items => { const gone = items.filter(item => item.missing); return gone.length ? `旧形式の長期集計（${shortDate(history.as_of_date, date)}）には未収録：${gone.map(item => item.label).join('・')}` : null; };
-  // `unknown`: the group shows a value as 未収録・算出不可・未算出 (or nothing at all), or one of its
-  // checks could not be judged. A phone's section tab marks it, so a hidden section never reads as clean.
-  const unvalued = item => (item.rows ? item.rows.some(row => !row.valued) : !item.valued);
-  const makeGroup = (id, title, question, short, items, scope) => {
-    const unavailable = groupUnavailable(scope);
-    const unknown = status.state !== 'loading' && (Boolean(unavailable) || items.some(unvalued) || checks.some(c => c.group === id && !c.judged));
-    return { id, title, question, short, items: unavailable ? [] : items.filter(item => !item.missing).map(asReference), fired: firedIn(id), references: referencesIn(id), unknown, asOf: unavailable ? null : groupDate(items), missing: unavailable || !history ? null : missingLine(items), unavailable };
-  };
-  const groups = [
-    makeGroup('index', '指数のトレンド', '上昇トレンドは続いているか', '指数', [ftdItem, distItem], 'index'),
-    makeGroup('breadth', '市場の参加度', '多くの銘柄が上昇に加わっているか', '参加度', [a200, a50, extremesItem, tt, leaderSubstitute].filter(Boolean), 'history'),
-    makeGroup('leaders', 'リーダーの健全性', '先導株が崩れていないか', 'リーダー', [rs90, breakout, healthItem, stageItem], 'history'),
-  ];
-
-  // The 指数 panel's S&P／Nasdaq switch (market tab): the Nasdaq only from a publication that carries its closes. Its
-  // figures are the exporter's (study.nasdaqPosition: indexSummary on the same bars) only when they describe the line's
-  // last bar (the same date and close), else indexSummary on those closes, so the figures and the chart never disagree;
-  // its marks are its own index series'.
-  const ndxCloses = ready ? indexCloses(ndx) : null;
-  const ndxPosition = study?.nasdaqPosition?.state, ndxLast = ndxCloses?.at(-1);
-  const series = ndxCloses ? [
-    { key: 'spx', name: 'S&P 500', short: 'S&P', spoken: 'S&P 500', closes: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null, summary },
-    { key: 'ndx', name: 'Nasdaq総合', short: 'NAS', spoken: 'Nasdaq総合（NAS）', closes: ndxCloses, distribution: ndx, distributionEnd: distributionCount(ndx)?.date || null, followThrough: ndx?.followThrough ?? null,
-      summary: ndxPosition && ndxPosition.date === ndxLast.date && ndxPosition.close === ndxLast.close ? ndxPosition : indexSummary(ndxCloses) }] : null;
   return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons, series,
     // Whether the TT達成数 row shows a value (its population note belongs beside it only then), and why the Nasdaq's
     // published closes were withdrawn (readMarketTrends' closes_error: the switch is then missing for that reason).
@@ -407,50 +300,5 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
     warnings: rules.filter(r => r.fired).map(({ key, text }) => ({ key, text, reference: isReference(key) })), split: split ? { ...split, reference: isReference('split') } : split, chart: { sp500: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null } };
 }
 
-// ---- the long-history section -----------------------------------------------------------------
-
-/**
- * One line on what the long history says, from the data only: the leader count against a year earlier
- * and its one-year range, and the leading sectors of the newest complete frame, then the survivorship caveat
- * (always). A value older than the analysis date `date` carries its own session (「9/30時点」), so a lagging
- * history never reads as today's.
- */
-export function historyTakeaway(history, date = null) {
-  if (!history) return null;
-  const rows = (history.breadth || []).map(environmentPoint);
-  const field = rows.some(row => 'trendTemplateCount' in row) ? ['trendTemplateCount', 'TT達成数'] : ['leaderCount', '先導株数（価格条件）'];
-  const hit = latestKnown(rows, field[0]), parts = [];
-  const olderThan = value => Boolean(value && date && value < date);
-  if (hit && hit.index >= YEAR - 1) {
-    const window = rows.slice(hit.index - (YEAR - 1), hit.index + 1).map(row => row[field[0]]).filter(finite), before = rows[hit.index - (YEAR - 1)]?.[field[0]];
-    const when = olderThan(hit.date) ? `${shortDate(hit.date, date)}時点・` : '';
-    // Without a year-earlier value the count is named by its own session, never 「現在」.
-    const from = finite(before) ? `1年前の${num(before)}から` : `${shortDate(hit.date, date || hit.date)}時点で`;
-    if (window.length >= 200) parts.push(`${field[1]}は${from}${num(hit.value)}銘柄（${finite(before) ? when : ''}1年の範囲 ${num(Math.min(...window))}〜${num(Math.max(...window))}）`);
-  }
-  const frame = (history.sectorRotation?.frames || []).at(-1);
-  if (frame?.ranks?.length === 11) parts.push(`セクターの上位は${[...frame.ranks].sort((a, b) => a.rank - b.rank).slice(0, 3).map(row => sectorNames[row.symbol] || row.symbol).join('・')}${olderThan(frame.date) ? `（${shortDate(frame.date, date)}時点）` : ''}`);
-  // The breadth series below are today's names traced back: said with every takeaway, whatever it holds.
-  parts.push(`参加度・リーダーの推移は${SURVIVORSHIP_NOTE}`);
-  return `${parts.join('。')}。`;
-}
-
-const completeFrame = frame => frame?.ranks?.length === 11 && frame.ranks.every(row => Number.isSafeInteger(row.rank) && finite(row.relativeIndex));
-/**
- * Sector ETFs ranked by this app's own relative strength (126-session price relative to SPY) on the newest
- * frame, each with its value as published (100 = the same move as SPY), its bar width against the widest
- * gap from 100, and its rank a month (21 frames) earlier. An incomplete frame invents no ranks.
- */
-export function sectorRanks(history, date) {
-  const frames = history?.sectorRotation?.frames || [];
-  const current = frames.at(-1) || null, before = frames.length > MONTH ? frames[frames.length - 1 - MONTH] : null;
-  if (!completeFrame(current)) return { complete: false, date: current?.date || null, older: Boolean(current?.date && date && current.date < date), rows: [] };
-  const prior = completeFrame(before) ? new Map(before.ranks.map(row => [row.symbol, row.rank])) : null;
-  const spread = Math.max(1, ...current.ranks.map(row => Math.abs(row.relativeIndex - 100)));
-  return { complete: true, date: current.date, older: Boolean(date && current.date < date), beforeDate: prior ? before.date : null,
-    rows: current.ranks.slice().sort((a, b) => a.rank - b.rank || a.symbol.localeCompare(b.symbol)).map(row => {
-      const was = prior?.get(row.symbol), move = Number.isSafeInteger(was) ? was - row.rank : null;
-      return { symbol: row.symbol, name: sectorNames[row.symbol] || row.symbol, rank: row.rank, value: row.relativeIndex, text: num(row.relativeIndex, 1),
-        up: row.relativeIndex >= 100, width: 50 * Math.abs(row.relativeIndex - 100) / spread, was: Number.isSafeInteger(was) ? was : null, move };
-    }) };
-}
+// The long-history section's takeaway and the sector ranks (historyTakeaway, sectorRanks) are the market tab's only:
+// they live in marketTabHistory.js, which only the lazily loaded market screen imports, so Today does not ship them.

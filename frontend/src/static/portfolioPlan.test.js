@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildPortfolioPlan, exposureRuleText, modelMarket, MARKET_CAPS } from './portfolioPlan';
+import { buildPortfolioPlan, modelMarket, MARKET_CAPS } from './portfolioPlan';
+import { exposureRuleText } from './reference/marketTabStudy.js';
 import { marketTone } from './brief/briefModel';
 import { withAuditFixture } from './testAuditFixture';
 

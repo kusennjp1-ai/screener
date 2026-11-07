@@ -4,10 +4,10 @@
 // hands the result to the 地合い card (marketCardView's `study`). Every number comes from the published market-trends
 // asset or the generated reference (market-regime-reference-v1.json): nothing here types a percentage, changes a
 // rule, a threshold or the verdict.
-import { bare, distributionCount, followThroughView, gspcFollowThrough, nasdaqInCorrection, shortDate, trendsStatus } from '../brief/briefModel';
+import { bare, distributionCount, gspcFollowThrough, nasdaqNote, shortDate, trendsStatus } from '../brief/briefModel';
 import { DISTRIBUTION_WARN, num, signedPercent, SURVIVORSHIP_NOTE, verdictBasis } from '../brief/marketTabModel';
 import { indexSummary } from './indexSummary.js';
-import { capText } from '../portfolioPlan';
+import { capText, MARKET_CAPS } from '../portfolioPlan';
 import { biasTag, ddGradeState, ftdRecent, ftdState, highState, meanLowerStates, quadrantState, referencePeriod, referenceState, signalTags, stateTag, validReference, BIAS_SHARE, SIGNAL_INDICATORS, TAGS } from './marketRegimeReference.js';
 
 const finite = Number.isFinite;
@@ -68,23 +68,14 @@ export function regimeKey(tags) {
 
 // ---- the Nasdaq beside the SPY verdict, its position and the 分配日 detail ------------------------------------
 
-/**
- * The verdict reads the S&P 500 (SPY) only. While it is positive and the Nasdaq's own follow-through state is a
- * correction, a rally attempt, an expired rally attempt or a failed FTD (nasdaqInCorrection, the condition of Today's
- * 「NAS調整中」 too), a neutral note says so (short: the phone's fold summary).
- */
-export function nasdaqNote(ft, date) {
-  if (!nasdaqInCorrection(ft)) return null;
-  const view = followThroughView(ft, date), at = view.asOf ? `${view.asOf}時点・` : '';
-  // An expired rally attempt names the correction it is still in; its own words (「15日以内のFTDなし」) say there is no FTD,
-  // inside the fold. Its short form is a correction's, which keeps the fold's summary at 2 lines on a 320px phone.
-  const expired = ft.state === 'attempt_expired';
-  const short = ft.state === 'ftd_failed' ? 'FTD失敗' : expired ? '調整中' : view.b;
-  // 「FTD未確認」 only where the state's own words do not already say there is no FTD.
-  const unconfirmed = ft.state === 'ftd_failed' || expired ? '' : 'FTD未確認・';
-  return { long: `判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は${expired ? `調整中・${view.b}` : view.b}（${at}${unconfirmed}独自判定）。`,
-    short: `Nasdaqは${short}（${at}判定はSPYのみ）` };
+/** The disclosure of the exposure guide, generated from portfolioPlan's caps (never hand-typed beside them). */
+export function exposureRuleText(caps = MARKET_CAPS) {
+  return `独自の目安：上昇トレンド ${capText(caps.confirmed_uptrend)}・上昇に圧力 ${capText(caps.uptrend_under_pressure)}・それ以外 ${capText(caps.otherwise)}（S&P 500（SPY）の50日線・200日線と局面判定から。バックエンドの局面判定の目安とは別）。注意サインも指数の過去の傾向も目安を変えません。`;
 }
+
+// nasdaqNote (the verdict reads SPY only; the Nasdaq's own state) lives in briefEnvironment.js, so Today's 地合い tile
+// explains its 「NAS調整中」 with the same words (marketTileNote) without loading this module.
+export { nasdaqNote };
 
 /**
  * One index's published position (the exporter's indices[i].state: indexSummary on the same validated bars and

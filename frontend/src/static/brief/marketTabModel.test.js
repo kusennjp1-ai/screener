@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
-import { basisConflict, delta, groupDate, historyTakeaway, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, REFERENCE_CHECKS, RULE_TEXT, sectorRanks, signedPercent, verdictBasis, yearRange } from './marketTabModel';
+import { basisConflict, delta, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, REFERENCE_CHECKS, RULE_TEXT, signedPercent, verdictBasis, yearRange } from './marketTabModel';
+import { historyTakeaway, sectorRanks } from './marketTabHistory';
+import { marketTabParts } from './marketTabGroups';
 import { gspcFtdWords, marketRegimeContext, marketTabStudy, nasdaqNote, publishedIndexState, publishedMarketContext, regimeCause, regimeKey, signalTagText, REGIME_NAMES, TAG_MEANINGS, TT_POPULATION } from '../reference/marketTabStudy.js';
 import { marketTileSuffix, MARKET_TILE_SUFFIX } from './briefEnvironment';
 import { capText } from '../portfolioPlan';
@@ -8,7 +10,10 @@ import reference from '../reference/market-regime-reference-v1.json' with { type
 import exchange from '../__fixtures__/nyse-sessions-2024-2026.json' with { type: 'json' };
 import { referenceState, signalTags, BIAS_SHARE, SIGNAL_INDICATORS, TAGS } from '../reference/marketRegimeReference.js';
 
-const view = (value, { date = '2026-10-02', market = UP, marketLoading = false } = {}) => marketCardView({ market, marketLoading, trends: value, date });
+// The market tab's card: marketCardView with its tab parts (marketTabParts), as MarketScreen asks for it.
+const cardView = args => marketCardView({ ...args, tab: marketTabParts });
+
+const view = (value, { date = '2026-10-02', market = UP, marketLoading = false } = {}) => cardView({ market, marketLoading, trends: value, date });
 const group = (model, id) => model.groups.find(g => g.id === id);
 const item = (model, key) => model.groups.flatMap(g => g.items).find(i => i.key === key);
 // Every visible string of the model, to check that no unknown leaks out as 0, NaN or a bare 未取得.
@@ -31,7 +36,7 @@ describe('market tab view model: a complete, current publication', () => {
     // while the row shows a value (ttShown); the opened row keeps its own figures.
     expect(item(model, 'tt')).toMatchObject({ b: '30銘柄', change: '+5', note: '観測200中30', detail: '観測200中30銘柄・1か月前 25銘柄', asOf: null, rule: RULE_TEXT.template, metric: 'trendTemplateCount' });
     const value = trends({ rows: breadth('2026-10-02', i => (i === 8 ? { trendTemplateCount: 25 } : {})) });
-    const withStudy = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: marketTabStudy({ trends: value, reference, date: '2026-10-02' }) });
+    const withStudy = cardView({ market: UP, trends: value, date: '2026-10-02', study: marketTabStudy({ trends: value, reference, date: '2026-10-02' }) });
     expect(item(withStudy, 'tt').details).toBeUndefined();
     expect([model.ttShown, withStudy.ttShown]).toEqual([true, true]);
     expect(TT_POPULATION).toMatch(/^TT達成数は長期集計の値で/);
@@ -70,7 +75,7 @@ describe('market tab view model: fired warnings', () => {
   value.data.indices[0] = index('^GSPC', '2026-10-02', 6, '2026-10-02', confirmed('2026-10-02'));
   const model = view(value);
   // The same publication under a reference that confirmed every breadth rule (no 参考 check): every fired rule is a warning.
-  const robust = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: { referenceKeys: [] } });
+  const robust = cardView({ market: UP, trends: value, date: '2026-10-02', study: { referenceKeys: [] } });
 
   it('lists every existing rule that fired, in page order, in plain sentences', () => {
     expect(model.signals.fired.map(s => [s.key, s.text])).toEqual([
@@ -482,7 +487,7 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
   };
   it('tags each fired check from the reference, with 〔偏り〕; the 〔参考〕 legend only when a 〔参考〕 tag is shown', () => {
     const value = failing();
-    const model = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
+    const model = cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
     // A fired distribution check takes its count's graded bucket (MK2): S&P 6 days is 5–6, NAS 7 days is 7 or more.
     expect(model.signals.fired.map(c => [c.key, c.tags])).toEqual([['dist-S&P', ['〔未確立〕']], ['dist-NAS', ['〔S&P・Nasdaqとも〕']], ['ftd-S&P', ['〔S&Pのみ〕', '〔偏り〕']], ['ftd-NAS', ['〔未確立〕']], ['lows', ['〔参考〕']]]);
     expect(model.signals.legend).toBe('〔参考〕＝2021〜26年の検証で関係未確認');
@@ -493,11 +498,11 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
     expect(model.signals.tagNote).not.toContain('目安');
     // Index checks only: no 〔参考〕 legend.
     const indexOnly = { ...value, data: { ...value.data, long_history: { as_of_date: '2026-10-02', breadth: breadth('2026-10-02'), sp500: [] } } };
-    const indexModel = marketCardView({ market: UP, trends: indexOnly, date: '2026-10-02', study: study(indexOnly) });
+    const indexModel = cardView({ market: UP, trends: indexOnly, date: '2026-10-02', study: study(indexOnly) });
     expect(indexModel.signals.fired.every(c => !c.tags.includes('〔参考〕'))).toBe(true);
     expect(indexModel.signals.legend).toBeNull();
     // Without a reference (or with a broken one), or without the study at all (Today), no tags and no words about them.
-    for (const none of [marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value, '2026-10-02', null) }), marketCardView({ market: UP, trends: value, date: '2026-10-02' })]) {
+    for (const none of [cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value, '2026-10-02', null) }), cardView({ market: UP, trends: value, date: '2026-10-02' })]) {
       expect(none.signals.fired.map(c => c.tags)).toEqual([[], [], [], [], []]);
       expect([none.signals.legend, none.signals.tagNote]).toEqual([null, null]);
       // The order of the checks is the page's, unchanged.
@@ -512,7 +517,7 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
     ref.indicators['^IXIC.dd.graded'].states['5-6'].labelDd5 = 'robust';
     ref.indicators['^IXIC.ftd.state'].states.ftd_failed.labelDd5 = 'insufficient';
     ref.breadth['rule.lows'].labelDd5 = 'robust';
-    const value = failing(), model = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value, '2026-10-02', ref) });
+    const value = failing(), model = cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value, '2026-10-02', ref) });
     expect(model.signals.fired.map(c => c.tags)).toEqual([['〔S&P・Nasdaqとも〕'], ['〔S&P・Nasdaqとも〕'], ['〔S&Pのみ〕', '〔偏り〕'], ['〔標本不足〕'], []]);
     expect(model.signals.legend).toBeNull();
     expect(model.signals.tagNote).toContain('（〔S&P・Nasdaqとも〕は両指数で確認、〔S&Pのみ〕はS&Pでのみ確認、〔標本不足〕は日数が足りず判定なし、〔偏り〕はその状態の日の60%以上が検証期間の前半か後半に集中）');
@@ -530,7 +535,7 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
     // An older expired attempt keeps its own date (the note is the market tab's; Today's tile says nothing for it).
     expect(nasdaqNote({ ...at('attempt_expired'), asOf: '2026-10-01' }, '2026-10-02').short).toBe('Nasdaqは調整中（10/1時点・判定はSPYのみ）');
     for (const ft of [confirmed('2026-10-02'), at('no_correction'), { available: false, reason: 'x' }, undefined]) expect(nasdaqNote(ft, '2026-10-02')).toBeNull();
-    const withStudy = (market = UP) => marketCardView({ market, trends: trends(), date: '2026-10-02', study: study(trends()) });
+    const withStudy = (market = UP) => cardView({ market, trends: trends(), date: '2026-10-02', study: study(trends()) });
     expect(withStudy().verdict.nasdaq).toMatchObject({ short: 'Nasdaqは反発3日目（判定はSPYのみ）' });
     expect(withStudy({ label: '50日線割れ（弱含み・独自判定）', cap: 0 }).verdict.nasdaq).toBeNull();
     expect(withStudy({ label: '市場未確認', cap: 0, state: 'unknown' }).verdict.nasdaq).toBeNull();
@@ -543,11 +548,11 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
       { date: '2026-09-14', state: 'active', ageSessions: 19 }, { date: '2026-09-30', state: 'active', ageSessions: 2 }, { date: '2026-09-22', state: 'active', ageSessions: 9 }, { date: '2026-08-01', state: 'expired', ageSessions: 40 }] };
     value.data.indices[1] = { ...value.data.indices[1], latest: { date: '2026-10-02', value: 0 }, lastObserved: { date: '2026-10-02', value: 0 }, points: [{ date: '2026-10-02', value: 0 }], events: [] };
     const dist = model => model.groups[0].items.find(i => i.key === 'dist');
-    const opened = dist(marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) }));
+    const opened = dist(cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) }));
     expect(opened.details).toEqual(['下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・5日以上で注意）', 'S&P：9/14・9/22・9/30（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）', 'NAS：有効な分配日なし']);
     expect(opened.yearLines.map(line => [line.label, line.range.series.length, line.range.series.filter(v => v === null).length, line.range.lo, line.range.hi, line.format(3)])).toEqual([['S&Pの分配日', 252, 0, 0, 8, '3日']]);
     // Dates that do not add up to the count are not listed.
-    expect(dist(marketCardView({ market: UP, trends: trends(), date: '2026-10-02', study: study(trends()) })).details.slice(1)).toEqual(['S&P：有効な分配日の日付を確認できません', 'NAS：有効な分配日の日付を確認できません']);
+    expect(dist(cardView({ market: UP, trends: trends(), date: '2026-10-02', study: study(trends()) })).details.slice(1)).toEqual(['S&P：有効な分配日の日付を確認できません', 'NAS：有効な分配日の日付を確認できません']);
     // Today (no study) has no detail lines.
     expect(dist(view(trends())).details).toBeUndefined();
   });
@@ -568,7 +573,7 @@ describe('market tab: the basis line names the regime\'s cause (MK1, MK4)', () =
   const below200 = { label: '長期トレンド警戒', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
   // The cause is the study's (the market tab's lazy chunk), from the verdict's market, the published manifest and the
   // ^GSPC record of the day (trends()'s: a confirmed FTD on 8/7, judged on 10/2).
-  const verdict = (market, value, series = trends()) => marketCardView({ market, trends: series, date: DATE, study: marketTabStudy({ trends: series, reference, date: DATE, market, manifest: value }) }).verdict;
+  const verdict = (market, value, series = trends()) => cardView({ market, trends: series, date: DATE, study: marketTabStudy({ trends: series, reference, date: DATE, market, manifest: value }) }).verdict;
   const READS = '局面判定は分配日のほか50日線・200日線と参加度も見ます';
   const upgradedBlock = block({ regime: 'confirmed_uptrend', distribution_days: 1, ftd_date: '2026-09-18', ftd_days_since: 10, exposure_pct: 40 });
   /** A publication whose ^GSPC record of the day is `ft` (the Nasdaq on a rally attempt). */
@@ -651,7 +656,7 @@ describe('market tab: the basis line names the regime\'s cause (MK1, MK4)', () =
     expect(Object.keys(REGIME_NAMES)).toEqual(['confirmed_uptrend', 'uptrend_under_pressure', 'correction', 'downtrend']);
     expect(regimeCause(null, block(), null, DATE)).toBeNull();
     // Today never reads the block: without the study there is no cause line.
-    expect(marketCardView({ market: pressure, trends: trends(), date: DATE }).verdict.cause).toBeNull();
+    expect(cardView({ market: pressure, trends: trends(), date: DATE }).verdict.cause).toBeNull();
   });
 });
 
@@ -659,7 +664,7 @@ describe('market tab: 〔参考〕 signs are counted apart from the warnings (MK
   const rows = breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30 } : {}));
   const make = counts => { const value = trends({ rows }); value.data.indices = value.data.indices.map((item, i) => sessionsOf({ ...item, method: DD, points: [{ ...item.points[0], value: counts[i] }], latest: { ...item.latest, value: counts[i] }, lastObserved: { ...item.lastObserved, value: counts[i] } })); return value; };
   it('counts a 〔参考〕 check apart, never in a group\'s or a tab\'s ▲, and marks its row 参考 instead of 注意', () => {
-    const value = make([3, 4]), model = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
+    const value = make([3, 4]), model = cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
     expect(model.signals.fired.map(c => [c.key, c.reference])).toEqual([['lows', true]]);
     expect([model.signals.warnings, model.signals.references]).toEqual([0, 1]);
     expect(model.groups.map(g => [g.id, g.fired, g.references])).toEqual([['index', 0, 0], ['breadth', 0, 1], ['leaders', 0, 0]]);
@@ -670,10 +675,10 @@ describe('market tab: 〔参考〕 signs are counted apart from the warnings (MK
     expect(model.signals.fired[0].text).toBe('新安値（30）が新高値（10）を上回る');
   });
   it('keeps an index warning a ▲ warning, and marks the same 参考 rules on Today, which never loads the study', () => {
-    const value = make([6, 4]), model = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
+    const value = make([6, 4]), model = cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
     expect([model.signals.warnings, model.signals.references]).toEqual([1, 1]);
     expect(model.groups.map(g => [g.id, g.fired, g.references])).toEqual([['index', 1, 0], ['breadth', 0, 1], ['leaders', 0, 0]]);
-    const today = marketCardView({ market: UP, trends: value, date: '2026-10-02' });
+    const today = cardView({ market: UP, trends: value, date: '2026-10-02' });
     expect([today.signals.warnings, today.signals.references]).toEqual([1, 1]);
     expect(today.groups.map(g => [g.fired, g.references])).toEqual([[1, 0], [0, 1], [0, 0]]);
     expect(today.today.find(fact => fact.key === 'extremes')).toMatchObject({ warn: false, em: '参考：新安値が新高値より多い' });
@@ -690,7 +695,7 @@ describe('market tab: 〔参考〕 signs are counted apart from the warnings (MK
   it('counts only checks that can raise a warning toward 「なし」 (warnable): 参考 checks never stand in for them', () => {
     const value = make([3, 4]);
     value.data.indices = value.data.indices.map(item => ({ ...item, available: false, points: [], latest: null, lastObserved: null, followThrough: { available: false, method: item.followThrough?.method ?? null, reason: 'OHLCV欠測' } }));
-    const model = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
+    const model = cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
     expect(model.signals.unjudged.map(c => c.key).filter(key => /^(dist|ftd)-/.test(key))).toEqual(['dist-S&P', 'dist-NAS', 'ftd-S&P', 'ftd-NAS']);
     expect([model.signals.warnings, model.signals.references, model.signals.warnable]).toEqual([0, 1, 0]);
   });
@@ -704,23 +709,23 @@ describe('market tab: the S&P／Nasdaq switch from the Nasdaq\'s published close
     expect(indexCloses({ closes: nasCloses('2026-10-02', 59) })).toBeNull();
     expect(indexCloses({})).toBeNull();
     expect(indexCloses(undefined)).toBeNull();
-    expect(marketCardView({ market: UP, trends: trends(), date: '2026-10-02' }).series).toBeNull();
-    expect(marketCardView({ market: UP, trends: withCloses(nasCloses('2026-10-02', 40)), date: '2026-10-02' }).series).toBeNull();
+    expect(cardView({ market: UP, trends: trends(), date: '2026-10-02' }).series).toBeNull();
+    expect(cardView({ market: UP, trends: withCloses(nasCloses('2026-10-02', 40)), date: '2026-10-02' }).series).toBeNull();
   });
   it('gives each index its own closes, marks and figures: the exporter\'s position first, else indexSummary on the same closes', () => {
     const position = { date: '2026-10-02', close: 18234.56, vsMa: -1.4, vs200: 3.2, fromHigh: -7.25, fullYear: true };
     const value = withCloses(nasCloses());
-    const plain = marketCardView({ market: UP, trends: value, date: '2026-10-02' });
+    const plain = cardView({ market: UP, trends: value, date: '2026-10-02' });
     expect(plain.series.map(entry => [entry.key, entry.name])).toEqual([['spx', 'S&P 500'], ['ndx', 'Nasdaq総合']]);
     expect(plain.series[0]).toMatchObject({ closes: value.data.long_history.sp500, distribution: value.data.indices[0], followThrough: value.data.indices[0].followThrough, summary: plain.summary });
     expect(plain.series[1]).toMatchObject({ closes: nasCloses(), distribution: value.data.indices[1], distributionEnd: '2026-10-02', followThrough: value.data.indices[1].followThrough, summary: indexSummary(nasCloses()) });
     // The exporter's figures describe the line's last bar only when its date and close are that bar's.
     const last = nasCloses().at(-1), matching = { ...position, close: last.close };
-    const published = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: { nasdaqPosition: { state: matching } } });
+    const published = cardView({ market: UP, trends: value, date: '2026-10-02', study: { nasdaqPosition: { state: matching } } });
     expect(published.series[1].summary).toBe(matching);
     // A position of another bar (another close, or another date) would disagree with its chart: the closes' own figures.
     for (const other of [position, { ...matching, date: '2026-10-01' }]) {
-      const mismatched = marketCardView({ market: UP, trends: value, date: '2026-10-02', study: { nasdaqPosition: { state: other } } });
+      const mismatched = cardView({ market: UP, trends: value, date: '2026-10-02', study: { nasdaqPosition: { state: other } } });
       expect(mismatched.series[1].summary).toEqual(indexSummary(nasCloses()));
     }
   });
@@ -728,7 +733,7 @@ describe('market tab: the S&P／Nasdaq switch from the Nasdaq\'s published close
   it('says why the switch is missing when the reader withdrew the Nasdaq\'s closes', () => {
     const value = trends();
     value.data.indices[1] = { ...value.data.indices[1], closes_error: '指数の終値の形式を確認できません。' };
-    expect(marketCardView({ market: UP, trends: value, date: '2026-10-02' })).toMatchObject({ series: null, nasdaqClosesError: '指数の終値の形式を確認できません。' });
-    expect(marketCardView({ market: UP, trends: trends(), date: '2026-10-02' }).nasdaqClosesError).toBeNull();
+    expect(cardView({ market: UP, trends: value, date: '2026-10-02' })).toMatchObject({ series: null, nasdaqClosesError: '指数の終値の形式を確認できません。' });
+    expect(cardView({ market: UP, trends: trends(), date: '2026-10-02' }).nasdaqClosesError).toBeNull();
   });
 });

@@ -6,7 +6,7 @@ import reference from './market-regime-reference-v1.json' with { type: 'json' };
 import { distributionDetail, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, regimeCause, signalTagText } from './marketTabStudy.js';
 import { CONTRACT_DATE, marketContext, marketContextUnknown } from '../../test/fixtures/publishedContracts.js';
 import { ddGradeState, stateTag, TAGS } from './marketRegimeReference.js';
-import { exposureRuleText } from '../portfolioPlan.js';
+import { exposureRuleText } from './marketTabStudy.js';
 import { NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
 import { REFERENCE_CHECKS, verdictBasis } from '../brief/marketTabModel.js';
 import { attempt, confirmed, days, failed, trends } from '../../test/fixtures/marketTrends';

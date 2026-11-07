@@ -75,6 +75,20 @@ describe('market tile suffix', () => {
     expect(marketTileSuffix({ market: { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'correction', ftdUpgraded: false }, trends: ready(ftd('correction')), manifest })).toBeNull();
   });
 
+  it('explains 「NAS調整中」 with the market tab\'s own Nasdaq note (marketTileNote), and nothing without the suffix', async () => {
+    const { marketTileNote, marketTileSuffix, nasdaqNote } = await import('./briefEnvironment');
+    for (const state of ['correction', 'rally_attempt', 'attempt_expired', 'ftd_failed']) {
+      const input = { market: OPEN, trends: ready({ ...ftd(state), attempt: { startDate: '2026-09-28', day: 3 } }), manifest };
+      expect(marketTileSuffix(input)).toBe('NAS調整中');
+      expect(marketTileNote(input)).toBe(nasdaqNote(input.trends.data.indices[1].followThrough, DATE).long);
+    }
+    // No suffix (the Nasdaq confirmed, an older state, the FTD suffix): no note.
+    expect(marketTileNote({ market: OPEN, trends: ready(ftd('confirmed')), manifest })).toBeNull();
+    expect(marketTileNote({ market: OPEN, trends: ready(ftd('correction', '2026-10-01')), manifest })).toBeNull();
+    expect(marketTileNote({ market: { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true }, trends: ready(ftd('correction')), manifest })).toBeNull();
+    expect(marketTileNote()).toBeNull();
+  });
+
   it('never asserts an FTD that the app\'s own ^GSPC record of the same day contradicts', async () => {
     const { gspcFollowThrough, gspcFtdDisagrees, marketTileSuffix, MARKET_TILE_SUFFIX } = await import('./briefEnvironment');
     // The ^GSPC record of the analysis date, or null for an older one, an unavailable one, none, or no ready series.

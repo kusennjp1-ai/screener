@@ -10,12 +10,13 @@ import { bare, sentence, shortDate, trendsStatus } from './briefModel';
 import { Expander, Parts, ScreenNotes } from './briefPrimitives';
 import { jumpTo } from './jump';
 import { barDay } from './briefNav';
-import { chartStatusOf, historyTakeaway, indexCloses, marketCardView, num, signedPercent, sma, SURVIVORSHIP_NOTE } from './marketTabModel';
+import { chartStatusOf, indexCloses, marketCardView, num, signedPercent, sma, SURVIVORSHIP_NOTE } from './marketTabModel';
+import { historyTakeaway } from './marketTabHistory';
+import { marketTabParts } from './marketTabGroups';
 import useSessionState from './useSessionState';
 import referenceData from '../reference/market-regime-reference-v1.json' with { type: 'json' };
 import { validReference } from '../reference/marketRegimeReference.js';
-import { marketTabStudy } from '../reference/marketTabStudy.js';
-import { exposureRuleText } from '../portfolioPlan';
+import { exposureRuleText, marketTabStudy } from '../reference/marketTabStudy.js';
 
 const EXPLORER_TITLE = 'brief-history-explorer-title';
 /** The versioned market-regime study reference (tools/market-regime-reference.mjs); an invalid one shows nothing. */
@@ -277,7 +278,7 @@ function SectionTabs({ panels, active, onSelect }) {
  * on a phone, across the card on the desktop).
  */
 export function MarketDetailCard({ market, marketLoading = false, trends, date, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, study = null, studyBlock = null }) {
-  const view = marketCardView({ market, marketLoading, trends, date, study });
+  const view = marketCardView({ market, marketLoading, trends, date, study, tab: marketTabParts });
   const { status, verdict, dating, signals, conflict, groups, chart } = view;
   const chartStatus = chartStatusOf(view, status);
   // The 指数 panel's S&P／Nasdaq switch (only with the Nasdaq's published closes): one index at a time, its figures, its

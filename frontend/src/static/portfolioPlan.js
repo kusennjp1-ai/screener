@@ -8,16 +8,14 @@ const centsDown = v => Math.floor(v * 100 + 1e-8) / 100;
 
 /**
  * The exposure guide's caps by the backend regime, this app's own (独自判定): modelMarket reads them and the market
- * tab prints its disclosure from them (exposureRuleText), so the two cannot drift. `otherwise` is every known state
+ * tab prints its disclosure from them (marketTabStudy's exposureRuleText), so the two cannot drift. `otherwise` is every known state
  * that is not one of the two uptrends (新規購入を抑制, 長期トレンド警戒, 50日線割れ); an unknown market is always 0.
  */
 export const MARKET_CAPS = Object.freeze({ confirmed_uptrend: .5, uptrend_under_pressure: .25, otherwise: 0 });
 /** One cap in the guide's words (「最大50%」, 「0%」): every screen prints a cap through this, never hand-typed beside MARKET_CAPS. */
 export const capText = cap => cap > 0 ? `最大${Math.round(cap * 100)}%` : '0%';
-/** The disclosure of the exposure guide, generated from the caps (never hand-typed beside them). */
-export function exposureRuleText(caps = MARKET_CAPS) {
-  return `独自の目安：上昇トレンド ${capText(caps.confirmed_uptrend)}・上昇に圧力 ${capText(caps.uptrend_under_pressure)}・それ以外 ${capText(caps.otherwise)}（S&P 500（SPY）の50日線・200日線と局面判定から。バックエンドの局面判定の目安とは別）。注意サインも指数の過去の傾向も目安を変えません。`;
-}
+// The guide's disclosure (exposureRuleText) is generated from these caps by the market tab's own module
+// (reference/marketTabStudy.js), so Today does not ship it.
 
 // Deliberately a disclosed research model, not IBD's proprietary exposure scale.
 // Besides the label and cap it returns the raw backend regime (`regime`, null when the rows carry none or disagree)
