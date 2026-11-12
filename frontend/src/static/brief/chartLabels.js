@@ -1,19 +1,30 @@
 // The price chart's label placer (imported by priceChart.js only, so it ships in the chart's lazy chunk). One rule for
 // every label: in priority order, each takes the first of its candidate spots that overlaps no box already taken
-// (labels, tags, marks, leaders) and no candle, preferring one that no line (an average, a level) crosses, and (when
-// asked) one no level line strikes through; only when no candle-free spot is left does it go over candles (the spot
-// with the fewest, with its halo), and it is marked forced. A label with a leader takes a spot only where the leader is
-// clear too, and holds the leader with its box.
+// (labels, tags, marks, leaders, the averages' last stretches) and no candle, preferring one that no line (an average,
+// a level) crosses, and (when asked) one no level line strikes through; only when no candle-free spot is left does it
+// go over candles (the spot with the fewest, with its halo), and it is marked forced. A label with a leader takes a
+// spot only where the leader is clear too, and holds the leader with its box.
 
 /**
  * Horizontal clearance kept beside a reserved box (a 12px label's box is 14px tall, so 2px stays above and below its
  * glyphs). Two labels sharing a row keep PHRASE_GAP between their glyphs, so they never read as one phrase
  * (「ピボット 2R 130.47」, 「T1 買いゾーン」, 「150 10」): at 6px or 9px they still do at 12px text, at 14px they read
  * apart (rendered with the chart's fonts). Their boxes keep LABEL_GAP, 2px more on each side for the estimated widths.
+ * Two bold figures (an average's name beside a depth, a T number or another name) keep FIGURE_GAP between their glyphs:
+ * at 16px 「150 −4%」 still reads as one phrase with the 150-day line between them, at 24px it does not.
  */
-export const BOX_GAP = 3, PHRASE_GAP = 14, LABEL_GAP = PHRASE_GAP + 2;
-/** The plan's green names (ピボット, 買いゾーン) on one row keep three glyphs apart: two green words read as one. */
-export const KIN_GAP = { plan: 36 };
+export const BOX_GAP = 3, PHRASE_GAP = 14, LABEL_GAP = PHRASE_GAP + 2, FIGURE_GAP = 24;
+/**
+ * The gap between two labels' boxes on one row by their kinds (`kin`): the plan's green names (ピボット, 買いゾーン)
+ * keep three glyphs apart (two green words read as one); an average's name ('ma') and a contraction's depth under its
+ * box ('leg') or its T number ('tn', 「T2 −8%」 too), or two names, keep FIGURE_GAP (and the estimate's slack).
+ */
+export const KIN_GAP = { plan: 36, figure: FIGURE_GAP + 2 };
+const FIGURES = ['ma', 'leg', 'tn'];
+export const kinGap = (a, b) => (a === 'plan' && b === 'plan' ? KIN_GAP.plan : (a === 'ma' && FIGURES.includes(b)) || (b === 'ma' && FIGURES.includes(a)) ? KIN_GAP.figure : LABEL_GAP);
+/** An average's name and a depth (alone) one above the other keep FIGURE_STACK between their boxes (「150／−8%／200」 reads as one column of names). */
+export const FIGURE_STACK = 6;
+const stackGap = (a, b) => ((a === 'ma' && b === 'leg') || (a === 'leg' && b === 'ma') ? FIGURE_STACK : 0);
 /** Two leaders meet when they share more than this much of their length (each box reaches past its line by up to 2px). */
 export const LEADER_SLACK = 2;
 /** The default x step of a search (data-search names the step; the test that checks a forced label re-runs the same spots). */
@@ -107,6 +118,13 @@ export function spots({ x0, x1, ys, step = SEARCH_STEP, inside = () => true, cos
 }
 
 /**
+ * Two leaders' parts (leaving `from` the same way, `up` or down, to `tip`, the row of their names) of two lines whose
+ * ends are within 3px share one leader when their names stack in the order of the ends: the higher end's name nearer
+ * the top (either order for ends within 1px, one point).
+ */
+export const sharedLeader = (a, b) => a.up === b.up && (Math.abs(a.from - b.from) <= 1 || (a.from - b.from) * (a.tip - b.tip) > 0);
+
+/**
  * A segment from (xa, ya) to (xb, yb) (xa ≤ xb) crosses the box: over their common x-range the segment's y-range meets the box's.
  */
 export function segmentCrosses([xa, ya], [xb, yb], box) {
@@ -131,30 +149,43 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
   const boxes = [];
   const clash = (a, b) => {
     let gap;
-    if (a.leader && b.leader) {
+    // An average's last stretch (`tail`) is taken for every label but an average's name (the names sit at their
+    // lines' ends): a depth there reads as the end of the line.
+    if (a.tail || b.tail) {
+      const other = a.tail ? b : a;
+      if (!other.label || other.kin === 'ma') return false;
+      gap = BOX_GAP;
+    } else if (a.leader && b.leader) {
       // Two leaders meet where one runs along the other or ends across it, not where both leave one line end apart. A
       // line's end ('end') meets the leader of another line that runs past it, not its own leader nor one that leaves
       // from the same point.
       if (a.key !== undefined && a.key === b.key) return false;
       const [end, other] = a.leader === 'end' ? [a, b] : [b, a];
       if (end.leader === 'end' && other.from !== undefined && Math.abs(other.from - (end.y0 + end.y1) / 2) <= 3) return false;
-      // Two vertical parts leaving one point (ends within 3px) meet only when they go the same way.
-      if (a.leader === 'v' && b.leader === 'v' && Math.abs(a.from - b.from) <= 3) return a.up === b.up && a.x0 < b.x1 && a.x1 > b.x0;
+      // Two vertical parts leaving one point (ends within 3px) go apart, or share one leader the same way with their
+      // names in the order of their ends (either order for ends within 1px: one point): the colours tie each to its line.
+      // The nearer name's horizontal part may branch off that shared leader too.
+      if (a.leader === 'v' && b.leader === 'v' && Math.abs(a.from - b.from) <= 3) return a.up === b.up && a.x0 < b.x1 && a.x1 > b.x0 && !sharedLeader(a, b);
+      if ((a.leader === 'h') !== (b.leader === 'h') && Math.abs(a.from - b.from) <= 3 && sharedLeader(a, b)) return false;
       return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 - LEADER_SLACK && a.y1 > b.y0 + LEADER_SLACK;
-    }
-    if (a.leader || b.leader) {
+    } else if (a.leader || b.leader) {
       // A leader's vertical part (and a line's end) runs in the axis gutter beside the tags' leaders and the last
       // price's dot: only a label or another leader meets it. A leader keeps BOX_GAP from a label.
       if ((a.leader !== 'h' && a.leader && !b.label) || (b.leader !== 'h' && b.leader && !a.label)) return false;
       gap = a.label || b.label ? BOX_GAP : 0;
-    } else gap = a.label && b.label ? (a.kin && a.kin === b.kin ? KIN_GAP[a.kin] ?? LABEL_GAP : LABEL_GAP) : BOX_GAP;
+    } else if (a.label && b.label) {
+      gap = kinGap(a.kin, b.kin);
+      const stack = stackGap(a.kin, b.kin);
+      if (stack) return a.x0 < b.x1 + gap && a.x1 > b.x0 - gap && a.y0 < b.y1 + stack && a.y1 > b.y0 - stack;
+    } else gap = BOX_GAP;
     return a.x0 < b.x1 + gap && a.x1 > b.x0 - gap && a.y0 < b.y1 && a.y1 > b.y0;
   };
-  // The reserved boxes by band of height (BAND px): two boxes meet only where their heights overlap, so a box is checked
-  // against those in its bands only (thousands of spots are tried against tens of boxes).
+  // The reserved boxes by band of height (BAND px): two boxes meet only where their heights overlap (or come within
+  // FIGURE_STACK of it), so a box is checked against those in its bands and the next ones only (thousands of spots are
+  // tried against tens of boxes).
   const bands = new Map(), bandsOf = box => { const out = []; for (let k = Math.floor(box.y0 / BAND); k <= Math.floor(box.y1 / BAND); k++) out.push(k); return out; };
   const hits = box => {
-    for (let k = Math.floor(box.y0 / BAND), last = Math.floor(box.y1 / BAND); k <= last; k++) {
+    for (let k = Math.floor((box.y0 - FIGURE_STACK) / BAND), last = Math.floor((box.y1 + FIGURE_STACK) / BAND); k <= last; k++) {
       const list = bands.get(k);
       if (list) for (const b of list) if (clash(box, b)) return true;
     }
@@ -175,13 +206,13 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
   const held = at => (at.extra?.length ? [at.box, ...at.extra] : [at.box]);
   // What never changes for a spot (the candles under it, a line across it, a level through its glyphs) is worked out
   // once per list and label size: a label placed again (repair, settle) only checks the reserved boxes.
-  const memo = (s, w, half) => {
-    if (s.memo?.w !== w || s.memo.half !== half) s.memo = { w, half, solid: new Int16Array(s.n).fill(-1), soft: new Int8Array(s.n).fill(-1), strike: new Int8Array(s.n).fill(-1) };
+  const memo = (s, w, half, struck = strike) => {
+    if (s.memo?.w !== w || s.memo.half !== half || s.memo.struck !== struck) s.memo = { w, half, struck, solid: new Int16Array(s.n).fill(-1), soft: new Int8Array(s.n).fill(-1), strike: new Int8Array(s.n).fill(-1) };
     const m = s.memo, box = k => ({ x0: s.x[k], x1: s.x[k] + w, y0: s.y[k] - half, y1: s.y[k] + half });
     return {
       solid: k => { if (m.solid[k] < 0) m.solid[k] = Math.min(32767, solid(box(k))); return m.solid[k]; },
       soft: k => { if (m.soft[k] < 0) m.soft[k] = Math.min(127, Number(soft(box(k)))); return m.soft[k]; },
-      strike: k => { if (m.strike[k] < 0) m.strike[k] = strike(box(k)) ? 1 : 0; return m.strike[k] === 1; },
+      strike: k => { if (m.strike[k] < 0) m.strike[k] = struck(box(k)) ? 1 : 0; return m.strike[k] === 1; },
     };
   };
   /**
@@ -191,14 +222,17 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
    * candle-free spot; else (`forced`) the spot over the fewest candles (or, with `perCandle`, the lowest cost counting
    * each candle as that much more), then the lowest cost; never over a reserved box (`kin`: see KIN_GAP). With `fewest`,
    * the candle-free spot (no level line through it) within `hard` of the first that the fewest lines cross wins over the
-   * first one when every such spot is crossed. A label with a `leader` (`(x, yc)` → the segments joining it there to its
-   * line, each a box with `leader` 'v' or 'h', its line's `key` and the height `from` which it leaves; null where no
-   * leader may run, so no spot there) takes a spot only where every segment is clear of the reserved boxes too (a
-   * line's end held as a box with `leader` 'end' included), and reserves them with its box, so no later label sits on
-   * them. Returns { x, yc, box, extra, forced } (the box and the segments in `extra` reserved) or null.
+   * first one when every such spot is crossed. With `apart` (a level's name), a spot a level line strikes through is
+   * never taken, over candles or not: the name would read as that line's (`strike` replaces the placer's own test for
+   * the label, so a name centred on its own line counts only the others). A label with a `leader` (`(x, yc)` → the
+   * segments joining it there to its line, each a box with `leader` 'v' or 'h', its line's `key` and the height `from`
+   * which it leaves; null where no leader may run, so no spot there) takes a spot only where every segment is clear of
+   * the reserved boxes too (a line's end held as a box with `leader` 'end' included), and reserves them with its box, so
+   * no later label sits on them. Returns { x, yc, box, extra, forced } (the box and the segments in `extra` reserved)
+   * or null.
    */
-  const place = (w, spotsIn, { forced = true, slack = Infinity, half = 7, perCandle = Infinity, kin = null, hard = 0, leader = null, fewest = false } = {}) => {
-    const s = asSpots(spotsIn), known = memo(s, w, half), reach = Math.max(slack, hard);
+  const place = (w, spotsIn, { forced = true, slack = Infinity, half = 7, perCandle = Infinity, kin = null, hard = 0, leader = null, fewest = false, apart = false, strike: strikeOf = strike } = {}) => {
+    const s = asSpots(spotsIn), known = memo(s, w, half, strikeOf), reach = Math.max(slack, hard);
     let first = null, plain = null, best = null, worst = Infinity;
     for (let k = 0; k < s.n; k++) {
       s.fill(k);
@@ -207,6 +241,7 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
       const count = known.solid(k);
       // Over candles: only a forced label's fallback, and none once a candle-free spot is found.
       if (count > 0 && (!forced || first)) continue;
+      if (apart && known.strike(k)) continue;
       const box = { x0: x, x1: x + w, y0: yc - half, y1: yc + half, label: true, kin };
       if (hits(box)) continue;
       const extra = leader ? leader(x, yc) : [];
@@ -234,7 +269,7 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
    * all may move them over candles (their own rule's forced spot): a forced label reads, a missing one does not.
    */
   const repair = label => {
-    const { w, options } = label, s = asSpots(label.spots), half = options.half ?? 7, known = memo(s, w, half), hard = options.hard > 0;
+    const { w, options } = label, s = asSpots(label.spots), half = options.half ?? 7, known = memo(s, w, half, options.strike), hard = options.hard > 0 || options.apart;
     const dropped = !label.at;
     if (label.at) releaseAt(label.at);
     // A label in the way that found no other spot twice is not asked again (each ask may try thousands of spots).
@@ -251,7 +286,7 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
       // The labels in its way; a box no movable label holds (a tag, a mark, a caption) keeps the spot taken.
       const blockers = new Set();
       let fixed = false;
-      for (const one of mine) for (let b = Math.floor(one.y0 / BAND); b <= Math.floor(one.y1 / BAND) && !fixed; b++) for (const theirs of bands.get(b) ?? []) {
+      for (const one of mine) for (let b = Math.floor((one.y0 - FIGURE_STACK) / BAND); b <= Math.floor((one.y1 + FIGURE_STACK) / BAND) && !fixed; b++) for (const theirs of bands.get(b) ?? []) {
         if (!clash(one, theirs)) continue;
         if (theirs.of?.at && labels.includes(theirs.of)) blockers.add(theirs.of); else { fixed = true; break; }
       }
@@ -285,7 +320,7 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
    */
   const put = (w, spots, options = {}) => {
     const label = own({ w, spots, options, at: place(w, spots, options) });
-    const struck = options.hard > 0 && label.at && !label.at.forced && strike(label.at.box);
+    const struck = options.hard > 0 && label.at && !label.at.forced && (options.strike ?? strike)(label.at.box);
     if ((!label.at || label.at.forced || struck) && (options.repair ?? options.forced !== false)) repair(label);
     if (label.at) labels.push(own(label));
     return label;

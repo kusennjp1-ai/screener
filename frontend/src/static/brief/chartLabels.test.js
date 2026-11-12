@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { BOX_GAP, KIN_GAP, LABEL_GAP, labelPlacer, PHRASE_GAP, placedAttrs, segmentCrosses, spotList, spots } from './chartLabels';
+import { BOX_GAP, FIGURE_GAP, FIGURE_STACK, KIN_GAP, kinGap, LABEL_GAP, labelPlacer, PHRASE_GAP, placedAttrs, segmentCrosses, sharedLeader, spotList, spots } from './chartLabels';
 
 // One candle box per 10px column from x = 100 to 190, 40px to 80px down (the "candles" of these tests).
 const candles = Array.from({ length: 10 }, (_, i) => ({ x0: 100 + i * 10, x1: 106 + i * 10, y0: 40, y1: 80 }));
@@ -86,6 +86,75 @@ describe('chart label placer', () => {
     expect(PHRASE_GAP).toBeGreaterThanOrEqual(14);
     expect(LABEL_GAP).toBeGreaterThan(PHRASE_GAP);
     expect(KIN_GAP.plan).toBeGreaterThanOrEqual(36);
+  });
+
+  it('keeps an average\'s name and a contraction\'s figure (or two names) on a row FIGURE_GAP apart: 「150 −4%」 reads as one phrase', () => {
+    expect(FIGURE_GAP).toBeGreaterThanOrEqual(24);
+    expect(KIN_GAP.figure).toBe(FIGURE_GAP + 2);
+    expect([kinGap('ma', 'leg'), kinGap('leg', 'ma'), kinGap('ma', 'ma')]).toEqual([KIN_GAP.figure, KIN_GAP.figure, KIN_GAP.figure]);
+    expect([kinGap('ma', 'tn'), kinGap('tn', 'ma')]).toEqual([KIN_GAP.figure, KIN_GAP.figure]);
+    expect([kinGap('leg', 'leg'), kinGap('leg', 'tn'), kinGap('ma', null), kinGap(null, null), kinGap('plan', 'plan'), kinGap('plan', 'ma')]).toEqual([LABEL_GAP, LABEL_GAP, LABEL_GAP, LABEL_GAP, KIN_GAP.plan, LABEL_GAP]);
+    const placer = labelPlacer({ solid });
+    placer.place(22, along(4, 4, [20]), { kin: 'leg' });
+    expect(placer.place(22, along(26, 99, [21]), { kin: 'ma', forced: false }).x).toBe(Math.ceil((26 + KIN_GAP.figure) / 2) * 2);
+    expect(placer.place(22, along(26, 99, [50]), { kin: 'leg', forced: false }).x).toBe(26);
+    // One above the other, a name and a figure keep FIGURE_STACK between their boxes (「150／−8%／200」 reads as a column of names).
+    const column = labelPlacer({ solid });
+    column.place(22, along(4, 4, [20]), { kin: 'leg' });
+    // (A name 5px under the figure's box, in the next band of the placer's index, is still in its way.)
+    expect(column.place(22, { list: [[4, 33.5], [4, 38.5], [4, 33.5 + FIGURE_STACK]] }, { kin: 'ma', half: 6.5, forced: false }).yc).toBe(33.5 + FIGURE_STACK);
+    // Two figures of the contractions stack with no such gap.
+    const legs = labelPlacer({ solid });
+    legs.place(22, along(4, 4, [20]), { kin: 'leg' });
+    expect(legs.place(22, { list: [[4, 34]] }, { kin: 'leg', forced: false }).yc).toBe(34);
+  });
+
+  it('keeps every label but an average\'s name off an average\'s last stretch (a `tail` box)', () => {
+    const placer = labelPlacer({ solid });
+    placer.take({ x0: 40, x1: 60, y0: 15, y1: 25, tail: true });
+    expect(placer.place(20, along(30, 30, [20]), { forced: false })).toBeNull();
+    expect(placer.place(20, along(30, 30, [20]), { forced: false, kin: 'leg' })).toBeNull();
+    // Reserved boxes that are not labels (tags, leaders) ignore it.
+    expect(placer.hits({ x0: 40, x1: 60, y0: 15, y1: 25 })).toBe(false);
+    expect(placer.place(20, along(30, 30, [20]), { forced: false, kin: 'ma' })).toMatchObject({ x: 30 });
+  });
+
+  it('with `apart`, never takes a spot a level line strikes through, over candles or not; `strike` replaces the test for one label', () => {
+    // A level line at y = 60 strikes every spot centred 55–65, candle-free or over candles.
+    const strike = box => Math.abs((box.y0 + box.y1) / 2 - 60) <= 5.5;
+    const spotsAt = { list: [[4, 60, 0], [100, 60, 1], [100, 72, 2]] };
+    expect(labelPlacer({ solid, strike }).place(20, spotsAt, { hard: 60 })).toMatchObject({ x: 4, yc: 60, forced: false });
+    expect(labelPlacer({ solid, strike }).place(20, spotsAt, { hard: 60, apart: true })).toMatchObject({ x: 100, yc: 72, forced: true });
+    expect(labelPlacer({ solid, strike }).place(20, { list: [[4, 60, 0], [100, 60, 1]] }, { apart: true })).toBeNull();
+    // The label's own line (here the one at 60) does not count against it.
+    expect(labelPlacer({ solid, strike }).place(20, spotsAt, { apart: true, strike: () => false })).toMatchObject({ x: 4, yc: 60 });
+    // Repair keeps it off a struck spot too: it never moves another label to free one.
+    const placer = labelPlacer({ solid, strike });
+    const first = placer.put(20, along(4, 4, [30]));
+    const name = placer.put(20, { list: [[4, 60, 0], [4, 30, 1], [100, 72, 2]] }, { apart: true });
+    expect(first.at).toMatchObject({ x: 4, yc: 30 });
+    expect(name.at).toMatchObject({ x: 100, yc: 72, forced: true });
+  });
+
+  it('lets two names whose lines end at one point share a leader the same way, in the order of their ends', () => {
+    const v = (from, tip) => ({ x0: 97, x1: 99, y0: Math.min(from, tip) - 1, y1: Math.max(from, tip) + 1, leader: 'v', key: `k${from}${tip}`, from, tip, up: tip < from });
+    // Ends 2px apart, both down: the higher end's name nearer; the other way round they would cross.
+    expect(sharedLeader(v(100, 110), v(102, 124))).toBe(true);
+    expect(sharedLeader(v(100, 124), v(102, 110))).toBe(false);
+    expect(sharedLeader(v(100, 124), v(100.6, 110))).toBe(true);
+    const placer = labelPlacer({ solid });
+    placer.take(v(100, 110));
+    expect(placer.hits(v(102, 124))).toBe(false);
+    expect(placer.hits(v(102, 90))).toBe(false);
+    expect(placer.hits(v(98, 124))).toBe(true);
+    // Ends further apart than 3px never share one.
+    expect(placer.hits(v(104, 124))).toBe(true);
+    // A nearer name moved left branches off the shared leader on its own row; out of the ends' order it would cross it.
+    const trunk = labelPlacer({ solid });
+    trunk.take(v(102, 124));
+    const branch = from => ({ x0: 80, x1: 98.5, y0: 108, y1: 112, leader: 'h', key: `h${from}`, from, tip: 110, up: false });
+    expect(trunk.hits(branch(100))).toBe(false);
+    expect(trunk.hits(branch(104))).toBe(true);
   });
 
   it('reserves a label\'s leader with it: a spot whose leader meets a label or another leader is not taken, and no later label sits on it', () => {
