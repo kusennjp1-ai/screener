@@ -7,7 +7,7 @@
 // phrase, no level line through a label uncut).
 import { test, expect } from '@playwright/test';
 import { date, horizontalOverflow, openBrief, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
-import { chartCrossing, crossingNote } from '../../src/static/brief/chartReadout.js';
+import { chartCrossing, crossingNote, priceInRange } from '../../src/static/brief/chartReadout.js';
 import { LEADER_OFF_LEVEL, LEADER_OFF_LEVEL_MIN, MA_SHIFT, MA_TAIL } from '../../src/static/brief/priceChart.js';
 import { BOX_GAP, FIGURE_GAP, FIGURE_STACK, KIN_GAP, LABEL_GAP, PHRASE_GAP } from '../../src/static/brief/chartLabels.js';
 
@@ -76,6 +76,49 @@ const collisions = page => page.getByTestId('brief-price-chart').evaluate(chart 
   column.forEach((a, i) => { for (const b of column.slice(i + 1)) if (hit(a, b)) out.push(`${a.name} × ${b.name}`); });
   return out;
 });
+/** A price as the chart may print it: two decimals, and on an axis tag none from 1,000 up. */
+const priceTexts = value => [2, ...(Math.abs(value) >= 1000 ? [0] : [])].map(digits => value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+/**
+ * The levels the chart's model puts in its price range (priceInRange, the renderer's own range): the 52-week high, the
+ * pivot, the stop, the last contraction's low, the plan's entry, 2R and 3R, and the zone's top. The model is the one the
+ * card drew (PriceChart's props, from React's record of them), never read off the drawing: a level the renderer left out
+ * leaves no trace there. Each with its line's selector, its name (none: its line only), its prices (priceTexts) and its
+ * own tag's key.
+ */
+async function levelsInRange(page) {
+  const drawn = await page.getByTestId('brief-price-chart').evaluate(chart => {
+    const key = Object.keys(chart).find(name => name.startsWith('__reactFiber$'));
+    let owner = key ? chart[key] : null;
+    while (owner && !(owner.memoizedProps?.model?.bars && Number.isFinite(owner.memoizedProps.period))) owner = owner.return;
+    if (!owner) return null;
+    // The node keeps the fiber that created it, which React may since have swapped for its alternate (the props of an
+    // earlier render): the chart's current fiber is the one of its type in the root's current tree.
+    let root = owner;
+    while (root.return) root = root.return;
+    let current = null;
+    for (const stack = [root.stateNode?.current]; stack.length && !current;) {
+      const fiber = stack.pop();
+      if (fiber) { if (fiber.type === owner.type) current = fiber; else stack.push(fiber.sibling, fiber.child); }
+    }
+    const { model, period } = current?.memoizedProps || {};
+    return model ? { period, model: { bars: model.bars, interval: model.interval, pivot: model.pivot, upper: model.upper, stop: model.stop, auditHigh: model.auditHigh, structuralLow: model.structuralLow, entry: model.entry, r2: model.r2, r3: model.r3 } } : null;
+  });
+  if (!drawn) return null;
+  const { model, period } = drawn, finite = Number.isFinite;
+  // The entry only apart from the pivot (the renderer draws it then: at the pivot it is the pivot's line).
+  const entry = finite(model.entry) && !(finite(model.pivot) && Math.abs(model.entry / model.pivot - 1) <= 0.001) ? model.entry : null;
+  return [
+    ['the 52-week high', model.auditHigh, 'line.bc-high52', '52週高', 'high52'],
+    ['the pivot', model.pivot, 'line.bc-pivot', 'ピボット', 'pivot'],
+    ['the stop', model.stop, 'line.bc-stop', '損切り', 'stop'],
+    ['the last contraction\'s low', model.structuralLow, 'line.bc-structural', '最後の収縮の安値', 'low'],
+    ['the entry', entry, 'line.bc-entry', '買値', 'entry'],
+    ['2R', model.r2, 'line.bc-r2', '2R', 'r2'],
+    ['3R', model.r3, 'line.bc-r3', '3R', 'r3'],
+    // The zone's top: its edge only (a band 14px or thinner goes unnamed; the conclusion's 買いの範囲 gives its price).
+    ['the zone\'s top', finite(model.pivot) ? model.upper : null, 'rect.bc-zoneedge', null, null],
+  ].filter(([, value]) => priceInRange(model, period, value)).map(([what, value, line, name, tag]) => ({ what, line, name, tag, prices: priceTexts(value) }));
+}
 /** How far from its line's end the test looks for a clear spot for a forced average's name (independent of data-search). */
 const MA_REACH = { left: MA_SHIFT, height: 48 };
 /**
@@ -101,10 +144,11 @@ const MA_REACH = { left: MA_SHIFT, height: 48 };
  * another name) FIGURE_GAP, the pivot's name and the zone's two glyphs. A level's name is never centred within 4px of
  * another level's line or the zone's top edge (it would read as that line's name and price). A level line (or the
  * zone's top edge) within 4px of a label's centre, or an average across its glyphs, is cut under it (its mask's hole
- * spans the glyphs). Also the stop's line has its name, and every contraction with a computed depth (data-depth on its
- * box) shows that depth. Returns the failures and the forced labels.
+ * spans the glyphs). Also the stop's line has its name, every contraction with a computed depth (data-depth on its
+ * box) shows that depth, and every level the chart's model puts in its price range (levelsInRange) has its line drawn
+ * and its name and price inside the card. Returns the failures and the forced labels.
  */
-const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart, { reach, kinGap, labelGap, phraseGap, figureGap, figureStack, boxGap, tailLength, offLevel, offLevelMin }) => {
+const labelAudit = async page => { const ranged = await levelsInRange(page); return page.getByTestId('brief-price-chart').evaluate((chart, { reach, kinGap, labelGap, phraseGap, figureGap, figureStack, boxGap, tailLength, offLevel, offLevelMin, ranged }) => {
   const out = [];
   const visible = node => !node.closest('.bc-hover, .bc-scrub') && node.getAttribute('visibility') !== 'hidden' && node.textContent.trim() !== '';
   const groupOf = node => node.closest('g.bc-tag, g.bc-rshigh, g.bc-earnflag');
@@ -330,8 +374,26 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
     const node = chart.querySelector(`.bc-legtext[data-i="${k}"]`) || chart.querySelector(`.bc-tlabel[data-leg="${k}"] .bc-tdepth`);
     if (!node || !visible(node) || !node.textContent.trim().endsWith(want)) out.push(`T${Number(k) + 1}: its depth ${want} is not shown`);
   }
+  // Every level the model puts in range has its line drawn, and its name and price inside the card: in the plot, on an
+  // axis tag, in the readout or in the legend's shown items (never only in the 注記 under the screen). The price is in
+  // the text that names the level (「52週高 123.45」, 「最後の収縮の安値 106.85」), or on the level's own tag beside its name.
+  if (!ranged) out.push('the chart\'s model was not found');
+  const card = chart.closest('.brief-chartcard');
+  const ownText = node => { const copy = node.cloneNode(true); copy.querySelectorAll('.sr-only').forEach(inner => inner.remove()); return copy.textContent.trim(); };
+  const carriers = [
+    ...texts.map(text => ({ text: text.name, tag: text.node.closest('g.bc-tag')?.dataset.tag ?? null })),
+    ...[...card.querySelectorAll('.brief-legend > span, .brief-readout .ro-item')].filter(node => node.getClientRects().length).map(node => ({ text: ownText(node), tag: null })),
+  ];
+  for (const level of ranged || []) {
+    const line = chart.querySelector(level.line);
+    if (!line || line.getAttribute('visibility') === 'hidden') out.push(`${level.what} ${level.prices[0]}: in range, its line not drawn`);
+    if (!level.name) continue;
+    const named = carriers.filter(carrier => carrier.text.startsWith(level.name));
+    const priced = named.some(carrier => level.prices.some(price => carrier.text.includes(price))) || (named.length > 0 && level.tag && carriers.some(carrier => carrier.tag === level.tag && level.prices.includes(carrier.text)));
+    if (!priced) out.push(`${level.what} ${level.prices[0]}: in range, ${named.length ? 'its price' : 'its name'} nowhere in the card`);
+  }
   return { failures: out, forced: texts.filter(t => t.node.dataset.forced === '1').map(t => t.name) };
-}, { reach: MA_REACH, kinGap: KIN_GAP, labelGap: LABEL_GAP, phraseGap: PHRASE_GAP, figureGap: FIGURE_GAP, figureStack: FIGURE_STACK, boxGap: BOX_GAP, tailLength: MA_TAIL, offLevel: LEADER_OFF_LEVEL, offLevelMin: LEADER_OFF_LEVEL_MIN });
+}, { reach: MA_REACH, kinGap: KIN_GAP, labelGap: LABEL_GAP, phraseGap: PHRASE_GAP, figureGap: FIGURE_GAP, figureStack: FIGURE_STACK, boxGap: BOX_GAP, tailLength: MA_TAIL, offLevel: LEADER_OFF_LEVEL, offLevelMin: LEADER_OFF_LEVEL_MIN, ranged }); };
 /** Every drawn level line (買値, 2R, 3R, 52週高, the wide chart's structural low) has its name drawn. */
 const unnamedLevels = page => page.getByTestId('brief-price-chart').evaluate(chart => ['bc-entry', 'bc-r2', 'bc-r3', 'bc-high52']
   .filter(cls => chart.querySelectorAll(`line.${cls}`).length !== [...chart.querySelectorAll(`.${cls}-text`)].filter(node => node.textContent.trim() && node.getAttribute('visibility') !== 'hidden').length));
@@ -658,7 +720,7 @@ for (const [name, device] of [['phone', VIEWPORTS.phone], ['desktop', VIEWPORTS.
 // no spot near its line's end was clear), no two labels read as one phrase, no level line through a label uncut, and
 // every computed depth on the chart.
 const NARROWEST = { viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
-for (const [name, device] of [['320', NARROWEST], ['390', VIEWPORTS.phone], ['1440', VIEWPORTS.desktop]]) test.describe(`label boxes at ${name}`, () => {
+for (const [name, device] of [['320', NARROWEST], ['375', { ...NARROWEST, viewport: { width: 375, height: 812 } }], ['390', VIEWPORTS.phone], ['1440', VIEWPORTS.desktop]]) test.describe(`label boxes at ${name}`, () => {
   test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
   test('every fixture stock and period: no label over a candle or another label unless forced with no clear spot, every depth shown', async ({ page }) => {
     test.setTimeout(240000);

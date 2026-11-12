@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { _test, dateTicks, indexRuns, MA_SHIFT, MA_TAIL, NARROW_CHART_WIDTH, renderPriceChart, RS_CAPTION, spread, weeklyBars, ZONE_ABOVE } from './priceChart';
 import { FIGURE_GAP, FIGURE_STACK, PHRASE_GAP, segmentCrosses, sharedLeader } from './chartLabels';
-import { chartContentKey, earningsMarker, EARNINGS_MARKER_DAYS } from './chartReadout';
+import { chartContentKey, earningsMarker, EARNINGS_MARKER_DAYS, priceInRange } from './chartReadout';
 import { EARNINGS_WARN_DAYS, earningsCall } from './briefCandidate';
 
 function container(width = 600, height = 420) {
@@ -38,6 +38,28 @@ const collisions = el => {
   labels.forEach((a, i) => { for (const b of [...labels.slice(i + 1), ...solid]) if (hit(a, b)) out.push(`${a.name} × ${b.name}`); });
   return out;
 };
+/**
+ * The levels the model puts in range (priceInRange) missing their line, or their name and price: in the chart (the price
+ * in the text that names the level, or on the level's own tag beside its name) or in the legend items the renderer hands
+ * the card (chart.legend: [key, text]). The zone's top: its edge only; the 「安値」 tag's price is the card's (the browser
+ * spec checks the card).
+ */
+function missingLevels(el, m, period, chart) {
+  const finite = Number.isFinite, prices = v => [2, ...(Math.abs(v) >= 1000 ? [0] : [])].map(d => v.toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const carriers = [...el.querySelectorAll('svg text')].filter(node => node.getAttribute('visibility') !== 'hidden' && !node.closest('.bc-hover, .bc-scrub') && node.textContent.trim())
+    .map(node => ({ text: node.textContent.trim(), tag: node.closest('g.bc-tag')?.dataset.tag ?? null })).concat((chart?.legend || []).map(([, text]) => ({ text, tag: null })));
+  const entry = finite(m.entry) && !(finite(m.pivot) && Math.abs(m.entry / m.pivot - 1) <= 0.001) ? m.entry : null;
+  return [['52週高', m.auditHigh, 'line.bc-high52', 'high52'], ['ピボット', m.pivot, 'line.bc-pivot', 'pivot'], ['損切り', m.stop, 'line.bc-stop', 'stop'],
+    ['最後の収縮の安値', m.structuralLow, 'line.bc-structural', 'low'], ['買値', entry, 'line.bc-entry', 'entry'], ['2R', m.r2, 'line.bc-r2', 'r2'], ['3R', m.r3, 'line.bc-r3', 'r3'],
+    [null, finite(m.pivot) ? m.upper : null, 'rect.bc-zoneedge']].filter(([, value]) => priceInRange(m, period, value)).flatMap(([name, value, line, tag]) => {
+    const out = el.querySelector(line) ? [] : [`${line} not drawn`];
+    // The last contraction's low on its 「安値」 tag: the card's legend gives its price (from the model, as it does at every width).
+    if (!name || (tag === 'low' && el.querySelector('[data-tag="low"]'))) return out;
+    const named = carriers.filter(c => c.text.startsWith(name)), p = prices(value);
+    if (!(named.some(c => p.some(price => c.text.includes(price))) || (named.length > 0 && tag && carriers.some(c => c.tag === tag && p.includes(c.text))))) out.push(`${name} ${p[0]}: ${named.length ? 'no price' : 'no name'}`);
+    return out;
+  });
+}
 const tagCentre = (el, key) => Number(el.querySelector(`[data-tag="${key}"] rect`).getAttribute('y')) + 10;
 /** Each average's leader as its vertical and horizontal parts (boxes 1px wide), with the key of the name it joins. */
 const leaderSegments = el => [...el.querySelectorAll('path.bc-maleader')].flatMap(path => {
@@ -182,6 +204,15 @@ describe('brief price chart', () => {
     expect(collisions(inside)).toEqual([]);
     expect(outside.querySelectorAll('.bc-r2, .bc-r3, .bc-high52')).toHaveLength(0);
     expect(texts(outside, '.bc-axis:not(.bc-date):not(.bc-volmax):not(.bc-volavg)')).toEqual(texts(inside, '.bc-axis:not(.bc-date):not(.bc-volmax):not(.bc-volavg)'));
+  });
+
+  it('keeps every level in range with its line, its name and its price in the chart or the legend, when its name finds no spot by its line', () => {
+    // Crowded at a phone's width (the 52-week high or the pivot's name with no spot beside its line), and wide (3R).
+    for (const [w, period, interval, auditHigh] of [[332, 130, 'day', 110], [332, 104, 'week', 106], [300, 250, 'day', 107], [1000, 63, 'day', 112.5]]) {
+      const m = { ...model, interval, auditHigh, structuralLow: 104.5, r2: 111, r3: 112 }, el = container(w, 340);
+      const chart = renderPriceChart(el, m, { period, animate: false });
+      expect({ w, period, interval, missing: missingLevels(el, m, period, chart) }).toEqual({ w, period, interval, missing: [] });
+    }
   });
 
   it('without a pivot draws no zone and no pivot line and says so; unmeasured contractions are said too', () => {
