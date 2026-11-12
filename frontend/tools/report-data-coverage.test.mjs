@@ -8,7 +8,7 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { secPoint, secRecord, secUnavailable } from '../src/test/fixtures/secRecord.js';
-import { briefRows, compareSecCarryForward, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, invokedAsCommand, publishedCoverage, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
+import { briefRows, compareSecCarryForward, coverageWarnings, EPS_UNKNOWN_CAUSES, epsUnknownCauses, secEvidenceLine, SETUP_CONFIDENCE_FLOOR, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, fundamentalsSummaryTable, invokedAsCommand, publishedCoverage, publishedFundamentalsReport, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
 
 const write = async (path, value) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(value)); };
 
@@ -102,7 +102,9 @@ describe('the publication SEC coverage block and the published report', () => {
       if (file && (has || reason)) results[symbol] = { ...make(symbol), schema_version: schema };
       const state = has ? { state: 'admitted', reason: null } : reason ? { state: 'refused', reason } : file ? { state: 'not_requested', reason: null } : { state: 'not_fetched', reason: 'no_file' };
       states.push({ symbol, ...state, status: has ? results[symbol].status : null });
-      await write(join(root, `static-data/research-details/${symbol}.json`), { symbol, market: 'US', as_of_date: date, book_financials: has ? results[symbol] : null, sec_admission: state });
+      // A current setup readiness on the first row, so these SEC cases do not also warn that readiness is unknown everywhere.
+      const ready = i === 0 ? { se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date } } : {};
+      await write(join(root, `static-data/research-details/${symbol}.json`), { symbol, market: 'US', as_of_date: date, book_financials: has ? results[symbol] : null, sec_admission: state, ...ready });
     }
     const input = file ? { schema_version: schema, as_of_date: file === 'stale' ? '2026-01-30' : date, results, ...(errors ? { errors } : {}), coverage: { eligible: listed + 3, requested: Object.keys(results).length, truncated: 3, deadline: { unreached } } } : null;
     if (input) await writeFile(join(root, 'static-data/book-financials.json.gz'), gzipSync(JSON.stringify(input)));
@@ -121,8 +123,11 @@ describe('the publication SEC coverage block and the published report', () => {
     const file = { schema_version: 2, as_of_date: date, results: { A: {}, B: {}, C: {} } };
     const block = fundamentalsCoverageBlock({ file, asOfDate: date, states });
     expect(block).toEqual({ schema_version: 'fundamentals-coverage-v1', as_of_date: date, sec_fetch_ran: true, sec_as_of: date, file_schema: 2, universe: 4, requested: 3,
-      eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 2, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 } });
+      eligible: null, truncated: null, deadline_unreached: null, ticker_map_ok: null, admitted: 2, with_quarters: 1, not_requested: 1, not_fetched: 0, refused: 1, refused_by_reason: { cik_url: 1 }, warnings: ['refused'] });
     expect(validFundamentalsCoverageBlock(block)).toBe(true);
+    // An older block without the warnings list stays valid; a list of unknown codes or repeats does not.
+    expect(validFundamentalsCoverageBlock((({ warnings, ...rest }) => { void warnings; return rest; })(block))).toBe(true);
+    for (const warnings of [['late'], ['refused', 'refused'], 'refused', null]) expect(validFundamentalsCoverageBlock({ ...block, warnings })).toBe(false);
     // The ticker map is known only from a file that lists its errors.
     expect(fundamentalsCoverageBlock({ file: { ...file, errors: [] }, asOfDate: date, states }).ticker_map_ok).toBe(true);
     expect(fundamentalsCoverageBlock({ file: { ...file, errors: ['SEC ticker map unavailable: URLError'] }, asOfDate: date, states }).ticker_map_ok).toBe(false);
@@ -133,6 +138,14 @@ describe('the publication SEC coverage block and the published report', () => {
     const stale = fundamentalsCoverageBlock({ file: { ...file, as_of_date: '2026-01-30' }, asOfDate: date, states: [{ symbol: 'A', state: 'not_fetched', reason: 'other_date' }] });
     expect(stale).toMatchObject({ sec_fetch_ran: false, sec_as_of: '2026-01-30', file_schema: 2, requested: null });
     expect(validFundamentalsCoverageBlock(undefined)).toBe(true);
+    // Each warning from the block's own counts, only for a same-day fetch; funds refused as not corporate are no warning.
+    const clean = { ...block, refused: 0, refused_by_reason: {}, eligible: 3, truncated: 0, deadline_unreached: 0, ticker_map_ok: true };
+    expect(coverageWarnings(clean)).toEqual([]);
+    expect(coverageWarnings({ ...clean, refused: 2, refused_by_reason: { not_corporate: 2 } })).toEqual([]);
+    expect(coverageWarnings({ ...clean, truncated: 5, deadline_unreached: 2, ticker_map_ok: false, file_schema: 1, refused: 1, refused_by_reason: { 'series:eps': 1 }, with_quarters: 0 }))
+      .toEqual(['truncated', 'deadline_unreached', 'ticker_map_unavailable', 'file_schema', 'refused', 'no_quarters']);
+    expect(coverageWarnings({ ...none })).toEqual([]);
+    expect(none.warnings).toEqual([]);
     for (const broken of [{ ...block, admitted: 3 }, { ...block, extra: 1 }, { ...block, requested: -1 }, { ...block, refused_by_reason: { cik_url: 2 } }, { ...block, sec_as_of: '2026-01-30' }, null, [],
       { ...block, ticker_map_ok: 'yes' }, { ...none, ticker_map_ok: true }, (({ ticker_map_ok, ...rest }) => { void ticker_map_ok; return rest; })(block)])
       expect(validFundamentalsCoverageBlock(broken)).toBe(false);
@@ -269,5 +282,151 @@ describe('the publication SEC coverage block and the published report', () => {
       await writeFile(previous, JSON.stringify({ unavailable: 'boom' }));
       expect((await published(before, ['--previous', previous, '--require-sec-carry-forward'])).text).toContain('cannot be verified: boom');
     } finally { await rm(before, { recursive: true, force: true }); await rm(after, { recursive: true, force: true }); }
+  });
+});
+
+describe('round-2 measurements in the published report (plan DT4, DT9): diagnostic only, 未計測 when missing', () => {
+  const date = '2026-02-01', now = Date.parse('2026-02-01T12:00:00Z');
+  const tenQ = symbol => { const value = secRecord({ symbol }); value.quarterly.eps = value.quarterly.eps.filter(p => !p.end.endsWith('12-31')); value.annualEps = [secPoint('eps', ['2024-01-01', '2024-12-31'], 4), secPoint('eps', ['2025-01-01', '2025-12-31'], 5.5)]; return value; };
+
+  it('names every cause behind an unknown EPS acceleration, independently of Code 33', async () => {
+    const { bookFinancialEvidence } = await import('../src/static/bookFinancialEvidence.js');
+    const causes = record => epsUnknownCauses(bookFinancialEvidence(record, record.symbol, date));
+    expect(EPS_UNKNOWN_CAUSES).toEqual(['under_8_quarters', 'gap', 'latest_row_fiscal_q4_without_eps', 'fiscal_q4_untagged', 'prior_year_loss_or_zero', 'period_mismatch']);
+    expect(causes(secRecord({ symbol: 'PASS' }))).toBeNull();
+    expect(causes(tenQ('Q4'))).toEqual({ primary: 'latest_row_fiscal_q4_without_eps', all: ['latest_row_fiscal_q4_without_eps'] });
+    expect(causes(secRecord({ symbol: 'YOUNG', quarters: [['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31']] }))).toMatchObject({ primary: 'under_8_quarters' });
+    const loss = secRecord({ symbol: 'LOSS' }); loss.quarterly.eps[0].value = -0.1;
+    expect(causes(loss)).toMatchObject({ primary: 'prior_year_loss_or_zero' });
+    const gap = secRecord({ symbol: 'GAP' }); for (const key of ['eps', 'revenue', 'netIncome']) gap.quarterly[key].splice(6, 1);
+    gap.quarterly.eps.unshift(secPoint('eps', ['2023-10-01', '2023-12-31'], 1)); gap.quarterly.revenue.unshift(secPoint('revenue', ['2023-10-01', '2023-12-31'], 100)); gap.quarterly.netIncome.unshift(secPoint('netIncome', ['2023-10-01', '2023-12-31'], 10));
+    expect(causes(gap)).toMatchObject({ primary: 'gap' });
+    // A missing fiscal-Q4 row inside the window is an untagged fiscal Q4, never a gap.
+    const quarters = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+      ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30'], ['2026-07-01', '2026-09-30']];
+    const missing = secRecord({ symbol: 'MISS', asOfDate: '2026-11-04', quarters, eps: [1, 1, 1, 1, 1, 1.1, 1.2, 1.4, 1.8], revenue: [100, 100, 100, 100, 100, 110, 130, 160, 200], netIncome: [10, 10, 10, 10, 10, 11, 14, 19, 26] });
+    for (const key of ['eps', 'revenue', 'netIncome']) missing.quarterly[key] = missing.quarterly[key].filter(p => p.end !== '2026-06-30');
+    missing.annualEps = [secPoint('eps', ['2025-07-01', '2026-06-30'], 5, { form: '10-K', filed: '2026-08-20', accession: 'k-26' })];
+    expect(epsUnknownCauses(bookFinancialEvidence(missing, 'MISS', '2026-11-04'))).toEqual({ primary: 'fiscal_q4_untagged', all: ['fiscal_q4_untagged'] });
+  });
+
+  it('counts readiness and its failed checks, the confidence floor, EPS unknowns, invalid payloads, gaps, Yahoo references, chart depth, the TT population, market fields, group rank and the list summaries', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'published-round2-'));
+    try {
+      const bank = secRecord({ symbol: 'BANK' }); bank.quarterly.revenue = []; bank.derivation_gaps = [{ fiscal_year: 2025, metric: 'netIncome', reason: 'broken_chain' }];
+      const yahoo = { symbol: 'YAHOO', as_of_date: date, status: 'available', basis: 'reported_diluted_eps', currency: 'USD', retrieved_at: '2026-02-01T08:00:00Z', annual: [],
+        quarterly: [['2024-09-30', 1, 100, 10], ['2024-12-31', 1, 100, 10], ['2025-03-31', 1.1, 110, 12], ['2025-06-30', 1.2, 120, 13], ['2025-09-30', 1.3, 130, 15]].map(([end, eps, revenue, netIncome]) => ({ end, eps, revenue, netIncome })) };
+      const cases = {
+        PASS: { book_financials: secRecord({ symbol: 'PASS' }), se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date }, se_pattern_confidence: 70, ibd_group_rank: 5, market_distribution_days: 3, market_ftd_date: '2025-12-01', se_pattern_primary: 'vcp' },
+        Q4: { book_financials: tenQ('Q4'), se_setup_ready: false, setup_recalculation: { status: 'calculated', as_of_date: date, reason: 'not_implemented / outside_early_zone' }, se_pattern_confidence: 40 },
+        BANK: { book_financials: bank, se_setup_ready: false, setup_recalculation: { status: 'calculated', as_of_date: date, reason: `not_implemented / ${'primary_pattern_below_confidence_floor'}` } },
+        BAD: { book_financials: secUnavailable({ symbol: 'BAD', reason: 'invalid_payload', invalid_detail: { class: 'PayloadMismatch', message: 'm', requested_cik: 1, received_cik: 2 } }) },
+        YAHOO: { book_financials: null, financial_history: yahoo },
+      };
+      const symbols = Object.keys(cases);
+      const rowsOut = symbols.map((symbol, i) => ({ symbol, market: 'US', as_of_date: date, research_detail_path: `research-details/${symbol}.json`,
+        technical_audit: { valid: i < 3, as_of_date: date, bars: [252, 300, 504][i] ?? 10 }, ...(cases[symbol].se_pattern_primary ? { se_pattern_primary: cases[symbol].se_pattern_primary } : {}),
+        rs_line_high: i < 3 ? { value: i === 0 ? true : i === 1 ? false : null, leading: i === 0, as_of_date: date } : null,
+        sec_summary: symbol === 'PASS' ? { sec_state: 'ok', eps_yoy: { value: 80, end: '2025-12-31' }, sales_yoy: { value: 100, end: '2025-12-31' }, code33: { state: 'pass', kind: null }, as_of_date: date } : null }));
+      for (const [i, row] of rowsOut.entries()) await write(join(root, `static-data/${row.research_detail_path}`), { ...row, ...cases[symbols[i]] });
+      await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows: rowsOut }));
+      await write(join(root, 'static-data/market-trends/series.json'), { long_history: { breadth: [{ date: '2026-01-30', trendTemplateCount: 9 }, { date, trendTemplateCount: 3 }] } });
+      await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: date, market_context: null, assets: { research: { path: 'research.json' }, market_trends: { path: 'market-trends/series.json' } } } } });
+      await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: symbols.map(symbol => ({ symbol, methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } })) });
+      const report = await publishedCoverage({ root, now });
+      expect(report.round2).toMatchObject({
+        setup_readiness: { pass: 1, fail: 2, unknown: 2, top_failed_checks: [['not_implemented', 2], ['outside_early_zone', 1], ['primary_pattern_below_confidence_floor', 1]] },
+        setup_confidence: { floor: SETUP_CONFIDENCE_FLOOR, below_floor: 1, missing: 3, floor_check_named: 1 },
+        eps_unknown: { with_current_report: 1, primary: { latest_row_fiscal_q4_without_eps: 1 }, fiscal_q4_share: 1 },
+        invalid_payload: { count: 1, by_cause: { cik_mismatch: 1 }, symbols: ['BAD'] },
+        gaps: { derivation_gaps: { 'netIncome:broken_chain': 1 }, empty_revenue: 1 },
+        without_sec: { rows: 2, yahoo_tile: 1, latest_period_age_days: { p50: 124, max: 124 }, older_than_190_days: 0 },
+        chart_depth: { charts: 3, bars: { p10: 252, p50: 300, p90: 504 }, weeks: { p10: 50, p50: 60, p90: 100 } },
+        tt_population: { long_history_tt: 3, listed_qualified: 5 },
+        market_fields: { rows_with_distribution_days: 1, rows_with_ftd_date: 1, market_context: 'null' },
+        group_rank: { filled: 1, listed: 5, as_of_fields: [] },
+        list_summaries: { rs_line_high: { rows: 5, certified: 3, value_true: 1, value_unknown: 1, leading_true: 1 }, sec_summary: { rows: 5, admitted: 1, eps_yoy: 1, sales_yoy: 1 }, se_pattern_primary: 1 },
+      });
+      expect(report.round2.chart_depth.window).toMatchObject({ producer: null, period: expect.stringMatching(/^\d+(y|mo)$/) });
+      // Code 33 counts SEC results only: the Yahoo-only 未達 (a falling Yahoo margin) is unknown there and a reference apart.
+      expect(report).toMatchObject({ code33: { pass: 1, fail: 0, unknown: 4 }, code33_reference: { pass: 0, fail: 1 }, code33_unknown_reason: { yahoo: 1, q4_eps: 1 } });
+      // The warnings: readiness measured and passing nowhere is not this case (one passes); the listed population exceeds the long history's.
+      const lines = []; await runPublished(['--published', '--root', root], { env: {}, log: line => lines.push(line), now });
+      expect(lines.some(line => line.startsWith('::warning::The brief lists 5 trend-template qualified rows, more than the long history\'s 3'))).toBe(true);
+      expect(lines.some(line => line.includes('Setup readiness passes on 0'))).toBe(false);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('keeps the round-1 coverage when a round-2 measurement throws on a row shape the fixtures lack, and says so', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'published-round2-throws-'));
+    try {
+      // A derivation gap that is not an object: the round-2 gap count cannot read it.
+      const odd = { ...secRecord({ symbol: 'ODD' }), derivation_gaps: [null] };
+      const cases = { ODD: { book_financials: odd }, FINE: { book_financials: secRecord({ symbol: 'FINE' }), se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date } } };
+      const rowsOut = Object.keys(cases).map(symbol => ({ symbol, market: 'US', as_of_date: date, research_detail_path: `research-details/${symbol}.json` }));
+      for (const row of rowsOut) await write(join(root, `static-data/${row.research_detail_path}`), { ...row, ...cases[row.symbol] });
+      await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows: rowsOut }));
+      await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' } } } } });
+      await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: rowsOut.map(({ symbol }) => ({ symbol, methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } })) });
+      const report = await publishedCoverage({ root, now });
+      // Round 1 counted both rows (the SEC record of each, the readiness of FINE).
+      expect(report).toMatchObject({ listed: 2, sec_record: 2, setup_ready: { pass: 1 } });
+      expect(report.round2).toEqual({ unavailable: expect.stringMatching(/null/) });
+      const lines = []; const code = await runPublished(['--published', '--root', root], { env: {}, log: line => lines.push(line), now });
+      expect(code).toBe(0);
+      expect(lines.some(line => line.startsWith('::warning::Round-2 coverage measurements unavailable: '))).toBe(true);
+      const table = fundamentalsSummaryTable(await publishedFundamentalsReport({ root, now }));
+      expect(table).toContain('| brief-listed rows | 2 |');
+      expect(table).toMatch(/\| round-2 measurements \| 未計測 \(/);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('tallies why a setup was not recalculated and warns when the Setup Engine returned no complete report for more than 1% of the listed rows', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'published-round2-unavailable-'));
+    try {
+      const cases = {
+        OK: { se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date } },
+        ERR: { setup_recalculation: { status: 'unavailable', as_of_date: date, reason: 'Setup Engine did not return a complete report' } },
+        SPY: { setup_recalculation: { status: 'unavailable', as_of_date: date, reason: 'SPY benchmark unavailable; benchmark-dependent setup and RS remain unknown' } },
+      };
+      const rowsOut = Object.keys(cases).map(symbol => ({ symbol, market: 'US', as_of_date: date, research_detail_path: `research-details/${symbol}.json` }));
+      for (const row of rowsOut) await write(join(root, `static-data/${row.research_detail_path}`), { ...row, book_financials: null, ...cases[row.symbol] });
+      await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows: rowsOut }));
+      await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' } } } } });
+      await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: rowsOut.map(({ symbol }) => ({ symbol, methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } })) });
+      const report = await publishedCoverage({ root, now });
+      expect(report.round2.setup_readiness).toMatchObject({ pass: 1, unknown: 2, incomplete_report: 1,
+        not_calculated: [['unavailable: SPY benchmark unavailable; benchmark-dependent setup and RS remain unknown', 1], ['unavailable: Setup Engine did not return a complete report', 1]] });
+      const lines = []; await runPublished(['--published', '--root', root], { env: {}, log: line => lines.push(line), now });
+      expect(lines.some(line => line.startsWith('::warning::Setup Engine returned no complete report (an Error or Insufficient Data rating, or no payload) for 1 of 3 brief-listed rows (above 1%'))).toBe(true);
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
+  it('reads an older publication without the new fields as 未計測, and prints the SEC evidence line of the file on request', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'published-older-'));
+    try {
+      const rowsOut = [{ symbol: 'OLD', market: 'US', as_of_date: date, research_detail_path: 'research-details/OLD.json' }];
+      await write(join(root, 'static-data/research-details/OLD.json'), { ...rowsOut[0], book_financials: null, se_setup_ready: false, setup_recalculation: { status: 'calculated', as_of_date: date, reason: 'not_implemented' } });
+      await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows: rowsOut }));
+      await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' } } } } });
+      await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: [{ symbol: 'OLD', methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } }] });
+      const file = { schema_version: 2, as_of_date: date, coverage: { eligible: 1, requested: 1 }, results: { OLD: secUnavailable({ symbol: 'OLD', reason: 'invalid_payload' }) } };
+      await writeFile(join(root, 'static-data/book-financials.json.gz'), gzipSync(JSON.stringify(file)));
+      const report = await publishedCoverage({ root, now });
+      expect(report.round2).toMatchObject({ tt_population: { long_history_tt: null }, market_fields: { market_context: 'absent' }, list_summaries: { rs_line_high: null, sec_summary: null, se_pattern_primary: null },
+        chart_depth: { charts: 0, bars: null, weeks: null }, eps_unknown: { fiscal_q4_share: null } });
+      const lines = []; const code = await runPublished(['--published', '--root', root, '--sec-evidence'], { env: {}, log: line => lines.push(line), now });
+      expect(code).toBe(0);
+      expect(lines).toContain(secEvidenceLine(file));
+      expect(secEvidenceLine(file)).toBe(`SEC evidence ${date} (published file): {"eligible":1,"requested":1,"records":1,"invalid_payload_by_cause":{"unrecorded":1},"derivation_gaps":{}}; first invalid_payload symbols OLD`);
+      // Measured but all failing readiness is a warning; the table says 未計測 for what is missing.
+      expect(lines.some(line => line.startsWith('::warning::Setup readiness passes on 0 of 1 brief-listed rows (fail 1, unknown 0; top failed checks: not_implemented 1)'))).toBe(true);
+      // Readiness unknown on every listed row is a data failure too, worded apart.
+      await write(join(root, 'static-data/research-details/OLD.json'), { ...rowsOut[0], book_financials: null });
+      const unknown = []; await runPublished(['--published', '--root', root], { env: {}, log: line => unknown.push(line), now });
+      expect(unknown).toContain('::warning::Setup readiness unknown on all 1 brief-listed rows (未計測)');
+      expect(unknown.some(line => line.includes('Setup readiness passes on 0'))).toBe(false);
+      expect(secEvidenceLine(null)).toBeNull();
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 });

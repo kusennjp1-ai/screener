@@ -264,3 +264,21 @@ it.each([[],[9,0,1,9,0],{}, {passed:9,failed:0,unknown:0,total:9,qualified:true,
  expect(bundle.rankings.minervini.map(x=>x.row.symbol)).toEqual(['HIGH','LOW']);
  const {rules,...expected}=assess(rows[0],'minervini');expect(rules.length).toBe(expected.total);expect(bundle.rankings.minervini[1].assessment).toEqual(expected);
 });
+
+// Round 2 (plan §2.3, DT5): the list fields the export adds travel unchanged, with every null kept null and an absent
+// field kept absent (an older publication's 未収録), through the unchanged transport.
+describe('the round-2 research-index list fields', () => {
+  it('round-trips rs_line_high, sec_summary and se_pattern_primary, telling null from absent', async () => {
+    const contracts = await import('../test/fixtures/publishedContracts.js');
+    const rows = [
+      { symbol: 'A', rs_line_high: contracts.rsLineHigh, sec_summary: contracts.secSummaryShape, se_pattern_primary: contracts.sePatternPrimary },
+      { symbol: 'B', rs_line_high: contracts.rsLineHighUnknown, sec_summary: contracts.secSummaryUnknown, se_pattern_primary: null },
+      { symbol: 'C', rs_line_high: null, sec_summary: null },
+      { symbol: 'D' },
+    ];
+    const decoded = decodeResearchIndex(JSON.parse(JSON.stringify(encodeResearchIndex({ as_of_date: contracts.CONTRACT_DATE, rows }))));
+    expect(decoded.rows).toEqual(rows);
+    for (const [index, row] of rows.entries()) for (const key of ['rs_line_high', 'sec_summary', 'se_pattern_primary']) expect(Object.hasOwn(decoded.rows[index], key)).toBe(Object.hasOwn(row, key));
+    expect(RESEARCH_TRANSPORT_VERSION).toBe('research-table-v2');
+  });
+});

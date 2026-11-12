@@ -23,7 +23,7 @@ from app.analysis.patterns.config import (
     DEFAULT_SETUP_ENGINE_PARAMETERS,
     build_setup_engine_parameters,
 )
-from app.analysis.patterns.detectors import PatternDetectorInput
+from app.analysis.patterns.detectors import DetectorOutcome, PatternDetectorInput
 from app.analysis.patterns.policy import (
     SetupEngineDataPolicyResult,
     evaluate_setup_engine_data_policy,
@@ -194,6 +194,21 @@ class SetupEngineScanner(BaseStockScreener):
 
         detectors_ms = (time.perf_counter() - t_detectors) * 1000.0
 
+        # A detector that raised never evaluated the stock: the scan is an error, never a
+        # verdict built from the detectors that did run (setup_ready stays unknown).
+        errored = [
+            trace for trace in agg_output.detector_traces
+            if trace.outcome == DetectorOutcome.ERROR.value
+        ]
+        if errored:
+            return self._error_result(
+                symbol,
+                "; ".join(
+                    f"{trace.detector_name}: {trace.error_detail or 'error'}"
+                    for trace in errored
+                ),
+            )
+
         # Per-detector timing at DEBUG level (avoids 3500+ lines per full scan)
         for trace in agg_output.detector_traces:
             logger.debug(
@@ -265,6 +280,7 @@ class SetupEngineScanner(BaseStockScreener):
             candidates=list(agg_output.candidates),
             passed_checks=list(agg_output.passed_checks),
             failed_checks=list(agg_output.failed_checks),
+            diagnostics=list(agg_output.detector_failed_checks),
             key_levels=agg_output.key_levels,
             invalidation_flags=all_invalidation_flags,
             readiness_features=readiness_features,

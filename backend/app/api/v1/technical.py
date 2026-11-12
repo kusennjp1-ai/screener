@@ -162,6 +162,11 @@ async def get_stage_analysis(symbol: str):
     # Get most recent values (last in chronological series)
     current_price = prices_chrono.iloc[-1]
     ma_200 = ma_200_series_chrono.iloc[-1]
+    # The stage-2 base exception needs the 150-day MA and the 252-session intraday
+    # high, as the Minervini scanner passes them (NaN with too little history: the
+    # analyzer then leaves the exception out).
+    ma_150 = float(prices_chrono.rolling(window=150, min_periods=150).mean().iloc[-1])
+    high_52w = float(data["High"].tail(252).max()) if "High" in data else None
 
     # Reverse for passing to analyzer (most recent first)
     prices = prices_chrono[::-1].reset_index(drop=True)
@@ -174,7 +179,9 @@ async def get_stage_analysis(symbol: str):
         ma_200,
         ma_200_series,
         prices,
-        volumes
+        volumes,
+        ma_150=ma_150,
+        high_52w=high_52w,
     )
 
     response = {

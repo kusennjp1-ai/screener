@@ -104,6 +104,7 @@ class TestNoScoreFastPath:
         payload = result.explain.to_payload()
         assert "detector_a_ok" in payload["passed_checks"]
         assert "detector_b_fail" in payload["failed_checks"]
+        assert result.diagnostics == ()
 
     def test_no_score_no_gate_checks_in_passed(self):
         gate_checks = {
@@ -235,7 +236,7 @@ class TestGate5Atr14:
         assert "atr14_within_limit" in result.explain.to_payload()["passed_checks"]
 
 
-# ── Gate 6: Volume floor (permissive) ────────────
+# ── Gate 6: Volume dry-up cap (permissive) ───────
 
 
 class TestGate6Volume:
@@ -249,8 +250,12 @@ class TestGate6Volume:
         assert "volume_sufficient" in result.explain.to_payload()["passed_checks"]
 
     def test_above_maximum_fails(self):
+        # Named for what failed: the volume is above the dry-up cap (round 2; was the
+        # inverted volume_below_minimum).
         result = build_explain_payload(_default_input(volume_vs_50d=1.3))
-        assert "volume_below_minimum" in result.explain.to_payload()["failed_checks"]
+        failed = result.explain.to_payload()["failed_checks"]
+        assert "volume_above_dryup_cap" in failed
+        assert "volume_below_minimum" not in failed
 
     def test_none_passes_permissive(self):
         """Gate 6 is permissive: None volume -> volume_sufficient."""
@@ -505,12 +510,20 @@ class TestDerivedReadySemantics:
         result = build_explain_payload(_default_input(setup_score=10.0))
         assert result.derived_ready is False
 
-    def test_pre_existing_failure_blocks_ready(self):
-        """Pre-existing failed checks count toward derived_ready."""
-        result = build_explain_payload(_default_input(
-            pre_existing_failed_checks=("detector_x_fail",),
-        ))
+    @pytest.mark.parametrize("check", [
+        "detector_x_fail",
+        "no_primary_pattern",
+        "primary_pattern_below_confidence_floor",
+        "insufficient_data",
+        "insufficient_daily_bars",
+        "trend_break",
+    ])
+    def test_pre_existing_failure_blocks_ready(self, check):
+        """Every caller-supplied failed check counts toward derived_ready (fail closed)."""
+        result = build_explain_payload(_default_input(pre_existing_failed_checks=(check,)))
         assert result.derived_ready is False
+        assert check in result.explain.to_payload()["failed_checks"]
+        assert result.diagnostics == ()
 
     def test_multiple_failures_all_recorded(self):
         result = build_explain_payload(_default_input(
@@ -543,3 +556,60 @@ class TestDerivedReadySemantics:
         ))
         assert "readiness_below_threshold" in result.explain.to_payload()["failed_checks"]
         assert result.derived_ready is False
+
+
+class TestDetectorDiagnostics:
+    """Round 2 (setup-ready-always-false): the detectors' own checks arrive apart, as
+    diagnostics (the aggregator separates them where they are produced), and never fail
+    readiness, whatever their name. Every caller-supplied failed check still fails it."""
+
+    DETECTOR_LEVEL = (
+        "cup_with_handle:not_detected",
+        "cup_with_handle:cup_structure_not_found",
+        "double_bottom:not_implemented",
+        "vcp:vcp_contraction_sequence_failed",
+        # DetectorOutcome.INSUFFICIENT_DATA.value from one detector short of history
+        "three_weeks_tight:insufficient_data",
+        "not_detected",
+    )
+
+    def test_diagnostics_never_fail_readiness(self):
+        result = build_explain_payload(_default_input(diagnostics=self.DETECTOR_LEVEL))
+        payload = result.explain.to_payload()
+        assert result.derived_ready is True
+        assert payload["failed_checks"] == []
+        assert result.diagnostics == self.DETECTOR_LEVEL
+
+    def test_a_detector_insufficient_data_is_a_diagnostic_but_the_name_still_fails_as_a_check(self):
+        from app.analysis.patterns.detectors import DetectorOutcome
+
+        name = DetectorOutcome.INSUFFICIENT_DATA.value
+        as_diagnostic = build_explain_payload(_default_input(diagnostics=(name,)))
+        assert as_diagnostic.derived_ready is True
+        assert as_diagnostic.diagnostics == (name,)
+        # The same name passed as a failed check (the data policy's insufficiency) fails.
+        as_check = build_explain_payload(_default_input(pre_existing_failed_checks=(name,)))
+        assert as_check.derived_ready is False
+        assert as_check.explain.to_payload()["failed_checks"] == [name]
+
+    def test_diagnostics_are_deduplicated_and_never_in_the_failed_list(self):
+        result = build_explain_payload(_default_input(
+            setup_score=10.0,
+            pre_existing_failed_checks=("no_primary_pattern",),
+            diagnostics=("double_bottom:not_implemented", "", "double_bottom:not_implemented"),
+        ))
+        failed = result.explain.to_payload()["failed_checks"]
+        assert "double_bottom:not_implemented" not in failed
+        assert failed[0] == "no_primary_pattern"
+        assert "setup_score_below_threshold" in failed
+        assert result.diagnostics == ("double_bottom:not_implemented",)
+        assert result.derived_ready is False
+
+    def test_a_gate_failure_still_blocks_with_diagnostics_present(self):
+        result = build_explain_payload(_default_input(
+            distance_to_pivot_pct=6.0,
+            diagnostics=("cup_with_handle:not_detected",),
+        ))
+        assert result.derived_ready is False
+        assert result.explain.to_payload()["failed_checks"] == ["outside_early_zone"]
+        assert result.diagnostics == ("cup_with_handle:not_detected",)

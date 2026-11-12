@@ -798,3 +798,18 @@ PR99はc789647/draft/open/未mergeをread-only確認。68aedd0と今回修正は
 - 最終対象36成功、全frontend258files/3629成功（224.06s）、lint0errors/既存6warnings、build13.05s成功（実static-data export skip/既存chunk警告）。初回追加testの閉じ括弧不足とlint診断引数だけを訂正し、生log保持。最終testで4構成を再確認。
 - 直前追加検証で公式PyPI→隔離Python3.12.14のruntime+test依存導入成功、Red line275/Golden43成功。今回はbackend無変更なので再実行せず結果を継承。GoldenはRed lineにも含まれる。CIのPython3.11/server依存と同一性は主張しない。
 - 実装・財務鮮度/unknown・品質/閾値・D9基準は無変更。自己レビューのみ。最新Design詳細/実画像、実ブラウザー、fresh財務source、未push候補のexact CIは未確認のまま。GitHub照会/取得/新run/認証・ネットワーク設定変更/push/merge/公開なし。差分・再現source/bundle・raw logsはpr99-transition-regressionとして既存Libraryへ永続保存。
+
+
+### 2026-11-06 — Round 2: 準備判定（setup_ready）とステージ分類の修正（CH11・CH12、claude/r2-integration）
+
+- 変更（chart トラック、統合ブランチ claude/r2-integration）:
+  - CH12 準備判定: `derived_ready` は 10 個の準備ゲートと主パターンの3条件（主パターンあり・信頼度55未満のフォールバックでない・データ方針が insufficient でない）だけで決める。検出器レベルの `not_detected`・`not_implemented`・`cup_structure_not_found`・`vcp_*` などは `explain.diagnostics`（各「<検出器>:<チェック>」）へ移し、準備判定を落とさない。呼び出し側が渡した失敗チェック（例 `trend_break`）は fail-closed のまま。DoubleBottom のスタブを既定の検出器から外した（double_bottom.py は残す）。検出器の例外は Error の結果になり payload を出さない。
+  - ゲート6の名前: 逆向きだった `volume_below_minimum` を `volume_above_dryup_cap` に改名（I4、chart の依頼）。判定（volume_vs_50d ≤ 0.8）は不変。旧公開の `setup_recalculation.reason` には旧名が残るため、数える側は両方を受け付ける。
+  - CH11 ステージ: 200日線が上向き・終値がその上・SMA150 > SMA200・52週高値から25%以内のとき、60本の傾きが横ばいでもステージ2（ベース形成中）。ステージ3は200日線が横ばい／下向き、または SMA150 割れで振れが大きいとき。`minervini_scanner.py` が SMA150 と52週高値を渡す。I4 で `/technical/{symbol}/stage` も同じ入力を渡す。フロントの `stageFromBars`・`stagePhase` も同じ規則。トレンドテンプレートは公開の8条件のまま（ステージは9番目の拒否条件ではない）。
+- 赤線（統合ブランチ、Python 3.11 venv）: tests/unit/scanners・services・golden・test_scan_orchestrator.py で 277 passed、1 failed。失敗は `test_mcp_market_copilot::test_market_overview_snapshot` で db8e297 でも同じく失敗する既存のもの（今回の変更ではない）。
+- Golden（make gate-5）: 43 passed（下限43）。gate-1 163 / gate-2 47 / gate-3 152 passed、gate-check OK。ゲート6改名の後も同数（下記の I4 再実行）。
+- Golden の更新: 322da04 で db8e297 時点ですでに古かった20スナップショットを再生成（null の start_date／end_date 22か所、VCP 候補の right_edge_volume_ratio・right_edge_dry、VCP チェック名の変更、rs_line_new_high と rs_line_blue_dot の順序、bb_width_pctile_252 39.68→39.29 と浮動小数のずれ）。CH12 による変更は検出器チェックの `explain.diagnostics` への移動、集約の failed_checks が no_primary_pattern のみ、trace 7→6。setup・quality・readiness のスコアは同一。
+- 908件の正解データ（scripts/validate_trade_ideas.py、同梱バンドルからオフライン）: 変更前後で同一。ALL 588 / CONTROL 575、S2 90.0% 対 37.9%、SETUP 78.6% 対 26.6%、判別力 SETUP +52.0pp・FIRE±5 +25.8pp。ハーネスの S2・SETUP 列は Markets360、TT は passes_template から取るため、CH11・CH12 の効果はこの表では構造上 未検証。
+- 補助プローブ（同じバンドル、凍結指標ではない）: 仕掛け時点のステージ2は 80.8%→90.8%（対照 60.2%→66.1%、判別力 +20.6pp→+24.7pp）。テンプレート通過銘柄のステージ3は 11.4%→4.2%。setup_ready は仕掛け 0/588→28/588（4.8%）、対照 0/575→23/575（4.0%）で差は +0.8pp のみ。仕掛けでの主な失敗はゲート6（出来高の枯れ上限0.8、458/588＝78%）、outside_early_zone 358、readiness_below_threshold 320。分析日が1.4倍以上でピボット上の引けだった仕掛け215件のうち準備判定の合格は0件（合格の出来高倍率は最大0.797）。準備判定は仕掛け当日のタイミング信号をほぼ持たないため、§9-4 の既定（並び順に使わない）を支持する。
+- 公開データへの反映: recalculate-setups.py の engine_sha256 が backend/app/analysis/patterns と backend/app/scanners を含むため、次の定時データ公開で全行を再計算する。setup_ready の合格・不合格・不明、主な失敗チェック、ゲート6の割合、vcp_ready_for_breakout、TT通過銘柄のステージ3の割合は 未検証（次の公開を読んでから）。
+- 次: I7 で実データの setup_ready 分布とゲート6の割合を読む。round 3 の候補として、ゲート6を分析日前の数セッション（例：直前5セッションの出来高倍率の中央値）で判定するか、1.4倍以上でピボット上の引けを除外する案を、908 の仕掛け−対照の判別力で評価する。

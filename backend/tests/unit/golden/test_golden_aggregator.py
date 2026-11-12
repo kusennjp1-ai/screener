@@ -226,3 +226,9 @@ def test_golden_aggregator_no_patterns_exponential(golden_update):
         "pattern_primary_is_none": True,
         "failed_checks_contains": ["no_primary_pattern"],
     })
+    # Round 2: the detectors' own misses are kept apart (named after their detector), so the
+    # readiness checks hold only the aggregator's own verdict.
+    assert output.failed_checks == ("no_primary_pattern",)
+    assert "cup_with_handle:not_detected" in output.detector_failed_checks
+    assert "vcp:vcp_contracting_depth_failed" in output.detector_failed_checks
+    assert all(":" in check for check in output.detector_failed_checks)

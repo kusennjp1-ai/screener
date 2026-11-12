@@ -15,9 +15,12 @@
 export const CONTRACT_DATE = '2026-10-02';
 
 /**
- * `rs_line_high`: present only when the row's technical_audit.as_of_date is the analysis date and its chart
- * is certified. `value` is rsLineNewHigh's (briefChartModel.js) on the chart's rs_line, `leading` the last
- * bar's RS-lead rule; either is null when the history is too short or the dates do not match.
+ * `rs_line_high`: an object only when the row's technical_audit.as_of_date is the analysis date and its chart
+ * is certified. A round-2 publication carries the key on every row: null when the chart is not certified for
+ * that date (a reader says 未確認); the key is absent only in an older publication (未収録, Object.hasOwn).
+ * `value` is rsLineNewHigh's (briefChartModel.js) on the chart's rs_line, `leading` the last bar's RS-lead
+ * rule; either is null when the history is too short or the dates do not match. (I4: the data track's export
+ * writes the present null; this comment used to say the field was absent then.)
  */
 export const rsLineHigh = Object.freeze({ value: true, leading: false, as_of_date: CONTRACT_DATE });
 export const rsLineHighUnknown = Object.freeze({ value: null, leading: null, as_of_date: CONTRACT_DATE });

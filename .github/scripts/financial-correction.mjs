@@ -182,6 +182,11 @@ export function dataInventory(root, excluded = []) {
 
 const owned = new Set([...contract.financial_fields,...contract.financial_context_fields,...contract.financial_derived_fields]);
 const metadata = new Set(['financial_generation','financial_evaluated_at','financial_knowledge_basis','financial_point_in_time','financial_source_publication_date','financial_policy_version']);
+// Row summaries the exporter derives from a row's book_financials (an owned field), the evaluation clock and the
+// instrument's applicability: sec_summary (round 2, the index row) and sec_admission (round 1, the detail). A correction
+// that re-admits or drops a cohort symbol's SEC record changes them with it, so they are compared as owned for permitted
+// cohort rows only; outside the cohort they stay bound like any other field.
+const bookDerived = new Set(['sec_summary','sec_admission']);
 const hashedPath = value => typeof value === 'string' ? value.replace(/-[a-f0-9]{16}(?=\.json(?:\.gz)?$)/,'-CONTENT') : value;
 function publicationInputView(row, capture, carriedScope=null) {
   const input=row.financial_publication_input;
@@ -247,7 +252,7 @@ function stripped(value, row=false, cohort=null, parentSymbol=null, parentMarket
   const input=isRow&&permitted&&captureInput?publicationInputView(value,captureInput,carriedScope):null;
   if(input!==null)contextual.financial_publication_input=input;
   if(isRow&&permitted)for(const key of ['screener_results','screener_details','screeners'])if(contextual[key]&&typeof contextual[key]==='object'&&!Array.isArray(contextual[key]))contextual[key]=Object.fromEntries(Object.entries(contextual[key]).filter(([name])=>!(/^(minervini|canslim|ipo|custom)$/i.test(name))));
-  return Object.fromEntries(Object.entries(contextual).filter(([key]) => !metadata.has(key) && !(isRow && ['method_summary','financial_current_state'].includes(key)) && !(isRow && permitted && owned.has(key))).map(([key,child]) => [key,
+  return Object.fromEntries(Object.entries(contextual).filter(([key]) => !metadata.has(key) && !(isRow && ['method_summary','financial_current_state'].includes(key)) && !(isRow && permitted && (owned.has(key)||bookDerived.has(key)))).map(([key,child]) => [key,
     key==='financial_publication_input'?child:['chart_path','research_detail_path','path','list_path'].includes(key) ? hashedPath(child) : stripped((key==='fundamentals'||key==='stock_data')&&child&&typeof child==='object'?{...Object.fromEntries(['symbol','market','as_of_date'].filter(k=>value[k]!==undefined).map(k=>[k,value[k]])),...child}:child,key==='fundamentals'||key==='stock_data',cohort,symbol,market,captureInput,carriedScope)]));
 }
 function preservedFinancialAudit(before,after) {

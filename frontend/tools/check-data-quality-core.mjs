@@ -11,6 +11,9 @@ import { researchEvaluation, validatePublishedSummaries, validateResearchListSum
 import {canonicalPivot} from '../src/static/researchPresentation.js';
 import {filterStaticScanRows,sortStaticScanRows} from '../src/static/scanClient.js';
 import {producerHistoryCoverage} from './producer-history-coverage.mjs';
+import {marketContextBlock,validMarketContext,validRsLineHigh} from './scan-list-payload.mjs';
+import {buildSecSummary,secSummary} from '../src/static/fundamentalsExplain.js';
+import {isDeepStrictEqual} from 'node:util';
 const read=async path=>JSON.parse(await readFile(`public/static-data/${path}`,'utf8'));
 const manifest=await read('manifest.json');
 const indexPath=(manifest.markets?.US||manifest).assets.research.path;
@@ -52,6 +55,32 @@ for(const row of index.rows) {
   canonicalRows.push(detail);
 }
 validatePublishedSummaries(canonicalRows,evaluatedAt);
+// Round-2 list summaries (index rows only) and the market context: each is valid when absent (an older exporter);
+// present, it must have its documented shape and be what the canonical detail gives with the export's own functions.
+{
+  const date=index.as_of_date,coverage=market.fundamentals_coverage??null,details=new Map(canonicalRows.map(row=>[row.symbol,row]));
+  const counts={rs_line_high:0,sec_summary:0,se_pattern_primary:0};
+  for(const row of index.rows) {
+    if(Object.hasOwn(row,'rs_line_high')) {
+      counts.rs_line_high++;
+      if(!validRsLineHigh(row.rs_line_high,date) || (row.rs_line_high!==null && !(row.technical_audit?.valid===true && row.technical_audit.as_of_date===date))) throw Error(`Invalid rs_line_high: ${row.symbol}`);
+    }
+    if(Object.hasOwn(row,'sec_summary')) {
+      counts.sec_summary++;
+      if(row.sec_summary!==null && (secSummary(row)===null || row.sec_summary.as_of_date!==date)) throw Error(`Invalid sec_summary: ${row.symbol}`);
+      if(!isDeepStrictEqual(row.sec_summary,buildSecSummary(details.get(row.symbol),{date,now:evaluatedAt,coverage}))) throw Error(`sec_summary differs from the admitted SEC record: ${row.symbol}`);
+    }
+    if(Object.hasOwn(row,'se_pattern_primary')) {
+      counts.se_pattern_primary++;
+      if(!(row.se_pattern_primary===null || typeof row.se_pattern_primary==='string') || row.se_pattern_primary!==details.get(row.symbol)?.se_pattern_primary) throw Error(`Invalid se_pattern_primary: ${row.symbol}`);
+    }
+  }
+  if(Object.hasOwn(market,'market_context')) {
+    if(!validMarketContext(market.market_context,date)) throw Error('Invalid market_context block');
+    if(!isDeepStrictEqual(market.market_context,marketContextBlock(canonicalRows,date).block)) throw Error('market_context differs from the canonical rows');
+  }
+  console.log(`List summary gate passed: rs_line_high ${counts.rs_line_high}, sec_summary ${counts.sec_summary}, se_pattern_primary ${counts.se_pattern_primary} of ${index.rows.length} rows; market_context ${Object.hasOwn(market,'market_context')?(market.market_context?'present':'null'):'absent'}.`);
+}
 const producerCoverage=await producerHistoryCoverage({root:'public/static-data',entry:market,rows:canonicalRows});
 if(producerCoverage && (quality.total!==producerCoverage.total || quality.verified!==producerCoverage.verified))throw Error('Producer protected coverage denominator changed');
 for(const now of new Set([evaluatedAt,checkedAt])) validateResearchParity(wire,canonicalRows,now);

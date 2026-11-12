@@ -348,6 +348,192 @@ class PublishedWindow(unittest.TestCase):
         self.assertEqual(sec.series(facts([entry(accn=None)]), "eps", "2026-03-01"), [])
         self.assertEqual(len(sec.series(facts([entry(accn="0001-25-1")]), "eps", "2026-03-01")), 1)
 
+class InvalidPayloadCause(unittest.TestCase):
+    """An invalid_payload record says what failed and which CIK came back (plan DT1); retries are unchanged."""
+
+    def fetch(self, payload):
+        return sec.fetch_symbol("BAD", {"BAD": 6}, "2026-10-02", get=lambda url: payload)
+
+    def test_a_cik_mismatch_records_both_ciks(self):
+        record = self.fetch({"cik": 999, "facts": {}})
+        self.assertEqual((record["status"], record["reason"]), ("unavailable", "invalid_payload"))
+        self.assertEqual(record["invalid_detail"], {"class": "PayloadMismatch", "message": "companyfacts cik does not match the requested cik", "requested_cik": 6, "received_cik": 999})
+        self.assertEqual(sec.invalid_cause(record), "cik_mismatch")
+
+    def test_another_exception_records_its_class_and_a_short_message(self):
+        record = self.fetch({"cik": 6, "facts": []})
+        detail = record["invalid_detail"]
+        self.assertEqual((detail["class"], detail["requested_cik"], detail["received_cik"]), ("AttributeError", 6, 6))
+        self.assertIn("has no attribute", detail["message"])
+        self.assertEqual(sec.invalid_cause(record), "AttributeError")
+        # A payload that is not an object names no CIK it received.
+        self.assertIsNone(self.fetch(["not", "an", "object"])["invalid_detail"]["received_cik"])
+
+    def test_the_message_carries_no_url_address_header_or_user_agent_and_stays_short(self):
+        import os
+        from unittest.mock import patch
+        with patch.dict(os.environ, {"SEC_USER_AGENT": "Ops Desk ops@example.org"}):
+            text = sec.safe_message("failed for Ops Desk ops@example.org at https://data.sec.gov/x?k=1 Authorization: Bearer abc\nnext " + "x" * 400, "ValueError")
+        for secret in ("ops@example.org", "Ops Desk", "https://", "Bearer", "\n"):
+            self.assertNotIn(secret, text)
+        self.assertLessEqual(len(text), sec.INVALID_MESSAGE_MAX)
+        self.assertEqual(sec.safe_message("", "KeyError"), "KeyError")
+
+    def test_counts_by_cause_and_the_first_ten_symbols(self):
+        results = {f"S{i:02d}": {"reason": "invalid_payload", "invalid_detail": {"class": "PayloadMismatch", "message": "m", "requested_cik": 1, "received_cik": 2 if i % 2 else 1}} for i in range(12)}
+        results["OK"] = {"status": "available", "quarterly": {"revenue": [{"derived": False}]}}
+        results["OLD"] = {"reason": "invalid_payload"}
+        summary = sec.invalid_summary(results)
+        self.assertEqual(summary["count"], 13)
+        self.assertEqual(summary["by_cause"], {"PayloadMismatch": 6, "cik_mismatch": 6, "unrecorded": 1})
+        self.assertEqual(summary["symbols"], [f"S{i:02d}" for i in range(10)])
+        self.assertEqual(sec.coverage(results, 14, 14)["invalid_payload_by_cause"], summary["by_cause"])
+
+def annual_entry(start, end, val, accn, filed=None):
+    return {"start": start, "end": end, "val": val, "filed": filed or f"{int(end[:4]) + 1}-02-20", "form": "10-K", "accn": accn}
+
+class SameConceptFourthQuarter(unittest.TestCase):
+    """A Q4 comes from the annual value of the quarterly series' own concept (audit2 earnings/q4tag.py)."""
+
+    def mixed_tags(self, legacy=True):
+        quarters = []
+        for year in (2023, 2024, 2025, 2026):
+            for s, e, f in ((f"{year}-01-01", f"{year}-03-31", f"{year}-05-01"), (f"{year}-04-01", f"{year}-06-30", f"{year}-08-01"), (f"{year}-07-01", f"{year}-09-30", f"{year}-10-30")):
+                if e <= "2026-09-30":
+                    quarters.append(quarter(s, e, 100 + (year - 2023) * 20, f, accn=f"q-{e}"))
+        asc606 = [annual_entry(f"{y}-01-01", f"{y}-12-31", 500 + (y - 2023) * 80, f"k-{y}") for y in (2023, 2024, 2025)]
+        # The 10-K also tags the legacy total, whose annual history is longer (tagged since before 2018).
+        legacy_total = [annual_entry(f"{y}-01-01", f"{y}-12-31", 520 + (y - 2016) * 80, f"k-{y}") for y in range(2016, 2026)]
+        concepts = {"RevenueFromContractWithCustomerExcludingAssessedTax": {"units": {"USD": quarters + asc606}},
+                    "EarningsPerShareDiluted": {"units": {"USD/shares": [dict(q, val=1.0) for q in quarters]}}}
+        if legacy:
+            concepts["Revenues"] = {"units": {"USD": legacy_total}}
+        return {"cik": 7, "facts": {"us-gaap": concepts}}
+
+    def test_a_legacy_annual_total_under_another_concept_no_longer_blocks_the_derivation(self):
+        for legacy in (True, False):
+            record = sec.normalize(self.mixed_tags(legacy), "ZZT", 7, "2026-11-04", "2026-11-04T20:00:00.000Z")
+            revenue = record["quarterly"]["revenue"]
+            derived = [p for p in revenue if p["derived"]]
+            self.assertEqual([p["end"] for p in derived], ["2023-12-31", "2024-12-31", "2025-12-31"])
+            self.assertEqual({p["tag"] for p in revenue}, {"RevenueFromContractWithCustomerExcludingAssessedTax"})
+            self.assertEqual(derived[-1]["value"], 660 - 3 * 140)
+            self.assertEqual(derived[-1]["components"][0], "k-2025")
+            self.assertEqual(record["derivation_gaps"], [])
+            # EPS is never derived: its fiscal fourth quarters stay absent.
+            self.assertFalse(any(p["end"].endswith("12-31") for p in record["quarterly"]["eps"]))
+
+class DerivationGaps(unittest.TestCase):
+    """Each fiscal year whose Q4 stays unknown is listed with why (tag_mismatch, broken_chain, no_annual)."""
+
+    def gaps(self, concepts, as_of="2026-03-01"):
+        return sec.normalize({"cik": 1, "facts": {"us-gaap": concepts}}, "T", 1, as_of)["derivation_gaps"]
+
+    def test_each_reason(self):
+        eps = {"EarningsPerShareDiluted": {"units": {"USD/shares": [dict(q, val=1.0) for q in FY]}}}
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": FY[:3]}}, "SalesRevenueNet": {"units": {"USD": FY[3:]}}}),
+            [{"fiscal_year": 2025, "metric": "revenue", "reason": "tag_mismatch"}])
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": [FY[0], FY[2], FY[3]]}}}), [{"fiscal_year": 2025, "metric": "revenue", "reason": "broken_chain"}])
+        # The fiscal year is known from the annual EPS only: the revenue has no annual value at all.
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": FY[:3]}}, **eps}), [{"fiscal_year": 2025, "metric": "revenue", "reason": "no_annual"}])
+        net = {"NetIncomeLoss": {"units": {"USD": [FY[0], FY[2], FY[3]]}}}
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": FY}}, **net}), [{"fiscal_year": 2025, "metric": "netIncome", "reason": "broken_chain"}])
+
+    def test_no_gap_when_derived_before_the_10k_or_for_eps(self):
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": FY}}}), [])
+        # Before the 10-K is filed the fiscal year has no annual value yet: nothing is missing.
+        self.assertEqual(self.gaps({"Revenues": {"units": {"USD": FY}}}, as_of="2026-01-15"), [])
+        eps_only = {"EarningsPerShareDiluted": {"units": {"USD/shares": [dict(q, val=q["val"] / 100) for q in FY]}}}
+        self.assertEqual(self.gaps(eps_only), [])
+
+    def test_a_bank_without_a_revenue_concept_is_flagged_not_gapped(self):
+        """audit2 earnings/bank.py: EPS and net income in standard tags, revenue as net interest income."""
+        q, ni = [], []
+        for year in (2024, 2025):
+            for s, e, f in ((f"{year}-01-01", f"{year}-03-31", f"{year}-05-01"), (f"{year}-04-01", f"{year}-06-30", f"{year}-08-01"), (f"{year}-07-01", f"{year}-09-30", f"{year}-10-30")):
+                q.append(quarter(s, e, 1.5, f, accn=f"q-{e}")); ni.append(quarter(s, e, 100, f, accn=f"q-{e}"))
+        annual = lambda value: [annual_entry(f"{y}-01-01", f"{y}-12-31", value, f"k-{y}") for y in (2024, 2025)]
+        facts = {"cik": 9, "facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": q + annual(6.5)}}, "NetIncomeLoss": {"units": {"USD": ni + annual(450)}},
+                 "InterestIncomeExpenseNet": {"units": {"USD": ni + annual(1700)}}}}}
+        record = sec.normalize(facts, "ZZBK", 9, "2026-03-01")
+        self.assertEqual((record["status"], record["quarterly"]["revenue"]), ("partial", []))
+        self.assertEqual([p["end"] for p in record["quarterly"]["netIncome"] if p["derived"]], ["2024-12-31", "2025-12-31"])
+        self.assertEqual(record["derivation_gaps"], [])
+        self.assertEqual(sec.coverage({"ZZBK": record}, 1, 1)["no_revenue_concept"], 1)
+
+class WiderTargets(unittest.TestCase):
+    """Recently listed and strong rows join the targets after today's listed rows (plan DT8)."""
+
+    def history(self, root, snapshots):
+        import gzip, hashlib, json
+        refs = []
+        for as_of, records in snapshots:
+            raw = gzip.compress(json.dumps({"as_of": as_of, "records": records}).encode())
+            path = f"candidate-history/{as_of}-{hashlib.sha256(raw).hexdigest()[:16]}.json.gz"
+            (root / path).parent.mkdir(parents=True, exist_ok=True)
+            (root / path).write_bytes(raw)
+            refs.append({"path": path, "sha256": hashlib.sha256(raw).hexdigest(), "as_of": as_of})
+        (root / sec.HISTORY_INDEX).write_text(json.dumps({"schema_version": 1, "snapshots": refs}))
+
+    def test_order_listed_then_recent_then_ranked_then_strong(self):
+        import tempfile
+        record = lambda symbol, state, rules: {"symbol": symbol, "market": "US", "methods": {"minervini": {"state": state, "rules": [[r, None, None] for r in rules]}}}
+        old = [record("OLD", "pass", ["pass"] * 9)]
+        days = [f"2026-10-{d:02d}" for d in range(1, 13)]
+        snapshots = [(days[0], old)] + [(day, [record("AAA", "pass", ["pass"] * 9)]) for day in days[1:10]] + [(days[10], [record("WWW", "fail", ["fail"] + ["pass"] * 8), record("UNK", "fail", ["fail", "unknown"] + ["pass"] * 7), record("TWO", "fail", ["fail", "fail"] + ["pass"] * 7)])]
+        audit_row = lambda symbol, rs, unknown, qualified=False, failed=2: {"symbol": symbol, "methods": {"minervini": {"qualified": qualified, "failed": failed, "unknown": unknown, "rules": [{"label": "RS 推計 ≥ 70（公開日足の共通母集団）", "value": rs}]}}}
+        audit = {"as_of_date": days[11], "results": [audit_row("AAA", 90, 0, True, 0), audit_row("RSA", 85, 1), audit_row("RSB", 79.9, 0), audit_row("RSC", 95, 2), audit_row("WWW", 88, 0)]}
+        daily = {"as_of_date": days[11], "candidates": {"minervini": [{"symbol": "RNK"}]}}
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.history(root, snapshots)
+            recent = sec.recent_listed(root, days[11])
+            self.assertEqual(recent, {"symbols": ["AAA", "WWW"], "sessions": 10})
+            self.assertEqual(sec.target_symbols(daily, audit, recent), ["AAA", "WWW", "RNK", "RSA"])
+            # A snapshot on or after the analysis date is not a past publication.
+            self.assertEqual(sec.recent_listed(root, days[10])["symbols"], ["OLD", "AAA"])
+            # Without today's audit nothing is listed and no strong row is known; recent rows still come first.
+            self.assertEqual(sec.target_symbols(daily, None, recent), ["AAA", "WWW", "RNK"])
+            # A changed snapshot is never read: the recent rows are skipped and the skip is logged.
+            path = next((root / "candidate-history").glob("2026-10-11-*.json.gz"))
+            path.write_bytes(b"tampered")
+            logged = []
+            self.assertIsNone(sec.recent_listed(root, days[11], log=lambda *args, **kwargs: logged.append(args[0])))
+            self.assertIn("skipped", logged[0])
+        with tempfile.TemporaryDirectory() as directory:
+            logged = []
+            self.assertIsNone(sec.recent_listed(Path(directory), days[11], log=lambda *args, **kwargs: logged.append(args[0])))
+            self.assertEqual(len(logged), 1)
+        # A strong row far from the template (three failed conditions) is not a target.
+        far = {"as_of_date": days[11], "results": [audit_row("FAR", 95, 0, False, 3), audit_row("NEAR", 95, 0, False, 2)]}
+        self.assertEqual(sec.strong_rows(far, days[11]), ["NEAR"])
+        self.assertEqual(sec.STRONG_MAX_FAILED, 2)
+        # Listed-first order and the cap are unchanged.
+        self.assertEqual(sec.MAX_SYMBOLS, 1500)
+        self.assertEqual(sec.target_symbols({"as_of_date": "2026-10-30", "candidates": {}}, {"as_of_date": "2026-10-30", "results": [audit_row("LST", 50, 0, True, 0)]}, {"symbols": ["LST", "REC"]}), ["LST", "REC"])
+
+    def test_strong_rows_beyond_the_limit_are_best_effort_never_truncation(self):
+        """Listed rows within MAX_SYMBOLS but listed plus strong rows above it: nothing listed is cut, so no truncation
+        (and no daily coverage warning); the strong rows left out are counted apart."""
+        audit_row = lambda symbol, rs, qualified: {"symbol": symbol, "methods": {"minervini": {"qualified": qualified, "failed": 0 if qualified else 1, "unknown": 0 if qualified else 1,
+            "rules": [{"label": "RS 推計 ≥ 70（公開日足の共通母集団）", "value": rs}]}}}
+        listed = [f"L{i}" for i in range(1400)]
+        strong = [f"S{i}" for i in range(300)]
+        audit = {"as_of_date": "2026-11-05", "results": [audit_row(s, 90, True) for s in listed] + [audit_row(s, 90, False) for s in strong]}
+        daily = {"as_of_date": "2026-11-05", "candidates": {}}
+        core = sec.core_targets(daily, audit, None)
+        ordered = sec.target_symbols(daily, audit, None)
+        symbols = sec.requested(ordered, sec.MAX_SYMBOLS)
+        self.assertEqual((len(core), len(ordered), len(symbols)), (1400, 1700, 1500))
+        counts = sec.target_counts(core, ordered, symbols)
+        self.assertEqual(counts, {"eligible": 1500, "truncated": 0, "strong_rows_requested": 100, "strong_rows_unfetched": 200})
+        cover = sec.coverage({}, counts["eligible"], len(symbols), listed)
+        self.assertEqual((cover["eligible"], cover["requested"], cover["truncated"]), (1500, 1500, 0))
+        # A limit that cuts listed rows is truncation, counted over the listed, recent and ranked targets only.
+        few = sec.requested(ordered, 1000)
+        self.assertEqual(sec.target_counts(core, ordered, few), {"eligible": 1400, "truncated": 400, "strong_rows_requested": 0, "strong_rows_unfetched": 300})
+        self.assertEqual(sec.coverage({}, 1400, len(few), listed)["truncated"], 400)
+
 ADMIT_SCRIPT = """
 import { admitBookFinancials } from './src/static/bookFinancialAdmission.js';
 let input = '';

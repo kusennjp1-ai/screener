@@ -204,7 +204,7 @@
 .brief-chart .bc-layer { position: absolute; inset: 0; display: block; width: 100%; height: 100%; }
 .brief-chart .bc-reveal { position: absolute; inset: 0; overflow: hidden; }
 .bc-gridline { stroke: var(--grid); stroke-width: 1; } .bc-axis, .bc-caption { fill: var(--text-3); }
-.bc-zonefill { fill: var(--zone-fill); stroke: var(--zone-edge); stroke-width: 1; } .bc-zonetext { fill: var(--zone); }
+.bc-zonefill { fill: var(--zone-fill); } .bc-zoneedge { stroke: var(--zone-edge); stroke-width: 1; } .bc-zonetext { fill: var(--zone); }
 .bc-legbox { fill: none; stroke: var(--line-2); stroke-width: 1; stroke-dasharray: 3 3; } .bc-legtext { fill: var(--text-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
 .bc-lows { stroke: var(--wait); stroke-width: 1.6; }
 .bc-ma { stroke-width: 1.3; } .bc-ma50 { stroke: var(--wait); stroke-width: 1.6; } .bc-ma150 { stroke: var(--text-3); } .bc-ma200 { stroke: var(--text-3); opacity: .65; }

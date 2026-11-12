@@ -66,3 +66,48 @@
   /* The 12px floor for the tabs, the bar's second line and the watch count. */
   .brief-tabs a, .brief-bar-title > span, .brief-count { font-size: 12px; }
 }
+
+/* Round 2 (rows). The bar's date line: a late publication's age in the warning tone, and the missing sessions
+   (「（10/5・10/6 未反映）」) only where they fit with 6px to spare: the line is one line high and a part that does
+   not fit wraps under it, out of view (the page never scrolls sideways; the whole sentence stays in the text). */
+.brief-bar-title > .brief-bar-date { display: flex; flex-wrap: wrap; align-items: baseline; row-gap: 4px; height: 1.3em; overflow: hidden; }
+.brief-bar-date > span { white-space: nowrap; }
+.brief-bar-date .brief-bar-age { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.brief-bar-date .brief-bar-missing { flex: none; padding-right: 6px; }
+.brief-bar-date.is-warn, .brief-stockhead-age.is-warn, .brief-bar-stale { color: var(--ext); font-weight: 700; }
+
+/* Today's SEC coverage line sits under the market card: the stack gap above it is cancelled, so it costs its line. */
+.brief-stack > .brief-coverage-note { margin-top: -12px; }
+
+/* The 注目候補 tile's 「うち上抜けN」: its own link in a strip at the tile's foot, a target high (44px below 768px). The
+   tile keeps the strip's height free under its text, so neither link covers the other; the count breaks only after うち. */
+.brief-summary li.has-sub { position: relative; --sub: 44px; }
+.brief-summary li.has-sub > .brief-tile { padding-bottom: var(--sub); }
+.brief-summary .brief-tile-sub { position: absolute; left: 0; right: 0; bottom: 0; height: var(--sub); display: flex; align-items: flex-end; padding: 0 12px 8px; font-size: 11px; font-weight: 700; line-height: 1.4; color: var(--accent); text-decoration: none; }
+.brief-tile-sub .brief-nowrap { white-space: nowrap; }
+.brief-summary .brief-tile-sub:hover { background: var(--surface-2); }
+.brief-summary .brief-tile-sub:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+@media (min-width: 768px) { .brief-summary li.has-sub { --sub: 26px; } }
+
+/* The 地合い tile's suffix from the market track: a line of its own under the cap. */
+.brief-summary .brief-tile-suffix { display: block; }
+
+/* The 候補 tab: the search, the sort and the 条件 menu share one line. The 条件 menu always reads 条件 (the condition
+   it chose is said by its chip, in full with its counts), so it is as narrow as that word; the sort shows its value
+   (a phone and the desktop's left column read 並び順 in its first option), with room for the arrow. 選定すべて's population sits under the filters. */
+.brief-filters .brief-search { flex: 1 1 100px; }
+.brief-filters .brief-sort select { padding-right: 4px; }
+.brief-filters .brief-cond select { width: 4.6em; }
+.brief-population { margin-top: -4px; }
+@media (min-width: 1024px) { .brief-filters .brief-search { flex-basis: 160px; } }
+
+@media (max-width: 520px) {
+  .brief-stack > .brief-coverage-note { margin-top: -10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brief-summary .brief-tile-sub { padding: 0 10px 8px; font-size: 12px; }
+}
+
+/* Every chip line of a row keeps 6px at its end: a chip that would leave less wraps (the rows' chip fit, BriefParts). */
+.brief-row .brief-reasons { padding-right: 6px; }
+
+/* The desktop's left column after a tab switch (BriefApp): the new screen is in place at once, with no rise. */
+.brief-desk > .brief-left.is-switched .in { animation: none; }

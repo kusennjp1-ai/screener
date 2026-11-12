@@ -1,6 +1,14 @@
 /* Track A (the stock chart). Loaded after brief.css; an existing rule changes only by an override here
    with equal or higher specificity. */
 
+/* Chart-scoped colours of the short averages (round 2): distinct from --wait (the 50-day line), --accent
+   (the RS line) and --ext (warnings and sell marks), defined for both themes. */
+.brief-chartcard { --ma10: #B4229B; --ema21: #0B6E8F; }
+.brief[data-theme="light"] .brief-chartcard { --ma10: #B4229B; --ema21: #0B6E8F; }
+/* Dark --ema21 is a light cyan: away from the 50-day line's --wait (ΔE2000 23 normal, 12 under deuteranopia, was 3
+   with #4CC9F0) and from --zone, the up candles' colour (19); 10.8:1 on --surface. */
+.brief[data-theme="dark"] .brief-chartcard { --ma10: #F27FDB; --ema21: #7FE3F0; }
+
 /* The card's head: the period segment, then the readout (beside it at 1024px and wider, under it below). */
 .brief-chartcard-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-width: 0; }
 .brief-chartcard .brief-periods { padding-top: 0; flex-wrap: nowrap; }
@@ -12,8 +20,10 @@
   /* The weekly button carries its week count: a larger share of the row. */
   .brief-chartcard .brief-periods button.brief-period-week { flex-grow: 1.4; }
 }
-/* On the narrowest phones the week count takes a second line, without its brackets. */
+/* On the narrowest phones the week count takes a second line, without its brackets; the readout takes 6 rows
+   there, so the plot gives up 8px (300 → 292 at 320×640) and the card keeps 12px under its 520 cap. */
 @media (max-width: 359px) {
+  .brief-chartcard .brief-chart { min-height: 292px; }
   .brief-chartcard .brief-periods button.brief-period-week { line-height: 14px; white-space: normal; }
   .brief-chartcard .brief-weeks { display: block; }
   .brief-chartcard .brief-paren { display: none; }
@@ -29,16 +39,30 @@
 .brief-readout .ro-change.is-up { color: color-mix(in srgb, var(--up) 72%, var(--text)); }
 .brief-readout .ro-change.is-down { color: color-mix(in srgb, var(--down) 72%, var(--text)); }
 .brief-readout .ro-ma50 i { color: var(--wait); }
+/* Bars not certified for the analysis date: a neutral chip first, the change and the ratio dimmed. */
+.brief-readout .ro-unverified { padding: 0 6px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface-2); color: var(--text-2); font-weight: 700; line-height: 14px; }
+.brief-readout .is-unverified, .brief-readout .ro-change.is-unverified { color: var(--text-3); font-weight: 400; }
+.brief-readout .ro-unverified-note { color: var(--text-3); }
+.brief-readout .ro-dist { color: var(--text-2); }
 @media (min-width: 1024px) {
   /* Beside the periods: two rows of 16px fit the 32px buttons, so the chart starts right under them. */
   .brief-readout { display: flex; flex-wrap: wrap; flex: 1 1 0; column-gap: 10px; }
   .brief-readout .ro-line { display: contents; }
 }
-@media (max-width: 520px) { .brief-card.brief-chartcard { padding: 12px; } }
+@media (max-width: 520px) {
+  /* 6px between the head, the chart and the legend: with the legend's 16px lines the card stays at 508px or less. */
+  .brief-card.brief-chartcard { padding: 12px; gap: 6px; }
+}
 /* 「最新足」 returns the readout to the latest bar: in the plot corner with the fewest candles (PriceChart places it). */
 .brief-chartbox { position: relative; min-width: 0; }
 .brief-latest { position: absolute; z-index: 3; top: 12px; left: 4px; min-height: 44px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 12px; font-weight: 700; white-space: nowrap; cursor: pointer; box-shadow: 0 2px 8px color-mix(in srgb, var(--text) 14%, transparent); }
 .brief-latest[hidden] { display: none; }
+/* The renderer's chunk failed to load: the message and a retry over the empty box, which keeps its height. */
+.brief-chart-failed { position: absolute; inset: 0; z-index: 2; display: grid; place-content: center; justify-items: center; gap: 10px; padding: 16px; text-align: center; color: var(--text-2); font-size: 13px; line-height: 1.6; }
+.brief-chart-failed p { margin: 0; }
+.brief-chart-failed button { min-height: 44px; padding: 0 16px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); color: var(--text); font: inherit; font-size: 13px; font-weight: 700; cursor: pointer; }
+.brief-chart-failed button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (min-width: 1024px) { .brief-chart-failed button { min-height: 32px; } }
 .brief-latest:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (min-width: 1024px) { .brief-latest { min-height: 28px; } }
 
@@ -48,17 +72,31 @@
 .brief-legend i.lg-ma50 { border-top-color: var(--wait); }
 .brief-legend i.lg-ma150 { border-top-color: var(--text-3); }
 .brief-legend i.lg-ma200 { border-top-color: var(--text-3); border-top-style: dashed; opacity: .65; }
-.brief-legend i.lg-ma10 { border-top-color: var(--ext); border-top-width: 1px; }
-.brief-legend i.lg-ema21 { border-top-color: var(--accent); border-top-width: 1px; }
+.brief-legend i.lg-ma10 { border-top-color: var(--ma10); }
+.brief-legend i.lg-ema21 { border-top-color: var(--ema21); }
+.brief-legend i.lg-rs { border-top-color: var(--accent); }
+/* The last contraction's low is dashed, apart from the dotted line joining the contraction lows. */
+.brief-legend i.lg-structural { border-top-color: var(--text-3); border-top-style: dashed; }
+/* The crossing's glyph is the chart's hollow arrow, in the colour of the drawn mark. */
+.brief-legend .lg-breakoutglyph { display: inline-block; width: 10px; height: 11px; margin-right: 3px; vertical-align: -1px; overflow: visible; }
+.brief-legend .lg-breakoutglyph path { fill: var(--surface); stroke: var(--text-2); stroke-width: 1.5; stroke-linejoin: round; }
+.brief-legend .lg-breakoutglyph.is-zone path { stroke: var(--zone); }
+.brief-legend .lg-heavydown { display: inline-block; width: 8px; height: 10px; margin-right: 4px; vertical-align: -1px; background: var(--ext); }
+.brief-legend > span[hidden] { display: none; }
 .brief-legend i.lg-pivot { border-top-color: var(--zone); }
 .brief-legend i.lg-stop { border-top-color: var(--neg); }
 .brief-legend i.lg-lows { border-top-color: var(--text-2); border-top-style: dotted; }
 .brief-legend .lg-sellglyph { margin-right: 3px; font-weight: 400; color: var(--ext); letter-spacing: 1px; }
+@media (max-width: 520px) {
+  .brief-chartcard .brief-legend { gap: 2px 8px; line-height: 16px; }
+  .brief-chartcard .brief-legend i { width: 10px; }
+  .brief-chartcard .brief-legend .lg-mas i + i { margin-left: 6px; }
+}
 .brief-chart-notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; font-size: 12px; line-height: 1.6; color: var(--text-3); }
 
 /* The chart's lines and marks. */
-.bc-ma10 { stroke: var(--ext); stroke-width: 1; }
-.bc-ema21 { stroke: var(--accent); stroke-width: 1; }
+.bc-ma10 { stroke: var(--ma10); stroke-width: 1; }
+.bc-ema21 { stroke: var(--ema21); stroke-width: 1; }
 .bc-ma200 { stroke-dasharray: 8 4; }
 .bc-lows { stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 1 2.5; }
 .bc-gap-up { fill: var(--up); opacity: .1; } .bc-gap-down { fill: var(--down); opacity: .1; }
@@ -77,17 +115,41 @@
 .bc-planline { stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 2 3; }
 .bc-high52 { stroke: var(--text-2); stroke-width: 1; stroke-dasharray: 6 3; opacity: .8; }
 .bc-malabel-ma50 { fill: var(--wait); } .bc-malabel-ma150, .bc-malabel-ma200 { fill: var(--text-3); }
-.bc-malabel-ma10 { fill: var(--ext); } .bc-malabel-ema21 { fill: var(--accent); }
+.bc-malabel-ma10 { fill: var(--ma10); } .bc-malabel-ema21 { fill: var(--ema21); }
 .bc-maleader { stroke-width: 1; opacity: .7; } .bc-maleader-ma50 { stroke: var(--wait); } .bc-maleader-ma150, .bc-maleader-ma200 { stroke: var(--text-3); }
-.bc-maleader-ma10 { stroke: var(--ext); } .bc-maleader-ema21 { stroke: var(--accent); }
-.bc-volkey { fill: var(--up); }
+.bc-maleader-ma10 { stroke: var(--ma10); } .bc-maleader-ema21 { stroke: var(--ema21); }
+.bc-volkey { fill: var(--up); } .bc-volkeydown { fill: var(--ext); }
 .bc-ttext { fill: var(--text-2); }
 .bc-leader { stroke: var(--text-3); stroke-width: 1; }
 .bc-lasttag-fill { fill: var(--surface); stroke: var(--text); stroke-width: 1; }
 .brief-chart .bc-tagtext.bc-lasttagtext { fill: var(--text); }
 .bc-leg.is-on .bc-legbox { stroke: var(--accent); stroke-width: 2; stroke-dasharray: none; fill: color-mix(in srgb, var(--accent) 10%, transparent); }
 .bc-leg.is-dim, .bc-tlabel.is-dim, .bc-legtext.is-dim { opacity: .35; }
-.bc-rslead { fill: var(--accent); }
+.bc-rslead { stroke: var(--accent); stroke-width: 2; }
+/* The RS line's new high: a tag in the axis column, as the price tags. */
+.bc-rstag-fill { fill: var(--accent); }
+.brief-chart .bc-rstext { fill: var(--accent-ink); paint-order: normal; stroke: none; }
+.brief[data-theme="dark"] .brief-chart .bc-rstext { fill: var(--ground); }
+.bc-rsleader { stroke: var(--accent); opacity: .7; }
+/* The last contraction's low as a tag on a narrow chart (its price in the legend), and a level whose name has no spot by
+   its line (its name over its price). */
+.bc-lowtag-fill, .bc-nametag-fill { fill: var(--surface); stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 2 2; }
+.brief-chart .bc-tagtext.bc-lowtagtext, .brief-chart .bc-tagtext.bc-nametagtext { fill: var(--text-2); }
+.bc-structural { stroke: var(--text-3); stroke-dasharray: 4 3; }
+/* The pivot crossing (certified bars only): a hollow arrow, never the filled ▲ of the 崩れ sell sign; green only
+   for a confirmed crossing (1.4× and the close still at or above the pivot), grey otherwise. */
+.bc-breakoutmark { fill: var(--surface); stroke: var(--text-2); stroke-width: 1.5; stroke-linejoin: round; }
+.bc-breakout.is-zone .bc-breakoutmark { stroke: var(--zone); }
+.bc-breakouttext { fill: var(--text-2); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
+.bc-breakout.is-zone .bc-breakouttext { fill: var(--zone); }
+/* The phone's compact earnings flag in the RS panel's axis column. */
+.bc-earnflag-fill { fill: var(--surface); stroke: var(--line-2); stroke-width: 1; }
+.bc-earnflag.bc-earnings-soon .bc-earnflag-fill { stroke: var(--ext); }
+.bc-earnflag .bc-earnings { stroke: none; }
+.bc-earnflag.bc-earnings-soon .bc-earnings { fill: var(--ext); }
+/* After the report the flag is dimmed with a dashed border, so it never reads as a coming date. */
+.bc-earnflag.is-past .bc-earnflag-fill { stroke: var(--text-3); stroke-dasharray: 3 2; }
+.bc-earnflag.is-past .bc-earnings { fill: var(--text-3); }
 .bc-rsmax { stroke: var(--accent); stroke-width: 1; stroke-dasharray: 2 3; opacity: .6; }
 .bc-tick { stroke: var(--line-2); stroke-width: 1; }
 .bc-axis.bc-date-year { fill: var(--text-2); }

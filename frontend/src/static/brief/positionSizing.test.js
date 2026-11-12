@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { adrPercent, adrState, ADR_SESSIONS, clampPlanSetting, PLAN_BLOCKED, PLAN_DEFAULTS, planLevels, positionPlan, readPlanSettings, RISK_MAX_PERCENT,
-  STOP_LIMIT_PERCENT, STOP_MAX_PERCENT, STOP_MIN_PERCENT, structuralStop, STRUCTURAL_STOP_BUFFER_PERCENT, STRUCTURAL_SYMBOLS_MAX, templateReference,
+  STOP_LIMIT_PERCENT, STOP_MAX_PERCENT, STOP_MIN_PERCENT, STOP_WARN_PERCENT, structuralStop, STRUCTURAL_STOP_BUFFER_PERCENT, STRUCTURAL_SYMBOLS_MAX, templateReference,
   withStructuralSymbol } from './positionSizing';
+import { buyGate, PLAN_BLOCKED as GATE_BLOCKED, templateReference as gateTemplateReference } from './buyGate';
 
-const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101, ...over });
+const DATE = '2026-03-01';
+/** A selected candidate in the buy zone whose Setup Engine base is current for DATE (confidence 60, over the floor). */
+const view = (over = {}) => ({ symbol: 'AAA', state: 'zone', position: 'zone', asOf: DATE, qualified: true, distance: 1, volumeRatio: 1.2, rs: 80, passed: 9, pivot: 100, price: 101,
+  row: { symbol: 'AAA', setup_recalculation: { status: 'calculated', as_of_date: DATE }, se_pattern_confidence: 60 }, ...over });
 const UP = { label: '上昇トレンド（独自判定）', cap: 0.5 };
 const day = i => new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10);
 /** Certified-looking bars: each with a 2% range (high ÷ low − 1 = 0.02) unless `range` says otherwise. */
@@ -86,18 +90,33 @@ describe('position plan: sizing (F1)', () => {
     const settings = { ...PLAN_DEFAULTS };
     const up = positionPlan(view({ price: 100 }), settings, { market: UP });
     expect(up.trialOnly).toBe(false);
-    expect(up.marketGuide).toEqual({ known: true, maxPercent: 50, usedPercent: up.weight, over: false });
+    expect(up.marketGuide).toEqual({ known: true, maxPercent: 50, usedPercent: up.weight, over: false, share: up.weight / 50 * 100, fits: Math.floor(50 / up.weight) });
     expect(positionPlan(view({ price: 100 }), { ...settings, stopPercent: 1, capPercent: 100, riskPercent: 5 }, { market: { cap: 0.25 } }).marketGuide).toMatchObject({ maxPercent: 25, over: true });
     // cap 0 with a known state: 試算のみ (the guide says 0%).
     const closed = positionPlan(view({ price: 100 }), settings, { market: { label: '長期トレンド警戒', cap: 0 } });
     expect(closed.trialOnly).toBe(true);
-    expect(closed.marketGuide).toEqual({ known: true, maxPercent: 0, usedPercent: null, over: false });
+    expect(closed.marketGuide).toEqual({ known: true, maxPercent: 0, usedPercent: null, over: false, share: null, fits: null });
     // Unknown is never read as 0%.
     for (const market of [null, { label: '市場未確認', cap: 0, state: 'unknown' }]) {
       const plan = positionPlan(view({ price: 100 }), settings, { market });
       expect(plan.trialOnly).toBe(true);
-      expect(plan.marketGuide).toEqual({ known: false, maxPercent: null, usedPercent: null, over: false });
+      expect(plan.marketGuide).toEqual({ known: false, maxPercent: null, usedPercent: null, over: false, share: null, fits: null });
     }
+  });
+
+  it('the exposure share: the position as a part of the guide, and how many of the same size fit in it (holdings not counted)', () => {
+    // 88 shares at 101: $8,888, 17.8% of the account, 35.5% of a 50% guide; two of the same size fit.
+    const up = positionPlan(view({ price: 101 }), PLAN_DEFAULTS, { market: UP });
+    expect(up.marketGuide.share).toBeCloseTo(8888 / 50000 * 100 / 50 * 100, 9);
+    expect(up.marketGuide.fits).toBe(2);
+    // Over the guide: more than 100% of it, and none of the same size fits.
+    const over = positionPlan(view({ price: 100 }), { ...PLAN_DEFAULTS, stopPercent: 1, capPercent: 100, riskPercent: 5 }, { market: { cap: 0.25 } });
+    expect([over.marketGuide.share, over.marketGuide.fits]).toEqual([400, 0]);
+    // Exactly the guide: one fits (never 0 by rounding).
+    const exact = positionPlan(view({ price: 100 }), { account: 10000, riskPercent: 5, stopPercent: 1, capPercent: 25 }, { market: { cap: 0.25 } });
+    expect([exact.weight, exact.marketGuide.share, exact.marketGuide.fits]).toEqual([25, 100, 1]);
+    // No share count: unknown, never 0.
+    expect(positionPlan(view({ price: 100 }), { account: 0 }, { market: UP }).marketGuide).toMatchObject({ usedPercent: null, share: null, fits: null });
   });
 
   it('clamps each input to its range: the stop from 1% to below 10%, the risk to at most 5%, the cap to at most 100%', () => {
@@ -131,7 +150,7 @@ describe('position plan: gating (F2)', () => {
   });
 
   it('a template that is not passed makes the plan a reference only (参考): TT未達 for a failed rule, TT未確認 otherwise', () => {
-    const reason = template => { const plan = positionPlan(view(), PLAN_DEFAULTS, { template }); return [plan.reference, plan.referenceReason]; };
+    const reason = template => { const plan = positionPlan(view(), PLAN_DEFAULTS, { template, market: UP }); return [plan.reference, plan.referenceReason]; };
     expect(reason({ ...PASS, passed: 7, failed: 1 })).toEqual([true, 'TT未達']);
     // A failed rule settles it even when another rule is unknown.
     expect(reason({ passed: 6, failed: 1, unknown: 1, integrity: { state: 'unknown' } })).toEqual([true, 'TT未達']);
@@ -143,12 +162,42 @@ describe('position plan: gating (F2)', () => {
     expect(reason({ passed: 8, failed: 0, unknown: 0 })).toEqual([true, 'TT未確認']);
     expect(reason(PASS)).toEqual([false, null]);
     expect(templateReference(PASS)).toBeNull();
-    // A broken setup (崩れ) or near earnings (決算前) also leaves the plan a reference; the template's reason leads.
-    const more = (template, context) => { const plan = positionPlan(view(), PLAN_DEFAULTS, { template, ...context }); return [plan.reference, plan.referenceReason]; };
+    // A selected stock the template does not select (an exclusion) is no candidate either.
+    expect([positionPlan(view({ qualified: false }), PLAN_DEFAULTS, { template: PASS, market: UP })].map(p => [p.reference, p.referenceReason])).toEqual([[true, '選定対象外']]);
+    // A broken setup (崩れ) or near earnings also leaves the plan a reference; the template's reason leads. The stock
+    // view's earnings call names the phase (決算前, 決算当日, 決算後); with the flag alone it is 決算.
+    const more = (template, context) => { const plan = positionPlan(view(), PLAN_DEFAULTS, { template, market: UP, ...context }); return [plan.reference, plan.referenceReason]; };
     expect(more(PASS, { broken: true })).toEqual([true, '崩れ']);
-    expect(more(PASS, { earningsSoon: true })).toEqual([true, '決算前']);
+    expect(more(PASS, { earningsSoon: true })).toEqual([true, '決算']);
+    expect([3, 0, -2].map(days => more(PASS, { earnings: { days, soon: true } })[1])).toEqual(['決算前', '決算当日', '決算後']);
+    expect(more(PASS, { earnings: { days: 20, soon: false } })).toEqual([false, null]);
     expect(more(PASS, { broken: true, earningsSoon: true })).toEqual([true, '崩れ']);
     expect(more({ ...PASS, passed: 7, failed: 1 }, { broken: true })).toEqual([true, 'TT未達']);
+  });
+
+  it('reads the market (参考（地合い）), the base and the zone\'s day as the conclusion does, in its order (buyGate\'s reason)', () => {
+    const reason = (context, over) => { const plan = positionPlan(view(over), PLAN_DEFAULTS, { template: PASS, market: UP, ...context }); return [plan.reference, plan.referenceReason]; };
+    // A known market with a guide of 0%: 試算のみ in the tile, and 参考（地合い） in the heading. Unknown, or none yet: 地合い未確認.
+    expect(reason({ market: { label: '50日線割れ', cap: 0 } })).toEqual([true, '地合い']);
+    expect(positionPlan(view(), PLAN_DEFAULTS, { template: PASS, market: { label: '50日線割れ', cap: 0 } }).trialOnly).toBe(true);
+    expect(reason({ market: { label: '市場未確認', cap: 0, state: 'unknown' } })).toEqual([true, '地合い未確認']);
+    expect(reason({ market: null })).toEqual([true, '地合い未確認']);
+    // Waiting below the pivot too (any position that gets a plan).
+    expect(reason({ market: { label: '50日線割れ', cap: 0 } }, { state: 'wait', position: 'base', price: 90, distance: -10 })).toEqual([true, '地合い']);
+    // The Setup Engine base: below the floor, missing, or not of the analysis date.
+    const base = over => ({ row: { symbol: 'AAA', setup_recalculation: { status: 'calculated', as_of_date: DATE }, se_pattern_confidence: 60, ...over } });
+    expect(reason({}, base({ se_pattern_confidence: 31 }))).toEqual([true, '土台未確認']);
+    expect(reason({}, base({ se_pattern_confidence: null }))).toEqual([true, '土台未確認']);
+    expect(reason({}, base({ setup_recalculation: { status: 'calculated', as_of_date: '2026-02-27' } }))).toEqual([true, '土台未確認']);
+    // The order: the template, a broken setup, the base, the market, earnings.
+    expect(reason({ broken: true, market: null }, base({ se_pattern_confidence: 31 }))).toEqual([true, '崩れ']);
+    expect(reason({ market: null, earningsSoon: true }, base({ se_pattern_confidence: 31 }))).toEqual([true, '土台未確認']);
+    expect(reason({ market: { cap: 0 }, earningsSoon: true })).toEqual([true, '地合い']);
+    // The plan reads the same gate the conclusion reads: given one, it is used as is.
+    const gate = buyGate({ view: view(), template: PASS, market: { cap: 0 } });
+    expect(positionPlan(view(), PLAN_DEFAULTS, { template: PASS, market: UP, gate }).referenceReason).toBe('地合い');
+    // The blocked reasons and the template rule live in the gate, under their old import path too.
+    expect([PLAN_BLOCKED, templateReference]).toEqual([GATE_BLOCKED, gateTemplateReference]);
   });
 });
 
@@ -223,6 +272,29 @@ describe('position plan: structural stop (F3)', () => {
     expect(structuralStop({ technical: above, judged: high, entry: 106, pivot: 102 })).toMatchObject({ state: 'unknown', stop: null, reason: '最後の収縮がピボットより上（上抜け後の押し）' });
   });
 
+  it('flags a stop inside the last contraction and a structural stop deeper than 8% (独自設定), never moving the stop', () => {
+    expect(STOP_WARN_PERCENT).toBe(8);
+    const at = low => { const list = bars(), evidence = technical(list, 50, low); return positionPlan(view({ price: 100 }), PLAN_DEFAULTS, { technical: evidence, judged: list, market: UP, template: PASS }); };
+    // The 7% stop (93.00) above a 92.00 low: inside the contraction. The structural stop is 8.46% deep.
+    const inside = at(92);
+    expect(inside).toMatchObject({ stopInsideBase: true, structuralDeep: true, stopSource: 'setting', stopPercent: 7 });
+    expect(inside.stop).toBeCloseTo(93, 9);
+    // A 96.00 low: the 7% stop is below it, and the structural stop (4.48%) is not deep.
+    expect(at(96)).toMatchObject({ stopInsideBase: false, structuralDeep: false });
+    // 8% exactly is not deeper than 8%; just over it is.
+    const exact = 100 - 8, low8 = exact / (1 - STRUCTURAL_STOP_BUFFER_PERCENT / 100);
+    expect(at(low8).structural.percent).toBeCloseTo(8, 9);
+    expect(at(low8).structuralDeep).toBe(false);
+    expect(at(low8 - 0.01).structuralDeep).toBe(true);
+    // The structural stop chosen: the stop is under the low, never inside it.
+    const list = bars(), evidence = technical(list, 50, 92);
+    expect(positionPlan(view({ price: 100 }), { ...PLAN_DEFAULTS, structuralSymbols: ['AAA'] }, { technical: evidence, judged: list }).stopInsideBase).toBe(false);
+    // Unknown when the low is unknown (no certified bars) or at the entry: null, never false.
+    expect(positionPlan(view({ price: 100 }), PLAN_DEFAULTS, { technical: evidence, judged: null })).toMatchObject({ stopInsideBase: null, structuralDeep: null });
+    const probe = bars();
+    expect(positionPlan(view({ price: 100, pivot: 101 }), PLAN_DEFAULTS, { technical: technical(probe, 50, 100.3), judged: probe })).toMatchObject({ stopInsideBase: null, structuralDeep: null });
+  });
+
   it('too deep at 10% or more (見送り候補); over the 9.5% input limit; under 1% or at the low is not used', () => {
     const deep = bars();
     expect(structuralStop({ technical: technical(deep, 50, 88), judged: deep, entry: 100, pivot: 100 })).toMatchObject({ state: 'tooDeep', low: 88 });
@@ -283,7 +355,7 @@ describe('planLevels', () => {
 
   it('a plan carries the contract fields the conclusion and the chart read', () => {
     const plan = positionPlan(view({ price: 100 }), PLAN_DEFAULTS, { market: UP });
-    for (const key of ['reference', 'referenceReason', 'trialOnly', 'defaults', 'binding', 'structural', 'stopSource', 'adrReason']) expect(plan[key]).toBeDefined();
+    for (const key of ['reference', 'referenceReason', 'trialOnly', 'defaults', 'binding', 'structural', 'stopSource', 'adrReason', 'stopInsideBase', 'structuralDeep']) expect(plan[key]).toBeDefined();
     expect(plan.blocked).toBeUndefined();
   });
 });

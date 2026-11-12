@@ -15,12 +15,19 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+#: A stage-2 base must stay within this % of its 52-week high: the trend template's own
+#: condition 6 (Minervini), not a new threshold.
+STAGE2_BASE_MAX_BELOW_52W_HIGH_PCT = 25.0
+
+
 class WeinsteinstageAnalyzer:
     """
     Analyze stock stage using Weinstein methodology.
 
     Stage 2 (Advancing) is the ideal stage for buying according to both
-    Weinstein and Minervini methodologies.
+    Weinstein and Minervini methodologies. A stage 2 includes the bases it
+    builds on the way up: 60 sideways sessions above a still-rising 200-day
+    line are a base inside stage 2, not a top (see ``_is_stage2_base``).
     """
 
     def __init__(self):
@@ -191,7 +198,10 @@ class WeinsteinstageAnalyzer:
         ma_200: float,
         ma_200_series: pd.Series,
         price_series: pd.Series,
-        volume_series: Optional[pd.Series] = None
+        volume_series: Optional[pd.Series] = None,
+        *,
+        ma_150: Optional[float] = None,
+        high_52w: Optional[float] = None,
     ) -> Dict:
         """
         Determine Weinstein stage for a stock.
@@ -202,6 +212,9 @@ class WeinsteinstageAnalyzer:
             ma_200_series: Series of 200-day MA values over time
             price_series: Price series
             volume_series: Volume series (optional, for validation)
+            ma_150: Current 150-day moving average (optional; with ``high_52w`` it
+                lets a sideways base above a rising 200-day line read as stage 2)
+            high_52w: 52-week (252-session) intraday high (optional)
 
         Returns:
             Dict with stage number and characteristics
@@ -218,8 +231,13 @@ class WeinsteinstageAnalyzer:
         # Check if price is above or below MA
         above_ma = current_price > ma_200
 
+        # A sideways 60 sessions above a rising 200-day line inside the template's
+        # structure is a stage-2 base (needs ma_150 and high_52w; without them the
+        # classification is as before).
+        base = self._is_stage2_base(current_price, ma_200, ma_150, high_52w)
+
         # Determine stage based on criteria including swing pattern
-        stage = self._classify_stage(above_ma, ma_trend, price_trend, swing_pattern)
+        stage = self._classify_stage(above_ma, ma_trend, price_trend, swing_pattern, stage2_base=base)
 
         # Calculate confidence score
         confidence = self._calculate_confidence(
@@ -237,20 +255,48 @@ class WeinsteinstageAnalyzer:
             "description": self._get_stage_description(stage),
         }
 
+    @staticmethod
+    def _is_stage2_base(
+        current_price: float,
+        ma_200: float,
+        ma_150: Optional[float],
+        high_52w: Optional[float],
+    ) -> bool:
+        """The structure a stage-2 base keeps (trend template conditions 1, 2 and 6).
+
+        Price above the 150-day line, the 150-day above the 200-day, and price within
+        ``STAGE2_BASE_MAX_BELOW_52W_HIGH_PCT`` of its 52-week high. A close under the
+        150-day line is not a base here (it stays stage 3, as before). Unknown inputs
+        are never a base.
+        """
+        values = (current_price, ma_200, ma_150, high_52w)
+        if any(v is None or pd.isna(v) for v in values) or high_52w <= 0:
+            return False
+        return bool(
+            current_price > ma_150 > ma_200
+            and current_price >= high_52w * (1 - STAGE2_BASE_MAX_BELOW_52W_HIGH_PCT / 100)
+        )
+
     def _classify_stage(
         self,
         above_ma: bool,
         ma_trend: str,
         price_trend: str,
-        swing_pattern: str = "unknown"
+        swing_pattern: str = "unknown",
+        stage2_base: bool = False,
     ) -> int:
         """
         Classify Weinstein stage based on price position, trends, and swing pattern.
 
         Key Weinstein criteria:
         - Stage 1: FLAT MA (after decline), price consolidating around MA
-        - Stage 2: RISING MA, price above MA, higher highs and higher lows
-        - Stage 3: MA flattening/turning down, price choppy around MA
+        - Stage 2: RISING MA, price above MA, higher highs and higher lows; a
+          sideways 60-session base above the still-rising MA (``stage2_base``:
+          price above the 150-day, 150 above 200, within 25% of the 52-week high)
+          is a base inside stage 2, not a top
+        - Stage 3: MA flattening/turning down, price choppy around MA; above a
+          rising MA only when the price trend turns down, or moves sideways
+          without the stage-2 base structure (e.g. under the 150-day line)
         - Stage 4: FALLING MA, price below MA, lower highs and lower lows
 
         Returns:
@@ -259,6 +305,11 @@ class WeinsteinstageAnalyzer:
         # Stage 2: Price above RISING 200-day MA with uptrend
         # Core Weinstein criteria - swing pattern used for confidence only
         if above_ma and ma_trend == "rising" and price_trend == "uptrend":
+            return 2
+
+        # Stage 2 (base): sideways above the still-rising 200-day line, inside the
+        # template's structure. A flat 60-bar slope is how a base looks, not a top.
+        if above_ma and ma_trend == "rising" and price_trend == "sideways" and stage2_base:
             return 2
 
         # Stage 4: Price below FALLING 200-day MA with downtrend

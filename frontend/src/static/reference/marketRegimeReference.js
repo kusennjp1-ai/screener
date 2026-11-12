@@ -57,10 +57,14 @@ export const biasTag = entry => finite(entry?.firstHalfShare) && (entry.firstHal
 export const meanLowerStates = ref => Object.entries(ref?.indicators || {}).flatMap(([key, indicator]) => Object.entries(indicator?.states || {})
   .filter(([, state]) => state?.labelMean === 'robust' && state.meanDirection === 'lower').map(([state]) => [key, state]));
 
-/** The warning summary's checks (marketCardView keys) and the study indicator each one is. */
+/**
+ * The warning summary's checks (marketCardView keys) and the study indicator each one is. A fired distribution check
+ * (5 or more days) takes the graded bucket of its actual count (dd.graded: 5–6 or 7 or more), the same state and tag
+ * the 「過去の傾向」 line of that count shows, never the warning's binary split (dd.binary).
+ */
 export const SIGNAL_INDICATORS = Object.freeze({
-  'dist-S&P': Object.freeze({ symbol: '^GSPC', suffix: 'dd.binary', state: 'warn', method: 'distribution' }),
-  'dist-NAS': Object.freeze({ symbol: '^IXIC', suffix: 'dd.binary', state: 'warn', method: 'distribution' }),
+  'dist-S&P': Object.freeze({ symbol: '^GSPC', suffix: 'dd.graded', state: 'count', method: 'distribution' }),
+  'dist-NAS': Object.freeze({ symbol: '^IXIC', suffix: 'dd.graded', state: 'count', method: 'distribution' }),
   'ftd-S&P': Object.freeze({ symbol: '^GSPC', suffix: 'ftd.state', state: 'ftd_failed', method: 'followThrough' }),
   'ftd-NAS': Object.freeze({ symbol: '^IXIC', suffix: 'ftd.state', state: 'ftd_failed', method: 'followThrough' }),
   split: Object.freeze({ breadth: 'rule.split' }), lows: Object.freeze({ breadth: 'rule.lows' }), template: Object.freeze({ breadth: 'rule.template' }),
@@ -71,7 +75,8 @@ export const SIGNAL_INDICATORS = Object.freeze({
  * panel was consistent with chance as a whole; the legend 「関係未確認」 relies on this); a robust one gets none.
  * An index check takes its state's tag and its 〔偏り〕, and none when the published method, or for the
  * follow-through state the judged window, differs from the study's. `published` holds the check's index inputs:
- * { distribution, followThrough } method ids and followThroughWindow, the sessions its follow-through was judged on.
+ * { distribution, followThrough } method ids, followThroughWindow (the sessions its follow-through was judged on)
+ * and distributionCount (the active days the warning counted; a distribution check without it has no tag).
  */
 export function signalTags(ref, key, published = {}) {
   const map = SIGNAL_INDICATORS[key];
@@ -79,7 +84,9 @@ export function signalTags(ref, key, published = {}) {
   if (map.breadth) { const rule = ref.breadth?.[map.breadth]; return rule && rule.labelDd5 !== 'robust' ? [TAGS.breadth] : []; }
   if (!published[map.method] || published[map.method] !== ref.methods?.[map.method]) return [];
   if (map.method === 'followThrough' && published.followThroughWindow !== ref.methods.followThroughWindowSessions) return [];
-  return [stateTag(ref, map.suffix, map.symbol, map.state), biasTag(referenceState(ref, `${map.symbol}.${map.suffix}`, map.state))].filter(Boolean);
+  const state = map.state === 'count' ? ddGradeState(published.distributionCount, ref) : map.state;
+  if (!state) return [];
+  return [stateTag(ref, map.suffix, map.symbol, state), biasTag(referenceState(ref, `${map.symbol}.${map.suffix}`, state))].filter(Boolean);
 }
 
 // ---- states, judged as the study judged them --------------------------------------------------------------

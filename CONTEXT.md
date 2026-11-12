@@ -142,7 +142,73 @@ The open stock is not in the list the dock steps through.
 The list the dock steps through from Today or the market tab: the top focus candidates Today shows (「注目候補の上位5件」), never the whole focus pool.
 
 **参考 / 試算のみ / 既定条件**:
-The qualifiers on the stock's level tiles: 参考 when the stock is no buy candidate now (TT未達, TT未確認, a broken setup, the market or an earnings date), 試算のみ when the market guide allows no new position or is unknown, 既定条件 when every plan input is still at its default.
+The qualifiers on the stock's level tiles: 参考 when the stock is no buy candidate now (TT未達, TT未確認, a broken setup or ブレイク失敗, the market, an earnings date, and from round 2 the base check, 下落日の大商い and 停滞), 試算のみ when the market guide allows no new position or is unknown, 既定条件 when every plan input is still at its default. The plan's heading names the cause in 参考（…）: TT未達, TT未確認, 崩れ, 土台未確認, 地合い, 地合い未確認, 決算前 / 決算当日 / 決算後, 下落日の大商い or 停滞 (positionSizing's referenceReason).
+
+### Round 2 terms
+
+**ブレイク失敗（独自判定）**:
+A breakout of today's pivot on 1.4× or more of the prior 50-day volume, within `failedBreakoutSessions` (10, 独自判定) sessions of the breakout itself (a run of touches may begin earlier), followed by a last close back under the pivot. A close at the pivot's cents is a touch (ピボット到達), not a breakout: the breakout is the first later close above the pivot, on that day's volume. It is a broken setup: the conclusion is neutral, the plan is 参考, the watch tile counts it, its headline leads the watch row and a watched focus row carries the same 崩れ chip (▲, the app's caution mark: see ▲ / ▼).
+_Avoid_: 失敗ブレイク, だまし
+
+**上抜けからN営業日**:
+The sessions since the latest close that broke above today's pivot (`lastPivotCrossing`, up to 60 sessions back; after a touch at the pivot's cents, the first close above it), named in the stock conclusion as 「M/Dに上抜け・N営業日前」, or 「ピボット到達からN営業日」 (wait, the touch's date in the line under it) when a touch was never followed by a close above. 「上抜けから60営業日超」 when every close in that window is at or above the pivot. Without a dated crossing the stock conclusion reads 「上抜け日 未確認」 and is never green. The rows have no bars (owner decision §9-11) and compare the day's two closes with the pivot in whole cents, as the conclusion and the chart do: a row whose previous close was already above the pivot's cents keeps its plain 「● 買いゾーン +x%」, green while the market is open and the base is current, and ranks below the day's events. A previous close at the pivot's cents is a touch only when the closes before it were below the pivot, and the rows cannot see those closes: it may as well be a pullback onto the pivot after an earlier breakout. So a close above the pivot's cents after one at them reads 「上抜け日 未確認」 on the rows (wait, never green or dated; 「うち上抜け」 leaves it out and the 上抜け filter counts it as 未確認), and a second close at the pivot's cents reads 「ピボットと同値のまま」 (wait). The conclusion tells them apart from certified bars: after a touch from below, the first close above it is that day's breakout (「M/Dに上抜け・出来高N×」 on the day's volume) or 「ピボット到達からN営業日」 while it stays on the cents; after an earlier close above the pivot, the breakout is dated from that close, on its volume and under the 停滞 / 押し戻し rule, as the chart's arrow marks it. The chart's arrow turns grey once the breakout is older than `staleBreakoutSessions`. Recording in the published audit whether the run at the pivot's cents began from below would let the rows date it too; that is a transport change for the owner.
+
+**ピボット到達 / ピボットと同値のまま**:
+A close at the pivot's cents after a close under it: 「M/Dにピボット到達」, green on that day only, as a stock arriving at its buy point. A later close at the pivot's cents is still a touch only while every close since the arrival stayed on the cents; the rows cannot see that far back, so they say what they see (「ピボットと同値のまま」, wait). The conclusion reads the bars: 「ピボット到達からN営業日」 (緑はピボット到達の当日のみ, 独自判定) while no close has broken out since the touch, or the earlier breakout's date when a close went above the pivot before this pullback onto it. Without certified bars it claims neither (ピボットに届いた日を確認できない).
+
+**±0.0% / +0.1%未満 / −0.1%未満**:
+The distance from the pivot to one decimal: 「±0.0%」 only at the pivot's cents (whichever side of the cent the float noise in a published pivot falls), 「+0.1%未満」 or 「−0.1%未満」 for a cent or more over or under the pivot that rounds to 0.0%; never 「+0.0%」 or 「−0.0%」. A close at the pivot's cents that the shared position rule still puts just under the pivot reads 「ピボット接近（ピボットと同値）」, never 「あと0.1%未満」.
+
+**▲ / ▼**:
+▲ is the app's amber caution mark wherever it appears: 買いゾーン超過, 下落日の大商い, 分配日, the market tab's 注意, and 崩れ / ブレイク失敗; the words beside it always name which. On the price chart ▼ is 上昇の加速 (a holder's sell-into-strength sign). On the sector table ▲N and ▼N are a rank that rose or fell N places, not a caution. The glyphs are hidden from assistive tech; the text names the event.
+
+**停滞 / 押し戻し**:
+A stock still in the buy zone `staleBreakoutSessions` (10, 独自判定) sessions after its crossing turns to wait: 停滞 when no certified close since the crossing went above the zone's top, 押し戻し when one did and the stock came back. New buying waits for the next pivot (次のピボット待ち).
+
+**ステージ2（ベース形成中）**:
+A flat 60-session base above a rising 200-day line, with SMA150 above SMA200 and the price within 25% of its 52-week high: stage 2, never stage 3 (the backend's stage classifier and `stagePhase`, from certified bars only). 「・日足から算出」 when the stage was computed on the screen.
+
+**土台を確認できない / 土台未確認**:
+The Setup Engine base is not current for the analysis date, or its confidence is under 55 (`SE_CONFIDENCE_FLOOR`) or missing (信頼度 未確認, never 0): the pivot and the plan are 参考 (独自判定). A certified VCP footprint does not override it (§9-13). On every row surface a buy-zone or near-pivot row with such a base is grey and says 「土台未確認」 in the RS chip's place (the conclusion's reason in its title and the row's label; a broken setup's 崩れ leads instead); Today's 注目候補 tile is green only while one focus row has a current base, its 「うち上抜け」 and the 上抜け filter leave such a row out (counted as 未確認), and the notes say why the rows are grey.
+
+**収縮の中**:
+The stop sits above the last contraction's low, inside the base, where normal swings reach it (独自判定). The stop never moves by itself.
+
+**8%超で見送り候補**:
+The structural stop is deeper than `STOP_WARN_PERCENT` (8%, 独自設定): a buy at the pivot carries a large risk.
+
+**参考（地合い）**:
+The plan's heading when the market guide is 0%: the shares are a reference only. The same 参考 qualifier names its other causes: the base check (土台), 下落日の大商い, 停滞, and 決算前 / 決算当日 / 決算後.
+
+**未反映 / 鮮度未確認**:
+The publication is older than the last closed NYSE session past `FRESHNESS_GRACE_HOURS` (28h, 独自設定): every bar reads 「分析基準日 M/D（曜）引け・N営業日前（M/D・M/D 未反映）」 in the warning tone. 鮮度未確認 when no valid exchange calendar is published; never 最新.
+
+**TT未確認（N条件）**:
+A trend-template row with N conditions that could not be judged and none failed. Never 「あと0条件」; with failures too it reads 「未達N・未確認M」.
+
+**未収録**:
+A field this publication does not carry (an older publication, before the field existed). Distinct from 未確認, which is a field that was published but could not be judged.
+
+**未検証の足**:
+Bars not certified for the analysis date. OHLC and moving averages still draw; the day change and volume ratio read 「（未検証）」, and nothing that judges the stock (pivot ratio, crossing mark, ADR, RS lead) is drawn from them.
+
+**NAS調整中**:
+Today's 地合い tile suffix and the verdict's sub-line when the guide is open while the Nasdaq is in correction, a rally attempt or a failed FTD. The verdict, its tone and the caps are judged on SPY only (判定はSPYのみ).
+
+**FTD確認済み**:
+The 地合い tile suffix when the guide is 0% while the backend regime is an FTD-upgraded uptrend (`ftdUpgraded`); the basis line says why the guide stays 0%.
+
+**参考（市場の注意サイン）**:
+A market check marked 〔参考〕 is counted apart from the 注意 signs (「▲ 注意サイン N件・参考 M件」), takes a neutral ○ and never sets a tab's ▲.
+
+**判定不可（注意サイン）**:
+The warning headline when no 注意 sign could be judged: 「注意サインを判定できません」, never 0件 or なし.
+
+**26-03期**:
+A fiscal quarter named by its year and end month (YY-MM). It is a period, not a negative number, so the U+2212 rule does not apply to it.
+
+**RS線 新高値**:
+The RS line (never RS推計) at a new high on the analysis date. The rows read only the published `rs_line_high` dated for that day (`publishedRsLineHigh`): absent is 未収録 there, a published null is 未確認. The stock view reads the same field and, when the row has none for that day (an older publication, such as a UI-only republish, or one dated for another day), falls back to `rsLineNewHigh` on the bars certified for that day; a published null stays 未確認.
 
 ## Relationships
 

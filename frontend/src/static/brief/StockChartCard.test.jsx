@@ -1,7 +1,16 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
+import { loadPriceChart } from './priceChartLoader';
+
+// The renderer is a lazy chunk in the app (fetched on idle); the tests draw synchronously, so it is loaded first.
+beforeAll(async () => { await loadPriceChart(); });
 import { AUDIT_VERSION } from '../qualificationAudit';
+import { lastPivotCrossing } from './breakoutHistory';
+
+// The crossing helper is verdict's (VD1/VD2 write its round-2 body): the chart's tests mock it (plan §2.2), keeping
+// the rest of the module (the conclusion's crossingEvent) as it is.
+vi.mock('./breakoutHistory', async importOriginal => ({ ...await importOriginal(), lastPivotCrossing: vi.fn(() => null) }));
 
 const DATE = '2026-10-02';
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -16,7 +25,7 @@ const data = (certified, end) => ({
   bars: bars(end), date: DATE, certification: certified ? { certified: true, reason: null } : { certified: false, reason: '最終日足が分析日と不一致' },
   chart: { data: { rs_line: [] }, isError: false },
 });
-afterEach(() => { cleanup(); sessionStorage.clear(); });
+afterEach(() => { cleanup(); sessionStorage.clear(); vi.useRealTimers(); lastPivotCrossing.mockReset(); lastPivotCrossing.mockReturnValue(null); });
 
 describe('brief stock view', () => {
   // One test per owner over the same uncertified, lagging bars: the conclusion's part is in
@@ -156,6 +165,99 @@ describe('brief stock chart card', () => {
     cleanup();
     render(<StockView data={{ ...data(true), bars: scaled }} wide />);
     expect(screen.getByRole('group', { name: '最新の足の値' })).toHaveTextContent(`終${close.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
+  });
+
+  it('draws the 10-day and 21-day lines on the phone 3か月 only, without their values in the readout', () => {
+    render(<StockView data={data(true)} />);
+    fireEvent.click(within(screen.getByRole('group', { name: '表示期間' })).getByRole('button', { name: '3か月' }));
+    expect(screen.getByTestId('brief-price-chart').querySelectorAll('.bc-ma10, .bc-ema21')).toHaveLength(2);
+    expect(screen.getByRole('group', { name: '最新の足の値' })).not.toHaveTextContent(/10日|21日/);
+    fireEvent.click(within(screen.getByRole('group', { name: '表示期間' })).getByRole('button', { name: '1年' }));
+    expect(screen.getByTestId('brief-price-chart').querySelectorAll('.bc-ma10, .bc-ema21')).toHaveLength(0);
+  });
+
+  it('counts the earnings days from the screen one call and redraws when the New York date changes', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(`${DATE}T19:00:00Z`));
+    const near = { ...data(true), view: { ...view, asOf: DATE, earnings: { date: '2026-10-05', days: 3 } } };
+    const { rerender } = render(<StockView data={near} />);
+    const chart = () => screen.getByTestId('brief-price-chart');
+    expect(chart().getAttribute('aria-label')).toContain('決算 10/5 あと3日');
+    // The next New York day, same data: the call counts 2 days and the chart redraws (its content key holds the date).
+    vi.setSystemTime(new Date('2026-10-03T16:00:00Z'));
+    rerender(<StockView data={near} />);
+    expect(chart().getAttribute('aria-label')).toContain('決算 10/5 あと2日');
+    vi.setSystemTime(new Date('2026-10-05T16:00:00Z'));
+    rerender(<StockView data={near} />);
+    expect(chart().getAttribute('aria-label')).toContain('決算 10/5 当日');
+    vi.setSystemTime(new Date('2026-10-06T16:00:00Z'));
+    rerender(<StockView data={near} />);
+    expect(chart().getAttribute('aria-label')).toContain('決算 10/5 経過');
+    expect(chart().getAttribute('aria-label')).not.toContain('あと');
+  });
+
+  it('marks the pivot crossing only on certified bars, and names it in the legend only when drawn', () => {
+    const list = bars();
+    lastPivotCrossing.mockImplementation(judged => ({ index: judged.length - 3, date: judged.at(-3).date, sessionsAgo: 2, volumeRatio: 1.62 }));
+    // The pivot under the latest close (which drops 10% on the last bar), so the crossing still holds.
+    const crossed = certified => ({ ...data(certified), bars: list, view: { ...view, pivot: list.at(-1).close * 0.99 } });
+    render(<StockView data={crossed(true)} />);
+    const mark = screen.getByTestId('brief-price-chart').querySelector('.bc-breakout');
+    expect(mark?.dataset.date).toBe(list.at(-3).date);
+    // 1.62× with the latest close still above the pivot: the green arrow, keyed by the same green glyph.
+    expect(mark.classList.contains('is-zone')).toBe(true);
+    const item = document.querySelector('.brief-legend [data-key="breakout"]');
+    expect(item).toHaveTextContent(/^上抜け$/);
+    expect(item.querySelector('svg.lg-breakoutglyph').classList.contains('is-zone')).toBe(true);
+    cleanup();
+    // The ratio unknown (today's helper body): grey, in the chart and in the legend.
+    lastPivotCrossing.mockImplementation(judged => ({ index: judged.length - 3, date: judged.at(-3).date, sessionsAgo: 2, volumeRatio: null }));
+    render(<StockView data={crossed(true)} />);
+    expect(screen.getByTestId('brief-price-chart').querySelector('.bc-breakout').classList.contains('is-zone')).toBe(false);
+    expect(document.querySelector('.brief-legend [data-key="breakout"] svg').classList.contains('is-zone')).toBe(false);
+    cleanup();
+    lastPivotCrossing.mockClear();
+    render(<StockView data={crossed(false)} />);
+    expect(screen.getByTestId('brief-price-chart').querySelector('.bc-breakout')).toBeNull();
+    expect(document.querySelector('.brief-legend [data-key="breakout"]')).toBeNull();
+    // On bars not certified the helper is never asked by the chart.
+    expect(lastPivotCrossing.mock.calls.every(([judged]) => judged === null || judged === undefined)).toBe(true);
+  });
+
+  it('starts the readout with 未検証の足 on uncertified bars and qualifies the change and the ratio; ADR reads — there', () => {
+    render(<StockView data={data(false)} />);
+    const readout = screen.getByRole('group', { name: '最新の足の値' });
+    const chip = readout.querySelector('.ro-unverified');
+    expect(chip).toHaveTextContent(/^未検証の足/);
+    expect(chip.getAttribute('title')).toMatch(/^分析基準日の日足として検証できていません（.+）$/);
+    expect(chip.getAttribute('title')).toContain('最終日足が分析日と不一致');
+    expect(readout.querySelector('.ro-change')).toHaveTextContent(/^[+−±]\d+\.\d%（未検証）$/);
+    expect(readout).toHaveTextContent(/\d\.\d{2}×（未検証）/);
+    expect(readout.querySelector('.ro-adr')).toHaveTextContent('ADR —');
+    cleanup();
+    render(<StockView data={data(true)} />);
+    const certified = screen.getByRole('group', { name: '最新の足の値' });
+    expect(certified.querySelector('.ro-unverified')).toBeNull();
+    expect(certified).not.toHaveTextContent('未検証');
+    expect(certified.querySelector('.ro-adr')).toHaveTextContent(/^ADR \d+\.\d%$/);
+    // The 50-day distance is the desktop's.
+    expect(certified.querySelector('.ro-dist')).toBeNull();
+    cleanup();
+    render(<StockView data={data(true)} wide />);
+    expect(screen.getByRole('group', { name: '最新の足の値' }).querySelector('.ro-ma50')).toHaveTextContent(/^50日 [\d,.]+（[+−±]\d+\.\d%）$/);
+  });
+
+  it('names the RS line in the legend with what it is, only when the RS line is drawn', () => {
+    const withLine = { ...data(true), chart: { data: { rs_line: bars().map((b, i) => ({ time: b.date, value: 1 + i / 1000 })) }, isError: false } };
+    render(<StockView data={withLine} />);
+    expect(document.querySelector('.brief-legend [data-key="rs"]')).toHaveTextContent('株価÷S&P 500・RS推計やIBD RSとは別');
+    expect(screen.getByTestId('brief-price-chart').querySelector('.bc-rscaption')).toHaveTextContent(/^RS線$/);
+    cleanup();
+    render(<StockView data={withLine} wide />);
+    expect(document.querySelector('.brief-legend [data-key="rs"]')).toHaveTextContent('RS線＝株価÷S&P 500・RS推計やIBD RSとは別');
+    cleanup();
+    render(<StockView data={data(true)} />);
+    expect(document.querySelector('.brief-legend [data-key="rs"]')).toBeNull();
   });
 
   it('names a week by its first session on screen and spells out its sessions for screen readers', () => {

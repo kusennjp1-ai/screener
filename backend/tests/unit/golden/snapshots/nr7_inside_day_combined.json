@@ -17,6 +17,8 @@
       "pivot_price": 112.0,
       "pivot_type": "nr7_inside_day_trigger_high",
       "pivot_date": "2024-03-11",
+      "start_date": null,
+      "end_date": null,
       "distance_to_pivot_pct": 0.4484304932735426,
       "setup_score": null,
       "quality_score": 65.0,

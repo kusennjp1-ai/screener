@@ -733,7 +733,7 @@ The `explain` sub-object provides human-readable gate results, key price levels,
 | 3 | `readiness_floor_ok` | `readiness_below_threshold` | `explain_builder.py:109-112` |
 | 4 | `in_early_zone` | `outside_early_zone` | `explain_builder.py:115-125` |
 | 5 | `atr14_within_limit` | `atr14_pct_exceeds_limit` | `explain_builder.py:128-134` |
-| 6 | `volume_sufficient` | `volume_below_minimum` | `explain_builder.py:137-143` |
+| 6 | `volume_sufficient` | `volume_above_dryup_cap` | `explain_builder.py` (Gate 6 volume dry-up cap: volume_vs_50d ≤ volume_vs_50d_max_for_ready (0.8)) |
 | 7 | `rs_leadership_ok` | `rs_leadership_insufficient` | `explain_builder.py:146-153` |
 | 8 | `stage_ok` | `stage_not_ok` | `explain_builder.py:156-161` |
 | 9 | `ma_alignment_ok` | `ma_alignment_insufficient` | `explain_builder.py:164-170` |
@@ -774,7 +774,7 @@ Individual detectors may emit their own passed/failed checks (e.g., `tight_band_
 | `readiness_floor_ok` / `readiness_below_threshold` | 3 | [`readiness_score_ready_min_pct`](se_h1_parameter_catalog.md#44-score-gates) |
 | `in_early_zone` / `outside_early_zone` | 4 | [`early_zone_distance_to_pivot_pct_min/max`](se_h1_parameter_catalog.md#42-breakout-zone-window) |
 | `atr14_within_limit` / `atr14_pct_exceeds_limit` | 5 | [`atr14_pct_max_for_ready`](se_h1_parameter_catalog.md#45-supplemental-readiness-controls) |
-| `volume_sufficient` / `volume_below_minimum` | 6 | [`volume_vs_50d_min_for_ready`](se_h1_parameter_catalog.md#45-supplemental-readiness-controls) |
+| `volume_sufficient` / `volume_above_dryup_cap` | 6 | [`volume_vs_50d_max_for_ready`](se_h1_parameter_catalog.md#45-supplemental-readiness-controls) (0.8; the dry-up cap) |
 | `rs_leadership_ok` / `rs_leadership_insufficient` | 7 | (implicit: `rs_vs_spy_65d > 0` or `rs_line_new_high`) |
 | `stage_ok` / `stage_not_ok` | 8 | (implicit: `stage ∈ {1, 2}`) |
 | `ma_alignment_ok` / `ma_alignment_insufficient` | 9 | [`context_ma_alignment_min_pct`](se_h1_parameter_catalog.md#46-context-gates) |
@@ -1104,7 +1104,7 @@ When adjusting multiple parameters simultaneously:
    → "readiness_below_threshold"      → Gate 3: check readiness_score vs 70.0
    → "outside_early_zone"             → Gate 4: check distance_to_pivot_pct vs [-2, 3]
    → "atr14_pct_exceeds_limit"        → Gate 5: check atr14_pct vs 8.0
-   → "volume_below_minimum"           → Gate 6: check volume_vs_50d vs 1.0
+   → "volume_above_dryup_cap"         → Gate 6 volume dry-up cap: volume_vs_50d ≤ volume_vs_50d_max_for_ready (0.8)
    → "rs_leadership_insufficient"     → Gate 7: check rs_vs_spy_65d and rs_line_new_high
    → "stage_not_ok"                   → Gate 8: check stage value (must be 1 or 2)
    → "ma_alignment_insufficient"      → Gate 9: check ma_alignment_score vs 60.0

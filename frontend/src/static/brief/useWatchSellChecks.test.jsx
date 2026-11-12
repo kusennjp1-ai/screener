@@ -84,3 +84,24 @@ describe('watched symbols the publication does not list', () => {
     expect(unlistedWatch(brief(null), ['AAA', 'QQQX'])).toEqual([]);
   });
 });
+
+describe('certifying the bars against the published audit', () => {
+  it('certifies bars whose close, day change and volume ratio are the published audit\'s, and refuses bars that drifted from it', async () => {
+    const { certifyBars } = await import('./useBriefData');
+    const { auditDailyBars } = await import('../qualificationAudit');
+    const payload = payloads['BBB.json'], price = payload.bars.at(-1).close;
+    const base = { symbol: 'BBB', market: 'US', current_price: price, technical_audit: { valid: true } };
+    const published = auditDailyBars(base, payload, DATE);
+    expect(published.valid).toBe(true);
+    const row = values => ({ ...base, technical_audit: { ...published, values: { ...published.values, ...values } } });
+    expect(certifyBars(row({}), payload, DATE)).toEqual({ certified: true, reason: null });
+    // Within the screens' rounding (0.1% and 0.01×): the same reading.
+    expect(certifyBars(row({ change: published.values.change + 0.04, volumeRatio: published.values.volumeRatio - 0.004 }), payload, DATE).certified).toBe(true);
+    // A change, a ratio or a close the bars do not give: never certified, with the reason.
+    for (const values of [{ change: published.values.change + 0.2 }, { volumeRatio: published.values.volumeRatio + 0.3 }, { close: price + 0.5 }]) {
+      expect(certifyBars({ ...row(values), current_price: values.close ?? price }, payload, DATE)).toEqual({ certified: false, reason: values.close ? 'スキャン価格と日足終値が不一致' : '公開時の検証値（終値・前日比・出来高倍率）と日足が一致しません' });
+    }
+    // An audit that publishes no values (the rows read those as 未確認) is not compared.
+    expect(certifyBars(base, payload, DATE).certified).toBe(true);
+  });
+});
