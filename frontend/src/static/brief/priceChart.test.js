@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { _test, dateTicks, FEW_CANDLES, indexRuns, MA_SHIFT, NARROW_CHART_WIDTH, renderPriceChart, RS_CAPTION, spread, weeklyBars, ZONE_ABOVE } from './priceChart';
-import { PHRASE_GAP, segmentCrosses } from './chartLabels';
+import { _test, dateTicks, indexRuns, MA_SHIFT, MA_TAIL, NARROW_CHART_WIDTH, renderPriceChart, RS_CAPTION, spread, weeklyBars, ZONE_ABOVE } from './priceChart';
+import { FIGURE_GAP, FIGURE_STACK, PHRASE_GAP, segmentCrosses, sharedLeader } from './chartLabels';
 import { chartContentKey, earningsMarker, EARNINGS_MARKER_DAYS } from './chartReadout';
 import { EARNINGS_WARN_DAYS, earningsCall } from './briefCandidate';
 
@@ -22,12 +22,12 @@ const texts = (el, selector) => [...el.querySelectorAll(selector)].map(node => n
  * The drawn label boxes as the renderer lays them out (jsdom has no layout): each label's text width at 12px
  * (the renderer's estimate), 12px around its centre (baseline − 4); every tag's rect and the last price's dot.
  */
-function chartBoxes(el) {
-  const labels = [...el.querySelectorAll('.bc-levelnote, .bc-malabel, .bc-ttext, .bc-legtext, .bc-zonetext, .bc-notice, .bc-breakouttext, .bc-rscaption')]
+function chartBoxes(el, selector = '.bc-levelnote, .bc-malabel, .bc-ttext, .bc-legtext, .bc-zonetext, .bc-notice, .bc-breakouttext, .bc-rscaption') {
+  const labels = [...el.querySelectorAll(selector)]
     .filter(node => node.getAttribute('visibility') !== 'hidden').map(node => {
       const w = _test.width(node.textContent, (node.getAttribute('font-family') || '').includes('mono')), x = Number(node.getAttribute('x')), anchor = node.getAttribute('text-anchor');
       const x0 = anchor === 'end' ? x - w : anchor === 'middle' ? x - w / 2 : x, centre = Number(node.getAttribute('y')) - 4;
-      return { name: node.textContent, x0, x1: x0 + w, y0: centre - 6, y1: centre + 6 };
+      return { name: node.textContent, ma: node.classList.contains('bc-malabel'), x0, x1: x0 + w, y0: centre - 6, y1: centre + 6 };
     });
   const rects = [...el.querySelectorAll('.bc-tag rect, .bc-rshigh rect, .bc-earnflag rect')].map(node => ({ name: node.closest('[data-tag]')?.dataset.tag || node.getAttribute('class'), x0: Number(node.getAttribute('x')), x1: Number(node.getAttribute('x')) + Number(node.getAttribute('width')), y0: Number(node.getAttribute('y')), y1: Number(node.getAttribute('y')) + Number(node.getAttribute('height')) }));
   const dot = el.querySelector('.bc-lastdot'), cx = Number(dot.getAttribute('cx')), cy = Number(dot.getAttribute('cy'));
@@ -42,12 +42,12 @@ const tagCentre = (el, key) => Number(el.querySelector(`[data-tag="${key}"] rect
 /** Each average's leader as its vertical and horizontal parts (boxes 1px wide), with the key of the name it joins. */
 const leaderSegments = el => [...el.querySelectorAll('path.bc-maleader')].flatMap(path => {
   const key = [...path.classList].find(cls => cls.startsWith('bc-maleader-')).slice('bc-maleader-'.length), out = [];
-  let x = 0, y = 0;
+  let x = 0, y = 0, start = 0;
   for (const [, cmd, value] of path.getAttribute('d').matchAll(/([MVH])([^MVH]+)/g)) {
-    if (cmd === 'M') { [x, y] = value.split(',').map(Number); continue; }
+    if (cmd === 'M') { [x, y] = value.split(',').map(Number); start = y; continue; }
     const v = Number(value);
-    if (cmd === 'V') { out.push({ key, x0: x - 0.5, x1: x + 0.5, y0: Math.min(y, v), y1: Math.max(y, v) }); y = v; }
-    else { out.push({ key, x0: Math.min(x, v), x1: Math.max(x, v), y0: y - 0.5, y1: y + 0.5 }); x = v; }
+    if (cmd === 'V') { out.push({ key, v: true, from: y, tip: v, up: v < y, x0: x - 0.5, x1: x + 0.5, y0: Math.min(y, v), y1: Math.max(y, v) }); y = v; }
+    else { out.push({ key, h: true, from: start, tip: y, up: y < start, x0: Math.min(x, v), x1: Math.max(x, v), y0: y - 0.5, y1: y + 0.5 }); x = v; }
   }
   return out;
 });
@@ -64,6 +64,27 @@ const detached = (el, pw) => [...el.querySelectorAll('.bc-malabel')].flatMap(nod
   const along = i >= 0 ? p[1] + (q[1] - p[1]) * (right + 3 - p[0]) / (q[0] - p[0]) : null;
   return (right >= pw - 8.1 && Math.abs(yc - end[1]) <= 3.2) || (along !== null && Math.abs(along - yc) <= 3.2) ? [] : [`${node.textContent} at ${right - pw}px, ${(yc - end[1]).toFixed(1)}px off`];
 });
+/**
+ * Two averages' leaders that meet: one runs along or across the other, except two vertical parts leaving one point (ends
+ * within 3px) apart, or the same way as one shared leader with their names in the order of the ends (sharedLeader), a
+ * nearer name's horizontal part branching off it.
+ */
+const leadersMeet = el => {
+  const segments = leaderSegments(el), hit = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+  return segments.flatMap((a, i) => segments.slice(i + 1).filter(b => b.key !== a.key && hit(a, b) && !(Math.abs(a.from - b.from) <= 3 && ((a.v && b.v && a.up !== b.up) || ((a.v || b.v) && sharedLeader(a, b))))).map(b => `${a.key} × ${b.key}`));
+};
+/** Level names centred within 5.5px of another level's line or the zone's top edge (they would read as its name); a line within 1.5px of its own reads as the same line. */
+const OWN_LINE = { 'bc-pivot-text': 'bc-pivot', 'bc-stop-text': 'bc-stop', 'bc-high52-text': 'bc-high52', 'bc-entry-text': 'bc-entry', 'bc-r2-text': 'bc-r2', 'bc-r3-text': 'bc-r3', 'bc-structural-text': 'bc-structural' };
+const onOtherLevel = el => {
+  const lines = [...el.querySelectorAll('line.bc-planline, line.bc-high52, line.bc-pivot, line.bc-stop')].map(line => ({ cls: [...line.classList].find(cls => Object.values(OWN_LINE).includes(cls)), x0: Number(line.getAttribute('x1')), x1: Number(line.getAttribute('x2')), y: Number(line.getAttribute('y1')) }));
+  const edge = el.querySelector('rect.bc-zoneedge');
+  if (edge) lines.push({ cls: 'zone', x0: Number(edge.getAttribute('x')), x1: Number(edge.getAttribute('x')) + Number(edge.getAttribute('width')), y: Number(edge.getAttribute('y')) });
+  return [...el.querySelectorAll('.bc-levelnote')].filter(node => node.getAttribute('visibility') !== 'hidden').flatMap(node => {
+    const own = OWN_LINE[[...node.classList].find(cls => OWN_LINE[cls])], x0 = Number(node.getAttribute('x')), x1 = x0 + _test.width(node.textContent), yc = Number(node.getAttribute('y')) - 4;
+    const ownY = lines.find(line => line.cls === own)?.y;
+    return lines.filter(line => line.cls !== own && !(Math.abs(line.y - ownY) <= 1.5) && line.x1 > x0 && line.x0 < x1 && Math.abs(line.y - yc) <= 5.5).map(line => `${node.textContent} on ${line.cls} (${(line.y - yc).toFixed(1)}px)`);
+  });
+};
 /** Labels a leader runs through (any label but the name it joins). */
 const leaderThrough = el => {
   const names = new Map([...el.querySelectorAll('.bc-malabel')].map(node => [node.textContent, [...node.classList].find(cls => cls.startsWith('bc-malabel-')).slice('bc-malabel-'.length)]));
@@ -478,8 +499,9 @@ describe('brief price chart', () => {
     renderPriceChart(wide, { ...model, bars: wall, pivot: 100, upper: 110, stop: 93, legs: [] }, { period: 130, animate: false });
     const forced = [...el.querySelectorAll('[data-forced="1"]'), ...wide.querySelectorAll('[data-forced="1"]')];
     expect(forced.map(node => node.textContent)).toEqual(expect.arrayContaining(['ピボット', '買いゾーン 〜110.00', '50']));
-    // A narrow chart leaves the zone unnamed rather than cover the wall's candles with its name.
-    expect(el.querySelector('.bc-zonetext')).toBeNull();
+    // A narrow chart keeps the zone's upper price too: 「買いゾーン 〜110.00」 over the fewest of the wall's candles.
+    expect(el.querySelector('.bc-zonetext').textContent).toBe('買いゾーン 〜110.00');
+    expect(el.querySelector('.bc-zonetext').dataset.forced).toBe('1');
     for (const node of forced) {
       expect(node.dataset.search).toMatch(/^\d+\.\d \d+\.\d \d+\|\d+\.\d( \d+\.\d)*$/);
       expect(node.dataset.box.split(' ').map(Number).every(Number.isFinite)).toBe(true);
@@ -652,7 +674,7 @@ describe('brief price chart', () => {
     expect(candles.filter(c => c.x > lx - 2 && c.x < lx + w + 2 && c.y0 < yc + 7 && c.y1 > yc - 7)).toEqual([]);
   });
 
-  it('on a narrow chart, names the zone with its price wherever a candle-free spot is near the band, else without it, over a few candles at most', () => {
+  it('on a narrow chart, names the zone with its upper price wherever a spot is free near the band: candle-free first, else over the fewest candles', () => {
     const pw = 332 - 68;
     // Candles fill the band and the row just above it, but not the rows higher up: 「買いゾーン 〜113.40」 takes one of
     // those, its glyphs ending within ZONE_ABOVE + 3 of the band's top edge.
@@ -665,25 +687,23 @@ describe('brief price chart', () => {
     const above = edge - (Number(full.getAttribute('y')) - 4);
     expect(above).toBeGreaterThan(9.5);
     expect(above).toBeLessThanOrEqual(9 + ZONE_ABOVE + 0.5);
-    // Candles fill the band and every row up to ZONE_ABOVE above it except over the last bars (`gap`): 「買いゾーン
-    // 〜113.40」 has no candle-free spot there, 「買いゾーン」 one; with no gap the band goes unnamed.
+    // Candles fill the band and every row up to ZONE_ABOVE above it (but over the last bars, `gap`): no candle-free spot
+    // is left for 「買いゾーン 〜113.40」, so it goes over the fewest candles with its halo, its price still shown (the
+    // short 「買いゾーン」 only when no spot is free for the full name at all).
     const crowded = bars.map((b, i) => (i > 170 ? { ...b, open: 108.5, close: 112.5, high: 122, low: 108.2 } : b));
-    for (const [gap, name] of [[40, '買いゾーン'], [0, null]]) {
+    for (const gap of [40, 0]) {
       const holed = crowded.map((b, i) => (i >= bars.length - gap ? { ...b, open: 102, close: 103, high: 103.5, low: 101.5 } : b));
       const el = container(332, 340);
       renderPriceChart(el, { ...model, bars: holed, legs: [] }, { period: 130, animate: false });
       const label = el.querySelector('.bc-zonetext');
-      expect({ gap, name: label?.textContent ?? null }).toEqual({ gap, name });
-      if (label) {
-        const lx = Number(label.getAttribute('x')), yc = Number(label.getAttribute('y')) - 4, w = _test.width(label.textContent);
-        const over = [...el.querySelectorAll('line.bc-up, line.bc-down')].filter(c => { const cx = Number(c.getAttribute('x1')); return cx > lx - 3 && cx < lx + w + 3 && Number(c.getAttribute('y1')) < yc + 7 && Number(c.getAttribute('y2')) > yc - 7; });
-        expect(over.length).toBeLessThanOrEqual(FEW_CANDLES);
-        expect(lx + w).toBeLessThanOrEqual(pw);
-      }
+      expect({ gap, name: label.textContent, forced: label.dataset.forced }).toEqual({ gap, name: '買いゾーン 〜113.40', forced: '1' });
+      const lx = Number(label.getAttribute('x')), w = _test.width(label.textContent);
+      expect(lx).toBeGreaterThanOrEqual(4);
+      expect(lx + w).toBeLessThanOrEqual(pw);
     }
   });
 
-  it('never puts two labels on one row closer than a phrase\'s gap, nor the pivot\'s name and the zone\'s closer than three glyphs', () => {
+  it('never puts two labels on one row closer than a phrase\'s gap, two figures closer than FIGURE_GAP, nor the pivot\'s name and the zone\'s closer than three glyphs', () => {
     // 6px and 9px still read as one phrase at 12px text (「ピボット T2」, 「52週高 110.00 3R 112.00」); 14px does not.
     expect(PHRASE_GAP).toBeGreaterThanOrEqual(14);
     for (const [width, period] of [[290, 130], [332, 130], [332, 250], [1000, 130], [1000, 65]]) for (const k of [1, 50]) {
@@ -694,6 +714,13 @@ describe('brief price chart', () => {
       if (pivot && zone && row(pivot, zone)) expect({ width, period, k, apart: gap(pivot, zone) > 24 }).toEqual({ width, period, k, apart: true });
       const close = labels.flatMap((a, i) => labels.slice(i + 1).filter(b => row(a, b) && gap(a, b) < PHRASE_GAP).map(b => `${a.name} ${b.name} ${gap(a, b).toFixed(1)}`));
       expect({ width, period, k, close }).toEqual({ width, period, k, close: [] });
+      // An average's name beside a depth, a T number or another name: two bold figures keep FIGURE_GAP (「150 −4%」).
+      const figures = chartBoxes(el, '.bc-malabel, .bc-ttext, .bc-legtext').labels;
+      const figure = figures.flatMap((a, i) => figures.slice(i + 1).filter(b => (a.ma || b.ma) && row(a, b) && gap(a, b) < FIGURE_GAP).map(b => `${a.name} ${b.name} ${gap(a, b).toFixed(1)}`));
+      expect({ width, period, k, figure }).toEqual({ width, period, k, figure: [] });
+      // One above the other, a name and a depth keep FIGURE_STACK (「150／−8%／200」 reads as a column of names).
+      const column = figures.flatMap((a, i) => figures.slice(i + 1).filter(b => a.ma !== b.ma && /^−\d+%$/.test(a.ma ? b.name : a.name) && a.x0 < b.x1 && a.x1 > b.x0 && !row(a, b) && Math.max(a.y0 - b.y1, b.y0 - a.y1) < FIGURE_STACK).map(b => `${a.name} ${b.name}`));
+      expect({ width, period, k, column }).toEqual({ width, period, k, column: [] });
     }
   });
 
@@ -706,9 +733,7 @@ describe('brief price chart', () => {
       const el = container(width, 340);
       renderPriceChart(el, { ...model, bars: series, pivot: 92, upper: 96.6, stop: 85, legs: [] }, { period, animate: false });
       expect({ width, period, through: leaderThrough(el) }).toEqual({ width, period, through: [] });
-      const segments = leaderSegments(el), hit = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
-      const meet = segments.flatMap((a, i) => segments.slice(i + 1).filter(b => b.key !== a.key && hit(a, b)).map(b => `${a.key} × ${b.key}`));
-      expect({ width, period, meet }).toEqual({ width, period, meet: [] });
+      expect({ width, period, meet: leadersMeet(el) }).toEqual({ width, period, meet: [] });
       expect({ width, period, detached: detached(el, width - 68) }).toEqual({ width, period, detached: [] });
       elbows += [...el.querySelectorAll('.bc-maleader')].filter(path => /H/.test(path.getAttribute('d'))).length;
     }
@@ -720,6 +745,85 @@ describe('brief price chart', () => {
       expect({ width, period, k, through: leaderThrough(el) }).toEqual({ width, period, k, through: [] });
       expect({ width, period, k, detached: detached(el, width - 68) }).toEqual({ width, period, k, detached: [] });
     }
+  });
+
+  it('hangs the names of two lines ending at one point off one leader, in the order of their ends, rather than over candles', () => {
+    // Flat since bar 141: the 50- and 150-day lines end at the same price; the last 8 bars reach far above it, so both
+    // names go down the gutter, one leader from the shared end, each in its line's colour.
+    const flat = bars.map((b, i) => (i > 140 ? { ...b, open: 90, high: 91.5, low: 88.5, close: 90 } : b));
+    const capped = flat.map((b, i) => (i >= bars.length - 8 ? { ...b, high: 112, low: 89.6 } : b));
+    for (const width of [332, 390, 1000]) for (const period of [65, 130]) {
+      const el = container(width, 340);
+      renderPriceChart(el, { ...model, bars: capped, pivot: 92, upper: 96.6, stop: 85, legs: [] }, { period, animate: false });
+      const name = key => el.querySelector(`.bc-malabel-${key}`), end = key => el.querySelector(`path.bc-ma.bc-${key}`).getAttribute('d').split(/[ML]/).filter(Boolean).at(-1).split(',').map(Number)[1];
+      expect(Math.abs(end('ma50') - end('ma150'))).toBeLessThanOrEqual(1);
+      for (const key of ['ma50', 'ma150']) expect({ width, period, key, forced: name(key).dataset.forced }).toEqual({ width, period, key, forced: undefined });
+      const parts = leaderSegments(el).filter(part => part.v && (part.key === 'ma50' || part.key === 'ma150'));
+      if (parts.length === 2 && parts[0].up === parts[1].up) expect(sharedLeader(parts[0], parts[1])).toBe(true);
+      expect({ width, period, meet: leadersMeet(el), through: leaderThrough(el) }).toEqual({ width, period, meet: [], through: [] });
+    }
+    // The rule: the same way from one point, the names in the order of the ends; either order for ends within 1px.
+    expect(sharedLeader({ from: 100, tip: 120, up: false }, { from: 102, tip: 134, up: false })).toBe(true);
+    expect(sharedLeader({ from: 100, tip: 134, up: false }, { from: 102, tip: 120, up: false })).toBe(false);
+    expect(sharedLeader({ from: 100, tip: 134, up: false }, { from: 100.5, tip: 120, up: false })).toBe(true);
+    expect(sharedLeader({ from: 100, tip: 80, up: true }, { from: 102, tip: 120, up: false })).toBe(false);
+  });
+
+  it('never names a level on another level\'s line: the structural low with the stop 11px under it sits over its line, on it, or is a 「安値」 tag', () => {
+    // The price `dy` px from the structural low's line, on the chart's log scale (that line and the pivot's give it).
+    const probe = container(1000, 340);
+    renderPriceChart(probe, busy(1), { period: 130, animate: false });
+    const ys = Number(probe.querySelector('line.bc-structural').getAttribute('y1')), yp = Number(probe.querySelector('line.bc-pivot').getAttribute('y1'));
+    const at = dy => Math.exp(Math.log(104.5) + (Math.log(108) - Math.log(104.5)) * dy / (yp - ys));
+    // A calm finish (the newest candles well over its line), the stop 11px under it (its lower row struck): the name goes
+    // over its line. With a 52-week high 9px over it too, every row beside it is struck: the name sits on its own line,
+    // cut under it (as a label sits on its line here). With the rising finish's candles there too (no candle-free spot
+    // by its line), it is the narrow chart's 「安値」 tag (its price in the legend), never a name over them.
+    const calm = bars.map((b, i) => (i > 200 ? { ...b, open: 109.5, close: 110, high: 110.5, low: 109 } : b));
+    for (const [extra, form] of [[{ stop: at(11), bars: calm }, 'over'], [{ stop: at(11), auditHigh: at(-9), bars: calm }, 'on'], [{ stop: at(11), auditHigh: at(-9) }, 'tag'], [{ stop: at(11) }, 'tag']]) {
+      const el = container(1000, 340);
+      renderPriceChart(el, { ...busy(1), ...extra }, { period: 130, animate: false });
+      const line = el.querySelector('line.bc-structural'), y0 = Number(line.getAttribute('y1')), stop = Number(el.querySelector('line.bc-stop').getAttribute('y1'));
+      expect(Math.abs(stop - (y0 + 11))).toBeLessThan(1);
+      expect({ form, other: onOtherLevel(el) }).toEqual({ form, other: [] });
+      const label = el.querySelector('.bc-structural-text');
+      if (form === 'tag') {
+        expect(label).toBeNull();
+        expect(el.querySelector('[data-tag="low"] .bc-tagtext').textContent).toBe('安値');
+        continue;
+      }
+      const yc = Number(label.getAttribute('y')) - 4;
+      expect({ form, forced: label.dataset.forced }).toEqual({ form, forced: undefined });
+      expect(Number(label.getAttribute('x'))).toBeGreaterThanOrEqual(Number(line.getAttribute('x1')) - 0.05);
+      if (form === 'on') {
+        expect(Math.abs(yc - y0)).toBeLessThan(0.5);
+        const [x0, x1] = label.dataset.box.split(' ').map(Number), mask = el.querySelector(line.getAttribute('mask').replace(/^url\((.*)\)$/, '$1'));
+        expect([...mask.querySelectorAll('rect[fill="#000"]')].some(r => Number(r.getAttribute('x')) <= x0 && Number(r.getAttribute('x')) + Number(r.getAttribute('width')) >= x1 && Number(r.getAttribute('y')) <= y0 && Number(r.getAttribute('y')) + Number(r.getAttribute('height')) >= y0)).toBe(true);
+      } else expect(Math.round(y0 - yc)).toBe(9);
+    }
+    // Nor on the busy charts, at any width.
+    for (const [width, period] of [[332, 130], [332, 250], [1000, 65], [1000, 130], [1000, 250]]) for (const k of [1, 50]) {
+      const el = container(width, 340);
+      renderPriceChart(el, busy(k), { period, animate: false });
+      expect({ width, period, k, other: onOtherLevel(el) }).toEqual({ width, period, k, other: [] });
+    }
+  });
+
+  it('keeps every label but the averages\' names off each average\'s last MA_TAIL px (a depth there reads as the line\'s end)', () => {
+    let tails = 0;
+    for (const [width, period] of [[290, 130], [332, 130], [332, 250], [390, 130], [1000, 130], [1000, 65]]) for (const k of [1, 50]) {
+      const el = container(width, 340);
+      renderPriceChart(el, busy(k), { period, animate: false });
+      const boxes = [...el.querySelectorAll('[data-box]:not(.bc-malabel)')].map(node => [node.textContent, ...node.dataset.box.split(' ').map(Number)]);
+      for (const path of el.querySelectorAll('path.bc-ma')) {
+        const points = path.getAttribute('d').split('M').filter(Boolean).at(-1).split('L').map(pair => pair.split(',').map(Number)), last = points.at(-1)[0];
+        const tail = points.slice(0, -1).map((p, i) => [p, points[i + 1]]).filter(([, q]) => last - q[0] < MA_TAIL);
+        tails += tail.length;
+        const on = boxes.filter(([, x0, x1, y0, y1]) => tail.some(([p, q]) => segmentCrosses(p, q, { x0, x1, y0, y1 }))).map(([name]) => name);
+        expect({ width, period, k, line: path.getAttribute('class'), on }).toEqual({ width, period, k, line: path.getAttribute('class'), on: [] });
+      }
+    }
+    expect(tails).toBeGreaterThan(0);
   });
 
   it('keeps a level line out of a contraction label\'s glyphs when a spot clear of it is near', () => {
@@ -754,12 +858,12 @@ describe('brief price chart', () => {
     const auditHigh = Math.exp(Math.log(108) + (Math.log(93) - Math.log(108)) * -9 / (line - top));
     const el = container(332, 340);
     renderPriceChart(el, { ...wallModel, auditHigh }, { period: 130, animate: false });
-    const high = el.querySelector('line.bc-high52'), hy = Number(high.getAttribute('y1'));
-    const struck = [...el.querySelectorAll('.bc-ttext, .bc-legtext')].filter(node => Math.abs(Number(node.getAttribute('y')) - 4 - hy) <= 5.5);
+    // The T label struck by a level line (the 52-week high's, or another the names pushed it onto) is cut under it.
+    const struck = [...el.querySelectorAll('line.bc-high52, line.bc-planline, line.bc-pivot')].flatMap(level => [...el.querySelectorAll('.bc-ttext, .bc-legtext')].filter(node => Math.abs(Number(node.getAttribute('y')) - 4 - Number(level.getAttribute('y1'))) <= 5.5).map(node => [level, node]));
     expect(struck.length).toBeGreaterThan(0);
-    const mask = el.querySelector(high.getAttribute('mask').replace(/^url\((.*)\)$/, '$1'));
-    const holes = [...mask.querySelectorAll('rect[fill="#000"]')].map(r => ({ x0: Number(r.getAttribute('x')), x1: Number(r.getAttribute('x')) + Number(r.getAttribute('width')), y0: Number(r.getAttribute('y')), y1: Number(r.getAttribute('y')) + Number(r.getAttribute('height')) }));
-    for (const node of struck) {
+    for (const [level, node] of struck) {
+      const hy = Number(level.getAttribute('y1')), mask = el.querySelector(level.getAttribute('mask').replace(/^url\((.*)\)$/, '$1'));
+      const holes = [...mask.querySelectorAll('rect[fill="#000"]')].map(r => ({ x0: Number(r.getAttribute('x')), x1: Number(r.getAttribute('x')) + Number(r.getAttribute('width')), y0: Number(r.getAttribute('y')), y1: Number(r.getAttribute('y')) + Number(r.getAttribute('height')) }));
       const [x0, x1] = node.dataset.box.split(' ').map(Number);
       expect(holes.some(h => h.x0 <= x0 && h.x1 >= x1 && h.y0 <= hy && h.y1 >= hy)).toBe(true);
     }
