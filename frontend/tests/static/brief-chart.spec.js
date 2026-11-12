@@ -3,12 +3,13 @@
 // round 2: no label over another label, a tag or the last price, the final contraction's depth, the date
 // ticks, the RS panel, one earnings count, the pivot crossing, ADR and the unverified readout; every label's box
 // on every fixture stock and period (no label over a candle unless the renderer proves it had no free box, no average's
-// name over candles while a clear spot is near its line's end, no two labels read as one phrase).
+// name over candles while a clear spot is near its line's end, no leader through a label, no two labels read as one
+// phrase, no level line through a label uncut).
 import { test, expect } from '@playwright/test';
 import { date, horizontalOverflow, openBrief, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
 import { chartCrossing, crossingNote } from '../../src/static/brief/chartReadout.js';
-import { MA_SHIFT } from '../../src/static/brief/priceChart.js';
-import { KIN_GAP } from '../../src/static/brief/chartLabels.js';
+import { LEADER_OFF_LEVEL, LEADER_OFF_LEVEL_MIN, MA_SHIFT } from '../../src/static/brief/priceChart.js';
+import { KIN_GAP, LABEL_GAP, PHRASE_GAP } from '../../src/static/brief/chartLabels.js';
 
 const DOCK_TOP = 788; // 844 − the 56px dock at 390×844
 // Measure only after the finite animations finish (the last price's pulse repeats for ever).
@@ -78,20 +79,27 @@ const collisions = page => page.getByTestId('brief-price-chart').evaluate(chart 
 /** How far from its line's end the test looks for a clear spot for a forced average's name (independent of data-search). */
 const MA_REACH = { left: MA_SHIFT, height: 48 };
 /**
- * Every label's box in the chart (round 2, labels fixes 1 and 2): each visible text (in-plot labels, captions, the axes'
+ * Every label's box in the chart (round 2, labels fixes 1–3): each visible text (in-plot labels, captions, the axes'
  * values, the tags' prices) against every candle (its whole high–low range across its body), every volume bar and its
- * dot, every other text and every tag, mark and leader. A text may sit over candles or bars only when the renderer
- * forced it (data-forced="1"): the test then re-runs the spots it tried (data-search "x0 x1 step|centres", the box from
- * data-box) with the box 1px larger on each side and every obstacle at least as large as the renderer took it (candles
- * 2px wider each side, bars 1px, texts 6px across (KIN_GAP between two of one kin) and 1px up and down, marks 2px), so
- * a spot clear here was clear for the renderer too; finding one fails. A forced average's name also fails when the test's own search finds a clear spot
- * near its line's end (its right end up to MA_REACH.left left of where it ends unmoved, 7px from the axis, its centre
- * within MA_REACH.height of the end's height, inside the plot), whatever spots the renderer tried. Two labels never read
- * as one phrase: the pivot's name and the zone's never share a row closer than two glyphs, a depth and an average's name
- * never closer than one. Also every contraction with a computed depth (data-depth on its box) shows that depth.
- * Returns the failures and the forced labels.
+ * dot, every other text and every tag, mark and leader (a tag's, and each part of an average's leader: no label but the
+ * name it joins may meet one, no other leader may run along or across it, and it may not run past another average's
+ * line end). A text may sit over candles or bars only when the renderer forced it (data-forced="1"):
+ * the test then re-runs the spots it tried (data-search "x0 x1 step|centres", the box from data-box) with the box 1px
+ * larger on each side and every obstacle at least as large as the renderer took it (candles 2px wider each side, bars
+ * 1px, texts LABEL_GAP across (KIN_GAP between two of one kin) and 1px up and down, marks 2px, leaders 4px across and 2px
+ * up and down), so a spot clear here was clear for the renderer too; finding one fails. A forced average's name also
+ * fails when the test's own search finds a clear spot near its line's end (its right end up to MA_REACH.left left of
+ * where it ends unmoved, 7px from the axis, its centre within MA_REACH.height of the end's height, inside the plot),
+ * whatever spots the renderer tried (an average's spot is clear only where the leader it would need there is clear
+ * too; a spot whose leader would run within LEADER_OFF_LEVEL of a level line counts as taken). An average's name with no
+ * leader sits at its line's end or on its own line, and no leader runs within LEADER_OFF_LEVEL_MIN of a level line. Two
+ * labels never read as one phrase: two texts whose glyph rows overlap (a label in the plot and another, or an axis
+ * value) keep PHRASE_GAP between their glyphs, the pivot's name and the zone's two glyphs. A level line (or the zone's
+ * top edge) within 4px of a label's centre, or an average across its glyphs, is cut under it (its mask's hole spans the
+ * glyphs). Also the stop's line has its name, and every contraction with a computed depth (data-depth on its box) shows
+ * that depth. Returns the failures and the forced labels.
  */
-const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart, { reach, kinGap }) => {
+const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart, { reach, kinGap, labelGap, phraseGap, offLevel, offLevelMin }) => {
   const out = [];
   const visible = node => !node.closest('.bc-hover, .bc-scrub') && node.getAttribute('visibility') !== 'hidden' && node.textContent.trim() !== '';
   const groupOf = node => node.closest('g.bc-tag, g.bc-rshigh, g.bc-earnflag');
@@ -101,11 +109,65 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
     const box = node.getBBox(), centre = Number(node.getAttribute('y')) - 4, reserved = node.dataset.box?.split(' ').map(Number);
     const own = { x0: box.x, x1: box.x + box.width, y0: centre - 6, y1: centre + 6 };
     const outer = reserved ? { x0: Math.min(own.x0, reserved[0]), x1: Math.max(own.x1, reserved[1]), y0: Math.min(own.y0, reserved[2]), y1: Math.max(own.y1, reserved[3]) } : own;
-    return { node, name: node.textContent.trim(), group: groupOf(node), ...own, outer, reserved };
+    return { node, name: node.textContent.trim(), group: groupOf(node), ...own, outer, reserved, centre };
   });
   const solids = [...chart.querySelectorAll('.bc-tag rect, .bc-rshigh rect, .bc-earnflag rect, .bc-lastdot, .bc-breakoutmark, .bc-sell, line.bc-leader')]
     .filter(node => node.getAttribute('visibility') !== 'hidden')
     .map(node => { const box = node.getBBox(); return { name: node.closest('[data-tag]')?.dataset.tag || node.getAttribute('class'), group: groupOf(node), x0: box.x, x1: box.x + box.width, y0: box.y, y1: box.y + box.height }; });
+  // Each average's leader, split into its vertical and horizontal parts (1px wide), with the key of the name it joins.
+  const leaders = [...chart.querySelectorAll('path.bc-maleader')].flatMap(path => {
+    const key = [...path.classList].find(cls => cls.startsWith('bc-maleader-')).slice('bc-maleader-'.length), parts = [];
+    let px = 0, py = 0, from = null;
+    for (const [, cmd, value] of path.getAttribute('d').matchAll(/([MVH])([^MVH]+)/g)) {
+      if (cmd === 'M') { [px, py] = value.split(',').map(Number); from = py; continue; }
+      const v = Number(value);
+      if (cmd === 'V') { parts.push({ key, from, v: true, name: `the ${key} leader`, x0: px - 0.5, x1: px + 0.5, y0: Math.min(py, v), y1: Math.max(py, v) }); py = v; }
+      else { parts.push({ key, from, v: false, name: `the ${key} leader`, x0: Math.min(px, v), x1: Math.max(px, v), y0: py - 0.5, y1: py + 0.5 }); px = v; }
+    }
+    return parts;
+  });
+  // Where each average's line ends (the leaders start there).
+  const lineEnds = [...chart.querySelectorAll('path.bc-ma')].map(path => ({ key: [...path.classList].find(cls => /^bc-(ma|ema)\d+$/.test(cls)).slice(3), y: (path.getAttribute('d') || '').split(/[ML]/).filter(Boolean).at(-1)?.split(',').map(Number)[1] })).filter(end => Number.isFinite(end.y));
+  const joins = (text, part) => text.node.classList.contains(`bc-malabel-${part.key}`);
+  // A vertical part's way from its line's end: up when its far end is above.
+  const upward = part => Math.abs(part.y0 - part.from) > Math.abs(part.y1 - part.from);
+  const plot = chart.querySelector('svg clipPath rect'), pw = Number(plot.getAttribute('width')), bottom = Number(plot.getAttribute('height'));
+  // The level lines drawn (and the zone's top edge), with the mask that cuts them.
+  const levels = [...chart.querySelectorAll('line.bc-planline, line.bc-high52, line.bc-pivot, line.bc-stop')].map(line => ({ name: line.getAttribute('class'), x0: Number(line.getAttribute('x1')), x1: Number(line.getAttribute('x2')), y: Number(line.getAttribute('y1')), mask: line.getAttribute('mask') }));
+  const edge = chart.querySelector('rect.bc-zoneedge');
+  if (edge) levels.push({ name: 'the zone\'s edge', x0: Number(edge.getAttribute('x')), x1: Number(edge.getAttribute('x')) + Number(edge.getAttribute('width')), y: Number(edge.getAttribute('y')), mask: edge.getAttribute('mask') });
+  // Each average's line as drawn (its points, run by run) and where it runs at xx (null where it is not drawn).
+  const linePoints = key => (chart.querySelector(`path.bc-ma.bc-${key}`)?.getAttribute('d') || '').split('M').filter(Boolean).map(run => run.split('L').map(pair => pair.split(',').map(Number)));
+  const lineAt = (runs, xx) => {
+    for (const run of runs) for (let i = 0; i + 1 < run.length; i++) {
+      const [p, q] = [run[i], run[i + 1]];
+      if (p[0] <= xx && xx <= q[0]) return q[0] === p[0] ? p[1] : p[1] + (q[1] - p[1]) * (xx - p[0]) / (q[0] - p[0]);
+    }
+    return null;
+  };
+  // The leader an average's name would need at a spot (x its left edge, w wide), as the renderer reserves it: up or down
+  // the axis gutter from its line's end, then left along the name's row when the name is moved left; none at the end
+  // itself (within 3px of its height, unmoved) or where its own line runs into a moved name's right end. A spot is clear
+  // for the name only where that leader keeps BOX_GAP from every other label and the horizontal part meets no mark or
+  // tag either nor runs along a level line (within LEADER_OFF_LEVEL), and it meets no other average's leader (running along it or
+  // ending across it).
+  const leaderAt = (runs, endY, x, yc, w) => {
+    const shifted = x < pw - 7 - w - 1;
+    if (shifted ? Math.abs((lineAt(runs, x + w + 3) ?? Infinity) - yc) <= 2.9 : Math.abs(yc - endY) <= 3) return [];
+    const tip = shifted ? yc : yc + (endY > yc ? 6 : -6);
+    const parts = [{ v: true, up: tip < endY, x0: pw - 2.5, x1: pw - 0.5, y0: Math.min(endY, tip) - 1, y1: Math.max(endY, tip) + 1 }];
+    if (!shifted) return parts;
+    if (levels.some(level => level.x0 < pw - 1.5 && Math.abs(level.y - yc) <= offLevel + 0.1)) return null;
+    return [...parts, { v: false, x0: x + w + 2, x1: pw - 1.5, y0: yc - 2, y1: yc + 2 }];
+  };
+  const leaderClear = (a, runs, endY, x, yc, w) => leaderAt(runs, endY, x, yc, w)?.every(part => !texts.some(t => t !== a && hit(part, grow(t.outer, 3.5, 0.5)))
+    && (part.v || !solids.some(s => hit(part, grow(s, 2, 2))))
+    && !leaders.filter(other => !joins(a, other)).some(other => {
+      const box = other.v ? { x0: other.x0 - 0.5, x1: other.x1 + 0.5, y0: other.y0 - 1, y1: other.y1 + 1 } : { x0: other.x0, x1: other.x1, y0: other.y0 - 1.5, y1: other.y1 + 1.5 };
+      if (part.v && other.v && Math.abs(other.from - endY) <= 3 && part.x0 < box.x1 && part.x1 > box.x0) return part.up === upward(other);
+      return part.x0 < box.x1 && part.x1 > box.x0 && part.y0 < box.y1 - 1.5 && part.y1 > box.y0 + 1.5;
+    })
+    && !lineEnds.some(end => !a.node.classList.contains(`bc-malabel-${end.key}`) && Math.abs(end.y - endY) > 3 && part.x0 < pw - 0.5 && part.x1 > pw - 2.5 && part.y0 < end.y && part.y1 > end.y));
   // A candle: its wick (the high–low range) across its body's width.
   const wicks = [...chart.querySelectorAll('line.bc-up, line.bc-down')], bodies = [...chart.querySelectorAll('rect.bc-up, rect.bc-down')];
   const candles = wicks.map((wick, i) => { const w = wick.getBBox(), b = bodies[i].getBBox(); return { x0: Math.min(b.x, w.x), x1: Math.max(b.x + b.width, w.x), y0: Math.min(w.y, b.y), y1: Math.max(w.y + w.height, b.y + b.height) }; });
@@ -122,9 +184,23 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
     const at = xx => (q[0] === p[0] ? p[1] : p[1] + (q[1] - p[1]) * (xx - p[0]) / (q[0] - p[0]));
     return Math.min(at(l), at(r)) < box.y1 && Math.max(at(l), at(r)) > box.y0;
   });
+  // Two averages' leaders never run along each other or end across each other, and none runs past another line's end
+  // (each would read as joined to the wrong line); leaders leaving one point (ends within 3px) may part there.
+  const span = (a, b) => Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
+  leaders.forEach((a, i) => {
+    for (const b of leaders.slice(i + 1)) {
+      if (a.key === b.key || !(a.x0 < b.x1 && a.x1 > b.x0)) continue;
+      // Two vertical parts leaving one point (ends within 3px) part there unless they go the same way.
+      const apartFromOnePoint = a.v && b.v && Math.abs(a.from - b.from) <= 3 && upward(a) !== upward(b);
+      if (!apartFromOnePoint && span(a, b) > (a.v && b.v ? 2 : 0)) out.push(`${a.name} meets ${b.name}`);
+    }
+    if (!a.v && a.x1 < pw - 2.5) return;
+    for (const end of lineEnds) if (end.key !== a.key && Math.abs(end.y - a.from) > 3 && end.y > a.y0 + (a.v ? 1 : -1) && end.y < a.y1 - (a.v ? 1 : -1)) out.push(`${a.name} runs past the ${end.key} line's end`);
+  });
   texts.forEach((a, i) => {
     for (const b of texts.slice(i + 1)) if (!(a.group && a.group === b.group) && hit(a, b)) out.push(`${a.name} × ${b.name}`);
     for (const b of solids) if (b.group !== a.group && hit(a, b)) out.push(`${a.name} × ${b.name}`);
+    for (const part of leaders) if (!joins(a, part) && hit(a, part)) out.push(`${a.name} × ${part.name}`);
     const under = solidUnder(a);
     if (!under) return;
     if (a.node.dataset.forced !== '1') { out.push(`${a.name} over ${under} candles or bars, not forced`); return; }
@@ -132,41 +208,78 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
     const [range, centres] = (a.node.dataset.search || '').split('|');
     if (!range || !a.reserved) { out.push(`${a.name}: forced without its search`); return; }
     const [x0, x1, step] = range.split(' ').map(Number), w = a.reserved[1] - a.reserved[0], half = (a.reserved[3] - a.reserved[2]) / 2;
-    // Labels of one kin (the plan's names; depths and averages' names) keep their wider gap (KIN_GAP) for the renderer too.
-    const kin = node => (node.matches('.bc-pivot-text, .bc-zonetext') ? 'plan' : node.matches('.bc-legtext, .bc-tdepth, .bc-malabel') ? 'figure' : null);
-    const gapTo = t => (kin(t.node) && kin(t.node) === kin(a.node) ? kinGap[kin(a.node)] : 6);
-    const others = [...texts.filter(t => t !== a && t.node.dataset.box !== a.node.dataset.box).map(t => grow(t.outer, gapTo(t), 1)), ...solids.map(s => grow(s, 2, 2))];
+    // An average's name: its line's end (the leader it would need at a spot is part of the spot).
+    const key = [...a.node.classList].find(cls => cls.startsWith('bc-malabel-'))?.slice('bc-malabel-'.length);
+    const end = key ? (chart.querySelector(`path.bc-ma.bc-${key}`)?.getAttribute('d') || '').split(/[ML]/).filter(Boolean).at(-1)?.split(',').map(Number) : null;
+    if (key && !end) { out.push(`${a.name}: forced, with no line of its own`); return; }
+    const runs = key ? linePoints(key) : [], clearFor = (xx, yc) => !end || leaderClear(a, runs, end[1], xx, yc, w);
+    // The plan's two green names keep their wider gap (KIN_GAP.plan) for the renderer too.
+    const kin = node => (node.matches('.bc-pivot-text, .bc-zonetext') ? 'plan' : null);
+    const gapTo = t => (kin(t.node) && kin(t.node) === kin(a.node) ? kinGap[kin(a.node)] : labelGap);
+    const others = [...texts.filter(t => t !== a && t.node.dataset.box !== a.node.dataset.box).map(t => grow(t.outer, gapTo(t), 1)), ...solids.map(s => grow(s, 2, 2)), ...leaders.filter(part => !joins(a, part)).map(part => grow(part, 4, 2))];
     const xs = [];
     for (let xx = x0; xx <= x1 + 1e-6; xx += step) xs.push(xx);
     if (xs.at(-1) < x1) xs.push(x1);
     for (const xx of xs) for (const yc of centres.split(' ').map(Number)) {
       const box = { x0: xx - 1, x1: xx + w + 1, y0: yc - half - 1, y1: yc + half + 1 };
-      if (!others.some(o => hit(box, o)) && !solidUnder(box, 1) && !crossesRs(box)) { out.push(`${a.name}: forced, but the spot ${xx.toFixed(1)},${yc.toFixed(1)} was clear`); return; }
+      if (!others.some(o => hit(box, o)) && !solidUnder(box, 1) && !crossesRs(box) && clearFor(xx, yc)) { out.push(`${a.name}: forced, but the spot ${xx.toFixed(1)},${yc.toFixed(1)} was clear`); return; }
     }
     // A forced average's name: no clear spot near its line's end, by the test's own search.
-    const key = [...a.node.classList].find(cls => cls.startsWith('bc-malabel-'))?.slice('bc-malabel-'.length);
     if (!key) return;
-    const plot = chart.querySelector('svg clipPath rect'), pw = Number(plot.getAttribute('width')), bottom = Number(plot.getAttribute('height'));
-    const end = (chart.querySelector(`path.bc-ma.bc-${key}`)?.getAttribute('d') || '').split(/[ML]/).filter(Boolean).at(-1)?.split(',').map(Number);
-    if (!end) { out.push(`${a.name}: forced, with no line of its own`); return; }
     for (let right = pw - 7; right >= pw - 7 - reach.left; right--) for (let yc = Math.ceil(end[1] - reach.height); yc <= end[1] + reach.height; yc++) {
       if (yc - half < 8 || yc + 7 > bottom) continue;
       const box = { x0: right - w - 1, x1: right + 1, y0: yc - half - 1, y1: yc + half + 1 };
-      if (!others.some(o => hit(box, o)) && !solidUnder(box, 1)) { out.push(`${a.name}: forced over candles, but ${right},${yc} near its line's end was clear`); return; }
+      if (!others.some(o => hit(box, o)) && !solidUnder(box, 1) && clearFor(right - w, yc)) { out.push(`${a.name}: forced over candles, but ${right},${yc} near its line's end was clear`); return; }
     }
   });
-  // Labels that would read as one phrase on one row: the pivot's and the zone's names (both green), a depth and an average's name.
-  const row = (a, b) => a.y0 < b.y1 && a.y1 > b.y0, apart = (a, b) => Math.max(a.x0 - b.x1, b.x0 - a.x1);
+  // Two texts that would read as one phrase on one row: a label in the plot (or a caption) and any other text of the
+  // plot or an axis value beside it (the lines of one notice block share its box and read as one).
+  const row = (a, b) => Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0) > 0.5, apart = (a, b) => Math.max(a.x0 - b.x1, b.x0 - a.x1);
   const named = cls => texts.filter(t => t.node.matches(cls));
+  const inPlot = named('.bc-levelnote, .bc-malabel, .bc-ttext, .bc-legtext, .bc-zonetext, .bc-notice, .bc-breakouttext, .bc-notetext, .bc-caption');
+  const axisValues = named('.bc-axis:not(.bc-date)');
+  inPlot.forEach((a, i) => {
+    for (const b of [...inPlot.slice(i + 1), ...axisValues]) if (!(a.reserved && a.node.dataset.box === b.node.dataset.box) && row(a, b) && apart(a, b) < phraseGap - 0.5) out.push(`${a.name} and ${b.name} on one row ${apart(a, b).toFixed(1)}px apart`);
+  });
   for (const pivot of named('.bc-pivot-text')) for (const zone of named('.bc-zonetext')) if (row(pivot, zone) && apart(pivot, zone) < 24) out.push(`${pivot.name} and ${zone.name} on one row ${apart(pivot, zone).toFixed(1)}px apart`);
-  for (const depth of named('.bc-legtext, .bc-tdepth')) for (const name of named('.bc-malabel')) if (row(depth, name) && apart(depth, name) < 12) out.push(`${depth.name} and ${name.name} on one row ${apart(depth, name).toFixed(1)}px apart`);
+  // A level line (or the zone's top edge) through a label's glyphs is cut under them.
+  const holes = id => [...(chart.querySelector(id.replace(/^url\((.*)\)$/, '$1'))?.querySelectorAll('rect[fill="#000"]') || [])].map(node => { const box = node.getBBox(); return { x0: box.x, x1: box.x + box.width, y0: box.y, y1: box.y + box.height }; });
+  for (const label of named('.bc-levelnote, .bc-malabel, .bc-ttext, .bc-legtext, .bc-zonetext, .bc-notice, .bc-breakouttext')) for (const level of levels) {
+    if (!(level.x1 > label.x0 && level.x0 < label.x1 && Math.abs(level.y - label.centre) <= 4)) continue;
+    if (!(level.mask && holes(level.mask).some(h => h.x0 <= label.x0 + 1 && h.x1 >= label.x1 - 1 && h.y0 <= level.y && h.y1 >= level.y))) out.push(`${label.name}: ${level.name} runs through it uncut (${(level.y - label.centre).toFixed(1)}px from its centre)`);
+  }
+  // An average across a label's glyphs is cut under them too (a line through 「109.67」 reads as 109:67).
+  const averagePaths = [...chart.querySelectorAll('path.bc-ma')].map(path => ({ name: path.getAttribute('class'), runs: (path.getAttribute('d') || '').split('M').filter(Boolean).map(run => run.split('L').map(pair => pair.split(',').map(Number))), mask: path.getAttribute('mask') }));
+  const across = (runs, box) => runs.some(run => run.some((p, i) => {
+    const q = run[i + 1];
+    if (!q) return false;
+    const l = Math.max(p[0], box.x0), r = Math.min(q[0], box.x1);
+    if (l > r) return false;
+    const at = xx => (q[0] === p[0] ? p[1] : p[1] + (q[1] - p[1]) * (xx - p[0]) / (q[0] - p[0]));
+    return Math.min(at(l), at(r)) < box.y1 && Math.max(at(l), at(r)) > box.y0;
+  }));
+  for (const label of named('.bc-levelnote, .bc-malabel, .bc-ttext, .bc-legtext, .bc-zonetext, .bc-notice, .bc-breakouttext')) for (const average of averagePaths) {
+    const glyphs = { x0: label.x0 + 1, x1: label.x1 - 1, y0: label.centre - 5, y1: label.centre + 5 };
+    if (glyphs.y0 >= bottom || !across(average.runs, glyphs)) continue;
+    if (!(average.mask && holes(average.mask).some(h => h.x0 <= label.x0 + 1 && h.x1 >= label.x1 - 1 && h.y0 <= glyphs.y0 && h.y1 >= glyphs.y1))) out.push(`${label.name}: ${average.name} runs through it uncut`);
+  }
+  // An average's name sits at its line's end, on its own line, or at the end of its leader; no leader runs along a level.
+  for (const name of named('.bc-malabel')) {
+    const key = [...name.node.classList].find(cls => cls.startsWith('bc-malabel-')).slice('bc-malabel-'.length), end = lineEnds.find(one => one.key === key);
+    if (!end || leaders.some(part => part.key === key)) continue;
+    const right = Number(name.node.getAttribute('x')), along = lineAt(linePoints(key), right + 3);
+    if (!(right >= pw - 8.1 && Math.abs(name.centre - end.y) <= 3.2) && !(along !== null && Math.abs(along - name.centre) <= 3.2)) out.push(`${name.name}: away from its line (${(right - pw).toFixed(1)}px from the axis, ${(name.centre - end.y).toFixed(1)}px from its end's height) with no leader`);
+  }
+  for (const part of leaders) for (const level of levels) if (!part.v && level.x0 < part.x1 && level.x1 > part.x0 && Math.abs(level.y - (part.y0 + part.y1) / 2) <= offLevelMin - 0.1) out.push(`${part.name} runs along ${level.name}`);
+  // The stop's dotted line always has its name.
+  if (chart.querySelector('line.bc-stop') && !named('.bc-stop-text').length) out.push('the stop line has no name');
   for (const leg of chart.querySelectorAll('.bc-leg[data-depth]')) {
     const k = leg.dataset.leg, want = `−${Math.round(Number(leg.dataset.depth))}%`;
     const node = chart.querySelector(`.bc-legtext[data-i="${k}"]`) || chart.querySelector(`.bc-tlabel[data-leg="${k}"] .bc-tdepth`);
     if (!node || !visible(node) || !node.textContent.trim().endsWith(want)) out.push(`T${Number(k) + 1}: its depth ${want} is not shown`);
   }
   return { failures: out, forced: texts.filter(t => t.node.dataset.forced === '1').map(t => t.name) };
-}, { reach: MA_REACH, kinGap: KIN_GAP });
+}, { reach: MA_REACH, kinGap: KIN_GAP, labelGap: LABEL_GAP, phraseGap: PHRASE_GAP, offLevel: LEADER_OFF_LEVEL, offLevelMin: LEADER_OFF_LEVEL_MIN });
 /** Every drawn level line (買値, 2R, 3R, 52週高, the wide chart's structural low) has its name drawn. */
 const unnamedLevels = page => page.getByTestId('brief-price-chart').evaluate(chart => ['bc-entry', 'bc-r2', 'bc-r3', 'bc-high52']
   .filter(cls => chart.querySelectorAll(`line.${cls}`).length !== [...chart.querySelectorAll(`.${cls}-text`)].filter(node => node.textContent.trim() && node.getAttribute('visibility') !== 'hidden').length));
@@ -489,8 +602,9 @@ for (const [name, device] of [['phone', VIEWPORTS.phone], ['desktop', VIEWPORTS.
 });
 
 // Every fixture stock with a chart, on every period, at 320, 390 and 1440: no label over a candle, a volume bar, another
-// label, a tag or a mark (over candles only when forced and no tried spot was clear; an average's name only when no spot
-// near its line's end was clear), no two labels read as one phrase, and every computed depth on the chart.
+// label, a tag, a mark or a leader (over candles only when forced and no tried spot was clear; an average's name only when
+// no spot near its line's end was clear), no two labels read as one phrase, no level line through a label uncut, and
+// every computed depth on the chart.
 const NARROWEST = { viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 };
 for (const [name, device] of [['320', NARROWEST], ['390', VIEWPORTS.phone], ['1440', VIEWPORTS.desktop]]) test.describe(`label boxes at ${name}`, () => {
   test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
