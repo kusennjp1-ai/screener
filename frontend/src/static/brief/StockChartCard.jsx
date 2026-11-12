@@ -66,9 +66,10 @@ const BreakoutGlyph = ({ zone }) => <svg className={`lg-breakoutglyph${zone ? ' 
  * text, fold rank]. Below 1024px the legend keeps two lines: the averages and the RS line's meaning always stay
  * (no rank), and the other items are kept by rank while they fit; every foldable item's key is also in the
  * screen's 注記 (chartNotes: the crossing, the short lines, the pivot and stop lines, ■, the contraction lines,
- * the 「安値」 tag with its price, the sell marks).
+ * the 「安値」 tag with its price, the sell marks). `kept`: the items the drawing needs shown ([key, text]), never folded
+ * (the pivot's or the stop's name with no spot by its line; the wide chart's 「安値」 tag's price).
  */
-function legendItems({ weekly, short, wide, rsShown, structuralLow, drawnLegs, crossing, heavyDown, sellMarks: sells, pivot, stop }) {
+function legendItems({ weekly, short, wide, rsShown, structuralLow, drawnLegs, crossing, heavyDown, sellMarks: sells, pivot, stop, kept }) {
   // Below 1024px the daily averages share one item (「50 150 200日線」, each number after its own swatch).
   const rows = !wide && !weekly ? [['mas', null, <><i className="lg-ma50" />50 <i className="lg-ma150" />150 <i className="lg-ma200" />200日線</>]]
     : (weekly ? ['10週線', '30週線', '40週線'] : ['50日線', '150日線', '200日線']).map((text, i) => [['ma50', 'ma150', 'ma200'][i], `lg-${['ma50', 'ma150', 'ma200'][i]}`, text]);
@@ -83,6 +84,7 @@ function legendItems({ weekly, short, wide, rsShown, structuralLow, drawnLegs, c
   if (Number.isFinite(pivot)) rows.push(['pivot', 'lg-pivot', 'ピボット', 7]);
   if (Number.isFinite(stop)) rows.push(['stop', 'lg-stop', '損切り', 7]);
   if (drawnLegs) rows.push(['lows', 'lg-lows', '収縮の安値を結ぶ線', 5], ['boxes', null, wide ? '枠＝値幅の収縮' : '枠＝収縮', 6]);
+  for (const row of rows) if (kept.some(([key]) => key === row[0])) row[3] = undefined;
   return rows.map(([key, swatch, text, rank]) => {
     if (swatch && typeof swatch !== 'string') return { key, rank, node: <>{swatch}{text}</> };
     const [glyph, cls, mark] = swatch?.startsWith('b:') ? swatch.split(':') : [];
@@ -176,6 +178,9 @@ export default function StockChartCard({ data, view, earningsCall = null, legs, 
   const index = scrub && scrub.model === model && scrub.period === period ? scrub.index : null;
   const onScrub = useCallback(i => setScrub({ ...current.current, index: i }), []);
   const onLatest = useCallback(() => setScrub(null), []);
+  // The legend items the drawn chart needs shown, for the model and period it drew.
+  const [drawnLegend, setDrawnLegend] = useState({ list: [] });
+  const onLegend = useCallback(list => setDrawnLegend(prev => (prev.model === current.current.model && prev.period === current.current.period && String(prev.list) === String(list) ? prev : { ...current.current, list })), []);
   const readout = useMemo(() => (model ? chartReadout(model, index ?? undefined, { certified, pivot: view?.pivot ?? null, auditHigh: model.auditHigh }) : null), [model, index, certified, view?.pivot]);
   // At 1024px and wider the stock pane scrolls on its own: a thin fade at its bottom says more follows.
   const card = useRef(null);
@@ -197,9 +202,9 @@ export default function StockChartCard({ data, view, earningsCall = null, legs, 
   // The crossing's bar must be on screen for its legend item (and the structural low in the y-range for its tag).
   const crossingShown = Boolean(crossing && bars && (weekly ? weeklyBars(bars).slice(-period) : bars.slice(-period)).some(bar => (weekly ? bar.start <= crossing.date && crossing.date <= bar.date : bar.date === crossing.date)));
   const rsShown = (data.chart.data?.rs_line || []).filter(point => Number.isFinite(point?.value)).length > 1;
-  const items = legendItems({ weekly, short, wide, rsShown, structuralLow: model && priceInRange(model, period, levels?.structuralLow) ? levels.structuralLow : null, drawnLegs, crossing: crossingShown ? crossing : null, heavyDown, sellMarks: model?.sellMarks?.length > 0, pivot: view?.pivot, stop: levels?.stop });
+  const items = legendItems({ weekly, short, wide, rsShown, structuralLow: model && priceInRange(model, period, levels?.structuralLow) ? levels.structuralLow : null, drawnLegs, crossing: crossingShown ? crossing : null, heavyDown, sellMarks: model?.sellMarks?.length > 0, pivot: view?.pivot, stop: levels?.stop, kept: drawnLegend.model === model && drawnLegend.period === period ? drawnLegend.list : [] });
   const legendRef = useRef(null);
-  useTwoLineLegend(legendRef, wide, items.map(item => item.key).join('|') + (levels?.structuralLow ?? ''));
+  useTwoLineLegend(legendRef, wide, items.map(item => item.key + (item.rank ?? '')).join('|') + (levels?.structuralLow ?? ''));
   // The renderer's chunk could not be loaded (the chart box says so): no legend or chart notes for marks that are not drawn,
   // and the period switch waits for the reload that draws the chart.
   const undrawn = useSyncExternalStore(subscribePriceChart, priceChartFailed, priceChartFailed) && Boolean(model);
@@ -208,7 +213,7 @@ export default function StockChartCard({ data, view, earningsCall = null, legs, 
       <div className="brief-periods" role="group" aria-label="表示期間">{Object.keys(RANGES).map(key => <button key={key} type="button" className={key === '2yw' ? 'brief-period-week' : undefined} aria-pressed={range === key} aria-label={key === '2yw' ? weeklyRangeLabel(bars) : undefined} disabled={undrawn} onClick={() => onRange?.(key)}>{key === '2yw' ? <WeeklyLabel bars={bars} /> : RANGES[key][2]}</button>)}</div>
       {readout ? <Readout readout={readout} compact={!wide} reason={certification?.reason ?? null} /> : null}
     </div>
-    {model ? <PriceChart ref={chartRef} model={model} period={period} onScrub={onScrub} selected={index} onLatest={onLatest} /> : <p className="brief-note brief-chart-placeholder" role="status">{data.chart.isError ? '日足チャートを取得できません。' : row?.chart_path ? '日足チャートを読み込み中…' : 'この銘柄の日足チャートは未配信です。'}</p>}
+    {model ? <PriceChart ref={chartRef} model={model} period={period} onScrub={onScrub} selected={index} onLatest={onLatest} onLegend={onLegend} /> : <p className="brief-note brief-chart-placeholder" role="status">{data.chart.isError ? '日足チャートを取得できません。' : row?.chart_path ? '日足チャートを読み込み中…' : 'この銘柄の日足チャートは未配信です。'}</p>}
     {bars && data.date && bars.at(-1)?.date !== data.date ? <p className="brief-note brief-asof" role="note">日足は {bars.at(-1)?.date} までです（分析基準日 {data.date} の日足は未取得）。チャートから算出する判定は未確認にしています。</p> : null}
     {undrawn ? null : <div ref={legendRef} className="brief-legend" aria-hidden="true">
       {items.map(item => <span key={item.key} className={item.key === 'mas' ? 'lg-mas' : undefined} data-key={item.key} data-fold={item.rank ? 'true' : undefined} data-rank={item.rank}>{item.node}</span>)}

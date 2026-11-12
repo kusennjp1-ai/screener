@@ -131,9 +131,10 @@
 .brief-chart .bc-rstext { fill: var(--accent-ink); paint-order: normal; stroke: none; }
 .brief[data-theme="dark"] .brief-chart .bc-rstext { fill: var(--ground); }
 .bc-rsleader { stroke: var(--accent); opacity: .7; }
-/* The last contraction's low as a tag on a narrow chart (its price in the legend). */
-.bc-lowtag-fill { fill: var(--surface); stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 2 2; }
-.brief-chart .bc-tagtext.bc-lowtagtext { fill: var(--text-2); }
+/* The last contraction's low as a tag on a narrow chart (its price in the legend), and a level whose name has no spot by
+   its line (its name over its price). */
+.bc-lowtag-fill, .bc-nametag-fill { fill: var(--surface); stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 2 2; }
+.brief-chart .bc-tagtext.bc-lowtagtext, .brief-chart .bc-tagtext.bc-nametagtext { fill: var(--text-2); }
 .bc-structural { stroke: var(--text-3); stroke-dasharray: 4 3; }
 /* The pivot crossing (certified bars only): a hollow arrow, never the filled ▲ of the 崩れ sell sign; green only
    for a confirmed crossing (1.4× and the close still at or above the pivot), grey otherwise. */

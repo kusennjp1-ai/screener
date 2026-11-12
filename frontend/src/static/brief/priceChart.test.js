@@ -192,12 +192,15 @@ describe('brief price chart', () => {
 
   it('draws the plan lines and the 52-week high only inside the y-range, never widening it', () => {
     const inside = container(), outside = container();
-    renderPriceChart(inside, { ...model, r2: 111, r3: 112, entry: 109, auditHigh: 112.5 }, { period: 130, animate: false });
+    const levels = { ...model, r2: 111, r3: 112, entry: 109, auditHigh: 112.5 };
+    const chart = renderPriceChart(inside, levels, { period: 130, animate: false });
     renderPriceChart(outside, { ...model, r2: 160, r3: 190, auditHigh: 300 }, { period: 130, animate: false });
     // Every level line is drawn with its name (never an unnamed dotted line): the 52-week high takes its spot first;
-    // a plan level with no free spot here (3R, crowded under the zone's top) is left out with its line.
+    // a plan level with no free spot beside its line (3R, crowded under the zone's top) keeps its line, its name on its
+    // tag at the right axis and its price in the legend.
     const drawn = cls => inside.querySelectorAll(`line.${cls}`).length, named = cls => inside.querySelectorAll(`.${cls}-text`).length;
     for (const cls of ['bc-r2', 'bc-r3', 'bc-entry', 'bc-high52']) expect({ cls, lines: drawn(cls) }).toEqual({ cls, lines: named(cls) });
+    expect(missingLevels(inside, levels, 130, chart)).toEqual([]);
     expect(texts(inside, '.bc-high52-text')).toEqual([expect.stringMatching(/^52週高値 112\.50（[−+±]\d+\.\d%）$/)]);
     expect(texts(inside, '.bc-levelnote')).toEqual(expect.arrayContaining(['2R 111.00', '買値 109.00']));
     expect(drawn('bc-r2') + drawn('bc-r3') + drawn('bc-entry') + drawn('bc-high52')).toBeGreaterThanOrEqual(3);
@@ -601,9 +604,13 @@ describe('brief price chart', () => {
     expect(phone.querySelector('[data-tag="low"] .bc-tagtext').textContent).toBe('安値');
     expect(phone.querySelector('.bc-structural-text')).toBeNull();
     expect(phone.querySelector('.bc-structural')).not.toBeNull();
-    for (const node of phone.querySelectorAll('.bc-high52-text')) expect(node.textContent).toBe('52週高 110.00');
+    // The 52-week high's short form: beside its line, or (no spot there, as on this crowded phone) on its tag at the right
+    // axis, its name over its price, its line still drawn.
+    expect(phone.querySelector('line.bc-high52')).not.toBeNull();
+    const tag = [...phone.querySelectorAll('[data-tag="high52"] text')].map(node => node.textContent).join(' ');
+    expect(phone.querySelector('.bc-levelnote.bc-high52-text')?.textContent ?? tag).toBe('52週高 110.00');
     expect(desk.querySelector('[data-tag="low"]')).toBeNull();
-    for (const node of desk.querySelectorAll('.bc-high52-text')) expect(node.textContent).toMatch(/^52週高値 110\.00（[−+±]\d+\.\d%）$/);
+    for (const node of desk.querySelectorAll('.bc-levelnote.bc-high52-text')) expect(node.textContent).toMatch(/^52週高値 110\.00（[−+±]\d+\.\d%）$/);
     expect(collisions(phone)).toEqual([]);
     expect(collisions(desk)).toEqual([]);
   });

@@ -11,12 +11,13 @@ const CHART_FAILED_TEXT = 'チャートを読み込めません（通信状態�
  * Large daily chart. Animates once per symbol/period; resizes redraw without animation. `onScrub` gets the
  * bar index (into the chart interval's bars) a touch, drag or the mouse selects, or null for the latest
  * bar; `selected` places the crosshair. While a past bar is selected, 「最新足」 (`onLatest`) sits in the
- * plot corner with the fewest candles. The handle moves the stop, emphasises a contraction and selects a bar.
+ * plot corner with the fewest candles. The handle moves the stop, emphasises a contraction and selects a bar. `onLegend`
+ * gets, after each drawing, the legend items the drawing needs shown ([key, text]: a level's name off the plot).
  */
-const PriceChart = forwardRef(function PriceChart({ model, period, className = '', onScrub = null, selected = null, onLatest = null }, ref) {
+const PriceChart = forwardRef(function PriceChart({ model, period, className = '', onScrub = null, selected = null, onLatest = null, onLegend = null }, ref) {
   const element = useRef(null), controller = useRef(null), introduced = useRef(null), stopRef = useRef(model?.stop);
-  const scrubRef = useRef(onScrub), selectedRef = useRef(selected), legRef = useRef(null), latest = useRef(null);
-  stopRef.current = model?.stop; scrubRef.current = onScrub; selectedRef.current = selected;
+  const scrubRef = useRef(onScrub), selectedRef = useRef(selected), legRef = useRef(null), latest = useRef(null), legendRef = useRef(onLegend);
+  stopRef.current = model?.stop; scrubRef.current = onScrub; selectedRef.current = selected; legendRef.current = onLegend;
   // 「最新足」 takes the free corner of the drawn chart (its size is measured once it is shown).
   const placeLatest = () => {
     const button = latest.current;
@@ -35,6 +36,7 @@ const PriceChart = forwardRef(function PriceChart({ model, period, className = '
     if (!element.current || !renderPriceChart) return controller.current;
     const chart = renderPriceChart(element.current, { ...model, stop: stopRef.current }, { period, onScrub: index => scrubRef.current?.(index), selected: selectedRef.current, ...options });
     if (chart && legRef.current !== null) chart.highlightLeg(legRef.current);
+    legendRef.current?.(chart?.legend ?? []);
     return chart;
   };
   useImperativeHandle(ref, () => ({

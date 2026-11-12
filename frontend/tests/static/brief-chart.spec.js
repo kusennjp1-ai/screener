@@ -394,7 +394,7 @@ const labelAudit = async page => { const ranged = await levelsInRange(page); ret
   }
   return { failures: out, forced: texts.filter(t => t.node.dataset.forced === '1').map(t => t.name) };
 }, { reach: MA_REACH, kinGap: KIN_GAP, labelGap: LABEL_GAP, phraseGap: PHRASE_GAP, figureGap: FIGURE_GAP, figureStack: FIGURE_STACK, boxGap: BOX_GAP, tailLength: MA_TAIL, offLevel: LEADER_OFF_LEVEL, offLevelMin: LEADER_OFF_LEVEL_MIN, ranged }); };
-/** Every drawn level line (買値, 2R, 3R, 52週高, the wide chart's structural low) has its name drawn. */
+/** Every drawn level line (買値, 2R, 3R, 52週高) has its name drawn: beside its line, or (no spot there) on its tag. */
 const unnamedLevels = page => page.getByTestId('brief-price-chart').evaluate(chart => ['bc-entry', 'bc-r2', 'bc-r3', 'bc-high52']
   .filter(cls => chart.querySelectorAll(`line.${cls}`).length !== [...chart.querySelectorAll(`.${cls}-text`)].filter(node => node.textContent.trim() && node.getAttribute('visibility') !== 'hidden').length));
 /** The 注記 key of each foldable legend item (chartNotes): a folded item's mark is still explained. */
@@ -541,8 +541,11 @@ test.describe('390×844 phone', () => {
       // The structural low is a 「安値」 tag on a phone, its price in the legend.
       if (await page.locator('[data-tag="low"]').count()) await expect(page.locator('.brief-legend [data-key="low"]')).toHaveText(/^最後の収縮の安値 [\d,]+\.\d{2}$/);
       await expect(page.locator('.bc-structural-text')).toHaveCount(0);
-      const high = page.locator('.bc-high52-text');
+      // The 52-week high's short form beside its line, or (no spot there) its name over its price on its tag.
+      const high = page.locator('.bc-levelnote.bc-high52-text');
       if (await high.count()) await expect(high).toHaveText(/^52週高 [\d,.]+$/);
+      const highTag = page.locator('[data-tag="high52"] text');
+      if (await highTag.count()) await expect(highTag).toHaveText(['52週高', /^[\d,.]+$/]);
       // A level line is never drawn unnamed, and a folded legend item's mark is keyed in the 注記.
       expect(await unnamedLevels(page), `${what}: unnamed level lines`).toEqual([]);
       expect(await unexplainedFolds(page), `${what}: folded legend items without a 注記 key`).toEqual([]);
