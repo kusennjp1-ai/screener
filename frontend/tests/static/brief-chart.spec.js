@@ -8,8 +8,8 @@
 import { test, expect } from '@playwright/test';
 import { date, horizontalOverflow, openBrief, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
 import { chartCrossing, crossingNote } from '../../src/static/brief/chartReadout.js';
-import { LEADER_OFF_LEVEL, LEADER_OFF_LEVEL_MIN, MA_SHIFT } from '../../src/static/brief/priceChart.js';
-import { KIN_GAP, LABEL_GAP, PHRASE_GAP } from '../../src/static/brief/chartLabels.js';
+import { LEADER_OFF_LEVEL, LEADER_OFF_LEVEL_MIN, MA_SHIFT, MA_TAIL } from '../../src/static/brief/priceChart.js';
+import { BOX_GAP, FIGURE_GAP, FIGURE_STACK, KIN_GAP, LABEL_GAP, PHRASE_GAP } from '../../src/static/brief/chartLabels.js';
 
 const DOCK_TOP = 788; // 844 − the 56px dock at 390×844
 // Measure only after the finite animations finish (the last price's pulse repeats for ever).
@@ -86,20 +86,25 @@ const MA_REACH = { left: MA_SHIFT, height: 48 };
  * line end). A text may sit over candles or bars only when the renderer forced it (data-forced="1"):
  * the test then re-runs the spots it tried (data-search "x0 x1 step|centres", the box from data-box) with the box 1px
  * larger on each side and every obstacle at least as large as the renderer took it (candles 2px wider each side, bars
- * 1px, texts LABEL_GAP across (KIN_GAP between two of one kin) and 1px up and down, marks 2px, leaders 4px across and 2px
- * up and down), so a spot clear here was clear for the renderer too; finding one fails. A forced average's name also
+ * 1px, texts LABEL_GAP across (KIN_GAP between the plan's two names and between an average's name and a figure) and 1px
+ * up and down, marks 2px, leaders 4px across and 2px up and down, each average's last MA_TAIL px BOX_GAP across for any
+ * label but a name, and for a level's name any spot another level line strikes), so a spot clear here was clear for the
+ * renderer too; finding one fails. A forced average's name also
  * fails when the test's own search finds a clear spot near its line's end (its right end up to MA_REACH.left left of
  * where it ends unmoved, 7px from the axis, its centre within MA_REACH.height of the end's height, inside the plot),
  * whatever spots the renderer tried (an average's spot is clear only where the leader it would need there is clear
  * too; a spot whose leader would run within LEADER_OFF_LEVEL of a level line counts as taken). An average's name with no
- * leader sits at its line's end or on its own line, and no leader runs within LEADER_OFF_LEVEL_MIN of a level line. Two
- * labels never read as one phrase: two texts whose glyph rows overlap (a label in the plot and another, or an axis
- * value) keep PHRASE_GAP between their glyphs, the pivot's name and the zone's two glyphs. A level line (or the zone's
- * top edge) within 4px of a label's centre, or an average across its glyphs, is cut under it (its mask's hole spans the
- * glyphs). Also the stop's line has its name, and every contraction with a computed depth (data-depth on its box) shows
- * that depth. Returns the failures and the forced labels.
+ * leader sits at its line's end or on its own line, and no leader runs within LEADER_OFF_LEVEL_MIN of a level line; two
+ * leaders meet only as one shared leader of two lines ending at one point (within 3px, the same way, the names in the
+ * order of the ends). Two labels never read as one phrase: two texts whose glyph rows overlap (a label in the plot and
+ * another, or an axis value) keep PHRASE_GAP between their glyphs, an average's name and a figure (a depth, a T number,
+ * another name) FIGURE_GAP, the pivot's name and the zone's two glyphs. A level's name is never centred within 4px of
+ * another level's line or the zone's top edge (it would read as that line's name and price). A level line (or the
+ * zone's top edge) within 4px of a label's centre, or an average across its glyphs, is cut under it (its mask's hole
+ * spans the glyphs). Also the stop's line has its name, and every contraction with a computed depth (data-depth on its
+ * box) shows that depth. Returns the failures and the forced labels.
  */
-const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart, { reach, kinGap, labelGap, phraseGap, offLevel, offLevelMin }) => {
+const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart, { reach, kinGap, labelGap, phraseGap, figureGap, figureStack, boxGap, tailLength, offLevel, offLevelMin }) => {
   const out = [];
   const visible = node => !node.closest('.bc-hover, .bc-scrub') && node.getAttribute('visibility') !== 'hidden' && node.textContent.trim() !== '';
   const groupOf = node => node.closest('g.bc-tag, g.bc-rshigh, g.bc-earnflag');
@@ -131,6 +136,13 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
   const joins = (text, part) => text.node.classList.contains(`bc-malabel-${part.key}`);
   // A vertical part's way from its line's end: up when its far end is above.
   const upward = part => Math.abs(part.y0 - part.from) > Math.abs(part.y1 - part.from);
+  // Where a vertical part reaches its name.
+  const tipOf = part => (upward(part) ? part.y0 : part.y1);
+  // Any part's way from its line's end and the row it reaches (a horizontal part's own row).
+  const wayOf = part => (part.v ? upward(part) : (part.y0 + part.y1) / 2 < part.from), rowOf = part => (part.v ? tipOf(part) : (part.y0 + part.y1) / 2);
+  // Two parts of two lines ending at one point (within 3px) that go the same way with their names in the order of the
+  // ends (either order within `loose` px): one shared leader, a nearer name's horizontal part branching off it.
+  const sharedParts = (a, b, loose) => Math.abs(a.from - b.from) <= 3 && (a.v || b.v) && wayOf(a) === wayOf(b) && (Math.abs(a.from - b.from) <= loose || (a.from - b.from) * (rowOf(a) - rowOf(b)) > 0);
   const plot = chart.querySelector('svg clipPath rect'), pw = Number(plot.getAttribute('width')), bottom = Number(plot.getAttribute('height'));
   // The level lines drawn (and the zone's top edge), with the mask that cuts them.
   const levels = [...chart.querySelectorAll('line.bc-planline, line.bc-high52, line.bc-pivot, line.bc-stop')].map(line => ({ name: line.getAttribute('class'), x0: Number(line.getAttribute('x1')), x1: Number(line.getAttribute('x2')), y: Number(line.getAttribute('y1')), mask: line.getAttribute('mask') }));
@@ -138,6 +150,15 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
   if (edge) levels.push({ name: 'the zone\'s edge', x0: Number(edge.getAttribute('x')), x1: Number(edge.getAttribute('x')) + Number(edge.getAttribute('width')), y: Number(edge.getAttribute('y')), mask: edge.getAttribute('mask') });
   // Each average's line as drawn (its points, run by run) and where it runs at xx (null where it is not drawn).
   const linePoints = key => (chart.querySelector(`path.bc-ma.bc-${key}`)?.getAttribute('d') || '').split('M').filter(Boolean).map(run => run.split('L').map(pair => pair.split(',').map(Number)));
+  // Each average's last stretch (its segments ending within tailLength of its last point), as boxes 1px taller each way.
+  const tails = [...chart.querySelectorAll('path.bc-ma')].flatMap(path => {
+    const points = ((path.getAttribute('d') || '').split('M').filter(Boolean).at(-1) || '').split('L').filter(Boolean).map(pair => pair.split(',').map(Number)), last = points.at(-1)?.[0];
+    return points.slice(0, -1).map((p, i) => [p, points[i + 1]]).filter(([, q]) => last - q[0] < tailLength).map(([p, q]) => ({ x0: p[0], x1: q[0], y0: Math.min(p[1], q[1]) - 1, y1: Math.max(p[1], q[1]) + 1 }));
+  });
+  // A label's kind for its gaps: the plan's green names, an average's name, a contraction's T number or depth.
+  const kindOf = node => (node.matches('.bc-pivot-text, .bc-zonetext') ? 'plan' : node.matches('.bc-malabel') ? 'ma' : node.matches('.bc-legtext') ? 'leg' : node.matches('.bc-ttext') ? 'tn' : null);
+  // A level's name: the class of its own line (null for any other label).
+  const ownLine = node => [...node.classList].map(cls => /^bc-(pivot|stop|high52|entry|r2|r3|structural)-text$/.exec(cls)?.[1]).find(Boolean)?.replace(/^/, 'bc-') ?? null;
   const lineAt = (runs, xx) => {
     for (const run of runs) for (let i = 0; i + 1 < run.length; i++) {
       const [p, q] = [run[i], run[i + 1]];
@@ -150,7 +171,8 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
   // itself (within 3px of its height, unmoved) or where its own line runs into a moved name's right end. A spot is clear
   // for the name only where that leader keeps BOX_GAP from every other label and the horizontal part meets no mark or
   // tag either nor runs along a level line (within LEADER_OFF_LEVEL), and it meets no other average's leader (running along it or
-  // ending across it).
+  // ending across it) but as one shared leader (ends within 3px, the same way, in the order of the ends; either order only
+  // for ends within 0.9px as the paths write them, so the search is never looser than the renderer).
   const leaderAt = (runs, endY, x, yc, w) => {
     const shifted = x < pw - 7 - w - 1;
     if (shifted ? Math.abs((lineAt(runs, x + w + 3) ?? Infinity) - yc) <= 2.9 : Math.abs(yc - endY) <= 3) return [];
@@ -164,7 +186,8 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
     && (part.v || !solids.some(s => hit(part, grow(s, 2, 2))))
     && !leaders.filter(other => !joins(a, other)).some(other => {
       const box = other.v ? { x0: other.x0 - 0.5, x1: other.x1 + 0.5, y0: other.y0 - 1, y1: other.y1 + 1 } : { x0: other.x0, x1: other.x1, y0: other.y0 - 1.5, y1: other.y1 + 1.5 };
-      if (part.v && other.v && Math.abs(other.from - endY) <= 3 && part.x0 < box.x1 && part.x1 > box.x0) return part.up === upward(other);
+      if (part.v && other.v && Math.abs(other.from - endY) <= 3 && part.x0 < box.x1 && part.x1 > box.x0) return part.up === upward(other) && !(Math.abs(other.from - endY) <= 0.9 || (endY - other.from) * ((part.up ? part.y0 + 1 : part.y1 - 1) - tipOf(other)) > 0);
+      if (part.v !== other.v && sharedParts({ v: part.v, from: endY, y0: part.v ? (part.up ? part.y0 + 1 : endY) : part.y0, y1: part.v ? (part.up ? endY : part.y1 - 1) : part.y1 }, other, 0.9)) return false;
       return part.x0 < box.x1 && part.x1 > box.x0 && part.y0 < box.y1 - 1.5 && part.y1 > box.y0 + 1.5;
     })
     && !lineEnds.some(end => !a.node.classList.contains(`bc-malabel-${end.key}`) && Math.abs(end.y - endY) > 3 && part.x0 < pw - 0.5 && part.x1 > pw - 2.5 && part.y0 < end.y && part.y1 > end.y));
@@ -185,14 +208,17 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
     return Math.min(at(l), at(r)) < box.y1 && Math.max(at(l), at(r)) > box.y0;
   });
   // Two averages' leaders never run along each other or end across each other, and none runs past another line's end
-  // (each would read as joined to the wrong line); leaders leaving one point (ends within 3px) may part there.
+  // (each would read as joined to the wrong line); leaders leaving one point (ends within 3px) may part there, or run
+  // the same way as one shared leader with their names in the order of the ends (either order for ends within 1px), a
+  // nearer name's horizontal part branching off it.
   const span = (a, b) => Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0);
   leaders.forEach((a, i) => {
     for (const b of leaders.slice(i + 1)) {
       if (a.key === b.key || !(a.x0 < b.x1 && a.x1 > b.x0)) continue;
       // Two vertical parts leaving one point (ends within 3px) part there unless they go the same way.
-      const apartFromOnePoint = a.v && b.v && Math.abs(a.from - b.from) <= 3 && upward(a) !== upward(b);
-      if (!apartFromOnePoint && span(a, b) > (a.v && b.v ? 2 : 0)) out.push(`${a.name} meets ${b.name}`);
+      // (Ends within 1px as the renderer works them out: within 1.1px as the paths write them to 0.1px.)
+      const apart = a.v && b.v && Math.abs(a.from - b.from) <= 3 && upward(a) !== upward(b), shared = sharedParts(a, b, 1.1);
+      if (!apart && !shared && span(a, b) > (a.v && b.v ? 2 : 0)) out.push(`${a.name} meets ${b.name}`);
     }
     if (!a.v && a.x1 < pw - 2.5) return;
     for (const end of lineEnds) if (end.key !== a.key && Math.abs(end.y - a.from) > 3 && end.y > a.y0 + (a.v ? 1 : -1) && end.y < a.y1 - (a.v ? 1 : -1)) out.push(`${a.name} runs past the ${end.key} line's end`);
@@ -213,16 +239,22 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
     const end = key ? (chart.querySelector(`path.bc-ma.bc-${key}`)?.getAttribute('d') || '').split(/[ML]/).filter(Boolean).at(-1)?.split(',').map(Number) : null;
     if (key && !end) { out.push(`${a.name}: forced, with no line of its own`); return; }
     const runs = key ? linePoints(key) : [], clearFor = (xx, yc) => !end || leaderClear(a, runs, end[1], xx, yc, w);
-    // The plan's two green names keep their wider gap (KIN_GAP.plan) for the renderer too.
-    const kin = node => (node.matches('.bc-pivot-text, .bc-zonetext') ? 'plan' : null);
-    const gapTo = t => (kin(t.node) && kin(t.node) === kin(a.node) ? kinGap[kin(a.node)] : labelGap);
-    const others = [...texts.filter(t => t !== a && t.node.dataset.box !== a.node.dataset.box).map(t => grow(t.outer, gapTo(t), 1)), ...solids.map(s => grow(s, 2, 2)), ...leaders.filter(part => !joins(a, part)).map(part => grow(part, 4, 2))];
+    // The plan's two green names, and an average's name beside a figure, keep their wider gaps (KIN_GAP) for the renderer too.
+    const gapTo = t => { const [k, l] = [kindOf(t.node), kindOf(a.node)], figure = ['ma', 'leg', 'tn']; return k === 'plan' && l === 'plan' ? kinGap.plan : (k === 'ma' && figure.includes(l)) || (l === 'ma' && figure.includes(k)) ? kinGap.figure : labelGap; };
+    // An average's last stretch is taken for every label but an average's name.
+    // (and a name and a contraction's figure one above the other FIGURE_STACK apart).
+    const stackTo = t => ([kindOf(t.node), kindOf(a.node)].sort().join() === 'leg,ma' ? figureStack + 1 : 1);
+    const others = [...texts.filter(t => t !== a && t.node.dataset.box !== a.node.dataset.box).map(t => grow(t.outer, gapTo(t), stackTo(t))), ...solids.map(s => grow(s, 2, 2)), ...leaders.filter(part => !joins(a, part)).map(part => grow(part, 4, 2)), ...(key ? [] : tails.map(tail => grow(tail, boxGap, 0)))];
+    // A level's name: no spot another level line (or the zone's top edge) strikes through.
+    // (Not its own line, nor one within 1.5px of it, which reads as the same line; 1.4px here, never looser.)
+    const own = ownLine(a.node), ownY = own && levels.find(level => level.name.split(' ').includes(own))?.y;
+    const struck = (xx, yc) => own && levels.some(level => !level.name.split(' ').includes(own) && !(Math.abs(level.y - ownY) <= 1.4) && xx + w + 1 > level.x0 && xx - 1 < level.x1 && Math.abs(level.y - yc) <= 5.6);
     const xs = [];
     for (let xx = x0; xx <= x1 + 1e-6; xx += step) xs.push(xx);
     if (xs.at(-1) < x1) xs.push(x1);
     for (const xx of xs) for (const yc of centres.split(' ').map(Number)) {
       const box = { x0: xx - 1, x1: xx + w + 1, y0: yc - half - 1, y1: yc + half + 1 };
-      if (!others.some(o => hit(box, o)) && !solidUnder(box, 1) && !crossesRs(box) && clearFor(xx, yc)) { out.push(`${a.name}: forced, but the spot ${xx.toFixed(1)},${yc.toFixed(1)} was clear`); return; }
+      if (!others.some(o => hit(box, o)) && !solidUnder(box, 1) && !crossesRs(box) && !struck(xx, yc) && clearFor(xx, yc)) { out.push(`${a.name}: forced, but the spot ${xx.toFixed(1)},${yc.toFixed(1)} was clear`); return; }
     }
     // A forced average's name: no clear spot near its line's end, by the test's own search.
     if (!key) return;
@@ -242,6 +274,26 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
     for (const b of [...inPlot.slice(i + 1), ...axisValues]) if (!(a.reserved && a.node.dataset.box === b.node.dataset.box) && row(a, b) && apart(a, b) < phraseGap - 0.5) out.push(`${a.name} and ${b.name} on one row ${apart(a, b).toFixed(1)}px apart`);
   });
   for (const pivot of named('.bc-pivot-text')) for (const zone of named('.bc-zonetext')) if (row(pivot, zone) && apart(pivot, zone) < 24) out.push(`${pivot.name} and ${zone.name} on one row ${apart(pivot, zone).toFixed(1)}px apart`);
+  // Two bold figures: an average's name beside a depth, a T number or another name (「150 −4%」 at 16px reads as one), or
+  // a name and a depth one above the other (「150／−8%／200」 reads as one column of names).
+  const figures = named('.bc-malabel, .bc-ttext, .bc-legtext');
+  figures.forEach((a, i) => {
+    for (const b of figures.slice(i + 1)) if ((kindOf(a.node) === 'ma' || kindOf(b.node) === 'ma') && row(a, b) && apart(a, b) < figureGap - 0.5) out.push(`${a.name} and ${b.name} (figures) on one row ${apart(a, b).toFixed(1)}px apart`);
+    // A depth in the names' column: one above the other, a name and a depth under its box keep FIGURE_STACK.
+    for (const b of figures.slice(i + 1)) {
+      if ([kindOf(a.node), kindOf(b.node)].sort().join() !== 'leg,ma' || !(Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0) > 0.5)) continue;
+      const between = Math.max(a.y0 - b.y1, b.y0 - a.y1);
+      if (between >= 0 && between < figureStack - 0.5) out.push(`${a.name} and ${b.name} (figures) one above the other ${between.toFixed(1)}px apart`);
+    }
+  });
+  // A level's name never sits on another level's line (it would read as that line's name and price); a line within
+  // 1.5px of its own reads as the same line.
+  for (const label of named('.bc-levelnote')) {
+    const own = ownLine(label.node), ownY = levels.find(level => level.name.split(' ').includes(own))?.y;
+    for (const level of levels) {
+      if (!level.name.split(' ').includes(own) && !(Math.abs(level.y - ownY) <= 1.6) && level.x1 > label.x0 && level.x0 < label.x1 && Math.abs(level.y - label.centre) <= 4) out.push(`${label.name} sits on ${level.name} (${(level.y - label.centre).toFixed(1)}px from its centre)`);
+    }
+  }
   // A level line (or the zone's top edge) through a label's glyphs is cut under them.
   const holes = id => [...(chart.querySelector(id.replace(/^url\((.*)\)$/, '$1'))?.querySelectorAll('rect[fill="#000"]') || [])].map(node => { const box = node.getBBox(); return { x0: box.x, x1: box.x + box.width, y0: box.y, y1: box.y + box.height }; });
   for (const label of named('.bc-levelnote, .bc-malabel, .bc-ttext, .bc-legtext, .bc-zonetext, .bc-notice, .bc-breakouttext')) for (const level of levels) {
@@ -279,7 +331,7 @@ const labelAudit = page => page.getByTestId('brief-price-chart').evaluate((chart
     if (!node || !visible(node) || !node.textContent.trim().endsWith(want)) out.push(`T${Number(k) + 1}: its depth ${want} is not shown`);
   }
   return { failures: out, forced: texts.filter(t => t.node.dataset.forced === '1').map(t => t.name) };
-}, { reach: MA_REACH, kinGap: KIN_GAP, labelGap: LABEL_GAP, phraseGap: PHRASE_GAP, offLevel: LEADER_OFF_LEVEL, offLevelMin: LEADER_OFF_LEVEL_MIN });
+}, { reach: MA_REACH, kinGap: KIN_GAP, labelGap: LABEL_GAP, phraseGap: PHRASE_GAP, figureGap: FIGURE_GAP, figureStack: FIGURE_STACK, boxGap: BOX_GAP, tailLength: MA_TAIL, offLevel: LEADER_OFF_LEVEL, offLevelMin: LEADER_OFF_LEVEL_MIN });
 /** Every drawn level line (買値, 2R, 3R, 52週高, the wide chart's structural low) has its name drawn. */
 const unnamedLevels = page => page.getByTestId('brief-price-chart').evaluate(chart => ['bc-entry', 'bc-r2', 'bc-r3', 'bc-high52']
   .filter(cls => chart.querySelectorAll(`line.${cls}`).length !== [...chart.querySelectorAll(`.${cls}-text`)].filter(node => node.textContent.trim() && node.getAttribute('visibility') !== 'hidden').length));
