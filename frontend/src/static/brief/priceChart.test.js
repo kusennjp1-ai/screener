@@ -38,6 +38,37 @@ const collisions = el => {
   return out;
 };
 const tagCentre = (el, key) => Number(el.querySelector(`[data-tag="${key}"] rect`).getAttribute('y')) + 10;
+/** Each average's leader as its vertical and horizontal parts (boxes 1px wide), with the key of the name it joins. */
+const leaderSegments = el => [...el.querySelectorAll('path.bc-maleader')].flatMap(path => {
+  const key = [...path.classList].find(cls => cls.startsWith('bc-maleader-')).slice('bc-maleader-'.length), out = [];
+  let x = 0, y = 0;
+  for (const [, cmd, value] of path.getAttribute('d').matchAll(/([MVH])([^MVH]+)/g)) {
+    if (cmd === 'M') { [x, y] = value.split(',').map(Number); continue; }
+    const v = Number(value);
+    if (cmd === 'V') { out.push({ key, x0: x - 0.5, x1: x + 0.5, y0: Math.min(y, v), y1: Math.max(y, v) }); y = v; }
+    else { out.push({ key, x0: Math.min(x, v), x1: Math.max(x, v), y0: y - 0.5, y1: y + 0.5 }); x = v; }
+  }
+  return out;
+});
+/**
+ * Averages' names away from their lines with no leader: a name without one sits at its line's end (unmoved, within 3px
+ * of its height) or on its own line (the line runs into its right end, within 3px).
+ */
+const detached = (el, pw) => [...el.querySelectorAll('.bc-malabel')].flatMap(node => {
+  const key = [...node.classList].find(cls => cls.startsWith('bc-malabel-')).slice('bc-malabel-'.length);
+  if (el.querySelector(`path.bc-maleader-${key}`)) return [];
+  const points = el.querySelector(`path.bc-ma.bc-${key}`).getAttribute('d').split(/[ML]/).filter(Boolean).map(pair => pair.split(',').map(Number));
+  const right = Number(node.getAttribute('x')), yc = Number(node.getAttribute('y')) - 4, end = points.at(-1);
+  const i = points.findIndex((p, k) => points[k + 1] && p[0] <= right + 3 && points[k + 1][0] >= right + 3), [p, q] = [points[i], points[i + 1]];
+  const along = i >= 0 ? p[1] + (q[1] - p[1]) * (right + 3 - p[0]) / (q[0] - p[0]) : null;
+  return (right >= pw - 8.1 && Math.abs(yc - end[1]) <= 3.2) || (along !== null && Math.abs(along - yc) <= 3.2) ? [] : [`${node.textContent} at ${right - pw}px, ${(yc - end[1]).toFixed(1)}px off`];
+});
+/** Labels a leader runs through (any label but the name it joins). */
+const leaderThrough = el => {
+  const names = new Map([...el.querySelectorAll('.bc-malabel')].map(node => [node.textContent, [...node.classList].find(cls => cls.startsWith('bc-malabel-')).slice('bc-malabel-'.length)]));
+  const hit = (a, b) => a.x0 < b.x1 - 0.5 && a.x1 > b.x0 + 0.5 && a.y0 < b.y1 - 0.5 && a.y1 > b.y0 + 0.5;
+  return chartBoxes(el).labels.flatMap(label => leaderSegments(el).filter(s => s.key !== names.get(label.name) && hit(s, label)).map(s => `${s.key} leader × ${label.name}`));
+};
 
 describe('brief price chart', () => {
   it('draws the period, buy zone, contraction boxes, pivot, stop and current-price tags with a summary label', () => {
@@ -422,10 +453,12 @@ describe('brief price chart', () => {
       const pw = width - 68, names = [...el.querySelectorAll('.bc-malabel')];
       const lines = [...el.querySelectorAll('path.bc-ma')].filter(path => !path.classList.contains('bc-mashort'));
       expect({ width, names: names.length }).toEqual({ width, names: lines.length });
-      const candles = [...el.querySelectorAll('line.bc-up, line.bc-down')].map(line => ({ x: Number(line.getAttribute('x1')), y0: Number(line.getAttribute('y1')), y1: Number(line.getAttribute('y2')) }));
+      // A candle's box as the renderer keeps names off it: its body's width and 2px more each side, its whole range.
+      const bodies = [...el.querySelectorAll('rect.bc-up, rect.bc-down')];
+      const candles = [...el.querySelectorAll('line.bc-up, line.bc-down')].map((line, i) => ({ x: Number(line.getAttribute('x1')), reach: Number(bodies[i].getAttribute('width')) / 2 + 2, y0: Number(line.getAttribute('y1')), y1: Number(line.getAttribute('y2')) }));
       for (const name of names) {
         const right = Number(name.getAttribute('x')), yc = Number(name.getAttribute('y')) - 4, w = _test.width(name.textContent, true);
-        const under = candles.filter(c => c.x > right - w - 4 && c.x < right + 4 && c.y0 < yc + 6.5 && c.y1 > yc - 6.5);
+        const under = candles.filter(c => c.x + c.reach > right - w + 0.05 && c.x - c.reach < right - 0.05 && c.y0 < yc + 6.5 && c.y1 > yc - 6.5);
         expect({ width, name: name.textContent, forced: name.dataset.forced, under: under.length }).toEqual({ width, name: name.textContent, forced: undefined, under: 0 });
         expect(right).toBeGreaterThanOrEqual(pw - 7 - MA_SHIFT - 1);
       }
@@ -648,6 +681,31 @@ describe('brief price chart', () => {
       const figures = [...el.querySelectorAll('.bc-legtext, .bc-tdepth')].map(node => labels.find(l => l.name === node.textContent));
       const names = [...el.querySelectorAll('.bc-malabel')].map(node => labels.find(l => l.name === node.textContent));
       for (const depth of figures) for (const name of names) if (depth && name && row(depth, name)) expect({ width, period, k, pair: `${depth.name} ${name.name}`, apart: gap(depth, name) > 12 }).toEqual({ width, period, k, pair: `${depth.name} ${name.name}`, apart: true });
+    }
+  });
+
+  it('joins a moved average\'s name to its line by a leader that runs through no other label and meets no other leader', () => {
+    // Flat finishes the averages all end in: their names crowd the right edge and move left and up or down.
+    const flat = bars.map((b, i) => (i > 200 ? { ...b, open: 90, high: 91.5, low: 88.5, close: 90 } : b));
+    const tall = flat.map((b, i) => (i >= bars.length - 4 ? { ...b, high: 112, low: 70 } : b));
+    let elbows = 0;
+    for (const series of [flat, tall]) for (const width of [290, 332, 390, 1000]) for (const period of [65, 130, 250]) {
+      const el = container(width, 340);
+      renderPriceChart(el, { ...model, bars: series, pivot: 92, upper: 96.6, stop: 85, legs: [] }, { period, animate: false });
+      expect({ width, period, through: leaderThrough(el) }).toEqual({ width, period, through: [] });
+      const segments = leaderSegments(el), hit = (a, b) => a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0;
+      const meet = segments.flatMap((a, i) => segments.slice(i + 1).filter(b => b.key !== a.key && hit(a, b)).map(b => `${a.key} × ${b.key}`));
+      expect({ width, period, meet }).toEqual({ width, period, meet: [] });
+      expect({ width, period, detached: detached(el, width - 68) }).toEqual({ width, period, detached: [] });
+      elbows += [...el.querySelectorAll('.bc-maleader')].filter(path => /H/.test(path.getAttribute('d'))).length;
+    }
+    expect(elbows).toBeGreaterThan(0);
+    // The busy charts too, where names share their rows with depths and levels.
+    for (const [width, period] of [[290, 130], [332, 130], [332, 250], [1000, 130], [1000, 65]]) for (const k of [1, 50]) {
+      const el = container(width, 340);
+      renderPriceChart(el, busy(k), { period, animate: false });
+      expect({ width, period, k, through: leaderThrough(el) }).toEqual({ width, period, k, through: [] });
+      expect({ width, period, k, detached: detached(el, width - 68) }).toEqual({ width, period, k, detached: [] });
     }
   });
 

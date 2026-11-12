@@ -19,11 +19,16 @@ const esc = text => String(text).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '
 // caption never sits on a bar).
 const FS = 12, TAG_H = 20, TAG_GAP = 20, VOL_HEAD = 20;
 /**
- * Where an average's name may go: its right end up to MA_SHIFT left of its place 7px from the axis, its centre within
- * MA_NEAR of its line's end first, then within MA_FAR (with a leader). The test that checks a forced name searches
- * inside this window. A narrow chart's zone name covers FEW_CANDLES candles at most.
+ * Where an average's name may go: its right end up to MA_SHIFT left of its place 7px from the axis and its centre within
+ * MA_NEAR of its line's end first, then up to MA_SHIFT_FAR left and within MA_FAR (with a leader). The test that checks
+ * a forced name searches the nearer window. A narrow chart's zone name covers FEW_CANDLES candles at most.
  */
-export const MA_SHIFT = 32, MA_NEAR = 24, MA_FAR = 72, FEW_CANDLES = 3;
+export const MA_SHIFT = 32, MA_SHIFT_FAR = 64, MA_NEAR = 24, MA_FAR = 72, FEW_CANDLES = 3;
+/**
+ * A moved average's leader runs along its name's row more than LEADER_OFF_LEVEL from a level line (closer, the two read
+ * as one line); a name that would otherwise be left out, more than LEADER_OFF_LEVEL_MIN.
+ */
+export const LEADER_OFF_LEVEL = 4.5, LEADER_OFF_LEVEL_MIN = 3;
 /** Below this chart width (a phone or a narrow tablet, under about 520px of screen) the chart uses its compact forms. */
 export const NARROW_CHART_WIDTH = 480;
 /** The RS panel's caption: its meaning (株価÷S&P 500, neither RS推計 nor IBD RS) is in the always-visible legend. */
@@ -426,9 +431,8 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
   // Contractions, newest first: every one shows its T number and its depth. The T number goes above its box and the
   // depth under it; one combined 「T2 −7%」 above it when the box is too narrow for the depth under it or the pair finds
   // no candle-free spots. Each takes the nearest spot around its box (inside it or beside it, accepting 24px more to
-  // keep clear of the lines, and 60px more to keep a level line out of its glyphs); a depth keeps more than a glyph from
-  // an average's name on its row (KIN_GAP.figure) and is never left out (over candles with its halo, or elsewhere in the
-  // plot when even its box's surroundings are taken).
+  // keep clear of the lines, and 60px more to keep a level line out of its glyphs); a depth is never left out (over
+  // candles with its halo, or elsewhere in the plot when even its box's surroundings are taken).
   const legLabels = legs.map(leg => { const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2; return { leg, x: (x0 + x1) / 2, x0, x1 }; });
   const around = (w, ax, ay, { x0, x1, top, low }) => spots({ x0: clampX(x0 - w - 4, w), x1: clampX(x1 + 4, w), ys: lineOf(top - 30, low + 30), inside: inPlot, cost: (lx, yc) => Math.abs(lx - ax) + 2 * Math.abs(yc - ay), near: { cost: 64, x: [ax - 64, ax + 64], y: [ay - 32, ay + 32] } });
   const tLabel = (leg, body, depth) => (at, search) => (at ? `<g class="bc-tlabel" data-leg="${leg.index}">${cut(at)}${text((at.x + width(body) / 2).toFixed(1), (at.yc + 4).toFixed(1), body, `bc-ttext${depth ? ' bc-tdepth' : ''}`, `text-anchor="middle" font-weight="700"${depth ? ` data-depth="${leg.depthPct}"` : ''} ${placedAttrs(at, search)}`)}</g>` : '');
@@ -438,7 +442,7 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
     const tBody = `T${leg.index + 1}`, tw = width(tBody), depth = finite(leg.depthPct) ? `−${Math.round(leg.depthPct)}%` : null, dw = depth ? width(depth, true) : 0;
     if (depth && x1 - x0 > Math.max(22, dw + 4)) {
       const t = placer.put(tw, around(tw, cx - tw / 2, area.top - 9, area), { forced: false, repair: true, slack: 24, hard: 60 });
-      const d = t.at ? placer.put(dw, around(dw, cx - dw / 2, area.low + 11, area), { forced: false, repair: true, slack: 24, hard: 60, kin: 'figure' }) : null;
+      const d = t.at ? placer.put(dw, around(dw, cx - dw / 2, area.low + 11, area), { forced: false, repair: true, slack: 24, hard: 60 }) : null;
       if (d?.at) {
         show(t, tLabel(leg, tBody, false));
         show(d, (at, search) => (at ? cut(at) + text((at.x + dw / 2).toFixed(1), (at.yc + 4).toFixed(1), depth, 'bc-legtext', `text-anchor="middle" font-weight="700" ${mono} data-depth="${leg.depthPct}" data-i="${leg.index}" ${placedAttrs(at, search)}`) : ''));
@@ -447,28 +451,76 @@ export function renderPriceChart(el, model, { period = 130, animate = true, fast
       placer.drop(t);
     }
     const body = depth ? `${tBody} ${depth}` : tBody, w = width(body);
-    const kin = depth ? 'figure' : null;
-    let label = placer.put(w, around(w, cx - w / 2, area.top - 9, area), { slack: 24, hard: 60, kin });
+    let label = placer.put(w, around(w, cx - w / 2, area.top - 9, area), { slack: 24, hard: 60 });
     // The whole plot on a coarse grid (8px across, 4px down): only when even the box's surroundings are taken.
-    if (!label.at && depth) label = placer.put(w, spots({ x0: 4, x1: pw - w - 4, ys: lineOf(padT + 6, plotBottom - 6, 4), step: 8, cost: (lx, yc) => Math.abs(lx - cx + w / 2) + 2 * Math.abs(yc - area.top + 9) }), { hard: 60, kin });
+    if (!label.at && depth) label = placer.put(w, spots({ x0: 4, x1: pw - w - 4, ys: lineOf(padT + 6, plotBottom - 6, 4), step: 8, cost: (lx, yc) => Math.abs(lx - cx + w / 2) + 2 * Math.abs(yc - area.top + 9) }), { hard: 60 });
     show(label, tLabel(leg, body, depth));
   }
   // The averages' names at their lines' right ends, ending 7px left of the axis (clear of the tags and their leaders):
-  // the nearest candle-free spot within MA_NEAR of the end's height and up to MA_SHIFT further left, then within MA_FAR;
-  // a 1px leader behind the candles joins a moved name to its line's end. Over the candles (each counted as 6px
-  // further) only when that whole window has no candle-free spot; left out only when every spot in it is taken. A
-  // level line through a name is cut under it.
-  const ends = averages.map(a => ({ a, v: a.shown.at(-1) })).filter(({ v }) => finite(v) && inRange(v)).map(({ a, v }) => ({ key: a.key, y: y(v), body: String(a.length) }));
-  for (const end of spread(ends, 13, padT + 6, plotBottom - 6)) {
+  // the nearest candle-free spot within MA_NEAR of the end's height and up to MA_SHIFT further left, then within MA_FAR
+  // and up to MA_SHIFT_FAR left; a 1px leader behind the candles joins a moved name to its line's end, unless its own
+  // line runs into the name's right end. Over the candles (each counted as 6px further) only when that whole window has
+  // no candle-free spot; left out only when every spot in it is taken. A level line through a name is cut under it. The
+  // leader is the name's own: its segments are reserved with the name (no later label sits on them), and a spot whose
+  // leader would run through a label, another leader or a mark, or along a level line, is not taken, so a leader never
+  // joins two names into one phrase (「150—10」) nor reads as part of a level.
+  const ends = averages.map(a => ({ a, v: a.shown.at(-1) })).filter(({ v }) => finite(v) && inRange(v)).map(({ a, v }) => ({ key: a.key, y: y(v), body: String(a.length), shown: a.shown }));
+  // Where an average's line runs at xx (straight between its points, as drawn), or null where it has no value there.
+  const lineAt = (shownValues, xx) => {
+    const i = Math.floor(xx / bw - 0.5), a = shownValues[i], b = shownValues[i + 1];
+    return finite(a) && finite(b) ? y(a) + (y(b) - y(a)) * (xx / bw - 0.5 - i) : null;
+  };
+  // Every line's end is held in the gutter first: no other line's leader runs past it (it would read as joined to it).
+  for (const end of ends) placer.take({ x0: pw - 2.5, x1: pw - 0.5, y0: end.y - 1.5, y1: end.y + 1.5, leader: 'end', key: end.key });
+  const placeName = (end, offLevel = LEADER_OFF_LEVEL) => {
     const w = width(end.body, true), lx = pw - 7 - w, lo = Math.floor(Math.min(end.at, end.y) - MA_FAR), hi = Math.ceil(Math.max(end.at, end.y) + MA_FAR);
     const cost = (x0, yc) => { const d = Math.abs(yc - end.at); return (d > MA_NEAR ? 1000 : 0) + d + lx - x0; };
     const near = { cost: MA_NEAR + MA_SHIFT, x: [lx - MA_SHIFT, lx], y: [end.at - MA_NEAR, end.at + MA_NEAR] };
-    const label = placer.put(w, spots({ x0: lx - MA_SHIFT, x1: lx, ys: lineOf(lo, hi, 1), inside: inPlot, cost, near }), { half: 6.5, slack: 0, perCandle: 6, kin: 'figure' });
+    // Beside the line's end: straight down or up to the name; a name moved left: on to its right end. None at the end
+    // itself (within 3px of its height), nor for a moved name its own line runs into (within 3px, 3px right of it).
+    const leaderOf = (x0, yc) => {
+      const shifted = x0 < lx - 1;
+      if (shifted ? Math.abs((lineAt(end.shown, x0 + w + 3) ?? Infinity) - yc) <= 3 : Math.abs(yc - end.y) <= 3) return null;
+      return { tip: shifted ? yc : yc + (end.y > yc ? 6 : -6), shifted, to: x0 + w + 2 };
+    };
+    // Its segments as boxes: the vertical part 2px wide in the axis gutter, the horizontal part 4px tall; null (no such
+    // spot) when the horizontal part would run along a level line or the zone's edge (within `offLevel`).
+    const leader = (x0, yc) => {
+      const path = leaderOf(x0, yc);
+      if (!path) return [];
+      if (path.shifted && struckBy.some(level => level.x0 < pw - 1.5 && Math.abs(level.y - yc) <= offLevel)) return null;
+      const segments = [{ x0: pw - 2.5, x1: pw - 0.5, y0: Math.min(end.y, path.tip) - 1, y1: Math.max(end.y, path.tip) + 1, leader: 'v', key: end.key, from: end.y, up: path.tip < end.y }];
+      if (path.shifted) segments.push({ x0: path.to, x1: pw - 1.5, y0: yc - 2, y1: yc + 2, leader: 'h', key: end.key, from: end.y });
+      return segments;
+    };
+    // Every 1px across and down (a name fits between two candles a coarser grid steps over), up to MA_SHIFT_FAR left.
+    const label = placer.put(w, spots({ x0: lx - MA_SHIFT_FAR, x1: lx, ys: lineOf(lo, hi, 1), step: 1, inside: inPlot, cost, near }), { half: 6.5, slack: 0, perCandle: 6, leader });
+    return { end, w, label, leaderOf };
+  };
+  // In the order of their ends (top first). When a name finds no spot at all, the names go again from the same state
+  // (the other labels back where they were): with the missing ones first, then (in either order) letting a leader run
+  // nearer a level line (LEADER_OFF_LEVEL_MIN); the first try that leaves none out is kept, else the one that leaves the
+  // fewest out (or as many, fewer over candles).
+  const order = spread(ends, 13, padT + 6, plotBottom - 6);
+  const score = list => list.filter(name => !name.label.at).length * 1000 + list.filter(name => name.label.at?.forced).length;
+  const beforeNames = placer.snapshot();
+  let names = order.map(end => placeName(end));
+  if (score(names) >= 1000) {
+    const missing = names.filter(name => !name.label.at).map(name => name.end), first = [...missing, ...order.filter(end => !missing.includes(end))];
+    let best = { list: order, offLevel: LEADER_OFF_LEVEL, score: score(names) }, last = best;
+    for (const [list, offLevel] of [[first, LEADER_OFF_LEVEL], [order, LEADER_OFF_LEVEL_MIN], [first, LEADER_OFF_LEVEL_MIN]]) {
+      placer.restore(beforeNames);
+      names = list.map(end => placeName(end, offLevel));
+      last = { list, offLevel, score: score(names) };
+      if (last.score < best.score) best = last;
+      if (last.score < 1000) break;
+    }
+    if (last !== best) { placer.restore(beforeNames); names = best.list.map(end => placeName(end, best.offLevel)); }
+  }
+  for (const { end, w, label, leaderOf } of names) {
     show(label, at => {
-      if (!at || Math.abs(at.yc - end.y) <= 3) return '';
-      // Beside the line's end: straight down or up to the name; a name moved left: on to its right end.
-      const shifted = at.x < lx - 1, tip = shifted ? at.yc : at.yc + (end.y > at.yc ? 6 : -6);
-      return `<path d="M${pw - 1.5},${end.y.toFixed(1)}V${tip.toFixed(1)}${shifted ? `H${(at.x + w + 2).toFixed(1)}` : ''}" class="bc-maleader bc-maleader-${end.key}" fill="none"/>`;
+      const path = at && leaderOf(at.x, at.yc);
+      return path ? `<path d="M${pw - 1.5},${end.y.toFixed(1)}V${path.tip.toFixed(1)}${path.shifted ? `H${path.to.toFixed(1)}` : ''}" class="bc-maleader bc-maleader-${end.key}" fill="none"/>` : '';
     }, B);
     show(label, (at, search) => (at ? cut(at) + text((at.x + w).toFixed(1), (at.yc + 4).toFixed(1), end.body, `bc-malabel bc-malabel-${end.key}`, `text-anchor="end" font-weight="700" ${mono} ${placedAttrs(at, search)}`) : ''));
   }
