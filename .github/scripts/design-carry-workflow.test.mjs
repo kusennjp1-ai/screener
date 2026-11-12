@@ -59,7 +59,7 @@ test('real carry replay uses one fixed memory budget without allowing runtime ho
 
 
 test('Design allows a finite 120-minute job without changing runner or acceptance gates',()=>{
-  assert.match(workflow,/runs-on: ubuntu-latest\n(?:\s*#[^\n]*\n)*\s+timeout-minutes: 120\n/);
+  assert.match(workflow,/runs-on: ubuntu-24\.04\n(?:\s*#[^\n]*\n)*\s+timeout-minutes: 120\n/);
   assert.equal((workflow.match(/timeout-minutes:/g)||[]).length,1);
   assert.doesNotMatch(workflow,/continue-on-error:/);
   const gate=step('name: Require every capture, no objective failure, and reviewed scores or the owner waiver');

@@ -22,7 +22,7 @@ concurrency:
 jobs:
   design-acceptance:
     name: Real-data design and performance budgets
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Authentic carry preparation and its replays precede the brief browser gates.
     # Keep a finite job cap; this changes runtime headroom, never acceptance budgets.
     timeout-minutes: 120
