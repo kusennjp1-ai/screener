@@ -1,0 +1,5570 @@
+{
+ "SPY": {
+  "last": "2026-11-12",
+  "rows": [
+   {
+    "i": 456,
+    "date": "2026-09-10",
+    "close": 757.83,
+    "low": 756.64,
+    "high": 760.09,
+    "ret": -0.599,
+    "volr": 1.298,
+    "vol_vs50": 1.02,
+    "rangepos": 0.34,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 457,
+    "date": "2026-09-11",
+    "close": 764.29,
+    "low": 763.6,
+    "high": 766.37,
+    "ret": 0.852,
+    "volr": 1.078,
+    "vol_vs50": 1.1,
+    "rangepos": 0.25,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 458,
+    "date": "2026-09-14",
+    "close": 760.88,
+    "low": 757.93,
+    "high": 763.52,
+    "ret": -0.446,
+    "volr": 0.965,
+    "vol_vs50": 1.06,
+    "rangepos": 0.53,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 459,
+    "date": "2026-09-15",
+    "close": 757.39,
+    "low": 756.15,
+    "high": 760.34,
+    "ret": -0.459,
+    "volr": 1.027,
+    "vol_vs50": 1.09,
+    "rangepos": 0.3,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 460,
+    "date": "2026-09-16",
+    "close": 754.05,
+    "low": 749.6,
+    "high": 761.65,
+    "ret": -0.441,
+    "volr": 1.318,
+    "vol_vs50": 1.44,
+    "rangepos": 0.37,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 461,
+    "date": "2026-09-17",
+    "close": 762.6,
+    "low": 759.96,
+    "high": 763.57,
+    "ret": 1.134,
+    "volr": 0.836,
+    "vol_vs50": 1.19,
+    "rangepos": 0.73,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 462,
+    "date": "2026-09-18",
+    "close": 761.69,
+    "low": 757.97,
+    "high": 762.0,
+    "ret": -0.119,
+    "volr": 1.32,
+    "vol_vs50": 1.56,
+    "rangepos": 0.92,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 463,
+    "date": "2026-09-21",
+    "close": 773.5,
+    "low": 766.03,
+    "high": 774.89,
+    "ret": 1.55,
+    "volr": 0.776,
+    "vol_vs50": 1.2,
+    "rangepos": 0.84,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 464,
+    "date": "2026-09-22",
+    "close": 773.38,
+    "low": 772.57,
+    "high": 775.14,
+    "ret": -0.016,
+    "volr": 0.689,
+    "vol_vs50": 0.82,
+    "rangepos": 0.32,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 465,
+    "date": "2026-09-23",
+    "close": 767.81,
+    "low": 766.5,
+    "high": 773.05,
+    "ret": -0.72,
+    "volr": 1.578,
+    "vol_vs50": 1.3,
+    "rangepos": 0.2,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 466,
+    "date": "2026-09-24",
+    "close": 767.18,
+    "low": 763.25,
+    "high": 768.95,
+    "ret": -0.082,
+    "volr": 0.801,
+    "vol_vs50": 1.03,
+    "rangepos": 0.69,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 467,
+    "date": "2026-09-25",
+    "close": 771.35,
+    "low": 766.29,
+    "high": 772.28,
+    "ret": 0.544,
+    "volr": 0.834,
+    "vol_vs50": 0.86,
+    "rangepos": 0.84,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 468,
+    "date": "2026-09-28",
+    "close": 765.61,
+    "low": 763.72,
+    "high": 769.54,
+    "ret": -0.744,
+    "volr": 1.164,
+    "vol_vs50": 1.0,
+    "rangepos": 0.32,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 469,
+    "date": "2026-09-29",
+    "close": 764.2,
+    "low": 762.35,
+    "high": 766.98,
+    "ret": -0.184,
+    "volr": 0.865,
+    "vol_vs50": 0.88,
+    "rangepos": 0.4,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 470,
+    "date": "2026-09-30",
+    "close": 762.63,
+    "low": 762.18,
+    "high": 769.41,
+    "ret": -0.205,
+    "volr": 1.683,
+    "vol_vs50": 1.48,
+    "rangepos": 0.06,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 471,
+    "date": "2026-10-01",
+    "close": 763.99,
+    "low": 758.79,
+    "high": 765.65,
+    "ret": 0.178,
+    "volr": 0.768,
+    "vol_vs50": 1.12,
+    "rangepos": 0.76,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 472,
+    "date": "2026-10-02",
+    "close": 769.64,
+    "low": 767.15,
+    "high": 772.65,
+    "ret": 0.74,
+    "volr": 0.971,
+    "vol_vs50": 1.08,
+    "rangepos": 0.45,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 473,
+    "date": "2026-10-05",
+    "close": 774.83,
+    "low": 769.63,
+    "high": 776.61,
+    "ret": 0.674,
+    "volr": 0.968,
+    "vol_vs50": 1.05,
+    "rangepos": 0.74,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 474,
+    "date": "2026-10-06",
+    "close": 779.09,
+    "low": 777.96,
+    "high": 781.62,
+    "ret": 0.55,
+    "volr": 0.804,
+    "vol_vs50": 0.84,
+    "rangepos": 0.31,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 475,
+    "date": "2026-10-07",
+    "close": 777.22,
+    "low": 773.61,
+    "high": 779.1,
+    "ret": -0.24,
+    "volr": 0.86,
+    "vol_vs50": 0.73,
+    "rangepos": 0.66,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 476,
+    "date": "2026-10-08",
+    "close": 773.93,
+    "low": 770.44,
+    "high": 777.09,
+    "ret": -0.423,
+    "volr": 1.305,
+    "vol_vs50": 0.95,
+    "rangepos": 0.52,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 477,
+    "date": "2026-10-09",
+    "close": 778.57,
+    "low": 775.14,
+    "high": 779.42,
+    "ret": 0.6,
+    "volr": 0.56,
+    "vol_vs50": 0.54,
+    "rangepos": 0.8,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 478,
+    "date": "2026-10-12",
+    "close": 778.1,
+    "low": 777.05,
+    "high": 779.4,
+    "ret": -0.06,
+    "volr": 0.826,
+    "vol_vs50": 0.46,
+    "rangepos": 0.45,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 479,
+    "date": "2026-10-13",
+    "close": 778.01,
+    "low": 775.95,
+    "high": 778.75,
+    "ret": -0.012,
+    "volr": 1.383,
+    "vol_vs50": 0.64,
+    "rangepos": 0.74,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 480,
+    "date": "2026-10-14",
+    "close": 769.6,
+    "low": 766.71,
+    "high": 776.35,
+    "ret": -1.081,
+    "volr": 2.156,
+    "vol_vs50": 1.41,
+    "rangepos": 0.3,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 481,
+    "date": "2026-10-15",
+    "close": 771.79,
+    "low": 764.43,
+    "high": 772.87,
+    "ret": 0.285,
+    "volr": 0.776,
+    "vol_vs50": 1.1,
+    "rangepos": 0.87,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 482,
+    "date": "2026-10-16",
+    "close": 763.25,
+    "low": 760.64,
+    "high": 773.25,
+    "ret": -1.107,
+    "volr": 1.488,
+    "vol_vs50": 1.63,
+    "rangepos": 0.21,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 483,
+    "date": "2026-10-19",
+    "close": 766.48,
+    "low": 765.82,
+    "high": 770.46,
+    "ret": 0.423,
+    "volr": 0.601,
+    "vol_vs50": 0.97,
+    "rangepos": 0.14,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 484,
+    "date": "2026-10-20",
+    "close": 769.05,
+    "low": 764.25,
+    "high": 772.29,
+    "ret": 0.335,
+    "volr": 0.906,
+    "vol_vs50": 0.88,
+    "rangepos": 0.6,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 485,
+    "date": "2026-10-21",
+    "close": 773.09,
+    "low": 768.4,
+    "high": 774.44,
+    "ret": 0.525,
+    "volr": 0.911,
+    "vol_vs50": 0.8,
+    "rangepos": 0.78,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 486,
+    "date": "2026-10-22",
+    "close": 763.96,
+    "low": 761.17,
+    "high": 767.71,
+    "ret": -1.181,
+    "volr": 1.694,
+    "vol_vs50": 1.35,
+    "rangepos": 0.43,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 487,
+    "date": "2026-10-23",
+    "close": 759.97,
+    "low": 758.68,
+    "high": 763.47,
+    "ret": -0.522,
+    "volr": 0.618,
+    "vol_vs50": 0.83,
+    "rangepos": 0.27,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 488,
+    "date": "2026-10-26",
+    "close": 765.37,
+    "low": 761.63,
+    "high": 767.73,
+    "ret": 0.711,
+    "volr": 0.95,
+    "vol_vs50": 0.78,
+    "rangepos": 0.61,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 489,
+    "date": "2026-10-27",
+    "close": 769.66,
+    "low": 765.21,
+    "high": 771.14,
+    "ret": 0.561,
+    "volr": 0.902,
+    "vol_vs50": 0.71,
+    "rangepos": 0.75,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 490,
+    "date": "2026-10-28",
+    "close": 772.31,
+    "low": 769.24,
+    "high": 773.36,
+    "ret": 0.344,
+    "volr": 1.052,
+    "vol_vs50": 0.75,
+    "rangepos": 0.75,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 491,
+    "date": "2026-10-29",
+    "close": 769.36,
+    "low": 766.62,
+    "high": 770.76,
+    "ret": -0.382,
+    "volr": 1.337,
+    "vol_vs50": 1.0,
+    "rangepos": 0.66,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 492,
+    "date": "2026-10-30",
+    "close": 755.72,
+    "low": 750.36,
+    "high": 761.46,
+    "ret": -1.773,
+    "volr": 1.928,
+    "vol_vs50": 1.94,
+    "rangepos": 0.48,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 493,
+    "date": "2026-11-02",
+    "close": 752.1,
+    "low": 751.6,
+    "high": 763.86,
+    "ret": -0.479,
+    "volr": 0.654,
+    "vol_vs50": 1.24,
+    "rangepos": 0.04,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 494,
+    "date": "2026-11-03",
+    "close": 754.35,
+    "low": 752.39,
+    "high": 757.07,
+    "ret": 0.299,
+    "volr": 0.647,
+    "vol_vs50": 0.8,
+    "rangepos": 0.42,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 495,
+    "date": "2026-11-04",
+    "close": 766.81,
+    "low": 762.64,
+    "high": 775.64,
+    "ret": 1.652,
+    "volr": 1.889,
+    "vol_vs50": 1.51,
+    "rangepos": 0.32,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 496,
+    "date": "2026-11-05",
+    "close": 733.0,
+    "low": 732.71,
+    "high": 765.97,
+    "ret": -4.409,
+    "volr": 2.026,
+    "vol_vs50": 3.01,
+    "rangepos": 0.01,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 497,
+    "date": "2026-11-06",
+    "close": 735.29,
+    "low": 734.58,
+    "high": 742.21,
+    "ret": 0.312,
+    "volr": 0.468,
+    "vol_vs50": 1.35,
+    "rangepos": 0.09,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 498,
+    "date": "2026-11-09",
+    "close": 752.69,
+    "low": 741.03,
+    "high": 755.42,
+    "ret": 2.366,
+    "volr": 0.853,
+    "vol_vs50": 1.13,
+    "rangepos": 0.81,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 499,
+    "date": "2026-11-10",
+    "close": 749.92,
+    "low": 744.86,
+    "high": 752.14,
+    "ret": -0.368,
+    "volr": 0.809,
+    "vol_vs50": 0.91,
+    "rangepos": 0.7,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 500,
+    "date": "2026-11-11",
+    "close": 759.81,
+    "low": 754.9,
+    "high": 762.51,
+    "ret": 1.319,
+    "volr": 0.962,
+    "vol_vs50": 0.88,
+    "rangepos": 0.65,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 501,
+    "date": "2026-11-12",
+    "close": 757.12,
+    "low": 753.7,
+    "high": 763.03,
+    "ret": -0.354,
+    "volr": 0.946,
+    "vol_vs50": 0.83,
+    "rangepos": 0.37,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   }
+  ],
+  "variants": {
+   "incl|stall=None|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "incl|stall=None|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "incl|stall=None|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "incl|stall=app|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "incl|stall=app|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "incl|stall=app|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "incl|stall=wide|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "incl|stall=wide|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "incl|stall=wide|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "strict|stall=None|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "strict|stall=None|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "strict|stall=None|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "strict|stall=app|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "strict|stall=app|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "strict|stall=app|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "strict|stall=wide|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "strict|stall=wide|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   },
+   "strict|stall=wide|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30",
+     "2026-11-05"
+    ]
+   }
+  },
+  "hist": [
+   {
+    "date": "2026-09-10",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-09-11",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-09-14",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-09-15",
+    "backend_like": 10,
+    "classic_incl": 10,
+    "frontend_like": 10
+   },
+   {
+    "date": "2026-09-16",
+    "backend_like": 10,
+    "classic_incl": 10,
+    "frontend_like": 10
+   },
+   {
+    "date": "2026-09-17",
+    "backend_like": 10,
+    "classic_incl": 10,
+    "frontend_like": 10
+   },
+   {
+    "date": "2026-09-18",
+    "backend_like": 10,
+    "classic_incl": 10,
+    "frontend_like": 10
+   },
+   {
+    "date": "2026-09-21",
+    "backend_like": 10,
+    "classic_incl": 10,
+    "frontend_like": 10
+   },
+   {
+    "date": "2026-09-22",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-09-23",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-09-24",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-09-25",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-09-28",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-09-29",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-09-30",
+    "backend_like": 10,
+    "classic_incl": 10,
+    "frontend_like": 10
+   },
+   {
+    "date": "2026-10-01",
+    "backend_like": 10,
+    "classic_incl": 10,
+    "frontend_like": 10
+   },
+   {
+    "date": "2026-10-02",
+    "backend_like": 10,
+    "classic_incl": 10,
+    "frontend_like": 10
+   },
+   {
+    "date": "2026-10-05",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-10-06",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-10-07",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-08",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-10-09",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-10-12",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-10-13",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-14",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-10-15",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-16",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-10-19",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-10-20",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-21",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-22",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-23",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-26",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-27",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-28",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-29",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-30",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-11-02",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-11-03",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-11-04",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-11-05",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-11-06",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-11-09",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-11-10",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-11-11",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-11-12",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   }
+  ],
+  "rally": {
+   "peak": {
+    "date": "2026-10-06",
+    "close": 779.0900268554688
+   },
+   "low": {
+    "date": "2026-11-05",
+    "low": 732.7100219726562,
+    "close": 733.0
+   },
+   "decline_close_to_lowclose": 5.92,
+   "decline_close_to_intraday_low": 5.95,
+   "maxdd_closing": 5.92,
+   "day1": "2026-11-06",
+   "day_count_on_last": 5,
+   "log": [
+    {
+     "date": "2026-10-09",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-14",
+     "ev": "undercut -> attempt reset",
+     "was_day": 4
+    },
+    {
+     "date": "2026-10-19",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-23",
+     "ev": "undercut -> attempt reset",
+     "was_day": 5
+    },
+    {
+     "date": "2026-10-26",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-30",
+     "ev": "undercut -> attempt reset",
+     "was_day": 5
+    },
+    {
+     "date": "2026-11-03",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-11-05",
+     "ev": "undercut -> attempt reset",
+     "was_day": 3
+    },
+    {
+     "date": "2026-11-06",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-11-11",
+     "ev": "FTD price-leg candidate",
+     "day": 4,
+     "gain": 1.32,
+     "vol_ratio_prev": 0.962,
+     "vol_higher": false,
+     "passes": {
+      "1.0": true,
+      "1.2": true,
+      "1.25": true,
+      "1.5": false,
+      "1.7": false,
+      "2.0": false
+     }
+    }
+   ]
+  },
+  "ma": {
+   "close": 757.12,
+   "sma50": 764.8,
+   "sma200": 731.29,
+   "vs50": -1.0,
+   "vs200": 3.53,
+   "sma50_rising_21": false,
+   "hi252": 779.0900268554688,
+   "from_high": 2.82
+  }
+ },
+ "QQQ": {
+  "last": "2026-11-12",
+  "rows": [
+   {
+    "i": 456,
+    "date": "2026-09-10",
+    "close": 708.69,
+    "low": 706.86,
+    "high": 712.06,
+    "ret": -1.064,
+    "volr": 1.174,
+    "vol_vs50": 0.87,
+    "rangepos": 0.35,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 457,
+    "date": "2026-09-11",
+    "close": 714.88,
+    "low": 713.63,
+    "high": 717.63,
+    "ret": 0.873,
+    "volr": 0.848,
+    "vol_vs50": 0.74,
+    "rangepos": 0.31,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 458,
+    "date": "2026-09-14",
+    "close": 709.18,
+    "low": 702.74,
+    "high": 712.95,
+    "ret": -0.797,
+    "volr": 1.322,
+    "vol_vs50": 0.99,
+    "rangepos": 0.63,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 459,
+    "date": "2026-09-15",
+    "close": 704.54,
+    "low": 703.64,
+    "high": 709.53,
+    "ret": -0.654,
+    "volr": 0.756,
+    "vol_vs50": 0.75,
+    "rangepos": 0.15,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 460,
+    "date": "2026-09-16",
+    "close": 704.72,
+    "low": 700.0,
+    "high": 711.88,
+    "ret": 0.026,
+    "volr": 1.34,
+    "vol_vs50": 1.01,
+    "rangepos": 0.4,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 461,
+    "date": "2026-09-17",
+    "close": 716.92,
+    "low": 713.32,
+    "high": 718.04,
+    "ret": 1.731,
+    "volr": 1.044,
+    "vol_vs50": 1.06,
+    "rangepos": 0.76,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 462,
+    "date": "2026-09-18",
+    "close": 721.45,
+    "low": 715.08,
+    "high": 721.73,
+    "ret": 0.632,
+    "volr": 1.301,
+    "vol_vs50": 1.38,
+    "rangepos": 0.96,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 463,
+    "date": "2026-09-21",
+    "close": 741.47,
+    "low": 727.81,
+    "high": 743.22,
+    "ret": 2.775,
+    "volr": 0.964,
+    "vol_vs50": 1.32,
+    "rangepos": 0.89,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 464,
+    "date": "2026-09-22",
+    "close": 747.46,
+    "low": 740.93,
+    "high": 748.35,
+    "ret": 0.808,
+    "volr": 0.859,
+    "vol_vs50": 1.12,
+    "rangepos": 0.88,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 465,
+    "date": "2026-09-23",
+    "close": 741.21,
+    "low": 738.19,
+    "high": 747.13,
+    "ret": -0.836,
+    "volr": 0.827,
+    "vol_vs50": 0.92,
+    "rangepos": 0.34,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 466,
+    "date": "2026-09-24",
+    "close": 741.1,
+    "low": 734.62,
+    "high": 742.66,
+    "ret": -0.015,
+    "volr": 0.874,
+    "vol_vs50": 0.8,
+    "rangepos": 0.81,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 467,
+    "date": "2026-09-25",
+    "close": 744.5,
+    "low": 739.64,
+    "high": 745.92,
+    "ret": 0.459,
+    "volr": 1.044,
+    "vol_vs50": 0.84,
+    "rangepos": 0.77,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 468,
+    "date": "2026-09-28",
+    "close": 736.53,
+    "low": 731.63,
+    "high": 741.42,
+    "ret": -1.071,
+    "volr": 1.379,
+    "vol_vs50": 1.17,
+    "rangepos": 0.5,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 469,
+    "date": "2026-09-29",
+    "close": 737.93,
+    "low": 735.34,
+    "high": 740.58,
+    "ret": 0.19,
+    "volr": 0.648,
+    "vol_vs50": 0.76,
+    "rangepos": 0.49,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 470,
+    "date": "2026-09-30",
+    "close": 739.77,
+    "low": 739.46,
+    "high": 745.1,
+    "ret": 0.249,
+    "volr": 1.102,
+    "vol_vs50": 0.84,
+    "rangepos": 0.05,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": true,
+    "borderline": true
+   },
+   {
+    "i": 471,
+    "date": "2026-10-01",
+    "close": 742.03,
+    "low": 736.25,
+    "high": 744.67,
+    "ret": 0.306,
+    "volr": 1.198,
+    "vol_vs50": 1.01,
+    "rangepos": 0.69,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 472,
+    "date": "2026-10-02",
+    "close": 749.58,
+    "low": 747.53,
+    "high": 754.54,
+    "ret": 1.017,
+    "volr": 0.966,
+    "vol_vs50": 0.97,
+    "rangepos": 0.29,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 473,
+    "date": "2026-10-05",
+    "close": 756.2,
+    "low": 749.08,
+    "high": 756.92,
+    "ret": 0.883,
+    "volr": 0.742,
+    "vol_vs50": 0.72,
+    "rangepos": 0.91,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 474,
+    "date": "2026-10-06",
+    "close": 759.66,
+    "low": 759.1,
+    "high": 762.86,
+    "ret": 0.458,
+    "volr": 1.036,
+    "vol_vs50": 0.75,
+    "rangepos": 0.15,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 475,
+    "date": "2026-10-07",
+    "close": 757.73,
+    "low": 751.75,
+    "high": 758.3,
+    "ret": -0.254,
+    "volr": 0.961,
+    "vol_vs50": 0.73,
+    "rangepos": 0.91,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 476,
+    "date": "2026-10-08",
+    "close": 747.58,
+    "low": 743.23,
+    "high": 757.18,
+    "ret": -1.34,
+    "volr": 1.951,
+    "vol_vs50": 1.45,
+    "rangepos": 0.31,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 477,
+    "date": "2026-10-09",
+    "close": 751.27,
+    "low": 748.37,
+    "high": 752.87,
+    "ret": 0.494,
+    "volr": 0.426,
+    "vol_vs50": 0.62,
+    "rangepos": 0.64,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 478,
+    "date": "2026-10-12",
+    "close": 746.04,
+    "low": 744.85,
+    "high": 749.79,
+    "ret": -0.696,
+    "volr": 1.188,
+    "vol_vs50": 0.76,
+    "rangepos": 0.24,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 479,
+    "date": "2026-10-13",
+    "close": 743.57,
+    "low": 738.83,
+    "high": 744.2,
+    "ret": -0.331,
+    "volr": 1.143,
+    "vol_vs50": 0.88,
+    "rangepos": 0.88,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 480,
+    "date": "2026-10-14",
+    "close": 728.95,
+    "low": 726.39,
+    "high": 740.53,
+    "ret": -1.966,
+    "volr": 1.823,
+    "vol_vs50": 1.62,
+    "rangepos": 0.18,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 481,
+    "date": "2026-10-15",
+    "close": 728.0,
+    "low": 715.44,
+    "high": 729.43,
+    "ret": -0.13,
+    "volr": 0.951,
+    "vol_vs50": 1.54,
+    "rangepos": 0.9,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 482,
+    "date": "2026-10-16",
+    "close": 709.8,
+    "low": 707.23,
+    "high": 725.96,
+    "ret": -2.5,
+    "volr": 1.343,
+    "vol_vs50": 2.05,
+    "rangepos": 0.14,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 483,
+    "date": "2026-10-19",
+    "close": 718.36,
+    "low": 716.57,
+    "high": 724.55,
+    "ret": 1.206,
+    "volr": 0.556,
+    "vol_vs50": 1.12,
+    "rangepos": 0.22,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 484,
+    "date": "2026-10-20",
+    "close": 717.63,
+    "low": 710.39,
+    "high": 722.75,
+    "ret": -0.102,
+    "volr": 0.82,
+    "vol_vs50": 0.91,
+    "rangepos": 0.59,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 485,
+    "date": "2026-10-21",
+    "close": 725.2,
+    "low": 719.71,
+    "high": 727.95,
+    "ret": 1.055,
+    "volr": 1.064,
+    "vol_vs50": 0.97,
+    "rangepos": 0.67,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 486,
+    "date": "2026-10-22",
+    "close": 704.47,
+    "low": 701.9,
+    "high": 715.43,
+    "ret": -2.859,
+    "volr": 1.988,
+    "vol_vs50": 1.93,
+    "rangepos": 0.19,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 487,
+    "date": "2026-10-23",
+    "close": 704.4,
+    "low": 701.16,
+    "high": 709.3,
+    "ret": -0.01,
+    "volr": 0.468,
+    "vol_vs50": 0.88,
+    "rangepos": 0.4,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 488,
+    "date": "2026-10-26",
+    "close": 712.2,
+    "low": 705.58,
+    "high": 715.25,
+    "ret": 1.107,
+    "volr": 1.095,
+    "vol_vs50": 0.97,
+    "rangepos": 0.68,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 489,
+    "date": "2026-10-27",
+    "close": 721.25,
+    "low": 713.59,
+    "high": 722.87,
+    "ret": 1.271,
+    "volr": 0.935,
+    "vol_vs50": 0.9,
+    "rangepos": 0.83,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 490,
+    "date": "2026-10-28",
+    "close": 725.61,
+    "low": 720.3,
+    "high": 726.14,
+    "ret": 0.605,
+    "volr": 0.986,
+    "vol_vs50": 0.88,
+    "rangepos": 0.91,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 491,
+    "date": "2026-10-29",
+    "close": 715.34,
+    "low": 711.62,
+    "high": 718.07,
+    "ret": -1.415,
+    "volr": 1.254,
+    "vol_vs50": 1.12,
+    "rangepos": 0.58,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 492,
+    "date": "2026-10-30",
+    "close": 690.49,
+    "low": 683.45,
+    "high": 698.63,
+    "ret": -3.474,
+    "volr": 2.228,
+    "vol_vs50": 2.49,
+    "rangepos": 0.46,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 493,
+    "date": "2026-11-02",
+    "close": 681.09,
+    "low": 680.33,
+    "high": 699.43,
+    "ret": -1.361,
+    "volr": 0.642,
+    "vol_vs50": 1.55,
+    "rangepos": 0.04,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 494,
+    "date": "2026-11-03",
+    "close": 685.28,
+    "low": 683.18,
+    "high": 688.69,
+    "ret": 0.615,
+    "volr": 0.685,
+    "vol_vs50": 1.05,
+    "rangepos": 0.38,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 495,
+    "date": "2026-11-04",
+    "close": 691.95,
+    "low": 687.87,
+    "high": 701.45,
+    "ret": 0.973,
+    "volr": 1.662,
+    "vol_vs50": 1.75,
+    "rangepos": 0.3,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 496,
+    "date": "2026-11-05",
+    "close": 647.05,
+    "low": 647.05,
+    "high": 683.65,
+    "ret": -6.489,
+    "volr": 2.095,
+    "vol_vs50": 3.59,
+    "rangepos": 0.0,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 497,
+    "date": "2026-11-06",
+    "close": 656.1,
+    "low": 653.99,
+    "high": 664.52,
+    "ret": 1.399,
+    "volr": 0.541,
+    "vol_vs50": 1.83,
+    "rangepos": 0.2,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 498,
+    "date": "2026-11-09",
+    "close": 679.35,
+    "low": 662.02,
+    "high": 682.48,
+    "ret": 3.544,
+    "volr": 0.777,
+    "vol_vs50": 1.39,
+    "rangepos": 0.85,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 499,
+    "date": "2026-11-10",
+    "close": 674.76,
+    "low": 667.05,
+    "high": 680.95,
+    "ret": -0.676,
+    "volr": 0.707,
+    "vol_vs50": 0.97,
+    "rangepos": 0.55,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 500,
+    "date": "2026-11-11",
+    "close": 690.38,
+    "low": 683.56,
+    "high": 695.57,
+    "ret": 2.315,
+    "volr": 1.155,
+    "vol_vs50": 1.12,
+    "rangepos": 0.57,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 501,
+    "date": "2026-11-12",
+    "close": 688.17,
+    "low": 679.84,
+    "high": 694.56,
+    "ret": -0.32,
+    "volr": 0.804,
+    "vol_vs50": 0.9,
+    "rangepos": 0.57,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   }
+  ],
+  "variants": {
+   "incl|stall=None|close5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=None|high5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=None|high6": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=app|close5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=app|high5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=app|high6": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=wide|close5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=wide|high5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=wide|high6": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=None|close5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=None|high5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=None|high6": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=app|close5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=app|high5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=app|high6": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=wide|close5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=wide|high5": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=wide|high6": {
+    "n": 7,
+    "days": [
+     "2026-10-12",
+     "2026-10-13",
+     "2026-10-14",
+     "2026-10-16",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   }
+  },
+  "hist": [
+   {
+    "date": "2026-09-10",
+    "backend_like": 7,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-11",
+    "backend_like": 7,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-14",
+    "backend_like": 8,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-09-15",
+    "backend_like": 8,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-09-16",
+    "backend_like": 7,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-17",
+    "backend_like": 7,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-18",
+    "backend_like": 7,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-21",
+    "backend_like": 7,
+    "classic_incl": 6,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-22",
+    "backend_like": 3,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-09-23",
+    "backend_like": 2,
+    "classic_incl": 1,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-09-24",
+    "backend_like": 2,
+    "classic_incl": 1,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-09-25",
+    "backend_like": 2,
+    "classic_incl": 1,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-09-28",
+    "backend_like": 3,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-09-29",
+    "backend_like": 3,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-09-30",
+    "backend_like": 3,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-01",
+    "backend_like": 3,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-02",
+    "backend_like": 3,
+    "classic_incl": 2,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-10-05",
+    "backend_like": 1,
+    "classic_incl": 1,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-10-06",
+    "backend_like": 1,
+    "classic_incl": 1,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-10-07",
+    "backend_like": 1,
+    "classic_incl": 1,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-10-08",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-09",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-12",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-10-13",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-10-14",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-10-15",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-10-16",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-19",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-20",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-21",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-22",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-23",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-26",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-27",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-28",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-29",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-10-30",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-11-02",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-11-03",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-11-04",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-11-05",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-11-06",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 9
+   },
+   {
+    "date": "2026-11-09",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-11-10",
+    "backend_like": 9,
+    "classic_incl": 9,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-11-11",
+    "backend_like": 8,
+    "classic_incl": 8,
+    "frontend_like": 8
+   },
+   {
+    "date": "2026-11-12",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   }
+  ],
+  "rally": {
+   "peak": {
+    "date": "2026-10-06",
+    "close": 759.6599731445312
+   },
+   "low": {
+    "date": "2026-11-05",
+    "low": 647.0499877929688,
+    "close": 647.0499877929688
+   },
+   "decline_close_to_lowclose": 14.82,
+   "decline_close_to_intraday_low": 14.82,
+   "maxdd_closing": 14.82,
+   "day1": "2026-11-06",
+   "day_count_on_last": 5,
+   "log": [
+    {
+     "date": "2026-10-09",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-13",
+     "ev": "undercut -> attempt reset",
+     "was_day": 3
+    },
+    {
+     "date": "2026-10-19",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-21",
+     "ev": "FTD price-leg candidate",
+     "day": 3,
+     "gain": 1.05,
+     "vol_ratio_prev": 1.064,
+     "vol_higher": true,
+     "passes": {
+      "1.0": true,
+      "1.2": false,
+      "1.25": false,
+      "1.5": false,
+      "1.7": false,
+      "2.0": false
+     }
+    },
+    {
+     "date": "2026-10-22",
+     "ev": "undercut -> attempt reset",
+     "was_day": 4
+    },
+    {
+     "date": "2026-10-26",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-30",
+     "ev": "undercut -> attempt reset",
+     "was_day": 5
+    },
+    {
+     "date": "2026-11-03",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-11-05",
+     "ev": "undercut -> attempt reset",
+     "was_day": 3
+    },
+    {
+     "date": "2026-11-06",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-11-11",
+     "ev": "FTD price-leg candidate",
+     "day": 4,
+     "gain": 2.31,
+     "vol_ratio_prev": 1.155,
+     "vol_higher": true,
+     "passes": {
+      "1.0": true,
+      "1.2": true,
+      "1.25": true,
+      "1.5": true,
+      "1.7": true,
+      "2.0": true
+     }
+    }
+   ]
+  },
+  "ma": {
+   "close": 688.17,
+   "sma50": 718.62,
+   "sma200": 681.99,
+   "vs50": -4.24,
+   "vs200": 0.91,
+   "sma50_rising_21": false,
+   "hi252": 759.6599731445312,
+   "from_high": 9.41
+  }
+ },
+ "^GSPC": {
+  "last": "2026-11-03",
+  "rows": [
+   {
+    "i": 9232,
+    "date": "2026-08-31",
+    "close": 7686.14,
+    "low": 7665.06,
+    "high": 7697.52,
+    "ret": -0.332,
+    "volr": 1.253,
+    "vol_vs50": 1.03,
+    "rangepos": 0.65,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9233,
+    "date": "2026-09-01",
+    "close": 7631.47,
+    "low": 7611.2,
+    "high": 7663.63,
+    "ret": -0.711,
+    "volr": 0.902,
+    "vol_vs50": 0.94,
+    "rangepos": 0.39,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9234,
+    "date": "2026-09-02",
+    "close": 7666.6,
+    "low": 7633.62,
+    "high": 7681.19,
+    "ret": 0.46,
+    "volr": 0.975,
+    "vol_vs50": 0.92,
+    "rangepos": 0.69,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9235,
+    "date": "2026-09-03",
+    "close": 7747.71,
+    "low": 7686.71,
+    "high": 7756.76,
+    "ret": 1.058,
+    "volr": 0.997,
+    "vol_vs50": 0.92,
+    "rangepos": 0.87,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9236,
+    "date": "2026-09-04",
+    "close": 7718.6,
+    "low": 7706.12,
+    "high": 7750.19,
+    "ret": -0.376,
+    "volr": 0.868,
+    "vol_vs50": 0.81,
+    "rangepos": 0.28,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9237,
+    "date": "2026-09-08",
+    "close": 7673.52,
+    "low": 7666.99,
+    "high": 7717.81,
+    "ret": -0.584,
+    "volr": 1.21,
+    "vol_vs50": 0.98,
+    "rangepos": 0.13,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9238,
+    "date": "2026-09-09",
+    "close": 7636.36,
+    "low": 7624.16,
+    "high": 7660.68,
+    "ret": -0.484,
+    "volr": 0.986,
+    "vol_vs50": 0.98,
+    "rangepos": 0.33,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9239,
+    "date": "2026-09-10",
+    "close": 7591.7,
+    "low": 7580.06,
+    "high": 7612.86,
+    "ret": -0.585,
+    "volr": 0.999,
+    "vol_vs50": 0.99,
+    "rangepos": 0.35,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9240,
+    "date": "2026-09-11",
+    "close": 7656.98,
+    "low": 7636.75,
+    "high": 7677.02,
+    "ret": 0.86,
+    "volr": 0.965,
+    "vol_vs50": 0.96,
+    "rangepos": 0.5,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9241,
+    "date": "2026-09-14",
+    "close": 7619.98,
+    "low": 7592.28,
+    "high": 7647.99,
+    "ret": -0.483,
+    "volr": 1.051,
+    "vol_vs50": 1.01,
+    "rangepos": 0.5,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9242,
+    "date": "2026-09-15",
+    "close": 7585.73,
+    "low": 7572.69,
+    "high": 7617.26,
+    "ret": -0.449,
+    "volr": 1.039,
+    "vol_vs50": 1.05,
+    "rangepos": 0.29,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9243,
+    "date": "2026-09-16",
+    "close": 7551.81,
+    "low": 7507.77,
+    "high": 7626.79,
+    "ret": -0.447,
+    "volr": 1.03,
+    "vol_vs50": 1.08,
+    "rangepos": 0.37,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9244,
+    "date": "2026-09-17",
+    "close": 7637.76,
+    "low": 7611.81,
+    "high": 7646.86,
+    "ret": 1.138,
+    "volr": 0.953,
+    "vol_vs50": 1.03,
+    "rangepos": 0.74,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9245,
+    "date": "2026-09-18",
+    "close": 7650.5,
+    "low": 7610.52,
+    "high": 7657.17,
+    "ret": 0.167,
+    "volr": 1.751,
+    "vol_vs50": 1.8,
+    "rangepos": 0.86,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 9246,
+    "date": "2026-09-21",
+    "close": 7764.7,
+    "low": 7691.19,
+    "high": 7779.22,
+    "ret": 1.493,
+    "volr": 0.545,
+    "vol_vs50": 0.96,
+    "rangepos": 0.84,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9247,
+    "date": "2026-09-22",
+    "close": 7764.64,
+    "low": 7756.26,
+    "high": 7782.19,
+    "ret": -0.001,
+    "volr": 1.095,
+    "vol_vs50": 1.05,
+    "rangepos": 0.32,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9248,
+    "date": "2026-09-23",
+    "close": 7706.03,
+    "low": 7694.89,
+    "high": 7761.94,
+    "ret": -0.755,
+    "volr": 0.967,
+    "vol_vs50": 1.02,
+    "rangepos": 0.17,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9249,
+    "date": "2026-09-24",
+    "close": 7704.13,
+    "low": 7662.57,
+    "high": 7719.01,
+    "ret": -0.025,
+    "volr": 1.04,
+    "vol_vs50": 1.05,
+    "rangepos": 0.74,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9250,
+    "date": "2026-09-25",
+    "close": 7743.41,
+    "low": 7693.08,
+    "high": 7752.07,
+    "ret": 0.51,
+    "volr": 0.846,
+    "vol_vs50": 0.89,
+    "rangepos": 0.85,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9251,
+    "date": "2026-09-28",
+    "close": 7683.69,
+    "low": 7666.6,
+    "high": 7724.15,
+    "ret": -0.771,
+    "volr": 1.14,
+    "vol_vs50": 1.02,
+    "rangepos": 0.3,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9252,
+    "date": "2026-09-29",
+    "close": 7670.84,
+    "low": 7653.55,
+    "high": 7699.6,
+    "ret": -0.167,
+    "volr": 0.979,
+    "vol_vs50": 1.0,
+    "rangepos": 0.38,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 9253,
+    "date": "2026-09-30",
+    "close": 7651.54,
+    "low": 7651.54,
+    "high": 7722.88,
+    "ret": -0.252,
+    "volr": 0.851,
+    "vol_vs50": 0.85,
+    "rangepos": 0.0,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9254,
+    "date": "2026-10-01",
+    "close": 7666.45,
+    "low": 7616.78,
+    "high": 7684.75,
+    "ret": 0.195,
+    "volr": 1.352,
+    "vol_vs50": 1.16,
+    "rangepos": 0.73,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 9255,
+    "date": "2026-10-02",
+    "close": 7722.72,
+    "low": 7700.51,
+    "high": 7754.67,
+    "ret": 0.734,
+    "volr": 0.912,
+    "vol_vs50": 1.05,
+    "rangepos": 0.41,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9256,
+    "date": "2026-10-05",
+    "close": 7773.95,
+    "low": 7727.59,
+    "high": 7794.35,
+    "ret": 0.663,
+    "volr": 1.107,
+    "vol_vs50": 1.17,
+    "rangepos": 0.69,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9257,
+    "date": "2026-10-06",
+    "close": 7818.93,
+    "low": 7805.96,
+    "high": 7844.52,
+    "ret": 0.579,
+    "volr": 0.859,
+    "vol_vs50": 1.0,
+    "rangepos": 0.34,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9258,
+    "date": "2026-10-07",
+    "close": 7801.77,
+    "low": 7763.34,
+    "high": 7807.02,
+    "ret": -0.219,
+    "volr": 1.018,
+    "vol_vs50": 1.02,
+    "rangepos": 0.88,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 9259,
+    "date": "2026-10-08",
+    "close": 7765.36,
+    "low": 7731.26,
+    "high": 7797.79,
+    "ret": -0.467,
+    "volr": 1.19,
+    "vol_vs50": 1.21,
+    "rangepos": 0.51,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9260,
+    "date": "2026-10-09",
+    "close": 7811.54,
+    "low": 7779.34,
+    "high": 7820.57,
+    "ret": 0.595,
+    "volr": 0.786,
+    "vol_vs50": 0.95,
+    "rangepos": 0.78,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9261,
+    "date": "2026-10-12",
+    "close": 7807.24,
+    "low": 7796.94,
+    "high": 7821.67,
+    "ret": -0.055,
+    "volr": 0.867,
+    "vol_vs50": 0.83,
+    "rangepos": 0.42,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9262,
+    "date": "2026-10-13",
+    "close": 7805.45,
+    "low": 7786.11,
+    "high": 7814.15,
+    "ret": -0.023,
+    "volr": 1.174,
+    "vol_vs50": 0.98,
+    "rangepos": 0.69,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9263,
+    "date": "2026-10-14",
+    "close": 7718.94,
+    "low": 7693.31,
+    "high": 7789.15,
+    "ret": -1.108,
+    "volr": 1.223,
+    "vol_vs50": 1.2,
+    "rangepos": 0.27,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9264,
+    "date": "2026-10-15",
+    "close": 7744.06,
+    "low": 7669.66,
+    "high": 7754.15,
+    "ret": 0.325,
+    "volr": 1.017,
+    "vol_vs50": 1.22,
+    "rangepos": 0.88,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9265,
+    "date": "2026-10-16",
+    "close": 7659.44,
+    "low": 7631.77,
+    "high": 7756.84,
+    "ret": -1.093,
+    "volr": 0.905,
+    "vol_vs50": 1.1,
+    "rangepos": 0.22,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9266,
+    "date": "2026-10-19",
+    "close": 7690.73,
+    "low": 7684.79,
+    "high": 7731.18,
+    "ret": 0.409,
+    "volr": 0.837,
+    "vol_vs50": 0.92,
+    "rangepos": 0.13,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9267,
+    "date": "2026-10-20",
+    "close": 7712.57,
+    "low": 7668.03,
+    "high": 7748.42,
+    "ret": 0.284,
+    "volr": 1.091,
+    "vol_vs50": 1.0,
+    "rangepos": 0.55,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9268,
+    "date": "2026-10-21",
+    "close": 7757.17,
+    "low": 7709.34,
+    "high": 7770.4,
+    "ret": 0.578,
+    "volr": 0.983,
+    "vol_vs50": 0.99,
+    "rangepos": 0.78,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9269,
+    "date": "2026-10-22",
+    "close": 7663.43,
+    "low": 7637.36,
+    "high": 7702.94,
+    "ret": -1.208,
+    "volr": 1.214,
+    "vol_vs50": 1.2,
+    "rangepos": 0.4,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9270,
+    "date": "2026-10-23",
+    "close": 7623.68,
+    "low": 7612.07,
+    "high": 7660.15,
+    "ret": -0.519,
+    "volr": 0.848,
+    "vol_vs50": 1.01,
+    "rangepos": 0.24,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9271,
+    "date": "2026-10-26",
+    "close": 7676.77,
+    "low": 7639.7,
+    "high": 7702.13,
+    "ret": 0.696,
+    "volr": 1.153,
+    "vol_vs50": 1.16,
+    "rangepos": 0.59,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9272,
+    "date": "2026-10-27",
+    "close": 7722.6,
+    "low": 7677.16,
+    "high": 7736.24,
+    "ret": 0.597,
+    "volr": 0.884,
+    "vol_vs50": 1.02,
+    "rangepos": 0.77,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9273,
+    "date": "2026-10-28",
+    "close": 7743.98,
+    "low": 7718.37,
+    "high": 7758.43,
+    "ret": 0.277,
+    "volr": 1.059,
+    "vol_vs50": 1.08,
+    "rangepos": 0.64,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9274,
+    "date": "2026-10-29",
+    "close": 7720.39,
+    "low": 7690.94,
+    "high": 7732.21,
+    "ret": -0.305,
+    "volr": 1.066,
+    "vol_vs50": 1.15,
+    "rangepos": 0.71,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9275,
+    "date": "2026-10-30",
+    "close": 7580.07,
+    "low": 7527.56,
+    "high": 7637.48,
+    "ret": -1.818,
+    "volr": 1.055,
+    "vol_vs50": 1.21,
+    "rangepos": 0.48,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9276,
+    "date": "2026-11-02",
+    "close": 7541.4,
+    "low": 7539.38,
+    "high": 7662.23,
+    "ret": -0.51,
+    "volr": 0.929,
+    "vol_vs50": 1.11,
+    "rangepos": 0.02,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9277,
+    "date": "2026-11-03",
+    "close": 7568.92,
+    "low": 7545.39,
+    "high": 7594.61,
+    "ret": 0.365,
+    "volr": 0.959,
+    "vol_vs50": 1.06,
+    "rangepos": 0.48,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   }
+  ],
+  "variants": {
+   "incl|stall=None|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=None|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=None|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=app|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=app|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=app|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=wide|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=wide|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "incl|stall=wide|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=None|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=None|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=None|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=app|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=app|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=app|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=wide|close5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=wide|high5": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   },
+   "strict|stall=wide|high6": {
+    "n": 6,
+    "days": [
+     "2026-10-07",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-29",
+     "2026-10-30"
+    ]
+   }
+  },
+  "hist": [
+   {
+    "date": "2026-08-31",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-09-01",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-09-02",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-09-03",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-09-04",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-09-08",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-09",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-10",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-11",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-14",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-09-15",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-16",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-09-17",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-09-18",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-09-21",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-09-22",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-23",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-09-24",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-09-25",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-09-28",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-29",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-30",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-01",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-02",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-05",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-06",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-10-07",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-08",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-09",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-12",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-13",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-14",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-15",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-16",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-10-19",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-20",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-10-21",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-10-22",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-10-23",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-10-26",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-10-27",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-10-28",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-10-29",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-10-30",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-11-02",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-11-03",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   }
+  ],
+  "rally": {
+   "peak": {
+    "date": "2026-10-06",
+    "close": 7818.93017578125
+   },
+   "low": {
+    "date": "2026-10-30",
+    "low": 7527.56005859375,
+    "close": 7580.06982421875
+   },
+   "decline_close_to_lowclose": 3.05,
+   "decline_close_to_intraday_low": 3.73,
+   "maxdd_closing": 3.55,
+   "day1": "2026-11-03",
+   "day_count_on_last": 1,
+   "log": [
+    {
+     "date": "2026-10-09",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-14",
+     "ev": "undercut -> attempt reset",
+     "was_day": 4
+    },
+    {
+     "date": "2026-10-19",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-23",
+     "ev": "undercut -> attempt reset",
+     "was_day": 5
+    },
+    {
+     "date": "2026-10-26",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-30",
+     "ev": "undercut -> attempt reset",
+     "was_day": 5
+    },
+    {
+     "date": "2026-11-03",
+     "ev": "Day 1"
+    }
+   ]
+  },
+  "ma": {
+   "close": 7568.919921875,
+   "sma50": 7692.74,
+   "sma200": 7315.89,
+   "vs50": -1.61,
+   "vs200": 3.46,
+   "sma50_rising_21": true,
+   "hi252": 7818.93017578125,
+   "from_high": 3.2
+  }
+ },
+ "^IXIC": {
+  "last": "2026-11-03",
+  "rows": [
+   {
+    "i": 9232,
+    "date": "2026-08-31",
+    "close": 26370.89,
+    "low": 26249.77,
+    "high": 26398.33,
+    "ret": -0.119,
+    "volr": 0.908,
+    "vol_vs50": 0.86,
+    "rangepos": 0.82,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9233,
+    "date": "2026-09-01",
+    "close": 26099.77,
+    "low": 25995.53,
+    "high": 26260.68,
+    "ret": -1.028,
+    "volr": 0.879,
+    "vol_vs50": 0.77,
+    "rangepos": 0.39,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9234,
+    "date": "2026-09-02",
+    "close": 26217.83,
+    "low": 26062.68,
+    "high": 26245.04,
+    "ret": 0.452,
+    "volr": 1.102,
+    "vol_vs50": 0.86,
+    "rangepos": 0.85,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9235,
+    "date": "2026-09-03",
+    "close": 26584.06,
+    "low": 26325.06,
+    "high": 26644.57,
+    "ret": 1.397,
+    "volr": 1.021,
+    "vol_vs50": 0.9,
+    "rangepos": 0.81,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9236,
+    "date": "2026-09-04",
+    "close": 26506.99,
+    "low": 26444.84,
+    "high": 26628.58,
+    "ret": -0.29,
+    "volr": 0.859,
+    "vol_vs50": 0.78,
+    "rangepos": 0.34,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9237,
+    "date": "2026-09-08",
+    "close": 26421.41,
+    "low": 26341.17,
+    "high": 26542.14,
+    "ret": -0.323,
+    "volr": 1.182,
+    "vol_vs50": 0.93,
+    "rangepos": 0.4,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9238,
+    "date": "2026-09-09",
+    "close": 26253.34,
+    "low": 26184.21,
+    "high": 26366.56,
+    "ret": -0.636,
+    "volr": 0.957,
+    "vol_vs50": 0.91,
+    "rangepos": 0.38,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9239,
+    "date": "2026-09-10",
+    "close": 26081.72,
+    "low": 25979.54,
+    "high": 26178.25,
+    "ret": -0.654,
+    "volr": 0.972,
+    "vol_vs50": 0.89,
+    "rangepos": 0.51,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9240,
+    "date": "2026-09-11",
+    "close": 26333.04,
+    "low": 26283.11,
+    "high": 26431.22,
+    "ret": 0.964,
+    "volr": 0.918,
+    "vol_vs50": 0.83,
+    "rangepos": 0.34,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9241,
+    "date": "2026-09-14",
+    "close": 26186.41,
+    "low": 25992.55,
+    "high": 26329.98,
+    "ret": -0.557,
+    "volr": 1.09,
+    "vol_vs50": 0.91,
+    "rangepos": 0.57,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9242,
+    "date": "2026-09-15",
+    "close": 25981.57,
+    "low": 25943.31,
+    "high": 26172.12,
+    "ret": -0.782,
+    "volr": 1.105,
+    "vol_vs50": 1.01,
+    "rangepos": 0.17,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9243,
+    "date": "2026-09-16",
+    "close": 25978.43,
+    "low": 25802.96,
+    "high": 26225.09,
+    "ret": -0.012,
+    "volr": 1.256,
+    "vol_vs50": 1.26,
+    "rangepos": 0.42,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9244,
+    "date": "2026-09-17",
+    "close": 26418.3,
+    "low": 26289.94,
+    "high": 26460.64,
+    "ret": 1.693,
+    "volr": 0.992,
+    "vol_vs50": 1.25,
+    "rangepos": 0.75,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9245,
+    "date": "2026-09-18",
+    "close": 26522.54,
+    "low": 26333.98,
+    "high": 26544.93,
+    "ret": 0.395,
+    "volr": 1.344,
+    "vol_vs50": 1.67,
+    "rangepos": 0.89,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9246,
+    "date": "2026-09-21",
+    "close": 27122.09,
+    "low": 26707.42,
+    "high": 27183.93,
+    "ret": 2.261,
+    "volr": 0.663,
+    "vol_vs50": 1.09,
+    "rangepos": 0.87,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9247,
+    "date": "2026-09-22",
+    "close": 27244.28,
+    "low": 27161.2,
+    "high": 27288.79,
+    "ret": 0.451,
+    "volr": 1.059,
+    "vol_vs50": 1.15,
+    "rangepos": 0.65,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9248,
+    "date": "2026-09-23",
+    "close": 26936.04,
+    "low": 26873.54,
+    "high": 27217.33,
+    "ret": -1.131,
+    "volr": 0.91,
+    "vol_vs50": 1.04,
+    "rangepos": 0.18,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9249,
+    "date": "2026-09-24",
+    "close": 26939.37,
+    "low": 26706.14,
+    "high": 26971.04,
+    "ret": 0.012,
+    "volr": 0.951,
+    "vol_vs50": 0.99,
+    "rangepos": 0.88,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9250,
+    "date": "2026-09-25",
+    "close": 27068.72,
+    "low": 26876.27,
+    "high": 27122.76,
+    "ret": 0.48,
+    "volr": 0.901,
+    "vol_vs50": 0.89,
+    "rangepos": 0.78,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9251,
+    "date": "2026-09-28",
+    "close": 26820.38,
+    "low": 26709.69,
+    "high": 26990.02,
+    "ret": -0.917,
+    "volr": 0.966,
+    "vol_vs50": 0.86,
+    "rangepos": 0.39,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9252,
+    "date": "2026-09-29",
+    "close": 26797.54,
+    "low": 26717.95,
+    "high": 26919.72,
+    "ret": -0.085,
+    "volr": 1.009,
+    "vol_vs50": 0.87,
+    "rangepos": 0.39,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9253,
+    "date": "2026-09-30",
+    "close": 26861.06,
+    "low": 26861.06,
+    "high": 27108.2,
+    "ret": 0.237,
+    "volr": 1.17,
+    "vol_vs50": 1.02,
+    "rangepos": 0.0,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": true,
+    "borderline": true
+   },
+   {
+    "i": 9254,
+    "date": "2026-10-01",
+    "close": 26871.6,
+    "low": 26733.89,
+    "high": 27014.47,
+    "ret": 0.039,
+    "volr": 0.883,
+    "vol_vs50": 0.9,
+    "rangepos": 0.49,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9255,
+    "date": "2026-10-02",
+    "close": 27190.86,
+    "low": 27112.24,
+    "high": 27353.68,
+    "ret": 1.188,
+    "volr": 1.085,
+    "vol_vs50": 0.97,
+    "rangepos": 0.33,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9256,
+    "date": "2026-10-05",
+    "close": 27477.31,
+    "low": 27223.49,
+    "high": 27544.06,
+    "ret": 1.053,
+    "volr": 0.984,
+    "vol_vs50": 0.96,
+    "rangepos": 0.79,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9257,
+    "date": "2026-10-06",
+    "close": 27599.79,
+    "low": 27592.56,
+    "high": 27722.75,
+    "ret": 0.446,
+    "volr": 1.08,
+    "vol_vs50": 1.03,
+    "rangepos": 0.06,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9258,
+    "date": "2026-10-07",
+    "close": 27538.69,
+    "low": 27341.31,
+    "high": 27547.2,
+    "ret": -0.221,
+    "volr": 0.866,
+    "vol_vs50": 0.89,
+    "rangepos": 0.96,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 9259,
+    "date": "2026-10-08",
+    "close": 27193.34,
+    "low": 27066.76,
+    "high": 27491.89,
+    "ret": -1.254,
+    "volr": 1.206,
+    "vol_vs50": 1.08,
+    "rangepos": 0.3,
+    "near_hi": true,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9260,
+    "date": "2026-10-09",
+    "close": 27366.17,
+    "low": 27254.03,
+    "high": 27395.41,
+    "ret": 0.636,
+    "volr": 0.776,
+    "vol_vs50": 0.84,
+    "rangepos": 0.79,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9261,
+    "date": "2026-10-12",
+    "close": 27245.9,
+    "low": 27219.42,
+    "high": 27376.66,
+    "ret": -0.439,
+    "volr": 0.918,
+    "vol_vs50": 0.77,
+    "rangepos": 0.17,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9262,
+    "date": "2026-10-13",
+    "close": 27204.38,
+    "low": 27116.08,
+    "high": 27277.88,
+    "ret": -0.152,
+    "volr": 1.112,
+    "vol_vs50": 0.87,
+    "rangepos": 0.55,
+    "near_hi": true,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 9263,
+    "date": "2026-10-14",
+    "close": 26692.87,
+    "low": 26602.12,
+    "high": 27134.29,
+    "ret": -1.88,
+    "volr": 1.226,
+    "vol_vs50": 1.08,
+    "rangepos": 0.17,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9264,
+    "date": "2026-10-15",
+    "close": 26713.03,
+    "low": 26308.85,
+    "high": 26754.02,
+    "ret": 0.076,
+    "volr": 1.269,
+    "vol_vs50": 1.37,
+    "rangepos": 0.91,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9265,
+    "date": "2026-10-16",
+    "close": 26140.03,
+    "low": 26023.1,
+    "high": 26674.66,
+    "ret": -2.145,
+    "volr": 0.874,
+    "vol_vs50": 1.2,
+    "rangepos": 0.18,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9266,
+    "date": "2026-10-19",
+    "close": 26430.89,
+    "low": 26344.67,
+    "high": 26613.15,
+    "ret": 1.113,
+    "volr": 0.793,
+    "vol_vs50": 0.95,
+    "rangepos": 0.32,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9267,
+    "date": "2026-10-20",
+    "close": 26424.82,
+    "low": 26179.73,
+    "high": 26601.71,
+    "ret": -0.023,
+    "volr": 1.016,
+    "vol_vs50": 0.96,
+    "rangepos": 0.58,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9268,
+    "date": "2026-10-21",
+    "close": 26702.86,
+    "low": 26507.07,
+    "high": 26778.9,
+    "ret": 1.052,
+    "volr": 1.021,
+    "vol_vs50": 0.98,
+    "rangepos": 0.72,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9269,
+    "date": "2026-10-22",
+    "close": 26008.86,
+    "low": 25918.09,
+    "high": 26359.41,
+    "ret": -2.599,
+    "volr": 1.153,
+    "vol_vs50": 1.13,
+    "rangepos": 0.21,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9270,
+    "date": "2026-10-23",
+    "close": 25955.34,
+    "low": 25866.15,
+    "high": 26111.62,
+    "ret": -0.206,
+    "volr": 0.727,
+    "vol_vs50": 0.82,
+    "rangepos": 0.36,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": true
+   },
+   {
+    "i": 9271,
+    "date": "2026-10-26",
+    "close": 26169.38,
+    "low": 25986.56,
+    "high": 26306.82,
+    "ret": 0.825,
+    "volr": 1.129,
+    "vol_vs50": 0.93,
+    "rangepos": 0.57,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9272,
+    "date": "2026-10-27",
+    "close": 26477.81,
+    "low": 26219.31,
+    "high": 26540.81,
+    "ret": 1.179,
+    "volr": 1.069,
+    "vol_vs50": 1.0,
+    "rangepos": 0.8,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9273,
+    "date": "2026-10-28",
+    "close": 26549.85,
+    "low": 26414.92,
+    "high": 26587.34,
+    "ret": 0.272,
+    "volr": 1.009,
+    "vol_vs50": 1.01,
+    "rangepos": 0.78,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9274,
+    "date": "2026-10-29",
+    "close": 26184.72,
+    "low": 26053.16,
+    "high": 26286.46,
+    "ret": -1.375,
+    "volr": 0.927,
+    "vol_vs50": 0.93,
+    "rangepos": 0.56,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9275,
+    "date": "2026-10-30",
+    "close": 25437,
+    "low": 25177.33,
+    "high": 25673,
+    "ret": -2.856,
+    "volr": 1.225,
+    "vol_vs50": 1.14,
+    "rangepos": 0.52,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9276,
+    "date": "2026-11-02",
+    "close": 25164.31,
+    "low": 25145.95,
+    "high": 25799.46,
+    "ret": -1.072,
+    "volr": 1.009,
+    "vol_vs50": 1.15,
+    "rangepos": 0.03,
+    "near_hi": false,
+    "dd_incl": true,
+    "dd_strict": true,
+    "price_leg": true,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   },
+   {
+    "i": 9277,
+    "date": "2026-11-03",
+    "close": 25372.01,
+    "low": 25246.63,
+    "high": 25474.46,
+    "ret": 0.825,
+    "volr": 0.913,
+    "vol_vs50": 1.04,
+    "rangepos": 0.55,
+    "near_hi": false,
+    "dd_incl": false,
+    "dd_strict": false,
+    "price_leg": false,
+    "stall_app": false,
+    "stall_wide": false,
+    "borderline": false
+   }
+  ],
+  "variants": {
+   "incl|stall=None|close5": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "incl|stall=None|high5": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "incl|stall=None|high6": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "incl|stall=app|close5": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "incl|stall=app|high5": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "incl|stall=app|high6": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "incl|stall=wide|close5": {
+    "n": 6,
+    "days": [
+     "2026-09-30(S)",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "incl|stall=wide|high5": {
+    "n": 6,
+    "days": [
+     "2026-09-30(S)",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "incl|stall=wide|high6": {
+    "n": 6,
+    "days": [
+     "2026-09-30(S)",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "strict|stall=None|close5": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "strict|stall=None|high5": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "strict|stall=None|high6": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "strict|stall=app|close5": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "strict|stall=app|high5": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "strict|stall=app|high6": {
+    "n": 5,
+    "days": [
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "strict|stall=wide|close5": {
+    "n": 6,
+    "days": [
+     "2026-09-30(S)",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "strict|stall=wide|high5": {
+    "n": 6,
+    "days": [
+     "2026-09-30(S)",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   },
+   "strict|stall=wide|high6": {
+    "n": 6,
+    "days": [
+     "2026-09-30(S)",
+     "2026-10-08",
+     "2026-10-14",
+     "2026-10-22",
+     "2026-10-30",
+     "2026-11-02"
+    ]
+   }
+  },
+  "hist": [
+   {
+    "date": "2026-08-31",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-01",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-02",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-03",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-04",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-08",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-09-09",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-09-10",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-09-11",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-09-14",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-15",
+    "backend_like": 7,
+    "classic_incl": 7,
+    "frontend_like": 7
+   },
+   {
+    "date": "2026-09-16",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-17",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-18",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-21",
+    "backend_like": 6,
+    "classic_incl": 6,
+    "frontend_like": 6
+   },
+   {
+    "date": "2026-09-22",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-23",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-24",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-09-25",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-09-28",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-09-29",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-09-30",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-10-01",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-10-02",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-10-05",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-10-06",
+    "backend_like": 1,
+    "classic_incl": 1,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-10-07",
+    "backend_like": 1,
+    "classic_incl": 1,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-10-08",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-09",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-12",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-13",
+    "backend_like": 1,
+    "classic_incl": 1,
+    "frontend_like": 1
+   },
+   {
+    "date": "2026-10-14",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-15",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-16",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-19",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-20",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-21",
+    "backend_like": 2,
+    "classic_incl": 2,
+    "frontend_like": 2
+   },
+   {
+    "date": "2026-10-22",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-10-23",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-10-26",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-10-27",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-10-28",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-10-29",
+    "backend_like": 3,
+    "classic_incl": 3,
+    "frontend_like": 3
+   },
+   {
+    "date": "2026-10-30",
+    "backend_like": 4,
+    "classic_incl": 4,
+    "frontend_like": 4
+   },
+   {
+    "date": "2026-11-02",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   },
+   {
+    "date": "2026-11-03",
+    "backend_like": 5,
+    "classic_incl": 5,
+    "frontend_like": 5
+   }
+  ],
+  "rally": {
+   "peak": {
+    "date": "2026-10-06",
+    "close": 27599.7890625
+   },
+   "low": {
+    "date": "2026-11-02",
+    "low": 25145.94921875,
+    "close": 25164.310546875
+   },
+   "decline_close_to_lowclose": 8.82,
+   "decline_close_to_intraday_low": 8.89,
+   "maxdd_closing": 8.82,
+   "day1": "2026-11-03",
+   "day_count_on_last": 1,
+   "log": [
+    {
+     "date": "2026-10-09",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-14",
+     "ev": "undercut -> attempt reset",
+     "was_day": 4
+    },
+    {
+     "date": "2026-10-19",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-21",
+     "ev": "FTD price-leg candidate",
+     "day": 3,
+     "gain": 1.05,
+     "vol_ratio_prev": 1.021,
+     "vol_higher": true,
+     "passes": {
+      "1.0": true,
+      "1.2": false,
+      "1.25": false,
+      "1.5": false,
+      "1.7": false,
+      "2.0": false
+     }
+    },
+    {
+     "date": "2026-10-22",
+     "ev": "undercut -> attempt reset",
+     "was_day": 4
+    },
+    {
+     "date": "2026-10-26",
+     "ev": "Day 1"
+    },
+    {
+     "date": "2026-10-30",
+     "ev": "undercut -> attempt reset",
+     "was_day": 5
+    },
+    {
+     "date": "2026-11-03",
+     "ev": "Day 1"
+    }
+   ]
+  },
+  "ma": {
+   "close": 25372.009765625,
+   "sma50": 26541.66,
+   "sma200": 25073.21,
+   "vs50": -4.41,
+   "vs200": 1.19,
+   "sma50_rising_21": true,
+   "hi252": 27599.7890625,
+   "from_high": 8.07
+  }
+ }
+}

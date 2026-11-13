@@ -1,0 +1,120 @@
+{
+ "spy_count_vs_backend": {
+  "days": 31,
+  "equal": 31,
+  "mismatch": {}
+ },
+ "robust_mean_rows": [
+  {
+   "key": "^GSPC.ftd.state",
+   "bucket": "調整中 (correction)",
+   "h": 5,
+   "est_pp": 0.74
+  },
+  {
+   "key": "^GSPC.ftd.state",
+   "bucket": "調整中 (correction)",
+   "h": 21,
+   "est_pp": 1.22
+  },
+  {
+   "key": "^GSPC.ftd.state",
+   "bucket": "調整中 (correction)",
+   "h": 63,
+   "est_pp": 1.87
+  },
+  {
+   "key": "^GSPC.ma.quadrant",
+   "bucket": "200日線の上・50日線の下 (above 200, below 50)",
+   "h": 5,
+   "est_pp": 0.26
+  },
+  {
+   "key": "^GSPC.ma.quadrant",
+   "bucket": "200日線の上・50日線の下 (above 200, below 50)",
+   "h": 21,
+   "est_pp": 0.65
+  },
+  {
+   "key": "^GSPC.ma.quadrant",
+   "bucket": "200日線の上・50日線の下 (above 200, below 50)",
+   "h": 63,
+   "est_pp": 1.28
+  },
+  {
+   "key": "^GSPC.combo.dd_ma50",
+   "bucket": "分配日5+・50日線以下",
+   "h": 5,
+   "est_pp": 0.19
+  },
+  {
+   "key": "^IXIC.ftd.state",
+   "bucket": "調整中 (correction)",
+   "h": 5,
+   "est_pp": 0.78
+  },
+  {
+   "key": "^IXIC.ftd.state",
+   "bucket": "調整中 (correction)",
+   "h": 10,
+   "est_pp": 0.84
+  },
+  {
+   "key": "^IXIC.ftd.state",
+   "bucket": "調整中 (correction)",
+   "h": 21,
+   "est_pp": 1.02
+  },
+  {
+   "key": "^IXIC.combo.dd_ma50",
+   "bucket": "分配日4以下・50日線以下",
+   "h": 10,
+   "est_pp": -0.76
+  },
+  {
+   "key": "rule.leaders",
+   "bucket": "注意サイン (warning)",
+   "h": 10,
+   "est_pp": 1.11
+  },
+  {
+   "key": "q.above50Percent",
+   "bucket": "Q5 上位20% (top fifth of earlier sessions)",
+   "h": 5,
+   "est_pp": -0.35
+  },
+  {
+   "key": "q.netHighsPercent",
+   "bucket": "Q3",
+   "h": 5,
+   "est_pp": 0.55
+  },
+  {
+   "key": "d21.breakoutHoldPercent",
+   "bucket": "Q3",
+   "h": 21,
+   "est_pp": -1.28
+  },
+  {
+   "key": "d21.stageSpread",
+   "bucket": "Q2",
+   "h": 10,
+   "est_pp": 1.12
+  }
+ ],
+ "tt_proxy": {
+  "last": [
+   "2026-11-12",
+   613
+  ],
+  "10_back": [
+   "2026-10-29",
+   676
+  ],
+  "21_back": [
+   "2026-10-14",
+   435
+  ]
+ },
+ "bundle_symbols": "{\"SPY\": {\"bars\": 502, \"first\": \"2024-11-12\", \"last\": \"2026-11-12\", \"last_close\": 757.12, \"last_volume\": 37043281, \"exchange\": \"XNYS\", \"other_keys\": [\"exchange\", \"symbol\"]}, \"QQQ\": {\"bars\": 502, \"first\": \"2024-11-12\", \"last\": \"2026-11-12\", \"last_close\": 688.17, \"last_volume\": 36073858, \"exchange\": \"XNAS\", \"other_keys\": [\"exchange\", \"symbol\"]}, \"IWM\": {\"bars\": 502, \"first\": \"2024-11-12\", \"last\": \"2026-11-12\", \"last_close\": 278.44, \"last_volume\": 22572446, \"exchange\": \"XNYS\", \"other_keys\": [\"exchange\", \"symbol\"]}, \"DIA\": {\"bars\": 502, \"first\": \"2024-11-12\", \"last\": \"2026-11-12\", \"last_close\": 522.47, \"last_volume\": 1683219, \"exchange\": \"XNYS\", \"other_keys\": [\"exchange\", \"symbol\"]}, \"MDY\": {\"bar"
+}

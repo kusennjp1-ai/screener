@@ -1,0 +1,311 @@
+{
+ "SPY": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 757.12,
+  "last_volume": 37043281,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "QQQ": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 688.17,
+  "last_volume": 36073858,
+  "exchange": "XNAS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "IWM": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 278.44,
+  "last_volume": 22572446,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "DIA": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 522.47,
+  "last_volume": 1683219,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "MDY": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 673.54,
+  "last_volume": 442235,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "RSP": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 220.72,
+  "last_volume": 7698777,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "^GSPC": null,
+ "^IXIC": null,
+ "^DJI": null,
+ "^RUT": null,
+ "^VIX": null,
+ "VIX": null,
+ "^NDX": null,
+ "^SPX": null,
+ "XLB": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 52.34,
+  "last_volume": 9544616,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XLC": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 107.56,
+  "last_volume": 4305859,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XLE": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 64.33,
+  "last_volume": 25927227,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XLF": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 58.21,
+  "last_volume": 21981255,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XLI": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 169.44,
+  "last_volume": 6402923,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XLK": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 173.77,
+  "last_volume": 9693263,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XLP": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 91.06,
+  "last_volume": 13909272,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XLRE": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 44.36,
+  "last_volume": 5643316,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XLU": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 43.810001373291016,
+  "last_volume": 17034100,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XLV": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 187.83,
+  "last_volume": 7772094,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XLY": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 120.46,
+  "last_volume": 8601342,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "SMH": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 501.73,
+  "last_volume": 10075387,
+  "exchange": "XNAS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "SOXX": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 154.99,
+  "last_volume": 51159364,
+  "exchange": "XNAS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "IBB": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 213.43,
+  "last_volume": 2563813,
+  "exchange": "XNAS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "XBI": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 151.2,
+  "last_volume": 8524022,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "ARKK": null,
+ "GLD": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 354.89,
+  "last_volume": 13075387,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "TLT": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 79.72,
+  "last_volume": 46920625,
+  "exchange": "XNAS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "HYG": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 76.98,
+  "last_volume": 42693547,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ },
+ "UUP": {
+  "bars": 502,
+  "first": "2024-11-12",
+  "last": "2026-11-12",
+  "last_close": 29.42,
+  "last_volume": 941887,
+  "exchange": "XNYS",
+  "other_keys": [
+   "exchange",
+   "symbol"
+  ]
+ }
+}

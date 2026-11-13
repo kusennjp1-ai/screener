@@ -1,0 +1,5 @@
+{"label":"completeness-critic","port_used":null,"renders":0,
+ "files":{"fr2.out":"feature-run 11-12 tallies (ratings, TT groups, market fields)","nasdaq-states.json":"followThroughDay.js on real ^GSPC/^IXIC to 11-03, last 45 sessions, with vs50/vs200/fromHigh","scripts":"fr.py fr2.py nas.mjs"},
+ "key":{"ratings_1112":{"Pass":7497,"Watch":602,"Insufficient Data":1816,"Buy_or_StrongBuy":0},"passes_template":727,"tt_etf_group":94,
+  "ixic_open_cap_days":{"2026-10-20":["no_correction",-0.74],"2026-10-27":["no_correction",-0.40],"2026-10-28":["no_correction",-0.15],"2026-10-29":["no_correction",-1.51]},
+  "candidate_history_sessions_recorded":21}}

@@ -1,0 +1,27 @@
+{
+ "120": {
+  "low_date": "2026-06-09",
+  "decline": 2.96,
+  "detect": "None",
+  "detect_no_gate": "None"
+ },
+ "100": {
+  "low_date": "2026-06-26",
+  "decline": 0.72,
+  "detect": "None",
+  "detect_no_gate": "None"
+ },
+ "60": {
+  "low_date": "2026-11-05",
+  "decline": 5.92,
+  "detect": "None",
+  "detect_no_gate": "None"
+ },
+ "sessions_since_0609": 109,
+ "hyp_vol_up_gate_off_lb60": "{'date': Timestamp('2026-11-11 00:00:00'), 'attempt_day': 4, 'gain_pct': 1.32, 'days_since': 1, 'dist_since_ftd': 0}",
+ "hyp_regime": [
+  "confirmed_uptrend",
+  25
+ ],
+ "hyp_vol_up_gate_on_lb60": "None"
+}

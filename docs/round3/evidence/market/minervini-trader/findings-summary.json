@@ -1,0 +1,36 @@
+{
+ "sessions": 45,
+ "cap_flips": 9,
+ "cap_open_while_fresh_hit7>=35": [
+  "2026-09-22",
+  "2026-09-23",
+  "2026-09-24",
+  "2026-09-25",
+  "2026-09-28",
+  "2026-09-29",
+  "2026-10-01",
+  "2026-10-15"
+ ],
+ "cap_closed_while_fresh_hit7<=20": [
+  "2026-10-22",
+  "2026-10-23",
+  "2026-10-26",
+  "2026-10-30"
+ ],
+ "app_breakout_rule_<40_days": [],
+ "rs70_cohort_<50_days": 26,
+ "rs90_cohort_<50_days": 15,
+ "findings": [
+  "F1 cap is SPY-50dma switch (9 flips/45 sessions) vs leaders",
+  "F2 no progressive exposure",
+  "F3 50% ceiling, no pilot path",
+  "F4 breakout rate lagged",
+  "F5 leader health cohort RS70 hides RS90 damage",
+  "F6 stage mix puts 35% of TT in stage 3",
+  "F7 setup count not a market indicator",
+  "F8 liquid TT",
+  "F9 intraday new highs",
+  "F10 reference demotion tested on index DD",
+  "F11-13 correct_and_good"
+ ]
+}

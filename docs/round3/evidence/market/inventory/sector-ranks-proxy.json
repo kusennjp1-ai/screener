@@ -1,0 +1,72 @@
+{
+ "date": "2026-11-12",
+ "before": "2026-10-14",
+ "ranks": [
+  {
+   "symbol": "XLV",
+   "rank": 1,
+   "relativeIndex": 126.58,
+   "rankMonthAgo": 3
+  },
+  {
+   "symbol": "XLF",
+   "rank": 2,
+   "relativeIndex": 112.15,
+   "rankMonthAgo": 5
+  },
+  {
+   "symbol": "XLE",
+   "rank": 3,
+   "relativeIndex": 109.47,
+   "rankMonthAgo": 2
+  },
+  {
+   "symbol": "XLP",
+   "rank": 4,
+   "relativeIndex": 105.89,
+   "rankMonthAgo": 4
+  },
+  {
+   "symbol": "XLY",
+   "rank": 5,
+   "relativeIndex": 100.31,
+   "rankMonthAgo": 10
+  },
+  {
+   "symbol": "XLB",
+   "rank": 6,
+   "relativeIndex": 100.1,
+   "rankMonthAgo": 7
+  },
+  {
+   "symbol": "XLRE",
+   "rank": 7,
+   "relativeIndex": 99.83,
+   "rankMonthAgo": 8
+  },
+  {
+   "symbol": "XLU",
+   "rank": 8,
+   "relativeIndex": 96.42,
+   "rankMonthAgo": 11
+  },
+  {
+   "symbol": "XLI",
+   "rank": 9,
+   "relativeIndex": 95.95,
+   "rankMonthAgo": 6
+  },
+  {
+   "symbol": "XLK",
+   "rank": 10,
+   "relativeIndex": 95.66,
+   "rankMonthAgo": 1
+  },
+  {
+   "symbol": "XLC",
+   "rank": 11,
+   "relativeIndex": 90.76,
+   "rankMonthAgo": 9
+  }
+ ]
+}

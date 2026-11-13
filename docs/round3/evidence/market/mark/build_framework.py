@@ -1,0 +1,281 @@
+# Builds framework-mark.json (Minervini general-market checklist).
+# Provenance labels: 実測 = measured/read by this agent; 出典 = a cited source says so
+# (here always "via WebSearch result; page not opened"); 推論/未検証 = inference / unverified.
+# Quotation marks are used ONLY for text visible in a search-result TITLE (X post titles
+# carry the post text, often truncated with "…"). Dates of X posts are 実測: decoded from
+# the status ID (see x_post_dates.txt). Everything else is paraphrase.
+import json, os
+
+OUT_MAIN = "/tmp/claude-0/-home-user-screener/c937365f-db46-520a-bbf4-94843e169170/scratchpad/audit-market/framework-mark.json"
+OUT_COPY = "/tmp/claude-0/-home-user-screener/c937365f-db46-520a-bbf4-94843e169170/scratchpad/audit-market/mark/framework-mark.json"
+
+X = "https://x.com/markminervini/status/"
+
+items = [
+ {
+  "id": "MM-01",
+  "indicator": "主導株（リーダー）の振る舞い＝市場判断の第一の物差し",
+  "definition": "出典: 本人は市場の方向を指数ではなく、高RSの主導株と自分の基準を満たす銘柄の動きで読む。2018-12-07 \"Leaders lead. Learn how to interpret stocks correctly and then you can stop stressing over what the Dow or some index is doing.\" 2020-07-07 \"When the market bottoms and leaders start emerging, you stop looking at the indexes and you focus on individual stock setups.\" 出典（書籍、二次要約経由）: Trade Like a Stock Market Wizard（2013、以下TLSMW）の\"Follow the Leaders\"章では、指数が安値を切り下げる間に主導株は安値を切り上げ、指数より数日〜数週早く上昇に転じるとされる。章番号は要約によって ch.9（sumitjain0014 substack）と「全11ユニット中10番目」（elearnmarkets）で食い違う。",
+  "thresholds": "本人が示した数値の閾値はなし（定性）。書籍（二次要約経由）: 指数が安値を切り下げ、主導株は安値を切り上げる。主導株の転換は指数より数日〜数週早い。",
+  "how_used": "出典: 主導株が現れたら指数を見るのをやめ、個別のセットアップで買いを始める。2022-07-08 \"The best stocks have already bottomed. Even if the indexes make new lows or take months to carve out a reliable bottom, the stocks that will lead the next up cycle have already made their lows and we have already begun to buy some select names.\" 指数がまだ下げていても、リーダーの底入れが買い開始の根拠になる。",
+  "weight": "core",
+  "sources": X+"1071095448738369536 (2018-12-07); "+X+"1280509355662684168 (2020-07-07); "+X+"1545443621184364545 (2022-07-08); TLSMW 'Follow the Leaders' via https://sumitjain0014.substack.com/p/in-chapter-9-titled-follow-the-leaders and https://www.elearnmarkets.com/school/units/trade-like-a-stock-market-wizard (ページは未取得。検索要約のみ)",
+  "confidence": "high"
+ },
+ {
+  "id": "MM-02",
+  "indicator": "主導株の天井・劣化（リーダーが先に崩れる）",
+  "definition": "出典: 上昇の終盤では主導株が先に崩れ、市場全体の弱さを先に知らせる。本人の投稿では、2021-03-08 \"We are likely entering stage 3 in mega cap growth names. For those who have not read my books, that's the topping phase before stage 4... the rapid declining phase.\" 2025-01-02 \"...Breadth and participation have been weak, and the high relative strength stocks have recently come under selli…\"（以降は省略記号で切れている）。2026-06-24 \"...creating the first meaningful challenge to AI leadership in months. The selling pressure culminated in a decisive distribution day on the Nasdaq...\" 出典（書籍、二次要約経由）: TLSMWのリーダー章では、上昇の終盤にリーダーが最初に弱さを知らせるとされる。",
+  "thresholds": "本人の数値閾値はなし。第三者の数値（本人のものではない）: 2014年のインタビュー・メモ（whatheheckaboom）では、高成長リーダーは市場天井の6〜12か月前に天井をつけうるとされる。逐語は未確認。",
+  "how_used": "出典: 高RS株への売り、指数の50日線割れ、参加度の低下を合わせて「圧力下」と読み、防御へ移る。2025-01-02の投稿は、12/9にSPYをショートしたことにも触れている（検索要約による言い換え）。推論: 個別の主導株の崩れが重なることが、指数の崩れに先立つ警告として使われている。",
+  "weight": "core",
+  "sources": X+"1369054991328100359 (2021-03-08); "+X+"1874827311406555485 (2025-01-02); "+X+"2069750598728089949 (2026-06-24); https://whatheheckaboom.wordpress.com/2014/05/11/notes-from-mark-minervini-interviews/ (第三者メモ); https://sumitjain0014.substack.com/p/in-chapter-9-titled-follow-the-leaders",
+  "confidence": "medium"
+ },
+ {
+  "id": "MM-03",
+  "indicator": "基準を満たす銘柄・買える位置にあるセットアップの数",
+  "definition": "出典: 本人は、自分の基準を満たし買える位置にある銘柄（セットアップ）が多いか少ないかで、投資するか現金にするかを決める。指数より優先すると明言している: 2019-03-22 \"I've missed index rallies being in cash and made fortunes in individual stocks while the indexes moved sideways. I could care less what the indexes are doing, I'm focused on stocks that meet my criteria. When stock setups are plentiful, I'm in, when there's few, I'm in cash.\"",
+  "thresholds": "本人の数値閾値はなし（\"plentiful\"と\"few\"の定性のみ）。2024-03-11 \"...few stocks meeting my buy criteria... No setups, no trading.\" 2024-04-29 \"We are only finding a few setups that are buyable. Until conditions improve, I would expect volatility/squats and reversals…\" 2026-03-04 \"There are still a good number of stocks forming bases following strong prior uptrends, and so far market pressure has not caused widespread technical damage. However, after running my stock screens, the dominant theme is right-side volatility — which often starts as pivot\"",
+  "how_used": "出典: 少なければ現金で待ち、多ければ投資する。2021-07-22 \"When I go to cash people always ask \"how long do we have to wait?\" My answer: \"As long as it takes! Until setups proliferate and breakouts start working.\"\" 現金から戻る条件は、セットアップが増え、かつブレイクアウトが機能し始めること（MM-05と対）。",
+  "weight": "core",
+  "sources": X+"1108920297447665666 (2019-03-22); "+X+"1767189913521299835 (2024-03-11); "+X+"1784968226599800955 (2024-04-29); "+X+"2029213943428698253 (2026-03-04); "+X+"1418195374506917891 (2021-07-22)",
+  "confidence": "high"
+ },
+ {
+  "id": "MM-04",
+  "indicator": "トレンドテンプレート通過銘柄数を市場指標として数えること",
+  "definition": "未検証: トレンドテンプレート通過数そのものを市場の健全度の指標として数える本人の記述は、本調査では見つからなかった。最も近い本人の言い方はMM-03の「基準を満たす銘柄の多寡」。トレンドテンプレートは銘柄単位のStage 2判定である。2019-11-08 \"98% of big winning stocks make their gains while is a stage 2 uptrend... My Trend Template keeps you in the 98% club.\" Deepvue等の第三者は、通過数が多いほど健全と解釈している。",
+  "thresholds": "本人の閾値はなし。第三者の数値（本人のものではない、ユニバースの大きさに依存）: 30以上=強気、10〜20=中立、0〜5=調整・弱気（tradervps等）。NSEでは強気相場100〜250、調整時30未満（Indian NSE向けの記事）。テンプレート自体の条件（銘柄単位）: 52週高値から25%以内、52週安値から30%以上上、など（chartmill等の二次資料）。",
+  "how_used": "推論: 本人の運用（MM-03）に沿うなら、通過数は「セットアップの多寡」の代理指標にはなる。ただし本人が露出の目安にこの数を使ったという出典はない。第三者の閾値をミネルヴィニの基準として表示してはいけない。",
+  "weight": "supporting",
+  "sources": X+"1192824370407858176 (2019-11-08); https://deepvue.com/screener/minervini-trend-template/ ; https://www.tradervps.com/blog/minervini-method-stepwise-approach-winning-stocks (第三者)",
+  "confidence": "low"
+ },
+ {
+  "id": "MM-05",
+  "indicator": "ブレイクアウトの追随と失敗（失敗ブレイクアウトの足跡: pivot leakage、squat、ストップ多発）",
+  "definition": "出典: 新しいブレイクアウトが続伸するか、ピボットへ戻るか、失敗するかを市場の質の判定に使う。2023-04-10 \"...breakout stocks are still not following though convincingly enough to warrant aggressive exposure. I'm still holding high levels of cash... Too many breakout failures and too much pivot \"leakage.\" Not yet an easy dollar market.\" 2024-08-01 \"As I suspected, it looks like yesterday was a \"sucker rally.\" Lots of stops getting hit and pivot failures today.\" 2026-04-29 \"When breakouts fail to gain traction, it's often a signal that the market is crowded and retail activity is elevated.\" 2021-09-08 \"Don't let the random index hitting a new high fool you, this market is still selective with little follow through coming from stock breakouts.\"",
+  "thresholds": "本人の数値閾値はなし（失敗率などの数値は示されていない）。言及される現象: 失敗の多発、pivot leakage、squat、反転、右側のボラティリティ。",
+  "how_used": "出典: ブレイクアウトが効かない間は、銘柄ごとのサイズと全体の露出を小さく保つ。2023-09-18 \"Rigjt now, my confidence in base breakouts is pretty low. As a result, I am keeping my position sizing (and overall exposure) small.\"（原文の綴りのまま）。2024-10-31 \"A good number of breakouts have worked, but the cost has been elevated\"。指数が新高値でも、ブレイクアウトが続かなければ露出を上げない。",
+  "weight": "core",
+  "sources": X+"1645428528337375236 (2023-04-10); "+X+"1819081963875324218 (2024-08-01); "+X+"2049565140245201280 (2026-04-29); "+X+"1435577411593281540 (2021-09-08); "+X+"1703834688689766663 (2023-09-18); "+X+"1852045845253812290 (2024-10-31)",
+  "confidence": "high"
+ },
+ {
+  "id": "MM-06",
+  "indicator": "プログレッシブ・エクスポージャー（自分の直近トレードの結果で露出を上下させる、試し玉）",
+  "definition": "出典: 本人の造語。うまくいっているときは攻め、うまくいかないときは縮小する。2020-08-12 \"With Progressive Exposure, when your trading is going well you press and get more aggressive with position sizing and overall exposure. Conversely, when not doing well you cut back.\" 2020-05-26 \"If you're not profitable at 25% or 50% invested, why move up to 75% or 100% invested or use margin? Wait for confirmation and require that at least a few trades work out before getting more aggressive. This is what I call Progressive Exposure...\"",
+  "thresholds": "出典（本人）: 25%または50%の投資で利益が出ていなければ、75%・100%・信用取引へ進まない。「少なくとも数件のトレードがうまくいく」ことが条件で、件数は示されていない。試し玉は四分の一と半分のポジション（2025-01-29 \"...Note: This includes partial Pilot Buys, quarter and half\"）。部分ポジションは1/2・1/4で、銘柄数は\"8, 12 or more positions\"になりうる（2020-10-20）。本人の適用例（2025-01-29、ID 1884705597402059074）: 1/14に1銘柄、1/16に2、1/19に1、1/22に1、1/23に2、1/24に3、1/27に2、1/28に7、1/29に3と追加。別の投稿（2025-01-29、ID 1884707172040241617）は Minervini Select Portfolio についてのもので、\"...this is how we applied Progressive Exposure (dates and position sizing in 7 individual stocks) to get to a near fully invested portfolio over a number of days.\"第三者の数値（本人のものではない）: 試し玉は通常の5〜10%（動画要約）。出典（書籍、二次要約経由）: Think & Trade Like a Champion（2017）の章 \"Position Sizing for Optimal Results\" は ch.8 とされる。章名・番号は要約間で一致しない。",
+  "how_used": "出典: 底入れ後、自分のポジションが機能し始めた分だけ段階的に買い増す（2020-10-19 \"...You can see how I got progressively more aggressive as the market bottomed and stock positions started working.\"）。逆にうまくいかないときは縮小する。2022-07-18 \"Big drawdowns are the result of not respecting risk and biting off too much too fast before your portfolio earned the right to get aggressive.\"",
+  "weight": "core",
+  "sources": X+"1293567014720745472 (2020-08-12); "+X+"1265399599067475972 (2020-05-26); "+X+"1318270046523838467 (2020-10-19); "+X+"1318562658052984834 (2020-10-20); "+X+"1549179115173199872 (2022-07-18); "+X+"1884705597402059074 (2025-01-29); "+X+"1884707172040241617 (2025-01-29); Champion章名: https://www.tradingreviewers.com/think-and-trade-like-a-champion-review/",
+  "confidence": "high"
+ },
+ {
+  "id": "MM-07",
+  "indicator": "ストップに繰り返し掛かること＝銘柄選択の欠陥か、敵対的な市場",
+  "definition": "出典（書籍、抜粋・書評の検索要約経由。逐語は未確認）: TLSMWによると、ストップに何度も掛かるなら、原因は銘柄選択の基準の欠陥か、敵対的な一般市場環境のどちらかしかない。McGraw-Hillの許可を得た抜粋がTradingMarketsに掲載されている。章番号は確認できていない。",
+  "thresholds": "本人の回数閾値はなし（「何度も」という定性のみ。検索要約による言い換え）。",
+  "how_used": "出典: 自分の損切りの連続を市場の質のシグナルとして使い、縮小・停止して原因を診断する。出典（二次要約）: Champion の \"Know the Truth About Your Trading\"（ch.4とされる）は、取引記録を取り、それを分析することを求める。推論: MM-06（結果による露出の調整）と同じ仕組みを、損失側から見たもの。",
+  "weight": "important",
+  "sources": "https://tradingmarkets.com/stocks/stocks_trading_lessons/3-dos-and-donts-most-traders-learn-the-hard-way-1583786 ; https://whatheheckaboom.wordpress.com/2014/05/04/book-review-of-trade-like-a-stock-market-wizard-by-mark-minervini/ ; https://www.tradingreviewers.com/think-and-trade-like-a-champion-review/ (いずれもページは未取得)",
+  "confidence": "medium"
+ },
+ {
+  "id": "MM-08",
+  "indicator": "STEM（銘柄だけで見る売買環境モデル、本人の独自モデル）",
+  "definition": "出典: 本人の投稿で \"our stock only Stock Trading Environment Model\" と呼ばれ、REDが最も慎重な読み。2024-03-14 \"Since our March 4th STEM downgrade (our stock only Stock Trading Environment Model), the indexes have made little progress.\" 2024-08-02 \"With our STEM model RED (its most cautious reading) since 7/17 and few stocks meeting our criteria in buyable position... c…\" 2023-08-02 \"...On 7/27, our stock only (STEM) model\"（以降は省略）。計算方法は公開されていない。",
+  "thresholds": "本人は計算規則を公開していない。第三者の説明（非公式・本人のものではない）: フォーカスリストの5日ローリング成績に基づく主観的モデルで、green=ブレイクアウトが機能（easy dollar）、orange=選別的・回転的、red=ブレイクアウトが機能しない（hard penny）。略称も第三者は \"Stock Tactical Environment Model\" と書いていて食い違う。",
+  "how_used": "出典: REDで買える銘柄が少ないときは現金かネットショート（2024-08-02。現金を最優先とする部分は省略された箇所で、検索要約による言い換え）。2024-08-01 \"Our stock only STEM model sell signal on 7/17/24 was timely.\" 推論: 市場判定の入力が指数ではなく自分の監視銘柄の成績である点で、MM-05とMM-06を形式化したものと読める。",
+  "weight": "important",
+  "sources": X+"1768278640612065436 (2024-03-14); "+X+"1819389183456170135 (2024-08-02); "+X+"1819081963875324218 (2024-08-01); "+X+"1686768352809648128 (2023-08-02); https://www.tradingviewindicators.net/product-page/minervini-stem-model (第三者)",
+  "confidence": "medium"
+ },
+ {
+  "id": "MM-09",
+  "indicator": "指数ベースの長期モデル・リスクモデル（ルール非公開）",
+  "definition": "出典: 本人は、STEMとは別に長期の機械的モデルやリスクモデルに言及する。2018-03-28 \"Our risk model flashed a sell alert and sell signal on Feb. 1 & 2 and then again on Mar. 21 & 22. In between the market has recorded many distribution days. I'm still holding a few names that are trading above my stops, but I have a large amount of cash for a better entry.\" 2024-12-31 \"...Our long term mechanical model has not yet triggered a sell signal, but another leg down would …\" 2023-08-02の投稿では、長期モデルは強気のままで2023-01-13の買いシグナルが有効とされる（検索要約による言い換え）。",
+  "thresholds": "未検証: 規則・閾値は非公開。第三者（rikopedia）は、STEMがリスクモデルの約25%を占めると書くが、本人の出典はない。",
+  "how_used": "出典: 売りシグナルの後は現金を多く持ち、ストップの上にある銘柄だけを残す（2018-03-28）。推論: 長期モデルは大局の判定に、STEMは短期の環境判定に使われ、両者が食い違うことがある（2023-08: STEMは慎重、長期は強気）。",
+  "weight": "supporting",
+  "sources": "https://twitter.com/markminervini/status/978995300441493504 (2018-03-28); "+X+"1874139838313574883 (2024-12-31); "+X+"1686768352809648128 (2023-08-02); https://www.rikopedia.com/2026/08/cara-screening-saham-ala-mark-minervini.html (第三者)",
+  "confidence": "medium"
+ },
+ {
+  "id": "MM-10",
+  "indicator": "指数と50日線・200日線（市場の性格）",
+  "definition": "出典: 本人は、主要指数が50日線・200日線の上か下か、200日線の向き、200日線への戻りを市場の性格の記述に使う。2026-03-25 \"The market's character is still one of a bear market or cyclical correction; strong open, fade into close and major average living below the 200-day line.\" 2025-01-02 \"Other than the Nasdaq Composite, all the major averages are trading below their 50-day moving average lines.\" 2024-04-16 \"...The Nasdaq Composite closed below the 50-day for the first time since early November…\" 2022-08-17 \"Averages are pulling back from logical supply near their down trending 200-day lines.\" 2023-04-10 \"...an Index like the IBD 50, it has barely rallied off the lows and remains below the 200-day ma. This would be more generally representative of the health of growth stock setups.\"",
+  "thresholds": "線の上か下か、200日線の向き（いずれも定性）。日数や乖離率の閾値は本人の記述にない。2025-03-26 \"The $SPY is now pulling back in classic fashion from the 200-day line. The key thing to watch here is how recent stock breakouts hold…\"",
+  "how_used": "出典: 200日線より下では底は未確立と読み、反発をカウンタートレンドとして扱う（MM-16）。判定は常にブレイクアウトの持ちこたえ（MM-05）と組み合わせる。2025-03-26の投稿では、小さく機敏に取引し、明確な強さが見えるまで露出を積極的に増やさないとしている（検索要約による言い換え）。推論: 指数の線だけで売買するという本人の規則は見つからなかった。",
+  "weight": "important",
+  "sources": X+"2036910022144229808 (2026-03-25); "+X+"1874827311406555485 (2025-01-02); "+X+"1780241776302788813 (2024-04-16); https://x.com/markminervini/status/1559940895318986753 (2022-08-17); "+X+"1645428528337375236 (2023-04-10); "+X+"1904945270330134991 (2025-03-26)",
+  "confidence": "high"
+ },
+ {
+  "id": "MM-11",
+  "indicator": "指数へのステージ分析",
+  "definition": "出典（書籍、二次要約経由）: TLSMWの \"Trading with the Trend\"（部分目次で5章）で、Weinsteinに由来する4ステージ（1 放置、2 上昇、3 天井、4 下落）を銘柄単位で扱い、Stage 2でだけ買う。未検証: 主要指数にステージを付けて売買規則にする本人の記述は見つからなかった。最も近いのは、メガキャップ成長株のグループにStage 3を当てた投稿（2021-03-08、MM-02）と、200日線より下を「弱気相場・循環的調整の性格」と呼ぶ投稿（2026-03-25、MM-10）。",
+  "thresholds": "指数についての閾値は本人の記述にない。銘柄のStage 2の定義はトレンドテンプレート（MM-04）。",
+  "how_used": "推論: 指数が200日線より下で200日線が下向きなら、Stage 4に相当する扱い（ラリーを信用しない）になり、本人の言い方と矛盾しない。ただし、本人がこれをステージとして名付けた出典はない。アプリで指数にStageを表示するなら、それはアプリ側の推論として表示すべき。",
+  "weight": "supporting",
+  "sources": "https://www.fishpond.co.uk/Books/Trade-Like-Stock-Market-Wizard-Mark-Minervini/9780071807227 (部分目次); "+X+"1369054991328100359 (2021-03-08); "+X+"2036910022144229808 (2026-03-25); "+X+"1192824370407858176 (2019-11-08)",
+  "confidence": "low"
+ },
+ {
+  "id": "MM-12",
+  "indicator": "指数の分配（distribution）",
+  "definition": "出典: 本人は \"distribution\"、\"distribution day\" という語を使うが、数値の定義は示さない（O'Neil/IBDの用語）。2023-08-02 \"We saw some distribution over the past 8 trading sessions with subsequent pauses. This is normal action before selling starts to pick up and spread to areas that were holding up.\" 2023-11-01 \"When the tape is dominated by distribution and there are few stocks in buyable position, I treat all rallies during a correction as nothing more than counter trend reactions.\" 2025-03-11 \"...Volume was well above average while this market has still not been able to bounce for any longer than one single session with distribu…\" チャーニングは別行（MM-21）に分けた。",
+  "thresholds": "本人の数値はなし。日数閾値（例: 4日以上・6日以上）、−0.2%、25営業日での失効、+5%での失効は、本人の記述では確認できなかった。これらはO'Neil/IBDの枠組みに属し、本調査でもウェブでの確認はできていない（検索で該当情報が出なかった）。repoの実装値（market_regime.py）は出典ではない。",
+  "how_used": "出典: 分配が優勢で買える銘柄が少ないあいだは、調整中のラリーをカウンタートレンドの反応とみなし、市場が証明するまで資金を出さない（2023-11-01 \"The market must prove itself to get my hard-earned capital at risk.\"）。分配日が重なったときは、リスクモデルの売りシグナルと現金化が伴っている（2018-03-28、MM-09）。FTD後の押しでは、深刻な分配を避けられるかが鍵とされる（MM-13）。",
+  "weight": "important",
+  "sources": X+"1686768352809648128 (2023-08-02); https://twitter.com/markminervini/status/1719712431046357276 (2023-11-01); "+X+"1899477808214048922 (2025-03-11); "+X+"2069750598728089949 (2026-06-24)",
+  "confidence": "high"
+ },
+ {
+  "id": "MM-13",
+  "indicator": "Follow-Through Day（FTD）",
+  "definition": "出典: 本人はFTDの概念を使う。2022-03-30 \"Indexes are pulling back as expected. A pullback of 3-5% would be normal during a new up leg after a follow through day. The key is how stocks behave during a pullback and if the indexes can avoid serious distribution. A lockout rally with even less pullback is indeed possible.\" 本人はFTDの数値定義を示していない。出典（IBDの枠組み、時期で異なる）: 上昇試行の4日目以降に、主要指数が大きく上げ、出来高が前日より増える日。上げ幅の閾値は、当初1%、2000年代半ばに1.7%（一時2%とする一説あり、単一の出典）、近年の説明では約1.25%と出典間で食い違う。公式に変更された日付は確認できなかった。Quantifiable Edges（2008-01）は、1%基準で1971-12〜2008-01の64件中35件（54.7%）が成功だったとしている。",
+  "thresholds": "本人の数値: FTD後の新しい上昇波で、3〜5%の押しは正常。FTDそのものの閾値は本人のものではない（上記のIBDの変遷を参照）。",
+  "how_used": "出典: 本人の再参入はFTDだけで決まらない。リーダーの出現とセットアップの増加（MM-01、MM-03）、ブレイクアウトの機能（MM-05）、試し玉の結果（MM-06）で段階的に進む。FTD後は、押しの中で銘柄がどう振る舞うか、指数が深刻な分配を避けられるかを見る。推論: 本人の体系では、FTDは確認材料の一つで、露出のはしご（例えば25→50→75%）をFTDの経過日数に機械的に結びつける出典はない。repoの25/50/75%のラダーは実装で、出典ではない。",
+  "weight": "supporting",
+  "sources": "https://x.com/markminervini/status/1509257440667316224 (2022-03-30); https://quantifiableedges.com/ibd-follow-through-days-pt-1-are-they-predictive/ ; https://note.com/erinaomi/n/nb7d40bb55c5a ; https://www.luxalgo.com/library/concept/follow-through-day/ (IBDの閾値の変遷。いずれもページは未取得)",
+  "confidence": "medium"
+ },
+ {
+  "id": "MM-14",
+  "indicator": "参加度（ブレッドス）: 50日線・200日線より上にある銘柄の割合など",
+  "definition": "出典（2021〜2026年の本人の投稿。書籍で重視されていたかは未確認）: 指数と参加度の食い違いを警戒材料に使う。2023-04-10 \"Considering the percentage of Nasdaq stocks above their own 200-day and 50-day lines are sub 24% and 31% respectively, a pullback is to be expected.\" 2025-10-31 \"I shorted $SPY on Wednesday. The long-term trend remains up, but breadth is weakening — fewer stocks above their 50-day lines; a divergence that has been worsening for months.\" 2026-09-29 \"On September 25, the S&P 500 Index closed just 0.7% below its August 13 record high. Yet only 24.5% of the stocks in the Multi-Cap universe we follow—U.S. common stocks—were above their 50-day moving averages, and only 43.1% were above their 200-day moving averages.\"（1981年以来初めてという部分は検索要約による言い換え）。2025-04-06 \"More than 60% of S&P 500 stocks are down 20% or more. We are in a bear market, most likely a cyclical bear.\" 2021-09-03 \"The \"market\" is still strong and could get even stronger if participation broadens out.\"",
+  "thresholds": "本人の売買閾値はなし。観測例として挙げた値: Nasdaq銘柄のうち200日線より上が24%未満、50日線より上が31%未満のとき「押しは予想される」（2023-04）。S&P 500構成銘柄の60%超が20%以上下落なら弱気相場、おそらく循環的な弱気（2025-04）。",
+  "how_used": "出典: 指数が高値圏でも参加度が細ければ、露出を抑えるかSPYのショートでヘッジする（2025-10-31、2026-09-29）。参加度とブレイクアウトの改善を見るまでロングに積極的にならない、という投稿もある（検索要約による言い換え。2025-08-20の投稿 ID 1958176651340116452 と結び付けたのは検索結果の並び順による推論で、未確認）。注意: \"I don't look much at breadth\" という発言は、検索結果がOliver Kellの発言ともしていて、本人のものか確認できないため採用しない。",
+  "weight": "important",
+  "sources": X+"1645428528337375236 (2023-04-10); "+X+"1984190748745503040 (2025-10-31); "+X+"2104922936654045264 (2026-09-29); "+X+"1908880484622316032 (2025-04-06); "+X+"1433610716049780739 (2021-09-03); "+X+"1958176651340116452 (2025-08-20)",
+  "confidence": "high"
+ },
+ {
+  "id": "MM-15",
+  "indicator": "52週新高値・新安値",
+  "definition": "出典（書籍、二次要約経由）: TLSMWのリーダー章では、市場が最初の上昇波に入るとき、52週高値リストと、持ちこたえて新高値から5〜15%以内にある銘柄に集中し、52週安値リストは完全に避ける。リーダーは市場が転換する頃に高値リストに載るので、割高に見える。前のサイクルのリーダーのうち次も主導するのは25%未満なので、新しい名前を予期する。未検証: 新高値数と新安値数の差を市場方向の指標として数値で使う本人の記述は見つからなかった。",
+  "thresholds": "書籍（二次要約経由）: 新高値から5〜15%以内。前サイクルのリーダーが次も主導するのは25%未満。新高値数・新安値数の比や差についての本人の閾値はない。",
+  "how_used": "出典: 新高値リストは市場判定の計器ではなく、市場が転換したときに次のリーダーを探す場として使う。推論: アプリで新高値数・新安値数を表示するなら、それは本人の基準ではなくO'Neil系や一般的な参加度の指標として表示すべき。",
+  "weight": "supporting",
+  "sources": "https://sumitjain0014.substack.com/p/in-chapter-9-titled-follow-the-leaders ; https://www.elearnmarkets.com/school/units/trade-like-a-stock-market-wizard (ページは未取得)",
+  "confidence": "medium"
+ },
+ {
+  "id": "MM-16",
+  "indicator": "調整局面での露出削減（ストップ、現金、指数ショート）",
+  "definition": "出典: 露出は意見ではなく、個別のストップと買える銘柄の少なさによって下がる。2023-10-27 \"...my opinions do not drive my trading... sound principles and managing risk in real time does.\" 必要に応じて、指数（SPY/DIA）のショートでヘッジするか、ネットショートにする。",
+  "thresholds": "本人の数値（ショートの例）: 2024-12-31 \"My stop is at all-time highs on both the ETF and the cash index (both must hit an all-time high to trigger the stop).\" 露出の水準: 2018-10-10 \"I'm in 100% cash as of last week...\"。2024-04-30 \"...Net net we are in 100% defensive with mostly cash.\"。2023-10-20 \"...But I'm already in mostly cash\"。露出を何%まで下げるかの規則は示されていない。",
+  "how_used": "出典: ストップに掛かった銘柄は外れ、新規の買いは「基準を満たす銘柄が少ない」ので起きない。結果として現金が増える（MM-03）。ロングを加えるとショートは「軽いヘッジ」になる（2025-12-11 \"...Over the past couple weeks I added 9 longs, so by default the short is now a light hedge.\"）。2024-10-31 \"...you should always be prepared for the opposite side of the trade; that's why I use stops.\"",
+  "weight": "core",
+  "sources": X+"1717952023784489244 (2023-10-27); "+X+"1874139838313574883 (2024-12-31); "+X+"1050168383537377280 (2018-10-10); "+X+"1785327649230840140 (2024-04-30); "+X+"1715466694364139917 (2023-10-20); "+X+"1999131108563112387 (2025-12-11); "+X+"1852045845253812290 (2024-10-31)",
+  "confidence": "high"
+ },
+ {
+  "id": "MM-17",
+  "indicator": "再参入の規律（底を当てにいかない、市場に証明させる、試し玉から）",
+  "definition": "出典: 調整中のラリーは、銘柄が基準を満たすまで信用しない。2024-08-08 \"This rally has the look and feel of nothing more than a technical bounce. Before a reliable bottom can be established, we are likely to experience more volatility and a test or undercut of the recent lows. With that said, my focus (as always) is on individual stocks. Until sto…\" 2026-03-25 \"Before a reliable bottom can be established, we need to see better price and volume action, including better action from b…\"（同じ投稿でVIXが弱気警戒の水準にあるがウォッシュアウトには届かず、ウォッシュアウトは底に必須ではないが確信を加える、としている。この部分は検索要約による言い換え）。",
+  "thresholds": "本人の数値閾値はなし。言及される条件は、価格と出来高の改善、ベースからのブレイクアウトの改善、セットアップの増加とブレイクアウトの機能（2021-07-22）、自分の試し玉が機能すること（MM-06）。",
+  "how_used": "出典: リーダーが現れたら指数は見ず、試し玉（四分の一と半分のポジション）から段階的に増やす（2020-07-07、2025-01-29）。指数が新安値を付けても、すでに底入れしたリーダーから買い始める（2022-07-08）。大きな上昇日だけで飛び乗らない（MM-19）。市場が\"overbought\"に見えても、調整を待ち続けて機会を逃さない（2020-07-07 \"The market will appear overbought and fool the amateurs that wait for a correction that never comes until the golden opportunity has passed.\"）。",
+  "weight": "core",
+  "sources": X+"1821615250128372222 (2024-08-08); "+X+"2036910022144229808 (2026-03-25); "+X+"1418195374506917891 (2021-07-22); "+X+"1280509355662684168 (2020-07-07); "+X+"1545443621184364545 (2022-07-08); "+X+"1884705597402059074 (2025-01-29)",
+  "confidence": "high"
+ },
+ {
+  "id": "MM-18",
+  "indicator": "頼らない（とする）指標と、実際に言及している指標（両面）",
+  "definition": "出典（頼らないとする側）: 2018-10-10 \"When the market is poised to crash or enter a bear market, you can throw all your VIX and bullshit oversold \"indicators\" out the window. EVERY major decline starts as an appetizing oversold condition to ego driven bottom fishers.\" 2019-03-22 \"I could care less what the indexes are doing...\" 2023-10-27 \"...my opinions do not drive my trading...\" 2026-04-15 \"...I still don't rely on gut instinct during turmoil, nor do I rely on analyst opinions, or what\"（ここで切れていて、続きは未確認）。2019-06-25 \"Investors don't lose money or fail to succeed in the stock market because of bear markets or economic hazards but because of mental hazards.\" MarketWatchのインタビュー（Sincere）では、ボトムアップで見出しではなく銘柄の振る舞いに従うとしている（言い換え）。出典（実際には言及している側）: センチメント（2025-03-10 \"Some measures of sentiment are showing signs of fear, but there are still readings that need to improve before a reliable bottom can be established.\"、2026-05-27 \"...sentiment is actually becoming LESS bullish — a classic hallmark of a powerful \"lockout rally\" that climbs the proverbial Wall of Worry.\"）。VIX（2024-08-02 \"The VIX has now officially doubled off the lows.\"、2024-08-06 \"...VIX spiking above 60...\"）。マクロ（2023-10-20 \"With rates rising, breakouts faltering, Powell talking hawkish...\"、2025-10-31 \"Rate cuts are priced in, and with the Fed hinting at a pause, a pullback looks likely.\"、2026-09-14 \"...another significant headwind: rising interest rates and oil prices.\"）。MarketWatchのインタビューでは原油80ドル超を景気後退リスクとして語っている（言い換え）。",
+  "thresholds": "VIX、センチメント、マクロについて本人が売買閾値を示した例はない。",
+  "how_used": "推論: 本人の売買のトリガーは、銘柄（セットアップの数、ブレイクアウトの成否）と自分の結果、そしてストップ。センチメント、VIX、マクロは状況説明や底の確信度の補助（ウォッシュアウトは確信を加える、という言い換え）として使い、単独の買い・売りシグナルとしては退けている（2018-10-10）。2018〜2019年の発言（指数やVIXを重視しない）と、2023〜2026年の投稿（センチメント、VIX、FRB、金利、原油、参加度に頻繁に言及）では力点が違う。アプリでセンチメントやマクロを露出の目安に入れるなら、それは本人の規則ではない。",
+  "weight": "supporting",
+  "sources": X+"1050154821511204864 (2018-10-10); "+X+"1108920297447665666 (2019-03-22); "+X+"1717952023784489244 (2023-10-27); "+X+"2044515432623923538 (2026-04-15); "+X+"1143522972914917377 (2019-06-25); "+X+"1899115780010029489 (2025-03-10); "+X+"2059619456192594299 (2026-05-27); "+X+"1819389183456170135 (2024-08-02); "+X+"1820828830115766778 (2024-08-06); "+X+"1715466694364139917 (2023-10-20); "+X+"1984190748745503040 (2025-10-31); "+X+"2099512619723870318 (2026-09-14); https://michaelsincere.com/articles/my-marketwatch-interview-with-stock-market-wizard-mark-minervini",
+  "confidence": "medium"
+ },
+ {
+  "id": "MM-19",
+  "indicator": "弱気相場・調整中の大陽線（+3%の日）",
+  "definition": "出典: 2020-04-06 \"It's easy to get lured into the market on big up days and place undisciplined FOMO trades. But keep in mind, the biggest rally days occur during bear markets. Sustained bull markets have very few +3% up days. Bear markets are dominated by them, but at the expense of volatility.\" 2025-03-07 \"The major indexes are oversold and could certainly rally any day. Some of the largest up days can occur during corrections and bear markets. But the market is still fragile, risk is high, and volatility is likely to remain elevated.\" 2026-04-01 \"Today's market strength was textbook. This is exactly what markets do during corrections when they get stretched to oversold levels.\"",
+  "thresholds": "本人の数値: +3%の上昇日。持続的な強気相場ではまれで、弱気相場で多い（頻度の数値は示されていない）。",
+  "how_used": "出典: 大陽線だけを再参入の根拠にしない。売られ過ぎからの反発は底の確認ではない（2026-04-01の投稿。続く部分は検索要約による言い換え）。",
+  "weight": "supporting",
+  "sources": X+"1247176535171387392 (2020-04-06); "+X+"1898054183636676925 (2025-03-07); "+X+"2039173257836794199 (2026-04-01)",
+  "confidence": "high"
+ },
+ {
+  "id": "MM-20",
+  "indicator": "大化け株は調整・弱気相場の明けに始まる（時機の窓）",
+  "definition": "出典: 2026-04-29 \"...This helps explain why the vast majority of significant stock advances begin out of corrections and bear markets—periods that effectively wash out the noise.\" 書籍由来とされる数値は出典間で食い違う: \"More than 90% of superperformance stocks began their phenomenal price surges as the general market came out of a correction or bear market. Very few stocks had superperformance phases during a bear market.\"（ファンアカウント@MinerviniQuoteの2023-01-16投稿。本人のアカウントではない）。動画要約やTradingViewの解説など別の二次資料は「96%超」としている。書籍の原文は未確認。",
+  "thresholds": "90%超（@MinerviniQuote）と96%超（別の二次資料）。どちらが書籍の数値かは未確認。",
+  "how_used": "推論（出典の組み合わせ）: 調整中に、RSで持ちこたえた次のリーダー候補を準備し、明けに試し玉で入る（MM-01、MM-06、MM-17）。調整が長引いても、明けの初動を逃さないことが最重要とされる。",
+  "weight": "important",
+  "sources": X+"2049565140245201280 (2026-04-29); https://x.com/MinerviniQuote/status/1614992174206140417 (2023-01-16、ファンアカウント); https://mohitsidana.substack.com/p/how-to-spot-leading-stocks-in-a-bear ; https://my.tradingview.com/chart/BTCUSDT/2xeuqrBi-What-to-look-for-during-a-Bear-Market-Correction (96%版)",
+  "confidence": "medium"
+ },
+ {
+  "id": "MM-21",
+  "indicator": "指数のチャーニング（出来高を伴いながら値が進まない状態）",
+  "definition": "未検証: チャーニングを主要指数に当てはめて市場判定に使う本人の記述は、本調査では見つからなかった。repoの docs/MINERVINI_MECHANICS_COVERAGE.md（E5「FTD後3-5日→初回churnを警戒」）は、これをRoppel（同じ手法系の別人）由来としている（実測で読んだ）。第三者（TradingViewのスクリプト、TAPLOT）は、出来高が多いのに値幅が進まない日をストレスの兆候と定義しているが、本人のものではない。",
+  "thresholds": "本人の閾値はなし。",
+  "how_used": "推論: 本人の体系で最も近いのは、指数の分配（MM-12）と、ブレイクアウトの失敗・squat（MM-05）。アプリでチャーニングを表示するなら、ミネルヴィニの基準ではなく、Roppel・O'Neil系や第三者の定義として表示すべき。",
+  "weight": "supporting",
+  "sources": "/home/user/screener/.claude/worktrees/r3-market-audit/docs/MINERVINI_MECHANICS_COVERAGE.md (E5); https://www.tradingview.com/script/4xC1hSpL-Distribution-Accumulation-ChurningDay-StockUnderStress (第三者、ページは未取得)",
+  "confidence": "low"
+ }
+]
+
+notes = """
+範囲と方法（実測）:
+- 書籍ファイルの検索（find / -xdev … | grep -i minervini|oneil|…|champion|money in stocks|ibd 等）では書籍は0件。TLSMW（2013）とThink & Trade Like a Champion（2017）の原文は読めていない。書籍への言及は、すべて二次要約（substack、elearnmarkets、書評、TradingMarketsの抜粋）の検索結果によるもので、ページ番号はない。
+- WebFetchは traderlion.com と benzinga.com で ENOTFOUND（このセッションのネットワーク許可外）。どのページも開けていない。TraderLionの \"Your Trading Results Are Your Best Market Indicator\" と、Benzingaの2022年FinTwit会議の記事を読むには、セッションのネットワーク設定でこの2つのホストを許可する必要がある。
+- 以上により、引用符で囲んだ英文は、検索結果のタイトルに表示されたX投稿の本文だけ（多くは省略記号で切れている。切れた先は補っていない）。例外として、章名・モデル名・用語（\"Follow the Leaders\"、\"Position Sizing for Optimal Results\"、\"distribution\" など）は名前として引用符で示した。検索要約の文は「言い換え」と明記した。
+- X投稿の日付（UTC）はステータスIDから復号した（実測）: /tmp/claude-0/-home-user-screener/c937365f-db46-520a-bbf4-94843e169170/scratchpad/audit-market/mark/x_post_dates.txt（スクリプト: /tmp/claude-0/-home-user-screener/c937365f-db46-520a-bbf4-94843e169170/scratchpad/audit-market/mark/decode_ids.py）。検索ログ: /tmp/claude-0/-home-user-screener/c937365f-db46-520a-bbf4-94843e169170/scratchpad/audit-market/mark/search_log.json。このJSONの生成スクリプト: /tmp/claude-0/-home-user-screener/c937365f-db46-520a-bbf4-94843e169170/scratchpad/audit-market/mark/build_framework.py。出力: /tmp/claude-0/-home-user-screener/c937365f-db46-520a-bbf4-94843e169170/scratchpad/audit-market/framework-mark.json（同じ内容の写し: /tmp/claude-0/-home-user-screener/c937365f-db46-520a-bbf4-94843e169170/scratchpad/audit-market/mark/framework-mark.json）。
+
+全体の読み方:
+- weight はすべて推論。本人は重みを公表していない。例外として、本人が明示的に順位を付けているのは、指数より個別のセットアップ（2019-03-22）と、リーダーが現れたら指数を見ない（2020-07-07）の2点で、MM-01・MM-03・MM-05・MM-06・MM-16・MM-17を core とした根拠になっている。
+- 本人の体系の中心は「銘柄からの読み」: 基準を満たすセットアップの数、ブレイクアウトの成否、自分の結果（プログレッシブ・エクスポージャー、STEM）。指数の線・分配・FTD・参加度は補助的な文脈として使われる。2021〜2026年の投稿では参加度（50日線・200日線より上の割合）、センチメント、VIX、FRB・金利・原油への言及が増えている。2018〜2019年の発言（指数やVIXを重視しない）とは力点が違うので、日付つきで両方を残した（MM-18）。
+
+見つからなかったもの（行は残し、「本人の記述なし」と明記した）:
+- トレンドテンプレート通過数の閾値（MM-04）。第三者の30+/10–20/0–5は本人のものではない。
+- 新高値数と新安値数の差を市場指標とする規則（MM-15）。
+- 指数へのステージ判定の規則（MM-11）。
+- 指数のチャーニング（MM-21）。repoではRoppel由来とされている。
+- 「マクロを無視する」という明言（MM-18。実際にはマクロに言及している）。
+- 分配日の数値（−0.2%、25日での失効、+5%での失効、4+/6+）。これはO'Neil/IBDの枠組みで、本調査ではウェブでの確認もできなかった。
+
+出典にしてはいけないもの:
+- repoの実装値（market_regime.py の FTD 4〜15日目・+1.2%、分配4+/6+、25/50/75%のラダー）は実装であって、出典ではない。
+- 同梱の trading-skills の数値（1トレードのリスク1%・0.5%、ポートフォリオのheat 6〜8%、\"Leading Stocks 20%\"の重み）には出典がない。
+- docs/MINERVINI_MECHANICS_COVERAGE.md では、E5（FTD後のchurn警戒）はRoppel由来、E6（セットアップ数＝健全度）はRitchie/Roppel由来とされている（実測で読んだ）。本人の規則とは区別すること。
+- RS推計をIBD RSと呼ばないこと。本人の投稿にある\"high relative strength stocks\"は概念で、アプリの数値とは別物。
+""".strip()
+
+doc = {
+  "framework": "Mark Minervini — general market（市場の方向・環境）の読み方と行動への変換（露出・買い・売り）。出典の優先順: 本人のX投稿（日付はIDから復号）＞書籍（TLSMW 2013、Think & Trade Like a Champion 2017。二次要約経由）＞第三者。作成 2026-11-13、label=mark。",
+  "items": items,
+  "notes": notes,
+}
+
+for p in (OUT_MAIN, OUT_COPY):
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(doc, f, ensure_ascii=False, indent=1)
+
+# self-check
+d = json.load(open(OUT_MAIN, encoding="utf-8"))
+ids = [i["id"] for i in d["items"]]
+assert len(ids) == len(set(ids))
+req = ["id","indicator","definition","thresholds","how_used","weight","sources","confidence"]
+for it in d["items"]:
+    for k in req:
+        assert k in it and isinstance(it[k], str) and it[k], (it.get("id"), k)
+    assert it["weight"] in ("core","important","supporting")
+    assert it["confidence"] in ("high","medium","low")
+def walk(o):
+    if isinstance(o,str):
+        assert "\\" not in o, o[:80]
+    elif isinstance(o,dict):
+        [walk(v) for v in o.values()]
+    elif isinstance(o,list):
+        [walk(v) for v in o]
+walk(d)
+print("items", len(ids), "bytes", os.path.getsize(OUT_MAIN))

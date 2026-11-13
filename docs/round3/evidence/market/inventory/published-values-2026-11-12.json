@@ -1,0 +1,21 @@
+{
+ "_note": "Published 11-12 market-environment values. kind: 実測 = read from CI log / feature run; 推論 = replay or proxy (see source); 未検証 = not retrievable from this sandbox.",
+ "backend_regime_feature_run": {"kind": "実測", "source": "feature-run-us-2026-11-12.json.gz (sha256 efbc14c0…), 8099/9915 rows carry it, all identical; tally in regime_fields.out",
+   "market_regime": "correction", "market_health": 58.7, "market_exposure_pct": 20, "market_distribution_days": 6, "market_above_50dma": false, "market_above_200dma": true, "market_50_above_200dma": true, "market_ftd_date": null, "market_ftd_days_since": null},
+ "backend_regime_replay_on_bundle_SPY": {"kind": "実測 (replay reproduces the feature run)", "source": "backend-regime-replay.json", "regime": "correction", "health": 58.7, "exposure_pct": 20, "distribution_days": 6, "pct_from_high": 2.82, "fifty_rising": false, "ftd": null,
+   "flip_history_since_10-16": "correction on 10-16,10-19,10-22,10-23,10-26,10-30..11-12; uptrend_under_pressure on 10-20,10-21,10-27,10-28,10-29"},
+ "market_context_manifest": {"kind": "実測 (CI log combine-and-build 131809613471 10:15:23 and 10:17:46; release 43408634161 line 1320)", "line": "Market context 2026-11-12: emitted from 4648 rows (correction)", "values_推論_from_feature_run": {"regime": "correction", "distribution_days": 6, "ftd_date": null, "ftd_days_since": null, "exposure_pct": 20}},
+ "long_history_final_session": {"kind": "実測", "source": "combine-and-build log 10:15:24 'Data coverage (market environment, final session)' and 10:02:58 independent scalar replay",
+   "coverage": 4531, "eligibleUniverse": 4538, "above50": 1940, "above50Percent": 42.82, "above200": 1876, "above200Percent": 41.40, "above150": 1804, "newHighs": 75, "newLows": 233,
+   "trendTemplateCount": 627, "rs90TemplateCount": 259, "leaderCount": 640, "stocks_up_4pct": 132, "stocks_down_4pct": 733,
+   "breakoutsJudged": 239, "breakoutsHeld": 141, "breakoutHoldPercent": 59.0, "leaderCohort": 480, "leaderCohortAbove50": 279, "leaderHealthPercent": 58.1,
+   "valid_breadth_sessions": 1269, "first_valid": "2021-10-25", "sector_frames": 252, "history_sha256": "341244f9ad679b50ca2a871e65350714234d5616b0ce23c9709fb449e516fc52"},
+ "long_history_proxy_bundle": {"kind": "推論 (collect-market-history.build on the bundle's 2y bars, 4421 of 4538 symbols, envelope-repaired; calibrated: above50% 43.1 vs 42.8, highs 74 vs 75, lows 233 vs 233, TT 613 vs 627)", "source": "long-history-proxy.json",
+   "stage_11_12": {"stage1": 1007, "stage2": 606, "stage3": 1237, "stage4": 1571, "stage2Percent": 13.7, "stage4Percent": 35.5}, "tt_10_29": 676, "tt_11_12": 613, "tt_change_10_sessions_percent": -9.3, "ratio_10day_11_12": 0.85},
+ "indices": {"kind": "未検証 for 11-12 (published series not retrievable: Pages blocked, Yahoo blocked, log prints only bar counts)", "log": "market-trend-source.json as_of 2026-11-12 indices [[^GSPC,280],[^IXIC,280]] put_call_observations 77 (combine-and-build 09:39:24)",
+   "real_2026-11-03_from_study_release": {"kind": "実測 (stale: 7 sessions before 11-12)", "^GSPC": {"dist": 6, "ft": "confirmed (FTD 2026-04-08)", "vs50": -1.61, "vs200": 3.46, "fromHigh": -3.2}, "^IXIC": {"dist": 5, "ft": "rally_attempt day 1 (low 11-02)", "vs50": -4.41, "vs200": 1.19, "fromHigh": -8.07}},
+   "lower_bound_11_12": {"kind": "推論", "^GSPC_dist_at_least": 4, "^IXIC_dist_at_least": 4},
+   "etf_proxy_11_12": {"kind": "推論 (SPY/QQQ volume ≠ index volume; calibration 08-03..11-03: S&P count equal 7/66, FT state equal 66/66; NAS count 19/66, state 22/66)", "SPY": {"dist": 6, "ft": "confirmed, decline 5.92% from 10-06 peak (6% line)", "vs50": -1.0, "vs200": 3.53, "fromHigh": -2.82}, "QQQ": {"dist": 7, "ft": "confirmed FTD 11-11 day 4 +2.31%", "vs50": -4.24, "vs200": 0.91, "fromHigh": -9.41}}},
+ "sector_ranks_proxy_11_12": {"kind": "推論 (bundle closes, producer formula)", "source": "sector-ranks-proxy.json", "order": ["XLV 126.6", "XLF 112.2", "XLE 109.5", "XLP 105.9", "XLY 100.3", "XLB 100.1", "XLRE 99.8", "XLU 96.4", "XLI 96.0", "XLK 95.7", "XLC 90.8"], "month_ago_10_14": {"XLK": 1, "XLE": 2, "XLV": 3}},
+ "put_call": {"kind": "実測 count only", "valid_observations": 77, "values": "未検証; not displayed by the brief"}
+}

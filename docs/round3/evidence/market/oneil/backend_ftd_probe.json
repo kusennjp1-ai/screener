@@ -1,0 +1,44 @@
+{
+ "SPY": {
+  "window_start": "2026-05-26",
+  "low_date": "2026-06-09",
+  "sessions_after_low": 109,
+  "prior_high_close": 759.5700073242188,
+  "decline_pct": 2.96,
+  "gate6_pass": false,
+  "detect": null,
+  "regime": "correction",
+  "exposure": 20,
+  "dist": 6,
+  "health": 58.7,
+  "above50": false,
+  "detect_without_gate": null
+ },
+ "QQQ": {
+  "window_start": "2026-05-26",
+  "low_date": "2026-11-05",
+  "sessions_after_low": 5,
+  "prior_high_close": 759.6599731445312,
+  "decline_pct": 14.82,
+  "gate6_pass": true,
+  "detect": {
+   "date": "2026-11-11 00:00:00",
+   "attempt_day": 4,
+   "gain_pct": 2.31,
+   "days_since": 1,
+   "dist_since_ftd": 0
+  },
+  "regime": "confirmed_uptrend",
+  "exposure": 25,
+  "dist": 7,
+  "health": 46.2,
+  "above50": false,
+  "detect_without_gate": {
+   "date": "2026-11-11 00:00:00",
+   "attempt_day": 4,
+   "gain_pct": 2.31,
+   "days_since": 1,
+   "dist_since_ftd": 0
+  }
+ }
+}

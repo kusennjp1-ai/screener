@@ -1,0 +1,13 @@
+DRAFT (O'Neil practitioner, port 4442 unused: no new renders; inventory renders/texts.json reused)
+F1 major wrong_definition: backend detect_follow_through anchors on 120-session lowest low = 2026-06-09 on SPY (decline 2.96% <6% gate) -> cannot see the 11-05 low; FTD off the current correction is structurally undetectable on SPY (backend_ftd_probe.json). 実測
+F2 major missing: Nasdaq FTD candidate 11-11 = Day 4 from 11-06 Day 1 (low 11-05), QQQ +2.31% vol 1.16x (passes 1.0/1.2/1.25/1.7/2.0); SPY +1.32% Day 4 vol 0.96x (price passes <=1.25, fails 1.7; volume leg fails on ETF). Index volume 未検証 (ETF/index volume direction agrees 59-62% of 120 sessions). Verdict is SPY-only; cap 0, Today shows nothing of it. 推論
+F3 major wrong_definition: cap is a SPY-50-day switch: FTD never opens buying (ftdUpgraded -> cap 0), 50-day recross opens 25% with no FTD (replay 10-20/21, 10-27..29: correction->under pressure->correction). W11/W12.
+F4 moderate misleading: label 50日線割れ（弱含み） vs IBD 'market in correction': SPY -5.92% closing DD, QQQ -14.8% (^IXIC -8.8% by 11-03), 6-7 DDs.
+F5 moderate misleading: frontend S&P FTD row likely '確認 4/8' (152 sessions old) during correction because of unsourced 6% gate (proxy 5.92%); rally-attempt day count for S&P hidden.
+F6 moderate wrong_definition: volume basis. SPY ETF count >=4 on 85.6% of last 250 sessions, >=6 on 57.6% (real ^GSPC 66.8%/24.8%); 10-16 is a DD on SPY (1.49x) but not on ^GSPC (0.91x). Thresholds 4/6 saturated.
+F7 minor: counts robust to variants this window: SPY 6 all 18 variants; 0 stalling days -> 'ストーリング日を含む数え方' adds nothing today; wide stalling adds ^IXIC 9-30.
+F8 minor: FTD 1.2% / day15 / FTD-fail=close<FTD low unsourced; show thresholds passed.
+F9 moderate missing: Today tile no 'rally attempt day n / waiting FTD' in correction.
+F10 minor overreach: DD ▲ warning continues during correction (W03 moot).
+F11 minor: cap scale 50/25/0 vs IBD 100/50/0 or 80-100/40-60/0-20.
+GOOD: G1 0% new buys in correction = W12; G2 gaps = 算出不可 never 0; historical flag; G3 strict 0.2/25/5% high rule sourced & disclosed 独自; G4 rally-attempt row wording '4日目以降の+1.2%上昇待ち', undercut reset on intraday low; G5 post-FTD distribution count shown; G6 ^GSPC/^IXIC used (not Dow), counted separately.

@@ -1,0 +1,22 @@
+{
+  "note": "Evidence log. All web content came from WebSearch result titles/snippets; no page was opened (WebFetch to traderlion.com and benzinga.com failed with ENOTFOUND = host not allowed in this session). Quotation marks in framework-mark.json are used only for text visible in a result TITLE (X post titles carry the post text, often truncated with an ellipsis). Everything else is summarizer paraphrase.",
+  "local_book_search": {
+    "command": "find / -xdev ( -iname '*.zip' -o -iname '*.pdf' -o -iname '*.epub' -o -iname '*.txt' -o -iname '*.mobi' -o -iname '*.azw*' ) | grep -i -E 'minervini|oneil|o.neil|canslim|wizard|champion|money in stocks|ibd|trade like|think and trade|mindset'",
+    "result": "no book files; only a numpy LICENSE.txt and earlier audit text files matched"
+  },
+  "blocked_fetch": ["https://traderlion.com/?p=419974 (Your Trading Results Are Your Best Market Indicator)", "https://benzinga.com/news/22/05/27210421/... (Minervini at 2022 FinTwit conference)"],
+  "secondary_book_sources": {
+    "TLSMW_ch9_follow_the_leaders": "https://sumitjain0014.substack.com/p/in-chapter-9-titled-follow-the-leaders",
+    "TLSMW_elearnmarkets_units": "https://www.elearnmarkets.com/school/units/trade-like-a-stock-market-wizard (lists Follow The Leaders as unit 10 of 11)",
+    "TLSMW_toc_partial": "https://www.fishpond.co.uk/Books/Trade-Like-Stock-Market-Wizard-Mark-Minervini/9780071807227 (1 Introduction, 2 What you need to know first, 3 The SEPA strategy, 4 Value comes at a price, 5 Trading with the trend)",
+    "TLSMW_stopped_out_excerpt": "https://tradingmarkets.com/stocks/stocks_trading_lessons/3-dos-and-donts-most-traders-learn-the-hard-way-1583786 ; https://whatheheckaboom.wordpress.com/2014/05/04/book-review-of-trade-like-a-stock-market-wizard-by-mark-minervini/",
+    "interview_notes_2014": "https://whatheheckaboom.wordpress.com/2014/05/11/notes-from-mark-minervini-interviews/",
+    "Champion_chapters": "https://www.tradingreviewers.com/think-and-trade-like-a-champion-review/ ; https://www.bookey.app/book/think-&-trade-like-a-champion",
+    "MarketWatch_interview": "https://michaelsincere.com/articles/my-marketwatch-interview-with-stock-market-wizard-mark-minervini",
+    "STEM_third_party": "https://www.tradingviewindicators.net/product-page/minervini-stem-model ; https://www.rikopedia.com/2026/08/cara-screening-saham-ala-mark-minervini.html",
+    "IBD_FTD_threshold_history": "https://quantifiableedges.com/ibd-follow-through-days-pt-1-are-they-predictive/ ; https://note.com/erinaomi/n/nb7d40bb55c5a ; https://www.luxalgo.com/library/concept/follow-through-day/",
+    "superperformance_96pct_variant": "https://mohitsidana.substack.com/p/how-to-spot-leading-stocks-in-a-bear ; https://my.tradingview.com/chart/BTCUSDT/2xeuqrBi-What-to-look-for-during-a-Bear-Market-Correction",
+    "third_party_TT_count_thresholds_NOT_his": "https://deepvue.com/screener/minervini-trend-template/ ; https://www.tradervps.com/blog/minervini-method-stepwise-approach-winning-stocks"
+  },
+  "x_post_dates": "x_post_dates.txt (UTC timestamps decoded from X status IDs: (id>>22)+1288834974657 ms; decode_ids.py)"
+}

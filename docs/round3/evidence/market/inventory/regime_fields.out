@@ -1,0 +1,16 @@
+top keys ['schema_version', 'market', 'pointer_key', 'generated_at', 'run', 'rows']
+rows 9915 type <class 'list'>
+row keys sample ['symbol', 'as_of_date', 'composite_score', 'overall_rating', 'passes_count', 'details_json']
+markets Counter({None: 9915})
+market_50_above_200dma [('true', 8099)]
+market_above_200dma [('true', 8099)]
+market_above_50dma [('false', 8099)]
+market_cap [('10624172', 2), ('49269886976', 1), ('10437368832', 1), ('490234016', 1), ('40561952', 1), ('343701312', 1)]
+market_cap_usd [('10624172', 2), ('49269886976', 1), ('10437368832', 1), ('490234016', 1), ('40561952', 1), ('343701312', 1)]
+market_distribution_days [('6', 8099)]
+market_exposure_pct [('20', 8099)]
+market_ftd_date [('null', 8099)]
+market_ftd_days_since [('null', 8099)]
+market_health [('58.7', 8099)]
+market_regime [('"correction"', 8099)]
+market_themes [('[]', 9763)]
