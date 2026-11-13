@@ -33,7 +33,8 @@ GATE_1 = \
   tests/unit/test_setup_engine_parameters.py \
   tests/unit/test_aggregator_execution_pipeline.py \
   tests/unit/test_explain_builder.py \
-  tests/unit/test_stage_analysis.py
+  tests/unit/test_stage_analysis.py \
+  tests/unit/test_pivot_timeframes.py
 
 # ── Identity Invariants (Fail Fast) ──────────────────────────────────
 # Canonical-key uniqueness, alias-key integrity, and identity contracts.
