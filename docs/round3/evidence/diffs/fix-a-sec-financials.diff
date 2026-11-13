@@ -1,0 +1,151 @@
+--- tools-orig/sec-financials.py	2026-11-13 12:36:24.861960867 +0000
++++ src/frontend/tools/sec-financials.py	2026-11-13 12:36:49.589562850 +0000
+@@ -153,6 +153,38 @@
+ class PayloadMismatch(ValueError):
+     """The companyfacts payload is not the one requested (another CIK) or the analysis date is invalid."""
+ 
++# A CIK as companyfacts may write it: a non-bool int, or ASCII digits (1-10, zero padding allowed). Nothing else
++# (a float, a bool, a signed or spaced string, Unicode digits) names a CIK; the identity check stays exact.
++CIK_TEXT = re.compile(r"[0-9]{1,10}")
++
++def payload_cik(value):
++    """The payload's CIK as an int, or None when it names none."""
++    if isinstance(value, bool):
++        return None
++    if isinstance(value, int):
++        return value if value >= 0 else None
++    if isinstance(value, str) and CIK_TEXT.fullmatch(value):
++        return int(value)
++    return None
++
++def cik_kind(facts):
++    """How the payload wrote its cik, for the run's diagnostic count: int, digits (a digit string), missing, null,
++    text (another string), not_object (the payload is not an object) or the JSON type's name."""
++    if not isinstance(facts, dict):
++        return "not_object"
++    if "cik" not in facts:
++        return "missing"
++    value = facts["cik"]
++    if value is None:
++        return "null"
++    if isinstance(value, bool):
++        return "bool"
++    if isinstance(value, int):
++        return "int"
++    if isinstance(value, str):
++        return "digits" if CIK_TEXT.fullmatch(value) else "text"
++    return type(value).__name__
++
+ DERIVATION_GAP_REASONS = ("tag_mismatch", "broken_chain", "no_annual")
+ 
+ def derivation_gaps(facts, field, quarters, as_of):
+@@ -185,7 +217,7 @@
+ def normalize(facts, symbol, cik, as_of, retrieved_at=None):
+     if not valid_date(as_of):
+         raise PayloadMismatch("analysis date is not a valid date")
+-    if facts.get("cik") != cik:
++    if payload_cik(facts.get("cik")) != cik:
+         raise PayloadMismatch("companyfacts cik does not match the requested cik")
+     retrieved_at = retrieved_at or now_iso()
+     fields = {key: series(facts, key, as_of) for key in TAGS}
+@@ -230,10 +262,10 @@
+ 
+ def invalid_detail(error, cik, facts):
+     """Why a payload could not be read: the exception class, a short message and the CIKs requested and received."""
+-    received = facts.get("cik") if isinstance(facts, dict) else None
++    received = payload_cik(facts.get("cik")) if isinstance(facts, dict) else None
+     name = type(error).__name__
+     return {"class": name if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]{0,63}", name) else "Exception", "message": safe_message(error, name),
+-        "requested_cik": cik, "received_cik": received if isinstance(received, int) and not isinstance(received, bool) and received >= 0 else None}
++        "requested_cik": cik, "received_cik": received}
+ 
+ def invalid_cause(record):
+     """The cause key of an invalid_payload record for the counts: cik_mismatch, or the exception class."""
+@@ -342,7 +374,7 @@
+ SECOND_PASS_DELAY_SECONDS = 20
+ TRANSIENT_ERROR = "SEC取得不可"
+ 
+-def fetch_symbol(symbol, tickers, as_of, get=None, deadline=None):
++def fetch_symbol(symbol, tickers, as_of, get=None, deadline=None, observe=None):
+     """One symbol's record. Permanent outcomes (no CIK, no companyfacts, no quarterly
+     report, an invalid payload) carry their reason; only `transient` is retried. Once the
+     run's deadline has passed no request is made and the symbol stays transient (unknown)."""
+@@ -364,15 +396,18 @@
+         return unavailable(symbol, as_of, "transient", f"{TRANSIENT_ERROR}: {type(e).__name__}", now_iso())
+     retrieved_at = now_iso()
+     try:
+-        return normalize(facts, symbol, cik, as_of, retrieved_at)
++        record = normalize(facts, symbol, cik, as_of, retrieved_at)
+     except Exception as e:
+-        # The cause is recorded (never the record's values): what failed, and which CIK came back.
+-        return {**unavailable(symbol, as_of, "invalid_payload", f"{TRANSIENT_ERROR}: {type(e).__name__}", retrieved_at), "invalid_detail": invalid_detail(e, cik, facts)}
++        record = {**unavailable(symbol, as_of, "invalid_payload", f"{TRANSIENT_ERROR}: {type(e).__name__}", retrieved_at), "invalid_detail": invalid_detail(e, cik, facts)}
++    # Diagnostic only (the run's log): how each received payload wrote its cik, by outcome. Never in the record.
++    if observe is not None:
++        observe(cik_kind(facts), record.get("reason") or "read")
++    return record
+ 
+-def fetch_all(symbols, tickers, as_of, get, workers=WORKERS, deadline=None):
++def fetch_all(symbols, tickers, as_of, get, workers=WORKERS, deadline=None, observe=None):
+     """Results in the order of `symbols`; the shared limiter bounds the total rate."""
+     with ThreadPoolExecutor(max_workers=workers) as pool:
+-        return list(pool.map(lambda symbol: fetch_symbol(symbol, tickers, as_of, get, deadline), symbols))
++        return list(pool.map(lambda symbol: fetch_symbol(symbol, tickers, as_of, get, deadline, observe), symbols))
+ 
+ # The second pass is skipped when SEC failed broadly: more than half of the requested symbols,
+ # and at least this many, failed transiently (retrying them would only spend the budget again).
+@@ -385,6 +420,10 @@
+     deadline = deadline or Deadline(sec_deadline_seconds())
+     get = get or (lambda url: get_json(url, deadline=deadline))
+     output = {"schema_version": SCHEMA_VERSION, "as_of_date": as_of, "retrieved_at": now_iso(), "results": {}, "errors": []}
++    kinds, lock = Counter(), threading.Lock()
++    def observe(kind, outcome):
++        with lock:
++            kinds[f"{kind}:{outcome}"] += 1
+     tickers = {}
+     for attempt in range(2):
+         try:
+@@ -396,7 +435,7 @@
+                 output["errors"].append(f"SEC ticker map unavailable: {type(e).__name__}")
+                 break
+             sleep(SECOND_PASS_DELAY_SECONDS)
+-    for symbol, result in zip(symbols, fetch_all(symbols, tickers, as_of, get, workers, deadline)):
++    for symbol, result in zip(symbols, fetch_all(symbols, tickers, as_of, get, workers, deadline, observe)):
+         output["results"][symbol] = result
+     failed = [s for s, r in output["results"].items() if r.get("reason") == "transient"]
+     requested = sum(r.get("reason") != "no_cik" for r in output["results"].values())
+@@ -405,13 +444,15 @@
+     recovered = 0
+     if failed and not skipped:
+         sleep(SECOND_PASS_DELAY_SECONDS)
+-        for symbol, result in zip(failed, fetch_all(failed, tickers, as_of, get, workers, deadline)):
++        for symbol, result in zip(failed, fetch_all(failed, tickers, as_of, get, workers, deadline, observe)):
+             if result.get("status") in ("available", "partial"):
+                 recovered += 1
+             output["results"][symbol] = result
+     output["second_pass"] = {"retried": 0 if skipped else len(failed), "recovered": recovered, **({"skipped": skipped} if skipped else {})}
+     unreached = sum(DEADLINE_ERROR in (r.get("error") or "") for r in output["results"].values())
+     output["deadline"] = {"seconds": deadline.seconds, "expired": deadline.expired(), "unreached": unreached}
++    # Every payload received (both passes), by how it wrote its cik and the outcome; main() logs it and never writes it.
++    output["payload_cik"] = dict(sorted(kinds.items()))
+     return output
+ 
+ def brief_targets(audit):
+@@ -538,13 +579,16 @@
+     targets = {"listed": len(brief), "recent_listed": None if recent is None else len(set(recent["symbols"]) - set(brief)), "recent_sessions": None if recent is None else recent["sessions"],
+         "strong_rows": len(set(strong_rows(audit, as_of)) - set(brief) - set((recent or {}).get("symbols") or [])),
+         "strong_rows_requested": counts["strong_rows_requested"], "strong_rows_unfetched": counts["strong_rows_unfetched"]}
++    payload_ciks = output.pop("payload_cik")
+     output["coverage"] = {**coverage(output["results"], counts["eligible"], len(symbols), brief), "targets": targets, "second_pass": output.pop("second_pass"), "deadline": output.pop("deadline")}
+     write_output(root, output)
+     print(f"SEC evidence {as_of}: " + json.dumps(output["coverage"], ensure_ascii=False) + "; missing remains unknown", flush=True)
+     summary = invalid_summary(output["results"])
+     print(f"SEC invalid_payload {as_of}: " + json.dumps(summary, ensure_ascii=False), flush=True)
++    print(f"SEC payload cik {as_of}: " + json.dumps(payload_ciks, ensure_ascii=False), flush=True)
+     append_step_summary(f"- SEC evidence {as_of}: {output['coverage']['available']} available, {output['coverage']['partial']} partial, {output['coverage']['unavailable']} unavailable of {len(symbols)} requested; "
+-        f"invalid_payload {summary['count']} by cause {json.dumps(summary['by_cause'], ensure_ascii=False)}; first symbols {' '.join(summary['symbols']) or 'none'}")
++        f"invalid_payload {summary['count']} by cause {json.dumps(summary['by_cause'], ensure_ascii=False)}; first symbols {' '.join(summary['symbols']) or 'none'}; "
++        f"payload cik {json.dumps(payload_ciks, ensure_ascii=False)}")
+     if output["coverage"]["truncated"] > 0:
+         print(f"::warning::SEC evidence covers {len(symbols)} of {len(core)} listed, recent and ranked symbols; {output['coverage']['truncated']} of them stay unfetched (unknown)", flush=True)
+     if counts["strong_rows_unfetched"] > 0:

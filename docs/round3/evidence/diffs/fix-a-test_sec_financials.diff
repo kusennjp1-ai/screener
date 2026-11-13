@@ -1,0 +1,38 @@
+--- tools-orig/test_sec_financials.py	2026-11-13 12:36:24.862559063 +0000
++++ src/frontend/tools/test_sec_financials.py	2026-11-13 12:37:06.264511926 +0000
+@@ -369,6 +369,35 @@
+         # A payload that is not an object names no CIK it received.
+         self.assertIsNone(self.fetch(["not", "an", "object"])["invalid_detail"]["received_cik"])
+ 
++    def test_a_cik_written_as_digits_is_the_same_cik(self):
++        # companyfacts may write the CIK as text (zero-padded or not): the same number is the same filer.
++        for written in ("0000000006", "6"):
++            record = self.fetch({"cik": written, "facts": {"us-gaap": {"EarningsPerShareDiluted": {"units": {"USD/shares": [entry()]}}}}})
++            self.assertEqual((record["status"], record["cik"]), ("partial", 6), written)
++
++    def test_a_different_or_unreadable_cik_still_fails(self):
++        different = self.fetch({"cik": "0000000999", "facts": {}})
++        self.assertEqual(different["invalid_detail"], {"class": "PayloadMismatch", "message": "companyfacts cik does not match the requested cik", "requested_cik": 6, "received_cik": 999})
++        self.assertEqual(sec.invalid_cause(different), "cik_mismatch")
++        # Missing, null, a float, a bool, a signed, spaced or non-ASCII number, or 11 digits: never the requested CIK.
++        for payload in ({"facts": {}}, {"cik": None, "facts": {}}, {"cik": 6.0, "facts": {}}, {"cik": True, "facts": {}}, {"cik": "+6", "facts": {}},
++                        {"cik": " 6", "facts": {}}, {"cik": "6\n", "facts": {}}, {"cik": "\uff16", "facts": {}}, {"cik": "00000000006", "facts": {}}, {"cik": "6_0", "facts": {}}):
++            record = self.fetch(payload)
++            self.assertEqual((record["reason"], record["invalid_detail"]["class"], record["invalid_detail"]["received_cik"]), ("invalid_payload", "PayloadMismatch", None), repr(payload))
++            self.assertEqual(sorted(record["invalid_detail"]), ["class", "message", "received_cik", "requested_cik"])
++        one = sec.fetch_symbol("ONE", {"ONE": 1}, "2026-10-02", get=lambda url: {"cik": True, "facts": {}})
++        self.assertEqual(one["reason"], "invalid_payload")
++
++    def test_the_run_counts_how_payloads_wrote_their_cik_and_never_writes_it(self):
++        payloads = {1: {"cik": 1, "facts": {}}, 2: {"cik": "0000000002", "facts": {}}, 3: {"facts": {}}}
++        def get(url):
++            if url.endswith("company_tickers.json"):
++                return {"0": {"ticker": "AAA", "cik_str": 1}, "1": {"ticker": "BBB", "cik_str": 2}, "2": {"ticker": "CCC", "cik_str": 3}}
++            return payloads[int(url.rsplit("CIK", 1)[1].split(".")[0])]
++        out = sec.collect(["AAA", "BBB", "CCC"], "2026-10-02", get=get, sleep=lambda s: None)
++        self.assertEqual(out["payload_cik"], {"digits:no_quarterly": 1, "int:no_quarterly": 1, "missing:invalid_payload": 1})
++        self.assertNotIn("payload_cik", out["results"]["CCC"])
++
+     def test_the_message_carries_no_url_address_header_or_user_agent_and_stays_short(self):
+         import os
+         from unittest.mock import patch
