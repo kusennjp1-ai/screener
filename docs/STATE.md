@@ -1,40 +1,64 @@
-# STATE — Round 2 統合（claude/r2-integration、未push）
+# STATE — Round 3 準備（claude/r3-step0）
 
-更新 2026-11-06。branch claude/r2-integration（基点 claude/r2-step0 = db8e297 + 18ccfbc。main は 4e3ede7＝PR #141 の step 0 のマージで、この branch はその上にある。PR の base は main 4e3ede7）。5トラック（data → chart → market → verdict → rows）を統合中。push・PR・ワークフロー起動・本番の再取得や公開はしていない。
+更新 2026-11-13（時刻はすべて日本時間）。main は 8849bf9（PR #142＝round 2 のマージ）。その前に #143（ブラウザーのジョブを ubuntu-24.04 に固定）。この branch は round 3 の step 0 の土台で、いまは記録だけ。PR・ワークフロー起動・本番の再取得や公開はしていない。
 
-## 現在のサイクル（スキャナー）
+## 公開の状態
 
-- 準備判定（setup_ready、CH12）: 10 の準備ゲートと主パターンの3条件だけで判定する。検出器レベルのチェックは `explain.diagnostics`（「<検出器>:<チェック>」）へ移し、準備判定を落とさない。DoubleBottom のスタブを既定の検出器から外した。検出器の例外は Error の結果（db8e297 でも同じく Error で、recalculate-setups.py は土台を消して unavailable と記録し、ピボットも消える。この挙動は round 2 で変えていない。変わったのは Error の理由の文言だけ）。data のカバレッジ報告は `setup_readiness.not_calculated`・`incomplete_report` を数え、掲載行の1%を超えると警告する。ただし `incomplete_report` は「Setup Engine が完全な報告を返さなかった」行の数で、検出器の例外（Error）だけでなく Insufficient Data の判定と payload なしを含む（recalculate-setups.py の理由文は3つを区別しない）。検出器の例外の件数そのものではない。
-- ゲート6: `volume_below_minimum` を `volume_above_dryup_cap` に改名（判定 volume_vs_50d ≤ 0.8 は不変）。旧公開の reason には旧名が残る。
-- ステージ（CH11）: 200日線が上向き・終値が上・SMA150 > SMA200・52週高値から25%以内なら、横ばいの60本でもステージ2（ベース形成中）。`minervini_scanner.py` と `/technical/{symbol}/stage` が SMA150 と52週高値を渡す。トレンドテンプレートは公開の8条件のまま。
+- round 2 の UI（8849bf9）は 11-13 06:13 に Pages へ反映（Research UI Release 43298315833、UI のみの再公開。SEC 記録は前後とも 1018／1018 で不変）。
+- 11-12 のデータは 11-13 10:14 に公開（Static Site 43314500446 → Research UI Release 43336886875、UI 8849bf9）。ただし put_call・long_history・long_breadth・sp500_history・sector_rs・sector_breadth・chart_coverage が 11-12 に届いていない（下の「データ公開の不具合」）。
+- 補完の Static Site 43347653915（10:48 起動）は 14:14 に producer-price-history.mjs:59「A retained history must be genuinely older than target」で失敗。監視が 16:24 に 43385558863 を起動（実行中）。
 
-## 現在の数値（統合ブランチで実測）
+## 実データの実測（I7、11-12 のデータ、round 2 の backend で初めての公開）
 
-- 赤線: 277 passed / 1 failed（`test_mcp_market_copilot::test_market_overview_snapshot`、db8e297 でも失敗する既存のもの）。
-- Golden（gate-5）: 43 passed（下限43）。gate-1 163 / gate-2 47 / gate-3 152、gate-check OK。
-- 908件の正解データ（オフライン、同梱バンドル）: 変更前後で同一。判別力 SETUP +52.0pp、FIRE±5 +25.8pp（S2 90.0% 対 対照 37.9%）。S2・SETUP 列は Markets360 由来のため CH11・CH12 はこの表では 未検証。
-- 補助プローブ（凍結指標ではない）: 仕掛けのステージ2 80.8%→90.8%（対照 60.2%→66.1%）、TT通過のステージ3 11.4%→4.2%、setup_ready 仕掛け 28/588・対照 23/575（差 +0.8pp）、仕掛けの失敗の最多はゲート6（78%）。
+- 掲載 941（11-11 は 1018）。選定コードは不変。チャート認証済みの銘柄が 4535→4187 に減ったため（初回の取得で更新失敗 781、うちレート制限 51）。掲載の割合は約22.5% で日によらない。
+- SEC: 記録 941／941、四半期あり 752（79.9%）。sec_state ok 732・stale 10・q4_annual_only 1・no_cik 1・no_companyfacts 5・no_quarterly 82・no_quarterly_values 2・invalid_payload 101・invalid 7。
+- invalid_payload 101 の原因はすべて PayloadMismatch（例 GFR・RSKD・HTFL・SN・TBBB・AII・ECO・CART・GRDN・BRZE）。round 2 から原因を記録するようになった。
+- EPS 前年比が不明 404 のうち fiscal_q4_untagged 373（主な理由）。sec_conditions: EPS 合格1・不合格327・不明404、売上 118・511・103、粗利 80・549・103。Code 33 合格0・不合格623・不明318。
+- setup_ready 合格 41／941（11-11 は 0／1018。CH12 の効果）。不合格の上位: outside_early_zone 694、readiness_below_threshold 685、volume_above_dryup_cap 411、stage_not_ok 255、rs_leadership_insufficient 148。
+- ステージ（feature-run のバンドルから、掲載行ではなく backend の全 9915 行。CH11 の効果）:
+  - 200日線が上向き・その上で横ばいの行のステージ3: 11-11 は 489 中 489（100%）→ 11-12 は 418 中 43（10.3%）。
+  - テンプレート通過行のステージ3: 41.5% → 18.4%。
+- 一覧の要約: rs_line_high は 941 行で認証済み（真 16）、sec_summary は 941（EPS 前年比 537・売上前年比 645）、se_pattern_primary は 941。
 
-## 公開データの実測（CI ログを読んだもの。I7 の「変更前」）
+## 実データの速さ（Design Acceptance、11-11 のデータ、CPU 4倍、中央値）
 
-いずれも 11-05 のデータ（分析日 2026-11-05）。数値は各ランのカバレッジ報告（Published coverage）から読んだ。
-- Static Site 42110952350（59e2dd7、手動起動、2026-11-05 21:15Z〜11-06 00:36Z、成功）: 掲載 858、SEC 記録 858、四半期あり 704。SEC の状態 ok 681・stale 15・no_quarterly 65・invalid 91（ほか no_cik 1・no_companyfacts 3・no_quarterly_values 2）、invalid_payload 85。Code 33 合格 0・未達 578・不明 280。setup_ready 合格 0／858。research index の gzip 825,297 バイト。SEC 取得 670 秒。
-- Static Site 42218395807（main 4e3ede7、手動起動、11-06 12:32Z〜15:12Z、成功）: 掲載 908、SEC 記録 908、四半期あり 739。ok 713・stale 16・no_quarterly 72・invalid 101、invalid_payload 93。Code 33 0・601・307。setup_ready 0／908。SEC 取得 604 秒。
-- Research UI Release 42282195175（main 4e3ede7、11-06 19:43Z〜20:32Z、成功）＝いま公開中: 掲載 908、SEC 記録 908、四半期あり 739。ok 714・stale 15・no_quarterly 72・invalid 101、invalid_payload 93。Code 33 0・583・325。setup_ready 0／908。I7 の比較の起点はこのラン。
+| 指標（予算） | round 2（3584d52） | main 430880e（同じデータ） |
+|---|---|---|
+| 390 最初の候補（3500ms） | 1755 | 1916〜2495 |
+| 390 タブ切替（400） | 153 | 215〜269 |
+| 390 銘柄を開く（1000） | 360 | 400〜443 |
+| 1440 タブ切替（400） | 210 | 483〜519（超過） |
+| 1440 最初の表示の最長タスク（200） | 236（超過） | 142〜185 |
 
-## 未検証（公開データを読むまで）
+1440 の最長タスクの超過は、オーナーの速度の保留の承認（docs/design-review/owner-waiver.json）で保留の警告として通る。原因は 未検証（1440 は Today の右ペインに最初の候補のチャートを描くので、ラベル配置の追加の計算と推測）。
 
-- 次の定時データ公開（recalculate-setups.py が全行を再計算）の後の setup_ready 合格・不合格・不明、主な失敗チェック、再計算できなかった行の理由、ゲート6の割合、vcp_ready_for_breakout、TT通過銘柄のステージ3の割合。
+## データ公開の不具合（round 2 とは無関係、11-06 にも同じ形）
+
+- put_call: Cboe の当日分が取得時点（08:44）に未掲載。
+- long_history 系5つ: collect-market-history.py の require_current は全部そろわないと全体を捨てる。セクター ETF のどれか1本の 11-12 の足が不正で、正しい 11-12 の breadth と S&P もまとめて捨てて 11-11 を保持した。どの ETF かは要約に出ない。
+- chart_coverage: 7501／8388＝0.894（基準 0.9）。初回の取得が上流の新しいバンドルより前で、更新失敗が多い。
+- 監視は上流のバンドルが出る前に同じ日の再取得を起動し、その再取得は producer-price-history.mjs:59 で必ず落ちる（11-06、11-11、11-13 の3回）。
+
+## round 3 に持ち越す項目
+
+- データ: PayloadMismatch の原因（同一性の比較の正規化。同一性の確認そのものは緩めない）。EPS の第4四半期（EPS は四半期を足し引きできないので、導くなら純利益と株数から、独自計算・参考の表示、達成には数えない。数えるかはオーナーの判断）。EPS 条件の合格1の妥当性（setup_ready と同じ形の定義の誤りがないか、提出書類で手確認）。
+- 準備判定: 41 行を実際のチャートで1件ずつ確認。908 の報告に仕掛け日の準備判定・ステージが出るか確認。
+- チャート（#142 の本文の一覧）: 混み合った13の表示で目盛り「80」が隠れる、引き出し線の交差 +2〜3、ローソク足の上の強制ラベル 106/17/6/2、細い買いゾーンの名前、320 のピボット名、平均線の名前が線の端から遠い。変更するときは 492 表示のプローブの差分を毎回の関門にする。オーナーの画像への意見があるまで配置器の作り直しはしない。
+- 速さ: 1440 の最長タスク 236ms の原因の切り分け（右ペインの銘柄を固定、8bddb88・5645ff0・HEAD を比較）。
+- 運用: 監視の同日再取得（上流のバンドルの前に起動しない）、producer-price-history.mjs:59（同日の公開済み履歴で全体を止めない）、require_current の失敗した ETF を要約に出す、AMD の RS 文脈の失敗。いずれも round 2 以前からの不具合。
+- テストの土台: 合成データに RS 線・上抜け後に保った銘柄・準備のそろった銘柄を加える（round 2 で出したがどのテストも描いていない）。
 
 ## 次の行動
 
-1. 統合の I4 を終え、PR を main へ（CI と Design Acceptance が通ること）。マージ後に UI のみの再公開（I6）。
-2. 次の定時データ公開の後に I7 の実測（上の未検証の項目）。
-3. round 3 の候補: ゲート6を分析日前の数セッションで判定するか、1.4倍以上でピボット上の引けを除外するかを、908 の仕掛け−対照の判別力で評価する。準備判定を並び順に使うかどうか（§9-4）はその後。
+1. 補完の Static Site 43385558863 と続く公開で 11-12 の不足が埋まるか確認。失敗したら round 2 以前からの不具合として報告し、手動の起動はしない（オーナーの判断）。
+2. 補完後の公開で 941 行と 41 行を読み直し、feature-run の asset id を記録して、監査の全員に同じスナップショットを渡す。
+3. round 3 の監査は round 2 より少ないトラック（データ、準備・結論、チャートの一覧）で、各段階の境目で push する。
 
 ## 絶対の制約
 
 - トレンドテンプレートは公開の8条件だけ。ステージは9番目の拒否条件にしない。Code 33 は加点要素で関門にしない。
 - 90% の品質基準を下げない。推計値やスコアを作らない。転送ハッシュの方式を変えない。RS推計を IBD RS と呼ばない。
+- 欠けた値を 0・あと0・達成にしない。古いデータを当日として示さない。
 - 本番の再取得・公開・キャッシュ削除で検証しない。実データの効果は公開データを読んでから報告する。
+- オーナーへの時刻は日本時間で示す。
 - 履歴は docs/PROGRESS.md、仕様は docs/SPEC.md。
