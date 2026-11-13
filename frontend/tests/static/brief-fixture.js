@@ -444,7 +444,7 @@ export async function openBrief(page, hash = '#/brief', { historyEnd, schema, st
 /**
  * Waits until every price chart on the page has finished drawing (round 3, STEP 0 helper H3; plan rule 20): fonts are
  * loaded; each chart's drawing has ended its intro (.bc-pulsing on the drawing) or never animates (reduced motion and a
- * redraw hide the pulse ring instead), or the chart says it has too few bars; then every finite animation has finished.
+ * redraw hide the pulse ring instead), or the chart says it has too few bars; then no finite animation is still running.
  * After a period click pass `{ redraw: true }`: it then waits for a drawing it has not settled before, so the previous
  * period's .bc-pulsing never ends the wait. Call it once a chart is on screen (it waits for a chart still loading).
  */
@@ -462,7 +462,12 @@ export async function chartSettled(page, { redraw = false, timeout = 20000 } = {
     if (done) for (const chart of charts) { const drawing = chart.querySelector('.bc-pulse')?.ownerSVGElement; if (drawing) seen.add(drawing); }
     return done;
   }, redraw, { timeout });
-  await page.evaluate(() => Promise.all(document.getAnimations().filter(a => a.effect?.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => null))));
+  // Finite animations still running (CSS and WAAPI), polled live: a paused or replaced animation never holds the wait.
+  const running = () => document.getAnimations().filter(a => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity);
+  await page.waitForFunction(`(${running})().length === 0`, null, { timeout }).catch(async error => {
+    const left = await page.evaluate(`(${running})().map(a => (a.animationName || a.transitionProperty || a.constructor.name) + ' on ' + (a.effect?.target?.className?.baseVal ?? a.effect?.target?.className ?? '?'))`).catch(() => []);
+    throw new Error(`chartSettled: finite animations still running after ${timeout}ms: ${left.join(', ')}`, { cause: error });
+  });
   // The intro's last label tweens run on animation frames (not in getAnimations), a few hundred ms past .bc-pulsing at most.
   await page.waitForTimeout(300);
 }
