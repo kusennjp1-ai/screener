@@ -20,6 +20,7 @@ import { auditDailyBars, auditValues } from '../qualificationAudit';
 import { publishedFundamentalsCoverage, secStatus } from '../fundamentalsExplain.js';
 import { candidateView, trendTemplate } from './briefCandidate';
 import { stockSells } from './briefSell';
+import { crossingFloor } from './breakoutHistory';
 
 export const WATCH_KEY = 'research-watch';
 // The brief ranks only the trend template; the worker skips the other methods' rankings.
@@ -203,7 +204,7 @@ export function useWatchSellChecks(views, brief) {
       if (!certified) { out[view.symbol] = { unknown: true, reason }; return; }
       let diagnostics = null;
       try { diagnostics = diagnoseBookChart(view.row, payload, date); } catch { diagnostics = null; }
-      out[view.symbol] = stockSells({ judged: payload.bars, diagnostics, view }) || { unknown: true, reason: '日足が不足' };
+      out[view.symbol] = stockSells({ judged: payload.bars, diagnostics, view, from: crossingFloor(payload.bars, view.row) }) || { unknown: true, reason: '日足が不足' };
     });
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps

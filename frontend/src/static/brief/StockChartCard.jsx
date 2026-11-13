@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, use
 import PriceChart from './PriceChart';
 import { priceChartFailed, subscribePriceChart } from './priceChartLoader';
 import { sellMarks } from './briefSell';
+import { crossingFloor } from './breakoutHistory';
 import { auditValues } from '../qualificationAudit';
 import { newYorkDate } from '../evidenceTime';
 import { ratioShown } from './briefCandidate';
@@ -158,7 +159,8 @@ export default function StockChartCard({ data, view, earningsCall = null, legs, 
   const certified = certification?.certified === true;
   // The 10-day and 21-day lines: on the 3- and 6-month charts at 1024px and wider, on the 3-month chart below.
   const short = shortAveragesShown(interval, period, wide);
-  const crossing = useMemo(() => (certified ? chartCrossing(bars, view?.pivot) : null), [certified, bars, view?.pivot]);
+  // The crossing floor of the view's row (crossingFloor, round 3 seam H1b), the same bound the conclusion and the sell checks read.
+  const crossing = useMemo(() => (certified ? chartCrossing(bars, view?.pivot, { from: crossingFloor(bars, view?.row) }) : null), [certified, bars, view?.pivot, view?.row]);
   const today = newYorkDate(Date.now());
   // The 52-week high judges the stock: only from the published audit of the analysis date, on certified bars.
   const auditHigh = certified && row?.technical_audit?.as_of_date === data.date && Number.isFinite(auditValues(row).high) ? auditValues(row).high : null;

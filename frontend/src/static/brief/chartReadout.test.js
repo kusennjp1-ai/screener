@@ -210,7 +210,8 @@ describe('the pivot crossing the chart marks', () => {
   it('reads lastPivotCrossing on certified bars only, never a touch at the pivot\'s cents, with its ratio or null', () => {
     lastPivotCrossing.mockReturnValue({ index: 117, date: list[117].date, sessionsAgo: 2, volumeRatio: 1.83 });
     expect(chartCrossing(list, pivot - 0.5)).toEqual({ date: list[117].date, sessionsAgo: 2, volumeRatio: 1.83, tone: 'zone', reason: null });
-    expect(lastPivotCrossing).toHaveBeenLastCalledWith(list, pivot - 0.5);
+    // No crossing floor (crossingFloor, round 3 seam H1b): the unbounded path, as before the seam.
+    expect(lastPivotCrossing).toHaveBeenLastCalledWith(list, pivot - 0.5, { from: null });
     // Bars not certified (null), or no pivot: no crossing, and the helper is not asked.
     lastPivotCrossing.mockClear();
     expect(chartCrossing(null, pivot)).toBeNull();

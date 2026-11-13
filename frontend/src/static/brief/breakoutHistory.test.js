@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { BREAKOUT_VOLUME_RATIO, breakoutEvent, candidateView, LIST_FILTERS, ratioShown, rowEvent, TOUCH_HELD_NOTE, UNDATED_EVENT } from './briefCandidate';
 import { chartCrossing } from './chartReadout';
-import { breakoutBar, crossingEvent, CROSSING_LOOKBACK_SESSIONS, lastPivotCrossing, pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
-import { SELL_RULES } from './briefSell';
+import { breakoutBar, crossingEvent, crossingFloor, CROSSING_LOOKBACK_SESSIONS, floorOf, lastPivotCrossing, pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
+import { sellSignals, SELL_RULES, stockSells } from './briefSell';
 import { withAuditFixture } from '../testAuditFixture';
 
 const DATE = '2026-10-02';
@@ -276,5 +276,98 @@ describe('the conclusion\'s event (crossingEvent)', () => {
     // A crossing on the analysis day contradicts an after event (the close before it was above): undated.
     expect(crossingEvent(after(), series([...Array(60).fill(95), 103]))).toMatchObject(undated);
     expect(crossingEvent(after()).note).toBe('上抜けの日を検証済みの日足で確認できないため、買いの裏付けはありません。');
+  });
+});
+
+// Round 3, STEP 0 seam H1b: one crossing floor (crossingFloor) for every crossing reader. Each helper takes an optional
+// `from`, the first bar index a crossing may be on; without one (null, undefined, or anything that is not a
+// non-negative integer) it takes exactly the path it took before the seam. R1 owns crossingFloor's body.
+describe('the crossing floor seam (crossingFloor and `from`)', () => {
+  const pivot = 100;
+  /** `closes` as certified bars ending on DATE with a low under each close; the crossing bars (`heavy`) trade 2x. */
+  const daily = (closes, heavy = []) => series(closes, i => (heavy.includes(i) ? 20000 : 10000)).map(bar => ({ ...bar, high: bar.close * 1.01, low: bar.close * 0.99 }));
+  const cases = {
+    // 70 bars: under the pivot, a heavy crossing 6 sessions back, then back under it (a failed breakout).
+    failed: daily([...Array(63).fill(95), 102, 103, 101, 99, 98, 97, 96], [63]),
+    // Two crossings: one 30 sessions back that fell back, one 4 sessions back still above (green on its volume).
+    twice: daily([...Array(40).fill(95), 102, ...Array(5).fill(98), ...Array(20).fill(97), 101, 102, 103, 102, 103], [40, 66]),
+    // A touch at the pivot's cents, then the first close above it.
+    touch: daily([...Array(60).fill(95), 100, 100, 101, 102], [60]),
+    // Over 252 bars (sellSignals reads the last 252).
+    long: daily([...Array(290).fill(95), 102, 101, 99, 98, 97, 96, 95, 96, 97, 98], [290]),
+  };
+  const view = { pivot, state: 'wait', distance: -2 };
+  // Above the pivot the day before (103 on DATE): the rows cannot date the breakout, the bars can (as the suite above).
+  const after = () => verdict(audited('C', { price: 103, change: 1, volume: 2 }));
+  const crossedAgo = ago => { const at = 70 - ago - 1; return series([...Array(at).fill(95), ...Array(ago).fill(102), 103], i => (i === at ? 16000 : 10000)); };
+  const NO_FLOOR = [undefined, null, 'x', -1, 1.5, Number.NaN];
+
+  it('crossingFloor is null in STEP 0 for every row (R1 replaces this with its body\'s contract)', () => {
+    const row = { se_pattern_primary: 'nr7_inside_day', se_pivot_date: DATE, se_pivot_price: 100 };
+    for (const list of Object.values(cases)) for (const r of [row, null, undefined, {}]) expect(crossingFloor(list, r)).toBeNull();
+    expect(crossingFloor(null, row)).toBeNull();
+  });
+
+  it('only a non-negative integer is a floor', () => {
+    for (const from of NO_FLOOR) expect(floorOf({ from })).toBeNull();
+    expect(floorOf(null)).toBeNull();
+    expect(floorOf(undefined)).toBeNull();
+    expect([floorOf({ from: 0 }), floorOf({ from: 7 })]).toEqual([0, 7]);
+  });
+
+  it('without a floor every helper gives exactly what it gave before the seam', () => {
+    for (const [name, list] of Object.entries(cases)) {
+      const crossings = pivotCrossings(list, pivot), last = lastPivotCrossing(list, pivot), viewOf = { ...after(), asOf: list.at(-1).date };
+      const before = { crossings, last, breakouts: crossings.map(c => breakoutBar(list, pivot, c)), chart: chartCrossing(list, pivot),
+        event: crossingEvent(viewOf, list), sells: sellSignals(list, SELL_RULES, { view }), stock: stockSells({ judged: list, diagnostics: null, view }) };
+      for (const from of NO_FLOOR) {
+        // Labelled, so a failure names the case and the value of `from`.
+        expect({ name, from: String(from), crossings: pivotCrossings(list, pivot, { from }), last: lastPivotCrossing(list, pivot, { from }),
+          breakouts: crossings.map(c => breakoutBar(list, pivot, c, { from })), chart: chartCrossing(list, pivot, { from }),
+          event: crossingEvent(viewOf, list, { from }), sells: sellSignals(list, SELL_RULES, { view, from }),
+          stock: stockSells({ judged: list, diagnostics: null, view, from }) }).toEqual({ name, from: String(from), ...before });
+      }
+    }
+  });
+
+  it('`from` is the first bar index a crossing may be on: the crossing at k counts with from k, not with from k + 1', () => {
+    const list = cases.failed, k = 63;
+    expect(lastPivotCrossing(list, pivot)).toMatchObject({ index: k });
+    expect(lastPivotCrossing(list, pivot, { from: k })).toMatchObject({ index: k });
+    expect(lastPivotCrossing(list, pivot, { from: k + 1 })).toBeNull();
+    expect(pivotCrossings(list, pivot, { from: k + 1 })).toEqual([]);
+    const crossing = lastPivotCrossing(list, pivot);
+    expect(breakoutBar(list, pivot, crossing, { from: k })).toEqual(crossing);
+    expect(breakoutBar(list, pivot, crossing, { from: k + 1 })).toBeNull();
+    expect(chartCrossing(list, pivot, { from: k })).toMatchObject({ date: list[k].date, reason: 'below_pivot' });
+    expect(chartCrossing(list, pivot, { from: k + 1 })).toBeNull();
+    const failed = checks => checks.weakness.find(check => check.key === 'failedBreakout');
+    expect(failed(sellSignals(list, SELL_RULES, { view, from: k }))).toMatchObject({ state: 'hit', crossDate: list[k].date });
+    expect(failed(sellSignals(list, SELL_RULES, { view, from: k + 1 }))).toMatchObject({ state: 'clear' });
+    // Of two crossings, a floor between them leaves the later one; the earlier one is never the last.
+    const twice = cases.twice;
+    expect(pivotCrossings(twice, pivot).map(c => c.index)).toEqual([66, 40]);
+    expect(pivotCrossings(twice, pivot, { from: 41 }).map(c => c.index)).toEqual([66]);
+    expect(pivotCrossings(twice, pivot, { from: 67 })).toEqual([]);
+    // A touch at the pivot's cents dates its breakout on the first close above it; a floor after the touch drops both.
+    expect(breakoutBar(cases.touch, pivot, lastPivotCrossing(cases.touch, pivot), { from: 60 })).toMatchObject({ index: 62 });
+    expect(lastPivotCrossing(cases.touch, pivot, { from: 61 })).toBeNull();
+  });
+
+  it('the conclusion\'s event reads the floor: a breakout before it is no longer the one it dates', () => {
+    const list = crossedAgo(4), at = list.length - 5, viewOf = after();
+    expect(crossingEvent(viewOf, list, { from: at })).toMatchObject({ kind: 'after', crossed: { index: at } });
+    expect(crossingEvent(viewOf, list, { from: at + 1 })).toMatchObject({ kind: 'undated', crossed: null });
+  });
+
+  it('sellSignals rebases a floor on all the bars onto the last 252 it reads', () => {
+    const list = cases.long, k = 290, failed = checks => checks.weakness.find(check => check.key === 'failedBreakout');
+    expect(list.length).toBeGreaterThan(252);
+    expect(failed(sellSignals(list, SELL_RULES, { view }))).toMatchObject({ state: 'hit', crossDate: list[k].date });
+    expect(failed(sellSignals(list, SELL_RULES, { view, from: k }))).toMatchObject({ state: 'hit', crossDate: list[k].date });
+    expect(failed(sellSignals(list, SELL_RULES, { view, from: k + 1 }))).toMatchObject({ state: 'clear' });
+    // A floor before the 252 bars bounds nothing in them.
+    expect(sellSignals(list, SELL_RULES, { view, from: 10 })).toEqual(sellSignals(list, SELL_RULES, { view }));
+    expect(stockSells({ judged: list, diagnostics: null, view, from: k + 1 }).weakness.find(check => check.key === 'failedBreakout').state).toBe('clear');
   });
 });
