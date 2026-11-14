@@ -41,6 +41,36 @@ export function indexClosesFrom(bars,lastDate){
   return bars.filter(bar=>bar.date<=lastDate).slice(-INDEX_CLOSES_MAX).map(bar=>({date:bar.date,close:bar.close}));
 }
 
+// Log text only (round 3 M0): one line, so a Python str(error) reason cannot split the line or start a workflow command.
+const logText=value=>String(value).replace(/\s+/g,' ').trim();
+const logUnavailable=reason=>`unavailable(${typeof reason==='string'&&logText(reason)?logText(reason):'-'})`;
+const logPercent=value=>{const text=Math.abs(value).toFixed(2);return value<0&&text!=='0.00'?`−${text}`:text;};
+/**
+ * One CI log line per index of a built market-trends payload (round 3 M0; no published field, no UI):
+ * `Market indices <as_of_date>: <symbol> last=<date|-> historical=<bool> dd=<n|unavailable(<reason>)> ddDates=[…]|-
+ *  ft=<state|unavailable(<reason>)> day=<n|-> ftd=<date|-> decline=<x.xx|->`.
+ * Every value is read from the objects written to the asset (points, lastObserved, events, followThrough); nothing
+ * is recomputed. `last` is the index's last bar (its last point); `dd` is the dated last count (lastObserved), printed
+ * only when it is that bar's count, so a historical index prints its own past count under its own date. A count that
+ * is not there prints `unavailable(<the index's reason>)` and its dates `-`, never 0 or an empty list. Never throws.
+ */
+export function marketIndexLogLines(payload){
+  const indices=Array.isArray(payload?.indices)?payload.indices:[];
+  return indices.map(index=>{
+    const last=Array.isArray(index?.points)?index.points.at(-1)?.date??null:null;
+    const observed=index?.lastObserved,counted=Boolean(last)&&observed?.date===last&&Number.isSafeInteger(observed?.value);
+    const active=Array.isArray(index?.events)?index.events.filter(event=>event?.state==='active').map(event=>event.date):[];
+    const ft=index?.followThrough,read=ft?.available===true;
+    return [`Market indices ${payload.as_of_date}: ${index?.symbol??'-'}`,
+      `last=${last??'-'}`,`historical=${index?.historical===true}`,
+      `dd=${counted?observed.value:logUnavailable(index?.reason)}`,`ddDates=${counted?`[${active.join(',')}]`:'-'}`,
+      `ft=${read?ft.state:logUnavailable(ft?.reason)}`,
+      `day=${read&&Number.isSafeInteger(ft.attempt?.day)?ft.attempt.day:'-'}`,
+      `ftd=${read&&typeof ft.ftd?.date==='string'?ft.ftd.date:'-'}`,
+      `decline=${read&&Number.isFinite(ft.declinePct)?logPercent(ft.declinePct):'-'}`].join(' ');
+  });
+}
+
 export function buildMarketTrends(source,{asOfDate,bookEvidence,sourceSha256}={}) {
   if(!isDay(asOfDate))throw Error('Invalid market trend date');
   const sourceMatches=source?.schema_version==='market-trend-source-v1'&&source.market==='US'&&source.as_of_date===asOfDate;
@@ -162,6 +192,8 @@ export async function exportMarketTrends({root,entry,asOfDate,bookEvidence,evalu
   if(bytes)await writeFile(resolve(root,`market-trends/source-${hash(bytes)}.json`),bytes);
   const body=JSON.stringify(payload),sha256=hash(body),path=`market-trends/series-${sha256}.json`;
   await writeFile(resolve(root,path),body);
+  // Round 3 M0: the index values as written above, for the CI log (log only; the payload and its bytes are unchanged).
+  for (const line of marketIndexLogLines(payload)) console.log(line);
   entry.assets={...entry.assets,market_trends:{path,sha256,schema_version:payload.schema_version,market:'US',as_of_date:asOfDate,source_path:bytes?`market-trends/source-${hash(bytes)}.json`:null,source_sha256:bytes?hash(bytes):null}};
   // A retained input series keeps the source and capture it names.
   if((await removeSupersededOutputs({root,references:entry,replacements:[{family:'market_trends_series',previous:previous?.path,current:path}]})).length)

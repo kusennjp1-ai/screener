@@ -1,11 +1,11 @@
-import { describe,it,expect } from 'vitest';
+import { describe,it,expect,vi } from 'vitest';
 import { readFileSync,writeFileSync,mkdirSync,mkdtempSync,rmSync,readdirSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
-import { buildMarketTrends,exportMarketTrends,indexClosesFrom,indexState,verifyLongHistorySource,selectLongHistorySource,selectRuntimeLongHistorySource,INDEX_CLOSES_MAX } from './export-market-trends.mjs';
+import { buildMarketTrends,exportMarketTrends,indexClosesFrom,indexState,verifyLongHistorySource,selectLongHistorySource,selectRuntimeLongHistorySource,marketIndexLogLines,INDEX_CLOSES_MAX } from './export-market-trends.mjs';
 import { INDEX_CLOSES_MAX as CONTRACT_CLOSES_MAX, indexCloses as contractCloses } from '../src/test/fixtures/publishedContracts.js';
 import { indexSummary } from '../src/static/reference/indexSummary.js';
 import { FOLLOW_THROUGH_METHOD } from '../src/static/followThroughDay.js';
@@ -228,9 +228,12 @@ describe('market trend source projection',()=>{
    await exportMarketTrends({root:normal,entry,asOfDate});
    const moduleUrl=pathToFileURL(resolve('tools/export-market-trends.mjs')).href,replay=resolve(foreign,'output');
    const code=`import {exportMarketTrends} from ${JSON.stringify(moduleUrl)};const entry={assets:{}};await exportMarketTrends({root:${JSON.stringify(replay)},entry,asOfDate:${JSON.stringify(asOfDate)}});process.stdout.write(JSON.stringify(entry));`;
-   const replayEntry=JSON.parse(execFileSync(process.execPath,['--input-type=module','-e',code],{cwd:foreign,encoding:'utf8'}));
+   // Round 3 M0: the exporter prints one log line per index ahead of the entry, so the entry is the last line.
+   const stdout=execFileSync(process.execPath,['--input-type=module','-e',code],{cwd:foreign,encoding:'utf8'}).split('\n');
+   const replayEntry=JSON.parse(stdout.at(-1));
    expect(replayEntry).toEqual(entry);
    const ref=entry.assets.market_trends;
+   expect(stdout.slice(0,-1)).toEqual(marketIndexLogLines(JSON.parse(readFileSync(resolve(replay,ref.path),'utf8'))));
    expect(readFileSync(resolve(replay,ref.path))).toEqual(readFileSync(resolve(normal,ref.path)));
    expect(readFileSync(resolve(replay,ref.source_path))).toEqual(readFileSync(resolve(normal,ref.source_path)));
   }finally{rmSync(scratch,{recursive:true,force:true});}
@@ -245,5 +248,93 @@ describe('market trend source projection',()=>{
    expect(ref.source_sha256).toBe(createHash('sha256').update(daily).digest('hex'));
    expect(readFileSync(resolve(root,ref.source_path))).toEqual(daily);
   }finally{rmSync(root,{recursive:true,force:true});}
+ });
+});
+// Round 3 M0: one CI log line per index, read from the asset's own objects (docs/round3/market.md).
+describe('market index log lines (M0)',()=>{
+ const LINE=/^Market indices (\S+): (\S+) last=(\S+) historical=(true|false) dd=(.+?) ddDates=(.+?) ft=(.+?) day=(\S+) ftd=(\S+) decline=(\S+)$/;
+ const parse=line=>{const m=LINE.exec(line);expect(m,line).not.toBeNull();const [,asOf,symbol,last,historical,dd,ddDates,ft,day,ftd,decline]=m;return {asOf,symbol,last,historical,dd,ddDates,ft,day,ftd,decline};};
+ const activeDates=index=>`[${index.events.filter(event=>event.state==='active').map(event=>event.date).join(',')}]`;
+ const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
+ it('(a) prints a current index from its last point, dated count, active distribution dates and follow-through',()=>{
+  const input=source(),out=buildMarketTrends(input,{asOfDate:input.as_of_date}),lines=marketIndexLogLines(out);
+  expect(lines).toHaveLength(2);
+  const [sp,nasdaq]=lines.map(parse);
+  // Anchors the existing projection tests already assert for this source.
+  expect(sp).toMatchObject({asOf:'2026-10-23',symbol:'^GSPC',last:'2026-10-23',historical:'false',dd:'5',ft:'confirmed',day:'-',ftd:'2026-04-08'});
+  expect(nasdaq).toMatchObject({asOf:'2026-10-23',symbol:'^IXIC',last:'2026-10-23',historical:'false',ft:'no_correction',day:'-',ftd:'-'});
+  for(const [i,field] of [sp,nasdaq].entries()){
+   const index=out.indices[i];
+   expect(field.last).toBe(index.points.at(-1).date);expect(field.last).toBe(index.latest.date);
+   expect(Number(field.dd)).toBe(index.latest.value);
+   expect(field.ddDates).toBe(activeDates(index));
+   expect(field.ddDates.slice(1,-1).split(',')).toHaveLength(index.latest.value);
+   expect(field.decline).toBe(index.followThrough.declinePct.toFixed(2));
+  }
+  for(const line of lines)expect(line).not.toMatch(/\n/);
+ });
+ it('(b) prints a series that ends one session early as historical, with its own last count under its own date',()=>{
+  const input=source();input.indices[0].bars.pop();
+  const out=buildMarketTrends(input,{asOfDate:input.as_of_date}),[sp,nasdaq]=marketIndexLogLines(out).map(parse),index=out.indices[0];
+  expect(index).toMatchObject({available:false,historical:true,latest:null});
+  expect(sp).toMatchObject({asOf:'2026-10-23',symbol:'^GSPC',last:'2026-10-22',historical:'true',ft:'confirmed',ftd:'2026-04-08'});
+  expect(sp.last).toBe(index.lastObserved.date);
+  expect(Number(sp.dd)).toBe(index.lastObserved.value);
+  expect(sp.ddDates).toBe(activeDates(index));
+  expect(sp.decline).toBe(index.followThrough.declinePct.toFixed(2));
+  expect(index.followThrough.asOf).toBe('2026-10-22');
+  expect(nasdaq).toMatchObject({last:'2026-10-23',historical:'false'});
+ });
+ it('(c) prints a missing OHLCV value as unavailable with the asset\'s own reason, never as 0 or an empty list',()=>{
+  const input=source();input.indices[1].bars[100].volume=null;
+  const out=buildMarketTrends(input,{asOfDate:input.as_of_date}),lines=marketIndexLogLines(out),[sp,nasdaq]=lines.map(parse),index=out.indices[1];
+  expect(index.available).toBe(false);
+  expect(nasdaq).toEqual({asOf:'2026-10-23',symbol:'^IXIC',last:'-',historical:'false',dd:`unavailable(${index.reason})`,ddDates:'-',ft:`unavailable(${index.followThrough.reason})`,day:'-',ftd:'-',decline:'-'});
+  expect(index.reason).toMatch(/ゼロ件とは扱いません/);
+  expect(lines[1]).not.toMatch(/ dd=\d| ft=\d| ddDates=\[/);
+  expect(sp).toMatchObject({last:'2026-10-23',dd:'5',ft:'confirmed'});
+  // No source of the date: both indices print their reason.
+  const missing=buildMarketTrends(source(),{asOfDate:'2026-10-26'});
+  marketIndexLogLines(missing).map(parse).forEach((field,i)=>{
+   expect(field).toEqual({asOf:'2026-10-26',symbol:missing.indices[i].symbol,last:'-',historical:'false',dd:`unavailable(${missing.indices[i].reason})`,ddDates:'-',ft:`unavailable(${missing.indices[i].followThrough.reason})`,day:'-',ftd:'-',decline:'-'});
+  });
+  // A collector reason (a Python str(error)) stays on one line and cannot start a workflow command.
+  const failed=source();failed.indices[1]={symbol:'^IXIC',bars:[],unavailable_reason:'HTTP 404\n::error::Not Found'};
+  const line=marketIndexLogLines(buildMarketTrends(failed,{asOfDate:failed.as_of_date}))[1];
+  expect(line.split('\n')).toHaveLength(1);
+  expect(parse(line)).toMatchObject({dd:'unavailable(HTTP 404 ::error::Not Found)',ft:'unavailable(HTTP 404 ::error::Not Found)',ddDates:'-'});
+ });
+ it('(d) prints a rally attempt\'s day and a confirmed follow-through day from the asset\'s follow-through',()=>{
+  // The same real bars up to 2026-04-08: the S&P's FTD session, the Nasdaq's sixth rally-attempt day.
+  const input=source(),date='2026-04-08';input.as_of_date=date;for(const index of input.indices)index.bars=index.bars.filter(bar=>bar.date<=date);
+  const out=buildMarketTrends(input,{asOfDate:date}),[sp,nasdaq]=marketIndexLogLines(out).map(parse),[spIndex,nasdaqIndex]=out.indices;
+  expect(spIndex.followThrough).toMatchObject({state:'confirmed',ftd:{date,attemptDay:6},attempt:null,declinePct:null});
+  expect(sp).toMatchObject({asOf:date,symbol:'^GSPC',last:date,historical:'false',ft:'confirmed',day:'-',ftd:date,decline:'-'});
+  expect(nasdaqIndex.followThrough).toMatchObject({state:'rally_attempt',attempt:{startDate:'2026-03-31',day:6},ftd:null});
+  expect(nasdaq).toMatchObject({asOf:date,symbol:'^IXIC',last:date,historical:'false',ft:'rally_attempt',day:'6',ftd:'-'});
+  expect(nasdaq.decline).toBe(nasdaqIndex.followThrough.declinePct.toFixed(2));
+  for(const [field,index] of [[sp,spIndex],[nasdaq,nasdaqIndex]]){expect(Number(field.dd)).toBe(index.latest.value);expect(field.ddDates).toBe(activeDates(index));}
+ });
+ it('never throws on a malformed payload and writes a negative decline with U+2212',()=>{
+  expect(marketIndexLogLines(null)).toEqual([]);expect(marketIndexLogLines({})).toEqual([]);
+  const [line]=marketIndexLogLines({as_of_date:'2026-10-23',indices:[{symbol:'^GSPC',points:[{date:'2026-10-23',value:null}],lastObserved:{date:'2026-10-22',value:4},events:[],followThrough:{available:true,state:'correction',declinePct:-1.234,attempt:null,ftd:null}}]});
+  // A last count that is not the last point's count is not printed under the last point's date.
+  expect(parse(line)).toMatchObject({last:'2026-10-23',dd:'unavailable(-)',ddDates:'-',decline:'−1.23'});
+  expect(parse(marketIndexLogLines({as_of_date:'2026-10-23',indices:[null]})[0])).toMatchObject({symbol:'-',dd:'unavailable(-)',ft:'unavailable(-)'});
+ });
+ it('logs the written lines without changing the payload or the series bytes, path and hash',async()=>{
+  const root=mkdtempSync(resolve(tmpdir(),'market-trends-log-')),log=vi.spyOn(console,'log').mockImplementation(()=>{});
+  try{
+   const bytes=readFileSync(resolve('data/market-trend-source-2026-10-23.json')),built=buildMarketTrends(JSON.parse(bytes),{asOfDate:'2026-10-23',sourceSha256:sha(bytes)});
+   const body=JSON.stringify(built),lines=marketIndexLogLines(built);
+   expect(JSON.stringify(built)).toBe(body);
+   // Before the long-history capture was retrieved (as above), so the written series is buildMarketTrends' payload alone.
+   const entry={},result=await exportMarketTrends({root,entry,asOfDate:'2026-10-23',evaluatedAt:Date.parse('2026-10-26T22:00:00Z')});
+   const ref=entry.assets.market_trends;
+   expect(ref).toMatchObject({path:`market-trends/series-${sha(body)}.json`,sha256:sha(body),source_sha256:sha(bytes)});
+   expect(readFileSync(resolve(root,ref.path),'utf8')).toBe(body);
+   expect(result).toEqual(built);
+   expect(log.mock.calls).toEqual(lines.map(line=>[line]));
+  }finally{log.mockRestore();rmSync(root,{recursive:true,force:true});}
  });
 });
