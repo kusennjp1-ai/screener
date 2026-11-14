@@ -183,7 +183,9 @@ function Group({ group, caveat = null, control = null, children }) {
   return <div className={`brief-env-group is-${group.id}`} role="group" aria-labelledby={`brief-env-${group.id}${group.asOf ? ` ${head}-d` : ''}`}>
     <div className={`brief-env-head${control ? ' has-control' : ''}`}>
       <div className="brief-env-title"><h3 id={`brief-env-${group.id}`} tabIndex={-1}>{group.title}</h3>{control && meta ? <span className="brief-env-meta is-inline">{meta}</span> : <span>{group.question}</span>}</div>
-      {control || (meta && <div className="brief-env-meta">{meta}</div>)}
+      {/* Both marks (a ▲ warning and a ○ reference, e.g. one index at 7 distribution days and the other at 5–6) stack as a
+          pair that a phone keeps within the title's two lines (brief-market-history.css). */}
+      {control || (meta && <div className={`brief-env-meta${group.fired > 0 && group.references > 0 ? ' is-pair' : ''}`}>{meta}</div>)}
     </div>
     {caveat && <p className="brief-env-caveat">{caveat}</p>}
     {group.unavailable ? <p className="brief-missing">{group.unavailable}</p> : children}

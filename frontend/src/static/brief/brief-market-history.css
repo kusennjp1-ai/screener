@@ -92,6 +92,13 @@
   .brief-index-switch button { min-height: 32px; }
 }
 
+/* A group with both marks (▲ 注意 and ○ 参考) stacks them as a pair: on a phone each mark is 2px shorter (17px lines) with no
+   top padding, so the pair (40px) stays within the heading and its question (40.4px) and the head keeps its height. */
+@media (max-width: 1023px) {
+  .brief-env-meta.is-pair { padding-top: 0; }
+  .brief-env-meta.is-pair > .brief-env-state { line-height: 17px; }
+}
+
 /* A sign the study tags 〔参考〕 is counted apart: a neutral ○ in the summary, on its row and on its group, never amber. */
 .brief-signals li.is-reference > span:first-child { color: var(--text-3); }
 .brief-env-status.is-reference { color: var(--text-2); }
