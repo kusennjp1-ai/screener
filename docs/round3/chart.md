@@ -197,7 +197,7 @@ None for C2.
 ## C3 (package CH-2): the 安値 price stays in the legend at 320
 
 **Commit measured:** f4b1e404 `feat(frontend): keep the last contraction's low price in the phone legend` (code and tests).
-- The package's later commits leave the source as f4b1e404 left it. 5437727b (C5) and 02d820e1 (its revert) cancel out: `git diff --name-only f4b1e40 02d820e1` is empty. 0fa62fd6 adds one spec test: `git diff --name-only f4b1e40 HEAD` lists only `frontend/tests/static/brief-chart.spec.js`, which the probe does not run.
+- The package's later commits leave the source as f4b1e404 left it. 5437727b (C5) and 02d820e1 (its revert) cancel out: `git diff --name-only f4b1e40 02d820e1` is empty. 0fa62fd6 adds one spec test. The rest change only this record and two StockChartCard.test.jsx assertions (now through the producer). So `git diff --name-only f4b1e40 HEAD` lists `docs/round3/chart.md`, `frontend/src/static/brief/StockChartCard.test.jsx` and `frontend/tests/static/brief-chart.spec.js`, and neither the probe nor the build reads any of them.
 - So `probe-f4b1e40*.json` are the probes of this package's code. They are kept for CH-4.
 
 ### What changed
@@ -333,6 +333,7 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 
 **vitest** (`cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run <files>`)
 - StockChartCard.test.jsx, chartReadout.test.js and briefCandidate.test.js (untouched): 3 files, **95 tests passed**.
+- After the last commit (two StockChartCard.test.jsx assertions of the low's text now compare with `structuralLowLegend` instead of a literal), StockChartCard.test.jsx: 21 passed, eslint clean. The full suite was not re-run for it, since only that test file changed.
 - What the tests cover for C3:
   - `legendItems` keeps 'low' at rank 1, foldable, with its three texts from `structuralLowLegend` below 1024px and the full one only at 1024px and wider.
   - A jsdom fold under mocked widths (a 300px legend; the averages' item on line 1 and the RS item on line 2): the full text fits → full; only the short one fits → short, shown; only 「安値 xx」 fits → tag; nothing fits → hidden, and every other item's state equals today's fold.

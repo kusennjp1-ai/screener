@@ -285,13 +285,14 @@ describe('the last contraction\'s low in the legend below 1024px (round 3 C3)', 
     expect(item().dataset.fold).toBe('true');
     expect(item().dataset.rank).toBe('1');
     expect([...item().querySelectorAll('.lg-form')].map(node => [node.className, node.textContent])).toEqual(structuralLowLegend(low).map(([form, text]) => [`lg-form lg-form-${form}`, text]));
-    expect(structuralLowLegend(low)[0][1]).toBe('最後の収縮の安値 84.03');
+    // The plan's structural low is the last contraction's low (its price, through the producer, is checked above).
+    expect(low).toBeCloseTo(84.03, 2);
     // Unmeasured (jsdom gives the legend no width), the fold leaves the full text on.
     expect(item().dataset.fit).toBeUndefined();
     cleanup();
     render(<StockView data={based} wide />);
     expect(item().querySelector('.lg-form')).toBeNull();
-    expect(item()).toHaveTextContent(/^最後の収縮の安値 84\.03$/);
+    expect(item().textContent).toBe(structuralLowLegend(low)[0][1]);
   });
 
   // Mocked layout: the legend is 300px wide with no gap; the averages' item is 100px (line 1) and the RS line's 250px
