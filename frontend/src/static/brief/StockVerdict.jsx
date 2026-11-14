@@ -55,6 +55,8 @@ function callLine(view, gate) {
     case 'ext': return <>{pivot}・{fromSma50(view)}追いかけ買いは避け、次の土台を待ちます。</>;
     case 'stalePivot': return <>{fromSma50(view)}ピボットが現在値から25%超離れた旧水準のため、買いの位置は判定しません。</>;
     case 'unjudged': return '買い位置を判定できません。';
+    // 低変動・監視のみ: the rule that held (buyGate's note, from lowActivityReason) in place of the buy range.
+    case 'lowActivity': return note;
     // The buy zone: a crossing without the volume (or a stalled or undated one) says why in place of the buy range (the range is the first tile).
     default: return <>{pivot}・{fromSma50(view)}{note || <>ピボットから<Unit>＋5%</Unit>までが買いの範囲です。</>}</>;
   }

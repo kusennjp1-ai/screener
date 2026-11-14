@@ -10,6 +10,7 @@ import { atPivotCents, baseShortfall, baseShortfallNote, candidateMarketGate, PO
 import { crossingEvent, crossingFloor } from './breakoutHistory';
 import { isBreakdown, SELL_RULES } from './briefSell';
 import { shortDate } from './briefShared';
+import { lowActivityReason } from '../priceActivity';
 
 /**
  * The Setup Engine's pattern-confidence floor (the backend aggregator's default, 55.0) and the check it names
@@ -86,7 +87,10 @@ function templateCall(view, template) {
   return { title: `選定対象外（${view.exclusion || integrity || '選定の判定を確認できません'}）`, reason: templateReference(template) || '選定対象外' };
 }
 
-/** The position call when nothing stops it: tone and title only (the conclusion writes the line under it). */
+/** The low-activity call's note: why the row is 低変動 (lowActivityReason, the producer entryReadiness prints too), named as the brief's own setting. */
+export const lowActivityNote = (view) => `${lowActivityReason(view?.row?.price_activity, view?.asOf) ?? '低変動の理由 未確認'}（独自設定）。`;
+
+/** The position call when nothing stops it: tone and title only (the conclusion writes the line under it), and for a low-activity row its reason. */
 function positionCall(view) {
   switch (view.position) {
     // Just under the pivot the gap is 「0.1%未満」, never a 0.0% that does not exist; at the pivot's cents (float noise in a
@@ -94,6 +98,8 @@ function positionCall(view) {
     case 'near': return { kind: 'near', tone: 'wait', title: `${POSITION_NAMES.near}（${atPivotCents(view) ? 'ピボットと同値' : `あと${underTenth(view.distance) ? '0.1%未満' : `${Math.abs(view.distance).toFixed(1)}%`}`}）` };
     case 'base': return { kind: 'basePosition', tone: 'neutral', title: POSITION_NAMES.base };
     case 'ext': return { kind: 'ext', tone: 'ext', title: POSITION_NAMES.ext };
+    // 低変動・監視のみ (price_activity.lowRange): the title stays the position's name, the note names the rule that held (round 3 R2).
+    case 'low': return { kind: 'lowActivity', tone: 'neutral', title: view.stateLabel || '判定不可', note: lowActivityNote(view) };
     case 'staleAbove': case 'staleBelow': return { kind: 'stalePivot', tone: view.stale?.above ? 'ext' : 'neutral', title: view.stale?.text || view.stateLabel };
     default: return { kind: 'unjudged', tone: 'neutral', title: view.stateLabel || '判定不可' };
   }

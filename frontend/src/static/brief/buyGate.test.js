@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { baseCurrent, breakoutEvent, candidateView, earningsCall, POSITION_NAMES, trendTemplate } from './briefCandidate';
 import { crossingEvent, crossingFloor } from './breakoutHistory';
 import { stockSells } from './briefSell';
-import { baseCheck, buyGate, HEAVY_DOWN_NOTE, marketGuidePercent, PLAN_BLOCKED, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, templateReference } from './buyGate';
+import { baseCheck, buyGate, HEAVY_DOWN_NOTE, lowActivityNote, marketGuidePercent, PLAN_BLOCKED, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, templateReference } from './buyGate';
+import { lowActivityReason } from '../priceActivity';
 import { conditionNote } from '../missingCondition';
 import { withAuditFixture } from '../testAuditFixture';
 
@@ -187,5 +188,25 @@ describe('the one buy gate', () => {
     expect(ext).toMatchObject({ kind: 'ext', tone: 'ext', blocked: PLAN_BLOCKED.ext, reference: false });
     expect(gateOf({ price: 112 }, { market: HOLD })).toMatchObject({ kind: 'ext', reason: '地合い', reference: false });
     expect(buyGate({ view: null })).toMatchObject({ kind: 'unjudged', reason: null, blocked: null, trialOnly: true });
+  });
+});
+
+describe('the low-activity call (round 3 R2)', () => {
+  it('keeps the position\'s title and PLAN_BLOCKED.low, and names the rule that held in the note', () => {
+    const sinceGap = { range60pct: 49, lowRange: true, reason: 'since_gap', adr20pct: 0.15, gap: { date: '2026-08-27', pct: 44.4, sessions: 25, rangePct: 0.8 } };
+    for (const activity of [{ range60pct: 3, lowRange: true }, sinceGap, { range60pct: 19, lowRange: true, reason: 'adr', adr20pct: 0.39, gap: null }]) {
+      const { view } = subject({ price_activity: activity });
+      const gate = gateOf({ price_activity: activity });
+      expect(view.state).toBe('low');
+      expect(gate).toMatchObject({ kind: 'lowActivity', tone: 'neutral', title: '低変動・監視のみ', note: lowActivityNote(view), units: [], reference: false, moved: false, blocked: PLAN_BLOCKED.low });
+      expect(gate.note).toBe(`${lowActivityReason(activity, DAY)}（独自設定）。`);
+    }
+    expect(PLAN_BLOCKED.low).toBe('低変動・監視のみ：新規の試算はしません');
+    expect(gateOf({ price_activity: sinceGap }).note).toBe('8/27の窓開け（+44%）後25営業日の値幅3%未満（独自設定）。');
+  });
+
+  it('leaves a template failure first, and every other position as before', () => {
+    expect(gateOf({ rs: 50, price_activity: { range60pct: 3, lowRange: true } }).kind).toBe('template');
+    expect(gateOf({ corporate_action: { cash_acquisition: true } })).toMatchObject({ kind: 'unjudged', title: '買収合意・対象外', note: null, blocked: PLAN_BLOCKED.acq });
   });
 });

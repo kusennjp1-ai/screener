@@ -4,6 +4,7 @@ import {entryReadiness,prepareReadinessTimeline} from './entryReadiness';
 import {assess} from './researchEngine';
 import {buildPortfolioPlan} from './portfolioPlan';
 import {withAuditFixture} from './testAuditFixture';
+import {lowActivityReason} from './priceActivity';
 const now=Date.parse('2026-09-26T10:00:00Z'),date='2026-09-25';
 const row=()=>withAuditFixture({symbol:'LEAD',market:'US',currency:'USD',gics_sector:'Tech',market_regime:'confirmed_uptrend',market_above_50dma:true,market_above_200dma:true,passes_template:true,rs_rating:95,week_52_low_distance:50,week_52_high_distance:3,composite_rating:95,eps_rating:90,ibd_group_rank:10,adv_usd:50000000,current_price:101,se_pivot_price:100,se_pattern_confidence:80,
 entry_evidence:{as_of_date:date,calendar:{latest_completed_session:date,evaluated_at:'2026-09-26T09:00:00Z',valid_until:'2026-09-28T20:00:00Z'},earnings:{date:'2026-10-20',checked_at:'2026-09-26T09:00:00Z'},shape:{candidate:true,summary:'自動推定'},volumeRatio:1.5}},date);
@@ -188,4 +189,27 @@ it.each(['2026-09-26T09:00:00+00:00','2026-09-26T09:00:00.123456+00:00','2026-09
  const time=Date.parse(value)+3600000;
  expect(entryReadiness(r,date,{cap:.5,label:'上昇'},time).rules.find(rule=>rule.id==='date').state).toBe('pass');
  expect(prepareReadinessTimeline([r])(time)).toBeGreaterThan(0);
+});
+// Round 3 R2: the selection rule names the low-activity rule that held, through the one producer (lowActivityReason); a
+// range60 row (or an older publication without a reason) reads exactly as before round 3.
+it('names the low-activity reason through its producer, the 60-session sentence byte-identical to before',()=>{
+ const detail=activity=>entryReadiness({...row(),price_activity:activity},date,{cap:.5,label:'上昇'},now).rules[0];
+ const before='60日値幅5%未満：低変動のため監視のみ（独自リスク設定）。選択中の手法とは別に';
+ for(const activity of [{range60pct:3,lowRange:true},{range60pct:3,lowRange:true,reason:'range60',adr20pct:0.4,gap:null}]){
+  expect(detail(activity).detail.startsWith(before)).toBe(true);
+  expect(detail(activity).state).toBe('fail');
+ }
+ const sinceGap={range60pct:49,lowRange:true,reason:'since_gap',adr20pct:0.15,gap:{date:'2026-08-27',pct:44.4,sessions:25,rangePct:0.8}};
+ const adr={range60pct:19,lowRange:true,reason:'adr',adr20pct:0.39,gap:null};
+ for(const activity of [sinceGap,adr]){
+  const rule=detail(activity);
+  expect(rule.state).toBe('fail');
+  expect(rule.detail.startsWith(`${lowActivityReason(activity,date)}：低変動のため監視のみ（独自リスク設定）。選択中の手法とは別に`)).toBe(true);
+  expect(rule.detail).not.toContain('60日値幅');
+ }
+ expect(lowActivityReason(sinceGap,date)).toBe('8/27の窓開け（+44%）後25営業日の値幅3%未満');
+ // Not low activity, or no price_activity at all: no sentence (never a 0 and never low).
+ for(const activity of [{range60pct:19,lowRange:false,reason:null,adr20pct:null,gap:null},undefined]){
+  expect(detail(activity).detail.startsWith('選択中の手法とは別に')).toBe(true);
+ }
 });

@@ -3,7 +3,8 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
 import StockVerdict from './StockVerdict';
 import { breakoutEvent, candidateView, earningsCall, trendTemplate } from './briefCandidate';
-import { HEAVY_DOWN_NOTE, SE_CONFIDENCE_FLOOR } from './buyGate';
+import { HEAVY_DOWN_NOTE, lowActivityNote, PLAN_BLOCKED, SE_CONFIDENCE_FLOOR } from './buyGate';
+import { lowActivityReason } from '../priceActivity';
 import { WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
 import { code33ChipView } from '../fundamentalsExplain.js';
 import { positionPlan } from './positionSizing';
@@ -129,6 +130,39 @@ describe('the conclusion says why there is no buy', () => {
     // default, the stop and the shares carry 既定条件 (Track F's contract), and nothing reads 参考.
     expect(tiles(card)).toEqual([['買いの範囲', '100.00', '〜105.00'], ['損切り −7.0%', '93.93', '買値 101.00', '既定条件'], ['株数', '88株', 'リスク $625', '既定条件']]);
     expect(quals(card)).toEqual(['既定条件', '既定条件']);
+  });
+
+  // Round 3 R2: a low-activity row names the rule that held under its title (one producer, lowActivityReason, 独自設定), so a
+  // since-gap pin never reads 低変動 beside a 60-session range that is plainly wide. The acquisition and 判定不可 lines are unchanged.
+  it('names why a row is 低変動・監視のみ under the title, through the reason producer', () => {
+    const shapes = [
+      { range60pct: 3.2, lowRange: true },
+      { range60pct: 3.2, lowRange: true, reason: 'range60', adr20pct: 0.4, gap: null },
+      { range60pct: 49.0, lowRange: true, reason: 'since_gap', adr20pct: 0.15, gap: { date: '2026-08-27', pct: 44.4, sessions: 25, rangePct: 0.8 } },
+      { range60pct: 19.2, lowRange: true, reason: 'adr', adr20pct: 0.39, gap: null },
+    ];
+    for (const activity of shapes) {
+      const row = audited({ price_activity: activity });
+      const card = conclusionOf({ row });
+      expect(card.getAttribute('data-gate')).toBe('lowActivity');
+      expect(card.className).toContain('tone-neutral');
+      expect(title(card)).toBe('低変動・監視のみ');
+      const view = candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, DAY);
+      expect(sub(card)).toBe(lowActivityNote(view));
+      expect(sub(card)).toBe(`${lowActivityReason(activity, DAY)}（独自設定）。`);
+      expect(positionPlan(view, {}, { market: OPEN })).toEqual({ blocked: PLAN_BLOCKED.low });
+      cleanup();
+    }
+    expect(lowActivityNote(candidateView({ row: audited({ price_activity: shapes[0] }), assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, DAY))).toBe('60日値幅5%未満（独自設定）。');
+    // An acquisition keeps today's line; a row that is not low activity (or has no price_activity) is never 低変動.
+    const acquired = conclusionOf({ row: audited({ corporate_action: { cash_acquisition: true } }) });
+    expect([acquired.getAttribute('data-gate'), title(acquired), sub(acquired)]).toEqual(['unjudged', '買収合意・対象外', '買い位置を判定できません。']);
+    cleanup();
+    for (const activity of [{ range60pct: 30, lowRange: false, reason: null, adr20pct: null, gap: null }, undefined]) {
+      const card = conclusionOf({ row: audited({ price_activity: activity }) });
+      expect(title(card)).not.toContain('低変動');
+      cleanup();
+    }
   });
 
   it('counts an unmet RS estimate in the one-line title and names it with its value and threshold under it, marking the position and the prices 参考', () => {
