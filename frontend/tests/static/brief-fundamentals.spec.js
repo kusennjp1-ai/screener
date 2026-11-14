@@ -3,6 +3,7 @@
 // compact card and its text floor, on synthetic data.
 import { test, expect } from '@playwright/test';
 import { openBrief, sessions, VIEWPORTS, horizontalOverflow, SEC_SYMBOL, date, now, rowBySymbol } from './brief-fixture.js';
+import { Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, Q4_DERIVED_SOURCE_NOTE } from '../../src/static/fundamentalsExplain.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 // How many line boxes a word of a node's text sits on (1: it never breaks); null when the word is absent.
@@ -26,7 +27,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   test('fundamentals show the latest SEC quarter with its source and say why a value is missing', async ({ page }) => {
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
     const card = page.getByTestId('brief-fundamentals');
-    await expect(card.getByText('出典：SEC XBRL（10-K 2026-08-09 提出）・2026-06期まで・売上/純利益のQ4は10-K年度値−3四半期で算出')).toBeVisible();
+    await expect(card.getByText(`出典：SEC XBRL（10-K 2026-08-09 提出）・2026-06期まで${Q4_DERIVED_SOURCE_NOTE}`)).toBeVisible();
     const epsTile = card.locator('.brief-fact').filter({ hasText: 'EPS 前年比' });
     await expect(epsTile).toContainText('+40%');
     await expect(epsTile).toContainText('2026-03期・最新 2026-06期はQ4のEPSは年次報告のみ');
@@ -182,7 +183,8 @@ test.describe('the compact fundamentals card', () => {
       const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { mutate: zznv(quarterly => { point(quarterly.revenue, '2026-06-30').value = 130; }) });
       const card = page.getByTestId('brief-fundamentals');
       await expect(card.getByText('Code 33 未達')).toBeVisible();
-      await expect(card.getByText('未達の根拠：売上 前年比が2026-03期 +60% → 2026-06期 +30%と伸びが鈍化しています。')).toBeVisible();
+      // The June quarter's sales are a derived Q4, so its rate says Q4算出 (round 3 D4).
+      await expect(card.getByText(`未達の根拠：売上 前年比が2026-03期 +60% → 2026-06期 +30%${Q4_DERIVED_MARK}と伸びが鈍化しています。`)).toBeVisible();
       const parts = card.getByRole('list', { name: 'Code 33 の3条件' });
       await expect(parts).toBeVisible();
       await expect(parts.locator('li')).toHaveText(['EPS の加速未確認', '売上の加速未達', '純利益率の上昇達成']);
@@ -257,7 +259,7 @@ test.describe('the compact fundamentals card', () => {
       await expect(card.getByText(/^出典：SEC XBRL/)).toBeVisible();
       await expect(card.locator('details')).toHaveCount(0);
       for (const locator of [card.getByRole('list', { name: '値なしの理由' }), card.getByRole('list', { name: 'Code 33 の3条件' }), card.getByText('対象外：予想・サプライズ・予想修正・調整後EPS'),
-        card.getByText('算出＝Q4を10-K年度値−3四半期で算出'), card.getByText(/^EPS は報告値（希薄化）/), card.locator('.brief-code33-mark'), card.getByRole('list', { name: '業績の質の根拠' })]) await expect(locator).toBeVisible();
+        card.getByText(Q4_DERIVED_LEGEND), card.getByText(/^EPS は報告値（希薄化）/), card.locator('.brief-code33-mark'), card.getByRole('list', { name: '業績の質の根拠' })]) await expect(locator).toBeVisible();
       // The step-0 layout (5ae744d; its dump's desktop1440 stock ZZNV and the same boxes measured on that tree): the
       // card is the grid's left tile at x 464, 470 wide; its three tiles sit in one row at x 17, 165 and 313 within it,
       // 140 wide, and the chart, the Code 33 box and the parts keep x 17, 436 wide. Only the order below the tiles

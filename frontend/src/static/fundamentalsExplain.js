@@ -197,6 +197,25 @@ export function wholePercent(value) {
   return whole === 0 ? 0 : whole;
 }
 
+// 「Q4算出」 is the one term for a fiscal Q4 whose sales and net income are the 10-K's fiscal-year values minus three
+// quarters (never EPS): every quote of such a quarter on the card carries it, and the source line keys the axis's 「算出」.
+export const Q4_DERIVED_MARK = '（Q4算出）';
+export const Q4_DERIVED_SOURCE_NOTE = '・Q4算出：売上/純利益のQ4は10-K年度値−3四半期';
+export const Q4_DERIVED_LEGEND = '算出＝Q4算出（10-K年度値−3四半期）';
+/**
+ * Whether a row's quoted `metric` ('eps', 'sales' or 'margin') rests on a derived fiscal Q4: a sales rate when its own
+ * quarter or its year-ago base is one, a margin when its quarter's revenue or net income is one, and never EPS.
+ */
+export function q4DerivedRate(row, metric) {
+  if (!row) return false;
+  if (metric === 'sales') return (row.salesDerived ?? row.derived) === true || row.salesBaseDerived === true;
+  return metric === 'margin' && row.derived === true;
+}
+/** The source line's note when any quarter on the card is a derived Q4 (the axis marks every such row) or a tile rests on one, else ''. */
+export function q4DerivedSourceNote(rows, tiles = []) {
+  return (rows || []).some(row => row?.derived) || (tiles || []).some(tile => tile?.derived) ? Q4_DERIVED_SOURCE_NOTE : '';
+}
+
 /**
  * The three fundamentals tiles from SEC quarterly rows: the newest quarter that has a
  * value, its period, and why a newer quarter (or every quarter) has none.
@@ -217,8 +236,10 @@ export function fundamentalTiles(report) {
     const row = rows[index], previous = rows[index - 1];
     // A sales rate compared with a derived Q4 base says so; the margin uses only its own quarter.
     const baseDerived = metric === 'sales' && row.salesBaseDerived === true;
+    // The quarter before, quoted as 前期, says Q4算出 when its own rate rests on a derived Q4 (sales only; EPS never is).
+    const before = previous => finite(previous[key]) ? `${format(previous[key])}${q4DerivedRate(previous, metric) ? Q4_DERIVED_MARK : ''}` : quarterReason(previous, metric);
     const note = (row === newest
-      ? metric === 'margin' ? ym(row.end) : `${ym(row.end)}・前期 ${previous ? finite(previous[key]) ? format(previous[key]) : quarterReason(previous, metric) : 'なし'}`
+      ? metric === 'margin' ? ym(row.end) : `${ym(row.end)}・前期 ${previous ? before(previous) : 'なし'}`
       : `${ym(row.end)}・最新 ${ym(newest.end)}は${quarterReason(newest, metric)}`) + (baseDerived ? '・前年同期はQ4算出' : '');
     const derived = metric === 'sales' ? (row.salesDerived ?? row.derived) === true || baseDerived : metric === 'margin' && row.derived === true;
     return { label, value: format(row[key]), short: null, note, end: row.end, derived, ...(turnaround ? { turnaround } : {}) };

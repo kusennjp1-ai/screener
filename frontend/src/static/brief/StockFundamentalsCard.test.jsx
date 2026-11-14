@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
 import FundamentalsCard, { EPS_NOTE } from './StockFundamentalsCard';
-import { EARNINGS_CHIP_NOTE, NO_REVENUE_CONCEPT, secStatus } from '../fundamentalsExplain.js';
+import { EARNINGS_CHIP_NOTE, NO_REVENUE_CONCEPT, Q4_DERIVED_SOURCE_NOTE, secStatus } from '../fundamentalsExplain.js';
 import { bookFinancialCurrent } from '../bookFinancialCurrent';
 import { financialHistory } from '../financialHistory';
 import { code33Layered } from '../code33Reference';
@@ -86,7 +86,7 @@ describe('brief fundamentals card', () => {
     for (const key of ['revenue', 'netIncome']) derive(baseOnly.quarterly[key].find(p => p.end === '2025-06-30'));
     let scope = card(financial(baseOnly));
     expect(tile(scope, '売上 前年比')).toHaveTextContent('+100%2026-06期・前期 +60%・前年同期はQ4算出');
-    expect(scope.getByText(/^出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで・売上\/純利益のQ4は10-K年度値−3四半期で算出$/)).toBeInTheDocument();
+    expect(scope.getByText(`出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで${Q4_DERIVED_SOURCE_NOTE}`)).toBeInTheDocument();
     expect(tile(scope, '純利益率')).not.toHaveTextContent('Q4算出');
     cleanup();
     // Both the quarter and its base are derived: the source names the derivation once.
@@ -94,12 +94,12 @@ describe('brief fundamentals card', () => {
     for (const key of ['revenue', 'netIncome']) for (const end of ['2025-06-30', '2026-06-30']) derive(both.quarterly[key].find(p => p.end === end));
     scope = card(financial(both));
     expect(tile(scope, '売上 前年比')).toHaveTextContent('・前年同期はQ4算出');
-    expect(scope.getByText(/^出典：SEC XBRL（10-K 2026-07-30 提出）・2026-06期まで・売上\/純利益のQ4は10-K年度値−3四半期で算出$/)).toBeInTheDocument();
+    expect(scope.getByText(`出典：SEC XBRL（10-K 2026-07-30 提出）・2026-06期まで${Q4_DERIVED_SOURCE_NOTE}`)).toBeInTheDocument();
     cleanup();
     // Neither derived: no derivation note anywhere.
     scope = card(financial(tenQFiler()));
     expect(tile(scope, '売上 前年比')).not.toHaveTextContent('Q4算出');
-    expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent('年度値−3四半期で算出');
+    expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent(/Q4算出|10-K年度値−3四半期/);
   });
 
   it('tells a swing from a loss to a profit as a fact (黒字転換), never as a growth rate', () => {
