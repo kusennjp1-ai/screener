@@ -87,6 +87,19 @@ export function gspcFollowThrough(trends) {
   const ft = (trends.data.indices || []).find(item => item?.symbol === '^GSPC')?.followThrough;
   return ft?.available === true && isoDay(ft.asOf) && ft.asOf === trends.data.as_of_date ? ft : null;
 }
+/**
+ * One index's follow-through record (indices[symbol].followThrough) only when it is judged on the market-trends asset's own
+ * session and that session is the published one: the series is ready, the record is available, its asOf is the asset's
+ * as_of_date, and when the manifest names the US market's date (manifest.markets.US.as_of_date) it is that date. Else null:
+ * an older record, an unavailable one, none, or no ready series is never read as today's (Today's 地合い tile suffixes).
+ */
+export function sameDayFollowThrough(trends, manifest, symbol) {
+  if (trendsStatus(trends).state !== 'ready') return null;
+  const date = trends.data.as_of_date, published = manifest?.markets?.US?.as_of_date;
+  if (!isoDay(date) || (published !== undefined && published !== date)) return null;
+  const ft = (trends.data.indices || []).find(item => item?.symbol === symbol)?.followThrough;
+  return ft?.available === true && ft.asOf === date ? ft : null;
+}
 /** Whether that day's ^GSPC record reads anything but a confirmed FTD (true / false), or null with nothing to compare. */
 export function gspcFtdDisagrees(trends) {
   const ft = gspcFollowThrough(trends);
@@ -97,21 +110,19 @@ export function gspcFtdDisagrees(trends) {
  * A short suffix for the 地合い tile on Today (plan MK11), from the market verdict (prepared.market), the market-trends
  * query (brief.trends) and the published manifest (brief.manifest.data, or null): at most one, else null.
  *  - 「FTD確認済み」 when the guide is 0% while the backend's regime is an FTD-upgraded uptrend (modelMarket's ftdUpgraded),
- *    unless the app's own ^GSPC record for that day reads no confirmed FTD (gspcFtdDisagrees): Today never asserts an FTD
- *    the market tab's own index record contradicts (the tab still explains the 0%).
+ *    only when the app's own ^GSPC record of the same day confirms it (sameDayFollowThrough's state 'confirmed'): no record,
+ *    an older one (series one session behind), an unavailable one or any other state gives no suffix, so Today never asserts
+ *    an FTD it cannot back with that day's index record (the market tab's cause line still explains the 0%).
  *  - otherwise 「NAS調整中」 while the guide is open and the Nasdaq's own follow-through state is one of
- *    NASDAQ_CAUTION_STATES, judged on the analysis date's session: an older state (series one session behind) is never
- *    shown as today's, so it gives no suffix.
+ *    NASDAQ_CAUTION_STATES, judged on the same day (sameDayFollowThrough): an older state is never shown as today's, so it
+ *    gives no suffix.
  * Never a cap, a tone or a verdict of its own.
  */
 export function marketTileSuffix({ market = null, trends = null, manifest = null } = {}) {
   if (!market || market.state === 'unknown') return null;
-  if (market.ftdUpgraded === true && market.cap === 0) return gspcFtdDisagrees(trends) === true ? null : MARKET_TILE_SUFFIX.ftd;
-  if (!(market.cap > 0) || trendsStatus(trends).state !== 'ready') return null;
-  const date = trends.data.as_of_date, published = manifest?.markets?.US?.as_of_date;
-  if (!isoDay(date) || (published !== undefined && published !== date)) return null;
-  const ft = (trends.data.indices || []).find(item => item?.symbol === '^IXIC')?.followThrough;
-  return nasdaqInCorrection(ft) && ft.asOf === date ? MARKET_TILE_SUFFIX.nasdaq : null;
+  if (market.ftdUpgraded === true && market.cap === 0) return sameDayFollowThrough(trends, manifest, '^GSPC')?.state === 'confirmed' ? MARKET_TILE_SUFFIX.ftd : null;
+  if (!(market.cap > 0)) return null;
+  return nasdaqInCorrection(sameDayFollowThrough(trends, manifest, '^IXIC')) ? MARKET_TILE_SUFFIX.nasdaq : null;
 }
 
 /**

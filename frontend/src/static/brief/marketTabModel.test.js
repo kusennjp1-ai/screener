@@ -609,10 +609,11 @@ describe('market tab: the basis line names the regime\'s cause (MK1, MK4)', () =
     expect(marketTileSuffix({ market: below50, trends: gspc(failed(DATE)), manifest: upgraded })).toBeNull();
     // Agree: a confirmed FTD on the record of the day; the tile keeps its suffix.
     expect(marketTileSuffix({ market: below50, trends: gspc(confirmed(DATE)), manifest: upgraded })).toBe(MARKET_TILE_SUFFIX.ftd);
-    // Unavailable: a ^GSPC record of an older session, or none: nothing is compared, the tile keeps its suffix.
-    for (const ft of [attempt('2026-10-01'), { available: false, method: 'x', reason: 'y' }]) {
+    // Unavailable: a ^GSPC record of an older session, or none: nothing is compared on the tab, and nothing backs the FTD
+    // on Today either, so the tile drops its suffix (M1a: only the same day's confirmed record says 「FTD確認済み」).
+    for (const ft of [attempt('2026-10-01'), confirmed('2026-10-01'), { available: false, method: 'x', reason: 'y' }]) {
       expect(verdict(below50, upgraded, gspc(ft)).cause).not.toContain('^GSPC');
-      expect(marketTileSuffix({ market: below50, trends: gspc(ft), manifest: upgraded })).toBe(MARKET_TILE_SUFFIX.ftd);
+      expect(marketTileSuffix({ market: below50, trends: gspc(ft), manifest: upgraded })).toBeNull();
     }
     expect(gspcFtdWords(null, '2026-09-18', DATE)).toBeNull();
   });
