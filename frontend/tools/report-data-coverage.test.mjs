@@ -600,3 +600,19 @@ describe('round 3 (D2): Code 33\'s parts named honestly, the EPS ≥ 25% floor, 
     });
   });
 });
+
+describe('round 3 (D3): the reference fiscal-Q4 EPS accuracy rides on the SEC evidence line (aggregates only, emission off)', () => {
+  it('prints the published file\'s coverage.q4_reference in the SEC evidence line, nulls kept as null', () => {
+    // The aggregate tools/sec-financials.py writes at file level (q4_reference_summary); no symbol and no record key.
+    const q4Reference = { emit: false, records_with_reference: 1, entries: 1,
+      refused: { no_numerator: 0, no_tiling: 0, no_shares: 2, split_band: 0, check_failed: 1, not_finite: 0, error: 0 },
+      q4: { n: 0, median_abs_error: null, within_1c_or_2pct: null, share: null }, q1_q3: { n: 3, median_abs_error: 0.0009, within_1c_or_2pct: 3, share: 1 } };
+    const file = { schema_version: 2, as_of_date: '2026-03-01', coverage: { eligible: 1, requested: 1, q4_reference: q4Reference }, results: { ZZQ: secRecord({ symbol: 'ZZQ', asOfDate: '2026-03-01' }) } };
+    const line = secEvidenceLine(file);
+    expect(line).toContain(`"q4_reference":${JSON.stringify(q4Reference)}`);
+    expect(line).toContain('"q4":{"n":0,"median_abs_error":null,"within_1c_or_2pct":null,"share":null}');
+    expect(line).not.toContain('q4EpsReference');
+    // An older file without the aggregate prints the line as before.
+    expect(secEvidenceLine({ ...file, coverage: { eligible: 1, requested: 1 } })).not.toContain('q4_reference');
+  });
+});
