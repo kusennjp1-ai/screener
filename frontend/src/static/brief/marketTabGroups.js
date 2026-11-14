@@ -5,7 +5,7 @@
 import { BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT } from '../marketLongHistory';
 import { indexSummary } from '../reference/indexSummary.js';
 import { distributionCount, shortDate, ENV_RULES } from './briefModel';
-import { delta, DISTRIBUTION_WARN, groupDate, indexCloses, monthBefore, num, pointChange, rangePosition, RULE_TEXT, STAGE_FIELDS, STAGE_NAMES, YEAR, yearRange } from './marketTabModel';
+import { delta, DISTRIBUTION_TEXT, groupDate, indexCloses, monthBefore, num, pointChange, rangePosition, RULE_TEXT, STAGE_FIELDS, STAGE_NAMES, YEAR, yearRange } from './marketTabModel';
 
 const finite = Number.isFinite;
 
@@ -29,9 +29,11 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
           : key === 'template' && finite(last.trendTemplateCount) && rows.at(-1 - ENV_RULES.templateSessions).trendTemplateCount < ENV_RULES.templateMinBase ? `${ENV_RULES.templateSessions}営業日前が${ENV_RULES.templateMinBase}銘柄未満`
             : '最新の値なし';
   const checks = [];
-  const check = (key, group, label, judged, firedText, asOf, reason) => checks.push({ key, group, label, judged, fired: Boolean(judged && firedText), text: judged ? firedText || null : null, asOf: judged ? asOf : null, reason: judged ? null : reason });
+  // `reference` marks a fired check counted as 参考 by its own value (a 5–6 distribution count), whatever its key.
+  const check = (key, group, label, judged, firedText, asOf, reason, reference = false) => checks.push({ key, group, label, judged, fired: Boolean(judged && firedText), text: judged ? firedText || null : null, asOf: judged ? asOf : null, reason: judged ? null : reason, reference: Boolean(judged && firedText && reference) });
   if (ready) {
-    for (const d of dist) check(`dist-${d.name}`, 'index', `${d.name}の分配日`, Boolean(d.hit), d.hit && d.hit.value >= DISTRIBUTION_WARN ? `${d.name}の分配日が25日間で${num(d.hit.value)}日` : null, d.hit?.date, '指数データを確認できません');
+    // A distribution check fires at 5 or more with the same sentence; 5–6 is counted as 参考, 7 or more as a warning (M3).
+    for (const d of dist) check(`dist-${d.name}`, 'index', `${d.name}の分配日`, Boolean(d.hit), d.grade ? `${d.name}の分配日が25日間で${num(d.hit.value)}日` : null, d.hit?.date, '指数データを確認できません', d.grade === 'reference');
     for (const f of follow) { const ft = f.item?.followThrough;
       check(`ftd-${f.name}`, 'index', `${f.name}のFTD`, ft?.available === true, ftdSignal(f.name, ft, date), ft?.asOf || distributionCount(f.item)?.date, ft === undefined ? '旧形式の公開データ' : '指数データを確認できません'); }
     if (history) {
@@ -52,7 +54,7 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
   // A fired check the study tags 〔参考〕 (a breadth rule it could not confirm) is counted apart from the warnings, with a
   // neutral ○: never a ▲, never in a group's or a tab's count. Its rule and its threshold are unchanged.
   const fired = checks.filter(c => c.fired).map(c => ({ ...c, itemAsOf: !boxDate && c.asOf && date && c.asOf < date ? shortDate(c.asOf, date) : null, tags: study?.signalTags?.[c.key] || [],
-    reference: isReference(c.key) }));
+    reference: c.reference || isReference(c.key) }));
   const unjudged = checks.filter(c => !c.judged);
   const reasons = [...new Set(unjudged.map(c => c.reason))].map(reason => ({ reason, labels: unjudged.filter(c => c.reason === reason).map(c => c.label) }));
   // The checks that were judged at all: with none, the summary can never say 「なし」. `warnable` counts the judged checks
@@ -72,9 +74,12 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
   // ---- market tab: three groups in decision order ----
   const followRows = follow.map(f => ({ name: f.name, ...f.view, valued: ready && f.view.b !== '未集計' && f.view.b !== '算出不可', warn: f.view.tone === 'ext', flag: f.view.tone === 'ext' ? 'FTD失敗' : null }));
   const ftdItem = { key: 'ftd', label: 'フォロースルーデー（独自判定）', className: 'brief-ftd', rows: followRows, rule: RULE_TEXT.ftd, warn: followRows.some(r => r.warn) };
+  // The 分配日 row: ▲ 注意 at 7 or more; a 5–6 count is marked 参考 (○, neutral) on its side, and on the row while no side warns.
+  const distRow = d => ({ name: d.name, valued: true, b: `${num(d.hit.value)}日`, asOf: date && d.hit.date < date ? shortDate(d.hit.date, date) : null, warn: d.grade === 'caution',
+    flag: d.grade === 'caution' ? DISTRIBUTION_TEXT.caution : d.grade === 'reference' ? `${DISTRIBUTION_TEXT.reference}・参考` : null, ...(d.grade === 'reference' ? { reference: true } : {}) });
   const distItem = !ready ? { key: 'dist', label: '分配日（25日）', className: 'brief-dist', rule: RULE_TEXT.dist, ...absent('') }
-    : { key: 'dist', label: '分配日（25日）', className: 'brief-dist', rule: RULE_TEXT.dist, warn: distWarn, ...(study?.distribution || {}), rows: dist.map(d => d.hit
-      ? { name: d.name, valued: true, b: `${num(d.hit.value)}日`, asOf: date && d.hit.date < date ? shortDate(d.hit.date, date) : null, warn: d.hit.value >= DISTRIBUTION_WARN, flag: d.hit.value >= DISTRIBUTION_WARN ? `${DISTRIBUTION_WARN}日以上` : null }
+    : { key: 'dist', label: '分配日（25日）', className: 'brief-dist', rule: RULE_TEXT.dist, warn: distWarn, ...(!distWarn && dist.some(d => d.grade === 'reference') ? { reference: true } : {}), ...(study?.distribution || {}), rows: dist.map(d => d.hit
+      ? distRow(d)
       : { name: d.name, b: '算出不可', em: d.item?.reason || '指数データを確認できません。' }) };
   const extremesItem = highsLows ? { key: 'extremes', label: '52週の新高値・新安値', className: 'brief-dist', metric: 'highsLows', rule: RULE_TEXT.extremes, warn: lowsLead,
     note: `差 ${delta(highsLows.value.newHighs - highsLows.value.newLows)}`, rows: [

@@ -10,8 +10,23 @@ import { isoDay } from './briefShared';
 const finite = Number.isFinite;
 /** Sessions in a year and in a month, as the long history counts them (marketTabHistory.js reads the same). */
 export const YEAR = 252, MONTH = 21;
-/** The existing distribution warning: 5 or more active distribution days on an index. */
+/**
+ * The market-regime study's binary split of the distribution count (5 or more active days against 4 or fewer):
+ * tools/market-regime-study.mjs reads it into APP_RULES (dd.binary), tools/market-regime-reference.mjs refuses a study whose
+ * appRules.DISTRIBUTION_WARN differs, and the committed reference carries it as ddWarn. No longer a warning line of the
+ * screens by itself: they grade the count with DISTRIBUTION_REFERENCE and DISTRIBUTION_CAUTION.
+ */
 export const DISTRIBUTION_WARN = 5;
+/**
+ * The screens' two grades of one index's active distribution days (独自設定), on the study's graded buckets (dd.graded: 5–6
+ * and 7 or more; only 7 or more was robust on both indices): 5–6 is 参考 (a neutral ○, never a warning, never in a ▲
+ * count), 7 or more a ▲ 注意. A test keeps them equal to the committed reference's buckets.ddGrades.
+ */
+export const DISTRIBUTION_REFERENCE = 5, DISTRIBUTION_CAUTION = 7;
+/** A count's grade: 'caution' (7 or more), 'reference' (5–6) or null (4 or fewer, or no count). */
+export const distributionGrade = value => !finite(value) ? null : value >= DISTRIBUTION_CAUTION ? 'caution' : value >= DISTRIBUTION_REFERENCE ? 'reference' : null;
+/** The grades in words, from the two constants (never typed beside them): 「7日以上」, 「5〜6日」. */
+export const DISTRIBUTION_TEXT = Object.freeze({ caution: `${DISTRIBUTION_CAUTION}日以上`, reference: `${DISTRIBUTION_REFERENCE}〜${DISTRIBUTION_CAUTION - 1}日` });
 /**
  * The breadth series are today's names traced back (the long history's current-universe retrospective): said
  * under the 参加度 and リーダー headers on the desktop, in the 注記 on a phone and in the long history's takeaway.
@@ -40,7 +55,7 @@ export const pointChange = (value, digits = 1) => { const r = Number(value.toFix
 // The distribution-day definition is the exporter's method (distributionDays.js DISTRIBUTION_METHOD).
 export const RULE_TEXT = Object.freeze({
   ftd: `${FTD_TEXT.decline}以上の下落（高値の終値から安値日の終値まで）の後、反発${FTD_TEXT.minDay}〜${FTD_TEXT.maxDay}日目に出来高増を伴う${FTD_TEXT.gain}以上の上昇。確認後にFTD当日の安値を終値で下回ると失敗で、注意サインです。`,
-  dist: `指数が前日比0.2%を超えて下落し、出来高が前日より多かった日。25営業日で失効し、その後の高値が分配日の終値から5%以上上がっても除外します。${DISTRIBUTION_WARN}日以上で注意サインです。`,
+  dist: `指数が前日比0.2%を超えて下落し、出来高が前日より多かった日。25営業日で失効し、その後の高値が分配日の終値から5%以上上がっても除外します。除外の基準は資料により5%／6%で、当アプリは後日の高値で5%です（独自選択）。${DISTRIBUTION_TEXT.caution}で注意サイン、${DISTRIBUTION_TEXT.reference}は参考です（独自設定）。`,
   above200: `終値が200日線より上の銘柄の割合（観測できた銘柄のうち）。S&P 500が1年高値から${SPLIT_RULE.nearHighPercent}%以内なのに${SPLIT_RULE.above200Below}%未満のとき「指数と個別株の乖離」で注意サインです。`,
   above50: '終値が50日線より上の銘柄の割合（観測できた銘柄のうち）。注意サインの基準はありません。',
   extremes: '52週の高値・安値を更新した銘柄数。新安値が新高値を上回ると注意サインです。',
@@ -230,7 +245,9 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
 
   // Distribution days: each index with its own last observed session.
   const dist = [['S&P', spx], ['NAS', ndx]].map(([name, item]) => ({ name, item, hit: distributionCount(item) }));
-  const distWarn = dist.some(d => d.hit && d.hit.value >= DISTRIBUTION_WARN);
+  // Graded (M3): 7 or more is a warning, 5–6 a reference; distWarn is the warning only.
+  for (const d of dist) d.grade = d.hit ? distributionGrade(d.hit.value) : null;
+  const distWarn = dist.some(d => d.grade === 'caution');
   const distAsOfParts = dist.filter(d => d.hit && date && d.hit.date < date);
   const distAsOf = !distAsOfParts.length ? null : distAsOfParts.length === 2 && distAsOfParts[0].hit.date === distAsOfParts[1].hit.date ? shortDate(distAsOfParts[0].hit.date, date) : distAsOfParts.map(d => `${d.name} ${shortDate(d.hit.date, date)}`).join('・');
   const distReasons = ready ? dist.filter(d => !d.hit).map(d => `${d.name}の分配日：${d.item?.reason || '指数データを確認できません。'}`) : [];
@@ -296,11 +313,15 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const { signals = null, groups = null, series = null } = tab ? tab({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, judgedNow, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, breakout, distWarn, spx, ndx, summary }) : {};
 
   // ---- Today: exactly four facts ----
-  const distPairs = dist.map(d => d.hit ? { name: d.name, value: `${num(d.hit.value)}日`, warn: d.hit.value >= DISTRIBUTION_WARN } : { name: d.name, value: '算出不可' });
-  const heavy = dist.filter(d => d.hit && d.hit.value >= DISTRIBUTION_WARN).map(d => d.name);
+  // Today's 分配日 tile: ▲ and amber only at 7 or more; a 5–6 count reads 参考 in the warning's place, the other 参考 tiles'
+  // form and length (never amber, no ▲); else the warning's line.
+  const distPairs = dist.map(d => d.hit ? { name: d.name, value: `${num(d.hit.value)}日`, warn: d.grade === 'caution' } : { name: d.name, value: '算出不可' });
+  const graded = grade => dist.filter(d => d.grade === grade).map(d => d.name);
+  const heavy = graded('caution'), noted = graded('reference');
   const todayDist = !ready ? { key: 'dist', label: '分配日（25日）', ...absent('') }
     : dist.every(d => !d.hit) ? { key: 'dist', label: '分配日（25日）', b: '算出不可', em: 'S&P・NAS' }
-      : { key: 'dist', label: '分配日（25日）', valued: true, pairs: distPairs, asOf: distAsOf, warn: distWarn, em: distWarn ? `注意：${heavy.join('・')}が${DISTRIBUTION_WARN}日以上` : `${DISTRIBUTION_WARN}日以上で注意` };
+      : { key: 'dist', label: '分配日（25日）', valued: true, pairs: distPairs, asOf: distAsOf, warn: distWarn,
+        em: heavy.length ? `注意：${heavy.join('・')}が${DISTRIBUTION_TEXT.caution}` : noted.length ? `参考：${noted.join('・')}が${DISTRIBUTION_TEXT.reference}` : `${DISTRIBUTION_TEXT.caution}で注意` };
   // A fired rule the study could not confirm reads 参考 on Today too, in the warning's place and length, never amber.
   const todayMark = (key, warn) => !warn ? { warn: false, word: null } : isReference(key) ? { warn: false, word: '参考' } : { warn: true, word: '注意' };
   const ttMark = todayMark('template', tt.warn), a200Mark = todayMark('split', a200.warn), lowsMark = todayMark('lows', lowsLead);

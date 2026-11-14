@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
-import { basisConflict, delta, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, REFERENCE_CHECKS, RULE_TEXT, signedPercent, verdictBasis, verdictWaiting, yearRange } from './marketTabModel';
+import { basisConflict, delta, distributionGrade, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, DISTRIBUTION_CAUTION, DISTRIBUTION_REFERENCE, DISTRIBUTION_TEXT, DISTRIBUTION_WARN, REFERENCE_CHECKS, RULE_TEXT, signedPercent, verdictBasis, verdictWaiting, yearRange } from './marketTabModel';
+import { DISTRIBUTION_METHOD } from '../distributionDays';
+import { distributionDetail, DISTRIBUTION_BRIDGE } from '../reference/marketTabStudy.js';
 import { marketUpdateState } from '../marketUpdateState';
 import { historyTakeaway, sectorRanks } from './marketTabHistory';
 import { marketTabParts } from './marketTabGroups';
@@ -64,7 +66,7 @@ describe('market tab view model: a complete, current publication', () => {
 
   it('keeps Today at its four tiles, each side of a pair named', () => {
     expect(model.today.map(f => f.label)).toEqual(['分配日（25日）', 'TT達成数', '200日線より上', '52週の新高値・新安値']);
-    expect(model.today[0]).toMatchObject({ pairs: [{ name: 'S&P', value: '3日', warn: false }, { name: 'NAS', value: '4日', warn: false }], em: '5日以上で注意', warn: false });
+    expect(model.today[0]).toMatchObject({ pairs: [{ name: 'S&P', value: '3日', warn: false }, { name: 'NAS', value: '4日', warn: false }], em: '7日以上で注意', warn: false });
     expect(model.today[1]).toMatchObject({ b: '30銘柄', em: '1か月で +5' });
     expect(model.today[3].pairs).toEqual([{ name: '高', value: '40' }, { name: '安', value: '12', warn: false }]);
   });
@@ -73,14 +75,15 @@ describe('market tab view model: a complete, current publication', () => {
 describe('market tab view model: fired warnings', () => {
   const rows = breadth('2026-10-02', (i, n) => (i === n - 1 ? { trendTemplateCount: 20, newHighs: 10, newLows: 30, stage1: 60, stage2: 40, stage3: 20, stage4: 80, breakoutsJudged: 10, breakoutsHeld: 3, leaderCohortAbove50: 9 } : {}), 260);
   const value = trends({ rows, sp500: closes('2026-10-02') });
-  value.data.indices[0] = index('^GSPC', '2026-10-02', 6, '2026-10-02', confirmed('2026-10-02'));
+  // 7 days: the distribution warning (M3: 5–6 is a reference, tested below).
+  value.data.indices[0] = index('^GSPC', '2026-10-02', 7, '2026-10-02', confirmed('2026-10-02'));
   const model = view(value);
   // The same publication under a reference that confirmed every breadth rule (no 参考 check): every fired rule is a warning.
   const robust = cardView({ market: UP, trends: value, date: '2026-10-02', study: { referenceKeys: [] } });
 
   it('lists every existing rule that fired, in page order, in plain sentences', () => {
     expect(model.signals.fired.map(s => [s.key, s.text])).toEqual([
-      ['dist-S&P', 'S&Pの分配日が25日間で6日'],
+      ['dist-S&P', 'S&Pの分配日が25日間で7日'],
       ['split', '指数は1年高値の水準なのに、200日線より上の銘柄は45.0%（指数と個別株の乖離）'],
       ['lows', '新安値（30）が新高値（10）を上回る'],
       ['template', 'トレンドテンプレート達成数が10営業日で33%減少'],
@@ -97,7 +100,7 @@ describe('market tab view model: fired warnings', () => {
   });
 
   it('flags each fired value with the rule it crossed, built from the same constants', () => {
-    expect(item(model, 'dist').rows[0]).toMatchObject({ warn: true, flag: '5日以上' });
+    expect(item(model, 'dist').rows[0]).toMatchObject({ warn: true, flag: '7日以上' });
     expect(item(model, 'dist').rows[1].warn).toBe(false);
     // A 参考 rule keeps its flag and its words, as 参考 (reference) instead of a warning.
     for (const [key, flag] of [['a200', '指数が1年高値から5%以内で50%未満'], ['tt', '10日で20%以上減少'], ['breakout', '40%未満'], ['health', '50%未満'], ['stage', 'ステージ4がステージ2より多い']]) {
@@ -108,11 +111,11 @@ describe('market tab view model: fired warnings', () => {
     expect(item(robust, 'extremes').rows[1]).toMatchObject({ warn: true, flag: '新高値より多い' });
     expect(item(model, 'a50').warn).toBeUndefined();
     // Today reads 参考 in the warning's place and length, never amber; an index warning stays 注意.
-    expect(model.today.map(f => [f.em, f.warn])).toEqual([['注意：S&Pが5日以上', true], ['参考：10日で20%以上減少', false], ['参考：指数と個別株の乖離', false], ['参考：新安値が新高値より多い', false]]);
+    expect(model.today.map(f => [f.em, f.warn])).toEqual([['注意：S&Pが7日以上', true], ['参考：10日で20%以上減少', false], ['参考：指数と個別株の乖離', false], ['参考：新安値が新高値より多い', false]]);
     expect(model.today[3].pairs).toEqual([{ name: '高', value: '10' }, { name: '安', value: '30', warn: false }]);
     expect(model.warnings.map(w => [w.key, w.reference])).toEqual([['template', true], ['stage', true], ['leaders', true], ['breakout', true]]);
     expect(model.split).toMatchObject({ warning: true, reference: true });
-    expect(robust.today.map(f => [f.em, f.warn])).toEqual([['注意：S&Pが5日以上', true], ['注意：10日で20%以上減少', true], ['注意：指数と個別株の乖離', true], ['注意：新安値が新高値より多い', true]]);
+    expect(robust.today.map(f => [f.em, f.warn])).toEqual([['注意：S&Pが7日以上', true], ['注意：10日で20%以上減少', true], ['注意：指数と個別株の乖離', true], ['注意：新安値が新高値より多い', true]]);
     expect(robust.warnings.every(w => w.reference === false) && robust.split.reference === false).toBe(true);
   });
 
@@ -147,7 +150,7 @@ describe('market tab view model: an older long-history schema', () => {
 
   it('keeps four tiles on Today, each named by what it shows', () => {
     expect(model.today.map(f => [f.label, f.b || f.pairs.map(p => p.value).join('・'), f.em])).toEqual([
-      ['分配日（25日）', '3日・4日', '5日以上で注意'],
+      ['分配日（25日）', '3日・4日', '7日以上で注意'],
       ['先導株数（価格条件）', '20銘柄', 'TT達成数は旧形式で未収録'],
       ['50日線より上', '43.0%', '200日線は旧形式で未収録'],
       ['52週の新高値・新安値', '40・12', '差 +28']]);
@@ -553,10 +556,10 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
     value.data.indices[1] = { ...value.data.indices[1], latest: { date: '2026-10-02', value: 0 }, lastObserved: { date: '2026-10-02', value: 0 }, points: [{ date: '2026-10-02', value: 0 }], events: [] };
     const dist = model => model.groups[0].items.find(i => i.key === 'dist');
     const opened = dist(cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) }));
-    expect(opened.details).toEqual(['下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・5日以上で注意）', 'S&P：9/14・9/22・9/30（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）', 'NAS：有効な分配日なし']);
+    expect(opened.details).toEqual(['目安の判定はSPYの別集計', '下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・7日以上で注意、5〜6日は参考）', 'S&P：9/14・9/22・9/30（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）', 'NAS：有効な分配日なし']);
     expect(opened.yearLines.map(line => [line.label, line.range.series.length, line.range.series.filter(v => v === null).length, line.range.lo, line.range.hi, line.format(3)])).toEqual([['S&Pの分配日', 252, 0, 0, 8, '3日']]);
     // Dates that do not add up to the count are not listed.
-    expect(dist(cardView({ market: UP, trends: trends(), date: '2026-10-02', study: study(trends()) })).details.slice(1)).toEqual(['S&P：有効な分配日の日付を確認できません', 'NAS：有効な分配日の日付を確認できません']);
+    expect(dist(cardView({ market: UP, trends: trends(), date: '2026-10-02', study: study(trends()) })).details.slice(2)).toEqual(['S&P：有効な分配日の日付を確認できません', 'NAS：有効な分配日の日付を確認できません']);
     // Today (no study) has no detail lines.
     expect(dist(view(trends())).details).toBeUndefined();
   });
@@ -680,14 +683,14 @@ describe('market tab: 〔参考〕 signs are counted apart from the warnings (MK
     expect(model.signals.fired[0].text).toBe('新安値（30）が新高値（10）を上回る');
   });
   it('keeps an index warning a ▲ warning, and marks the same 参考 rules on Today, which never loads the study', () => {
-    const value = make([6, 4]), model = cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
+    const value = make([7, 4]), model = cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
     expect([model.signals.warnings, model.signals.references]).toEqual([1, 1]);
     expect(model.groups.map(g => [g.id, g.fired, g.references])).toEqual([['index', 1, 0], ['breadth', 0, 1], ['leaders', 0, 0]]);
     const today = cardView({ market: UP, trends: value, date: '2026-10-02' });
     expect([today.signals.warnings, today.signals.references]).toEqual([1, 1]);
     expect(today.groups.map(g => [g.fired, g.references])).toEqual([[1, 0], [0, 1], [0, 0]]);
     expect(today.today.find(fact => fact.key === 'extremes')).toMatchObject({ warn: false, em: '参考：新安値が新高値より多い' });
-    expect(today.today.find(fact => fact.key === 'dist')).toMatchObject({ warn: true, em: '注意：S&Pが5日以上' });
+    expect(today.today.find(fact => fact.key === 'dist')).toMatchObject({ warn: true, em: '注意：S&Pが7日以上' });
   });
 
   it('marks on Today exactly the checks the study reference tags 〔参考〕 (REFERENCE_CHECKS against the reference)', () => {
@@ -800,5 +803,87 @@ describe('market tab: the verdict lead waits for a new publication (M1e)', () =>
     expect([unknown.state, unknown.target]).toEqual(['unknown', null]);
     expect(cardView({ market: UP, trends: trends(), date: DATE, update: { target: unknown.target } }).verdict.lead).toBe('新規の買いを検討できます。');
     expect(marketUpdateState({ ...trends().data, refresh_schedule: { ...schedule, provider: 'x' } }, Date.parse('2026-10-06T09:00:00Z')).target).toBeNull();
+  });
+});
+
+// ---- Round 3 (market track): two grades of distribution days (M3) -----------------------------------------------------
+describe('market tab: distribution days in two grades, 5–6 参考 and 7 or more 注意 (M3)', () => {
+  const DATE = '2026-10-02';
+  /** Both index series with the study's method and `counts` active days on the analysis date (null: not computable). */
+  const graded = counts => { const value = trends(); value.data.indices = value.data.indices.map((item, i) => counts[i] === null
+    ? { ...item, available: false, points: [], latest: null, lastObserved: null, reason: '指数OHLCVに欠測・重複・不正値があります。ゼロ件とは扱いません。' }
+    : sessionsOf({ ...item, method: DD, points: [{ ...item.points[0], value: counts[i] }], latest: { ...item.latest, value: counts[i] }, lastObserved: { ...item.lastObserved, value: counts[i] } })); return value; };
+  const tab = counts => { const value = graded(counts); return cardView({ market: UP, trends: value, date: DATE, study: study(value) }); };
+  const today = counts => marketCardView({ market: UP, trends: graded(counts), date: DATE });
+  const dist = model => model.groups[0].items.find(i => i.key === 'dist');
+  const checks = model => model.signals.fired.filter(c => c.key.startsWith('dist-')).map(c => [c.key, c.text, c.reference]);
+
+  it('keeps the study\'s binary split and the method, and grades on the committed reference\'s own buckets', () => {
+    // DISTRIBUTION_WARN stays the study's split (tools/market-regime-study.mjs, the reference's ddWarn); the screens read the grades.
+    expect(DISTRIBUTION_WARN).toBe(5);
+    expect(reference.buckets.ddWarn).toBe(DISTRIBUTION_WARN);
+    expect([DISTRIBUTION_REFERENCE, DISTRIBUTION_CAUTION]).toEqual([5, 7]);
+    expect(reference.buckets.ddGrades.slice(-2)).toEqual([[DISTRIBUTION_REFERENCE, DISTRIBUTION_CAUTION - 1], [DISTRIBUTION_CAUTION, null]]);
+    expect(DISTRIBUTION_TEXT).toEqual({ caution: '7日以上', reference: '5〜6日' });
+    expect(DISTRIBUTION_METHOD).toBe('index-down-strictly-over-0.2-higher-volume-age25-high5-v1');
+    expect(DISTRIBUTION_METHOD).toBe(reference.methods.distribution);
+    expect([0, 4, 5, 6, 7, 12, null, undefined, NaN].map(distributionGrade)).toEqual([null, null, 'reference', 'reference', 'caution', 'caution', null, null, null]);
+  });
+
+  it('states both grades and the removal rule in the row\'s 基準 and in the opened row, from the constants', () => {
+    expect(RULE_TEXT.dist).toBe('指数が前日比0.2%を超えて下落し、出来高が前日より多かった日。25営業日で失効し、その後の高値が分配日の終値から5%以上上がっても除外します。除外の基準は資料により5%／6%で、当アプリは後日の高値で5%です（独自選択）。7日以上で注意サイン、5〜6日は参考です（独自設定）。');
+    const { details } = distributionDetail(graded([3, 4]).data.indices, DATE);
+    expect(details.slice(0, 2)).toEqual([DISTRIBUTION_BRIDGE, '下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・7日以上で注意、5〜6日は参考）']);
+    expect(DISTRIBUTION_BRIDGE).toBe('目安の判定はSPYの別集計');
+    // No hand-typed study claim beside a 5–6 count (the study's words are its tag and its own 過去の傾向 line).
+    expect([RULE_TEXT.dist, ...details].join('')).not.toMatch(/全期間並み|過去は/);
+  });
+
+  it('counts 4 as nothing, 5 and 6 as 参考 and 7 as a warning, on the summary, the row and Today; a missing count is never 0', () => {
+    for (const [count, grade] of [[4, null], [5, 'reference'], [6, 'reference'], [7, 'caution']]) {
+      const model = tab([count, 3]), row = dist(model).rows[0], fact = today([count, 3]).today[0];
+      // The check fires at 5 or more with the same sentence; 5–6 is counted apart as 参考 (never in a ▲ count).
+      expect(checks(model)).toEqual(grade ? [['dist-S&P', `S&Pの分配日が25日間で${count}日`, grade === 'reference']] : []);
+      expect([model.signals.warnings, model.groups[0].fired, model.groups[0].references]).toEqual(grade === 'caution' ? [1, 1, 0] : grade === 'reference' ? [0, 0, 1] : [0, 0, 0]);
+      expect(model.signals.references).toBe(grade === 'reference' ? 1 : 0);
+      // The index checks can always raise a warning: a 5–6 count never makes 注意 判定不可.
+      expect(model.signals.warnable).toBeGreaterThanOrEqual(4);
+      expect([row.warn, row.reference ?? false, row.flag]).toEqual(grade === 'caution' ? [true, false, '7日以上'] : grade === 'reference' ? [false, true, '5〜6日・参考'] : [false, false, null]);
+      expect([dist(model).warn, dist(model).reference ?? false]).toEqual([grade === 'caution', grade === 'reference']);
+      expect([fact.warn, fact.pairs[0].warn, fact.em]).toEqual(grade === 'caution' ? [true, true, '注意：S&Pが7日以上'] : grade === 'reference' ? [false, false, '参考：S&Pが5〜6日'] : [false, false, '7日以上で注意']);
+    }
+    // Not computable: unjudged with its reason, 算出不可 on the row and on Today, never 0 days and never a grade.
+    const missing = tab([null, 3]);
+    expect(missing.signals.unjudged.map(c => c.key)).toContain('dist-S&P');
+    expect(dist(missing).rows[0]).toMatchObject({ name: 'S&P', b: '算出不可' });
+    expect(dist(missing).rows[0].warn).toBeUndefined();
+    expect(today([null, 3]).today[0].pairs[0]).toEqual({ name: 'S&P', value: '算出不可' });
+    expect(today([null, 3]).today[0].em).toBe('7日以上で注意');
+    expect(today([null, null]).today[0]).toMatchObject({ b: '算出不可', em: 'S&P・NAS' });
+  });
+
+  it('keeps a 7 a ▲ warning beside a 5, on its side only: the 5 stays 参考', () => {
+    const model = tab([7, 5]);
+    expect(checks(model)).toEqual([['dist-S&P', 'S&Pの分配日が25日間で7日', false], ['dist-NAS', 'NASの分配日が25日間で5日', true]]);
+    expect([model.signals.warnings, model.groups[0].fired, model.groups[0].references]).toEqual([1, 1, 1]);
+    expect(dist(model).rows.map(r => [r.name, r.warn, r.reference ?? false, r.flag])).toEqual([['S&P', true, false, '7日以上'], ['NAS', false, true, '5〜6日・参考']]);
+    expect([dist(model).warn, dist(model).reference ?? false]).toEqual([true, false]);
+    const fact = today([7, 5]).today[0];
+    expect([fact.warn, fact.pairs.map(p => p.warn), fact.em]).toEqual([true, [true, false], '注意：S&Pが7日以上']);
+    // Both at 7 or more, and both at 5–6: the names join.
+    expect(today([8, 7]).today[0].em).toBe('注意：S&P・NASが7日以上');
+    expect(today([6, 5]).today[0]).toMatchObject({ warn: false, em: '参考：S&P・NASが5〜6日' });
+    expect(today([5, 9]).today[0]).toMatchObject({ warn: true, em: '注意：NASが7日以上' });
+  });
+
+  it('keeps Today\'s three forms no longer than the round-2 warning lines (the frozen 320 and first-screen checks)', () => {
+    // Full-width characters count 2, as the tile renders them.
+    const width = text => [...text].reduce((sum, c) => sum + (c.codePointAt(0) <= 0xff ? 1 : 2), 0);
+    expect(width('7日以上で注意')).toBe(width('5日以上で注意'));
+    expect(width('注意：S&Pが7日以上')).toBe(width('注意：S&Pが5日以上'));
+    expect(width('参考：S&Pが5〜6日')).toBeLessThanOrEqual(width('注意：S&Pが5日以上'));
+    expect(width('参考：S&P・NASが5〜6日')).toBeLessThanOrEqual(width('注意：S&P・NASが5日以上'));
+    // A 5–6 tile reads like the other 参考 tiles: the word, a colon, the finding.
+    expect(today([5, 3]).today[0].em).toMatch(/^参考：/);
   });
 });

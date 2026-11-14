@@ -5,7 +5,7 @@
 // asset or the generated reference (market-regime-reference-v1.json): nothing here types a percentage, changes a
 // rule, a threshold or the verdict.
 import { bare, distributionCount, gspcFollowThrough, nasdaqNote, shortDate, trendsStatus } from '../brief/briefModel';
-import { DISTRIBUTION_WARN, num, signedPercent, SURVIVORSHIP_NOTE, verdictBasis } from '../brief/marketTabModel';
+import { DISTRIBUTION_TEXT, num, signedPercent, SURVIVORSHIP_NOTE, verdictBasis } from '../brief/marketTabModel';
 import { indexSummary } from './indexSummary.js';
 import { capText, MARKET_CAPS } from '../portfolioPlan';
 import { biasTag, ddGradeState, ftdRecent, ftdState, highState, meanLowerStates, quadrantState, referencePeriod, referenceState, signalTags, stateTag, validReference, BIAS_SHARE, SIGNAL_INDICATORS, TAGS } from './marketRegimeReference.js';
@@ -118,13 +118,15 @@ export function nasdaqFigures(state, date) {
   return { close: num(state.close, 2), text: `${shortDate(state.date, date)}終値・${at('1年高値から', state.fromHigh)}・${at('50日線比', state.vsMa)}・${at('200日線比', state.vs200)}` };
 }
 
+/** The opened 分配日 row's first line: the verdict's guide reads SPY's own count (the regime's, inside 目安と判定の基準). */
+export const DISTRIBUTION_BRIDGE = '目安の判定はSPYの別集計';
 /**
- * The opened 分配日 row: the method in one sentence, each index's active distribution days with the sessions
- * left on the oldest (a later high can remove a day earlier), and each index's last year of counts (gaps stay gaps),
- * each named by its index (`name`) in its caption.
+ * The opened 分配日 row: that the guide reads SPY's own count (DISTRIBUTION_BRIDGE), the method in one sentence with its two
+ * grades, each index's active distribution days with the sessions left on the oldest (a later high can remove a day
+ * earlier), and each index's last year of counts (gaps stay gaps), each named by its index (`name`) in its caption.
  */
 export function distributionDetail(indices, date) {
-  const details = [`下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・${DISTRIBUTION_WARN}日以上で注意）`];
+  const details = [DISTRIBUTION_BRIDGE, `下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・${DISTRIBUTION_TEXT.caution}で注意、${DISTRIBUTION_TEXT.reference}は参考）`];
   const yearLines = [];
   for (const [name, symbol] of [['S&P', '^GSPC'], ['NAS', '^IXIC']]) {
     const item = (indices || []).find(entry => entry?.symbol === symbol), hit = distributionCount(item);
