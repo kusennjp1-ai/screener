@@ -903,6 +903,28 @@ test.describe('the chart card at 320×640', () => {
   });
 });
 
+// At 375 the readout's second line (出来高, 対ピボット, 高値から) has about 16px to spare (round 3 C5, held: see
+// docs/round3/chart.md): a 対ピボット text wider than 「+0.0%」 by more than that adds a row and takes the card past its
+// 520px cap. ZZPG closes within 0.05% of its pivot: on every period the readout keeps 3 rows and the card its STEP 0 508px.
+test.describe('the readout of a close within 0.05% of the pivot at 375×812', () => {
+  test.use({ ...NARROWEST, viewport: { width: 375, height: 812 }, contextOptions: { reducedMotion: 'reduce' } });
+  test('ZZPG keeps the readout in 3 rows and the card at 508px on every period', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZPG', { oracles: true });
+    await chartSettled(page);
+    for (const label of ['3か月', '6か月', '1年', /^週足/]) {
+      const button = page.getByRole('group', { name: '表示期間' }).getByRole('button', { name: label });
+      await button.click();
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
+      await chartSettled(page, { redraw: true });
+      const what = `ZZPG ${label}`;
+      await expect(page.locator('.brief-readout .ro-item').filter({ hasText: /^対ピボット/ }), `${what}: the distance to the pivot`).toHaveCount(1);
+      expect(await readoutRows(page), `${what}: readout rows`).toBeLessThanOrEqual(3);
+      expect((await page.locator('.brief-chartcard').boundingBox()).height, `${what}: card height`).toBe(508);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
 // Round 3 C3: at 320 the last contraction's low keeps its price on the card whenever the plot draws its 「安値」 tag. Beside
 // the RS line's item (ZZRL) its full text fits neither line, so the fold shows the shorter one it measured to fit (never a
 // third line): the legend stays two 16px lines (34px) and the card its STEP 0 height (the oracles: 476 on the daily periods,
