@@ -39,7 +39,14 @@ export const floorOf = options => (Number.isInteger(options?.from) && options.fr
  * The first bar index of `bars` (the certified daily bars) a pivot crossing may be on for this `row`, or null for no
  * floor. Every crossing reader passes it as `from` (the failed-breakout check, the conclusion's crossing event, the
  * chart's arrow and the watch-row and Today sell checks), so the bound is applied in one place (round 3, STEP 0 seam
- * H1b). In STEP 0 it is null for every row: behaviour is unchanged. R1 owns the body (the bar after pivotBar's bar).
+ * H1b). In STEP 0 it is null for every row: behaviour is unchanged. R1 owns the body.
+ * - The floor for R1 is the pivot bar's own index (pivotBar(bars, row).index), not the bar after it. A crossing on the
+ *   pivot's own bar can only be a touch (its close cannot exceed its high, which is the pivot), so its breakout is
+ *   dated on a later bar (breakoutBar); nothing before the pivot formed is admitted. A floor one bar later drops a real
+ *   breakout: the pivot bar closes at its high and the next bar closes above on volume. The touch is under that floor,
+ *   and the next bar is no crossing, because the close before it is not under the pivot (the seam contract test).
+ * - R1 still decides one case: a run at the pivot's cents that began before the pivot bar (the bar before it closed at
+ *   the cents too). It has no crossing at or after either floor, so its later close above is dropped as well.
  */
 export function crossingFloor(bars, row) {
   void bars; void row;
