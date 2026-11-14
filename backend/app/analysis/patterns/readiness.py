@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 
 from app.analysis.patterns.config import (
+    ACTIVITY_ADR_SESSIONS,
     CONTRACTION_ATR_MULTIPLE,
     CONTRACTION_ATR_SESSIONS,
     CONTRACTION_DEPTH_FRACTION,
@@ -22,8 +23,14 @@ from app.analysis.patterns.config import (
     CONTRACTION_LOOKBACK_SESSIONS,
     CONTRACTION_MAX_LEGS,
     CONTRACTION_REPAIR_FRACTION,
+    GAP_MOVE_PERCENT,
+    LOW_ADR_PERCENT,
+    LOW_RANGE_PERCENT,
     PIVOT_ALREADY_CROSSED_PCT,
     PIVOT_BELOW_BASE_HIGH_PCT,
+    PRICE_ACTIVITY_SESSIONS,
+    SINCE_GAP_MIN_SESSIONS,
+    SINCE_GAP_RANGE_PERCENT,
 )
 from app.analysis.patterns.models import coerce_pattern_candidate
 from app.analysis.patterns.technicals import (
@@ -826,3 +833,101 @@ def setup_diagnostics(
         ):
             found.append(PIVOT_BELOW_BASE_HIGH)
     return tuple(found)
+
+
+# ── Pinned price (round 3 R3a) ──────────────────────────────────────
+# A failing readiness check, ``price_pinned``: the brief's low-activity rule
+# (frontend/src/static/priceActivity.js, round 3 R2(a)) ported with the same constants, so
+# the Setup Engine never calls ready a row the brief shows as 低変動・監視のみ. The screener
+# passes it with the caller's failed checks (``pre_existing_failed_checks``), never as an
+# 11th gate. Fewer than PRICE_ACTIVITY_SESSIONS bars, or a rule whose figures are missing,
+# is never pinned: missing data is never a failure.
+
+PRICE_PINNED = "price_pinned"
+
+
+@dataclass(frozen=True)
+class PriceActivity:
+    """priceActivity.js's decision: ``low`` (its ``lowRange``) and the first rule that holds."""
+
+    low: bool
+    reason: str | None  # 'range60', 'since_gap', 'adr' or None
+
+
+def _adr20_pct(bars: DailyBars) -> float | None:
+    """priceActivity.js ``adr20``: the mean of (high ÷ low − 1) over the last N bars, in %."""
+    n = len(bars)
+    if n < ACTIVITY_ADR_SESSIONS:
+        return None
+    total = 0
+    for i in range(n - ACTIVITY_ADR_SESSIONS, n):
+        high, low = bars.highs[i], bars.lows[i]
+        if not (_positive(high) and _positive(low) and high >= low):
+            return None
+        total = total + (high / low - 1)
+    return total / ACTIVITY_ADR_SESSIONS * 100
+
+
+def _since_gap_pinned(bars: DailyBars) -> bool:
+    """priceActivity.js ``largestGap`` and its since-gap rule.
+
+    The largest one-day close-to-close move into each of the last PRICE_ACTIVITY_SESSIONS bars
+    (the first of equal moves), when it is at least GAP_MOVE_PERCENT; pinned when at least
+    SINCE_GAP_MIN_SESSIONS sessions follow it and their high/low range stays under
+    SINCE_GAP_RANGE_PERCENT. Unknown (fewer than 61 bars, a missing close in the window, a
+    missing high or low after the gap) is not pinned.
+    """
+    n = len(bars)
+    first = n - PRICE_ACTIVITY_SESSIONS
+    if first < 1:
+        return False
+    at, pct = -1, 0.0
+    for i in range(first, n):
+        close, previous = bars.closes[i], bars.closes[i - 1]
+        if not (_positive(close) and _positive(previous)):
+            return False
+        move = (close / previous - 1) * 100
+        if abs(move) > abs(pct):
+            at, pct = i, move
+    if at < 0 or not abs(pct) >= GAP_MOVE_PERCENT:
+        return False
+    after = range(at + 1, n)
+    sessions = len(after)
+    if not sessions or not all(
+        _positive(bars.highs[i]) and _positive(bars.lows[i]) and bars.highs[i] >= bars.lows[i]
+        for i in after
+    ):
+        return False
+    range_pct = (max(bars.highs[i] for i in after) / min(bars.lows[i] for i in after) - 1) * 100
+    return sessions >= SINCE_GAP_MIN_SESSIONS and range_pct < SINCE_GAP_RANGE_PERCENT
+
+
+def price_activity(bars: DailyBars | None) -> PriceActivity:
+    """priceActivity.js's ``lowRange`` and ``reason`` (round 3 R2(a)), on the same rules:
+
+    (i) a PRICE_ACTIVITY_SESSIONS-session range under LOW_RANGE_PERCENT ('range60');
+    (ii) since the largest gap, a range under SINCE_GAP_RANGE_PERCENT over at least
+    SINCE_GAP_MIN_SESSIONS sessions ('since_gap'); (iii) ADR20 under LOW_ADR_PERCENT ('adr').
+    The first that holds is the reason. Fewer than PRICE_ACTIVITY_SESSIONS bars: never low.
+    """
+    if bars is None or len(bars) < PRICE_ACTIVITY_SESSIONS:
+        return PriceActivity(low=False, reason=None)
+    n = len(bars)
+    recent = range(n - PRICE_ACTIVITY_SESSIONS, n)
+    narrow = all(_positive(bars.highs[i]) and _positive(bars.lows[i]) for i in recent) and (
+        (max(bars.highs[i] for i in recent) / min(bars.lows[i] for i in recent) - 1) * 100
+        < LOW_RANGE_PERCENT
+    )
+    if narrow:
+        return PriceActivity(low=True, reason="range60")
+    if _since_gap_pinned(bars):
+        return PriceActivity(low=True, reason="since_gap")
+    adr = _adr20_pct(bars)
+    if adr is not None and adr < LOW_ADR_PERCENT:
+        return PriceActivity(low=True, reason="adr")
+    return PriceActivity(low=False, reason=None)
+
+
+def price_pinned(price_frame: pd.DataFrame) -> bool:
+    """True when the brief's low-activity rule holds on these daily bars (``price_pinned``)."""
+    return price_activity(daily_bars_from_frame(price_frame)).low

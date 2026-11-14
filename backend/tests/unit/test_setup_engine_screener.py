@@ -871,3 +871,105 @@ class TestSetupDiagnostics:
         assert "contraction_unconfirmed" in found
         assert "contraction_unconfirmed" not in self._diagnostics(
             frame, pattern="cup_with_handle", timeframe="weekly", pivot=None, pivot_date=None)
+
+
+class TestPricePinned:
+    """Round 3 R3a: ``price_pinned`` fails readiness when the brief's low-activity rule holds
+    (priceActivity.js, R2(a), ported with the same constants). Missing data is never pinned."""
+
+    @staticmethod
+    def _bars(closes, spreads, *, end: str = "2025-12-19") -> pd.DataFrame:
+        closes = np.asarray(closes, dtype=float)
+        spreads = np.broadcast_to(np.asarray(spreads, dtype=float), closes.shape)
+        index = pd.bdate_range(end=pd.Timestamp(end), periods=len(closes))
+        return pd.DataFrame(
+            {"Open": closes, "High": closes * (1 + spreads / 2), "Low": closes * (1 - spreads / 2),
+             "Close": closes, "Volume": np.full(len(closes), 1e6)},
+            index=index,
+        )
+
+    def _gapped(self, *, before: int = 80, gap: float = 40.0, after: int = 25, pin: float = 0.004):
+        """priceActivity.test.js ``gapped``: ±3% swings, a one-day move of ``gap`` %, then a pin."""
+        closes = [20 * (1 + 0.03 * np.sin(i)) for i in range(before)]
+        spreads = [0.04] * before
+        level = closes[-1] * (1 + gap / 100)
+        closes.append(level)
+        spreads.append(pin)
+        for i in range(1, after + 1):
+            closes.append(level * (1 + (pin / 4 if i % 2 else -pin / 4)))
+            spreads.append(pin)
+        return self._bars(closes, spreads)
+
+    @staticmethod
+    def _activity(frame):
+        from app.analysis.patterns.readiness import daily_bars_from_frame, price_activity
+
+        return price_activity(daily_bars_from_frame(frame))
+
+    def test_a_gap_inside_the_window_that_pins_is_since_gap(self):
+        assert self._activity(self._gapped()).reason == "since_gap"
+        assert self._activity(self._gapped(gap=-30.0, after=20)).reason == "since_gap"
+
+    def test_a_gap_older_than_the_window_or_too_few_sessions_or_too_small_is_not_since_gap(self):
+        assert self._activity(self._gapped(after=70, pin=0.012)).reason != "since_gap"
+        assert self._activity(self._gapped(after=14, pin=0.012)).low is False
+        assert self._activity(self._gapped(after=15, pin=0.012)).reason == "since_gap"
+        assert self._activity(self._gapped(gap=9.0, pin=0.012)).low is False
+
+    def test_adr20_alone_and_the_sixty_session_range(self):
+        climb = [10 * 1.003 ** i for i in range(80)]
+        assert self._activity(self._bars(climb, 0.003)).reason == "adr"
+        assert self._activity(self._bars(climb, 0.02)).low is False
+        narrow = self._bars([50.0] * 70, 0.01)
+        assert self._activity(narrow).reason == "range60"
+
+    def test_missing_or_short_bars_are_never_pinned(self):
+        from app.analysis.patterns.readiness import price_pinned
+
+        pinned = self._gapped()
+        assert price_pinned(pinned) is True
+        assert price_pinned(pinned.iloc[-59:]) is False
+        no_low = pinned.copy()
+        no_low.iloc[-3, no_low.columns.get_loc("Low")] = np.nan
+        assert self._activity(no_low).low is False
+        no_close = pinned.copy()
+        no_close.iloc[-40, no_close.columns.get_loc("Close")] = np.nan
+        # The since-gap rule is unknown without that close; ADR20 still reads its own (valid) bars.
+        assert self._activity(no_close).reason == "adr"
+        assert price_pinned(pd.DataFrame()) is False
+
+    def test_a_pinned_price_fails_readiness_as_a_failed_check_never_a_gate(self):
+        """The ideal VCP of TestSetupReadinessRegressions, but its last 30 sessions pinned after a
+        +40% gap: not ready, and ``price_pinned`` is the one failed check (the ten gates pass)."""
+        from app.analysis.patterns.readiness import PRICE_PINNED
+
+        cases = TestSetupReadinessRegressions()
+        stock, spy = cases._frames()
+        level = float(stock["Close"].iloc[-31]) * 1.4
+        pin = stock.index[-30:]
+        stock.loc[pin, "Close"] = level
+        stock.loc[pin, "Open"] = level
+        stock.loc[pin, "High"] = level * 1.001
+        stock.loc[pin, "Low"] = level * 0.999
+        scanner = SetupEngineScanner()
+        pivot = level * 1.01
+
+        class _IdealVcp(PatternDetector):
+            name = "vcp"
+
+            def detect(self, detector_input, parameters):
+                del detector_input, parameters
+                return PatternDetectorResult.detected(
+                    self.name,
+                    PatternCandidateModel(
+                        pattern="vcp", timeframe="daily", source_detector=self.name, pivot_price=pivot,
+                        pivot_type="vcp_pivot", quality_score=85.0, readiness_score=88.0, confidence=0.8,
+                    ),
+                )
+
+        scanner._aggregator = SetupEngineAggregator(detectors=[_IdealVcp()])
+        result = scanner.scan_stock("PIN", StockData(symbol="PIN", price_data=stock, benchmark_data=spy))
+        payload = result.details["setup_engine"]
+        assert payload["setup_ready"] is False and result.passes is False
+        assert payload["explain"]["failed_checks"] == [PRICE_PINNED]
+        assert PRICE_PINNED not in payload["explain"]["diagnostics"]

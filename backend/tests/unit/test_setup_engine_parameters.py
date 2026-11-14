@@ -153,3 +153,23 @@ def test_contraction_constants_match_book_technical_evidence():
         "MAX_LEGS": config.CONTRACTION_MAX_LEGS,
         "REPAIR_FRACTION": config.CONTRACTION_REPAIR_FRACTION,
     }
+
+
+_PRICE_ACTIVITY = _REPO / "frontend" / "src" / "static" / "priceActivity.js"
+
+
+def test_price_pinned_constants_match_price_activity():
+    """R3a price_pinned ports priceActivity.js (R2(a)): the seven exported constants, same values."""
+    from app.analysis.patterns import config
+
+    text = _PRICE_ACTIVITY.read_text(encoding="utf-8")
+    js = {name: float(value) for name, value in re.findall(r"^export const (\w+) = ([0-9.]+);", text, re.M)}
+    assert js == {
+        "PRICE_ACTIVITY_SESSIONS": config.PRICE_ACTIVITY_SESSIONS,
+        "LOW_RANGE_PERCENT": config.LOW_RANGE_PERCENT,
+        "ACTIVITY_ADR_SESSIONS": config.ACTIVITY_ADR_SESSIONS,
+        "LOW_ADR_PERCENT": config.LOW_ADR_PERCENT,
+        "GAP_MOVE_PERCENT": config.GAP_MOVE_PERCENT,
+        "SINCE_GAP_RANGE_PERCENT": config.SINCE_GAP_RANGE_PERCENT,
+        "SINCE_GAP_MIN_SESSIONS": config.SINCE_GAP_MIN_SESSIONS,
+    }

@@ -33,7 +33,9 @@ from app.analysis.patterns.operational_flags import (
     compute_operational_flags,
 )
 from app.analysis.patterns.readiness import (
+    PRICE_PINNED,
     compute_breakout_readiness_features,
+    price_pinned,
     setup_diagnostics,
 )
 from app.analysis.patterns.technicals import resample_ohlcv
@@ -258,6 +260,13 @@ class SetupEngineScanner(BaseStockScreener):
             )
         )
 
+        # 12c. A pinned price (round 3 R3a): the brief's low-activity rule fails readiness. It
+        # travels with the aggregator's failed checks (every one fails readiness), never as an
+        # 11th gate, so the ten gates' names and order are unchanged.
+        failed_checks = list(agg_output.failed_checks)
+        if price_pinned(price_data):
+            failed_checks.append(PRICE_PINNED)
+
         # 13. Compute operational invalidation flags
         dollar_volume = price_data["Close"] * price_data["Volume"]
         adtv_series = dollar_volume.rolling(50, min_periods=50).mean()
@@ -294,7 +303,7 @@ class SetupEngineScanner(BaseStockScreener):
             pivot_date=agg_output.pivot_date,
             candidates=list(agg_output.candidates),
             passed_checks=list(agg_output.passed_checks),
-            failed_checks=list(agg_output.failed_checks),
+            failed_checks=failed_checks,
             diagnostics=diagnostics,
             key_levels=agg_output.key_levels,
             invalidation_flags=all_invalidation_flags,
