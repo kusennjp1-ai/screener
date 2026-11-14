@@ -57,12 +57,13 @@ D2 は記録のキー・警告コード・インデックスの項目を1つも�
 - (a) 名前の変更：変更前のツール（45603f06、blob 09c3b81）で同じ記録から取った `sec_conditions` の数（eps pass 2・unknown 2、sales pass 3・unknown 1、margin pass 2・fail 1・unknown 1、q4_eps_missing 1）を書き込み、`code33_parts` が同じ数で、`sec_conditions` が無いことを入力側・公開側の両方で確かめる。
 - (b) `eps_acceleration_pass_symbols`：掲載順に並び、`limit: 2` で2件に切れ、件数は 3 のまま。
 - (c) `eps_floor_25`：bookFinancialEvidence 自身の判定（UP pass/pass、PASS pass/fail、SLOW fail/fail、YOUNG unknown/unknown）を確かめた上で、last2 {2,1,1}・last4 {1,2,1}。SEC 報告の無い行は数えない。
-- (d) `q4_only`：この試験ファイルで作った4つの記録（凍結のフィクスチャ secRecord/secPoint は読み込むだけ）。それぞれの `epsUnknownCauses(...).all` を明示して、1行だけの公開で数える。
+- (d) `q4_only`：この試験ファイルで作った5つの記録（凍結のフィクスチャ secRecord/secPoint は読み込むだけ）。それぞれの `epsUnknownCauses(...).all` を明示して、1行だけの公開で数える。
   - ZZNV の形（最新の行が EPS の無い fiscal Q4）：`['latest_row_fiscal_q4_without_eps']` → 1。
-  - ZZQF の形（EPS の無い fiscal Q4 が直近4四半期の中）：`['fiscal_q4_untagged']` → 1。
+  - ZZQF の形（直近4四半期の中に fiscal Q4 の行があり、売上・純利益はあるが EPS は 10-K の年だけ）：`['fiscal_q4_untagged']` → 1。epsUnknownCauses の「Q4 の行に EPS が無い」分岐。
+  - fiscal Q4 の行そのものが直近4四半期の中で欠けている形：`['fiscal_q4_untagged']` → 1。もう一方の分岐（連続していない窓と `fiscalQ4Missing`）。
   - Q4 の原因に前年の赤字が重なる行：`['latest_row_fiscal_q4_without_eps', 'prior_year_loss_or_zero']` → 0。
   - 原因が列挙されない行（no_base）：`[]` → 0。
-  - 4行まとめて：with_current_report 4、q4_only 2。
+  - 5行まとめて：with_current_report 5、q4_only 3、any の fiscal_q4_untagged 2・latest_row_fiscal_q4_without_eps 2。
 - (e) `briefLiquid`・`setupReadyLiquidity`：
   - 価格と売買代金の線は filterRanked 自身を倍々で探し、二分して隣り合う数まで詰めた（線の値は書いていない）。線の直下・線上・null・NaN・Infinity・文字列・負・0 の組み合わせで、`briefLiquid` が filterRanked と一致し、両方とも線上の行だけが載る。
   - liquid の pass/fail/unknown、illiquid の pass、価格の無い行（illiquid かつ missing）、価格も売買代金も無い集合で null。
@@ -99,9 +100,10 @@ cd frontend && O=…/audit3/r3-harness/snapshot/out/c61bf96 node --input-type=mo
 
 木：`…/audit3/r3-step0/final/h2/new/repo/frontend/public`（STEP 0 の H2 の再エクスポート。SEC 記録・決算日などは入っていない）。
 
+コマンド（終了コード 0）と、書き出した JSON から読んだ値（下の4行は JSON の要約で、ツールの標準出力そのものではない）：
+
 ```
 cd frontend && env -u GITHUB_STEP_SUMMARY node tools/report-data-coverage.mjs --published --root …/r3-step0/final/h2/new/repo/frontend/public --json …/audit3/r3-data/d2-h2-report.json
-exit 0
 listed 632  setup_ready {pass 32, fail 600, unknown 0}
 setup_ready_liquidity {liquid {pass 14, fail 317, unknown 0}, illiquid {pass 18, fail 283, unknown 0}, missing_price_or_adv 0}
 code33_parts: すべて 0（有効な SEC 報告が 0 件）、eps_acceleration_pass_symbols []
@@ -155,11 +157,11 @@ cd frontend && npx vitest run
 /proc/loadavg 前 4.69 3.58 1.79（06:10:58Z）、後 6.34 5.36 3.04（06:15:34Z）
 ```
 
-時間は負荷のある機械での参考値（advisory）。
+時間は負荷のある機械での参考値（advisory）。全体の実行はコミット 194dddc8 の上。その後のテストだけの変更（q4_only に ZZQF の形の行を足した、件数は 23 のまま）の後は、このテストファイル（23 passed）と eslint だけを走らせ直した。
 
 **G. 所有の確認と差分の確認**
 
-- G1：`python3 -I …/audit3/check-ownership.py DATA <worktree> 45603f06…` → `OWNERSHIP OK (DATA): 2 paths`（コードのコミットの前）。この文書のコミットの前にも走らせる。
+- G1：`python3 -I …/audit3/check-ownership.py DATA <worktree> 45603f06…` → コードのコミット（194dddc8）の前に `OWNERSHIP OK (DATA): 2 paths`、この文書の最初のコミット（733fda47）の前に `OWNERSHIP OK (DATA): 3 paths`。テストの追加と記録の直し（次のコミット）の前にも同じ結果。
 - G2：`git diff -U0` の削除行（`-`）は `sec_conditions` の4か所、表の2行、`let`/`const` の宣言1組だけ。上の「変えていないもの」の関数名・`warnings.push`・`::warning::` を含む `+`/`-` 行は 0（grep の exit 1）。差分の塊は fundamentalsCoverage・publishedCoverage・fundamentalsSummaryTable と新しいコードの中だけ。
 - G3：しきい値の数字（10、20000000 とその書き方の変種）は2つのファイルのどちらにも無い（grep、実測）。
 - G4：`sec_conditions` を読むのは、リポジトリ内で docs/STATE.md（凍結）だけ（grep、実測）。.github のワークフローは「SEC conditions」も `sec_conditions` も読まない。research-ui-release.yml の `--previous` が読むのは前のレポートの `records`（compareSecCarryForward）で、名前の変更の影響を受けない。

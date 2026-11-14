@@ -515,7 +515,11 @@ describe('round 3 (D2): Code 33\'s parts named honestly, the EPS ≥ 25% floor, 
   it('counts a row in q4_only only when every enumerated cause is a fiscal Q4 without EPS, the two causes checked apart', async () => {
     // ZZNV's shape: the newest row is a fiscal Q4 whose EPS only the 10-K reports.
     const latest = tenQ('Q4LATEST');
-    // ZZQF's shape: an EPS-less fiscal Q4 (a June year) inside the latest four quarters.
+    // ZZQF's shape: a fiscal-Q4 row (a June year) inside the latest four quarters, present with sales and net income but
+    // without EPS (the 10-K reports it only for the year).
+    const q4Row = secRecord({ symbol: 'Q4ROW' }); q4Row.quarterly.eps = q4Row.quarterly.eps.filter(p => p.end !== '2025-06-30');
+    q4Row.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 5, { form: '10-K', filed: '2025-08-20', accession: 'k-25' })];
+    // The other fiscal_q4_untagged branch: the fiscal-Q4 row is missing altogether inside the latest four quarters.
     const quarters = [['2023-10-01', '2023-12-31'], ['2024-01-01', '2024-03-31'], ['2024-04-01', '2024-06-30'], ['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'],
       ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'], ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31']];
     const inside = secRecord({ symbol: 'Q4INSIDE', quarters, eps: [1, 1, 1, 1, 1, 1.1, 1.2, 1.4, 1.8], revenue: [100, 100, 100, 100, 100, 110, 130, 160, 200], netIncome: [10, 10, 10, 10, 10, 11, 14, 19, 26] });
@@ -525,7 +529,7 @@ describe('round 3 (D2): Code 33\'s parts named honestly, the EPS ≥ 25% floor, 
     const mixed = tenQ('Q4MIXED'); mixed.quarterly.eps.find(p => p.end === '2024-03-31').value = -0.1;
     // No enumerated cause at all (a missing year-ago EPS reads no_base, which epsUnknownCauses does not track): never Q4-only.
     const noBase = secRecord({ symbol: 'NOBASE' }); noBase.quarterly.eps = noBase.quarterly.eps.filter(p => p.end !== '2024-06-30');
-    const cases = [[latest, ['latest_row_fiscal_q4_without_eps'], 1], [inside, ['fiscal_q4_untagged'], 1], [mixed, ['latest_row_fiscal_q4_without_eps', 'prior_year_loss_or_zero'], 0], [noBase, [], 0]];
+    const cases = [[latest, ['latest_row_fiscal_q4_without_eps'], 1], [q4Row, ['fiscal_q4_untagged'], 1], [inside, ['fiscal_q4_untagged'], 1], [mixed, ['latest_row_fiscal_q4_without_eps', 'prior_year_loss_or_zero'], 0], [noBase, [], 0]];
     expect(Q4_EPS_CAUSES).toEqual(['latest_row_fiscal_q4_without_eps', 'fiscal_q4_untagged']);
     for (const [record, all, q4Only] of cases) {
       expect(epsUnknownCauses(bookFinancialEvidence(record, record.symbol, date)).all, record.symbol).toEqual(all);
@@ -535,10 +539,10 @@ describe('round 3 (D2): Code 33\'s parts named honestly, the EPS ≥ 25% floor, 
         expect(report.round2.eps_unknown, record.symbol).toMatchObject({ with_current_report: 1, q4_only: q4Only });
       });
     }
-    // Together: the two Q4 shapes count, the mixed and cause-less rows do not.
+    // Together: the three Q4 shapes count, the mixed and cause-less rows do not.
     await withRoot(Object.fromEntries(cases.map(([record]) => [record.symbol, { book_financials: record }])), async root => {
-      expect((await publishedCoverage({ root, now })).round2.eps_unknown).toMatchObject({ with_current_report: 4, q4_only: 2,
-        any: { latest_row_fiscal_q4_without_eps: 2, fiscal_q4_untagged: 1, prior_year_loss_or_zero: 1 } });
+      expect((await publishedCoverage({ root, now })).round2.eps_unknown).toMatchObject({ with_current_report: 5, q4_only: 3,
+        any: { latest_row_fiscal_q4_without_eps: 2, fiscal_q4_untagged: 2, prior_year_loss_or_zero: 1 } });
     });
   });
 
