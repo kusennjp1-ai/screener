@@ -3,10 +3,12 @@
 // (The day's event titles, Today's focus tile under the market verdict and the verified day change in the bar
 // and the desktop header are brief-rows.spec.js's; here the call's colour for those events is asserted.)
 import { test, expect } from '@playwright/test';
-import { openBrief, VIEWPORTS, rowBySymbol, SEC_SYMBOL, date, now, charts, horizontalOverflow } from './brief-fixture.js';
+import { openBrief, VIEWPORTS, rowBySymbol, SEC_SYMBOL, date, now, charts, horizontalOverflow, ORACLE, ORACLE_ROWS } from './brief-fixture.js';
 import { conditionNote } from '../../src/static/missingCondition.js';
 import { breakoutEvent, candidateView, earningsCall } from '../../src/static/brief/briefCandidate.js';
 import { crossingEvent } from '../../src/static/brief/breakoutHistory.js';
+import { lowActivityNote, PLAN_BLOCKED } from '../../src/static/brief/buyGate.js';
+import { lowActivityReason } from '../../src/static/priceActivity.js';
 
 const phoneDevice = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const conclusion = page => page.getByTestId('brief-conclusion');
@@ -412,6 +414,32 @@ test.describe('round 2: ZZNV at 390×844', () => {
     const chips = await chipLines(page);
     expect(chips.lines).toBeLessThanOrEqual(3);
     expect(chips.slack).toBeGreaterThanOrEqual(6);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 R2: ZZPG (PCRX's shape: a 44% gap, then 25 sessions pinned) is low activity since its gap, so the conclusion reads
+// 低変動・監視のみ and names that rule under the title (buyGate's lowActivityNote from lowActivityReason). The 60-session range
+// is plainly wide, so the 60-session words would be wrong; the rule's words come from the one producer.
+const pinnedView = () => { const row = ORACLE_ROWS.find(item => item.symbol === ORACLE.postGapPin); return candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, date); };
+for (const [width, height] of [[320, 640], [390, 844], [1440, 900]]) test.describe(`round 3 R2: a pinned stock's conclusion at ${width}px`, () => {
+  test.use(width < 1024 ? { ...phoneDevice(width, height), contextOptions: { reducedMotion: 'reduce' } } : { viewport: { width, height }, contextOptions: { reducedMotion: 'reduce' } });
+  test('reads 低変動・監視のみ with the since-gap reason, no buy range, and nothing overflows', async ({ page }) => {
+    const view = pinnedView();
+    expect(view.state).toBe('low');
+    expect(lowActivityReason(view.row.price_activity, date)).not.toContain('60日');
+    const { errors } = await openBrief(page, `#/brief/stock/${view.symbol}`, { oracles: true });
+    await expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down').first()).toBeAttached();
+    await settled(page);
+    await expect(conclusion(page)).toHaveAttribute('data-gate', 'lowActivity');
+    await expect(conclusion(page).locator('strong')).toHaveText(view.stateLabel);
+    await expect(conclusion(page).locator('.brief-call-status p').first()).toHaveText(lowActivityNote(view));
+    await expect(conclusion(page)).not.toContainText('買いの範囲です');
+    await expect(page.getByTestId('brief-plan-blocked')).toHaveText(PLAN_BLOCKED.low);
+    expect(await horizontalOverflow(page)).toBe(0);
+    // The reason line stays inside the card.
+    const inside = await conclusion(page).evaluate(card => { const box = card.getBoundingClientRect(), line = card.querySelector('.brief-call-status p').getBoundingClientRect(); return line.left >= box.left - 0.5 && line.right <= box.right + 0.5; });
+    expect(inside).toBe(true);
     expect(errors).toEqual([]);
   });
 });

@@ -356,6 +356,40 @@ test.describe('round 3 R1: one sell wording per stock, bounded by the pivot\'s o
   });
 });
 
+// Round 3 R2: low activity (price_activity.lowRange) is one state on every surface. ZZPG, pinned since its gap, reads its state
+// name (candidateView's stateLabel, 低変動・監視のみ) on the watch tab's row and as the stock conclusion's title; without
+// price_activity (an older or a partial row) no surface calls it low.
+test.describe('round 3 R2: one low-activity state per stock', () => {
+  test.use(phone(390, 844));
+  const pinned = () => ORACLE_ROWS.find(row => row.symbol === ORACLE.postGapPin);
+  const viewOf = row => candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, date);
+  for (const [name, mutate] of [['as served', null], ['without price_activity', { rows: rows => { delete rows.find(row => row.symbol === ORACLE.postGapPin).price_activity; } }]]) {
+    test(`ZZPG ${name}: the watch row and the stock conclusion agree`, async ({ page }) => {
+      const row = structuredClone(pinned());
+      if (mutate) mutate.rows([row]);
+      const view = viewOf(row), low = view.state === 'low';
+      expect(low).toBe(!mutate);
+      const { errors } = await openBrief(page, '#/brief/watch', { oracles: true, storage: { 'research-watch': [row.symbol] }, ...(mutate ? { mutate } : {}) });
+      const listed = page.getByRole('region', { name: 'ウォッチ中の銘柄' }).locator(`[data-testid="brief-candidate"][data-symbol="${row.symbol}"]`);
+      await expect(listed).toBeVisible();
+      if (low) await expect(listed).toContainText(view.stateLabel);
+      else await expect(listed).not.toContainText('低変動');
+      await page.goto(`/#/brief/stock/${row.symbol}`);
+      await expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down').first()).toBeAttached();
+      await chartSettled(page);
+      const conclusion = page.getByTestId('brief-conclusion');
+      if (low) {
+        await expect(conclusion.locator('strong')).toHaveText(view.stateLabel);
+        await expect(conclusion).toHaveAttribute('data-gate', 'lowActivity');
+      } else {
+        await expect(conclusion).not.toHaveAttribute('data-gate', 'lowActivity');
+        await expect(page.locator('#brief-main')).not.toContainText('低変動');
+      }
+      expect(errors).toEqual([]);
+    });
+  }
+});
+
 // Every screen, with unknown conditions (ZZZF), a broken setup and a failed breakout among the watched stocks.
 const NO_ZERO = { charts: served => { broken('ZZSD').charts(served); failedBreakout('ZZAR').charts(served); }, ...onRow('ZZAR', row => { row.se_pivot_price = Math.round(rowBySymbol.ZZAR.current_price * 1.02 * 100) / 100; }) };
 // 「あと0」 that claims nothing is left (あと0条件, あと0%, あと0.0%); a real gap of a tenth or more (あと0.1%) is a value.

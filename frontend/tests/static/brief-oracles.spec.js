@@ -235,7 +235,7 @@ test.describe('round-3 targets (each owning track flips its own)', () => {
     expect(errors).toEqual([]);
   });
 
-  test.fixme('R2: ZZPG is low activity (PLAN_BLOCKED.low) and never pairs its stop with the base before the gap', async ({ page, context }) => {
+  test('R2: ZZPG is low activity (PLAN_BLOCKED.low) and never pairs its stop with the base before the gap', async ({ page, context }) => {
     const row = oracleRow(ORACLE.postGapPin), bars = certified(row, chartOf(row)), view = viewOf(row);
     // R2(a): low activity blocks the plan.
     expect(row.price_activity.lowRange).toBe(true);
