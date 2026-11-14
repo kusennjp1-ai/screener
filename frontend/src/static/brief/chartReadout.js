@@ -150,6 +150,13 @@ const grouped = (value, digits) => value.toLocaleString('en-US', { minimumFracti
  * the decimals from 1,000 up, as the chart's price tags do.
  */
 export const formatPrice = (value, { compact = false } = {}) => (finite(value) ? grouped(value, compact && Math.abs(value) >= 1000 ? 0 : 2) : '—');
+/**
+ * The legend's texts for the last contraction's low (its price, as formatPrice prints it), longest first: the full
+ * name, and below 1024px the shorter ones the legend falls back to when the full one fits neither of its two lines
+ * (measured: StockChartCard's useTwoLineLegend), down to the plot's own tag name 「安値」. [form, text] pairs; null when
+ * the low is unknown.
+ */
+export const structuralLowLegend = value => (finite(value) ? [['long', `最後の収縮の安値 ${formatPrice(value)}`], ['short', `収縮の安値 ${formatPrice(value)}`], ['tag', `安値 ${formatPrice(value)}`]] : null);
 /** A signed percent, e.g. +2.2% / −0.8% / ±0.0%, or — when unknown. */
 export const formatPercent = (value, digits = 1) => (finite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.abs(value).toFixed(digits)}%` : '—');
 // The unit is chosen after rounding, so 999,600 reads 1M, never 1000K.

@@ -7,7 +7,7 @@
 // phrase, no level line through a label uncut).
 import { test, expect } from '@playwright/test';
 import { chartSettled, charts, date, horizontalOverflow, openBrief, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
-import { chartCrossing, crossingNote, priceInRange, weeklyBars, weeklyShortNote } from '../../src/static/brief/chartReadout.js';
+import { chartCrossing, crossingNote, formatPrice, priceInRange, structuralLowLegend, weeklyBars, weeklyShortNote } from '../../src/static/brief/chartReadout.js';
 import { LEADER_OFF_LEVEL, LEADER_OFF_LEVEL_MIN, MA_SHIFT, MA_TAIL } from '../../src/static/brief/priceChart.js';
 import { BOX_GAP, FIGURE_GAP, FIGURE_STACK, KIN_GAP, LABEL_GAP, PHRASE_GAP } from '../../src/static/brief/chartLabels.js';
 
@@ -52,6 +52,10 @@ const scaled = charts => { withRsLine(charts); for (const chart of Object.values
 const CARD_CAP = 520, CARD_LINE = CARD_CAP - 12;
 /** Lines of the legend's shown items (their distinct tops). */
 const legendLines = page => page.locator('.brief-legend').evaluate(node => new Set([...node.children].filter(item => !item.hidden && item.getClientRects().length).map(item => Math.round(item.getBoundingClientRect().top))).size);
+/** The text the legend's last-contraction-low item shows (its displayed form only), or null when it is folded or absent. */
+const shownLow = page => page.locator('.brief-legend').evaluate(node => { const item = node.querySelector('[data-key="low"]'); return item && !item.hidden && item.getClientRects().length ? item.innerText.trim() : null; });
+/** The legend's shown text (the items it displays, each as displayed). */
+const shownLegend = page => page.locator('.brief-legend').evaluate(node => [...node.children].filter(item => !item.hidden && item.getClientRects().length).map(item => item.innerText.trim()).join(' '));
 /** Each readout line's horizontal slack: its width less its items and gaps (one row each, so it never wraps). */
 const readoutSlack = page => page.locator('.brief-readout').evaluate(node => [...node.querySelectorAll('.ro-line')].map(line => {
   const items = [...line.children].filter(item => item.getClientRects().length), gap = parseFloat(getComputedStyle(line).columnGap) || 0;
@@ -78,31 +82,35 @@ const collisions = page => page.getByTestId('brief-price-chart').evaluate(chart 
 });
 /** A price as the chart may print it: two decimals, and on an axis tag none from 1,000 up. */
 const priceTexts = value => [2, ...(Math.abs(value) >= 1000 ? [0] : [])].map(digits => value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+/** The model and period the card's chart drew (PriceChart's props, from React's record of them); null before a chart. */
+const drawnModel = page => page.getByTestId('brief-price-chart').evaluate(chart => {
+  const key = Object.keys(chart).find(name => name.startsWith('__reactFiber$'));
+  let owner = key ? chart[key] : null;
+  while (owner && !(owner.memoizedProps?.model?.bars && Number.isFinite(owner.memoizedProps.period))) owner = owner.return;
+  if (!owner) return null;
+  // The node keeps the fiber that created it, which React may since have swapped for its alternate (the props of an
+  // earlier render): the chart's current fiber is the one of its type in the root's current tree.
+  let root = owner;
+  while (root.return) root = root.return;
+  let current = null;
+  for (const stack = [root.stateNode?.current]; stack.length && !current;) {
+    const fiber = stack.pop();
+    if (fiber) { if (fiber.type === owner.type) current = fiber; else stack.push(fiber.sibling, fiber.child); }
+  }
+  const { model, period } = current?.memoizedProps || {};
+  return model ? { period, model: { bars: model.bars, interval: model.interval, pivot: model.pivot, upper: model.upper, stop: model.stop, auditHigh: model.auditHigh, structuralLow: model.structuralLow, entry: model.entry, r2: model.r2, r3: model.r3 } } : null;
+});
+/** The names the legend gives the last contraction's low (structuralLowLegend's texts without the price), longest first. */
+const lowNames = value => structuralLowLegend(value).map(([, text]) => text.slice(0, -(formatPrice(value).length + 1)));
 /**
  * The levels the chart's model puts in its price range (priceInRange, the renderer's own range): the 52-week high, the
  * pivot, the stop, the last contraction's low, the plan's entry, 2R and 3R, and the zone's top. The model is the one the
  * card drew (PriceChart's props, from React's record of them), never read off the drawing: a level the renderer left out
- * leaves no trace there. Each with its line's selector, its name (none: its line only), its prices (priceTexts) and its
- * own tag's key.
+ * leaves no trace there. Each with its line's selector, its name or names (none: its line only), its prices (priceTexts)
+ * and its own tag's key.
  */
 async function levelsInRange(page) {
-  const drawn = await page.getByTestId('brief-price-chart').evaluate(chart => {
-    const key = Object.keys(chart).find(name => name.startsWith('__reactFiber$'));
-    let owner = key ? chart[key] : null;
-    while (owner && !(owner.memoizedProps?.model?.bars && Number.isFinite(owner.memoizedProps.period))) owner = owner.return;
-    if (!owner) return null;
-    // The node keeps the fiber that created it, which React may since have swapped for its alternate (the props of an
-    // earlier render): the chart's current fiber is the one of its type in the root's current tree.
-    let root = owner;
-    while (root.return) root = root.return;
-    let current = null;
-    for (const stack = [root.stateNode?.current]; stack.length && !current;) {
-      const fiber = stack.pop();
-      if (fiber) { if (fiber.type === owner.type) current = fiber; else stack.push(fiber.sibling, fiber.child); }
-    }
-    const { model, period } = current?.memoizedProps || {};
-    return model ? { period, model: { bars: model.bars, interval: model.interval, pivot: model.pivot, upper: model.upper, stop: model.stop, auditHigh: model.auditHigh, structuralLow: model.structuralLow, entry: model.entry, r2: model.r2, r3: model.r3 } } : null;
-  });
+  const drawn = await drawnModel(page);
   if (!drawn) return null;
   const { model, period } = drawn, finite = Number.isFinite;
   // The entry only apart from the pivot (the renderer draws it then: at the pivot it is the pivot's line).
@@ -111,7 +119,8 @@ async function levelsInRange(page) {
     ['the 52-week high', model.auditHigh, 'line.bc-high52', '52週高', 'high52'],
     ['the pivot', model.pivot, 'line.bc-pivot', 'ピボット', 'pivot'],
     ['the stop', model.stop, 'line.bc-stop', '損切り', 'stop'],
-    ['the last contraction\'s low', model.structuralLow, 'line.bc-structural', '最後の収縮の安値', 'low'],
+    // Below 1024px the legend may give the low a shorter name (the fold's measured fallback), each with its price.
+    ['the last contraction\'s low', model.structuralLow, 'line.bc-structural', finite(model.structuralLow) ? lowNames(model.structuralLow) : null, 'low'],
     ['the entry', entry, 'line.bc-entry', '買値', 'entry'],
     ['2R', model.r2, 'line.bc-r2', '2R', 'r2'],
     ['3R', model.r3, 'line.bc-r3', '3R', 'r3'],
@@ -379,7 +388,12 @@ const labelAudit = async page => { const ranged = await levelsInRange(page); ret
   // the text that names the level (「52週高 123.45」, 「最後の収縮の安値 106.85」), or on the level's own tag beside its name.
   if (!ranged) out.push('the chart\'s model was not found');
   const card = chart.closest('.brief-chartcard');
-  const ownText = node => { const copy = node.cloneNode(true); copy.querySelectorAll('.sr-only').forEach(inner => inner.remove()); return copy.textContent.trim(); };
+  // The text a node shows: the screen readers' own words and the texts it holds but does not display left out.
+  const ownText = node => {
+    const parts = [], walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) if (text.parentElement.getClientRects().length && !text.parentElement.closest('.sr-only')) parts.push(text.textContent);
+    return parts.join('').trim();
+  };
   const carriers = [
     ...texts.map(text => ({ text: text.name, tag: text.node.closest('g.bc-tag')?.dataset.tag ?? null })),
     ...[...card.querySelectorAll('.brief-legend > span, .brief-readout .ro-item')].filter(node => node.getClientRects().length).map(node => ({ text: ownText(node), tag: null })),
@@ -388,7 +402,7 @@ const labelAudit = async page => { const ranged = await levelsInRange(page); ret
     const line = chart.querySelector(level.line);
     if (!line || line.getAttribute('visibility') === 'hidden') out.push(`${level.what} ${level.prices[0]}: in range, its line not drawn`);
     if (!level.name) continue;
-    const named = carriers.filter(carrier => carrier.text.startsWith(level.name));
+    const names = [].concat(level.name), named = carriers.filter(carrier => names.some(name => carrier.text.startsWith(name)));
     const priced = named.some(carrier => level.prices.some(price => carrier.text.includes(price))) || (named.length > 0 && level.tag && carriers.some(carrier => carrier.tag === level.tag && level.prices.includes(carrier.text)));
     if (!priced) out.push(`${level.what} ${level.prices[0]}: in range, ${named.length ? 'its price' : 'its name'} nowhere in the card`);
   }
@@ -545,8 +559,13 @@ test.describe('390×844 phone', () => {
       await expect(page.locator('.bc-rshigh .bc-rstext')).toHaveText('RS新高値');
       expect(tag.x, `${what}: RS新高値 in the axis column`).toBeGreaterThan(plot.x + plot.width - 70);
       expect(tag.x > caption.x + caption.width || tag.y > caption.y + caption.height || tag.y + tag.height < caption.y, `${what}: caption and tag apart`).toBe(true);
-      // The structural low is a 「安値」 tag on a phone, its price in the legend.
-      if (await page.locator('[data-tag="low"]').count()) await expect(page.locator('.brief-legend [data-key="low"]')).toHaveText(/^最後の収縮の安値 [\d,]+\.\d{2}$/);
+      // The structural low is a 「安値」 tag on a phone, its price in the legend: the item shows one of its texts (the full
+      // one, or the shorter one the fold measured to fit), and the screen's 注記 explains the tag when the item is folded.
+      if (await page.locator('[data-tag="low"]').count()) {
+        await expect(page.locator('.brief-legend [data-key="low"]'), `${what}: the low's legend item`).toHaveCount(1);
+        const { model } = await drawnModel(page), shown = await shownLow(page);
+        if (shown !== null) expect(structuralLowLegend(model.structuralLow).map(([, text]) => text), `${what}: the low's legend text`).toContain(shown);
+      }
       await expect(page.locator('.bc-structural-text')).toHaveCount(0);
       // The 52-week high's short form beside its line, or (no spot there) its name over its price on its tag.
       const high = page.locator('.bc-levelnote.bc-high52-text');
@@ -880,6 +899,36 @@ test.describe('the chart card at 320×640', () => {
       expect((await page.locator('.brief-chartcard').boundingBox()).height, `${symbol} ${label}: card height`).toBeLessThanOrEqual(CARD_LINE);
       expect(await legendLines(page), `${symbol} ${label}: legend lines`).toBeLessThanOrEqual(2);
     }
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 C3: at 320 the last contraction's low keeps its price on the card whenever the plot draws its 「安値」 tag. Beside
+// the RS line's item (ZZRL) its full text fits neither line, so the fold shows the shorter one it measured to fit (never a
+// third line): the legend stays two 16px lines (34px) and the card its STEP 0 height (the oracles: 476 on the daily periods,
+// 492 on 週足; the fixture stock ZZNV: 508 and 492).
+test.describe('the 安値 price in the legend at 320×640', () => {
+  test.use({ ...NARROWEST, contextOptions: { reducedMotion: 'reduce' } });
+  for (const [symbol, oracles, daily] of [['ZZRD', true, 476], ['ZZRL', true, 476], ['ZZNV', false, 508]]) test(`${symbol}: two legend lines, the low's price shown on every period that tags it, the card at its height`, async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${symbol}`, oracles ? { oracles: true } : {});
+    await chartSettled(page);
+    let tagged = 0;
+    for (const [label, height] of [['3か月', daily], ['6か月', daily], ['1年', daily], [/^週足/, 492]]) {
+      const button = page.getByRole('group', { name: '表示期間' }).getByRole('button', { name: label });
+      await button.click();
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
+      await chartSettled(page, { redraw: true });
+      const what = `${symbol} ${label}`;
+      expect(await legendLines(page), `${what}: legend lines`).toBeLessThanOrEqual(2);
+      expect((await page.locator('.brief-legend').boundingBox()).height, `${what}: legend height`).toBe(34);
+      expect((await page.locator('.brief-chartcard').boundingBox()).height, `${what}: card height`).toBe(height);
+      if (!await page.getByTestId('brief-price-chart').locator('g.bc-tag[data-tag="low"]').count()) continue;
+      tagged++;
+      const { model } = await drawnModel(page);
+      expect(await shownLegend(page), `${what}: the low's price in the legend`).toContain(formatPrice(model.structuralLow));
+      expect(structuralLowLegend(model.structuralLow).map(([, text]) => text), `${what}: the low's legend text`).toContain(await shownLow(page));
+    }
+    expect(tagged, `${symbol}: periods with the 「安値」 tag`).toBeGreaterThan(0);
     expect(errors).toEqual([]);
   });
 });

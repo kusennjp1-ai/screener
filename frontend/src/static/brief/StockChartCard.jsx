@@ -6,7 +6,7 @@ import { crossingFloor } from './breakoutHistory';
 import { auditValues } from '../qualificationAudit';
 import { newYorkDate } from '../evidenceTime';
 import { ratioShown } from './briefCandidate';
-import { CHART_RANGES as RANGES, chartCrossing, chartReadout, formatPercent, formatPrice, heavyVolumeBars, priceInRange, shortAveragesShown, weeklyBars, weeklyRangeLabel } from './chartReadout';
+import { CHART_RANGES as RANGES, chartCrossing, chartReadout, formatPercent, formatPrice, heavyVolumeBars, priceInRange, shortAveragesShown, structuralLowLegend, weeklyBars, weeklyRangeLabel } from './chartReadout';
 
 /** The 上げ下げ出来高比 footnote, in the stock screen's 注記 below 1024px. */
 export const VCP_NOTE = '上げ下げ出来高比（50日）は、上げた日の出来高 ÷ 下げた日の出来高です。1超は買いが優勢です。';
@@ -75,8 +75,10 @@ function legendItems({ weekly, short, wide, rsShown, structuralLow, drawnLegs, c
   const rows = !wide && !weekly ? [['mas', null, <><i className="lg-ma50" />50 <i className="lg-ma150" />150 <i className="lg-ma200" />200日線</>]]
     : (weekly ? ['10週線', '30週線', '40週線'] : ['50日線', '150日線', '200日線']).map((text, i) => [['ma50', 'ma150', 'ma200'][i], `lg-${['ma50', 'ma150', 'ma200'][i]}`, text]);
   if (rsShown) rows.push(['rs', 'lg-rs', `${wide ? 'RS線＝' : ''}株価÷S&P 500・RS推計やIBD RSとは別`]);
-  // The last contraction's low (a 「安値」 tag on a narrow chart, a dotted line on every chart): its price.
-  if (Number.isFinite(structuralLow)) rows.push(['low', 'lg-structural', `最後の収縮の安値 ${formatPrice(structuralLow)}`, 1]);
+  // The last contraction's low (a 「安値」 tag on a narrow chart, a dotted line on every chart): its price. Below 1024px
+  // the item holds each of its texts (structuralLowLegend), and the fold shows the longest that fits (useTwoLineLegend).
+  const low = structuralLowLegend(structuralLow);
+  if (low) rows.push(['low', 'lg-structural', wide ? low[0][1] : <>{low.map(([form, text]) => <span key={form} className={`lg-form lg-form-${form}`}>{text}</span>)}</>, 1]);
   if (crossing) rows.push(['breakout', <BreakoutGlyph key="glyph" zone={crossing.tone === 'zone'} />, '上抜け', 2]);
   // Below 1024px the volume panel's caption also keys ■ (下落日), beside the bars.
   if (heavyDown) rows.push(['heavydown', 'b:lg-heavydown:', '下落日の大商い', wide ? 3 : 6]);
@@ -93,10 +95,16 @@ function legendItems({ weekly, short, wide, rsShown, structuralLow, drawnLegs, c
   });
 }
 
+/** The shorter texts the last contraction's low falls back to below 1024px, in order (structuralLowLegend's forms). */
+const LOW_FALLBACK_FORMS = ['short', 'tag'];
+
 /**
  * Below 1024px, keeps the legend on two lines: the items that must stay take their places first, then the
  * foldable ones by rank while one of the two lines still has room (measured, so it holds for any font);
  * the rest are hidden (each is explained in the 注記). Items are ordered line by line with CSS `order`.
+ * The last contraction's low (the first foldable item) is placed with its full text; if it ends hidden, the whole
+ * placement runs again with its shorter texts in turn (data-fit, shown by brief-chart.css), and if none of them
+ * stays shown, once more with the full text, so the legend is then exactly as it would be without the shorter ones.
  */
 function useTwoLineLegend(ref, wide, signature) {
   useLayoutEffect(() => {
@@ -104,27 +112,44 @@ function useTwoLineLegend(ref, wide, signature) {
     if (!legend || wide) return undefined;
     const fold = () => {
       const items = [...legend.children];
-      for (const item of items) { item.hidden = false; item.style.order = ''; }
+      const low = items.find(item => item.dataset.key === 'low' && item.dataset.fold === 'true' && item.querySelector('.lg-form'));
+      const reset = form => {
+        for (const item of items) { item.hidden = false; item.style.order = ''; }
+        if (!low) return;
+        if (form === 'long') delete low.dataset.fit;
+        else low.dataset.fit = form;
+      };
+      reset('long');
       const room = legend.clientWidth, gap = parseFloat(getComputedStyle(legend).columnGap) || 0;
       if (!(room > 0)) return;
-      const used = [0, 0], place = item => {
-        const w = item.getBoundingClientRect().width;
-        for (const line of [0, 1]) if (used[line] + (used[line] ? gap : 0) + w <= room + 0.5) { used[line] += (used[line] ? gap : 0) + w; return line; }
-        return null;
-      };
       const keep = items.filter(item => item.dataset.fold !== 'true'), foldable = items.filter(item => item.dataset.fold === 'true').sort((a, b) => Number(a.dataset.rank) - Number(b.dataset.rank));
-      for (const item of [...keep, ...foldable]) {
-        const line = place(item);
-        if (line === null && item.dataset.fold === 'true') item.hidden = true;
-        else item.style.order = String(line ?? 1);
-      }
-      // The browser wraps for itself: if a fraction of a pixel still made a third line, fold the last kept item.
       const tops = () => new Set(items.filter(item => !item.hidden).map(item => Math.round(item.offsetTop))).size;
-      for (let guard = 0; tops() > 2 && guard < items.length; guard++) {
-        const last = foldable.filter(item => !item.hidden).at(-1);
-        if (!last) break;
-        last.hidden = true;
+      const pass = form => {
+        reset(form);
+        const used = [0, 0], place = item => {
+          const w = item.getBoundingClientRect().width;
+          for (const line of [0, 1]) if (used[line] + (used[line] ? gap : 0) + w <= room + 0.5) { used[line] += (used[line] ? gap : 0) + w; return line; }
+          return null;
+        };
+        for (const item of [...keep, ...foldable]) {
+          const line = place(item);
+          if (line === null && item.dataset.fold === 'true') item.hidden = true;
+          else item.style.order = String(line ?? 1);
+        }
+        // The browser wraps for itself: if a fraction of a pixel still made a third line, fold the last kept item.
+        for (let guard = 0; tops() > 2 && guard < items.length; guard++) {
+          const last = foldable.filter(item => !item.hidden).at(-1);
+          if (!last) break;
+          last.hidden = true;
+        }
+      };
+      pass('long');
+      if (!low?.hidden) return;
+      for (const form of LOW_FALLBACK_FORMS) {
+        pass(form);
+        if (!low.hidden) return;
       }
+      pass('long');
     };
     fold();
     const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(fold) : null;

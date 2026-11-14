@@ -83,6 +83,10 @@
 .brief-legend .lg-breakoutglyph.is-zone path { stroke: var(--zone); }
 .brief-legend .lg-heavydown { display: inline-block; width: 8px; height: 10px; margin-right: 4px; vertical-align: -1px; background: var(--ext); }
 .brief-legend > span[hidden] { display: none; }
+/* Below 1024px the last contraction's low holds each of its texts: the full one, or the shorter one the fold measured
+   to fit (data-fit, set by StockChartCard's useTwoLineLegend). */
+.brief-legend .lg-form { display: none; }
+.brief-legend > span:not([data-fit]) > .lg-form-long, .brief-legend > [data-fit="short"] > .lg-form-short, .brief-legend > [data-fit="tag"] > .lg-form-tag { display: inline; }
 .brief-legend i.lg-pivot { border-top-color: var(--zone); }
 .brief-legend i.lg-stop { border-top-color: var(--neg); }
 .brief-legend i.lg-lows { border-top-color: var(--text-2); border-top-style: dotted; }

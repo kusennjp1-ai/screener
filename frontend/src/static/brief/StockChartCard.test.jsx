@@ -7,6 +7,7 @@ import { loadPriceChart } from './priceChartLoader';
 beforeAll(async () => { await loadPriceChart(); });
 import { AUDIT_VERSION } from '../qualificationAudit';
 import { lastPivotCrossing } from './breakoutHistory';
+import { structuralLowLegend } from './chartReadout';
 
 // The crossing helper is verdict's (VD1/VD2 write its round-2 body): the chart's tests mock it (plan §2.2), keeping
 // the rest of the module (the conclusion's crossingEvent) as it is.
@@ -265,5 +266,78 @@ describe('brief stock chart card', () => {
     fireEvent.click(within(screen.getByRole('group', { name: '表示期間' })).getByRole('button', { name: /^週足/ }));
     const readout = screen.getByRole('group', { name: /^最新の足（\d\d\/\d\d〜\d\d\/\d\dの週）の値$/ });
     expect(readout.querySelector('.ro-date').textContent).toMatch(/^\d\d\/\d\d週$/);
+  });
+});
+
+describe('the last contraction\'s low in the legend below 1024px (round 3 C3)', () => {
+  // Two measured contractions whose lows are on the bars they name (the plan's structural low is the last one's: 84.03),
+  // and an RS line, so the legend keeps two items that must stay (the averages and the RS line's meaning).
+  const list = bars();
+  const legs = [{ startDate: day(150), endDate: day(160), depthPct: 9, high: list[150].high, low: list[158].low, lowDate: day(158), bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.8 } },
+    { startDate: day(170), endDate: day(180), depthPct: 4, high: list[170].high, low: list[175].low, lowDate: day(175), bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.7 } }];
+  const based = { ...data(true), bars: list, technical: { version: 'book-technical-evidence-v2', vcp: { source: 'algorithm', legs, measurementsValid: true, depthsContract: true } },
+    chart: { data: { rs_line: list.map((b, i) => ({ time: b.date, value: 1 + i / 1000 })) }, isError: false } };
+  const low = list[175].low, item = () => document.querySelector('.brief-legend [data-key="low"]');
+  const state = () => Object.fromEntries([...document.querySelector('.brief-legend').children].map(node => [node.dataset.key, node.hidden ? 'hidden' : node.style.order]));
+
+  it('keeps the low first among the foldable items, with each of its texts below 1024px and the full one only at 1024px and wider', () => {
+    render(<StockView data={based} />);
+    expect(item().dataset.fold).toBe('true');
+    expect(item().dataset.rank).toBe('1');
+    expect([...item().querySelectorAll('.lg-form')].map(node => [node.className, node.textContent])).toEqual(structuralLowLegend(low).map(([form, text]) => [`lg-form lg-form-${form}`, text]));
+    expect(structuralLowLegend(low)[0][1]).toBe('最後の収縮の安値 84.03');
+    // Unmeasured (jsdom gives the legend no width), the fold leaves the full text on.
+    expect(item().dataset.fit).toBeUndefined();
+    cleanup();
+    render(<StockView data={based} wide />);
+    expect(item().querySelector('.lg-form')).toBeNull();
+    expect(item()).toHaveTextContent(/^最後の収縮の安値 84\.03$/);
+  });
+
+  // Mocked layout: the legend is 300px wide with no gap; the averages' item is 100px (line 1) and the RS line's 250px
+  // (line 2); every other item is 40px; the low's width is per text (its data-fit, the full text without one).
+  let restore = [];
+  afterEach(() => { for (const undo of restore.reverse()) undo(); restore = []; });
+  const layout = lowWidths => {
+    const rect = Element.prototype.getBoundingClientRect, width = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth');
+    const widths = { mas: 100, rs: 250 };
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      if (!this.parentElement?.classList.contains('brief-legend')) return rect.call(this);
+      const w = this.dataset.key === 'low' ? lowWidths[this.dataset.fit ?? 'long'] : widths[this.dataset.key] ?? 40;
+      return { x: 0, y: 0, left: 0, top: 0, width: w, height: 16, right: w, bottom: 16 };
+    };
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get() { return this.classList.contains('brief-legend') ? 300 : width.get.call(this); } });
+    restore.push(() => { Element.prototype.getBoundingClientRect = rect; }, () => { delete HTMLElement.prototype.clientWidth; });
+  };
+  // The legend as today's fold leaves it when the low fits neither line: hidden, and the others placed by rank in its absence.
+  const today = { mas: '0', rs: '1', low: 'hidden', sell: '0', lows: '0', heavydown: '0', boxes: '0', pivot: '0', stop: '1' };
+
+  it('shows the full text when it fits', () => {
+    layout({ long: 150, short: 110, tag: 70 });
+    render(<StockView data={based} />);
+    expect(item().dataset.fit).toBeUndefined();
+    expect(state()).toEqual({ mas: '0', rs: '1', low: '0', sell: '0', lows: '1', heavydown: 'hidden', boxes: 'hidden', pivot: 'hidden', stop: 'hidden' });
+  });
+
+  it('shows the shorter text when only it fits, and the items it displaces fold in its place', () => {
+    layout({ long: 220, short: 150, tag: 70 });
+    render(<StockView data={based} />);
+    expect(item().dataset.fit).toBe('short');
+    expect(state()).toEqual({ mas: '0', rs: '1', low: '0', sell: '0', lows: '1', heavydown: 'hidden', boxes: 'hidden', pivot: 'hidden', stop: 'hidden' });
+  });
+
+  it('falls back to the tag\'s own name when only 「安値 xx」 fits', () => {
+    layout({ long: 220, short: 210, tag: 150 });
+    render(<StockView data={based} />);
+    expect(item().dataset.fit).toBe('tag');
+    expect(state()).toEqual({ mas: '0', rs: '1', low: '0', sell: '0', lows: '1', heavydown: 'hidden', boxes: 'hidden', pivot: 'hidden', stop: 'hidden' });
+  });
+
+  it('folds the low when no text fits, leaving every other item as today\'s fold places it', () => {
+    layout({ long: 220, short: 210, tag: 205 });
+    render(<StockView data={based} />);
+    expect(item().hidden).toBe(true);
+    expect(item().dataset.fit).toBeUndefined();
+    expect(state()).toEqual(today);
   });
 });

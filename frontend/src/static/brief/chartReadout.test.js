@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { CHART_RANGES, chartContentKey, chartCrossing, chartNotes, chartReadout, crossingNote, earningsMarker, chartSeries, ema, formatPercent, formatPrice, formatShares, formatVolume, heavyVolumeBars, shortAveragesDrawn, shortAveragesShown, priceInRange, weeklyBars, weeklyRangeLabel, weeklyShortNote } from './chartReadout';
+import { CHART_RANGES, chartContentKey, chartCrossing, chartNotes, chartReadout, crossingNote, earningsMarker, chartSeries, ema, formatPercent, formatPrice, formatShares, formatVolume, heavyVolumeBars, shortAveragesDrawn, shortAveragesShown, priceInRange, structuralLowLegend, weeklyBars, weeklyRangeLabel, weeklyShortNote } from './chartReadout';
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { ADR_SESSIONS, adrPercent } from './positionSizing';
 import { lastPivotCrossing, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
@@ -323,5 +323,18 @@ describe('the chart helpers the card and the screen share', () => {
     expect(priceInRange(model, 65, 50)).toBe(false);
     expect(priceInRange(model, 65, null)).toBe(false);
     expect(chartContentKey({ ...model, crossing: { date: 'd', tone: 'zone' } }, 65)).not.toBe(chartContentKey({ ...model, crossing: { date: 'd', tone: 'neutral' } }, 65));
+  });
+});
+
+describe('structuralLowLegend (round 3 C3)', () => {
+  it('gives the legend\'s texts for the last contraction\'s low, longest first, each with the price formatPrice prints', () => {
+    expect(structuralLowLegend(84.03425682638421)).toEqual([['long', '最後の収縮の安値 84.03'], ['short', '収縮の安値 84.03'], ['tag', '安値 84.03']]);
+    // The price as the chart prints it below 1024px and wider alike: two decimals, thousands grouped.
+    for (const [, text] of structuralLowLegend(1234.5)) expect(text.endsWith(` ${formatPrice(1234.5)}`)).toBe(true);
+    expect(formatPrice(1234.5)).toBe('1,234.50');
+  });
+
+  it('gives nothing for an unknown low: never a price of 0 or —', () => {
+    for (const value of [null, undefined, NaN, Infinity]) expect(structuralLowLegend(value)).toBeNull();
   });
 });
