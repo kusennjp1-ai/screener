@@ -348,6 +348,8 @@ D3 のうち作る側（`frontend/tools/sec-financials.py`）だけ。UI 側（a
 
 **数える年度（ここで決めたこと）**：エントリーになり得る年度だけ、すなわちレコードの窓の中（`TRIM_DAYS` の cutoff 以降）で、Q4 EPS が報告されていない年度。窓より古い年度と、Q4 EPS が報告されている年度は `refused` に数えない。
 
+例外：四半期の EPS も売上高も無いレコードには cutoff が無い（normalize も切らない）。そのレコードでは、事実のあるすべての会計年度が数えられ、多くは `check_failed`・`no_shares`・`no_numerator` になる。そのため `refused` の合計が大きく出ることがある（エントリーは出ない。報告 EPS が無いと照合に落ちるため）。
+
 ### エントリー
 
 `{"end", "start", "value", "method", "numerator": {"tag", "components": [年度の accession, q1, q2, q3]}, "shares": {"tag", "components": [年度, q1, q2, q3]}}`（キーはこれだけ）。end 順、レコードの cutoff 以降の年度末だけ、四半期 EPS が報告されていない年度末だけ、最大 4 件。`quarterly.eps` には何も足さない・埋めない（制約 4）。報告 EPS は、レコードと同じ**切る前**の系列（`series(facts, "eps", as_of)`）から読む。切った後の系列だと、窓の最も古い年度の Q1〜Q3 が欠けて誤って `check_failed` になる。
@@ -394,6 +396,10 @@ D3 のうち作る側（`frontend/tools/sec-financials.py`）だけ。UI 側（a
 - 実際の会社のうち、何社の年度が埋まるか（`WeightedAverageNumberOfDilutedSharesOutstanding` を使わず `WeightedAverageNumberOfShareOutstandingBasicAndDiluted` だけを付ける会社は `no_shares` になる）。
 - 計画の「掲載のうち Code 33 が fiscal Q4 にかかるのは最大 103 行、Q4 の行に付けられるのは最大 21 行」の上限。
 - 52/53 週の会計年度や決算期の変更での振る舞い（テストは暦年の会社だけ）。
+
+### 設計の注記（精度の行を読む人へ）
+
+- **2% の照合は、EPS が小さい会社にはきびしい。** 報告 EPS はセント単位に丸められている。丸めの誤差（最大 0.005）だけで、\|EPS\| が約 0.25 ドル未満のときに 2% を超えうる。そうした会社の年度は `check_failed` になり、`q4` のサンプルからも外れる。指示どおりの許容幅の帰結なので、ここでは直さない。OD1 の判断の材料として、指揮者に申し送る。
 
 ### 指示からの逸脱（小さいもの）
 
