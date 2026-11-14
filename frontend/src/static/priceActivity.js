@@ -1,6 +1,9 @@
 // A row's recent price activity, as the research export publishes it (`price_activity`, tools/export-research.mjs).
-// Moved verbatim out of the exporter (round 3, STEP 0 helper H2) so the exporter and the synthetic test oracles
-// compute it with one function; the output is unchanged, key order included. No imports: plain Node runs it.
+// Moved out of the exporter with the same output (round 3, STEP 0 helper H2), so the exporter and the synthetic test
+// oracles compute it with one function. It is an equivalent refactor, not a verbatim move: 60 and 5 became named
+// constants, and the exporter's `audit.valid ? chart.bars.slice(-60) : []` became an argument that is null when the
+// audit refused the bars. Identity is proven by re-export (docs/round3/step0.md, H2), key order included. No imports:
+// plain Node runs it.
 
 /** The sessions the range is measured over (the last N certified daily bars). */
 export const PRICE_ACTIVITY_SESSIONS = 60;
