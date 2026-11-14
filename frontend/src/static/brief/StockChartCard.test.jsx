@@ -8,6 +8,7 @@ beforeAll(async () => { await loadPriceChart(); });
 import { AUDIT_VERSION } from '../qualificationAudit';
 import { lastPivotCrossing } from './breakoutHistory';
 import { structuralLowLegend } from './chartReadout';
+import { pivotDistanceText } from './briefCandidate';
 
 // The crossing helper is verdict's (VD1/VD2 write its round-2 body): the chart's tests mock it (plan §2.2), keeping
 // the rest of the module (the conclusion's crossingEvent) as it is.
@@ -132,6 +133,23 @@ describe('brief stock chart card', () => {
     render(<StockView data={audited('2026-10-01')} />);
     expect(screen.getByTestId('brief-price-chart').querySelector('.bc-high52')).toBeNull();
     expect(screen.getByRole('group', { name: '最新の足の値' })).not.toHaveTextContent('52週高値');
+  });
+
+  it('prints the distance to the pivot as every screen does: 「+0.1%未満」 a cent over it, 「−0.1%未満」 a cent under, 「±0.0%」 at its cents (round 3 C5)', () => {
+    // The latest close on whole cents (81.23, inside its bar's range), so a pivot a cent away is off its cents.
+    const list = bars();
+    list[list.length - 1] = { ...list.at(-1), close: 81.23 };
+    const pivotItem = () => [...screen.getByRole('group', { name: '最新の足の値' }).querySelectorAll('.ro-item')].find(node => node.textContent.startsWith('対ピボット'));
+    for (const [pivot, text] of [[81.22, '+0.1%未満'], [81.24, '−0.1%未満'], [81.23000000000002, '±0.0%'], [81.22999999999999, '±0.0%']]) {
+      render(<StockView data={{ ...data(true), bars: list, view: { ...view, pivot, upper: pivot * 1.05 } }} />);
+      expect(pivotItem()).toHaveTextContent(`対ピボット${pivotDistanceText({ price: 81.23, pivot, distance: (81.23 / pivot - 1) * 100 })}`);
+      expect(pivotItem()).toHaveTextContent(`対ピボット${text}`);
+      expect(pivotItem().textContent).not.toMatch(/[+−]0\.0%$/);
+      cleanup();
+    }
+    // Bars not certified for the analysis date: no distance to the pivot at all.
+    render(<StockView data={{ ...data(false), bars: list, view: { ...view, pivot: 81.22, upper: 85 } }} />);
+    expect(pivotItem()).toBeUndefined();
   });
 
   it('names the contraction marks only when they are drawn, shortly on a phone, with ▼▲ explained in the 注記', () => {
