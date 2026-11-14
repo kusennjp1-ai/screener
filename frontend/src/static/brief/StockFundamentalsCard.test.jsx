@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
 import FundamentalsCard, { EPS_NOTE } from './StockFundamentalsCard';
-import { EARNINGS_CHIP_NOTE, NO_REVENUE_CONCEPT, Q4_DERIVED_SOURCE_NOTE, secStatus } from '../fundamentalsExplain.js';
+import { EARNINGS_CHIP_NOTE, NO_REVENUE_CONCEPT, Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, Q4_DERIVED_SOURCE_NOTE, secStatus } from '../fundamentalsExplain.js';
 import { bookFinancialCurrent } from '../bookFinancialCurrent';
 import { financialHistory } from '../financialHistory';
 import { code33Layered } from '../code33Reference';
@@ -393,5 +393,98 @@ describe('round-2 card copy (plan DT1-DT4, DT7, DT10)', () => {
     const wide = show(financial(secRecord({ symbol: 'AAA', asOfDate: DATE })), true);
     expect(wide).toHaveTextContent(/^.*EPS は報告値（希薄化）/);
     expect(wide).not.toHaveTextContent('業績チップ');
+  });
+});
+
+// Round 3 D4: every quote of a derived fiscal Q4 on the card says 「Q4算出」 (the one term), and the source line keys the
+// axis's short 「算出」 on a phone whenever a quarter is derived, even when no tile is (ZZQF's shape).
+describe('round-3 D4: a derived fiscal Q4 is marked Q4算出 wherever it is quoted', () => {
+  const DATE = '2026-11-04', now = Date.parse('2026-11-04T12:00:00Z');
+  const financial = book_financials => {
+    const row = { symbol: 'AAA', market: 'US', as_of_date: DATE, book_financials };
+    const book = bookFinancialCurrent(book_financials, 'AAA', DATE, now, row);
+    const report = book?.current ? book.report : null;
+    return { report, sec: secStatus(row, book), history: null, historyRetrievedAt: null, code33: code33Layered(report, null, DATE) };
+  };
+  const show = (value, wide = false) => { render(<FundamentalsCard financial={value} wide={wide} />); return screen.getByTestId('brief-fundamentals'); };
+  const derive = point => Object.assign(point, { form: '10-K', derived: 'fiscal-year-minus-three-quarters', components: ['fy', 'q1', 'q2', 'q3'] });
+  const deriveAt = (record, ends) => { for (const key of ['revenue', 'netIncome']) for (const end of ends) derive(record.quarterly[key].find(p => p.end === end)); return record; };
+  const tileNote = (node, label) => [...node.querySelectorAll('.brief-fact')].find(tile => tile.querySelector('small').textContent === label).querySelector('em');
+  const settled = node => [...node.querySelectorAll('.brief-code33 p')].map(p => p.textContent).find(text => text.startsWith('未達の根拠：'));
+  // ZZQF's shape: a June fiscal year whose September 10-Q is filed, Q4 EPS untagged, the June Q4s derived inside the window.
+  const QF = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+    ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30'], ['2026-07-01', '2026-09-30']];
+  const zzqf = () => {
+    const value = secRecord({ symbol: 'AAA', asOfDate: DATE, quarters: QF, eps: [1, 1, 1, 1.05, 1.1, 1.3, 1.4, 1.8, 1.9], revenue: [80, 85, 90, 95, 100, 110, 122, 136, 150], netIncome: [8, 9, 10, 11, 12, 14, 16, 19, 23] });
+    value.quarterly.eps = value.quarterly.eps.filter(p => !p.end.endsWith('06-30'));
+    value.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4.05, { form: '10-K' }), secPoint('eps', ['2025-07-01', '2026-06-30'], 5.6, { form: '10-K' })];
+    return deriveAt(value, ['2025-06-30', '2026-06-30']);
+  };
+  // Eight quarters to 2026-06 (a June fiscal year), each test deriving its own quarters.
+  const EIGHT = QF.slice(0, 8);
+  const year = (options = {}) => secRecord({ symbol: 'AAA', asOfDate: DATE, quarters: EIGHT, ...options });
+
+  it('keys the axis 算出 on a phone from the source line when a quarter is derived but no tile is (ZZQF), and marks the 前期 it quotes', () => {
+    const node = show(financial(zzqf()));
+    expect([...node.querySelectorAll('.brief-q-axis > span > i')].map(cell => cell.textContent)).toEqual(['', '', '算出', '', '', '', '算出', '']);
+    expect(node.querySelector('.brief-fin-source').textContent).toBe(`出典：SEC XBRL（10-Q 2026-10-30 提出）・2026-09期まで${Q4_DERIVED_SOURCE_NOTE}`);
+    // The sales tile quotes the June quarter as 前期: its rate rests on a derived Q4, so it says so; the mark never breaks.
+    expect(tileNote(node, '売上 前年比').textContent).toBe(`2026-09期・前期 +43%${Q4_DERIVED_MARK}`);
+    expect(tileNote(node, '売上 前年比').querySelector('.brief-q4-mark').textContent).toBe(Q4_DERIVED_MARK);
+    // EPS is never derived: its 前期 is the reason, never a mark; the margin tile names its own quarter only.
+    expect(tileNote(node, 'EPS 前年比').textContent).toBe('2026-09期・前期 Q4のEPSは年次報告のみ');
+    expect(tileNote(node, '純利益率').textContent).toBe('2026-09期');
+    // The phone legend stays on its one line, with no derivation item (the source line keys 算出).
+    expect([...node.querySelectorAll('.brief-q-legend span')].map(span => span.textContent)).toEqual(['EPS', '売上', '前年比%・下段は純利益率%', '値なし']);
+  });
+
+  it('on the desktop keys 算出 with the legend item and the card note in place, so a derived row alone adds no source note', () => {
+    const node = show(financial(zzqf()), true);
+    expect(Q4_DERIVED_LEGEND).toBe('算出＝Q4算出（10-K年度値−3四半期）');
+    expect([...node.querySelectorAll('.brief-q-legend span')].map(span => span.textContent)).toContain(Q4_DERIVED_LEGEND);
+    expect(node).toHaveTextContent('「Q4算出」と表示します');
+    expect(node.querySelector('.brief-fin-source').textContent).toBe('出典：SEC XBRL（10-Q 2026-10-30 提出）・2026-09期まで');
+    expect(tileNote(node, '売上 前年比').textContent).toBe(`2026-09期・前期 +43%${Q4_DERIVED_MARK}`);
+    cleanup();
+    // A tile that rests on a derived Q4 keeps the source note at every width (ZZNV's case).
+    const tile = show(financial(deriveAt(year(), ['2025-06-30', '2026-06-30'])), true);
+    expect(tile.querySelector('.brief-fin-source').textContent.endsWith(Q4_DERIVED_SOURCE_NOTE)).toBe(true);
+    expect(tileNote(tile, '売上 前年比').textContent).toBe('2026-06期・前期 +60%・前年同期はQ4算出');
+    cleanup();
+    // No derived quarter: no note, no legend item, no mark on either layout.
+    for (const wide of [false, true]) {
+      const plain = show(financial(year()), wide);
+      expect(plain.querySelector('.brief-fin-source').textContent).toBe('出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで');
+      expect(plain.querySelector('.brief-q4-mark')).toBeNull();
+      expect([...plain.querySelectorAll('.brief-q-legend span')].map(span => span.textContent)).not.toContain(Q4_DERIVED_LEGEND);
+      cleanup();
+    }
+  });
+
+  it('marks each quarter of a 未達 sentence whose rate rests on a derived Q4: sales and margin, never EPS', () => {
+    // EPS +40 → +30, sales +60 → +30 and margin 12.0% → 10.0% all fall in the June quarter, whose sales and net income are derived.
+    const all = deriveAt(year({ eps: [1, 1, 1, 1, 1.1, 1.2, 1.4, 1.3], revenue: [100, 100, 100, 100, 110, 130, 160, 130], netIncome: [10, 10, 10, 10, 11, 14.3, 19.2, 13] }), ['2026-06-30']);
+    let node = show(financial(all));
+    expect(settled(node)).toBe(`未達の根拠：EPS 前年比が2026-03期 +40% → 2026-06期 +30%と伸びが鈍化しています。売上 前年比が2026-03期 +60% → 2026-06期 +30%${Q4_DERIVED_MARK}と伸びが鈍化しています。`
+      + `純利益率が2026-03期 12.0% → 2026-06期 10.0%${Q4_DERIVED_MARK}と下がっています。`);
+    expect(node.querySelectorAll('.brief-code33 .brief-q4-mark')).toHaveLength(2);
+    cleanup();
+    // Only the year-ago base of the June sales rate is derived: the rate still rests on it (salesBaseDerived); the margin does not.
+    const falling = { revenue: [100, 100, 100, 100, 110, 130, 160, 130] };
+    node = show(financial(deriveAt(year(falling), ['2025-06-30'])));
+    expect(settled(node)).toBe(`未達の根拠：売上 前年比が2026-03期 +60% → 2026-06期 +30%${Q4_DERIVED_MARK}と伸びが鈍化しています。`);
+    cleanup();
+    // The earlier quarter of the pair is the derived one: the mark follows its value.
+    node = show(financial(deriveAt(year(falling), ['2026-03-31'])));
+    expect(settled(node)).toBe(`未達の根拠：売上 前年比が2026-03期 +60%${Q4_DERIVED_MARK} → 2026-06期 +30%と伸びが鈍化しています。`);
+    cleanup();
+    // Neither quarter rests on a derived Q4: no mark.
+    node = show(financial(year(falling)));
+    expect(settled(node)).toBe('未達の根拠：売上 前年比が2026-03期 +60% → 2026-06期 +30%と伸びが鈍化しています。');
+    expect(node.querySelector('.brief-q4-mark')).toBeNull();
+    cleanup();
+    // A loss quarter is said as a fact, and EPS is never marked even beside a derived quarter.
+    node = show(financial(deriveAt(year({ eps: [1, 1, 1, 1, 1.1, 1.2, 1.4, -12] }), ['2026-06-30'])));
+    expect(settled(node)).toBe('未達の根拠：EPS 前年比が2026-03期 +40% → 2026-06期は赤字（EPS −12.00）です。');
   });
 });

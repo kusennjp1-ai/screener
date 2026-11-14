@@ -1,7 +1,7 @@
 // The seams C owns and other tracks call: the conclusion's Code 33 chip (D) and the published SEC
 // coverage block that useStockData (E) hands to secStatus; and secStatus's wording for each coverage state.
 import { describe, expect, it } from 'vitest';
-import { buildSecSummary, chipQuarter, code33ChipView, code33Explain, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_NOTE, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalTiles, meetsEarningsChipPercent, publishedFundamentalsCoverage, quarterReason, secRowChip, secStatus, secSummary, secSummaryCurrent, wholePercent } from './fundamentalsExplain.js';
+import { buildSecSummary, chipQuarter, code33ChipView, code33Explain, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_NOTE, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalsSource, fundamentalTiles, meetsEarningsChipPercent, publishedFundamentalsCoverage, Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, Q4_DERIVED_SOURCE_NOTE, q4DerivedRate, q4DerivedSourceNote, quarterReason, secRowChip, secStatus, secSummary, secSummaryCurrent, wholePercent } from './fundamentalsExplain.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
 import { bookFinancialEvidence } from './bookFinancialEvidence.js';
 import { code33Layered } from './code33Reference.js';
@@ -433,5 +433,61 @@ describe('round-2 reasons: the cause of an unusable record, a fiscal Q4 without 
     expect(margin).toMatchObject({ value: null, short: '対象外', note: '売上の科目なし', title: '売上の科目が対象外（銀行・保険などの収益科目）' });
     expect(quarterReason(report.rows.at(-1), 'sales')).toBe('売上の科目が対象外（銀行・保険などの収益科目）');
     for (const tile of [sales, margin]) expect(`${tile.short}${tile.note}`).not.toContain('未報告');
+  });
+});
+
+// Round 3 D4: 「Q4算出」 is the one term for a derived fiscal Q4 (sales and net income are the 10-K's year minus three quarters).
+describe('round-3 D4: the Q4算出 producers', () => {
+  const row = (end, extra = {}) => ({ end, epsYoY: 20, salesYoY: 30, margin: 10, derived: false, salesDerived: false, salesBaseDerived: false, ...extra });
+
+  it('names the derivation with one term, its minus sign U+2212', () => {
+    expect(Q4_DERIVED_MARK).toBe('（Q4算出）');
+    expect(Q4_DERIVED_SOURCE_NOTE).toBe('・Q4算出：売上/純利益のQ4は10-K年度値\u22123四半期');
+    expect(Q4_DERIVED_LEGEND).toBe('算出＝Q4算出（10-K年度値\u22123四半期）');
+    for (const text of [Q4_DERIVED_SOURCE_NOTE, Q4_DERIVED_LEGEND]) expect(text).not.toMatch(/-3/);
+  });
+
+  it('q4DerivedRate: a sales rate on a derived quarter or base, a margin on a derived quarter, never EPS', () => {
+    expect(q4DerivedRate(row('2026-06-30', { salesDerived: true, derived: true }), 'sales')).toBe(true);
+    // Only the year-ago base is derived: the rate still rests on it, while the margin (its own quarter only) does not.
+    const base = row('2026-06-30', { salesBaseDerived: true });
+    expect(q4DerivedRate(base, 'sales')).toBe(true);
+    expect(q4DerivedRate(base, 'margin')).toBe(false);
+    // Net income alone derived (a bank has no revenue): the margin rests on it, the sales rate does not.
+    const income = row('2026-06-30', { derived: true, salesDerived: false });
+    expect(q4DerivedRate(income, 'margin')).toBe(true);
+    expect(q4DerivedRate(income, 'sales')).toBe(false);
+    for (const value of [row('2026-06-30', { derived: true, salesDerived: true, salesBaseDerived: true }), row('2026-03-31')]) expect(q4DerivedRate(value, 'eps')).toBe(false);
+    expect(q4DerivedRate(row('2026-03-31'), 'sales')).toBe(false);
+    expect(q4DerivedRate(null, 'sales')).toBe(false);
+    // A row without salesDerived (built before it existed) reads the row's own flag, as the tile does.
+    expect(q4DerivedRate({ end: '2026-06-30', derived: true }, 'sales')).toBe(true);
+  });
+
+  it('q4DerivedSourceNote: the note when a quarter or a tile is derived, nothing otherwise; fundamentalsSource itself is unchanged', () => {
+    const tiles = [{ derived: false }, { derived: false }, { derived: false }];
+    expect(q4DerivedSourceNote([row('2026-06-30', { derived: true }), row('2026-09-30')], tiles)).toBe(Q4_DERIVED_SOURCE_NOTE);
+    expect(q4DerivedSourceNote([], [{ derived: false }, { derived: true }])).toBe(Q4_DERIVED_SOURCE_NOTE);
+    expect(q4DerivedSourceNote([row('2026-03-31'), row('2026-06-30')], tiles)).toBe('');
+    expect(q4DerivedSourceNote(null)).toBe('');
+    const report = { rows: [row('2026-06-30', { derived: true, form: '10-K', filed: '2026-08-09' })] };
+    expect(fundamentalsSource(report)).toBe('出典：SEC XBRL（10-K 2026-08-09 提出）・2026-06期まで');
+  });
+
+  it('the sales tile marks a 前期 whose rate rests on a derived Q4 and keeps its own note and flag as they were', () => {
+    // ZZQF: the newest quarter (2026-09) is reported; the one before (2026-06) is a derived Q4.
+    const zzqf = { rows: [row('2026-03-31', { salesYoY: 35 }), row('2026-06-30', { salesYoY: 43.2, derived: true, salesDerived: true, epsYoY: null, epsYoYReason: 'not_reported', fiscalQ4: true }), row('2026-09-30', { salesYoY: 50 })] };
+    const [eps, sales, margin] = fundamentalTiles(zzqf);
+    expect(sales).toMatchObject({ value: '+50%', note: `2026-09期・前期 +43%${Q4_DERIVED_MARK}`, derived: false });
+    expect(eps.note).toBe('2026-09期・前期 Q4のEPSは年次報告のみ');
+    expect(margin).toMatchObject({ note: '2026-09期', derived: false });
+    // Only the base of the previous quarter's rate is derived: still marked.
+    expect(fundamentalTiles({ rows: [row('2026-06-30', { salesBaseDerived: true }), row('2026-09-30')] })[1].note).toBe(`2026-09期・前期 +30%${Q4_DERIVED_MARK}`);
+    // ZZNV: the tile's own quarter and its base are derived, the one before is not: the note is unchanged.
+    const zznv = { rows: [row('2026-03-31', { salesYoY: 60 }), row('2026-06-30', { salesYoY: 100, derived: true, salesDerived: true, salesBaseDerived: true })] };
+    expect(fundamentalTiles(zznv)[1]).toMatchObject({ note: '2026-06期・前期 +60%・前年同期はQ4算出', derived: true });
+    // No derived quarter: no mark; a previous quarter without a rate gives its reason, never a mark.
+    expect(fundamentalTiles({ rows: [row('2026-06-30'), row('2026-09-30')] })[1].note).toBe('2026-09期・前期 +30%');
+    expect(fundamentalTiles({ rows: [row('2026-06-30', { salesYoY: null, salesYoYReason: 'no_base', salesDerived: true }), row('2026-09-30')] })[1].note).toBe('2026-09期・前期 前年同期の値なし');
   });
 });
