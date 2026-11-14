@@ -193,3 +193,138 @@ None for C2.
 - StockView.jsx already passes `bars`, `interval` and `period` to `chartNotes`.
 - No test outside CHART's files failed.
 - The H5 baselines that hold a 週足 screen change as stated above: the probe, the oracle probe, and the dump's ZZNV 週足 screens. Integration's re-baseline should expect it.
+
+## C3 (package CH-2): the 安値 price stays in the legend at 320
+
+**Commit measured:** f4b1e404 `feat(frontend): keep the last contraction's low price in the phone legend` (code and tests).
+- The package's later commits leave the source as f4b1e404 left it. 5437727b (C5) and 02d820e1 (its revert) cancel out: `git diff --name-only f4b1e40 02d820e1` is empty. 0fa62fd6 adds one spec test: `git diff --name-only f4b1e40 HEAD` lists only `frontend/tests/static/brief-chart.spec.js`, which the probe does not run.
+- So `probe-f4b1e40*.json` are the probes of this package's code. They are kept for CH-4.
+
+### What changed
+
+**`chartReadout.js`** (entry chunk)
+- New exported `structuralLowLegend(value)`. It gives the legend's texts for the last contraction's low, longest first, each with the price `formatPrice` prints: `[['long', '最後の収縮の安値 xx'], ['short', '収縮の安値 xx'], ['tag', '安値 xx']]`. It gives null when the low is unknown, never a price of 0 or —.
+
+**`StockChartCard.jsx`** (entry chunk)
+- `legendItems`: the 'low' item keeps rank 1 (the first foldable item) and stays foldable.
+  - Below 1024px it holds the three texts as `span.lg-form.lg-form-{long,short,tag}`.
+  - At 1024px and wider it holds the full text only, as before (same DOM).
+- `useTwoLineLegend`'s `fold()` places the items exactly as before with the full text. If the low ends hidden, it runs the whole placement again with 「収縮の安値 xx」 (`data-fit="short"`), and then with 「安値 xx」 (`data-fit="tag"`). If no text stays shown, it runs the full-text pass once more, so the legend is then exactly today's. The forms are `LOW_FALLBACK_FORMS`.
+- The price is the same `formatPrice` value in every form.
+
+**`brief-chart.css`**
+- `.lg-form` is hidden by default. The item shows the full text without `data-fit`, and otherwise the form `data-fit` names.
+
+**Unchanged**
+- `priceChart.js`, `chartLabels.js` and so the SVG (byte-identical, below).
+- The 注記: chartNotes keeps 「「安値」＝最後の収縮の安値 xx」.
+- The legend at 1024px and wider, and the card height at every width.
+- The legend is `aria-hidden`, so screen readers are unaffected. Its `textContent` now holds the three texts below 1024px. The readers outside CHART's files were checked (grep of `brief-legend`, `lg-structural`, `最後の収縮の安値` and `収縮の安値` over `frontend/tests`, `frontend/tools` and `frontend/src`):
+  - `brief-compact.spec.js` and `tools/design-review.mjs` match `.brief-legend` by 「10週線」 only.
+  - The H5 probe and dump read displayed text only (`getClientRects`, `innerText`).
+  - None of them reads the low's text.
+
+### Correction to the plan: the item stays foldable
+
+The plan says to make 'low' unfoldable. That is unsafe:
+- `useTwoLineLegend` places an unfoldable item that fits neither line on line 2 anyway, and the browser wraps a third line.
+- Its trailing guard folds foldable items only, so it cannot take that line back.
+- This breaks the plan's own gate (a 34px legend, the card height unchanged). It is likeliest beside the kept 「ピボット」/「損切り」 names and the long RS item.
+
+Keeping it first among the foldable items, with measured shorter texts, gives the same result wherever a text fits, and it can never add a line.
+
+### The fallback ladder, measured
+
+The measurement is on the base code (24f1210), with a scratch spec (`audit3/r3-chart/measure/legend-measure.spec.js`, CI-faithful, port 4424) at 320×640, 375×812 and 390×844 over the default and oracle stocks and every period. `audit3/r3-chart/ladder-summary.mjs` reads it.
+- The texts' widths, swatch included: full 142.375px, short 106.375px, 「安値 xx」 70.375px (prices 68.16 and 67.96; tabular figures).
+- "Free" is the room left on the better line after the items that must stay. It uses the fold's own rule: `room + 0.5 − used − gap`.
+
+| Width | Set | Views with the low item | Full text already shown | Needs a shorter text |
+|---|---|---|---|---|
+| 320 (room 262, gap 8) | default | 116 of 120 | 116 | 0 |
+| 320 | oracles | 28 of 32 | 20 (ZZRD among them) | 8: ZZRL, ZZRW (their RS item) |
+| 375 (room 317) | default | 116 of 120 | 116 | 0 |
+| 375 | oracles | 28 of 32 | 26 | 2: ZZRL, ZZRW 週足 |
+| 390 | both | 144 of 152 | 144 | 0 |
+
+**Per view** (rung = the text shown after C3):
+
+| View | Free | Full | 「収縮の安値 xx」 | 「安値 xx」 | Rung |
+|---|---|---|---|---|---|
+| ZZRL, ZZRW 3m/6m/1y at 320 (6 views) | 119.42 | 22.95 over | fits (13.05 spare) | fits | (2) 「収縮の安値 xx」 |
+| ZZRL, ZZRW 週足 at 320 (2 views) | 87.42 | 54.95 over | **18.95 over** | fits (17.05 spare) | (3) 「安値 xx」 |
+| ZZRL, ZZRW 週足 at 375 (2 views) | 142.42 | see below | fits | fits | (2) 「収縮の安値 xx」 |
+
+- At 320 the daily periods' must-stay items are the averages' item (135.08px, line 1) and the RS line's meaning (231.42px, line 2). On 週足 the averages are three items (3 × 50.36 + 2 gaps = 167.08px).
+- **Rung (3) is a disclosed deviation** (the order's step 3). At 320 週足 beside the RS item, 「収縮の安値 xx」 is 18.95px too wide for either line in both views. The tag's own name 「安値」 (the plot's tag reads 「安値」) fits there.
+- **375 週足 is a fractional-pixel case** that the base already got wrong:
+  - The full text passed the fold's +0.5 tolerance (167.08 + 8 + 142.375 = 317.45px against a 317px line), and the browser wrapped a third line.
+  - The trailing guard then folded 「枠＝収縮」 and the low. The base state shows this: both hidden with their `order` set, and only the guard hides an item after placing it.
+  - With C3 the full-text pass ends with the low hidden, so the short pass runs. 「収縮の安値 xx」 goes on line 1 and 「枠＝収縮」 fits line 2 again (231.42 + 8 + 48 = 287.42px).
+  - So here the low's text brings another item back instead of folding one. The order's expected list did not name this case.
+- Rung (4) (nothing fits, the item stays hidden) is reached in no fixture view.
+
+### Gate (rule 16): expected diff against CH-1's probe, 実測
+
+**Commands** (port 4424):
+
+```
+$H/probe/run-probe.sh <worktree> 4424            # → probe-f4b1e40.json          sha256 1127e3b8…bc62342
+$H/probe/run-probe.sh <worktree> 4424 oracles    # → probe-f4b1e40-oracles.json  sha256 d2e88172…63d2a3
+node $H/probe/diff.mjs $H/probe/probe-24f1210-oracles.json $H/probe/probe-f4b1e40-oracles.json --texts
+```
+
+**Result: the gate is green.**
+- **Default probe** (492 label views + 480 value views): the sha256 equals probe-24f1210.json's (1127e3b8…bc62342). Every view is byte-identical, because the full text already showed wherever the item exists.
+- **Oracle probe:** 20 of 264 views differ (0 → 0 page errors), and every one differs in `html` only. Unchanged in all 264 views: the SVG texts, boxes, masks, leaders, solids, aria, the chart and SVG boxes, and the card height.
+
+| Width | Label views | Value views | The card text |
+|---|---|---|---|
+| 320 | 8: ZZRL, ZZRW × 3m/6m/1y/週足 | 8 | daily: +「収縮の安値 68.16」 (ZZRL) / +「収縮の安値 67.96」 (ZZRW), −「枠＝収縮」; 週足: +「安値 68.16」 / +「安値 67.96」, −「枠＝収縮」 |
+| 375 | 2: ZZRL, ZZRW 週足 | 2 | +「収縮の安値 68.16」 / +「収縮の安値 67.96」, and +「枠＝収縮」 |
+| 390 | 0 | 0 | — |
+| 1440 | 0 | 0 | — |
+
+- **Folded in the low's place:** only 「枠＝収縮」 (rank 6), in the 8 views at 320. The 注記 explains it: chartNotes keeps 「点線＝収縮の安値を結んだ線、枠＝値幅の収縮」. No other legend item changed state in any view.
+- **Probe files:**
+  - CH-1's `probe-24f1210.json` and `probe-24f1210-oracles.json` were deleted once this diff was recorded. Their sha256 stubs are in `audit3/r3-chart/`.
+  - The probes of the reverted C5 commit (`probe-5437727*.json`) were deleted too.
+- **Load:** the probe ran at 1-min load 4.80 → 7.93 → 7.55. The probe is not a timing.
+
+## C5 (package CH-2): held. Implemented, measured, reverted
+
+**Commits:**
+- 5437727b `fix(frontend): print the readout's 対ピボット by the pivot-distance rule` implemented the order as written:
+  - `chartReadout()` gained `pivotText = pivotDistanceText({ price: bar.close, pivot, distance: pivotRatio })`. `briefCandidate.js` was imported and not edited.
+  - The Readout printed `readout.pivotText`.
+  - It had tests at 1 cent over and under, at the pivot's cents with float noise, ordinary distances, and `formatPercent` ≡ `positionGeometry.signed` over a range.
+- 02d820e1 reverts it, because the probe gate showed a card height change.
+- 0fa62fd6 pins the case in brief-chart.spec.js.
+
+**What the probe showed** (5437727 against f4b1e40, the same commands as above):
+- **Default probe:** the sha256 is unchanged (1127e3b8…). No default fixture stock closes within 0.1% of its pivot off its cents. ZZNV and ZZKS print 「±0.0%」 at the cents, before and after.
+- **Oracle probe:** 32 of 264 views differ, all ZZPG: 4 periods × 4 widths × labels and values. The text changes from 「+0.0%」 to 「+0.1%未満」.
+  - At 320, 390 and 1440 that text is the only change (`html`).
+  - **At 375 the card grows 508 → 524 on every period.** The chart and SVG boxes and every SVG text's screen position move down 16.00px. The SVG-internal texts are identical (`audit3/r3-chart/c5-375-detail.txt`).
+  - 524 is past the spec's 520px cap (`CARD_CAP`), and the order says the card height must not change at any width.
+
+**Why: the readout's second line has less spare room than 「未満」 needs**
+- The in-band text is 24.00px wider than 「+0.0%」: 「未満」 measured in the readout's 12px font, and the figures are tabular. That is added to the second line (出来高 and its ratio | 対ピボット | 高値から), which wraps to a new 16px row when its slack is under 24px.
+- The slack was measured with a scratch spec (`audit3/r3-chart/measure/readout-measure.spec.js`, on 5437727). Only ZZPG's text differs from the base there, so ZZPG's base slack is its measured slack + 24.
+
+| Width | Second line's slack in the base, fixture views | With 「+0.1%未満」 |
+|---|---|---|
+| 320 | already 2 rows (−31.78 to −38.45) | ZZPG still 2 rows, card 476 unchanged |
+| 375 | 16.55–23.64px (default 30 stocks: 16.55 min, 16.55 median, 23.64 max; oracles 16.55–23.22; ZZPG 21.87) | **every fixture stock would wrap: 0.36–7.45px short.** ZZPG wraps (2.13px short) and the card becomes 524 |
+| 390 | 31.55–38.64px (ZZPG 36.88) | fits in every fixture view (≥ 7.55px spare) |
+| 1440 | one line | fits |
+
+So the order's text and "the card height at any width" cannot both hold. At 375, any stock whose close sits within 0.05% of its pivot and off its cents would take a fourth readout row. The fixtures have only ZZPG. The rebuild's PCRX, PFIS, TECH and LNTH are in the band (plan p4-6), so their 375 readouts would grow too (未検証 on real data).
+
+**The decision is the conductor's.** Each option needs something this order does not grant:
+1. **A narrower label in the band, below 1024px:** 「ピボット」 with the 「対」 kept for screen readers. This follows the same line's 「高値から」 with 「52週」 for screen readers. It saves about 12px (one character of the 12px font; not measured, while 「未満」 measured 24.00px for two), so the in-band item adds about 12px: on the measured slack it fits every fixture view at 375 (≥ 4.55px spare). This is a copy change in CHART's file.
+2. **A narrower in-band text from the producer** (e.g. 「+<0.1%」). It needs `pivotDistanceText` in `briefCandidate.js` changed, which is not CHART's file and is shared with the rows.
+3. **Accept +16px at 375 for in-band closes only.** It needs the "card height unchanged" rule waived and the spec's 520 cap raised.
+
+- C5's code is ready: `git revert 02d820e1` re-applies 5437727b. Any option keeps 「±0.0%」 only at the cents and never prints 「+0.0%」/「−0.0%」.
+- 0fa62fd6's spec (ZZPG at 375: the readout keeps 3 rows and the card 508 on every period) goes red on the as-ordered text by design. Under option 3 it is updated on purpose; under options 1 and 2 it stays as it is.
