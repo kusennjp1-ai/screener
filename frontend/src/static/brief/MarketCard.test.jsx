@@ -12,6 +12,8 @@ import { marketTabStudy } from '../reference/marketTabStudy.js';
 import { followThroughDay } from '../followThroughDay';
 import { exposureRuleText } from '../reference/marketTabStudy.js';
 import { num, signedPercent } from './marketTabModel';
+import { followThroughView } from './briefEnvironment';
+import { followThroughDetail } from '../reference/marketTabStudy.js';
 import { indexState } from '../../../tools/export-market-trends.mjs';
 
 /** Today's card, or with `detail` the market tab's (MarketScreen.jsx, the tab's lazy chunk). */
@@ -52,7 +54,10 @@ describe('brief market card: market tab', () => {
     expect(tile('リーダーの健全度')).toHaveTextContent('70%20営業日前のTT達成30銘柄が対象');
     expect(tile('52週の新高値・新安値')).toHaveTextContent('新高値40新安値12');
     const [spx, ndx] = tile('フォロースルーデー（独自判定）').querySelectorAll('.brief-ftd-row');
-    expect(spx).toHaveTextContent('S&P確認 8/7+1.4%・反発4日目・FTD後の有効な分配日2');
+    // The fixture's FTD is 40 sessions old: the producer's words (M2: 「前回のFTD 8/7」, the count first in the em line).
+    const own = followThroughView(confirmed('2026-10-02'), '2026-10-02');
+    expect(spx).toHaveTextContent(`S&P${own.b}${own.em}`);
+    expect(spx).toHaveTextContent('S&P前回のFTD 8/740日前・+1.4%・反発4日目・FTD後の有効な分配日2');
     expect(ndx).toHaveTextContent('NAS反発3日目安値9/29・4日目以降の+1.2%上昇待ち');
     expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日');
     for (const element of tiles()) {
@@ -129,7 +134,10 @@ describe('brief market card: market tab', () => {
     expect(screen.getByText('判定の根拠はスキャン時点のSPY、この数値は長期履歴の^GSPC終値（10/2）です。50日線・200日線との位置が一致していません。')).toBeInTheDocument();
     // A confirmed FTD whose record carries no ftd event has no rally-low date: the ◆ only, no ○.
     // 260 closes: the 200-day line starts inside the 130-session window, so the label names its first day.
-    expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（\d+\/\d+〜）（2026-05-26〜2026-10-02）。有効な分配日 0日。FTD 8\/7。目盛り 5,482〜5,801$/ })).toBeInTheDocument();
+    // The FTD is 40 sessions old (FTD_RECENT_SESSIONS 25): its ◆ stays and reads 「前回のFTD」 (M2).
+    expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（\d+\/\d+〜）（2026-05-26〜2026-10-02）。有効な分配日 0日。前回のFTD 8\/7。目盛り 5,482〜5,801$/ })).toBeInTheDocument();
+    expect(document.querySelector('.brief-index-mark.is-ftd')).toHaveTextContent('◆前回のFTD 8/7');
+    expect(document.querySelector('.brief-index-legend .is-ftd')).toHaveTextContent('◆ 前回のFTD');
   });
 
   it('shows one section at a time behind phone tabs that carry each group\'s ▲ count and move by arrow keys', () => {
@@ -216,7 +224,7 @@ describe('brief market card: market tab', () => {
     for (const name of ['指数のトレンド', '市場の参加度', 'リーダーの健全性']) expect(screen.getByRole('group', { name: `${name} 10/1時点の値` })).toBeInTheDocument();
     expect(document.querySelector('.brief-fact-asof')).toBeNull();
     expect(signals()).toHaveTextContent('注意サインなし（10/1時点・独自判定）');
-    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('確認 8/7');
+    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent(followThroughView(confirmed('2026-10-01'), '2026-10-02').b);
     expect(screen.getByRole('img', { name: /ステージ構成 .*（10\/1時点）$/ })).toBeInTheDocument();
   });
 
@@ -297,7 +305,7 @@ describe('brief market card: market tab', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/^長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: 取得日時）。分配日・フォロースルーデーは指数データから表示しています。$/);
     expect(screen.getByText('指数の履歴は長期集計の整合性を確認できないため表示しません。')).toBeInTheDocument();
     expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日');
-    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('確認 8/7');
+    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent(followThroughView(confirmed('2026-10-02'), '2026-10-02').b);
     expect(group('市場の参加度')).toHaveTextContent('長期集計の整合性を確認できないため表示しません。');
     expect(signals()).toHaveTextContent(/^注意サインなし（独自判定）長期集計がないため、分配日とFTDだけを判定しています。$/);
   });
@@ -588,6 +596,20 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線/ })).toHaveAttribute('aria-label', expect.stringContaining(`FTD ${md(dates[83])}、反発の安値 ${md(dates[79])}`));
     const low = document.querySelector('.brief-index-mark.is-low'), x = i => 4 + i * 592 / 119;
     expect(low.style.left).toBe(`${(100 * x(79) / 600).toFixed(2)}%`);
+  });
+
+  it('keeps 「FTD」 on the ◆ of an FTD within FTD_RECENT_SESSIONS, and opens the row to its rule, the cited rises and 過去の傾向 (M2)', () => {
+    const recent = { ...confirmed('2026-10-02'), ftd: { ...confirmed('2026-10-02').ftd, sessionsSince: 25 } };
+    show(trends({ sp500: closes('2026-10-02', 300), follow: [recent, attempt('2026-10-02')] }));
+    expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線/ }).getAttribute('aria-label')).toMatch(/。FTD 8\/7。目盛り/);
+    expect(document.querySelector('.brief-index-mark.is-ftd')).toHaveTextContent('◆FTD 8/7');
+    expect(document.querySelector('.brief-index-legend .is-ftd')).toHaveTextContent('◆ FTD');
+    const row = tile('フォロースルーデー（独自判定）');
+    expect(row.querySelector('.brief-ftd-row')).toHaveTextContent(`S&P確認 8/725日前・`);
+    fireEvent.click(row.querySelector('.brief-env-toggle'));
+    const lines = [...row.querySelectorAll('.brief-env-detail p')].map(p => p.textContent);
+    expect(lines.slice(0, 4)).toEqual(followThroughDetail().details);
+    expect(lines.at(-1)).toMatch(/^基準/);
   });
 
   it('says a failed FTD failed on its ◆, draws no ○ without the FTD\'s own low, and puts a label near the top under its ◆', () => {

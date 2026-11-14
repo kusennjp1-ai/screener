@@ -7,7 +7,7 @@ import { marketUpdateState } from '../marketUpdateState';
 import { historyTakeaway, sectorRanks } from './marketTabHistory';
 import { marketTabParts } from './marketTabGroups';
 import { gspcFtdWords, marketRegimeContext, marketTabStudy, nasdaqNote, publishedIndexState, publishedMarketContext, regimeCause, regimeKey, signalTagText, REGIME_NAMES, TAG_MEANINGS, TT_POPULATION } from '../reference/marketTabStudy.js';
-import { marketTileSuffix, MARKET_TILE_SUFFIX } from './briefEnvironment';
+import { followThroughView, marketTileSuffix, MARKET_TILE_SUFFIX } from './briefEnvironment';
 import { capText } from '../portfolioPlan';
 import reference from '../reference/market-regime-reference-v1.json' with { type: 'json' };
 import exchange from '../__fixtures__/nyse-sessions-2024-2026.json' with { type: 'json' };
@@ -50,7 +50,9 @@ describe('market tab view model: a complete, current publication', () => {
     expect(item(model, 'stage')).toMatchObject({ b: 'ステージ2 35%', stages: [{ k: 1, name: '底固め', share: 25 }, { k: 2, name: '上昇', share: 35 }, { k: 3, name: '天井圏', share: 20 }, { k: 4, name: '下降', share: 20 }] });
     expect(item(model, 'extremes').rows.map(r => [r.name, r.b, r.warn || false])).toEqual([['新高値', '40', false], ['新安値', '12', false]]);
     expect(item(model, 'dist').rows.map(r => [r.name, r.b, r.asOf])).toEqual([['S&P', '3日', null], ['NAS', '4日', null]]);
-    expect(item(model, 'ftd').rows.map(r => [r.name, r.b])).toEqual([['S&P', '確認 8/7'], ['NAS', '反発3日目']]);
+    // The fixture's FTD is 40 sessions old: the producer's 「前回のFTD 8/7」 (M2).
+    expect(item(model, 'ftd').rows.map(r => [r.name, r.b])).toEqual([['S&P', followThroughView(confirmed('2026-10-02'), '2026-10-02').b], ['NAS', '反発3日目']]);
+    expect(item(model, 'ftd').rows[0]).toMatchObject({ b: '前回のFTD 8/7', previous: true });
     expect(strings(model.groups).join(' ')).not.toMatch(BARE);
   });
 
@@ -566,8 +568,12 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
 
   it('never tones a confirmed FTD as a buy zone (the model the row reads; the card never drew the tone)', () => {
     const ftd = view(trends()).groups[0].items.find(i => i.key === 'ftd');
-    expect(ftd.rows[0]).toMatchObject({ name: 'S&P', b: '確認 8/7' });
+    expect(ftd.rows[0]).toMatchObject({ name: 'S&P', b: followThroughView(confirmed('2026-10-02'), '2026-10-02').b });
     expect(ftd.rows[0].tone).toBeUndefined();
+    // A recent one (within FTD_RECENT_SESSIONS) reads 確認 and is not toned either.
+    const recent = view(trends({ follow: [{ ...confirmed('2026-10-02'), ftd: { ...confirmed('2026-10-02').ftd, sessionsSince: 12 } }, attempt('2026-10-02')] })).groups[0].items.find(i => i.key === 'ftd');
+    expect(recent.rows[0]).toMatchObject({ name: 'S&P', b: '確認 8/7', em: '12日前・+1.4%・反発4日目・FTD後の有効な分配日2', warn: false });
+    expect(recent.rows[0].tone).toBeUndefined();
   });
 });
 
@@ -647,7 +653,9 @@ describe('market tab: the basis line names the regime\'s cause (MK1, MK4)', () =
     expect(verdict(pressure, manifest(block({ distribution_days: 0 }))).cause).toBe(`局面判定の分配日：SPY 0日（ストーリング日を含む数え方）。${READS}`);
     // Where the basis does not name the regime (新規購入を抑制, 50日線割れ, 長期トレンド警戒), the line names it.
     const held = { label: '新規購入を抑制', cap: 0, regime: 'correction', ftdUpgraded: false };
-    expect(verdict(held, manifest(block({ regime: 'correction', distribution_days: 3 }))).cause).toBe('局面判定の分配日：SPY 3日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます');
+    // trends()'s ^GSPC record of the day is a confirmed FTD 40 sessions old: the line says it is the index's own count (M2).
+    expect(verdict(held, manifest(block({ regime: 'correction', distribution_days: 3 }))).cause).toBe('局面判定の分配日：SPY 3日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます。下の^GSPCの前回のFTD（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）');
+    expect(verdict(held, manifest(block({ regime: 'correction', distribution_days: 3 })), gspc(attempt(DATE))).cause).toBe('局面判定の分配日：SPY 3日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます');
     const weak = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'uptrend_under_pressure', ftdUpgraded: false };
     expect(verdict(weak, manifest(block({ distribution_days: null }))).cause).toBe('局面判定の分配日（SPY）は未収録。局面判定は「上昇に圧力」で、分配日のほか50日線・200日線と参加度も見ます');
     // The regime's name is said once: never beside the basis line's own, never as a cause through a colon.

@@ -204,8 +204,25 @@ export function distributionCount(index) {
 // later close can sit lower. The post-FTD count is the distribution days still active (25-session window).
 export const FTD_TEXT = Object.freeze({ minDay: 4, maxDay: 15, gain: '+1.2%', decline: '6%' });
 /**
+ * A confirmed FTD more than this many sessions after its day reads 「前回のFTD」, never as the current one (独自設定, M2): the
+ * study's combo.ftd_recent window (market-regime-reference-v1.json buckets.ftdRecentSessions). Today's chunk never loads
+ * the reference, so the number is a constant here; a test pins it to the reference's.
+ */
+export const FTD_RECENT_SESSIONS = 25;
+/**
+ * The sessions after a confirmed FTD's day (the exporter's ftd.sessionsSince: 0 on the FTD's own session) when the record is
+ * available, confirmed and carries a whole count, else null (an older record without it is never given one).
+ */
+export const ftdSessionsSince = ft => ft?.available === true && ft.state === 'confirmed' && Number.isSafeInteger(ft.ftd?.sessionsSince) && ft.ftd.sessionsSince >= 0 ? ft.ftd.sessionsSince : null;
+/** A confirmed FTD older than FTD_RECENT_SESSIONS (「前回のFTD」): the フォロースルーデー row, its ◆ and the cause line read it alike. */
+export const ftdPrevious = ft => { const n = ftdSessionsSince(ft); return n !== null && n > FTD_RECENT_SESSIONS; };
+/**
  * Compact tile text for one index's follow-through state (this app's own judgement):
  * { b, em, asOf } where asOf is set when the judgement is older than the analysis date.
+ * A confirmed FTD says how many sessions ago it was, first in its em line (「12日前」, 「当日」 on its own session; the opened
+ * row says the days are sessions); one older than FTD_RECENT_SESSIONS reads 「前回のFTD 8/13」 with `previous: true` and no
+ * tone. The count is the sessions after the FTD's day, so it reads 「n日前」 (never 「n日目」). A record without a whole
+ * count keeps 「確認 M/D」 and its em as before.
  * A missing field (older publication) or an unavailable input never becomes a state.
  */
 export function followThroughView(ft, date) {
@@ -221,8 +238,11 @@ export function followThroughView(ft, date) {
   const { ftd, attempt, low, peak } = ft;
   switch (ft.state) {
     // A confirmed FTD is a state, not a green light: no 'zone' tone (the 1990-2026 study found no established edge).
-    case 'confirmed': return { b: isoDay(ftd?.date) ? `確認 ${at(ftd.date)}` : '確認', asOf,
-      em: join([finite(ftd?.gainPct) ? `+${ftd.gainPct.toFixed(1)}%` : null, whole(ftd?.attemptDay) ? `反発${ftd.attemptDay}日目` : null, whole(ftd?.distributionSince) ? `FTD後の有効な分配日${ftd.distributionSince}` : null]) };
+    // The sessions since the FTD lead the em line (「35日前」, 「当日」): in the value they wrap it to a second line on a 320px
+    // phone (measured), so the value keeps 「確認 M/D」 or 「前回のFTD M/D」 and the opened row says the days are sessions.
+    case 'confirmed': return { b: `${ftdPrevious(ft) ? '前回のFTD' : '確認'}${isoDay(ftd?.date) ? ` ${at(ftd.date)}` : ''}`, asOf,
+      ...(ftdPrevious(ft) ? { previous: true } : {}),
+      em: join([(n => n === null ? null : n === 0 ? '当日' : `${n}日前`)(ftdSessionsSince(ft)),finite(ftd?.gainPct) ? `+${ftd.gainPct.toFixed(1)}%` : null, whole(ftd?.attemptDay) ? `反発${ftd.attemptDay}日目` : null, whole(ftd?.distributionSince) ? `FTD後の有効な分配日${ftd.distributionSince}` : null]) };
     case 'rally_attempt': return { b: whole(attempt?.day) ? `反発${attempt.day}日目` : '反発中', asOf,
       em: join([isoDay(low?.date) ? `安値${at(low.date)}` : null, `${FTD_TEXT.minDay}日目以降の${FTD_TEXT.gain}上昇待ち`]) };
     case 'correction': return { b: '調整中', asOf, em: fall ? `高値${isoDay(peak?.date) ? at(peak.date) : ''}から${fall}` : `${FTD_TEXT.decline}以上の下落` };

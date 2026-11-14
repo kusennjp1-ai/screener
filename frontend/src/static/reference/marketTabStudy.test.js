@@ -3,11 +3,11 @@
 // guide's disclosure (that is said once, in exposureRuleText).
 import { describe, expect, it } from 'vitest';
 import reference from './market-regime-reference-v1.json' with { type: 'json' };
-import { distributionDetail, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, regimeCause, signalTagText } from './marketTabStudy.js';
+import { distributionDetail, followThroughDetail, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, regimeCause, signalTagText, FTD_SOURCE_GAINS } from './marketTabStudy.js';
 import { CONTRACT_DATE, marketContext, marketContextUnknown } from '../../test/fixtures/publishedContracts.js';
-import { ddGradeState, stateTag, TAGS } from './marketRegimeReference.js';
+import { ddGradeState, ftdRecent, stateTag, TAGS } from './marketRegimeReference.js';
 import { exposureRuleText } from './marketTabStudy.js';
-import { NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
+import { ftdPrevious, FTD_RECENT_SESSIONS, FTD_TEXT, NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
 import { REFERENCE_CHECKS, verdictBasis } from '../brief/marketTabModel.js';
 import { attempt, confirmed, days, failed, trends } from '../../test/fixtures/marketTrends';
 
@@ -181,5 +181,53 @@ describe('published market context', () => {
       ['an unknown regime', { ...block, regime: 'bull' }], ['a negative count', { ...block, distribution_days: -1 }], ['a count of 0.5', { ...block, distribution_days: 0.5 }], ['a count as text', { ...block, distribution_days: '4' }],
       ['a future FTD', { ...block, ftd_date: '2026-10-05' }], ['an FTD that is not a day', { ...block, ftd_date: '9/18' }], ['an exposure as text', { ...block, exposure_pct: '55' }]]) expect(read(value)).toBeNull();
     expect(read(block, { as_of_date: '2026-10-01' })).toBeNull();
+  });
+});
+
+// ---- Round 3 (M2): the FTD's age, its opened row and the cause line under a correction ---------------------------------
+describe('the FTD\'s age (M2)', () => {
+  const at = (sessionsSince, asOf = DATE) => ({ ...confirmed(asOf), ftd: { ...confirmed(asOf).ftd, sessionsSince } });
+  it('pins FTD_RECENT_SESSIONS (Today\'s chunk never loads the reference) to the study\'s combo.ftd_recent window', () => {
+    expect(FTD_RECENT_SESSIONS).toBe(reference.buckets.ftdRecentSessions);
+    // 前回のFTD is exactly what the study does not count as recent: they agree on both sides of the line.
+    for (const n of [0, 1, 24, 25, 26, 152]) expect([n, ftdPrevious(at(n))]).toEqual([n, !ftdRecent(at(n), reference)]);
+  });
+
+  it('opens the row to the app\'s own rule from FTD_TEXT, the rises by source as a second-hand citation, the failure, 前回のFTD and 過去の傾向', () => {
+    const { details } = followThroughDetail();
+    expect(details).toEqual([
+      `FTDの基準は独自設定（${FTD_TEXT.gain}・${FTD_TEXT.minDay}〜${FTD_TEXT.maxDay}日目・高値から${FTD_TEXT.decline}以上の下落後）。${FTD_SOURCE_GAINS}。`,
+      '失敗の判定はFTD当日の安値を終値で割ったとき（独自・出典より早く出る場合があります）。',
+      `「n日前」はFTDの日からの営業日数で、${FTD_RECENT_SESSIONS}営業日を過ぎた確認は「前回のFTD」と表示します（独自設定）。`,
+      'FTDの状態ごとの過去の傾向は、下の「過去の傾向」を参照。',
+    ]);
+    expect(details[0]).toBe('FTDの基準は独自設定（+1.2%・4〜15日目・高値から6%以上の下落後）。出典ごとの上昇率の目安：1.0%〜1.25%（IBD）、1.7%（William O\'Neil + Co.）（二次資料経由・未確認）。');
+    // No study figure is put on the row: neither index's past share sits beside the other's line.
+    for (const line of details.slice(1)) expect(line).not.toMatch(/\d+(\.\d+)?%/);
+    expect(marketTabStudy({ trends: make(), reference, date: DATE }).followThrough).toEqual({ details });
+    expect(marketTabStudy({ trends: { loading: true }, reference, date: DATE }).followThrough).toBeNull();
+  });
+
+  const block = (regime, over = {}) => ({ as_of_date: DATE, regime, distribution_days: 7, ftd_date: null, ftd_days_since: null, exposure_pct: 0, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows', ...over });
+  const held = regime => ({ label: '新規購入を抑制（独自判定）', cap: 0, regime, ftdUpgraded: false });
+  const cause = (regime, gspc) => regimeCause(held(regime), block(regime), verdictBasis(held(regime), DATE), DATE, { gspc });
+  const LINE = '局面判定の分配日：SPY 7日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます';
+  it('says under a correction that the same day\'s confirmed ^GSPC FTD is the index\'s own count, not withdrawn under a 6% decline', () => {
+    expect(cause('correction', at(12))).toBe(`${LINE}。下の^GSPCのFTD（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
+    expect(cause('downtrend', at(26))).toBe('局面判定の分配日：SPY 7日（ストーリング日を含む数え方）。局面判定は「下降トレンド」で、分配日のほか50日線・200日線と参加度も見ます。下の^GSPCの前回のFTD（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）');
+    // Without the FTD's date the clause leaves the date out, never guessed.
+    expect(cause('correction', { ...at(12), ftd: { sessionsSince: 12 } })).toBe(`${LINE}。下の^GSPCのFTDは指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
+  });
+
+  it('adds nothing for a record of another day, another state, no record, or a regime that is no correction', () => {
+    expect(cause('correction', at(12, '2026-10-01'))).toBe(LINE);
+    for (const ft of [attempt(DATE), failed(DATE), { available: false, method: 'm', reason: 'x' }, null]) expect(cause('correction', ft)).toBe(LINE);
+    const pressure = { label: '上昇に圧力（独自判定）', cap: 0.25, regime: 'uptrend_under_pressure', ftdUpgraded: false };
+    expect(regimeCause(pressure, block('uptrend_under_pressure'), verdictBasis(pressure, DATE), DATE, { gspc: at(12) })).not.toContain('^GSPC');
+    const up = { label: '上昇トレンド（独自判定）', cap: 0.5, regime: 'confirmed_uptrend', ftdUpgraded: false };
+    expect(regimeCause(up, block('confirmed_uptrend'), verdictBasis(up, DATE), DATE, { gspc: at(12) })).toBe('局面判定の分配日：SPY 7日（ストーリング日を含む数え方）');
+    // Through the study: the ^GSPC record of the day comes from the series (gspcFollowThrough).
+    const value = make(), market = held('correction'), manifest = { markets: { US: { as_of_date: DATE, market_context: block('correction') } } };
+    expect(marketTabStudy({ trends: value, reference, date: DATE, market, manifest }).cause).toBe(`${LINE}。下の^GSPCの前回のFTD（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
   });
 });

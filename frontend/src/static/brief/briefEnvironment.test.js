@@ -217,11 +217,39 @@ describe('market tab helpers', () => {
     expect(sentence('長期市場履歴: universe')).toBe('長期市場履歴: universe。');
   });
 
+  it('says how many sessions ago a confirmed FTD was, and 前回のFTD after FTD_RECENT_SESSIONS (M2)', async () => {
+    const { followThroughView, ftdPrevious, ftdSessionsSince, FTD_RECENT_SESSIONS } = await import('./briefEnvironment');
+    const confirmed = (sessionsSince, over = {}) => ({ available: true, method: 'rally-attempt-gain1.2-day4-15-decline6-v1', asOf: '2026-10-02', state: 'confirmed', peak: { date: '2026-07-01', close: 100 }, low: { date: '2026-08-01', low: 90 },
+      declinePct: 9.1, attempt: null, ftd: { date: '2026-09-16', attemptDay: 4, gainPct: 1.43, volumeRatio: 1.2, ...(sessionsSince === undefined ? {} : { sessionsSince }), distributionSince: 2 }, failedDate: null, events: [], ...over });
+    const view = (n, over) => followThroughView(confirmed(n, over), '2026-10-02');
+    expect(FTD_RECENT_SESSIONS).toBe(25);
+    // sessionsSince counts the sessions after the FTD's day: 0 is the FTD's own session.
+    expect(view(0)).toEqual({ b: '確認 9/16', em: '当日・+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
+    expect(view(12)).toEqual({ b: '確認 9/16', em: '12日前・+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
+    expect(view(FTD_RECENT_SESSIONS)).toEqual({ b: '確認 9/16', em: '25日前・+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
+    // Older than the window: 前回のFTD, flagged, and still no tone (never green, never amber).
+    expect(view(FTD_RECENT_SESSIONS + 1)).toEqual({ b: '前回のFTD 9/16', em: '26日前・+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null, previous: true });
+    expect(view(152).b).toBe('前回のFTD 9/16');
+    expect(view(152).tone).toBeUndefined();
+    // No usable count (an older record, a negative or fractional one): today's words, nothing guessed.
+    for (const n of [undefined, null, -1, 2.5, '30']) expect(view(n)).toEqual({ b: '確認 9/16', em: '+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
+    // Without the FTD's date the count still stands, the date is never invented; an older record keeps its date.
+    expect(view(30, { ftd: { sessionsSince: 30 } })).toMatchObject({ b: '前回のFTD', em: '30日前', previous: true });
+    expect(view(30, { asOf: '2026-10-01' })).toMatchObject({ b: '前回のFTD 9/16', asOf: '10/1' });
+    // The predicate the row, the ◆ and the cause line share: confirmed records only.
+    expect([0, 25, 26].map(n => ftdPrevious(confirmed(n)))).toEqual([false, false, true]);
+    expect([0, 25, 26].map(n => ftdSessionsSince(confirmed(n)))).toEqual([0, 25, 26]);
+    for (const ft of [{ ...confirmed(40), state: 'ftd_failed' }, { ...confirmed(40), available: false }, confirmed(undefined), null, undefined]) {
+      expect(ftdPrevious(ft)).toBe(false);
+      expect(ftdSessionsSince(ft)).toBeNull();
+    }
+  });
+
   it('words every follow-through state compactly and dates an older judgement', async () => {
     const { followThroughView } = await import('./briefEnvironment');
     const base = { available: true, method: 'rally-attempt-gain1.2-day4-15-decline6-v1', asOf: '2026-10-02', peak: { date: '2026-09-10', close: 100 }, low: { date: '2026-09-29', low: 90 }, declinePct: 7.24, attempt: { startDate: '2026-09-30', day: 3 }, ftd: null, failedDate: null, events: [] };
     const view = (over, date = '2026-10-02') => followThroughView({ ...base, ...over }, date);
-    expect(view({ state: 'confirmed', ftd: { date: '2026-08-07', attemptDay: 4, gainPct: 1.43, volumeRatio: 1.2, sessionsSince: 40, distributionSince: 2 } })).toMatchObject({ b: '確認 8/7', em: '+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
+    expect(view({ state: 'confirmed', ftd: { date: '2026-08-07', attemptDay: 4, gainPct: 1.43, volumeRatio: 1.2, sessionsSince: 40, distributionSince: 2 } })).toMatchObject({ b: '前回のFTD 8/7', em: '40日前・+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null, previous: true });
     expect(view({ state: 'rally_attempt' })).toMatchObject({ b: '反発3日目', em: '安値9/29・4日目以降の+1.2%上昇待ち' });
     expect(view({ state: 'correction', attempt: null })).toMatchObject({ b: '調整中', em: '高値9/10から−7.2%' });
     expect(view({ state: 'attempt_expired', attempt: { startDate: '2026-09-01', day: 17 } })).toMatchObject({ b: '15日以内のFTDなし', em: '安値9/29を維持・反発17日目' });

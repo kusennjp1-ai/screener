@@ -73,7 +73,8 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
 
   // ---- market tab: three groups in decision order ----
   const followRows = follow.map(f => ({ name: f.name, ...f.view, valued: ready && f.view.b !== '未集計' && f.view.b !== '算出不可', warn: f.view.tone === 'ext', flag: f.view.tone === 'ext' ? 'FTD失敗' : null }));
-  const ftdItem = { key: 'ftd', label: 'フォロースルーデー（独自判定）', className: 'brief-ftd', rows: followRows, rule: RULE_TEXT.ftd, warn: followRows.some(r => r.warn) };
+  // The opened row's lines (study.followThrough: the rule beside the cited rises, the failure, 前回のFTD, 過去の傾向), market tab only.
+  const ftdItem = { key: 'ftd', label: 'フォロースルーデー（独自判定）', className: 'brief-ftd', rows: followRows, rule: RULE_TEXT.ftd, warn: followRows.some(r => r.warn), ...(study?.followThrough || {}) };
   // The 分配日 row: ▲ 注意 at 7 or more; a 5–6 count is marked 参考 (○, neutral) on its side, and on the row while no side warns.
   const distRow = d => ({ name: d.name, valued: true, b: `${num(d.hit.value)}日`, asOf: date && d.hit.date < date ? shortDate(d.hit.date, date) : null, warn: d.grade === 'caution',
     flag: d.grade === 'caution' ? DISTRIBUTION_TEXT.caution : d.grade === 'reference' ? `${DISTRIBUTION_TEXT.reference}・参考` : null, ...(d.grade === 'reference' ? { reference: true } : {}) });

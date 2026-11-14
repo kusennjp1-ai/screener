@@ -2,9 +2,9 @@
 // words, the Nasdaq's own state beside the SPY verdict, its published position and the opened 分配日 row. Only the
 // lazily loaded market tab (MarketScreen.jsx) imports this module, so none of it ships with Today; MarketScreen
 // hands the result to the 地合い card (marketCardView's `study`). Every number comes from the published market-trends
-// asset or the generated reference (market-regime-reference-v1.json): nothing here types a percentage, changes a
-// rule, a threshold or the verdict.
-import { bare, distributionCount, gspcFollowThrough, nasdaqNote, shortDate, trendsStatus } from '../brief/briefModel';
+// asset or the generated reference (market-regime-reference-v1.json): nothing here types a percentage of the app's own,
+// changes a rule, a threshold or the verdict. The one typed figure is a citation (FTD_SOURCE_GAINS), never a rule.
+import { bare, distributionCount, ftdPrevious, gspcFollowThrough, nasdaqNote, shortDate, trendsStatus, FTD_RECENT_SESSIONS, FTD_TEXT } from '../brief/briefModel';
 import { DISTRIBUTION_TEXT, num, signedPercent, SURVIVORSHIP_NOTE, verdictBasis } from '../brief/marketTabModel';
 import { indexSummary } from './indexSummary.js';
 import { capText, MARKET_CAPS } from '../portfolioPlan';
@@ -144,6 +144,27 @@ export function distributionDetail(indices, date) {
     if (values.length >= 200 && Math.max(...values) > Math.min(...values)) yearLines.push({ label: `${name}の分配日`, name, range: { lo: Math.min(...values), hi: Math.max(...values), series }, format: value => `${num(value)}日` });
   }
   return { details, yearLines };
+}
+
+/**
+ * The FTD's rise by source, cited second-hand (market plan W09): 1.0%〜1.25% from IBD's later articles (through a reprint) and
+ * 1.7% from William O'Neil + Co.'s Market View, both read through search summaries; no primary source was opened. Printed
+ * beside the app's own rule (FTD_TEXT) as a citation only: it is no rule, threshold or input of the app.
+ */
+export const FTD_SOURCE_GAINS = '出典ごとの上昇率の目安：1.0%〜1.25%（IBD）、1.7%（William O\'Neil + Co.）（二次資料経由・未確認）';
+/**
+ * The opened フォロースルーデー row (M2): the app's own rule from FTD_TEXT beside the cited rises (FTD_SOURCE_GAINS), when its
+ * failure is judged (earlier than the sources can say), when a confirmed FTD reads 「前回のFTD」 (FTD_RECENT_SESSIONS, in
+ * sessions), and where its past tendency is (the 「過去の傾向」 block below, whose figures are each index's own: none is put
+ * on this row, so the S&P's figure never sits beside the Nasdaq's line).
+ */
+export function followThroughDetail() {
+  return { details: [
+    `FTDの基準は独自設定（${FTD_TEXT.gain}・${FTD_TEXT.minDay}〜${FTD_TEXT.maxDay}日目・高値から${FTD_TEXT.decline}以上の下落後）。${FTD_SOURCE_GAINS}。`,
+    '失敗の判定はFTD当日の安値を終値で割ったとき（独自・出典より早く出る場合があります）。',
+    `「n日前」はFTDの日からの営業日数で、${FTD_RECENT_SESSIONS}営業日を過ぎた確認は「前回のFTD」と表示します（独自設定）。`,
+    'FTDの状態ごとの過去の傾向は、下の「過去の傾向」を参照。',
+  ] };
 }
 
 // ---- the study block (過去の傾向) ----------------------------------------------------------------------------
@@ -351,7 +372,8 @@ export function gspcFtdWords(ft, ftdDate, date) {
  *    apart from the ^GSPC/^IXIC counts of the 分配日 row. The regime is named only where the basis line does not already
  *    name it (it does for 上昇トレンド and 上昇に圧力). Under any regime but a confirmed uptrend the line adds that the
  *    regime also reads the moving averages and the breadth (REGIME_READS), so a small count never reads as its cause.
- *    A null count reads 未収録, never 0.
+ *    A null count reads 未収録, never 0. Under a correction or a downtrend, a confirmed ^GSPC record of the same day adds
+ *    that it is the index's separate count (ownFtdLine, M2).
  *  - Without the block (an older publication): null, the basis line alone as before.
  * A block is used only when its regime is the verdict's rows' regime (a market without one borrows none).
  */
@@ -367,7 +389,19 @@ export function regimeCause(market, context, basis, date, { gspc = null } = {}) 
   const count = block.distribution_days === null ? '局面判定の分配日（SPY）は未収録' : `局面判定の分配日：SPY ${num(block.distribution_days)}日（ストーリング日を含む数え方）`;
   const reads = block.regime !== 'confirmed_uptrend', named = Boolean(basis?.text?.includes(`「${name}」`));
   const regime = named ? (reads ? `局面判定は${REGIME_READS}` : null) : `局面判定は「${name}」${reads ? `で、${REGIME_READS}` : ''}`;
-  return regime ? `${count}。${regime}` : count;
+  return [count, regime, ownFtdLine(block, gspc, date)].filter(Boolean).join('。');
+}
+
+/**
+ * Under a correction or a downtrend, the app's own ^GSPC record of the same day (`gspc`, gspcFollowThrough, dated `date`)
+ * that still reads a confirmed FTD (M2): one clause saying it is the index's separate count, which a decline under
+ * FTD_TEXT.decline from the high does not withdraw (独自設定), 「前回のFTD」 when older than FTD_RECENT_SESSIONS. A record of
+ * another day, any other state or any other regime adds nothing.
+ */
+function ownFtdLine(block, gspc, date) {
+  if (!['correction', 'downtrend'].includes(block.regime) || gspc?.available !== true || gspc.state !== 'confirmed' || !isDay(date) || gspc.asOf !== date) return null;
+  const day = isDay(gspc.ftd?.date) ? `（${shortDate(gspc.ftd.date, date)}）` : '';
+  return `下の^GSPCの${ftdPrevious(gspc) ? '前回のFTD' : 'FTD'}${day}は指数の別集計で、高値から${FTD_TEXT.decline}未満の下落では取り消しません（独自設定）`;
 }
 
 /** Where the Nasdaq's figures and line come from (the switch's source line on the desktop, the 注記 on a phone). */
@@ -385,6 +419,7 @@ const publishedInputs = item => ({ distribution: item?.method ?? null, followThr
  *  - signalTags: each warning-summary check's study tags (marketRegimeReference SIGNAL_INDICATORS); tagText(fired)
  *    the legend and the sentence on the tags actually shown; referenceKeys the checks tagged 〔参考〕
  *  - distribution: the opened 分配日 row's method, dates and year lines
+ *  - followThrough: the opened フォロースルーデー row's lines (followThroughDetail)
  *  - nasdaq: the Nasdaq note beside the SPY verdict (the card shows it only while the verdict is positive)
  *  - nasdaqPosition / nasdaqFigures: the Nasdaq's published position, as data and in words
  *  - regime: the 過去の傾向 block
@@ -403,6 +438,7 @@ export function marketTabStudy({ trends, reference, date = null, market = null, 
     // The checks whose tag is 〔参考〕: the card counts them apart from the warnings, with a neutral ○.
     referenceKeys: Object.keys(signalTagsByKey).filter(key => signalTagsByKey[key].includes(TAGS.breadth)),
     distribution: ready ? distributionDetail(indices, date) : null,
+    followThrough: ready ? followThroughDetail() : null,
     nasdaq: ready ? nasdaqNote(byName.NAS?.followThrough, date) : null,
     nasdaqPosition, nasdaqFigures: nasdaqFigures(nasdaqPosition?.state, date),
     regime: marketRegimeContext({ history: ready ? trends.data.long_history || null : null, trends, reference: ref, date }),
