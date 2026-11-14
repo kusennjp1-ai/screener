@@ -166,3 +166,271 @@
 ### 変えていないもの
 
 pivotBar.js とそのテスト、brief-fixture.js、brief-oracles.spec.js の R1 の 1 行以外、輸送、briefCandidate.js、portfolioPlan.js、バックエンド、下限が null の行の文言と状態、492 ビューの probe、dump、高さの台帳、失敗ブレイクの 10 営業日の窓、BREAKOUT_VOLUME_RATIO、選定、トレンドテンプレート。
+
+## R2. ギャップの後に張り付いた値動き（パッケージ R-P2）
+
+### 規則（a）：低変動の3つの判定（priceActivity.js）
+
+- `price_activity` の最初の2つのキー `range60pct`・`lowRange` は今日と同じ意味（lowRange が true なら 低変動・監視のみ）。その後に `reason`、`adr20pct`、`gap` を足した。
+- lowRange は次のどれかが成り立つとき true。順に調べ、最初に成り立ったものが `reason`。
+  1. **'range60'**：60本の値幅（最高値÷最安値−1）が 5% 未満（今日の規則。値もキーの順も今日と同じ）。
+  2. **'since_gap'**：直近60本で最大の1日の動き（終値比 |当日終値÷前日終値−1|。窓開けも、一日の大きな上げ下げも数える）が 10% 以上で、その足より後の足が 15 本以上あり、その高値・安値の値幅が 3% 未満。
+  3. **'adr'**：ADR20（直近20本の (高値÷安値−1) の平均、%）が 0.5% 未満。
+- 今日 lowRange の行は、すべて 'range60' のまま（その2キーの値も同じ）。
+- **欠けた値では決して当たらない**。60本未満（または日足なし）は `{ range60pct: null, lowRange: false, reason: null, adr20pct: null, gap: null }`。各規則は自分が読む値に、有限でない値か0以下の値が1つでもあれば「不明」で、当たりにも0にもならない。
+  - 60本ちょうどのとき、最初の足の動きは前日の終値が無いので、'since_gap' は不明（gap は null）。'range60' と 'adr' はそのまま判定する。
+  - 60本の値幅は今日の計算をそのまま残した（欠けた高値は NaN、JSON では null）。安値が0以下の窓は 'range60' に当てない（今日は負の安値で true になり得た。実データでは起きない。vitest で固定）。
+- `adr20pct` と `gap` は**低変動の行だけに載せ、ほかの行は null**。
+  - `gap` は `{ date, pct, sessions, rangePct }`：その足の日付、符号付きの動き、その後の本数、その後の値幅。最大の動きが 10% 未満なら null。
+  - 理由：`price_activity` はインデックスの列でもあるので、全行に載せると研究インデックスが約 83 kB（gzip）増える。低変動の行だけなら約 2.6 kB（下の「インデックスの大きさ」）。
+- ADR の式は計画書の ADR（positionSizing.js の adrState、高値÷安値−1）と同じ。priceActivity.js は import を持てない（素の Node とエクスポーターが読む）ので式を書き直し、vitest で `adrPercent` と一致させた（`toBe`）。
+  - 注文の文には「(高値−安値)÷終値」とあるが、拘束力のある指示は「adrState と同じ式」なので、こちらに従った。オラクルの spec の ZZPG の確認は (高値−安値)÷終値 で < 0.2% を見ており、どちらの式でも ZZPG は 0.15%。
+
+### 定数（独自設定。チャートを見た後に選んだ。オーナーの確認待ち：OD6）
+
+| 名前 | 値 | 意味 |
+|---|---|---|
+| `ACTIVITY_ADR_SESSIONS` | 20 | ADR20 の本数（positionSizing の ADR_SESSIONS と同じ。vitest で固定） |
+| `LOW_ADR_PERCENT`（X） | 0.5 | ADR20 がこれ未満なら低変動 |
+| `GAP_MOVE_PERCENT`（G） | 10 | 1日の動き（終値比）がこれ以上ならギャップ |
+| `SINCE_GAP_RANGE_PERCENT`（Y） | 3 | ギャップの後の値幅がこれ未満なら張り付き |
+| `SINCE_GAP_MIN_SESSIONS`（N） | 15 | ギャップの後に必要な本数 |
+
+- 出発点は X 0.6・Y 3・N 15・G 10。X だけを 0.6 → 0.5 に締めた。
+  - 再構築でも H4 でも、0.5 と 0.6 で当たる行は同じ（再構築の ADR20 は、当たる行の最大が PTC の 0.493、当たらない行の最小が CPAC の 0.713。H4 は下）。同じ結果なら狭いほうを取った（p4 の値と同じ）。
+  - 0.4 は採らない。BWIN（ADR20 0.392）は ADR だけで当たる行（ギャップ +7.9% は G 未満、その後の値幅 3.19% は Y 以上）で、0.4 では余裕が 0.008 しかない。また同じ数字の PAG（0.436）・CCC（0.418）が外れる。
+- 近い外れ（再構築、記録のみ）：
+  - BRZE：10/20 に +51.7%、その後 17 本の値幅 3.01%（Y の 3% をわずかに超える）。ADR20 1.14%（20本の窓にギャップの日が入る）。
+  - ADT：10/29 に +33.2%、その後 10 本の値幅 1.12%。N の 15 本に足りない（あと 5 本で当たる）。
+  - どちらも、今の定数では当たらない。緩めてはいない。
+
+### 二つのペルソナの定義で当たる行（再現スナップショットの数、11-12。`$T/r2/measure-9ac8705.json`）
+
+- 対象：掲載 980 行（再構築の research の行で technical_audit が通るものは 980 行すべて）。R-P1 の再構築（out/9ac8705、R2 の前）の日足で計算。
+- 列：流動順位は R2 の前の `ui_liquid_rank`（今日 lowRange の行はすでに最後に並ぶので 1822 以降）。「60本で最大の1日の動き」は、R2 の gap と同じ終値比で、10% 未満でも載せた。「その後の値幅」はその足より後の足だけの高値・安値（p1 の rng_since_big はその足を含むので、PCRX で 1.1 と 1.02 の差がある）。
+
+p1 (ADR20 < 0.6% かつ 20本の値幅 < 3%)： 22 行
+
+| 銘柄 | 流動順位 | ADR20 % | 20本の値幅 % | 60本の値幅 % | 60本で最大の1日の動き（終値比） | その後の本数 | その後の値幅 % | 準備 | 今日の lowRange | R2 後の reason |
+|---|---|---|---|---|---|---|---|---|---|---|
+| PCRX | 1 | 0.150 | 0.52 | 55.05 | 10/08 +44.4% | 25 | 1.02 | ready | — | since_gap |
+| BWIN | 75 | 0.392 | 1.32 | 17.92 | 09/14 +7.9% | 43 | 3.19 | ready | — | adr |
+| PAG | 142 | 0.436 | 1.29 | 14.95 | 10/15 +8.8% | 20 | 1.29 | — | — | adr |
+| PTC | 400 | 0.493 | 2.09 | 55.21 | 10/05 +33.5% | 28 | 2.19 | — | — | since_gap |
+| DV | 1822 | 0.214 | 0.74 | 2.71 | 09/14 +0.8% | 43 | 1.65 | — | ○ | range60 |
+| TECH | 1823 | 0.157 | 0.59 | 1.11 | 08/20 −0.3% | 59 | 1.11 | ready | ○ | range60 |
+| OGN | 1824 | 0.312 | 1.31 | 1.98 | 09/09 −0.6% | 46 | 1.98 | — | ○ | range60 |
+| LNTH | 1825 | 0.448 | 2.21 | 2.51 | 08/24 +0.8% | 57 | 2.51 | — | ○ | range60 |
+| ARX | 1826 | 0.243 | 0.96 | 2.05 | 09/04 +0.9% | 48 | 2.05 | ready | ○ | range60 |
+| HZO | 1827 | 0.298 | 1.75 | 1.75 | 10/19 −0.7% | 18 | 1.42 | — | ○ | range60 |
+| SLAB | 1828 | 0.406 | 1.05 | 3.05 | 09/11 +0.5% | 44 | 2.05 | — | ○ | range60 |
+| ITGR | 1829 | 0.134 | 0.35 | 1.59 | 09/04 +0.8% | 48 | 0.77 | — | ○ | range60 |
+| BMBL | —（非流動） | 0.453 | 1.85 | 147.54 | 10/13 +56.6% | 22 | 1.85 | — | — | since_gap |
+| CCC | —（非流動） | 0.418 | 1.45 | 26.76 | 10/12 +8.1% | 23 | 5.19 | — | — | adr |
+| CEPO | —（非流動） | 0.130 | 0.65 | 1.50 | 08/21 +1.1% | 58 | 0.84 | ready | ○ | range60 |
+| DSGR | —（非流動） | 0.307 | 0.95 | 1.93 | 11/11 +0.3% | 1 | 0.26 | ready | ○ | range60 |
+| LXFR | —（非流動） | 0.235 | 1.11 | 1.46 | 11/04 +0.6% | 6 | 0.40 | — | ○ | range60 |
+| PAYO | —（非流動） | 0.428 | 1.55 | 1.98 | 09/03 +0.8% | 49 | 1.83 | — | ○ | range60 |
+| PRTH | —（非流動） | 0.369 | 1.66 | 52.99 | 09/21 +33.8% | 38 | 2.32 | ready | — | since_gap |
+| RNW | —（非流動） | 0.414 | 1.90 | 2.80 | 09/04 +0.6% | 48 | 2.20 | ready | ○ | range60 |
+| SAFT | —（非流動） | 0.210 | 0.68 | 1.45 | 09/01 −0.6% | 51 | 1.43 | — | ○ | range60 |
+| VREX | —（非流動） | 0.307 | 1.86 | 1.86 | 11/12 −0.7% | 0 | — | — | ○ | range60 |
+
+p4 (ADR20 < 0.5% または 20本の値幅 < 3%)： 27 行
+
+| 銘柄 | 流動順位 | ADR20 % | 20本の値幅 % | 60本の値幅 % | 60本で最大の1日の動き（終値比） | その後の本数 | その後の値幅 % | 準備 | 今日の lowRange | R2 後の reason |
+|---|---|---|---|---|---|---|---|---|---|---|
+| PCRX | 1 | 0.150 | 0.52 | 55.05 | 10/08 +44.4% | 25 | 1.02 | ready | — | since_gap |
+| BWIN | 75 | 0.392 | 1.32 | 17.92 | 09/14 +7.9% | 43 | 3.19 | ready | — | adr |
+| PAG | 142 | 0.436 | 1.29 | 14.95 | 10/15 +8.8% | 20 | 1.29 | — | — | adr |
+| PTC | 400 | 0.493 | 2.09 | 55.21 | 10/05 +33.5% | 28 | 2.19 | — | — | since_gap |
+| SYNA | 432 | 0.790 | 2.69 | 38.41 | 10/02 +14.1% | 29 | 4.30 | — | — | — |
+| DV | 1822 | 0.214 | 0.74 | 2.71 | 09/14 +0.8% | 43 | 1.65 | — | ○ | range60 |
+| TECH | 1823 | 0.157 | 0.59 | 1.11 | 08/20 −0.3% | 59 | 1.11 | ready | ○ | range60 |
+| OGN | 1824 | 0.312 | 1.31 | 1.98 | 09/09 −0.6% | 46 | 1.98 | — | ○ | range60 |
+| LNTH | 1825 | 0.448 | 2.21 | 2.51 | 08/24 +0.8% | 57 | 2.51 | — | ○ | range60 |
+| ARX | 1826 | 0.243 | 0.96 | 2.05 | 09/04 +0.9% | 48 | 2.05 | ready | ○ | range60 |
+| HZO | 1827 | 0.298 | 1.75 | 1.75 | 10/19 −0.7% | 18 | 1.42 | — | ○ | range60 |
+| SLAB | 1828 | 0.406 | 1.05 | 3.05 | 09/11 +0.5% | 44 | 2.05 | — | ○ | range60 |
+| ITGR | 1829 | 0.134 | 0.35 | 1.59 | 09/04 +0.8% | 48 | 0.77 | — | ○ | range60 |
+| CZR | 1830 | 0.887 | 2.87 | 4.24 | 10/29 +2.0% | 10 | 1.63 | — | ○ | range60 |
+| BMBL | —（非流動） | 0.453 | 1.85 | 147.54 | 10/13 +56.6% | 22 | 1.85 | — | — | since_gap |
+| BOW | —（非流動） | 0.766 | 2.03 | 3.50 | 08/24 +0.7% | 57 | 3.34 | — | ○ | range60 |
+| CCC | —（非流動） | 0.418 | 1.45 | 26.76 | 10/12 +8.1% | 23 | 5.19 | — | — | adr |
+| CEPO | —（非流動） | 0.130 | 0.65 | 1.50 | 08/21 +1.1% | 58 | 0.84 | ready | ○ | range60 |
+| CPAC | —（非流動） | 0.713 | 2.86 | 11.47 | 09/17 −3.7% | 40 | 8.38 | — | — | — |
+| DSGR | —（非流動） | 0.307 | 0.95 | 1.93 | 11/11 +0.3% | 1 | 0.26 | ready | ○ | range60 |
+| FUSB | —（非流動） | 0.904 | 2.39 | 9.83 | 10/05 −4.5% | 28 | 3.65 | — | — | — |
+| LXFR | —（非流動） | 0.235 | 1.11 | 1.46 | 11/04 +0.6% | 6 | 0.40 | — | ○ | range60 |
+| PAYO | —（非流動） | 0.428 | 1.55 | 1.98 | 09/03 +0.8% | 49 | 1.83 | — | ○ | range60 |
+| PRTH | —（非流動） | 0.369 | 1.66 | 52.99 | 09/21 +33.8% | 38 | 2.32 | ready | — | since_gap |
+| RNW | —（非流動） | 0.414 | 1.90 | 2.80 | 09/04 +0.6% | 48 | 2.20 | ready | ○ | range60 |
+| SAFT | —（非流動） | 0.210 | 0.68 | 1.45 | 09/01 −0.6% | 51 | 1.43 | — | ○ | range60 |
+| VREX | —（非流動） | 0.307 | 1.86 | 1.86 | 11/12 −0.7% | 0 | — | — | ○ | range60 |
+
+- 二つの定義の違い：p1 の 22 行は p4 の 27 行にすべて入る。p4 だけの 5 行は SYNA（ADR20 0.790・20本 2.69%）、CZR（今日すでに range60）、BOW（同）、CPAC（0.713・2.86%）、FUSB（0.904・2.39%）。この 3 行（SYNA、CPAC、FUSB）は 20本の値幅だけが狭く、ADR は 0.7% 以上。R2 はこの 3 行を当てない。
+- R2 の定数で新たに当たる掲載行は p1 の 22 行のうち、今日 lowRange でない 7 行とちょうど同じ（PCRX、BWIN、PAG、PTC、BMBL、CCC、PRTH）。この 7 行は ADR20 0.15〜0.49%・20本の値幅 0.52〜2.09% で、同じ数字で張り付いている。4 行（PCRX、PTC、BMBL、PRTH）は +33〜57% のギャップの後 22〜38 本が 1.0〜2.3% の幅に収まる（買収発表の後のような値動き）。3 行（BWIN、PAG、CCC）は +7.9〜8.8% の動き（G 未満）の後に ADR20 0.39〜0.44%。
+
+### H4：908 件の補助の点での当たり（実測、`$T/r2/h4_flags.py` と `h4_summary.py`、`$T/r2/h4-figures.json`）
+
+- 方法：凍結の probe（backend/scripts/probe_setup_ready_908.py）を import し、その `run_probe` に差し替えのスキャナーを渡した。だから点の選び方（読み込み、T0 での切り出し、63 本前の対照、飛ばす規則）は probe そのもの。差し替えの Setup Engine は準備の判定をせず、その点の日足から上の数字だけを返す。リポジトリには何も足していない（凍結のファイルは変えず、写しも作らない）。
+  - コマンド：`cd $W/backend && DATABASE_URL="postgresql://local/none" /home/user/screener/backend/venv/bin/python $T/r2/h4_flags.py $T/r2/h4-figures.json`（11 秒）。
+  - 結果の点の数：エントリー 588・対照 575。飛ばした数は no_bundle_file 270・short_history 50・対照の control_before_min_prior_bars 13 で、H4 と同じ。61 本未満の点は 0。
+
+| 定義 | エントリー（/588） | 対照（/575） |
+|---|---|---|
+| 今日（60本の値幅 < 5%） | 1 | 1 |
+| p1（ADR20 < 0.6% かつ 20本 < 3%） | 1 | 1 |
+| p4（ADR20 < 0.5% または 20本 < 3%） | 2 | 2 |
+| ADR だけ（X 0.4 / 0.5 / 0.6） | 2 / 2 / 2 | 2 / 2 / 2 |
+| ギャップの後だけ（Y 3・N 15・G 10。Y 2、G 15、N 10 も） | 0 | 0 |
+| **R2 の採用値（X 0.5・Y 3・N 15・G 10）** | **2** | **2** |
+| 出発点（X 0.6・Y 3・N 15・G 10） | 2 | 2 |
+
+- 当たったエントリーは 2 件で、どちらも束の日足の品質の問題。
+  - SWSH 2017-03-31：60 本の終値・高値・安値がすべて同じ（出来高 0）。今日の 60 本の規則でも当たる。対照（2016-12-29）も同じ形。
+  - POWR 2013-07-11：ADR20 0.37%、20本の値幅 6.53%。直近 21 本のうち 10 本が高値＝安値で出来高 0。対照（2013-04-11）は ADR20 0.15%。
+- 採用の条件（エントリーの当たりが 5/588 以下）を満たす。余裕も大きい：上の 2 件を除くエントリーの ADR20 の最小は 1.109%（中央値 3.36%）。G 以上のギャップの後に 15 本以上ある点は 392 あり、その後の値幅の最小は 5.72%。
+- H4 そのもの（setup_ready 28/588 対 23/575、+0.8pp、gate 6 で 458/588 が不合格）は R2 で変わらない。これは**推論**で、再実行はしていない。根拠：`git diff --stat 45603f06 HEAD -- backend` の出力が空（R2 はバックエンドのファイルを一つも変えていない）。凍結 908 ハーネス（SETUP +52.0pp）も同じ理由で変わらないとみているが、再実行はしていない。
+
+### 規則（b）：前の土台（positionSizing.js）
+
+- `positionPlan` は `pivotBar(judged, view.row)`（H1、凍結）でピボットの足を求め、その日付を `structuralStop` に渡す。
+- `technical.vcp.base.brokeOut === true` で、`base.breakoutDate` が日付で、ピボットの足の日付より**前**なら、その土台は前の土台。構造上の損切りは未確認になり、理由は `previousBaseReason(breakoutDate, 分析日)` が作る 「前の土台（M/Dに上抜け済み）」（M/D は shortDate）。
+  - だから `structural.low` は null、`stopInsideBase` は null、`structuralDeep` は null になり、「損切りが収縮の中」は出ない。planLevels の structuralLow も null なので、チャートの「最後の収縮の安値」の線もその行では消える。
+  - 判定の場所は、収縮の安値を日足で確かめた直後（既存の「収縮を測定できません」「ピボットが未確認」「最後の収縮がピボットより上」「収縮の測定日が日足と不一致」の理由は今までどおり先に出る）。
+  - 決まった % に置き換えることはしない。この銘柄の構造上の損切りを選んでいた人は、ほかの未確認のときと同じく設定の損切り幅に戻る（stopSource 'structural' は state 'ok' のときだけ）。
+- ピボットの足が無い（vcp、se_pivot_date が無い、古い公開、一致する足が無い、日足が未検証）、土台が上抜けていない、上抜けがピボットの足と同じ日かそれより後：何も変わらない（vitest で固定）。
+- bookTechnicalEvidence.js を読んだ：ピボットを読むところは無く、土台の安値をピボットと組む箇所も無い（`grep -n pivot` で 0 件）。組み合わせは positionSizing.js の structuralStop だけ。チャートの脚と VCP の「土台の高値を上抜け（M/D）」の文言は変えていない（オラクルの spec の ZZPG の形の検査が通る）。報告すべきものは無い。
+
+### 規則（c）：結論の一行
+
+- 今日は、低変動の行の結論は buyGate の既定（kind 'unjudged'、題は「低変動・監視のみ」、下の行は「買い位置を判定できません。」）で、理由を書いていなかった。
+- いまは kind 'lowActivity'、題は同じ「低変動・監視のみ」、下の行は `lowActivityNote(view)`＝「{lowActivityReason の文}（独自設定）。」。例：「60日値幅5%未満（独自設定）。」「10/8の窓開け（+44%）後25営業日の値幅3%未満（独自設定）。」「20日平均値幅（ADR）0.5%未満（独自設定）。」
+- `PLAN_BLOCKED.low` の文はそのまま。行の状態・並び・試算は今までどおり `lowRange` だけを読む（researchEngine.js:174/:196、portfolioPlan.js:49 は変えていない）。
+- entryReadiness.js の選定の行は `${lowActivityReason(...)}：低変動のため監視のみ（独自リスク設定）。`。range60 の行と reason の無い古い公開の行では、文全体が今日とバイト一致（vitest）。
+
+### 再現スナップショットでの結果（再構築の数、11-12。R-P1 の out/9ac8705 と R-P2 の out/93fd59e。`$T/r2/compare.mjs` → `$T/r2/compare-93fd59e.json`）
+
+- **lowRange の掲載行 17 → 24**。足されたのは PCRX（since_gap）、BWIN（adr）、PAG（adr）、PTC（since_gap）、BMBL（since_gap）、CCC（adr）、PRTH（since_gap）。外れた行は 0。今日の 17 行は 17 行とも reason 'range60' で、`range60pct`・`lowRange` の値も同じ。
+  - counts.json の「準備のある張り付いた行と SLAB」：6/9 → **9/9**（TECH、PCRX、ARX、BWIN、CEPO、DSGR、PRTH、RNW、SLAB）。
+  - 配信する全 5955 行では lowRange 107 → 125。掲載外の 11 行（AKO-A、CAPN、CHAR、EURK、FSHP、IBAC、NCEW、OPCH、SIMA、SSEA、TCBS）が足された（多くは信託の価格に張り付く SPAC）。
+- 掲載 980・準備 37 は同じ（選定は変えていない）。rows.jsonl と ready43.jsonl は `ui_liquid_rank` 以外がすべて同じ。research の行は price_activity 以外がすべて同じで、price_activity の最初の2キーが変わったのは上の 18 行の lowRange だけ。
+- **順位の変化（PR と OD6 で名前を出す）**：当たった行は最後に並ぶ。流動順位が動いた掲載行は 561。PCRX 1 → 1819、BWIN 75 → 1825、PAG 142 → 1826、PTC 400 → 1828。
+  - 流動の上位 10（前）：PCRX、DRI、BMO、HCI、HUM、SWKS、WSM、SONO、PRGS、NDSN。
+  - 流動の上位 10（後）：DRI、BMO、HCI、HUM、SWKS、WSM、SONO、PRGS、NDSN、LTC（PCRX が 1 位から外れる）。
+  - Today の上位 5（focus、`work/today-eval.json`）：前後とも SWKS、HCI、HAE、ANF、LIND。件数はゾーン 68 → 67、接近 82 → 80、計 150 → 147（PCRX、BWIN、PAG が抜けた）。見出しの注記と forgotten（32 行）は同じ。
+- **当たった 7 行の画面**（`work/sell-eval.jsonl`）：
+  - PCRX：前は 買いゾーン・結論 marketHold・試算 244 株・構造上の損切り tooDeep（安値 24.56）・`stopInsideBase` true（「損切りが収縮の中（安値 24.56 より上・独自判定）」）。後は 低変動・監視のみ・結論 lowActivity「10/8の窓開け（+44%）後25営業日の値幅3%未満（独自設定）。」・試算は `PLAN_BLOCKED.low`、株数なし、「損切りが収縮の中」なし。
+  - BWIN：ピボット接近・277 株 → 低変動・lowActivity「20日平均値幅（ADR）0.5%未満（独自設定）。」・試算なし。
+  - PAG：ピボット接近・40 株 → 低変動・lowActivity（ADR）・試算なし。
+  - PRTH：買いゾーン・1128 株 → 低変動・lowActivity「9/21の窓開け（+34%）後38営業日の値幅3%未満（独自設定）。」・試算なし。
+  - BMBL：ピボット接近・1478 株 → 低変動・lowActivity「10/13の窓開け（+57%）後22営業日の値幅3%未満（独自設定）。」・試算なし。
+  - PTC、CCC：トレンドテンプレートの 1 条件未達で、結論は template のまま。状態は低変動・試算は `PLAN_BLOCKED.low`。
+- **当たらなかった行**：sell-eval で差のある行は 570。当たった 7 行を除く 563 のうち 551 は `liquidRank` だけ（上の順位の変化）。残る 12 行（DV、TECH、PAYO、OGN、RNW、LNTH、ARX、SAFT、LXFR、HZO、BOW、DSGR）は今日すでに低変動の行で、結論の kind が 'unjudged' → 'lowActivity' になり、下の行が「買い位置を判定できません。」→「60日値幅5%未満（独自設定）。」になった（規則 c）。状態と試算は同じ。今日低変動の残る 5 行（SLAB は買収、ITGR、CEPO、CZR、VREX はテンプレート未達）は結論も同じ。
+  - つまり、低変動でない行の状態・結論・試算は一つも変わっていない。変わったのは順位だけ。
+- **規則（b）で構造上の損切りが変わる行**（`$T/r2/prevbase2.mjs` → `$T/r2/prevbase-93fd59e.json`。この木のモジュールで、試算が止まっていても構造上の損切りを直接計算した）：
+  - 検証済みの掲載 615 行のうち、土台を測れたのが 615、上抜けた土台が 99、そのうちピボットの足より前に上抜けたのが 13。
+  - 構造上の損切りが変わるのは 3 行。PCRX（土台の上抜け 10/8 < ピボットの足 10/26、tooDeep 安値 24.56 → 未確認「前の土台（10/8に上抜け済み）」）、VREX（8/10 < 11/3、tooDeep 安値 10.02 → 「前の土台（8/10に上抜け済み）」）、CCC（10/12 < 10/27、tooDeep 安値 6.43 → 「前の土台（10/12に上抜け済み）」）。3 行とも低変動で試算が止まるので、この再構築では画面に出ない。
+  - 残る 10 行（BSVN、OVBC、IDT、TBCH、VTMX、ARX、SAFT、BMBL、BWIN、PTC）は前から「収縮を測定できません」で、変わらない。
+  - 試算のある行で構造上の損切りが変わった行：**0**。
+
+### インデックスの大きさとエクスポートの同一性
+
+- `ONLY=index-size`（再構築の近似、差だけを使う）：ea5b8cd 619,830 → 93fd59e **622,390 バイト gzip（+2,560）**、raw 1,759,379 → 1,787,559（+28,180）。R のこれまでの合計は 8849bf9 の 613,518 から +8,872。公開版 868,379 にこの差を足すと 877,251 で、1,000,000 の内側（公開版での値は未検証）。
+  - 全行に `adr20pct` と `gap` を載せた場合を同じ方法で測った（スクラッチ、`$T/r2/size/`）：+82,955。低変動の行だけに載せる形にしたのはこのため。丸め（小数 3 桁）でも +36,360 だった。
+- **エクスポートの同一性**（STEP 0 の H2 の実行器の写し `$T/h2/run.sh`、old = 45603f06、new = 93fd59e、同じ `FINANCIAL_EVALUATED_AT=2026-11-13T10:14:12Z`、入力は `audit3/r3-step0/h2/input`）：
+  - 両側とも 14,830 ファイル、エクスポーターは exit 0。old の研究インデックスは research-index-1bf5a7cc904990db.json で、STEP 0 の H2 の記録と同じ。
+  - バイト単位で中身が違うのは 10,385 ファイル：詳細 5,955（price_activity にキーが増えた）、verified-charts 4,421（stock_data に price_activity を含む）、研究インデックス、manifest、scan/US.json、research-daily.json、scan-list の 2 つ、candidate-history の 1 つ、static-data 直下の 4 つ（ハッシュ付きの名前を参照するもの）。
+  - 正規化して比べた（`$T/h2/normalize.py`、`lists.mjs`、`deep.py`）：price_activity を最初の2キーに切り、インデックスから R1 の se_pivot_date を除き、ファイル名とパスの 16 桁のハッシュを伏せる。残る差は次の 3 つだけ。
+    1. 17 行の `price_activity.lowRange` false → true（詳細 17、scan/US.json の rows 17 と initial_rows 3、研究インデックス 17）。17 行は再構築の 18 行から PAG を除いたもの。この入力では PAG の監査が日足を退けている（old・new とも range60pct null）。再構築の research の行は監査を通っているので、PAG はそちらでだけ当たる（入力の差。下の未検証）。
+    2. research-daily.json の候補の順位（minervini と minervini2 の上位 50 が、当たった行が後ろに回った分ずれる）。
+    3. インデックスに se_pivot_date（4,421 行、R1）。
+  - それ以外（scan-list の行と preview、charts-index、candidate-history、workbench、manifest）は、ハッシュを伏せればすべて同じ。
+  - エクスポーター自身のログ：研究インデックス 1,746,122 raw / 630,964 gzip → 1,781,586 / 639,390（+8,426 gzip。R1 の se_pivot_date と R2 の合計）。
+  - export-research.mjs は変えていない（R-P1 の後の差は 0）。
+
+### 規則 18（UI より先にデータを出さない）
+
+- vitest（priceActivity.test.js の「the new price_activity keys reach no reader that refuses them」）：新しいキーを持つ行と、最初の2キーだけの同じ行で、researchEngine の状態（entryPlan）と並び（rankCandidates）が同じ。研究インデックスの符号化と復号で、price_activity がキーの順も null もそのまま戻る。entryReadiness も新しい形の行で動く（entryReadiness.test.js）。
+- 8849bf9 の UI での確認（スクラッチ、`$T/rule18-r2/check.mjs`。8849bf9 の木 /home/user/screener/.claude/worktrees/r3-base を読むだけ）：再構築の 5955 行に R2 の price_activity を付けたもの（`$T/r2/research-r2.json`）と、それを最初の2キーに切ったものから、この木の listFields で 2 つのインデックスを作り、8849bf9 の prepareResearchBundle、candidateView、rowEvent、focusCandidates、focusCounts、entryReadiness、buyGate に通した。
+  - 結果：エラー無し。順位・評価・ビュー・行のイベント・注目候補・件数・entryReadiness・buyGate の結論・行（price_activity を除く）が、両方で**すべて同じ**（`$T/rule18-r2/result.json`）。8849bf9 の UI は新しいキーを読まず、拒みもせず、lowRange だけを読む。
+- price_activity のキーを調べる検証器は無い（grep：researchEngine.js、entryReadiness.js、portfolioPlan.js は lowRange だけを読む）。
+
+### オラクルの probe（実測、93fd59e）
+
+- `$H/probe/run-probe.sh $W 4423 oracles` → `probe-93fd59e-oracles.json`（label 132・value 132・8 銘柄・エラー 0、sha256 5df9eb3c…78db）。
+- `node $H/probe/diff.mjs $H/probe/probe-ea5b8cd-oracles.json $H/probe/probe-93fd59e-oracles.json --texts` → 「32 of 264 views differ (0 → 0 page errors)」。32 は **ZZPG の label 16・value 16 だけ**。ほかの銘柄の差は 0（`$T/oracle-diff-93fd59e.txt`）。
+- 計画は「ZZPG のチャートは変わらない」と見ていたが、変わる。理由は（b）ではなく（a）：ZZPG が低変動になって試算が止まり、planLevels が null を返すので、試算の水準が全部チャートから消える。期待どおりの差として次に挙げる。
+  - 消える：損切りの線と名前「損切り −7.0%」、その価格「33.91」、構造上の安値（狭い幅では「安値」の札、1440 では「最後の収縮の安値 24.56」）、凡例の「損切り」と注記の「最後の収縮の安値 24.56」、aria の「損切りの目安 33.91、」。
+  - 空いた場所に入る（配置器の置き直し。新しい要素ではない）：移動平均の名前（25、30、10日線、21日EMA）、320 の週足の「上抜け 0.38×」、2 行の凡例の次の項目（「収縮の安値を結ぶ線」「枠＝収縮」）。
+  - 位置：チャートのカードは 320 で 38.8px、375 で 20.8px 上にずれる（その上の結論が短くなった）。カードの高さは phone で同じ。1440 の 3か月・6か月はカードが 20px 低くなる（注記の行が減る）。
+- 492 ビューの probe と dump はバイト同一（下の実測）。既定のフィクスチャの行は price_activity も se_pivot_date も持たない。
+
+### 語彙（CONTEXT.md、統合で）
+
+- **ギャップ後の低変動**（since-gap 低変動）：直近60本で最大の1日の動き（終値比）が 10% 以上で、その後 15 本以上の値幅が 3% 未満の行。低変動（lowRange、低変動・監視のみ）の一つの理由。ほかの理由は 60日値幅（range60）と ADR20（adr）。
+- **前の土台**：ピボットの足より前に上抜けた収縮の土台。その安値はこのピボットの構造上の損切りにしない。
+
+### 未検証（R2）
+
+- 公開版での効果（当たる行の数、順位、インデックスの大きさ）。数はすべて 11-12 の再現のもの。
+- PAG のように、再構築の research の行と CI のエクスポーターで監査の結果が違う行の、公開版での扱い（この入力のエクスポートでは PAG は当たらない）。
+- H4 と凍結 908 ハーネスの再実行（バックエンドの差が 0 なので変わらないと推論）。
+- R3a（同じ定義のバックエンドへの移植）との一致：R3a はまだ無い。
+- 時間の計測はしていない（チャートのコードは変えていない）。負荷のもとの loadavg はすべて参考。
+- ブラウザで PCRX などの実データの画面を描いてはいない（sell-eval の結論と試算で確かめた）。
+
+### 実測（R2。コマンドと結果。時刻は日本時間。負荷のもとでの数はすべて参考）
+
+環境は R1 と同じ（`PATH=/opt/node22/bin:$PATH`、`FONTCONFIG_FILE=$S/ci-fonts/fonts.conf`、`SESSION_CALENDAR_PYTHON`、`FINANCIAL_REPLAY_PYTHON`）。HEAD は 93fd59e（この文書のコミットの前。後のコミットは docs/round3/verdict.md だけ）。
+
+| 何を | コマンド | 結果 | /proc/loadavg（前 → 後、参考） |
+|---|---|---|---|
+| 測定（STEP A、再構築） | `node $T/r2/measure.mjs $H/snapshot/out/9ac8705 $T/r2/measure-9ac8705.json` | 掲載 980 行。p1 22 行、p4 27 行、今日の lowRange 17 行（上の表） | — |
+| 測定（STEP A、H4） | `cd $W/backend && DATABASE_URL="postgresql://local/none" /home/user/screener/backend/venv/bin/python $T/r2/h4_flags.py $T/r2/h4-figures.json`、`python3 -I $T/r2/h4_summary.py $T/r2/h4-figures.json` | エントリー 588・対照 575、飛ばした数は H4 と同じ。採用値で 2/588・2/575（上の表） | 1.37 → — |
+| vitest（触ったファイルと読み手） | `cd $W/frontend && npx vitest run src/static/priceActivity.test.js src/static/entryReadiness.test.js src/static/brief/positionSizing.test.js src/static/brief/buyGate.test.js src/static/brief/StockVerdict.test.jsx src/static/brief/StockPlanCard.test.jsx src/static/brief/StockView.test.jsx src/static/researchTransport.test.js src/static/entryPosition.test.js src/static/portfolioPlan.test.js tools/export-research-order.test.mjs`（93fd59e、11-14 20:32） | 11 ファイル・448 本すべて通過 | 3.37 → 6.14 |
+| vitest（全部、1 回） | `cd $W/frontend && npx vitest run`（93fd59e、11-14 21:03–21:10、389 秒） | 248 ファイル・**4023 本**すべて通過（R1 の後 3993、+30） | 7.48 → 9.56 |
+| Playwright | `cd $W/frontend && AUDIT_PORT=4423 AUDIT_MATCH='brief-(oracles\|plan\|decision\|invariants\|sell\|watch\|rows\|compact\|phone)\.spec\.js' npx playwright test -c $T/pw.config.mjs`（93fd59e、11-14 20:49–21:02、12.9 分、`$T/pw-93fd59e.out`） | 290 本：**289 通過・1 skip**。skip は brief-invariants.spec.js:340 の `test.fixme('INTEGRATION: …')`（R1 の統合の依頼）。brief-oracles.spec.js の fixme は **0**（R1・R2 とも test）。やり直しは無し。brief-compact と brief-phone（凍結の高さの予算）も通過 | 5.24 → 5.83 |
+| R2 の Playwright だけ（コミット前） | 同じ設定で `-g 'R2'`、oracles・plan・decision・invariants | 9 本すべて通過（41 秒） | — → 3.87 |
+| 492 ビューの probe | `$H/probe/run-probe.sh $W 4423` → `cmp $H/probe/probe-8849bf9.json $H/probe/probe-93fd59e.json`（11-14 20:35–20:39） | label 492・value 480・30 銘柄・エラー 0。**バイト同一**（sha256 b5f29cff…39fa2） | 8.02 → 11.25 |
+| dump | `$H/dump/run-dump.sh $W 4423` → `cmp $H/dump/dump-8849bf9.json $H/dump/dump-93fd59e.json`（11-14 20:40–20:42） | 42 画面・エラー 0。**バイト同一**（sha256 cba0a2f2…c3555）。ウォッチ 5 銘柄の高さ 442 | 10.28 → 4.87 |
+| オラクルの probe | `$H/probe/run-probe.sh $W 4423 oracles` → `node $H/probe/diff.mjs $H/probe/probe-ea5b8cd-oracles.json $H/probe/probe-93fd59e-oracles.json --texts`（11-14 20:43–20:45） | 132・132 ビュー・エラー 0。差は ZZPG の 32 ビューだけ（上の節） | 2.74 → 4.88 |
+| 再構築（SNAP） | `$H/snapshot/run-snapshot.sh $W`（93fd59e、11-14 20:32–20:41、recalc 492 秒） | 全段 ok。eval-proxy は 980 掲載・準備 37 で同じ。rows.jsonl と ready43.jsonl のハッシュは SNAP と違う（`ui_liquid_rank` だけ。上の節）。counts.json：lowRange 17 → 24、張り付いた準備の行と SLAB 9/9、failedBreakout は R1 と同じ（hit 14） | 3.37 → 7.51 |
+| 再構築の比較 | `node $T/r2/compare.mjs $H/snapshot/out/9ac8705 $H/snapshot/out/93fd59e $W/frontend/src/static/brief/pivotBar.js $T/r2/compare-93fd59e.json`、`node $T/r2/prevbase2.mjs $H/snapshot/out/93fd59e $H/snapshot/out/93fd59e/rows.jsonl $T/r2/prevbase-93fd59e.json` | 上の節のとおり | — |
+| インデックスの大きさ | `ONLY=index-size` は再構築に含まれる（`out/93fd59e/index-size.json`）。全行に載せる案などは `$T/r2/restamp.mjs`・`variants.mjs` と `$H/snapshot/scripts/index-size.mjs` | 622,390 バイト gzip（ea5b8cd から +2,560） | — |
+| エクスポートの同一性 | `$T/h2/run.sh 93fd59ec`（old 45603f06、new 93fd59e）→ `normalize.py`、`lists.mjs`、`deep.py`（11-14 20:45–20:46） | 上の節のとおり。両側の出力の木は記録の後に消した（sha の一覧、ログ、比較の結果は `$T/h2/` に残した） | 2.89 → 4.88 |
+| 古い UI での確認 | `node $T/rule18-r2/check.mjs /home/user/screener/.claude/worktrees/r3-base $W $T/r2/research-r2.json $T/rule18-r2` | エラー無し。9 つの比較がすべて同じ（`$T/rule18-r2/result.json`） | — |
+| lint | `cd $W/frontend && npm run lint`（93fd59e） | 0 errors・4 warnings（前と同じ 4 つ） | — |
+| build | `$H/build/run-build.sh $W`（93fd59e、11-14 21:02–21:03） | `npm run build` の入口のチャンク 375.41 kB・**gzip 131.20 kB**。R1 の後（130.62）から **+0.58 kB**、STEP 0（130.28）からの R の合計 **+0.92 kB**、線 134.00 の内側。Design Acceptance の build の入口 gzip9 130,841 バイト（R1 の後 130,244 から +597） | 5.46 → 6.85 |
+| 所有の門 | `python3 -I $S/audit3/check-ownership.py R $W 45603f065f054cd48c812a3003f3a71ffd91cf45` | 各コミットの前に OWNERSHIP OK | — |
+| バックエンドの差 | `git diff --stat 45603f06 HEAD -- backend` | 出力は空 | — |
+| 凍結のファイル | `git diff --stat ea5b8cd HEAD -- pivotBar.js brief-fixture.js portfolioPlan.js researchEngine.js positionGeometry.js briefCandidate.js StockPlanCard.jsx researchTransport.js transport bookTechnicalEvidence.js export-research.mjs` | 出力は空（brief-oracles.spec.js は R2 の 1 行だけ） | — |
+
+- 高さ：brief-compact と brief-phone は変更なしで通過。台帳の高さ（既定のフィクスチャ）は動かない。既定の行は低変動でないので、結論の新しい行は台帳のどの変種にも出ない。ZZPG の結論は短くなった（チャートのカードが 320 で 38.8px、375 で 20.8px 上にずれる。オラクルの probe）。
+
+### パッケージ R-P2 の記録
+
+- コミット：a462ca5 `feat(frontend): flag pinned prices after a gap as low activity`、507afa6 `fix(frontend): never pair the stop with a base that broke out before the pivot`、93fd59e `test(frontend): flip the R2 oracle target and cover pinned prices after a gap`、この文書のコミット（docs）。
+- 変えたファイル：priceActivity.js（規則と定数、`lowActivityReason`）、entryReadiness.js（理由の文）、buyGate.js（低変動の結論 `lowActivityNote`、kind 'lowActivity'）、StockVerdict.jsx（その行）、positionSizing.js（前の土台、`previousBaseReason`）、テスト（priceActivity・entryReadiness・buyGate・StockVerdict・positionSizing）、spec（brief-oracles.spec.js の R2 の 1 行、brief-plan・brief-decision・brief-invariants）、この文書。
+- export-research.mjs は変えていない（注文どおり。price_activity はすでに列）。
+- 注文からのずれ：
+  1. X は 0.6 ではなく **0.5**（同じ結果で狭いほう。上の「定数」）。
+  2. `adr20pct` と `gap` は**低変動の行だけ**に載せる（全行だとインデックスが約 83 kB 増える）。注文は「figures it used」とだけ書き、全行とは書いていない。低変動でない行では両方 null。
+  3. `gap` は最大の動きが G 以上のときだけ（G 未満の動きはギャップと呼ばない）。
+  4. ADR の式は注文の文の (高値−安値)÷終値 ではなく、注文が拘束する adrState の 高値÷安値−1（上の「規則（a）」）。
+  5. 60本の窓に 0 以下の安値があると 'range60' に当てない（今日は負の安値で true になり得た。実データでは起きない）。
+  6. 結論の kind を 'unjudged' から 'lowActivity' に変えた（'unjudged' の行は note を描かないので、理由を出すには別の kind が要る）。今日すでに低変動の 12 行の結論の下の行が「買い位置を判定できません。」→「60日値幅5%未満（独自設定）。」になる（状態・試算は同じ）。
+  7. 計画の「ZZPG のチャートは変わらない」は成り立たない。試算が止まるので試算の水準が全部消える（上の「オラクルの probe」に正確な差）。
+
+### 統合への依頼（R2）
+
+1. **OD6（オーナーの確認）**：定数 X 0.5・Y 3・N 15・G 10 は、チャートを見た後に選んだもの。順位の変化（当たった行が最後に回り、PCRX が流動 1 位から外れる）を PR に書く。
+2. **語彙（CONTEXT.md）**：上の「語彙」。
+3. **R3a**：同じ定義と定数を Python に移す（このパッケージではしていない）。一致の検査の対象は、再構築の 18 行（掲載 7、掲載外 11）。
+4. **計画の訂正（記録のみ）**：§5 R2 の「ZZPG のチャートは変わらない」（上の 7）。ADR の式の文（上の 4）。
+5. bookTechnicalEvidence.js に直すべき組み合わせは無い（上の「規則（b）」）。依頼なし。
+
+### 変えていないもの（R2）
+
+`lowRange` の意味（今日の 17 行はすべて 'range60' で当たったまま）、低変動でない行の状態・結論・試算、選定、90% の線、トレンドテンプレート、Code 33、portfolioPlan.js、researchEngine.js、positionGeometry.js、briefCandidate.js、StockPlanCard.jsx、pivotBar.js、brief-fixture.js、輸送、バックエンド、チャートの脚と VCP の足跡の文、BOOK_TECHNICAL_VERSION、`PLAN_BLOCKED.low` の文、492 ビューの probe、dump、高さの台帳。
