@@ -441,3 +441,90 @@ p4 (ADR20 < 0.5% または 20本の値幅 < 3%)： 27 行
 ### 変えていないもの（R2）
 
 `lowRange` の意味（今日の 17 行はすべて 'range60' で当たったまま）、低変動でない行の状態・結論・試算、選定、90% の線、トレンドテンプレート、Code 33、portfolioPlan.js、researchEngine.js、positionGeometry.js、briefCandidate.js、StockPlanCard.jsx、pivotBar.js、brief-fixture.js、輸送、バックエンド、チャートの脚と VCP の足跡の文、BOOK_TECHNICAL_VERSION、`PLAN_BLOCKED.low` の文、492 ビューの probe、dump、高さの台帳。
+
+## R3c. 準備に効かない3つの診断（パッケージ R-P3）
+
+コミット 6eae7cd `feat(scanner): add setup diagnostics for unconfirmed contractions and stale pivots`（ゴールデンを含む）。準備（`derived_ready`）・`failed_checks`・10 のゲートの名前と順・トレンドテンプレート・Code 33 は変えていない。
+
+### 規則
+
+- 3つの名前を `explain.diagnostics` に足す。通り道は既存の診断の経路（`ExplainBuilderInput.diagnostics`）。setup_engine_screener.py が、検出器の診断（`agg_output.detector_failed_checks`）の後ろに、readiness.py の `setup_diagnostics` の結果を並べて渡す。`failed_checks` には入らず、`derived_ready` を動かさない。新しい最上位の値は作らない（round 2 の規則 10）。
+- 値が欠けていれば診断を出さない（不明は発見ではない）。どの診断も「ある」ときだけ出るので、欠けた値で誤って出ることはない。
+- **`contraction_unconfirmed`**：ブリーフの収縮の自動測定（bookTechnicalEvidence.js の `automaticLegs`・`setupBase`・`contractions`、独自近似）が有効な並びを見つけない。チャートの「収縮は未確認」に当たる。
+  - JS を Python に移した。浮動小数の演算の順も JS と同じ（ATR20 の累積和など。pandas の和は使わない）。定数は VCP_METHOD と同じ値で、test_setup_engine_parameters.py が bookTechnicalEvidence.js の宣言を読んで固定する。
+  - 土台の起点は JS と同じ：主パターンの型の**最初の**候補の開始日・終了日（ペイロードが公開する形。カップならハンドルの日付が metrics から start_date に上がる）の間の最高値。その候補が無ければ、直近150本のジグザグで確かめた最高のスイング高値。エクスポーターが公開する `book_technical_evidence` は、再計算がその日のものなら、この土台を使う（export-research.mjs:128 は `se_candidates` を持つ行で呼ぶ）。
+  - 有効とは、2〜6 個の収縮で、どれも始まりが山・後に安値・深さが正。ブリーフはさらに日足の認証を要る（認証されない行のチャートは常に「収縮は未確認」）が、診断はエンジン自身の日足で測る。
+  - 高値・安値・終値のどれかが欠けるか 0 以下の足がある、または 20 本未満なら不明（診断なし）。
+- **`pivot_already_crossed`**：ピボット自身の足より後の足で、終値がピボット ×（1 ＋ `PIVOT_ALREADY_CROSSED_PCT`／100）を超える。`PIVOT_ALREADY_CROSSED_PCT` = 3（config.py、独自設定）。
+  - ピボットの足は pivotBar.js（凍結）の規則をそのまま移した：週足の型ならピボット日はその週の金曜のラベルで、その日までの7暦日のうち、高値がピボットとセント単位で等しい最も新しい足。日足の型ならその日の足（高値がセントで等しいとき）。セントは JS の `Math.round`（0.5 は切り上げ。Python の銀行丸めではない。単体テストで固定）。時間軸は選ばれた主パターンの候補自身のもの。足が見つからなければ診断なし。
+  - p1 の 17/37 は「ピボット日より後の高値が 3% 超」。こちらは「ピボットの足より後の終値が 3% 超」で、狭い。
+- **`pivot_below_base_high`**：ピボットが、土台の起点からピボットの足までの最高値より `PIVOT_BELOW_BASE_HIGH_PCT` を超えて下。`PIVOT_BELOW_BASE_HIGH_PCT` = 5（config.py、独自設定。p1 の 5%）。
+  - 起点は選ばれた主パターンの候補（型・ピボット価格・ピボット日で一致するもの）の、カップなら左の縁（`left_lip_date`）、ほかは開始日。週足のラベルはその週の最初の暦日から数える。起点・ピボットの足・窓の高値のどれかが無ければ診断なし。
+  - カップの左の縁のピボットは普通（p1 の検証の注意）なので、これは記録のための診断で、判定には使わない。
+
+### テスト（すべてゲートに入った既存のファイル）
+
+- test_setup_engine_screener.py `TestSetupDiagnostics`（13 件）：各診断がその形で出る、閾値の手前では出ない、欠けた入力では出ない（ピボット日なし・不正な日付・セントが合わない・ピボットなし・候補なし・高値の欠け）、週足のラベルはその週の最後の一致の足で区切る（その前の高い終値は数えない）、JS の丸め、ペイロードの日付で土台を取ると結果が変わる、診断があっても準備は true のまま。
+- test_explain_builder.py：3つの名前を診断として渡しても `derived_ready` は true、ゲートの不合格はそのまま。
+- test_setup_engine_parameters.py：VCP_METHOD の定数の固定。
+- 既存の 2 件（理想の VCP、検出器の一つが履歴不足）は診断の正確な並びを固定していたので、末尾に `contraction_unconfirmed` を足した（どちらも準備は true のまま。緩めてはいない）。
+
+### ゴールデンの差（`make golden-update`、実測）
+
+scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` の末尾に足しただけ（前からの並びはそのまま、ほかのキーは同一。JSON を読んで比べた）。
+
+| ファイル | 足した文字列 |
+|---|---|
+| scanner_3wt_strict.json | contraction_unconfirmed |
+| scanner_cwh_classic.json | contraction_unconfirmed |
+| scanner_degraded_no_benchmark.json | contraction_unconfirmed |
+| scanner_first_pullback.json | contraction_unconfirmed |
+| scanner_high_score_not_ready.json | contraction_unconfirmed, pivot_already_crossed |
+| scanner_htf_classic.json | contraction_unconfirmed |
+| scanner_no_pattern_exponential.json | contraction_unconfirmed |
+| scanner_nr7_inside_day.json | contraction_unconfirmed |
+| scanner_vcp_detected.json | contraction_unconfirmed |
+
+検出器・集約・rrg のゴールデンと、ほかの scanner のゴールデン（scanner_insufficient_50_bars・scanner_policy_insufficient）は変わらない。golden-update の唯一の失敗は既知の test_mcp_market_copilot（このパッケージの前の HEAD での空の実行でも同じで、そのときは木が汚れなかった）。
+
+### 再構築での確認（再現スナップショットの数、11-12。公開版の数ではない）
+
+コマンド：`ONLY=bundle,recalc,eval,assemble,eval-sell,p1-analyze,p1-stats,counts $H/snapshot/run-snapshot.sh $W`（out/6eae7cd）。前は R-P2 の out/93fd59e。集計は `$T/r3/r3c-rebuild.py`（→ `$T/r3/r3c-rebuild-6eae7cd.txt`）。
+
+- **準備は変わらない**：掲載 980 行のうち、新しい3つの文字列を除いて違う行は 0。準備 37 行は同じ銘柄。前からの診断が変わった行も 0。counts.json・work/sell-eval.jsonl・p1/stats.txt・work/eval-proxy.json・serve/research.json はバイト一致（R3c は failed_checks を変えないので、インデックスの `setup_recalculation.reason` も同じ）。
+- **`contraction_unconfirmed`**：準備 37 行のうち **28**（計画の見込み 28）。CI の日足 22、代理の日足 6（BB, BHB, EMR, EQH, GEO, IQV）。掲載 694/980。
+  - AMAL, BB, BHB, BWIN, CEPO, CZFS, EMR, EQH, FCNCA, GEO, GLBE, HAFC, IDT, IQV, LARK, LCNB, NBTB, OPK, PCRX, PRTH, RMBI, RNW, SIG, SWKS, TECH, TMP, TRST, WSFS。
+  - 出ない 9 行：ADI, ARX, CFBK, CTKB, DJCO, DSGR, FMAO, MGRC, RDNT。
+  - **JS との一致**（`$T/r3/contraction-parity.mjs` → `$T/r3/contraction-parity-6eae7cd.json`）：スナップショットのバンドルの `buildBookTechnicalEvidence` を、各行の公開形の候補（`se_candidates`）と再計算の記録で呼んだ。認証された掲載行 615 行すべてで、JS の「有効な並びなし」と Python の診断が一致（不一致 0）。認証されない 365 行はブリーフでは常に「収縮は未確認」。準備の行では、JS（認証なしは未確認と数える）29、Python 28 で、差は DSGR だけ（代理の日足で認証されないのでチャートは未確認、エンジンは包んだ日足で有効な並びを測る）。
+  - **p1 の 28 との関係**：p1 と p3 の数（スナップショットの aria ラベル）は、土台の候補が無い経路（ジグザグだけ）で描かれたもの。同じ経路で測ると 27（CI 21、代理 6）で、CI の 21 行と、脚が描かれた 9 行（PCRX, MGRC, ADI, RDNT, CFBK, CTKB, LCNB, PRTH, RMBI）は p3 と同じ（最初の版のコミットで測った。`$T/r3/r3c-rebuild-d4049ba-algorithm-only.txt`）。公開の経路（土台の候補あり）では LCNB, PCRX, PRTH, RMBI が加わり、ARX, DJCO, FMAO が外れて 28。PCRX は p1 が見た 18/12/5（ギャップの前の脚）が、公開の経路ではハンドルの週から測るので脚にならない。
+  - 最初の版（d4049ba、増やす前に修正して amend）は、集約の候補が開始日を metrics にしか持たないのを見落とし、いつもジグザグの経路を通っていた。JS との突き合わせで 55 行の不一致として見つけ、ペイロードと同じ正規化（`coerce_pattern_candidate`）を通すように直した。
+- **`pivot_already_crossed`**：準備 37 行のうち **14**（p1 は 17）。ADI, BB, BHB, CTKB, EMR, EQH, FMAO, GLBE, HAFC, LCNB, NBTB, OPK, RDNT, SIG。CI 10、代理 4（BB, BHB, EMR, EQH）。掲載 614/980。
+  - p1 の 17 のうち SWKS（高値 +3.7%）・IQV（+4.0%）・TRST（+4.2%）は、高値では 3% を超えたが終値では超えていない。p1 に無い行は無い。
+- **`pivot_below_base_high`**：準備 37 行のうち **8**。ADI, BB, CFBK, CTKB, GLBE, LARK, LCNB, OPK。CI 7、代理 1（BB）。掲載 369/980。
+
+### H4（実測）
+
+`cd $W/backend && DATABASE_URL="postgresql://local/none" /home/user/screener/backend/venv/bin/python scripts/probe_setup_ready_908.py --json $T/r3/h4-r3c2.json --rows`：変更の前（`$T/r3/h4-before.json`、STEP 0 の記録 `audit3/r3-h4/probe-908-8849bf9.json` ともバイト一致）と**バイト一致**（cmp）。probe は診断を出力しないので、変わるところが無い。準備の率・ゲートの表も同じ（28/588 対 23/575、+0.8pp、ゲート 6 で 458/588）。
+
+### 規則 18（UI より先にデータを出さない）
+
+- **新しい文字列は公開の研究の詳細に届く**：export-research.mjs:94 `row.se_explain=row.setup_engine?.explain`、また詳細は行そのもの（`setup_engine` を含む）を持つ。どちらも既存の自由形式の配列 `explain.diagnostics` の中の要素が増えるだけで、新しいキー・警告コード・インデックスの項目ではない。
+- **読む側も拒む側も無い**（grep `diagnostics`・`se_explain`・`setup_engine`・`failed_checks`・`setup_recalculation`。frontend/src/static、frontend/src/components、frontend/tools）：
+  - frontend/src/static（公開のブリーフ）は `se_explain`・`setup_engine`・`explain.diagnostics` を読まない。bookTechnicalEvidence.js が読むのは `se_candidates` と `setup_recalculation` の status・as_of_date だけ。
+  - `se_explain` を読むのは接続版アプリの src/components/Scan（SetupEngineDrawer.jsx など）だけで、静的ビルドには入らない（main.jsx：`STATIC_BUILD` のとき App の遅延 import を落とす）。SetupEngineDrawer も表示するのは passed/failed の check と invalidation_flags で、diagnostics は描かない。
+  - 詳細の受け入れの検査（bookFinancialAdmission.js の `sameKeys`、fundamentalsExplain.js の警告コード）は財務の記録とその警告コードのもので、`se_explain` の中身を見ない。
+  - recalculate-setups.py は `failed_checks` だけを `setup_recalculation.reason` に写す（診断は写さない）。だからインデックスの行には届かない。このラウンドでは写さない（診断はバックエンド側に留める）。
+- 詳細の内容が変わるので詳細のハッシュ（パス）は変わる。これは公開ごとに起きることで、新しい形ではない。
+
+### 実測（R3c。コマンドと結果。時刻は日本時間。負荷のもとでの時間はすべて参考）
+
+- 変更の前（HEAD b609500、11-14 23:10〜）：
+  - H4：上のコマンドを `--json $T/r3/h4-before.json --rows` で（8分4秒、負荷 3.64 → 1.40）。8849bf9 の記録とバイト一致。
+  - 凍結 908：`cd $W/backend && DATABASE_URL="postgresql://local/none" /home/user/screener/backend/venv/bin/python scripts/validate_trade_ideas.py > $T/r3/frozen-908-before.log`：「DISCRIMINATION (entry − control): FIRE±5 +25.8pp, SETUP +52.0pp」。STEP 0 の記録と、バンドルのパスの行と警告を除いて同じ。
+  - ゲート：`cd $W && make PYTHON=/home/user/screener/backend/venv/bin/python gate-1`（〜gate-5、gate-check）：gate-1 279、gate-2 47、gate-3 152、gate-4 21（参考）、gate-5 43、gate-check OK。`make … golden-update` の空の実行は test_mcp_market_copilot の既知の失敗だけで、`git status` は空のまま。
+- 変更の後（6eae7cd）：gate-1 294（新しい 15 件）、gate-2 47、gate-3 152、gate-5 43、gate-check OK。所有の検査 OWNERSHIP OK。再構築・JS との一致・H4 は上。
+
+### 未検証（R3c）
+
+- 公開版での数（すべて再構築の数）。公開版の詳細の `book_technical_evidence` が、ここで JS を呼んだ形（`se_candidates` あり）と同じ経路を通ること（export-research.mjs:94-95 と :128 の読みからの推論）。
+- 凍結 908 は R3c だけでは再実行していない（R3a の後に1回。SETUP の列は Markets360 の条件で Setup Engine を見ない：p1-5）。
