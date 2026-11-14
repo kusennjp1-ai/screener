@@ -19,8 +19,8 @@ const Unverified = () => <span className="ro-unverified-note">（未検証）</s
 /**
  * The readout beside (1024px and wider) or under the period segment: the selected bar (the latest by
  * default) with its open, high, low, close and change, its volume and ratio, the 50/150/200 averages
- * (10/30/40 weeks) and, for the latest certified bar only, the distance to the pivot (as every screen prints it:
- * chartReadout's pivotText) and from the 52-week high. A value and its qualifier never wrap apart. `compact` (below 1024px) drops the decimals
+ * (10/30/40 weeks) and, for the latest certified bar only, the distance to the pivot and from the
+ * 52-week high. A value and its qualifier never wrap apart. `compact` (below 1024px) drops the decimals
  * of prices from 1,000 up, as the chart's tags do. On bars not certified for the analysis date it starts
  * with a neutral 「未検証の足」 chip (the reason for screen readers and in its title) and reads the change and
  * the volume ratio dimmed with 「（未検証）」; the prices and averages stay. ADR (the latest daily bar; — when
@@ -49,7 +49,7 @@ function Readout({ readout, compact, reason }) {
         <span className="ro-item"><i>出来高</i>{readout.volume === null ? <Missing word="未取得" /> : readout.volumeText}</span>
         <span className={`ro-item ro-ratio${unverified ? ' is-unverified' : ''}`} title={`直前${readout.volumeBasis}の平均出来高との比`}>{readout.volumeRatio === null ? <Missing /> : <>{ratioShown(readout.volumeRatio)}{unverified ? <Unverified /> : null}</>}<span className="sr-only">（直前{readout.volumeBasis}平均比）</span></span>
       </span>
-      {readout.pivotText !== null ? <span className="ro-item"><i>対ピボット</i>{readout.pivotText}</span> : null}
+      {readout.pivotRatio !== null ? <span className="ro-item"><i>対ピボット</i>{formatPercent(readout.pivotRatio)}</span> : null}
       {readout.fromHigh !== null ? <span className="ro-item" title="52週高値から"><i>{compact ? <><span className="sr-only">52週</span>高値から</> : '52週高値から'}</i>{formatPercent(readout.fromHigh)}</span> : null}
     </span>
     <span className="ro-line ro-averages">
