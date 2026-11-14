@@ -860,3 +860,31 @@ describe('brief market card: round 2', () => {
     expect(labels.join('')).not.toMatch(/-\d/);
   });
 });
+
+// ---- Round 3 (market track): the market tab's lead while a newer session has closed (M1e) -------------------------------
+describe('brief market card: a verdict older than the last closed session (M1e)', () => {
+  const lead = () => screen.getByTestId('brief-regime').querySelector('.brief-verdict-head p').textContent;
+  const card = (props, { switcher = false, market = UP } = {}) => render(<MemoryRouter><Card market={market} trends={trends()} date="2026-10-02" detail switcher={switcher} section="index" onSection={() => {}} {...studyProps(trends(), '2026-10-02', reference, !switcher)} {...props} /></MemoryRouter>);
+  it('says the judgement is 10/2\'s and waits for a new publication: the long form on the desktop, one line on a phone', () => {
+    card({ update: { target: '2026-10-05' } });
+    expect(lead()).toBe('10/2引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）');
+    // The label, the meter and the cap are unchanged.
+    expect(screen.getByTestId('brief-regime').querySelector('strong')).toHaveTextContent('上昇トレンド（独自判定）');
+    expect(screen.getByTestId('brief-regime').querySelector('.brief-exposure b')).toHaveTextContent(/^最大 50%$/);
+    cleanup();
+    card({ update: { target: '2026-10-05' } }, { switcher: true });
+    expect(lead()).toBe('10/2時点の判定・更新待ち');
+    cleanup();
+    // The verdict's day is the last closed session, no calendar, or a 0% guide: the lead as before.
+    for (const [props, options, text] of [[{ update: { target: '2026-10-02' } }, {}, '新規の買いを検討できます。'], [{ update: { target: null } }, { switcher: true }, '新規の買いを検討できます。'], [{}, {}, '新規の買いを検討できます。'],
+      [{ update: { target: '2026-10-05' } }, { switcher: true, market: { label: '50日線割れ（弱含み・独自判定）', cap: 0 } }, '新規の買いは控えます（独自判定）。']]) {
+      card(props, options);
+      expect(lead()).toBe(text);
+      cleanup();
+    }
+  });
+  it('never changes Today\'s card, which takes no calendar', () => {
+    render(<MemoryRouter><Card market={UP} trends={trends()} date="2026-10-02" update={{ target: '2026-10-05' }} /></MemoryRouter>);
+    expect(screen.getByTestId('brief-regime')).toHaveTextContent('上昇トレンド（独自判定）新規の買いを検討できる地合い。エクスポージャーの目安は最大 50%（独自判定）。');
+  });
+});

@@ -277,8 +277,8 @@ function SectionTabs({ panels, active, onSelect }) {
  * judge side's cause under the basis and two notes) and `studyBlock`, the 「過去の傾向」 fold (at the end of the 指数 panel
  * on a phone, across the card on the desktop).
  */
-export function MarketDetailCard({ market, marketLoading = false, trends, date, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, study = null, studyBlock = null }) {
-  const view = marketCardView({ market, marketLoading, trends, date, study, tab: marketTabParts });
+export function MarketDetailCard({ market, marketLoading = false, trends, date, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, study = null, studyBlock = null, update = null }) {
+  const view = marketCardView({ market, marketLoading, trends, date, study, tab: marketTabParts, update });
   const { status, verdict, dating, signals, conflict, groups, chart } = view;
   const chartStatus = chartStatusOf(view, status);
   // The 指数 panel's S&P／Nasdaq switch (only with the Nasdaq's published closes): one index at a time, its figures, its
@@ -348,7 +348,8 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
     {dating.lagNote && !switcher && <p className="brief-note brief-asof brief-lag" role="note">{dating.lagNote}</p>}
     <div className="brief-lead">
       <div className={`brief-verdict is-lead tone-${verdict.tone}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}>
-        <div className="brief-verdict-head"><VerdictMark verdict={verdict} /><div><strong><Label text={verdict.label} /></strong>{verdict.date && <span className="brief-verdict-date numeric">{verdict.date}</span>}<p>{verdict.lead}</p></div></div>
+        {/* A lead that waits for a new publication (verdictWaiting) takes its one-line form on a phone. */}
+        <div className="brief-verdict-head"><VerdictMark verdict={verdict} /><div><strong><Label text={verdict.label} /></strong>{verdict.date && <span className="brief-verdict-date numeric">{verdict.date}</span>}<p>{switcher && verdict.leadShort ? verdict.leadShort : verdict.lead}</p></div></div>
         {/* On a narrow phone the label breaks before の目安, never leaving 「安」 alone. */}
         {verdict.exposure !== null && <div className="brief-exposure"><small><span className="brief-frag">エクスポージャー</span><span className="brief-frag">の目安</span></small><b className="numeric">{verdict.exposure > 0 ? `最大 ${verdict.exposure}%` : '0%'}</b><span className="brief-exposure-track" aria-hidden="true"><i style={{ width: `${verdict.exposure}%` }} /></span></div>}
         {/* 目安と判定の基準, in the same order on both: the verdict's basis, while the verdict is positive the Nasdaq's
@@ -462,8 +463,11 @@ export default function MarketScreen({ brief }) {
   // With the Nasdaq's closes the 指数 panel switches between the indices and shows the Nasdaq's figures itself.
   const nasdaqSwitch = status.state === 'ready' && Boolean(indexCloses((trends.data.indices || []).find(item => item?.symbol === '^IXIC')));
   const historyError = !history && typeof trends?.data?.long_history_error === 'string';
-  // The 推移 tab's 「?」 on a phone: no long history to show, or one that is not the latest session's.
-  const update = status.state === 'ready' && history ? marketUpdateState(trends.data).state : null;
+  // The exchange calendar's last closed session (marketUpdateState, on the clock), whenever the series is ready: the verdict's
+  // lead waits for a new publication when it is after the verdict's day (M1e). The 推移 tab's 「?」 on a phone reads the
+  // state only with a long history: none to show, or one that is not the latest session's.
+  const schedule = status.state === 'ready' ? marketUpdateState(trends.data) : null;
+  const update = history ? schedule?.state ?? null : null;
   const historyUnknown = status.state === 'loading' || update === 'current' ? null : update === 'pending' ? '更新待ち' : '未確認';
   const historySection = <section className={wide ? 'brief-card brief-history in' : 'brief-history is-section'} style={wide ? { '--i': 2 } : undefined} aria-labelledby="brief-history-title">
     <div className="brief-step"><h2 id="brief-history-title" tabIndex={-1}>市場環境の推移</h2></div>
@@ -487,7 +491,7 @@ export default function MarketScreen({ brief }) {
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け・米国株` : '日付未確認'}</small><h1>市場</h1></header>
     <MarketDetailCard market={brief.market} marketLoading={brief.marketLoading} trends={trends} date={brief.date} onOpenMetric={openMetric}
       switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} historyUnknown={historyUnknown}
-      study={study}
+      study={study} update={schedule ? { target: schedule.target } : null}
       studyBlock={<RegimeContext context={study.regime} wide={wide} nasdaq={study.nasdaqPosition?.state && !nasdaqSwitch ? study.nasdaqFigures : null} />} />
     {wide && historySection}
   </>;

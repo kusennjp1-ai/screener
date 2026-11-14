@@ -5,6 +5,7 @@
 import { bifurcation, environmentPoint, BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT, SPLIT_RULE } from '../marketLongHistory';
 import { indexSummary } from '../reference/indexSummary.js';
 import { distributionCount, environmentRules, followThroughView, latestKnown, marketTone, shortDate, trendsStatus, ENV_RULES, FTD_TEXT } from './briefModel';
+import { isoDay } from './briefShared';
 
 const finite = Number.isFinite;
 /** Sessions in a year and in a month, as the long history counts them (marketTabHistory.js reads the same). */
@@ -152,6 +153,19 @@ export function groupDate(items) {
   return valued.length && valued.every(item => item.asOf && item.asOf === valued[0].asOf) ? valued[0].asOf : null;
 }
 
+/**
+ * The market tab's verdict lead while a newer session has closed than the verdict's own (M1e): `target` is the last
+ * session the exchange calendar says has closed (marketUpdateState's target), `date` the verdict's (the analysis date).
+ * Only while the guide is open (cap > 0), so 「新規の買いを検討できます」 never stands on an older session's judgement:
+ * { lead, short } naming that session, else null (a current verdict, a closed guide, or no valid target or date:
+ * nothing is inferred without the calendar). The label, the tone, the cap and every gate are not this function's.
+ */
+export function verdictWaiting({ market, date, target }) {
+  if (!(market?.cap > 0) || market.state === 'unknown' || !isoDay(target) || !isoDay(date) || !(date < target)) return null;
+  const md = shortDate(date, date);
+  return { lead: `${md}引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）`, short: `${md}時点の判定・更新待ち` };
+}
+
 // ---- the card ---------------------------------------------------------------------------------
 
 /**
@@ -162,8 +176,12 @@ export function groupDate(items) {
  * the warning summary's study tags and their words, the 〔参考〕 checks counted apart, the opened 分配日 row's detail, the
  * Nasdaq note and position, the judge side's cause under the basis and whom TT達成数 counts. Without it (Today) none of
  * these is shown. `series` is the 指数 panel's S&P／Nasdaq switch, only from a publication with the Nasdaq's closes.
+ * `update` is the market tab's `{ target }`: the last session the exchange calendar says has closed (marketUpdateState's
+ * target, computed by the screen from the clock; this model never reads one). With a valid target after the verdict's day
+ * and an open guide, the verdict's lead says the judgement is that older session's and waits for a new publication
+ * (verdictWaiting); its label, tone, cap, Today's `text` and every gate stay as they are. Today passes none.
  */
-export function marketCardView({ market, marketLoading = false, trends, date, study = null, tab = null }) {
+export function marketCardView({ market, marketLoading = false, trends, date, study = null, tab = null, update = null }) {
   const status = trendsStatus(trends), ready = status.state === 'ready';
   const history = ready ? trends.data.long_history || null : null;
   const longError = ready && !history && typeof trends.data.long_history_error === 'string' ? trends.data.long_history_error : null;
@@ -259,9 +277,12 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const dating = marketDating({ date, historyDate, indexDates: dist.filter(d => d.hit).map(d => ({ name: d.name, date: d.hit.date })) });
   const tone = marketTone(market);
   const exposure = market?.cap > 0 ? Math.round(market.cap * 100) : market && market.state !== 'unknown' ? 0 : null;
+  const waiting = verdictWaiting({ market, date, target: update?.target ?? null });
   const verdict = {
     tone, pending, exposure, label: market?.label || (pending ? '判定を読み込み中…' : '市場未確認'),
-    lead: market?.cap > 0 ? '新規の買いを検討できます。' : market?.state === 'unknown' ? '市場の状態を確認できません。新規の買いは見送ります。' : market ? '新規の買いは控えます（独自判定）。' : pending ? '市場の判定を読み込み中です。' : '市場の判定を読み込めません。新規の買いは見送ります。',
+    lead: waiting ? waiting.lead : market?.cap > 0 ? '新規の買いを検討できます。' : market?.state === 'unknown' ? '市場の状態を確認できません。新規の買いは見送ります。' : market ? '新規の買いは控えます（独自判定）。' : pending ? '市場の判定を読み込み中です。' : '市場の判定を読み込めません。新規の買いは見送ります。',
+    // The phone's one-line form of a waiting lead (MarketDetailCard picks it below 1024px); null otherwise.
+    leadShort: waiting ? waiting.short : null,
     text: market?.cap > 0 ? `新規の買いを検討できる地合い。エクスポージャーの目安は最大 ${Math.round(market.cap * 100)}%（独自判定）。` : market?.state === 'unknown' ? '市場の状態を確認できません。新規の買いは見送ります。' : market ? '新規の買いは控えます（独自判定）。' : pending ? '市場の判定を読み込み中です。' : '市場の判定を読み込めません。新規の買いは見送ります。',
     basis: verdictBasis(market, date), date: market && market.state !== 'unknown' ? dating.verdictDate : null,
     nasdaq: market?.cap > 0 ? study?.nasdaq ?? null : null,

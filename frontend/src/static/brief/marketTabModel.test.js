@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
-import { basisConflict, delta, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, REFERENCE_CHECKS, RULE_TEXT, signedPercent, verdictBasis, yearRange } from './marketTabModel';
+import { basisConflict, delta, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, REFERENCE_CHECKS, RULE_TEXT, signedPercent, verdictBasis, verdictWaiting, yearRange } from './marketTabModel';
+import { marketUpdateState } from '../marketUpdateState';
 import { historyTakeaway, sectorRanks } from './marketTabHistory';
 import { marketTabParts } from './marketTabGroups';
 import { gspcFtdWords, marketRegimeContext, marketTabStudy, nasdaqNote, publishedIndexState, publishedMarketContext, regimeCause, regimeKey, signalTagText, REGIME_NAMES, TAG_MEANINGS, TT_POPULATION } from '../reference/marketTabStudy.js';
@@ -739,5 +740,65 @@ describe('market tab: the S&P／Nasdaq switch from the Nasdaq\'s published close
     value.data.indices[1] = { ...value.data.indices[1], closes_error: '指数の終値の形式を確認できません。' };
     expect(cardView({ market: UP, trends: value, date: '2026-10-02' })).toMatchObject({ series: null, nasdaqClosesError: '指数の終値の形式を確認できません。' });
     expect(cardView({ market: UP, trends: trends(), date: '2026-10-02' }).nasdaqClosesError).toBeNull();
+  });
+});
+
+// ---- Round 3 (market track): the verdict's lead while a newer session has closed (M1e) ---------------------------------
+describe('market tab: the verdict lead waits for a new publication (M1e)', () => {
+  const DATE = '2026-10-02';
+  const caps = [['上昇トレンド（独自判定）', 0.5], ['上昇に圧力（独自判定）', 0.25], ['50日線割れ（弱含み・独自判定）', 0]];
+  const LONG = '10/2引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）', SHORT = '10/2時点の判定・更新待ち';
+  /** The exchange calendar the exporter writes (refresh_schedule): 10/2 and the sessions after it, each closing at 20:00Z. */
+  const schedule = { provider: 'pandas_market_calendars:NYSE', valid_until: '2026-10-08T23:00:00Z',
+    sessions: ['2026-10-01', '2026-10-02', '2026-10-05', '2026-10-06', '2026-10-07'].map(date => ({ date, close_at: `${date}T20:00:00Z` })) };
+  const scheduled = (value, at) => marketUpdateState({ ...value.data, refresh_schedule: schedule }, Date.parse(at));
+
+  it('waits only while the guide is open and a session after the verdict\'s day has closed', () => {
+    for (const [label, cap] of caps) {
+      const market = { label, cap };
+      // The verdict's own day is the last closed session: the lead is unchanged.
+      expect(verdictWaiting({ market, date: DATE, target: DATE })).toBeNull();
+      // A newer session has closed: an open guide's lead names the verdict's session; a 0% guide already says 控えます.
+      expect(verdictWaiting({ market, date: DATE, target: '2026-10-05' })).toEqual(cap > 0 ? { lead: LONG, short: SHORT } : null);
+    }
+    // Nothing is inferred without the calendar, a valid date or a known market.
+    for (const target of [null, undefined, 'x', '2026-10-01']) expect(verdictWaiting({ market: UP, date: DATE, target })).toBeNull();
+    expect(verdictWaiting({ market: UP, date: null, target: '2026-10-05' })).toBeNull();
+    expect(verdictWaiting({ market: { label: '市場未確認', cap: 0.5, state: 'unknown' }, date: DATE, target: '2026-10-05' })).toBeNull();
+    expect(verdictWaiting({ market: null, date: DATE, target: '2026-10-05' })).toBeNull();
+  });
+
+  it('replaces the market tab\'s lead only: the label, tone, cap, Today\'s text and the basis stay', () => {
+    for (const [label, cap] of caps) {
+      const market = { label, cap, regime: 'confirmed_uptrend' };
+      const current = cardView({ market, trends: trends(), date: DATE, update: { target: DATE } }).verdict;
+      const behind = cardView({ market, trends: trends(), date: DATE, update: { target: '2026-10-05' } }).verdict;
+      const none = cardView({ market, trends: trends(), date: DATE }).verdict;
+      expect(current).toEqual(none);
+      expect(behind.lead).toBe(cap > 0 ? LONG : none.lead);
+      expect(behind.leadShort).toBe(cap > 0 ? SHORT : null);
+      expect(none.leadShort).toBeNull();
+      const rest = value => Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'lead' && key !== 'leadShort'));
+      expect(rest(behind)).toEqual(rest(none));
+      expect(behind.text).toBe(none.text);
+    }
+  });
+
+  it('reads the target from marketUpdateState: a verdict two sessions old waits; a long history one session behind does not', () => {
+    // The clock after 10/5's close: the verdict's 10/2 is older than the last closed session.
+    const late = scheduled(trends(), '2026-10-06T09:00:00Z');
+    expect(late.target).toBe('2026-10-05');
+    expect(cardView({ market: UP, trends: trends(), date: DATE, update: { target: late.target } }).verdict).toMatchObject({ lead: LONG, leadShort: SHORT, label: UP.label, exposure: 50, tone: 'zone' });
+    // The long history ends on 10/1 while the verdict's day is current: marketUpdateState says pending (the 推移 tab's
+    // 更新待ち), yet its target is the verdict's own day, so the lead is unchanged.
+    const lagging = trends({ asOf: '2026-10-01', date: DATE });
+    const pending = scheduled(lagging, '2026-10-02T21:00:00Z');
+    expect([pending.state, pending.target]).toEqual(['pending', DATE]);
+    expect(cardView({ market: UP, trends: lagging, date: DATE, update: { target: pending.target } }).verdict.lead).toBe('新規の買いを検討できます。');
+    // No refresh_schedule (or one that is invalid): unknown, no target, the lead unchanged.
+    const unknown = marketUpdateState(trends().data, Date.parse('2026-10-06T09:00:00Z'));
+    expect([unknown.state, unknown.target]).toEqual(['unknown', null]);
+    expect(cardView({ market: UP, trends: trends(), date: DATE, update: { target: unknown.target } }).verdict.lead).toBe('新規の買いを検討できます。');
+    expect(marketUpdateState({ ...trends().data, refresh_schedule: { ...schedule, provider: 'x' } }, Date.parse('2026-10-06T09:00:00Z')).target).toBeNull();
   });
 });
