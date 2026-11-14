@@ -54,8 +54,11 @@ def valid_date(s):
 
 def concept_points(facts, field, tag, as_of, annual=False):
     """One concept's points for a field: the latest filing of each period end, as of the date."""
-    unit = TAGS[field][1]
-    instant = field in ("inventory", "receivables")
+    return tag_points(facts, tag, TAGS[field][1], field in ("inventory", "receivables"), as_of, annual)
+
+def tag_points(facts, tag, unit, instant, as_of, annual=False):
+    """One us-gaap tag's points in one unit (an instant or a 70-105 / 330-400 day flow): the latest filing of
+    each period end, as of the date. A period end whose latest filings disagree is dropped."""
     points = {}
     for e in facts.get("facts", {}).get("us-gaap", {}).get(tag, {}).get("units", {}).get(unit, []):
         end, start, filed, value, accession = e.get("end"), e.get("start"), e.get("filed"), e.get("val"), e.get("accn")
@@ -214,6 +217,12 @@ def derivation_gaps(facts, field, quarters, as_of):
             gaps.append({"fiscal_year": key[0], "metric": field, "reason": reason, "end": end})
     return gaps
 
+def trim_cutoff(quarterly):
+    """The record's window: TRIM_DAYS before the newest EPS or revenue period end; None (no trim) without either.
+    Trimming keeps the newest end, so a trimmed record's quarters give the same cutoff."""
+    ends = [p["end"] for key in ("eps", "revenue") for p in quarterly.get(key) or []]
+    return (date.fromisoformat(max(ends)) - timedelta(days=TRIM_DAYS)).isoformat() if ends else None
+
 def normalize(facts, symbol, cik, as_of, retrieved_at=None):
     if not valid_date(as_of):
         raise PayloadMismatch("analysis date is not a valid date")
@@ -232,9 +241,8 @@ def normalize(facts, symbol, cik, as_of, retrieved_at=None):
     annual_eps = series(facts, "eps", as_of, annual=True)
     if not (fields["eps"] or fields["revenue"] or fields["netIncome"] or annual_eps):
         return unavailable(symbol, as_of, "no_quarterly", "SEC四半期報告なし", retrieved_at, filed_forms(facts))
-    ends = [p["end"] for key in ("eps", "revenue") for p in fields[key]]
-    if ends:
-        cutoff = (date.fromisoformat(max(ends)) - timedelta(days=TRIM_DAYS)).isoformat()
+    cutoff = trim_cutoff(fields)
+    if cutoff is not None:
         fields = {key: [p for p in points if p["end"] >= cutoff] for key, points in fields.items()}
         gaps = [gap for gap in gaps if gap["end"] >= cutoff]
     # Annual EPS stays complete: the annual record compares against every prior year.
@@ -244,6 +252,211 @@ def normalize(facts, symbol, cik, as_of, retrieved_at=None):
         "quarterly": fields, "annualEps": annual_eps,
         "limitations": ["US GAAP標準タグ・USDの報告値。調整後EPSと同一ではない", "EPSは直接報告された四半期だけを使用。年間EPSからQ4を差し引き推計しない", "売上高・純利益のQ4が年度値だけで報告される場合は、同じ科目の年度値から3四半期を差し引いて算出（算出元を記録）", "提出日までの情報。同日中の発表時刻・決算発表日そのものは未確認", "一時利益・予想値・修正履歴・企業材料は未検証"],
         "derivation_gaps": [{key: gap[key] for key in ("fiscal_year", "metric", "reason")} for gap in sorted(gaps, key=lambda gap: (gap["end"], gap["metric"]))]}
+
+# Round 3 (D3): a reference fiscal-Q4 EPS for a filer that reports its fourth quarter only inside the 10-K. It is a
+# 独自計算・参考 value: it lives in its own list (never in quarterly.eps) and never counts toward any gate or score
+# (counting it is owner decision OD1). Every threshold below is 独自設定 (the brief's own choice, not an SEC or
+# Minervini rule). The tags are kept in their own tuples, never added to TAGS: TAGS defines the record's quarterly
+# keys, mirrored by the browser admission's SEC_FIELD_TAGS (two numerator tags already sit in TAGS["netIncome"]).
+# 独自設定: the one switch. Off, the reference and its accuracy are computed and logged, and no record carries it.
+# OD1: switched on only in a follow-up, after the round-3 UI is live and the owner has seen the published accuracy.
+Q4_EPS_REFERENCE_EMIT = False
+# 独自設定: the method's name, written into every entry.
+Q4_REFERENCE_METHOD = "q4-ni-over-q4-diluted-shares-v1"
+# 独自設定: the numerator, tried in this order for each fiscal year (the tag used is recorded).
+Q4_REFERENCE_NUMERATOR_TAGS = ("NetIncomeLossAvailableToCommonStockholdersDiluted", "NetIncomeLossAvailableToCommonStockholdersBasic", "NetIncomeLoss")
+Q4_REFERENCE_NUMERATOR_UNIT = "USD"
+# 独自設定: the share count, weighted-average diluted shares.
+Q4_REFERENCE_SHARE_TAGS = ("WeightedAverageNumberOfDilutedSharesOutstanding",)
+Q4_REFERENCE_SHARE_UNIT = "shares"
+# 独自設定: Q4 shares outside [min(Q1..Q3) x (1 - band), max(Q1..Q3) x (1 + band)] read as a split or a restatement.
+Q4_REFERENCE_SHARE_BAND = 0.10
+# 独自設定: each of Q1-Q3 must satisfy |reported EPS x shares - net income| <= tolerance x |net income|.
+Q4_REFERENCE_CHECK_TOLERANCE = 0.02
+# 独自設定: at most this many entries per record (the newest kept).
+Q4_REFERENCE_MAX = 4
+# 独自設定: the accuracy figure's "within 1 cent or 2%".
+Q4_REFERENCE_WITHIN_CENTS = 0.01
+Q4_REFERENCE_WITHIN_SHARE = 0.02
+# Why a fiscal year's reference stays unknown (checked in this order; the first that applies is tallied):
+# no_numerator  no annual value of any numerator tag for the fiscal year
+# no_tiling     an annual numerator exists but no tag's three quarters tile the year, or the share facts sit on
+#               other period boundaries than the numerator's
+# no_shares     the annual or a Q1-Q3 weighted diluted share count is missing
+# split_band    the Q4 share count is <= 0 or outside the band of Q1-Q3
+# check_failed  a Q1-Q3 quarter has no reported EPS or fails the EPS x shares = net income check (a net income of 0 fails)
+# not_finite    the quotient is not a finite number
+# `error` (a raising computation, per record) is tallied beside them by fetch_symbol.
+Q4_REFERENCE_REFUSALS = ("no_numerator", "no_tiling", "no_shares", "split_band", "check_failed", "not_finite")
+
+def _days(start, end):
+    """A period's length in days, both ends inclusive (as tag_points counts them)."""
+    return (date.fromisoformat(end) - date.fromisoformat(start)).days + 1
+
+def _tiling_chain(quarters, start, end):
+    """The three quarters that tile a fiscal year from its first day, as derive_fourth_quarters walks them."""
+    chain, cursor = [], start
+    for _ in range(3):
+        following = [p for p in quarters if p["start"] == cursor and p["end"] < end]
+        if len(following) != 1:
+            return None
+        chain.append(following[0])
+        cursor = (date.fromisoformat(following[0]["end"]) + timedelta(days=1)).isoformat()
+    return chain
+
+def _numerator_q4(numerators, end):
+    """The first numerator tag whose annual value and three quarters tile the fiscal year ending on `end`: (tag, the
+    exact derived Q4, the Q1-Q3 chain), or a refusal reason. A reported Q4 flow of the year is set aside, so the
+    remainder is always the annual value minus three reported quarters (derive_fourth_quarters, unchanged)."""
+    annual_seen = False
+    for tag in Q4_REFERENCE_NUMERATOR_TAGS:
+        quarters, annual = numerators[tag]
+        year = annual.get(end)
+        if year is None:
+            continue
+        annual_seen = True
+        inside = [p for p in quarters if year["start"] <= p["start"] and p["end"] < end]
+        derived = [p for p in derive_fourth_quarters(inside, [year]) if p.get("derived") == DERIVED_Q4 and p["end"] == end]
+        chain = _tiling_chain(inside, year["start"], end) if derived else None
+        if derived and chain:
+            return (tag, year, derived[0], chain), None
+    return None, "no_tiling" if annual_seen else "no_numerator"
+
+def _share_chain(shares, year, chain):
+    """The share tag's annual and Q1-Q3 weighted counts on exactly the numerator chain's period boundaries:
+    (tag, annual, [q1, q2, q3]), or a refusal reason (no_shares when a fact is missing, no_tiling when it sits on
+    other boundaries)."""
+    reason = "no_shares"
+    for tag in Q4_REFERENCE_SHARE_TAGS:
+        quarters, annual = shares[tag]
+        points = [annual.get(year["end"]), *(quarters.get(p["end"]) for p in chain)]
+        if any(point is None for point in points):
+            continue
+        if points[0]["start"] != year["start"] or any(point["start"] != p["start"] for point, p in zip(points[1:], chain)):
+            reason = "no_tiling"
+            continue
+        return (tag, points[0], points[1:]), None
+    return None, reason
+
+def _q4_reference_year(end, numerators, shares, eps_by_end, q1_q3_samples):
+    """One fiscal year's reference Q4 EPS: (value, the entry), or (None, a refusal reason). The Q1-Q3 accuracy samples
+    (net income / weighted shares against the reported EPS) are appended once the year tiles, before the check."""
+    numerator, reason = _numerator_q4(numerators, end)
+    if numerator is None:
+        return None, reason
+    tag, year, q4, chain = numerator
+    share, reason = _share_chain(shares, year, chain)
+    if share is None:
+        return None, reason
+    share_tag, share_year, share_quarters = share
+    reported = []
+    for p, s in zip(chain, share_quarters):
+        eps = eps_by_end.get(p["end"])
+        eps = eps if eps is not None and eps["start"] == p["start"] else None
+        reported.append(eps)
+        if eps is not None and s["value"] > 0:
+            ratio = p["value"] / s["value"]
+            if math.isfinite(ratio):
+                q1_q3_samples.append((round(ratio, 4), eps["value"]))
+    values = [s["value"] for s in share_quarters]
+    q4_days = _days(q4["start"], end)
+    q4_shares = (share_year["value"] * _days(year["start"], end) - sum(s["value"] * _days(p["start"], p["end"]) for p, s in zip(chain, share_quarters))) / q4_days
+    if not math.isfinite(q4_shares) or q4_shares <= 0 or not min(values) * (1 - Q4_REFERENCE_SHARE_BAND) <= q4_shares <= max(values) * (1 + Q4_REFERENCE_SHARE_BAND):
+        return None, "split_band"
+    for p, s, eps in zip(chain, share_quarters, reported):
+        if eps is None or p["value"] == 0 or not abs(eps["value"] * s["value"] - p["value"]) <= Q4_REFERENCE_CHECK_TOLERANCE * abs(p["value"]):
+            return None, "check_failed"
+    value = q4["value"] / q4_shares
+    if not math.isfinite(value):
+        return None, "not_finite"
+    value = round(value, 4) + 0.0
+    return value, {"end": end, "start": q4["start"], "value": value, "method": Q4_REFERENCE_METHOD,
+        "numerator": {"tag": tag, "components": list(q4["components"])},
+        "shares": {"tag": share_tag, "components": [share_year["accession"], *(s["accession"] for s in share_quarters)]}}
+
+def q4_eps_reference(facts, as_of, eps_quarters, cutoff=None):
+    """A 独自計算・参考 fiscal-Q4 EPS for each fiscal year whose fourth quarter has no reported quarterly EPS.
+
+    Per fiscal year (an annual 330-400 day fact): the Q4 net income is the exact derive_fourth_quarters remainder
+    (annual minus three reported quarters, one numerator tag, each fact named by its accession), and the Q4 weighted
+    diluted shares are (annual weighted shares x fiscal-year days - sum(quarter weighted shares x quarter days)) /
+    Q4 days, on the numerator chain's own period boundaries. The share remainder is exact for basic shares (a
+    weighted average over days is additive) and only approximate for diluted shares (incremental shares and
+    anti-dilution are decided per period). The value stays unknown (no entry, the reason tallied) for the reasons in
+    Q4_REFERENCE_REFUSALS. `eps_quarters` is the untrimmed quarterly EPS series the record is trimmed from.
+
+    Returns (entries, samples, refusals):
+    - entries: the record's reference list, sorted by end, only fiscal-year ends on or after `cutoff` (the record's
+      trim) without a reported quarterly EPS, at most Q4_REFERENCE_MAX (the newest kept);
+    - samples: {"q4": [(reference, reported)], "q1_q3": [(net income / shares, reported)]}, never written into a
+      record: q4 for fiscal years whose Q4 EPS is reported (computed under the same refusal rules), q1_q3 for every
+      Q1-Q3 quarter of every fiscal year that tiles, before the EPS check;
+    - refusals: a Counter of reasons over the fiscal years that could carry an entry (in the window, Q4 EPS not reported).
+    """
+    numerators = {tag: (tag_points(facts, tag, Q4_REFERENCE_NUMERATOR_UNIT, False, as_of),
+        {p["end"]: p for p in tag_points(facts, tag, Q4_REFERENCE_NUMERATOR_UNIT, False, as_of, annual=True)}) for tag in Q4_REFERENCE_NUMERATOR_TAGS}
+    shares = {tag: ({p["end"]: p for p in tag_points(facts, tag, Q4_REFERENCE_SHARE_UNIT, False, as_of)},
+        {p["end"]: p for p in tag_points(facts, tag, Q4_REFERENCE_SHARE_UNIT, False, as_of, annual=True)}) for tag in Q4_REFERENCE_SHARE_TAGS}
+    eps_by_end = {p["end"]: p for p in eps_quarters}
+    # A fiscal year is known from an annual numerator, an annual share count or the annual EPS (as derivation_gaps does).
+    fiscal_ends = {end for _, annual in numerators.values() for end in annual} | {end for _, annual in shares.values() for end in annual} \
+        | {p["end"] for p in series(facts, "eps", as_of, annual=True)}
+    entries, samples, refusals = [], {"q4": [], "q1_q3": []}, Counter()
+    for end in sorted(fiscal_ends):
+        value, result = _q4_reference_year(end, numerators, shares, eps_by_end, samples["q1_q3"])
+        reported = eps_by_end.get(end)
+        if reported is not None:
+            # The Q4 EPS is reported: never an entry, only an accuracy sample on the same quarter.
+            if value is not None and reported["start"] == result["start"]:
+                samples["q4"].append((value, reported["value"]))
+            continue
+        if cutoff is not None and end < cutoff:
+            continue
+        if value is None:
+            refusals[result] += 1
+        else:
+            entries.append(result)
+    return entries[-Q4_REFERENCE_MAX:], samples, refusals
+
+def q4_reference_accuracy(samples):
+    """The accuracy of (reference, reported) pairs: n, the median absolute error, how many are within 1 cent or 2%
+    and their share. With no sample nothing is measured: every figure but n is null, never 0."""
+    n = len(samples)
+    if not n:
+        return {"n": 0, "median_abs_error": None, "within_1c_or_2pct": None, "share": None}
+    # Rounded to 6 places first, so a difference of exactly 1 cent is not lost to binary floating point.
+    errors = [round(abs(reference - reported), 6) for reference, reported in samples]
+    within = sum(error <= Q4_REFERENCE_WITHIN_CENTS or error <= round(Q4_REFERENCE_WITHIN_SHARE * abs(reported), 6) for error, (_, reported) in zip(errors, samples))
+    ordered = sorted(errors)
+    middle = n // 2
+    median = ordered[middle] if n % 2 else (ordered[middle - 1] + ordered[middle]) / 2
+    return {"n": n, "median_abs_error": round(median, 4), "within_1c_or_2pct": within, "share": round(within / n, 4)}
+
+def q4_reference_summary(records_with_reference, entries, refused, samples):
+    """The run's aggregate (no symbols): logged, added to the step summary and written as the file's coverage.q4_reference."""
+    return {"emit": Q4_EPS_REFERENCE_EMIT, "records_with_reference": records_with_reference, "entries": entries,
+        "refused": {reason: refused.get(reason, 0) for reason in (*Q4_REFERENCE_REFUSALS, "error")},
+        "q4": q4_reference_accuracy(samples["q4"]), "q1_q3": q4_reference_accuracy(samples["q1_q3"])}
+
+def q4_reference_line(as_of, summary):
+    return f"SEC q4 reference accuracy {as_of}: " + json.dumps(summary, ensure_ascii=False, allow_nan=False)
+
+def attach_q4_reference(record, facts, as_of, tally=None):
+    """Compute the record's reference after a successful normalize, apart from it: a raising computation leaves the
+    record exactly as normalize returned it and is tallied as `error`. The entries are attached as q4EpsReference only
+    when Q4_EPS_REFERENCE_EMIT is on; the samples and refusals go to `tally` either way."""
+    try:
+        result = q4_eps_reference(facts, as_of, series(facts, "eps", as_of), trim_cutoff(record["quarterly"]))
+    except Exception:
+        if tally is not None:
+            tally([], {"q4": [], "q1_q3": []}, Counter({"error": 1}))
+        return record
+    entries, samples, refusals = result
+    if tally is not None:
+        tally(entries, samples, refusals)
+    if Q4_EPS_REFERENCE_EMIT and entries:
+        record["q4EpsReference"] = entries
+    return record
 
 INVALID_MESSAGE_MAX = 200
 _SECRET_PATTERNS = (re.compile(r"https?://\S+"), re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+"),
@@ -374,10 +587,12 @@ def get_json(url, attempts=3, sleep=time.sleep, opener=urlopen, limiter=None, de
 SECOND_PASS_DELAY_SECONDS = 20
 TRANSIENT_ERROR = "SEC取得不可"
 
-def fetch_symbol(symbol, tickers, as_of, get=None, deadline=None, observe=None):
+def fetch_symbol(symbol, tickers, as_of, get=None, deadline=None, observe=None, q4_reference=None):
     """One symbol's record. Permanent outcomes (no CIK, no companyfacts, no quarterly
     report, an invalid payload) carry their reason; only `transient` is retried. Once the
-    run's deadline has passed no request is made and the symbol stays transient (unknown)."""
+    run's deadline has passed no request is made and the symbol stays transient (unknown).
+    After a successful normalize the reference fiscal-Q4 EPS is computed apart from it
+    (attach_q4_reference); `q4_reference` receives its entries, samples and refusals."""
     get = get or get_json
     cik = tickers.get(symbol.replace(".", "-")) or tickers.get(symbol)
     if not cik:
@@ -402,12 +617,15 @@ def fetch_symbol(symbol, tickers, as_of, get=None, deadline=None, observe=None):
     # Diagnostic only (the run's log): how each received payload wrote its cik, by outcome. Never in the record.
     if observe is not None:
         observe(cik_kind(facts), record.get("reason") or "read")
+    # Outside normalize's try: the reference can never turn a readable payload into invalid_payload.
+    if record.get("status") in ("available", "partial"):
+        record = attach_q4_reference(record, facts, as_of, q4_reference)
     return record
 
-def fetch_all(symbols, tickers, as_of, get, workers=WORKERS, deadline=None, observe=None):
+def fetch_all(symbols, tickers, as_of, get, workers=WORKERS, deadline=None, observe=None, q4_reference=None):
     """Results in the order of `symbols`; the shared limiter bounds the total rate."""
     with ThreadPoolExecutor(max_workers=workers) as pool:
-        return list(pool.map(lambda symbol: fetch_symbol(symbol, tickers, as_of, get, deadline, observe), symbols))
+        return list(pool.map(lambda symbol: fetch_symbol(symbol, tickers, as_of, get, deadline, observe, q4_reference), symbols))
 
 # The second pass is skipped when SEC failed broadly: more than half of the requested symbols,
 # and at least this many, failed transiently (retrying them would only spend the budget again).
@@ -424,6 +642,15 @@ def collect(symbols, as_of, get=None, sleep=time.sleep, workers=WORKERS, deadlin
     def observe(kind, outcome):
         with lock:
             kinds[f"{kind}:{outcome}"] += 1
+    # The reference fiscal-Q4 EPS (D3), aggregated over every record read; main() logs it and writes only the aggregate.
+    reference = {"records": 0, "entries": 0, "refused": Counter(), "samples": {"q4": [], "q1_q3": []}}
+    def q4_reference(entries, samples, refusals):
+        with lock:
+            reference["records"] += bool(entries)
+            reference["entries"] += len(entries)
+            reference["refused"].update(refusals)
+            for key in ("q4", "q1_q3"):
+                reference["samples"][key] += samples[key]
     tickers = {}
     for attempt in range(2):
         try:
@@ -435,7 +662,7 @@ def collect(symbols, as_of, get=None, sleep=time.sleep, workers=WORKERS, deadlin
                 output["errors"].append(f"SEC ticker map unavailable: {type(e).__name__}")
                 break
             sleep(SECOND_PASS_DELAY_SECONDS)
-    for symbol, result in zip(symbols, fetch_all(symbols, tickers, as_of, get, workers, deadline, observe)):
+    for symbol, result in zip(symbols, fetch_all(symbols, tickers, as_of, get, workers, deadline, observe, q4_reference)):
         output["results"][symbol] = result
     failed = [s for s, r in output["results"].items() if r.get("reason") == "transient"]
     requested = sum(r.get("reason") != "no_cik" for r in output["results"].values())
@@ -444,7 +671,7 @@ def collect(symbols, as_of, get=None, sleep=time.sleep, workers=WORKERS, deadlin
     recovered = 0
     if failed and not skipped:
         sleep(SECOND_PASS_DELAY_SECONDS)
-        for symbol, result in zip(failed, fetch_all(failed, tickers, as_of, get, workers, deadline, observe)):
+        for symbol, result in zip(failed, fetch_all(failed, tickers, as_of, get, workers, deadline, observe, q4_reference)):
             if result.get("status") in ("available", "partial"):
                 recovered += 1
             output["results"][symbol] = result
@@ -453,6 +680,8 @@ def collect(symbols, as_of, get=None, sleep=time.sleep, workers=WORKERS, deadlin
     output["deadline"] = {"seconds": deadline.seconds, "expired": deadline.expired(), "unreached": unreached}
     # Every payload received (both passes), by how it wrote its cik and the outcome; main() logs it and never writes it.
     output["payload_cik"] = dict(sorted(kinds.items()))
+    # Aggregates only (no symbols); main() moves it into the file's coverage block and logs it.
+    output["q4_reference"] = q4_reference_summary(reference["records"], reference["entries"], reference["refused"], reference["samples"])
     return output
 
 def brief_targets(audit):
@@ -580,15 +809,21 @@ def main():
         "strong_rows": len(set(strong_rows(audit, as_of)) - set(brief) - set((recent or {}).get("symbols") or [])),
         "strong_rows_requested": counts["strong_rows_requested"], "strong_rows_unfetched": counts["strong_rows_unfetched"]}
     payload_ciks = output.pop("payload_cik")
-    output["coverage"] = {**coverage(output["results"], counts["eligible"], len(symbols), brief), "targets": targets, "second_pass": output.pop("second_pass"), "deadline": output.pop("deadline")}
+    q4_reference = output.pop("q4_reference")
+    # coverage.q4_reference: the reference fiscal-Q4 EPS aggregate at file level (no symbols; not a record key). The
+    # coverage report's --sec-evidence line prints it from the published file.
+    output["coverage"] = {**coverage(output["results"], counts["eligible"], len(symbols), brief), "targets": targets, "second_pass": output.pop("second_pass"), "deadline": output.pop("deadline"),
+        "q4_reference": q4_reference}
     write_output(root, output)
     print(f"SEC evidence {as_of}: " + json.dumps(output["coverage"], ensure_ascii=False) + "; missing remains unknown", flush=True)
     summary = invalid_summary(output["results"])
     print(f"SEC invalid_payload {as_of}: " + json.dumps(summary, ensure_ascii=False), flush=True)
     print(f"SEC payload cik {as_of}: " + json.dumps(payload_ciks, ensure_ascii=False), flush=True)
+    print(q4_reference_line(as_of, q4_reference), flush=True)
     append_step_summary(f"- SEC evidence {as_of}: {output['coverage']['available']} available, {output['coverage']['partial']} partial, {output['coverage']['unavailable']} unavailable of {len(symbols)} requested; "
         f"invalid_payload {summary['count']} by cause {json.dumps(summary['by_cause'], ensure_ascii=False)}; first symbols {' '.join(summary['symbols']) or 'none'}; "
         f"payload cik {json.dumps(payload_ciks, ensure_ascii=False)}")
+    append_step_summary(f"- {q4_reference_line(as_of, q4_reference)}")
     if output["coverage"]["truncated"] > 0:
         print(f"::warning::SEC evidence covers {len(symbols)} of {len(core)} listed, recent and ranked symbols; {output['coverage']['truncated']} of them stay unfetched (unknown)", flush=True)
     if counts["strong_rows_unfetched"] > 0:
