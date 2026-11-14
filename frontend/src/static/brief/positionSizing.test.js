@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { adrPercent, adrState, ADR_SESSIONS, clampPlanSetting, PLAN_BLOCKED, PLAN_DEFAULTS, planLevels, positionPlan, readPlanSettings, RISK_MAX_PERCENT,
   STOP_LIMIT_PERCENT, STOP_MAX_PERCENT, STOP_MIN_PERCENT, STOP_WARN_PERCENT, structuralStop, STRUCTURAL_STOP_BUFFER_PERCENT, STRUCTURAL_SYMBOLS_MAX, templateReference,
-  withStructuralSymbol } from './positionSizing';
+  previousBaseReason, withStructuralSymbol } from './positionSizing';
+import { pivotBar } from './pivotBar';
+import { shortDate } from './briefShared';
 import { buyGate, PLAN_BLOCKED as GATE_BLOCKED, templateReference as gateTemplateReference } from './buyGate';
 
 const DATE = '2026-03-01';
@@ -312,6 +314,64 @@ describe('position plan: structural stop (F3)', () => {
     expect(structuralStop({ technical: technical(probe, 50, 100.3), judged: probe, entry: 100, pivot: 101 })).toMatchObject({ state: 'above', low: 100.3, lowDate: probe[50].date, stop: null, percent: null });
     const above = bars();
     expect(structuralStop({ technical: technical(above, 50, 101), judged: above, entry: 100, pivot: 102 }).state).toBe('above');
+  });
+});
+
+// Round 3 R2(b): a contraction base that broke out before the pivot's own bar (pivotBar) is a previous base, so its low is never
+// this pivot's structural stop and never makes 「損切りが収縮の中」. Nothing changes without a pivot bar or with a breakout on or after it.
+describe('position plan: a previous base (round 3 R2(b))', () => {
+  /** 60 bars, a daily pivot of 100 on bar 55 (its high), legs with lows on bars 40 and 50 (92), the base broken out on bar `broke`. */
+  const setup = ({ broke = 52, brokeOut = true, pattern = 'nr7_inside_day', pivotAt = 55 } = {}) => {
+    const list = bars();
+    list[pivotAt] = { ...list[pivotAt], high: 100 };
+    const evidence = legsAt(list, [[40, 95], [50, 92]]);
+    evidence.vcp.base = { startDate: list[30].date, brokeOut, ...(brokeOut ? { breakoutDate: typeof broke === 'number' ? list[broke].date : broke } : {}) };
+    const row = { symbol: 'AAA', setup_recalculation: { status: 'calculated', as_of_date: DATE }, se_pattern_confidence: 60, se_pattern_primary: pattern, se_pivot_date: list[pivotAt].date, se_pivot_price: 100 };
+    return { list, evidence, row, subject: view({ pivot: 100, price: 100, row }) };
+  };
+
+  it('reads the structural stop 未確認 with 前の土台 when the base broke out before the pivot\'s bar: no low, no 収縮の中', () => {
+    const { list, evidence, row, subject } = setup();
+    expect(pivotBar(list, row)).toEqual({ index: 55, date: list[55].date });
+    const plan = positionPlan(subject, PLAN_DEFAULTS, { technical: evidence, judged: list });
+    const reason = previousBaseReason(list[52].date, list.at(-1).date);
+    expect(reason).toBe(`前の土台（${shortDate(list[52].date, list.at(-1).date)}に上抜け済み）`);
+    expect(reason).toBe('前の土台（2/22に上抜け済み）');
+    expect(plan.structural).toEqual({ state: 'unknown', low: null, lowDate: null, stop: null, percent: null, buffer: STRUCTURAL_STOP_BUFFER_PERCENT, reason });
+    expect(plan.stopInsideBase).toBeNull();
+    expect(plan.structuralDeep).toBeNull();
+    expect(planLevels(plan).structuralLow).toBeNull();
+    // The plan itself is made (the setting's stop): the rule removes the pairing, never the plan or a fixed percentage.
+    expect(plan).toMatchObject({ stopSource: 'setting', stopPercent: 7, shares: expect.any(Number) });
+    // Without the rule the same base pairs its low with this pivot (the stop at 93 sits above the low of 92).
+    const unbounded = structuralStop({ technical: evidence, judged: list, entry: 100, pivot: 100 });
+    expect(unbounded).toMatchObject({ state: 'ok', low: 92 });
+    expect(structuralStop({ technical: evidence, judged: list, entry: 100, pivot: 100, pivotDate: list[55].date })).toEqual(plan.structural);
+  });
+
+  it('falls back to the stop setting for a viewer who chose this stock\'s structural stop, as for any unknown structural stop', () => {
+    const { list, evidence, subject } = setup();
+    const plan = positionPlan(subject, { ...PLAN_DEFAULTS, structuralSymbols: ['AAA'] }, { technical: evidence, judged: list });
+    expect(plan).toMatchObject({ stopSource: 'setting', stopPercent: 7, stopInsideBase: null });
+    expect(plan.stop).toBeCloseTo(93, 9);
+  });
+
+  it('changes nothing for a breakout on or after the pivot\'s bar, a base that has not broken out, or no pivot bar', () => {
+    const before = ({ list, evidence, subject }) => positionPlan(subject, PLAN_DEFAULTS, { technical: evidence, judged: list });
+    const cases = [setup({ broke: 55 }), setup({ broke: 57 }), setup({ brokeOut: false }), setup({ broke: 'not-a-date' }),
+      // No pivot bar: a VCP publishes no pivot date (se_pivot_date null), so pivotBar is null.
+      (() => { const item = setup({ pattern: 'vcp' }); item.row.se_pivot_date = null; return item; })()];
+    for (const item of cases) {
+      const plan = before(item);
+      expect(plan.structural).toMatchObject({ state: 'ok', low: 92, lowDate: item.list[50].date });
+      expect(plan.stopInsideBase).toBe(true);
+    }
+    // No bar whose high is the pivot in cents (or no certified bars): no pivot bar, nothing changes.
+    const unmatched = setup();
+    unmatched.row.se_pivot_price = 101;
+    expect(pivotBar(unmatched.list, unmatched.row)).toBeNull();
+    expect(before(unmatched).structural).toMatchObject({ state: 'ok', low: 92 });
+    expect(positionPlan(setup().subject, PLAN_DEFAULTS, { technical: setup().evidence, judged: null }).structural.reason).toBe('日足が分析日で未検証');
   });
 });
 

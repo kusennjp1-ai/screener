@@ -6,6 +6,8 @@
 // unknown. The structural stop is chosen per stock: one stock's structure never sets another's stop.
 import { finite } from '../researchEngine';
 import { buyGate, marketGuidePercent, PLAN_BLOCKED, templateReference } from './buyGate';
+import { pivotBar } from './pivotBar';
+import { shortDate } from './briefShared';
 
 // The plan's gate is the conclusion's (buyGate.js); these two live there and keep their old import path.
 export { PLAN_BLOCKED, templateReference };
@@ -158,15 +160,26 @@ export function adrState(judged, sessions = ADR_SESSIONS) {
 export const adrPercent = (judged, sessions = ADR_SESSIONS) => adrState(judged, sessions).value;
 
 const unknownStructural = reason => ({ state: 'unknown', low: null, lowDate: null, stop: null, percent: null, buffer: STRUCTURAL_STOP_BUFFER_PERCENT, reason });
+const isoDay = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/**
+ * The structural stop's reason when the measured base is a previous one (round 3 R2(b)): 「前の土台（M/Dに上抜け済み）」, M/D the
+ * base's breakout date as the brief writes dates (shortDate, against the analysis date `asOf`).
+ */
+export const previousBaseReason = (breakoutDate, asOf = null) => `前の土台（${shortDate(breakoutDate, asOf)}に上抜け済み）`;
 
 /**
  * The structural stop: the low of the base's last measured contraction (technical.vcp, only with valid
  * measurements: the last leg whose low is under the pivot, since a leg above it is a pullback after the
  * breakout) less STRUCTURAL_STOP_BUFFER_PERCENT, checked against the bars certified for the analysis date
  * (`judged`, or null). Never falls back to a fixed percentage: unknown says why.
+ * A base that broke out before the pivot's own bar (`pivotDate`, pivotBar's date: `vcp.base.brokeOut` with a
+ * `base.breakoutDate` earlier than it) is a previous base: its contractions are not this pivot's, so their low is never this
+ * plan's stop (unknown, previousBaseReason; round 3 R2(b)). Without a pivot bar's date, or with a breakout on or after it, the
+ * rule does not apply.
  * @returns {StructuralStop}
  */
-export function structuralStop({ technical, judged, entry, pivot }) {
+export function structuralStop({ technical, judged, entry, pivot, pivotDate = null }) {
   if (!Array.isArray(judged) || !judged.length) return unknownStructural('日足が分析日で未検証');
   const vcp = technical?.vcp;
   const legs = vcp?.measurementsValid === true && Array.isArray(vcp.legs) ? vcp.legs : [];
@@ -178,6 +191,8 @@ export function structuralStop({ technical, judged, entry, pivot }) {
   if (typeof technical.as_of_date === 'string' && technical.as_of_date !== judged.at(-1)?.date) return unknownStructural('収縮の測定日が日足と不一致');
   const bar = judged.find(item => item?.date === leg.lowDate);
   if (!bar || !finite(bar.low) || Math.abs(bar.low - leg.low) > Math.abs(leg.low) * 1e-9) return unknownStructural('収縮の測定日が日足と不一致');
+  const base = vcp.base;
+  if (base?.brokeOut === true && isoDay(base.breakoutDate) && isoDay(pivotDate) && base.breakoutDate < pivotDate) return unknownStructural(previousBaseReason(base.breakoutDate, judged.at(-1)?.date));
   if (!finite(entry) || entry <= 0) return unknownStructural('買値が未確認');
   // Already at or under the contraction's low: there is no stop below it to place.
   if (leg.low >= entry) return { state: 'above', low: leg.low, lowDate: leg.lowDate, stop: null, percent: null, buffer: STRUCTURAL_STOP_BUFFER_PERCENT, reason: null };
@@ -210,7 +225,8 @@ export function positionPlan(view, settings = {}, { market = null, template = nu
   const basis = view?.state === 'zone' ? 'price' : view?.state === 'wait' ? 'pivot' : finite(view?.price) && finite(view?.pivot) && view.price >= view.pivot ? 'price' : 'pivot';
   const entry = finite(view?.pivot) && finite(view?.price) ? (basis === 'price' ? view.price : view.pivot) : null;
   if (!finite(entry) || entry <= 0) return null;
-  const structural = structuralStop({ technical, judged, entry, pivot: view.pivot });
+  // The pivot's own bar (H1 pivotBar, from the view's row and the certified bars): a base that broke out before it is a previous one.
+  const structural = structuralStop({ technical, judged, entry, pivot: view.pivot, pivotDate: pivotBar(judged, view.row)?.date ?? null });
   // This stock's own structural stop, only when the viewer chose it for this symbol and it is usable.
   const stopSource = structural.state === 'ok' && cleanStructuralSymbols(input.structuralSymbols).includes(view.symbol) ? 'structural' : 'setting';
   const pct = stopSource === 'structural' ? structural.percent : clampPlanSetting('stopPercent', finite(input.stopPercent) ? input.stopPercent : STOP_DEFAULT_PERCENT);
