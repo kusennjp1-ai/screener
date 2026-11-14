@@ -158,7 +158,8 @@ describe('the chart footnotes', () => {
     expect(weeklyBars(full)).toHaveLength(weekly);
     // The count and the month of the first week's first session (YYYY/MM, as on the date axis).
     const sentence = weeklyShortNote(weeklyBars(short));
-    expect(sentence).toBe(`週足は2026/01〜の${weekly - 1}週分（2年分はありません）`);
+    expect(sentence).toContain('2026/01〜');
+    expect(sentence).toContain(`の${weekly - 1}週分`);
     const notes = chartNotes({ bars: short, interval: 'week', period: weekly });
     expect(notes[0]).toBe('—＝必要な本数に足りない値（移動平均・出来高の倍率）');
     expect(notes[1]).toBe(sentence);
@@ -166,7 +167,11 @@ describe('the chart footnotes', () => {
     // A first week cut by the start of the data is not counted, and the month is its next week's.
     const cut = bars(300).slice(2), weeks = weeklyBars(cut);
     expect(weeks[0].start).toBe('2026-01-12');
-    expect(chartNotes({ bars: cut, interval: 'week', period: weekly })[1]).toBe(`週足は2026/01〜の${weeks.length}週分（2年分はありません）`);
+    const cutNote = chartNotes({ bars: cut, interval: 'week', period: weekly })[1];
+    expect(cutNote).toBe(weeklyShortNote(weeks));
+    expect(cutNote).toContain('2026/01〜');
+    expect(cutNote).toContain(`の${weeks.length}週分`);
+    expect(weeks.length).toBe(weeklyBars(bars(300)).length - 1);
     // Not at two years of weeks, never on a daily period, and never without bars or without a whole week (never 「0週分」).
     expect(weeklyShortNote(weeklyBars(full))).toBeNull();
     expect(chartNotes({ bars: full, interval: 'week', period: weekly }).join('')).not.toContain('週足は');

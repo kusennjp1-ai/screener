@@ -15,7 +15,9 @@ Probe files are named after the commit they measured. Outputs stay in scratch an
 
 ## C2 (package CH-1): the 週足 notice moves from the plot to the 注記
 
-**Commit measured:** 24f1210b `feat(frontend): move the weekly chart's week count from the plot to the 注記` (code and tests). The commit that adds this record changes only `docs/round3/chart.md`, so the probes named `probe-24f1210*.json` are its code.
+**Commit measured:** 24f1210b `feat(frontend): move the weekly chart's week count from the plot to the 注記` (code and tests).
+- Two later commits change no source: one adds this record, and one makes `chartReadout.test.js` assert the sentence through its producer only (`git diff --name-only 24f1210b..HEAD` lists `docs/round3/chart.md` and `frontend/src/static/brief/chartReadout.test.js`).
+- So the probes named `probe-24f1210*.json` and the build `build-24f1210.json` are the package's code.
 
 ### What changed
 
@@ -63,7 +65,7 @@ node audit3/r3-chart/forced-c2.mjs <base> <head>      # forced label lines per p
   - The allowed exceptions are the removed weekly notice texts, the remaining notice block's boxes, and halos with those texts left out.
   - A mask hole may differ only where it lies under a notice line (the removed line's for a removed hole).
   - At 1440 the card may gain exactly one html text matching the sentence, and a new card height with the same top, left and right.
-- Both sanity runs agree: 8849bf9 against c61bf96 (identical code) gives 0 of 492 differing views in the comparer, as in `diff.mjs`.
+- Sanity run: 8849bf9 against c61bf96 (identical code; STEP 0 recorded the same sha256 for both files) gives 0 of 492 differing label views and 0 of 480 value views in the comparer.
 
 **Result: the gate is green. The diff is exactly the expected one.** No other label moved, none is newly forced, none is missing, and no view's forced count rose.
 
@@ -135,8 +137,9 @@ Notice lines in 週足 views fell from 91 to 1 at 320 and from 61 to 1 at 375, 3
 
 **vitest**
 - Command: `cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run <files>`.
-- priceChart.test.js, chartReadout.test.js, StockChartCard.test.jsx and StockView.test.jsx: 5 files, 96 tests passed.
-- The full suite: 247 files, **3984 tests passed** (STEP 0: 3983; +1 new chartReadout case). Load 3.53 → 6.13.
+- priceChart.test.js, chartReadout.test.js, StockChartCard.test.jsx and StockView.test.jsx: 96 tests passed. The filters also match PriceChart.test.jsx, so 5 files ran (49 + 19 + 16 + 9 + 3).
+- The full suite on 24f1210b: 247 files, **3984 tests passed** (STEP 0: 3983; +1 new chartReadout case). Load 3.53 → 6.13.
+- After the test-only commit (the producer assertions): the same five files, 96 tests passed. The full suite was not re-run for it, since only that one test file changed.
 
 **What the tests cover**
 - `priceChart.test.js`:
@@ -163,6 +166,7 @@ Notice lines in 週足 views fell from 91 to 1 at 320 and from 61 to 1 at 375, 3
 
 **Entry chunk** (rule 21, `$H/build/run-build.sh <worktree>` on the archive of 24f1210)
 - `npm run build`: 130.28 kB gzip (c61bf96, STEP 0) → **130.38 kB gzip** (+0.10 kB; the line is 134.00).
+  - The base 45603f06 differs from c61bf96 in `frontend/` only by one comment line in pivotBar.js (`git diff --stat c61bf96b 45603f06 -- frontend/src frontend/package.json frontend/package-lock.json frontend/vite.config.js`), so c61bf96's build stands for the base's.
 - The design-acceptance build: 372,422 → 372,644 raw bytes (+222); gzip -9 129,915 → 130,024 (+109).
 - The lazy priceChart chunk: 43,099 → 42,801 raw (−298); gzip -9 18,228 → 18,071 (−157).
 
@@ -179,7 +183,7 @@ Notice lines in 週足 views fell from 91 to 1 at 320 and from 61 to 1 at 375, 3
 
 - **Trailing 「。」:** the sentence is the plan's text without 「。」.
   - Every 注記 sentence but 「—＝…」 ends in 「。」. The existing check `notes.every(note => note.endsWith('。') || note.startsWith('—'))` (chartReadout.test.js) runs on a daily list only, so it still passes.
-  - Adding 「。」 is a one-character change in `weeklyShortNote`, and the tests read the producer, so none would need editing.
+  - Adding 「。」 is a one-character change in `weeklyShortNote`. The tests compare with the producer or check only its parts (the month, 「の N週分」), so none would need editing.
 - **The literal 104 in `StockChartCard.jsx` `WeeklyLabel`:** `if (count >= 104)` is not in package CH-1's file list, so it is left. The file is CHART's, so a later CHART package can read the same constant (it would need exporting from chartReadout.js).
 
 ### Integration requests
