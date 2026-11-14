@@ -68,9 +68,28 @@ export function regimeKey(tags) {
 
 // ---- the Nasdaq beside the SPY verdict, its position and the 分配日 detail ------------------------------------
 
-/** The disclosure of the exposure guide, generated from portfolioPlan's caps (never hand-typed beside them). */
+/**
+ * The backend regime's breadth-divergence guard (backend/app/services/market_regime.py:56-57, BREADTH_ROT_PCT = 40.0 and
+ * BREADTH_DIVERGENCE_NEAR_HIGH = 0.03): a confirmed uptrend is lowered to uptrend_under_pressure when fewer than
+ * `above200Below`% of the scan's names close above their 200-day line while SPY closes within `nearHighPercent`% of its
+ * 252-session closing high. A mirror for the disclosure's words only: the UI judges nothing with it (a test reads the
+ * backend constants, so the two cannot drift), and whether the guard fired on a day is not published.
+ */
+export const BACKEND_BREADTH_GUARD = Object.freeze({ above200Below: 40, nearHighPercent: 3 });
+
+/** A cap as a bare share of the account (「50%」), from the same caps capText prints. */
+const capShare = cap => `${Math.round(cap * 100)}%`;
+
+/**
+ * The disclosure of the exposure guide, generated from portfolioPlan's caps and the backend's guard (never hand-typed beside
+ * them): the caps, what they read, that the signs and the study do not move them, what a cap is a limit of and that its
+ * levels are untested (M1d), and the one backend rule that can lower the guide on a day without saying so (M1b).
+ */
 export function exposureRuleText(caps = MARKET_CAPS) {
-  return `独自の目安：上昇トレンド ${capText(caps.confirmed_uptrend)}・上昇に圧力 ${capText(caps.uptrend_under_pressure)}・それ以外 ${capText(caps.otherwise)}（S&P 500（SPY）の50日線・200日線と局面判定から。バックエンドの局面判定の目安とは別）。注意サインも指数の過去の傾向も目安を変えません。`;
+  const levels = [caps.confirmed_uptrend, caps.uptrend_under_pressure].filter(cap => cap > 0).map(capShare).join('・');
+  return `独自の目安：上昇トレンド ${capText(caps.confirmed_uptrend)}・上昇に圧力 ${capText(caps.uptrend_under_pressure)}・それ以外 ${capText(caps.otherwise)}（S&P 500（SPY）の50日線・200日線と局面判定から。バックエンドの局面判定の目安とは別）。注意サインも指数の過去の傾向も目安を変えません。`
+    + `目安は口座資金に対する新規の建玉合計の上限です。${levels ? `水準（${levels}）は` : '水準は'}検証していない独自設定です。`
+    + `局面判定（バックエンド）は、スキャン対象のうち200日線より上が${BACKEND_BREADTH_GUARD.above200Below}%未満でSPYが1年高値から${BACKEND_BREADTH_GUARD.nearHighPercent}%以内のとき「${REGIME_NAMES.uptrend_under_pressure}」に下げることがあり、その日は目安が${capText(caps.uptrend_under_pressure)}になります（独自判定）。発動の有無は公開値に含まれません。`;
 }
 
 // nasdaqNote (the verdict reads SPY only; the Nasdaq's own state) lives in briefEnvironment.js, so Today's 地合い tile
