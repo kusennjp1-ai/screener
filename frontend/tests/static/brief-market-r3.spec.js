@@ -7,6 +7,7 @@ import { date, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brie
 import { DISTRIBUTION_TEXT, verdictWaiting } from '../../src/static/brief/marketTabModel.js';
 import { DISTRIBUTION_BRIDGE, exposureRuleText } from '../../src/static/reference/marketTabStudy.js';
 import { MARKET_TILE_SUFFIX } from '../../src/static/brief/briefEnvironment.js';
+import { indexState } from '../../tools/export-market-trends.mjs';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, contextOptions: { reducedMotion: 'reduce' } });
 const PHONES = { 320: phone(320, 640), 375: phone(375, 812), 390: phone(390, 844) };
@@ -30,6 +31,15 @@ const days = (i, n) => ({ trends: value => {
   item.latest = item.latest ? item.points.at(-1) : null;
   item.lastObserved = { date: item.points.at(-1).date, value: item.points.at(-1).value };
 } });
+/** What the round-2 exporter publishes besides: each index's closes and the Nasdaq's position (the phone's S&P／Nasdaq switch). */
+const withCloses = { trends: value => {
+  const sp = value.long_history.sp500;
+  for (const [i, item] of value.indices.entries()) {
+    const dates = item.points.map(point => point.date), n = dates.length;
+    item.closes = dates.map((day, k) => ({ date: day, close: i === 0 ? sp.find(point => point.date === day).close : Math.round((16000 + k * 12 - (k > n - 30 ? (k - n + 30) * 45 : 0)) * 100) / 100 }));
+  }
+  value.indices[1].state = indexState(value.indices[1].closes, value.indices[1].points.at(-1).date);
+} };
 /** An FTD-upgraded uptrend: the rows' regime confirmed_uptrend while SPY is under its 50-day line, and the regime's block. */
 const ftdUpgraded = { rows: rows => { for (const row of rows) row.market_above_50dma = false; },
   manifest: value => { value.markets.US.market_context = { as_of_date: date, regime: 'confirmed_uptrend', distribution_days: 1, ftd_date: sessions.at(-8), ftd_days_since: 7, exposure_pct: 40, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' }; } };
@@ -230,6 +240,26 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M3 at ${wid
     await page.goto('/#/brief');
     await todayReady(page);
     expect(await clippedTileText(page)).toEqual([]);
+    expect(errors).toEqual([]);
+  });
+
+  test('beside the switch, one session behind: the ▲ and ○ pair and the date keep the head no taller than a ▲ alone', async ({ page, context }) => {
+    const options = state => ({ historyEnd: sessions.at(-2), mutate: compose(state, withCloses) });
+    const alone = await context.newPage();
+    await openBrief(alone, '#/brief/market', options(days(0, 7)));
+    await marketReady(alone);
+    const single = (await alone.locator('.brief-env-group.is-index > .brief-env-head').boundingBox()).height;
+    await alone.close();
+    const { errors } = await openBrief(page, '#/brief/market', options(compose(days(0, 7), days(1, 5))));
+    await marketReady(page);
+    await expect(page.getByRole('region', { name: '地合い' }).getByRole('group', { name: '表示する指数' })).toBeVisible();
+    const meta = page.locator('.brief-env-group.is-index .brief-env-meta.is-inline');
+    // The section tabs' short form on screen, each word for assistive tech; the date of the older session stays.
+    await expect(meta.locator('.brief-env-state')).toHaveText(['▲注意 1', '○参考 1']);
+    await expect(meta.locator('.brief-env-asof')).toHaveText(/^\d+\/\d+時点の値$/);
+    expect((await page.locator('.brief-env-group.is-index > .brief-env-head').boundingBox()).height).toBeLessThanOrEqual(single);
+    expect(await lead(page)).toBeLessThanOrEqual(756);
+    expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
 });

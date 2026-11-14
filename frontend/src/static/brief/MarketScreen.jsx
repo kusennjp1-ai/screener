@@ -175,9 +175,13 @@ function EnvRow({ item, groupAsOf, onOpenMetric }) {
  */
 function Group({ group, caveat = null, control = null, children }) {
   const head = useId();
+  // Both marks in the phone's inline slot (beside the switch) take the section tabs' short form, 「▲ 1」「○ 1」 with the word
+  // for assistive tech, so the pair and a date keep the question's one line under the heading (M3: one index at 7 or more
+  // beside the other at 5–6). Everywhere else the marks keep their words.
+  const pair = group.fired > 0 && group.references > 0, word = text => control && pair ? <span className="sr-only">{text}</span> : ` ${text}`;
   const meta = (group.fired > 0 || group.references > 0 || group.asOf) ? <>
-    {group.fired > 0 && <span className="brief-env-state"><span aria-hidden="true">▲</span> 注意 {group.fired}</span>}
-    {group.references > 0 && <span className="brief-env-state is-reference"><span aria-hidden="true">○</span> 参考 {group.references}</span>}
+    {group.fired > 0 && <span className="brief-env-state"><span aria-hidden="true">▲</span>{word('注意')} {group.fired}</span>}
+    {group.references > 0 && <span className="brief-env-state is-reference"><span aria-hidden="true">○</span>{word('参考')} {group.references}</span>}
     {group.asOf && <span className="brief-env-asof" id={`${head}-d`}>{group.asOf}時点の値</span>}
   </> : null;
   return <div className={`brief-env-group is-${group.id}`} role="group" aria-labelledby={`brief-env-${group.id}${group.asOf ? ` ${head}-d` : ''}`}>
@@ -185,7 +189,7 @@ function Group({ group, caveat = null, control = null, children }) {
       <div className="brief-env-title"><h3 id={`brief-env-${group.id}`} tabIndex={-1}>{group.title}</h3>{control && meta ? <span className="brief-env-meta is-inline">{meta}</span> : <span>{group.question}</span>}</div>
       {/* Both marks (a ▲ warning and a ○ reference, e.g. one index at 7 distribution days and the other at 5–6) stack as a
           pair that a phone keeps within the title's two lines (brief-market-history.css). */}
-      {control || (meta && <div className={`brief-env-meta${group.fired > 0 && group.references > 0 ? ' is-pair' : ''}`}>{meta}</div>)}
+      {control || (meta && <div className={`brief-env-meta${pair ? ' is-pair' : ''}`}>{meta}</div>)}
     </div>
     {caveat && <p className="brief-env-caveat">{caveat}</p>}
     {group.unavailable ? <p className="brief-missing">{group.unavailable}</p> : children}

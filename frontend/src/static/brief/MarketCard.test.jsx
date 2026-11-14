@@ -943,6 +943,25 @@ describe('brief market card: distribution days in two grades, 5–6 参考 and 7
     expect(within(screen.getByRole('tablist', { name: '市場タブの表示' })).getAllByRole('tab')[0].textContent).not.toMatch(/▲/);
   });
 
+  it('keeps the words of both head marks, and in a phone\'s inline slot beside the switch takes the tabs\' short form', () => {
+    // Stacked beside the heading (no switch): the words show.
+    phone(counts(7, 5));
+    expect([...document.querySelectorAll('.brief-env-group.is-index .brief-env-meta .brief-env-state')].map(node => node.textContent)).toEqual(['▲ 注意 1', '○ 参考 1']);
+    cleanup();
+    // Beside the switch (the Nasdaq's closes): 「▲ 1」「○ 1」 on screen, each word kept for assistive tech.
+    const value = counts(7, 5), nas = days('2026-10-02', 280).map((date, i) => ({ date, close: 16000 + i * 10 }));
+    value.data.indices[1] = { ...value.data.indices[1], closes: nas, state: indexState(nas, '2026-10-02') };
+    phone(value);
+    const marks = [...document.querySelectorAll('.brief-env-group.is-index .brief-env-meta.is-inline .brief-env-state')];
+    expect(marks.map(node => node.textContent)).toEqual(['▲注意 1', '○参考 1']);
+    expect(marks.map(node => node.querySelector('.sr-only').textContent)).toEqual(['注意', '参考']);
+    cleanup();
+    // A single mark beside the switch keeps its word.
+    const single = counts(7, 3); single.data.indices[1] = { ...single.data.indices[1], closes: nas, state: indexState(nas, '2026-10-02') };
+    phone(single);
+    expect([...document.querySelectorAll('.brief-env-group.is-index .brief-env-meta.is-inline .brief-env-state')].map(node => node.textContent)).toEqual(['▲ 注意 1']);
+  });
+
   it('says Today\'s tile in three forms: 注意 amber with ▲ at 7, 参考 without either at 5–6, else the warning line', () => {
     show(counts(7, 5), { detail: false });
     expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P▲注意 7日NAS5日注意：S&Pが7日以上$/);
