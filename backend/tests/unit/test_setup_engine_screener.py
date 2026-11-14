@@ -597,11 +597,13 @@ class TestSetupReadinessRegressions:
         assert payload["setup_ready"] is True
         assert explain["failed_checks"] == []
         # The other detectors' misses and the stub are kept as diagnostics, inside explain,
-        # each named after its detector.
+        # each named after its detector. A steady advance has no measured contraction, so the
+        # round-3 setup diagnostic follows them; it never fails readiness either.
         assert explain["diagnostics"] == [
             "cup_with_handle:not_detected",
             "cup_with_handle:cup_structure_not_found",
             "double_bottom:not_implemented",
+            "contraction_unconfirmed",
         ]
         assert "not_implemented" not in explain["failed_checks"]
 
@@ -639,6 +641,7 @@ class TestSetupReadinessRegressions:
         assert explain["diagnostics"] == [
             "needs_more_history:insufficient_data",
             "needs_more_history:daily_bars_lt_400",
+            "contraction_unconfirmed",
         ]
 
     def test_a_detector_that_raises_makes_the_scan_an_error_not_a_ready_row(self):
@@ -675,3 +678,196 @@ class TestSetupReadinessRegressions:
         noted = build_setup_engine_payload(**ready, diagnostics=["cup_with_handle:not_detected"])
         assert noted["setup_ready"] is True
         assert noted["explain"]["diagnostics"] == ["cup_with_handle:not_detected"]
+
+
+class TestSetupDiagnostics:
+    """Round 3 R3c: three setup diagnostics for ``explain.diagnostics``. Each fires on its
+    shape, is absent when its input is missing (unknown is not a finding), and never fails
+    readiness."""
+
+    @staticmethod
+    def _frame(closes, *, spread: float = 0.005, end: str = "2025-12-19") -> pd.DataFrame:
+        closes = np.asarray(closes, dtype=float)
+        index = pd.bdate_range(end=pd.Timestamp(end), periods=len(closes))
+        return pd.DataFrame(
+            {"Open": closes, "High": closes * (1 + spread), "Low": closes * (1 - spread),
+             "Close": closes, "Volume": np.full(len(closes), 1e6)},
+            index=index,
+        )
+
+    @staticmethod
+    def _ramp(*legs):
+        """Piecewise-linear closes: legs of (target, sessions) from a start value."""
+        out = [float(legs[0])]
+        for target, sessions in legs[1:]:
+            start = out[-1]
+            out.extend(start + (target - start) * (k + 1) / sessions for k in range(sessions))
+        return out
+
+    def _diagnostics(self, frame, *, pattern, timeframe, pivot, pivot_date, **candidate):
+        from app.analysis.patterns.readiness import setup_diagnostics
+
+        cand = {"pattern": pattern, "timeframe": timeframe, "pivot_price": pivot, "pivot_date": pivot_date, **candidate}
+        return setup_diagnostics(
+            frame, pattern_primary=pattern, pivot_price=pivot, pivot_date=pivot_date, candidates=[cand],
+        )
+
+    def test_constants_are_named_and_unchanged(self):
+        from app.analysis.patterns import config
+
+        assert config.PIVOT_ALREADY_CROSSED_PCT == 3.0
+        assert config.PIVOT_BELOW_BASE_HIGH_PCT == 5.0
+
+    # -- pivot_already_crossed ------------------------------------------------
+
+    def _pivot_frame(self, after_close: float):
+        """A daily pivot on bar 99 (high = pivot), then one close at ``after_close`` on bar 100."""
+        closes = [50.0] * 99 + [50.0, after_close, 50.0]
+        frame = self._frame(closes, spread=0.0)
+        frame.iloc[99, frame.columns.get_loc("High")] = 51.0
+        return frame, frame.index[99].date().isoformat()
+
+    def test_pivot_already_crossed_fires_on_a_close_above_pivot_plus_three_percent_after_its_bar(self):
+        frame, day = self._pivot_frame(after_close=51.0 * 1.031)
+        found = self._diagnostics(frame, pattern="nr7_inside_day", timeframe="daily", pivot=51.0, pivot_date=day)
+        assert "pivot_already_crossed" in found
+
+    def test_pivot_already_crossed_needs_more_than_three_percent(self):
+        frame, day = self._pivot_frame(after_close=51.0 * 1.029)
+        found = self._diagnostics(frame, pattern="nr7_inside_day", timeframe="daily", pivot=51.0, pivot_date=day)
+        assert "pivot_already_crossed" not in found
+
+    def test_pivot_already_crossed_is_absent_without_the_pivots_bar(self):
+        frame, day = self._pivot_frame(after_close=60.0)
+        for pivot_date, timeframe, pivot in ((None, "daily", 51.0), ("2025-13-01", "daily", 51.0),
+                                             (day, "daily", 51.5), (day, "daily", None)):
+            found = self._diagnostics(frame, pattern="nr7_inside_day", timeframe=timeframe, pivot=pivot,
+                                      pivot_date=pivot_date)
+            assert "pivot_already_crossed" not in found, (pivot_date, timeframe, pivot)
+        # No candidate of the primary's pattern: its timeframe (and so its pivot's bar) is unknown.
+        from app.analysis.patterns.readiness import setup_diagnostics
+
+        assert "pivot_already_crossed" not in setup_diagnostics(
+            frame, pattern_primary="nr7_inside_day", pivot_price=51.0, pivot_date=day, candidates=[])
+
+    def test_a_weekly_label_bounds_at_the_latest_bar_of_its_week_with_the_pivots_high(self):
+        """The W-FRI label is the week's Friday; the pivot's bar is Wednesday (its high in cents).
+        A close far above the pivot on the Tuesday before it is not a crossing; Thursday's is."""
+        from app.analysis.patterns.readiness import daily_bars_from_frame, pivot_bar_index
+
+        closes = [50.0] * 100
+        frame = self._frame(closes, spread=0.0, end="2025-12-19")  # ends on a Friday
+        tue, wed, thu = frame.index[-4], frame.index[-3], frame.index[-2]
+        frame.loc[wed, "High"] = 51.0
+        frame.loc[tue, "Close"] = 60.0
+        frame.loc[tue, "High"] = 60.0
+        label = frame.index[-1].date().isoformat()
+        bars = daily_bars_from_frame(frame)
+        assert pivot_bar_index(bars, pivot_price=51.0, pivot_date=label, timeframe="weekly") == len(frame) - 3
+        found = self._diagnostics(frame, pattern="cup_with_handle", timeframe="weekly", pivot=51.0, pivot_date=label)
+        assert "pivot_already_crossed" not in found
+        frame.loc[thu, "Close"] = 53.0
+        found = self._diagnostics(frame, pattern="cup_with_handle", timeframe="weekly", pivot=51.0, pivot_date=label)
+        assert "pivot_already_crossed" in found
+
+    def test_cents_round_half_up_as_javascript_does(self):
+        """pivotBar.js compares Math.round(price × 100): 10.125 is 1013 cents (Python's round gives 1012)."""
+        from app.analysis.patterns.readiness import _cents, daily_bars_from_frame, pivot_bar_index
+
+        assert _cents(10.125) == 1013 and round(10.125 * 100) == 1012
+        frame = self._frame([10.0] * 30, spread=0.0)
+        frame.iloc[-1, frame.columns.get_loc("High")] = 10.13
+        bars = daily_bars_from_frame(frame)
+        day = frame.index[-1].date().isoformat()
+        assert pivot_bar_index(bars, pivot_price=10.125, pivot_date=day, timeframe="daily") == len(frame) - 1
+
+    # -- pivot_below_base_high ------------------------------------------------
+
+    def _cup_frame(self, pivot_high: float):
+        """A left lip at 100 (a Friday), a cup, then a handle whose high is the pivot."""
+        closes = self._ramp(80.0, (100.0, 40), (75.0, 30), (pivot_high, 30), (pivot_high - 3, 5), (pivot_high - 1, 5))
+        frame = self._frame(closes, spread=0.0)
+        top = frame.index[40]
+        frame.loc[top, "High"] = 100.0
+        handle = frame.index[100]
+        return frame, top, handle
+
+    def test_pivot_below_base_high_fires_more_than_five_percent_under_the_left_lip(self):
+        frame, top, handle = self._cup_frame(pivot_high=94.0)
+        day = handle.date().isoformat()
+        found = self._diagnostics(frame, pattern="first_pullback", timeframe="daily", pivot=94.0, pivot_date=day,
+                                  start_date=handle.date().isoformat(), metrics={"left_lip_date": top.date().isoformat()})
+        assert "pivot_below_base_high" in found
+
+    def test_pivot_below_base_high_is_absent_within_five_percent_or_without_a_base_start(self):
+        frame, top, handle = self._cup_frame(pivot_high=96.0)
+        day = handle.date().isoformat()
+        found = self._diagnostics(frame, pattern="first_pullback", timeframe="daily", pivot=96.0, pivot_date=day,
+                                  metrics={"left_lip_date": top.date().isoformat()})
+        assert "pivot_below_base_high" not in found
+        frame, top, handle = self._cup_frame(pivot_high=94.0)
+        day = handle.date().isoformat()
+        # The handle's own start is the start: no left lip, no finding (the window holds the handle only).
+        found = self._diagnostics(frame, pattern="first_pullback", timeframe="daily", pivot=94.0, pivot_date=day,
+                                  start_date=day)
+        assert "pivot_below_base_high" not in found
+        found = self._diagnostics(frame, pattern="first_pullback", timeframe="daily", pivot=94.0, pivot_date=day)
+        assert "pivot_below_base_high" not in found
+
+    # -- contraction_unconfirmed ----------------------------------------------
+
+    def _contracting(self):
+        """An advance to 100, then three progressively shallower contractions (20%, 10%, 4%)."""
+        return self._ramp(70.0, (100.0, 60), (80.0, 15), (97.0, 15), (87.0, 10), (95.0, 10), (91.0, 6),
+                          (94.0, 4), (93.6, 5))
+
+    def test_contraction_measurement_finds_three_contractions_so_no_diagnostic(self):
+        from app.analysis.patterns.readiness import contraction_measurements_valid, daily_bars_from_frame
+
+        frame = self._frame(self._contracting())
+        assert contraction_measurements_valid(daily_bars_from_frame(frame), None) is True
+        assert "contraction_unconfirmed" not in self._diagnostics(
+            frame, pattern="vcp", timeframe="daily", pivot=None, pivot_date=None)
+
+    def test_contraction_unconfirmed_fires_on_a_steady_advance(self):
+        frame = self._frame(self._ramp(50.0, (90.0, 200)))
+        assert "contraction_unconfirmed" in self._diagnostics(
+            frame, pattern="vcp", timeframe="daily", pivot=None, pivot_date=None)
+
+    def test_contraction_unconfirmed_is_absent_when_a_bar_is_missing(self):
+        from app.analysis.patterns.readiness import contraction_measurements_valid, daily_bars_from_frame
+
+        frame = self._frame(self._ramp(50.0, (90.0, 200)))
+        frame.iloc[150, frame.columns.get_loc("High")] = np.nan
+        assert contraction_measurements_valid(daily_bars_from_frame(frame), None) is None
+        assert "contraction_unconfirmed" not in self._diagnostics(
+            frame, pattern="vcp", timeframe="daily", pivot=None, pivot_date=None)
+
+    # -- never readiness ------------------------------------------------------
+
+    def test_the_diagnostics_never_fail_readiness(self):
+        from app.analysis.patterns.readiness import SETUP_DIAGNOSTICS
+        from app.scanners.setup_engine_scanner import build_setup_engine_payload
+
+        ready = dict(
+            setup_score=80, quality_score=80, readiness_score=95, distance_to_pivot_pct=0,
+            pattern_primary="vcp", pattern_confidence=70,
+        )
+        noted = build_setup_engine_payload(**ready, diagnostics=list(SETUP_DIAGNOSTICS))
+        assert noted["setup_ready"] is True
+        assert noted["explain"]["failed_checks"] == []
+        assert noted["explain"]["diagnostics"] == [
+            "contraction_unconfirmed", "pivot_already_crossed", "pivot_below_base_high",
+        ]
+
+    def test_contraction_reads_the_setup_engine_base_as_the_payload_publishes_its_dates(self):
+        """The brief anchors the base on the primary's published start/end dates (a cup's handle
+        dates are lifted from its metrics). Anchored on the last 3% of the base, no sequence is
+        found, so the diagnostic fires although the algorithm alone finds three contractions."""
+        frame = self._frame(self._contracting())
+        start, end = frame.index[-12].date().isoformat(), frame.index[-6].date().isoformat()
+        found = self._diagnostics(frame, pattern="cup_with_handle", timeframe="weekly", pivot=None, pivot_date=None,
+                                  metrics={"handle_start_date": start, "handle_end_date": end})
+        assert "contraction_unconfirmed" in found
+        assert "contraction_unconfirmed" not in self._diagnostics(
+            frame, pattern="cup_with_handle", timeframe="weekly", pivot=None, pivot_date=None)

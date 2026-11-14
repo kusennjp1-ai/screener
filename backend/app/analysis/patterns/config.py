@@ -322,3 +322,36 @@ def build_setup_engine_parameters(
     params = SetupEngineParameters(**values)
     assert_valid_setup_engine_parameters(params)
     return params
+
+
+# ── Setup diagnostics (round 3 R3c) ─────────────────
+# Reported in ``explain.diagnostics`` only: they never fail readiness and never enter
+# ``failed_checks`` (readiness.py ``setup_diagnostics``; setup_engine_screener.py).
+
+#: ``pivot_already_crossed``: a daily close more than this % above the pivot on a bar after
+#: the pivot's own bar (独自設定, round 3 R3c; p1 measured highs more than 3% above it).
+PIVOT_ALREADY_CROSSED_PCT: float = 3.0
+
+#: ``pivot_below_base_high``: the pivot more than this % under the highest high from the
+#: base's first bar to the pivot's own bar (独自設定, round 3 R3c; p1's 5% under the high).
+PIVOT_BELOW_BASE_HIGH_PCT: float = 5.0
+
+# ``contraction_unconfirmed``: the brief's automatic contraction measurement, whose failure the
+# chart shows as 「収縮は未確認」 (frontend/src/static/bookTechnicalEvidence.js, VCP_METHOD; 独自近似).
+# The same values, restated; tests/unit/test_setup_engine_parameters.py parses the JS constants
+# and pins these to them, so the two sides cannot drift.
+#: The sessions the base high is searched over when the Setup Engine gives no base.
+CONTRACTION_LOOKBACK_SESSIONS: int = 150
+#: ATR's sessions (a trailing true-range mean, as a % of the close).
+CONTRACTION_ATR_SESSIONS: int = 20
+#: A reversal counts when it moves at least this many ATR20s …
+CONTRACTION_ATR_MULTIPLE: float = 1.5
+#: … and at least this fraction of the previous contraction's depth.
+CONTRACTION_DEPTH_FRACTION: float = 0.3
+#: The last contraction needs only this noise floor (%), or one ATR20 when that is larger.
+CONTRACTION_FINAL_FLOOR_PCT: float = 1.5
+#: The contractions kept (the latest ones); a valid sequence has 2 to this many.
+CONTRACTION_MAX_LEGS: int = 6
+#: A pullback whose high is in the lower part (this fraction) of the previous contraction's
+#: range is the base still repairing, not a contraction.
+CONTRACTION_REPAIR_FRACTION: float = 0.5

@@ -32,7 +32,10 @@ from app.analysis.patterns.operational_flags import (
     OperationalFlagInputs,
     compute_operational_flags,
 )
-from app.analysis.patterns.readiness import compute_breakout_readiness_features
+from app.analysis.patterns.readiness import (
+    compute_breakout_readiness_features,
+    setup_diagnostics,
+)
 from app.analysis.patterns.technicals import resample_ohlcv
 from app.scanners.base_screener import (
     BaseStockScreener,
@@ -243,6 +246,18 @@ class SetupEngineScanner(BaseStockScreener):
             benchmark_close=spy_close,
         )
 
+        # 12b. Setup diagnostics (round 3 R3c): shapes the gates do not see, reported in
+        # explain.diagnostics beside the detectors' own; they never fail readiness.
+        diagnostics = list(agg_output.detector_failed_checks) + list(
+            setup_diagnostics(
+                price_data,
+                pattern_primary=agg_output.pattern_primary,
+                pivot_price=agg_output.pivot_price,
+                pivot_date=agg_output.pivot_date,
+                candidates=agg_output.candidates,
+            )
+        )
+
         # 13. Compute operational invalidation flags
         dollar_volume = price_data["Close"] * price_data["Volume"]
         adtv_series = dollar_volume.rolling(50, min_periods=50).mean()
@@ -280,7 +295,7 @@ class SetupEngineScanner(BaseStockScreener):
             candidates=list(agg_output.candidates),
             passed_checks=list(agg_output.passed_checks),
             failed_checks=list(agg_output.failed_checks),
-            diagnostics=list(agg_output.detector_failed_checks),
+            diagnostics=diagnostics,
             key_levels=agg_output.key_levels,
             invalidation_flags=all_invalidation_flags,
             readiness_features=readiness_features,

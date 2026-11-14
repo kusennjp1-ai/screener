@@ -613,3 +613,17 @@ class TestDetectorDiagnostics:
         assert result.derived_ready is False
         assert result.explain.to_payload()["failed_checks"] == ["outside_early_zone"]
         assert result.diagnostics == ("cup_with_handle:not_detected",)
+
+    def test_the_round_3_setup_diagnostics_never_fail_readiness(self):
+        """R3c: contraction_unconfirmed, pivot_already_crossed and pivot_below_base_high travel the
+        same channel: returned in ``diagnostics``, never in the failed list, readiness unmoved."""
+        from app.analysis.patterns.readiness import SETUP_DIAGNOSTICS
+
+        assert SETUP_DIAGNOSTICS == ("contraction_unconfirmed", "pivot_already_crossed", "pivot_below_base_high")
+        ready = build_explain_payload(_default_input(diagnostics=SETUP_DIAGNOSTICS))
+        assert ready.derived_ready is True
+        assert ready.explain.to_payload()["failed_checks"] == []
+        assert ready.diagnostics == SETUP_DIAGNOSTICS
+        blocked = build_explain_payload(_default_input(distance_to_pivot_pct=6.0, diagnostics=SETUP_DIAGNOSTICS))
+        assert blocked.derived_ready is False
+        assert blocked.explain.to_payload()["failed_checks"] == ["outside_early_zone"]

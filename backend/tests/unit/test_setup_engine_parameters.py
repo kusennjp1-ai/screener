@@ -1,5 +1,8 @@
 """Tests for Setup Engine parameter governance."""
 
+import re
+from pathlib import Path
+
 import pytest
 
 from app.analysis.patterns.config import (
@@ -120,3 +123,33 @@ def test_earnings_soon_window_days_spec():
     assert spec.min_value == 1.0
     assert spec.max_value == 90.0
     assert spec.unit == "days"
+
+
+# ── Round 3: constants restated from the brief's JavaScript, pinned so neither side drifts ──
+
+_REPO = Path(__file__).resolve().parents[3]
+_BOOK_TECHNICAL = _REPO / "frontend" / "src" / "static" / "bookTechnicalEvidence.js"
+
+
+def _js_const_line(path, first_name):
+    """``name -> number`` from the one ``const A = 1, B = 2;`` declaration that starts with ``first_name``."""
+    text = path.read_text(encoding="utf-8")
+    match = re.search(rf"^const ({first_name} = [^;]+);", text, re.M)
+    assert match, f"{first_name} declaration not found in {path.name}"
+    return {name: float(value) for name, value in re.findall(r"(\w+) = ([0-9.]+)", match.group(1))}
+
+
+def test_contraction_constants_match_book_technical_evidence():
+    """R3c contraction_unconfirmed ports bookTechnicalEvidence.js (VCP_METHOD): same values."""
+    from app.analysis.patterns import config
+
+    js = _js_const_line(_BOOK_TECHNICAL, "VCP_LOOKBACK")
+    assert js == {
+        "VCP_LOOKBACK": config.CONTRACTION_LOOKBACK_SESSIONS,
+        "ATR_SESSIONS": config.CONTRACTION_ATR_SESSIONS,
+        "ATR_MULTIPLE": config.CONTRACTION_ATR_MULTIPLE,
+        "DEPTH_FRACTION": config.CONTRACTION_DEPTH_FRACTION,
+        "FINAL_FLOOR_PCT": config.CONTRACTION_FINAL_FLOOR_PCT,
+        "MAX_LEGS": config.CONTRACTION_MAX_LEGS,
+        "REPAIR_FRACTION": config.CONTRACTION_REPAIR_FRACTION,
+    }
