@@ -6,8 +6,8 @@
 // name over candles while a clear spot is near its line's end, no leader through a label, no two labels read as one
 // phrase, no level line through a label uncut).
 import { test, expect } from '@playwright/test';
-import { date, horizontalOverflow, openBrief, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
-import { chartCrossing, crossingNote, priceInRange } from '../../src/static/brief/chartReadout.js';
+import { chartSettled, charts, date, horizontalOverflow, openBrief, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
+import { chartCrossing, crossingNote, priceInRange, weeklyBars, weeklyShortNote } from '../../src/static/brief/chartReadout.js';
 import { LEADER_OFF_LEVEL, LEADER_OFF_LEVEL_MIN, MA_SHIFT, MA_TAIL } from '../../src/static/brief/priceChart.js';
 import { BOX_GAP, FIGURE_GAP, FIGURE_STACK, KIN_GAP, LABEL_GAP, PHRASE_GAP } from '../../src/static/brief/chartLabels.js';
 
@@ -453,7 +453,14 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     expect(weeks).toBeLessThan(104);
     await weekly.click();
     await expect(chart).toHaveAttribute('aria-label', new RegExp(`^${target} の週足チャート（.*〜${date}）`));
-    await expect(chart.locator('.bc-notice').first()).toHaveText(new RegExp(`^週足は直近${weeks}週分（\\d{4}/\\d{2}〜）。$`));
+    await chartSettled(page, { redraw: true });
+    // The week count and its first month are a sentence of the 注記 (on the card at 1440), never a notice in the plot.
+    const sentence = weeklyShortNote(weeklyBars(charts[rowBySymbol[target].chart_path.split('/').pop()].bars));
+    expect(sentence).toContain(`の${weeks}週分`);
+    const notes = page.locator(phone ? '.brief-screen-notes' : '.brief-chartcard .brief-chart-notes');
+    await expect(notes).toHaveCount(1);
+    await expect(notes.locator('li').filter({ hasText: sentence })).toHaveCount(1);
+    await expect(chart.locator('svg text').filter({ hasText: /週足は|2年分はありません/ })).toHaveCount(0);
     await expect(page.locator('.brief-legend')).toContainText('10週線');
     expect(errors).toEqual([]);
   });

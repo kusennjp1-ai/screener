@@ -289,7 +289,7 @@ describe('brief price chart', () => {
     expect(texts(el, '.bc-volcaption')[0]).toContain('1.4×以上（独自判定）');
   });
 
-  it('builds Monday-based weeks, draws a weekly chart with week averages and says when two years are not there', async () => {
+  it('builds Monday-based weeks and draws a weekly chart with week averages; its week count is no notice in the plot', async () => {
     const days = ['2026-09-21', '2026-09-22', '2026-09-25', '2026-09-28', '2026-10-02'].map((date, i) => ({ date, open: 10 + i, high: 12 + i, low: 9 + i, close: 11 + i, volume: 100 }));
     const weeks = weeklyBars(days);
     expect(weeks).toEqual([
@@ -304,8 +304,20 @@ describe('brief price chart', () => {
     expect(el.getAttribute('aria-label')).toContain('週足チャート');
     expect(el.querySelectorAll('.bc-up, .bc-down').length).toBe(count * 2);
     expect(el.textContent).toContain('出来高・10週平均');
-    // The month is written as on the date axis (YYYY/MM).
-    expect(texts(el, '.bc-notice').slice(0, 2)).toEqual([`週足は直近${count}週分（${weeklyBars(bars)[0].start.slice(0, 7).replace('-', '/')}〜）。`, '2年分はありません']);
+    // Under two years of weeks (the screen's 注記 says how many): with a pivot and measured contractions, no notice at all.
+    expect(count).toBeLessThan(104);
+    expect(el.querySelectorAll('.bc-notice')).toHaveLength(0);
+    expect(el.textContent).not.toMatch(/週足は|2年分/);
+    // Without a pivot or measured contractions, those notices stay, and only those.
+    for (const w of [600, 320]) {
+      const bare = container(w, 340);
+      renderPriceChart(bare, { ...model, interval: 'week', pivot: null, upper: null, legs: [], legsValid: false }, { period: 104, animate: false });
+      expect({ w, notices: texts(bare, '.bc-notice') }).toEqual({ w, notices: ['ピボット 未確認', '収縮は未確認'] });
+      expect(bare.textContent).not.toMatch(/週足は|2年分/);
+      const one = container(w, 340);
+      renderPriceChart(one, { ...model, interval: 'week', legsValid: false }, { period: 104, animate: false });
+      expect({ w, notices: texts(one, '.bc-notice') }).toEqual({ w, notices: ['収縮は未確認'] });
+    }
   });
 
   it('ticks month starts and writes the year at the left edge and where it changes', () => {
@@ -575,6 +587,12 @@ describe('brief price chart', () => {
     const other = renderPriceChart(missing, { ...model, pivot: null, upper: null }, { period: 130, animate: false });
     const notice = missing.querySelector('.bc-notice'), spot = other.freeCorner(72, 44);
     expect(Math.abs(spot.x - Number(notice.getAttribute('x'))) > 72 || Math.abs(spot.y - Number(notice.getAttribute('y'))) > 44).toBe(true);
+    // The same on the weekly chart, whose remaining notices are the pivot's and the contractions'.
+    const week = container(390, 340);
+    const weekly = renderPriceChart(week, { ...model, interval: 'week', pivot: null, upper: null }, { period: 104, animate: false });
+    const weekNotice = week.querySelector('.bc-notice'), weekSpot = weekly.freeCorner(72, 44);
+    expect(texts(week, '.bc-notice')).toEqual(['ピボット 未確認']);
+    expect(Math.abs(weekSpot.x - Number(weekNotice.getAttribute('x'))) > 72 || Math.abs(weekSpot.y - Number(weekNotice.getAttribute('y'))) > 44).toBe(true);
   });
 
   // Round 2 (CH2–CH7): a phone-width chart (332px wide at 390) with every level, 4–5 digit prices and every mark.

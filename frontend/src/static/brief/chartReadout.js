@@ -223,14 +223,22 @@ export function chartReadout(model, index, { certified = false, pivot = null, au
   };
 }
 
+/** Two years of weeks: the weekly period's length (CHART_RANGES['2yw']). */
+const TWO_YEARS_OF_WEEKS = CHART_RANGES['2yw'][0];
 /**
  * The weekly period's button: 「週足2年」 only when two years of weeks exist, otherwise the honest count. Without
  * bars (a chart not delivered, failed or still loading) the count is unknown, never 0: 「週足（本数 未確認）」.
  */
 export function weeklyRangeLabel(bars) {
   const count = weeklyBars(bars).length;
-  return !count ? '週足（本数 未確認）' : count >= 104 ? '週足2年' : `週足（${count}週）`;
+  return !count ? '週足（本数 未確認）' : count >= TWO_YEARS_OF_WEEKS ? '週足2年' : `週足（${count}週）`;
 }
+/**
+ * The 注記's sentence for a weekly chart under two years of weeks (`weeks`, weeklyBars of the chart): the month of the
+ * first week's first session (YYYY/MM, as on the date axis) and the week count. Null with no weeks (never 「0週分」) or
+ * with two years of them.
+ */
+export const weeklyShortNote = weeks => (weeks?.length && weeks.length < TWO_YEARS_OF_WEEKS ? `週足は${(weeks[0].start || weeks[0].date).slice(0, 7).replace('-', '/')}〜の${weeks.length}週分（2年分はありません）` : null);
 
 /** Why a drawn crossing is grey, not green (chartCrossing's `reason`), for the 注記. */
 const CROSSING_REASONS = {
@@ -250,7 +258,8 @@ export function crossingNote(crossing) {
 
 /**
  * The chart's footnotes for the screen's 注記 (in place on the card at 1024px and wider). Each one is
- * stated once and only when it applies; every N is counted from the data.
+ * stated once and only when it applies; every N is counted from the data. A weekly chart under two years of
+ * weeks says so second (weeklyShortNote).
  * @param {object} p { bars, interval, period, short (the 10/21-day lines are drawn), rsLead (rsLeadMarks of
  *   the certified bars, or null), gaps (shown gap days), sellMarks (the phone legend names ▼▲ without their
  *   meaning), adr (the readout shows ADR and the distance from the 50-day line), crossing (chartCrossing of
@@ -263,6 +272,9 @@ export function chartNotes({ bars, interval, period, short = shortAveragesDrawn(
   const series = chartSeries({ bars, interval, short });
   const n = Math.min(period, series.all.length), from = series.all.length - n;
   const notes = ['—＝必要な本数に足りない値（移動平均・出来高の倍率）'];
+  // Under two years of weeks the weekly chart says how many it draws, here (not in the plot).
+  const weeklyNote = series.weekly ? weeklyShortNote(series.all) : null;
+  if (weeklyNote) notes.push(weeklyNote);
   if (series.averages.some(a => a.short)) notes.push('10日線・21日EMAは独自計算です。');
   const partial = series.averages.filter(a => !a.short).map(a => ({ a, count: a.values.slice(from).filter(v => v !== null).length })).filter(({ count }) => count < n);
   if (partial.length) notes.push(`${partial.map(({ a, count }) => (count ? `${a.label}線は直近${count}本のみ` : `${a.label}線は描けません`)).join('・')}（${series.weekly ? '週足' : '日足'}が足りないため）。`);

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { chartContentKey, chartCrossing, chartNotes, chartReadout, crossingNote, earningsMarker, chartSeries, ema, formatPercent, formatPrice, formatShares, formatVolume, heavyVolumeBars, shortAveragesDrawn, shortAveragesShown, priceInRange, weeklyBars, weeklyRangeLabel } from './chartReadout';
+import { CHART_RANGES, chartContentKey, chartCrossing, chartNotes, chartReadout, crossingNote, earningsMarker, chartSeries, ema, formatPercent, formatPrice, formatShares, formatVolume, heavyVolumeBars, shortAveragesDrawn, shortAveragesShown, priceInRange, weeklyBars, weeklyRangeLabel, weeklyShortNote } from './chartReadout';
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { ADR_SESSIONS, adrPercent } from './positionSizing';
 import { lastPivotCrossing, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
@@ -148,6 +148,39 @@ describe('the chart footnotes', () => {
     // At 1024px and wider (no marks) the crossing's colour is still explained.
     expect(chartNotes({ bars: list, interval: 'day', period: 130, crossing: { ...crossing, tone: 'zone', reason: null } })).toContain('チャートの印：緑の矢印＝終値がピボットを上抜けた日（出来高1.4×以上、直近の終値もピボット以上。検証済みの日足）。');
     expect(chartNotes({ bars: [], interval: 'day', period: 130 })).toEqual([]);
+  });
+
+  it('say second, on the weekly chart only and under two years of weeks, how many weeks it draws from which month', () => {
+    const weekly = CHART_RANGES['2yw'][0];
+    // 515 weekdays from a Monday are 103 whole weeks; 520 are 104 (two years).
+    const short = bars(515), full = bars(520);
+    expect(weeklyBars(short)).toHaveLength(weekly - 1);
+    expect(weeklyBars(full)).toHaveLength(weekly);
+    // The count and the month of the first week's first session (YYYY/MM, as on the date axis).
+    const sentence = weeklyShortNote(weeklyBars(short));
+    expect(sentence).toBe(`週足は2026/01〜の${weekly - 1}週分（2年分はありません）`);
+    const notes = chartNotes({ bars: short, interval: 'week', period: weekly });
+    expect(notes[0]).toBe('—＝必要な本数に足りない値（移動平均・出来高の倍率）');
+    expect(notes[1]).toBe(sentence);
+    expect(notes.filter(note => note.startsWith('週足は'))).toHaveLength(1);
+    // A first week cut by the start of the data is not counted, and the month is its next week's.
+    const cut = bars(300).slice(2), weeks = weeklyBars(cut);
+    expect(weeks[0].start).toBe('2026-01-12');
+    expect(chartNotes({ bars: cut, interval: 'week', period: weekly })[1]).toBe(`週足は2026/01〜の${weeks.length}週分（2年分はありません）`);
+    // Not at two years of weeks, never on a daily period, and never without bars or without a whole week (never 「0週分」).
+    expect(weeklyShortNote(weeklyBars(full))).toBeNull();
+    expect(chartNotes({ bars: full, interval: 'week', period: weekly }).join('')).not.toContain('週足は');
+    for (const [, [period, interval]] of Object.entries(CHART_RANGES).filter(([key]) => key !== '2yw')) {
+      expect(chartNotes({ bars: short, interval, period }).join('')).not.toContain('週足は');
+      expect(chartNotes({ bars: bars(280), interval, period }).join('')).not.toContain('週足は');
+    }
+    expect(chartNotes({ bars: [], interval: 'week', period: weekly })).toEqual([]);
+    expect(chartNotes({ bars: null, interval: 'week', period: weekly })).toEqual([]);
+    // Three sessions from a Wednesday: a partial first week only, so no whole week.
+    const partial = bars(10).slice(2, 5);
+    expect(weeklyBars(partial)).toEqual([]);
+    expect(chartNotes({ bars: partial, interval: 'week', period: weekly })).toEqual(['—＝必要な本数に足りない値（移動平均・出来高の倍率）']);
+    for (const none of [null, undefined, []]) expect(weeklyShortNote(none)).toBeNull();
   });
 });
 

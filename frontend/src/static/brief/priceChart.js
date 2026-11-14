@@ -640,17 +640,13 @@ export function renderPriceChart(el, model, options = {}) {
   }
   // The notices (one block, a line each): a plot corner first (top-left, bottom-left, bottom-right, top-right), else the
   // free spot nearest one on a coarse grid (8px across, 4px down), clear of the lines within 64px more; over the fewest
-  // candles when none is free.
+  // candles when none is free. A weekly chart's week count is the screen's 注記 (chartNotes), not a notice.
   let noticeLabel = null;
   const notices = [];
-  if (weekly && all.length < 104) notices.push(`週足は直近${all.length}週分（${(all[0].start || all[0].date).slice(0, 7).replace('-', '/')}〜）。`, '2年分はありません');
   if (!hasPivot) notices.push('ピボット 未確認');
   if (model.legsValid === false) notices.push('収縮は未確認');
   if (notices.length) {
-    // A line wider than the plot breaks before its parenthesis (「週足は直近58週分」「（2025/08〜）。」 at 320px).
-    const lines = notices.flatMap(notice => (width(notice) > pw - 8 && notice.indexOf('（') > 0 ? [notice.slice(0, notice.indexOf('（')), notice.slice(notice.indexOf('（'))] : [notice]));
-    notices.splice(0, notices.length, ...lines);
-    const w = Math.min(Math.max(...notices.map(notice => width(notice))), pw - 8), half = notices.length * 8 - 1;
+    const w =Math.min(Math.max(...notices.map(notice => width(notice))), pw - 8), half = notices.length * 8 - 1;
     const right = clampX(pw - 34 - w, w), yTop = padT + 2 + half, yBottom = plotBottom - 2 - half;
     const corners = [[4, yTop], [4, yBottom], [right, yBottom], [right, yTop]];
     const grid = spots({ x0: 4, x1: pw - w - 4, ys: lineOf(yTop, yBottom, 4), step: 8, first: corners.filter(([cx]) => cx >= 4).map(([cx, cy]) => [cx, cy, -1]), cost: (lx, yc) => { let near = Infinity; for (const [cx, cy] of corners) near = Math.min(near, Math.abs(lx - cx) + Math.abs(yc - cy)); return near; } });
