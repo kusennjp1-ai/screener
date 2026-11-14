@@ -305,4 +305,111 @@ UI の文言だけの変更。データのキー・チャートのコードは�
 pre-D3 SHA：測った木 9efa9927 の上に、この文書だけを変える docs(round3) のコミットが1つ。その SHA が D4 までの区切り（D3 を入れないときの落とし所）で、指揮者への報告に書く。`git diff 9efa9927..<その SHA> --name-only` は docs/round3/data.md だけ。
 
 
-## D3（予定・分離可能）
+## D3（分離可能）独自計算・参考の fiscal Q4 EPS：作る側と精度の計測、出力は止めたまま（P3）
+
+D3 のうち作る側（`frontend/tools/sec-financials.py`）だけ。UI 側（admission の任意キー、カードの表示）は P4。出力は止めてある（`Q4_EPS_REFERENCE_EMIT = False`）ので、公開されるレコードの形は変わらない。Q4 の参考値は**判定・点数・絞り込み・並べ替えのどれにも使わない**（使うかどうかはオーナー判断 OD1、既定は使わない）。
+
+### 方法
+
+10-K の中でしか fiscal Q4 を報告しない会社の、各会計年度（330〜400 日の年度値）について：
+
+- **分子（Q4 純利益）**：既存の `derive_fourth_quarters`（そのまま）で、年度値から同じタグの3四半期を引いた残り。タグは `Q4_REFERENCE_NUMERATOR_TAGS` の順に試し、年度値があって3四半期が年度を隙間なく埋める最初のタグを使い、そのタグを記録する。会計年度末に終わる四半期の値（10-K の Q4 の報告値）があっても、計算からは外す。残りは常に「年度値 − 3四半期」になる。
+- **分母（Q4 の希薄化後加重平均株数）**：(年度の加重株数 × 年度の日数 − Σ 四半期の加重株数 × その日数) ÷ Q4 の日数。株数の事実は、分子の鎖と**同じ期間の境界**のものだけを使う。日数は両端を含む（concept_points と同じ数え方）。基本株数なら正確、希薄化後は近似（希薄化の増分と逆希薄化の除外が期間ごとに決まるため）。docstring にもそう書いた。
+- **値**：round(Q4 純利益 ÷ Q4 株数, 4)。
+
+### 定数（すべて 独自設定：このブリーフ自身の選択で、SEC の規則でも Minervini の規則でもない）
+
+| 定数 | 値 | 意味 |
+| --- | --- | --- |
+| `Q4_EPS_REFERENCE_EMIT` | `False` | ただ一つのスイッチ。オフでも計算と精度の行は動く。レコードには載らない |
+| `Q4_REFERENCE_METHOD` | `"q4-ni-over-q4-diluted-shares-v1"` | 各エントリーに書く方法の名前 |
+| `Q4_REFERENCE_NUMERATOR_TAGS` | `NetIncomeLossAvailableToCommonStockholdersDiluted` → `…Basic` → `NetIncomeLoss`（USD） | 分子。この順に試す |
+| `Q4_REFERENCE_SHARE_TAGS` | `WeightedAverageNumberOfDilutedSharesOutstanding`（`shares`） | 分母 |
+| `Q4_REFERENCE_SHARE_BAND` | `0.10` | Q4 株数が [min(Q1..Q3) × 0.9, max(Q1..Q3) × 1.1] の外なら分割・修正とみなす |
+| `Q4_REFERENCE_CHECK_TOLERANCE` | `0.02` | Q1〜Q3 の各期で \|報告 EPS × 株数 − 純利益\| ≤ 0.02 × \|純利益\| |
+| `Q4_REFERENCE_MAX` | `4` | 1レコードあたりのエントリー数の上限（新しい方を残す） |
+| `Q4_REFERENCE_WITHIN_CENTS` / `_SHARE` | `0.01` / `0.02` | 精度の「1¢ または 2% 以内」 |
+
+タグは `TAGS` に**入れていない**（制約 1）。`TAGS` はレコードの `quarterly` のキーを決め、ブラウザーの admission の `SEC_FIELD_TAGS`（sameKeys）と一致を検査されている。分子の2つ（`NetIncomeLoss` と `…Basic`）は元から `TAGS["netIncome"]` にあり、そこは変えていない。
+
+### 値が未確認のまま（エントリーなし）になる理由
+
+上から順に調べ、最初に当たった理由を数える。
+
+| 理由 | いつ |
+| --- | --- |
+| `no_numerator` | どの分子タグにもその年度の年度値がない（年度は、分子・株数の年度値または年次 EPS から知る。derivation_gaps と同じ考え方） |
+| `no_tiling` | 年度値はあるが、どのタグの3四半期も年度を埋めない。または株数の事実が分子と別の期間の境界にある |
+| `no_shares` | 年度または Q1〜Q3 の希薄化後加重株数が無い |
+| `split_band` | Q4 株数が 0 以下、または帯の外 |
+| `check_failed` | Q1〜Q3 のどれかに報告 EPS が無い、または 2% の照合に落ちる（純利益 0 は落ちる） |
+| `not_finite` | 商が有限の数でない |
+| `error` | 計算そのものが例外を出した（レコード単位。fetch_symbol が数える） |
+
+**数える年度（ここで決めたこと）**：エントリーになり得る年度だけ、すなわちレコードの窓の中（`TRIM_DAYS` の cutoff 以降）で、Q4 EPS が報告されていない年度。窓より古い年度と、Q4 EPS が報告されている年度は `refused` に数えない。
+
+### エントリー
+
+`{"end", "start", "value", "method", "numerator": {"tag", "components": [年度の accession, q1, q2, q3]}, "shares": {"tag", "components": [年度, q1, q2, q3]}}`（キーはこれだけ）。end 順、レコードの cutoff 以降の年度末だけ、四半期 EPS が報告されていない年度末だけ、最大 4 件。`quarterly.eps` には何も足さない・埋めない（制約 4）。報告 EPS は、レコードと同じ**切る前**の系列（`series(facts, "eps", as_of)`）から読む。切った後の系列だと、窓の最も古い年度の Q1〜Q3 が欠けて誤って `check_failed` になる。
+
+### 精度の計測（レコードには書かない）
+
+- `q4`：Q4 EPS を報告している年度で、同じ理由の規則で計算した参考値と、報告された Q4 EPS（同じ開始日のもの）を比べる。
+- `q1_q3`：埋まる年度すべての Q1〜Q3 で、純利益 ÷ 加重株数と報告 EPS を比べる。2% の照合の**前**に測る（後で測ると定義上 2% 以内になる）。窓より古い年度も含む。
+- それぞれ `{"n", "median_abs_error", "within_1c_or_2pct", "share"}`。誤差は 6 桁に丸めてから 1¢・2% と比べる（ちょうど 1¢ の差が二進の浮動小数で落ちないように）。中央値と share は 4 桁。
+
+### 配線
+
+- `fetch_symbol(…, q4_reference=None)`：normalize が成功した（available / partial）後、**normalize の try の外**で、別の try の中で `attach_q4_reference` を呼ぶ。例外ならレコードは normalize が返したまま、`error` を数える（制約 3）。`q4EpsReference` を付けるのは `Q4_EPS_REFERENCE_EMIT and entries` のときだけ。
+- `collect`：既存の lock の下で集計し、`output["q4_reference"]` を返す（`payload_cik` と同じ扱い）。
+- `main`：それを取り出し、1行 `SEC q4 reference accuracy <date>: {...}` を出し、同じ行をステップサマリーに足し、ファイルの `coverage.q4_reference` に書く（集計だけ、銘柄なし）。
+- 集計の形：`{"emit": false, "records_with_reference", "entries", "refused": {理由: n（error を含む）}, "q4": {...}, "q1_q3": {...}}`。`records_with_reference` と `entries` は、出力がオフでも「計算できた数」。
+
+**集計レポートの経路（計画の細部をここで決めた）**：`coverage.q4_reference` はファイルの最上位の coverage で、レコードのキーでも警告コードでも索引の項目でもない。`git grep -n "brief_fetched\|q4_revenue_derived" -- . ':!docs'` は sec-financials.py とそのテストだけを返した（実測）。ファイルの coverage を厳密に検査するものは無い：`secInputSummary` は名前のあるキーだけを読み、`secEvidenceLine` は `file.coverage` を展開して「SEC evidence … (published file)」の行に出す（両方のワークフローが `--sec-evidence` で出す）。ブラウザーはこのファイルを読まない。`git grep -ln "sec-financials\|sec_financials" -- frontend .github` の先も見たが、作る側のファイルのバイトを固定しているゴールデンは無い。したがって報告側のコードは変えず、テスト1つで固定した。
+
+### 規則 18
+
+レコードのキー `q4EpsReference` は**出力オフ**（`Q4_EPS_REFERENCE_EMIT = False`）で出荷するので、公開されるレコードの形は変わらない。未知のレコードのキーを拒むのはブラウザーではなくツールである：export-research.mjs の admission、financial-correction-overlay.mjs の再 admission（`fail`）、集計レポートの admission。どれも bookFinancialAdmission.js の sameKeys を通る。P4 より前のコミットから作ったリリースは、このキーのあるレコードを丸ごと拒む。ファイル最上位の `coverage.q4_reference` は、レコードのキーでも警告コードでも索引の項目でもない。
+
+### テスト
+
+- `frontend/tools/test_sec_financials.py`：39 → 54（新しい 15）。
+  - `Q4EpsReference`：埋まる年度（値 = Q4 純利益 ÷ Q4 株数 = 1.3592、4件ずつの components）。分子タグの順と記録（希薄化後 → 年度値なし／鎖が切れていれば基本 → NetIncomeLoss）。分割（年度値が2倍、残りが負）→ `split_band`。欠けた事実 → `no_shares`（四半期・年度・タグごと無い）、`no_numerator`、`no_tiling`（純利益の Q2 が無い、株数の Q2 が別の境界）。損失の Q4（希薄化後 = 基本）→ 負の値。Q1〜Q3 の照合失敗（EPS がずれる・無い・純利益 0）→ `check_failed`、ずれた期も精度のサンプルには入る。Q4 EPS を報告する会社 → エントリーなし、`q4` のサンプル1件（10-K の Q4 純利益・株数は外して計算）。窓と上限（2022〜2025 の4件、上限 2 で新しい2件、上限 10 でも窓で4件、窓より古い年度の失敗は数えない）。`quarterly.eps` は埋めない、`TAGS` は変わらない。
+  - `Q4EpsReferenceEmission`：出力オフで、株数の事実があってもなくても書くレコードが normalize の出力とバイト一致、`q4EpsReference` は無い（制約 2）。出力オン（定数をテストで差し替え）でちょうどその形のキー、外せば normalize の出力と一致。計算に例外を注入 → レコードは normalize のまま、`error` を数える（制約 3）。読めないペイロードは計算に届かない。
+  - `Q4EpsReferenceAccuracy`：精度の算術（n = 0 で null、ちょうど 1¢・ちょうど 2% は以内）。collect の集計。main の行・ステップサマリー・ファイルの `coverage.q4_reference`（ネットワークなし：collect を差し替え、一時ディレクトリで実行）。
+- `frontend/tools/report-data-coverage.test.mjs`：23 → 24（新しい1つ）。`secEvidenceLine` がファイルの `coverage.q4_reference` を null も含めてそのまま出し、集計の無い古いファイルは今までどおり。
+
+### 実測（このサンドボックス）
+
+- A：`cd frontend/tools && PATH=/opt/node22/bin:$PATH python3 -m unittest test_sec_financials` → 編集前 `Ran 39 tests … OK`、編集後 `Ran 54 tests … OK`。
+- B：`npx vitest run tools/report-data-coverage.test.mjs`（SESSION_CALENDAR_PYTHON・FINANCIAL_REPLAY_PYTHON を指定）→ 24 passed。全体の `npx vitest run` → 247 files / 3998 tests passed（302.95 s、loadavg 前 2.61 1.69 1.22、後 9.32 6.29 3.34。時間は advisory）。
+- C：`git grep -n "q4EpsReference" -- frontend/src` → 何も出ない（UI 側は P4）。
+- 制約 2 の基準との照合（スクラッチ、コミットしない）：45603f06 の sec-financials.py と新しいものを並べて読み込み、同じ 10 のペイロード（7年分、参考値のある年度、Q4 EPS を報告する会社、損失、株数なし、照合失敗、別タグの年度値、cik 不一致、壊れた facts、20-F だけ）で `collect` を回した。`results` は JSON でバイト一致（sha256 先頭 304c62871fe0cb57 が両方）、`coverage()` も一致、`write_output` のファイルは `coverage.q4_reference` を除いて一致、ファイルに `q4EpsReference` の文字列は無い。collect の戻り値で増えたキーは `q4_reference` だけ。
+- 変異の確認（スクラッチのコピー）：出力オン、10-K の Q4 の値を外さない、normalize の try の中で計算、cutoff なし、切った EPS 系列、の5つとも、新しいテストのどれかが落ちる（cutoff なしは最初は上限 4 に隠れて通ったので、上限 10 の確認を足した）。
+- ownership gate：コミットの前ごとに `OWNERSHIP OK (DATA): 11 paths`。
+
+### 未検証
+
+- 実データの精度（`q4`・`q1_q3` の数）はすべて未検証。ここでは何も取得していない（`main()`／data.sec.gov への collect は実行していない）。最初の公開の実行のログの `SEC q4 reference accuracy <date>` の行が計測になる。
+- 実際の会社のうち、何社の年度が埋まるか（`WeightedAverageNumberOfDilutedSharesOutstanding` を使わず `WeightedAverageNumberOfShareOutstandingBasicAndDiluted` だけを付ける会社は `no_shares` になる）。
+- 計画の「掲載のうち Code 33 が fiscal Q4 にかかるのは最大 103 行、Q4 の行に付けられるのは最大 21 行」の上限。
+- 52/53 週の会計年度や決算期の変更での振る舞い（テストは暦年の会社だけ）。
+
+### 指示からの逸脱（小さいもの）
+
+1. n = 0 のとき、`within_1c_or_2pct` も null にした（指示は中央値と share だけ null）。サンプルが無いときの「以内の数」も測っていないので。
+2. `q4_eps_reference(facts, as_of, eps_quarters, cutoff=None)`：レコードの窓を渡すため、任意の引数 `cutoff` を足した。normalize の窓は `trim_cutoff` に出し、normalize もそれを呼ぶ（出力は変わらない、上の照合）。
+3. 「商が有限でない」の理由名を `not_finite` にした。`error` は `refused` の中に、レコード単位で数える。
+4. 単位と「1¢・2%」も名前のある定数にした（`Q4_REFERENCE_NUMERATOR_UNIT`、`Q4_REFERENCE_SHARE_UNIT`、`Q4_REFERENCE_WITHIN_CENTS`、`Q4_REFERENCE_WITHIN_SHARE`）。
+5. 既存の `SEC evidence <date>: …` のログ行は `output["coverage"]` を丸ごと出すので、そこにも `q4_reference` が入る（ファイル最上位に書く経路の帰結。ログだけ）。
+
+### 分離
+
+D3 のコミットは d8457cfb（pre-D3）の上の3つ：b306c6de（feat：作る側とその Python テスト）、19135046（test：集計レポートの1テスト）、この docs(round3) のコミット。触るのは frontend/tools/sec-financials.py、frontend/tools/test_sec_financials.py、frontend/tools/report-data-coverage.test.mjs（末尾に足した describe）、docs/round3/data.md（この節）だけ。3つを戻せば D2・D4 の状態に戻る。
+
+### 統合・オーナーへの依頼
+
+- **OD1**：出力のスイッチ（`Q4_EPS_REFERENCE_EMIT = True`）は後の別の変更で、次の両方の後に限る：(a) round 3 の UI（P4 の admission の任意キーと表示）が Pages で動いていることを読み取りだけで確かめた、(b) オーナーが公開の実行の精度の行を見た。
+- P4 の admission は `q4EpsReference` を任意・厳密なキーとして受け、無いレコードは今と同じに扱うこと（上の規則 18）。
+- CONTEXT.md：「独自計算・参考 Q4 EPS」（方法の名前 `q4-ni-over-q4-diluted-shares-v1`、判定に使わない）を載せる。
+- I6/I7 で読むもの：公開の実行の `SEC q4 reference accuracy <date>` の行（と `--sec-evidence` の行の `q4_reference`）。run id と JST の時刻を添える。
