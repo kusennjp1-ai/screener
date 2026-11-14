@@ -210,7 +210,7 @@ test.describe('oracle shapes, through the producers', () => {
 });
 
 test.describe('round-3 targets (each owning track flips its own)', () => {
-  test.fixme('R1: ZZNR has no ブレイク失敗 and no arrow before its pivot\'s bar', async ({ page }) => {
+  test('R1: ZZNR has no ブレイク失敗 and no arrow before its pivot\'s bar', async ({ page }) => {
     const row = oracleRow(ORACLE.pivotAfterCrossing), bars = certified(row, chartOf(row)), view = viewOf(row), bar = pivotBar(bars, row);
     const from = crossingFloor(bars, row), sells = stockSells({ judged: bars, diagnostics: null, view, from });
     // No crossing after the pivot's bar: the failed-breakout check reads clear (never null or unknown).

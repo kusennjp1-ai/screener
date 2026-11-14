@@ -3,8 +3,11 @@
 // count. Each surface's copy belongs to its track; this spec compares the surfaces with each other and asserts no
 // track's wording as a literal (plan §1 rule 14), only counts and the absence of 「あと0」 and of 「あと」 after a date.
 import { test, expect } from '@playwright/test';
-import { charts, date, openBrief, rowBySymbol, VIEWPORTS } from './brief-fixture.js';
-import { sellChipView } from '../../src/static/brief/briefSell.js';
+import { chartSettled, charts, date, openBrief, ORACLE, ORACLE_CHARTS, ORACLE_ROWS, rowBySymbol, VIEWPORTS } from './brief-fixture.js';
+import { sellChipView, stockSells, WEAKNESS_ROW_CHIP } from '../../src/static/brief/briefSell.js';
+import { crossingFloor } from '../../src/static/brief/breakoutHistory.js';
+import { candidateView } from '../../src/static/brief/briefCandidate.js';
+import { diagnoseBookChart } from '../../src/static/bookChartDiagnostics.js';
 import { BASE_UNCHECKED_CHIP, BASE_UNCHECKED_NOTE, LIST_FILTERS, rowEvent, TOUCH_HELD_NOTE } from '../../src/static/brief/briefCandidate.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
@@ -275,6 +278,80 @@ test.describe('a failed breakout counts in the watch tile', () => {
     const { errors } = await openBrief(page, '#/brief', { storage: watch, mutate: failedBreakout('ZZAR') });
     await expect(tile(page)).toHaveText(/\d+件/);
     expect(await count(page)).toBe(before + 1);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 R1 (crossings count from the pivot's own bar): the watch rows, Today and the stock screen read one bound, so a
+// stock says one sell wording everywhere. ZZNR's crossing came before its pivot formed (no 崩れ anywhere); ZZHB's came after
+// its pivot's bar (its chip, whatever it is, is the same on every surface). The chip is sellChipView's on the bounded checks:
+// its short form on the rows, its full sentence in the conclusion (StockVerdict), as before R1.
+const oracleOf = symbol => {
+  const row = ORACLE_ROWS.find(item => item.symbol === symbol), chart = ORACLE_CHARTS[row.chart_path.split('/').pop()];
+  const view = candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, date);
+  const sells = from => stockSells({ judged: chart.bars, diagnostics: diagnoseBookChart(row, chart, date), view, from });
+  return { row, chart, bounded: sellChipView(sells(crossingFloor(chart.bars, row))), unbounded: sellChipView(sells(null)) };
+};
+test.describe('round 3 R1: one sell wording per stock, bounded by the pivot\'s own bar', () => {
+  test.use(phone(390, 844));
+  const symbols = [ORACLE.pivotAfterCrossing, ORACLE.heldBreakout];
+  test('ZZNR and ZZHB read the same sell chip on Today\'s watch rows, the watch tab and their stock screens', async ({ page }) => {
+    const expected = Object.fromEntries(symbols.map(symbol => [symbol, oracleOf(symbol)]));
+    // Not vacuous: without the floor ZZNR would carry the 崩れ chip; with it, it does not.
+    expect(expected.ZZNR.unbounded?.text).toBe(WEAKNESS_ROW_CHIP);
+    expect(expected.ZZNR.bounded?.text ?? null).not.toBe(WEAKNESS_ROW_CHIP);
+    expect(expected.ZZHB.bounded).toEqual(expected.ZZHB.unbounded);
+    const { errors } = await openBrief(page, '#/brief', { oracles: true, storage: { 'research-watch': symbols } });
+    const watch = page.getByRole('region', { name: 'ウォッチの状況' });
+    await expect(page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ }).locator('b')).toHaveText(/\d+件/);
+    const chipOf = node => node.locator('.brief-sellchip');
+    for (const symbol of symbols) {
+      const row = watch.locator(`[data-symbol="${symbol}"]`), chip = expected[symbol].bounded;
+      await expect(row).toBeVisible();
+      await expect(row).not.toContainText(WEAKNESS_ROW_CHIP);
+      if (chip) await expect(chipOf(row)).toContainText(chip.text);
+      else await expect(chipOf(row)).toHaveCount(0);
+    }
+    await page.goto('/#/brief/watch');
+    const tab = page.getByRole('region', { name: 'ウォッチ中の銘柄' });
+    for (const symbol of symbols) {
+      const row = tab.locator(`[data-testid="brief-candidate"][data-symbol="${symbol}"]`), chip = expected[symbol].bounded;
+      await expect(row).toBeVisible();
+      await expect(row).not.toContainText(WEAKNESS_ROW_CHIP);
+      if (chip) await expect(row.locator('.brief-reasons')).toContainText(chip.text);
+    }
+    for (const symbol of symbols) {
+      await page.goto(`/#/brief/stock/${symbol}`);
+      await expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down').first()).toBeAttached();
+      await chartSettled(page);
+      const conclusion = page.getByTestId('brief-conclusion'), chip = expected[symbol].bounded;
+      await expect(conclusion).not.toHaveAttribute('data-gate', 'failedBreakout');
+      await expect(conclusion).not.toContainText(WEAKNESS_ROW_CHIP);
+      if (chip) await expect(conclusion.locator('.brief-tags')).toContainText(chip.full ?? chip.text);
+    }
+    expect(errors).toEqual([]);
+  });
+
+  // INTEGRATION (docs/round3/verdict.md, "Integration requests"): useStockData builds the stock screen's row as
+  // {...detail, ...summary} (useBriefData.js, mergeFinancialDetail), so on an older publication whose index lacks
+  // se_pivot_date while a detail carries it, the stock screen is bounded and the watch row is not. The one-line fix in
+  // useBriefData.js (not this track's file) drops a detail-only se_pivot_date from the merged row; until it lands this
+  // fails on the stock-screen side (its data-gate is the bounded call, not failedBreakout).
+  test.fixme('INTEGRATION: an index without se_pivot_date and a detail with it leave the stock screen and the watch row both unbounded', async ({ page }) => {
+    const nr = ORACLE_ROWS.find(row => row.symbol === ORACLE.pivotAfterCrossing), path = `research-details/${nr.symbol}-detail.json`;
+    const mutate = {
+      rows: rows => { const row = rows.find(item => item.symbol === nr.symbol); delete row.se_pivot_date; row.research_detail_path = path; },
+      details: details => { details[path.split('/').pop()] = { ...structuredClone(nr), as_of_date: date, research_detail_path: path }; },
+    };
+    const detail = page.waitForResponse(response => response.url().endsWith(path.split('/').pop()));
+    const { errors } = await openBrief(page, `#/brief/stock/${nr.symbol}`, { oracles: true, storage: { 'research-watch': [nr.symbol] }, mutate });
+    await detail;
+    await expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down').first()).toBeAttached();
+    await chartSettled(page);
+    // Both unbounded, as the index (the one source both screens share) says: today's failed breakout on both.
+    await expect(page.getByTestId('brief-conclusion')).toHaveAttribute('data-gate', 'failedBreakout');
+    await page.goto('/#/brief');
+    await expect(page.getByRole('region', { name: 'ウォッチの状況' }).locator(`[data-symbol="${nr.symbol}"]`)).toContainText(WEAKNESS_ROW_CHIP);
     expect(errors).toEqual([]);
   });
 });

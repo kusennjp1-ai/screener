@@ -1,7 +1,12 @@
 // Daily brief sell side on the stock screen: the sell card's qualifier beside a fired check, on synthetic data.
 // (The watch rows and the watch tile that count a broken setup are brief-watch.spec.js's.)
 import { test, expect } from '@playwright/test';
-import { openBrief, rowBySymbol, SEC_SYMBOL } from './brief-fixture.js';
+import { chartSettled, date, openBrief, ORACLE, ORACLE_CHARTS, ORACLE_ROWS, rowBySymbol, SEC_SYMBOL } from './brief-fixture.js';
+import { candidateView, distanceText } from '../../src/static/brief/briefCandidate.js';
+import { crossingFloor } from '../../src/static/brief/breakoutHistory.js';
+import { noBreakoutSincePivot, sellChipView, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from '../../src/static/brief/briefSell.js';
+import { shortDate } from '../../src/static/brief/briefShared.js';
+import { diagnoseBookChart } from '../../src/static/bookChartDiagnostics.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 
@@ -118,6 +123,43 @@ test.describe('round 2: a failed breakout on a watched stock', () => {
     const sell = page.getByTestId('brief-sell');
     // The fired row itself is the failed breakout's (its label is this track's copy).
     await expect(sell.locator('li').filter({ has: page.locator('.is-sell-hit') }).filter({ hasText: '出来高を伴う上抜け後のピボット割れ（1.40×以上・10営業日以内・ブレイク失敗）' })).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 R1: crossings count from the pivot's own bar (crossingFloor). ZZNR's close crossed its level on 2.1× seven
+// sessions before the analysis day, before its NR7 pivot formed (the day before the analysis day; MGRC's shape): no
+// ブレイク失敗 on its stock screen, and the sell card's failed-breakout line says no breakout followed this pivot's bar.
+const nr = ORACLE_ROWS.find(row => row.symbol === ORACLE.pivotAfterCrossing), nrChart = ORACLE_CHARTS[nr.chart_path.split('/').pop()], nrBars = nrChart.bars;
+const nrView = candidateView({ row: nr, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, date);
+const failedCheck = from => stockSells({ judged: nrBars, diagnostics: null, view: nrView, from }).weakness.find(check => check.key === 'failedBreakout');
+for (const [width, options] of [[390, phone(390, 844)], [1440, { viewport: { width: 1440, height: 900 } }]]) test.describe(`round 3 R1: a pivot dated after a heavy crossing at ${width}px`, () => {
+  test.use(options);
+  test('ZZNR\'s stock screen has no ブレイク失敗: its failed-breakout line is clear and names the pivot\'s bar', async ({ page }) => {
+    const from = crossingFloor(nrBars, nr), bounded = failedCheck(from), unbounded = failedCheck(null);
+    // The producers first: without the floor this is today's hit, with it the clear line of the pivot's bar.
+    expect(unbounded.state).toBe('hit');
+    expect(bounded).toMatchObject({ state: 'clear', detail: noBreakoutSincePivot(shortDate(nrBars[from].date, date), distanceText((nrBars.at(-1).close / nr.se_pivot_price - 1) * 100)) });
+    const { errors } = await openBrief(page, `#/brief/stock/${nr.symbol}`, { oracles: true });
+    await expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down').first()).toBeAttached();
+    await chartSettled(page);
+    const conclusion = page.getByTestId('brief-conclusion');
+    await expect(conclusion).not.toHaveAttribute('data-gate', 'failedBreakout');
+    for (const text of [WEAKNESS_ROW_CHIP, WEAKNESS_CHIP, unbounded.headline]) await expect(conclusion).not.toContainText(text);
+    const line = page.getByTestId('brief-sell').locator('li').filter({ hasText: bounded.label });
+    await expect(line).toHaveCount(1);
+    await expect(line.locator('.brief-check')).toHaveClass(/is-sell-clear/);
+    // On a phone the quiet checks are folded (サインなし n件); the line is the same text inside the fold.
+    await expect(line.locator('em')).toHaveText(bounded.detail);
+    // The card's fired checks are the bounded ones (the stock screen's book diagnostics are diagnoseBookChart's here): one
+    // fewer than without the floor, the failed breakout's; the holders' signal (the advance's largest down day) stays.
+    const sells = from => stockSells({ judged: nrBars, diagnostics: diagnoseBookChart(nr, nrChart, date), view: nrView, from });
+    expect(sells(from).hits).toBe(sells(null).hits - 1);
+    await expect(page.getByTestId('brief-sell').locator('.is-sell-hit')).toHaveCount(sells(from).hits);
+    // The chip the conclusion carries is the bounded checks' (sellChipView, its full sentence there), never the 崩れ chip.
+    const chip = sellChipView(sells(from));
+    expect(chip?.text ?? null).not.toBe(WEAKNESS_ROW_CHIP);
+    if (chip) await expect(conclusion.locator('.brief-tags')).toContainText(chip.full ?? chip.text);
     expect(errors).toEqual([]);
   });
 });
