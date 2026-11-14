@@ -124,7 +124,7 @@ export const HEAVY_DOWN_NOTE = `このため新規の買いは見送ります（
 export function buyGate({ view, template = null, market = null, sells = null, broken = false, earnings = null, event, base, judged = null } = {}) {
   const blocked = (view && PLAN_BLOCKED[view.state]) || null, guide = marketGuidePercent(market), trialOnly = !(guide > 0);
   if (!view) return { kind: 'unjudged', tone: 'neutral', title: '判定不可', note: null, units: [], reference: false, moved: false, reason: null, blocked, trialOnly, event: null };
-  // The crossing floor of the view's own row (crossingFloor, round 3 seam H1b: null in STEP 0, so nothing changes).
+  // The crossing floor of the view's own row (crossingFloor: the pivot's own bar, round 3 R1; null leaves the event unbounded).
   const day = event === undefined ? crossingEvent(view, judged, { staleSessions: SELL_RULES.staleBreakoutSessions, from: crossingFloor(judged, view.row) }) : event;
   const tt = templateCall(view, template);
   const breakdown = Array.isArray(sells?.weakness) ? sells.weakness.find(isBreakdown) : null;

@@ -1,11 +1,13 @@
 // When the close crossed the canonical pivot, from certified daily bars: the crossing helpers the
 // conclusion, the chart's breakout mark and the sell checks share. Every bar here is one the caller
 // certified for the analysis date (StockView's `judged`); anything missing is null, never a guess.
-// This module imports briefCandidate (the day's event) and nothing imports it back, so there is no cycle.
+// This module imports briefCandidate (the day's event) and pivotBar (which imports nothing), and nothing imports it
+// back, so there is no cycle.
 import { finite } from '../researchEngine';
 import { signed } from '../positionGeometry';
 import { AFTER_EVENT, BREAKOUT_VOLUME_RATIO, breakoutEvent, ratioShown, TOUCH_HELD_NOTE, UNDATED_EVENT } from './briefCandidate';
 import { shortDate } from './briefShared';
+import { pivotBar } from './pivotBar';
 
 /** How many sessions back the crossing is looked for (the current pivot only: it is re-detected daily). */
 export const CROSSING_LOOKBACK_SESSIONS = 60;
@@ -36,21 +38,26 @@ const lookbackOf = options => (Number.isInteger(options?.lookback) && options.lo
 export const floorOf = options => (Number.isInteger(options?.from) && options.from >= 0 ? options.from : null);
 
 /**
- * The first bar index of `bars` (the certified daily bars) a pivot crossing may be on for this `row`, or null for no
- * floor. Every crossing reader passes it as `from` (the failed-breakout check, the conclusion's crossing event, the
- * chart's arrow and the watch-row and Today sell checks), so the bound is applied in one place (round 3, STEP 0 seam
- * H1b). In STEP 0 it is null for every row: behaviour is unchanged. R1 owns the body.
- * - The floor for R1 is the pivot bar's own index (pivotBar(bars, row).index), not the bar after it. A crossing on the
- *   pivot's own bar can only be a touch (its close cannot exceed its high, which is the pivot), so its breakout is
- *   dated on a later bar (breakoutBar); nothing before the pivot formed is admitted. A floor one bar later drops a real
- *   breakout: the pivot bar closes at its high and the next bar closes above on volume. The touch is under that floor,
- *   and the next bar is no crossing, because the close before it is not under the pivot (the seam contract test).
- * - R1 still decides one case: a run at the pivot's cents that began before the pivot bar (the bar before it closed at
- *   the cents too). It has no crossing at or after either floor, so its later close above is dropped as well.
+ * The first bar index of `bars` (the certified daily bars) a pivot crossing may be on for this `row`: the index of the
+ * bar that formed the row's Setup Engine pivot (pivotBar(bars, row).index, round 3 R1), or null for no floor. Every
+ * crossing reader passes it as `from` (the failed-breakout check, the conclusion's crossing event, the chart's arrow and
+ * the watch-row and Today sell checks), so the bound is applied in one place (STEP 0 seam H1b): a close through the
+ * level before the pivot existed is never this pivot's breakout.
+ * - The floor is the pivot bar's own index, not the bar after it. A crossing on the pivot's own bar can only be a touch
+ *   (its close cannot exceed its high, which is the pivot), so its breakout is dated on a later bar (breakoutBar). A
+ *   floor one bar later would drop a real breakout: the pivot bar closes at its high and the next bar closes above on
+ *   volume; the touch is under that floor, and the next bar is no crossing, because the close before it is not under
+ *   the pivot (the seam contract test).
+ * - Null, so every reader behaves exactly as without the floor, whenever pivotBar is null: no bars, no or a malformed
+ *   `se_pivot_date` (every older index row, which does not carry the field), no pivot, a pattern outside
+ *   PIVOT_TIMEFRAMES, a vcp primary (it publishes no pivot date) or no bar whose high is the pivot in cents.
+ * - A run at the pivot's cents that began before the pivot bar (the close before it already at or above the cents) has
+ *   no crossing at or after the floor, so a later close above is not dated either; it is left so, not special-cased
+ *   (docs/round3/verdict.md counts it on the rebuild).
+ * `row` is the view's row as each screen holds it; only its se_pattern_primary, se_pivot_date and se_pivot_price are read.
  */
 export function crossingFloor(bars, row) {
-  void bars; void row;
-  return null;
+  return pivotBar(bars, row)?.index ?? null;
 }
 
 /**

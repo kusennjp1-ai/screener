@@ -128,6 +128,13 @@ function ma50State(list, rules) {
 const cents = value => Math.round(value * 100);
 
 /**
+ * The failed-breakout check's clear detail when no breakout of the pivot followed its own bar (round 3 R1) and that bar
+ * is younger than the check's window, so 「直近N営業日に…なし」 would claim sessions before the pivot existed: `day` is the
+ * pivot bar's date as shortDate prints it, `shown` the last close's distance from the pivot as the rows print it.
+ */
+export const noBreakoutSincePivot = (day, shown) => `このピボット（${day}）以降の上抜けなし（終値はピボット比 ${shown}）`;
+
+/**
  * The failed breakout (VD2, ブレイク失敗, 独自判定): a crossing of the pivot on `rules.breakVolumeRatio` or
  * more of the prior 50-day average (lastPivotCrossing's volumeRatio), within `rules.failedBreakoutSessions`
  * sessions, followed by a last close back under the pivot: 'hit', dated from the first close of the current run
@@ -138,7 +145,9 @@ const cents = value => Math.round(value * 100);
  * hit's date is the chart's mark; it carries the crossing's date and ratio, and `headline` is the watch row's short form.
  * A crossing that closed at the pivot's cents is a touch: its breakout is the first later close above the pivot
  * (breakoutBar), dated and judged on that bar; a touch that fell back without one is no breakout.
- * `from` is the first index of `list` a crossing may be on (crossingFloor's, rebased by sellSignals), or null for none.
+ * `from` is the first index of `list` a crossing may be on (crossingFloor's, rebased by sellSignals: the pivot's own bar),
+ * or null for none. With a floor on a bar of `list` younger than the window and no breakout from it on, the clear detail
+ * names the pivot's bar (noBreakoutSincePivot); every other detail, and every state, is the same with or without it.
  */
 function failedBreakoutCheck(list, view, rules, from = null) {
   const base = { key: 'failedBreakout', label: `出来高を伴う上抜け後のピボット割れ（${ratioText(rules.breakVolumeRatio)}以上・${rules.failedBreakoutSessions}営業日以内・ブレイク失敗）` };
@@ -155,7 +164,12 @@ function failedBreakoutCheck(list, view, rules, from = null) {
   const crossings = pivotCrossings(list, pivot, { lookback: CROSSING_LOOKBACK_SESSIONS, from }).map(c => breakoutBar(list, pivot, c, { from }))
     .filter(c => c && c.sessionsAgo <= rules.failedBreakoutSessions);
   const day = i => shortDate(list[i].date, last.date);
-  if (!crossings.length) return { ...base, state: 'clear', detail: `直近${rules.failedBreakoutSessions}営業日にピボットの上抜けなし（終値はピボット比 ${shown}）` };
+  if (!crossings.length) {
+    // The pivot's bar inside the window: the sessions before it had no pivot to break out of, so the sentence is the pivot's.
+    const floor = Number.isInteger(from) && from >= 0 && from < n ? from : null;
+    if (floor !== null && n - 1 - floor < rules.failedBreakoutSessions) return { ...base, state: 'clear', detail: noBreakoutSincePivot(day(floor), shown) };
+    return { ...base, state: 'clear', detail: `直近${rules.failedBreakoutSessions}営業日にピボットの上抜けなし（終値はピボット比 ${shown}）` };
+  }
   const heavy = crossings.find(c => finite(c.volumeRatio) && c.volumeRatio >= rules.breakVolumeRatio);
   if (heavy) {
     // The current run under the pivot: a re-cross after the first close back under it moves the date on.
@@ -178,13 +192,14 @@ function failedBreakoutCheck(list, view, rules, from = null) {
  * it without a confirmed heavy-volume break), 'unknown' (an input is missing) or 'na' (not judged, with
  * the reason). `view` (the candidate: state, pivot, distance) gates the strength checks; without it they
  * are 'na'. `from` (crossingFloor's) is the first index of `bars` a pivot crossing may be on; the failed-breakout
- * check reads it on the last 252 bars, so it is rebased there (a floor before them bounds nothing). Null is none.
+ * check reads it on the last 252 bars, so it is rebased there (a floor before them bounds nothing: no floor, the same
+ * crossings as a floor on their first bar). Null is none.
  * Returns null when the bars cannot be judged.
  */
 export function sellSignals(bars, rules = SELL_RULES, { view = null, from = null } = {}) {
   const list = (bars || []).slice(-252);
   if (list.length < 60 || list.some(b => !finite(b?.close) || !finite(b?.low) || b.close <= 0 || b.low <= 0)) return null;
-  const floor = floorOf({ from }), listFloor = floor === null ? null : Math.max(0, floor - (bars.length - list.length));
+  const floor = floorOf({ from }), offset = bars.length - list.length, listFloor = floor === null || floor < offset ? null : floor - offset;
   const n = list.length, recent = n - rules.recentSessions, last = list[n - 1];
   const change = i => (list[i].close / list[i - 1].close - 1) * 100;
   const on = i => shortDate(list[i].date, last.date);
@@ -286,7 +301,7 @@ export function sellMarks(sells) {
 /**
  * Every sell check one stock gets: the checks on its certified bars (`judged`, or null) plus the book's
  * combined warning. Null when the bars cannot be judged. `view` (the candidate) gates the strength checks.
- * `from` is crossingFloor(judged, row) for the failed-breakout check (null: no floor).
+ * `from` is crossingFloor(judged, row) for the failed-breakout check (null: no floor, exactly the unbounded checks).
  */
 export function stockSells({ judged, diagnostics, view, from = null }) {
   return withBookWarning(sellSignals(judged, SELL_RULES, { view, from }), diagnostics);

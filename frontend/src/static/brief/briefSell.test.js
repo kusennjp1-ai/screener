@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { pivotDistanceText } from './briefCandidate';
-import { bookWarningCheck, HOLDING_CHIP, HOLDING_ROW_CHIP, isBreakdown, ma50Hit, sellChipView, sellMarks, sellSignals, SELL_RULES, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP, withBookWarning } from './briefSell';
+import { distanceText, pivotDistanceText } from './briefCandidate';
+import { crossingFloor } from './breakoutHistory';
+import { shortDate } from './briefShared';
+import { bookWarningCheck, HOLDING_CHIP, HOLDING_ROW_CHIP, isBreakdown, ma50Hit, noBreakoutSincePivot, sellChipView, sellMarks, sellSignals, SELL_RULES, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP, withBookWarning } from './briefSell';
 
 // Synthetic bars only: no test here leans on the browser fixture's last-bar jump.
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -397,6 +399,71 @@ describe('the failed breakout (ブレイク失敗, 独自判定)', () => {
     // Without a pivot there is no breakout to fail: no such check (the weakness side keeps its other checks).
     expect(sellSignals(failed([98]), SELL_RULES, { view: null }).weakness.map(c => c.key)).toEqual(['day-down', 'ma50']);
     expect(check(failed([98]), SELL_RULES, null)).toBeUndefined();
+  });
+});
+
+describe('the failed breakout counts crossings from the pivot\'s own bar (round 3 R1, crossingFloor)', () => {
+  const pivot = 100;
+  /** `closes` with bar `k`'s high on the pivot (the bar that formed it), the crossing bars (`heavy`) on 2.2x, `missing` without a volume. */
+  const shaped = (closes, k, { heavy = [], missing = [] } = {}) => make(closes, i => (missing.includes(i) ? null : heavy.includes(i) ? 22000 : 10000))
+    .map((bar, i) => (i === k ? { ...bar, high: pivot } : bar));
+  const view = bars => ({ symbol: 'AAA', state: 'wait', pivot, distance: (bars.at(-1).close / pivot - 1) * 100 });
+  /** The app's floor for an NR7 pivot dated on bar k (crossingFloor), and the check with it and without one. */
+  const floorOf = (bars, k) => crossingFloor(bars, { se_pattern_primary: 'nr7_inside_day', se_pivot_date: bars[k].date, se_pivot_price: pivot });
+  const failed = (bars, from = null) => stockSells({ judged: bars, diagnostics: null, view: view(bars), from }).weakness.find(c => c.key === 'failedBreakout');
+  /** The last close's distance as the check prints it (the rows' distanceText). */
+  const shown = bars => distanceText((bars.at(-1).close / pivot - 1) * 100);
+
+  it('a pivot dated after a heavy crossing: clear, and the detail names the pivot\'s bar (noBreakoutSincePivot)', () => {
+    // A 2.2x crossing 7 sessions back, back under the pivot, then the NR7 pivot's own bar the day before the last (ZZNR's shape).
+    const bars = shaped([...Array(200).fill(95), 102, 103, 101, 99, 98, 97, 98.5, 98], 206, { heavy: [200] }), from = floorOf(bars, 206);
+    expect(from).toBe(206);
+    expect(failed(bars)).toMatchObject({ state: 'hit', crossDate: bars[200].date });
+    const clear = failed(bars, from);
+    expect(clear).toEqual({ key: 'failedBreakout', label: failed(bars).label, state: 'clear', detail: noBreakoutSincePivot(shortDate(bars[206].date, bars.at(-1).date), shown(bars)) });
+    expect(clear.detail.startsWith('このピボット（')).toBe(true);
+    // Never a broken setup: the sell chip and the marks no longer carry it.
+    const sells = stockSells({ judged: bars, diagnostics: null, view: view(bars), from });
+    expect(sells.breakdownHits).toBe(0);
+    expect(sellMarks(sells)).toEqual([]);
+    // A pivot dated on the analysis day itself (MGRC's shape): its bar is the last, still younger than the window.
+    const today = shaped([...Array(200).fill(95), 102, 103, 101, 99, 98, 97, 98.5], 206, { heavy: [200] });
+    expect(failed(today, floorOf(today, 206))).toMatchObject({ state: 'clear', detail: noBreakoutSincePivot(shortDate(today[206].date, today[206].date), shown(today)) });
+  });
+
+  it('a pivot bar as old as the window or older keeps the old sentence byte for byte (it is still true)', () => {
+    for (const age of [10, 12]) {
+      const n = 220, k = n - 1 - age, bars = shaped([...Array(k).fill(95), 96, ...Array(age).fill(95)], k), from = floorOf(bars, k);
+      expect(from).toBe(k);
+      expect(failed(bars, from)).toEqual(failed(bars));
+      expect(failed(bars, from)).toMatchObject({ state: 'clear', detail: `直近${SELL_RULES.failedBreakoutSessions}営業日にピボットの上抜けなし（終値はピボット比 ${shown(bars)}）` });
+    }
+    // One session younger than the window: the pivot's own sentence (the window would reach back before the pivot).
+    const young = shaped([...Array(210).fill(95), 96, ...Array(9).fill(95)], 210);
+    expect(failed(young, floorOf(young, 210))).toMatchObject({ state: 'clear', detail: noBreakoutSincePivot(shortDate(young[210].date, young.at(-1).date), shown(young)) });
+    // A floor before the 252 bars the check reads bounds nothing there, and never names a pivot's bar.
+    const long = shaped([...Array(300).fill(95)], 20), from = floorOf(long, 20);
+    expect(from).toBe(20);
+    expect(failed(long, from)).toEqual(failed(long));
+    // Nor does a floor past the last bar (no bar of the list to date).
+    expect(failed(long, long.length)).toEqual(failed(long));
+  });
+
+  it('a pivot bar before the heavy crossing (a handle high), then a close back under: still the same hit, word for word', () => {
+    const bars = shaped([...Array(195).fill(95), 97, 95, 95, 95, 95, 102, 98, 97], 195, { heavy: [200] }), from = floorOf(bars, 195);
+    expect(from).toBe(195);
+    expect(failed(bars, from)).toEqual(failed(bars));
+    expect(failed(bars, from)).toMatchObject({ state: 'hit', crossDate: bars[200].date, date: bars[201].date, sessions: 2 });
+    // The touch on the pivot's own bar, then the heavy close above on the next and back under: the floor keeps it.
+    const touched = shaped([...Array(200).fill(95), 100, 102, 98], 200, { heavy: [201] });
+    expect(failed(touched, floorOf(touched, 200))).toEqual(failed(touched));
+    expect(failed(touched, floorOf(touched, 200))).toMatchObject({ state: 'hit', crossDate: touched[201].date });
+  });
+
+  it('a crossing after the floor whose volume is missing stays unknown, never clear', () => {
+    const bars = shaped([...Array(195).fill(95), 97, 95, 95, 95, 95, 102, 98], 195, { missing: [200] }), from = floorOf(bars, 195);
+    expect(failed(bars, from)).toEqual(failed(bars));
+    expect(failed(bars, from).state).toBe('unknown');
   });
 });
 

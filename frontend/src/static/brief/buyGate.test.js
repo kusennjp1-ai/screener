@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { baseCurrent, breakoutEvent, candidateView, earningsCall, POSITION_NAMES, trendTemplate } from './briefCandidate';
-import { crossingEvent } from './breakoutHistory';
+import { crossingEvent, crossingFloor } from './breakoutHistory';
+import { stockSells } from './briefSell';
 import { baseCheck, buyGate, HEAVY_DOWN_NOTE, marketGuidePercent, PLAN_BLOCKED, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, templateReference } from './buyGate';
 import { conditionNote } from '../missingCondition';
 import { withAuditFixture } from '../testAuditFixture';
@@ -81,6 +82,24 @@ describe('the one buy gate', () => {
     expect(gateOf({}, { broken: true })).toMatchObject({ kind: 'broken', note: null, reason: '崩れ', reference: true });
     // A check that is not a hit breaks nothing.
     expect(gateOf({}, { sells: sells({ ...failed, state: 'unknown' }) })).toMatchObject({ kind: 'breakout', reference: false });
+  });
+
+  it('a pivot dated after a heavy crossing (ZZNR\'s shape, TT 8/8) is a failed breakout without a floor and not with crossingFloor', () => {
+    // Certified bars ending on DAY: a 2.2x crossing 7 sessions back, back under the pivot, the NR7 pivot's own bar (high on
+    // the pivot) the day before DAY, and DAY's close 1% under the pivot.
+    const day = i => new Date(Date.UTC(2026, 5, 1) + i * 86400000).toISOString().slice(0, 10);
+    const closes = [...Array(60).fill(95), 102, 103, 101, 99, 98, 97, 98.5];
+    const bars = [...closes.map((close, i) => ({ date: day(i), close, high: i === 66 ? 100 : close * 1.005, low: close * 0.995, volume: i === 60 ? 22000 : 10000 })),
+      { date: DAY, close: 99, high: 99.5, low: 98.5, volume: 10000 }];
+    const { view, template } = subject({ price: 99, se_pattern_primary: 'nr7_inside_day', se_pivot_date: bars[66].date });
+    expect(template.qualified).toBe(true);
+    const from = crossingFloor(bars, view.row);
+    expect(from).toBe(66);
+    const gate = from => buyGate({ view, template, market: OPEN, earnings: null, judged: bars, sells: stockSells({ judged: bars, diagnostics: null, view, from }) });
+    expect(gate(null)).toMatchObject({ kind: 'failedBreakout', reason: '崩れ' });
+    const bounded = gate(from);
+    expect(bounded.kind).not.toBe('failedBreakout');
+    expect(bounded).toMatchObject({ kind: 'near', reason: null, reference: false });
   });
 
   it('an unmet RS estimate alone is counted in the one-line title and named with its threshold (conditionNote)', () => {
