@@ -5,6 +5,7 @@
 import { test, expect } from '@playwright/test';
 import { date, marketTrends, openBrief, VIEWPORTS, horizontalOverflow, sessions } from './brief-fixture.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
+import { distributionDetail } from '../../src/static/reference/marketTabStudy.js';
 
 const STALE = sessions.at(-3), STALE_MD = STALE.slice(5).split('-').map(Number).join('/'), DATE_MD = date.slice(5).split('-').map(Number).join('/');
 const row = (market, label) => market.locator('.brief-env-row').filter({ has: market.page().locator('small', { hasText: label }) });
@@ -338,9 +339,12 @@ test.describe('desktop 1440px: the study block and the guide\'s basis', () => {
     const dist = row(market, '分配日（25日）');
     await dist.getByRole('button').first().click();
     const detail = dist.locator('.brief-env-detail');
-    await expect(detail.locator('p').first()).toHaveText('下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・5日以上で注意）');
-    await expect(detail.locator('p').nth(1)).toHaveText(/^S&P：\d+\/\d+・\d+\/\d+・\d+\/\d+（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）$/);
-    await expect(detail.locator('p').nth(2)).toHaveText(/^NAS：(\d+\/\d+・){3}\d+\/\d+（最も古い日はあと4営業日で失効・後日の高値で早く除外される場合あり）$/);
+    // The opened row's first lines are the producer's (the guide reads SPY's own count; this row's method and its grades).
+    const [bridge, method] = distributionDetail([], date).details;
+    await expect(detail.locator('p').first()).toHaveText(bridge);
+    await expect(detail.locator('p').nth(1)).toHaveText(method);
+    await expect(detail.locator('p').nth(2)).toHaveText(/^S&P：\d+\/\d+・\d+\/\d+・\d+\/\d+（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）$/);
+    await expect(detail.locator('p').nth(3)).toHaveText(/^NAS：(\d+\/\d+・){3}\d+\/\d+（最も古い日はあと4営業日で失効・後日の高値で早く除外される場合あり）$/);
     await expect(detail.getByRole('img', { name: /^S&Pの分配日の直近1年の推移。/ })).toBeVisible();
     await expect(detail.getByRole('img', { name: /^NASの分配日の直近1年の推移。/ })).toBeVisible();
     expect(errors).toEqual([]);
