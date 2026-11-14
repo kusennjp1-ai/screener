@@ -233,13 +233,20 @@ const ZZHB = oracle('ZZHB', 'Harbor Biotics', 1, zzhbBars, { se_pivot_price: HB_
 // (about 18%, 8% and 5%) on falling volume, the last one under its prior 50-session average; the close is 2% under the
 // pivot (the last contraction's high; no close has reached it since the first contraction), in the early zone. A VCP
 // primary publishes no pivot date (vcp_wrapper.py).
+// Its Setup Engine scalars are these bars' own, so a screen that prints two of them never shows two figures for one
+// measure: se_volume_vs_50d 0.74 and se_quiet_days_10d 2 are readiness.py's formulas (the day's volume over its 50-day
+// average including the day; dry-up days with a true range under ATR14) run on these bars, and the readout's
+// 当日の出来高 (the 50 sessions before the day) reads 0.73. se_base_length_weeks 17 and se_base_depth_pct 18 are the
+// app's own measure of this base (footprint: 「VCP 17週 18/5 3T」), so the VCP card shows no Setup Engine mismatch;
+// what the Setup Engine's VCP detector itself would measure on these bars is not run here. The confidence and
+// se_setup_ready are set, not computed.
 const zzrdBars = shapedBars(304, [[0, 30], [195, 60], [213, 49.4], [230, 57], [240, 52.8], [255, 57.6], [262, 54.9], [279, 56.6]],
   { volume: 2e6, at: Object.fromEntries(Array.from({ length: 85 }, (_, j) => 195 + j).map(i => [i, bar => ({ volume: Math.round(bar.volume * (i < 230 ? 1 : i < 255 ? 0.75 : 0.45)) })])) });
 const rdPivot = Math.max(...zzrdBars.slice(245, 262).map(b => b.high));
 zzrdBars[279] = { ...zzrdBars[279], open: round(rdPivot * 0.975), close: round(rdPivot * 0.98) };
 zzrdBars[279] = { ...zzrdBars[279], high: Math.max(zzrdBars[279].high, zzrdBars[279].open, zzrdBars[279].close), low: Math.min(zzrdBars[279].low, zzrdBars[279].open, zzrdBars[279].close) };
 const ZZRD = oracle('ZZRD', 'Redline Devices', 0, zzrdBars, { se_pivot_price: rdPivot, se_pattern_primary: 'vcp', se_pattern_confidence: 78, se_setup_ready: true,
-  se_volume_vs_50d: 0.62, se_quiet_days_10d: 7, se_base_length_weeks: 12, se_base_depth_pct: 18 });
+  se_volume_vs_50d: 0.74, se_quiet_days_10d: 2, se_base_length_weeks: 17, se_base_depth_pct: 18 });
 
 // ZZPM: a same-day detail whose SEC record is the published invalid_payload signature (PayloadMismatch with
 // received_cik null), in the shape tools/sec-financials.py writes it (unavailable() plus invalid_detail()).
@@ -311,9 +318,14 @@ export const ORACLE_ROWS = ORACLES.map(o => o.row);
 export const ORACLE_CHARTS = Object.fromEntries(ORACLES.map(o => [o.row.chart_path.split('/').pop(), o.chart]));
 /** The oracles' research details by file name (ZZPM and ZZQF). */
 export const ORACLE_DETAILS = Object.fromEntries(ORACLES.filter(o => o.detail).map(o => [o.row.research_detail_path.split('/').pop(), o.detail]));
-/** Each oracle's symbol by its name in the plan; ZZNV (a default row) is the fiscal_q4_untagged oracle. */
+/**
+ * Each oracle's symbol by its name in the plan. The two fiscal-Q4 EPS oracles have different causes (epsUnknownCauses):
+ * - fiscalQ4Latest, ZZNV (a default row): the newest row is a fiscal Q4 without EPS, cause
+ *   'latest_row_fiscal_q4_without_eps' (the plan called it the fiscal_q4_untagged oracle; it is not);
+ * - fiscalQ4Window, ZZQF: the EPS-less fiscal Q4 sits inside the window, cause 'fiscal_q4_untagged'.
+ */
 export const ORACLE = Object.freeze({ rsHigh: 'ZZRL', rsLagging: 'ZZRW', heldBreakout: 'ZZHB', ready: 'ZZRD', payloadMismatch: 'ZZPM',
-  fiscalQ4Window: 'ZZQF', pivotAfterCrossing: 'ZZNR', postGapPin: 'ZZPG', fiscalQ4Untagged: SEC_SYMBOL });
+  fiscalQ4Window: 'ZZQF', pivotAfterCrossing: 'ZZNR', postGapPin: 'ZZPG', fiscalQ4Latest: SEC_SYMBOL });
 const oracleRowBySymbol = Object.fromEntries(ORACLE_ROWS.map(row => [row.symbol, row]));
 
 /**

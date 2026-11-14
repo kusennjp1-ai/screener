@@ -4,11 +4,11 @@
 // the round-3 tracks (it reads shapes and producers, never a track's copy); the targets are the fixme tests.
 import { test, expect } from '@playwright/test';
 import { chartSettled, date, details, horizontalOverflow, now, openBrief, ORACLE, ORACLE_CHARTS, ORACLE_DETAILS, ORACLE_ROWS, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
-import { BREAKOUT_VOLUME_RATIO, candidateView } from '../../src/static/brief/briefCandidate.js';
+import { BREAKOUT_VOLUME_RATIO, candidateView, trendTemplate } from '../../src/static/brief/briefCandidate.js';
 import { chartCrossing } from '../../src/static/brief/chartReadout.js';
 import { crossingEvent, crossingFloor, STALE_BREAKOUT_SESSIONS } from '../../src/static/brief/breakoutHistory.js';
 import { SELL_RULES, sellSignals, stockSells } from '../../src/static/brief/briefSell.js';
-import { PLAN_BLOCKED } from '../../src/static/brief/buyGate.js';
+import { buyGate, PLAN_BLOCKED } from '../../src/static/brief/buyGate.js';
 import { positionPlan } from '../../src/static/brief/positionSizing.js';
 import { footprint, publishedRsLineHigh, rsLeadMarks, rsLineNewHigh } from '../../src/static/brief/briefChartModel.js';
 import { pivotBar, PIVOT_TIMEFRAMES } from '../../src/static/brief/pivotBar.js';
@@ -40,8 +40,8 @@ test.describe('the oracles as served', () => {
   test('every oracle is synthetic, collides with no default symbol, and its bars certify', () => {
     const symbols = ORACLE_ROWS.map(row => row.symbol);
     expect(symbols).toEqual(['ZZRL', 'ZZRW', 'ZZHB', 'ZZRD', 'ZZPM', 'ZZQF', 'ZZNR', 'ZZPG']);
-    expect(Object.values(ORACLE).filter(symbol => !symbols.includes(symbol))).toEqual([ORACLE.fiscalQ4Untagged]);
-    expect(rowBySymbol[ORACLE.fiscalQ4Untagged]).toBeTruthy();
+    expect(Object.values(ORACLE).filter(symbol => !symbols.includes(symbol))).toEqual([ORACLE.fiscalQ4Latest]);
+    expect(rowBySymbol[ORACLE.fiscalQ4Latest]).toBeTruthy();
     const taken = new Set([...rows.map(row => row.symbol), ...Array.from({ length: 100 }, (_, i) => `ZZU${String(i).padStart(3, '0')}`)]);
     for (const row of ORACLE_ROWS) {
       expect(row.symbol).toMatch(/^ZZ[A-Z]{2}$/);
@@ -53,7 +53,7 @@ test.describe('the oracles as served', () => {
       expect({ symbol: row.symbol, certified: certified(row, chart) !== null }).toEqual({ symbol: row.symbol, certified: true });
     }
     // The default fixture's details are untouched; the oracles add their own.
-    expect(Object.keys(details)).toEqual([`${ORACLE.fiscalQ4Untagged}-detail.json`]);
+    expect(Object.keys(details)).toEqual([`${ORACLE.fiscalQ4Latest}-detail.json`]);
     expect(Object.keys(ORACLE_DETAILS).sort()).toEqual(['ZZPM-detail.json', 'ZZQF-detail.json']);
   });
 });
@@ -94,8 +94,9 @@ test.describe('oracle shapes, through the producers', () => {
     expect(view.state).toBe('zone');
     // The conclusion dates the same breakout, green (crossingEvent's 'after'; its title is 「M/Dに上抜け・N営業日前」 today).
     expect(crossingEvent(view, bars)).toMatchObject({ kind: 'after', tone: 'zone', crossed: { date: '2026-09-28', sessionsAgo: 4 } });
-    // A floor after the pivot's bar (R1's rule) and the app's own floor keep it: the crossing follows the pivot's bar.
-    for (const from of [bar.index + 1, crossingFloor(bars, row)]) {
+    // A floor on the pivot's own bar (R1's floor, crossingFloor's comment), one on the bar after it, and the app's own
+    // floor all keep it: the crossing follows the pivot's bar.
+    for (const from of [bar.index, bar.index + 1, crossingFloor(bars, row)]) {
       expect(chartCrossing(bars, view.pivot, { from })).toEqual(crossing);
       expect(crossingEvent(view, bars, { from })).toEqual(crossingEvent(view, bars));
     }
@@ -112,7 +113,13 @@ test.describe('oracle shapes, through the producers', () => {
     expect(vcp.legs).toHaveLength(3);
     expect(vcp).toMatchObject({ measurementsValid: true, depthsContract: true, volumeContracts: true });
     expect(vcp.finalContractionVolume.intervalRatio).toBeLessThan(1);
-    expect(footprint({ vcp }, bars)).toMatchObject({ count: 3, contracting: true });
+    const print = footprint({ vcp }, bars);
+    expect(print).toMatchObject({ count: 3, contracting: true });
+    // Its Setup Engine scalars are its bars' own (brief-fixture.js): the day's volume ratio within 0.03 of the readout's
+    // (the published relation), and the base's weeks and depth within the VCP card's tolerance of the measured base.
+    expect(Math.abs(row.se_volume_vs_50d - view.volumeRatio)).toBeLessThanOrEqual(0.03);
+    expect(Math.abs(row.se_base_length_weeks - print.weeks)).toBeLessThanOrEqual(2);
+    expect(Math.abs(row.se_base_depth_pct - Math.max(...vcp.legs.map(leg => leg.depthPct)))).toBeLessThanOrEqual(3);
     // Under the pivot (the last contraction's high), within 5%: no close has reached it since the first contraction.
     expect(view.pivot).toBe(vcp.legs.at(-1).high);
     expect(view.position).toBe('near');
@@ -149,15 +156,17 @@ test.describe('oracle shapes, through the producers', () => {
     expect(report.rows.at(-1).end).toBe('2026-09-30');
     expect(report.rows.filter(r => r.derived).map(r => r.end)).toEqual(['2025-06-30', '2026-06-30']);
     expect(code33Parts(report).q4Eps).toBe(true);
-    expect(epsUnknownCauses(report).all).toContain('fiscal_q4_untagged');
+    // The fiscal_q4_untagged oracle (ZZNV's cause is a different code, below).
+    expect(epsUnknownCauses(report).all).toEqual(['fiscal_q4_untagged']);
   });
 
-  test('ZZNV (default row, named oracle): a fiscal Q4 whose EPS is only in the 10-K, so Code 33 hinges on it', () => {
-    const row = rowBySymbol[ORACLE.fiscalQ4Untagged], detail = details[`${row.symbol}-detail.json`];
+  test('ZZNV (default row, named oracle): the newest row a fiscal Q4 whose EPS is only in the 10-K, so Code 33 hinges on it', () => {
+    const row = rowBySymbol[ORACLE.fiscalQ4Latest], detail = details[`${row.symbol}-detail.json`];
     const report = bookFinancialCurrent(detail.book_financials, row.symbol, date, now, detail).report;
     expect(report.rows.at(-1)).toMatchObject({ end: '2026-06-30', eps: null, derived: true });
     expect(code33Parts(report).q4Eps).toBe(true);
-    expect(epsUnknownCauses(report).all).toEqual(expect.arrayContaining([expect.stringMatching(/^(fiscal_q4_untagged|latest_row_fiscal_q4_without_eps)$/)]));
+    // Not fiscal_q4_untagged (that is ZZQF's): the EPS-less Q4 is the newest row.
+    expect(epsUnknownCauses(report).all).toEqual(['latest_row_fiscal_q4_without_eps']);
   });
 
   test('ZZNR today: a heavy crossing 7 sessions before the analysis day, then an NR7 pivot dated the day before (MGRC\'s shape)', () => {
@@ -203,21 +212,32 @@ test.describe('oracle shapes, through the producers', () => {
 test.describe('round-3 targets (each owning track flips its own)', () => {
   test.fixme('R1: ZZNR has no ブレイク失敗 and no arrow before its pivot\'s bar', async ({ page }) => {
     const row = oracleRow(ORACLE.pivotAfterCrossing), bars = certified(row, chartOf(row)), view = viewOf(row), bar = pivotBar(bars, row);
-    const from = crossingFloor(bars, row);
-    expect(failedBreakout(stockSells({ judged: bars, diagnostics: null, view, from }))?.state).not.toBe('hit');
+    const from = crossingFloor(bars, row), sells = stockSells({ judged: bars, diagnostics: null, view, from });
+    // No crossing after the pivot's bar: the failed-breakout check reads clear (never null or unknown).
+    expect(failedBreakout(sells)?.state).toBe('clear');
     const crossing = chartCrossing(bars, view.pivot, { from });
     expect(crossing === null || crossing.date > bar.date).toBe(true);
+    // The conclusion is not the failed breakout's (buyGate's kind, which the screen carries as data-gate). With the trend
+    // template the stock screen passes, and without a floor, the gate does reach that conclusion, so this is not vacuous.
+    const template = trendTemplate(row, now), unbounded = buyGate({ view, template, sells: stockSells({ judged: bars, diagnostics: null, view, from: null }), judged: bars });
+    expect(unbounded.kind).toBe('failedBreakout');
+    expect(buyGate({ view, template, sells, judged: bars }).kind).not.toBe(unbounded.kind);
     const { errors } = await openBrief(page, `#/brief/stock/${row.symbol}`, { oracles: true });
     const chart = page.getByTestId('brief-price-chart');
     await expect(chart.locator('svg rect.bc-up, svg rect.bc-down').first()).toBeAttached();
     await chartSettled(page);
     const marked = await chart.locator('.bc-breakout').evaluateAll(nodes => nodes.map(node => node.getAttribute('data-date')));
     expect(marked.filter(day => day <= bar.date)).toEqual([]);
+    // Read once the bars are on the chart (the sell checks are computed from the same bars).
+    const gate = await page.getByTestId('brief-conclusion').getAttribute('data-gate');
+    expect(gate).toBeTruthy();
+    expect(gate).not.toBe(unbounded.kind);
     expect(errors).toEqual([]);
   });
 
-  test.fixme('R2: ZZPG is low activity (PLAN_BLOCKED.low) and never pairs its stop with the base before the gap', async ({ page }) => {
+  test.fixme('R2: ZZPG is low activity (PLAN_BLOCKED.low) and never pairs its stop with the base before the gap', async ({ page, context }) => {
     const row = oracleRow(ORACLE.postGapPin), bars = certified(row, chartOf(row)), view = viewOf(row);
+    // R2(a): low activity blocks the plan.
     expect(row.price_activity.lowRange).toBe(true);
     const plan = positionPlan(view, {}, { technical: technicalOf(row), judged: bars, sells: stockSells({ judged: bars, diagnostics: null, view, from: crossingFloor(bars, row) }) });
     expect(plan).toEqual({ blocked: PLAN_BLOCKED.low });
@@ -225,11 +245,31 @@ test.describe('round-3 targets (each owning track flips its own)', () => {
     await expect(page.getByTestId('brief-plan-blocked')).toHaveText(PLAN_BLOCKED.low);
     await expect(page.getByTestId('brief-plan-warn')).toHaveCount(0);
     expect(errors).toEqual([]);
+    // R2(b), whatever the low-activity rule says: a row without the flag (an older publication's 60-session range only)
+    // gets a plan, and its stop is never paired with the base the gap broke out of (the legs before vcp.base.breakoutDate).
+    const recent = bars.slice(-60), range60 = (Math.max(...recent.map(b => b.high)) / Math.min(...recent.map(b => b.low)) - 1) * 100;
+    const activity = { range60pct: range60, lowRange: false }, open = viewOf({ ...row, price_activity: activity });
+    expect(open.state).toBe('zone');
+    const vcp = technicalOf(row).vcp, previous = vcp.legs.filter(leg => leg.endDate < vcp.base.breakoutDate);
+    expect(previous.length).toBeGreaterThan(0);
+    const sells = stockSells({ judged: bars, diagnostics: null, view: open, from: crossingFloor(bars, open.row) });
+    const planned = positionPlan(open, {}, { technical: technicalOf(row), judged: bars, sells });
+    expect(Number.isFinite(planned?.entry)).toBe(true);
+    expect(planned.stopInsideBase).not.toBe(true);
+    expect(previous.map(leg => leg.low)).not.toContain(planned.structural.low);
+    const other = await context.newPage();
+    const served = await openBrief(other, `#/brief/stock/${row.symbol}`, { oracles: true,
+      mutate: { rows: list => { list.find(r => r.symbol === row.symbol).price_activity = activity; } } });
+    await expect(other.getByTestId('brief-shares')).toBeVisible();
+    await expect(other.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down').first()).toBeAttached();
+    await chartSettled(other);
+    await expect(other.getByTestId('brief-plan-warn')).toHaveCount(0);
+    expect(served.errors).toEqual([]);
   });
 });
 
 // Every oracle's stock screen (and ZZNV's, with the oracles served) renders with no page error and no sideways scroll.
-const RENDERED = [...ORACLE_ROWS.map(row => row.symbol), ORACLE.fiscalQ4Untagged];
+const RENDERED = [...ORACLE_ROWS.map(row => row.symbol), ORACLE.fiscalQ4Latest];
 for (const [width, use] of WIDTHS) {
   test.describe(`oracles at ${width}px`, () => {
     test.use(use);
