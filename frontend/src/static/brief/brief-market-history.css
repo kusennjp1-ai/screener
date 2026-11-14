@@ -92,11 +92,12 @@
   .brief-index-switch button { min-height: 32px; }
 }
 
-/* A group with both marks (▲ 注意 and ○ 参考) stacks them as a pair: on a phone each mark is 2px shorter (17px lines) with no
-   top padding, so the pair (40px) stays within the heading and its question (40.4px) and the head keeps its height. */
+/* A group with both marks (▲ 注意 and ○ 参考): on a phone they take the short form (「▲ 1」「○ 1」, MarketScreen's Group) on one
+   row, with an older session's date on the row under them, so the pair stays within the heading and its question and the
+   head keeps its height (a single mark's column: 22px, or 44px with the date). The desktop keeps the words, stacked. */
 @media (max-width: 1023px) {
-  .brief-env-meta.is-pair { padding-top: 0; }
-  .brief-env-meta.is-pair > .brief-env-state { line-height: 17px; }
+  .brief-env-meta.is-pair { display: grid; grid-template-columns: auto auto; justify-content: end; column-gap: 4px; row-gap: 2px; padding-top: 0; }
+  .brief-env-meta.is-pair > .brief-env-asof { grid-column: 1 / -1; justify-self: end; }
 }
 
 /* A sign the study tags 〔参考〕 is counted apart: a neutral ○ in the summary, on its row and on its group, never amber. */

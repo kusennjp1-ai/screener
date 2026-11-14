@@ -232,7 +232,8 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M3 at ${wid
     const { errors } = await openBrief(page, '#/brief/market', { mutate: compose(days(0, 7), days(1, 5)) });
     await marketReady(page);
     const head = page.locator('.brief-env-group.is-index > .brief-env-head');
-    await expect(head.locator('.brief-env-state')).toHaveText(['▲ 注意 1', '○ 参考 1']);
+    // The section tabs' short form on one row, each word for assistive tech.
+    await expect(head.locator('.brief-env-state')).toHaveText(['▲注意 1', '○参考 1']);
     expect((await head.boundingBox()).height).toBeLessThanOrEqual(single);
     await expect(pairRow(page, 'NAS').locator('.brief-flag')).toHaveClass(/is-reference/);
     await expect(page.getByRole('group', { name: '注意サイン（独自判定）' }).locator(':scope > b')).toHaveText(/^▲ 注意 1件・参考 \d件（独自判定）$/);
@@ -243,8 +244,8 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M3 at ${wid
     expect(errors).toEqual([]);
   });
 
-  test('beside the switch, one session behind: the ▲ and ○ pair and the date keep the head no taller than a ▲ alone', async ({ page, context }) => {
-    const options = state => ({ historyEnd: sessions.at(-2), mutate: compose(state, withCloses) });
+  for (const [where, extra] of [['beside the heading', {}], ['beside the switch', withCloses]]) test(`${where}, one session behind: the ▲ and ○ pair and the date keep the head no taller than a ▲ alone`, async ({ page, context }) => {
+    const options = state => ({ historyEnd: sessions.at(-2), mutate: compose(state, extra) });
     const alone = await context.newPage();
     await openBrief(alone, '#/brief/market', options(days(0, 7)));
     await marketReady(alone);
@@ -252,8 +253,8 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M3 at ${wid
     await alone.close();
     const { errors } = await openBrief(page, '#/brief/market', options(compose(days(0, 7), days(1, 5))));
     await marketReady(page);
-    await expect(page.getByRole('region', { name: '地合い' }).getByRole('group', { name: '表示する指数' })).toBeVisible();
-    const meta = page.locator('.brief-env-group.is-index .brief-env-meta.is-inline');
+    await expect(page.getByRole('region', { name: '地合い' }).getByRole('group', { name: '表示する指数' })).toHaveCount(extra === withCloses ? 1 : 0);
+    const meta = page.locator(`.brief-env-group.is-index .brief-env-meta.${extra === withCloses ? 'is-inline' : 'is-pair'}`);
     // The section tabs' short form on screen, each word for assistive tech; the date of the older session stays.
     await expect(meta.locator('.brief-env-state')).toHaveText(['▲注意 1', '○参考 1']);
     await expect(meta.locator('.brief-env-asof')).toHaveText(/^\d+\/\d+時点の値$/);

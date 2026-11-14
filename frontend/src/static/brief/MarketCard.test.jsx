@@ -943,10 +943,16 @@ describe('brief market card: distribution days in two grades, 5–6 参考 and 7
     expect(within(screen.getByRole('tablist', { name: '市場タブの表示' })).getAllByRole('tab')[0].textContent).not.toMatch(/▲/);
   });
 
-  it('keeps the words of both head marks, and in a phone\'s inline slot beside the switch takes the tabs\' short form', () => {
-    // Stacked beside the heading (no switch): the words show.
-    phone(counts(7, 5));
+  it('keeps the words of both head marks on the desktop, and on a phone takes the tabs\' short form, beside the heading or the switch', () => {
+    // The desktop: the words show.
+    show(counts(7, 5));
     expect([...document.querySelectorAll('.brief-env-group.is-index .brief-env-meta .brief-env-state')].map(node => node.textContent)).toEqual(['▲ 注意 1', '○ 参考 1']);
+    cleanup();
+    // A phone, beside the heading (no switch): 「▲ 1」「○ 1」 on one row (is-pair), each word kept for assistive tech.
+    phone(counts(7, 5));
+    const stacked = document.querySelector('.brief-env-group.is-index .brief-env-meta.is-pair');
+    expect([...stacked.querySelectorAll('.brief-env-state')].map(node => node.textContent)).toEqual(['▲注意 1', '○参考 1']);
+    expect([...stacked.querySelectorAll('.brief-env-state .sr-only')].map(node => node.textContent)).toEqual(['注意', '参考']);
     cleanup();
     // Beside the switch (the Nasdaq's closes): 「▲ 1」「○ 1」 on screen, each word kept for assistive tech.
     const value = counts(7, 5), nas = days('2026-10-02', 280).map((date, i) => ({ date, close: 16000 + i * 10 }));

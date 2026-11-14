@@ -173,12 +173,13 @@ function EnvRow({ item, groupAsOf, onOpenMetric }) {
  * takes the marks' slot beside the heading, and the marks and date, when there are any, take the question's line under
  * the heading: the head keeps its two lines and the switch adds no row of its own.
  */
-function Group({ group, caveat = null, control = null, children }) {
+function Group({ group, caveat = null, control = null, compact = false, children }) {
   const head = useId();
-  // Both marks in the phone's inline slot (beside the switch) take the section tabs' short form, 「▲ 1」「○ 1」 with the word
-  // for assistive tech, so the pair and a date keep the question's one line under the heading (M3: one index at 7 or more
-  // beside the other at 5–6). Everywhere else the marks keep their words.
-  const pair = group.fired > 0 && group.references > 0, word = text => control && pair ? <span className="sr-only">{text}</span> : ` ${text}`;
+  // Both marks on a phone (`compact`, below 1024px) take the section tabs' short form, 「▲ 1」「○ 1」 with the word for
+  // assistive tech (M3: one index at 7 or more beside the other at 5–6): beside the switch the pair and a date keep the
+  // question's one line, and beside the heading the pair sits on one row above the date (brief-market-history.css), so the
+  // head keeps its height. A single mark, and the desktop, keep the words.
+  const pair = group.fired > 0 && group.references > 0, word = text => compact && pair ? <span className="sr-only">{text}</span> : ` ${text}`;
   const meta = (group.fired > 0 || group.references > 0 || group.asOf) ? <>
     {group.fired > 0 && <span className="brief-env-state"><span aria-hidden="true">▲</span>{word('注意')} {group.fired}</span>}
     {group.references > 0 && <span className="brief-env-state is-reference"><span aria-hidden="true">○</span>{word('参考')} {group.references}</span>}
@@ -187,8 +188,6 @@ function Group({ group, caveat = null, control = null, children }) {
   return <div className={`brief-env-group is-${group.id}`} role="group" aria-labelledby={`brief-env-${group.id}${group.asOf ? ` ${head}-d` : ''}`}>
     <div className={`brief-env-head${control ? ' has-control' : ''}`}>
       <div className="brief-env-title"><h3 id={`brief-env-${group.id}`} tabIndex={-1}>{group.title}</h3>{control && meta ? <span className="brief-env-meta is-inline">{meta}</span> : <span>{group.question}</span>}</div>
-      {/* Both marks (a ▲ warning and a ○ reference, e.g. one index at 7 distribution days and the other at 5–6) stack as a
-          pair that a phone keeps within the title's two lines (brief-market-history.css). */}
       {control || (meta && <div className={`brief-env-meta${pair ? ' is-pair' : ''}`}>{meta}</div>)}
     </div>
     {caveat && <p className="brief-env-caveat">{caveat}</p>}
@@ -380,7 +379,7 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
     <StatusAlert view={view} trends={trends} detail />
     {switcher && panels.length > 0 && <div ref={tabsRef} className="brief-switchbar"><SectionTabs panels={panels} active={active} onSelect={select} /></div>}
     <div className="brief-env-groups">
-      {groups.map(group => panel(group.id, <Group key={group.id} group={group} caveat={!switcher && (group.id === 'breadth' || group.id === 'leaders') ? SURVIVORSHIP_NOTE : null} control={group.id === 'index' && switcher ? indexSwitch : null}>
+      {groups.map(group => panel(group.id, <Group key={group.id} group={group} caveat={!switcher && (group.id === 'breadth' || group.id === 'leaders') ? SURVIVORSHIP_NOTE : null} control={group.id === 'index' && switcher ? indexSwitch : null} compact={switcher}>
         {group.id === 'index' && <div className="brief-index-block">
           {!switcher && indexSwitch}
           {summary && <div className="brief-index-stats" role="group" aria-label={shown && shown.key !== 'spx' ? `${shown.name}（^IXICの日足、${shortDate(summary.date, date)}）` : `S&P 500（長期履歴の^GSPC終値、${shortDate(summary.date, date)}）`}>
