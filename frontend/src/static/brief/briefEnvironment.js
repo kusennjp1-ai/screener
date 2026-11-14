@@ -73,9 +73,11 @@ export const NASDAQ_CAUTION_STATES = Object.freeze(['correction', 'rally_attempt
 /** The Nasdaq follow-through record (indices[^IXIC].followThrough) is one of NASDAQ_CAUTION_STATES. */
 export const nasdaqInCorrection = ft => ft?.available === true && NASDAQ_CAUTION_STATES.includes(ft.state);
 
-/** The suffixes of Today's 地合い tile, at most 7 full-width characters each (TodayView joins one after 「・」). */
-export const MARKET_TILE_SUFFIX = Object.freeze({ ftd: 'FTD確認済み', nasdaq: 'NAS調整中' });
-
+/**
+ * The suffixes of Today's 地合い tile, at most 7 full-width characters each (TodayView joins one after 「・」): 「FTD確認済み」,
+ * 「NAS調整中」 and 「反発n日目」 (`rally(n)`, n the rally attempt's day; a test measures it for every day of the attempt window).
+ */
+export const MARKET_TILE_SUFFIX = Object.freeze({ ftd: 'FTD確認済み', nasdaq: 'NAS調整中', rally: day => `反発${day}日目` });
 /**
  * The app's own ^GSPC follow-through record (indices[^GSPC].followThrough: the market tab's フォロースルーデー row and its
  * ◆ mark) when it is available and judged on the analysis date's session, else null (an older or missing record is
@@ -106,6 +108,31 @@ export function gspcFtdDisagrees(trends) {
   return ft ? ft.state !== 'confirmed' : null;
 }
 
+/** The two indices in Today's words (the market tab's Nasdaq note names the Nasdaq the same way). */
+const INDEX_WORDS = Object.freeze({ '^GSPC': 'S&P 500', '^IXIC': 'Nasdaq総合' });
+/**
+ * The indices of the same day (sameDayFollowThrough) in a rally attempt with a known day: state 'rally_attempt' and a
+ * positive whole attempt.day, in the order ^GSPC, ^IXIC. Only an index the exporter's 6% gate already put in a rally attempt
+ * (followThroughDay.js): no correction is defined here, and a correction, an expired attempt, a confirmed or failed FTD,
+ * no correction, an unavailable record or a record of another day is none.
+ */
+function rallyAttempts(trends, manifest) {
+  return ['^GSPC', '^IXIC'].map(symbol => ({ symbol, ft: sameDayFollowThrough(trends, manifest, symbol) }))
+    .filter(({ ft }) => ft?.state === 'rally_attempt' && Number.isSafeInteger(ft.attempt?.day) && ft.attempt.day > 0);
+}
+
+/** What Today's 地合い tile adds (marketTileSuffix's reading): { kind, suffix, attempts } or null. */
+function tileReading({ market = null, trends = null, manifest = null } = {}) {
+  if (!market || market.state === 'unknown') return null;
+  if (market.ftdUpgraded === true && market.cap === 0) return sameDayFollowThrough(trends, manifest, '^GSPC')?.state === 'confirmed' ? { kind: 'ftd', suffix: MARKET_TILE_SUFFIX.ftd } : null;
+  if (market.cap === 0) {
+    const attempts = rallyAttempts(trends, manifest);
+    return attempts.length ? { kind: 'rally', suffix: MARKET_TILE_SUFFIX.rally(Math.max(...attempts.map(({ ft }) => ft.attempt.day))), attempts } : null;
+  }
+  if (!(market.cap > 0)) return null;
+  return nasdaqInCorrection(sameDayFollowThrough(trends, manifest, '^IXIC')) ? { kind: 'nasdaq', suffix: MARKET_TILE_SUFFIX.nasdaq } : null;
+}
+
 /**
  * A short suffix for the 地合い tile on Today (plan MK11), from the market verdict (prepared.market), the market-trends
  * query (brief.trends) and the published manifest (brief.manifest.data, or null): at most one, else null.
@@ -113,16 +140,15 @@ export function gspcFtdDisagrees(trends) {
  *    only when the app's own ^GSPC record of the same day confirms it (sameDayFollowThrough's state 'confirmed'): no record,
  *    an older one (series one session behind), an unavailable one or any other state gives no suffix, so Today never asserts
  *    an FTD it cannot back with that day's index record (the market tab's cause line still explains the 0%).
+ *  - otherwise, while the guide is 0% (cap 0, not an FTD upgrade), 「反発n日目」 when the same day's ^GSPC or ^IXIC record is
+ *    in a rally attempt with a known day (rallyAttempts); with both, the larger day (M4). The rest is in marketTileNote.
  *  - otherwise 「NAS調整中」 while the guide is open and the Nasdaq's own follow-through state is one of
  *    NASDAQ_CAUTION_STATES, judged on the same day (sameDayFollowThrough): an older state is never shown as today's, so it
  *    gives no suffix.
  * Never a cap, a tone or a verdict of its own.
  */
-export function marketTileSuffix({ market = null, trends = null, manifest = null } = {}) {
-  if (!market || market.state === 'unknown') return null;
-  if (market.ftdUpgraded === true && market.cap === 0) return sameDayFollowThrough(trends, manifest, '^GSPC')?.state === 'confirmed' ? MARKET_TILE_SUFFIX.ftd : null;
-  if (!(market.cap > 0)) return null;
-  return nasdaqInCorrection(sameDayFollowThrough(trends, manifest, '^IXIC')) ? MARKET_TILE_SUFFIX.nasdaq : null;
+export function marketTileSuffix(input = {}) {
+  return tileReading(input)?.suffix ?? null;
 }
 
 /**
@@ -144,14 +170,24 @@ export function nasdaqNote(ft, date) {
 }
 
 /**
- * The explanation of Today's 地合い tile suffix (marketTileSuffix, same input), or null without one: for 「NAS調整中」 the
- * market tab's own Nasdaq note (nasdaqNote's long form: the verdict reads the S&P 500 only, the Nasdaq's state is the
- * app's own judgement), for the tile's title, assistive tech and Today's notes. 「FTD確認済み」 is explained on the market tab.
+ * The explanation of Today's 地合い tile suffix (marketTileSuffix, same input), or null without one, for the tile's title,
+ * assistive tech and Today's notes:
+ *  - 「NAS調整中」: the market tab's own Nasdaq note (nasdaqNote's long form: the verdict reads the S&P 500 only, the
+ *    Nasdaq's state is the app's own judgement);
+ *  - 「反発n日目」: each index in a rally attempt with its own day and its rally low's date, what the attempt waits for
+ *    (FTD_TEXT, 独自判定) and that the verdict and the guide do not change (M4);
+ *  - 「FTD確認済み」 is explained on the market tab.
  */
 export function marketTileNote(input = {}) {
-  if (marketTileSuffix(input) !== MARKET_TILE_SUFFIX.nasdaq) return null;
-  const ft = (input.trends.data.indices || []).find(item => item?.symbol === '^IXIC')?.followThrough;
-  return nasdaqNote(ft, input.trends.data.as_of_date)?.long ?? null;
+  const reading = tileReading(input);
+  if (reading?.kind === 'nasdaq') {
+    const ft = (input.trends.data.indices || []).find(item => item?.symbol === '^IXIC')?.followThrough;
+    return nasdaqNote(ft, input.trends.data.as_of_date)?.long ?? null;
+  }
+  if (reading?.kind !== 'rally') return null;
+  const date = input.trends.data.as_of_date;
+  const parts = reading.attempts.map(({ symbol, ft }) => `${INDEX_WORDS[symbol]}は${isoDay(ft.low?.date) ? `安値${shortDate(ft.low.date, date)}から` : ''}反発${ft.attempt.day}日目`);
+  return `${parts.join('、')}。${FTD_TEXT.minDay}日目以降の${FTD_TEXT.gain}上昇待ち（独自判定）。判定と目安は変わりません。`;
 }
 
 /**
