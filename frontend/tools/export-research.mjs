@@ -29,6 +29,7 @@ import { auditDailyBars, mergeScanRows, rankVerifiedUniverse, AUDIT_VERSION } fr
 import { producerHistoryCoverage } from './producer-history-coverage.mjs';
 import { VERIFIED_CHART_OMITTED } from './verified-chart-fields.mjs';
 import { buildSecSummary } from '../src/static/fundamentalsExplain.js';
+import { priceActivity } from '../src/static/priceActivity.js';
 import { register } from 'node:module';
 
 // briefChartModel.js (the chart track's frozen RS-line rules) uses extensionless relative imports that Vite resolves.
@@ -120,9 +121,7 @@ for (const row of merged) {
   }
   if (chart) await writeFile(resolve(root, paths.get(row.symbol)), JSON.stringify(chart));
   rsHighs.set(row.symbol, audit.valid ? rsLineHighSummary({ rsLineNewHigh, rsLeadMarks }, { audit, chart, date: scan.as_of_date }) : null);
-  const recent60 = audit.valid ? chart.bars.slice(-60) : [];
-  const range60 = recent60.length === 60 ? (Math.max(...recent60.map(b=>b.high))/Math.min(...recent60.map(b=>b.low))-1)*100 : null;
-  row.price_activity = {range60pct:range60,lowRange:range60 != null && range60 < 5};
+  row.price_activity = priceActivity(audit.valid ? chart.bars : null);
   if(row.symbol==='SLAB' && scan.as_of_date >= '2026-02-04') row.corporate_action={cash_acquisition:true,label:'現金買収合意（成長株の購入候補から除外）',announced:'2026-02-04',source:'https://investor.silabs.com/news-releases/news-release-details/texas-instruments-acquire-silicon-labs'};
   if (row.technical_audit?.errors?.includes('同一銘柄のデータが矛盾')) { audit.errors.push('同一銘柄のデータが矛盾'); audit.valid = false; audit.values = {}; }
   const diagnostics = diagnoseBookChart(row, audit.valid ? chart : null, scan.as_of_date);

@@ -3,7 +3,7 @@
 import { finite } from '../researchEngine';
 import { signed } from '../positionGeometry';
 import { BREAKOUT_VOLUME_RATIO, distanceText, pivotDistanceText, ratioShown } from './briefCandidate';
-import { breakoutBar, CROSSING_LOOKBACK_SESSIONS, pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
+import { breakoutBar, CROSSING_LOOKBACK_SESSIONS, floorOf, pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
 import { shortDate } from './briefShared';
 
 // Sell-side checks after an advance. The ideas (selling into strength on a climax run,
@@ -138,8 +138,9 @@ const cents = value => Math.round(value * 100);
  * hit's date is the chart's mark; it carries the crossing's date and ratio, and `headline` is the watch row's short form.
  * A crossing that closed at the pivot's cents is a touch: its breakout is the first later close above the pivot
  * (breakoutBar), dated and judged on that bar; a touch that fell back without one is no breakout.
+ * `from` is the first index of `list` a crossing may be on (crossingFloor's, rebased by sellSignals), or null for none.
  */
-function failedBreakoutCheck(list, view, rules) {
+function failedBreakoutCheck(list, view, rules, from = null) {
   const base = { key: 'failedBreakout', label: `出来高を伴う上抜け後のピボット割れ（${ratioText(rules.breakVolumeRatio)}以上・${rules.failedBreakoutSessions}営業日以内・ブレイク失敗）` };
   const pivot = view?.pivot, n = list.length, last = list[n - 1];
   if (!finite(pivot) || pivot <= 0) return null;
@@ -151,7 +152,7 @@ function failedBreakoutCheck(list, view, rules) {
   // window is the breakout's (CONTEXT.md: the first close above the pivot within failedBreakoutSessions), so the
   // crossings are read over the conclusion's whole look-back: a run of touches that began before the window still
   // dates a breakout inside it.
-  const crossings = pivotCrossings(list, pivot, { lookback: CROSSING_LOOKBACK_SESSIONS }).map(c => breakoutBar(list, pivot, c))
+  const crossings = pivotCrossings(list, pivot, { lookback: CROSSING_LOOKBACK_SESSIONS, from }).map(c => breakoutBar(list, pivot, c, { from }))
     .filter(c => c && c.sessionsAgo <= rules.failedBreakoutSessions);
   const day = i => shortDate(list[i].date, last.date);
   if (!crossings.length) return { ...base, state: 'clear', detail: `直近${rules.failedBreakoutSessions}営業日にピボットの上抜けなし（終値はピボット比 ${shown}）` };
@@ -176,11 +177,14 @@ function failedBreakoutCheck(list, view, rules) {
  * Sell checks for the latest bars. Each check is 'hit', 'clear', 'caution' (the 50-day line only: below
  * it without a confirmed heavy-volume break), 'unknown' (an input is missing) or 'na' (not judged, with
  * the reason). `view` (the candidate: state, pivot, distance) gates the strength checks; without it they
- * are 'na'. Returns null when the bars cannot be judged.
+ * are 'na'. `from` (crossingFloor's) is the first index of `bars` a pivot crossing may be on; the failed-breakout
+ * check reads it on the last 252 bars, so it is rebased there (a floor before them bounds nothing). Null is none.
+ * Returns null when the bars cannot be judged.
  */
-export function sellSignals(bars, rules = SELL_RULES, { view = null } = {}) {
+export function sellSignals(bars, rules = SELL_RULES, { view = null, from = null } = {}) {
   const list = (bars || []).slice(-252);
   if (list.length < 60 || list.some(b => !finite(b?.close) || !finite(b?.low) || b.close <= 0 || b.low <= 0)) return null;
+  const floor = floorOf({ from }), listFloor = floor === null ? null : Math.max(0, floor - (bars.length - list.length));
   const n = list.length, recent = n - rules.recentSessions, last = list[n - 1];
   const change = i => (list[i].close / list[i - 1].close - 1) * 100;
   const on = i => shortDate(list[i].date, last.date);
@@ -222,7 +226,7 @@ export function sellSignals(bars, rules = SELL_RULES, { view = null } = {}) {
     weakness.push({ key: 'day-down', label: '起点以来で最大の1日の下落（直近5営業日）', date: list[down].date, state: down >= recent && change(down) < 0 ? 'hit' : 'clear', detail: `最大は ${on(down)} の ${signed(change(down))}` });
   } else weakness.push(na('day-down', '起点以来で最大の1日の下落（直近5営業日）', `起点（直近1年の安値）から +${rules.advanceMinPercent}%・${rules.advanceMinSessions}営業日以上の上昇局面でのみ判定`));
   weakness.push(ma50State(list, rules));
-  const failed = failedBreakoutCheck(list, view, rules);
+  const failed = failedBreakoutCheck(list, view, rules, listFloor);
   if (failed) weakness.push(failed);
 
   const run = gate.on ? { basis: gate.basis, startDate: list[gate.origin].date, startClose: list[gate.origin].close, pivot: gate.pivot, distance: gate.distance, fromSma50: gate.fromSma50 ?? null, sessions: n - 1 - gate.origin } : null;
@@ -282,9 +286,10 @@ export function sellMarks(sells) {
 /**
  * Every sell check one stock gets: the checks on its certified bars (`judged`, or null) plus the book's
  * combined warning. Null when the bars cannot be judged. `view` (the candidate) gates the strength checks.
+ * `from` is crossingFloor(judged, row) for the failed-breakout check (null: no floor).
  */
-export function stockSells({ judged, diagnostics, view }) {
-  return withBookWarning(sellSignals(judged, SELL_RULES, { view }), diagnostics);
+export function stockSells({ judged, diagnostics, view, from = null }) {
+  return withBookWarning(sellSignals(judged, SELL_RULES, { view, from }), diagnostics);
 }
 
 /** A watched stock's 50-day check when it fired (its detail leads the watch row), else null. */

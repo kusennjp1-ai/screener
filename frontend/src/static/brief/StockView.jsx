@@ -5,6 +5,7 @@ import useSessionState from './useSessionState';
 import { gapDays, publishedRsLineHigh, rsLeadMarks, rsLineNewHigh, stageFromBars, stagePhase } from './briefChartModel';
 import { CHART_RANGES as RANGES, chartCrossing, chartNotes, earningsMarker, heavyVolumeBars, priceInRange, shortAveragesShown, weeklyBars } from './chartReadout';
 import { isBreakdown, sellMarks, stockSells } from './briefSell';
+import { crossingFloor } from './breakoutHistory';
 import { earningsCall } from './briefCandidate';
 import { planLevels } from './positionSizing';
 import StockVerdict from './StockVerdict';
@@ -49,7 +50,8 @@ export default function StockView({ data, header = null, wide = false, market = 
     // Published by an earlier method: measure the contractions again on the certified bars.
     try { return { ...technical, vcp: buildBookTechnicalEvidence(row, chartPayload, data.date).vcp ?? null }; } catch { return { ...technical, vcp: null }; }
   }, [technical, vcpPending, certified, row, chartPayload, data.date]);
-  const sells = useMemo(() => stockSells({ judged, diagnostics, view }), [judged, diagnostics, view]);
+  // Every crossing reader here takes the view's row's crossing floor (crossingFloor, round 3 seam H1b).
+  const sells = useMemo(() => stockSells({ judged, diagnostics, view, from: crossingFloor(judged, view?.row) }), [judged, diagnostics, view]);
   // A broken setup or near earnings leaves the plan a reference only, as the conclusion is (参考).
   const broken = Array.isArray(sells?.weakness) && sells.weakness.some(isBreakdown);
   // The earnings call is computed once and handed to the cards that date earnings (the chart, the plan and the conclusion read it in round 2).
@@ -83,7 +85,7 @@ export default function StockView({ data, header = null, wide = false, market = 
     const shown = interval === 'day' ? new Set(bars.slice(-period).map(b => b.date)) : null;
     // The crossing's colour is explained at every width, when its bar is drawn.
     const visible = interval === 'day' ? bars.slice(-period) : weeklyBars(bars).slice(-period);
-    const crossing = chartCrossing(judged, view?.pivot);
+    const crossing = chartCrossing(judged, view?.pivot, { from: crossingFloor(judged, view?.row) });
     const crossingShown = crossing && visible.some(bar => (bar.start ?? bar.date) <= crossing.date && crossing.date <= bar.date) ? crossing : null;
     // Below 1024px the legend names ▼▲ without their meaning and keeps two lines: every mark it may fold is explained
     // here (only marks the chart draws: the structural low inside the price panel's range, the earnings flag in its window).

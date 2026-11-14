@@ -4,9 +4,11 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { withAuditFixture } from '../../src/static/testAuditFixture.js';
+import { auditDailyBars } from '../../src/static/qualificationAudit.js';
 import { FINANCIAL_TEST_DATE, FINANCIAL_TEST_NOW } from '../../src/static/testFinancialFixture.js';
 import { SECTOR_ETFS } from '../../src/static/marketLongHistory.js';
 import { secPoint, secRecord } from '../../src/test/fixtures/secRecord.js';
+import { priceActivity } from '../../src/static/priceActivity.js';
 
 export const date = FINANCIAL_TEST_DATE;
 export const now = FINANCIAL_TEST_NOW;
@@ -77,16 +79,17 @@ function barsAudit(list) {
  * (export-research.mjs computes one from the other, and certifyBars refuses a pair that drifted apart). When a spec
  * changes a chart's last 51 sessions, the row's (and its detail's) day change and volume ratio follow those bars; when
  * it changes only the row's day change or volume ratio, the chart's last two sessions follow the row. Bars whose last
- * close is not the row's price are left as they are (they are not certified anyway).
+ * close is not the row's price are left as they are (they are not certified anyway). The opt-in oracles (ORACLE_ROWS,
+ * ORACLE_CHARTS) take the same path: their base is their own row and chart.
  */
 function consistent(served) {
   const tail = list => JSON.stringify((list || []).slice(-52).map(bar => [bar?.date, bar?.close, bar?.volume]));
   const day = row => [row?.technical_audit?.values?.change, row?.technical_audit?.values?.volumeRatio];
   const fix = {};
   for (const row of served.rows) {
-    const file = row.chart_path?.split('/').pop(), chart = served.charts[file], base = rowBySymbol[row.symbol];
+    const file = row.chart_path?.split('/').pop(), chart = served.charts[file], base = rowBySymbol[row.symbol] ?? oracleRowBySymbol[row.symbol];
     if (!chart || !base || !Array.isArray(chart.bars) || chart.bars.length < 52 || Math.abs(chart.bars.at(-1).close - row.current_price) > 0.02 || row.technical_audit?.as_of_date !== date) continue;
-    if (tail(chart.bars) !== tail(charts[file]?.bars)) fix[row.symbol] = { audit: barsAudit(chart.bars) };
+    if (tail(chart.bars) !== tail((charts[file] ?? ORACLE_CHARTS[file])?.bars)) fix[row.symbol] = { audit: barsAudit(chart.bars) };
     else if (JSON.stringify(day(row)) !== JSON.stringify(day(base))) fix[row.symbol] = { file, bars: day(row) };
   }
   if (!Object.keys(fix).length) return served;
@@ -152,6 +155,178 @@ export const charts = Object.fromEntries(rows.map((row, index) => [row.chart_pat
   symbol: row.symbol, as_of_date: date, bars: bars(index + 101, row.current_price, 0.5 + (index % 4) * 0.4),
   session_calendar: sessionCalendar, stock_data: row, rs_line: [],
 }]));
+
+// ── Round-3 oracles (STEP 0; opt-in, frozen with this file) ──────────────────────────────────────────────────────────
+// Synthetic stocks with one shape each, served only with `oracles: true` (openBrief, routeBrief). Each is built like a
+// default row (withAuditFixture) with its own bars' audit values (auditDailyBars: the close, day change and volume ratio
+// consistent() checks, and the averages and 52-week range the trend template reads), so its bars certify. Tickers start with ZZ and collide with no default symbol (nor ZZU000–ZZU099); every
+// company name ends in "(synthetic)". docs/round3/step0.md describes each oracle and what it is for.
+
+/**
+ * 280 daily bars ending on the analysis day: closes follow the `anchors` ([index, close], linear between them) with a
+ * seeded wiggle; highs and lows sit `spread` around the open and close; `volume` is the base volume. `at[i]` overrides
+ * any field of bar i (a function gets the bar and the list so far). The high and low always cover the open and close.
+ */
+function shapedBars(seed, anchors, { wiggle = 0.003, spread = 0.006, volume = 2e6, at = {} } = {}) {
+  const r = rng(seed), days = sessions.slice(-280), out = [];
+  let k = 0;
+  for (let i = 0; i < days.length; i++) {
+    while (k < anchors.length - 2 && anchors[k + 1][0] <= i) k++;
+    const [i0, c0] = anchors[k], [i1, c1] = anchors[k + 1], t = Math.min(1, Math.max(0, (i - i0) / (i1 - i0)));
+    const close = round((c0 + (c1 - c0) * t) * (1 + (r() - 0.5) * 2 * wiggle)), open = round(close * (1 + (r() - 0.5) * wiggle));
+    let bar = { date: days[i], open, close, high: round(Math.max(open, close) * (1 + r() * spread)), low: round(Math.min(open, close) * (1 - r() * spread)),
+      volume: Math.round(volume * (0.7 + 0.6 * r())) };
+    const change = at[i];
+    if (change) bar = { ...bar, ...(typeof change === 'function' ? change(bar, out) : change) };
+    out.push({ ...bar, high: Math.max(bar.high, bar.open, bar.close), low: Math.min(bar.low, bar.open, bar.close) });
+  }
+  return out;
+}
+/** The average volume of the `n` bars before bar i. */
+const priorVolume = (list, i, n = 50) => list.slice(i - n, i).reduce((sum, bar) => sum + bar.volume, 0) / n;
+
+/** One oracle: its row (withAuditFixture, with its bars' own audit values), its chart and, with `detail`, its research detail. */
+function oracle(symbol, company, sector, list, extra = {}, { rsLine = [], detail = null } = {}) {
+  const row = withAuditFixture({
+    symbol, company_name: `${company} (synthetic)`, currency: 'USD', market: 'US', gics_sector: SECTORS[sector],
+    market_regime: 'confirmed_uptrend', market_above_50dma: true, market_above_200dma: true, ibd_industry_group: `${SECTORS[sector]} group 1`,
+    current_price: list.at(-1).close, se_pattern_confidence: SETUP_CONFIDENCE, setup_recalculation: { status: 'calculated', as_of_date: date },
+    adv_usd: 6e7, rs_rating: 92, chart_path: `charts/${symbol}.json`, eps_growth_yy: 55, sales_growth_yy: 32, market_cap: 8e9, ...extra,
+  }, date);
+  // The audit is the bars' own (auditDailyBars, as the exporter publishes it): its close, day change and volume ratio
+  // certify the bars (consistent()'s rule) and its averages and 52-week high and low are these bars', not synthetic.
+  const audit = auditDailyBars(row, { symbol, as_of_date: date, bars: list, session_calendar: sessionCalendar }, date);
+  if (!audit.valid) throw Error(`oracle ${symbol}: ${audit.errors.join(', ')}`);
+  row.technical_audit = { ...row.technical_audit, values: { ...row.technical_audit.values, ...audit.values } };
+  if (detail) row.research_detail_path = `research-details/${symbol}-detail.json`;
+  const chart = { symbol, as_of_date: date, bars: list, session_calendar: sessionCalendar, stock_data: row, rs_line: rsLine };
+  return { row, chart, detail: detail ? { ...row, as_of_date: date, ...detail(row) } : null };
+}
+
+/** An RS line as the exporter writes it (close ÷ benchmark per bar), from the RS value `rs(i)` each bar should have. */
+const rsLineOf = (list, rs) => list.map((bar, i) => { const benchmark = Math.round(bar.close / rs(i) * 1e4) / 1e4; return { time: bar.date, value: bar.close / benchmark }; });
+/** An advance, a base 5% under its high, the last close 2.5% above its prior close: the RS oracles' price. */
+const rsPrice = seed => shapedBars(seed, [[0, 34], [150, 61], [200, 72], [228, 64], [258, 70], [279, 68.4]]);
+
+// ZZRL: the RS line at a new high on the analysis day while the price is still under its high (an RS lead mark on the
+// last bar), as the published rs_line_high says.
+const zzrlBars = rsPrice(301);
+const ZZRL = oracle('ZZRL', 'Relay Logic', 0, zzrlBars, { se_pivot_price: round(Math.max(...zzrlBars.slice(-60).map(b => b.high))), se_pattern_primary: 'cup_with_handle',
+  rs_line_high: { value: true, leading: true, as_of_date: date } }, { rsLine: rsLineOf(zzrlBars, i => 1 + i * 0.002) });
+// ZZRW: an RS line that peaked 80 sessions ago and is now 15% under its high (no new high, no lead).
+const zzrwBars = rsPrice(302), rsPeak = 1 + 199 * 0.002;
+const ZZRW = oracle('ZZRW', 'Ridgeway Freight', 2, zzrwBars, { se_pivot_price: round(Math.max(...zzrwBars.slice(-60).map(b => b.high))), se_pattern_primary: 'cup_with_handle',
+  rs_line_high: { value: false, leading: false, as_of_date: date } }, { rsLine: rsLineOf(zzrwBars, i => (i < 200 ? 1 + i * 0.002 : rsPeak * (1 - 0.15 * (i - 199) / 80))) });
+
+// ZZHB: a held breakout from a weekly pattern. se_pivot_date is the pivot week's Friday label (2026-09-25); the bar whose
+// high is the pivot is that week's Tuesday (2026-09-22). The close crossed the pivot on 2026-09-28 (4 sessions before
+// the analysis day) on 2.4× the prior 50 sessions, and every close since is at or above the pivot (in the buy zone).
+const HB_PIVOT = 48.5;
+const zzhbBars = shapedBars(303, [[0, 26], [170, 51.5], [205, 40], [255, 47.4], [262, 47.6], [268, 46.4], [271, 48], [274, 46.9], [275, 49.7], [279, 50]], { at: {
+  271: { open: 47.8, close: 48.05, high: HB_PIVOT, low: 47.6 },
+  275: (bar, list) => ({ open: 47.3, close: 49.7, high: 49.95, low: 47.2, volume: Math.ceil(priorVolume([...list, bar], 275) * 2.4) }),
+  276: { open: 49.6, close: 49.4, high: 49.9, low: 49.1 }, 277: { open: 49.5, close: 49.8, high: 50.1, low: 49.3 },
+  278: { open: 49.8, close: 49.75, high: 50.05, low: 49.5 }, 279: { open: 49.8, close: 50, high: 50.2, low: 49.6 } } });
+const ZZHB = oracle('ZZHB', 'Harbor Biotics', 1, zzhbBars, { se_pivot_price: HB_PIVOT, se_pivot_date: '2026-09-25', se_pivot_type: 'handle_high', se_pattern_primary: 'cup_with_handle' });
+
+// ZZRD: a ready Setup Engine base (se_setup_ready, confidence 78) with three measurable, shallower contractions
+// (about 18%, 8% and 5%) on falling volume, the last one under its prior 50-session average; the close is 2% under the
+// pivot (the last contraction's high; no close has reached it since the first contraction), in the early zone. A VCP
+// primary publishes no pivot date (vcp_wrapper.py).
+// Its Setup Engine scalars are these bars' own, so a screen that prints two of them never shows two figures for one
+// measure: se_volume_vs_50d 0.74 and se_quiet_days_10d 2 are readiness.py's formulas (the day's volume over its 50-day
+// average including the day; dry-up days with a true range under ATR14) run on these bars, and the readout's
+// 当日の出来高 (the 50 sessions before the day) reads 0.73. se_base_length_weeks 17 and se_base_depth_pct 18 are the
+// app's own measure of this base (footprint: 「VCP 17週 18/5 3T」), so the VCP card shows no Setup Engine mismatch;
+// what the Setup Engine's VCP detector itself would measure on these bars is not run here. The confidence and
+// se_setup_ready are set, not computed.
+const zzrdBars = shapedBars(304, [[0, 30], [195, 60], [213, 49.4], [230, 57], [240, 52.8], [255, 57.6], [262, 54.9], [279, 56.6]],
+  { volume: 2e6, at: Object.fromEntries(Array.from({ length: 85 }, (_, j) => 195 + j).map(i => [i, bar => ({ volume: Math.round(bar.volume * (i < 230 ? 1 : i < 255 ? 0.75 : 0.45)) })])) });
+const rdPivot = Math.max(...zzrdBars.slice(245, 262).map(b => b.high));
+zzrdBars[279] = { ...zzrdBars[279], open: round(rdPivot * 0.975), close: round(rdPivot * 0.98) };
+zzrdBars[279] = { ...zzrdBars[279], high: Math.max(zzrdBars[279].high, zzrdBars[279].open, zzrdBars[279].close), low: Math.min(zzrdBars[279].low, zzrdBars[279].open, zzrdBars[279].close) };
+const ZZRD = oracle('ZZRD', 'Redline Devices', 0, zzrdBars, { se_pivot_price: rdPivot, se_pattern_primary: 'vcp', se_pattern_confidence: 78, se_setup_ready: true,
+  se_volume_vs_50d: 0.74, se_quiet_days_10d: 2, se_base_length_weeks: 17, se_base_depth_pct: 18 });
+
+// ZZPM: a same-day detail whose SEC record is the published invalid_payload signature (PayloadMismatch with
+// received_cik null), in the shape tools/sec-financials.py writes it (unavailable() plus invalid_detail()).
+const zzpmBars = shapedBars(305, [[0, 42], [150, 76], [200, 88], [228, 79], [258, 86], [279, 84.2]]);
+const ZZPM = oracle('ZZPM', 'Pinemark Materials', 7, zzpmBars, { se_pivot_price: round(Math.max(...zzpmBars.slice(-60).map(b => b.high))), se_pattern_primary: 'cup_with_handle' }, {
+  detail: row => ({ sec_admission: { state: 'admitted', reason: null }, book_financials: { schema_version: 2, symbol: row.symbol, as_of_date: date, status: 'unavailable',
+    reason: 'invalid_payload', error: 'SEC取得不可: PayloadMismatch', retrieved_at: `${date}T21:30:00.000Z`,
+    invalid_detail: { class: 'PayloadMismatch', message: 'companyfacts cik does not match the requested cik', requested_cik: 1000001, received_cik: null } } }) });
+
+// ZZQF: a June fiscal year whose September 10-Q is filed (10-01), so the derived June Q4s sit inside the card's
+// window, not at its newest edge. Q4 EPS is untagged (10-K only); Q4 revenue and net income are derived as
+// sec-financials.py derives them. The known EPS growth rises around the missing June Q4, so EPS acceleration (and Code 33)
+// stays unknown because of that Q4 (cause fiscal_q4_untagged); sales and margin rise with the derived Q4s. Only keys the
+// 8849bf9 admission accepts.
+const QF_QUARTERS = [...SEC_QUARTERS, ['2026-07-01', '2026-09-30']];
+const zzqfFinancials = (() => {
+  const record = secRecord({ symbol: 'ZZQF', cik: 1000003, asOfDate: date, retrievedAt: `${date}T21:30:00.000Z`, quarters: QF_QUARTERS,
+    eps: [1, 1, 1, 1.05, 1.1, 1.3, 1.4, 1.8, 1.9], revenue: [80, 85, 90, 95, 100, 110, 122, 136, 150], netIncome: [8, 9, 10, 11, 12, 14, 16, 19, 23] });
+  record.quarterly.eps = record.quarterly.eps.filter(point => !point.end.endsWith('06-30'));
+  for (const key of ['eps', 'revenue', 'netIncome']) for (const point of record.quarterly[key]) {
+    point.form = '10-Q';
+    if (point.end === '2026-09-30') Object.assign(point, { filed: '2026-10-01', accession: '0000000003-26-093000' });
+  }
+  for (const key of ['revenue', 'netIncome']) for (const point of record.quarterly[key].filter(p => p.end.endsWith('06-30'))) {
+    const filing = tenK(point.end);
+    const quarters = record.quarterly[key].filter(p => p.end < point.end && p.end > `${Number(point.end.slice(0, 4)) - 1}-06-30`).map(p => p.accession);
+    Object.assign(point, filing, { derived: 'fiscal-year-minus-three-quarters', components: [filing.accession, ...quarters] });
+  }
+  record.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4.05, tenK('2025-06-30')), secPoint('eps', ['2025-07-01', '2026-06-30'], 5.6, tenK('2026-06-30'))];
+  return record;
+})();
+const zzqfBars = shapedBars(306, [[0, 31], [150, 57], [200, 67], [228, 60], [258, 66], [279, 64.3]]);
+const ZZQF = oracle('ZZQF', 'Quillfield Software', 0, zzqfBars, { se_pivot_price: round(Math.max(...zzqfBars.slice(-60).map(b => b.high))), se_pattern_primary: 'cup_with_handle' }, {
+  detail: () => ({ sec_admission: { state: 'admitted', reason: null }, book_financials: zzqfFinancials }) });
+
+// ZZNR: an NR7/inside-day pivot (se_pivot_date the day before the analysis day, its high the pivot) that a close crossed
+// on 2.1× volume 7 sessions earlier (2026-09-23), before the pivot formed; the last close is under the pivot (MGRC's shape).
+const NR_PIVOT = 62.4;
+const zznrBars = shapedBars(307, [[0, 33], [165, 64.8], [200, 55], [240, 60.6], [271, 61.4]], { at: {
+  272: (bar, list) => ({ open: 61.5, close: 63.15, high: 63.4, low: 61.3, volume: Math.ceil(priorVolume([...list, bar], 272) * 2.1) }),
+  273: { open: 63.1, close: 63.65, high: 63.9, low: 62.9 }, 274: { open: 63.6, close: 63.3, high: 63.8, low: 62.95 },
+  275: { open: 63, close: 62.1, high: 63.1, low: 61.9 }, 276: { open: 62.1, close: 61.8, high: 62.3, low: 61.5 },
+  277: { open: 61.7, close: 61.45, high: 62.6, low: 61.05 }, 278: { open: 61.6, close: 61.8, high: NR_PIVOT, low: 61.4 },
+  279: { open: 61.75, close: 61.5, high: 61.95, low: 61.3 } } });
+const ZZNR = oracle('ZZNR', 'Northridge Robotics', 2, zznrBars, { se_pivot_price: NR_PIVOT, se_pivot_date: '2026-10-01', se_pivot_type: 'nr7_inside_day_trigger_high',
+  se_pattern_primary: 'nr7_inside_day' });
+
+// ZZPG: three contracting legs, then a +44% one-day gap (2026-08-27) on 50× the prior 50 sessions, then 25 sessions
+// closing within 36.31–36.49 (ADR20 about 0.15%); the cup-with-handle pivot 36.45 is the high of 2026-09-23 (its week is
+// labelled 2026-09-25) and the last crossing (2026-09-30, light volume) follows it (PCRX's shape). price_activity is
+// computed as the exporter computes it (priceActivity).
+const PG_PIVOT = 36.45, PG_BAND = [36.38, 36.42, 36.47, 36.33, 36.4, 36.31, 36.44, 36.36, 36.49, 36.35, 36.41, 36.32, 36.43, 36.39, 36.46, 36.37,
+  36.42, 36.34, 36.38, 36.4, 36.36, 36.43, 36.47, 36.48, 36.46];
+const PG_HIGHS = { 257: 36.58, 270: 36.42, 271: 36.44, 272: PG_PIVOT, 273: 36.43, 274: 36.4 };
+const zzpgBars = shapedBars(308, [[0, 12], [155, 27], [175, 21.7], [195, 26.3], [205, 23.5], [222, 25.9], [240, 25.8], [252, 24.75], [253, 25.2]], {
+  volume: 1e6, at: {
+    252: { open: 24.9, close: 24.8, high: 25.0, low: 24.56 }, 253: { open: 24.85, close: 25.2, high: 25.3, low: 24.8 },
+    254: (bar, list) => ({ open: 35.1, close: 36.39, high: 36.6, low: 34.9, volume: Math.ceil(priorVolume([...list, bar], 254) * 50) }),
+    ...Object.fromEntries(PG_BAND.map((close, j) => [255 + j, { open: round(close - 0.01), close, high: PG_HIGHS[255 + j] ?? round(Math.min(close + 0.03, j > 14 && j < 20 ? 36.44 : 36.52)),
+      low: round(close - 0.025), volume: Math.round(2.6e6 * (1 - j * 0.03)) }])),
+  } });
+const ZZPG = oracle('ZZPG', 'Pellgate Pharma', 1, zzpgBars, { se_pivot_price: PG_PIVOT, se_pivot_date: '2026-09-25', se_pivot_type: 'handle_high',
+  se_pattern_primary: 'cup_with_handle', price_activity: priceActivity(zzpgBars) });
+
+const ORACLES = [ZZRL, ZZRW, ZZHB, ZZRD, ZZPM, ZZQF, ZZNR, ZZPG];
+/** The oracles' research rows (served after the default rows with `oracles: true`). */
+export const ORACLE_ROWS = ORACLES.map(o => o.row);
+/** The oracles' chart payloads by file name. */
+export const ORACLE_CHARTS = Object.fromEntries(ORACLES.map(o => [o.row.chart_path.split('/').pop(), o.chart]));
+/** The oracles' research details by file name (ZZPM and ZZQF). */
+export const ORACLE_DETAILS = Object.fromEntries(ORACLES.filter(o => o.detail).map(o => [o.row.research_detail_path.split('/').pop(), o.detail]));
+/**
+ * Each oracle's symbol by its name in the plan. The two fiscal-Q4 EPS oracles have different causes (epsUnknownCauses):
+ * - fiscalQ4Latest, ZZNV (a default row): the newest row is a fiscal Q4 without EPS, cause
+ *   'latest_row_fiscal_q4_without_eps' (the plan called it the fiscal_q4_untagged oracle; it is not);
+ * - fiscalQ4Window, ZZQF: the EPS-less fiscal Q4 sits inside the window, cause 'fiscal_q4_untagged'.
+ */
+export const ORACLE = Object.freeze({ rsHigh: 'ZZRL', rsLagging: 'ZZRW', heldBreakout: 'ZZHB', ready: 'ZZRD', payloadMismatch: 'ZZPM',
+  fiscalQ4Window: 'ZZQF', pivotAfterCrossing: 'ZZNR', postGapPin: 'ZZPG', fiscalQ4Latest: SEC_SYMBOL });
+const oracleRowBySymbol = Object.fromEntries(ORACLE_ROWS.map(row => [row.symbol, row]));
 
 /**
  * A market-trends asset (market-trends-v1 with a market-long-history-v1 body) that passes the
@@ -225,9 +400,13 @@ export function marketTrends({ historyEnd = date, schema = 'current', mutate } =
  * variant) for this page only: `rows` (the research rows), `charts` (the chart payloads by file name),
  * `details` (the research details by file name), `trends` (the market-trends value) and `manifest`.
  */
-export async function routeBrief(page, { historyEnd = date, schema, fail, detailGate, mutate = {} } = {}) {
+export async function routeBrief(page, { historyEnd = date, schema, fail, detailGate, mutate = {}, oracles = false } = {}) {
   const trends = marketTrends({ historyEnd, schema, mutate: mutate.trends });
-  const served = consistent({ rows: variant(rows, mutate.rows), charts: variant(charts, mutate.charts), details: variant(details, mutate.details) });
+  // With `oracles`, the synthetic oracles (ORACLE_ROWS, ORACLE_CHARTS, ORACLE_DETAILS) join a private copy of the base,
+  // and each mutator receives the combined set. Without it the served data is exactly the default fixture's.
+  const withOracles = (base, extra) => (oracles ? structuredClone(Array.isArray(base) ? [...base, ...extra] : { ...base, ...extra }) : base);
+  const served = consistent({ rows: variant(withOracles(rows, ORACLE_ROWS), mutate.rows), charts: variant(withOracles(charts, ORACLE_CHARTS), mutate.charts),
+    details: variant(withOracles(details, ORACLE_DETAILS), mutate.details) });
   const manifest = variant({ as_of_date: date, generated_at: new Date(now).toISOString(), research_generation: 'brief-browser-fixture',
     default_market: 'US', supported_markets: ['US'], markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' }, market_trends: trends.ref }, pages: {} } } }, mutate.manifest);
   const external = [];
@@ -255,9 +434,10 @@ export async function routeBrief(page, { historyEnd = date, schema, fail, detail
  * A fresh page on the synthetic publication at the fixed analysis clock, collecting page errors.
  * `storage` seeds localStorage once per tab (a later change and reload keep the user's choice),
  * e.g. { 'research-watch': ['ZZNV'] } or { 'screener:color-mode': 'light' }. `mutate` serves a variant
- * of the data to this page (routeBrief), e.g. { rows: rows => { rows[0].rs_rating = 97.01; } }.
+ * of the data to this page (routeBrief), e.g. { rows: rows => { rows[0].rs_rating = 97.01; } }. `oracles: true` also
+ * serves the round-3 oracles (ORACLE_ROWS); without it nothing changes.
  */
-export async function openBrief(page, hash = '#/brief', { historyEnd, schema, storage, fail, detailGate, mutate } = {}) {
+export async function openBrief(page, hash = '#/brief', { historyEnd, schema, storage, fail, detailGate, mutate, oracles = false } = {}) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.clock.setFixedTime(new Date(now));
@@ -268,9 +448,40 @@ export async function openBrief(page, hash = '#/brief', { historyEnd, schema, st
       sessionStorage.setItem('brief-spec-seeded', '1');
     } catch { /* storage blocked: the app must still render */ }
   }, storage);
-  const network = await routeBrief(page, { historyEnd, schema, fail, detailGate, mutate });
+  const network = await routeBrief(page, { historyEnd, schema, fail, detailGate, mutate, oracles });
   await page.goto(`/${hash}`);
   return { errors, external: network.external };
+}
+
+/**
+ * Waits until every price chart on the page has finished drawing (round 3, STEP 0 helper H3; plan rule 20): fonts are
+ * loaded; each chart's drawing has ended its intro (.bc-pulsing on the drawing) or never animates (reduced motion and a
+ * redraw hide the pulse ring instead), or the chart says it has too few bars; then no finite animation is still running.
+ * After a period click pass `{ redraw: true }`: it then waits for a drawing it has not settled before, so the previous
+ * period's .bc-pulsing never ends the wait. Call it once a chart is on screen (it waits for a chart still loading).
+ */
+export async function chartSettled(page, { redraw = false, timeout = 20000 } = {}) {
+  await page.evaluate(() => document.fonts.ready.then(() => true));
+  await page.waitForFunction(fresh => {
+    const seen = (window.__briefChartSettled ||= new WeakSet());
+    const charts = [...document.querySelectorAll('[data-testid="brief-price-chart"]')];
+    const done = charts.every(chart => {
+      if (chart.querySelector('.brief-chart-empty')) return true;
+      const pulse = chart.querySelector('.bc-pulse'), drawing = pulse?.ownerSVGElement;
+      if (!drawing || (fresh && seen.has(drawing))) return false;
+      return drawing.classList.contains('bc-pulsing') || pulse.style.opacity === '0';
+    });
+    if (done) for (const chart of charts) { const drawing = chart.querySelector('.bc-pulse')?.ownerSVGElement; if (drawing) seen.add(drawing); }
+    return done;
+  }, redraw, { timeout });
+  // Finite animations still running (CSS and WAAPI), polled live: a paused or replaced animation never holds the wait.
+  const running = () => document.getAnimations().filter(a => a.playState === 'running' && a.effect?.getComputedTiming().iterations !== Infinity);
+  await page.waitForFunction(`(${running})().length === 0`, null, { timeout }).catch(async error => {
+    const left = await page.evaluate(`(${running})().map(a => (a.animationName || a.transitionProperty || a.constructor.name) + ' on ' + (a.effect?.target?.className?.baseVal ?? a.effect?.target?.className ?? '?'))`).catch(() => []);
+    throw new Error(`chartSettled: finite animations still running after ${timeout}ms: ${left.join(', ')}`, { cause: error });
+  });
+  // The intro's last label tweens run on animation frames (not in getAnimations), a few hundred ms past .bc-pulsing at most.
+  await page.waitForTimeout(300);
 }
 
 /** Wide and phone viewports the specs run at; the phone uses touch and the mobile layout. */

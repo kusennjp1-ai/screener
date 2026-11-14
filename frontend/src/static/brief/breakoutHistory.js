@@ -29,16 +29,41 @@ function crossingVolumeRatio(bars, index) {
 }
 
 const lookbackOf = options => (Number.isInteger(options?.lookback) && options.lookback > 0 ? options.lookback : CROSSING_LOOKBACK_SESSIONS);
+/**
+ * The crossing floor of `options.from` (round 3, STEP 0 seam H1b): the first bar index a crossing may be on, or null for
+ * none. Only a non-negative integer is a floor; null, undefined and anything else take exactly the path without one.
+ */
+export const floorOf = options => (Number.isInteger(options?.from) && options.from >= 0 ? options.from : null);
+
+/**
+ * The first bar index of `bars` (the certified daily bars) a pivot crossing may be on for this `row`, or null for no
+ * floor. Every crossing reader passes it as `from` (the failed-breakout check, the conclusion's crossing event, the
+ * chart's arrow and the watch-row and Today sell checks), so the bound is applied in one place (round 3, STEP 0 seam
+ * H1b). In STEP 0 it is null for every row: behaviour is unchanged. R1 owns the body.
+ * - The floor for R1 is the pivot bar's own index (pivotBar(bars, row).index), not the bar after it. A crossing on the
+ *   pivot's own bar can only be a touch (its close cannot exceed its high, which is the pivot), so its breakout is
+ *   dated on a later bar (breakoutBar); nothing before the pivot formed is admitted. A floor one bar later drops a real
+ *   breakout: the pivot bar closes at its high and the next bar closes above on volume. The touch is under that floor,
+ *   and the next bar is no crossing, because the close before it is not under the pivot (the seam contract test).
+ * - R1 still decides one case: a run at the pivot's cents that began before the pivot bar (the bar before it closed at
+ *   the cents too). It has no crossing at or after either floor, so its later close above is dropped as well.
+ */
+export function crossingFloor(bars, row) {
+  void bars; void row;
+  return null;
+}
 
 /**
  * Every crossing of `pivot` from below in the certified `bars` within `lookback` sessions (0 to lookback
  * back), the latest first, each as lastPivotCrossing gives it. The walk stops at a missing close: a
- * crossing before it cannot be told, so it is never listed.
+ * crossing before it cannot be told, so it is never listed. With `from` (a bar index, floorOf), a crossing
+ * bar before it is never listed either (the bar before the crossing may be the one at from − 1).
  */
 export function pivotCrossings(bars, pivot, options = {}) {
   if (!Array.isArray(bars) || !positive(pivot)) return [];
-  const lookback = lookbackOf(options), n = bars.length, out = [], close = i => (positive(bars[i]?.close) ? bars[i].close : null);
-  for (let i = n - 1; i >= Math.max(1, n - 1 - lookback); i--) {
+  const lookback = lookbackOf(options), floor = floorOf(options), n = bars.length, out = [], close = i => (positive(bars[i]?.close) ? bars[i].close : null);
+  const lowest = floor === null ? Math.max(1, n - 1 - lookback) : Math.max(1, n - 1 - lookback, floor);
+  for (let i = n - 1; i >= lowest; i--) {
     const today = close(i), before = close(i - 1);
     if (today === null || before === null) break;
     if (cents(today) >= cents(pivot) && cents(before) < cents(pivot)) out.push({ index: i, date: bars[i].date, sessionsAgo: n - 1 - i, volumeRatio: crossingVolumeRatio(bars, i) });
@@ -50,7 +75,8 @@ export function pivotCrossings(bars, pivot, options = {}) {
  * The last crossing of `pivot` from below in the certified `bars`, as `{ index, date, sessionsAgo,
  * volumeRatio }` (`index` is the crossing bar's index in `bars`), or null. The one helper the conclusion,
  * the chart's breakout mark (chart) and the sell checks read. `options` may be omitted or null; a
- * `lookback` that is not a positive integer falls back to the default.
+ * `lookback` that is not a positive integer falls back to the default. `from` (crossingFloor's) is the first
+ * bar index the crossing may be on; without one (null, undefined) nothing changes.
  * - The crossing is the latest bar i, with 0 ≤ sessionsAgo ≤ `lookback`, whose close is at or above the
  *   pivot (the same cents count as at) while the close before it is under the pivot. The default
  *   `lookback` is CROSSING_LOOKBACK_SESSIONS (60).
@@ -65,7 +91,7 @@ export function pivotCrossings(bars, pivot, options = {}) {
  * - Any close missing between the crossing and the last bar gives null, never a guess.
  */
 export function lastPivotCrossing(bars, pivot, options = {}) {
-  return pivotCrossings(bars, pivot, { lookback: lookbackOf(options) })[0] ?? null;
+  return pivotCrossings(bars, pivot, { lookback: lookbackOf(options), from: options?.from })[0] ?? null;
 }
 
 /**
@@ -74,9 +100,12 @@ export function lastPivotCrossing(bars, pivot, options = {}) {
  * first later bar that closed above them before any close back under the pivot, as `{ index, date, sessionsAgo,
  * volumeRatio }` (that bar's own volume ratio, as lastPivotCrossing gives it). Null without a crossing, or when the
  * touch was never followed by a close above the pivot (it fell back, or still sits on it). A missing close ends the walk.
+ * With `options.from` (crossingFloor's), a crossing before that bar index has no breakout (null).
  */
-export function breakoutBar(bars, pivot, crossing) {
+export function breakoutBar(bars, pivot, crossing, options = {}) {
   if (!Array.isArray(bars) || !positive(pivot) || !Number.isInteger(crossing?.index)) return null;
+  const floor = floorOf(options);
+  if (floor !== null && crossing.index < floor) return null;
   const n = bars.length;
   for (let i = crossing.index; i < n; i++) {
     const close = bars[i]?.close;
@@ -110,15 +139,16 @@ export function breakoutBar(bars, pivot, crossing) {
  * - Without certified bars (or bars that end on another day), a close missing in the window, or bars too few to tell:
  *   kind 'undated', tone 'wait', 「買いゾーン内（上抜け日 未確認）」 (UNDATED_EVENT), never green; a 'touchHeld' keeps the
  *   rows' words (tone 'wait') with a note that claims nothing the bars did not show.
+ * `from` (crossingFloor's) is the first bar index a crossing may be on (lastPivotCrossing, breakoutBar); null is none.
  */
-export function crossingEvent(view, bars = null, { staleSessions = STALE_BREAKOUT_SESSIONS } = {}) {
+export function crossingEvent(view, bars = null, { staleSessions = STALE_BREAKOUT_SESSIONS, from = null } = {}) {
   const event = breakoutEvent(view);
   if (event?.kind !== 'after' && event?.kind !== 'undated' && event?.kind !== 'touchHeld') return event;
   const usable = Array.isArray(bars) && bars.length > 1 && bars.at(-1)?.date === view.asOf;
-  const crossing = usable ? lastPivotCrossing(bars, view.pivot) : null;
+  const crossing = usable ? lastPivotCrossing(bars, view.pivot, { from }) : null;
   // A crossing that closed at the pivot's cents is a touch (rows' 「ピボット到達」, no arrow on the chart): the breakout is
   // dated from the first close above the pivot after it, with that bar's volume (breakoutBar).
-  const broke = crossing ? breakoutBar(bars, view.pivot, crossing) : null;
+  const broke = crossing ? breakoutBar(bars, view.pivot, crossing, { from }) : null;
   // A close above the pivot before the analysis day: the stock was already above it, whatever the day before closed at.
   const crossed = broke && broke.sessionsAgo >= 1 ? broke : null;
   if (event.kind !== 'after' && !crossed && crossing) {

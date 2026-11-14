@@ -7,7 +7,7 @@
 import { finite } from '../researchEngine';
 import { conditionCompactLabel, conditionCompactText, conditionNote, conditionNoteValue } from '../missingCondition';
 import { atPivotCents, baseShortfall, baseShortfallNote, candidateMarketGate, POSITION_NAMES, ratioShown, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, underTenth } from './briefCandidate';
-import { crossingEvent } from './breakoutHistory';
+import { crossingEvent, crossingFloor } from './breakoutHistory';
 import { isBreakdown, SELL_RULES } from './briefSell';
 import { shortDate } from './briefShared';
 
@@ -124,7 +124,8 @@ export const HEAVY_DOWN_NOTE = `このため新規の買いは見送ります（
 export function buyGate({ view, template = null, market = null, sells = null, broken = false, earnings = null, event, base, judged = null } = {}) {
   const blocked = (view && PLAN_BLOCKED[view.state]) || null, guide = marketGuidePercent(market), trialOnly = !(guide > 0);
   if (!view) return { kind: 'unjudged', tone: 'neutral', title: '判定不可', note: null, units: [], reference: false, moved: false, reason: null, blocked, trialOnly, event: null };
-  const day = event === undefined ? crossingEvent(view, judged, { staleSessions: SELL_RULES.staleBreakoutSessions }) : event;
+  // The crossing floor of the view's own row (crossingFloor, round 3 seam H1b: null in STEP 0, so nothing changes).
+  const day = event === undefined ? crossingEvent(view, judged, { staleSessions: SELL_RULES.staleBreakoutSessions, from: crossingFloor(judged, view.row) }) : event;
   const tt = templateCall(view, template);
   const breakdown = Array.isArray(sells?.weakness) ? sells.weakness.find(isBreakdown) : null;
   const isBroken = Boolean(breakdown) || broken === true;

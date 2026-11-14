@@ -22,6 +22,9 @@ NVM_ACTIVATE = export NVM_DIR="$$HOME/.nvm" && [ -s "$$NVM_DIR/nvm.sh" ] && . "$
 
 # ── Gate 1: Detector Correctness ────────────────────────────────────
 # Detectors produce correct outputs, contracts are honored, schemas validate.
+# It also runs the 908 ground-truth harness's mechanics test and the readiness
+# probe's test (its gate table is pinned against explain_builder.py); no other
+# CI job collects tests/unit/services.
 
 GATE_1 = \
   tests/unit/test_detector_interface_contract.py \
@@ -33,7 +36,10 @@ GATE_1 = \
   tests/unit/test_setup_engine_parameters.py \
   tests/unit/test_aggregator_execution_pipeline.py \
   tests/unit/test_explain_builder.py \
-  tests/unit/test_stage_analysis.py
+  tests/unit/test_stage_analysis.py \
+  tests/unit/test_pivot_timeframes.py \
+  tests/unit/services/test_probe_setup_ready_908.py \
+  tests/unit/services/test_validate_trade_ideas_harness.py
 
 # ── Identity Invariants (Fail Fast) ──────────────────────────────────
 # Canonical-key uniqueness, alias-key integrity, and identity contracts.

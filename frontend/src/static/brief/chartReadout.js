@@ -298,11 +298,12 @@ const cents = value => Math.round(value * 100);
  * failure). `volumeRatio` is that bar's (null when the helper supplies none, never 0). `tone` is 'zone' (green)
  * only when that ratio is BREAKOUT_VOLUME_RATIO× or more, the latest certified close is still at or above the
  * pivot (cents) and the breakout is at most STALE_BREAKOUT_SESSIONS sessions old (the conclusion's 停滞 rule);
- * otherwise 'neutral', with the `reason` the 注記 states.
+ * otherwise 'neutral', with the `reason` the 注記 states. `from` (crossingFloor's) is the first bar index a crossing may
+ * be on (lastPivotCrossing, breakoutBar); null is none.
  */
-export function chartCrossing(judged, pivot) {
+export function chartCrossing(judged, pivot, { from = null } = {}) {
   if (!Array.isArray(judged) || !finite(pivot) || pivot <= 0) return null;
-  const crossing = breakoutBar(judged, pivot, lastPivotCrossing(judged, pivot));
+  const crossing = breakoutBar(judged, pivot, lastPivotCrossing(judged, pivot, { from }), { from });
   const bar = crossing && Number.isInteger(crossing.index) ? judged[crossing.index] : null;
   if (!bar || !finite(bar.close) || !(cents(bar.close) > cents(pivot))) return null;
   const volumeRatio = finite(crossing.volumeRatio) && crossing.volumeRatio > 0 ? crossing.volumeRatio : null;
