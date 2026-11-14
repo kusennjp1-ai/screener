@@ -328,3 +328,51 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 
 - C5's code is ready: `git revert 02d820e1` re-applies 5437727b. Any option keeps 「±0.0%」 only at the cents and never prints 「+0.0%」/「−0.0%」.
 - 0fa62fd6's spec (ZZPG at 375: the readout keeps 3 rows and the card 508 on every period) goes red on the as-ordered text by design. Under option 3 it is updated on purpose; under options 1 and 2 it stays as it is.
+
+### CH-2 tests and checks (実測, at 3de9a0a9: the source of f4b1e404; 1-min load in parentheses)
+
+**vitest** (`cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run <files>`)
+- StockChartCard.test.jsx, chartReadout.test.js and briefCandidate.test.js (untouched): 3 files, **95 tests passed**.
+- What the tests cover for C3:
+  - `legendItems` keeps 'low' at rank 1, foldable, with its three texts from `structuralLowLegend` below 1024px and the full one only at 1024px and wider.
+  - A jsdom fold under mocked widths (a 300px legend; the averages' item on line 1 and the RS item on line 2): the full text fits → full; only the short one fits → short, shown; only 「安値 xx」 fits → tag; nothing fits → hidden, and every other item's state equals today's fold.
+  - `structuralLowLegend`'s texts and its null for an unknown low.
+  - The existing 「最後の収縮の安値」 assertions still pass.
+- **The full suite:** 247 files, 3991 tests. 3990 passed and 1 timed out: `tools/export-market-trends.test.mjs` 「replays identical selected seed and manifest bytes from a foreign cwd…」 took 23.3s against its 20s limit (load 2.25 → 7.46).
+  - Re-run once alone: 37 of 37 passed, the case in 13.7s (load 6.54 → 4.68).
+  - The track touches nothing under `frontend/tools`.
+  - The same suite on 0fa62fd6 (the same source) had passed whole: 3991 of 3991 (`audit3/r3-chart/vitest-full-0fa62fd.log`).
+
+**Playwright** (CI-faithful, 4424, `npx playwright test -c audit3/r3-chart/pw-147.config.mjs`, one spec at a time). No re-run was needed.
+- brief-chart.spec.js: **43 passed** (4.6 min; load 0.94 → 8.14). That is CH-1's 39 plus the three C3 tests (ZZRD, ZZRL, ZZNV at 320) and the ZZPG 375 readout test, including the 320 card-height, no-overflow and legend-colour tests.
+- brief-oracles.spec.js: **38 passed, 2 skipped** (the R1 and R2 fixmes; file not edited). Load 9.26 → 3.36.
+- brief-compact.spec.js and brief-phone.spec.js: **66 passed** (2.2 min; load 2.84 → 2.95).
+- **The ZZPG pin with C5 re-applied** (`git revert --no-commit 02d820e1`, run with `-g 'ZZPG keeps the readout'`, then `git revert --abort`; the worktree is clean after): **1 failed**, 「ZZPG 3か月: readout rows」 expected ≤ 3, received 4. So the pin catches the as-ordered text.
+
+**Other checks**
+- eslint on StockChartCard.jsx (+test), chartReadout.js (+test) and brief-chart.spec.js: 0 errors, 0 warnings.
+- Ownership gate before each commit: `OWNERSHIP OK (CHART)`.
+
+**Entry chunk** (rule 21, `$H/build/run-build.sh <worktree>` → `build-3de9a0a.json`; load 1.13 → 1.31)
+- `npm run build`: 130.38 kB gzip (24f1210, CH-1) → **130.60 kB gzip** (+0.22 kB; the line is 134.00). The track is +0.32 kB from STEP 0's 130.28.
+- The design-acceptance build's entry: 372,644 → 373,134 raw bytes (+490); gzip -9 130,024 → 130,213 (+189).
+- Every other chunk is byte-identical to CH-1's, the lazy priceChart chunk included.
+- The C3 code is the legend's fold in the card shell (StockChartCard.jsx) and its texts (chartReadout.js), not chart drawing. It runs before the lazy chunk loads, so it stays in the entry chunk.
+- Superseded outputs deleted: `snapshot/trees/24f1210` and `build/npm-build-24f1210`. `build-24f1210.json`, the 1 KB summary the deltas above cite, is kept.
+
+### CH-2 未検証
+
+- **The real-data acceptance** (CH-4): at 320, the low's price on the card in 13/13 rebuild stocks that draw the tag, in every period. **It is not assured.**
+  - At 320 週足 beside the RS item, 「安値 68.16」 fit with 17.05px to spare. A price three characters longer (e.g. 1,234.56 against 68.16: two figures and a comma, about 18px) would reach rung (4), the item hidden.
+  - The daily periods' 「収縮の安値 xx」 had 13.05px to spare, so two more figures would fall back to 「安値 xx」.
+  - The rebuild's prices and RS items decide it.
+- **The PCRX, PFIS, TECH and LNTH readouts:** C5 is held, so they print 「+0.0%」/「−0.0%」 as before.
+- **The dump and heights harnesses** were not re-run.
+  - Expected: no change, because the legend change is inside the card and the card height is unchanged in every probe view.
+- **No timings were taken.** C3 can add at most three fold passes on a phone, only when the low's full text does not fit. Its cost is measured at integration with C1.
+
+### CH-2 for the conductor and integration
+
+- **C5 needs a decision** (options 1–3 in the C5 section above). Nothing outside CHART's files has been changed for it. Option 2 would need a change to `briefCandidate.js`, which is outside CHART's list.
+- **No integration request for C3.** No file outside CHART's list needs a change. No test outside CHART's files reads the low's text.
+- **The H5 oracle baselines** shift by the 20 views above (320 ZZRL/ZZRW, 375 ZZRL/ZZRW 週足; card text only). The default probe does not shift.
