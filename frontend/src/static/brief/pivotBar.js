@@ -1,5 +1,5 @@
 // The Setup Engine pivot's own daily bar (round 3, STEP 0 helper H1; frozen: changes only in STEP 0 or at integration).
-// R1 (crossings count only after the pivot's bar) and C4 (the pivot's date on the stock screen) both read it, so the
+// R1 (crossings count from the pivot's bar on: the floor is the pivot bar's own index, see crossingFloor) and C4 (the pivot's date on the stock screen) both read it, so the
 // two never disagree about which bar formed the pivot. It never guesses: no match is null.
 
 /**

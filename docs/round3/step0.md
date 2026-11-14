@@ -1,6 +1,6 @@
 # Round 3 STEP 0：共通部品と検証用の合成銘柄
 
-作成 2026-11-13、更新 2026-11-14（日本時間）。ブランチ claude/r3-step0（main 8849bf9 ＋ 計画の文書 ＋ H4 の合流）。計画は docs/round3/plan.md の §4.1〜§4.3。
+作成 2026-11-13、更新 2026-11-14（日本時間）。ブランチ claude/r3-step0（main 8849bf9 ＋ 計画の文書 ＋ H4 の合流。PR の前に main 7f0ff13d〔#144、sec-financials.py とそのテストだけ〕を合流）。この文書の測定はすべて 8849bf9 を土台にした木で取ったもの。計画は docs/round3/plan.md の §4.1〜§4.3。
 レビューの指摘への対応は §5、計画の訂正は §6、未検証の一覧は §7。
 既定のフィクスチャでは画面に変化なし（合成銘柄はすべて `oracles: true` のときだけ配信）。実測と未検証は分けて書く。
 
@@ -137,7 +137,7 @@
 
 ### SEC 記録の形
 
-- **ZZPM** の `book_financials` は sec-financials.py の `unavailable()` に `invalid_detail()` を足した形（test_sec_financials.py:360 と同じ形で、received_cik は null）。
+- **ZZPM** の `book_financials` は sec-financials.py の `unavailable()` に `invalid_detail()` を足した形（received_cik が null になるのは test_sec_financials.py の test_another_exception_records_its_class_and_a_short_message のうち、payload がオブジェクトでない場合。main の #144 以降は数字の文字列の CIK を同じ CIK として読むので、null の形が残るのは CIK を名乗らない payload だけ）。
   - キーは `schema_version, symbol, as_of_date, status: 'unavailable', reason: 'invalid_payload', error: 'SEC取得不可: PayloadMismatch', retrieved_at, invalid_detail`。
   - `invalid_detail` の4つのキーは `class: 'PayloadMismatch'`、`message: 'companyfacts cik does not match the requested cik'`、`requested_cik: 1000001`、`received_cik: null`。
   - 詳細には、エクスポーターが書くとおり `sec_admission {state:'admitted', reason:null}` を付けた。
