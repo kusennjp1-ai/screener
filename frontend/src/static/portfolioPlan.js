@@ -17,7 +17,8 @@ export const capText = cap => cap > 0 ? `最大${Math.round(cap * 100)}%` : '0%'
 // The guide's disclosure (exposureRuleText) is generated from these caps by the market tab's own module
 // (reference/marketTabStudy.js), so Today does not ship it.
 
-// Deliberately a disclosed research model, not IBD's proprietary exposure scale.
+// Deliberately a disclosed research model, not IBD's proprietary exposure scale. Every known label carries 独自判定 (TodayView's
+// summary tile strips the mark with its own regex; verdictBasis reads the labels by their prefix).
 // Besides the label and cap it returns the raw backend regime (`regime`, null when the rows carry none or disagree)
 // and `ftdUpgraded`: the backend regime is confirmed_uptrend while SPY is under a moving average, which only its
 // follow-through-day upgrade produces (backend market_regime.py). The label and the cap never read either.
@@ -31,14 +32,14 @@ export function modelMarket(rows) {
   if (!observed.length || regimes.length !== 1) return { label: '市場未確認', cap: 0, state: 'unknown', regime, ftdUpgraded: false };
   const below200 = observed.some(r => r.market_above_200dma === false), below50 = observed.some(r => r.market_above_50dma === false);
   const known = { regime, ftdUpgraded: regime === 'confirmed_uptrend' && (below200 || below50) };
-  if (below200) return { label: '長期トレンド警戒', cap: MARKET_CAPS.otherwise, ...known };
+  if (below200) return { label: '長期トレンド警戒（独自判定）', cap: MARKET_CAPS.otherwise, ...known };
   // A close below the 50-day line is a known weak state, not an unknown one; anything else that is
   // not an observed true stays explicitly unknown. Both keep new buying closed.
   if (below50) return { label: '50日線割れ（弱含み・独自判定）', cap: MARKET_CAPS.otherwise, ...known };
   if (observed.some(r => r.market_above_50dma !== true)) return { label: '市場条件未確認', cap: 0, state: 'unknown', ...known };
   if (regime === 'confirmed_uptrend') return { label: '上昇トレンド（独自判定）', cap: MARKET_CAPS.confirmed_uptrend, ...known };
   if (regime === 'uptrend_under_pressure') return { label: '上昇に圧力（独自判定）', cap: MARKET_CAPS.uptrend_under_pressure, ...known };
-  return { label: '新規購入を抑制', cap: MARKET_CAPS.otherwise, ...known };
+  return { label: '新規購入を抑制（独自判定）', cap: MARKET_CAPS.otherwise, ...known };
 }
 
 export function preparePortfolioRows(input, now = Date.now()) {

@@ -283,6 +283,9 @@ describe('market tab helpers', () => {
   it('words the basis of each verdict from its scan inputs, and only says the inputs differ', () => {
     expect(verdictBasis({ label: '上昇に圧力（独自判定）', cap: 0.25 }, '2026-10-02').text).toBe('根拠（10/2スキャン時点）：S&P 500（SPY）は50日線・200日線の上で、局面判定が「上昇に圧力」');
     expect(verdictBasis({ label: '長期トレンド警戒', cap: 0 }, '2026-10-02')).toMatchObject({ above50: null, above200: false });
+    // modelMarket's labels carry （独自判定） (M1c): the basis reads them by their prefix, so the words are unchanged.
+    expect(verdictBasis({ label: '長期トレンド警戒（独自判定）', cap: 0 }, '2026-10-02')).toEqual(verdictBasis({ label: '長期トレンド警戒', cap: 0 }, '2026-10-02'));
+    expect(verdictBasis({ label: '新規購入を抑制（独自判定）', cap: 0 }, '2026-10-02')).toEqual({ text: '根拠（10/2スキャン時点）：S&P 500（SPY）は50日線・200日線の上で、局面判定が上昇トレンドではない', above50: true, above200: true });
     expect(verdictBasis({ label: '市場未確認', cap: 0, state: 'unknown' }, '2026-10-02')).toBeNull();
     const basis = verdictBasis(UP, '2026-10-02');
     expect(basisConflict(basis, { date: '2026-10-02', vsMa: -1, vs200: 3 }, '2026-10-02')).toBe('判定の根拠はスキャン時点のSPY、この数値は長期履歴の^GSPC終値（10/2）です。50日線との位置が一致していません。');

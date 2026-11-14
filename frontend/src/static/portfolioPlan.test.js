@@ -109,8 +109,8 @@ describe('the exposure guide\'s caps and their disclosure', () => {
     expect(Object.fromEntries(Object.entries(cases).map(([name, rows]) => [name, verdict(modelMarket(rows))]))).toEqual({
       confirmed: { label: '上昇トレンド（独自判定）', cap: 0.5 },
       pressure: { label: '上昇に圧力（独自判定）', cap: 0.25 },
-      correction: { label: '新規購入を抑制', cap: 0 },
-      below200: { label: '長期トレンド警戒', cap: 0 },
+      correction: { label: '新規購入を抑制（独自判定）', cap: 0 },
+      below200: { label: '長期トレンド警戒（独自判定）', cap: 0 },
       below50: { label: '50日線割れ（弱含み・独自判定）', cap: 0 },
       unknown50: { label: '市場未確認', cap: 0, state: 'unknown' },
       noRegime: { label: '市場未確認', cap: 0, state: 'unknown' },
@@ -137,6 +137,6 @@ describe('the FTD-upgraded uptrend (MK1)', () => {
   });
   it('leaves the label and the cap as they were: the guide stays 0% under either line', () => {
     expect(modelMarket([fixture('W', { market_above_50dma: false })])).toMatchObject({ label: '50日線割れ（弱含み・独自判定）', cap: 0 });
-    expect(modelMarket([fixture('L', { market_above_200dma: false })])).toMatchObject({ label: '長期トレンド警戒', cap: 0 });
+    expect(modelMarket([fixture('L', { market_above_200dma: false })])).toMatchObject({ label: '長期トレンド警戒（独自判定）', cap: 0 });
   });
 });
