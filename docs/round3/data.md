@@ -188,6 +188,121 @@ cd frontend && npx vitest run
 
 ---
 
-## D4（予定）
+## D4 算出した Q4 を引くところすべてに「Q4算出」（p2-6）
+
+UI の文言だけの変更。データのキー・チャートのコードは触っていない。測った木は **9efa9927**（コード 3bf9f4a8＋テスト 9efa9927）。この記録はその上の docs だけのコミット。
+
+### 変更
+
+文言は `frontend/src/static/fundamentalsExplain.js` に置き、カードとテストはそこから読む。
+
+- `Q4_DERIVED_MARK = '（Q4算出）'`、`Q4_DERIVED_SOURCE_NOTE = '・Q4算出：売上/純利益のQ4は10-K年度値−3四半期'`、`Q4_DERIVED_LEGEND = '算出＝Q4算出（10-K年度値−3四半期）'`（どれも U+2212）。
+- `q4DerivedRate(row, metric)`：その行の値が算出した Q4 に乗っているか。売上の前年比は `(salesDerived ?? derived) === true || salesBaseDerived === true`、純利益率は `derived === true`、EPS は常に false。
+- `q4DerivedSourceNote(rows, tiles)`：行かタイルのどれかが算出なら注記、なければ ''。`fundamentalsSource(report)` 自体は変えていない（1 引数の出力は同じ。briefModelShared.test.js の固定もそのまま）。
+
+カード（`StockFundamentalsCard.jsx`）：
+
+1. **出典の行**：`fundamentalsSource(report) + q4DerivedSourceNote(wide ? [] : rows, tiles)`。
+   - スマホでは、窓の中のどれかの四半期が算出なら必ず付く（軸の「算出」の鍵になる）。ZZQF のように算出のタイルが無いカードでも付く。
+   - デスクトップ（1024px 以上）では、これまでどおりタイルが算出に乗るときだけ（下の「指示からの逸脱 1」）。
+2. **凡例**：デスクトップの項目を `Q4_DERIVED_LEGEND` に。スマホの凡例は1行のまま、文言は足していない。コメントは「出典の行が、行が算出のときは必ず名前を出す（q4DerivedSourceNote）」に直した。軸のセルは「算出」のまま（320px の列に4文字は入らない。同じカードの出典の行か凡例が鍵になる）。
+3. **未達の根拠（settledText）**：引いた四半期ごとに、その値が算出した Q4 に乗っていれば値の直後に「（Q4算出）」。from と to を別々に見る。EPS には付けない（赤字の文も同じ）。
+   - 例：「売上 前年比が2026-03期 +60% → 2026-06期 +30%（Q4算出）と伸びが鈍化しています。」
+4. **売上タイルの「前期 +x%」**：前の行の売上の前年比が算出に乗っていれば「（Q4算出）」。EPS の前期には付かない（EPS は算出しない）。前期に値が無く理由を出すときも付かない。タイル自身の「・前年同期はQ4算出」と `derived` の判定はそのまま（その行は触っていない）。
+5. **折り返し**：印は `span.brief-q4-mark`（`white-space: nowrap`、brief-fundamentals.css）で包み、印の中では折れない。390px の ZZQF の売上タイルが「（Q4」「算出）」で折れていたため（実測、下）。タイルの注記と未達の根拠の文に使う。
+6. 触っていないもの：CARD_NOTE・EPS_NOTE（もともと「Q4算出」）、QuarterTable の「（Q4算出）」、code33Explain、チップ、判定・スコア、チャートのファイル。新しいしきい値は無い。
+
+### 算出した前年同期（base）の扱い（ここで決めたこと）
+
+- 売上の前年比は、その四半期か前年同期のどちらかが算出した Q4 なら、値が算出に乗っている。だから `salesDerived` か `salesBaseDerived` のどちらかで印を付ける。`salesDerived` を持たない行は行自身の `derived` を読む（タイルの `derived` と同じ読み方）。
+- 純利益率はその四半期の売上と純利益だけから出すので、`derived`（売上か純利益が算出）のときだけ。前年同期は関係しない。
+- EPS は算出しない（bookFinancialEvidence が算出の EPS を受け付けない）ので、印は付かない。
+
+### 規則 18
+
+記録のキー・警告コード・インデックスの項目は1つも足していない。足したのは UI の定数と関数だけ。`fundamentalTiles(...).note` を読むのはカードだけ（report-data-coverage.mjs が読むのは `tile.value` の数だけ）。
+
+### 既存のテストで変えたもの
+
+文言を producer から読むように変えた箇所だけ。数値の上限・箱の位置は1つも変えていない。
+
+- `brief-fundamentals.spec.js`
+  - 「fundamentals show the latest SEC quarter …」（全ビューポート）：ZZNV の出典の文字列を `` `…2026-06期まで${Q4_DERIVED_SOURCE_NOTE}` `` に。
+  - 1440「keeps the desktop layout …」：凡例の項目を `Q4_DERIVED_LEGEND` に。箱（x・幅・順序）はそのまま通る（ZZNV の出典は 1440 で 2 行のまま）。
+  - 390「keeps the Code 33 parts visible beside a 未達 …」：未達の根拠の文に「（Q4算出）」が入る（ZZNV の 6 月の売上は算出なので、言い換えではなく項目 3 による変化）。
+  - ヘルパーの移動：320 の `wider` とセルの切れの判定（`cutCells`）、390 の注意の1行判定（`lineFit`）をファイルの先頭に出した。アサーションは変えていない。
+- `StockFundamentalsCard.test.jsx`「flags a sales rate whose quarter or year-ago base is a derived Q4」：出典の2つの文字列を producer から。注記が無いことの確認は、言い換えで空振りになるので `/Q4算出|10-K年度値−3四半期/` に。
+
+### 新しいテスト
+
+- `fundamentalsExplain.test.js`（4 件）：3つの文字列（U+2212、`-3` が無い）、`q4DerivedRate`（売上の四半期・前年同期、純利益だけ算出の銀行、EPS は常に false、null、`salesDerived` の無い古い行）、`q4DerivedSourceNote`（行・タイル・どちらも無い）と `fundamentalsSource` が変わらないこと、売上タイルの前期の印（ZZQF の形・前年同期だけ算出・ZZNV の形は変わらない・印なし・理由のときは印なし）。
+- `StockFundamentalsCard.test.jsx`（3 件、ZZQF と同じ形の記録を試験の中で作る）：
+  - スマホ：軸の「算出」、出典の注記、売上タイル「2026-09期・前期 +43%（Q4算出）」と印の span、EPS の前期は理由、利益率は期だけ、スマホの凡例は4項目のまま。
+  - デスクトップ：凡例の項目、カードの注記の「「Q4算出」と表示します」、出典に注記が無いこと、タイルの印。算出のタイルがあるときは両方の幅で注記。算出が無いときはどちらの幅でも注記・凡例の項目・印が無い。
+  - 未達の根拠：EPS・売上・利益率が同じ四半期で落ちる記録で、売上と利益率だけに印（EPS には付かない）。前年同期だけ算出で印。from の四半期が算出なら from の後に印。算出なしで印なし。赤字の文には印なし。
+- `brief-fundamentals.spec.js`（4 件、オラクル ZZQF、`openBrief(page, '#/brief/stock/ZZQF', { oracles: true })`、`chartSettled`、reduced motion）：
+  - 320×640・375×812・390×844：出典の文字列（注記つき）が見えていて閉じた折りたたみの中に無い、軸の「算出」、スマホの凡例、売上タイルの文字列と印が1つの行に収まる（`lineBoxes`）、横はみ出し 0、セルの切れ 0（`cutCells`・`wider`）、品質チップは各1行・自分の箱の余り 6px 以上・カードの右端まで 6px 以上、375 で画面の高さ 3388 以内。
+  - 1440：凡例の項目とカードの注記が見える、出典は注記なし、タイルの印、横はみ出し 0、セルの切れ 0、カードの高さ 847 以内（STEP 0 の 846.8）。
+
+### 実測（このサンドボックス、CI と同じ設定：Chrome for Testing 147 headless shell、CI のフォント、ポート 4422）
+
+- **A**：`cd $W/frontend && npx vitest run src/static/fundamentalsExplain.test.js src/static/brief/StockFundamentalsCard.test.jsx` → 2 files、48 passed（27＋21。基準は 23＋18）。
+- **B**：`AUDIT_PORT=4422 AUDIT_MATCH='brief-(fundamentals|oracles|compact|phone|accessibility)' npx playwright test -c $S/audit3/r3-data/pw-147.config.mjs` → 149 件、147 passed・2 skipped（7.5 分、再実行なし）。内訳：fundamentals 33（基準 29＋4）、oracles 40（38 passed＋R1・R2 の fixme 2）、compact 27、phone 39、accessibility 10。compact・phone の上限は変えていない。負荷（advisory）：前 1.64 / 後 5.67。
+  - その前に fundamentals だけを1回：33 passed（再実行なし）。
+  - B はコミットを2つに分ける前の作業ツリーで走らせた。分けた後の 9efa9927 の3つの試験ファイルは、B で走らせたファイルとバイト単位で同じ（`git show 9efa9927:<path> | cmp - audit3/r3-data/d4-split/*.final`、3つとも一致）。ソースの3ファイルは B の後に編集していない（`git diff 9efa9927 -- frontend` は空）。A・C・F・G はコミット後の 9efa9927 で走らせた。
+- **C（dump）**：コミット後に `$H/dump/run-dump.sh $W 4422` → `dump-9efa992.json`（sha256 996e122d…8982）、42 画面・エラー 0。`dump-8849bf9.json` との差（スクラッチの `audit3/r3-data/d4-dumpdiff.py`）：
+  - 違う項目は `text` だけ。`boxes`・`content`・`page`・`blocks`・`rows`・`overflow` はすべての画面で同じ。高さの変化は 0。
+  - 違う行は2つだけで、どちらも ZZNV の業績カードの中：
+    - 出典：「…・2026-06期まで・売上/純利益のQ4は10-K年度値−3四半期で算出」→「…・2026-06期まで・Q4算出：売上/純利益のQ4は10-K年度値−3四半期」
+    - デスクトップの凡例の項目：「算出＝Q4を10-K年度値−3四半期で算出」→「算出＝Q4算出（10-K年度値−3四半期）」
+  - 違う画面は 10。375 の ZZNV と ZZNV 週足（出典だけ）。1440 の ZZNV と ZZNV 週足（2行）。それに 1440 の today-4・today-5・list-zone-4・list-zone-5・watch-4・watch-5（2行）。この6つは、デスクトップの右の欄に ZZNV の銘柄画面を開いている画面（実測：欄の業績カードの直前の銘柄が ZZNV で、出典がある）。右の欄が ZZAR・ZZZF・ZZHW などの 1440 の画面と、ほかの 375 の画面はすべて同じ。指示の想定（ZZNV の銘柄画面だけ）より画面は多いが、違う要素は同じカードの同じ2行（下の「指示からの逸脱 2」）。
+- **D（規則 16）**：`git -C $W diff --name-only 45603f06...HEAD` → docs/round3/data.md、StockFundamentalsCard.jsx (+test)、brief-fundamentals.css、fundamentalsExplain.js (+test)、brief-fundamentals.spec.js、report-data-coverage.mjs (+test)。チャートのファイル（priceChart.js・chartLabels.js・PriceChart.jsx・StockChartCard.jsx・chartReadout.js・bookTechnicalEvidence.js）は無い。492 画面のプローブは不要で、走らせていない。C で高さが変わらなかったので、heights も走らせていない。
+- **E**：`npx eslint src/static/fundamentalsExplain.js src/static/brief/StockFundamentalsCard.jsx tests/static/brief-fundamentals.spec.js` → 0 errors（2つの試験ファイルも 0）。
+- **F**：`npx vitest run`（全体）→ 247 files、3997 passed。負荷（advisory）：前 0.74 2.14 2.85 / 後 5.81 4.16 3.51。
+- **G**：`$H/build/run-build.sh $W` → `build-9efa992.json`。`npm run build` の入口チャンク 373.39 kB・gzip **130.52 kB**。STEP 0（c61bf96・996bfdc、130.28）から **+0.24 kB**（DATA の D4 までの差。D2 はツールだけで入口に入らない）。線 134.00 まで 3.48 kB。Design Acceptance の入口は gzip 130.31 kB（vite）。
+- **H**：`python3 -I $S/audit3/check-ownership.py DATA $W 45603f06…` → コードのコミットの前に `OWNERSHIP OK (DATA): 8 paths`、テストのコミットの前に `9 paths`。この文書のコミットの前にも走らせる。
+- **I**：古い r3-data の HEAD の名前の dump・probe・build の出力は無かった（P1 は作っていない）。消したものは無い。8849bf9・c61bf96 と他トラックの出力には触っていない。
+
+画面の高さ（スクラッチの `audit3/r3-data/d4-measure/measure.spec.js`。STEP 0 の oracle-heights.spec.js と同じ測り方：`#brief-main .brief-stack` の下端、reduced motion、有限のアニメーションを待ち、1.5 秒の DOM の静止。変更前の木（d4d5d327）で STEP 0 の数をそのまま再現した）：
+
+| 銘柄 | 320×640 | 375×812 | 390×844 | 1440×900 |
+|---|---|---|---|---|
+| ZZQF（STEP 0 → D4） | 3189 → 3207（+18） | 2985 → 3000（+15） | 2985 → 3000（+15） | 1832 → 1832 |
+| ZZQF のカード | 659.4 → 677.4 | 607.3 → 622 | 607.3 → 622 | 846.8 → 846.8 |
+| ZZNV（既定の行） | 3308 → 3308 | 3044 → 3044（線 3388） | 2954 → 2954 | 1832 → 1832 |
+| ZZNV のカード | 712.2 → 712.2 | 656.8 → 656.8 | 593.5 → 593.5 | 914.3 → 914.3 |
+
+- ZZQF の 320 の +18 は出典の行が 2 → 3 行（注記）。375・390 の +15 は売上タイルの注記が 1 → 2 行（「（Q4算出）」が次の行へ。375 は「2026-09期・前期 +43%」「（Q4算出）」、390 も同じ）。375 の 3000 は線 3388 の中。
+- 銀行の形（spec の `bank`：売上なし・純利益の 6 月は算出）のカード：320 625.5 → 643.5（上限 655）、375 588.1 → 588.1（上限 588.1）、1440 872.7 → 872.7（上限 872.7）。375 では出典の2行目が 313px のうち 302.4px で、残りは **10.6px**。上限との余裕は 0 なので、出典がもう1文字長くなると 375 の上限を超える。
+- ZZQF の品質チップ（「EPS前年比≥25%（直近4期）未確認」「年間EPS最高 未確認」）：どの幅でも各1行。自分の箱の余り 10 / 14 / 14 / 18px（320 / 375 / 390 / 1440）、カードの右端までの余り 62.7px 以上。
+- 印の折り返し（スクラッチの wrap.spec.js）：nowrap の前、390 の ZZQF の売上タイルは「2026-09期・前期 +43%（Q4」「算出）」と印の中で折れていた。nowrap の後は 320「2026-09期・前期 」「+43%（Q4算出）」、375・390・1440「2026-09期・前期 +43%」「（Q4算出）」。
+
+### 指示からの逸脱
+
+1. **デスクトップでは、行だけが算出のときに出典の注記を付けない。** 指示どおり（どの幅でも `rows.some(r => r.derived)` で付ける）にすると、デスクトップで出典が1行増え、銀行の形のカードが上限を超える（実測：1440 で 872.7 → 893.1、上限 872.7。ZZQF は 846.8 → 867.2）。上限は上げない、文言を短くしても 1440 の1行目の残り（約 110px）には入らない、という指示の優先順に従った。
+   - デスクトップでも鍵は欠けない。軸の「算出」は、軸と同じ条件（`rows.some(r => r.derived)`）で出る凡例の項目が鍵になる。タイルと文の「（Q4算出）」とクォーター表は、デスクトップでカードの中に出る注記（CARD_NOTE の「「Q4算出」と表示します」）が鍵になる。
+   - 指示どおりに戻すときのコード：`q4DerivedSourceNote(wide ? [] : rows, tiles)` を `q4DerivedSourceNote(rows, tiles)` に（1か所）。ただし、この逸脱はテストでも固定しているので、次も一緒に変わる：
+     - `StockFundamentalsCard.test.jsx`「on the desktop keys 算出 with the legend item …」：デスクトップの ZZQF の出典に注記が無いこと。
+     - `brief-fundamentals.spec.js` の D4 の 1440：ZZQF の出典の文字列（注記なし）と、カードの高さ 847 以内（指示どおりなら 867.2）。
+     - `brief-fundamentals.spec.js` の round-2 の 1440「the card of a bank keeps its step-0 height」：上限 872.7（指示どおりなら 893.1 で落ちる）。この上限を誰かが決め直す必要がある。
+   - どちらを採るかは指揮者が決める。
+2. **dump の差は、想定より6画面多い。** 1440 の today・list-zone・watch（各 4・5）は右の欄に ZZNV の銘柄画面を出すので、同じカードの同じ2行が変わる。要素も箱も想定どおり。
+3. **印を nowrap の span で包んだ**（手順 6 が許す CSS）。タイルの注記と未達の根拠の文が対象。testing-library の `getByText` は自分の文字ノードしか見ないので、印のある文は `textContent` で確かめている。
+
+### 未検証
+
+- 窓の中に算出した Q4 がある実データの銘柄は、ここでは描画していない（SNAP の再現の上でも D4 の画面は見ていない）。
+- 公開版（Pages）での表示。
+- 時間の計測はしていない（チャートのコードは触っていない）。ここの負荷の数はすべて advisory。
+- 492 画面のプローブと heights は走らせていない（規則 16 の対象外、C で高さの変化なし）。
+
+### 統合への依頼
+
+- CONTEXT.md：「Q4算出」を一つの名前として載せる。10-K の年度値から3四半期を差し引いた fiscal Q4 の売上・純利益（EPS は算出しない）。軸の短い「算出」は、スマホでは出典の行が、デスクトップでは凡例が鍵になる。
+- 計画 §5 D4 の「whenever rows.some(r => r.derived)」：上の逸脱 1 を採るなら「スマホでは常に、デスクトップではタイルが算出のときだけ（凡例と注記が鍵）」と直す。採らないなら銀行の 1440 の上限を決め直す。
+- D4 の dump の想定に、ZZNV を右の欄に出す 1440 の6画面を加える。
+
+pre-D3 SHA：測った木 9efa9927 の上に、この文書だけを変える docs(round3) のコミットが1つ。その SHA が D4 までの区切り（D3 を入れないときの落とし所）で、指揮者への報告に書く。`git diff 9efa9927..<その SHA> --name-only` は docs/round3/data.md だけ。
+
 
 ## D3（予定・分離可能）
