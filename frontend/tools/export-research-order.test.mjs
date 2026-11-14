@@ -473,6 +473,27 @@ it('writes the round-2 list summaries into the index only, from certified charts
   } finally { await rm(directory, { recursive: true, force: true }); }
 });
 
+it('publishes se_pivot_date as a list field (round 3 R1): a date and null as the scan has them, absent stays absent', async () => {
+  const { directory, root, run, outputs } = await fixture();
+  try {
+    const pivotDates = { ZETA: '2026-09-25', BETA: null };
+    for (const path of ['scan.json', 'chunk.json']) {
+      const payload = await read(join(root, path)), key = path === 'scan.json' ? 'initial_rows' : 'rows';
+      for (const row of payload[key]) if (Object.hasOwn(pivotDates, row.symbol)) row.se_pivot_date = pivotDates[row.symbol];
+      await write(join(root, path), payload);
+    }
+    run();
+    const { index, details } = await outputs();
+    const row = symbol => index.rows.find(item => item.symbol === symbol);
+    expect(row('ZETA').se_pivot_date).toBe('2026-09-25');
+    expect(Object.hasOwn(row('BETA'), 'se_pivot_date')).toBe(true);
+    expect(row('BETA').se_pivot_date).toBeNull();
+    expect(Object.hasOwn(row('ALPHA'), 'se_pivot_date')).toBe(false);
+    // The canonical detail still carries it, as before (a list field is a copy, never moved).
+    expect(details.find(detail => detail.symbol === 'ZETA').se_pivot_date).toBe('2026-09-25');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
 it('emits market_context only when every US row that carries the regime agrees, and leaves rs_line_high null without a certified chart', async () => {
   const context = { market_regime: 'confirmed_uptrend', market_distribution_days: 3, market_ftd_date: '2026-09-18', market_ftd_days_since: 10, market_exposure_pct: 50 };
   const setRows = async (root, change) => {
