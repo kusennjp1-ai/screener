@@ -499,8 +499,12 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
   - **p1 の 28 との関係**：p1 と p3 の数（スナップショットの aria ラベル）は、土台の候補が無い経路（ジグザグだけ）で描かれたもの。同じ経路で測ると 27（CI 21、代理 6）で、CI の 21 行と、脚が描かれた 9 行（PCRX, MGRC, ADI, RDNT, CFBK, CTKB, LCNB, PRTH, RMBI）は p3 と同じ（最初の版のコミットで測った。`$T/r3/r3c-rebuild-d4049ba-algorithm-only.txt`）。公開の経路（土台の候補あり）では LCNB, PCRX, PRTH, RMBI が加わり、ARX, DJCO, FMAO が外れて 28。PCRX は p1 が見た 18/12/5（ギャップの前の脚）が、公開の経路ではハンドルの週から測るので脚にならない。
   - 最初の版（d4049ba、増やす前に修正して amend）は、集約の候補が開始日を metrics にしか持たないのを見落とし、いつもジグザグの経路を通っていた。JS との突き合わせで 55 行の不一致として見つけ、ペイロードと同じ正規化（`coerce_pattern_candidate`）を通すように直した。
 - **`pivot_already_crossed`**：準備 37 行のうち **14**（p1 は 17）。ADI, BB, BHB, CTKB, EMR, EQH, FMAO, GLBE, HAFC, LCNB, NBTB, OPK, RDNT, SIG。CI 10、代理 4（BB, BHB, EMR, EQH）。掲載 614/980。
-  - p1 の 17 のうち SWKS（高値 +3.7%）・IQV（+4.0%）・TRST（+4.2%）は、高値では 3% を超えたが終値では超えていない。p1 に無い行は無い。
+  - 内訳（`$T/r3/r3c-split.py` → `$T/r3/r3c-split.json`、再計算の全ペイロードから測り直し、バックエンドの出力と全 37 行で一致）：出た 14、ピボットの足があって出ない 23、ピボットの足が見つからない（不明）0。
+  - p1 の 17 のうち SWKS（高値 +3.7%）・IQV（+4.0%）・TRST（+4.2%）は、高値では 3% を超えたが、ピボットの足より後の終値の最大は +0.17%・+2.14%・+1.15%（実測）。p1 に無い行は無い。
 - **`pivot_below_base_high`**：準備 37 行のうち **8**。ADI, BB, CFBK, CTKB, GLBE, LARK, LCNB, OPK。CI 7、代理 1（BB）。掲載 369/980。
+  - 内訳：出た 8、起点とピボットの足があって出ない 23、不明（起点の日付が無い：NR7 などの主パターン）6（AMAL, CZFS, FCNCA, MGRC, TMP, WSFS）。
+  - **起点を取る候補は一意ではない**：型・ピボット価格・ピボット日が同じ候補が複数あり、起点（左の縁または開始日）が違う掲載行が 692/980（準備の行では 23）。集約がどれを選んだかはペイロードに無いので、診断はペイロードの順で最初に一致した候補の起点を使う（31d8dba で注記をそう直した。挙動は同じ）。信頼度でも絞ってみると、一致が取れない行が 133 あり、取れた行ではこの診断は変わらなかった（`$T/r3/r3c-primary.py`）。どの候補を使うかを確かめる手段は、集約が選んだ候補を出すこと（統合への依頼）。
+- `contraction_unconfirmed` の内訳：出た 28、出ない 9、不明 0。
 
 ### H4（実測）
 
@@ -528,10 +532,11 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 
 - 公開版での数（すべて再構築の数）。公開版の詳細の `book_technical_evidence` が、ここで JS を呼んだ形（`se_candidates` あり）と同じ経路を通ること（export-research.mjs:94-95 と :128 の読みからの推論）。
 - 凍結 908 は R3c だけでは再実行していない（R3a の後に1回。SETUP の列は Markets360 の条件で Setup Engine を見ない：p1-5）。
+- R3c の時点の ready43.jsonl は単独では比べていない（rows.jsonl の同一から推論。R3a の後では比べた）。
 
 ## R3a. 張り付いた値動きで準備を不合格にする `price_pinned`（パッケージ R-P3）
 
-コミット 24bf6b9 `feat(scanner): fail readiness on a pinned price`（ゴールデンを含む）。**採用**（下の4条件をすべて満たした）。統合で落とすなら、このコミットだけを revert すればよい（R3c のコミットと文書は独立）。
+コミット 24bf6b9 `feat(scanner): fail readiness on a pinned price`（ゴールデンを含む）。**採用**（下の4条件をすべて満たした）。統合で落とすなら、このコミットだけを revert すればよい（実測：作業用の clone で `git revert --no-commit 24bf6b9` は衝突なしで、その後の gate-1 は 294 件通過）。R3c は R3a の部品（`DailyBars`・`daily_bars_from_frame`・`_positive`）を使われ、同じ4つのファイルの末尾に足しているので、**R3c だけの revert は衝突する**（実測）。R3c を落とすときは R3a → 31d8dba（下の注記の訂正）→ 6eae7cd の順に revert する（実測：衝突なし、backend は b609500 と同一、gate-1 279・gate-5 43）。
 
 ### 規則
 
@@ -574,7 +579,7 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 
 1. **再構築**（`ONLY=bundle,recalc,eval,assemble,eval-sell,eval-today,p1-analyze,p1-stats,counts $H/snapshot/run-snapshot.sh $W`、out/24bf6b9。比べたのは R3c の out/6eae7cd。集計 `$T/r3/r3a-rebuild.py` → `$T/r3/r3a-rebuild-24bf6b9.json`。再構築の数）：
    - 準備 37 → **29**。準備から外れた行（規則 19 の行の一覧）：**ARX, BWIN, CEPO, DSGR, PCRX, PRTH, RNW, TECH**（p1 の張り付いた準備の 8 行と同じ。8 行とも `price_pinned`）。外れて準備になった行は 0。張り付いた準備の行は 8 → 0。
-   - 張り付いていない掲載行は 1 行も変わらない（行のオブジェクトがすべて同一）。張り付いた行でも、`price_pinned`・準備・`setup_recalculation.reason` 以外は同一。
+   - 張り付いていない掲載行は 1 行も変わらない（行のオブジェクトがすべて同一）。張り付いた行でも、`price_pinned`・準備・`setup_recalculation.reason` 以外は同一。ready43.jsonl は 37 → 29 行（上の 8 行が抜ける）で、残る 29 行は R-P2 の out/93fd59e と、R3c の診断の文字列を除いて同一（実測）。
    - 掲載行で `price_pinned` は 24 行：ARX, BMBL, BOW, BWIN, CCC, CEPO, CZR, DSGR, DV, HZO, ITGR, LNTH, LXFR, OGN, PAG, PAYO, PCRX, PRTH, PTC, RNW, SAFT, SLAB, TECH, VREX（R2 の lowRange の掲載 24 行と同じ）。
    - 全体（再計算 4,421 行）：準備 82 → 34。外れた 48 行はすべて `price_pinned`（掲載の 8 行のほか、AES, ALF, BDCI, BLZR, CCII, CHEC, CRAQ, EMIS, EVAC, FERA, FIGX, FSHP, GIW, GSHR, JACS, KOYN, LATA, LCCC, LKSP, LPBB, MBVI, MCGA, MKLY, NPAC, ONCH, ORIQ, OYSE, PACH, PAII, PCAP, RAC, RANG, RDAG, RTAC, SDHI, TAVI, TONT, UYSC, VNME, YCY。名前の多くは SPAC と見られる：推論）。
    - ほかの出力：work/today-eval.json は R-P2 の out/93fd59e とバイト一致（Today は変わらない）。work/sell-eval.jsonl は 8 行の `setup_ready` だけが true → false。counts.json で変わるのは `ready`（37 → 29、流動 18 → 14・非流動 19 → 15、CI の日足 30 → 23・代理 7 → 6）、`pinned_listed.ready`（8 行 → 空）、`lowRange_pinned_ready_plus_SLAB`（9 → SLAB の 1）だけ。p1/stats.txt は準備の行の上の項目が 29 行で計算し直される（[A] の張り付いた準備 8/22 → 0/22、[B] 流動 18/37 → 14/29 など）。
@@ -626,6 +631,8 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 3. **OD6**：定数はブリーフと同じ。ブリーフの定数を変えると test_setup_engine_parameters.py が落ちるので、両方を一緒に変える。
 4. **オーナーに伝えること**：R3a は準備の KPI（再構築で掲載 37 → 29、全体 82 → 34）を下げる。H4 の差（+0.8pp）と凍結 908（SETUP +52.0pp）は変わらない。
 5. 凍結のファイル（probe、凍結ハーネス、test_pivot_timeframes.py、検出器）は変えていない。
+6. **集約が選んだ候補**：`AggregatedPatternOutput` は選んだ候補そのものを持たない（型・信頼度・ピボットの価格と日付だけ）。`pivot_below_base_high` を確かな起点で測るには、集約が選んだ候補（またはその順番）を出す必要がある（aggregator.py はこのトラックの所有だが、検出器・集約の出力の形を変えるのでこのラウンドではしない）。
+7. **落とし方**：R3a だけなら 24bf6b9 の revert。R3c まで落とすなら 24bf6b9 → 31d8dba → 6eae7cd の順（上の実測）。
 
 ### 変えていないもの（R3）
 
@@ -633,7 +640,7 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 
 ### パッケージ R-P3 の記録
 
-- コミット：6eae7cd（R3c ＋ ゴールデン）、c54933b（R3c の記録）、24bf6b9（R3a ＋ ゴールデン）、この文書のコミット（R3a の記録）。どれも所有の検査 OWNERSHIP OK の後。R3c と R3a はそれぞれ revert だけで落とせる。
+- コミット：6eae7cd（R3c ＋ ゴールデン）、c54933b（R3c の記録）、24bf6b9（R3a ＋ ゴールデン）、97a59df（R3a の記録）、31d8dba（R3c の注記の訂正。挙動は同じ。gate-1 300・gate-5 43）、この文書の追記。どれも所有の検査 OWNERSHIP OK の後。R3a は単独で落とせる。R3c は R3a と 31d8dba の後でなければ落とせない（上の「落とし方」）。
 - 順序：変更の前の基準（H4・凍結 908・ゲート・ゴールデンの空の実行）→ R3c → 再構築・JS との突き合わせ・H4 → R3a → 再構築・関数どうしの一致・H4・凍結 908・赤線・gate-4。
 - 再構築の出力は `$H/snapshot/out/24bf6b9`（R3a）と R-P2 の `out/93fd59e` を残し、R3c の out/6eae7cd と最初の版の out/d4049ba は測定の後に消した（数は `$T/r3/` の集計ファイルにある）。
 - フロントのファイルは変えていない（vitest・Playwright・ビルドは走らせていない。必要ない）。
