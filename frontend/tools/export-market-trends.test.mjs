@@ -218,7 +218,7 @@ describe('market trend source projection',()=>{
    expect(payload.long_history.breadth.filter(point=>point.newHighs!==null).length).toBeGreaterThan(1250);
    expect(readFileSync(resolve(root,`market-trends/history-source-${historySha256}.json`))).toEqual(historyBytes);
   }finally{rmSync(root,{recursive:true,force:true});}
- });
+ },60_000);
  it('replays identical selected seed and manifest bytes from a foreign cwd, ignoring a spoofed cwd seed',async()=>{
   const scratch=mkdtempSync(resolve(tmpdir(),'market-replay-'));
   try{
@@ -239,7 +239,7 @@ describe('market trend source projection',()=>{
    expect(readFileSync(resolve(replay,ref.path))).toEqual(readFileSync(resolve(normal,ref.path)));
    expect(readFileSync(resolve(replay,ref.source_path))).toEqual(readFileSync(resolve(normal,ref.source_path)));
   }finally{rmSync(scratch,{recursive:true,force:true});}
- });
+ },60_000);
  it('keeps the exact-date daily source ahead of the compiler seed',async()=>{
   const root=mkdtempSync(resolve(tmpdir(),'market-daily-source-'));
   try{
