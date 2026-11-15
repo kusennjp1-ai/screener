@@ -1,5 +1,5 @@
 import { fixedMinus, signed } from '../positionGeometry';
-import { code33Explain, code33Parts, EARNINGS_CHIP_NOTE, fundamentalTiles, fundamentalsSource, NO_REVENUE_CONCEPT, Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, q4DerivedRate, q4DerivedSourceNote, Q4_REFERENCE_LEGEND, q4ReferenceLine, q4ReferenceTitle, quarterReason, secStatus } from '../fundamentalsExplain.js';
+import { code33Explain, code33Parts, EARNINGS_CHIP_NOTE, fundamentalTiles, fundamentalsSource, NO_REVENUE_CONCEPT, Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, q4DerivedRate, q4DerivedSourceNote, Q4_REFERENCE_LEGEND, q4ReferenceLine, q4ReferenceNamed, q4ReferenceTitle, quarterReason, secStatus } from '../fundamentalsExplain.js';
 import { Expander } from './briefPrimitives';
 
 const finite = Number.isFinite;
@@ -258,8 +258,11 @@ export default function FundamentalsCard({ financial, wide }) {
   // Round 3 D3: the 独自計算・参考 fiscal-Q4 EPS (secStatus' q4Reference, on a current record only). Display only: one line under
   // the Code 33 box at every width (never in a fold) and the bars' reference marks; nothing else on the card reads it.
   const q4Reference = sec.state === 'ok' && Array.isArray(sec.q4Reference) ? sec.q4Reference.filter(entry => rows.some(row => row.end === entry?.end)) : [];
-  const referenceLine = q4Reference.length ? q4ReferenceLine(q4Reference) : null;
-  const reference = referenceLine ? new Map(q4Reference.map(entry => [entry.end, entry])) : null;
+  const named = q4ReferenceNamed(q4Reference), referenceLine = named ? q4ReferenceLine(q4Reference) : null;
+  // A quarter is marked (dashed bar, dashed axis rate) only where the card keys it in unfolded text: on the desktop every shown
+  // one (Q4_REFERENCE_LEGEND, under the same `wide`), below 1024px only the quarter the 参考 line names (the phone legend has no
+  // reference item). Any other reference quarter on a phone reads exactly as a plain 値なし bar and 「—」.
+  const reference = named ? new Map((wide ? q4Reference : [named]).map(entry => [entry.end, entry])) : null;
   const missing = !rows.length && !yahoo;
   return <section className="brief-card in brief-fin" style={{ '--i': 5 }} aria-labelledby="brief-fin-title" data-testid="brief-fundamentals">
     <div><h2 id="brief-fin-title">業績の加速</h2>{source && <p className="brief-note brief-fin-source">{source}</p>}</div>

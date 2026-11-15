@@ -1,7 +1,7 @@
 // The seams C owns and other tracks call: the conclusion's Code 33 chip (D) and the published SEC
 // coverage block that useStockData (E) hands to secStatus; and secStatus's wording for each coverage state.
 import { describe, expect, it } from 'vitest';
-import { buildSecSummary, chipQuarter, code33ChipView, code33Explain, code33Parts, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_NOTE, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalsSource, fundamentalTiles, meetsEarningsChipPercent, publishedFundamentalsCoverage, Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, Q4_DERIVED_SOURCE_NOTE, q4DerivedRate, q4DerivedSourceNote, q4EpsReference, Q4_REFERENCE_LEGEND, q4ReferenceLine, q4ReferenceTitle, quarterReason, secRowChip, secStatus, secSummary, secSummaryCurrent, wholePercent } from './fundamentalsExplain.js';
+import { buildSecSummary, chipQuarter, code33ChipView, code33Explain, code33Parts, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_NOTE, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalsSource, fundamentalTiles, meetsEarningsChipPercent, publishedFundamentalsCoverage, Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, Q4_DERIVED_SOURCE_NOTE, q4DerivedRate, q4DerivedSourceNote, q4EpsReference, Q4_REFERENCE_LEGEND, q4ReferenceLine, q4ReferenceNamed, q4ReferenceTitle, quarterReason, secRowChip, secStatus, secSummary, secSummaryCurrent, wholePercent } from './fundamentalsExplain.js';
 import { admitBookFinancials, SEC_Q4_REFERENCE_METHOD } from './bookFinancialAdmission.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
 import { bookFinancialEvidence, DERIVED_Q4 } from './bookFinancialEvidence.js';
@@ -625,6 +625,11 @@ describe('round-3 D3: the reference fiscal-Q4 EPS is shown and never counted', (
     for (const text of [line(reference(june())), line([{ end: '2026-06-30', value: -0.25, yoy: -123.81, yoyBase: 'reported' }])]) expect(text).not.toMatch(/(?<!\d)-/);
     // The newest shown quarter; nothing to show is null.
     for (const empty of [[], null, undefined, [{ end: '2026-06-30', value: null }]]) expect(line(empty)).toBeNull();
+    // q4ReferenceNamed is the quarter the line names (the only one a phone card marks): the newest entry, the same object.
+    const shown = reference(june());
+    expect(q4ReferenceNamed(shown)).toBe(shown[1]);
+    expect(line(shown)).toMatch(/：26-06期 /);
+    for (const empty of [[], null, undefined, [{ end: '2026-06-30', value: null }], [shown[0], { end: '2026-06', value: 1 }]]) expect(q4ReferenceNamed(empty)).toBeNull();
     expect(q4ReferenceTitle(reference(june())[1])).toBe('参考（独自計算）Q4 EPS ≈ 1.80 → 前年比 +71%（前年同期も参考値）');
     expect(q4ReferenceTitle(reference(june())[0])).toBe('参考（独自計算）Q4 EPS ≈ 1.05');
     expect(q4ReferenceTitle(null)).toBeNull();

@@ -633,13 +633,22 @@ function referenceFacts(entry, { method = true } = {}) {
 }
 const referenceEntry = entry => Boolean(entry) && isoDay(entry.end) && finite(entry.value);
 /**
- * The card's one line for the newest shown reference quarter (q4EpsReference's list), or null without one:
+ * The one reference quarter the card's 参考 line names: the newest shown entry of q4EpsReference's list, or null. Below 1024px
+ * the card marks only this quarter on its bars and axis (the phone legend has no reference item, so the line is the key);
+ * the desktop marks every shown one, keyed by Q4_REFERENCE_LEGEND.
+ */
+export function q4ReferenceNamed(reference) {
+  const entry = Array.isArray(reference) ? reference.at(-1) : null;
+  return referenceEntry(entry) ? entry : null;
+}
+/**
+ * The card's one line for the reference quarter q4ReferenceNamed gives, or null without one:
  * 「参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.23（純利益÷希薄化株数）→ 前年比 +45%」. Without a rate the tail
  * 「→ 前年比 …」 is left out (never +0%); a base that is itself a reference adds 「（前年同期も参考値）」.
  */
 export function q4ReferenceLine(reference) {
-  const entry = Array.isArray(reference) ? reference.at(-1) : null;
-  return referenceEntry(entry) ? `参考（独自計算・判定に使わない）：${yyMm(entry.end)} ${referenceFacts(entry)}` : null;
+  const entry = q4ReferenceNamed(reference);
+  return entry ? `参考（独自計算・判定に使わない）：${yyMm(entry.end)} ${referenceFacts(entry)}` : null;
 }
 /** The reference quarter's EPS bar title after its 値なし reason: 「参考（独自計算）Q4 EPS ≈ 1.23 → 前年比 +45%」, or null. */
 export function q4ReferenceTitle(entry) {

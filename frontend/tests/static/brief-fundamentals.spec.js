@@ -542,6 +542,22 @@ test.describe('round-3 D3: the reference fiscal-Q4 EPS on ZZQF is shown and chan
     shares: { tag: 'WeightedAverageNumberOfDilutedSharesOutstanding', components: [`0000000001-${end.slice(2, 4)}-${end.slice(5, 7)}${end.slice(8)}10`, 'q-1', 'q-2', 'q-3'] } });
   const june = () => [entry('2025-06-30', '2025-04-01', 1.05), entry('2026-06-30', '2026-04-01', 1.8)];
   const withReference = list => ({ details: details => { details['ZZQF-detail.json'].book_financials.q4EpsReference = list; } });
+  // A reported 2024-06 EPS in its 10-K (before the fixture's first quarter), so the 2025-06 reference has a reported base.
+  const reported2406 = details => {
+    const eps = details['ZZQF-detail.json'].book_financials.quarterly.eps;
+    eps.unshift({ ...eps[0], end: '2024-06-30', start: '2024-04-01', value: 0.9, form: '10-K', filed: '2024-08-09', accession: '0000000001-24-063010' });
+  };
+  // The YY-MM期 of each dashed reference cell of the axis that no visible text of the card outside a closed fold names with 「参考」.
+  const unkeyed = node => node.evaluate(root => {
+    const said = [...root.querySelectorAll('p, li')].filter(item => item.checkVisibility() && !item.closest('details:not([open])') && !item.closest('svg'))
+      .map(item => item.innerText).filter(text => text.includes('参考'));
+    return [...root.querySelectorAll('.brief-q-axis .q-eps-t.is-reference')].map(cell => {
+      const [year, month] = [...cell.parentElement.children].map(item => item.textContent);
+      return `${year.replace('年', '')}-${month.replace('月', '').padStart(2, '0')}期`;
+    }).filter(period => !said.some(text => text.includes(period)));
+  });
+  // One quarter's bars and axis column as markup.
+  const column = (page, i) => card(page).evaluate((root, i) => [root.querySelectorAll('.brief-quarters g')[i].outerHTML, root.querySelectorAll('.brief-q-axis > span')[i].outerHTML], i);
   // The copy through its producer: 2026-06 at 1.80 against the 2025-06 reference at 1.05 (fundamentalsExplain.test.js pins the words).
   const LINE = q4ReferenceLine([{ end: '2026-06-30', value: 1.8, yoy: (1.8 / 1.05 - 1) * 100, yoyBase: 'reference' }]);
   const open = async (page, mutate) => {
@@ -597,10 +613,11 @@ test.describe('round-3 D3: the reference fiscal-Q4 EPS on ZZQF is shown and chan
         const ref = cells.find(cell => cell.cls.includes('is-reference')), unknown = cells.find(cell => cell.cls.includes('is-unknown')), known = cells.find(cell => cell.cls === 'q-eps-t');
         expect(ref).toMatchObject({ text: '+71', outline: 'dashed', color: unknown.color });
         expect(ref.color).not.toBe(known.color);
-        // The two reference bars: a thicker dash than every 値なし bar, the same rect.
+        // The reference bars (both on the desktop, only the one the 参考 line names on a phone): a thicker dash than every 値なし
+        // bar, the same rect.
         const dash = await card(keyed).locator('.brief-quarters rect.q-unknown').evaluateAll(nodes => nodes.map(node => [node.classList.contains('is-reference'), getComputedStyle(node).strokeDasharray, getComputedStyle(node).strokeWidth]));
         const marked = dash.filter(([is]) => is), unmarked = dash.filter(([is]) => !is);
-        expect(marked).toHaveLength(2);
+        expect(marked).toHaveLength(desktop ? 2 : 1);
         expect(unmarked.length).toBeGreaterThan(0);
         for (const item of marked) expect(item.slice(1)).not.toEqual(unmarked[0].slice(1));
         // The desktop legend keys the dash; the phone legend keeps its four items (the line says 参考).
@@ -619,6 +636,45 @@ test.describe('round-3 D3: the reference fiscal-Q4 EPS on ZZQF is shown and chan
         expect(await card(bad).locator('.brief-fin-reference, .is-reference, .q-key-reference').count()).toBe(0);
         expect(badErrors).toEqual([]);
       } finally { await keyed.close(); await bad.close(); }
+      expect(errors).toEqual([]);
+    });
+
+    // Conductor's order (round 1 of review): below 1024px every dashed reference cell of the axis is named 参考 in unfolded text on
+    // the card. A reported 2024-06 EPS gives the 2025-06 reference a rate (+17) beside the newest's (+71); the 参考 line names only
+    // 2026-06, so a phone marks only that quarter and its 2025-06 column reads exactly as without the key; the desktop prints both
+    // rates in dashed cells and its legend keys the dash.
+    test('every dashed reference cell is keyed on the card: a phone marks only the quarter the 参考 line names, the desktop legend keys each', async ({ page }) => {
+      const errors = await open(page, { details: reported2406 });
+      const plain = await read(page);
+      const plainColumn = await column(page, 2);
+      const keyed = await page.context().newPage();
+      try {
+        const keyedErrors = await open(keyed, { details: details => { reported2406(details); details['ZZQF-detail.json'].book_financials.q4EpsReference = june(); } });
+        await expect(card(keyed).locator('.brief-fin-reference')).toHaveText(LINE);
+        const cells = await card(keyed).locator('.brief-q-axis .q-eps-t.is-reference').allTextContents();
+        const value = await read(keyed);
+        expect(value.same).toEqual(plain.same);
+        if (desktop) {
+          expect(cells).toEqual(['+17', '+71']);
+          const key = card(keyed).locator('.brief-q-legend span').filter({ hasText: Q4_REFERENCE_LEGEND });
+          await expect(key).toHaveCount(1);
+          await expect(key).toBeVisible();
+          expect(await key.evaluate(node => node.closest('details:not([open])') === null && node.querySelector('i.q-key-reference') !== null)).toBe(true);
+        } else {
+          // At least one dashed cell, each named 参考 by visible, unfolded text on the card; the older reference quarter is plain.
+          expect(cells).toEqual(['+71']);
+          expect(await unkeyed(card(keyed))).toEqual([]);
+          expect(await column(keyed, 2)).toEqual(plainColumn);
+          expect((await card(keyed).locator('.brief-q-axis .q-eps-t').evaluateAll(nodes => nodes.map(node => [node.textContent, node.className])))[2]).toEqual(['—', 'q-eps-t is-unknown']);
+          await expect(card(keyed).locator('.brief-quarters rect.is-reference')).toHaveCount(1);
+          await expect(card(keyed).locator('.brief-q-legend span')).toHaveText(['EPS', '売上', '前年比%・下段は純利益率%', '値なし']);
+          if (width === 375) expect(value.content).toBeLessThanOrEqual(3388);
+        }
+        expect(await horizontalOverflow(keyed)).toBe(0);
+        expect(await cutCells(card(keyed))).toEqual([]);
+        expect(await wider(card(keyed))).toEqual([]);
+        expect(keyedErrors).toEqual([]);
+      } finally { await keyed.close(); }
       expect(errors).toEqual([]);
     });
   });
