@@ -644,3 +644,96 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 - 順序：変更の前の基準（H4・凍結 908・ゲート・ゴールデンの空の実行）→ R3c → 再構築・JS との突き合わせ・H4 → R3a → 再構築・関数どうしの一致・H4・凍結 908・赤線・gate-4。
 - 再構築の出力は `$H/snapshot/out/24bf6b9`（R3a）と R-P2 の `out/93fd59e` を残し、R3c の out/6eae7cd と最初の版の out/d4049ba は測定の後に消した（数は `$T/r3/` の集計ファイルにある）。
 - フロントのファイルは変えていない（vitest・Playwright・ビルドは走らせていない。必要ない）。
+
+## R3b. ゲート 8 はブリーフが示すステージを読む（パッケージ R-P4）
+
+コミット 53b82cb `feat(scanner): gate 8 reads the published stage`（ゴールデンを含む）。**採用**（下の3条件をすべて満たした。判断の規則と予測は測定の前に `$T/r3b/r3b-decision-rule.txt` に書いた）。統合で落とすなら、このコミットだけを revert すればよい（R3a・R3c とは別の行を変えている）。
+
+### 規則
+
+- ゲート 8 の入力を `quick_stage_check` から、Minervini スキャナーが公開する（ブリーフが示す）ステージに替えた。呼ぶのはスキャナーと同じ分類器 `WeinsteinstageAnalyzer.determine_stage`（SMA150 と 52 週高値を渡す、round 2 のステージ 2 の土台の規則を含む）。setup_engine_screener.py の `_published_stage` は、minervini_scanner.py:378-389 と同じ入力（逆順の終値・出来高・200 日線、オーケストレーターの事前計算があればそれ、52 週高値は直近 252 本の高値）を組み立てるだけで、分類の論理は写していない。
+- ゲート 8 は**ステージ 2 を要る**。1・3・4 は不合格。**None は合格のまま**（50・150・200 日線のどれかが無いとき。欠けた値は不合格にしない）。
+- 短い履歴：スキャナーの 200 日線の傾きは 219 本を要る（それより短いと 'unknown' で 3 か 4 に落ちる）。しかしセットアップエンジンのデータ方針は 252 本未満を insufficient にして、ゲートを一つも走らせない（policy.py `min_daily_bars`）。だからこの場合はゲート 8 に届かない（H4 の 200〜219 本の 6 点はどれも insufficient_data：`$T/r3b/short_hist.py`）。3 つ目の規則は足していない。
+- ペイロードの `stage`（インデックスの `se_stage`）も同じ値になる。models.py の項目の説明を直した。トレンドテンプレートは変えていない（stage は 9 番目の拒否にしない）。
+
+### テスト（ゲートに入った既存のファイル）
+
+- test_setup_engine_screener.py `TestPublishedStageParity`（4 件）：4 つの形（上昇・平らな 200 日線・上昇中の 50 日線割れ・下降）で、ペイロードの `stage` が同じ足の `MinerviniScanner` の公開する `stage` と等しい（事前計算あり・なしの両方）。2 つの分類器が食い違う形（平らな 200 日線：quick 1・スキャナー 3 → 不合格になる。50 日線割れ：quick 3・スキャナー 2 → 合格になる）。200 日線が無ければ stage は None。
+- test_explain_builder.py `TestGate8Stage`：ステージ 1 は不合格（失敗は `stage_not_ok` だけ、準備は false）、2 と None は合格。
+
+### ゴールデンの差（`make golden-update`、実測。`$T/r3b/golden-r3b.diff`）
+
+| ファイル | 変化 |
+|---|---|
+| scanner_3wt_strict.json | `stage` 3 → 2。`stage_not_ok` が `failed_checks` から消え、`passed_checks` に `stage_ok` |
+| scanner_degraded_no_benchmark.json | 同じ |
+
+どちらも準備は false のまま（`volume_above_dryup_cap`）。ほかのキーとほかのゴールデンは同一（JSON で比べた）。golden-update の失敗は既知の test_mcp_market_copilot だけ。
+
+### 採用の条件
+
+1. **再構築**（`ONLY=bundle,recalc,eval,assemble,eval-sell,eval-today,p1-analyze,p1-stats,counts $H/snapshot/run-snapshot.sh $W` → out/53b82cb。比べたのは R3a の out/24bf6b9。集計 `$T/r3b/r3b_rebuild.py` → `$T/r3b/r3b-rebuild-53b82cb.json`。**再現スナップショットの数**）：
+   - **一致**：再計算できた 4,421 行すべてで、ペイロードの `stage` ＝ 同じ行のスキャナーの `stage`（不一致 0）。
+   - 掲載の準備 **29 → 26**（予測どおり）。規則 19 の行の一覧（スキャナーのステージ／前の quick のステージ）：
+
+| 行 | 変化 | スキャナー | 前の quick | 前の失敗 | 後の失敗 |
+|---|---|---|---|---|---|
+| CTKB | 準備から外れる | 3 | 1 | なし | stage_not_ok |
+| DJCO | 外れる | 3 | 1 | なし | stage_not_ok |
+| FCNCA | 外れる | 3 | 1 | なし | stage_not_ok |
+| GEO | 外れる | 3 | 2 | なし | stage_not_ok |
+| GLBE | 外れる | 3 | 1 | なし | stage_not_ok |
+| RDNT | 外れる | 3 | 1 | なし | stage_not_ok |
+| AVTR | 準備になる | 2 | 3 | stage_not_ok | なし |
+| SHEL | 準備になる | 2 | 3 | stage_not_ok | なし |
+| VSTM | 準備になる | 2 | 3 | stage_not_ok | なし |
+
+   - 計画の見込みとの対応：スキャナーのステージ 3 の 8 行（GLBE, FCNCA, DJCO, RDNT, CEPO, CTKB, GEO, TECH）のうち、CEPO と TECH は R3a（`price_pinned`）で既に準備ではないので、外れたのは残りの 6 行。ステージだけで落ちていた行（AVTR, SHEL, ITGR, VSTM）のうち 3 行が準備になり、ITGR は `price_pinned` で外れたまま。ASIC（スキャナー 3）は外れたまま。
+   - **注意（オーナーへ）**：新しく準備になった 3 行は、どれも R3c の `pivot_already_crossed` を持つ（p1 の測り方でピボット日の後の高値が AVTR +11.9%・SHEL +13.0%・VSTM +22.0%。VSTM は 52 週高値の −22.4%）。AVTR と SHEL は代理の日足。下の R4 のゲート 4 の案ならこの 3 行は外れる。
+   - 全体（再計算 4,421 行）：準備 34 → 26。外れた 11 行（AIG, BSBK, CTKB, DJCO, FCNCA, GEO, GLBE, NTWO, OVLY, RDNT, UL）はすべてスキャナー 3（前の quick は 1、GEO と OVLY は 2）。準備になった 3 行は上と同じ。`stage_not_ok` の行 2,262 → 3,627。再計算した行のステージの分布：スキャナー {1: 1143, 2: 794, 3: 1049, 4: 1435}、前の quick {1: 1544, 2: 615, 3: 676, 4: 1586}。
+   - ほかの出力：counts.json は `ready`（29 → 26、流動 14 → 11、CI の日足 23 → 19・代理 6 → 7）だけ。work/sell-eval.jsonl は上の 9 行の `setup_ready` だけ。work/today-eval.json は「失敗した大商いの上抜け」の一覧の RDNT の `setup_ready` だけ（注目候補・件数・見出しは同じ）。p1/stats.txt は準備の行の項目が 26 行で計算し直される。研究インデックス（5,955 行）：`se_setup_ready` 14 行（上の全体の 14 行）、`entry_evidence` 14 行、`setup_recalculation.reason` 1,871 行（`stage_not_ok` の有無）、`se_stage` 1,039 行（値がスキャナーのものになる）。新しいキーは無い。
+2. **ゲート**（実測）：gate-1 304 通過、gate-2 47、gate-3 152、gate-4 21（参考）、gate-5 43、gate-check OK。赤線（`cd backend && … -m pytest tests/unit/scanners tests/unit/services tests/unit/golden tests/unit/test_scan_orchestrator.py tests/unit/test_setup_engine_contract.py --ignore=tests/unit/golden/test_mcp_market_copilot.py -q`）326 通過・失敗 0（R-P3 の組に契約のテストを足した）。
+3. **凍結 908**（`validate_trade_ideas.py > $T/r3b/frozen-908-r3b.log`）：「DISCRIMINATION (entry − control): FIRE±5 +25.8pp, SETUP +52.0pp」。R3a の後のログと**バイト一致**（diff 空）。この SETUP の列は Markets360 で、ゲート 8 を見ない（p1-5）。効果は H4 で見る。
+4. **H4**（`probe_setup_ready_908.py --json $T/r3b/h4-r3b.json --rows`。前は R-P3 の `$T/r3/h4-r3a.json`、24bf6b9 で取ったもの。HEAD fb2db3c のバックエンドとの差は 31d8dba のドキュメント文字列だけ：`git diff 24bf6b9 31d8dba -- backend` で確かめた）：
+
+| | 変更の前 | R3b の後 |
+|---|---|---|
+| エントリー（評価した点） | 588 | 588 |
+| 対照 | 575 | 575 |
+| setup_ready エントリー | 28/588（4.76%） | **29/588（4.93%）** |
+| setup_ready 対照 | 23/575（4.00%） | **21/575（3.65%）** |
+| 差（probe の表示） | +0.8pp | **+1.3pp** |
+| 差（四捨五入なし） | +0.762pp | **+1.280pp** |
+| G8 の不合格（エントリー／対照） | 34／178 | 46／185 |
+| G8 の差 | −25.2pp | −24.4pp |
+| ゲート 8 の入力のステージ 2（エントリー／対照） | 528／300（quick） | 532／378（スキャナー） |
+| Minervini のステージ 2（エントリー／対照） | 534／380 | 534／380（同じ） |
+| ほかのゲートの不合格（G1〜G7・G9・G10） | docs/round3/step0.md §3 の表 | 同一 |
+| 上抜け日のエントリーでの準備 | 215 件で 0 | 215 件で 0 |
+
+   - 準備の点の出入り：エントリーは AG 2016-04-07 が加わる（失うもの無し）。対照は FDX 2020-11-24 が加わり、HTHT 2015-12-23・IOVA 2018-02-22・RIC 2016-03-29 が外れる。測定の前に h4-r3a.json の行から立てた予測（ready′ ＝ 失敗から stage_not_ok を除いて空、かつ Minervini のステージが 2 か None）と、両側の準備の点の集合が**完全に一致**した。
+   - スキャナーとゲート入力のステージが違う点はエントリー 2・対照 6 で、すべてセットアップエンジンが insufficient_data（240〜251 本：Minervini は 240 本から、エンジンは 252 本から）。ゲートは走らないので、準備に効かない。
+   - 判断の規則：四捨五入なしの差が前（+0.762pp）以上なら満たす。+1.280pp で満たした。
+
+### 規則 18（UI より先にデータを出さない）
+
+- 変わるのは既存の項目の値だけ：インデックスの `se_stage`（ペイロードの `stage`）、`setup_recalculation.reason` の文字列、`se_setup_ready`、詳細の `se_explain`。新しいキー・警告コード・インデックスの項目は無い（再構築のインデックスで確かめた）。
+- `se_stage` を読む静的ブリーフの部品は無い（grep `se_stage`：frontend/src、frontend/tools、.github/scripts にテスト以外の読み手なし）。ブリーフのステージは行の `stage`（スキャナーの値）で、これは変わらない。
+
+### 実測（R3b。時刻は日本時間。負荷のもとの時間はすべて参考）
+
+- gate-1〜gate-5・gate-check（11-15 12:57〜12:59、負荷 5.66 → 6.84）、golden-update、赤線：上の数。所有の検査 `check-ownership.py R $W 45603f06…` → OWNERSHIP OK（41 パス）。
+- 再構築 out/53b82cb：13:00:26〜13:10:33（recalc 577 秒、負荷 3.10 → 8.99）。
+- H4：596 秒（負荷 3.44 → 8.91）。凍結 908：負荷 8.91 → 6.61。
+
+### 未検証（R3b）
+
+- 公開版での数（すべて再構築の数）。公開版では代理の日足の行（AVTR, SHEL を含む）のバーが違いうる。
+- ブラウザでの表示（フロントのファイルは変えていない。vitest・Playwright・ビルドは走らせていない）。
+
+### 統合への依頼（R3b）
+
+1. 凍結の probe の説明（probe_setup_ready_908.py:39-41「"SE stage" is … (``quick_stage_check``), the input to gate 8」）は、R3b の後はスキャナーのステージになる。probe は凍結なので統合で直す（数え方は変わらない）。
+2. docs/setup_engine/se_h4_formula_dictionary_operator_runbook.md:81・644 の `quick_stage_check` の記述（このトラックの所有の外）。backend/tests/unit/golden/test_golden_scanner.py:105 のコメントも古い（挙動には関係ない）。
+3. 語彙（CONTEXT.md）：ゲート 8 ＝スキャナーが公開するステージが 2（None は合格）。
+4. **オーナーへ**：R3b は H4 の差を +0.8 → +1.3pp に上げ、再構築の掲載の準備を 29 → 26 にする。新しく準備になる AVTR・SHEL・VSTM はどれもピボットを越えて戻った行（`pivot_already_crossed`）。オーナーは採用を拒める（OD10）。
