@@ -10,7 +10,7 @@ import { chartSettled, charts, date, horizontalOverflow, openBrief, ORACLE, ORAC
 import { chartCrossing, crossingNote, formatPrice, priceInRange, structuralLowLegend, weeklyBars, weeklyShortNote } from '../../src/static/brief/chartReadout.js';
 import { LEADER_OFF_LEVEL, LEADER_OFF_LEVEL_MIN, MA_SHIFT, MA_TAIL } from '../../src/static/brief/priceChart.js';
 import { BOX_GAP, FIGURE_GAP, FIGURE_STACK, KIN_GAP, LABEL_GAP, PHRASE_GAP } from '../../src/static/brief/chartLabels.js';
-import { PIVOT_DAY_UNKNOWN, QUIET_DAYS_TITLE, QUIET_DAYS_WINDOW, WEEKLY_PATTERN, pivotDayNote, quietDaysText } from '../../src/static/brief/StockVcpCard.jsx';
+import { PIVOT_DAY_SEPARATOR, PIVOT_DAY_UNKNOWN, QUIET_DAYS_TITLE, QUIET_DAYS_WINDOW, WEEKLY_PATTERN, pivotDayNote, quietDaysText } from '../../src/static/brief/StockVcpCard.jsx';
 import { candidateView } from '../../src/static/brief/briefCandidate.js';
 import { shortDate } from '../../src/static/brief/briefShared.js';
 
@@ -991,6 +991,13 @@ for (const [name, device, symbols] of [['390', VIEWPORTS.phone, [ORACLE.heldBrea
     await chartSettled(page);
     const card = page.locator('section[aria-labelledby="brief-vcp-title"]');
     await expect(card.locator('.brief-vcp-pivotday'), `${symbol}: the pivot day`).toHaveText(pivotDay);
+    // With the Setup Engine's base note shown (ZZRD), the day ends that note after the separator; otherwise it is its own note.
+    const base = card.locator('.brief-vcp-engine');
+    await expect(base, `${symbol}: the Setup Engine base note`).toHaveCount(symbol === ORACLE.ready ? 1 : 0);
+    if (symbol === ORACLE.ready) {
+      await expect(base.locator('.brief-vcp-pivotday'), `${symbol}: the day inside the base note`).toHaveCount(1);
+      expect((await base.textContent()).endsWith(`${PIVOT_DAY_SEPARATOR}${pivotDay}`), `${symbol}: base note then the day`).toBe(true);
+    } else await expect(card.locator('p.brief-vcp-pivotday'), `${symbol}: the day as its own note`).toHaveCount(1);
     const shown = card.locator('.brief-vcp-quiet');
     if (quiet) {
       await expect(shown, `${symbol}: the quiet days`).toHaveText(quiet);

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
-import VcpCard, { PIVOT_DAY_UNKNOWN, QUIET_DAYS_TITLE, QUIET_DAYS_WINDOW, WEEKLY_PATTERN, pivotDayNote, quietDaysText } from './StockVcpCard';
+import VcpCard, { PIVOT_DAY_SEPARATOR, PIVOT_DAY_UNKNOWN, QUIET_DAYS_TITLE, QUIET_DAYS_WINDOW, WEEKLY_PATTERN, pivotDayNote, quietDaysText } from './StockVcpCard';
 import { mergeFinancialDetail } from '../financialCurrent';
 import { shortDate } from './briefShared';
 
@@ -159,17 +159,23 @@ describe('the Setup Engine pivot day and quiet days', () => {
     expect(quietDaysText({ ...current, se_quiet_days_10d: 2 }, null)).toBeNull();
   });
 
-  it('draws the pivot day as a note under the Setup Engine base and the quiet days beside the day\'s volume, with their definition', () => {
+  it('writes the pivot day in the Setup Engine base\'s own note and the quiet days beside the day\'s volume, with their definition', () => {
     const row = { ...weeklyRow, se_quiet_days_10d: 2, se_base_length_weeks: 14, se_base_depth_pct: 12.6 };
     const { container } = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={{ pivot: 89.88, volumeRatio: 1.2, pivotSource: 'カップ・ウィズ・ハンドル（SE信頼度60）' }} row={row} date={DATE} />);
+    const pivotDay = pivotDayNote({ view: { pivot: 89.88 }, row, judged: weeklyBarsList, date: DATE });
     const note = container.querySelector('.brief-vcp-pivotday');
-    expect(note).toHaveTextContent(pivotDayNote({ view: { pivot: 89.88 }, row, judged: weeklyBarsList, date: DATE }));
+    expect(note.textContent).toBe(pivotDay);
     // 「（週足の型）」 is its own span, so a wrap moves it whole.
     expect(note.querySelector('.brief-vcp-weekly')).toHaveTextContent(WEEKLY_PATTERN);
-    expect(note.tagName).toBe('P');
-    expect(note).toHaveClass('brief-note');
-    // It follows the Setup Engine's base note.
-    expect(note.previousElementSibling).toHaveTextContent(/^Setup Engine：/);
+    // One span at the end of the Setup Engine's base note, after the separator: no note of its own.
+    expect(note.tagName).toBe('SPAN');
+    const base = note.parentElement;
+    expect(base.tagName).toBe('P');
+    expect(base).toHaveClass('brief-note', 'brief-vcp-engine');
+    expect(base.textContent).toMatch(/^Setup Engine：/);
+    expect(base.textContent.endsWith(`${PIVOT_DAY_SEPARATOR}${pivotDay}`)).toBe(true);
+    expect(base.lastElementChild).toBe(note);
+    expect(container.querySelectorAll('p.brief-vcp-pivotday')).toHaveLength(0);
     const day = screen.getByText('当日の出来高').nextSibling;
     expect(day).toHaveTextContent(`1.20×上抜けの目安 1.40×以上${quietDaysText(row, DATE)}`);
     const quiet = within(day).getByText(quietDaysText(row, DATE));
@@ -178,6 +184,23 @@ describe('the Setup Engine pivot day and quiet days', () => {
     // The other rows read as before.
     expect(screen.getByText('ピボット').nextSibling).toHaveTextContent('$89.88カップ・ウィズ・ハンドル（SE信頼度60）');
     expect(container.querySelectorAll('.brief-vcp-pivotday')).toHaveLength(1);
+  });
+
+  it('gives the pivot day a note of its own when no Setup Engine base is shown, and the base note its old text', () => {
+    // No base length or depth: no Setup Engine base note, so the day is its own note where the base note would be.
+    const { container } = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={{ pivot: 89.88, volumeRatio: 1.2 }} row={weeklyRow} date={DATE} />);
+    expect(container.querySelector('.brief-vcp-engine')).toBeNull();
+    const note = container.querySelector('.brief-vcp-pivotday');
+    expect(note.tagName).toBe('P');
+    expect(note).toHaveClass('brief-note');
+    expect(note.textContent).toBe(pivotDayNote({ view: { pivot: 89.88 }, row: weeklyRow, judged: weeklyBarsList, date: DATE }));
+    expect(note.textContent.startsWith(PIVOT_DAY_SEPARATOR)).toBe(false);
+    expect(note.nextElementSibling.tagName).toBe('DL');
+    cleanup();
+    // A base with no pivot day to show (a vcp_pivot fallback): the base note reads as before, with no separator.
+    const base = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={{ pivot: 89.88 }} row={{ ...current, vcp_pivot: 89.88, se_base_length_weeks: 14, se_base_depth_pct: 12.6 }} date={DATE} />).container;
+    expect(base.querySelector('.brief-vcp-pivotday')).toBeNull();
+    expect(base.querySelector('.brief-vcp-engine').textContent).toMatch(/^Setup Engine：土台 14週・深さ 13%(（独自近似と異なります）)?$/);
   });
 
   it('keeps the quiet days when the day\'s volume ratio is unknown, and shows neither line without the fields', () => {

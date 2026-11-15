@@ -27,6 +27,8 @@ function engineBase(row, date) {
 export const PIVOT_DAY_UNKNOWN = 'ピボットの日 未確認';
 /** The suffix for a pivot found by a weekly detector (PIVOT_TIMEFRAMES 'weekly'): its bar is the day's, its pattern the weeks'. */
 export const WEEKLY_PATTERN = '（週足の型）';
+/** Between the Setup Engine's base and its pivot's day when the day is written in the base's own note. */
+export const PIVOT_DAY_SEPARATOR = '・';
 
 /**
  * The Setup Engine pivot's own day (round 3 C4), or null when there is no line to show: 「ピボット $89.88＝9/28の高値（SE）」,
@@ -77,7 +79,9 @@ function legLength(leg, bars, weekly) {
  * contraction is a button with its T number, depth, length and interval volume ratio; pressing it
  * emphasises that contraction on the chart (`chartRef`). `interval` is the chart's ('week' counts weeks).
  * The Setup Engine's base is shown beside the result when it is current, with a mark when they differ, and the Setup
- * Engine pivot's own day under it (pivotDayNote); 当日の出来高 adds the Setup Engine's quiet days (quietDaysText).
+ * Engine pivot's own day (pivotDayNote) after it in the same note (one inline-block span after 「・」, so a wrap moves the
+ * day whole to the note's next line); with no base shown, the day is a note of its own. 当日の出来高 adds the Setup Engine's
+ * quiet days (quietDaysText).
  * `pending` (the research detail or the bars still loading) and `uncertified` ({ reason }: the bars are
  * not certified for the analysis date) leave the VCP 未確認 and say why. While `pending`, the pivot's day is not shown
  * at all: the detail that carries its date has not arrived (loading, not 未確認).
@@ -87,6 +91,8 @@ export default function VcpCard({ technical, bars, judged, view, wide, chartRef 
   const dry = print ? legs.at(-1)?.volumeEvidence?.intervalRatio : null;
   const engine = engineBase(row, date);
   const pivotDay = pending ? null : pivotDayNote({ view, row, judged, date }), quiet = quietDaysText(row, date);
+  // 「（週足の型）」 moves to the next line whole when the line wraps (brief-chart.css).
+  const pivotDayText = !pivotDay ? null : pivotDay.endsWith(WEEKLY_PATTERN) ? <>{pivotDay.slice(0, -WEEKLY_PATTERN.length)}<span className="brief-vcp-weekly">{WEEKLY_PATTERN}</span></> : pivotDay;
   const [active, setActive] = useState(null);
   const disagree = engine && print && ((engine.weeks !== null && Math.abs(engine.weeks - print.weeks) > 2) || (engine.depth !== null && Math.abs(engine.depth - Math.max(...legs.map(l => l.depthPct))) > 3));
   const deepest = legs.length ? Math.max(...legs.map(l => l.depthPct)) : 1;
@@ -126,9 +132,8 @@ export default function VcpCard({ technical, bars, judged, view, wide, chartRef 
         : uncertified ? `${bars?.length ? `日足を分析基準日で検証できないため${uncertified.reason ? `（${uncertified.reason}）` : ''}` : '日足がないため'}、VCPは未確認です。`
           : '測定できる収縮が2回以上ないため、VCPは未確認です。'}</p>
     </>}
-    {engine ? <p className="brief-note brief-vcp-engine">Setup Engine：土台 {engine.weeks === null ? '未確認' : `${Math.round(engine.weeks)}週`}・深さ {engine.depth === null ? '未確認' : `${engine.depth.toFixed(0)}%`}{disagree ? '（独自近似と異なります）' : !print ? '（独自近似は未確認）' : ''}</p> : null}
-    {/* 「（週足の型）」 moves to the next line whole when the line wraps (brief-chart.css). */}
-    {pivotDay ? <p className="brief-note brief-vcp-pivotday">{pivotDay.endsWith(WEEKLY_PATTERN) ? <>{pivotDay.slice(0, -WEEKLY_PATTERN.length)}<span className="brief-vcp-weekly">{WEEKLY_PATTERN}</span></> : pivotDay}</p> : null}
+    {engine ? <p className="brief-note brief-vcp-engine">Setup Engine：土台 {engine.weeks === null ? '未確認' : `${Math.round(engine.weeks)}週`}・深さ {engine.depth === null ? '未確認' : `${engine.depth.toFixed(0)}%`}{disagree ? '（独自近似と異なります）' : !print ? '（独自近似は未確認）' : ''}{pivotDayText ? <>{PIVOT_DAY_SEPARATOR}<span className="brief-vcp-pivotday">{pivotDayText}</span></> : null}</p> : null}
+    {!engine && pivotDayText ? <p className="brief-note brief-vcp-pivotday">{pivotDayText}</p> : null}
     <dl className="brief-dl">
       <div><dt>最後の収縮の出来高</dt><dd>{finite(dry) ? <>{times(dry)}<small>直前50日平均比</small></> : '未確認'}</dd></div>
       <div><dt>上げ下げ出来高比（50日）</dt><dd>{(() => { const v = upDownVolume(judged); return v ? <>{v.ratio.toFixed(2)}<small>{wide ? UPDOWN_INLINE : '1超は買いが優勢'}</small></> : '未確認'; })()}</dd></div>
