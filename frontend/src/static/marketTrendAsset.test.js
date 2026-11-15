@@ -193,6 +193,18 @@ describe('market trend reader: the round 3 optional keys (M8)',()=>{
   const copied=structuredClone(none);copied.indices[0].stalling={available:true,method:STALLING_METHOD,dates:[]};
   expect(readMarketTrends(copied,entry).indices[0].stalling.available).toBe(false);
  });
+ it('keeps the oldest live stalling day the exporter writes (age 24), and the exporter expires it at 25: one window',()=>{
+  const at=age=>{const source=structuredClone(trendSource),bars=source.indices.find(index=>index.symbol==='^GSPC').bars,i=bars.length-1-age,prev=bars[i-1],close=prev.close*1.001;
+   // A +0.1% close on higher volume, low in its range and near the closing high: a stalling day on the real bars.
+   bars[i]={...bars[i],open:prev.close,close,high:close*1.01,low:close*0.998,volume:Math.round(prev.volume*1.1)};
+   return {day:bars[i].date,value:emitted(source)};};
+  const live=at(STALLING_SESSIONS-1),gone=at(STALLING_SESSIONS);
+  expect(live.value.indices[0].stalling).toEqual({available:true,method:STALLING_METHOD,dates:[live.day]});
+  expect(live.day).toBe(live.value.indices[0].points.at(-STALLING_SESSIONS).date);
+  expect(readMarketTrends(structuredClone(live.value),entry).indices[0].stalling).toEqual(live.value.indices[0].stalling);
+  expect(gone.value.indices[0].stalling).toEqual({available:true,method:STALLING_METHOD,dates:[]});
+  expect(gone.day).toBe(gone.value.indices[0].points.at(-STALLING_SESSIONS-1).date);
+ });
  it.each([
   ['not an object',()=>'2'],
   ['no method',stalling=>({available:true,dates:stalling.dates})],

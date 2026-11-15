@@ -53,9 +53,10 @@ export const pointChange = (value, digits = 1) => { const r = Number(value.toFix
 /** The sessions the breakout row judges (the collector's BREAKOUT_HOLD_SESSIONS 10 and BREAKOUT_WINDOW_SESSIONS 20; a test reads them). */
 export const BREAKOUT_WINDOW_TEXT = '10〜29営業日前';
 /**
- * The breakout row's label (M8c): its name, 「上抜けの維持（確定分）」, with the sessions it judges said in the opened row. The
- * label with them, 「上抜けの維持（確定分・10〜29営業日前）」, wraps the closed row (measured, CI fonts: 85→117.5px at 320,
- * 65→97.5px at 375 and 65→78.7px at 390), so it is not used.
+ * The breakout row's label (M8c): its name, 「上抜け維持（確定分）」 (BREAKOUT_HOLD_NAME), with the sessions it judges said in
+ * the opened row. The label with them, 「上抜けの維持（確定分・10〜29営業日前）」, wraps the closed row (measured, CI fonts:
+ * 85→117.5px at 320, 65→97.5px at 375 and 65→78.7px at 390), and so does 「上抜けの維持（確定分）」 at 320 (85→98.7px), so
+ * neither is used.
  */
 export const BREAKOUT_HOLD_LABEL = BREAKOUT_HOLD_NAME;
 
