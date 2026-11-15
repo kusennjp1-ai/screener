@@ -684,7 +684,7 @@ export function renderPriceChart(el, model, options = {}) {
   if (!hasPivot) notices.push('ピボット 未確認');
   if (model.legsValid === false) notices.push('収縮は未確認');
   if (notices.length) {
-    const w =Math.min(Math.max(...notices.map(notice => width(notice))), pw - 8), half = notices.length * 8 - 1;
+    const w = Math.min(Math.max(...notices.map(notice => width(notice))), pw - 8), half = notices.length * 8 - 1;
     const right = clampX(pw - 34 - w, w), yTop = padT + 2 + half, yBottom = plotBottom - 2 - half;
     const corners = [[4, yTop], [4, yBottom], [right, yBottom], [right, yTop]];
     const grid = spots({ x0: 4, x1: pw - w - 4, ys: lineOf(yTop, yBottom, 4), step: 8, first: corners.filter(([cx]) => cx >= 4).map(([cx, cy]) => [cx, cy, -1]), cost: (lx, yc) => { let near = Infinity; for (const [cx, cy] of corners) near = Math.min(near, Math.abs(lx - cx) + Math.abs(yc - cy)); return near; } });
