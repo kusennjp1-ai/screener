@@ -149,4 +149,166 @@ class DailyHistoryTests(unittest.TestCase):
             audit['results'][0]['audit']['as_of_date']='2026-10-22';(root.parent/'qualification-audit.json').write_bytes(module.encode(audit))
             with self.assertRaisesRegex(ValueError,'identity/date'):module.published_universe(root)
 
+# Round 3 M8a-M8c: five optional breadth keys behind EMIT_R3_MARKET_FIELDS (off until the round-3 UI is on Pages).
+def bars_record(symbol,days,closes,highs,lows,volumes,missing=()):
+    stamps=[int(datetime.fromisoformat(day+'T16:00:00+00:00').timestamp()) for day in days]
+    quote={'open':list(closes),'high':list(highs),'low':list(lows),'close':list(closes),'volume':list(volumes)}
+    for index in missing:
+        for values in quote.values():values[index]=None
+    raw=json.dumps({'chart':{'result':[{'meta':{'symbol':symbol,'firstTradeDate':946684800},'timestamp':stamps,'indicators':{'quote':[quote]}}]}})
+    return {'symbol':symbol,'raw':raw,'provenance':{'url':f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol}','sha256':module.digest(raw.encode()),'retrieved_at':'2026-10-27T00:00:00+00:00'}}
+
+def designed_universe(n=560,count=110,gap_symbols=0,gap_at=None):
+    """Random trends for RS spread, plus designed breakouts, a high-only new high and a cohort member that breaks down."""
+    import numpy as np
+    days=[day.strftime('%Y-%m-%d') for day in pd.bdate_range('2024-01-01',periods=n)]
+    series={}
+    for i in range(count):
+        rng=np.random.default_rng(100+i);drift=[.0025,0.,-.001][i%3];level=50.;closes=[]
+        for _ in range(n):level*=1+drift+rng.normal(0,.012);closes.append(round(level,4))
+        series[f'S{i}']={'close':closes,'high':[c*1.005 for c in closes],'low':[c*.99 for c in closes],'volume':[10000]*n,'missing':set()}
+    def steady(rate,wiggle):
+        return [round(40*(1+rate)**k*(1+.004*np.sin(k/5+wiggle)),4) for k in range(n)]
+    # S0..S4 break out 9, 7, 6, 5 and 7 sessions before the last session; S5's high (not its close) makes a new high.
+    plans={'S0':(n-10,None),'S1':(n-8,6),'S2':(n-7,3),'S3':(n-6,5),'S4':(n-7,None)}
+    for k,(symbol,(b,fail)) in enumerate(plans.items()):
+        closes=steady(.003,k);top=max(closes[j]*1.005 for j in range(b-251,b))
+        closes[b]=round(top*1.03,4)
+        for j in range(b+1,n):closes[j]=round(closes[b]*.995,4)
+        highs=[c*1.005 for c in closes];lows=[c*.99 for c in closes];volumes=[10000]*n;volumes[b]=30000
+        if fail is not None and b+fail<n:lows[b+fail]=closes[b]*.90
+        series[symbol]={'close':closes,'high':highs,'low':lows,'volume':volumes,'missing':{b+2} if symbol=='S4' else set()}
+    closes=steady(.003,9);b=n-7;top=max(closes[j]*1.005 for j in range(b-251,b))
+    for j in range(b,n):closes[j]=round(top*.99,4)
+    highs=[c*1.005 for c in closes];highs[b]=top*1.02
+    series['S5']={'close':closes,'high':highs,'low':[c*.99 for c in closes],'volume':[10000]*n,'missing':set()}
+    # S6 leads strongly, then falls below its 50-day line within the last 20 sessions.
+    closes=steady(.005,3)
+    for j in range(n-18,n):closes[j]=round(closes[j-1]*.98,4)
+    series['S6']={'close':closes,'high':[c*1.005 for c in closes],'low':[c*.99 for c in closes],'volume':[10000]*n,'missing':set()}
+    for i in range(gap_symbols):series[f'S{count-1-i}']['missing'].add(gap_at)
+    symbols=[f'S{i}' for i in range(count)]
+    records={s:bars_record(s,days,v['close'],v['high'],v['low'],v['volume'],sorted(v['missing'])) for s,v in series.items()}
+    return days,symbols,records,series
+
+def replay(series,symbols,n):
+    """Independent scalar replay of the five keys from the bars (written apart from the collector, as audit-market-history.py is)."""
+    present=lambda s,j:j>=0 and j not in series[s]['missing']
+    def good(s,j):return j>=252 and all(present(s,k) for k in range(j-252,j+1))
+    def mean(values):return sum(values)/len(values)
+    cache={}
+    def obs(s,j):
+        if (s,j) in cache:return cache[(s,j)]
+        if not good(s,j):cache[(s,j)]=None;return None
+        v=series[s];c=v['close'];cj=c[j]
+        ma=lambda m,lag=0:mean(c[j-lag-m+1:j-lag+1])
+        ma50,ma150,ma200=ma(50),ma(150),ma(200)
+        high252=max(v['high'][j-251:j+1]);low252=min(v['low'][j-251:j+1]);prior=max(v['high'][j-251:j])
+        trend=cj>ma150 and cj>ma200 and ma150>ma200 and ma200>ma(200,21) and ma50>ma150 and ma50>ma200 and cj>ma50 and cj/high252>=.75
+        cache[(s,j)]=row={'template30':trend and cj/low252>=1.30,'above50':cj>ma50,'newHigh':v['high'][j]>prior,'newHighClose':cj>prior,
+            'momentum':sum((cj/c[j-lag]-1)*w for lag,w in [(63,.4),(126,.2),(189,.2),(252,.2)]),
+            'volumeOk':v['volume'][j]>=1.4*mean(v['volume'][j-50:j])}
+        return row
+    def rs(j):
+        rows={s:obs(s,j) for s in symbols if obs(s,j)};order=sorted(rows,key=lambda s:rows[s]['momentum'])
+        return {s:1+98*k/max(len(order)-1,1) for k,s in enumerate(order)}
+    def sufficient(j):
+        observed=sum(1 for s in symbols if obs(s,j));return j>=0 and observed/len(symbols)>=.9 and observed>=100
+    def breakout(s,j):
+        row=obs(s,j)
+        return bool(row) and row['template30'] and row['newHighClose'] and row['volumeOk']
+    result={}
+    for i in range(n-25,n):
+        valid=sufficient(i);then=i-module.LEADER_LOOKBACK_SESSIONS;rank=rs(then)
+        members={s for s in symbols if obs(s,then) and obs(s,then)['template30'] and rank[s]>=90 and obs(s,i)}
+        cohort=valid and sufficient(then)
+        dated=[(s,j) for j in range(i-9,i-4) for s in symbols if breakout(s,j) and all(present(s,k) for k in range(j+1,j+6))]
+        failed=[(s,j) for s,j in dated if min(series[s]['low'][j+1:j+6])<=series[s]['close'][j]*(1-module.BREAKOUT_FAILURE_DRAWDOWN)]
+        known=all(sufficient(j) for j in range(i-9,i+1))
+        result[i]={'rs90Cohort':len(members) if cohort else None,'rs90CohortAbove50':sum(obs(s,i)['above50'] for s in members) if cohort else None,
+            'newHighsClose':sum(1 for s in symbols if obs(s,i) and obs(s,i)['newHighClose']) if valid else None,
+            'breakoutsEarlyJudged':len(dated) if known else None,'breakoutsEarlyFailed':len(failed) if known else None,'_dated':dated}
+    return result
+
+class Clock(datetime):
+    @classmethod
+    def now(cls,tz=None):return cls(2026,11,15,0,0,tzinfo=timezone.utc)
+
+def stripped(value):
+    value=json.loads(module.encode(value))
+    for row in value['breadth']:
+        for key in module.R3_MARKET_FIELDS:row.pop(key,None)
+    for key in module.R3_INDICATOR_POLICY:value['indicator_policy'].pop(key,None)
+    return value
+
+class R3MarketFieldTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.days,cls.symbols,cls.records,cls.series=designed_universe()
+        cls.lines={'off':[],'on':[]}
+        with patch.object(module,'datetime',Clock):
+            cls.off=module.build(cls.records,{},cls.symbols,cls.days,cls.days[-1],log=cls.lines['off'].append)
+            with patch.object(module,'EMIT_R3_MARKET_FIELDS',True):
+                cls.on=module.build(cls.records,{},cls.symbols,cls.days,cls.days[-1],log=cls.lines['on'].append)
+        cls.replayed=replay(cls.series,cls.symbols,len(cls.days))
+    def test_flag_is_off_and_off_writes_no_new_key_or_policy(self):
+        self.assertIs(module.EMIT_R3_MARKET_FIELDS,False)
+        for row in self.off['breadth']:
+            self.assertFalse(set(module.R3_MARKET_FIELDS)&set(row),row['date'])
+        self.assertIs(self.off['indicator_policy'],module.INDICATOR_POLICY)
+        self.assertFalse(set(module.R3_INDICATOR_POLICY)&set(module.INDICATOR_POLICY))
+    def test_off_output_is_the_on_output_without_the_five_keys(self):
+        self.assertEqual(module.encode(self.off),module.encode(stripped(self.on)))
+        self.assertEqual(set(self.on['indicator_policy']),{*module.INDICATOR_POLICY,*module.R3_INDICATOR_POLICY})
+        for row in self.on['breadth']:self.assertTrue(set(module.R3_MARKET_FIELDS)<=set(row),row['date'])
+    def test_each_definition_matches_an_independent_replay(self):
+        rows=self.on['breadth'];n=len(self.days);self.assertEqual(len(rows),n)
+        for i,expected in self.replayed.items():
+            for key in module.R3_MARKET_FIELDS:
+                with self.subTest(day=self.days[i],key=key):self.assertEqual(rows[i][key],expected[key])
+        last=rows[-1];dated={s for s,_ in self.replayed[n-1]['_dated']}
+        # S0, S1, S2 and S3 are judged (S1 fails on its 6th later session, outside the five); S4 misses a later bar.
+        self.assertTrue({'S0','S1','S2','S3'}<=dated);self.assertNotIn('S4',dated)
+        self.assertTrue(0<last['breakoutsEarlyFailed']<last['breakoutsEarlyJudged'])
+        self.assertTrue(0<last['rs90CohortAbove50']<last['rs90Cohort']<last['leaderCohort'])
+        breakout_day=rows[n-7];self.assertTrue(0<breakout_day['newHighsClose']<breakout_day['newHighs'])
+    def test_invariants_hold_on_every_row(self):
+        for row in self.on['breadth']:
+            with self.subTest(day=row['date']):
+                if row['rs90Cohort'] is not None:
+                    self.assertLessEqual(row['rs90Cohort'],row['leaderCohort']);self.assertLessEqual(row['rs90CohortAbove50'],row['rs90Cohort'])
+                    self.assertLessEqual(row['rs90CohortAbove50'],row['leaderCohortAbove50'])
+                if row['newHighsClose'] is not None:self.assertLessEqual(row['newHighsClose'],row['newHighs'])
+                if row['breakoutsEarlyJudged'] is not None:self.assertLessEqual(row['breakoutsEarlyFailed'],row['breakoutsEarlyJudged'])
+                for key in module.R3_MARKET_FIELDS:self.assertTrue(row[key] is None or (type(row[key]) is int and row[key]>=0),key)
+    def test_null_rules_follow_leader_cohort_and_the_early_window(self):
+        n=560;gap=280
+        days,symbols,records,_=designed_universe(n=n,gap_symbols=12,gap_at=gap)
+        with patch.object(module,'EMIT_R3_MARKET_FIELDS',True):rows=module.build(records,{},symbols,days,days[-1])['breadth']
+        valid=[row['newHighs'] is not None for row in rows]
+        # Twelve missing bars on one session leave 98 of 110 observed for the next 253 sessions.
+        self.assertFalse(any(valid[gap:gap+253]));self.assertTrue(valid[gap-1] and all(valid[gap+253:]))
+        for i,row in enumerate(rows):
+            with self.subTest(day=row['date']):
+                self.assertEqual(row['rs90Cohort'] is None,row['leaderCohort'] is None)
+                self.assertEqual(row['rs90CohortAbove50'] is None,row['leaderCohortAbove50'] is None)
+                self.assertEqual(row['newHighsClose'] is None,not valid[i])
+                early_known=i>=9 and all(valid[i-9:i+1])
+                self.assertEqual(row['breakoutsEarlyJudged'] is None,not early_known);self.assertEqual(row['breakoutsEarlyFailed'] is None,not early_known)
+        back=gap+253
+        self.assertTrue(all(rows[i]['breakoutsEarlyJudged'] is None for i in range(back,back+9)))
+        self.assertTrue(all(rows[i]['breakoutsEarlyJudged'] is not None and rows[i]['rs90Cohort'] is None for i in range(back+9,back+20)))
+        self.assertTrue(all(rows[i]['rs90Cohort'] is not None for i in range(back+20,n)))
+        # Too few observed stocks: every key is unknown, never 0.
+        with patch.object(module,'EMIT_R3_MARKET_FIELDS',True):
+            last=module.build({s:records[s] for s in symbols[:99]},{},symbols,days,days[-1])['breadth'][-1]
+        for key in module.R3_MARKET_FIELDS:self.assertIsNone(last[key],key)
+    def test_log_line_prints_the_newest_values_whether_or_not_they_are_written(self):
+        last=self.on['breadth'][-1]
+        for state,lines in self.lines.items():
+            self.assertEqual(lines,[f"Market history r3 fields {self.days[-1]} (emission {state}): "+' '.join(f'{key}={last[key]}' for key in module.R3_MARKET_FIELDS)])
+        lines=[];module.build({s:self.records[s] for s in self.symbols[:99]},{},self.symbols,self.days,self.days[-1],log=lines.append)
+        self.assertEqual(lines,[f"Market history r3 fields {self.days[-1]} (emission off): "+' '.join(f'{key}=unavailable' for key in module.R3_MARKET_FIELDS)])
+        self.assertNotIn('=0 ',lines[0]+' ')
+
 if __name__=='__main__':unittest.main()
