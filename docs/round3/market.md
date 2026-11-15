@@ -885,3 +885,237 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 - **backend の 5% の外し方をストーリング日に入れるか**（判断 1）。入れるなら method id を変える。
 - **on への切り替え**は、UI が Pages に出たのを読取で確かめた後、Python と JS の 2 つの定数を同じ追従コミットで変える（それぞれ全件の取り直しが 1 回起きる。上の注意）。
 - **CONTEXT.md の語彙**（統合時に移す）：「早期（上抜け後5営業日）」＝5〜9 営業日前の上抜けを後の 5 営業日の安値で読んだ割合（独自設定）。「ストーリング日（独自近似）」＝backend と同じ条件の、分配日に数えない別の集計。「終値でも更新」＝`newHighsClose`。「RS推計90以上のコホート」＝`rs90Cohort`。
+
+## M8a〜M8e の読み手と表示、M9、M10（パッケージ P6）
+
+コミット（すべて claude/r3-market、push なし）：
+
+- 7f9e0e93 読み手（marketLongHistory.js、marketTrendAsset.js）とその vitest
+- 368a8863 表示（M8a〜M8e、M9：marketTabGroups.js、marketTabModel.js、briefEnvironment.js、marketTabStudy.js）とその vitest、MarketCard.test.jsx の照合
+- d3b837bf Playwright（brief-market-r3.spec.js の P6 の 4 状態、brief-market.spec.js の名前の照合）
+- 4dc5698b M10（docs/MARKET_HISTORY_PRODUCER.md、docs/MARKET_INDICATOR_HISTORY.md、docs/brief-and-market-environment.md）
+- ebd6cdfe ストーリング日の窓の境界の往復テスト（marketTrendAsset.test.js）と、marketTabModel.js の `BREAKOUT_HOLD_LABEL` のコメントの訂正（名前を「上抜けの維持（確定分）」と書いていた）。動作の変更なし（下の関門 (3)・(4) で dump と build が 4dc5698 と同一）
+- この節（文書だけ）
+- 出力はどちらの producer も off のまま（`EMIT_R3_MARKET_FIELDS`）。**今の公開はどれも新しいキーを持たない**ので、利用者が最初に見るのは「未収録」の形。
+
+### 作ったもの
+
+**読み手（キーはどこでも任意）**
+
+- `validateLongHistory`：行がキーを持つときだけ検査する。どれも null か 0 以上の整数。
+  - `rs90Cohort`：`leaderCohort` と同じ観測率の条件（`sufficient`）と、観測数以下。行に `leaderCohort` があれば `rs90Cohort ≤ leaderCohort`。
+  - `rs90CohortAbove50`：`rs90Cohort` が数のときだけ、かつそれ以下。
+  - `newHighsClose`：`newHighs` と同じ条件と観測数以下、かつ `newHighsClose ≤ newHighs`（P5 が定義上成り立つと報告したもの）。
+  - `breakoutsEarlyJudged`：数か null だけ。`breakoutsJudged` と同じく 5 営業日の窓の合計なので、1 日の観測数では上限を付けない（付けると、出力を on にした日に長期履歴ごと取り下げられうる）。
+  - `breakoutsEarlyFailed`：`breakoutsEarlyJudged` が数のときだけ、かつそれ以下。
+  - 壊れたキーは、ほかの壊れた数と同じく長期履歴だけを取り下げる（検査項目の日本語は既存の分類：観測範囲または集計値の整合）。
+- `environmentPoint`：`rs90HealthPercent`（`rs90Cohort ≥ LEADER_MIN_COHORT` のときだけ）と `breakoutEarlyFailedPercent`（`breakoutsEarlyJudged ≥ BREAKOUT_MIN_SAMPLE` のときだけ）を足した。それ以外は null。
+- `readMarketTrends` の `readIndex`：任意の `stalling`（P5 の形 `{available:true, method, dates}` か `{available:false, method, reason}`）。
+  - 日付は、その指数の最後の 25 点（`STALLING_SESSIONS`、exporter の `STALLING_WINDOW_SESSIONS` にテストで固定）のどれかで、古い順・重複なし。`stalling` に asOf は無いので、指数の点が日付の代わり。
+  - 境界（ebd6cdfe のテスト）：10-23 の実際の ^GSPC の足の 1 本をストーリング日に書き換え、出力を on にして exporter に通した。経過 24 営業日（最後の 25 点の最初）は exporter が書き、読み手がそのまま残す。経過 25 営業日は exporter が失効させる（`dates: []`）。読み手の窓と exporter の窓は同じ 25 本。
+  - 不正なものは `closes`・`followThrough` と同じく、それだけを `{available:false, method, reason:'ストーリング日の形式を確認できません。'}` に置き換える。分配日の本数・終値・FTD はそのまま。
+  - method id は文字列なら何でも読む（P5 の 5% の外し方の判断で id が変わりうるため）。画面の見出しは「独自近似」とだけ言い、id を名指ししない。
+
+**表示（開いた行だけ。閉じた行の高さは不変、下の実測）**
+
+キーが公開に無いときは「未収録（この公開データには含まれていません）」（`KEY_ABSENT`）。0 にも率にもしない。どの行も開いた行の普通の 1 行（`details`）で、値・印・色・▲・段のタブの「?」を持たない。
+
+| 項目 | 行 | 文（producer） | 読む行 |
+|---|---|---|---|
+| M8a | リーダーの健全度 | 「RS推計90以上：12銘柄中 42%」、10 銘柄未満は「RS推計90以上：6銘柄（10銘柄未満のため率は非表示）」、null は「未算出（観測不足の日を含む）」（`rs90CohortLine`） | 健全度の値と同じ行（率の行。コホートが 10 未満のときは最新の行） |
+| M8b | 52週の新高値・新安値 | 「うち終値でも更新 n」、null は「うち終値でも更新：未算出（観測率90%未満）」（`closeHighsLine`、開いた行の 1 行目） | 行の値と同じ行 |
+| M8c | 上抜け維持（確定分） | 「早期（上抜け後5営業日・独自）：9件中 33% が −7%に到達」、5 件未満は「3件（5件未満のため率は非表示）」（`earlyBreakoutLine`）、「52週高値抜けで、ベースのピボットではありません」、「確定分は10〜29営業日前の上抜けを、その後10営業日で判定」 | 行の率と同じ行（率が無ければ最新の行） |
+| M8d | 分配日（25日） | 最後の行に「ストーリング日（独自近似・IBDの定義は非公開・本数に含めません）：S&P 1日／NAS 0日」。指数が古い日なら「（10/1時点）」、不可・取り下げは「算出不可（理由）」（`stallingLine`） | 各指数の `stalling` |
+| M8e | フォロースルーデー | 「S&P：現在の下落 −2.6%（高値9/29→安値10/1）・6%で調整判定（独自設定）」（`currentLegLine`） | 各指数の `followThrough`（confirmed だけ） |
+| M9 | フォロースルーデー | 「+3%以上の上昇日：S&P 直近279営業日でk回／NAS 直近279営業日でk回（弱気相場・調整中に多い。買いの合図ではありません）」（`bigUpDayLine`）。終値の無い公開は「未収録（旧形式）」 | 各指数の検証済みの `closes` |
+
+- **M8c の名前**は「上抜け維持（確定分）」（`BREAKOUT_HOLD_NAME`、briefEnvironment.js）。注意サインの文「上抜け維持（確定分）が30%に低下」、注意サインの判定項目、銘柄側の 1 行（P4）、旧形式の未収録の行が同じ定数を読む。行のラベルは `BREAKOUT_HOLD_LABEL`（同じ値）。理由は判断 1。
+- **M8e**：followThroughDay は confirmed の状態で、FTD 後の高値からの今の足を `peak`・`low`・`declinePct` として公開している（6% の調整判定と同じ `decline()`）。新しいキーは足していない。表示は confirmed で `declinePct` が有限かつ `100 × FTD_MIN_DECLINE` 未満のときだけ。状態機械は 6% 以上で confirmed を抜けるので、フィクスチャの合成値 7.6 には何も出ない。既存の 6 未満の丸めのガード（`under6`、briefEnvironment.js の関数の中から出して export した。followThroughView の動作は同じ）を使う：5.996 は「−5.99%」、0.04 は「−0.04%」、0 は「0.0%」（「−0.0%」にしない）。分析日より古い記録は「NAS（10/1時点）：…」。
+- **M9**：`BIG_UP_DAY = 0.03`（marketTabStudy.js。出典はミネルヴィニ本人の投稿の +3%〔市場計画 MM-19：2020-04-06、2025-03-07〕、ここでの使い方は独自設定）。前日の終値より +3% 以上上がった日を k、比較の回数 `closes.length − 1` を N とする。浮動小数の誤差だけを `1e-12` で吸収する（1070 → 1102.10 はちょうど +3.00% だが、比は 1.0299999999999998 と計算される）。読み手が取り下げた終値は「算出不可（指数の終値の形式を確認できません）」。
+- **分配日の開いた行の 2 行目**は「（ストーリング日なし・…）」を「（ストーリング日を含まない・…）」に変えた。すぐ下の「ストーリング日…：S&P 1日」と並ぶと「なし」が 0 日に読めるため。
+
+**M10（文書）**
+
+- docs/MARKET_HISTORY_PRODUCER.md：表の put/call と S&P500/Nasdaq の 2 行は 2026-10-13 の checkout の説明だった。collect-market-trends.py（static-site.yml:1001、定期の公開ビルドで毎回）は Yahoo の ^GSPC／^IXIC の日足（280 営業日）と Cboe の put/call（SUM OF ALL PRODUCTS、全取引所ではないと明記）を集め、export-market-trends.mjs が market-trends の asset にする（コード読取）。表に訂正の印を付け、表の下に訂正の注を足した。P5 の節の「未収録（旧形式）」の一文も訂正した。
+- docs/MARKET_INDICATOR_HISTORY.md：冒頭に「未実装」を明記した。grep の結果：`payload.market_indicator_history` を書く処理は frontend/src、frontend/tools、backend、.github のどこにも無い。読み手 `marketIndicatorHistory.js` はアプリのどの画面からも import されず（tools の 4 ファイルとテストだけ）、文書が挙げる `StaticBreadthPage` と `MarketIndicatorHistory` は #127 で外れて今は無い。ローカル専用の export-market-history.mjs（13F だけ）はワークフローから呼ばれない。
+- docs/brief-and-market-environment.md：M8a〜M8e と M9 の定義、round 3 の市場の定数の表（`DISTRIBUTION_REFERENCE`／`CAUTION`、`DISTRIBUTION_WARN`、`FTD_RECENT_SESSIONS`、`FTD_MIN_DECLINE`、`BREAKOUT_EARLY_SESSIONS`、`BREAKOUT_FAILURE_PERCENT`、`BREAKOUT_WINDOW_TEXT`、`BREAKOUT_MIN_SAMPLE`／`LEADER_MIN_COHORT`、ストーリング日の 3 つ、`STALLING_SESSIONS`、`BIG_UP_DAY`、`BACKEND_BREADTH_GUARD`、`EMIT_R3_MARKET_FIELDS`。それぞれ何で固定しているか）、candidate-history（record-candidate-history.mjs が公開ごとに候補一覧のその日の snapshot を足し、restore-candidate-history.py が次のビルドの前に戻す。市場タブは読まない）。M3 と M6 の段落の古くなった語（「ストーリング日なし」「ブレイクアウト成功率」）も直した。
+
+### 計画・指示からの補いと判断
+
+1. **上抜けの行の名前は「上抜け維持（確定分）」（指示の「上抜けの維持（確定分）」から「の」を落とした）。**
+   - 指示は「長い形が 320／375／390 で閉じた行を伸ばさないなら長い形、伸ばすなら『上抜けの維持（確定分）』」。測ると、短い形でも 320 で伸びた（下の表）。
+   - 「の」を落とした 10 文字（旧名「ブレイクアウト成功率」と同じ文字数）は 320／375／390 とも閉じた行が変わらない（実測）。窓（10〜29営業日前）は開いた行で言う。
+   - 選択肢：このまま受け入れる。または「上抜けの維持（確定分）」に戻して 320 のリーダー区画の +14px を受け入れる。
+2. **ストーリング日と +3% の日は、2 指数を 1 行にまとめた**（見出しと注意書きを 1 回だけにするため）。指数の間は「／」で区切る（不可の理由の文に「・」が入るため）。
+3. **新しい行は、古い日のとき「（M/D時点）」を付ける。** 市場計画の規則 2 は指数系列を読む新しい表示に同日ガードを求めるが、指示の M9 は日付を付ける形だった。開いた行の既存の行（分配日の日付の行、FTD の行）も日付を付ける形なので、M8d・M8e・M9 をそろえた。古い値を今日の値として出す箇所は無い。
+4. **M8a・M8c の副文は、行の値と同じ行のオブジェクトから読む。** 1 つの日付が値と副文の両方に当たるため。M8c の早期の読みは確定分より条件（観測率の窓）が短いので、率が古い日の行のときは古い日の早期の読みが出る。
+5. **null の副文は「未算出（…）」、キーが無いときだけ「未収録（この公開データには含まれていません）」**（指示の訂正どおり、「旧形式」とは言わない）。M9 だけは指示どおり「未収録（旧形式）」（終値は round 2 からのキーで、無いのは本当に古い公開だけ）。
+6. **副文は段のタブの「?」を変えない。** 値の行の `valued`・`missing`・`warn` には触れず、群の `unknown` がキーの有無で同じことを vitest で確かめた。
+7. **M8e の 6% は `FTD_MIN_DECLINE`（followThroughDay.js）から読み、文の「6%」は `FTD_TEXT.decline`。** followThroughDay.js は変えていない。
+8. **MarketCard.test.jsx を変えた**（パッケージのファイル一覧にないが、このトラックの所有。P3・P4 と同じ）。名前と「ストーリング日を含まない」の照合を producer の定数から作るようにした。
+9. **marketTabStudy の `followThroughDetail()` は引数なしで今までの 4 行を返す**（既存のテストと spec がそう呼ぶ）。市場タブは `followThroughDetail(indices, date)` で呼び、4 行の後に M8e と M9 の行が付く。
+10. **Today の文の変化**：上抜けの規則が発火する日、Today の悪化サインの行は「○ 参考：上抜け維持（確定分）が30%に低下（独自判定）」になる（旧「ブレイクアウトの成功率が…」より 1 文字短い）。基準のフィクスチャでは発火しない。
+
+### 高さ（実測、閉じた状態）
+
+計測は scratch の spec（`$S/audit3/r3-market/p6/measure/p6-measure.spec.js`、`p6-states.spec.js`）。CI と同じ Chrome for Testing 147 と CI のフォント（`FONTCONFIG_FILE=$S/ci-fonts/fonts.conf`）、ポート 4433。
+
+**上抜けの行のラベル**（基準のフィクスチャ、リーダーの区画を開いたとき、閉じた行の高さ px）
+
+| 幅 | 変更前「ブレイクアウト成功率」 | 「上抜けの維持（確定分・10〜29営業日前）」 | 「上抜けの維持（確定分）」 | 「上抜け維持（確定分）」（採用） |
+|---|---|---|---|---|
+| 320 | 85 | 117.5 | 98.7 | 85 |
+| 375 | 65 | 97.5 | 65 | 65 |
+| 390 | 65 | 78.7 | 65 | 65 |
+| 1440 | 61 | 93.5 | 61 | 61 |
+
+- 長い形ではリーダーの区画の内容高が 320 で 1159→1192、375 で 1075→1107、390 で 1061→1075。1440 の旧形式の「未収録」の行も 73.6→92.8px。
+- 「上抜けの維持（確定分）」は 320 だけ 1159→1173。採用した形は全幅で変わらない（320 の 5 状態、測った）。
+
+**P6 の 4 状態の閉じた高さ**（変更前のコード 90e88204 と変更後で、同じ状態を同じ spec で測った。各区画の内容高 px）
+
+| 状態 | 幅 | 指数 | 参加度 | リーダー | 先頭の下端 |
+|---|---|---|---|---|---|
+| キーあり（＋終値・ストーリング日・FTD 後の 2.4% の下げ・最新のコホート 30） | 320／375／390 | 1337／1201／1201 | 1098／1031／1015 | 1161／1075／1061 | 551／531／531 |
+| キーなし（基準のフィクスチャ） | 320／375／390 | 1341／1219／1219 | 1098／1031／1015 | 1159／1075／1061 | 551／531／531 |
+| 小さい標本 | 同上 | 同上 | 同上 | 同上 | 同上 |
+| 不正なストーリング日 | 同上 | 同上 | 同上 | 同上 | 同上 |
+
+- 変更前と変更後の JSONL は全 12 行で一致した（`diff` の出力なし）。
+- 変更前のコードは、作業ツリーの frontend/src だけを一時的に 90e88204 に戻して測り、すぐ HEAD に戻した（`git checkout 90e88204 -- frontend/src` → 計測 → `git checkout HEAD -- frontend/src`。戻した後の `git status` は spec の未コミットの変更だけ）。
+- 基準の 5 状態（基準、切替、旧形式、上抜けの規則の発火、1 営業日遅れ）× 4 幅でも、ラベルの採用後は内容高・先頭・注意サインの一覧の高さが変更前と同じ（変わったのは発火の状態の注意サインの文だけ）。
+- 負荷：計測の前後の /proc/loadavg は 1.50〜5.37（他のトラックと共有）。高さは負荷に左右されないが、時間は測っていない。
+
+### 8849bf9 の読み手と画面（規則 18、scratch、実測。コミットしたテストではない）
+
+CI の浅いチェックアウトには 8849bf9 が無いことがあるので、scratch で 1 回だけ確かめた。置き場所は `$S/audit3/r3-market/rule18/`（コミットしない）。
+
+- 8849bf9 の木：`at8849bf9/frontend/src` は `git archive 8849bf9` の frontend/src。`diff -rq` で 8849bf9 と同一（足したのは scratch のテスト `src/rule18.scratch.test.jsx` 1 つだけ）。node_modules はこの worktree のものへのリンク。
+- 入力
+  - P5 の collector の出力：`build_on_off.py`（P5 の `build()` を `EMIT_R3_MARKET_FIELDS` の off と on で、P5 の単体テストの合成入力 3 つ〔設計した銘柄群、その 12 銘柄に欠けがある形、環境テストの 110 銘柄〕）→ `py/*.json` の 6 つ（各 560 行）。
+  - フィクスチャの market-trends：`dump-fixture.mjs`（brief-fixture.js の `marketTrends()`、spec が配る asset そのもの）。テストの中で、長期履歴の全行に 5 つのキーを、2 指数に `stalling`（一方は日付 1 つ、他方は不可と理由）を足す。
+- コマンド（このセッションで再実行）：`cd rule18/at8849bf9/frontend && RULE18_PY=../../py RULE18_FIXTURE=../../fixture-asset.json npx vitest run src/rule18.scratch.test.jsx`（PATH の先頭 /opt/node22/bin）→ 10 件通過、rc=0。
+- 結果
+  - collector の 6 つの出力（キーなし 3、キーあり 3）を、8849bf9 の `validateLongHistory` と今の `validateLongHistory` がどちらも受け入れる。
+  - exporter を 10-23 の実際の入力で出力 on と off で動かすと、8849bf9 の `readMarketTrends` の結果は、そのまま通る `stalling`（2 指数とも `dates: []`）を除いて同じ。
+  - キーを足したフィクスチャでも、8849bf9 の読み手は長期履歴を取り下げず（`long_history_error` なし）、キーを素通しする。
+  - 8849bf9 の `marketCardView` の表示する部分（today、groups、signals、verdict、warnings、split、dating、summary、conflict、distReasons。JSON で 14170 文字）はキーの有無で同一。`history` は生の行を素通しするので比較から外したが、1440 の MarketScreen の描画（全区画が 1 画面）で覆われる。
+  - 8849bf9 の MarketScreen の描画（375 で 47641 文字、1440 で 45279 文字）と Today の MarketCard（5268 文字）は、キーの有無でマークアップが同一。
+- よって、on に切り替えた後に古い UI（キャッシュの残る端末）が新しいキーを受け取っても、取り下げも表示の変化も起きない。実際の長期履歴（11-12 の再構築）に 5 つのキーを付けたものは 8849bf9 の読み手に通していない（未検証）。
+
+### 関門（実測、コードの最終 HEAD ebd6cdfe）
+
+計測はすべて CI と同じ Chrome for Testing 147 と CI のフォント（`FONTCONFIG_FILE=$S/ci-fonts/fonts.conf`）、PATH の先頭 /opt/node22/bin、ポート 4433。dump の木は「dirty」と記録されるが、未コミットはこの文書（docs/round3/market.md）だけ。
+
+- **(1) MARKET の spec**：146 件すべて通過（6.0 分）。コマンド：`AUDIT_PORT=4433 AUDIT_MATCH='brief-market' npx playwright test -c $S/audit3/r3-market/pw-147.config.mjs`（frontend で。PATH と FONTCONFIG_FILE は上のとおり）。/proc/loadavg は 3.59→3.08。再実行は不要だった。
+  - 1 回目は d3b837bf をコミットする直前の作業ツリー（spec の最後の変更の後）で、146 件すべて通過していた（6.6 分、/proc/loadavg 5.84→5.02）。コミットの後の木で測ったと言えないので、ebd6cdfe の後に取り直したのが上の値。
+- **(2) 凍結 spec（無編集）**：124 件通過、2 件スキップ（brief-oracles の R1／R2 の test.fixme）、失敗 0、6.6 分。コマンド：`AUDIT_MATCH='brief-(compact|phone|oracles|freshness)\.spec'`（ほかは (1) と同じ）。/proc/loadavg は 2.47→10.19。再実行は不要だった。
+  - brief-compact・brief-phone・brief-oracles・brief-freshness・brief-fixture は 45603f06 から差分 0（`git diff 45603f06 HEAD -- <5 ファイル>` が 0 行）。
+  - 4dc5698 の木でも同じ結果（124 件通過・2 件スキップ、6.9 分、/proc/loadavg 3.89→7.24）。
+- **(3) dump**：`r3-harness/dump/run-dump.sh <W> 4433` → `dump-ebd6cdf.json`（sha256 cbb64b4f…afce4c7d5ce、42 画面、エラー 0）。4dc5698 の dump と同じハッシュ。/proc/loadavg は 3.46→3.76。
+  - **変更前の dump を作り直した**：P4 の dump（d522ce7）はこのパッケージの途中で削除していたので、作業ツリーの frontend/src だけを一時的に 90e88204（P6 の直前）に戻して `run-dump.sh <W> 4433 dump-90e8820-preP6` を取り、すぐ HEAD に戻した（`git checkout 90e88204 -- frontend/src` → dump → `git checkout HEAD -- frontend/src`。戻した後の `git status` は docs/round3/market.md だけ）。sha256 は 4cdddcf3…c4471a6983 で、P4 の d522ce7 の dump と同じ（P5 は frontend/src を変えていない：`git diff --stat d522ce7c 90e88204 -- frontend/src` は空）。/proc/loadavg は 2.27→3.86。比べた後に削除した。
+  - P6 と変更前の差は 2 画面だけ（`p6/gate/dumpdiff-4dc5698-vs-preP6.txt`、`boxalign-4dc5698-vs-preP6.txt`）：
+    - 1440-market：行の名前「ブレイクアウト成功率」→「上抜け維持（確定分）」と、銘柄側の 1 行の同じ語。
+    - 375-market-tab2：行の名前の同じ変更。
+    - 箱は、新しい名前を包む `span.brief-frag`（65×19px）が 1 つ増えただけで、ほかの箱はすべて同じ位置と大きさ。内容高とページの高さは不変（1440：2519／2551、tab2：1075／1143）。Today・候補・ウォッチ・銘柄の画面は完全に一致。
+  - 8849bf9 の dump との差（`dumpdiff-4dc5698-vs-8849bf9.txt`）：P2〜P4 の差（P4 の節の一覧）に、上の名前の変更が足されただけ。市場と Today の画面のほかは、1440 の銘柄画面 6 つの横の Today の分配日タイルの 1 行（P2 の「7日以上で注意」）だけ。
+- **(4) ビルド**：`r3-harness/build/run-build.sh <W>` → `build-ebd6cdf.json`。/proc/loadavg は 3.76→4.94。
+  - `npm run build` のエントリチャンクは gzip **131.64 kB**（raw 377.05 kB）。STEP 0（c61bf96）の 130.28 kB から **+1.36 kB**（トラック全体）。P4（d522ce7、frontend/src は 90e88204 と同じ）の 131.14 kB から +0.50 kB（このパッケージの分）。線 134.00 kB の内側。
+    - エントリに入ったもの（組み上がったチャンクの文字列で確かめた）：読み手の新しい検査（`validateLongHistory` の 5 つのキー、`stallingValid`、`environmentPoint` の 2 つの率）と、`BREAKOUT_HOLD_NAME`／`BREAKOUT_HOLD_LABEL`／`BREAKOUT_WINDOW_TEXT`、`under6` の export、注意サインの文。
+    - 開いた行の文（RS推計90以上、うち終値でも更新、早期、ストーリング日、+3%以上の上昇日、未収録の語）は遅延チャンク MarketScreen にだけある。
+  - デザイン受け入れ用ビルドのエントリは 131.44 kB（vite 表示。gzip -9 で 131267 バイト）。遅延チャンク MarketScreen は 31.84→33.17 kB（vite 表示。gzip -9 で 31781→33117 バイト）。
+  - 4dc5698 のビルドと比べると、チャンクの一覧・大きさ・dist の合計（932091 バイト）が同じで、違うのはビルドの所要時間の行だけ。ebd6cdfe はコメントとテストだけの変更なので、配る JS は同一。
+  - 古い出力（4dc5698 の dump・raw・build・npm-build・ログ・snapshot/trees/4dc5698）は削除した。ebd6cdf のものだけが残る。
+
+### その他の実測
+
+- **vitest 全体（1 回目、4dc5698 の木）**：`npx vitest run`（SESSION_CALENDAR_PYTHON と FINANCIAL_REPLAY_PYTHON を指定）→ 247 ファイル、4088 件通過・2 件失敗、371.5 秒。/proc/loadavg は 4.89→8.78。
+  - 失敗の 2 件はどちらも `tools/export-market-trends.test.mjs` の 20000 ms の時間切れ（「writes raw and derived data with exact content hashes and binds the manifest reference」と「replays identical selected seed and manifest bytes from a foreign cwd, ignoring a spoofed cwd seed」）。このパッケージはこのファイルも export-market-trends.mjs も変えていない。
+  - そのファイルだけの再実行：59 件すべて通過、32.8 秒（2 件は 14.3 秒と 15.3 秒）。/proc/loadavg は 4.06→3.31。
+- **vitest 全体（2 回目、同じ 4dc5698 の木）**：247 ファイル、4090 件すべて通過、345.1 秒。/proc/loadavg は 2.26→8.69。同じ 2 件は 19.3 秒と 18.2 秒で通過（線の 20 秒の近く）。前のパッケージの全体の実行でも 17.8／17.9 秒（M0）、15.9／16.7 秒（P2）だった。負荷の下の時間なので参考値（advisory）。
+- **ebd6cdfe の後のパッケージの vitest**：`npx vitest run src/static/marketTrendAsset.test.js src/static/marketLongHistory.test.js src/static/brief/marketTabModel.test.js src/static/brief/MarketCard.test.jsx src/static/brief/MarketScreen.test.jsx src/static/brief/briefEnvironment.test.js src/static/reference/marketTabStudy.test.js` → 7 ファイル、264 件通過。ebd6cdfe はテスト 1 件とコメントだけなので、全体は通し直していない。
+- **eslint**：45603f06 からこのトラックが変えた .js／.jsx／.mjs の 22 ファイルで指摘 0（rc=0）。ebd6cdfe で変えた 2 ファイルも指摘 0。
+- **所有の関門**：ebd6cdfe の前に `check-ownership.py MARKET` → `OWNERSHIP OK (MARKET): 29 paths`。この節のコミットの前にも走らせる。
+- **時間の計測**：取っていない（このトラックの関門ではない）。
+
+### 未検証（P6）
+
+- **M8 のすべての値の実データでの読み**：出力が off なので、今の公開はどれもキーを持たない。画面に出るのは「未収録（この公開データには含まれていません）」（これは spec と dump で実測）。on にした後の公開で、CI ログの `Market history r3 fields …` と M0 の行の `stalling=` を、開いた行の値と照らす。期待値の数字は書かない。
+- **M9 の実際の回数**（公開の ^GSPC／^IXIC の終値）と、**M8e の「現在の下落」が実データで出るか**（どちらかの指数が confirmed で、FTD 後の下げが 6% 未満のときだけ）。
+- **開いた行の高さ**：spec が測ったのは閉じた行と先頭の下端だけ。開いた行の高さ、1024〜1439px の幅、1440 の実データでの高さは測っていない。
+- **もう一方のテーマ**：新しい行は既存の開いた行の 1 行（`details`）と同じ要素なので色の指定を足していないが、テーマごとの見え方は見ていない。
+- **8849bf9 の読み手に実際の長期履歴を通すこと**：上の規則 18 の確認は P5 の合成の出力とフィクスチャだけ。
+
+### 統合への依頼（P6。このトラックでは変えていない）
+
+- **MarketHistoryExplorer.jsx:14 の指標名「ブレイクアウトの成功率」**（所有外）。1440 では同じ市場画面の長期推移の切替ボタンに出て、環境の行の「上抜け維持（確定分）」と並ぶ。`BREAKOUT_HOLD_NAME`（briefEnvironment.js）を読むようにそろえるとよい。そのとき brief-market.spec.js:97 の照合（その切替ボタンの語）も直す。
+- **market-regime-study.mjs:201・785 の「ブレイクアウト成功率」**（所有外の研究ツールの出力の名前）。reference-sources の結果ファイル（ci-results-run41844557380.md）は記録なので変えない。次の版の研究で名前をそろえるかは統合の判断。
+- **上抜けの行の名前**（判断 1）：「上抜け維持（確定分）」を受け入れるか、「上抜けの維持（確定分）」に戻して 320 のリーダー区画の +14px を受け入れるか。戻すなら `BREAKOUT_HOLD_NAME` の 1 定数と spec の高さの値だけ。
+- **export-market-trends.test.mjs の 2 件の時間の余裕**：通るときも 14〜19 秒で、20 秒の既定の線に近い（負荷 8.8 で 2 件とも時間切れ）。テストに明示の時間（たとえば 60 秒）を付けるのがよい。このファイルは MARKET の所有だが、P6 の一覧にないので変えていない。
+- **エントリチャンク**：131.64 kB（+1.36 kB、STEP 0 比）。ほかのトラックと合わせて 134.00 kB の線に入るかを統合で確かめてほしい。
+
+
+## トラック全体のまとめ（統合で使うもの）
+
+### CONTEXT.md に移す語彙（統合のときに。このトラックでは CONTEXT.md を変えていない）
+
+| 語 | 意味 | 出どころ |
+|---|---|---|
+| 前回のFTD | 確認から `FTD_RECENT_SESSIONS`（25）営業日を過ぎた、アプリ自身の指数の FTD 記録。今の FTD としては読まない | P3（M2） |
+| 反発n日目 | 目安 0% の日に、同日の指数の記録がラリー試行（rally_attempt）のときの Today の地合いタイルの接尾辞。n は試行の日数 | P3（M4） |
+| 分配日の参考／注意 | 有効な分配日が 5〜6 日は参考（○、注意の件数に入れない）、7 日以上は注意（▲）。独自設定 | P2（M3） |
+| 銘柄側（参考） | 判定のそばの参考の 1 行（TT 達成数とその 1 か月前、上抜け維持（確定分）の率と件数、リーダーの健全度と銘柄数）。目安は読まない。注意サインに数えない | P4（M6） |
+| 上抜け維持（確定分） | 10〜29 営業日前の 52 週高値の上抜けのうち、その後 10 営業日で −7% に届かなかった割合（旧名「ブレイクアウト成功率」）。ベースのピボットの上抜けではない | P6（M8c） |
+| 早期（上抜け後5営業日） | 5〜9 営業日前の上抜けを後の 5 営業日の安値で読んだ、−7% に届いた割合（独自設定）。確定分の窓とは重ならない | P5・P6（M8c） |
+| ストーリング日（独自近似） | backend と同じ条件の近似（+0.2% 以下の上昇・出来高増・日中レンジの下半分・25 日の終値の高値から 3% 以内、25 営業日で失効）。IBD の定義は非公開。分配日の本数に入れない別の集計 | P5・P6（M8d） |
+| うち終値でも更新 | 52 週の新高値のうち、終値でも直前 251 営業日の高値を上回った銘柄数（`newHighsClose`） | P5・P6（M8b） |
+| RS推計90以上（コホート） | 20 営業日前に TT 達成かつ RS推計 90 以上で今日も観測されている銘柄（`rs90Cohort`）と、その 50 日線の上の割合。IBD RS ではない | P5・P6（M8a） |
+| 現在の下落（FTD 後） | 確認済みの FTD の後の高値から、その後の最安値日の終値までの下落率（followThroughDay の `declinePct`）。6% で調整判定（独自設定） | P6（M8e） |
+| +3%以上の上昇日 | 前日の終値より +3% 以上上がった日の回数（〔参考〕、買いの合図ではない）。+3% はミネルヴィニの数字、使い方は独自設定 | P6（M9） |
+| 同日の記録 | `sameDayFollowThrough` が返す、分析日と同じ日の指数の判定記録 | P2（M1a） |
+| 更新待ちの判定 | 後の取引日が引けたのに公開が来ていないときの、市場タブの結論文 | P2（M1e） |
+| 0% の注記 | 50日線割れの判定の 0% が独自設定で検証されていないことを言う文 | P4（M5） |
+| 未収録（この公開データには含まれていません） | 公開がキーを持たないときの語。旧形式の公開にも、出力を off にした今の公開にも使う。0 にも率にもしない | P6 |
+
+### このトラックで計画（市場環境の計画・指示）から変えたこと
+
+- **P1（M0）**：`ddDates=-`（本数が出せない指数。`[]` は 0 日と同じ意味になるため）。1 営業日遅れの指数は自分の日付で出す。既存テスト 1 か所（子プロセスの標準出力の最後の行を読む）。
+- **P2（M1・M3）**：200 日線の下の状態で電話の閉じた高さが +27px（M1c のラベルの折り返し）。M1e の電話の短い形。分配日の橋渡しの句は開いた行の 1 行目。M1b は「1年高値」。M1e に猶予なし。5・7 本の状態の高さは変更前後の同じ状態で比べた。▲と○の組の短い形「▲ 1」「○ 1」。
+- **P3（M2・M4）**：M4 のタイルは 97±2 ではなく 115.8px（375）。M2 の経過日数は値ではなく em の先頭。原因行の同日の判定に記録の asOf も求めた。年をまたぐ前回の FTD は 320 で +24px。
+- **P4（M5〜M7）**：M7 の凡例は短い形。M6 の凡例の句は注記の文へ。M6 の日付は見出しにまとめた。系列が ready でないと銘柄側の行は出さない。
+- **P5（M8 の producer）**：ストーリング日は 25 営業日の失効だけ（backend の 5% の外し方は入れていない）。49 本未満は不可。早期の判定は後の 5 営業日の安値がすべて観測されたものだけ。出力が off の間、ログはストーリングを同じ build から読む。
+- **P6（M8 の読み手と表示、M9、M10）**：
+  - 指揮役の訂正 2 つ（計画への訂正）：M8e は新しい producer のキーを作らず、followThroughDay の既存の `peak`・`low`・`declinePct` を読む表示だけ。キーが無いときの語は「未収録（旧形式）」ではなく「未収録（この公開データには含まれていません）」。
+  - このパッケージの判断：上抜けの行の名前「上抜け維持（確定分）」（判断 1。指示の 2 つの形はどちらも 320 で閉じた行を伸ばした）。ストーリング日と +3% の日は 2 指数を 1 行（判断 2）。古い日は隠さず日付を付ける（判断 3）。分配日の開いた行の「ストーリング日なし」→「ストーリング日を含まない」。MarketCard.test.jsx（このトラックの所有、P6 の一覧の外）の照合を producer の定数から作るようにした。
+
+### 統合への依頼（全パッケージ。このトラックでは変えていない）
+
+- **P2**：market-regime-study.mjs の説明（41 行、762 行）が「DISTRIBUTION_WARN で注意」のまま。M1c のラベルが所有外の画面（entryReadiness、buildPortfolioPlan の blockers、PortfolioPlanDrawer／PortfolioDecision）に届く。200 日線の下の +27px を受け入れるか。M1e の猶予を足すか。▲と○の組の短い形のデザインの確認。
+- **P3**：M4 のタイルの高さ（TodayView／brief.css）。年をまたぐ前回の FTD の 320 の +24px（shortDate は共有）。gspcFtdWords の「^GSPCの日足ではFTD 8/7」は「前回の」と言わない。「前回のFTD」の語が 3 つのソースと spec に直接書いてある。
+- **P4**：注意サインの見出しの「参考 M件」が注意の日に琥珀色になる（brief.css）。marketRegimeReference.js:75 のコメントと同 test.js:41 のテスト名が古い凡例の語。過去の傾向の脚注の「値動きが荒い」を残すか。metricGlossary.js:139 の「3=天井圏」。
+- **P5**：audit-market-history.py に 5 つのキーの独立の再計算を足す（on の前に）。ストーリング日に backend の 5% の外し方を入れるか（入れるなら method id を変える）。
+- **P6**（詳しくは P6 の節の「統合への依頼」）：
+  - **frontend/src/static/components/MarketHistoryExplorer.jsx:14 の長期推移の指標名「ブレイクアウトの成功率」**（所有外）。1440 では同じ市場画面で環境の行の「上抜け維持（確定分）」と並ぶ。同じ `BREAKOUT_HOLD_NAME` を読むようにそろえるとよい。そのとき brief-market.spec.js:97 の照合も直す（このトラックの spec だが、所有外のファイルの語なので触れていない）。
+  - market-regime-study.mjs:201・785 の同じ旧名（研究ツールの出力。記録の結果ファイルは変えない）。
+  - 上抜けの行の名前（判断 1）を受け入れるか。
+  - export-market-trends.test.mjs の 2 件に明示の時間を付ける（通るときも 14〜19 秒で、既定の 20 秒に近い）。
+  - CONTEXT.md の語彙（上の表）。
+- **エントリチャンク**：P6 の関門 (4) の 131.64 kB（STEP 0 の 130.28 kB から +1.36 kB）。統合で 134.00 kB の線に入るかを、ほかのトラックと合わせて確かめてほしい。
+
+### 次回の公開を読むまで未検証のもの（期待値の数字は書かない）
+
+- M0 のログの行の値：実際の ^GSPC／^IXIC の最後の日、分配日の本数と日付、FTD の状態・日・下落率、ストーリング日の本数と日付（P5 の 2 欄）。
+- 実際の分配日数の段階（4 以下、5〜6、7 以上）と、Today／市場タブの分配日の行の読み。
+- FTD の行の読み（「確認」「前回のFTD」「反発n日目」）と、M8e の「現在の下落」が出るか（^GSPC か ^IXIC が confirmed で下げが 6% 未満のときだけ）。
+- M8 のすべての値：長期履歴の 5 つのキーと各指数のストーリング日。出力が off の間は画面にどれも「未収録」と出る（これは実測：P6 の関門と spec）。on にした後の公開で、CI ログの `Market history r3 fields …` と M0 の行の `stalling=` と、画面の値を照らす。
+- M9 の実際の回数（公開の ^GSPC／^IXIC の終値）。
+- 1440 の市場・Today の実データでの高さ。
+- 長期履歴のキャッシュの全件の取り直し（P5 の合流と on の切り替えで 1 回ずつ）が成功するか、かかる時間。
+
+### 追従コミット：EMIT_R3_MARKET_FIELDS を on にする（OD-M10 の既定）
+
+1. round 3 の UI（このトラックの P6 を含む）が合流して Pages に出たことを、読取だけで確かめる。市場タブの開いた行に「未収録（この公開データには含まれていません）」が出ていれば、新しいキーを受け入れる UI が届いている。
+2. その前に、audit-market-history.py に 5 つのキーの独立の再計算を足す（P5 の依頼）。ストーリング日の 5% の外し方を決める（変えるなら method id も）。
+3. 1 つの追従コミットで、collect-market-history.py の `EMIT_R3_MARKET_FIELDS = False` と export-market-trends.mjs の `EMIT_R3_MARKET_FIELDS=false` を両方 on にする。長期履歴のキャッシュキーが変わるので、次の定期実行は全件を 1 回取り直す（P5 の注意）。
+4. 8849bf9 の読み手と画面も新しいキーを受け入れ、表示が変わらないことは、P6 で scratch で確かめた（P6 の「8849bf9 の読み手と画面」）。on の後に古い端末のキャッシュが古い UI を出しても壊れない。
+5. on の後の最初の公開で、CI ログの 2 種類の行と市場タブの値を読取で照らす（検証のための再実行はしない）。
