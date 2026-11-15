@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
-import { basisConflict, delta, distributionGrade, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, DISTRIBUTION_CAUTION, DISTRIBUTION_REFERENCE, DISTRIBUTION_TEXT, DISTRIBUTION_WARN, REFERENCE_CHECKS, RULE_TEXT, signedPercent, verdictBasis, verdictWaiting, yearRange } from './marketTabModel';
+import { basisConflict, delta, distributionGrade, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, DISTRIBUTION_CAUTION, DISTRIBUTION_REFERENCE, DISTRIBUTION_TEXT, DISTRIBUTION_WARN, REFERENCE_CHECKS, RULE_TEXT, signedPercent, STAGE_NAMES, verdictBasis, verdictWaiting, yearRange } from './marketTabModel';
 import { DISTRIBUTION_METHOD } from '../distributionDays';
 import { distributionDetail, DISTRIBUTION_BRIDGE } from '../reference/marketTabStudy.js';
 import { marketUpdateState } from '../marketUpdateState';
 import { historyTakeaway, sectorRanks } from './marketTabHistory';
-import { marketTabParts, STOCK_SIDE_HEAD } from './marketTabGroups';
+import { marketTabParts, STAGE_LEGEND_NAMES, STAGE_REPLAY_NOTE, STOCK_SIDE_HEAD } from './marketTabGroups';
 import { gspcFtdWords, marketRegimeContext, marketTabStudy, nasdaqNote, publishedIndexState, publishedMarketContext, regimeCause, regimeKey, signalTagText, REGIME_NAMES, TAG_MEANINGS, TT_POPULATION } from '../reference/marketTabStudy.js';
 import { followThroughView, marketTileSuffix, MARKET_TILE_SUFFIX } from './briefEnvironment';
 import { capText } from '../portfolioPlan';
@@ -47,7 +47,7 @@ describe('market tab view model: a complete, current publication', () => {
     expect(item(model, 'rs90')).toMatchObject({ b: '8銘柄', change: '−2' });
     expect(item(model, 'breakout')).toMatchObject({ b: '75%', note: '8件で判定', detail: '10〜29営業日前の上抜け8件のうち6件が10日間で−7%に届かず', warn: false });
     expect(item(model, 'health')).toMatchObject({ b: '70%', note: '20営業日前のTT達成30銘柄が対象', detail: '30銘柄のうち21銘柄が50日線の上' });
-    expect(item(model, 'stage')).toMatchObject({ b: 'ステージ2 35%', stages: [{ k: 1, name: '底固め', share: 25 }, { k: 2, name: '上昇', share: 35 }, { k: 3, name: '天井圏', share: 20 }, { k: 4, name: '下降', share: 20 }] });
+    expect(item(model, 'stage')).toMatchObject({ b: 'ステージ2 35%', stages: [{ k: 1, name: '底固め', share: 25 }, { k: 2, name: '上昇（加速中）', share: 35 }, { k: 3, name: '横ばい・天井圏', share: 20 }, { k: 4, name: '下降', share: 20 }] });
     expect(item(model, 'extremes').rows.map(r => [r.name, r.b, r.warn || false])).toEqual([['新高値', '40', false], ['新安値', '12', false]]);
     expect(item(model, 'dist').rows.map(r => [r.name, r.b, r.asOf])).toEqual([['S&P', '3日', null], ['NAS', '4日', null]]);
     // The fixture's FTD is 40 sessions old: the producer's 「前回のFTD 8/7」 (M2).
@@ -964,5 +964,25 @@ describe('market tab: the 銘柄側 line (M6)', () => {
     // The warning summary counts the two fired rules, as before, and nothing else.
     expect(tagged.signals.fired.map(c => c.key)).toEqual(['leaders', 'breakout']);
     expect([tagged.signals.warnings, tagged.signals.references]).toEqual([0, 2]);
+  });
+});
+
+// ---- Round 3 (M7): the stage legend under the bar --------------------------------------------------------------------------
+describe('market tab: the stage legend (M7)', () => {
+  it('names stage 2 advancing only and stage 3 flat or topping in the legend alone; the rule, its names, the shares and the sign are unchanged', () => {
+    const model = view(trends({ rows: breadth('2026-10-02', (i, n) => (i === n - 1 ? { stage2: 30, stage4: 50 } : {})) }));
+    const stage = item(model, 'stage');
+    expect(stage.stages.map(s => s.name)).toEqual([...STAGE_LEGEND_NAMES]);
+    expect(STAGE_LEGEND_NAMES).toEqual(['底固め', '上昇（加速中）', '横ばい・天井圏', '下降']);
+    // RULE_TEXT.stage (and every other reader of STAGE_NAMES) keeps the names it had.
+    expect(STAGE_NAMES).toEqual(['底固め', '上昇', '天井圏', '下降']);
+    expect(RULE_TEXT.stage).toBe('200日線の傾き・株価の傾き・200日線との位置から日ごとに判定した、1 底固め・2 上昇・3 天井圏・4 下降の割合。ステージ4がステージ2を上回ると注意サインです。');
+    // The opened row says the long history does not replay the scanner's stage-2 base exception.
+    expect(stage.details).toEqual([STAGE_REPLAY_NOTE]);
+    expect(STAGE_REPLAY_NOTE).toBe('スキャナーのステージ2ベース例外は再生していません（独自集計）');
+    // The shares and the stage4 > stage2 sign (a 参考 rule) as before.
+    expect(stage.stages.map(s => s.share)).toEqual([25, 15, 20, 25]);
+    expect([stage.reference, stage.flag]).toEqual([true, 'ステージ4がステージ2より多い']);
+    expect(model.warnings.map(w => w.key)).toContain('stage');
   });
 });

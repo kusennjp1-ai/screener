@@ -5,7 +5,7 @@
 import { BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT } from '../marketLongHistory';
 import { indexSummary } from '../reference/indexSummary.js';
 import { distributionCount, shortDate, ENV_RULES } from './briefModel';
-import { delta, DISTRIBUTION_TEXT, groupDate, indexCloses, monthBefore, num, pointChange, rangePosition, RULE_TEXT, STAGE_FIELDS, STAGE_NAMES, YEAR, yearRange } from './marketTabModel';
+import { delta, DISTRIBUTION_TEXT, groupDate, indexCloses, monthBefore, num, pointChange, rangePosition, RULE_TEXT, STAGE_FIELDS, YEAR, yearRange } from './marketTabModel';
 
 const finite = Number.isFinite;
 
@@ -14,6 +14,16 @@ function ftdSignal(name, ft, date) {
   if (!ft || ft.available !== true || ft.state !== 'ftd_failed') return null;
   return `${name}のFTDが失敗${ft.failedDate ? `（${shortDate(ft.failedDate, date)}）` : ''}`;
 }
+
+/**
+ * The stage bar's legend under the bar (M7; MT-05): stage 2 counts an advancing name only and stage 3 a flat or topping one, a
+ * base being built included, so a trend-template name in a base reads 3 here. The short form keeps the legend at two lines at
+ * 320px (measured: 「2 上昇（加速中のみ）」「3 横ばい・天井圏（ベース形成中を含む）」 take four). Only this legend reads it;
+ * STAGE_NAMES (RULE_TEXT.stage) is unchanged, and so are the stages, the shares and the stage4 > stage2 sign.
+ */
+export const STAGE_LEGEND_NAMES = Object.freeze(['底固め', '上昇（加速中）', '横ばい・天井圏', '下降']);
+/** The opened stage row (M7): the long history's stages are its own daily judgement, without the scanner's stage-2 base exception. */
+export const STAGE_REPLAY_NOTE = 'スキャナーのステージ2ベース例外は再生していません（独自集計）';
 
 /** The 銘柄側 line's head (M6): the stock side, for reference, beside a guide it does not move. */
 export const STOCK_SIDE_HEAD = '銘柄側（参考・目安は変えません）';
@@ -135,7 +145,7 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
       : { ...healthBase, ...absent('leaderCohort') };
   const stageHit = known(STAGE_FIELDS);
   const stageItem = stageHit ? { key: 'stage', label: 'ステージ構成', className: 'is-stage', metric: 'stages', rule: RULE_TEXT.stage, valued: true, b: `ステージ2 ${num(stageHit.value.stage2Percent, 0)}%`, asOf: older(stageHit.date),
-    warn: Boolean(stageRule?.fired), flag: stageRule?.fired ? 'ステージ4がステージ2より多い' : null, stages: STAGE_FIELDS.map((field, i) => ({ k: i + 1, name: STAGE_NAMES[i], share: stageHit.value[field] })) }
+    warn: Boolean(stageRule?.fired), flag: stageRule?.fired ? 'ステージ4がステージ2より多い' : null, stages: STAGE_FIELDS.map((field, i) => ({ k: i + 1, name: STAGE_LEGEND_NAMES[i], share: stageHit.value[field] })), details: [STAGE_REPLAY_NOTE] }
     : { key: 'stage', label: 'ステージ構成', className: 'is-stage', metric: 'stages', rule: RULE_TEXT.stage, ...absent('stage1') };
 
   // Values a former long-history schema did not record are named once per group, not row by row.

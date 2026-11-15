@@ -11,7 +11,7 @@ import reference from '../reference/market-regime-reference-v1.json' with { type
 import { marketTabStudy } from '../reference/marketTabStudy.js';
 import { followThroughDay } from '../followThroughDay';
 import { exposureRuleText } from '../reference/marketTabStudy.js';
-import { marketCardView, num, signedPercent } from './marketTabModel';
+import { marketCardView, num, RULE_TEXT, signedPercent } from './marketTabModel';
 import { marketTabParts } from './marketTabGroups';
 import { followThroughView } from './briefEnvironment';
 import { followThroughDetail } from '../reference/marketTabStudy.js';
@@ -66,8 +66,11 @@ describe('brief market card: market tab', () => {
       expect(element.querySelector('.brief-env-status')).toBeEmptyDOMElement();
     }
     expect(screen.getByRole('img', { name: /^ステージ構成 ステージ1 25\.0%、ステージ2 35\.0%、ステージ3 20\.0%、ステージ4 20\.0%$/ })).toBeInTheDocument();
-    // The stage legend names each stage.
-    expect(tile('ステージ構成')).toHaveTextContent('1 底固め 25%2 上昇 35%3 天井圏 20%4 下降 20%');
+    // The stage legend names each stage (M7: stage 2 advancing only, stage 3 flat or topping).
+    expect(tile('ステージ構成')).toHaveTextContent('1 底固め 25%2 上昇（加速中） 35%3 横ばい・天井圏 20%4 下降 20%');
+    // Opened, the row says the scanner's stage-2 base exception is not replayed, then its rule.
+    fireEvent.click(toggle('ステージ構成'));
+    expect([...tile('ステージ構成').querySelectorAll('.brief-env-detail p')].map(p => p.textContent)).toEqual(['スキャナーのステージ2ベース例外は再生していません（独自集計）', `基準${RULE_TEXT.stage}`]);
   });
 
   it('opens a row to its details, its rule and a link that opens the metric in the long history', () => {
