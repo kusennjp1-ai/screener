@@ -1272,3 +1272,149 @@ p4-4 への対応。上抜けから `SELL_RULES.failedBreakoutSessions`（10）�
   - 「収縮 0」の形は、ピボットの足まで滑らかに上がり、次の足で上抜ける形にした（上抜けの前に確かめられた高値が無いので、基準も収縮も無い）。注文の括弧書き（「基準がその直前」）どおりの形では、ジグザグがピボットの足を基準として確かめられず、Setup Engine の土台も c − 1 より前に限るので、収縮 0 にならない。収縮 1 の形は、収縮 1 つの後にピボットの足、次の足で上抜けにした。
   - 土台の準備完了 30 行は c61bf96 の組で数え、このブランチの d5b3e42 の組（19 行）も並べた。d5b3e42 の準備完了は R3b などで 26 行（CI と同じ日足は 19）に変わっているため。
 - 片づけ：このパッケージが作ったハーネスの出力はビルドの b141086 だけ（json、trees/b141086、npm-build-b141086）。R-P5 の d5b3e42 のビルドは R5 の記録が参照するので消していない。probe・dump・スナップショットは作っていない。スクラッチの `$T/r6/before`（b80ab95e の frontend/src と frontend/contracts、6 MB）と束は、指揮者の確認のために残した。
+
+## R6（続き）. 構造の損切りは上抜けの後の収縮の安値をとらない（パッケージ R6-P2）
+
+P1 の後、自動の収縮（v3）は上抜けの足をまたがない。だからこれは主な直しではなく守り。P1 が測り直さない証拠、つまりレビュー担当者の区間や、ほかの方法で測った脚を持つ証拠にも効く。前の structuralStop は「ピボットより下の最後の脚」をとった。上抜けの後にピボットを割った押しも、そのまま損切りの安値になった（HUM：11/12 の 434.09、ピボット 442.99、state ok、損切り 431.92）。
+
+### 規則（positionSizing.js の structuralStop。独自判定。新しいしきい値は無い）
+
+- 引数 `breakoutDate = null`（ISO の日）を足した。
+  - positionPlan（呼び出しはここだけ）は `pivotBreakout(judged, view.row).breakoutDate` を渡す。P1 の関数（bookTechnicalEvidence.js）なので、測定と損切りで切れ目の定義は一つ。`pivotDate` は今のまま pivotBar から渡す。
+  - 読み込みの循環は無い。bookTechnicalEvidence.js が読むのは qualificationAudit.js（evidenceTime.js だけを読む）と brief/pivotBar.js（何も読まない）だけ。
+- breakoutDate が ISO の日なら、終わりがその日かその後の脚は候補にしない。
+  - 脚の終わりは、endDate が ISO の日ならそれ、でなければ lowDate。
+  - どちらも ISO の日でない脚は日付で比べられないので外さない。選ばれれば、日足との照合で 「収縮の測定日が日足と不一致」 になる（今と同じ）。
+- 残った脚から今と同じ選び方をする：ピボットより下の最後の脚。
+- 全部の脚が外れたら unknown（low・lowDate・stop・percent は null）。理由は新しく書き出した定数 `POST_BREAKOUT_LEGS_REASON`：「収縮はすべてピボットの上抜けの後の値動き」。
+- 残った脚がすべてピボット以上なら、今の理由 「最後の収縮がピボットより上（上抜け後の押し）」 のまま。外れた脚の安値はとらない。
+- 固定の％にも 0 にもしない。unknown は理由を言う。
+- breakoutDate が null・undefined・形の悪い値なら、何も外さず今と同じ結果（テスト 4 で toEqual）。
+
+### 検査の順番と R2(b)
+
+- 今の検査は、すべて同じ順番で残した。外す脚（kept）は脚を選ぶところで決め、結論は R2(b) の後に出す。
+  1. 今の選び方（全部の脚から）でピボットより下の脚が無ければ、今と同じ場所で unknown。理由は、全部外れていれば新しい理由、そうでなければ今の理由。
+  2. 測定日・日足との照合・R2(b)（previousBaseReason）は、今と同じ脚で今と同じに行う。
+  3. その後で、残った脚から選び直す。無ければ unknown（全部外れた → 新しい理由、残ったが全部ピボット以上 → 今の理由）。選び直した脚が今の脚と違えば、その脚も日足と照合する。
+- だから、breakoutDate 無しの呼び出しが 前の土台（R2(b)）か 「収縮の測定日が日足と不一致」 を返す入力では、breakoutDate があっても同じものを返す。**R2(b) が勝つ**。テスト 5 で 3 つの場合を確かめた：一部が外れる、全部が外れる、残った脚がピボット以上。
+- 二つの規則が同時に当たるのは、手で作った証拠だけ。
+  - 自動の脚は土台の上抜けの前に終わる。土台がピボットの足より前に上抜けていれば、脚はすべてピボットの足より前に終わるので、新しい規則では外れない。
+  - レビュー担当者の区間の証拠は base を持たないので、R2(b) は当たらない。
+- 注文は「脚を選ぶところに置く」。外す脚はそこで決めるが、結論は R2(b) の後に出した。注文のもう一つの文 「R2(b) はそのまま、前に当たったところでは勝つ」 を、全部の入力で守るため。結論を脚を選ぶところで出す形（改変テスト C）では、全部が外れる場合に新しい理由が前の土台に勝ち、テスト 5 が落ちる。
+
+### 文言と規則 18
+
+- 新しい理由は 20 字。StockPlanCard.jsx（読んだだけで、変えていない）は unknown を 「構造上の損切り目安：収縮の安値 未確認」 に続けて、同じ行に 「（理由）」 として出す（`.brief-structural.is-unknown` は inline）。だから 320px では、どの理由も 1 行に入らない（今の 22 字の理由も同じ）。入れ子の括弧は避けた。
+- この理由が出る画面は、フィクスチャにも再構築にも無い（下の数で 0 行）。描いて確かめていない（未検証）。
+- 新しいレコードのキー・警告コード・インデックスの欄は無い（理由は画面の側で計算する）。規則 18 は当たらない。
+
+### テスト（新しいファイル positionSizingBreakout.test.js の 6 本）
+
+- positionSizing.test.js は変えていない（`git diff 05488ef8 -- frontend/src/static/brief/positionSizing.test.js` は空）。既存の 28 本は配線の直後にも、そのまま通った。
+- 形はファイルの中で作る。HUM の形は bookTechnicalEvidencePivot.test.js と同じ作り方（ピボットの足 → 上抜け → ピボットを割る押し）。
+1. HUM の形を、レビュー担当者の区間で測る。T1 は取っ手（上抜けの前）、T2 は上抜けの後の押し。どちらの安値もピボットより下。breakoutDate ありでは T1 の low・lowDate、なしでは T2（前の振る舞い）。null でもなしと同じ。
+2. 全部の脚が上抜けの日かその後に終わる → toEqual unknown（POST_BREAKOUT_LEGS_REASON）。全部ピボット以上で全部外れても同じ理由。残った脚がピボット以上なら今の理由。外れた脚だけがピボットより下でも今の理由。
+3. 上抜けの日に終わる脚は外れ、その前の日に終わる脚は残る。lowDate が前でも endDate が上抜けの日なら外れる（endDate と lowDate が分かれる場合）。endDate が無い脚、ISO の日でない脚は lowDate で比べる。選び直した脚も日足と照合する。
+4. breakoutDate が null・undefined・'bad'・'2026-3-1'・数・Date のとき、ok・tooDeep・above・ピボットより上の 4 つの形で、引数なしと toEqual。
+5. R2(b) が勝つ（上の 3 つの場合）。測定日の不一致も同じ場所に残る。
+6. positionPlan の配線。HUM の形の日足と、se_pattern_primary・se_pivot_date・se_pivot_price を持つ行を使う。
+   - P1 の証拠（buildBookTechnicalEvidence）に、上抜けの後の押しの脚を手で足す。plan.structural は、breakoutDate = pivotBreakout(judged, row).breakoutDate の structuralStop と等しい。安値は押しの安値ではない（breakoutDate なしでは押しの安値）。
+   - P1 の証拠そのままでは、measurementsValid true、全部の脚が切れ目の前に終わる、state ok。守りのありなしで同じ。
+- 理由の文はすべて作り手から読む：新しい理由は定数、今の理由は structuralStop の呼び出しから。
+
+### 改変テスト（実測）
+
+- どれも `cp` で控え、`cmp` で戻したことを確かめた。
+- A：除外をやめた（`const kept = legs;`）→ 1・2・3・6 が落ちた。4・5 と既存の 28 本は通った（`$T/r6/p2-mutation.out`）。
+- B：positionPlan の配線を外した（`breakoutDate: null`）→ 6 だけが落ちた（`$T/r6/p2-mutation-B.out`）。
+- C：今の脚を残った脚から選んだ（結論を脚を選ぶところで出す形）→ 5 だけが落ちた（`$T/r6/p2-mutation-C.out`）。
+
+### 再構築での数（再現スナップショットの数、11-12。公開版の数ではない）
+
+- 入力は P1 と同じ `$H/snapshot/out/d5b3e42`。新しいスナップショットは作っていない。
+- 束：P1 の 2 つ（b80ab95e、196c880。196c880 の束は P1 の時に作ったものをそのまま使った）と、HEAD（d298e19）の新しい束 `$T/r6/p2-bundle`。89116e6 は注釈だけの違いで、束はバイト単位で同じ。
+- 買値は P1 の数と同じ近似（終値がピボット以上なら終値、でなければピボット）。judged は certifyBars が certified のときだけ日足。HEAD の breakoutDate は positionPlan と同じ `pivotBreakout(judged, row).breakoutDate`。
+- コマンド：`node $T/r6/tally-p2.mjs $H/snapshot/out/d5b3e42 $T/r6/before-bundle/bundle.mjs $T/r6/after-bundle/bundle.mjs $T/r6/p2-bundle/bundle.mjs $T/r6/tally-p2-d298e19.json $H/snapshot/out/c61bf96/counts.json`（→ `$T/r6/tally-p2-d298e19.out`）。
+
+| 数（再構築の数） | 掲載 980 | TT 8/8 の 614 | 土台の準備完了 30 | このブランチの準備完了 19 |
+|---|---|---|---|---|
+| 構造の損切り（state・low・lowDate）が変わった行：b80ab95e → HEAD | 184 | 130 | 5 | 4 |
+| そのうち P1 の測り直しで変わった行（b80ab95e → 196c880） | 184 | 130 | 5 | 4 |
+| そのうち、この守りでさらに変わった行（196c880 → HEAD） | **0** | 0 | 0 | 0 |
+| stop と reason も比べたとき（P1 の 190 の数え方）：P1 で / 守りで | 190 / 0 | 134 / 0 | 5 / 0 | 4 / 0 |
+| 構造の安値が、上抜けの日以後に終わる脚から来る行：b80ab95e / 196c880 / HEAD | 76 / 0 / 0 | 46 / 0 / 0 | 4 / 0 / 0 | 3 / 0 / 0 |
+| HEAD で理由が POST_BREAKOUT_LEGS_REASON の行 | 0 | 0 | 0 | 0 |
+| 参考：b80ab95e の証拠に HEAD の structuralStop（守りつき）をあてて、変わった行（state・low・lowDate） | 76 | 46 | 4 | 3 |
+| 同じく、上抜け後の脚から安値をとる行 | 76 → 0 | 46 → 0 | 4 → 0 | 3 → 0 |
+
+- 守りが自動の証拠で何も変えないことは、ほかに 2 つの数で確かめた。
+  - 196c880 と HEAD の証拠は、980 行すべてで同じ（深く等しい）。P2 は測定を変えていない。
+  - HEAD の structuralStop に breakoutDate を渡さないと、980 行すべてで 196c880 と同じ結果。
+- 「上抜け後の脚から」は 2 通りで数えた（安値の日が上抜けの日以後、脚の終わりが上抜けの日以後）。どちらも同じ数。
+- 参考の行は、v2 の証拠に守りをあてた場合。画面は古い版の証拠を日足で測り直すので、実際にはこの道を通らない。守りが効くことを示すためだけの数。
+  - 76 行の内訳。ok→unknown 25、tooDeep→unknown 15、overLimit→unknown 1。この 41 行は新しい理由になる。
+  - ok→ok 10、ok→tooDeep 10、tooDeep→tooDeep 11、tooDeep→ok 4。この 35 行は、上抜けの前の脚の安値になる。
+  - ほかに 14 行は、理由だけが変わる（「最後の収縮がピボットより上」 → 新しい理由。脚が全部ピボット以上で、全部上抜けの後）。
+  - 切れ目の無い行（状態 unknown・none）での変化は 0。
+- HUM と LIND（再構築の数）：
+
+| 銘柄 | b80ab95e | 196c880（P1） | HEAD（P2） | 参考：v2 の証拠に守り |
+|---|---|---|---|---|
+| HUM（上抜け 11/11） | ok、安値 434.09（11/12、上抜けの後の押し）、損切り 431.92 | unknown（収縮を測定できません） | 同じ | tooDeep、安値 399.35（11/02、上抜けの前の T1） |
+| LIND（上抜け 10/01） | tooDeep、安値 30.57（11/04、上抜けの後） | unknown（収縮を測定できません） | 同じ | unknown（新しい理由。2 つの脚とも上抜けの後） |
+
+### フィクスチャとオラクル（チャート、規則 16）
+
+- `node $T/r6/fixture-stops-p2.mjs`：既定の 30 行（状態はすべて unknown）とオラクル 8 行で、196c880 と HEAD の構造の損切りは同じ（diff 0）。
+  - ZZHB は ok 46.64（9/25、切れ目 9/28 の前）。ZZPG は前の土台（8/27）のまま。
+- だから、オラクルの probe と 492 枚の probe で予想される差は、P1 の差（ZZHB だけ）から増えない。この守りで変わる画面は無い。probe は走らせていない（未検証、P3）。
+
+### 準備（規則 19）
+
+- 準備・選定・トレンドテンプレート・結論のゲートは、構造の損切りを読まない。バックエンドのファイルは変えていない。H4 の表は R3b の記録のまま。規則 19 は当たらない。
+
+### 実測（R6-P2。コマンドと結果。時刻は日本時間。負荷のもとの数はすべて参考）
+
+環境は R6 と同じ（`PATH=/opt/node22/bin:$PATH`、`SESSION_CALENDAR_PYTHON`、`FINANCIAL_REPLAY_PYTHON`、`FONTCONFIG_FILE`）。
+
+| 検査 | コマンド | 結果 | 負荷（前 → 後） |
+|---|---|---|---|
+| 既存のテスト（配線の直後） | `cd $W/frontend && npx vitest run src/static/brief/positionSizing.test.js` | 28 本すべて通過 | — |
+| 注文の vitest | `cd $W/frontend && npx vitest run src/static/brief/positionSizing.test.js src/static/brief/positionSizingBreakout.test.js src/static/bookTechnicalEvidence.test.js src/static/bookTechnicalEvidencePivot.test.js src/static/brief/StockPlanCard.test.jsx src/static/brief/StockView.test.jsx src/static/brief/buyGate.test.js`（注文のパスはすべてある。新しいファイルと P1 のファイルを足した。`$T/r6/p2-acceptance-vitest.out`） | 7 ファイル・119 本すべて通過 | — |
+| 改変テスト A・B・C | 上 | 上 | — |
+| eslint | `cd $W/frontend && npx eslint src/static/brief/positionSizing.js src/static/brief/positionSizing.test.js src/static/brief/positionSizingBreakout.test.js` | エラー 0・警告 0 | — |
+| Playwright（plan と oracles、CI と同じ） | `cd $W/frontend && FONTCONFIG_FILE=$S/ci-fonts/fonts.conf AUDIT_PORT=4423 AUDIT_MATCH='brief-(oracles\|plan)\.spec\.js' npx playwright test -c $T/pw.config.mjs`（d298e19、07:52–07:56、3.9 分、`$T/r6/pw-p2-d298e19.out`。89116e6 との差は注釈だけ：Node の束がバイト単位で同じ） | 59 本すべて通過。skip 0、やり直し 0。ZZPG の R2 と、plan のカードの構造の損切りの検査を含む。brief-oracles.spec.js の `test.fixme(` は 0（3 行目の注釈の中の文字だけ）で、このパッケージでは変えていない（基準との差は R1・R2 の 2 つの切り替えだけ） | 0.27 → 1.88 |
+| 全部の vitest | `cd $W/frontend && npx vitest run`（89116e6、07:57–08:01、3 分 50 秒、`$T/r6/vitest-full-89116e6.out`） | 250 ファイル・4,054 本：**4,053 通過・1 失敗**。失敗は P1 と同じ StockChartCard.test.jsx の版の文字列の 1 本（P1 の統合への依頼 1）。P1 の 4,048 本 ＋ 新しい 6 本 | 0.96 → 5.47 |
+| ビルド（規則 21） | `$H/build/run-build.sh $W`（89116e6、08:01、`$H/build/build-89116e6.json`） | 入口のチャンク **132.23 kB gzip**（raw 378.01）。b141086（P1）の 132.06 から **＋0.17**。R の累計は STEP 0 の 130.28 から ＋1.95。線 134.00 まで 1.77 | 4.63 → 3.50 |
+| 所有の検査 | `python3 -I $S/audit3/check-ownership.py R $W 45603f065f054cd48c812a3003f3a71ffd91cf45` | d298e19・89116e6・この記録の前に `OWNERSHIP OK (R): 46 paths` | — |
+| 再構築の数 | `node $T/r6/tally-p2.mjs …`（上） | 上の表 | 0.37 → 0.42 |
+| フィクスチャ・オラクル | `node $T/r6/fixture-stops-p2.mjs` | diff 0（上） | — |
+| 触らない場所 | `git -C $W diff --stat 05488ef8 -- backend frontend/tools frontend/tests frontend/src/static/bookTechnicalEvidence.js frontend/src/static/brief/StockPlanCard.jsx frontend/src/static/brief/buyGate.js frontend/src/static/brief/briefSell.js frontend/src/static/brief/breakoutHistory.js frontend/src/static/brief/pivotBar.js` | 出力は空 | — |
+
+- 時間は一つも測っていない（このパッケージに時間の検査は無い）。
+
+### 未検証（R6-P2）
+
+- 新しい理由が出る画面（StockPlanCard の 320px での折り返し）。この理由になる行は、フィクスチャにも再構築にも無い。
+- レビュー担当者の区間を持つ行での数（再構築の行には区間が無い）。
+- 公開版での数（すべて再構築の数）。
+- オラクルの probe と 492 枚の probe（P3）。予想は P1 のまま（ZZHB だけ）。
+
+### 統合への依頼（R6-P2）
+
+- コードの依頼は無い。breakoutHistory.js に継ぎ目は要らなかった（pivotBreakout が切れ目を一つで持つ）。
+- P1 の依頼はそのまま（StockChartCard.test.jsx:143 の版の文字列、footprint の週数、CONTEXT.md の 「上抜けの足」、規則 16 の probe、readiness.py）。全部の vitest の 1 本の失敗は、P1 の依頼 1 のもの。
+
+### パッケージ R6-P2 の記録
+
+- コミット（どれも所有の検査 OWNERSHIP OK の後）：
+  - d298e19 `fix(frontend): keep the structural stop off post-breakout contractions`（positionSizing.js と、新しい positionSizingBreakout.test.js）
+  - 89116e6 `docs(frontend): state where the structural stop's breakout guard sits`（positionSizing.js の注釈だけ。Node の束がバイト単位で同じことを cmp で確かめた）
+  - この記録（`docs(round3): record R6-P2 (the structural stop's breakout guard)`）
+- 注文と違えたところ：
+  - テストは positionSizing.test.js ではなく、新しいファイル positionSizingBreakout.test.js に入れた（注文が許す positionSizing*.test.js）。既存のファイルを一字も変えないことを、diff の空で示せるため。
+  - 結論を出す場所は R2(b) の後（上の 「検査の順番と R2(b)」）。
+  - 注文の呼び出し名 computePlan は、実際には positionPlan。
+  - 理由の文は注文の例（「収縮は上抜け後の値動きのみ（収縮には数えません）」、24 字）より短くし、入れ子の括弧を避けた。
+- 片づけ：このパッケージのハーネスの出力はビルドの 89116e6 だけ（json、trees/89116e6、npm-build-89116e6）。古くなった P1 の b141086 の trees と npm-build は消した（json とログは P1 の記録が引くので残した）。スクラッチの束 `$T/r6/p2-bundle`、`tally-p2.mjs`、`fixture-stops-p2.mjs`、改変テストの出力は、指揮者の確認のために残した。probe・dump・スナップショットは作っていない。
