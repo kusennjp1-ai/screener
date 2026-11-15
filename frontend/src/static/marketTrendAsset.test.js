@@ -2,8 +2,8 @@
 import { describe,it,expect } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { buildMarketTrends } from '../../tools/export-market-trends.mjs';
-import { readMarketTrends, longHistoryCheck, INDEX_CLOSES_MAX } from './marketTrendAsset';
+import { buildMarketTrends, buildMarketTrendsWithStalling, STALLING_METHOD, STALLING_WINDOW_SESSIONS } from '../../tools/export-market-trends.mjs';
+import { readMarketTrends, longHistoryCheck, INDEX_CLOSES_MAX, STALLING_SESSIONS } from './marketTrendAsset';
 import { INDEX_CLOSES_MAX as CONTRACT_CLOSES_MAX } from '../test/fixtures/publishedContracts.js';
 import { validateLongHistory } from './marketLongHistory';
 const date='2026-10-23',entry={as_of_date:date};
@@ -148,5 +148,87 @@ describe('market trend reader: long history isolation',()=>{
    expect(readMarketTrends(early,entry).long_history_error).toMatch(/^長期市場履歴の整合性を確認できないため/);
    expect(Object.hasOwn(readMarketTrends(early,entry),'long_history')).toBe(false);
   }finally{Date.now=realNow;}
+ });
+});
+
+// Round 3 M8a-M8d: the keys the producers write only once EMIT_R3_MARKET_FIELDS is on (package P5). Every publication lacks
+// them today: the reader takes an asset with or without them, and withdraws only a malformed stalling record, alone.
+describe('market trend reader: the round 3 optional keys (M8)',()=>{
+ /** The exporter's own output with each index's stalling written (emission on), as the follow-up commit will publish it. */
+ const emitted=(source=trendSource)=>buildMarketTrendsWithStalling(structuredClone(source),{asOfDate:date,emitR3MarketFields:true}).payload;
+ /** The five long-history keys on every row, each null where its sibling is (the collector's null rules). */
+ const withR3Rows=value=>{for(const row of value.long_history.breadth)Object.assign(row,{rs90Cohort:row.leaderCount===null?null:Math.floor(row.leaderCount/3),
+  rs90CohortAbove50:row.leaderCount===null?null:Math.floor(row.leaderCount/6),newHighsClose:row.newHighs===null?null:Math.floor(row.newHighs/2),
+  breakoutsEarlyJudged:row.newHighs===null?null:row.newHighs+3,breakoutsEarlyFailed:row.newHighs===null?null:Math.floor(row.newHighs/4)});return value;};
+ it('pins the live window to the exporter\'s and reads the exporter\'s stalling record unchanged, written or not',()=>{
+  expect(STALLING_SESSIONS).toBe(STALLING_WINDOW_SESSIONS);
+  const on=emitted();
+  for(const index of on.indices)expect(index.stalling).toEqual({available:true,method:STALLING_METHOD,dates:[]});
+  expect(readMarketTrends(structuredClone(on),entry)).toEqual(on);
+  // Emission off (today's publications): no key, and the reader adds none.
+  const off=payload();
+  for(const index of readMarketTrends(structuredClone(off),entry).indices)expect(Object.hasOwn(index,'stalling')).toBe(false);
+  // Apart from the key, the two assets are the same bytes.
+  const stripped=structuredClone(on);for(const index of stripped.indices)delete index.stalling;
+  expect(JSON.stringify(stripped)).toBe(JSON.stringify(off));
+ });
+ it('keeps live dates, an unavailable record with its reason, and a historical index\'s record on its own last session',()=>{
+  const value=emitted(),dates=value.indices[0].points.map(point=>point.date);
+  value.indices[0].stalling.dates=[dates.at(-STALLING_SESSIONS),dates.at(-3)];
+  value.indices[1].stalling={available:false,method:STALLING_METHOD,reason:'25営業日の判定に必要な履歴が不足しています。'};
+  expect(readMarketTrends(structuredClone(value),entry)).toEqual(value);
+  // ^IXIC ends three sessions early: its stalling days are judged on 10-20, its own last point.
+  const source=structuredClone(trendSource);source.indices.find(index=>index.symbol==='^IXIC').bars.splice(-3);
+  const historical=emitted(source);
+  expect(historical.indices[1]).toMatchObject({historical:true,stalling:{available:true,method:STALLING_METHOD}});
+  expect(readMarketTrends(structuredClone(historical),entry).indices[1].stalling).toEqual(historical.indices[1].stalling);
+  // A day after its own last session (a record relabelled onto the analysis date) is not one of its sessions.
+  const relabelled=structuredClone(historical);relabelled.indices[1].stalling.dates=[date];
+  expect(readMarketTrends(relabelled,entry).indices[1].stalling).toEqual({available:false,method:STALLING_METHOD,reason:'ストーリング日の形式を確認できません。'});
+  // An index without bars says why (the exporter's own record), and a record copied onto it is withdrawn.
+  const missing=structuredClone(trendSource);missing.indices=missing.indices.filter(index=>index.symbol!=='^GSPC');
+  const none=emitted(missing);
+  expect(none.indices[0].stalling).toEqual({available:false,method:STALLING_METHOD,reason:'同じ基準日の出典付き指数履歴は未取得です。'});
+  expect(readMarketTrends(structuredClone(none),entry).indices[0].stalling).toEqual(none.indices[0].stalling);
+  const copied=structuredClone(none);copied.indices[0].stalling={available:true,method:STALLING_METHOD,dates:[]};
+  expect(readMarketTrends(copied,entry).indices[0].stalling.available).toBe(false);
+ });
+ it.each([
+  ['not an object',()=>'2'],
+  ['no method',stalling=>({available:true,dates:stalling.dates})],
+  ['an empty method',stalling=>({...stalling,method:''})],
+  ['dates that are not a list',stalling=>({...stalling,dates:'2026-10-20'})],
+  ['a date outside the last 25 sessions',(stalling,dates)=>({...stalling,dates:[dates.at(-STALLING_SESSIONS-1)]})],
+  ['a date that is not one of its sessions',stalling=>({...stalling,dates:['2026-10-18']})],
+  ['dates out of order',(stalling,dates)=>({...stalling,dates:[dates.at(-2),dates.at(-4)]})],
+  ['a repeated date',(stalling,dates)=>({...stalling,dates:[dates.at(-2),dates.at(-2)]})],
+  ['an invalid day',stalling=>({...stalling,dates:['2026-02-30']})],
+  ['unavailable without a reason',stalling=>({available:false,method:stalling.method})],
+  ['neither available nor unavailable',stalling=>({...stalling,available:'yes'})],
+ ])('withdraws a malformed stalling record (%s) alone, keeping the count, the closes and the follow-through',(_,mutate)=>{
+  const value=emitted(),index=value.indices[0],original=structuredClone(index);
+  index.stalling=mutate(index.stalling,index.points.map(point=>point.date));
+  const out=readMarketTrends(value,entry).indices[0];
+  expect(out.stalling).toEqual({available:false,method:typeof index.stalling?.method==='string'&&index.stalling.method?index.stalling.method:null,reason:'ストーリング日の形式を確認できません。'});
+  const {stalling,...rest}=out,{stalling:kept,...expected}=original;
+  expect(kept.available).toBe(true);expect(stalling.available).toBe(false);
+  expect(rest).toEqual(expected);
+  expect(out.latest.value).toBe(5);
+ });
+ it('keeps a long history whose rows carry the five keys, and one whose rows do not',()=>{
+  const value=withR3Rows(payload({history:true})),out=readMarketTrends(structuredClone(value),entry);
+  expect(Object.hasOwn(out,'long_history_error')).toBe(false);
+  expect(out.long_history).toEqual(value.long_history);
+  expect(out.long_history.breadth.at(-1)).toMatchObject({rs90Cohort:201,newHighsClose:61,breakoutsEarlyJudged:125});
+  const without=readMarketTrends(payload({history:true}),entry);
+  expect(Object.hasOwn(without,'long_history_error')).toBe(false);
+  expect('rs90Cohort' in without.long_history.breadth.at(-1)).toBe(false);
+  // A broken key withdraws only the long history, as any other broken count does.
+  const broken=withR3Rows(payload({history:true})),row=broken.long_history.breadth.at(-1);row.newHighsClose=row.newHighs+1;
+  const refused=readMarketTrends(broken,entry);
+  expect(Object.hasOwn(refused,'long_history')).toBe(false);
+  expect(refused.long_history_error_key).toBe('close new highs subset of new highs');
+  expect(refused.long_history_error).toBe('長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: 集計値の整合）。');
+  expect(refused.indices).toEqual(payload().indices);
  });
 });
