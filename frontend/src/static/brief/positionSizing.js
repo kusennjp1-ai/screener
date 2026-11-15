@@ -193,9 +193,11 @@ const afterBreakout = (leg, cut) => isoDay(legEnd(leg)) && legEnd(leg) >= cut;
  * A leg that ends on or after the pivot's breakout (`breakoutDate`, an ISO day: pivotBreakout's breakoutDate, the first close
  * above the pivot's cents after the pivot's bar) is price action after the breakout, never a candidate (round 3 R6; no new
  * threshold). Its end is legEnd's. The last kept leg under the pivot is used; every leg excluded is unknown with
- * POST_BREAKOUT_LEGS_REASON; kept legs all above the pivot keep the reason they have today. The rule is checked after R2(b):
- * every earlier unknown reason, R2(b)'s included, is the one the call without `breakoutDate` gives. Without a valid
- * `breakoutDate` (null, undefined, malformed) nothing is excluded and the result is today's.
+ * POST_BREAKOUT_LEGS_REASON; kept legs all above the pivot keep the reason they have today. The kept legs are chosen from
+ * after R2(b): the measurement-date checks and R2(b) run on today's leg, so wherever the call without `breakoutDate` gives
+ * previousBaseReason or a measurement-date mismatch, this call gives the same (with no leg under the pivot at all, the
+ * reason is POST_BREAKOUT_LEGS_REASON only when every leg is excluded). Without a valid `breakoutDate` (null, undefined,
+ * malformed) nothing is excluded and the result is today's.
  * @returns {StructuralStop}
  */
 export function structuralStop({ technical, judged, entry, pivot, pivotDate = null, breakoutDate = null }) {
