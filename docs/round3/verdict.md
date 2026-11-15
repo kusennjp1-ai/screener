@@ -528,3 +528,112 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 
 - 公開版での数（すべて再構築の数）。公開版の詳細の `book_technical_evidence` が、ここで JS を呼んだ形（`se_candidates` あり）と同じ経路を通ること（export-research.mjs:94-95 と :128 の読みからの推論）。
 - 凍結 908 は R3c だけでは再実行していない（R3a の後に1回。SETUP の列は Markets360 の条件で Setup Engine を見ない：p1-5）。
+
+## R3a. 張り付いた値動きで準備を不合格にする `price_pinned`（パッケージ R-P3）
+
+コミット 24bf6b9 `feat(scanner): fail readiness on a pinned price`（ゴールデンを含む）。**採用**（下の4条件をすべて満たした）。統合で落とすなら、このコミットだけを revert すればよい（R3c のコミットと文書は独立）。
+
+### 規則
+
+- R2（a）の低変動の規則（frontend/src/static/priceActivity.js の `lowRange` と `reason`）を、同じ定数で Python に移した（readiness.py `price_activity`・`price_pinned`）。順に調べ、最初に成り立ったものが理由：
+  1. 'range60'：直近60本の値幅（最高値÷最安値−1）が 5% 未満（窓の高値・安値がすべて正のとき）。
+  2. 'since_gap'：直近60本で最大の1日の動き（終値比。同じ大きさなら古いほう）が 10% 以上で、その後の足が 15 本以上あり、その高値・安値の値幅が 3% 未満。61 本未満、窓の中に欠けた終値、その後の足に欠けた高値・安値があれば不明。
+  3. 'adr'：ADR20（直近20本の 高値÷安値−1 の平均）が 0.5% 未満。
+- 演算は JS と同じ順の素の浮動小数（pandas の和・平均は使わない）。60 本未満、または規則の値が欠けていれば、その規則は当たらない（欠けた値で不合格にしない）。
+- 成り立てば、スクリーナー（setup_engine_screener.py）が集約の `failed_checks` に `price_pinned` を足す。`build_explain_payload` は呼び出し側の失敗をすべて不合格にするので、`derived_ready` は false になる。
+- **11 番目のゲートにはしない**（計画の訂正）：backend/tests/unit/services/test_probe_setup_ready_908.py は、`pre_existing_failed_checks=()` で全ゲートを落とし、explain_builder の失敗の名前がすべて凍結の probe の `GATE_OF_CHECK`（ゲート 1〜10）にあることを確かめている。ゲートの中に足せばこのテストが落ち、probe は凍結。呼び出し側の失敗として渡すので、10 のゲートの名前と順は変わらず、probe は `price_pinned` を「その他の失敗」に数える（このテストは gate-1 で通っている）。
+
+### 定数（config.py。priceActivity.js と同じ値。test_setup_engine_parameters.py が JS の `export const` 7 つを読んで固定）
+
+| 名前 | 値 | ラベル |
+|---|---|---|
+| `PRICE_ACTIVITY_SESSIONS` | 60 | ブリーフの規則（R2 の前からの 60 本） |
+| `LOW_RANGE_PERCENT` | 5 | ブリーフの規則（低変動・監視のみ） |
+| `ACTIVITY_ADR_SESSIONS` | 20 | 独自設定 |
+| `LOW_ADR_PERCENT`（X） | 0.5 | 独自設定（OD6） |
+| `GAP_MOVE_PERCENT`（G） | 10 | 独自設定（OD6） |
+| `SINCE_GAP_RANGE_PERCENT`（Y） | 3 | 独自設定（OD6） |
+| `SINCE_GAP_MIN_SESSIONS`（N） | 15 | 独自設定（OD6） |
+
+### テスト（ゲートに入った既存のファイル）
+
+- test_setup_engine_screener.py `TestPricePinned`（5 件）：ギャップの後の張り付き（上げ・下げ）、60 本より古いギャップ・本数不足（14 本は外れ、15 本で当たる）・小さすぎる動き、ADR だけ・60 本の値幅、欠けた値や 59 本では当たらない（欠けた終値では since_gap が不明になり ADR だけで当たる、JS のテストと同じ形）、スクリーナーでは理想の VCP を張り付かせると準備が false で、失敗は `price_pinned` ひとつ（10 のゲートはすべて通過）、診断には入らない。
+- test_setup_engine_parameters.py：priceActivity.js の 7 つの定数の固定。
+- frontend/tools/test_recalculate_setups.py は足していない：写すべき値は無い（recalculate-setups.py は既に `failed_checks` を `setup_recalculation.reason` に ` / ` でつなぐ）。そのテストは 10 件通過（実測）。
+
+### ゴールデンの差（`make golden-update`、実測。R3c の後との差）
+
+| ファイル | 変化 |
+|---|---|
+| scanner_cwh_classic.json | `failed_checks` の先頭に price_pinned（合成の 60 本の値幅 3.26%、reason 'range60'） |
+| scanner_htf_classic.json | `failed_checks` の先頭に price_pinned（60 本の値幅 2.02%、'range60'） |
+
+ほかのキーは同一（JSON で比べた）。どちらも前から準備は false。ほかのゴールデンは変わらない。
+
+### 採用の4条件（判断の規則は H4 を走らせる前に `$T/r3/r3a-decision-rule.txt` に書いた）
+
+1. **再構築**（`ONLY=bundle,recalc,eval,assemble,eval-sell,eval-today,p1-analyze,p1-stats,counts $H/snapshot/run-snapshot.sh $W`、out/24bf6b9。比べたのは R3c の out/6eae7cd。集計 `$T/r3/r3a-rebuild.py` → `$T/r3/r3a-rebuild-24bf6b9.json`。再構築の数）：
+   - 準備 37 → **29**。準備から外れた行（規則 19 の行の一覧）：**ARX, BWIN, CEPO, DSGR, PCRX, PRTH, RNW, TECH**（p1 の張り付いた準備の 8 行と同じ。8 行とも `price_pinned`）。外れて準備になった行は 0。張り付いた準備の行は 8 → 0。
+   - 張り付いていない掲載行は 1 行も変わらない（行のオブジェクトがすべて同一）。張り付いた行でも、`price_pinned`・準備・`setup_recalculation.reason` 以外は同一。
+   - 掲載行で `price_pinned` は 24 行：ARX, BMBL, BOW, BWIN, CCC, CEPO, CZR, DSGR, DV, HZO, ITGR, LNTH, LXFR, OGN, PAG, PAYO, PCRX, PRTH, PTC, RNW, SAFT, SLAB, TECH, VREX（R2 の lowRange の掲載 24 行と同じ）。
+   - 全体（再計算 4,421 行）：準備 82 → 34。外れた 48 行はすべて `price_pinned`（掲載の 8 行のほか、AES, ALF, BDCI, BLZR, CCII, CHEC, CRAQ, EMIS, EVAC, FERA, FIGX, FSHP, GIW, GSHR, JACS, KOYN, LATA, LCCC, LKSP, LPBB, MBVI, MCGA, MKLY, NPAC, ONCH, ORIQ, OYSE, PACH, PAII, PCAP, RAC, RANG, RDAG, RTAC, SDHI, TAVI, TONT, UYSC, VNME, YCY。名前の多くは SPAC と見られる：推論）。
+   - ほかの出力：work/today-eval.json は R-P2 の out/93fd59e とバイト一致（Today は変わらない）。work/sell-eval.jsonl は 8 行の `setup_ready` だけが true → false。counts.json で変わるのは `ready`（37 → 29、流動 18 → 14・非流動 19 → 15、CI の日足 30 → 23・代理 7 → 6）、`pinned_listed.ready`（8 行 → 空）、`lowRange_pinned_ready_plus_SLAB`（9 → SLAB の 1）だけ。p1/stats.txt は準備の行の上の項目が 29 行で計算し直される（[A] の張り付いた準備 8/22 → 0/22、[B] 流動 18/37 → 14/29 など）。
+   - 研究インデックス（serve/research.json、5,955 行）：124 行の `setup_recalculation.reason` の先頭に `price_pinned` が付く。そのうち 48 行は `se_setup_ready` が true → false、`entry_evidence.shape` の `setup_ready` と既存の文「ブレイク前の準備条件を通過」→「ブレイク前の準備条件は未達（当日の購入条件とは別判定）」が変わる。新しいキーは無い。
+2. **ゲート**：gate-5 43 通過（差は上の2ファイル）、gate-1 300、gate-2 47、gate-3 152、gate-4 21（参考）、gate-check OK。赤線（`cd backend && DATABASE_URL="postgresql://local/none" /home/user/screener/backend/venv/bin/python -m pytest tests/unit/scanners tests/unit/services tests/unit/golden tests/unit/test_scan_orchestrator.py --ignore=tests/unit/golden/test_mcp_market_copilot.py -q`）293 通過・失敗 0。
+3. **凍結 908**（`validate_trade_ideas.py > $T/r3/frozen-908-r3a.log`）：「DISCRIMINATION (entry − control): FIRE±5 +25.8pp, SETUP +52.0pp」。変更の前のログと、バンドルのパスの1行を除いてバイト一致（diff）。凍結ハーネスの SETUP の列は Markets360 の条件で、Setup Engine の準備を見ない（p1-5）。だからこの一致は R3a の効果を示さない。効果は H4 で見る。
+4. **H4**（`probe_setup_ready_908.py --json $T/r3/h4-r3a.json --rows`）：
+
+| | 変更の前 | R3a の後 |
+|---|---|---|
+| エントリー（評価した点） | 588 | 588 |
+| 対照 | 575 | 575 |
+| setup_ready エントリー | 28/588（4.76%） | 28/588 |
+| setup_ready 対照 | 23/575（4.00%） | 23/575 |
+| 差（probe の表示、四捨五入） | +0.8pp | +0.8pp |
+| 差（四捨五入なし） | +0.762pp | +0.762pp |
+| ゲートごとの不合格（G1〜G10、両側） | docs/round3/step0.md §3 H4 の表（例：G6 エントリー 458・対照 301） | 同一（両側の gate_fail_n が全ゲートで一致） |
+| その他の失敗（エントリー） | insufficient_data 10・insufficient_daily_bars 10・insufficient_weekly_bars 10 | 同じ ＋ price_pinned 2 |
+| その他の失敗（対照） | insufficient_data 12・insufficient_daily_bars 12・insufficient_weekly_bars 6・primary_pattern_below_confidence_floor 2 | 同じ ＋ price_pinned 2 |
+| 上抜け日のエントリーでの準備 | 215 件で 0 | 215 件で 0 |
+
+   - `price_pinned` の点：エントリー SWSH 2017-03-31・POWR 2013-07-11、対照 SWSH 2016-12-29・POWR 2013-04-11。4 点とも前から準備ではない（ほかのゲートでも落ちる）ので、準備の数も準備の点の一覧（`ready_ideas`）も変わらない。R-P2 で測った「R2 の規則が当たる H4 の点：エントリー 2・対照 2」と同じ点。
+   - 判断の規則（前もって書いた）：probe の差の表示が +0.8pp 以上なら満たす。満たした（+0.8pp、四捨五入なしでも同じ 0.762）。
+
+### 一致の検査（計画 R3a のパリティ。再構築）
+
+- **掲載の CI の日足の行**（612 行）：バックエンドの `price_pinned` の集合＝ブリーフの lowRange の集合（serve/research.json の `price_activity`、R2 の定義）。18 行で、違いは 0：ARX, BMBL, BWIN, CCC, CEPO, CZR, DV, LNTH, OGN, PAYO, PCRX, PRTH, PTC, RNW, SAFT, SLAB, TECH, VREX。代理の日足の掲載行でも 6 行（BOW, DSGR, HZO, ITGR, LXFR, PAG）で一致（ただしブリーフの公開版では代理の日足は認証されない：R2 の注意）。
+- **関数どうし**（`$T/r3/pa-js.mjs` と `$T/r3/pa-py.py` → `$T/r3/pa-parity.json`）：再構築の入力の全 5,955 行で、再計算と同じ日足（受け入れた束の日足、または代理の包み）に priceActivity.js と Python の `price_activity` をかけ、`lowRange` と `reason` が 5,955 行すべてで一致（当たり 291 対 291）。再計算できた 4,421 行では、バックエンドの `price_pinned` 124 行＝JS の lowRange 124 行（違い 0）。
+
+### 規則 18（UI より先にデータを出さない）
+
+- `price_pinned` が届くのは既存の自由文の `setup_recalculation.reason`（インデックスの項目、` / ` でつないだ失敗の名前）と、詳細の `se_explain.failed_checks`。新しいキーも警告コードも無い。
+- 読む側（grep `setup_recalculation`・`reason`。frontend/src/static、frontend/tools）：
+  - setupReadiness.js は理由の文字列をそのまま根拠として返す（researchEngine.js の CSV の列と entryChecks の evidence）。名前の一覧で絞らないので、拒まない。
+  - briefCandidate.js（凍結、読み取りだけ）と buyGate.js の `SE_BELOW_FLOOR_CHECK` は `reason.includes('primary_pattern_below_confidence_floor')`。`price_pinned` はその文字列を含まないので影響しない。briefCandidate.js:134 の `'25%超'` も同じ。
+  - report-data-coverage.mjs は理由を ` / ` で分けて名前ごとに数える（`price_pinned` が一つの名前として加わるだけ。計画 §7 が「price_pinned を含む上位の失敗」を見込んでいる）。check-data-quality-core.mjs は status だけを見る。
+- ブリーフでは 8 行とも R2 で既に「低変動・監視のみ」（試算なし）。準備が false になって変わるのは、準備に関わる表示（`se_setup_ready`、`entry_evidence` の文）だけ。ブラウザでの表示は確かめていない（未検証）。
+
+### 未検証（R3a）
+
+- 公開版での数（すべて再構築の数）。公開版の 8 行とほかの張り付いた行の、ブラウザでの表示（このパッケージはフロントのファイルを変えていないので vitest・Playwright は走らせていない）。
+- 公開版のバーが再構築と違う行（代理の日足の 7 行など）での一致。
+- 時間はすべて負荷のもとの参考（H4 10分13秒、負荷 2.70 → 7.26。凍結 908 は負荷 7.26 → 4.62）。
+
+### 統合への依頼（R3）
+
+1. **計画の訂正（記録のみ）**：§5 R3a の「準備の失敗の検査」は 11 番目のゲートではなく、呼び出し側の失敗として渡す（凍結の probe とそのテストのため。上の「規則」）。
+2. **語彙（CONTEXT.md、統合で）**：`price_pinned`（張り付いた値動きで準備を不合格にする検査。ブリーフの低変動・監視のみと同じ規則）。`contraction_unconfirmed`・`pivot_already_crossed`・`pivot_below_base_high`（準備に効かない診断）。
+3. **OD6**：定数はブリーフと同じ。ブリーフの定数を変えると test_setup_engine_parameters.py が落ちるので、両方を一緒に変える。
+4. **オーナーに伝えること**：R3a は準備の KPI（再構築で掲載 37 → 29、全体 82 → 34）を下げる。H4 の差（+0.8pp）と凍結 908（SETUP +52.0pp）は変わらない。
+5. 凍結のファイル（probe、凍結ハーネス、test_pivot_timeframes.py、検出器）は変えていない。
+
+### 変えていないもの（R3）
+
+10 のゲートの名前と順、`derived_ready` の組み立て（explain_builder.py は変えていない）、トレンドテンプレートと stage の規則（stage は 9 番目の拒否にしない）、Code 33、検出器のファイル（pivotBar.js が行番号を引く）、凍結の probe・ハーネス・バンドル、Makefile、フロントの実行時のファイル（このパッケージはフロントを変えていない）。
+
+### パッケージ R-P3 の記録
+
+- コミット：6eae7cd（R3c ＋ ゴールデン）、c54933b（R3c の記録）、24bf6b9（R3a ＋ ゴールデン）、この文書のコミット（R3a の記録）。どれも所有の検査 OWNERSHIP OK の後。R3c と R3a はそれぞれ revert だけで落とせる。
+- 順序：変更の前の基準（H4・凍結 908・ゲート・ゴールデンの空の実行）→ R3c → 再構築・JS との突き合わせ・H4 → R3a → 再構築・関数どうしの一致・H4・凍結 908・赤線・gate-4。
+- 再構築の出力は `$H/snapshot/out/24bf6b9`（R3a）と R-P2 の `out/93fd59e` を残し、R3c の out/6eae7cd と最初の版の out/d4049ba は測定の後に消した（数は `$T/r3/` の集計ファイルにある）。
+- フロントのファイルは変えていない（vitest・Playwright・ビルドは走らせていない。必要ない）。
