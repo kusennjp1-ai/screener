@@ -301,7 +301,8 @@ test.describe('desktop 1440px: the study block and the guide\'s basis', () => {
     expect(await ma200.getAttribute('d')).toMatch(/^M[\d.]+,[\d.]+(L[\d.]+,[\d.]+){50,}$/);
     expect(await ma200.evaluate(path => getComputedStyle(path).strokeDasharray)).not.toBe('none');
     await expect(frame.locator('.brief-index-mark.is-ftd')).toHaveText(`◆${FTD_WORD} 8/13`);
-    await expect(page.getByRole('region', { name: '地合い' }).locator('.brief-index-legend .is-ftd')).toHaveText(`◆ ${FTD_WORD}・○ 反発の安値`);
+    // The legend keeps the glyph's meaning: 「◆ 前回のFTD」 would wrap it at 320px beside the phone's switch (M2).
+    await expect(page.getByRole('region', { name: '地合い' }).locator('.brief-index-legend .is-ftd')).toHaveText('◆ FTD・○ 反発の安値');
     await expect(frame.locator('.brief-index-mark.is-low')).toHaveText('○');
     const box = await frame.boundingBox();
     for (const mark of await frame.locator('.brief-index-mark, .brief-index-mark-label, .brief-index-scale').all()) {

@@ -66,7 +66,9 @@ function IndexChart({ closes, name = 'S&P 500', distribution, distributionEnd, f
   const lowAt = find(rallyLow);
   const at = i => ({ left: `${(100 * x(i) / W).toFixed(2)}%`, top: `${(100 * y(points[i].close) / H).toFixed(2)}%` });
   // A failed FTD keeps its ◆ but says it failed, so the mark never reads as a standing follow-through. A confirmed FTD older
-  // than FTD_RECENT_SESSIONS keeps its ◆ and reads 「前回のFTD」 (ftdPrevious, the フォロースルーデー row's own reading).
+  // than FTD_RECENT_SESSIONS keeps its ◆ and reads 「前回のFTD」 (ftdPrevious, the フォロースルーデー row's own reading) on its
+  // label and in the aria-label; the legend keeps 「◆ FTD」 (the glyph's meaning), since 「◆ 前回のFTD」 wraps it to a second
+  // line at 320px beside the phone's S&P／Nasdaq switch (measured: +22px).
   const ftdName = ftdAt >= 0 && ftdPrevious(ft) ? '前回のFTD' : 'FTD';
   const ftdWord = ftdAt >= 0 ? `${ftdName} ${shortDate(points[ftdAt].date, chartEnd)}${ft.state === 'ftd_failed' && isDay(ft.failedDate) ? `（失敗 ${shortDate(ft.failedDate, chartEnd)}）` : ft.state === 'ftd_failed' ? '（失敗）' : ''}` : null;
   const words = [ftdWord, lowAt >= 0 ? `反発の安値 ${shortDate(points[lowAt].date, chartEnd)}` : null].filter(Boolean);
@@ -88,7 +90,7 @@ function IndexChart({ closes, name = 'S&P 500', distribution, distributionEnd, f
       {/* The FTD label sits above its ◆, or below it when the close is near the frame's top. */}
       {ftdAt >= 0 && <span className={`brief-index-mark is-ftd${x(ftdAt) > W * 0.6 ? ' is-end' : ''}${y(points[ftdAt].close) < H * 0.3 ? ' is-below' : ''}${ft.state === 'ftd_failed' ? ' is-failed' : ''}`} aria-hidden="true" style={at(ftdAt)}>◆<span className="brief-index-mark-label">{ftdWord}</span></span>}
     </div>
-    <p className="brief-index-legend" aria-hidden="true">{legendName && <span className="is-close">{name} 終値（{shortDate(points[0].date, chartEnd)}〜{shortDate(chartEnd, chartEnd)}）</span>}<span className="is-ma">50日線{from50}</span>{line200 && <span className="is-ma200">200日線{from200}</span>}<span className="is-dist">▲ 分配日{distributionEnd && distributionEnd !== chartEnd ? `（${shortDate(distributionEnd, chartEnd)}まで）` : ''}</span>{(ftdAt >= 0 || lowAt >= 0) && <span className="is-ftd">{ftdAt >= 0 ? `◆ ${ftdName}${ft.state === 'ftd_failed' ? '（失敗）' : ''}` : ''}{ftdAt >= 0 && lowAt >= 0 ? '・' : ''}{lowAt >= 0 ? '○ 反発の安値' : ''}</span>}</p>
+    <p className="brief-index-legend" aria-hidden="true">{legendName && <span className="is-close">{name} 終値（{shortDate(points[0].date, chartEnd)}〜{shortDate(chartEnd, chartEnd)}）</span>}<span className="is-ma">50日線{from50}</span>{line200 && <span className="is-ma200">200日線{from200}</span>}<span className="is-dist">▲ 分配日{distributionEnd && distributionEnd !== chartEnd ? `（${shortDate(distributionEnd, chartEnd)}まで）` : ''}</span>{(ftdAt >= 0 || lowAt >= 0) && <span className="is-ftd">{ftdAt >= 0 ? `◆ FTD${ft.state === 'ftd_failed' ? '（失敗）' : ''}` : ''}{ftdAt >= 0 && lowAt >= 0 ? '・' : ''}{lowAt >= 0 ? '○ 反発の安値' : ''}</span>}</p>
   </>;
 }
 

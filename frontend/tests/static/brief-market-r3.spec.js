@@ -282,7 +282,8 @@ const CLOSED = { label: '50日線割れ（弱含み・独自判定）', cap: 0, 
 const CORRECTION_BLOCK = { as_of_date: date, regime: 'correction', distribution_days: 7, ftd_date: null, ftd_days_since: null, exposure_pct: 0, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' };
 const correctionBlock = { manifest: value => { value.markets.US.market_context = CORRECTION_BLOCK; } };
 /** The closed content height of each state before M2 (3a4a162, CI fonts, measured): a state never grows past it. */
-const PRE_M2 = { old: { 320: 1390, 375: 1242, 390: 1219 }, recent: { 320: 1341, 375: 1219, 390: 1219 }, absent: { 320: 1314, 375: 1202, 390: 1202 }, behind: { 320: 1391, 375: 1228, 390: 1219 } };
+const PRE_M2 = { old: { 320: 1390, 375: 1242, 390: 1219 }, recent: { 320: 1341, 375: 1219, 390: 1219 }, absent: { 320: 1314, 375: 1202, 390: 1202 }, behind: { 320: 1391, 375: 1228, 390: 1219 },
+  switch: { 320: 1337, 375: 1201, 390: 1201 }, oldSwitch: { 320: 1386, 375: 1223, 390: 1201 } };
 const ftdRow = page => page.getByRole('region', { name: '地合い' }).locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) });
 const lines = locator => locator.evaluate(node => Math.round(node.getBoundingClientRect().height / parseFloat(getComputedStyle(node).lineHeight)));
 
@@ -293,6 +294,9 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M2 at ${wid
     ['recent', 'an FTD 12 sessions old', compose(methods, ftdAgo(12)), {}],
     ['absent', 'an older asset without follow-through records', compose(methods, noFollowThrough), {}],
     ['behind', 'the series one session behind', methods, { historyEnd: sessions.at(-2) }],
+    // What the current exporter publishes besides: each index's closes, so the phone's S&P／Nasdaq switch sits beside the heading.
+    ['switch', 'the fixture\'s FTD with the S&P／Nasdaq switch', compose(methods, withCloses), {}],
+    ['oldSwitch', 'an old FTD under a 0% guide with the S&P／Nasdaq switch', compose(methods, below50Rows, belowFiftyIndex, correctionBlock, withCloses), {}],
   ];
   for (const [key, name, mutate, extra] of STATES) test(`${name}: the producer's words on one value line, no taller than before`, async ({ page }) => {
     const seen = {};
@@ -301,7 +305,7 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M2 at ${wid
     const views = seen.value.indices.map(index => followThroughView(index.followThrough, date)), pairs = ftdRow(page).locator('.brief-ftd-row');
     await expect(pairs.locator('b')).toHaveText(views.map(view => view.b));
     for (const [i, view] of views.entries()) await expect(pairs.nth(i)).toContainText(`${view.b}${view.em}`);
-    if (key === 'old' || key === 'behind') expect(views[0]).toMatchObject({ b: expect.stringMatching(/^前回のFTD \d+\/\d+$/), em: expect.stringMatching(/^35日前・/), previous: true });
+    if (['old', 'behind', 'switch', 'oldSwitch'].includes(key)) expect(views[0]).toMatchObject({ b: expect.stringMatching(/^前回のFTD \d+\/\d+$/), em: expect.stringMatching(/^35日前・/), previous: true });
     if (key === 'recent') expect(views[0]).toMatchObject({ b: expect.stringMatching(/^確認 \d+\/\d+$/), em: expect.stringMatching(/^12日前・/) });
     if (key === 'absent') expect(views.map(view => view.b)).toEqual(['未集計', '未集計']);
     // The count leads the em line, so the value keeps one line even at 320px.
@@ -309,6 +313,7 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M2 at ${wid
     expect(await contentHeight(page)).toBeLessThanOrEqual(PRE_M2[key][width]);
     expect(await lead(page)).toBeLessThanOrEqual(756);
     expect(await horizontalOverflow(page)).toBe(0);
+    if (key === 'switch' || key === 'oldSwitch') await expect(page.getByRole('region', { name: '地合い' }).getByRole('group', { name: '表示する指数' })).toHaveCount(1);
     if (key === 'old') {
       // Inside the closed fold, the cause line says the same day's ^GSPC FTD is the index's own count.
       const verdict = page.getByTestId('brief-regime');
@@ -346,7 +351,7 @@ test.describe('M2 at 320px: the ◆ of an FTD 120 sessions old', () => {
     const day = seen.value.indices[0].followThrough.ftd.date.slice(5).split('-').map(Number).join('/');
     await expect(frame.locator('.brief-index-mark.is-ftd')).toHaveText(`◆前回のFTD ${day}`);
     await expect(frame.getByRole('img')).toHaveAttribute('aria-label', new RegExp(`。前回のFTD ${day}。目盛り`));
-    await expect(page.locator('.brief-index-legend .is-ftd')).toHaveText('◆ 前回のFTD');
+    await expect(page.locator('.brief-index-legend .is-ftd')).toHaveText('◆ FTD');
     const box = await frame.boundingBox(), label = await frame.locator('.brief-index-mark-label').boundingBox();
     expect(label.x).toBeGreaterThanOrEqual(box.x);
     expect(label.x + label.width).toBeLessThanOrEqual(box.x + box.width);

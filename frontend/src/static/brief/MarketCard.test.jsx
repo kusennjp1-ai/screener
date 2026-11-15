@@ -137,7 +137,8 @@ describe('brief market card: market tab', () => {
     // The FTD is 40 sessions old (FTD_RECENT_SESSIONS 25): its ◆ stays and reads 「前回のFTD」 (M2).
     expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（\d+\/\d+〜）（2026-05-26〜2026-10-02）。有効な分配日 0日。前回のFTD 8\/7。目盛り 5,482〜5,801$/ })).toBeInTheDocument();
     expect(document.querySelector('.brief-index-mark.is-ftd')).toHaveTextContent('◆前回のFTD 8/7');
-    expect(document.querySelector('.brief-index-legend .is-ftd')).toHaveTextContent('◆ 前回のFTD');
+    // The legend keeps the glyph's meaning (「◆ 前回のFTD」 wraps it at 320px beside the phone's switch).
+    expect(document.querySelector('.brief-index-legend .is-ftd')).toHaveTextContent(/^◆ FTD$/);
   });
 
   it('shows one section at a time behind phone tabs that carry each group\'s ▲ count and move by arrow keys', () => {
