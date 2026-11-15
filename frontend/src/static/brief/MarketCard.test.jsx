@@ -744,8 +744,9 @@ describe('brief market card: round 2', () => {
   it('says why an FTD-upgraded uptrend keeps the guide at 0%: inside 目安と判定の基準 on a phone, in place on the desktop', () => {
     const market = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
     const manifest = { as_of_date: '2026-10-02', markets: { US: { as_of_date: '2026-10-02', market_context: { as_of_date: '2026-10-02', regime: 'confirmed_uptrend', distribution_days: 1, ftd_date: '2026-09-18', ftd_days_since: 10, exposure_pct: 40, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' } } } };
-    // The regime's FTD is SPY's (9/18); the tab's own ^GSPC record of the day confirmed one on 8/7: each is attributed.
-    const LINE = '局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足ではFTD 8/7。この目安はSPYが50日線の下のため0%（独自判定）';
+    // The regime's FTD is SPY's (9/18); the tab's own ^GSPC record of the day confirmed one on 8/7, 40 sessions ago: each
+    // is attributed, the older one as 「前回のFTD」 (M2).
+    const LINE = `局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足では${FTD_PREVIOUS_NAME} 8/7。この目安はSPYが50日線の下のため0%（独自判定）`;
     render(<MemoryRouter><Card market={market} trends={trends()} date="2026-10-02" detail switcher section="index" onSection={() => {}} {...studyProps(trends(), '2026-10-02', reference, false, { market, manifest })} /></MemoryRouter>);
     const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
     // The fixture's long history has no ^GSPC closes, so the 0% note (M5) is its closing sentence alone.

@@ -3,8 +3,8 @@
 import { test, expect } from '@playwright/test';
 import { date, marketTrends, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
-import { followThroughView, FTD_PREVIOUS_NAME } from '../../src/static/brief/briefEnvironment.js';
-import { BREADTH_LEGEND, marketTabStudy, STOCK_OUTCOME_UNTESTED } from '../../src/static/reference/marketTabStudy.js';
+import { followThroughView, ftdPrevious, FTD_PREVIOUS_NAME } from '../../src/static/brief/briefEnvironment.js';
+import { BREADTH_LEGEND, gspcFtdWords, marketTabStudy, STOCK_OUTCOME_UNTESTED } from '../../src/static/reference/marketTabStudy.js';
 import { marketCardView } from '../../src/static/brief/marketTabModel.js';
 import { marketTabParts } from '../../src/static/brief/marketTabGroups.js';
 import { readFileSync } from 'node:fs';
@@ -391,7 +391,16 @@ test.describe('round 2 at 375×812: an FTD-upgraded uptrend', () => {
     const reference = JSON.parse(readFileSync(new URL('../../src/static/reference/market-regime-reference-v1.json', import.meta.url), 'utf8'));
     const stockSide = marketCardView({ market: market50, trends: served, date, tab: marketTabParts }).stockSide, zeroCap = marketTabStudy({ trends: served, reference, date, market: market50 }).zeroCap;
     expect(zeroCap).toMatch(/0%は独自設定で、検証された水準ではありません。$/);
-    await expect(basis.locator('p')).toHaveText([stockSide, '根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', `局面判定はSPYのFTD（${md}）による上昇トレンド。^GSPCの日足ではFTD ${gspc}。この目安はSPYが50日線の下のため0%（独自判定）`, /^独自の目安：/, zeroCap]);
+    // The cause line is the producer's for the served asset and the manifest ftdUpgraded serves (regimeCause through the
+    // study). Its ^GSPC words are gspcFtdWords': that FTD is 35 sessions old, so they call it what the row above does.
+    const manifest = { markets: { US: { as_of_date: date } } };
+    ftdUpgraded.manifest(manifest);
+    const record = served.data.indices[0].followThrough, own = gspcFtdWords(record, sessions.at(-8), date);
+    const cause = marketTabStudy({ trends: served, reference, date, market: market50, manifest }).cause;
+    expect(ftdPrevious(record)).toBe(true);
+    expect(own).toContain(`${FTD_PREVIOUS_NAME} ${gspc}`);
+    expect(cause).toContain(`（${md}）による上昇トレンド。${own}。`);
+    await expect(basis.locator('p')).toHaveText([stockSide, '根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', cause, /^独自の目安：/, zeroCap]);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

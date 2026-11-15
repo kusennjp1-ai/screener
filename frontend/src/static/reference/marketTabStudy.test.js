@@ -3,7 +3,7 @@
 // guide's disclosure (that is said once, in exposureRuleText).
 import { describe, expect, it } from 'vitest';
 import reference from './market-regime-reference-v1.json' with { type: 'json' };
-import { bigUpDayLine, bigUpDays, currentLegLine, distributionDetail, followThroughDetail, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, regimeCause, signalTagText, stallingLine, zeroCapNote, BIG_UP_DAY, BIG_UP_HEAD, BIG_UP_NOTE, FTD_SOURCE_GAINS, STALLING_HEAD } from './marketTabStudy.js';
+import { bigUpDayLine, bigUpDays, currentLegLine, distributionDetail, followThroughDetail, gspcFtdWords, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, regimeCause, signalTagText, stallingLine, zeroCapNote, BIG_UP_DAY, BIG_UP_HEAD, BIG_UP_NOTE, FTD_SOURCE_GAINS, STALLING_HEAD } from './marketTabStudy.js';
 import { KEY_ABSENT } from '../brief/marketTabGroups';
 import { followThroughDay, FTD_MIN_DECLINE } from '../followThroughDay';
 import { shortDate } from '../brief/briefShared';
@@ -12,7 +12,7 @@ import { biasTag, ddGradeState, ftdRecent, INDEX_SYMBOLS, meanLowerStates, refer
 import { indexSummary } from './indexSummary.js';
 import { capText, MARKET_CAPS } from '../portfolioPlan';
 import { exposureRuleText } from './marketTabStudy.js';
-import { ftdPrevious, FTD_PREVIOUS_NAME, FTD_RECENT_SESSIONS, FTD_TEXT, NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
+import { followThroughView, ftdPrevious, FTD_PREVIOUS_NAME, FTD_RECENT_SESSIONS, FTD_TEXT, NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
 import { REFERENCE_CHECKS, verdictBasis } from '../brief/marketTabModel.js';
 import { attempt, confirmed, days, failed, trends } from '../../test/fixtures/marketTrends';
 
@@ -228,6 +228,26 @@ describe('the FTD\'s age (M2)', () => {
     expect(cause('downtrend', at(26))).toBe(`局面判定の分配日：SPY 7日（ストーリング日を含む数え方）。局面判定は「下降トレンド」で、分配日のほか50日線・200日線と参加度も見ます。下の^GSPCの${FTD_PREVIOUS_NAME}（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
     // Without the FTD's date the clause leaves the date out, never guessed.
     expect(cause('correction', { ...at(12), ftd: { sessionsSince: 12 } })).toBe(`${LINE}。下の^GSPCのFTDは指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
+  });
+
+  it('calls the ^GSPC FTD of an FTD-upgraded 0% cause line 「前回のFTD」 past FTD_RECENT_SESSIONS, as the row below does', () => {
+    const upgraded = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
+    const spy = block('confirmed_uptrend', { distribution_days: 1, ftd_date: '2026-09-18', ftd_days_since: 10, exposure_pct: 40 });
+    const line = gspc => regimeCause(upgraded, spy, verdictBasis(upgraded, DATE), DATE, { gspc });
+    // On the line (25 sessions) the FTD is still the current one; one session past it, 「前回のFTD」.
+    expect(gspcFtdWords(at(FTD_RECENT_SESSIONS), '2026-09-18', DATE)).toBe('^GSPCの日足ではFTD 8/7');
+    expect(gspcFtdWords(at(FTD_RECENT_SESSIONS + 1), '2026-09-18', DATE)).toBe(`^GSPCの日足では${FTD_PREVIOUS_NAME} 8/7`);
+    expect(line(at(FTD_RECENT_SESSIONS))).toBe('局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足ではFTD 8/7。この目安はSPYが50日線の下のため0%（独自判定）');
+    expect(line(at(FTD_RECENT_SESSIONS + 1))).toBe(`局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足では${FTD_PREVIOUS_NAME} 8/7。この目安はSPYが50日線の下のため0%（独自判定）`);
+    // The word is the row's (followThroughView) and the ◆'s (ftdPrevious) for the same record.
+    expect(followThroughView(at(FTD_RECENT_SESSIONS + 1), DATE).b).toBe(`${FTD_PREVIOUS_NAME} 8/7`);
+    // A record without a whole count keeps today's words: nothing is guessed.
+    const { sessionsSince, ...uncounted } = confirmed(DATE).ftd;
+    expect(sessionsSince).toBe(40);
+    expect(gspcFtdWords({ ...confirmed(DATE), ftd: uncounted }, '2026-09-18', DATE)).toBe('^GSPCの日足ではFTD 8/7');
+    for (const n of [null, -1, 2.5, '30']) expect(gspcFtdWords(at(n), '2026-09-18', DATE)).toBe('^GSPCの日足ではFTD 8/7');
+    // The same FTD day as the regime's: nothing to attribute, at any age.
+    expect(gspcFtdWords(at(FTD_RECENT_SESSIONS + 1), '2026-08-07', DATE)).toBeNull();
   });
 
   it('adds nothing for a record of another day, another state, no record, or a regime that is no correction', () => {

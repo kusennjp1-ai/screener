@@ -488,14 +488,16 @@ const REGIME_READS = '分配日のほか50日線・200日線と参加度も見�
  * What the app's own ^GSPC record of the analysis date (gspcFollowThrough: the フォロースルーデー row and its ◆) reads
  * beside the regime's SPY FTD, in words, only where the two differ: 「^GSPCの日足ではFTD未確認」 / 「…FTD失敗」 for a
  * record that is not a confirmed FTD, 「^GSPCの日足ではFTD 8/13」 for a confirmed one dated otherwise than the regime's
- * known FTD date; else null (the same reading, an unknown regime date, or no record of that day to compare).
+ * known FTD date, 「^GSPCの日足では前回のFTD 8/13」 when that FTD is older than FTD_RECENT_SESSIONS (ftdPrevious, as the
+ * row, its ◆ and ownFtdLine call it; a record without a whole count keeps 「FTD」); else null (the same reading, an
+ * unknown regime date, or no record of that day to compare).
  */
 export function gspcFtdWords(ft, ftdDate, date) {
   if (!ft) return null;
   if (ft.state === 'ftd_failed') return '^GSPCの日足ではFTD失敗';
   if (ft.state !== 'confirmed') return '^GSPCの日足ではFTD未確認';
   const own = ft.ftd?.date;
-  return ftdDate && isDay(own) && own !== ftdDate ? `^GSPCの日足ではFTD ${shortDate(own, date)}` : null;
+  return ftdDate && isDay(own) && own !== ftdDate ? `^GSPCの日足では${ftdPrevious(ft) ? FTD_PREVIOUS_NAME : 'FTD'} ${shortDate(own, date)}` : null;
 }
 
 /**

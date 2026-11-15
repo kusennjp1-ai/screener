@@ -598,9 +598,10 @@ describe('market tab: the basis line names the regime\'s cause (MK1, MK4)', () =
   const gspc = ft => trends({ follow: [ft, attempt(DATE)] });
 
   it('says an FTD-upgraded uptrend keeps the guide at 0%, naming the regime\'s SPY FTD, its date only from the regime\'s block', () => {
-    // The regime's FTD (9/18) and the tab's own ^GSPC record (8/7) differ: the line attributes each.
-    expect(verdict(below50, manifest(upgradedBlock)).cause).toBe('局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足ではFTD 8/7。この目安はSPYが50日線の下のため0%（独自判定）');
-    expect(verdict(below200, manifest(upgradedBlock)).cause).toBe('局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足ではFTD 8/7。この目安はSPYが200日線の下のため0%（独自判定）');
+    // The regime's FTD (9/18) and the tab's own ^GSPC record (8/7) differ: the line attributes each. That FTD is 40
+    // sessions old, so the line calls it 「前回のFTD」 as the row below does (M2).
+    expect(verdict(below50, manifest(upgradedBlock)).cause).toBe(`局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足では${FTD_PREVIOUS_NAME} 8/7。この目安はSPYが50日線の下のため0%（独自判定）`);
+    expect(verdict(below200, manifest(upgradedBlock)).cause).toBe(`局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足では${FTD_PREVIOUS_NAME} 8/7。この目安はSPYが200日線の下のため0%（独自判定）`);
     // The same FTD day on both: nothing to attribute.
     expect(verdict(below50, manifest({ ...upgradedBlock, ftd_date: '2026-08-07' })).cause).toBe('局面判定はSPYのFTD（8/7）による上昇トレンド。この目安はSPYが50日線の下のため0%（独自判定）');
     // Without the block (an older publication) or with a null date, the date is left out, never guessed from ^GSPC, and
