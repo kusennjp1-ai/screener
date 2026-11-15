@@ -428,8 +428,8 @@ P3 の作る側（出力は止めたまま）に続く、受け取る側と見�
 
 - **admission**（`bookFinancialAdmission.js`）
   - `OPTIONAL_RECORD_KEYS` に `q4EpsReference`。available・partial のレコードだけ（unavailable のレコードの `UNAVAILABLE_KEYS` には入れていないので、そこに付いていれば `keys` で拒む）。
-  - 作る側と同じ定数を出す：`SEC_Q4_REFERENCE_METHOD = 'q4-ni-over-q4-diluted-shares-v1'`、`SEC_Q4_REFERENCE_TAGS = { numerator: [3タグ], shares: ['WeightedAverageNumberOfDilutedSharesOutstanding'] }`、`SEC_Q4_REFERENCE_MAX = 4`（test_sec_financials.py が Python 側と照合する）。
-  - `q4ReferenceEntryValid(entry, asOfDate)`（カードの読み手と共有）：キーは end・start・value・method・numerator・shares だけ。日付は正しい日、start ≤ end ≤ asOfDate、期間は両端を含めて 70〜105 日（safeSeries・Python の `_days` と同じ数え方）、value は有限の数、method が一致、numerator・shares はキーが tag・components だけで、tag は上の一覧の中、components はちょうど4つの空でない文字列。
+  - 作る側と同じ定数を出す：`SEC_Q4_REFERENCE_METHOD = 'q4-ni-over-q4-diluted-shares-v1'`、`SEC_Q4_REFERENCE_TAGS = { numerator: [3タグ], shares: ['WeightedAverageNumberOfDilutedSharesOutstanding'] }`、`SEC_Q4_REFERENCE_QUARTER_DAYS = { min: 70, max: 105 }`、`SEC_Q4_REFERENCE_MAX = 4`（どれも 独自設定 とコメントし、test_sec_financials.py が Python 側と照合する。日数の範囲は Python では tag_points・derive_fourth_quarters の裸の数なので、その2つの動きを境界と1日外で確かめる。指揮者の指示 第1回の2、d4eb1fd6）。
+  - `q4ReferenceEntryValid(entry, asOfDate)`（カードの読み手と共有）：キーは end・start・value・method・numerator・shares だけ。日付は正しい日、start ≤ end ≤ asOfDate、期間は両端を含めて `SEC_Q4_REFERENCE_QUARTER_DAYS` の 70〜105 日（safeSeries・Python の `_days` と同じ数え方）、value は有限の数、method が一致、numerator・shares はキーが tag・components だけで、tag は上の一覧の中、components はちょうど4つの空でない文字列。
   - リスト：1〜4 件、end が厳密に増える、どの end も quarterly.eps の点の end と一致しない（報告された EPS を参考値で覆わない）。
   - どれかに外れればレコード全体を**既存の理由 `keys`** で拒む。`SEC_REFUSAL_REASONS`・`REFUSAL_TEXT` は変えていない。キーの検査は既存の検査の**後**（limitations の後）に置いたので、キーのあるレコードでも既存の理由（`series:eps` など）が先に名指しされ、quarterly.eps は検査済みの系列として読める。キーの無いレコードは今までとまったく同じ（基準の 66 件のテストが新しい admission の上でそのまま通る、実測）。
   - `admitPoint`（quarterly.eps に算出した EPS が入れば `series:eps`）と bookFinancialEvidence の `safeSeries`（同じく拒む）は**変えていない**。テストで確かめただけ。
@@ -442,14 +442,16 @@ P3 の作る側（出力は止めたまま）に続く、受け取る側と見�
     - 報告された EPS は、bookFinancialEvidence がその系列を丸ごと拒んだ（`refusedSeries` に eps）ときは使わない（安全でない基準から率を作らない）。safeSeries は全部か無しかなので、拒まれていなければ生の quarterly.eps が検査済みの系列そのもの。
     - 参考値の基準になるのは、見せる参考値だけ（窓の外の参考値は基準にしない）。
   - `secStatus` の `make('ok', …)` に、リストが空でないときだけ `q4Reference` を足す。キーの無いレコード（と、全部が落ちたレコード）の secStatus の結果は今と deep-equal。
-  - 行の文：`q4ReferenceLine(reference)` → 見せる中で一番新しい四半期について「参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.80（純利益÷希薄化株数）→ 前年比 +71%（前年同期も参考値）」。率が無ければ「→ 前年比 …」を付けない（+0% と書かない）。基準が参考値なら「（前年同期も参考値）」。率は `growth`（`wholePercent` の後 `signed`）なので 0.3% は ±0%、負の数は U+2212（`fixedMinus` と `signed`）。
+  - 行の文が名指す四半期：`q4ReferenceNamed(reference)` → 見せる中で一番新しいエントリー（崩れていれば null）。行の文とカードの印（1024px 未満）が同じこの関数で選ぶ（11c59c5b）。
+  - 行の文：`q4ReferenceLine(reference)` → `q4ReferenceNamed` の四半期について「参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.80（純利益÷希薄化株数）→ 前年比 +71%（前年同期も参考値）」。率が無ければ「→ 前年比 …」を付けない（+0% と書かない）。基準が参考値なら「（前年同期も参考値）」。率は `growth`（`wholePercent` の後 `signed`）なので 0.3% は ±0%、負の数は U+2212（`fixedMinus` と `signed`）。
   - 棒の title：`q4ReferenceTitle(entry)` →「参考（独自計算）Q4 EPS ≈ 1.80 → 前年比 +71%（前年同期も参考値）」。カードは「2026-06期 EPS 前年比：Q4のEPSは年次報告のみ・」の後ろに付ける。
   - デスクトップの凡例：`Q4_REFERENCE_LEGEND = '太い破線＝参考（独自計算・判定に使わない）'`。
 - **カード**（`StockFundamentalsCard.jsx`、`brief-fundamentals.css`）：`financial.sec.q4Reference` を読む（`sec.state === 'ok'` で配列のときだけ、窓の行にある end だけ）。
   - (a) Code 33 の箱（と3条件）の下に1行、`p.brief-note.brief-fin-reference`。カードの上で、どの幅でも折りたたみの中に入れない。
-  - (b) 棒：参考値のある四半期の EPS の棒は、同じ大きさ・同じ位置の灰色の `q-unknown` の rect のまま、`is-reference` の class で**太く濃い破線**（`stroke: var(--text-2); stroke-width: 2px; stroke-dasharray: 4 2`）。title は上のとおり。
-  - (b) 軸：率があれば EPS のセルに既存の4文字の `growthShort` の形で書き（例「+71」、赤字の参考値は「赤字」）、灰色の破線のセル（`q-eps-t is-reference`、`outline: 1px dashed`、`outline-offset: -1px`、角は 4px のトークン）。EPS の色にはしない。率が無ければ「—」のまま（`is-unknown`）。outline なのでセルの大きさは変わらない。
-  - (b) 1024px 以上の凡例に「太い破線＝参考（独自計算・判定に使わない）」（見本は同じ破線の四角）。スマホの凡例は4項目のまま（行の文が「参考」を言う）。
+  - **印を付ける四半期**（指揮者の指示 第1回の1、11c59c5b）：1024px 以上では見せる参考値のすべて（凡例の項目が鍵）。1024px 未満では**行の文が名指す四半期だけ**（`q4ReferenceNamed`：見せる中で一番新しいもの。`q4ReferenceLine` も同じ関数で選ぶ）。スマホの凡例には参考の項目が無いので、行の文がそのセルの鍵になる。それより古い参考の四半期は、スマホではキーの無い記録とまったく同じ（値なしの灰色の棒と title、軸は「—」の `is-unknown`）。どちらも凡例と同じ `wide` で決めるので、印と鍵が離れることはない。
+  - (b) 棒：印を付ける四半期の EPS の棒は、同じ大きさ・同じ位置の灰色の `q-unknown` の rect のまま、`is-reference` の class で**太く濃い破線**（`stroke: var(--text-2); stroke-width: 2px; stroke-dasharray: 4 2`）。title は上のとおり。
+  - (b) 軸：印を付ける四半期に率があれば EPS のセルに既存の4文字の `growthShort` の形で書き（例「+71」、赤字の参考値は「赤字」）、灰色の破線のセル（`q-eps-t is-reference`、`outline: 1px dashed`、`outline-offset: -1px`、角は 4px のトークン）。EPS の色にはしない。率が無ければ「—」のまま（`is-unknown`）。outline なのでセルの大きさは変わらない。
+  - (b) 1024px 以上の凡例に「太い破線＝参考（独自計算・判定に使わない）」（見本は同じ破線の四角）。スマホの凡例は4項目のまま（行の文が「参考」を言い、印は行の文が名指す四半期にしか付かない）。
   - (c) 棒の尺度（`known`、up・down・span）は行の `epsYoY`・`salesYoY` だけから作るので参考値を含まない。その四半期は「値なしの理由」に元の理由（「Q4のEPSは年次報告のみ」）で残る。タイル・品質のチップ・Code33Parts・Code 33 の箱の題・文・色・settledText・出典の行は変えていない。Code 33 は 未確認 のまま。
   - 参考値が無い（または全部落ちた）ときは、何も足さない：空の要素も、class の文字列も増えない（DOM が同じ、下のテストと dump）。
 - **変えていないもの**：quarterly.eps の扱い、`chipQuarter`、`epsFloor`、`earningsChipView`、`earningsCaution`、`secRowChip`、`code33ChipView`、`buildSecSummary`・`secSummary` の出力、`code33Explain`。UI に新しいしきい値は無い（10% 帯・2% 照合などは作る側の 独自設定、P3）。
@@ -460,6 +462,7 @@ P3 の作る側（出力は止めたまま）に続く、受け取る側と見�
 - admission はツールの中でしか走らず、ブラウザーは呼ばない。だから表示の関数が自分で厳しく確かめ、崩れたものは無いものとして扱う。
 - カードが受け取るのは `financial = { report, sec, history, historyRetrievedAt, code33 }`（useBriefData.js で作る、DATA のものではない）だけで、`report` は生のレコードを持たない。生のレコードに届く DATA の道は `secStatus(row, book, …)` だけ（`row.book_financials` を受け取る）。だから参考値は secStatus の 'ok' の結果に乗せた。
 - 計画の軸の文「参考 +45」は軸のセルに入らない（320px のスマホで 12px の4文字、spec はどのセルも切れないことを確かめている）。上の形（率だけを灰色の破線のセルに、「参考」は行の文とデスクトップの凡例が言う）にした。
+  - **指揮者の裁定（第1回の1）**：セルから「参考」の語を外すのは、カードそのものがそのようなセルのすべてに鍵を付けるときに限って認める。だからセルの「参考」の語は、この鍵に置き換えた：1024px 以上では凡例の項目（`Q4_REFERENCE_LEGEND`、同じ `wide` の下で出る）、1024px 未満では行の文（「参考（独自計算・判定に使わない）：26-06期 …」）。スマホで破線のセルになるのは行の文が名指す四半期だけ。前の版では、行の文が名指さない古い参考の四半期（例：2024-06 の EPS が報告されているときの 2025-06 の「+17」）もスマホで破線のセルに率を出し、カードの見える文字のどこにも鍵が無かった（SVG の title はタッチで届かず、軸は aria-hidden）。
 
 ### 規則 18
 
@@ -489,8 +492,11 @@ P3 の作る側（出力は止めたまま）に続く、受け取る側と見�
 - `bookFinancialAdmission.test.js`：66 → 96（新しい 30）。定数と理由の一覧が変わらないこと、正しいリストは同じオブジェクトで受ける（3つの分子タグ、負の値、4件、partial）、キーの無い記録は今までどおり、`keys` で拒む 25 の形（余分・欠けたキー、`__proto__`、method、分子・株数のタグ、shares の余分なキー、components 3・5・空、NaN・Infinity・文字列の値、asOfDate の後の end、start > end、105 日超・70 日未満、存在しない日、順序、同じ end、報告のある四半期、5件、空、オブジェクトでないエントリー）、配列でないもの5つ、unavailable の5つの理由すべて、既存の理由が先に出る（`series:eps`・`symbol`・`keys`）、算出の EPS は（キーがあっても）`series:eps`、`q4ReferenceEntryValid` の境界（70・105 日は可、69・106 日は不可）。
 - `fundamentalsExplain.test.js`：27 → 33（新しい 6）。上の証明、secStatus に付くとき・付かないとき、率（報告の基準・参考の基準・赤字・ゼロ・基準なし・期間の不一致・負の参考値・拒まれた EPS の系列）、落とすもの（崩れたエントリー6種のそれぞれと残るもの、報告のある四半期、窓の外、fiscal Q4 でない行）、リストの形（空・null・{}・逆順・重複・5件・null のエントリー）、別の日の記録、無効な報告、null の記録。行の文と title の文（U+2212、±0%、率なしで尾なし、基準なしで尾なし、ASCII のマイナスが無い）。
 - `StockFundamentalsCard.test.jsx`：21 → 26（新しい 5）。上の証明、行が1回・折りたたみの外・Code 33 の箱の後、棒の class と title、軸のセル（+71 は is-reference、率の無い 2025-06 は — のまま）、凡例、赤字の参考値、率の無い参考値。
-- `test_sec_financials.py`：54 → 56（新しい 2、`Q4EpsReferenceBrowserAdmission`）。method・タグ・上限が bookFinancialAdmission.js の定数と一致。出力を（テストの中で）オンにして P3 のコードで作ったレコード（2022〜2025 の4件）が node の admission を通り、出力オフのレコードも通り、method 違い・報告のある四半期・5件は拒まれる（既存の `ADMIT_SCRIPT` を使う）。
+  - 指揮者の指示 第1回の1（11c59c5b）：26 → 28。既存の棒のテストは、スマホで印の付く棒が 2 → 1（2026-06 だけ。2025-06 は class `q-unknown` と元の title）、デスクトップで 2 に。新しい 2：(i) ZZQF に報告された 2024-06 の EPS（10-K、0.90）と6月の参考値2つ。記録は admission を通り、q4Reference は 2025-06 が +16.67%（基準は報告値）、2026-06 が +71.43%（基準は参考値）。スマホ：破線のセルは「+71」の1つで、どの破線のセルの四半期（列の「年」「月」から作る YY-MM期）も、閉じた折りたたみと SVG の外のカードの文字（p・li）が「参考」と一緒に名指す。2025-06 の列（棒の g と軸の span）はキーの無い記録と outerHTML で同じ、軸は「—」の `is-unknown`。タイル・チップ・箱・出典・理由・棒の座標もキーの無い記録と同じ、凡例は4項目。デスクトップ：破線のセルは「+17」「+71」、棒の印は2つ、凡例の項目（`q-key-reference`、折りたたみの外）。(ii) 一番新しい参考値に率が無く（2025-06 の参考値が赤字なので前年同期にならない）古い方に率（赤字）があるとき、スマホに破線のセルは無く、印の付く棒は行の文が名指す 2026-06 だけ。デスクトップは「赤字」の破線のセルと凡例の項目。
+- `fundamentalsExplain.test.js`：件数は 33 のまま。行の文のテストに `q4ReferenceNamed`（行の文が名指すもの＝一番新しいエントリーと同じオブジェクト、崩れたもの・空は null）を足した。
+- `test_sec_financials.py`：54 → 56（新しい 2、`Q4EpsReferenceBrowserAdmission`）。指揮者の指示 第1回の2（d4eb1fd6）で 57：`test_the_quarter_day_bounds_match_the_browser_admission` が `SEC_Q4_REFERENCE_QUARTER_DAYS` をソースから読み、`tag_points`（四半期の flow の事実）と `derive_fourth_quarters`（Q4 の残り）が 69・106 日を捨て 70・105 日を残すことを確かめる。method・タグ・上限が bookFinancialAdmission.js の定数と一致。出力を（テストの中で）オンにして P3 のコードで作ったレコード（2022〜2025 の4件）が node の admission を通り、出力オフのレコードも通り、method 違い・報告のある四半期・5件は拒まれる（既存の `ADMIT_SCRIPT` を使う）。
 - `brief-fundamentals.spec.js`：4 件（320×640・375×812・390×844・1440×900、reduced motion、`chartSettled`）。ZZQF に `{ oracles: true, mutate: { details } }` で 2025-06-30 と 2026-06-30 の参考値を足す（fixture は凍結のまま）。キーの無い画面・ある画面・method 違いの画面を同じ context の3つのページで開いて比べる：行が見える・閉じた折りたたみの外・Code 33 の箱の後・文は producer の出力、チップ・タイル・値なしの理由とその件数（スマホの見出しの「N件」）・Code 33（未確認）・出典・rect の座標が同じ、軸で変わるのは 2026-06 の EPS のセル（— → +71）だけでその色は「—」のセルと同じ灰色・EPS の色ではない・outline は dashed、参考の棒の破線と太さは値なしの棒と違う、デスクトップの凡例・スマホの凡例、横はみ出し 0、切れたセル 0（`cutCells`・`wider`）、375 で 3388 以内、method 違いは何も無い画面と同じ。高さはログに出す。
+  - 指揮者の指示 第1回の1（11c59c5b）：4 → 8。既存の4件は、印の付く棒がスマホで 1・デスクトップで 2。新しい4件（同じ4つの幅）：ZZQF に `mutate.details` で報告された 2024-06 の EPS（2024-04-01〜2024-06-30、10-K）と6月の参考値2つ。比べる相手は 2024-06 の EPS だけを足した画面（キーなし）。チップ・タイル・値なしの理由・Code 33・出典・rect の座標が同じ。スマホ（320・375・390）：破線のセルは「+71」だけで、その四半期は `checkVisibility()` が真で閉じた折りたたみの外にあるカードの p・li の文字が「参考」と一緒に名指す、2025-06 の列はキーなしの画面と同じ markup で「—」の `is-unknown`、印の付く棒は1つ、凡例は4項目、375 で 3388 以内。1440：破線のセルは「+17」「+71」、凡例の項目（「太い破線＝参考（独自計算・判定に使わない）」、見本 `q-key-reference`、折りたたみの外）が見える。どの幅でも横はみ出し 0、切れたセル 0。前の版（2450a6f のカード）では、スマホの3件が落ち（破線のセルが「+17」「+71」）、1440 は通った（実測、下）。
 
 ### 実測（このサンドボックス、CI と同じ設定：Chrome for Testing 147 headless shell、CI のフォント、ポート 4422）
 
@@ -521,6 +527,18 @@ P3 の作る側（出力は止めたまま）に続く、受け取る側と見�
 - spec（brief-fundamentals.spec.js の D3 の4件）が出すログ：320 3207 → 3277、375 3000 → 3069、390 3000 → 3069、1440 1837 → 1837（spec の 1440 は VIEWPORTS.desktop で deviceScaleFactor 1 なので、上の表の 1832 と測り方が違う）。カードは表と同じ。
 - 見た目（スクラッチのスクリーンショット `audit3/r3-data/d3-measure/card-375.png`・`card-1440.png`、コミットしない）：参考の棒は値なしの棒より太く濃い破線、軸の「+71」は灰色の破線の枠、1440 の凡例の3行目に「太い破線＝参考（独自計算・判定に使わない）」、行の文は Code 33 の3条件の下。
 
+### 実測（指揮者の指示 第1回の1・2の後。測った木 d4eb1fd6、CI と同じ設定、ポート 4422）
+
+この節の docs のコミットの直前の木（作業ツリーの違いは data.md だけ）。負荷はすべて advisory。
+
+- **A**：`cd $W/frontend/tools && python3 test_sec_financials.py` → **Ran 57 tests … OK**。`npx vitest run src/static/bookFinancialAdmission.test.js src/static/fundamentalsExplain.test.js src/static/brief/StockFundamentalsCard.test.jsx` → 3 files、**157 passed**（96＋33＋28）。`npx eslint`（触った 7 ファイル）→ 0 errors・0 warnings。負荷：前 2.18 / 後 2.75。
+- **負の確認**：2450a6f のカード（`StockFundamentalsCard.jsx` だけ）を作業ツリーに戻し、新しい spec を `AUDIT_MATCH='brief-fundamentals' … -g 'every dashed reference cell'` で走らせた → **320・375・390 が落ち、1440 は通った**（4件、22.0 s）。スマホの3件はどれも破線のセルの文字で落ちた：期待 `['+71']`、実際 `['+17', '+71']`。その後 `git checkout HEAD --` で戻し、`git status` は data.md だけ。続けて、spec の中で `unkeyed` の期待を `cells` の期待の前に一時的に入れ替えて同じ4件を走らせた → 320・375・390 が `unkeyed` で落ちた（期待 `[]`、実際 `['25-06期']`。鍵の無い四半期を正しく名指す）、1440 は通った（23.7 s）。カードと spec を `git checkout HEAD --` で戻し、`git status` は空。
+- **B**：`AUDIT_PORT=4422 AUDIT_MATCH='brief-(fundamentals|oracles|compact|phone|accessibility)' npx playwright test -c $S/audit3/r3-data/pw-147.config.mjs` → **157 件：155 passed・2 skipped**（8.6 分、**再実行なし**）。157 ＝ 指揮者の確認の 153 ＋ 新しい4件。skip の2つは brief-oracles.spec.js の `test.fixme('R1: …')`・`test.fixme('R2: …')` で、有効な oracle のアサーションはすべて通った。負荷：前 2.15 / 後 5.74。
+- **E**：`npx vitest run`（全体、SESSION_CALENDAR_PYTHON・FINANCIAL_REPLAY_PYTHON つき）→ **247 files、4041 passed**、exit 0（305 s）。4041 ＝ 4039 ＋ カードの新しい2件。負荷：前 4.69 / 後 5.59。
+- **F（入口チャンク）**：`$H/build/run-build.sh $W` → `build-d4eb1fd.json`。`npm run build` の入口 377.12 kB・gzip **131.88 kB**（2450a6f の 131.82 から +0.06、線 134.00 まで 2.12 kB）。Design Acceptance の build の入口は gzip 131.66 kB（+0.04）。
+- **C（dump）**：`$H/dump/run-dump.sh $W 4422` → `dump-d4eb1fd.json`、42 画面・エラー 0、sha256 **996e122d…8982**。`cmp` で dump-2450a6f.json と**バイト単位で同じ**（既定の fixture は変わらない）。
+- **G**：コミットの前ごとに `python3 -I $S/audit3/check-ownership.py DATA $W 45603f06…` → `OWNERSHIP OK (DATA)`。
+
 ### 指示からの逸脱
 
 1. **凡例の言葉は「太い破線＝参考（独自計算・判定に使わない）」**（指示は「破線＝…」）。brief.css（DATA のものではない）が `.q-unknown` をもともと細い破線（`stroke-dasharray: 3 3`）で描くので、「破線＝参考」ではすべての値なしの棒を参考と呼ぶことになる。参考の棒は `is-reference` で太く濃い破線（`--text-2`、2px、`4 2`）にして区別し、凡例の見本も同じ破線にした。
@@ -536,6 +554,7 @@ P3 の作る側（出力は止めたまま）に続く、受け取る側と見�
 - 実際の銘柄での表示（このキーを持つ公開の記録はまだ無い。出力はオフ）。実データの精度（P3 の未検証と同じ）。公開版（Pages）での効果と表示。
 - ライトモードでの参考の棒と軸のセルの見え方（スクリーンショットはダークだけ）。axe（brief-accessibility）は既定の画面で通ったが、参考値のある ZZQF の画面では走らせていない。軸は `aria-hidden` で、参考値は SVG の title と行の文で読まれる（スクリーンリーダーでは確かめていない）。
 - 時間の計測はしていない（チャートのコードは触っていない）。ここの負荷の数はすべて advisory。CI の Design Acceptance は走らせていない。
+- 指揮者の指示 第1回の1 の後：391〜1023px の幅は描画していない（印と鍵はどちらも `wide` で決まるので、その幅はスマホと同じ側になるはずだが、確かめたのは 320・375・390・1440 だけ）。直した木（d4eb1fd6）で走らせた Playwright は 5 つの spec（brief-fundamentals・oracles・compact・phone・accessibility）だけで、tests/static の全体（新しい4件を足して 460 件、`--list` で数えた）は走らせていない。
 
 ### D3 のコミット（古い順。統合で D3 を外すときは新しい順に戻せば pre-D3 の d8457cfb に戻る）
 
@@ -546,7 +565,12 @@ P3 の作る側（出力は止めたまま）に続く、受け取る側と見�
 5. 07bcd93d feat(frontend): admit and show the reference fiscal-Q4 EPS without counting it（P4）
 6. c770fd31 test(frontend): prove the reference fiscal-Q4 EPS is strict, shown and never counted（P4）
 7. 2acdaaf4 test(frontend): check the reference fiscal-Q4 EPS on ZZQF at 320, 375, 390 and 1440（P4）
-8. この docs(round3) のコミット（P4、この節だけ）
+8. 2450a6f5 docs(round3): record D3 display（P4）
+9. 11c59c5b fix(frontend): on a phone mark only the reference quarter the 参考 line names（指揮者の指示 第1回の1）
+10. d4eb1fd6 refactor(frontend): name the reference quarter's day bounds as a 独自設定 constant（第1回の2）
+11. この docs(round3) のコミット（第1回の1・2の記録、D3 の節だけ）
+
+D3 ではないコミットが一つだけ、この上にある：第1回の3（D4 の逸脱への裁定）を D4 の節に書く docs のコミット。D4 の節の行しか変えないので、D3 の 11 個を戻しても残り、d8457cfb の data.md にもそのまま当たる。
 
 `git diff d8457cfb..HEAD --name-only` は D3 の 12 ファイル（上の D の一覧の 13 から report-data-coverage.mjs を除いたもの。report-data-coverage.test.mjs は P3 が末尾に足した describe だけ）。D3 を外しても D2・D4 は触らない。
 
