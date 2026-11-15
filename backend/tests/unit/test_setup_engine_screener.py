@@ -973,3 +973,113 @@ class TestPricePinned:
         assert payload["setup_ready"] is False and result.passes is False
         assert payload["explain"]["failed_checks"] == [PRICE_PINNED]
         assert PRICE_PINNED not in payload["explain"]["diagnostics"]
+
+
+class TestPublishedStageParity:
+    """Round 3 R3b: gate 8 reads the stage the Minervini scanner publishes for the same bars
+    (``WeinsteinstageAnalyzer.determine_stage`` with SMA150 and the 52-week high), with and
+    without the orchestrator's precomputed context, and requires stage 2 (None passes)."""
+
+    _N = 350
+
+    @classmethod
+    def _frame(cls, close: np.ndarray, volume: float = 2_000_000.0) -> pd.DataFrame:
+        index = pd.bdate_range(end=pd.Timestamp("2025-12-19"), periods=len(close))
+        return pd.DataFrame(
+            {"Open": close * 0.998, "High": close * 1.008, "Low": close * 0.992, "Close": close,
+             "Volume": np.full(len(close), volume)},
+            index=index,
+        )
+
+    @classmethod
+    def _shapes(cls) -> dict[str, np.ndarray]:
+        n = cls._N
+        rng = np.random.default_rng(7)
+        leader = 50 * 1.003 ** np.arange(n) * (1 + rng.normal(0, 0.002, n))
+        # A flat 200-day line with a small lift at the end: the quick check's stage 1 (it
+        # passed gate 8), the scanner's stage 3 (above a flat line).
+        flat = 50 * (1 + rng.normal(0, 0.003, n))
+        flat[-40:] = flat[-40:] * np.linspace(1.0, 1.04, 40)
+        # A pullback under the 50-day line in a rising trend: the quick check's stage 3 (it
+        # failed gate 8), the scanner's stage 2.
+        pullback = 50 * 1.003 ** np.arange(n)
+        pullback[-12:] = pullback[-13] * np.linspace(0.99, 0.93, 12)
+        pullback = pullback * (1 + rng.normal(0, 0.001, n))
+        decline = 80 * 0.997 ** np.arange(n) * (1 + rng.normal(0, 0.002, n))
+        return {"leader": leader, "flat_200": flat, "pullback": pullback, "decline": decline}
+
+    @classmethod
+    def _spy(cls) -> pd.DataFrame:
+        rng = np.random.default_rng(11)
+        return cls._frame(400 * (1 + rng.normal(0, 0.002, cls._N)), volume=5e7)
+
+    @staticmethod
+    def _stock_data(stock: pd.DataFrame, spy: pd.DataFrame, *, precomputed: bool) -> StockData:
+        from app.scanners.scan_orchestrator import _build_precomputed_scan_context
+
+        data = StockData(symbol="X", price_data=stock, benchmark_data=spy)
+        if precomputed:
+            data.precomputed_scan_context = _build_precomputed_scan_context(data)
+            assert data.precomputed_scan_context is not None
+        return data
+
+    @staticmethod
+    def _quick_stage(close: np.ndarray) -> int:
+        from app.scanners.criteria.stage_analysis import quick_stage_check
+
+        series = pd.Series(close)
+        ma_200 = series.rolling(200).mean()
+        return quick_stage_check(
+            float(close[-1]), float(series.rolling(50).mean().iloc[-1]),
+            float(series.rolling(150).mean().iloc[-1]), float(ma_200.iloc[-1]), float(ma_200.iloc[-21]),
+        )
+
+    @pytest.mark.parametrize("precomputed", [False, True], ids=["raw", "precomputed"])
+    def test_gate_8_receives_the_stage_the_scanner_publishes(self, precomputed):
+        from app.scanners.minervini_scanner import MinerviniScanner
+
+        spy = self._spy()
+        published = {}
+        for name, close in self._shapes().items():
+            data = self._stock_data(self._frame(close), spy, precomputed=precomputed)
+            scanner_stage = MinerviniScanner().scan_stock("X", data).details["stage"]
+            payload = SetupEngineScanner().scan_stock("X", data).details["setup_engine"]
+            assert payload["stage"] == scanner_stage, name
+            explain = payload["explain"]
+            if scanner_stage == 2:
+                assert "stage_ok" in explain["passed_checks"] and "stage_not_ok" not in explain["failed_checks"], name
+            else:
+                assert "stage_not_ok" in explain["failed_checks"] and "stage_ok" not in explain["passed_checks"], name
+            published[name] = scanner_stage
+        assert published == {"leader": 2, "flat_200": 3, "pullback": 2, "decline": 4}
+
+    def test_the_two_classifiers_disagree_and_gate_8_follows_the_published_one(self):
+        """The cases R3b changes: a flat 200-day line (quick 1, scanner 3) now fails, and a
+        pullback under the 50-day line (quick 3, scanner 2) now passes."""
+        shapes = self._shapes()
+        assert self._quick_stage(shapes["flat_200"]) == 1
+        assert self._quick_stage(shapes["pullback"]) == 3
+        spy = self._spy()
+        flat = SetupEngineScanner().scan_stock(
+            "X", self._stock_data(self._frame(shapes["flat_200"]), spy, precomputed=False),
+        ).details["setup_engine"]
+        assert flat["stage"] == 3 and "stage_not_ok" in flat["explain"]["failed_checks"]
+        pullback = SetupEngineScanner().scan_stock(
+            "X", self._stock_data(self._frame(shapes["pullback"]), spy, precomputed=False),
+        ).details["setup_engine"]
+        assert pullback["stage"] == 2 and "stage_ok" in pullback["explain"]["passed_checks"]
+
+    def test_a_missing_200_day_line_is_no_stage_and_passes(self):
+        """Without a 200-day line there is no stage (None), and gate 8 passes it: a missing
+        stage is never a failure. (The data policy needs 252 bars before any gate runs, so a
+        scan only reaches this through a gap in the closes.)"""
+        from app.scanners.criteria.moving_averages import MovingAverageAnalyzer
+        from app.scanners.criteria.relative_strength import RelativeStrengthCalculator
+
+        close = self._shapes()["leader"].copy()
+        close[-150:-100] = np.nan
+        stock = self._frame(close)
+        context = SetupEngineScanner._compute_context(
+            stock, None, "X", MovingAverageAnalyzer(), RelativeStrengthCalculator(),
+        )
+        assert context["stage"] is None

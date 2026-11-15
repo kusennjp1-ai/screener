@@ -48,7 +48,8 @@ from app.scanners.base_screener import (
 from app.scanners.screener_registry import register_screener
 from app.scanners.criteria.moving_averages import MovingAverageAnalyzer
 from app.scanners.criteria.relative_strength import RelativeStrengthCalculator
-from app.scanners.criteria.stage_analysis import quick_stage_check
+from app.scanners.criteria.stage_analysis import WeinsteinstageAnalyzer
+from app.scanners.minervini_scanner import TRADING_DAYS_52W
 from app.scanners.setup_engine_scanner import build_setup_engine_payload
 
 logger = logging.getLogger(__name__)
@@ -347,6 +348,57 @@ class SetupEngineScanner(BaseStockScreener):
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _published_stage(
+        price_data: pd.DataFrame,
+        prices_chrono: pd.Series,
+        ma_200_series: pd.Series,
+        *,
+        current_price: float,
+        ma_150: float,
+        ma_200: float,
+        precomputed_context=None,
+    ) -> int | None:
+        """The stage the Minervini scanner publishes for these bars (round 3 R3b).
+
+        Gate 8 and the payload's ``stage`` read the brief's stage: the scanner's own
+        classifier (``WeinsteinstageAnalyzer.determine_stage``, with SMA150 and the 52-week
+        high), fed as minervini_scanner.py feeds it (reversed closes, volumes and 200-day
+        line; the precomputed context when the orchestrator supplies one). Only the inputs
+        are assembled here; the classification is not copied. A unit test pins the parity.
+        """
+        high_52w = (
+            float(precomputed_context.high_52w)
+            if precomputed_context is not None and precomputed_context.high_52w is not None
+            else float(price_data.tail(TRADING_DAYS_52W)["High"].max())
+        )
+        prices_rev = (
+            precomputed_context.close_rev
+            if precomputed_context is not None and precomputed_context.close_rev is not None
+            else prices_chrono[::-1].reset_index(drop=True)
+        )
+        volumes_chrono = (
+            precomputed_context.volume_chrono
+            if precomputed_context is not None and precomputed_context.volume_chrono is not None
+            else price_data["Volume"].reset_index(drop=True)
+        )
+        volumes_rev = (
+            precomputed_context.volume_rev
+            if precomputed_context is not None and precomputed_context.volume_rev is not None
+            else volumes_chrono[::-1].reset_index(drop=True)
+        )
+        result = WeinsteinstageAnalyzer().determine_stage(
+            current_price,
+            ma_200,
+            ma_200_series[::-1].reset_index(drop=True),
+            prices_rev,
+            volumes_rev,
+            ma_150=ma_150,
+            high_52w=high_52w,
+        )
+        stage = result.get("stage")
+        return int(stage) if stage is not None else None
+
+    @staticmethod
     def _compute_context(
         price_data: pd.DataFrame,
         spy_close: pd.Series | None,
@@ -356,7 +408,11 @@ class SetupEngineScanner(BaseStockScreener):
         rs_universe_performances: Optional[Dict[int | str, list[float]]] = None,
         precomputed_context=None,
     ) -> dict:
-        """Compute stage, MA alignment, and RS rating from price data."""
+        """Compute stage, MA alignment, and RS rating from price data.
+
+        The stage is the Minervini scanner's published one (``_published_stage``); it is
+        None only when a 50-, 150- or 200-day line is missing, and gate 8 passes None.
+        """
         prices_chrono = (
             precomputed_context.close_chrono
             if precomputed_context is not None and precomputed_context.close_chrono is not None
@@ -401,9 +457,10 @@ class SetupEngineScanner(BaseStockScreener):
             )
         )
 
-        stage = quick_stage_check(
-            current_price, float(ma_50), float(ma_150),
-            float(ma_200), ma_200_month_ago,
+        stage = SetupEngineScanner._published_stage(
+            price_data, prices_chrono, ma_200_series,
+            current_price=current_price, ma_150=float(ma_150), ma_200=float(ma_200),
+            precomputed_context=precomputed_context,
         )
 
         ma_result = ma_analyzer.comprehensive_ma_analysis(

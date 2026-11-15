@@ -40,7 +40,7 @@
     "rs_line_blue_dot": false,
     "rs_vs_spy_65d": null,
     "rs_vs_spy_trend_20d": null,
-    "stage": 3,
+    "stage": 2,
     "ma_alignment_score": 60.0,
     "rs_rating": null,
     "candidates": [
@@ -747,12 +747,12 @@
         "in_early_zone",
         "atr14_within_limit",
         "rs_leadership_ok",
+        "stage_ok",
         "ma_alignment_ok",
         "rs_rating_ok"
       ],
       "failed_checks": [
-        "volume_above_dryup_cap",
-        "stage_not_ok"
+        "volume_above_dryup_cap"
       ],
       "key_levels": {
         "pivot_price": 101.28524300278332
