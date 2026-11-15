@@ -760,7 +760,9 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 
 - fc3bc60d M8a〜M8c（`frontend/tools/collect-market-history.py`）と、その unittest（`test_collect_market_history.py`）
 - 3e3af808 M8d（`frontend/tools/export-market-trends.mjs`）と、その vitest（`export-market-trends.test.mjs`）
-- このコミットの文書（この節、M0 の節の 1 段落、docs/MARKET_HISTORY_PRODUCER.md の追記）
+- 8e3de1a3 文書（この節、M0 の節の 1 段落、docs/MARKET_HISTORY_PRODUCER.md の追記）
+- eb0ca39e 見直しでの修正：`marketIndexLogLines(payload, null)` が例外を投げていた（分割代入の既定値は `undefined` にしか効かない）のを `options?.stalling` に直し、`collect()` が `build()` に `log` を渡すことのテストを足した
+- この節の追記（全体の vitest、ワークフローの標準出力、5% の外し方の測定）
 - 両方の producer とも `EMIT_R3_MARKET_FIELDS` は **off**（Python は `False`、JS は `false`）。規則 18 により、新しいキーを読む UI が Pages に出たのを読取で確かめた後の追従コミットでだけ on にする（このパッケージではしない）。
 - UI（marketLongHistory.js、marketTrendAsset.js、marketTabModel.js、marketTabStudy.js の読み手と表示）はこのパッケージに含まない。src/ は 1 行も変えていない。
 
@@ -799,7 +801,7 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 
 ### 計画・指示からの補いと判断
 
-1. **backend との違い（決めてほしい）**：backend はストーリング日を分配日と同じ列に OR してから失効を数えるので、**後の終値が その日の終値の 5% 以上上に来たストーリング日も外す**（`DIST_EXPIRY_RALLY`）。指示の条件と method id（`…-age25-v1`）にはこれが無いので、指示どおり 25 営業日の失効だけにした。定数（0.2%、3%、25）は backend と同じ。backend の数え方にそろえるなら、5% の外し方（backend は終値、`distributionDays.js` は後日の高値で 5%）を決め、method id も変える必要がある。
+1. **backend との違い（決めてほしい）**：backend はストーリング日を分配日と同じ列に OR してから失効を数えるので、**後の終値が その日の終値の 5% 以上上に来たストーリング日も外す**（`DIST_EXPIRY_RALLY`）。指示の条件と method id（`…-age25-v1`）にはこれが無いので、指示どおり 25 営業日の失効だけにした。指示の「backend の定数が違えば backend に従う」は定数の話と読んだ（定数 0.2%、3%、25 は backend と同じ）。この違いは実データで値を変える（下の実測：^GSPC で 232 日中 12 日）。backend の数え方にそろえるなら、5% の外し方（backend は終値、`distributionDays.js` は後日の高値で 5%）を決め、method id も変える必要がある。
 2. **短い履歴**：backend の 25 営業日の終値の最高値は `rolling(25, min_periods=1)` で、系列の最初の方では短い窓を使う。ここでは生きている窓（最後の 25 営業日）の各日に 25 本の窓がそろうことを求め、49 本未満は不可にした。実際の指数の系列（280 本）では違いは出ない（下の照合で 0 件）。
 3. **M8c の「判定済み」**：指示は「5〜9 営業日前の上抜けの件数」。既存の確定分（`matured`）が後の 10 営業日の安値がすべて観測されたものだけを数えるのに合わせ、後の 5 営業日の安値がすべて観測されたものだけを数えた（欠けた日に −7% に届いたかもしれないので、判定しない）。テストに、欠けた足のある上抜けが数えられない例を入れた。
 4. **ログの読み先（M0 の約束の例外）**：M0 の行は「asset に書いた値だけを読む」約束だった。出力が off の間はストーリングが asset に無いので、この 2 欄だけは同じ build の値を読む。M0 の節にもその旨を書いた。
@@ -807,7 +809,7 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 
 ### テスト
 
-**Python（test_collect_market_history.py、`R3MarketFieldTests` の 6 件）**
+**Python（test_collect_market_history.py、`R3MarketFieldTests` の 7 件）**
 
 - 入力：110 銘柄・560 営業日の合成。乱数の傾向（RS の散らばり）に、設計した銘柄を足した：5〜9 営業日前の上抜け 4 件（後の 3・5 営業日目に −10% の安値、6 営業日目に −10%〔5 日の外〕、届かない）、後の 2 営業日目の足が欠けた上抜け 1 件、高値だけが新高値の銘柄、20 営業日前に RS 上位で今日 50 日線を割った銘柄。最後の日は 0 < 失敗 < 判定、0 < 50 日線の上 < rs90Cohort < leaderCohort、上抜けの日は 0 < newHighsClose < newHighs（どれも 0 や上限に張り付かない）。
 - 各定義を、テストの中に別に書いたスカラーの再計算（audit-market-history.py と同じ作り：バーから移動平均・テンプレート・RS 順位・上抜けを 1 銘柄ずつ数える）と、最後の 25 営業日について 5 つのキーとも照合。
@@ -815,6 +817,7 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 - null の規則：12 銘柄が 1 日欠けて 253 営業日 観測率が 90% を下回る入力で、`rs90Cohort` の null ⇔ `leaderCohort` の null、`newHighsClose` の null ⇔ 当日の不足、上抜けの早期 2 つの null ⇔ 9 営業日前〜当日のどれかの不足を全行で確かめ、戻った後の 9 日・20 日の境目も確かめた。99 銘柄だけの入力では 5 つとも null（0 にしない）。
 - 検査：全行で上の 5 つの不等式と、値が null か 0 以上の整数であること。
 - ログ：on でも off でも同じ 1 行で、値は on の最後の行と同じ。99 銘柄だけの入力では 5 つとも `unavailable`。
+- `collect()` が `build()` に呼べる `log` を渡し、それが `print(line, flush=True)` を呼ぶこと（eb0ca39e。`collect()` の他のテストは `build` を差し替えるので、これが無いと配線を外しても全部通ってしまう）。
 
 **vitest（export-market-trends.test.mjs、describe「stalling days (M8d)」の 16 件）**
 
@@ -829,16 +832,20 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 
 ### 実測（このワークツリー）
 
-- **Python（CI と同じコマンド、ワークツリーの直下で）**：`$S/audit/r1-step0/cal-venv/bin/python -m unittest discover -s frontend/tools -p "test_collect_market*.py"` → 33 件 OK（31.9 秒）。所有していない test_collect_market_environment.py と test_collect_market_trends.py は無編集で通過（変更前は 27 件 OK）。
-- **vitest（指示の一覧）**：`npx vitest run tools/export-market-trends.test.mjs tools/export-research-order.test.mjs tools/market-history-producer.test.mjs tools/market-history-transport.test.mjs src/static/marketLongHistory.test.js src/static/marketTrendAsset.test.js`（PATH の先頭 /opt/node22/bin、SESSION_CALENDAR_PYTHON と FINANCIAL_REPLAY_PYTHON を指定）→ 6 ファイル、189 件通過。
+- **Python（CI と同じコマンド、ワークツリーの直下で）**：`$S/audit/r1-step0/cal-venv/bin/python -m unittest discover -s frontend/tools -p "test_collect_market*.py"` → 34 件 OK（31.0 秒、eb0ca39e の木）。所有していない test_collect_market_environment.py と test_collect_market_trends.py は無編集で通過（変更前は 27 件 OK）。
+- **vitest 全体（3e3af808 の木、1 回）**：`npx vitest run`（PATH の先頭 /opt/node22/bin、SESSION_CALENDAR_PYTHON と FINANCIAL_REPLAY_PYTHON を指定）→ 247 ファイル、4050 件すべて通過、4 分 54 秒。/proc/loadavg は 1.73→6.63。他のトラックと共有の負荷下の時間なので参考値（advisory）。eb0ca39e で変えた 2 つのテストファイルは、下の一覧と Python のコマンドで通し直した。
+- **vitest（指示の一覧）**：`npx vitest run tools/export-market-trends.test.mjs tools/export-research-order.test.mjs tools/market-history-producer.test.mjs tools/market-history-transport.test.mjs src/static/marketLongHistory.test.js src/static/marketTrendAsset.test.js`（PATH の先頭 /opt/node22/bin、SESSION_CALENDAR_PYTHON と FINANCIAL_REPLAY_PYTHON を指定）→ 6 ファイル、189 件通過（3e3af808 と eb0ca39e の両方の木で）。
 - **eslint**：`npx eslint tools/export-market-trends.mjs tools/export-market-trends.test.mjs` → 指摘 0。
 - **collector の出力のバイト（変更前のコードとの比較、コミットしない scratch のスクリプト）**：`git show 45603f06:frontend/tools/collect-market-history.py` を読み込み、同じ入力・固定した時計で `encode(build(…))` を比べた（`$S/audit3/r3-market-p5/identity.py`）。3 つの入力すべてでバイトが一致：
   - 設計した合成入力（393,631 バイト、sha256 0d3e2d71…）
   - 同じ入力で 12 銘柄が 1 日欠けたもの（420,890 バイト、30015d1d…）
   - test_collect_market_environment.py の 110 銘柄の入力に業種の分類を付けたもの（1,116,570 バイト、6dd27eca…）
 - **ストーリング日の backend との照合（コミットしない scratch のスクリプト）**：コミット済みの実バー（^GSPC／^IXIC、各 280 本、2025-09-15〜2026-10-23）で、49 本目以降の各日を分析日として `stallingDays` を計算し、backend の `_distribution_days` と同じ式（`market_regime.py` の定数を読み込む）のストーリングの列の最後の 25 営業日と比べた（`$S/audit3/r3-market-p5/parity.py`、/home/user/screener/backend/venv の Python）。各指数 232 日、不一致 0。この期間に backend の式がストーリングとした日は ^GSPC 2025-10-21・2025-12-05・2026-01-02・2026-07-27、^IXIC 2026-01-28・2026-05-22。2026-10-23 を分析日とすると両指数とも 0 日（ログ行は `stalling=0 stallingDates=[]`）。
-  - backend の 5% の外し方は比べていない（判断 1）。この期間の値でそれが違いを生むかは確かめていない。
-- **所有の関門**：各コミットの前に `python3 -I $S/audit3/check-ownership.py MARKET <W> 45603f06…` → `OWNERSHIP OK (MARKET): 23 paths`。
+  - backend の 5% の外し方を入れた場合（`$S/audit3/r3-market-p5/parity_rally.py`：上の一覧から、後の終値がその日の終値の 5% 以上上に来た日を外す）：^GSPC は 232 日中 12 日（2026-08-13〜08-28）で一覧が変わる（2026-07-27 の日が 25 営業日の失効より早く外れる）。^IXIC は 0 日。判断 1 は実際に値を変える。
+- **所有の関門**：各コミットの前に `python3 -I $S/audit3/check-ownership.py MARKET <W> 45603f06…` → OWNERSHIP OK。fc3bc60d と 3e3af808 の前は 23 paths、8e3de1a3 以降は 24 paths（docs/MARKET_HISTORY_PRODUCER.md が加わったため）。
+- **ワークフローは collector の標準出力を読まない（読取）**：static-site.yml:1012 は collector を `--report "$RUNNER_TEMP/market-history-update.json"` 付きで呼び、:1013 で `updated` をその JSON ファイルから読む。標準出力をパイプで受けたり行ごとに解析したりする箇所は .github／Makefile に無い（`collect-market-history` の grep は :1012 の呼び出しと :979 の `hashFiles` だけ）。したがって JSON でない 1 行（`Market history r3 fields …`）を足しても壊れない。
+- **バックエンドのファイルを読む vitest の前例**：portfolioPlan.test.js:105（P2）が同じ `readFileSync(resolve('../backend/app/services/market_regime.py'))` を使い、static-site.yml:995 と research-ui-release.yml:249 の CI の一覧に入っている（全体のチェックアウトで走る）。
+- **エントリチャンクの増分**：0（推論、ビルドはしていない）。このパッケージは src/ を変えておらず、変えた tools/ のファイルはアプリから読まれない（テストと CI のスクリプトだけが読む）。
 
 ### 推論（11-12 の再構築の代理。公開値ではない）
 
@@ -868,7 +875,6 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 ### 未検証
 
 - 公開された長期履歴での 5 つの値と、公開された ^GSPC／^IXIC でのストーリング日（次回の公開の CI ログの 2 種類の行で読む）。期待値は書かない。
-- backend の 5% の外し方を入れたときの違い（判断 1）。
 - 8849bf9 の読み手が on の asset を受け入れること（UI のパッケージで確かめる）。
 - 定期実行の全件取り直しにかかる時間と、成功するか。
 - 時間の計測はしていない（上の秒数は負荷下の参考値）。
