@@ -1002,6 +1002,7 @@ p4-4 への対応。上抜けから `SELL_RULES.failedBreakoutSessions`（10）�
   - DK・FTRE・VG・ASND は一行を持つ。一行は TT の判定にかかわらず出る。
   - **MSM は持たない**。10/1 に 1.94× で上抜けた後、初めてピボットの下で引けたのが 10/22（15 営業日後）。窓の間は持ちこたえたので、検査が一度もサインありにしていない。
 - p4 の表の残りで窓の後のもの（WSM・IEX・ARQT・SIGI・HURN・APPF・LW・EWBC）は、いまピボットの上にあるので一行は無い。
+- 「窓の間は持ちこたえた」という条件だけで一行が無い行は **3**（上抜け→初めての割れ、営業日）：MSM（10/1→10/22、15）、NEOG（9/15→10/6、15）、TALO（10/16→11/2、11）。`$T/r5/held-count.mjs` → `$T/r5/held-count.out`。この条件は注文の文言（「重い上抜けの後にピボットの下へ戻った」）より狭い読み方で、指揮者の確認を求める。
 - 下限（crossingFloor）だけが一行を止めた行が **29**：BPRN, FCNCA, LARK, TRGP, DJCO, DE, CFFI, ICCC, AFCG, SI, RLAY, ATRC, NEO, NTAP, GTLB, FLXS, NAT, ZD, ACOG, TITN, DAC, PTGX, WNC, NCNO, CIB, ZYME, RMBI, BWIN, CCC。上抜けがいまのピボットの足より前にあり、このピボットの上抜けではない（R1 と同じ読み方）。
 - 17 行すべてで、buyGate の結果（kind・reason・reference・title・note・blocked）は、`failedContext` を外した sells で回したものと同じだった。判定の内訳は、地合い（控える）6、TT未達 10、土台形成中 1。
 - 前の head（R-P4 の out/53b82cb）と比べて、`work/sell-eval.jsonl`・`work/today-eval.json`・`counts.json`・`rows.jsonl`・`ready43.jsonl`・`serve/research.json`・`work/eval-proxy.json`・`p1/stats.txt`・`serve/charts`（manifest）はバイト単位で同じ（`$T/r5/compare.sh d5b3e42`）。
@@ -1030,7 +1031,7 @@ p4-4 への対応。上抜けから `SELL_RULES.failedBreakoutSessions`（10）�
 | 492 枚の probe | `$H/probe/run-probe.sh $W 4423` → `cmp $H/probe/probe-8849bf9.json $H/probe/probe-d5b3e42.json`（14:59–15:02） | **バイト単位で同じ**（sha256 b5f29cff…39fa2）。R-P2 の 93fd59e とも同じ | 5.74 → 5.85 |
 | dump | `$H/dump/run-dump.sh $W 4423` → `cmp $H/dump/dump-8849bf9.json $H/dump/dump-d5b3e42.json`（15:02–15:04） | **バイト単位で同じ**（sha256 cba0a2f2…c3555）。42 画面、375 の ZZNV は 3,044、ウォッチ（5 銘柄）は 442 | 5.46 → 4.96 |
 | オラクルの probe | `$H/probe/run-probe.sh $W 4423 oracles`（15:04–15:06） | 8 銘柄・132 枚。**93fd59e（R の前のフロントの head）とバイト単位で同じ**（sha256 5df9eb3c…78db）。一行を持つオラクルは無い | 4.73 → 6.33 |
-| 再構築 | `$H/snapshot/run-snapshot.sh $W`（14:40–14:52、recalc 685 秒、`$T/r5/snapshot-d5b3e42.out`）、比較 `$T/r5/compare.sh d5b3e42` | 上の「再構築の行」。counts.json は 53b82cb と同じ | 4.54 → 8.13 |
+| 再構築 | `$H/snapshot/run-snapshot.sh $W`（14:40–14:52、recalc 685 秒、`$T/r5/snapshot-d5b3e42.out`）、比較 `$T/r5/compare.sh d5b3e42` | 上の「再構築の行」。counts.json は 53b82cb と同じ | 5.35 → 8.13 |
 | lint | `cd $W/frontend && npm run lint` | エラー 0、警告 4（土台と同じ 4 つ。R5 のファイルには無い） | — |
 | ビルド | `$H/build/run-build.sh $W`（15:06、`$H/build/build-d5b3e42.json`） | 入口のチャンク **131.72 kB gzip**（raw 376.84）。R5 の分は 93fd59e の 131.20 から **＋0.52**。R の累計は STEP 0 の 130.28 から **＋1.44**。線 134.00 まで 2.28 | 5.90 → 7.47 |
 | 画面写真 | `$T/r5/shots/{conclusion,sell}-{320,390,1440}.png`（スクラッチの spec。木からは外した） | 320 で結論の一行は 2 行に折れ、二つの部分はそれぞれ一続き。売りのサインでは折りたたみの外 | — |
