@@ -1,14 +1,22 @@
 // Round 3 (market track) on synthetic data. Package P2: Today's 「FTD確認済み」 only with the same day's ^GSPC record (M1a),
 // the exposure guide's disclosure (M1b, M1d), the marked labels (M1c), the market tab's lead while a newer session has
 // closed (M1e) and distribution days in two grades (M3). Package P3: the FTD row's age and 「前回のFTD」 (M2) and Today's
-// 「反発n日目」 (M4). Every state is built here with marketTrends' mutators and row overrides (the fixture is never edited);
-// every word is the producer's. Phones never grow their closed height.
+// 「反発n日目」 (M4). Package P4: the 50日線割れ verdict's 0% and what 過去の傾向 compares (M5), the 銘柄側 line and the 〔参考〕
+// legend (M6) and the stage legend (M7). Every state is built here with marketTrends' mutators and row overrides (the fixture is
+// never edited); every word is the producer's. Phones never grow their closed height.
 import { test, expect } from '@playwright/test';
 import { date, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 import { DISTRIBUTION_TEXT, RULE_TEXT, verdictBasis, verdictWaiting } from '../../src/static/brief/marketTabModel.js';
 import { DISTRIBUTION_BRIDGE, exposureRuleText, followThroughDetail, publishedMarketContext, regimeCause } from '../../src/static/reference/marketTabStudy.js';
 import { followThroughView, marketTileNote, marketTileSuffix, MARKET_TILE_SUFFIX } from '../../src/static/brief/briefEnvironment.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
+import { readFileSync } from 'node:fs';
+import { marketCardView } from '../../src/static/brief/marketTabModel.js';
+import { marketTabParts, STAGE_LEGEND_NAMES, STAGE_REPLAY_NOTE, STOCK_SIDE_HEAD } from '../../src/static/brief/marketTabGroups.js';
+import { BREADTH_LEGEND, marketTabStudy, STOCK_OUTCOME_UNTESTED } from '../../src/static/reference/marketTabStudy.js';
+import { TAGS } from '../../src/static/reference/marketRegimeReference.js';
+
+const REFERENCE = JSON.parse(readFileSync(new URL('../../src/static/reference/market-regime-reference-v1.json', import.meta.url), 'utf8'));
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, contextOptions: { reducedMotion: 'reduce' } });
 const PHONES = { 320: phone(320, 640), 375: phone(375, 812), 390: phone(390, 844) };
@@ -425,6 +433,120 @@ test.describe('M4 at 1440px: the note under the market card', () => {
     const input = { market: CLOSED, trends: { data: seen.value }, manifest: SERVED_MANIFEST };
     expect(marketTileNote(input)).toMatch(/^S&P 500は安値\d+\/\d+から反発5日目、Nasdaq総合は安値\d+\/\d+から反発3日目。4日目以降の\+1\.2%上昇待ち（独自判定）。判定と目安は変わりません。$/);
     await expect(page.locator('.brief-tile-note')).toHaveText(`${marketTileSuffix(input)}：${marketTileNote(input)}`);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// ---- M5, M6, M7 (package P4) ------------------------------------------------------------------------------------------
+/** The closed content height of each state before P4 (a085a88, CI fonts, measured): a state never grows past it. */
+const PRE_P4 = { base: { 320: 1341, 375: 1219, 390: 1219 }, below50: { 320: 1390, 375: 1242, 390: 1219 }, behind: { 320: 1391, 375: 1228, 390: 1219 }, switch: { 320: 1337, 375: 1201, 390: 1201 },
+  /** The リーダー section's content height before P4 (the stage legend at two lines). */
+  leaders: { 320: 1159, 375: 1075, 390: 1061 } };
+const UP_MARKET = { label: '上昇トレンド（独自判定）', cap: 0.5, regime: 'confirmed_uptrend', ftdUpgraded: false };
+/** The producers' words for the served asset: the 銘柄側 line (marketTabParts) and the study parts (marketTabStudy). */
+const words = (served, market, manifest = { markets: { US: { as_of_date: date } } }) => ({ stockSide: marketCardView({ market, trends: { data: served }, date, tab: marketTabParts }).stockSide,
+  study: marketTabStudy({ trends: { data: served }, reference: REFERENCE, date, market, manifest }) });
+const fold = page => page.getByTestId('brief-regime').locator('details.brief-exposure-basis');
+const P4_STATES = [
+  ['base', 'the fixture (上昇トレンド)', {}, {}, UP_MARKET],
+  ['below50', 'a 50日線割れ verdict with ^GSPC above its 200-day line and under its 50-day line', compose(methods, below50Rows, belowFiftyIndex, correctionBlock), {}, CLOSED],
+  ['behind', 'the series one session behind', {}, { historyEnd: sessions.at(-2) }, UP_MARKET],
+  ['switch', 'the S&P／Nasdaq switch beside the heading', compose(methods, withCloses), {}, UP_MARKET],
+];
+
+for (const [width, device] of Object.entries(PHONES)) test.describe(`M5, M6 and M7 at ${width}px: the fold, the legends and the stage row`, () => {
+  test.use(device);
+  for (const [key, name, mutate, extra, market] of P4_STATES) test(`${name}: the 銘柄側 line first, the 0% note last, the closed height as before`, async ({ page }) => {
+    const seen = {};
+    const { errors } = await openBrief(page, '#/brief/market', { ...extra, mutate: compose(mutate, capture(seen)) });
+    await marketReady(page);
+    const { stockSide, study } = words(seen.value, market);
+    await expect(fold(page)).not.toHaveAttribute('open', '');
+    const summary = (await fold(page).locator(':scope > summary').boundingBox()).height;
+    expect(summary).toBeGreaterThanOrEqual(44);
+    expect(summary).toBeLessThanOrEqual(key === 'behind' ? 53 : 48);
+    const before = await contentHeight(page);
+    expect(before).toBeLessThanOrEqual(PRE_P4[key][width]);
+    expect(await lead(page)).toBeLessThanOrEqual(756);
+    await fold(page).locator(':scope > summary').click();
+    const lines = fold(page).locator('.brief-expander-body > p');
+    await expect(lines.first()).toHaveText(stockSide);
+    await expect(lines.first()).toHaveClass('brief-verdict-stock');
+    expect(stockSide.startsWith(key === 'behind' ? STOCK_SIDE_HEAD.replace('（', `（${sessions.at(-2).slice(5).split('-').map(Number).join('/')}時点・`) : `${STOCK_SIDE_HEAD}：`)).toBe(true);
+    // Never a sign: no ▲, no ○, no amber.
+    expect(stockSide).not.toMatch(/▲|○|注意/);
+    expect(await lines.first().evaluate(node => getComputedStyle(node).color)).toBe(await resolved(page, '--text-2'));
+    if (key === 'below50') {
+      expect(study.zeroCap).toMatch(new RegExp(`^\\^GSPC・21営業日で5%以上の下げ：この状態 \\d+%${TAGS.unestablished}／両線の上 \\d+%${TAGS.both}／全期間 \\d+%。0%は独自設定で、検証された水準ではありません。$`));
+      await expect(lines.last()).toHaveText(study.zeroCap);
+      await expect(lines.last()).toHaveClass('brief-exposure-zero');
+    } else {
+      expect(study.zeroCap).toBeNull();
+      await expect(fold(page).locator('.brief-exposure-zero')).toHaveCount(0);
+    }
+    await fold(page).locator(':scope > summary').click();
+    expect(await contentHeight(page)).toBe(before);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('the 〔参考〕 legend stays one line and says what the study did not find; the 注記 says what it never tested', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    await marketReady(page);
+    const legend = page.getByRole('group', { name: '注意サイン（独自判定）' }).locator('.brief-signals-tags');
+    await expect(legend).toHaveText(`${TAGS.breadth}＝${BREADTH_LEGEND}`);
+    expect(await lines(legend)).toBe(1);
+    await expect(page.locator('.brief-screen-notes')).toContainText(`${STOCK_OUTCOME_UNTESTED}）。`);
+    // The headline's 参考 count is in the same bold text as its 注意 count (one text node of the one <b>).
+    const head = await page.getByRole('group', { name: '注意サイン（独自判定）' }).locator(':scope > b').evaluate(node => ({ text: node.firstChild.nodeType === 3 ? node.firstChild.textContent : null, weight: Number(getComputedStyle(node).fontWeight) }));
+    expect(head.text).toMatch(/^注意 \d+件・参考 \d+件$/);
+    expect(head.weight).toBeGreaterThanOrEqual(700);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(PRE_P4.base[width]);
+    expect(errors).toEqual([]);
+  });
+
+  test('M7: the stage legend says what stages 2 and 3 count on its two lines; the opened row says the base exception is not replayed', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    await marketReady(page);
+    await page.getByRole('tab', { name: /^リーダー/ }).click();
+    const legend = page.locator('.brief-stagelegend');
+    await expect(legend.locator('span')).toHaveText(STAGE_LEGEND_NAMES.map((name, i) => new RegExp(`^${i + 1} ${name.replace(/[（）]/g, '\\$&')} \\d+%$`)));
+    expect(new Set(await legend.locator('span').evaluateAll(nodes => nodes.map(node => Math.round(node.getBoundingClientRect().top)))).size).toBeLessThanOrEqual(2);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(PRE_P4.leaders[width]);
+    const row = page.locator('.brief-env-row.is-stage');
+    await row.locator('.brief-env-toggle').click();
+    await expect(row.locator('.brief-env-detail p').first()).toHaveText(STAGE_REPLAY_NOTE);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('M5, M6 and M7 at 1440px: in place', () => {
+  test.use(VIEWPORTS.desktop);
+  test('the 銘柄側 line under the basis on at most two lines, the 0% note after the guide, the tag note and the footer', async ({ page, context }) => {
+    const base = await context.newPage(), seenBase = {};
+    await openBrief(base, '#/brief/market', { mutate: capture(seenBase) });
+    await marketReady(base);
+    const baseWords = words(seenBase.value, UP_MARKET), stock = base.getByTestId('brief-regime').locator('p.brief-verdict-why + p.brief-verdict-stock');
+    await expect(stock).toHaveText(baseWords.stockSide);
+    expect(await lines(stock)).toBeLessThanOrEqual(2);
+    await expect(base.getByTestId('brief-regime').locator('.brief-exposure-zero')).toHaveCount(0);
+    await expect(base.getByRole('group', { name: '注意サイン（独自判定）' }).locator('.brief-signals-tags')).toContainText(`${STOCK_OUTCOME_UNTESTED}）。`);
+    await expect(base.locator('.brief-stagelegend span').nth(1)).toHaveText(new RegExp(`^2 ${STAGE_LEGEND_NAMES[1].replace(/[（）]/g, '\\$&')} \\d+%$`));
+    await base.close();
+    const seen = {};
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: compose(methods, below50Rows, belowFiftyIndex, correctionBlock, capture(seen)) });
+    await marketReady(page);
+    const { stockSide, study } = words(seen.value, CLOSED), verdict = page.getByTestId('brief-regime');
+    await expect(verdict.locator('p.brief-verdict-why').first()).toHaveText(verdictBasis(CLOSED, date).text);
+    await expect(verdict.locator('p.brief-verdict-why + p.brief-verdict-stock')).toHaveText(stockSide);
+    await expect(verdict.locator('p.brief-exposure-basis + p.brief-exposure-zero')).toHaveText(study.zeroCap);
+    expect(await lines(verdict.locator('.brief-exposure-zero'))).toBeLessThanOrEqual(2);
+    // The footer says what the block compares and names the S&P's 200日線の上・50日線の下 (its own row's robust higher mean).
+    await expect(page.locator('.brief-regime-foot').first()).toHaveText(study.regime.footer);
+    expect(study.regime.footer).toContain('この欄は下げの頻度の比較です（21営業日・^GSPC／^IXIC）。');
+    expect(study.regime.footer).toContain('200日線の上・50日線の下（S&P）は平均リターンは高めでした。');
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
