@@ -8,7 +8,7 @@ import { bare, distributionCount, ftdPrevious, gspcFollowThrough, nasdaqNote, sh
 import { DISTRIBUTION_TEXT, num, signedPercent, SURVIVORSHIP_NOTE, verdictBasis } from '../brief/marketTabModel';
 import { indexSummary } from './indexSummary.js';
 import { capText, MARKET_CAPS } from '../portfolioPlan';
-import { biasTag, ddGradeState, ftdRecent, ftdState, highState, meanLowerStates, quadrantState, referencePeriod, referenceState, signalTags, stateTag, validReference, BIAS_SHARE, SIGNAL_INDICATORS, TAGS } from './marketRegimeReference.js';
+import { biasTag, ddGradeState, ftdRecent, ftdState, highState, meanLowerStates, quadrantState, referencePeriod, referenceState, signalTags, stateTag, validReference, BIAS_SHARE, INDEX_SYMBOLS, SIGNAL_INDICATORS, TAGS } from './marketRegimeReference.js';
 
 const finite = Number.isFinite;
 const isDay = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
@@ -90,6 +90,32 @@ export function exposureRuleText(caps = MARKET_CAPS) {
   return `独自の目安：上昇トレンド ${capText(caps.confirmed_uptrend)}・上昇に圧力 ${capText(caps.uptrend_under_pressure)}・それ以外 ${capText(caps.otherwise)}（S&P 500（SPY）の50日線・200日線と局面判定から。バックエンドの局面判定の目安とは別）。注意サインも指数の過去の傾向も目安を変えません。`
     + `目安は口座資金に対する新規の建玉合計の上限です。${levels ? `水準（${levels}）は` : '水準は'}検証していない独自設定です。`
     + `局面判定（バックエンド）は、スキャン対象のうち200日線より上が${BACKEND_BREADTH_GUARD.above200Below}%未満でSPYが1年高値から${BACKEND_BREADTH_GUARD.nearHighPercent}%以内のとき「${REGIME_NAMES.uptrend_under_pressure}」に下げることがあり、その日は目安が${capText(caps.uptrend_under_pressure)}になります（独自判定）。発動の有無は公開値に含まれません。`;
+}
+
+/**
+ * The 50日線割れ verdict's 0% inside 「目安と判定の基準」 (M5; Q-01, OD-M11): only for modelMarket's below-50 state (verdictBasis:
+ * SPY under its 50-day line and over its 200-day line) with a 0% guide, and always ending with that the 0% is the app's own
+ * untested setting (the 0% printed through capText). The study's figures come with it only when ^GSPC's own 50/200-day cell, as
+ * the 過去の傾向 block judged it (`regime`, marketRegimeContext: indexSummary on the long history's ^GSPC closes; the reference
+ * has no method id for this cell), is above200_below50 and dated the analysis date `date`: that state's share and the share of
+ * above_both, each with its own tags (stateTag, biasTag), and the row's baseline (全期間), on the reference's outcome. The
+ * verdict reads SPY and the figures are ^GSPC's, so they can sit beside each other only on that cell. No long history, too few
+ * closes, an older state, another cell, an invalid reference or a row without a share: the closing sentence alone, no number.
+ * The block's own line for that state stays; this line prints each of its three rows once.
+ */
+export function zeroCapNote({ market, regime, reference, date }) {
+  const basis = verdictBasis(market, date);
+  if (!basis || basis.above50 !== false || basis.above200 !== true || market.cap !== 0) return null;
+  const closing = `${capText(market.cap)}は独自設定で、検証された水準ではありません。`;
+  const ref = validReference(reference) ? reference : null;
+  const cell = ref && regime?.available === true ? regime.indices.find(block => block.symbol === '^GSPC')?.items.find(entry => entry.indicator === '^GSPC.ma.quadrant') : null;
+  const both = ref ? referenceState(ref, '^GSPC.ma.quadrant', 'above_both') : null;
+  const joined = cell && !cell.reason && cell.state === 'above200_below50' && isDay(date) && cell.stateDate === date && cell.comparator === 'baseline'
+    && finite(cell.pDd5) && finite(cell.comparatorPDd5) && both && both.labelDd5 !== 'insufficient' && finite(both.pDd5);
+  if (!joined) return closing;
+  const tags = list => list.filter(Boolean).join('');
+  const own = tags([cell.tag, cell.biasTag]), other = tags([stateTag(ref, 'ma.quadrant', '^GSPC', 'above_both'), biasTag(both)]);
+  return `^GSPC・${ref.outcome.horizonSessions}営業日で${Math.abs(ref.outcome.drawdownPercent)}%以上の下げ：この状態 ${share(cell.pDd5)}${own}／両線の上 ${share(both.pDd5)}${other}／全期間 ${share(cell.comparatorPDd5)}。${closing}`;
 }
 
 // nasdaqNote (the verdict reads SPY only; the Nasdaq's own state) lives in briefEnvironment.js, so Today's 地合い tile
@@ -204,6 +230,28 @@ const direction = (value, comparator) => {
   return shown === against ? null : shown > against ? 'higher' : 'lower';
 };
 
+/** Each index's short name, as the tags name it (〔S&Pのみ〕〔Nasdaqのみ〕). */
+const INDEX_SHORT = Object.freeze({ '^GSPC': 'S&P', '^IXIC': 'Nasdaq' });
+/**
+ * The footer's sentence on what the block compares (M5; Q-12): the frequency of declines over the study's horizon on the two
+ * indices, from the reference's outcome and INDEX_SYMBOLS. 「平均リターンが低かった状態はどちらの指数にもありません」 only while no
+ * state's mean was robustly lower (meanLowerStates), and a state the block shows is named 「平均リターンは高め」 only when its own
+ * row (that index's indicator and state) has a robust mean label with the direction 'higher', with the index that shows it.
+ * The reference carries no volatility: nothing is said about one, and nothing is said of every state.
+ */
+function meansSentence(reference, blocks) {
+  const compares = `この欄は下げの頻度の比較です（${reference.outcome.horizonSessions}営業日・${INDEX_SYMBOLS.join('／')}）。`;
+  const lower = meanLowerStates(reference).length ? '' : '平均リターンが低かった状態はどちらの指数にもありません。';
+  const named = new Map();
+  for (const block of blocks) for (const entry of block.items) {
+    const row = !entry.reason && finite(entry.pDd5) ? referenceState(reference, entry.indicator, entry.state) : null;
+    if (row?.labelMean !== 'robust' || row.meanDirection !== 'higher' || !entry.label) continue;
+    named.set(entry.label, [...(named.get(entry.label) || []), INDEX_SHORT[block.symbol]]);
+  }
+  const higher = [...named].map(([label, names]) => `${label}（${names.join('・')}）`).join('、');
+  return `${compares}${lower}${higher ? `表示中の状態のうち、${higher}は平均リターンは高めでした。` : ''}`;
+}
+
 /** The trailing run of known closes: a window never bridges an unknown close, as in the study. */
 function trailingRun(points) {
   const run = [];
@@ -291,9 +339,7 @@ export function marketRegimeContext({ history, trends, reference, date = null })
     return { symbol, name: INDEX_NAMES[symbol], items };
   });
   const sample = period.same ? `^GSPC・^IXIC日足 ${period.first}〜${period.last}` : ['^GSPC', '^IXIC'].map(symbol => `${symbol}日足 ${reference.samples[symbol].first}〜${reference.samples[symbol].last}`).join('・');
-  // 「平均リターンが低かった状態はどちらの指数にもありません」 only while the reference says so (the labels' directions).
-  const means = meanLowerStates(reference).length ? 'この欄は下げの割合だけを示します。' : 'この欄は下げの割合だけを示し、平均リターンが低かった状態はどちらの指数にもありません。';
-  const footer = `状態ごとの過去の割合で、組み合わせた確率ではありません。これらは同じ事実（下げの最中・直後は値動きが荒い）を別の形で数えたもので、2指数は連動しているため独立の確認ではありません。${means}指数の結果で、個別銘柄の値ではありません。出典：${reference.study_version}${reference.source?.ci_run ? `（CI run ${reference.source.ci_run}）` : ''}、${sample}`;
+  const footer = `状態ごとの過去の割合で、組み合わせた確率ではありません。これらは同じ事実（下げの最中・直後は値動きが荒い）を別の形で数えたもので、2指数は連動しているため独立の確認ではありません。${meansSentence(reference, blocks)}指数の結果で、個別銘柄の値ではありません。出典：${reference.study_version}${reference.source?.ci_run ? `（CI run ${reference.source.ci_run}）` : ''}、${sample}`;
   const key = regimeKey(blocks.flatMap(block => block.items.flatMap(entry => entry.parts?.tags || [])));
   // One line on what the lines say: how many states had more declines than their comparator, how many fewer (robust
   // lines only); the lines, the key and the footer say the rest. Never a combined probability. A state both indices are
@@ -422,7 +468,7 @@ const publishedInputs = item => ({ distribution: item?.method ?? null, followThr
  *  - followThrough: the opened フォロースルーデー row's lines (followThroughDetail)
  *  - nasdaq: the Nasdaq note beside the SPY verdict (the card shows it only while the verdict is positive)
  *  - nasdaqPosition / nasdaqFigures: the Nasdaq's published position, as data and in words
- *  - regime: the 過去の傾向 block
+ *  - regime: the 過去の傾向 block; zeroCap: the 50日線割れ verdict's 0% in 「目安と判定の基準」 (zeroCapNote, M5)
  *  - cause: the regime's cause under the verdict's basis (regimeCause, from `market`, the published `manifest` and the
  *    ^GSPC record of the day)
  *  - ttPopulation, nasdaqSource: whom TT達成数 counts, and where the Nasdaq's figures come from
@@ -433,6 +479,7 @@ export function marketTabStudy({ trends, reference, date = null, market = null, 
   const byName = { 'S&P': find('^GSPC'), NAS: find('^IXIC') };
   const signalTagsByKey = Object.fromEntries(Object.keys(SIGNAL_INDICATORS).map(key => { const name = /-(S&P|NAS)$/.exec(key)?.[1]; return [key, signalTags(ref, key, name ? publishedInputs(byName[name]) : {})]; }));
   const nasdaqPosition = ready ? publishedIndexState(byName.NAS) : null;
+  const regime = marketRegimeContext({ history: ready ? trends.data.long_history || null : null, trends, reference: ref, date });
   return {
     signalTags: signalTagsByKey, tagText: fired => signalTagText(ref, fired),
     // The checks whose tag is 〔参考〕: the card counts them apart from the warnings, with a neutral ○.
@@ -441,7 +488,7 @@ export function marketTabStudy({ trends, reference, date = null, market = null, 
     followThrough: ready ? followThroughDetail() : null,
     nasdaq: ready ? nasdaqNote(byName.NAS?.followThrough, date) : null,
     nasdaqPosition, nasdaqFigures: nasdaqFigures(nasdaqPosition?.state, date),
-    regime: marketRegimeContext({ history: ready ? trends.data.long_history || null : null, trends, reference: ref, date }),
+    regime, zeroCap: zeroCapNote({ market, regime, reference: ref, date }),
     cause: regimeCause(market, publishedMarketContext(manifest?.markets?.US ?? null, { date }), verdictBasis(market, date), date, { gspc: gspcFollowThrough(trends) }),
     ttPopulation: TT_POPULATION, nasdaqSource: NASDAQ_SOURCE,
   };

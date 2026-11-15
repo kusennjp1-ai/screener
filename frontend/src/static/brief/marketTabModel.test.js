@@ -363,7 +363,7 @@ const context = (value, date = '2026-10-02', ref = reference) => marketRegimeCon
 const lines = ctx => ctx.indices.map(block => [block.name, block.items.map(item => item.text)]);
 const study = (value, date = '2026-10-02', ref = reference) => marketTabStudy({ trends: value, reference: ref, date });
 const BANNED = /上がりやすい|下がりやすい|安全|底打ち|オールクリア|今日の確率/;
-const FOOTER = '状態ごとの過去の割合で、組み合わせた確率ではありません。これらは同じ事実（下げの最中・直後は値動きが荒い）を別の形で数えたもので、2指数は連動しているため独立の確認ではありません。この欄は下げの割合だけを示し、平均リターンが低かった状態はどちらの指数にもありません。指数の結果で、個別銘柄の値ではありません。出典：market-regime-study-v2（CI run 41844557380）、^GSPC・^IXIC日足 1990-01-02〜2026-11-03';
+const FOOTER = '状態ごとの過去の割合で、組み合わせた確率ではありません。これらは同じ事実（下げの最中・直後は値動きが荒い）を別の形で数えたもので、2指数は連動しているため独立の確認ではありません。この欄は下げの頻度の比較です（21営業日・^GSPC／^IXIC）。平均リターンが低かった状態はどちらの指数にもありません。指数の結果で、個別銘柄の値ではありません。出典：market-regime-study-v2（CI run 41844557380）、^GSPC・^IXIC日足 1990-01-02〜2026-11-03';
 
 describe('market tab: 過去の傾向 (market-regime study block)', () => {
   it('joins the fixture\'s S&P state to the study: above both lines and further below its high, 0.29 from the edge', () => {
@@ -409,7 +409,8 @@ describe('market tab: 過去の傾向 (market-regime study block)', () => {
     Object.assign(ref.indicators['^IXIC.ftd.state'].states.ftd_failed, { labelMean: 'robust', meanDirection: 'lower' });
     const footer = context(regimeTrends(), '2026-10-02', ref).footer;
     expect(footer).not.toContain('平均リターン');
-    expect(footer).toContain('この欄は下げの割合だけを示します。');
+    // What the block compares is said either way (M5).
+    expect(footer).toContain('この欄は下げの頻度の比較です（21営業日・^GSPC／^IXIC）。指数の結果で');
   });
 
   it('never shows the baseline as a state\'s value or combines states: each share is its own row\'s', () => {

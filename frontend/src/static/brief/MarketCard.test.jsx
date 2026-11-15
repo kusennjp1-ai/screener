@@ -638,7 +638,7 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     expect(shown.size).toBeGreaterThan(2);
     expect(new Set(key.match(/〔[^〕]+〕(?=＝)/g))).toEqual(shown);
     expect(key).toMatch(/^割合は、その日の終値から21営業日以内に終値で5%以上下げた日の割合です。全期間は、その項目を判定できた全営業日での割合です。/);
-    expect(regime().querySelector('.brief-regime-key + .brief-regime-foot')).toHaveTextContent('この欄は下げの割合だけを示し、平均リターンが低かった状態はどちらの指数にもありません。');
+    expect(regime().querySelector('.brief-regime-key + .brief-regime-foot')).toHaveTextContent('この欄は下げの頻度の比較です（21営業日・^GSPC／^IXIC）。平均リターンが低かった状態はどちらの指数にもありません。');
   });
 
   it('keeps the 50-day cell as narrow as a value without 200 closes: a dash, the words read out and the reason in the 注記', () => {
@@ -740,7 +740,10 @@ describe('brief market card: round 2', () => {
     const LINE = '局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足ではFTD 8/7。この目安はSPYが50日線の下のため0%（独自判定）';
     render(<MemoryRouter><Card market={market} trends={trends()} date="2026-10-02" detail switcher section="index" onSection={() => {}} {...studyProps(trends(), '2026-10-02', reference, false, { market, manifest })} /></MemoryRouter>);
     const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
-    expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', LINE, exposureRuleText()]);
+    // The fixture's long history has no ^GSPC closes, so the 0% note (M5) is its closing sentence alone.
+    const zeroCap = marketTabStudy({ trends: trends(), reference, date: '2026-10-02', market, manifest }).zeroCap;
+    expect(zeroCap).toBe('0%は独自設定で、検証された水準ではありません。');
+    expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', LINE, exposureRuleText(), zeroCap]);
     expect(fold).not.toHaveAttribute('open');
     // The label, the meter and the cap are unchanged.
     expect(screen.getByTestId('brief-regime')).toHaveTextContent('50日線割れ（弱含み・独自判定）');
@@ -1004,5 +1007,30 @@ describe('brief market card: distribution days in two grades, 5–6 参考 and 7
     cleanup();
     show(counts(4, 3), { detail: false });
     expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P4日NAS3日7日以上で注意$/);
+  });
+});
+
+// ---- Round 3 (M5): the 50日線割れ verdict's 0% inside 目安と判定の基準 ---------------------------------------------------------
+describe('brief market card: the 50日線割れ verdict\'s 0% (M5)', () => {
+  const BELOW_50 = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'correction', ftdUpgraded: false };
+  /** The long history's ^GSPC under its 50-day line and over its 200-day line on the analysis date. */
+  const below50 = () => trends({ sp500: closes('2026-10-02', 300, 5000, 5).map((point, i) => i === 299 ? { ...point, close: 6200 } : point) });
+  const card = (value, market, wide) => render(<MemoryRouter><Card market={market} trends={value} date="2026-10-02" detail switcher={!wide} section="index" onSection={() => {}} {...studyProps(value, '2026-10-02', reference, wide, { market })} /></MemoryRouter>);
+  it('ends 目安と判定の基準 with the study\'s ^GSPC figures for that cell and the 0% as untested: in the fold on a phone, in place on the desktop', () => {
+    const value = below50(), note = marketTabStudy({ trends: value, reference, date: '2026-10-02', market: BELOW_50 }).zeroCap;
+    expect(note).toMatch(/^\^GSPC・21営業日で5%以上の下げ：この状態 \d+%〔未確立〕／両線の上 \d+%〔S&P・Nasdaqとも〕／全期間 \d+%。0%は独自設定で、検証された水準ではありません。$/);
+    card(value, BELOW_50, false);
+    const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
+    expect(fold).not.toHaveAttribute('open');
+    expect([...fold.querySelectorAll('p')].at(-1)).toHaveTextContent(note);
+    expect(fold.querySelector('p.brief-exposure-zero')).toHaveTextContent(note);
+    cleanup();
+    card(value, BELOW_50, true);
+    const verdict = screen.getByTestId('brief-regime');
+    expect(verdict.querySelector('p.brief-exposure-basis + p.brief-exposure-zero')).toHaveTextContent(note);
+    cleanup();
+    // Any other verdict: no note.
+    card(value, UP, true);
+    expect(screen.getByTestId('brief-regime').querySelector('.brief-exposure-zero')).toBeNull();
   });
 });

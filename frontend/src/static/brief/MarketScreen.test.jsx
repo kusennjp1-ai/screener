@@ -136,3 +136,19 @@ describe('brief market screen: a verdict older than the last closed session', ()
     expect(lead()).toBe('新規の買いを検討できます。');
   });
 });
+
+// ---- Round 3 (M5): the screen hands its verdict to the study, so a 50日線割れ verdict's fold says the 0% is untested ----------
+describe('brief market screen: the 50日線割れ verdict\'s 0% (M5)', () => {
+  beforeEach(() => atWidth(375));
+  it('ends the closed 目安と判定の基準 fold with the 0% note for a 50日線割れ verdict, and has none for an open guide', () => {
+    const value = history300();
+    render(<MemoryRouter><MarketScreen brief={{ trends: value, date: '2026-10-02', market: { label: '50日線割れ（弱含み・独自判定）', cap: 0 }, marketLoading: false }} /></MemoryRouter>);
+    const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
+    expect(fold).not.toHaveAttribute('open');
+    // This history has no ^GSPC closes: the closing sentence alone, no study figure.
+    expect(fold.querySelector('p.brief-exposure-zero')).toHaveTextContent(/^0%は独自設定で、検証された水準ではありません。$/);
+    cleanup();
+    show(history300());
+    expect(screen.getByTestId('brief-regime').querySelector('.brief-exposure-zero')).toBeNull();
+  });
+});

@@ -3,9 +3,11 @@
 // guide's disclosure (that is said once, in exposureRuleText).
 import { describe, expect, it } from 'vitest';
 import reference from './market-regime-reference-v1.json' with { type: 'json' };
-import { distributionDetail, followThroughDetail, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, regimeCause, signalTagText, FTD_SOURCE_GAINS } from './marketTabStudy.js';
+import { distributionDetail, followThroughDetail, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, regimeCause, signalTagText, zeroCapNote, FTD_SOURCE_GAINS } from './marketTabStudy.js';
 import { CONTRACT_DATE, marketContext, marketContextUnknown } from '../../test/fixtures/publishedContracts.js';
-import { ddGradeState, ftdRecent, stateTag, TAGS } from './marketRegimeReference.js';
+import { biasTag, ddGradeState, ftdRecent, INDEX_SYMBOLS, meanLowerStates, referenceState, stateTag, TAGS } from './marketRegimeReference.js';
+import { indexSummary } from './indexSummary.js';
+import { capText, MARKET_CAPS } from '../portfolioPlan';
 import { exposureRuleText } from './marketTabStudy.js';
 import { ftdPrevious, FTD_RECENT_SESSIONS, FTD_TEXT, NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
 import { REFERENCE_CHECKS, verdictBasis } from '../brief/marketTabModel.js';
@@ -229,5 +231,125 @@ describe('the FTD\'s age (M2)', () => {
     // Through the study: the ^GSPC record of the day comes from the series (gspcFollowThrough).
     const value = make(), market = held('correction'), manifest = { markets: { US: { as_of_date: DATE, market_context: block('correction') } } };
     expect(marketTabStudy({ trends: value, reference, date: DATE, market, manifest }).cause).toBe(`${LINE}。下の^GSPCの前回のFTD（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
+  });
+});
+
+// ---- Round 3 (M5): the 50日線割れ verdict's 0% and what the 過去の傾向 block compares ----------------------------------------
+describe('the 50日線割れ verdict\'s 0% (M5)', () => {
+  const BELOW_50 = { label: '50日線割れ（弱含み・独自判定）', cap: MARKET_CAPS.otherwise, state: 'weak', regime: 'correction', ftdUpgraded: false };
+  const CLOSING = `${capText(0)}は独自設定で、検証された水準ではありません。`;
+  /** ^GSPC closes ending on `end`, rising, with the last close `last` (6200: under its 50-day line, over its 200-day line). */
+  const sp500 = (end = DATE, n = 300, last = 6200, gap = null) => days(end, n).map((date, i) => ({ date, close: i === n - 1 ? last : i === gap ? null : 5000 + i * 5 }));
+  const withHistory = closes => { const value = make(); value.data.long_history = { ...value.data.long_history, sp500: closes }; return value; };
+  const note = (value, { market = BELOW_50, ref = reference, date = DATE } = {}) => zeroCapNote({ market, regime: marketRegimeContext({ history: value.data.long_history || null, trends: value, reference: ref, date }), reference: ref, date });
+  /** The expected line, from the reference's rows and the readers' tags (no percentage typed here). */
+  const figures = (ref = reference) => {
+    const row = referenceState(ref, '^GSPC.ma.quadrant', 'above200_below50'), both = referenceState(ref, '^GSPC.ma.quadrant', 'above_both');
+    const tags = (state, entry) => [stateTag(ref, 'ma.quadrant', '^GSPC', state), biasTag(entry)].filter(Boolean).join('');
+    return `^GSPC・${ref.outcome.horizonSessions}営業日で${Math.abs(ref.outcome.drawdownPercent)}%以上の下げ：この状態 ${Math.round(row.pDd5)}%${tags('above200_below50', row)}／両線の上 ${Math.round(both.pDd5)}%${tags('above_both', both)}／全期間 ${Math.round(row.comparatorPDd5)}%。${CLOSING}`;
+  };
+
+  it('joins ^GSPC\'s own cell of the analysis date, as 過去の傾向 judged it, and always ends with the 0% being untested', () => {
+    const value = withHistory(sp500()), summary = indexSummary(value.data.long_history.sp500);
+    expect([summary.vsMa < 0, summary.vs200 > 0, summary.date]).toEqual([true, true, DATE]);
+    const line = note(value);
+    expect(line).toBe(figures());
+    expect(line.endsWith(CLOSING)).toBe(true);
+    // The state is not established on the S&P (〔未確立〕): its tag is printed, never left out.
+    expect(stateTag(reference, 'ma.quadrant', '^GSPC', 'above200_below50')).toBe(TAGS.unestablished);
+    expect(line).toContain(`この状態 ${Math.round(referenceState(reference, '^GSPC.ma.quadrant', 'above200_below50').pDd5)}%${TAGS.unestablished}／`);
+    // The block keeps its own line for that state; the note prints each of its three rows once.
+    const block = marketRegimeContext({ history: value.data.long_history, trends: value, reference, date: DATE }).indices[0].items.find(item => item.indicator === '^GSPC.ma.quadrant');
+    expect([block.state, block.stateDate]).toEqual(['above200_below50', DATE]);
+    for (const word of ['この状態', '両線の上', '全期間']) expect(line.split(word)).toHaveLength(2);
+    // Through the study, with the verdict MarketScreen hands it.
+    expect(marketTabStudy({ trends: value, reference, date: DATE, market: BELOW_50 }).zeroCap).toBe(line);
+    // An FTD-upgraded 50日線割れ (the regime confirmed_uptrend) is the same below-50 state with the same 0%.
+    expect(note(value, { market: { ...BELOW_50, regime: 'confirmed_uptrend', ftdUpgraded: true } })).toBe(line);
+  });
+
+  it('keeps each state\'s own 〔偏り〕 beside its tag, from the reference', () => {
+    const ref = structuredClone(reference);
+    ref.indicators['^GSPC.ma.quadrant'].states.above_both.firstHalfShare = 70;
+    expect(note(withHistory(sp500()), { ref })).toBe(figures(ref));
+    expect(figures(ref)).toContain(`${stateTag(ref, 'ma.quadrant', '^GSPC', 'above_both')}${TAGS.bias}／全期間`);
+  });
+
+  it('says the closing sentence alone, no number, when the cell cannot be joined', () => {
+    const cases = [
+      ['no long history', trends({ history: false })],
+      ['an empty ^GSPC history', withHistory([])],
+      ['fewer than 200 closes (no 200-day line, the cell\'s window)', withHistory(sp500(DATE, 150))],
+      ['an unknown close inside the last 200 (the trailing run never bridges it)', withHistory(sp500(DATE, 300, 6200, 250))],
+      ['the last close of an older session', withHistory(sp500(days(DATE, 2)[0]))],
+      ['above both lines', withHistory(sp500(DATE, 300, 7000))],
+      ['under both lines', withHistory(sp500(DATE, 300, 5500))],
+    ];
+    for (const [name, value] of cases) expect([name, note(value)]).toEqual([name, CLOSING]);
+    // An invalid reference, or a reference row without a share (a null pDd5 is valid in the reference), prints no number.
+    const value = withHistory(sp500());
+    expect(note(value, { ref: null })).toBe(CLOSING);
+    expect(note(value, { ref: { ...reference, outcome: { ...reference.outcome, horizonSessions: 10 } } })).toBe(CLOSING);
+    for (const [state, over] of [['above_both', { pDd5: null }], ['above_both', { labelDd5: 'insufficient' }], ['above200_below50', { pDd5: null }], ['above200_below50', { labelDd5: 'insufficient' }], ['above200_below50', { comparatorPDd5: null }]]) {
+      const ref = structuredClone(reference);
+      Object.assign(ref.indicators['^GSPC.ma.quadrant'].states[state], over);
+      expect([state, over, note(value, { ref })]).toEqual([state, over, CLOSING]);
+    }
+    const ref = structuredClone(reference);
+    delete ref.indicators['^GSPC.ma.quadrant'].states.above200_below50;
+    expect(note(value, { ref })).toBe(CLOSING);
+    // A date the cell is not dated (the analysis date after the history's last close).
+    expect(note(value, { date: '2026-10-05' })).toBe(CLOSING);
+  });
+
+  it('says nothing for any verdict but 50日線割れ, or a 50日線割れ whose guide is not 0%', () => {
+    const value = withHistory(sp500());
+    for (const market of [{ label: '上昇トレンド（独自判定）', cap: 0.5 }, { label: '上昇に圧力（独自判定）', cap: 0.25 }, { label: '長期トレンド警戒（独自判定）', cap: 0 }, { label: '新規購入を抑制（独自判定）', cap: 0 },
+      { label: '市場未確認', cap: 0, state: 'unknown' }, { label: '市場条件未確認', cap: 0, state: 'unknown' }, null, { ...BELOW_50, cap: 0.25 }]) expect([market, note(value, { market })]).toEqual([market, null]);
+    expect(marketTabStudy({ trends: value, reference, date: DATE }).zeroCap).toBeNull();
+  });
+});
+
+describe('what the 過去の傾向 block compares (M5)', () => {
+  const footer = (value, ref = reference) => marketRegimeContext({ history: value.data.long_history, trends: value, reference: ref, date: DATE }).footer;
+  const COMPARES = `この欄は下げの頻度の比較です（${reference.outcome.horizonSessions}営業日・${INDEX_SYMBOLS.join('／')}）。`;
+  const NO_LOWER = '平均リターンが低かった状態はどちらの指数にもありません。';
+  const sp500 = last => days(DATE, 300).map((date, i) => ({ date, close: i === 299 ? last : 5000 + i * 5 }));
+  const correction = { ...attempt(DATE), state: 'correction', attempt: null };
+
+  it('says it compares the frequency of declines, and no state had a lower mean while the reference says so', () => {
+    expect(meanLowerStates(reference)).toEqual([]);
+    // No shown state with a robust higher mean: nothing is named.
+    const value = make();
+    value.data.long_history = { ...value.data.long_history, sp500: sp500(7000) };
+    const plain = footer(value);
+    expect(plain).toContain(`独立の確認ではありません。${COMPARES}${NO_LOWER}指数の結果で、個別銘柄の値ではありません。`);
+    expect(plain).not.toContain('平均リターンは高め');
+    expect(plain).not.toMatch(/どの状態でも|振れ幅/);
+  });
+
+  it('names a shown state 「平均リターンは高め」 only by its own row, with the index that shows it', () => {
+    const value = make();
+    value.data.long_history = { ...value.data.long_history, sp500: sp500(6200) };
+    // The Nasdaq in the same cell: its own row has no robust mean, so only the S&P is named.
+    value.data.indices[1] = { ...value.data.indices[1], state: { date: DATE, close: 18000, vs50: -2, vs200: 3, fromHigh: -4, fullYear: true } };
+    expect(referenceState(reference, '^GSPC.ma.quadrant', 'above200_below50')).toMatchObject({ labelMean: 'robust', meanDirection: 'higher' });
+    expect(referenceState(reference, '^IXIC.ma.quadrant', 'above200_below50').labelMean).not.toBe('robust');
+    expect(footer(value)).toContain(`${COMPARES}${NO_LOWER}表示中の状態のうち、200日線の上・50日線の下（S&P）は平均リターンは高めでした。指数の結果で`);
+    // Both indices in a correction (each row robust and higher): one state, both indices named.
+    for (const item of value.data.indices) item.followThrough = { ...correction };
+    expect(footer(value)).toContain('表示中の状態のうち、200日線の上・50日線の下（S&P）、調整中（S&P・Nasdaq）は平均リターンは高めでした。');
+  });
+
+  it('says nothing of lower means once the reference has one, and still names a shown higher row', () => {
+    const ref = structuredClone(reference);
+    Object.assign(ref.indicators['^IXIC.ftd.state'].states.ftd_failed, { labelMean: 'robust', meanDirection: 'lower' });
+    const value = make();
+    value.data.long_history = { ...value.data.long_history, sp500: sp500(6200) };
+    const text = footer(value, ref);
+    expect(text).toContain(`${COMPARES}表示中の状態のうち、200日線の上・50日線の下（S&P）は平均リターンは高めでした。指数の結果で`);
+    expect(text).not.toContain(NO_LOWER);
+    value.data.long_history = { ...value.data.long_history, sp500: sp500(7000) };
+    expect(footer(value, ref)).toContain(`独立の確認ではありません。${COMPARES}指数の結果で`);
   });
 });

@@ -43,7 +43,7 @@
 .brief-regime-foot { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-3); text-wrap: pretty; }
 
 /* The exposure guide's basis: a quiet fold under the meter on a phone, one line on the desktop. */
-.brief-exposure-basis, .brief-exposure-nasdaq { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+.brief-exposure-basis, .brief-exposure-nasdaq, .brief-exposure-zero { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
 .brief-verdict .brief-exposure-basis > summary { padding: 0; font-size: 12px; font-weight: 400; color: var(--text-2); }
 .brief-verdict .brief-exposure-basis .brief-expander-body { padding: 0 0 4px; }
 .brief-verdict .brief-exposure-basis .brief-expander-body p { font-size: 12px; line-height: 1.6; color: var(--text-2); }
