@@ -303,6 +303,13 @@ class R3MarketFieldTests(unittest.TestCase):
         with patch.object(module,'EMIT_R3_MARKET_FIELDS',True):
             last=module.build({s:records[s] for s in symbols[:99]},{},symbols,days,days[-1])['breadth'][-1]
         for key in module.R3_MARKET_FIELDS:self.assertIsNone(last[key],key)
+    def test_collect_passes_a_log_callback_to_build(self):
+        with TemporaryDirectory(prefix='history-r3-log-') as directory:
+            source=DailyHistoryTests().current()
+            with patch.object(module,'fetch_symbol',side_effect=OSError('offline test')),patch.object(module,'build',return_value=source) as built,patch('builtins.print') as printed:
+                module.collect('2026-10-23',[f'S{i}' for i in range(100)],None,Path(directory)/'cache',Path(directory)/'source.json')
+                log=built.call_args.kwargs['log'];self.assertTrue(callable(log))
+                log('Market history r3 fields test');printed.assert_called_with('Market history r3 fields test',flush=True)
     def test_log_line_prints_the_newest_values_whether_or_not_they_are_written(self):
         last=self.on['breadth'][-1]
         for state,lines in self.lines.items():

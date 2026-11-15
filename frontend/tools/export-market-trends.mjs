@@ -95,7 +95,8 @@ const logPercent=value=>{const text=Math.abs(value).toFixed(2);return value<0&&t
  * Round 3 M8d: `stalling` is the index's written `stalling` when emission is on, else the same build's value passed as
  * `{stalling: {<symbol>: …}}` (buildMarketTrendsWithStalling); neither prints `unavailable(-)`, never 0.
  */
-export function marketIndexLogLines(payload,{stalling:computed}={}){
+export function marketIndexLogLines(payload,options){
+  const computed=options?.stalling;
   const indices=Array.isArray(payload?.indices)?payload.indices:[];
   return indices.map(index=>{
     const last=Array.isArray(index?.points)?index.points.at(-1)?.date??null:null;

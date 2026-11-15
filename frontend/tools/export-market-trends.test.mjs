@@ -319,7 +319,8 @@ describe('market index log lines (M0)',()=>{
   for(const [field,index] of [[sp,spIndex],[nasdaq,nasdaqIndex]]){expect(Number(field.dd)).toBe(index.latest.value);expect(field.ddDates).toBe(activeDates(index));}
  });
  it('never throws on a malformed payload and writes a negative decline with U+2212',()=>{
-  expect(marketIndexLogLines(null)).toEqual([]);expect(marketIndexLogLines({})).toEqual([]);
+  expect(marketIndexLogLines(null)).toEqual([]);expect(marketIndexLogLines({})).toEqual([]);expect(marketIndexLogLines({},null)).toEqual([]);
+  expect(parse(marketIndexLogLines({as_of_date:'2026-10-23',indices:[{symbol:'^GSPC'}]},null)[0])).toMatchObject({stalling:'unavailable(-)',stallingDates:'-'});
   const [line]=marketIndexLogLines({as_of_date:'2026-10-23',indices:[{symbol:'^GSPC',points:[{date:'2026-10-23',value:null}],lastObserved:{date:'2026-10-22',value:4},events:[],followThrough:{available:true,state:'correction',declinePct:-1.234,attempt:null,ftd:null}}]});
   // A last count that is not the last point's count is not printed under the last point's date.
   expect(parse(line)).toMatchObject({last:'2026-10-23',dd:'unavailable(-)',ddDates:'-',decline:'−1.23'});
