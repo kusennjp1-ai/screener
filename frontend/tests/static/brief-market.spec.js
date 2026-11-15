@@ -6,7 +6,7 @@ import { test, expect } from '@playwright/test';
 import { date, marketTrends, openBrief, VIEWPORTS, horizontalOverflow, sessions } from './brief-fixture.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
 import { distributionDetail } from '../../src/static/reference/marketTabStudy.js';
-import { followThroughView, ftdPrevious } from '../../src/static/brief/briefEnvironment.js';
+import { followThroughView, ftdPrevious, BREAKOUT_HOLD_NAME } from '../../src/static/brief/briefEnvironment.js';
 
 const STALE = sessions.at(-3), STALE_MD = STALE.slice(5).split('-').map(Number).join('/'), DATE_MD = date.slice(5).split('-').map(Number).join('/');
 /** The served ^GSPC follow-through record (the fixture's: an FTD 35 sessions old) and the row's words for it, from the producer (M2). */
@@ -58,7 +58,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     // neutral 「?」, a section holding a check that could not be judged (here TT達成数の急減 and リーダーの健全度). The
     // fixture's one fired check (新安値) is 〔参考〕: counted apart, it never sets a tab's ▲.
     if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度?未確認あり', 'リーダー?未確認あり', '推移']);
-    await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', '200日線より上', '50日線より上', '52週の新高値・新安値', 'TT達成数', 'RS推計90以上のTT達成（独自）', 'ブレイクアウト成功率', 'リーダーの健全度', 'ステージ構成']);
+    await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', '200日線より上', '50日線より上', '52週の新高値・新安値', 'TT達成数', 'RS推計90以上のTT達成（独自）', BREAKOUT_HOLD_NAME, 'リーダーの健全度', 'ステージ構成']);
     // The fixture has more new lows (3) than new highs (2): one sentence under the verdict. The study could not confirm the
     // rule (〔参考〕), so it is counted apart: ○ 参考 on its row and group, never ▲ 注意 (MK9).
     const signals = market.getByRole('group', { name: '注意サイン（独自判定）' });
@@ -198,16 +198,16 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.getByTestId('brief-missing-breadth')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：200日線より上・TT達成数`);
-    await expect(market.getByTestId('brief-missing-leaders')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：RS推計90以上のTT達成（独自）・ブレイクアウト成功率・リーダーの健全度・ステージ構成`);
+    await expect(market.getByTestId('brief-missing-leaders')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：RS推計90以上のTT達成（独自）・${BREAKOUT_HOLD_NAME}・リーダーの健全度・ステージ構成`);
     // A phone's tabs mark the sections that hold 未収録 values or unjudged checks, and the history awaiting its update.
     if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度?未確認あり', 'リーダー?未確認あり', '推移?更新待ち']);
     // The desktop says which checks and why on one line; a phone names them on the summary line and folds the reason.
     const unjudged = market.getByRole('group', { name: '注意サイン（独自判定）' });
     if (phone) {
-      await expect(unjudged.locator('summary')).toHaveText('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率');
+      await expect(unjudged.locator('summary')).toHaveText(`判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・${BREAKOUT_HOLD_NAME}`);
       await unjudged.locator('summary').click();
       await expect(unjudged.getByText('理由：旧形式の長期集計に未収録')).toBeVisible();
-    } else await expect(unjudged).toContainText('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率（旧形式の長期集計に未収録）');
+    } else await expect(unjudged).toContainText(`判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・${BREAKOUT_HOLD_NAME}（旧形式の長期集計に未収録）`);
     await expect(market.locator('.brief-fact small')).toHaveText(['フォロースルーデー（独自判定）', '分配日（25日）', '50日線より上', '52週の新高値・新安値', '先導株数（価格条件）']);
     for (const fact of await market.locator('.brief-fact').all()) await expect(fact).not.toContainText(/未取得|未確認|未算出/);
     await section(page, '推移');

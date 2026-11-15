@@ -2,8 +2,9 @@
 // the exposure guide's disclosure (M1b, M1d), the marked labels (M1c), the market tab's lead while a newer session has
 // closed (M1e) and distribution days in two grades (M3). Package P3: the FTD row's age and 「前回のFTD」 (M2) and Today's
 // 「反発n日目」 (M4). Package P4: the 50日線割れ verdict's 0% and what 過去の傾向 compares (M5), the 銘柄側 line and the 〔参考〕
-// legend (M6) and the stage legend (M7). Every state is built here with marketTrends' mutators and row overrides (the fixture is
-// never edited); every word is the producer's. Phones never grow their closed height.
+// legend (M6) and the stage legend (M7). Package P6: the round 3 keys' lines in opened rows, with the keys and without (M8a-M8d),
+// a confirmed FTD's current decline (M8e) and the +3% days (M9). Every state is built here with marketTrends' mutators and row
+// overrides (the fixture is never edited); every word is the producer's. Phones never grow their closed height.
 import { test, expect } from '@playwright/test';
 import { date, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 import { DISTRIBUTION_TEXT, RULE_TEXT, verdictBasis, verdictWaiting } from '../../src/static/brief/marketTabModel.js';
@@ -15,6 +16,10 @@ import { marketCardView } from '../../src/static/brief/marketTabModel.js';
 import { marketTabParts, STAGE_LEGEND_NAMES, STAGE_REPLAY_NOTE, STOCK_SIDE_HEAD } from '../../src/static/brief/marketTabGroups.js';
 import { BREADTH_LEGEND, marketTabStudy, STOCK_OUTCOME_UNTESTED } from '../../src/static/reference/marketTabStudy.js';
 import { TAGS } from '../../src/static/reference/marketRegimeReference.js';
+import { readMarketTrends } from '../../src/static/marketTrendAsset.js';
+import { KEY_ABSENT } from '../../src/static/brief/marketTabGroups.js';
+import { BIG_UP_HEAD, STALLING_HEAD } from '../../src/static/reference/marketTabStudy.js';
+import { STALLING_METHOD } from '../../tools/export-market-trends.mjs';
 
 const REFERENCE = JSON.parse(readFileSync(new URL('../../src/static/reference/market-regime-reference-v1.json', import.meta.url), 'utf8'));
 
@@ -338,11 +343,15 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M2 at ${wid
 test.describe('M2 at 375px: the opened row', () => {
   test.use(PHONES[375]);
   test('opens to the app\'s own rule beside the cited rises, the failure, 前回のFTD and 過去の傾向, then the rule', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/market');
+    const seen = {};
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: capture(seen) });
     await marketReady(page);
     const row = ftdRow(page), before = await contentHeight(page);
     await row.locator('.brief-env-toggle').click();
-    await expect(row.locator('.brief-env-detail p')).toHaveText([...followThroughDetail().details, `基準${RULE_TEXT.ftd}`]);
+    // The row's own four lines first, then the round 3 lines of the served asset (P6: M8e, M9), then the rule.
+    const { details } = followThroughDetail(readMarketTrends(structuredClone(seen.value), { as_of_date: date }).indices, date);
+    expect(details.slice(0, 4)).toEqual(followThroughDetail().details);
+    await expect(row.locator('.brief-env-detail p')).toHaveText([...details, `基準${RULE_TEXT.ftd}`]);
     await row.locator('.brief-env-toggle').click();
     expect(await contentHeight(page)).toBe(before);
     expect(errors).toEqual([]);
@@ -547,6 +556,97 @@ test.describe('M5, M6 and M7 at 1440px: in place', () => {
     await expect(page.locator('.brief-regime-foot').first()).toHaveText(study.regime.footer);
     expect(study.regime.footer).toContain('この欄は下げの頻度の比較です（21営業日・^GSPC／^IXIC）。');
     expect(study.regime.footer).toContain('200日線の上・50日線の下（S&P）は平均リターンは高めでした。');
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// ---- M8a-M8e, M9 (package P6) -------------------------------------------------------------------------------------------
+/**
+ * The closed content height of each section in each state below before P6 (90e8820, the code of d522ce7, which ignores the
+ * keys; CI fonts, measured): the 指数 panel, then the 参加度 and リーダー sections. The keys never move a closed row.
+ */
+const PRE_BASE = { index: { 320: 1341, 375: 1219, 390: 1219 }, breadth: { 320: 1098, 375: 1031, 390: 1015 }, leaders: { 320: 1159, 375: 1075, 390: 1061 } };
+const PRE_P6 = { present: { index: { 320: 1337, 375: 1201, 390: 1201 }, breadth: PRE_BASE.breadth, leaders: { 320: 1161, 375: 1075, 390: 1061 } }, absent: PRE_BASE, small: PRE_BASE, malformed: PRE_BASE };
+/** The five long-history keys on every row, under the collector's null rules (`last` overrides the newest row). */
+const r3Rows = (last = {}) => ({ trends: value => { const rows = value.long_history.breadth;
+  for (const row of rows) { const cohort = row.leaderCohort === null ? null : Math.floor(row.leaderCohort * 0.6);
+    Object.assign(row, { rs90Cohort: cohort, rs90CohortAbove50: cohort === null ? null : Math.floor(cohort * 0.45), newHighsClose: 1, breakoutsEarlyJudged: 9, breakoutsEarlyFailed: 3 }); }
+  Object.assign(rows.at(-1), typeof last === 'function' ? last(rows.at(-1)) : last); } });
+/** Each index's stalling days as the exporter writes them with emission on (`records` overrides them). */
+const stalling = (records = null) => ({ trends: value => value.indices.forEach((item, i) => {
+  item.stalling = records ? records[i] : { available: true, method: STALLING_METHOD, dates: i ? [] : [item.points.at(-3).date] }; }) });
+/** The ^GSPC FTD confirmed with a pullback of `pct`% from its post-FTD peak (followThroughDay's peak, low and declinePct). */
+const pullback = pct => ({ trends: value => { const item = value.indices[0], dates = item.points.map(point => point.date);
+  Object.assign(item.followThrough, { peak: { date: dates.at(-10), close: 5400 }, low: { date: dates.at(-4), low: 5260 }, declinePct: pct }); } });
+const P6_STATES = [
+  ['present', 'every key present', compose(methods, withCloses, r3Rows({ leaderCohort: 30, leaderCohortAbove50: 21, rs90Cohort: 12, rs90CohortAbove50: 5 }), stalling(), pullback(2.4)), 'present'],
+  ['absent', 'no key (every publication while emission is off)', {}, 'absent'],
+  ['small', 'samples under the minimums', compose(r3Rows(row => ({ rs90Cohort: Math.min(row.leaderCohort, 6), rs90CohortAbove50: 2, breakoutsEarlyJudged: 3, breakoutsEarlyFailed: 1 })), stalling()), 'small'],
+  ['malformed', 'a malformed stalling record', stalling([{ available: true, method: STALLING_METHOD, dates: ['2026-02-30'] }, { available: true, method: STALLING_METHOD, dates: [] }]), 'malformed'],
+];
+/** The app's view of the served asset, through the reader and the producers the market tab uses. */
+const p6View = served => { const data = readMarketTrends(structuredClone(served), { as_of_date: date }), trends = { data };
+  return marketCardView({ market: UP_MARKET, trends, date, study: marketTabStudy({ trends, reference: REFERENCE, date, market: UP_MARKET, manifest: SERVED_MANIFEST }), tab: marketTabParts }); };
+/** An opened row's lines in EnvRow's order (its detail, a pair row's note, its details), then its rule. */
+const openedLines = item => [item.detail, item.rows ? item.note : null, ...(item.details || []), `基準${item.rule}`].filter(Boolean);
+const P6_ROWS = [['index', 'ftd', 'フォロースルーデー'], ['index', 'dist', '分配日（25日）'], ['breadth', 'extremes', '52週の新高値・新安値'], ['leaders', 'breakout', null], ['leaders', 'health', 'リーダーの健全度']];
+const envRow = (page, group, key, label) => page.locator(`.brief-env-group.is-${group} .brief-env-row`).filter(label ? { has: page.locator('small', { hasText: label }) } : { has: page.locator('small', { hasText: '確定分' }) });
+
+for (const [width, device] of [...Object.entries(PHONES), ['1440', VIEWPORTS.desktop]]) test.describe(`M8a-M8e and M9 at ${width}px: the opened rows`, () => {
+  test.use(device);
+  const phone = width !== '1440';
+  for (const [key, name, mutate, pre] of P6_STATES) test(`${name}: each opened row reads its producer's lines, and the closed heights stay`, async ({ page }) => {
+    const seen = {};
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: compose(mutate, capture(seen)) });
+    await marketReady(page);
+    const view = p6View(seen.value), item = id => view.groups.flatMap(g => g.items).find(entry => entry.key === id);
+    if (phone) {
+      expect(await contentHeight(page)).toBe(PRE_P6[pre].index[width]);
+      expect(await lead(page)).toBeLessThanOrEqual(756);
+    }
+    for (const [group, id, label] of P6_ROWS) {
+      if (phone) { await page.getByRole('tab', { name: new RegExp(`^${{ index: '指数', breadth: '参加度', leaders: 'リーダー' }[group]}`) }).click(); await settled(page); }
+      const row = envRow(page, group, id, label);
+      await expect(row).toHaveCount(1);
+      const closed = phone ? await contentHeight(page) : null;
+      if (phone) expect(closed).toBe(PRE_P6[pre][group][width]);
+      await row.locator('.brief-env-toggle').click();
+      const lines = row.locator('.brief-env-detail > p');
+      await expect(lines).toHaveText(openedLines(item(id)));
+      for (const text of await lines.allTextContents()) expect(text).not.toMatch(/▲|○/);
+      await row.locator('.brief-env-toggle').click();
+      if (phone) expect(await contentHeight(page)).toBe(closed);
+    }
+    const lineOf = (id, head) => openedLines(item(id)).find(text => text.startsWith(head));
+    if (key === 'absent') {
+      expect(lineOf('health', 'RS推計90以上')).toBe(`RS推計90以上：${KEY_ABSENT}`);
+      expect(item('extremes').detail).toBe(`うち終値でも更新：${KEY_ABSENT}`);
+      expect(lineOf('breakout', '早期')).toBe(`早期（上抜け後5営業日・独自）：${KEY_ABSENT}`);
+      expect(lineOf('dist', STALLING_HEAD)).toBe(`${STALLING_HEAD}：${KEY_ABSENT}`);
+      expect(lineOf('ftd', BIG_UP_HEAD)).toBe(`${BIG_UP_HEAD}：未収録（旧形式）`);
+      // No decline line beside the fixture's synthetic 7.6 (a confirmed record never stays confirmed at 6% or more).
+      expect(openedLines(item('ftd')).some(text => text.includes('現在の下落'))).toBe(false);
+      for (const text of [lineOf('health', 'RS推計90以上'), item('extremes').detail, lineOf('breakout', '早期'), lineOf('dist', STALLING_HEAD)]) expect(text).not.toMatch(/[０-９0-9]+(銘柄|件|日|%)/);
+    }
+    if (key === 'present') {
+      expect(lineOf('health', 'RS推計90以上')).toBe('RS推計90以上：12銘柄中 42%');
+      expect(item('extremes').detail).toBe('うち終値でも更新 1');
+      expect(lineOf('breakout', '早期')).toBe('早期（上抜け後5営業日・独自）：9件中 33% が −7%に到達');
+      expect(lineOf('dist', STALLING_HEAD)).toBe(`${STALLING_HEAD}：S&P 1日／NAS 0日`);
+      expect(lineOf('ftd', 'S&P：現在の下落')).toMatch(/^S&P：現在の下落 −2\.4%（高値\d+\/\d+→安値\d+\/\d+）・6%で調整判定（独自設定）$/);
+      expect(lineOf('ftd', BIG_UP_HEAD)).toMatch(new RegExp(`^\\${BIG_UP_HEAD}：S&P 直近\\d+営業日で\\d+回／NAS 直近\\d+営業日で\\d+回（弱気相場・調整中に多い。買いの合図ではありません）$`));
+    }
+    if (key === 'small') {
+      expect(lineOf('health', 'RS推計90以上')).toMatch(/^RS推計90以上：\d銘柄（10銘柄未満のため率は非表示）$/);
+      expect(lineOf('breakout', '早期')).toBe('早期（上抜け後5営業日・独自）：3件（5件未満のため率は非表示）');
+    }
+    if (key === 'malformed') {
+      expect(lineOf('dist', STALLING_HEAD)).toBe(`${STALLING_HEAD}：S&P 算出不可（ストーリング日の形式を確認できません）／NAS 0日`);
+      // The distribution count beside it stays.
+      if (phone) await page.getByRole('tab', { name: /^指数/ }).click();
+      await expect(distRow(page).locator('.brief-ftd-row b')).toHaveText(['3日', '4日']);
+    }
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
