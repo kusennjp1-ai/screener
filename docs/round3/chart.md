@@ -475,6 +475,15 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
   - A price-only text would be about 53px, which would still miss both views.
   - So this is the plan's 「If two lines cannot hold it, the item does not ship and the measured overflow is reported」 for these two views. No code was changed for it.
 
+**What folds in the low's place at 320 on the rebuild** (`node audit3/r3-chart/legend-fold-320.mjs out/c61bf96/render/probe-reduce.json out/57fdcd6/render/probe-reduce.json`: `legendHidden` at 320, before and after, with the low item left out):
+- **In all 50 views where the low now shows, 「上抜け」 (the breakout arrow's key, rank 2) is newly folded.**
+- **「枠＝収縮」 (rank 6) is newly folded too in the 38 daily-period views.** On 週足 it was already folded.
+- No other item changed state, and no item came back.
+- This differs from the fixture gate, where only 「枠＝収縮」 folded (ZZRL, ZZRW).
+- It is the fold's rank order working as designed: the low keeps rank 1, as at base, and the arrow is rank 2.
+  - Both folded items stay explained in the 注記: 「緑の矢印＝…」/「灰色の矢印＝…」 for the arrow, and 「点線＝収縮の安値を結んだ線、枠＝値幅の収縮」.
+  - But it means **the 320 legend trades the breakout arrow's key for the low's price** in these 50 views. That is a priority call for the conductor (see "For the conductor (CH-4)").
+
 **Gate on the rebuild:**
 - **No legend is taller than two lines:** 192 of 192 views at 320 and 192 of 192 at 390 show 2 line tops and a 34px legend.
 - **Card heights identical to c61bf96's histogram:** 320 {489: 95, 505: 61, 521: 36}; 390 {508: 192}.
@@ -820,6 +829,9 @@ These are recorded in the C1 section header below and in `audit3/r3-chart/pre-c1
   - If option 1 or 2 is chosen, it is a change in CHART's or R's files. It moves P, so the C1 baselines would be re-frozen after it.
 - **C3 does not reach 13/13 on the rebuild.** HUM's 1y and 週足 at 320 keep the low hidden: its 3-figure price, the kept 「ピボット」 and the RS item leave 50.42px and 23.08px against 77.05px. This is reported as the plan says, not fixed.
   - A fix would need a shorter must-stay item or another item allowed to fold before the low, which is a design decision.
+- **C3 at 320 trades the breakout arrow's legend key for the low's price.** In all 50 rebuild views where the low now shows, 「上抜け」 (rank 2) folds, and 「枠＝収縮」 also folds in the 38 daily views.
+  - The arrow stays explained in the 注記, and it is the existing rank order (low 1, arrow 2).
+  - If the arrow's key should win at 320, the fix is a rank swap in `legendItems` (CHART's file). It would move P and need the C1 baselines re-frozen.
 - **C3 at 390 on the rebuild:** HUM 1y and 週足 now show the low, and 「損切り」/「枠＝収縮」 fold in its place. It is within the gate (two lines, 508), but it was not in the order's expected list.
 
 ### Integration requests (CH-4)
