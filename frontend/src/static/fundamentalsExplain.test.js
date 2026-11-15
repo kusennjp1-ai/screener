@@ -1,9 +1,10 @@
 // The seams C owns and other tracks call: the conclusion's Code 33 chip (D) and the published SEC
 // coverage block that useStockData (E) hands to secStatus; and secStatus's wording for each coverage state.
 import { describe, expect, it } from 'vitest';
-import { buildSecSummary, chipQuarter, code33ChipView, code33Explain, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_NOTE, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalsSource, fundamentalTiles, meetsEarningsChipPercent, publishedFundamentalsCoverage, Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, Q4_DERIVED_SOURCE_NOTE, q4DerivedRate, q4DerivedSourceNote, quarterReason, secRowChip, secStatus, secSummary, secSummaryCurrent, wholePercent } from './fundamentalsExplain.js';
+import { buildSecSummary, chipQuarter, code33ChipView, code33Explain, code33Parts, COVERAGE_WARNINGS, earningsCaution, earningsChipView, EARNINGS_CHIP_NOTE, EARNINGS_CHIP_PERCENT, fundamentalsCoverageWarning, fundamentalsSource, fundamentalTiles, meetsEarningsChipPercent, publishedFundamentalsCoverage, Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, Q4_DERIVED_SOURCE_NOTE, q4DerivedRate, q4DerivedSourceNote, q4EpsReference, Q4_REFERENCE_LEGEND, q4ReferenceLine, q4ReferenceTitle, quarterReason, secRowChip, secStatus, secSummary, secSummaryCurrent, wholePercent } from './fundamentalsExplain.js';
+import { admitBookFinancials, SEC_Q4_REFERENCE_METHOD } from './bookFinancialAdmission.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
-import { bookFinancialEvidence } from './bookFinancialEvidence.js';
+import { bookFinancialEvidence, DERIVED_Q4 } from './bookFinancialEvidence.js';
 import { code33Layered } from './code33Reference.js';
 import { secPoint, secRecord, secUnavailable } from '../test/fixtures/secRecord.js';
 import { CONTRACT_DATE, SEC_SUMMARY_INVALID, secSummaryShape, secSummaryUnknown } from '../test/fixtures/publishedContracts.js';
@@ -489,5 +490,144 @@ describe('round-3 D4: the Q4算出 producers', () => {
     // No derived quarter: no mark; a previous quarter without a rate gives its reason, never a mark.
     expect(fundamentalTiles({ rows: [row('2026-06-30'), row('2026-09-30')] })[1].note).toBe('2026-09期・前期 +30%');
     expect(fundamentalTiles({ rows: [row('2026-06-30', { salesYoY: null, salesYoYReason: 'no_base', salesDerived: true }), row('2026-09-30')] })[1].note).toBe('2026-09期・前期 前年同期の値なし');
+  });
+});
+
+// Round 3 D3 (plan §5): the 独自計算・参考 fiscal-Q4 EPS is read for display only. Every function that judges, scores, filters
+// or sorts gives the identical result with and without the key; only secStatus' 'ok' result carries it, as q4Reference.
+describe('round-3 D3: the reference fiscal-Q4 EPS is shown and never counted', () => {
+  const date = '2026-11-04', now = Date.parse('2026-11-04T12:00:00Z');
+  const QUARTERS = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'], ['2025-07-01', '2025-09-30'],
+    ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30'], ['2026-07-01', '2026-09-30']];
+  // ZZQF's shape, built here: a June fiscal year whose June Q4 EPS is only in the 10-K, with derived June revenue and net income.
+  const record = ({ keep = [] } = {}) => {
+    const value = secRecord({ symbol: 'AAA', asOfDate: date, quarters: QUARTERS, eps: [1, 1, 1, 1.05, 1.1, 1.3, 1.4, 1.8, 1.9], revenue: [80, 85, 90, 95, 100, 110, 122, 136, 150], netIncome: [8, 9, 10, 11, 12, 14, 16, 19, 23] });
+    value.quarterly.eps = value.quarterly.eps.filter(p => !p.end.endsWith('06-30') || keep.includes(p.end));
+    for (const key of ['revenue', 'netIncome']) for (const point of value.quarterly[key].filter(p => p.end.endsWith('06-30'))) {
+      const quarters = value.quarterly[key].filter(p => p.end < point.end && p.end > `${Number(point.end.slice(0, 4)) - 1}-06-30`).map(p => p.accession);
+      Object.assign(point, { form: '10-K', derived: DERIVED_Q4, components: [`k-${point.end}`, ...quarters] });
+    }
+    value.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4.05, { form: '10-K', filed: '2025-08-20', accession: 'k-2025' }), secPoint('eps', ['2025-07-01', '2026-06-30'], 5.6, { form: '10-K', filed: '2026-08-20', accession: 'k-2026' })];
+    return value;
+  };
+  const entry = (end, start, value, extra = {}) => ({ end, start, value, method: SEC_Q4_REFERENCE_METHOD,
+    numerator: { tag: 'NetIncomeLoss', components: [`k-${end}`, 'q-1', 'q-2', 'q-3'] }, shares: { tag: 'WeightedAverageNumberOfDilutedSharesOutstanding', components: [`k-${end}`, 'q-1', 'q-2', 'q-3'] }, ...extra });
+  const june = () => [entry('2025-06-30', '2025-04-01', 1.05), entry('2026-06-30', '2026-04-01', 1.8)];
+  const keyed = (list = june(), base = record()) => ({ ...base, q4EpsReference: list });
+  const rowOf = value => ({ symbol: 'AAA', market: 'US', as_of_date: date, book_financials: value });
+  const view = value => {
+    const row = rowOf(value), book = bookFinancialCurrent(value, 'AAA', date, now, row), sec = secStatus(row, book, {});
+    const report = book.current ? book.report : null;
+    return { row, book, sec, financial: { report, sec, history: null, historyRetrievedAt: null, code33: code33Layered(report, null, date) } };
+  };
+  const reference = (list, base) => { const value = keyed(list, base); return q4EpsReference(value, bookFinancialEvidence(value, 'AAA', date)); };
+
+  it('the fixture is a record admission accepts, with and without the key', () => {
+    for (const value of [record(), keyed()]) expect(admitBookFinancials(value, { symbol: 'AAA', asOfDate: date, evaluatedAt: now, row: rowOf(value) })).toBe(value);
+    const report = bookFinancialEvidence(keyed(), 'AAA', date);
+    expect(report.rows.filter(row => row.fiscalQ4).map(row => [row.end, row.eps, row.epsYoY, row.epsYoYReason])).toEqual([['2025-06-30', null, null, 'not_reported'], ['2026-06-30', null, null, 'not_reported']]);
+  });
+
+  it('never counted: every judging, scoring, filtering and sorting function gives the identical result with and without the key', () => {
+    const plain = view(record()), withKey = view(keyed());
+    // The record's own series are untouched: no reference end reaches quarterly.eps.
+    expect(keyed().quarterly).toEqual(record().quarterly);
+    expect(withKey.book.report).toEqual(plain.book.report);
+    for (const key of ['rows', 'epsFloor', 'epsAcceleration', 'salesAcceleration', 'marginImprovement', 'code33', 'settled', 'consecutive', 'stale', 'annualRecord'])
+      expect(withKey.book.report[key]).toEqual(plain.book.report[key]);
+    expect(withKey.book).toEqual(plain.book);
+    for (const key of ['eps', 'epsYoY', 'salesYoY']) expect(chipQuarter(withKey.book.report.rows, key)).toEqual(chipQuarter(plain.book.report.rows, key));
+    expect(withKey.financial.code33).toEqual(plain.financial.code33);
+    expect(code33Layered(withKey.book.report, null, date)).toEqual(code33Layered(plain.book.report, null, date));
+    for (const options of [{}, { interim: true }]) expect(code33Explain(withKey.financial.report, withKey.sec, withKey.financial.code33, options)).toEqual(code33Explain(plain.financial.report, plain.sec, plain.financial.code33, options));
+    expect(code33Parts(withKey.financial.report)).toEqual(code33Parts(plain.financial.report));
+    for (const read of [earningsChipView, earningsCaution, code33ChipView]) expect(read(withKey.financial)).toEqual(read(plain.financial));
+    expect(fundamentalTiles(withKey.financial.report)).toEqual(fundamentalTiles(plain.financial.report));
+    expect(fundamentalsSource(withKey.financial.report)).toEqual(fundamentalsSource(plain.financial.report));
+    // The research index summary (the rows' chip, EPS filter and sort read it) carries no reference.
+    const summary = value => buildSecSummary(rowOf(value), { date, now });
+    expect(summary(keyed())).toEqual(summary(record()));
+    expect(JSON.stringify(summary(keyed()))).not.toMatch(/reference|q4Eps|参考/i);
+    const listed = value => ({ ...rowOf(value), sec_summary: summary(value) });
+    expect(secRowChip(listed(keyed()), { now, date })).toEqual(secRowChip(listed(record()), { now, date }));
+    expect(secSummaryCurrent(listed(keyed()), { now, date })).toEqual(secSummaryCurrent(listed(record()), { now, date }));
+    // secStatus: identical but for the added q4Reference on 'ok'.
+    const { q4Reference, ...rest } = withKey.sec;
+    expect(rest).toEqual(plain.sec);
+    expect(plain.sec).not.toHaveProperty('q4Reference');
+    expect(q4Reference).toEqual([{ end: '2025-06-30', value: 1.05, yoy: null, yoyBase: null }, { end: '2026-06-30', value: 1.8, yoy: expect.closeTo(71.4286, 3), yoyBase: 'reference' }]);
+  });
+
+  it('secStatus carries q4Reference only on a current record with a shown entry, so every other result is as before', () => {
+    // Every entry dropped (another method): no key at all, deep-equal to the record without it.
+    const malformed = keyed(june().map(item => ({ ...item, method: 'q4-other-v1' })));
+    expect(view(malformed).sec).toEqual(view(record()).sec);
+    expect(view(malformed).sec).not.toHaveProperty('q4Reference');
+    // A record past the 180-day rule is 古い: no reference travels with it.
+    const late = keyed(), old = rowOf(late);
+    const stale = secStatus(old, bookFinancialCurrent(late, 'AAA', date, Date.parse('2027-06-01T00:00:00Z'), old), {});
+    expect(stale.state).toBe('stale');
+    expect(stale).not.toHaveProperty('q4Reference');
+  });
+
+  it('q4EpsReference: the rate from a reported base, from a reference base, and null on a loss, a zero, no base or a period mismatch', () => {
+    // The 2025-06 Q4 EPS is reported (1.05): the 2026-06 reference's base is that reported EPS.
+    expect(reference([entry('2026-06-30', '2026-04-01', 1.8)], record({ keep: ['2025-06-30'] }))).toEqual([{ end: '2026-06-30', value: 1.8, yoy: expect.closeTo(71.4286, 3), yoyBase: 'reported' }]);
+    expect(reference(june())[1]).toMatchObject({ yoyBase: 'reference' });
+    // The oldest reference has no year-ago quarter (the record starts 2024-07): no rate.
+    expect(reference(june())[0]).toEqual({ end: '2025-06-30', value: 1.05, yoy: null, yoyBase: null });
+    for (const base of [-0.2, 0]) expect(reference([entry('2025-06-30', '2025-04-01', base), entry('2026-06-30', '2026-04-01', 1.8)])[1]).toEqual({ end: '2026-06-30', value: 1.8, yoy: null, yoyBase: null });
+    // A 72-day quarter against a 91-day base: yoyDetail's period mismatch, no rate.
+    expect(reference([entry('2025-06-30', '2025-04-01', 1.05), entry('2026-06-30', '2026-04-20', 1.8)])[1]).toMatchObject({ yoy: null, yoyBase: null });
+    // A loss quarter against a profit: the rate is the fact yoyDetail gives (the line prints it with U+2212).
+    expect(reference([entry('2025-06-30', '2025-04-01', 1.05), entry('2026-06-30', '2026-04-01', -0.25)])[1]).toEqual({ end: '2026-06-30', value: -0.25, yoy: expect.closeTo(-123.81, 1), yoyBase: 'reference' });
+    // EPS the browser's series check refused (a filing after the as-of date) is no base: no rate from it.
+    const refused = record({ keep: ['2025-06-30'] }); refused.quarterly.eps.find(p => p.end === '2026-03-31').filed = '2026-11-05';
+    const value = keyed([entry('2026-06-30', '2026-04-01', 1.8)], refused), report = bookFinancialEvidence(value, 'AAA', date);
+    expect(report.refusedSeries).toContain('eps');
+    expect(q4EpsReference(value, report)).toEqual([{ end: '2026-06-30', value: 1.8, yoy: null, yoyBase: null }]);
+  });
+
+  it('q4EpsReference drops a malformed entry, one with a reported EPS and one outside the window; a malformed list is absent', () => {
+    const base = record();
+    base.quarterly.eps = base.quarterly.eps.filter(p => p.end !== '2026-03-31');
+    const ends = list => reference(list, base).map(item => item.end);
+    expect(ends(june())).toEqual(['2025-06-30', '2026-06-30']);
+    // One malformed entry is dropped and the other kept.
+    for (const bad of [{ method: 'q4-other-v1' }, { value: Number.NaN }, { start: '2025-06-01' }, { note: 'x' }, { numerator: { tag: 'ProfitLoss', components: ['a', 'b', 'c', 'd'] } }, { shares: { tag: 'WeightedAverageNumberOfDilutedSharesOutstanding', components: ['a', 'b', 'c'] } }])
+      expect(ends([{ ...june()[0], ...bad }, june()[1]])).toEqual(['2026-06-30']);
+    // A quarter whose EPS is reported, one before the card's window (2024-06 is no row), and one that is not a fiscal Q4 (2026-03 has no EPS here).
+    expect(ends([entry('2025-06-30', '2025-04-01', 1.05), entry('2025-09-30', '2025-07-01', 1.1), entry('2026-06-30', '2026-04-01', 1.8)])).toEqual(['2025-06-30', '2026-06-30']);
+    expect(ends([entry('2024-06-30', '2024-04-01', 1), ...june()])).toEqual(['2025-06-30', '2026-06-30']);
+    expect(ends([entry('2026-03-31', '2026-01-01', 1.4), entry('2026-06-30', '2026-04-01', 1.8)])).toEqual(['2026-06-30']);
+    expect(bookFinancialEvidence(keyed([], base), 'AAA', date).rows.find(row => row.end === '2026-03-31')).toMatchObject({ eps: null, fiscalQ4: false });
+    // A list that is not one to four entries with strictly increasing ends is absent as a whole.
+    for (const list of [[], null, {}, june().reverse(), [june()[1], june()[1]], [...june(), ...['2021', '2022', '2023'].map(year => entry(`${year}-06-30`, `${year}-04-01`, 1))], [null, june()[1]]])
+      expect(reference(list, base)).toEqual([]);
+    // Another day's record, or no valid report: absent.
+    const value = keyed();
+    expect(q4EpsReference({ ...value, as_of_date: '2026-11-03' }, bookFinancialEvidence(value, 'AAA', date))).toEqual([]);
+    expect(q4EpsReference(value, { valid: false, rows: [] })).toEqual([]);
+    expect(q4EpsReference(null, bookFinancialEvidence(value, 'AAA', date))).toEqual([]);
+  });
+
+  it('q4ReferenceLine and q4ReferenceTitle: the copy through the producer, U+2212, never +0% for a missing rate', () => {
+    const line = list => q4ReferenceLine(list);
+    expect(line(reference(june()))).toBe('参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.80（純利益÷希薄化株数）→ 前年比 +71%（前年同期も参考値）');
+    expect(line(reference([entry('2026-06-30', '2026-04-01', 1.8)], record({ keep: ['2025-06-30'] })))).toBe('参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.80（純利益÷希薄化株数）→ 前年比 +71%');
+    // No rate: the tail is left out, never +0%.
+    expect(line([{ end: '2026-06-30', value: 1.23, yoy: null, yoyBase: null }])).toBe('参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.23（純利益÷希薄化株数）');
+    expect(line(reference([entry('2025-06-30', '2025-04-01', 0), entry('2026-06-30', '2026-04-01', 1.8)]))).not.toMatch(/前年比/);
+    // A loss and a fall read with U+2212; a rate that rounds to zero reads ±0%, never −0% or +0%.
+    expect(line([{ end: '2026-06-30', value: -0.25, yoy: -123.81, yoyBase: 'reported' }])).toBe('参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ −0.25（純利益÷希薄化株数）→ 前年比 −124%');
+    for (const yoy of [0.3, -0.3]) expect(line([{ end: '2026-06-30', value: 1.23, yoy, yoyBase: 'reported' }])).toMatch(/→ 前年比 ±0%$/);
+    expect(line([{ end: '2026-06-30', value: 1.23, yoy: 45.2, yoyBase: 'reported' }])).toBe('参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.23（純利益÷希薄化株数）→ 前年比 +45%');
+    for (const text of [line(reference(june())), line([{ end: '2026-06-30', value: -0.25, yoy: -123.81, yoyBase: 'reported' }])]) expect(text).not.toMatch(/(?<!\d)-/);
+    // The newest shown quarter; nothing to show is null.
+    for (const empty of [[], null, undefined, [{ end: '2026-06-30', value: null }]]) expect(line(empty)).toBeNull();
+    expect(q4ReferenceTitle(reference(june())[1])).toBe('参考（独自計算）Q4 EPS ≈ 1.80 → 前年比 +71%（前年同期も参考値）');
+    expect(q4ReferenceTitle(reference(june())[0])).toBe('参考（独自計算）Q4 EPS ≈ 1.05');
+    expect(q4ReferenceTitle(null)).toBeNull();
+    expect(Q4_REFERENCE_LEGEND).toBe('太い破線＝参考（独自計算・判定に使わない）');
   });
 });

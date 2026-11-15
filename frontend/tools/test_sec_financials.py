@@ -915,5 +915,43 @@ class Q4EpsReferenceAccuracy(unittest.TestCase):
         # The existing coverage keys keep their values beside the new aggregate.
         self.assertEqual({key: written["coverage"][key] for key in ("available", "partial", "unavailable", "q4_revenue_derived")}, {"available": 1, "partial": 0, "unavailable": 0, "q4_revenue_derived": 1})
 
+class Q4EpsReferenceBrowserAdmission(unittest.TestCase):
+    """Round 3 D3 (P4): the browser admission takes the reference this tool writes with emission on, and mirrors its constants."""
+
+    def source(self):
+        return (Path(__file__).parent.parent / "src/static/bookFinancialAdmission.js").read_text(encoding="utf-8")
+
+    def test_the_method_tags_and_cap_match_the_browser_admission(self):
+        import json, re
+        text = self.source()
+        self.assertEqual(json.loads(re.search(r"SEC_Q4_REFERENCE_TAGS = Object\.freeze\((\{.*?\})\);", text).group(1)),
+            {"numerator": list(sec.Q4_REFERENCE_NUMERATOR_TAGS), "shares": list(sec.Q4_REFERENCE_SHARE_TAGS)})
+        self.assertEqual(re.search(r"SEC_Q4_REFERENCE_METHOD = '([^']+)';", text).group(1), sec.Q4_REFERENCE_METHOD)
+        self.assertEqual(int(re.search(r"SEC_Q4_REFERENCE_MAX = (\d+);", text).group(1)), sec.Q4_REFERENCE_MAX)
+        # The units the browser never needs: the numerator is USD (as netIncome) and the shares are a count.
+        self.assertEqual((sec.Q4_REFERENCE_NUMERATOR_UNIT, sec.Q4_REFERENCE_SHARE_UNIT), ("USD", "shares"))
+
+    @unittest.skipUnless(__import__("shutil").which("node"), "node runs src/static/bookFinancialAdmission.js")
+    def test_a_record_written_with_emission_on_passes_the_browser_admission(self):
+        import copy, json, subprocess
+        from unittest.mock import patch
+        payload = ref_payload({year: REF_YEAR for year in range(2022, 2026)}, numerators=sec.Q4_REFERENCE_NUMERATOR_TAGS)
+        with patch.object(sec, "now_iso", lambda: "2026-03-01T10:00:00.000Z"), patch.object(sec, "Q4_EPS_REFERENCE_EMIT", True):
+            record = sec.fetch_symbol("ZZQ", {"ZZQ": 1}, "2026-03-01", get=lambda url: payload)
+        with patch.object(sec, "now_iso", lambda: "2026-03-01T10:00:00.000Z"):
+            plain = sec.fetch_symbol("ZZQ", {"ZZQ": 1}, "2026-03-01", get=lambda url: payload)
+        self.assertEqual([e["end"] for e in record["q4EpsReference"]], ["2022-12-31", "2023-12-31", "2024-12-31", "2025-12-31"])
+        self.assertNotIn("q4EpsReference", plain)
+        # Mutations that the admission must refuse (as 'keys'): another method, a reported EPS shadowed, five entries.
+        method = copy.deepcopy(record); method["q4EpsReference"][-1]["method"] = "q4-other-v1"
+        shadow = copy.deepcopy(record); shadow["q4EpsReference"][-1].update(end=record["quarterly"]["eps"][-1]["end"], start=record["quarterly"]["eps"][-1]["start"])
+        shadow["q4EpsReference"].sort(key=lambda e: e["end"])
+        many = copy.deepcopy(record); many["q4EpsReference"].insert(0, dict(record["q4EpsReference"][0], end="2021-12-31", start="2021-10-01"))
+        cases = {"REF": record, "PLAIN": plain, "METHOD": method, "SHADOW": shadow, "MANY": many}
+        payload_json = json.dumps({"asOfDate": "2026-03-01", "evaluatedAt": "2026-03-01T12:00:00.000Z", "results": cases}, allow_nan=False)
+        run = subprocess.run(["node", "--input-type=module", "-e", ADMIT_SCRIPT], input=payload_json, cwd=Path(__file__).parent.parent,
+            capture_output=True, text=True, check=True, timeout=60)
+        self.assertEqual(json.loads(run.stdout), {"REF": True, "PLAIN": True, "METHOD": False, "SHADOW": False, "MANY": False})
+
 if __name__ == "__main__":
     unittest.main()
