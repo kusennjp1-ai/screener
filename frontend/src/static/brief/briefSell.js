@@ -188,12 +188,56 @@ function failedBreakoutCheck(list, view, rules, from = null) {
 }
 
 /**
+ * A failed breakout after its window (round 3 R5, p4-4): once `rules.failedBreakoutSessions` sessions have passed since the
+ * breakout, the failed-breakout check is clear and says nothing of the failure (the window is the breakout's, CONTEXT.md), so
+ * the stock screen adds one neutral, dated line: 「ブレイク失敗後（9/22上抜け→9/25割れ・その後の安値 −12.0%）」. It is context
+ * only: never a check, never a hit, never counted (no tile, chip or mark), and it changes no state, buy call or plan.
+ * - The crossings are failedBreakoutCheck's: the last `CROSSING_LOOKBACK_SESSIONS` (60, the conclusion's look-back) of the
+ *   certified `bars`, from `from` on (crossingFloor's; null is none), each dated on its breakout (breakoutBar: after a touch,
+ *   the first close above the pivot).
+ * - No line while the check would say it: a breakout inside the window on `rules.breakVolumeRatio` or more (the hit) or
+ *   with its volume unknown. Older breakouts are read latest first: a lighter one is skipped (it was never a failed
+ *   breakout), the first heavy one is the breakout, and one with its volume unknown gives no line.
+ * - That breakout failed by the check's own rule: its first close back under the pivot's cents came within
+ *   `rules.failedBreakoutSessions` sessions of it (on that day the check was a hit). A breakout that held longer gives none.
+ * - The low is the lowest low from that first close back under to the last bar, against the pivot (distanceText: signed with
+ *   U+2212, never a −0.0% that does not exist).
+ * - The last close at or above the pivot's cents, or a close, low or volume missing (or 0) from the breakout to the last bar:
+ *   null, never a guessed date or a 0.
+ * Returns `{ crossDate, backDate, lowDate, low, lowPercent, ratio, text, units }` (`units`: the parts a phone line never
+ * splits) or null.
+ */
+export function failedBreakoutContext(bars, pivot, { rules = SELL_RULES, from = null } = {}) {
+  if (!Array.isArray(bars) || !bars.length || !finite(pivot) || pivot <= 0) return null;
+  const n = bars.length, last = bars[n - 1], positive = value => finite(value) && value > 0;
+  if (!positive(last?.close) || cents(last.close) >= cents(pivot)) return null;
+  const breakouts = pivotCrossings(bars, pivot, { lookback: CROSSING_LOOKBACK_SESSIONS, from }).map(c => breakoutBar(bars, pivot, c, { from })).filter(Boolean);
+  const heavyOrUnknown = c => !finite(c.volumeRatio) || c.volumeRatio >= rules.breakVolumeRatio;
+  if (breakouts.some(c => c.sessionsAgo <= rules.failedBreakoutSessions && heavyOrUnknown(c))) return null;
+  const breakout = breakouts.find(c => c.sessionsAgo > rules.failedBreakoutSessions && heavyOrUnknown(c));
+  if (!breakout || !finite(breakout.volumeRatio)) return null;
+  const span = bars.slice(breakout.index);
+  if (!span.every(bar => positive(bar?.close) && positive(bar?.low) && positive(bar?.volume))) return null;
+  let back = breakout.index + 1;
+  while (back < n && cents(bars[back].close) >= cents(pivot)) back++;
+  if (back >= n || back - breakout.index > rules.failedBreakoutSessions) return null;
+  let lowAt = back;
+  for (let i = back + 1; i < n; i++) if (bars[i].low < bars[lowAt].low) lowAt = i;
+  const lowPercent = (bars[lowAt].low / pivot - 1) * 100, day = i => shortDate(bars[i].date, last.date);
+  const dates = `${day(breakout.index)}上抜け→${day(back)}割れ`, low = `その後の安値 ${distanceText(lowPercent)}`;
+  return { crossDate: breakout.date, backDate: bars[back].date, lowDate: bars[lowAt].date, low: bars[lowAt].low, lowPercent, ratio: breakout.volumeRatio,
+    text: `ブレイク失敗後（${dates}・${low}）`, units: [dates, low] };
+}
+
+/**
  * Sell checks for the latest bars. Each check is 'hit', 'clear', 'caution' (the 50-day line only: below
  * it without a confirmed heavy-volume break), 'unknown' (an input is missing) or 'na' (not judged, with
  * the reason). `view` (the candidate: state, pivot, distance) gates the strength checks; without it they
  * are 'na'. `from` (crossingFloor's) is the first index of `bars` a pivot crossing may be on; the failed-breakout
  * check reads it on the last 252 bars, so it is rebased there (a floor before them bounds nothing: no floor, the same
  * crossings as a floor on their first bar). Null is none.
+ * With the failed-breakout check clear and a failed breakout past its window, the result also carries `failedContext`
+ * (failedBreakoutContext's, round 3 R5): context for the sell card and the conclusion, outside every check and count.
  * Returns null when the bars cannot be judged.
  */
 export function sellSignals(bars, rules = SELL_RULES, { view = null, from = null } = {}) {
@@ -243,10 +287,13 @@ export function sellSignals(bars, rules = SELL_RULES, { view = null, from = null
   weakness.push(ma50State(list, rules));
   const failed = failedBreakoutCheck(list, view, rules, listFloor);
   if (failed) weakness.push(failed);
+  // Round 3 R5: a failed breakout past its window, as neutral context beside the clear check (on the same bars and floor).
+  // Only a result that has the line carries the key, so every other result keeps its shape.
+  const failedContext = failed?.state === 'clear' ? failedBreakoutContext(list, view.pivot, { rules, from: listFloor }) : null;
 
   const run = gate.on ? { basis: gate.basis, startDate: list[gate.origin].date, startClose: list[gate.origin].close, pivot: gate.pivot, distance: gate.distance, fromSma50: gate.fromSma50 ?? null, sessions: n - 1 - gate.origin } : null;
   return tally({ asOf: last.date, advance: inAdvance ? advance : null, run, runReason: gate.on ? null : gate.reason,
-    runShort: gate.on ? null : { reason: gate.short, fromSma50: gate.fromSma50 }, strength, weakness });
+    runShort: gate.on ? null : { reason: gate.short, fromSma50: gate.fromSma50 }, strength, weakness, ...(failedContext ? { failedContext } : {}) });
 }
 
 /** The weakness checks that break a buy setup when they hit. */

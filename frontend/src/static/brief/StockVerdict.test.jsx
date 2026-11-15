@@ -5,7 +5,7 @@ import StockVerdict from './StockVerdict';
 import { breakoutEvent, candidateView, earningsCall, trendTemplate } from './briefCandidate';
 import { HEAVY_DOWN_NOTE, lowActivityNote, PLAN_BLOCKED, SE_CONFIDENCE_FLOOR } from './buyGate';
 import { lowActivityReason } from '../priceActivity';
-import { WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
+import { failedBreakoutContext, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
 import { code33ChipView } from '../fundamentalsExplain.js';
 import { positionPlan } from './positionSizing';
 import { conditionNote } from '../missingCondition';
@@ -360,6 +360,42 @@ describe('the conclusion says why there is no buy', () => {
     const caution = conclusionOf({ sells: sells('caution') });
     expect([title(caution), caution.className.includes('tone-zone')]).toEqual(['10/2に上抜け・出来高1.60×', true]);
     expect([...caution.querySelectorAll('.brief-tags .brief-chip')].map(node => node.textContent)).toContain('50日線の下（大商いの割れは未確認）');
+  });
+
+  // Round 3 R5: a failed breakout past its 10-session window is one neutral line under the call (failedBreakoutContext, carried
+  // on the sell checks), whatever the call; the call, its tone and line, the meter, the tiles and the chips read as without it.
+  it('dates a failed breakout after its window in one neutral line under the call, and changes nothing else', () => {
+    // Certified bars ending on DAY: under the pivot of 100, a close above it on 2.2x, back under the next session and under
+    // it for the 12 sessions since, the last close 99 (the row's price).
+    const barsOf = closes => closes.map((close, i) => ({ date: new Date(Date.parse(DAY) - (closes.length - 1 - i) * 86400000).toISOString().slice(0, 10),
+      open: close, high: close * 1.005, low: close * 0.995, close, volume: i === 200 ? 22000 : 10000 }));
+    const judged = barsOf([...Array(200).fill(95), 102, 98, 97, 96, 90, 92, 94, 95, 96, 97, 98, 98, 99]);
+    const sells = stockSells({ judged, diagnostics: null, view: { symbol: 'AAA', state: 'wait', pivot: 100, distance: -1 } });
+    const context = failedBreakoutContext(judged, 100);
+    expect(sells.failedContext).toEqual(context);
+    const { failedContext, ...without } = sells;
+    const read = card => ({ gate: card.dataset.gate, tone: card.className, title: title(card), sub: sub(card), tiles: tiles(card), quals: quals(card),
+      meter: meter(card)?.getAttribute('aria-label') ?? null, chips: [...card.querySelectorAll('.brief-tags .brief-chip')].map(node => [node.textContent, node.className]) });
+    for (const market of [OPEN, { label: '50日線割れ（弱含み・独自判定）', cap: 0 }]) {
+      const card = conclusionOf({ row: audited({ price: 99 }), market, sells });
+      const lines = card.querySelectorAll('[data-testid="brief-failed-context"]');
+      expect(lines).toHaveLength(1);
+      expect(lines[0].textContent).toBe(failedContext.text);
+      // Neutral: a plain line of the call (no tone of its own), its two parts kept whole on a phone line.
+      expect([lines[0].tagName, lines[0].className]).toEqual(['P', '']);
+      expect([...lines[0].querySelectorAll('.brief-nowrap')].map(node => node.textContent)).toEqual(failedContext.units);
+      const shown = read(card);
+      cleanup();
+      const plain = conclusionOf({ row: audited({ price: 99 }), market, sells: without });
+      expect(plain.querySelectorAll('[data-testid="brief-failed-context"]')).toHaveLength(0);
+      expect(shown).toEqual(read(plain));
+      cleanup();
+    }
+    // Back under the pivot three sessions ago: the failed-breakout call says it, and there is no line.
+    const recent = barsOf([...Array(200).fill(95), 102, 98, 97, 99]);
+    const hit = conclusionOf({ row: audited({ price: 99 }), sells: stockSells({ judged: recent, diagnostics: null, view: { symbol: 'AAA', state: 'wait', pivot: 100, distance: -1 } }) });
+    expect(hit.dataset.gate).toBe('failedBreakout');
+    expect(hit.querySelectorAll('[data-testid="brief-failed-context"]')).toHaveLength(0);
   });
 
   // Track A's footprint says when the base was already broken out of (I4, requested by Track A).

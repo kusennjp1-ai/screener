@@ -124,6 +124,9 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
   const code33 = code33ChipView(financial), sell = sellChipView(sells);
   // The data track's earnings chip and its caution line (the line only under a green call: it never stops it).
   const earningsChip = earningsChipView(financial), caution = tone === 'zone' ? earningsCaution(financial) : null;
+  // A failed breakout past its window (failedBreakoutContext on the certified bars, round 3 R5): one neutral line under the
+  // call, whatever the call; it never changes the gate's kind, reason or the plan.
+  const context = sells?.failedContext ?? null;
   const levels = plan && !plan.blocked ? plan : null;
   const referenced = reference || plan?.reference;
   const sizing = referenced ? '参考' : plan?.trialOnly ? '試算のみ' : plan?.defaults ? '既定条件' : null;
@@ -160,7 +163,7 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
     [earnings ? earnings.chip : '決算日 未確認', earnings?.soon ? 'ext' : ''],
   ];
   return <section className={`brief-card brief-call tone-${tone} in`} style={{ '--i': 0 }} aria-label="結論" data-testid="brief-conclusion" data-gate={gate.kind}>
-    <div className="brief-call-status"><span className="brief-call-dot" aria-hidden="true" /><div><strong>{withUnits(title, String(title ?? '').match(TITLE_UNITS) || [])}</strong><p>{sub}</p>{caution && <p className="brief-call-caution">{caution.text}</p>}</div></div>
+    <div className="brief-call-status"><span className="brief-call-dot" aria-hidden="true" /><div><strong>{withUnits(title, String(title ?? '').match(TITLE_UNITS) || [])}</strong><p>{sub}</p>{caution && <p className="brief-call-caution">{caution.text}</p>}{context && <p data-testid="brief-failed-context">{withUnits(context.text, context.units)}</p>}</div></div>
     <Meter distance={view.distance} text={pivotDistanceText(view)} reference={reference} stale={Boolean(view.stale)} />
     <div className="brief-kgrid">
       <div><small>買いの範囲</small><b className="numeric">{price(view.pivot)}</b><em>〜{price(view.upper)}</em><Qualifier text={referenced ? '参考' : null} /></div>

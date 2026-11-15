@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { distanceText, pivotDistanceText } from './briefCandidate';
 import { crossingFloor } from './breakoutHistory';
 import { shortDate } from './briefShared';
-import { bookWarningCheck, HOLDING_CHIP, HOLDING_ROW_CHIP, isBreakdown, ma50Hit, noBreakoutSincePivot, sellChipView, sellMarks, sellSignals, SELL_RULES, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP, withBookWarning } from './briefSell';
+import { bookWarningCheck, failedBreakoutContext, HOLDING_CHIP, HOLDING_ROW_CHIP, isBreakdown, ma50Hit, noBreakoutSincePivot, sellChipView, sellMarks, sellSignals, SELL_RULES, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP, withBookWarning } from './briefSell';
 
 // Synthetic bars only: no test here leans on the browser fixture's last-bar jump.
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -464,6 +464,139 @@ describe('the failed breakout counts crossings from the pivot\'s own bar (round 
     const bars = shaped([...Array(195).fill(95), 97, 95, 95, 95, 95, 102, 98], 195, { missing: [200] }), from = floorOf(bars, 195);
     expect(failed(bars, from)).toEqual(failed(bars));
     expect(failed(bars, from).state).toBe('unknown');
+  });
+});
+
+describe('a failed breakout after its window (round 3 R5, failedBreakoutContext)', () => {
+  const pivot = 100;
+  /**
+   * 200 sessions under the pivot of 100, a close above it at index 200 on 2.2x (`ratio`), then `after`; bar `lowAt` has a
+   * low of `low`. `volume` overrides a bar's volume (null: missing).
+   */
+  const shaped = (after, { ratio = 2.2, lowAt = null, low = null, volume = {} } = {}) => make([...Array(200).fill(95), 102, ...after],
+    i => (i in volume ? volume[i] : i === 200 ? Math.round(10000 * ratio) : 10000)).map((bar, i) => (i === lowAt ? { ...bar, low } : bar));
+  const view = bars => ({ symbol: 'AAA', state: 'wait', pivot, distance: (bars.at(-1).close / pivot - 1) * 100 });
+  const sellsOf = (bars, from = null) => stockSells({ judged: bars, diagnostics: null, view: view(bars), from });
+  const failed = (bars, from = null) => sellsOf(bars, from).weakness.find(c => c.key === 'failedBreakout');
+  const short = i => `${Number(day(i).slice(5, 7))}/${Number(day(i).slice(8))}`;
+  // Under the pivot the session after the breakout and since: 12 sessions after it, the low of 88 four sessions after it.
+  const PAST = [98, 97, 96, 90, 92, 94, 95, 96, 97, 98, 98, 99];
+
+  it('past the window: the check stays clear with its old sentence, and the line dates the breakout, the first close back under and the low since', () => {
+    const bars = shaped(PAST, { lowAt: 204, low: 88 });
+    expect(bars.length - 1 - 200).toBe(12);
+    const sells = sellsOf(bars);
+    expect(failed(bars)).toMatchObject({ state: 'clear', detail: '直近10営業日にピボットの上抜けなし（終値はピボット比 −1.0%）' });
+    const context = failedBreakoutContext(bars, pivot);
+    expect(context).toMatchObject({ crossDate: bars[200].date, backDate: bars[201].date, lowDate: bars[204].date, low: 88 });
+    expect(context.lowPercent).toBeCloseTo(-12, 9);
+    expect(context.ratio).toBeCloseTo(2.2, 9);
+    // The producer's own copy: the dates as shortDate prints them, the low against the pivot with U+2212.
+    expect(context.text).toBe(`ブレイク失敗後（${short(200)}上抜け→${short(201)}割れ・その後の安値 −12.0%）`);
+    expect(context.text).toContain('−');
+    expect(context.units).toEqual([`${short(200)}上抜け→${short(201)}割れ`, 'その後の安値 −12.0%']);
+    // sellSignals carries it beside the checks, on the same bars: never a hit, a count, a chip or a mark.
+    expect(sells.failedContext).toEqual(context);
+    const { failedContext, ...without } = sells;
+    expect(failedContext).toBeTruthy();
+    expect(sells.weakness.map(c => [c.key, c.state])).toEqual([['day-down', 'na'], ['ma50', 'clear'], ['failedBreakout', 'clear'], ['book', 'unknown']]);
+    expect(sells).toMatchObject({ hits: 0, breakdownHits: 0, cautions: 0, unknowns: 1 });
+    expect(sellChipView(sells)).toEqual(sellChipView(without));
+    expect(sellMarks(sells)).toEqual(sellMarks(without));
+    expect(sells.weakness.map(c => c.state)).toEqual(without.weakness.map(c => c.state));
+    // The 10 sessions are the breakout's: on the session the window ends there is no line, the next one has it.
+    const edge = shaped(PAST.slice(0, 10), { lowAt: 204, low: 88 });
+    expect(failed(edge).state).toBe('hit');
+    expect(failedBreakoutContext(edge, pivot)).toBeNull();
+    expect(failedBreakoutContext(shaped(PAST.slice(0, 11), { lowAt: 204, low: 88 }), pivot)).toMatchObject({ crossDate: bars[200].date });
+  });
+
+  it('inside the window it is the check\'s hit, with no line', () => {
+    const bars = shaped([98, 97, 96]);
+    expect(failed(bars)).toMatchObject({ state: 'hit', crossDate: bars[200].date });
+    expect(failedBreakoutContext(bars, pivot)).toBeNull();
+    expect('failedContext' in sellsOf(bars)).toBe(false);
+    // An older failure with a newer heavy one in the window: the hit says it, still no line.
+    const twice = make([...Array(200).fill(95), 102, ...PAST, 102, 98], i => (i === 200 || i === 213 ? 22000 : 10000));
+    expect(failed(twice)).toMatchObject({ state: 'hit', crossDate: twice[213].date });
+    expect(failedBreakoutContext(twice, pivot)).toBeNull();
+    // A breakout in the window whose volume is unknown: the check is unknown, and there is no line.
+    const unknown = make([...Array(200).fill(95), 102, ...PAST, 102, 98], i => (i === 200 ? 22000 : i === 213 ? null : 10000));
+    expect(failed(unknown).state).toBe('unknown');
+    expect(failedBreakoutContext(unknown, pivot)).toBeNull();
+    expect('failedContext' in sellsOf(unknown)).toBe(false);
+  });
+
+  it('is none when the last close is back at or above the pivot, and none for a breakout that held longer than the window', () => {
+    for (const last of [100, 100.004, 101]) {
+      const bars = shaped([...PAST, last]);
+      expect(failedBreakoutContext(bars, pivot)).toBeNull();
+      expect('failedContext' in sellsOf(bars)).toBe(false);
+    }
+    // Above the pivot for 11 sessions, then under it: no check ever called it a failed breakout, so no line.
+    const held = shaped([...Array(11).fill(103), 98, 97]);
+    expect(failed(held).state).toBe('clear');
+    expect(failedBreakoutContext(held, pivot)).toBeNull();
+    // Back under on the 10th session after the breakout: that day the check was a hit, so the line follows its window.
+    const tenth = shaped([...Array(9).fill(103), 98, 97, 96]);
+    expect(failedBreakoutContext(tenth, pivot)).toMatchObject({ crossDate: tenth[200].date, backDate: tenth[210].date });
+  });
+
+  it('reads the breakout as the check does: a touch dates it on the first close above, a lighter one is skipped, the latest heavy one counts', () => {
+    // A touch at the pivot's cents, then the heavy close above the next session (the breakout), then under for 12 sessions.
+    const touched = make([...Array(200).fill(95), 100, 102, ...PAST], i => (i === 201 ? 22000 : 10000));
+    expect(failedBreakoutContext(touched, pivot)).toMatchObject({ crossDate: touched[201].date, backDate: touched[202].date });
+    // A light re-cross inside the window after the old failure (GEN's shape): the check names the light one, the line the old one.
+    const relit = make([...Array(200).fill(95), 102, ...PAST, 101, 98], i => (i === 200 ? 22000 : 10000));
+    expect(failed(relit)).toMatchObject({ state: 'clear', detail: expect.stringMatching(/の上抜けは出来高 0\.97×（基準 1\.40×未満）/) });
+    expect(failedBreakoutContext(relit, pivot)).toMatchObject({ crossDate: relit[200].date, backDate: relit[201].date });
+    // The first close back under the pivot after the breakout, not the start of the current run (SAIL's re-cross).
+    const recross = make([...Array(200).fill(95), 102, 97, 101, 101, 98, ...Array(10).fill(97)], i => (i === 200 ? 22000 : 10000));
+    expect(failedBreakoutContext(recross, pivot)).toMatchObject({ crossDate: recross[200].date, backDate: recross[201].date });
+    // A lighter breakout older than the window after the heavy one is skipped; two heavy ones: the latest.
+    const light = make([...Array(200).fill(95), 102, 98, 97, 101, 98, ...Array(12).fill(97)], i => (i === 200 ? 22000 : 10000));
+    expect(failedBreakoutContext(light, pivot)).toMatchObject({ crossDate: light[200].date, backDate: light[201].date });
+    const heavy = make([...Array(200).fill(95), 102, 98, 97, 101, 98, ...Array(12).fill(97)], i => (i === 200 || i === 203 ? 22000 : 10000));
+    expect(failedBreakoutContext(heavy, pivot)).toMatchObject({ crossDate: heavy[203].date, backDate: heavy[204].date });
+    // Only light breakouts: none was a failed breakout.
+    expect(failedBreakoutContext(shaped(PAST, { ratio: 1.39 }), pivot)).toBeNull();
+    // Older than the conclusion's 60-session look-back: no crossing to read, so no line.
+    expect(failedBreakoutContext(shaped([98, ...Array(60).fill(97)]), pivot)).toBeNull();
+    expect(failedBreakoutContext(shaped([98, ...Array(59).fill(97)]), pivot)).toMatchObject({ crossDate: day(200) });
+  });
+
+  it('gives no line for a missing close, low or volume from the breakout on, never a guessed date or a 0', () => {
+    // Through the sell checks (every close and low is there, or the bars are refused): a volume missing or 0 after the breakout,
+    // on the breakout, or in the 50 sessions before it.
+    for (const volume of [{ 205: null }, { 212: 0 }, { 200: null }, { 180: 0 }]) {
+      const bars = shaped(PAST, { volume });
+      expect(failed(bars).state).toBe('clear');
+      expect(failedBreakoutContext(bars, pivot)).toBeNull();
+      expect('failedContext' in sellsOf(bars)).toBe(false);
+    }
+    // The producer on its own: a missing close or low, or no pivot.
+    const bars = shaped(PAST);
+    expect(failedBreakoutContext(bars, pivot)).not.toBeNull();
+    for (const [i, key] of [[206, 'close'], [206, 'low'], [205, 'low']]) expect(failedBreakoutContext(bars.map((bar, k) => (k === i ? { ...bar, [key]: k === 205 ? 0 : null } : bar)), pivot)).toBeNull();
+    for (const p of [null, 0, NaN]) expect(failedBreakoutContext(bars, p)).toBeNull();
+    expect(failedBreakoutContext(null, pivot)).toBeNull();
+    expect(failedBreakoutContext([], pivot)).toBeNull();
+  });
+
+  it('reads crossings through the floor every reader takes: a floor after the breakout gives no line, one on its bar keeps it', () => {
+    const bars = shaped(PAST);
+    expect(failedBreakoutContext(bars, pivot, { from: 200 })).toEqual(failedBreakoutContext(bars, pivot));
+    for (const from of [201, 205, bars.length - 1]) {
+      expect(failedBreakoutContext(bars, pivot, { from })).toBeNull();
+      expect('failedContext' in sellsOf(bars, from)).toBe(false);
+    }
+    expect(sellsOf(bars, 200).failedContext).toEqual(sellsOf(bars).failedContext);
+    // The floor of a pivot bar dated after the breakout (crossingFloor, as the stock screen passes it).
+    const dated = bars.map((bar, i) => (i === 206 ? { ...bar, high: pivot } : bar));
+    const from = crossingFloor(dated, { se_pattern_primary: 'nr7_inside_day', se_pivot_date: dated[206].date, se_pivot_price: pivot });
+    expect(from).toBe(206);
+    expect(sellsOf(dated).failedContext).toBeTruthy();
+    expect('failedContext' in sellsOf(dated, from)).toBe(false);
   });
 });
 
