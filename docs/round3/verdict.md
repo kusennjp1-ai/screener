@@ -1121,6 +1121,7 @@ p4-4 への対応。上抜けから `SELL_RULES.failedBreakoutSessions`（10）�
   - `book_technical_evidence` を読むのは useBriefData.js:138、LeaderEvidenceChart.jsx:65、export-research.mjs:144/225/228（書き出し）。テストは scan-list-payload.test.mjs（一覧から外す）と export-research-order.test.mjs:465（詳細のフィールド）。
   - `book_technical_evidence` や `vcp` のキーを数える・拒む検査は無い。新しいキー `vcp.pivotCut` を読む画面も無く、古い UI は知らないキーを読まない。
   - check-data-quality-core.mjs は証拠の版を見ない。
+  - リポジトリ全体（`git grep -n "book-technical-evidence\|book_technical_evidence\|BOOK_TECHNICAL_VERSION" -- ':!frontend/src' ':!frontend/tools'`）でも、.github/scripts の 2 つ（financial-candidate-baseline-derived.mjs と publisher-export-research-oct6-carry-v1.mjs のフィクスチャ）が詳細からこのキーを外す・書くだけで、版やキーを検査する所は無い。backend/tests/unit/test_setup_engine_parameters.py は `const VCP_LOOKBACK = …` の宣言の値だけを読む（この行は変えていない。14 本通過、実測）。
 - **ほかのトラックへの依頼**：`frontend/src/static/brief/StockChartCard.test.jsx:143`（CHART の持ち物）は版の文字列 `'book-technical-evidence-v2'` を直接書いている。v3 では「古い版」になり、StockView が測り直して収縮が消えるので、「names the contraction marks only when they are drawn…」が落ちる。
   - 原因の確認（実測）：定数を一時的に v2 に戻すと 16 本すべて通る。元に戻したことは cmp で確かめた。
   - 直し方の案：`BOOK_TECHNICAL_VERSION` を読み込んで使う（この test は「今の版の証拠」を意味している）。このファイルは編集していない。
@@ -1171,7 +1172,7 @@ p4-4 への対応。上抜けから `SELL_RULES.failedBreakoutSessions`（10）�
   - 後で unknown になった理由は、すべて「収縮を測定できません」（52）。
   - 状態 cut 以外の行での変化は 0。
 - **直らない行（pivotBar が null、状態 unknown）**：86 行。
-  - 76 は `se_pivot_price` が無い。±25% の規則が消した行で、`pivot_date` は残っている。
+  - 76 は `se_pivot_price` が無い。76 行すべてで、rows.jsonl の `pivot` に `pivot_date` が残り `extended_from_pivot` が true、再計算は calculated（実測、`$T/r6` の python の集計）。つまり ±25% の規則が消した行で、元からピボットが無い行は 0。
   - 10 は、高値がピボットとセントで一致する足が無い（STEP 0 の H1 で数えた 10 行）。
   - 表示中は 12 で、すべてピボットの値が無い行：CDNA、CHYM、ABNB、HAS、AIRT、ARL、CIX、CRCT、JAKK、PERI、SOPH、TLS。どれも `extended_from_pivot` true。収縮は切っていない。
   - 再構築の行にはピボットの値が無いので、上抜けの後の収縮を持つかどうかは判定できない（**未検証**）。ゆるい探し方（調べの方法）でも 0 行しか分類できない。
@@ -1225,6 +1226,7 @@ p4-4 への対応。上抜けから `SELL_RULES.failedBreakoutSessions`（10）�
 2. **統合（チャート）**：HUM 型の footprint の週数は、`vcp.pivotCut.measuredThrough` で止めるのが筋（briefChartModel.js）。VCP カードの収縮 1 つの文（調べの案 「収縮は1回のみ（縮小は判定できません・独自算出）」）も。どちらも CHART の持ち物。
 3. **CONTEXT.md の語彙（統合で）**：**上抜けの足（pivot breakout bar）**：ピボットの足より後で、終値がピボットのセントを初めて上回った足。自動の収縮はその前の日（measuredThrough）までの日足で測る。
 4. **規則 16**：オラクルの probe の予想される差は ZZHB だけ（上）。492 枚は同じのはず。P3 で確かめる。
+5. **R（バックエンド、R3c の続き）**：readiness.py の `contraction_unconfirmed`（R3c）は、bookTechnicalEvidence.js の自動測定を Python に移したもので、R6 の切れ目を持たない。だから状態 cut の行では、診断（エンジン自身の日足で測る）とブリーフの 「収縮は未確認」 が食い違いうる。診断は準備にも failed_checks にも効かない（R3c の規則）。このパッケージはバックエンドを触れないので、R6 の切れ目を readiness.py に移すかどうかは指揮者の判断を求める。食い違う行の数は数えていない（未検証）。
 
 ### 実測（R6。コマンドと結果。時刻は日本時間。負荷のもとの数はすべて参考）
 
@@ -1234,7 +1236,8 @@ p4-4 への対応。上抜けから `SELL_RULES.failedBreakoutSessions`（10）�
 |---|---|---|---|
 | 注文の vitest | `cd $W/frontend && npx vitest run src/static/bookTechnicalEvidencePivot.test.js src/static/bookTechnicalEvidence.test.js src/static/brief/positionSizing.test.js src/static/brief/StockView.test.jsx src/static/brief/StockChartCard.test.jsx src/static/brief/StockVcpCard.test.jsx src/static/brief/breakoutHistory.test.js tools/export-research-order.test.mjs tools/scan-list-payload.test.mjs`（`$T/r6/acceptance-vitest.out`。注文のパスはすべてある） | 9 ファイル・138 本：**137 通過・1 失敗**。失敗は StockChartCard.test.jsx の「names the contraction marks only when they are drawn…」（版の文字列。上の CHART への依頼）。既存の bookTechnicalEvidence.test.js の 22 本は変更なしで通過、新しい bookTechnicalEvidencePivot.test.js は 14 本 | 3.04 → — |
 | 失敗の原因 | 定数を一時的に v2 に戻して `npx vitest run src/static/brief/StockChartCard.test.jsx`、元に戻して `cmp` | 16 本すべて通過。元に戻したことを cmp で確認 | — |
-| 改変テスト | `contractions()` で切れ目を一時的に無効にした（どの状態も unknown として扱う）。`$T/r6/mutation.out` | **6 本が落ちた**：HUM、LIND、切った日足との一致、CFBK（注文の 1〜4）、収縮 1 つ・0、Setup Engine の土台。ほかの 8 本と既存の 22 本は通った。元に戻したことを cmp で確認（`MUTATION` の文字は 0） | — |
+| 改変テスト A | `contractions()` で切れ目を一時的に無効にした（どの状態も unknown として扱う）。最後のテストのファイル（b141086）で取り直した。`$T/r6/mutation-A.out` | **6 本が落ちた**：HUM、LIND、切った日足との一致、CFBK（注文の 1〜4）、収縮 1 つ・0、Setup Engine の土台。ほかの 8 本と既存の 22 本は通った | — |
+| 改変テスト B | `setupBase` の基準の条件 `anchor < limit - 1` を一時的に `anchor < limit` にした。`$T/r6/mutation-B.out` | Setup Engine の土台のテストだけが落ちた（基準が c − 1 の場合）。A・B とも、元に戻したことを cmp と `git diff --quiet HEAD` で確認 | — |
 | 素の Node | `cd $W/frontend && node -e "import('./src/static/bookTechnicalEvidence.js').then(m=>console.log(m.BOOK_TECHNICAL_VERSION, typeof m.pivotBreakout))"` | `book-technical-evidence-v3 function` | — |
 | eslint | `cd $W/frontend && npx eslint src/static/bookTechnicalEvidence.js src/static/bookTechnicalEvidence.test.js src/static/bookTechnicalEvidencePivot.test.js` | エラー 0・警告 0 | — |
 | lint | `cd $W/frontend && npm run lint` | エラー 0、警告 4（土台と同じ 4 つ） | — |
@@ -1243,6 +1246,7 @@ p4-4 への対応。上抜けから `SELL_RULES.failedBreakoutSessions`（10）�
 | 所有の検査 | `python3 -I $S/audit3/check-ownership.py R $W 45603f065f054cd48c812a3003f3a71ffd91cf45` | コードのコミットの前に `OWNERSHIP OK (R): 45 paths` | — |
 | 触らない場所 | `git -C $W diff --stat b80ab95e -- backend frontend/tools frontend/tests frontend/src/static/brief` | 出力は空 | — |
 | 再構築の数 | `node $T/r6/tally.mjs …`（上の「再構築での数」） | 上の表 | 1.51 → 3.00 |
+| ビルド（規則 21） | `$H/build/run-build.sh $W`（b141086、11-16 07:39–07:40、`$H/build/build-b141086.json`） | 入口のチャンク **132.06 kB gzip**（raw 377.60）。b80ab95（R-P5 の後）の 131.72 から **＋0.34**。R の累計は STEP 0 の 130.28 から ＋1.78。線 134.00 まで 1.94 | 0.13 → 0.80 |
 | フィクスチャ・オラクル | `node $T/r6/fixture30.mjs`、`node $T/r6/oracles.mjs` | 既定の 30 行は diff 0、オラクルは ZZHB だけが変わる（上） | — |
 
 - 時間は一つも測っていない（このパッケージに時間の検査は無い）。
@@ -1259,10 +1263,12 @@ p4-4 への対応。上抜けから `SELL_RULES.failedBreakoutSessions`（10）�
 
 - コミット（どれも所有の検査 OWNERSHIP OK の後）：
   - 196c880 `fix(frontend): measure contractions only before the pivot's breakout`（bookTechnicalEvidence.js と、新しい bookTechnicalEvidencePivot.test.js）
-  - この記録（`docs(round3): record R6 (contractions end at the breakout)`）
+  - c0729bd `docs(round3): record R6 (contractions end at the breakout)`
+  - b141086 `test(frontend): pin the Setup Engine anchor bound at the breakout bar`（Setup Engine の基準が c − 1 になる場合のテスト。改変テスト B で効くことを確かめた）
+  - この追記（`docs(round3): add R6's build size, mutation checks and the backend port request`）
 - テストは注文の 1〜11 を、新しいファイル bookTechnicalEvidencePivot.test.js の 14 本に入れた（形はそのファイルの中で作る。brief-fixture.js とオラクルは読み込まない）。既存の bookTechnicalEvidence.test.js は変えていない。
 - 注文と違えたところ：
   - 「vcp の主パターン」の unknown は、日付の無い vcp の行で確かめた。pivotBar の表では vcp は日足の型なので、日付を付けると足が見つかる。vcp_wrapper.py は pivot_date を出さないので、実際の vcp の行は日付を持たない。
   - 「収縮 0」の形は、ピボットの足まで滑らかに上がり、次の足で上抜ける形にした（上抜けの前に確かめられた高値が無いので、基準も収縮も無い）。注文の括弧書き（「基準がその直前」）どおりの形では、ジグザグがピボットの足を基準として確かめられず、Setup Engine の土台も c − 1 より前に限るので、収縮 0 にならない。収縮 1 の形は、収縮 1 つの後にピボットの足、次の足で上抜けにした。
   - 土台の準備完了 30 行は c61bf96 の組で数え、このブランチの d5b3e42 の組（19 行）も並べた。d5b3e42 の準備完了は R3b などで 26 行（CI と同じ日足は 19）に変わっているため。
-- 片づけ：消すべき古い出力は無い（このパッケージは probe・dump・ビルド・スナップショットを作っていない）。スクラッチの `$T/r6/before`（b80ab95e の frontend/src と frontend/contracts、6 MB）と束は、指揮者の確認のために残した。
+- 片づけ：このパッケージが作ったハーネスの出力はビルドの b141086 だけ（json、trees/b141086、npm-build-b141086）。R-P5 の d5b3e42 のビルドは R5 の記録が参照するので消していない。probe・dump・スナップショットは作っていない。スクラッチの `$T/r6/before`（b80ab95e の frontend/src と frontend/contracts、6 MB）と束は、指揮者の確認のために残した。
