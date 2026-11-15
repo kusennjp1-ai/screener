@@ -419,3 +419,139 @@ D3 のコミットは d8457cfb（pre-D3）の上の3つ：b306c6de（feat：作�
 - P4 の admission は `q4EpsReference` を任意・厳密なキーとして受け、無いレコードは今と同じに扱うこと（上の規則 18）。
 - CONTEXT.md：「独自計算・参考 Q4 EPS」（方法の名前 `q4-ni-over-q4-diluted-shares-v1`、判定に使わない）を載せる。
 - I6/I7 で読むもの：公開の実行の `SEC q4 reference accuracy <date>` の行（と `--sec-evidence` の行の `q4_reference`）。run id と JST の時刻を添える。
+
+## D3（分離可能）の UI 側：任意キーの admission、参考の表示、判定に使わないことの証明（P4）
+
+P3 の作る側（出力は止めたまま）に続く、受け取る側と見せる側。出力のスイッチ（`Q4_EPS_REFERENCE_EMIT`）は**オフのまま**で、既定の fixture・公開のレコードにこのキーを持つものは無い。参考値は**判定・点数・絞り込み・並べ替えのどれにも使わない**（OD1、既定は使わない）。
+
+### 変更
+
+- **admission**（`bookFinancialAdmission.js`）
+  - `OPTIONAL_RECORD_KEYS` に `q4EpsReference`。available・partial のレコードだけ（unavailable のレコードの `UNAVAILABLE_KEYS` には入れていないので、そこに付いていれば `keys` で拒む）。
+  - 作る側と同じ定数を出す：`SEC_Q4_REFERENCE_METHOD = 'q4-ni-over-q4-diluted-shares-v1'`、`SEC_Q4_REFERENCE_TAGS = { numerator: [3タグ], shares: ['WeightedAverageNumberOfDilutedSharesOutstanding'] }`、`SEC_Q4_REFERENCE_MAX = 4`（test_sec_financials.py が Python 側と照合する）。
+  - `q4ReferenceEntryValid(entry, asOfDate)`（カードの読み手と共有）：キーは end・start・value・method・numerator・shares だけ。日付は正しい日、start ≤ end ≤ asOfDate、期間は両端を含めて 70〜105 日（safeSeries・Python の `_days` と同じ数え方）、value は有限の数、method が一致、numerator・shares はキーが tag・components だけで、tag は上の一覧の中、components はちょうど4つの空でない文字列。
+  - リスト：1〜4 件、end が厳密に増える、どの end も quarterly.eps の点の end と一致しない（報告された EPS を参考値で覆わない）。
+  - どれかに外れればレコード全体を**既存の理由 `keys`** で拒む。`SEC_REFUSAL_REASONS`・`REFUSAL_TEXT` は変えていない。キーの検査は既存の検査の**後**（limitations の後）に置いたので、キーのあるレコードでも既存の理由（`series:eps` など）が先に名指しされ、quarterly.eps は検査済みの系列として読める。キーの無いレコードは今までとまったく同じ（基準の 66 件のテストが新しい admission の上でそのまま通る、実測）。
+  - `admitPoint`（quarterly.eps に算出した EPS が入れば `series:eps`）と bookFinancialEvidence の `safeSeries`（同じく拒む）は**変えていない**。テストで確かめただけ。
+- **読み手**（`fundamentalsExplain.js`）
+  - `q4EpsReference(record, report)` → `[]` か `[{ end, value, yoy, yoyBase: 'reported' | 'reference' | null }]`（古い順）。表示のためだけ。
+    - ブラウザーは admission を走らせない（admission はツールの中だけ：export-research.mjs・financial-correction-overlay.mjs・report-data-coverage.mjs）。だから自分で厳しく確かめ、形の崩れたものは無いものとして扱う。
+    - リストの形（配列、1〜4 件、end が文字列の日付で厳密に増える）が崩れていれば全体が無い。
+    - 1件ずつ：`q4ReferenceEntryValid` に外れる、quarterly.eps に書かれた四半期で終わる、カードの窓（`report.rows.slice(-8)`）の `fiscalQ4: true` かつ `eps === null` の行でない、のどれかなら落とす。
+    - 前年比は bookFinancialEvidence の `yoyDetail` をそのまま使う（基準の規則を二つ目に書かない）。系列は、報告された EPS の点と、見せる参考値を点の形にしたもの（同じ end なら報告が勝つ）。`yoyDetail` が理由（前年同期なし・赤字やゼロの前年同期・期間の不一致など）を返せば `yoy` は null、`yoyBase` も null。
+    - 報告された EPS は、bookFinancialEvidence がその系列を丸ごと拒んだ（`refusedSeries` に eps）ときは使わない（安全でない基準から率を作らない）。safeSeries は全部か無しかなので、拒まれていなければ生の quarterly.eps が検査済みの系列そのもの。
+    - 参考値の基準になるのは、見せる参考値だけ（窓の外の参考値は基準にしない）。
+  - `secStatus` の `make('ok', …)` に、リストが空でないときだけ `q4Reference` を足す。キーの無いレコード（と、全部が落ちたレコード）の secStatus の結果は今と deep-equal。
+  - 行の文：`q4ReferenceLine(reference)` → 見せる中で一番新しい四半期について「参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.80（純利益÷希薄化株数）→ 前年比 +71%（前年同期も参考値）」。率が無ければ「→ 前年比 …」を付けない（+0% と書かない）。基準が参考値なら「（前年同期も参考値）」。率は `growth`（`wholePercent` の後 `signed`）なので 0.3% は ±0%、負の数は U+2212（`fixedMinus` と `signed`）。
+  - 棒の title：`q4ReferenceTitle(entry)` →「参考（独自計算）Q4 EPS ≈ 1.80 → 前年比 +71%（前年同期も参考値）」。カードは「2026-06期 EPS 前年比：Q4のEPSは年次報告のみ・」の後ろに付ける。
+  - デスクトップの凡例：`Q4_REFERENCE_LEGEND = '太い破線＝参考（独自計算・判定に使わない）'`。
+- **カード**（`StockFundamentalsCard.jsx`、`brief-fundamentals.css`）：`financial.sec.q4Reference` を読む（`sec.state === 'ok'` で配列のときだけ、窓の行にある end だけ）。
+  - (a) Code 33 の箱（と3条件）の下に1行、`p.brief-note.brief-fin-reference`。カードの上で、どの幅でも折りたたみの中に入れない。
+  - (b) 棒：参考値のある四半期の EPS の棒は、同じ大きさ・同じ位置の灰色の `q-unknown` の rect のまま、`is-reference` の class で**太く濃い破線**（`stroke: var(--text-2); stroke-width: 2px; stroke-dasharray: 4 2`）。title は上のとおり。
+  - (b) 軸：率があれば EPS のセルに既存の4文字の `growthShort` の形で書き（例「+71」、赤字の参考値は「赤字」）、灰色の破線のセル（`q-eps-t is-reference`、`outline: 1px dashed`、`outline-offset: -1px`、角は 4px のトークン）。EPS の色にはしない。率が無ければ「—」のまま（`is-unknown`）。outline なのでセルの大きさは変わらない。
+  - (b) 1024px 以上の凡例に「太い破線＝参考（独自計算・判定に使わない）」（見本は同じ破線の四角）。スマホの凡例は4項目のまま（行の文が「参考」を言う）。
+  - (c) 棒の尺度（`known`、up・down・span）は行の `epsYoY`・`salesYoY` だけから作るので参考値を含まない。その四半期は「値なしの理由」に元の理由（「Q4のEPSは年次報告のみ」）で残る。タイル・品質のチップ・Code33Parts・Code 33 の箱の題・文・色・settledText・出典の行は変えていない。Code 33 は 未確認 のまま。
+  - 参考値が無い（または全部落ちた）ときは、何も足さない：空の要素も、class の文字列も増えない（DOM が同じ、下のテストと dump）。
+- **変えていないもの**：quarterly.eps の扱い、`chipQuarter`、`epsFloor`、`earningsChipView`、`earningsCaution`、`secRowChip`、`code33ChipView`、`buildSecSummary`・`secSummary` の出力、`code33Explain`。UI に新しいしきい値は無い（10% 帯・2% 照合などは作る側の 独自設定、P3）。
+
+### 計画の修正（指揮者の指示どおり、コードに合わせた）
+
+- 計画の「admitPoint と safeSeries は算出の EPS を拒む（bookFinancialAdmission.js:49）」：admitPoint は bookFinancialAdmission.js、safeSeries は bookFinancialEvidence.js（DATA のものではない）。どちらも算出の EPS の点をすでに拒むので、規則は変えずにテストで確かめた。
+- admission はツールの中でしか走らず、ブラウザーは呼ばない。だから表示の関数が自分で厳しく確かめ、崩れたものは無いものとして扱う。
+- カードが受け取るのは `financial = { report, sec, history, historyRetrievedAt, code33 }`（useBriefData.js で作る、DATA のものではない）だけで、`report` は生のレコードを持たない。生のレコードに届く DATA の道は `secStatus(row, book, …)` だけ（`row.book_financials` を受け取る）。だから参考値は secStatus の 'ok' の結果に乗せた。
+- 計画の軸の文「参考 +45」は軸のセルに入らない（320px のスマホで 12px の4文字、spec はどのセルも切れないことを確かめている）。上の形（率だけを灰色の破線のセルに、「参考」は行の文とデスクトップの凡例が言う）にした。
+
+### 規則 18
+
+- このコミットの admission がキーを受け、このコミットの UI が読む。出力は**オフのまま**。
+- これより前のコミットから作ったツール（export-research.mjs・financial-correction-overlay.mjs・集計レポートの admission）は、このキーのあるレコードを丸ごと拒む（`keys`）。だから出力のスイッチは後の別の変更（OD1）で、この UI が Pages で動いていることを読み取りだけで確かめてから。
+- 警告コード・索引の項目・`sec_summary` の項目は足していない。secStatus の結果の `q4Reference` は画面の中だけのもので、公開されるファイルには書かれない（buildSecSummary は `sec.state` しか書かない、テストで確かめた）。
+
+### 判定に使わないことの証明（テスト、キーのある記録と無い記録を toEqual で比べる）
+
+`fundamentalsExplain.test.js`「never counted」（ZZQF と同じ形の記録をテストの中で作る。その記録は admission を通ることも確かめる）：
+
+- `quarterly` そのものが同じ（参考値は quarterly.eps に入らない）。
+- `bookFinancialEvidence`：報告全体と、rows（eps・epsYoY・epsYoYReason を含む）・epsFloor・epsAcceleration・salesAcceleration・marginImprovement・code33・settled・consecutive・stale・annualRecord。`bookFinancialCurrent` 全体。
+- `chipQuarter`（eps・epsYoY・salesYoY）。
+- `code33Layered`、`code33Explain`（カードの interim の有無とも）、`code33Parts`。
+- `earningsChipView`、`earningsCaution`、`code33ChipView`。
+- `fundamentalTiles`、`fundamentalsSource`。
+- `buildSecSummary`（索引の要約。行のチップ・EPS の絞り込み・並べ替えはこれを読む）と、その JSON に reference・q4Eps・参考 の文字が無いこと。`secRowChip`、`secSummaryCurrent`。
+- `secStatus`：`q4Reference` を除けば同じ。キーの無い記録の結果には `q4Reference` が無い。全部が落ちる記録（method 違い）の結果は、キーの無い記録と同じ。180 日を過ぎた記録（古い）には付かない。
+
+`StockFundamentalsCard.test.jsx`：タイル・品質のチップ・Code 33 の箱と3条件・出典・値なしの理由・四半期表の文字がキーの有無で同じ（両方の幅）。棒と基準線の座標が同じ。StockView の画面のチップ（結論の業績チップとカードの品質チップ）が両方の幅で同じ。参考値が無い・崩れている（method 違い、順序違い、空、報告のある四半期だけ）ときのカードの outerHTML が、キーの無い記録とバイト単位で同じ。
+
+`brief-fundamentals.spec.js`（実ブラウザー）：画面のチップすべて、タイル、値なしの理由とその件数、Code 33 の箱、出典、棒の rect の座標と大きさがキーの有無で同じ。
+
+### テスト
+
+- `bookFinancialAdmission.test.js`：66 → 96（新しい 30）。定数と理由の一覧が変わらないこと、正しいリストは同じオブジェクトで受ける（3つの分子タグ、負の値、4件、partial）、キーの無い記録は今までどおり、`keys` で拒む 25 の形（余分・欠けたキー、`__proto__`、method、分子・株数のタグ、shares の余分なキー、components 3・5・空、NaN・Infinity・文字列の値、asOfDate の後の end、start > end、105 日超・70 日未満、存在しない日、順序、同じ end、報告のある四半期、5件、空、オブジェクトでないエントリー）、配列でないもの5つ、unavailable の5つの理由すべて、既存の理由が先に出る（`series:eps`・`symbol`・`keys`）、算出の EPS は（キーがあっても）`series:eps`、`q4ReferenceEntryValid` の境界（70・105 日は可、69・106 日は不可）。
+- `fundamentalsExplain.test.js`：27 → 33（新しい 6）。上の証明、secStatus に付くとき・付かないとき、率（報告の基準・参考の基準・赤字・ゼロ・基準なし・期間の不一致・負の参考値・拒まれた EPS の系列）、落とすもの（崩れたエントリー6種のそれぞれと残るもの、報告のある四半期、窓の外、fiscal Q4 でない行）、リストの形（空・null・{}・逆順・重複・5件・null のエントリー）、別の日の記録、無効な報告、null の記録。行の文と title の文（U+2212、±0%、率なしで尾なし、基準なしで尾なし、ASCII のマイナスが無い）。
+- `StockFundamentalsCard.test.jsx`：21 → 26（新しい 5）。上の証明、行が1回・折りたたみの外・Code 33 の箱の後、棒の class と title、軸のセル（+71 は is-reference、率の無い 2025-06 は — のまま）、凡例、赤字の参考値、率の無い参考値。
+- `test_sec_financials.py`：54 → 56（新しい 2、`Q4EpsReferenceBrowserAdmission`）。method・タグ・上限が bookFinancialAdmission.js の定数と一致。出力を（テストの中で）オンにして P3 のコードで作ったレコード（2022〜2025 の4件）が node の admission を通り、出力オフのレコードも通り、method 違い・報告のある四半期・5件は拒まれる（既存の `ADMIT_SCRIPT` を使う）。
+- `brief-fundamentals.spec.js`：4 件（320×640・375×812・390×844・1440×900、reduced motion、`chartSettled`）。ZZQF に `{ oracles: true, mutate: { details } }` で 2025-06-30 と 2026-06-30 の参考値を足す（fixture は凍結のまま）。キーの無い画面・ある画面・method 違いの画面を同じ context の3つのページで開いて比べる：行が見える・閉じた折りたたみの外・Code 33 の箱の後・文は producer の出力、チップ・タイル・値なしの理由とその件数（スマホの見出しの「N件」）・Code 33（未確認）・出典・rect の座標が同じ、軸で変わるのは 2026-06 の EPS のセル（— → +71）だけでその色は「—」のセルと同じ灰色・EPS の色ではない・outline は dashed、参考の棒の破線と太さは値なしの棒と違う、デスクトップの凡例・スマホの凡例、横はみ出し 0、切れたセル 0（`cutCells`・`wider`）、375 で 3388 以内、method 違いは何も無い画面と同じ。高さはログに出す。
+
+### 実測（このサンドボックス、CI と同じ設定：Chrome for Testing 147 headless shell、CI のフォント、ポート 4422）
+
+測った木は **2acdaaf4**（この節の docs のコミットの直前）。この docs のコミットは文書しか変えない。
+
+- **A**：`cd $W/frontend && npx vitest run src/static/bookFinancialAdmission.test.js src/static/fundamentalsExplain.test.js src/static/brief/StockFundamentalsCard.test.jsx` → 3 files、**155 passed**（96＋33＋26。P4 の前は 66＋27＋21）。`cd $W/frontend/tools && python3 -m unittest test_sec_financials` → **Ran 56 tests … OK**（P3 の後は 54）。P4 の前の admission のテスト（0d8d668c の bookFinancialAdmission.test.js）を新しい admission の上で走らせても 66 passed（スクラッチにコピーして実行、コミットしない）。
+- **B**：コミットの後に `cd $W/frontend && AUDIT_PORT=4422 npx playwright test -c $S/audit3/r3-data/pw-147.config.mjs` → **456 件：454 passed・2 skipped**（20.3 分、**再実行なし**）。456 ＝ STEP 0 の 448 ＋ D4 の 4 ＋ D3 の 4。skip の2つは brief-oracles.spec.js の `test.fixme('R1: …')` と `test.fixme('R2: …')`（触っていない。`git diff 45603f06 -- frontend/tests/static/brief-oracles.spec.js frontend/tests/static/brief-fixture.js` は空）。brief-oracles の有効なアサーションはすべて通った。負荷（advisory）：前 1.19 2.68 3.79 / 後 6.56 5.24 4.57。
+  - その前に D3 の4件だけ：`AUDIT_MATCH='brief-fundamentals' … -g 'round-3 D3'` → 4 passed（30.2 s、再実行なし）。
+- **C（dump）**：`$H/dump/run-dump.sh $W 4422` → `dump-2acdaaf.json`、42 画面・エラー 0、sha256 **996e122d…8982**。`cmp dump-2acdaaf.json dump-9efa992.json` → **バイト単位で同じ**（P2 で測った木 9efa9927 の dump。d8457cfb はそれと docs だけが違う）。既定の fixture にこのキーを持つ記録は無いので、D3 は何も変えない。
+- **D（規則 16）**：`git -C $W diff --name-only 45603f06...HEAD` → docs/round3/data.md、bookFinancialAdmission.js (+test)、StockFundamentalsCard.jsx (+test)、brief-fundamentals.css、fundamentalsExplain.js (+test)、brief-fundamentals.spec.js、report-data-coverage.mjs (+test)、sec-financials.py、test_sec_financials.py。チャートのファイルは無い。492 画面のプローブは不要で、走らせていない。
+- **E**：`npx vitest run`（全体）→ 247 files、4039 件のうち 4038 passed、1 件が時間切れ（`tools/export-market-trends.test.mjs` の「writes raw and derived data with exact content hashes …」、20 s。DATA は触っていない、負荷 9.46 のとき）。そのファイルだけを1回走らせ直して **37 passed**（31 s、負荷 9.23 → 7.49）。全体の数：P2 の 3997 ＋ P3 の 1 ＋ P4 の 41 ＝ 4039。負荷（advisory）：前 4.25 4.76 4.48 / 後 9.46 7.86 5.94。`npx eslint`（触った 7 ファイル）→ 0 errors。
+- **F（入口チャンク）**：`$H/build/run-build.sh $W` → `build-2acdaaf.json`。`npm run build` の入口 377.02 kB・gzip **131.82 kB**。
+  - **D3 の差**：P2 の 130.52 kB（9efa9927）から **+1.30 kB**（P3 はツールだけで入口に入らないので、全部 P4 の UI。admission の定数と検査、読み手、行の文、カード）。
+  - **DATA の D4 までの差**（P2）：STEP 0 の 130.28 から +0.24。DATA 全体（D2〜D3）：+1.54。線 134.00 まで **2.18 kB**。Design Acceptance の build（vite）の入口は gzip 131.62 kB（9efa992 の 130.31 から +1.31）。
+  - 中身の確認：入口に `q4-ni-over-q4-diluted-shares-v1`、分子・株数のタグ、`太い破線`、`参考（独自計算）`、`brief-fin-reference`、`is-reference` が入り、それ以外の新しいものは無い（スクラッチで grep）。
+- **G**：`python3 -I $S/audit3/check-ownership.py DATA $W 45603f06…` → コミットの前ごとに `OWNERSHIP OK (DATA): 13 paths`。
+- **H**：古い r3-data の HEAD（9efa992）の大きな出力を消した：`snapshot/trees/9efa992`（39M）、`build/npm-build-9efa992`（19M）、`dump/raw/dump-9efa992`（と log）、`dump/dump-9efa992.json`（と sha256。dump-2acdaaf.json とバイト単位で同じなので失うものは無い）。`build/build-9efa992.json` と3つの build の log は P2 の数の記録として残した（数 kB）。8849bf9・c61bf96 と他トラックの出力には触っていない。
+
+**画面の高さ**（スクラッチの `audit3/r3-data/d3-measure/measure.spec.js`。D4 の measure.spec.js をそのまま写し、ZZQF に参考値を足した版を加えたもの。STEP 0 の oracle-heights と同じ測り方：`#brief-main .brief-stack` の下端、reduced motion、有限のアニメーションを待ち、1.5 秒の DOM の静止、deviceScaleFactor 2）。キーの無い画面は D4 の数をそのまま再現した。
+
+| 画面 | 320×640 | 375×812 | 390×844 | 1440×900 |
+|---|---|---|---|---|
+| ZZQF（D4 → 参考値あり） | 3207 → 3277（+70） | 3000 → 3069（+69、線 3388） | 3000 → 3069（+69） | 1832 → 1832 |
+| ZZQF のカード | 677.4 → 746.6 | 622 → 691.2 | 622 → 691.2 | 846.8 → 920 |
+| ZZNV（既定の行、キーなし） | 3308 → 3308 | 3044 → 3044 | 2954 → 2954 | 1832 → 1832 |
+
+- スマホの +69〜70 は行の文が3行（12px・行の高さ 1.7）とカードの間隔。1440 はカードが +73.2（行の文が2行と凡例の項目の1行）だが、画面の下端は変わらない（その幅では業績のカードが一番長い列ではない）。
+- spec（brief-fundamentals.spec.js の D3 の4件）が出すログ：320 3207 → 3277、375 3000 → 3069、390 3000 → 3069、1440 1837 → 1837（spec の 1440 は VIEWPORTS.desktop で deviceScaleFactor 1 なので、上の表の 1832 と測り方が違う）。カードは表と同じ。
+- 見た目（スクラッチのスクリーンショット `audit3/r3-data/d3-measure/card-375.png`・`card-1440.png`、コミットしない）：参考の棒は値なしの棒より太く濃い破線、軸の「+71」は灰色の破線の枠、1440 の凡例の3行目に「太い破線＝参考（独自計算・判定に使わない）」、行の文は Code 33 の3条件の下。
+
+### 指示からの逸脱
+
+1. **凡例の言葉は「太い破線＝参考（独自計算・判定に使わない）」**（指示は「破線＝…」）。brief.css（DATA のものではない）が `.q-unknown` をもともと細い破線（`stroke-dasharray: 3 3`）で描くので、「破線＝参考」ではすべての値なしの棒を参考と呼ぶことになる。参考の棒は `is-reference` で太く濃い破線（`--text-2`、2px、`4 2`）にして区別し、凡例の見本も同じ破線にした。
+2. **崩れたものの扱い**：リストの形（配列でない・0 件や 5 件以上・end の順序や重複・end が日付でない）はリスト全体を無いものとし、1件ずつの崩れはその件だけを落とす。だから Playwright の「崩れた参考値は無いものと同じ」はすべての件を崩して（method 違い）確かめた。参考値の前年同期の基準になるのは、見せる参考値だけ（窓の外の参考値は基準にしない）。
+3. **赤字の参考値**：軸のセルは `growthShort` の既存の規則（その四半期の EPS が負なら「赤字」）を参考の EPS に当てて「赤字」。行の文は率をそのまま U+2212 で書く（例「→ 前年比 −124%」）。
+4. **棒の title**：「2026-06期 EPS 前年比：Q4のEPSは年次報告のみ・参考（独自計算）Q4 EPS ≈ 1.80 → 前年比 +71%（前年同期も参考値）」（値なしの理由の後に参考値。producer は `q4ReferenceTitle`）。
+5. **行の位置**：Code 33 の箱の後、3条件（Code33Parts）の後。箱と3条件は一つのまとまりなので、その下に置いた。
+6. **Python の照合**：567 行付近の `ADMIT_SCRIPT` をそのまま使い、テストはファイルの最後に新しいクラス `Q4EpsReferenceBrowserAdmission` として足した。
+7. **入口チャンクが D4 より大きく増えた**（+1.30 kB）。日本語の文（行・凡例・title）と分子のタグの長い文字列が主。線までは 2.18 kB 残る。
+
+### 未検証
+
+- 実際の銘柄での表示（このキーを持つ公開の記録はまだ無い。出力はオフ）。実データの精度（P3 の未検証と同じ）。公開版（Pages）での効果と表示。
+- ライトモードでの参考の棒と軸のセルの見え方（スクリーンショットはダークだけ）。axe（brief-accessibility）は既定の画面で通ったが、参考値のある ZZQF の画面では走らせていない。軸は `aria-hidden` で、参考値は SVG の title と行の文で読まれる（スクリーンリーダーでは確かめていない）。
+- 時間の計測はしていない（チャートのコードは触っていない）。ここの負荷の数はすべて advisory。CI の Design Acceptance は走らせていない。
+
+### D3 のコミット（古い順。統合で D3 を外すときは新しい順に戻せば pre-D3 の d8457cfb に戻る）
+
+1. b306c6de feat(frontend): compute a reference fiscal-Q4 EPS in the SEC producer with emission off（P3）
+2. 19135046 test(frontend): check that the SEC evidence line prints coverage.q4_reference（P3）
+3. 60180dd5 docs(round3): record D3 producer（P3）
+4. 0d8d668c docs(round3): note D3's unwindowed refusals and the 2% check on small EPS（P3）
+5. 07bcd93d feat(frontend): admit and show the reference fiscal-Q4 EPS without counting it（P4）
+6. c770fd31 test(frontend): prove the reference fiscal-Q4 EPS is strict, shown and never counted（P4）
+7. 2acdaaf4 test(frontend): check the reference fiscal-Q4 EPS on ZZQF at 320, 375, 390 and 1440（P4）
+8. この docs(round3) のコミット（P4、この節だけ）
+
+`git diff d8457cfb..HEAD --name-only` は D3 の 12 ファイル（上の D の一覧の 13 から report-data-coverage.mjs を除いたもの。report-data-coverage.test.mjs は P3 が末尾に足した describe だけ）。D3 を外しても D2・D4 は触らない。
+
+### 統合・オーナーへの依頼
+
+- **OD1**：出力のスイッチ（`Q4_EPS_REFERENCE_EMIT = True`）は後の別の変更で、次の両方の後に限る：(a) この UI（admission の任意キーと表示）が Pages で動いていることを読み取りだけで確かめた、(b) オーナーが公開の実行の精度の行（`SEC q4 reference accuracy <date>`）を見た。数えるかどうか（判定・点数に使うか）も OD1 で、既定は使わない。
+- **CONTEXT.md の言葉**：「参考 Q4 EPS」（独自計算・参考の fiscal Q4 EPS、方法 `q4-ni-over-q4-diluted-shares-v1`、純利益÷希薄化株数）と「独自計算・判定に使わない」（どの判定・点数・絞り込み・並べ替えにも入らない値の言い方）。
+- **任意**：参考値を secStatus の結果に乗せる代わりに、useBriefData.js（DATA のものではない）で `financial.q4Reference = q4EpsReference(row.book_financials, report)` として作ってもよい。そのときはカードの読む場所（`financial.sec.q4Reference`）と secStatus の `q4Reference` を一緒に変え、「secStatus は 'ok' の q4Reference を除いて同じ」のテストを「secStatus はキーの有無で同じ」に直す。
