@@ -759,6 +759,13 @@ def _selected_candidate(
     pivot_price: float | None,
     pivot_date: object,
 ) -> Mapping[str, object] | None:
+    """The first candidate with the primary's pattern, pivot price and pivot date.
+
+    The aggregator does not publish which candidate it selected, and several candidates can
+    share all three (cups with different left lips and the same handle), so this is the first
+    of them in the payload's order, not necessarily the selected one. Its timeframe is the
+    pattern's own either way; only ``pivot_below_base_high``'s base start can differ.
+    """
     if not pattern:
         return None
     return next(
@@ -789,8 +796,9 @@ def setup_diagnostics(
     - ``pivot_already_crossed``: a close more than PIVOT_ALREADY_CROSSED_PCT above the pivot on
       a bar after the pivot's own bar (``pivot_bar_index``, the brief's pivotBar rule).
     - ``pivot_below_base_high``: the pivot more than PIVOT_BELOW_BASE_HIGH_PCT under the
-      highest high from the selected primary candidate's base start (a cup's left lip, else
-      its start date) to the pivot's own bar.
+      highest high from the base start (a cup's left lip, else its start date) of the first
+      candidate matching the primary's pattern, pivot price and pivot date
+      (``_selected_candidate``) to the pivot's own bar.
     """
     bars = daily_bars_from_frame(price_frame)
     if bars is None or not len(bars):
