@@ -377,3 +377,183 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 - **C5 needs a decision** (options 1–3 in the C5 section above). Nothing outside CHART's files has been changed for it. Option 2 would need a change to `briefCandidate.js`, which is outside CHART's list.
 - **No integration request for C3.** No file outside CHART's list needs a change. No test outside CHART's files reads the low's text.
 - **The H5 oracle baselines** shift by the 20 views above (320 ZZRL/ZZRW, 375 ZZRL/ZZRW 週足; card text only). The default probe does not shift.
+
+## C4 (package CH-3): the Setup Engine pivot's own day and the quiet days on the VCP card
+
+**Commits**
+- 08bebfc7 `feat(frontend): name the Setup Engine pivot's own day and quiet days on the VCP card`: the code and tests.
+- ff4349b2 `test(frontend): assert the VCP card's pivot-day and quiet-day lines through their producers`: tests only.
+  - The render tests, the oracle tests and the spec no longer retype 「ピボット $…＝…の高値（SE）」 or 「静かな日 N/10日（SE）」. They compare with the producers, or check only the parts each case is about.
+  - The producers' own unit tests keep one pin of each form, as `structuralLowLegend`'s does.
+- Source files: `git diff --name-only 503102fd..HEAD -- frontend/src ':!*.test.*'` lists only `StockVcpCard.jsx` and `brief-chart.css`.
+- `priceChart.js`, `chartLabels.js`, `PriceChart.jsx` and `StockChartCard.jsx` are untouched, so the SVG and the chart card are unchanged.
+- pivotBar.js, briefCandidate.js, StockView.jsx, brief-fixture.js and brief-oracles.spec.js are untouched.
+
+### What changed (StockVcpCard.jsx)
+
+**`pivotDayNote({ view, row, judged, date })`** returns a string or null.
+- **No line (null)** unless all three hold:
+  - `view.pivot` is finite;
+  - `row.se_pivot_price` is finite and equals `view.pivot` in whole cents, so a vcp_pivot fallback or another price shows nothing;
+  - the recalculation is current: `setup_recalculation.status === 'calculated'` and `as_of_date === date`.
+- That test is now one function, `setupCurrent`, shared with `engineBase`. engineBase's behaviour is unchanged.
+- **The dated line:** the bar is `pivotBar(judged, row)` (H1) on the certified bars, and null when `judged` is null. The line reads 「ピボット $48.50＝9/22の高値（SE）」, with the card's own `money` and `shortDate` (M/D; the year only when it is not the analysis date's year).
+  - It adds 「（週足の型）」 when `PIVOT_TIMEFRAMES[se_pattern_primary] === 'weekly'`, read through `Object.hasOwn`.
+- **No bar** gives 「ピボットの日 未確認」 (`PIVOT_DAY_UNKNOWN`). The cases: no `se_pivot_date`, a pattern outside the table, no bar whose high is the pivot in cents, or bars not certified.
+  - `se_pivot_date` itself is never printed, and nothing is guessed.
+- **Where it shows:** a `<p className="brief-note brief-vcp-pivotday">` directly under the 「Setup Engine：土台…」 note.
+  - 「（週足の型）」 is its own inline-block span, so a wrap at 320 moves it whole.
+  - Nothing renders while `pending` is true: the detail that carries the date has not arrived, which is loading, not 未確認.
+
+**`quietDaysText(row, date)`**
+- It returns 「静かな日 N/10日（SE）」 only when the recalculation is current (the same test) and `se_quiet_days_10d` is an integer from 0 to 10.
+- A real 0 prints 0/10. A missing, fractional, out-of-range or string value prints nothing: absent, never 0.
+- `QUIET_DAYS_WINDOW = 10` is the field's own window (backend/app/analysis/patterns/readiness.py `quiet_days_window=10`, field `quiet_days_10d`). It is not a threshold of the brief's.
+- **Where it shows:** a second `<small className="brief-vcp-quiet">` in the 「当日の出来高」 dd, on its own line (CSS `display: block`). It also shows when the day's volume ratio is 未確認.
+- **Its title** (`QUIET_DAYS_TITLE`) is worded from what readiness.py computes:
+  - the title: 「直近10営業日のうち、出来高がその日までの50日平均の0.8倍未満で、かつ真の値幅がその日の14日ATR未満だった日の数（Setup Engineの計算）」;
+  - the code: `quiet_day_mask = volume < volume_sma(50) × 0.8 & true_range_pct < atr14_pct`, summed over the last 10 bars.
+  - Checked: no caller overrides the defaults. `SetupEngineScanner` (setup_engine_screener.py:240) calls `compute_breakout_readiness_features(price_data, pivot_price=…, benchmark_close=…)`, and `frontend/tools/recalculate-setups.py` runs that scanner.
+- **No in-plot or axis mark.**
+
+**brief-chart.css:** two rules, scoped to the new elements (`.brief-vcp-pivotday .brief-vcp-weekly`, `.brief-dl dd small.brief-vcp-quiet`).
+
+**Corrections to the plan, as ordered:**
+- ZZHB's line names **9/22**, the Tuesday whose high is the pivot. 9/25 is the Friday label, and 9/28 is the crossing day of the verdict's 「9/28に上抜け・4営業日前」, which this line does not repeat.
+- Every stock whose screen pivot is a current Setup Engine pivot with no matching bar gains 「ピボットの日 未確認」, default fixture stocks included. The default rows carry no `se_pivot_date`. See the dump below.
+
+### Gate
+
+- **Rule 16 (the 492-view probe) does not list StockVcpCard.jsx, so no probe was run.** CH-4 proves the chart card byte-identical. The chart card's height is unchanged in all 36 measured oracle views below.
+- **Copy through its producer:** the spec and the oracle tests evaluate `pivotDayNote`/`quietDaysText` on the fixture's rows and bars. The spec takes the screen's pivot from `candidateView`, as the frozen brief-oracles.spec.js `viewOf` does.
+
+### Acceptance on the rebuild (実測, no browser; rebuild counts, never the publication's)
+
+- **Command:** `node audit3/r3-chart/c4-rebuild/c4-rebuild.mjs <SNAP bundle> <vcp bundle> $H/snapshot/out/c61bf96 <STEP 0 h1-check.json> <out>`.
+  - The VCP producers are esbuild-bundled (jsx loader) from the worktree's StockVcpCard.jsx, at the source of 08bebfc7, which is HEAD's.
+  - The screen's view comes from `rankCandidates` → `candidateView`, and the bars from `certifyBars` on serve/charts, as the stock screen takes them.
+  - The cross-check is STEP 0's h1-check (pivotBar on ready43's own fields).
+  - Output: `audit3/r3-chart/c4-rebuild/c4-rebuild-08bebfc.{json,log}`.
+- **The 30 CI-bar ready rows:**
+  - 30/30 show a dated line, and the date equals H1's bar in all 30.
+  - In all 30, the dated bar's high equals the pivot in cents. **0 are 未確認.**
+  - SWKS reads 「ピボット $89.88＝9/28の高値（SE）（週足の型）」 (9/28, not the label 10/2).
+  - Weekly patterns: 24/24 carry 「（週足の型）」. The 6 nr7_inside_day rows carry none.
+  - 「静かな日 N/10日（SE）」: 30/30, with N from 1 to 9.
+- **All 37 ready rows:** 「静かな日 N/10日（SE）」 shows for **37/37**.
+- **The 7 bundle-envelope-proxy rows** show the line in all 7.
+  - BB is certified and dated: 10/12, with 「（週足の型）」.
+  - The 6 uncertified rows read 「ピボットの日 未確認」, because their bars are not certified: EMR, EQH, IQV, GEO, BHB, DSGR. STEP 0's H1 check found a bar for each on its own bars, so this is the certification rule, not a missing pivot bar.
+- **No CI-bar row differs from the expectation.**
+
+### Heights (実測, CI-faithful, 4424, oracles: true, reduced motion, settled)
+
+- **Command:** a scratch spec `audit3/r3-chart/measure/c4-heights.spec.js`, measuring as STEP 0's oracle heights do (content = the bottom of `#brief-main .brief-stack`).
+- **Before:** at 503102f, CH-2's head, without C4. These equal STEP 0's §4 table exactly.
+- **After:** at 08bebfc7, the same source as HEAD.
+- Load: before not recorded; after 3.65 → 5.22.
+
+| Stock screen content | 320 | 375 | 390 |
+|---|---|---|---|
+| ZZNV | 3308 → 3338 (+30) | 3044 → 3075 (+31) | 2954 → 2985 (+31) |
+| ZZHB | 2476 → 2527 (+51) | 2348 → 2379 (+31) | 2330 → 2361 (+31) |
+| ZZRD | 2621 → 2686 (+65) | 2496 → 2543 (+47) | 2496 → 2543 (+47) |
+
+| VCP card | 320 | 375 | 390 | 1440 |
+|---|---|---|---|---|
+| ZZNV (未確認) | 459.9 → 490.3 | 422.1 → 452.5 | 422.1 → 452.5 | 434.7 → 467.1 |
+| ZZHB (9/22, weekly) | 349.5 → 400.3 | 311.7 → 342.1 | 311.7 → 342.1 | 252.3 → 284.7 |
+| ZZRD (未確認 + 静かな日 2) | 490.3 → 555.5 | 452.5 → 500.3 | 452.5 → 500.3 | 467.1 → 517.5 |
+
+- **Why the heights grow:**
+  - The pivot line adds one 12px note line, about +30px.
+  - At 320, ZZHB's line wraps once: 「（週足の型）」 moves whole to the second line.
+  - ZZRD adds the quiet-days line: +17px at 375/390. At 320 「（SE）」 wraps under 「静かな日 2/10日」 in the half-width dd, as 「上抜けの目安 1.40×以上」 already does. That is the +65 at 320.
+- **1440:** the stock screen's content and page heights are unchanged (1832/1864); the card grows inside the scrolling pane.
+- **Other oracle stocks:** +30 or +31 at 375. The largest at 375 is ZZNV, 3075, under brief-phone.spec.js's 3388 line.
+- **Every view:** horizontal overflow 0, no page errors, chart card height unchanged.
+- Screenshots of the VCP card for ZZRD, ZZHB and ZZNV at 320/375/1440: `audit3/r3-chart/measure/shots-ff4349b/`.
+
+### The dump (実測, `$H/dump/run-dump.sh <worktree> 4424` → `dump-ff4349b.json`; load 1.37 → 1.18)
+
+- **Compared with dump-8849bf9:** `python3 -I audit3/r3-chart/dump-compare.py dump-8849bf9.json dump-ff4349b.json` → `audit3/r3-chart/dump-compare-8849bf9-ff4349b.txt`.
+- **18 screens are identical:** every 375 list, watch, Today and market screen, and 1440 market.
+- **24 differ**, and in each the only text added by C4 is 「ピボットの日 未確認」 (the default rows have no `se_pivot_date`):
+  - the 6 stock screens at 375 and the 6 at 1440;
+  - 1440's 4 lists × 2 watchlists, Today × 2 and watch × 2, whose right pane shows a stock.
+- **ZZNV 週足** also shows C2's move: the in-plot 「週足は直近58週分（2025/08〜）。」「2年分はありません」 become the 注記 sentence 「週足は2025/08〜の58週分（2年分はありません）」, and the 注記 count goes from 6 to 7 at 375. Nothing from C3 shows at 375 or 1440.
+- **375 stock screen content:**
+  - ZZAR 2488 → 2518
+  - ZZHW 2591 → 2621
+  - ZZNV 3044 → 3075, and 週足 3044 → 3075
+  - ZZSD-broken 2615 → 2646
+  - ZZZF 2567 → 2597
+- **1440:** no page or content height changes.
+- **So the H5 dump baseline shifts on these 24 screens.**
+
+### Tests and checks (実測)
+
+**Earlier session**
+- This session resumed after the usage-limit cut-off. These ran on 08bebfc7 before the cut-off (logs in `audit3/r3-chart/`, 15 Nov ~01:00–01:19 UTC, after the 00:58 commit). The source is HEAD's.
+- No re-run is visible in the logs. Whether a run was repeated before its log was written is not known.
+- brief-chart.spec.js: 47 passed (4.6 min; load 4.51 → 7.69).
+- brief-oracles.spec.js (frozen, not edited): **38 passed, 2 skipped** (the R1/R2 fixmes; load 7.87 → 9.77). ZZHB's green arrow and every other active assertion stay green.
+- brief-compact.spec.js + brief-phone.spec.js (frozen height budgets): **66 passed** (load 9.78 → 5.42).
+- brief-accessibility.spec.js + brief-rows.spec.js: 68 passed (10 + 58; load 4.30 → 3.31).
+- Full vitest: 248 files, 4007 passed (load 2.87 → 4.52).
+
+**This session, on ff4349b2**
+- vitest (`cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run <files>`):
+  - StockVcpCard.test.jsx, StockVcpCard.oracles.test.jsx, StockView.test.jsx and pivotBar.test.js (untouched): **4 files, 41 tests passed** (load 0.64 → 0.83). The two C4 files were re-run after the test edits: 23 passed.
+  - **The full suite: 248 files, 4007 passed** (load 2.60 → 7.06). CH-2 had 247 files and 3991 tests; +16 are C4's (12 in StockVcpCard.test.jsx, 4 in the oracle file).
+- Playwright (CI-faithful, `npx playwright test -c audit3/r3-chart/pw-147.config.mjs`, AUDIT_PORT=4424). No re-run was needed.
+  - brief-chart.spec.js, whole: **47 passed** (4.1 min; load 0.60 → 2.98). That is CH-2's 43 plus C4's 4: ZZHB, ZZNR and ZZRD at 390, and ZZHB at 1440.
+  - Each C4 test checks four things:
+    - the line equals `pivotDayNote` on the fixture row and bars, with ZZHB naming 9/22 and not 9/25, ending 「（週足の型）」;
+    - ZZNR names the day before the analysis day, with no suffix;
+    - ZZRD shows `PIVOT_DAY_UNKNOWN`, and its quiet days equal `quietDaysText`, with the title;
+    - no overflow and no page errors.
+- eslint on StockVcpCard.jsx, StockVcpCard.test.jsx, StockVcpCard.oracles.test.jsx and brief-chart.spec.js: clean.
+- Ownership gate before each commit: `OWNERSHIP OK (CHART)`.
+
+**What the vitest cases cover**
+- Weekly: the Tuesday bar, not the Friday label, plus the suffix.
+- Daily: the se_pivot_date bar, no suffix.
+- A float-noise pivot (89.88000000000001) matches.
+- The year shows across a year end.
+- 未確認 for: a VCP primary without a date, a high one cent short, `judged` null, an unnamed pattern, and no pattern.
+- No line for:
+  - a vcp_pivot fallback or another price;
+  - no view or no row;
+  - a stale, failed or missing recalculation, or no date;
+  - `pending`.
+- Quiet days: 2, 0 and 10 show; undefined, null, 2.5, 11, −1, '2', NaN and Infinity show nothing; a stale or unavailable recalculation shows nothing.
+- The rendered card: the note follows the Setup Engine note, the weekly span, the `<small>` with its title, and the 未確認 volume ratio. An older publication gives 未確認 and no quiet days. The other rows are unchanged.
+- **The data path:** `mergeFinancialDetail(summary without the keys, detail with them)` keeps `se_pivot_date` and `se_quiet_days_10d` on the merged row. A detail of another day leaves them absent.
+
+### Deviations from the order
+
+- **One extra test file, `StockVcpCard.oracles.test.jsx`, with `// @vitest-environment node`.**
+  - vitest cannot import `tests/static/brief-fixture.js` under jsdom: 「TypeError: The URL must be of scheme file」. That was measured here with a temporary test, then deleted.
+  - So the ZZHB, ZZNR and ZZRD cases read `ORACLE_ROWS`/`ORACLE_CHARTS` in a node-environment file beside the jsdom one.
+  - The ownership gate accepts it as one of the StockVcpCard tests.
+- **ff4349b2** brings the tests to the track's producer-only rule (as 8edf27ca and 503102fd did for C2 and C3). The order's expected strings are kept as the producers' unit-test pins.
+
+### 未検証
+
+- **The detail-only path in a browser.** The oracle rows carry both keys on the list row itself. The detail merge is covered only by the `mergeFinancialDetail` vitest and by reading the code: export-research.mjs `listFields` omits both keys, and the detail is the whole row.
+- **Whether a published research detail carries `se_pivot_date` and `se_quiet_days_10d`.** Not checked until a release is read; no production action was taken.
+- **The entry-chunk delta.** StockVcpCard.jsx now imports pivotBar.js, which no production module imported before, so it joins the entry chunk. CH-4 reports this as ordered; no build was run here.
+- **Timings.** None were taken.
+
+### For integration
+
+- **Vocabulary for CONTEXT.md:**
+  - 「ピボットの日」: the bar whose high is the Setup Engine pivot, found by pivotBar (H1) on certified bars; 未確認 when there is none.
+  - 「静かな日」: the Setup Engine's `quiet_days_10d` over its own 10 sessions.
+- **Both fields are detail-only on a publication.** While the detail loads, no pivot-day line shows. When the detail fails, or on an older publication without the keys, the card reads 「ピボットの日 未確認」 and shows no quiet days. It never shows 0 or a guessed date.
+- **The H5 baselines shift:**
+  - the dump on the 24 screens above;
+  - the oracle stock heights, as in the table;
+  - 375 stock screens +30 or +31, ZZRD +47.
+- **No integration request.** No file outside CHART's list needs a change.
