@@ -921,3 +921,146 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
   - R3a の out/24bf6b9 は R4 の計算の後に消した。数は `$T/r3b/` と `$T/r4/` の集計ファイルにある。
   - R-P2 の out/93fd59e は R-P3 が残したまま。
 - フロントのファイルは変えていない。全部の vitest を 1 回走らせた：`cd $W/frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run`。11-15 13:23〜13:27、241 秒、負荷 0.21 → 7.49。248 ファイル・4,023 本すべて通過（R-P2 と同じ数）。Playwright とビルドは走らせていない（フロントの変更が無い）。
+
+## R5. 窓の後のブレイク失敗を日付つきの一行で示す（パッケージ R-P5、任意・切り離せる）
+
+p4-4 への対応。上抜けから `SELL_RULES.failedBreakoutSessions`（10）を過ぎると、ブレイク失敗の検査は「サインなし」に戻り、失敗について何も言わない（窓は上抜けの日から数える。CONTEXT.md）。そこで株の画面に、中立で日付つきの一行を一つ加える。10 営業日の規則と、すべての数は変えない。
+
+### 規則（briefSell.js の `failedBreakoutContext`。この一行を作るのはこの関数だけ）
+
+- 文言：「ブレイク失敗後（M/D上抜け→M/D割れ・その後の安値 −x.x%）」。
+  - 日付は shortDate（年が違えば年つき）。
+  - 安値はピボット比で、distanceText で書く（U+2212。「−0.0%」は出さない）。
+- 上抜けの読み方は、ブレイク失敗の検査と同じ：
+  - 検証済みの日足の直近 60 本（結論の振り返り、`CROSSING_LOOKBACK_SESSIONS`）を読む。
+  - `from`（crossingFloor の足。sellSignals が 252 本に合わせ直す）より前の上抜けは読まない。
+  - 各上抜けは breakoutBar で日付を決める（ピボットと同値の足の後は、最初にピボットの上で引けた足）。
+- 一行を出さない場合：
+  - 窓の中に、出来高 1.40× 以上の上抜け、または出来高が未確認の上抜けがある。検査がサインあり（または未確認）で、それ自体が失敗を言う。
+  - 最後の終値がピボットのセント以上にある。
+  - 窓より古い上抜けを新しい順に読み、軽い上抜けは飛ばす（ブレイク失敗ではない）。最初の重い上抜けを使う。最初に当たったのが出来高未確認の上抜けなら、一行は出さない。
+  - その上抜けの後、ピボットの下で引けた最初の日が、上抜けから 10 営業日より後（上抜けが窓の間は持ちこたえた）。その日に検査がサインありになったことは一度もないので、「ブレイク失敗後」とは言わない。
+  - 上抜けの足から最後の足までに、終値・安値・出来高の欠け（または 0）がある。日付や 0 を推測しない。
+- 割れの日は、上抜けの後に初めてピボットの下で引けた日。いまの下の続きの始まりではない（SAIL のように、軽い再上抜けがあっても動かない）。
+- 「その後の安値」は、割れの日から最後の足までの安値（終値ではない）の最小。
+- 新しいしきい値は無い。使うのは `failedBreakoutSessions`（10）、`breakVolumeRatio`（1.40×）、`CROSSING_LOOKBACK_SESSIONS`（60）だけ。
+
+### 置き場所（中立）
+
+- sellSignals は、検査が「サインなし」で一行があるときだけ、結果に `failedContext` を載せる。一行がない結果は、形もこれまでと同じ（キーが無い）。
+  - 検査の配列には入れない。だから tally・sellChipView・sellMarks・isBreakdown は読まない。ウォッチの行と Today の数も変わらない。
+- 結論（StockVerdict.jsx）：見出しの下の行（と決算の注意）の後に、色の無い `<p>` を一つ。どの判定の下にも出る。二つの部分（「M/D上抜け→M/D割れ」「その後の安値 −x.x%」）は、電話の行で割らない。
+- 売りのサイン（StockSellCard.jsx）：最初の説明の後に `brief-note` を一つ。折りたたみの外に出すので、電話でも開かずに見える。検査の行ではないので、印も色も無い。
+- buyGate.js と positionSizing.js は変えていない。結論は `sells.failedContext` を読む。buyGate.test.js で、一行の有無にかかわらず、判定（kind・reason・reference ほか全部）と計画が同じであることを固定した。
+
+### テスト
+
+- briefSell.test.js（6 本）：
+  - 窓の後に、三つの数を持つ一行。窓の終わる日（上抜けから 10 営業日目）には一行が無く、次の日から出る。
+  - 窓の中はサインありで一行は無い。窓の中に新しい重い上抜け、または出来高未確認の上抜けがあるときも無い。
+  - ピボットの上（同値のセント・それより上）では無い。窓の間ずっと持ちこたえた上抜けにも無い。割れが 10 営業日目なら出る。
+  - 同値の後の上抜け、窓の中の軽い再上抜け（GEN の形）、割れの後の再上抜け（SAIL の形）、窓より古い軽い上抜け、重い上抜け二つ、60 本の振り返りの境。
+  - 出来高の欠けか 0（上抜けの後・上抜けの日・その前の 50 本）、終値や安値の欠け、ピボットが無いときは無い。
+  - 下限（from）：上抜けの足なら同じ。その後の足なら無い。crossingFloor の足（NR7 のピボットが上抜けの後）でも無い。
+- StockSellCard.test.jsx（3 本）：電話と机上で一回だけ、producer の文言のまま、色の無い `brief-note`、折りたたみの外。検査の行と状態、説明の行は、一行が無いときと同じ。窓の中と既定の画面には無い。
+- StockVerdict.test.jsx（1 本）：上昇トレンドと「控える」地合いの下で一回だけ、色の無い `<p>`、二つの部分はそれぞれ一続き。判定・色・見出し・下の行・メーター・タイル・チップは、一行が無いときと同じ。窓の中はブレイク失敗の判定で、一行は無い。
+- buyGate.test.js（1 本）：接近・地合い（控える）・地合い未確認・TT未達で、判定と計画が一行の有無で同じ。
+- brief-sell.spec.js（3 本：320・390・1440）：ZZAR を変えた行（`mutate`。ピボットを価格の 2% 上、15 営業日前に 2.2× で上抜け、次の日に割れ）。結論と売りのサインに一回ずつ、producer の文言で見え、カードの中に収まり、横スクロールは 0。判定・色・見出し・売りの検査は、同じ上抜けを軽い出来高にした対照（一行なし）と同じ。
+- brief-invariants.spec.js（1 本）：同じ二つで、Today のタイル・ウォッチの行・ウォッチのタブが同じ。対照の株の画面には一行が無く、重い方には二つある。
+  - 二つの変種では、上抜けの足とその 2 本前の足の出来高を入れ替えている。だから最後の日の出来高倍率など、行が読む値はすべて同じ。
+
+### 再構築の行（再現スナップショットの数、11-12。公開版の数ではない。`$T/r5/eval-context.mjs` → `$T/r5/context-d5b3e42.json`）
+
+ハーネスの eval-sell.mjs は `failedContext` を書き出さない。そこで、同じ経路（candidateView・certifyBars・diagnoseBookChart・crossingFloor つきの stockSells・buyGate）を新しい bundle で回す自前のスクリプトで数えた。
+
+- 検証済みの上場 615 行、ピボットのある 564 行。ブレイク失敗の検査はサインあり 14、サインなし 550。この 550 のうち **17 行** が一行を持ち、533 行は持たない。
+- 一行を持つ 17 行（流動性の順位、位置、判定、一行、その後の安値の日）：
+
+| 銘柄 | 順位 | 位置 | 判定 | 一行 | 安値の日 |
+|---|---|---|---|---|---|
+| PLBC | – | near | marketHold | ブレイク失敗後（10/22上抜け→10/23割れ・その後の安値 −1.8%） | 11/5 |
+| KARO | – | near | marketHold | ブレイク失敗後（9/23上抜け→9/24割れ・その後の安値 −12.0%） | 10/20 |
+| SAIL | 94 | near | marketHold | ブレイク失敗後（9/22上抜け→9/25割れ・その後の安値 −13.2%） | 11/5 |
+| UTMD | – | near | marketHold | ブレイク失敗後（10/22上抜け→10/23割れ・その後の安値 −11.1%） | 10/30 |
+| PFG | 132 | near | marketHold | ブレイク失敗後（9/18上抜け→9/21割れ・その後の安値 −9.0%） | 10/14 |
+| GEN | 136 | near | marketHold | ブレイク失敗後（9/14上抜け→9/16割れ・その後の安値 −33.7%） | 9/29 |
+| FENC | – | base | basePosition | ブレイク失敗後（8/28上抜け→9/1割れ・その後の安値 −24.5%） | 11/6 |
+| DK | 360 | near | template | ブレイク失敗後（8/21上抜け→8/24割れ・その後の安値 −13.7%） | 11/6 |
+| FTRE | 361 | near | template | ブレイク失敗後（10/5上抜け→10/7割れ・その後の安値 −8.4%） | 11/12 |
+| TNET | 404 | base | template | ブレイク失敗後（10/22上抜け→10/28割れ・その後の安値 −16.0%） | 10/29 |
+| VG | 427 | near | template | ブレイク失敗後（10/23上抜け→10/26割れ・その後の安値 −19.3%） | 11/9 |
+| RGEN | 446 | base | template | ブレイク失敗後（10/5上抜け→10/6割れ・その後の安値 −15.1%） | 10/8 |
+| PAGP | 465 | base | template | ブレイク失敗後（10/23上抜け→10/30割れ・その後の安値 −12.2%） | 11/10 |
+| ASND | 475 | near | template | ブレイク失敗後（9/3上抜け→9/9割れ・その後の安値 −18.3%） | 10/8 |
+| TACT | – | base | template | ブレイク失敗後（10/22上抜け→11/5割れ・その後の安値 −9.0%） | 11/9 |
+| NWBI | – | near | template | ブレイク失敗後（10/26上抜け→10/27割れ・その後の安値 −3.2%） | 10/28 |
+| FXNC | – | near | template | ブレイク失敗後（10/27上抜け→10/28割れ・その後の安値 −5.6%） | 11/12 |
+
+- **SAIL・GEN・PFG は一行を持つ**（計画の確認点）。
+- p4 の表の % は、その後の **最安終値**（SAIL −12.0%、GEN −32.1%、PFG −8.3%）。注文どおり **最安値（安値）** をとるので、数は SAIL −13.2%、GEN −33.7%、PFG −9.0% になる。日付は p4 と同じ。
+- p4 が「TT の 1 条件だけ足りない同じ形」とした 5 行：
+  - DK・FTRE・VG・ASND は一行を持つ。一行は TT の判定にかかわらず出る。
+  - **MSM は持たない**。10/1 に 1.94× で上抜けた後、初めてピボットの下で引けたのが 10/22（15 営業日後）。窓の間は持ちこたえたので、検査が一度もサインありにしていない。
+- p4 の表の残りで窓の後のもの（WSM・IEX・ARQT・SIGI・HURN・APPF・LW・EWBC）は、いまピボットの上にあるので一行は無い。
+- 下限（crossingFloor）だけが一行を止めた行が **29**：BPRN, FCNCA, LARK, TRGP, DJCO, DE, CFFI, ICCC, AFCG, SI, RLAY, ATRC, NEO, NTAP, GTLB, FLXS, NAT, ZD, ACOG, TITN, DAC, PTGX, WNC, NCNO, CIB, ZYME, RMBI, BWIN, CCC。上抜けがいまのピボットの足より前にあり、このピボットの上抜けではない（R1 と同じ読み方）。
+- 17 行すべてで、buyGate の結果（kind・reason・reference・title・note・blocked）は、`failedContext` を外した sells で回したものと同じだった。判定の内訳は、地合い（控える）6、TT未達 10、土台形成中 1。
+- 前の head（R-P4 の out/53b82cb）と比べて、`work/sell-eval.jsonl`・`work/today-eval.json`・`counts.json`・`rows.jsonl`・`ready43.jsonl`・`serve/research.json`・`work/eval-proxy.json`・`p1/stats.txt`・`serve/charts`（manifest）はバイト単位で同じ（`$T/r5/compare.sh d5b3e42`）。
+  - counts.json のブレイク失敗：サインあり 14・サインなし 550・検査なし 51。窓の中のサインあり 14 行は変わらない。
+  - out/53b82cb には `work/pivot-date.json`・`work/oneoffs.txt`・`p1/gate6_alt.txt`・`index-size.json` が無いので、これらは比べていない（R-P4 の走らせ方による。R5 はこれらの入力を変えない）。新しい out/d5b3e42 は中間ファイル（recalc-proxy.jsonl・eval-proxy.jsonl）を残さない既定の走らせ方なので、R3b と R4 が読む out/53b82cb は消していない。
+
+### フィクスチャ（既定の 30 行とオラクルの 8 行）
+
+- 一行を持つ行は **0**（下限を外しても 0）。`$T/r5/zz-r5-fixture-scan.test.js.keep`（vitest の node 環境で一度だけ走らせ、木からは外した）→ `$T/r5/fixture-scan.json`。
+- だから 492 枚の probe、dump、オラクルの probe はどれも変わらないはず。実際にバイト単位で同じだった（下の実測）。
+
+### 規則 18（UI より先にデータを出さない）
+
+- 公開するデータ、インデックスのフィールド、警告の符号は何も増やしていない。一行は、ブラウザが検証済みの日足からその場で作る。
+
+### 実測（R5。コマンドと結果。時刻は日本時間。負荷のもとの数はすべて参考）
+
+`S=/tmp/claude-0/-home-user-screener/c937365f-db46-520a-bbf4-94843e169170/scratchpad`、`T=$S/audit3/r3-verdict`、`H=$S/audit3/r3-harness`、`W=/home/user/screener/.claude/worktrees/r3-verdict`。環境は `PATH=/opt/node22/bin:$PATH`、`SESSION_CALENDAR_PYTHON=$S/audit/r1-step0/cal-venv/bin/python`、`FINANCIAL_REPLAY_PYTHON=$S/replay-venv/bin/python`、`FONTCONFIG_FILE=$S/ci-fonts/fonts.conf`。
+
+| 検査 | コマンド | 結果 | 負荷（前 → 後） |
+|---|---|---|---|
+| 触れた vitest | `cd $W/frontend && npx vitest run src/static/brief/{briefSell,buyGate}.test.js src/static/brief/{StockSellCard,StockVerdict}.test.jsx`（コミット前、`$T/r5/vitest-touched.out`） | 4 ファイル・96 本すべて通過 | 5.51 → 5.79 |
+| 全部の vitest | `cd $W/frontend && npx vitest run`（d5b3e42、11-15 14:55–14:59、259 秒、`$T/r5/vitest-full-d5b3e42.out`） | **248 ファイル・4,034 本すべて通過**（R-P4 の 4,023 ＋ 新しい 11 本） | 1.96 → 5.98 |
+| Playwright（注文の 8 ファイル） | `cd $W/frontend && AUDIT_PORT=4423 AUDIT_MATCH='brief-(oracles\|sell\|invariants\|watch\|decision\|plan\|compact\|phone)\.spec\.js' npx playwright test -c $T/pw.config.mjs`（d5b3e42、14:40–14:54、14.1 分、`$T/r5/pw-d5b3e42.out`） | 236 本：**235 通過・1 skip**。skip は brief-invariants.spec.js:389 の `test.fixme('INTEGRATION: …')`（R1 の統合の依頼。8 ファイルの fixme/skip はこれだけ、grep で確認）。brief-compact・brief-phone（凍結の高さの予算）も通過。やり直しは無し | 4.54 → 3.37（途中で 12 まで。スナップショットの再構築と重なった） |
+| R5 の Playwright だけ（コミット前） | 同じ設定で `AUDIT_MATCH='brief-(sell\|invariants)\.spec\.js' … -g R5`（`$T/r5/pw-r5-first.out`） | 4 本すべて通過（28 秒） | 5.28 → 7.36 |
+| 492 枚の probe | `$H/probe/run-probe.sh $W 4423` → `cmp $H/probe/probe-8849bf9.json $H/probe/probe-d5b3e42.json`（14:59–15:02） | **バイト単位で同じ**（sha256 b5f29cff…39fa2）。R-P2 の 93fd59e とも同じ | 5.74 → 5.85 |
+| dump | `$H/dump/run-dump.sh $W 4423` → `cmp $H/dump/dump-8849bf9.json $H/dump/dump-d5b3e42.json`（15:02–15:04） | **バイト単位で同じ**（sha256 cba0a2f2…c3555）。42 画面、375 の ZZNV は 3,044、ウォッチ（5 銘柄）は 442 | 5.46 → 4.96 |
+| オラクルの probe | `$H/probe/run-probe.sh $W 4423 oracles`（15:04–15:06） | 8 銘柄・132 枚。**93fd59e（R の前のフロントの head）とバイト単位で同じ**（sha256 5df9eb3c…78db）。一行を持つオラクルは無い | 4.73 → 6.33 |
+| 再構築 | `$H/snapshot/run-snapshot.sh $W`（14:40–14:52、recalc 685 秒、`$T/r5/snapshot-d5b3e42.out`）、比較 `$T/r5/compare.sh d5b3e42` | 上の「再構築の行」。counts.json は 53b82cb と同じ | 4.54 → 8.13 |
+| lint | `cd $W/frontend && npm run lint` | エラー 0、警告 4（土台と同じ 4 つ。R5 のファイルには無い） | — |
+| ビルド | `$H/build/run-build.sh $W`（15:06、`$H/build/build-d5b3e42.json`） | 入口のチャンク **131.72 kB gzip**（raw 376.84）。R5 の分は 93fd59e の 131.20 から **＋0.52**。R の累計は STEP 0 の 130.28 から **＋1.44**。線 134.00 まで 2.28 | 5.90 → 7.47 |
+| 画面写真 | `$T/r5/shots/{conclusion,sell}-{320,390,1440}.png`（スクラッチの spec。木からは外した） | 320 で結論の一行は 2 行に折れ、二つの部分はそれぞれ一続き。売りのサインでは折りたたみの外 | — |
+
+- 時間は一つも測っていない（このパッケージに時間の検査は無い）。
+
+### 未検証（R5）
+
+- 公開版での数と表示（すべて再構築の数）。
+- 一行を持つ実データの株の画面の高さ（SAIL などの 375 での高さ）。既定のフィクスチャの高さの予算（ZZNV、売りのサインの上限）は、dump が同じで、brief-compact と brief-phone も通っている。
+- 一行についての axe（アクセシビリティ）の検査、200% の拡大、明るいテーマの見た目。使ったのは既存のクラスと既存の `<p>` の書式だけ。
+- 古い公開版（インデックスに se_pivot_date が無い）での表示。下限が null の道は単体テストで通しているが、古い公開版のファイルでは見ていない。
+- 一行の出る日々の推移（ここでは今日のピボットで見た）。ピボットは毎日検出し直すので、表示される日々は未検証。
+
+### 統合への依頼（R5）
+
+- CONTEXT.md の語彙（統合で）。案：**ブレイク失敗後（M/D上抜け→M/D割れ・その後の安値 −x%）**：ブレイク失敗の検査の窓（上抜けから 10 営業日）の後、株の画面（結論と売りのサイン）だけに出す中立の一行。サインではなく、どの数にも、チップにも、印にも入らない。安値は割れの日からの最安値で、ピボット比。
+- OD9（失敗の記憶）の既定はこの一行。もう一つの案（ピボットの上で引けるまで、または新しいピボットが出るまで失敗を残す）は作っていない。
+- ハーネスの eval-sell.mjs（スクラッチ）は `failedContext` を書き出さない。統合で数えるなら `$T/r5/eval-context.mjs` を使う。
+- 凍結のファイル（StockView.jsx、brief-fixture.js、brief-oracles.spec.js、briefCandidate.js、useBriefData.js、チャートのファイル、CSS）は変えていない。buyGate.js と positionSizing.js も変えていない。
+
+### パッケージ R-P5 の記録
+
+- コミット（どれも所有の検査 OWNERSHIP OK の後。R5 の 3 つはまとめて落とせる。R1〜R4 はこれに頼らない）：
+  - 527ed3e `feat(frontend): date a failed breakout after its window`（briefSell.js・StockSellCard.jsx・StockVerdict.jsx と vitest 4 ファイル）
+  - d5b3e42 `test(frontend): show the failed-breakout context on the stock screen and count it nowhere`（brief-sell.spec.js・brief-invariants.spec.js）
+  - この記録（`docs(round3): record R5 (the failed-breakout context after the window)`）
+- 注文と違えたところ：
+  - 安値は p4 の表の終値ではなく、注文どおり安値で測った（数が変わる。上に記した）。
+  - 割れが上抜けから 10 営業日より後の上抜けには一行を出さない（MSM）。検査が一度もブレイク失敗と呼ばなかった上抜けを「ブレイク失敗後」とは呼ばない。新しいしきい値ではなく、`failedBreakoutSessions` をそのまま使う。
+  - buyGate.js は変えていない。結論は `sells.failedContext` を読み、判定のどれも変わらないことは buyGate.test.js で固定した（「buyGate の note」に入れると、接近の判定では表示されない。callLine が接近では note を使わないため）。
+  - 売りのサインでは、一行をブレイク失敗の検査の行の中ではなく、折りたたみの外の説明に置いた。電話では落ち着いた検査は折りたたまれ、そのままでは見えないため。
+- 片づけ：自分の古い出力のうち、93fd59e の probe（ふつうとオラクル）・dump・npm ビルドの出力と、再構築の out/93fd59e を消した（比較の後。どれも新しいものとバイト単位で同じか、取り直した）。out/53b82cb は R3b と R4 が中間ファイルを読むので残した。
