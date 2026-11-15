@@ -3,6 +3,7 @@
 import { test, expect } from '@playwright/test';
 import { date, marketTrends, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
+import { followThroughView } from '../../src/static/brief/briefEnvironment.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 
@@ -376,7 +377,9 @@ test.describe('round 2 at 375×812: an FTD-upgraded uptrend', () => {
     const md = sessions.at(-8).slice(5).split('-').map(Number).join('/');
     // The regime's FTD (SPY, the block's date) and the tab's own ^GSPC record (its FTD on another day) are each attributed.
     const gspc = sessions.at(-36).slice(5).split('-').map(Number).join('/');
-    await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(`確認 ${gspc}`);
+    // The row's words for that record are the producer's (M2: an FTD 35 sessions old reads 「前回のFTD」).
+    await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(followThroughView(JSON.parse(marketTrends().text).indices[0].followThrough, date).b);
+    await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(`前回のFTD ${gspc}`);
     await expect(basis.locator('p')).toHaveText(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', `局面判定はSPYのFTD（${md}）による上昇トレンド。^GSPCの日足ではFTD ${gspc}。この目安はSPYが50日線の下のため0%（独自判定）`, /^独自の目安：/]);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);

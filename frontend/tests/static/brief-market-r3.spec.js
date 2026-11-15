@@ -1,12 +1,13 @@
-// Round 3 (market track), package P2 on synthetic data: Today's 「FTD確認済み」 only with the same day's ^GSPC record (M1a),
+// Round 3 (market track) on synthetic data. Package P2: Today's 「FTD確認済み」 only with the same day's ^GSPC record (M1a),
 // the exposure guide's disclosure (M1b, M1d), the marked labels (M1c), the market tab's lead while a newer session has
-// closed (M1e) and distribution days in two grades (M3). Every state is built here with marketTrends' mutators and row
-// overrides (the fixture is never edited); every word is the producer's. Phones never grow their closed height.
+// closed (M1e) and distribution days in two grades (M3). Package P3: the FTD row's age and 「前回のFTD」 (M2) and Today's
+// 「反発n日目」 (M4). Every state is built here with marketTrends' mutators and row overrides (the fixture is never edited);
+// every word is the producer's. Phones never grow their closed height.
 import { test, expect } from '@playwright/test';
 import { date, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
-import { DISTRIBUTION_TEXT, verdictWaiting } from '../../src/static/brief/marketTabModel.js';
-import { DISTRIBUTION_BRIDGE, exposureRuleText } from '../../src/static/reference/marketTabStudy.js';
-import { MARKET_TILE_SUFFIX } from '../../src/static/brief/briefEnvironment.js';
+import { DISTRIBUTION_TEXT, RULE_TEXT, verdictBasis, verdictWaiting } from '../../src/static/brief/marketTabModel.js';
+import { DISTRIBUTION_BRIDGE, exposureRuleText, followThroughDetail, publishedMarketContext, regimeCause } from '../../src/static/reference/marketTabStudy.js';
+import { followThroughView, marketTileNote, marketTileSuffix, MARKET_TILE_SUFFIX } from '../../src/static/brief/briefEnvironment.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, contextOptions: { reducedMotion: 'reduce' } });
@@ -121,7 +122,9 @@ test.describe('M1b and M1d at 1440px: the disclosure in place', () => {
 test.describe('M1c at 375px: SPY under its 200-day line', () => {
   test.use(PHONES[375]);
   test('the market tab marks the label 独自判定; Today\'s tile strips it and keeps 97px; the lead stays above 756px', async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief/market', { mutate: compose(methods, below200) });
+    // The Nasdaq in a correction without a rally attempt, so the 0% tile carries no suffix (M4's 「反発n日目」 is tested below).
+    const noRally = { trends: value => { Object.assign(value.indices[1].followThrough, { state: 'correction', attempt: null }); } };
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: compose(methods, below200, noRally) });
     await marketReady(page);
     const verdict = page.getByTestId('brief-regime');
     await expect(verdict.locator('strong')).toHaveText('長期トレンド警戒（独自判定）');
@@ -134,6 +137,7 @@ test.describe('M1c at 375px: SPY under its 200-day line', () => {
     await todayReady(page);
     const tile = page.getByTestId('brief-summary').locator('li').first();
     await expect(tile.locator('b')).toHaveText('長期トレンド警戒');
+    await expect(tile.locator('.brief-tile-suffix')).toHaveCount(0);
     for (const height of await tileHeights(page)) expect(Math.abs(height - 97)).toBeLessThanOrEqual(2);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
@@ -260,6 +264,162 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M3 at ${wid
     await expect(meta.locator('.brief-env-asof')).toHaveText(/^\d+\/\d+時点の値$/);
     expect((await page.locator('.brief-env-group.is-index > .brief-env-head').boundingBox()).height).toBeLessThanOrEqual(single);
     expect(await lead(page)).toBeLessThanOrEqual(756);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// ---- M2: the FTD row's age and 「前回のFTD」 -------------------------------------------------------------------------
+/** The served asset's value, kept as served (the producer's inputs for the expected words). */
+const capture = seen => ({ trends: value => { seen.value = structuredClone(value); } });
+/** The ^GSPC FTD `n` sessions before the series' last point. */
+const ftdAgo = n => ({ trends: value => { const dates = value.indices[0].points.map(point => point.date), ft = value.indices[0].followThrough; ft.ftd = { ...ft.ftd, date: dates.at(-1 - n), sessionsSince: n }; } });
+/** An older asset: no follow-through record on either index (followThroughValid withdraws a confirmed record without sessionsSince). */
+const noFollowThrough = { trends: value => { for (const index of value.indices) delete index.followThrough; } };
+/** A 50日線割れ verdict that is no FTD upgrade (the rows' regime a correction), with the long history's ^GSPC under its 50-day line. */
+const below50Rows = { rows: rows => { for (const row of rows) { row.market_above_50dma = false; row.market_regime = 'correction'; } } };
+const CLOSED = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'correction', ftdUpgraded: false };
+const CORRECTION_BLOCK = { as_of_date: date, regime: 'correction', distribution_days: 7, ftd_date: null, ftd_days_since: null, exposure_pct: 0, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' };
+const correctionBlock = { manifest: value => { value.markets.US.market_context = CORRECTION_BLOCK; } };
+/** The closed content height of each state before M2 (3a4a162, CI fonts, measured): a state never grows past it. */
+const PRE_M2 = { old: { 320: 1390, 375: 1242, 390: 1219 }, recent: { 320: 1341, 375: 1219, 390: 1219 }, absent: { 320: 1314, 375: 1202, 390: 1202 }, behind: { 320: 1391, 375: 1228, 390: 1219 } };
+const ftdRow = page => page.getByRole('region', { name: '地合い' }).locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) });
+const lines = locator => locator.evaluate(node => Math.round(node.getBoundingClientRect().height / parseFloat(getComputedStyle(node).lineHeight)));
+
+for (const [width, device] of Object.entries(PHONES)) test.describe(`M2 at ${width}px: the FTD row says how old the FTD is`, () => {
+  test.use(device);
+  const STATES = [
+    ['old', 'an FTD 35 sessions old under a 0% guide (the fixture\'s)', compose(methods, below50Rows, belowFiftyIndex, correctionBlock), {}],
+    ['recent', 'an FTD 12 sessions old', compose(methods, ftdAgo(12)), {}],
+    ['absent', 'an older asset without follow-through records', compose(methods, noFollowThrough), {}],
+    ['behind', 'the series one session behind', methods, { historyEnd: sessions.at(-2) }],
+  ];
+  for (const [key, name, mutate, extra] of STATES) test(`${name}: the producer's words on one value line, no taller than before`, async ({ page }) => {
+    const seen = {};
+    const { errors } = await openBrief(page, '#/brief/market', { ...extra, mutate: compose(mutate, capture(seen)) });
+    await marketReady(page);
+    const views = seen.value.indices.map(index => followThroughView(index.followThrough, date)), pairs = ftdRow(page).locator('.brief-ftd-row');
+    await expect(pairs.locator('b')).toHaveText(views.map(view => view.b));
+    for (const [i, view] of views.entries()) await expect(pairs.nth(i)).toContainText(`${view.b}${view.em}`);
+    if (key === 'old' || key === 'behind') expect(views[0]).toMatchObject({ b: expect.stringMatching(/^前回のFTD \d+\/\d+$/), em: expect.stringMatching(/^35日前・/), previous: true });
+    if (key === 'recent') expect(views[0]).toMatchObject({ b: expect.stringMatching(/^確認 \d+\/\d+$/), em: expect.stringMatching(/^12日前・/) });
+    if (key === 'absent') expect(views.map(view => view.b)).toEqual(['未集計', '未集計']);
+    // The count leads the em line, so the value keeps one line even at 320px.
+    for (const b of await pairs.locator('b').all()) expect(await lines(b)).toBe(1);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(PRE_M2[key][width]);
+    expect(await lead(page)).toBeLessThanOrEqual(756);
+    expect(await horizontalOverflow(page)).toBe(0);
+    if (key === 'old') {
+      // Inside the closed fold, the cause line says the same day's ^GSPC FTD is the index's own count.
+      const verdict = page.getByTestId('brief-regime');
+      await expect(verdict.locator('strong')).toHaveText(CLOSED.label);
+      await verdict.locator('details.brief-exposure-basis > summary').click();
+      const cause = regimeCause(CLOSED, publishedMarketContext({ as_of_date: date, market_context: CORRECTION_BLOCK }, { date }), verdictBasis(CLOSED, date), date, { gspc: seen.value.indices[0].followThrough });
+      expect(cause).toContain('下の^GSPCの前回のFTD（');
+      await expect(verdict.locator('.brief-verdict-cause')).toHaveText(cause);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('M2 at 375px: the opened row', () => {
+  test.use(PHONES[375]);
+  test('opens to the app\'s own rule beside the cited rises, the failure, 前回のFTD and 過去の傾向, then the rule', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    await marketReady(page);
+    const row = ftdRow(page), before = await contentHeight(page);
+    await row.locator('.brief-env-toggle').click();
+    await expect(row.locator('.brief-env-detail p')).toHaveText([...followThroughDetail().details, `基準${RULE_TEXT.ftd}`]);
+    await row.locator('.brief-env-toggle').click();
+    expect(await contentHeight(page)).toBe(before);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('M2 at 320px: the ◆ of an FTD 120 sessions old', () => {
+  test.use(PHONES[320]);
+  test('keeps its ◆ near the window\'s left edge, reads 前回のFTD, and its label stays inside the frame', async ({ page }) => {
+    const seen = {};
+    const { errors } = await openBrief(page, '#/brief/market', { mutate: compose(methods, ftdAgo(120), capture(seen)) });
+    await marketReady(page);
+    const frame = page.getByRole('region', { name: '地合い' }).locator('.brief-index-frame');
+    const day = seen.value.indices[0].followThrough.ftd.date.slice(5).split('-').map(Number).join('/');
+    await expect(frame.locator('.brief-index-mark.is-ftd')).toHaveText(`◆前回のFTD ${day}`);
+    await expect(frame.getByRole('img')).toHaveAttribute('aria-label', new RegExp(`。前回のFTD ${day}。目盛り`));
+    await expect(page.locator('.brief-index-legend .is-ftd')).toHaveText('◆ 前回のFTD');
+    const box = await frame.boundingBox(), label = await frame.locator('.brief-index-mark-label').boundingBox();
+    expect(label.x).toBeGreaterThanOrEqual(box.x);
+    expect(label.x + label.width).toBeLessThanOrEqual(box.x + box.width);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// ---- M4: 「反発n日目」 on Today's 地合い tile -----------------------------------------------------------------------
+/** The ^GSPC in a rally attempt of day `d` on the analysis day (the fixture's ^IXIC is on day 3). */
+const gspcRally = d => ({ trends: value => { const dates = value.indices[0].points.map(point => point.date), last = dates.length - 1;
+  Object.assign(value.indices[0].followThrough, { state: 'rally_attempt', low: { date: dates[last - d], low: 4980 }, attempt: { startDate: dates[last - d + 1], day: d }, ftd: null, events: [] }); } });
+const SERVED_MANIFEST = { markets: { US: { as_of_date: date } } };
+const TODAY_LINE = 1400;
+
+for (const [width, device] of Object.entries(PHONES)) test.describe(`M4 at ${width}px: 反発n日目 on Today's tile while the guide is 0%`, () => {
+  test.use(device);
+  for (const [name, extra] of [['the Nasdaq on day 3', {}], ['both indices, the larger day', gspcRally(5)]]) test(`${name}: the suffix and its note, the FTD確認済み tile's height, unclipped, Today within its line`, async ({ page, context }) => {
+    // The same label with the existing suffix form (an FTD-upgraded uptrend says 「FTD確認済み」 on its second line).
+    const reference = await context.newPage();
+    await openBrief(reference, '#/brief', { mutate: compose(ftdUpgraded, belowFiftyIndex) });
+    await todayReady(reference);
+    await expect(reference.getByTestId('brief-summary').locator('.brief-tile-suffix')).toHaveText(MARKET_TILE_SUFFIX.ftd);
+    const suffixed = await tileHeights(reference);
+    await reference.close();
+    const seen = {};
+    const { errors } = await openBrief(page, '#/brief', { mutate: compose(methods, below50Rows, belowFiftyIndex, extra, capture(seen)) });
+    await todayReady(page);
+    const input = { market: CLOSED, trends: { data: seen.value }, manifest: SERVED_MANIFEST }, days = seen.value.indices.map(index => index.followThrough.attempt?.day ?? 0);
+    expect(marketTileSuffix(input)).toBe(MARKET_TILE_SUFFIX.rally(Math.max(...days)));
+    const tile = page.getByTestId('brief-summary').locator('li').first();
+    await expect(tile.locator('b')).toHaveText('50日線割れ（弱含み）');
+    await expect(tile.locator('em')).toContainText('買いは控える');
+    await expect(tile.locator('.brief-tile-suffix')).toHaveText(marketTileSuffix(input));
+    await expect(tile.locator('a')).toHaveAttribute('title', marketTileNote(input));
+    // A 0% label takes two lines on a phone, so its suffix line makes the tile as tall as 「FTD確認済み」 does at 375 and 390
+    // (measured: 115.8px against 97.8px without a suffix) and shorter at 320, where 「FTD確認済み」 wraps; the row stays level.
+    const heights = await tileHeights(page);
+    for (const [i, height] of heights.entries()) {
+      expect(height).toBeLessThanOrEqual(suffixed[i] + 1);
+      if (width !== '320') expect(Math.abs(height - suffixed[i])).toBeLessThanOrEqual(1);
+    }
+    expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+    expect(await contentHeight(page)).toBeLessThanOrEqual(TODAY_LINE);
+    expect(await clippedTileText(page)).toEqual([]);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('one session behind, or the guide open: no 反発n日目 on the tile', async ({ page, context }) => {
+    const behind = await context.newPage();
+    await openBrief(behind, '#/brief', { historyEnd: sessions.at(-2), mutate: compose(methods, below50Rows, belowFiftyIndex) });
+    await todayReady(behind);
+    await expect(behind.getByTestId('brief-summary').locator('.brief-tile-suffix')).toHaveCount(0);
+    for (const height of await tileHeights(behind)) if (width === '375') expect(Math.abs(height - 97)).toBeLessThanOrEqual(2);
+    await behind.close();
+    // The base fixture's open guide keeps 「NAS調整中」 for the same Nasdaq rally attempt.
+    const { errors } = await openBrief(page, '#/brief', { mutate: methods });
+    await todayReady(page);
+    await expect(page.getByTestId('brief-summary').locator('.brief-tile-suffix')).toHaveText(MARKET_TILE_SUFFIX.nasdaq);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('M4 at 1440px: the note under the market card', () => {
+  test.use(VIEWPORTS.desktop);
+  test('says each index\'s day and rally low, the wait (独自判定) and that the verdict and the guide are unchanged', async ({ page }) => {
+    const seen = {};
+    const { errors } = await openBrief(page, '#/brief', { mutate: compose(methods, below50Rows, belowFiftyIndex, gspcRally(5), capture(seen)) });
+    await todayReady(page);
+    const input = { market: CLOSED, trends: { data: seen.value }, manifest: SERVED_MANIFEST };
+    expect(marketTileNote(input)).toMatch(/^S&P 500は安値\d+\/\d+から反発5日目、Nasdaq総合は安値\d+\/\d+から反発3日目。4日目以降の\+1\.2%上昇待ち（独自判定）。判定と目安は変わりません。$/);
+    await expect(page.locator('.brief-tile-note')).toHaveText(`${marketTileSuffix(input)}：${marketTileNote(input)}`);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
