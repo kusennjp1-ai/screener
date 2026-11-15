@@ -18,10 +18,12 @@ import { BREADTH_LEGEND, marketTabStudy, STOCK_OUTCOME_UNTESTED } from '../../sr
 import { TAGS } from '../../src/static/reference/marketRegimeReference.js';
 import { readMarketTrends } from '../../src/static/marketTrendAsset.js';
 import { KEY_ABSENT } from '../../src/static/brief/marketTabGroups.js';
-import { BIG_UP_HEAD, STALLING_HEAD } from '../../src/static/reference/marketTabStudy.js';
+import { BIG_UP_HEAD, BIG_UP_NOTE, STALLING_HEAD } from '../../src/static/reference/marketTabStudy.js';
 import { STALLING_METHOD } from '../../tools/export-market-trends.mjs';
 
 const REFERENCE = JSON.parse(readFileSync(new URL('../../src/static/reference/market-regime-reference-v1.json', import.meta.url), 'utf8'));
+/** A producer's text inside a pattern (its + and . are literal). */
+const escape = text => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, contextOptions: { reducedMotion: 'reduce' } });
 const PHONES = { 320: phone(320, 640), 375: phone(375, 812), 390: phone(390, 844) };
@@ -635,7 +637,7 @@ for (const [width, device] of [...Object.entries(PHONES), ['1440', VIEWPORTS.des
       expect(lineOf('breakout', '早期')).toBe('早期（上抜け後5営業日・独自）：9件中 33% が −7%に到達');
       expect(lineOf('dist', STALLING_HEAD)).toBe(`${STALLING_HEAD}：S&P 1日／NAS 0日`);
       expect(lineOf('ftd', 'S&P：現在の下落')).toMatch(/^S&P：現在の下落 −2\.4%（高値\d+\/\d+→安値\d+\/\d+）・6%で調整判定（独自設定）$/);
-      expect(lineOf('ftd', BIG_UP_HEAD)).toMatch(new RegExp(`^\\${BIG_UP_HEAD}：S&P 直近\\d+営業日で\\d+回／NAS 直近\\d+営業日で\\d+回（弱気相場・調整中に多い。買いの合図ではありません）$`));
+      expect(lineOf('ftd', BIG_UP_HEAD)).toMatch(new RegExp(`^${escape(BIG_UP_HEAD)}：S&P 直近\\d+営業日で\\d+回／NAS 直近\\d+営業日で\\d+回（${escape(BIG_UP_NOTE)}）$`));
     }
     if (key === 'small') {
       expect(lineOf('health', 'RS推計90以上')).toMatch(/^RS推計90以上：\d銘柄（10銘柄未満のため率は非表示）$/);

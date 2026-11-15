@@ -474,7 +474,9 @@ describe('the +3% days (M9)', () => {
   const indices = (sp, nas) => [{ symbol: '^GSPC', ...(sp === undefined ? {} : { closes: sp }) }, { symbol: '^IXIC', ...(nas === undefined ? {} : { closes: nas }) }];
   it('pins the constant and counts closes at least +3% above the previous one over the comparisons made', () => {
     expect(BIG_UP_DAY).toBe(0.03);
-    expect(BIG_UP_HEAD).toBe('+3%以上の上昇日');
+    // The head says the threshold is the app's own (独自設定), built from the constant.
+    expect(BIG_UP_HEAD).toBe('+3%以上の上昇日（独自設定）');
+    expect(BIG_UP_HEAD.startsWith(`+${BIG_UP_DAY * 100}%`)).toBe(true);
     expect(bigUpDays(series([0.01, -0.02, 0.005]))).toEqual({ sessions: 3, count: 0, date: '2026-10-02' });
     expect(bigUpDays(series([0.031, -0.02, 0.045, 0.01, 0.0305]))).toEqual({ sessions: 5, count: 3, date: '2026-10-02' });
     // Exactly +3.00% counts, also where the ratio's floating point falls just under 1.03; +2.99% does not.

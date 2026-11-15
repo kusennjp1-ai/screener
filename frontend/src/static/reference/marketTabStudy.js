@@ -263,8 +263,11 @@ export function bigUpDays(closes) {
   for (let i = 1; i < closes.length; i++) if (closes[i].close / closes[i - 1].close - 1 >= BIG_UP_DAY - RATIO_SLACK) count++;
   return { sessions: closes.length - 1, count, date: closes.at(-1).date };
 }
-/** The M9 line's head and its caveat, from BIG_UP_DAY. */
-export const BIG_UP_HEAD = `+${num(BIG_UP_DAY * 100)}%以上の上昇日`;
+/**
+ * The M9 line's head and its caveat, from BIG_UP_DAY. The head carries 「（独自設定）」 like every round 3 threshold on
+ * the screen; the figure's source (Minervini's posts) stays in the docs, never a name or a quotation in the line.
+ */
+export const BIG_UP_HEAD = `+${num(BIG_UP_DAY * 100)}%以上の上昇日（独自設定）`;
 export const BIG_UP_NOTE = '弱気相場・調整中に多い。買いの合図ではありません';
 /**
  * The opened フォロースルーデー row's +3% days (M9): for each index, from its validated closes (indices[i].closes, read by
