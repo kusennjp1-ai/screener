@@ -4,6 +4,8 @@ import { test, expect } from '@playwright/test';
 import { date, marketTrends, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
 import { followThroughView } from '../../src/static/brief/briefEnvironment.js';
+import { BREADTH_LEGEND, STOCK_OUTCOME_UNTESTED } from '../../src/static/reference/marketTabStudy.js';
+import { TAGS } from '../../src/static/reference/marketRegimeReference.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 
@@ -116,9 +118,10 @@ test.describe('the study block and the guide\'s basis at 375×812', () => {
     await expect(basis).toContainText('根拠（10/2スキャン時点）：S&P 500（SPY）が50日線・200日線の上');
     await expect(basis).toContainText('独自の目安：上昇トレンド 最大50%・上昇に圧力 最大25%・それ以外 0%');
     await expect(study.locator('li').first()).toBeVisible();
-    // The 〔参考〕 legend is short on a phone; the full sentence is in the 注記.
-    await expect(market.locator('.brief-signals-tags')).toHaveText('〔参考〕＝2021〜26年の検証で関係未確認');
+    // The 〔参考〕 legend is short on a phone; the full sentence, its years and what it never tested (M6) are in the 注記.
+    await expect(market.locator('.brief-signals-tags')).toHaveText(`${TAGS.breadth}＝${BREADTH_LEGEND}`);
     await expect(page.locator('.brief-screen-notes')).toContainText('注意サインの印：〔参考〕は、2021〜2026年の参加度データ');
+    await expect(page.locator('.brief-screen-notes')).toContainText(`${STOCK_OUTCOME_UNTESTED}）。`);
     await expect(page.locator('.brief-screen-notes')).toContainText('参加度・リーダーの値は、現在の銘柄で過去をさかのぼった集計（上場廃止銘柄を含まない）です。');
     const small = await page.locator(B_TEXT).evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).filter(node => parseFloat(getComputedStyle(node).fontSize) < 12).map(node => node.textContent.slice(0, 30)));
     expect(small).toEqual([]);

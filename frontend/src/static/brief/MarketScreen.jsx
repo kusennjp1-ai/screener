@@ -288,7 +288,7 @@ function SectionTabs({ panels, active, onSelect }) {
  */
 export function MarketDetailCard({ market, marketLoading = false, trends, date, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, study = null, studyBlock = null, update = null }) {
   const view = marketCardView({ market, marketLoading, trends, date, study, tab: marketTabParts, update });
-  const { status, verdict, dating, signals, conflict, groups, chart } = view;
+  const { status, verdict, dating, signals, conflict, groups, chart, stockSide } = view;
   const chartStatus = chartStatusOf(view, status);
   // The 指数 panel's S&P／Nasdaq switch (only with the Nasdaq's published closes): one index at a time, its figures, its
   // chart and its marks; the switch replaces what the panel shows and never adds an index's block beside the other.
@@ -349,6 +349,9 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
   const nas = switcher || view.series ? null : view.nasdaqFigures;
   // The judge side's cause (or the FTD upgrade's disclosure): one line after the verdict's basis.
   const cause = verdict.cause ? <p className="brief-verdict-why brief-verdict-cause">{verdict.cause}</p> : null;
+  // The 銘柄側 line (marketTabParts' stockSide, M6): the leaders' three values, for reference, beside a guide they do not move;
+  // never coloured, never a sign. First inside the phone's fold (its closed height is unchanged), under the basis on the desktop.
+  const stockLine = stockSide && (verdict.exposure !== null || verdict.basis) ? <p className="brief-verdict-stock">{stockSide}</p> : null;
   // The 50日線割れ verdict's 0%: the app's own untested setting, with ^GSPC's study figures for that cell (zeroCapNote, M5).
   const zeroCap = verdict.exposure !== null && study?.zeroCap ? <p className="brief-exposure-zero">{study.zeroCap}</p> : null;
 
@@ -363,12 +366,13 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
         <div className="brief-verdict-head"><VerdictMark verdict={verdict} /><div><strong><Label text={verdict.label} /></strong>{verdict.date && <span className="brief-verdict-date numeric">{verdict.date}</span>}<p>{switcher && verdict.leadShort ? verdict.leadShort : verdict.lead}</p></div></div>
         {/* On a narrow phone the label breaks before の目安, never leaving 「安」 alone. */}
         {verdict.exposure !== null && <div className="brief-exposure"><small><span className="brief-frag">エクスポージャー</span><span className="brief-frag">の目安</span></small><b className="numeric">{verdict.exposure > 0 ? `最大 ${verdict.exposure}%` : '0%'}</b><span className="brief-exposure-track" aria-hidden="true"><i style={{ width: `${verdict.exposure}%` }} /></span></div>}
-        {/* 目安と判定の基準, in the same order on both: the verdict's basis, while the verdict is positive the Nasdaq's
-            own state, then how the guide is set (from MARKET_CAPS) and, under a 50日線割れ verdict, that its 0% is untested.
-            One fold under the meter on a phone, whose summary names the fold and, when it applies, the Nasdaq note's short
-            form; in place on the desktop. */}
+        {/* 目安と判定の基準, in the same order on both: the verdict's basis, the 銘柄側 line (first in the phone's fold), the
+            regime's cause, while the verdict is positive the Nasdaq's own state, then how the guide is set (from MARKET_CAPS)
+            and, under a 50日線割れ verdict, that its 0% is untested. One fold under the meter on a phone, whose summary names
+            the fold and, when it applies, the Nasdaq note's short form; in place on the desktop. */}
         {switcher && (verdict.exposure !== null || verdict.basis)
           ? <Expander id="market-exposure-rule" className="brief-exposure-basis" summary={verdict.nasdaq ? <Parts text={`目安と判定の基準・${verdict.nasdaq.short}`} /> : '目安と判定の基準'}>
+            {stockLine}
             {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
             {cause}
             {verdict.nasdaq && <p>{verdict.nasdaq.long}</p>}
@@ -377,6 +381,7 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
           </Expander>
           : <>
             {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
+            {stockLine}
             {cause}
             {verdict.nasdaq && <p className="brief-exposure-nasdaq">{verdict.nasdaq.long}</p>}
             {verdict.exposure !== null && <p className="brief-exposure-basis">{exposureRuleText()}</p>}

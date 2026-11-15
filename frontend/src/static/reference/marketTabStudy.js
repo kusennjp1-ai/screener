@@ -35,20 +35,27 @@ const CONFIRMED_TAGS = [TAGS.both, TAGS['^GSPC'], TAGS['^IXIC']];
 const CONFIRMED = '偶然では説明しにくい差（p≤0.05）が、期間の前半・後半とも同じ向きで出たこと';
 const meanings = tags => Object.keys(TAG_MEANINGS).filter(tag => tags.has(tag));
 
+/** What the 〔参考〕 legend says the breadth study did not find (M6): a relation with the index's later declines. */
+export const BREADTH_LEGEND = '指数の下げとの関係は未確認';
 /**
- * The words beside the warning summary's study tags: the 〔参考〕 legend (only when a 〔参考〕 tag is shown) and one
- * sentence on every tag shown, each defined from TAG_MEANINGS, for the 注記 on a phone and in place on the desktop.
- * Years and the breadth panel's chance level come from the reference. `fired` are the checks with their `tags`.
+ * What the breadth study never tested (M6; MT-09: its outcome was the index's decline). Said in the tag note's sentence: in
+ * the phone's legend it adds lines at 320, 375 and 390px (measured: 1→3, 1→2 and 1→2 lines).
+ */
+export const STOCK_OUTCOME_UNTESTED = '個別株のブレイクアウト成績との関係は未検証';
+/**
+ * The words beside the warning summary's study tags: the 〔参考〕 legend (only when a 〔参考〕 tag is shown; its years are in
+ * the note) and one sentence on every tag shown, each defined from TAG_MEANINGS, for the 注記 on a phone and in place on the
+ * desktop. Years and the breadth panel's chance level come from the reference. `fired` are the checks with their `tags`.
  */
 export function signalTagText(reference, fired) {
   const tags = new Set((fired || []).flatMap(c => c.tags || []));
   if (!tags.size || !validReference(reference)) return { legend: null, note: null };
   const breadth = reference.samples?.breadth, from = breadth?.first?.slice(0, 4), to = breadth?.last?.slice(0, 4), index = referencePeriod(reference);
-  const legend = tags.has(TAGS.breadth) && from && to ? `${TAGS.breadth}＝${from}〜${to.slice(2)}年の検証で関係未確認` : null;
+  const legend = tags.has(TAGS.breadth) && from && to ? `${TAGS.breadth}＝${BREADTH_LEGEND}` : null;
   const parts = [];
   // 「偶然と区別できない」 only when the breadth panel's robust labels stayed within its placebo's 95th percentile.
   const chance = reference.chance?.breadth, chanceLike = finite(chance?.actual) && finite(chance?.p95) && chance.actual <= chance.p95;
-  if (tags.has(TAGS.breadth) && from && to) parts.push(`${TAGS.breadth}は、${from}〜${to}年の参加度データ（${SURVIVORSHIP_INLINE}）の検証で、その後の指数の下げとの関係を確認できなかった注意サインです${chanceLike ? '（全体として偶然と区別できない結果）' : ''}。`);
+  if (tags.has(TAGS.breadth) && from && to) parts.push(`${TAGS.breadth}は、${from}〜${to}年の参加度データ（${SURVIVORSHIP_INLINE}）の検証で、その後の指数の下げとの関係を確認できなかった注意サインです（${chanceLike ? '全体として偶然と区別できない結果・' : ''}${STOCK_OUTCOME_UNTESTED}）。`);
   const shown = meanings(tags);
   if (shown.length) {
     parts.push(`${shown.filter(tag => tag !== TAGS.bias).join('')}は、${index.fromYear}〜${index.toYear}年の指数の日足で、その状態のあと${OUTCOME}を調べた結果です（${shown.map(tag => `${tag}は${TAG_MEANINGS[tag]}`).join('、')}）。`);

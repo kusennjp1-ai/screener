@@ -308,9 +308,9 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   verdict.cause = study?.cause ?? null;
   const summary = ready ? indexSummary(history?.sp500) : null;
   const conflict = basisConflict(verdict.basis, summary, date);
-  // The market tab's warning summary, its three groups and its index switch (`tab`: marketTabParts, marketTabGroups.js,
-  // which only the lazily loaded market screen passes), so Today, which reads none of them, never ships them.
-  const { signals = null, groups = null, series = null } = tab ? tab({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, judgedNow, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, breakout, distWarn, spx, ndx, summary }) : {};
+  // The market tab's warning summary, its three groups, its index switch and its 銘柄側 line (`tab`: marketTabParts,
+  // marketTabGroups.js, which only the lazily loaded market screen passes), so Today, which reads none of them, never ships them.
+  const { signals = null, groups = null, series = null, stockSide = null } = tab ? tab({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, judgedNow, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, breakout, distWarn, spx, ndx, summary }) : {};
 
   // ---- Today: exactly four facts ----
   // Today's 分配日 tile: ▲ and amber only at 7 or more; a 5–6 count reads 参考 in the warning's place, the other 参考 tiles'
@@ -333,7 +333,7 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
     : { key: 'extremes', label: '52週の新高値・新安値', ...absent('newHighs') };
   const today = [todayDist, todayTT, todayA200, todayExtremes];
 
-  return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons, series,
+  return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons, series, stockSide,
     // Whether the TT達成数 row shows a value (its population note belongs beside it only then), and why the Nasdaq's
     // published closes were withdrawn (readMarketTrends' closes_error: the switch is then missing for that reason).
     ttShown: tt.valued === true, nasdaqClosesError: ready && typeof ndx?.closes_error === 'string' && ndx.closes_error ? ndx.closes_error : null,

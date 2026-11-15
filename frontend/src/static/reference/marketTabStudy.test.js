@@ -46,7 +46,10 @@ describe('the warning summary\'s study inputs', () => {
   it('explains the tags shown without repeating the guide\'s disclosure, which exposureRuleText says once (MK6)', () => {
     const fired = [{ key: 'dist-S&P', tags: [TAGS.unestablished] }, { key: 'lows', tags: [TAGS.breadth] }];
     const { note, legend } = signalTagText(reference, fired);
-    expect(legend).toBe('〔参考〕＝2021〜26年の検証で関係未確認');
+    expect(legend).toBe('〔参考〕＝指数の下げとの関係は未確認');
+    // The years and what the breadth study never tested are said in the note (in the legend they add lines on a phone).
+    expect(note).toContain('〔参考〕は、2021〜2026年の参加度データ');
+    expect(note).toContain('（全体として偶然と区別できない結果・個別株のブレイクアウト成績との関係は未検証）。');
     expect(note).not.toMatch(/目安|基準と/);
     expect(note.endsWith('その指数では確認できず）。')).toBe(true);
     expect(exposureRuleText()).toContain('注意サインも指数の過去の傾向も目安を変えません。');

@@ -11,7 +11,8 @@ import reference from '../reference/market-regime-reference-v1.json' with { type
 import { marketTabStudy } from '../reference/marketTabStudy.js';
 import { followThroughDay } from '../followThroughDay';
 import { exposureRuleText } from '../reference/marketTabStudy.js';
-import { num, signedPercent } from './marketTabModel';
+import { marketCardView, num, signedPercent } from './marketTabModel';
+import { marketTabParts } from './marketTabGroups';
 import { followThroughView } from './briefEnvironment';
 import { followThroughDetail } from '../reference/marketTabStudy.js';
 import { indexState } from '../../../tools/export-market-trends.mjs';
@@ -501,7 +502,7 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     for (const tag of ['〔S&Pのみ〕', '〔未確立〕', '〔偏り〕']) expect(signals().querySelector('.brief-signals-tags').textContent).toContain(`${tag}は`);
     cleanup();
     phone(make());
-    expect(signals().querySelector('.brief-signals-tags')).toHaveTextContent(/^〔参考〕＝2021〜26年の検証で関係未確認$/);
+    expect(signals().querySelector('.brief-signals-tags')).toHaveTextContent(/^〔参考〕＝指数の下げとの関係は未確認$/);
     expect(document.querySelector('.brief-screen-notes')).toHaveTextContent('注意サインの印：〔参考〕は、2021〜2026年の参加度データ');
     cleanup();
     // No 〔参考〕 tag shown, no legend.
@@ -522,7 +523,9 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
     // The Nasdaq note applies (positive verdict, Nasdaq on a rally attempt): the summary names the fold and its short form.
     expect(fold.querySelector('summary')).toHaveTextContent(/^目安と判定の基準・Nasdaqは反発3日目（判定はSPYのみ）$/);
-    expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual(['根拠（10/2スキャン時点）：S&P 500（SPY）が50日線・200日線の上で、局面判定（分配日・FTDなど）が「上昇トレンド」',
+    // The 銘柄側 line (M6) first, then the basis, the Nasdaq note and the guide.
+    const stockSide = marketCardView({ market: UP, trends: trends(), date: '2026-10-02', tab: marketTabParts }).stockSide;
+    expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual([stockSide, '根拠（10/2スキャン時点）：S&P 500（SPY）が50日線・200日線の上で、局面判定（分配日・FTDなど）が「上昇トレンド」',
       '判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は反発3日目（FTD未確認・独自判定）。', exposureRuleText()]);
     expect(fold).not.toHaveAttribute('open');
     cleanup();
@@ -743,7 +746,8 @@ describe('brief market card: round 2', () => {
     // The fixture's long history has no ^GSPC closes, so the 0% note (M5) is its closing sentence alone.
     const zeroCap = marketTabStudy({ trends: trends(), reference, date: '2026-10-02', market, manifest }).zeroCap;
     expect(zeroCap).toBe('0%は独自設定で、検証された水準ではありません。');
-    expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', LINE, exposureRuleText(), zeroCap]);
+    const stockSide = marketCardView({ market, trends: trends(), date: '2026-10-02', tab: marketTabParts }).stockSide;
+    expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual([stockSide, '根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', LINE, exposureRuleText(), zeroCap]);
     expect(fold).not.toHaveAttribute('open');
     // The label, the meter and the cap are unchanged.
     expect(screen.getByTestId('brief-regime')).toHaveTextContent('50日線割れ（弱含み・独自判定）');
@@ -1032,5 +1036,37 @@ describe('brief market card: the 50日線割れ verdict\'s 0% (M5)', () => {
     // Any other verdict: no note.
     card(value, UP, true);
     expect(screen.getByTestId('brief-regime').querySelector('.brief-exposure-zero')).toBeNull();
+  });
+});
+
+// ---- Round 3 (M6): the 銘柄側 line beside the verdict ---------------------------------------------------------------------
+describe('brief market card: the 銘柄側 line (M6)', () => {
+  const card = (value, wide, market = UP) => render(<MemoryRouter><Card market={market} trends={value} date="2026-10-02" detail switcher={!wide} section="index" onSection={() => {}} {...studyProps(value, '2026-10-02', reference, wide, { market })} /></MemoryRouter>);
+  const rows = () => breadth('2026-10-02', i => (i === 8 ? { trendTemplateCount: 25 } : {}));
+  it('is the first line inside the closed fold on a phone and the line under the basis on the desktop, plain and never a sign', () => {
+    const value = trends({ rows: rows() }), line = marketCardView({ market: UP, trends: value, date: '2026-10-02', tab: marketTabParts }).stockSide;
+    expect(line).toBe('銘柄側（参考・目安は変えません）：TT達成 30（1か月前 25）・ブレイクアウト成功率 75%（8件）・リーダーの健全度 70%（30銘柄）');
+    card(value, false);
+    const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
+    expect(fold).not.toHaveAttribute('open');
+    expect(fold.querySelector('p')).toHaveTextContent(line);
+    expect(fold.querySelector('p').className).toBe('brief-verdict-stock');
+    // The summary still names the fold only (the line adds nothing to the closed height).
+    expect(fold.querySelector('summary')).toHaveTextContent(/^目安と判定の基準・Nasdaqは反発3日目（判定はSPYのみ）$/);
+    cleanup();
+    card(value, true);
+    const verdict = screen.getByTestId('brief-regime');
+    expect(verdict.querySelector('.brief-verdict-why + .brief-verdict-stock')).toHaveTextContent(line);
+    expect(verdict.querySelector('.brief-verdict-stock')).not.toHaveTextContent(/▲|○|注意/);
+    expect(verdict.querySelector('.brief-verdict-stock').className).toBe('brief-verdict-stock');
+    // The warning summary is the same with or without the line: it is no sign.
+    expect(signals()).not.toHaveTextContent('銘柄側');
+  });
+  it('shows no line before the series is ready, and says each term\'s own absent words once it is', () => {
+    card({ loading: true }, true);
+    expect(document.querySelector('.brief-verdict-stock')).toBeNull();
+    cleanup();
+    card(trends({ rows: oldSchema(breadth('2026-10-02')) }), true);
+    expect(document.querySelector('.brief-verdict-stock')).toHaveTextContent(/^銘柄側（参考・目安は変えません）：TT達成 未収録・ブレイクアウト成功率 未収録・リーダーの健全度 未収録$/);
   });
 });

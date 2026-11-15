@@ -15,9 +15,42 @@ function ftdSignal(name, ft, date) {
   return `${name}のFTDが失敗${ft.failedDate ? `（${shortDate(ft.failedDate, date)}）` : ''}`;
 }
 
+/** The 銘柄側 line's head (M6): the stock side, for reference, beside a guide it does not move. */
+export const STOCK_SIDE_HEAD = '銘柄側（参考・目安は変えません）';
+/** The TT term's name on the 銘柄側 line (the row's own label is TT達成数). */
+const STOCK_SIDE_TT = 'TT達成';
+
 /**
- * The market tab's `{ signals, groups, series }` from marketCardView's shared values (`ctx`, its own names): pass it as
- * marketCardView's `tab` option.
+ * The 銘柄側 line beside the verdict (M6; MT-01, MT-10): what the leaders do, in one line, from the rows the market tab already
+ * shows and their own values, never a new figure, a rule or a sign:
+ *  - TT達成 with its count 21 sessions before (the tt row's own one-month comparison, monthBefore on the same field);
+ *  - the breakout row (its own label) with its rate and the breakouts it judged, or the count alone while it is too small
+ *    for a rate (BREAKOUT_MIN_SAMPLE);
+ *  - the leaders' health with its rate and its cohort, or the cohort alone while it is too small (LEADER_MIN_COHORT).
+ * A term without a value says its row's own absent words (未収録・未算出・未配信 …), never 0. A long history older than the
+ * analysis date dates the line once, in its head (「銘柄側（10/1時点・参考・目安は変えません）」, the warning summary's form); a term
+ * of an older session than that keeps its row's own date (「75%（9/30時点・8件）」). No colour and no ▲, never counted as a sign,
+ * never read by the guide. Null until the series is ready.
+ */
+function stockSideLine({ ready, rows, last, date, known, tt, breakout, health }) {
+  if (!ready) return null;
+  const ttHit = known('trendTemplateCount'), ttBefore = ttHit ? monthBefore(rows, ttHit, 'trendTemplateCount') : null;
+  const rate = known('breakoutHoldPercent');
+  const terms = [
+    tt.valued && ttHit ? { name: STOCK_SIDE_TT, value: num(ttHit.value), asOf: tt.asOf, extra: ttBefore === null ? '1か月前の値なし' : `1か月前 ${num(ttBefore)}` } : { name: STOCK_SIDE_TT, value: tt.b },
+    breakout.valued ? { name: breakout.label, value: breakout.b, asOf: breakout.asOf, extra: rate ? `${num(rate.row.breakoutsJudged)}件` : null } : { name: breakout.label, value: breakout.b },
+    health.item.valued ? { name: health.item.label, value: health.item.b, asOf: health.item.asOf, extra: health.cohort === null ? null : `${num(health.cohort)}銘柄` } : { name: health.item.label, value: health.item.b },
+  ];
+  // The long history's own session, when it is older than the analysis date (the rows' asOf of that session reads the same).
+  const shared = last && date && last.date < date ? shortDate(last.date, date) : null;
+  const text = terms.map(term => { const notes = [term.asOf && term.asOf !== shared ? `${term.asOf}時点` : null, term.extra].filter(Boolean);
+    return `${term.name} ${term.value}${notes.length ? `（${notes.join('・')}）` : ''}`; }).join('・');
+  return `${shared ? STOCK_SIDE_HEAD.replace('（', `（${shared}時点・`) : STOCK_SIDE_HEAD}：${text}`;
+}
+
+/**
+ * The market tab's `{ signals, groups, series, stockSide }` from marketCardView's shared values (`ctx`, its own names): pass it
+ * as marketCardView's `tab` option.
  */
 export function marketTabParts({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, judgedNow, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, breakout, distWarn, spx, ndx, summary }) {
   // ---- warning summary: every existing rule, fired or not, and the ones that could not be judged ----
@@ -131,5 +164,6 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
     { key: 'spx', name: 'S&P 500', short: 'S&P', spoken: 'S&P 500', closes: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null, summary },
     { key: 'ndx', name: 'Nasdaq総合', short: 'NAS', spoken: 'Nasdaq総合（NAS）', closes: ndxCloses, distribution: ndx, distributionEnd: distributionCount(ndx)?.date || null, followThrough: ndx?.followThrough ?? null,
       summary: ndxPosition && ndxPosition.date === ndxLast.date && ndxPosition.close === ndxLast.close ? ndxPosition : indexSummary(ndxCloses) }] : null;
-  return { signals, groups, series };
+  const stockSide = stockSideLine({ ready, rows, last, date, known, tt, breakout, health: { item: healthItem, cohort: health && !(cohortNow !== null && cohortNow < LEADER_MIN_COHORT) ? health.row.leaderCohort : null } });
+  return { signals, groups, series, stockSide };
 }
