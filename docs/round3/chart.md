@@ -470,7 +470,7 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
   - At 320, ZZHB's line wraps once: 「（週足の型）」 moves whole to the second line.
   - ZZRD adds the quiet-days line: +17px at 375/390. At 320 「（SE）」 wraps under 「静かな日 2/10日」 in the half-width dd, as 「上抜けの目安 1.40×以上」 already does. That is the +65 at 320.
 - **1440:** the stock screen's content and page heights are unchanged (1832/1864); the card grows inside the scrolling pane.
-- **Other oracle stocks:** +30 or +31 at 375. The largest at 375 is ZZNV, 3075, under brief-phone.spec.js's 3388 line.
+- **Other oracle stocks:** +30 or +31 at 375. The largest at 375 is ZZNV, 3075: under the plan's 3388 line for the stock screen and brief-compact.spec.js's `BUDGET.stock` (3400, content height).
 - **Every view:** horizontal overflow 0, no page errors, chart card height unchanged.
 - Screenshots of the VCP card for ZZRD, ZZHB and ZZNV at 320/375/1440: `audit3/r3-chart/measure/shots-ff4349b/`.
 
@@ -513,6 +513,12 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
     - ZZNR names the day before the analysis day, with no suffix;
     - ZZRD shows `PIVOT_DAY_UNKNOWN`, and its quiet days equal `quietDaysText`, with the title;
     - no overflow and no page errors.
+  - **The other stock-screen specs, track R's and the rest:** brief-fundamentals, brief-decision, brief-plan, brief-flow, brief-sell, brief-invariants, brief-freshness, brief-watch and brief-legacy-redirects, one invocation (8.1 min; load 5.38 → 6.03). **179 of 180 passed, 1 failed:**
+    - `brief-decision.spec.js:269` 「a breakout still in the zone 25 sessions on that stalls waits for the next pivot, its tiles 参考」 at 375×812, line 281: content **3145**, against `STOCK_CAP` = 3056 + 80 − 12 = **3124**.
+    - Re-run alone: the same, 3145 against 3124 (load 3.38 → 3.51). It is a layout height, not a timeout.
+    - With C4's source reverted (`git checkout 503102fd -- StockVcpCard.jsx brief-chart.css`, then restored to HEAD), both cases of that loop pass. The pre-C4 height is derived, not measured: about 3114–3115, which is 3145 less the 30–31px the line adds on every 375 stock screen in the dump. So the state had about 9–10px of slack, and the line takes 30–31px.
+    - The other case of the loop (「was pulled back to the pivot after a run」) and every other `STOCK_CAP`/`STOCK_LINE` check in the nine specs pass.
+    - Logs: `audit3/r3-chart/pw-ch3b-others.log`, `pw-ch3b-decision-rerun.log`, `pw-ch3b-decision-preC4.log`.
 - eslint on StockVcpCard.jsx, StockVcpCard.test.jsx, StockVcpCard.oracles.test.jsx and brief-chart.spec.js: clean.
 - Ownership gate before each commit: `OWNERSHIP OK (CHART)`.
 
@@ -545,6 +551,8 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 - **Whether a published research detail carries `se_pivot_date` and `se_quiet_days_10d`.** Not checked until a release is read; no production action was taken.
 - **The entry-chunk delta.** StockVcpCard.jsx now imports pivotBar.js, which no production module imported before, so it joins the entry chunk. CH-4 reports this as ordered; no build was run here.
 - **Timings.** None were taken.
+- **brief-market.spec.js and brief-market-phone.spec.js** were not run. Neither opens a stock screen, and the dump's market screens are identical.
+- **The headroom left in the other `STOCK_CAP` states** of brief-decision.spec.js (they pass) was not measured.
 
 ### For integration
 
@@ -556,4 +564,12 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
   - the dump on the 24 screens above;
   - the oracle stock heights, as in the table;
   - 375 stock screens +30 or +31, ZZRD +47.
-- **No integration request.** No file outside CHART's list needs a change.
+- **Integration request: brief-decision.spec.js `STOCK_CAP` (track R's file; a decision for the conductor).**
+  - C4's line makes `brief-decision.spec.js:269` (the 'stalls' case) fail at 375: 3145 against 3124 (see Tests and checks).
+  - It shows only where C4 and R's spec meet, at integration; R's branch does not have C4.
+  - The cap is 「verdict's +80 over step 0」 less 12px of headroom. C4's line, about 31px, is not in that allowance.
+  - **(a)** Track R or integration raises `STOCK_CAP` by C4's measured 31px (3124 → 3155). The frozen budgets (brief-compact.spec.js `BUDGET.stock` 3400, `STOCK_LINE` 3388) are not reached.
+  - **(b)** Hold C4: `git revert ff4349b2 08bebfc7` (tests, then code); this record stays.
+  - **(c)** Another placement for the line, which needs a new order. No placement in CHART's files fits about 9px for a text line.
+  - Nothing outside CHART's list was edited.
+- **For CH-4:** this failure is known, and it is C4's. It is not a regression of C1–C3.
