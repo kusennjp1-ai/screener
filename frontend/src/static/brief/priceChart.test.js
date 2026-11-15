@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { _test, dateTicks, indexRuns, MA_SHIFT, MA_TAIL, NARROW_CHART_WIDTH, renderPriceChart, RS_CAPTION, spread, weeklyBars, ZONE_ABOVE } from './priceChart';
 import { FIGURE_GAP, FIGURE_STACK, PHRASE_GAP, segmentCrosses, sharedLeader } from './chartLabels';
-import { chartContentKey, earningsMarker, EARNINGS_MARKER_DAYS, priceInRange } from './chartReadout';
+import { CHART_RANGES, chartContentKey, earningsMarker, EARNINGS_MARKER_DAYS, priceInRange } from './chartReadout';
 import { EARNINGS_WARN_DAYS, earningsCall } from './briefCandidate';
 
 function container(width = 600, height = 420) {
@@ -1022,5 +1022,24 @@ describe('brief price chart', () => {
     expect(chartContentKey({ ...base, today: '2026-10-04' }, 130)).not.toBe(chartContentKey(base, 130));
     expect(chartContentKey({ ...base, crossing: { date: bars.at(-3).date, volumeRatio: null } }, 130)).not.toBe(chartContentKey(base, 130));
     expect(chartContentKey({ ...base }, 130)).toBe(chartContentKey(base, 130));
+  });
+
+  it('draws the same chart with and without its speed-ups (the test-only `reference` option bypasses them)', () => {
+    // The fixture's stocks and oracles, and crowded charts that send the names through every retry, are checked the same
+    // way in priceChart.identity.test.js; here this file's chart at the four plot sizes, and one with every bar spanning
+    // the plot (its names go over candles) at 390.
+    const wall = { ...model, bars: bars.map(b => ({ ...b, open: 90, close: 91, high: 125, low: 60 })), pivot: 100, upper: 110, stop: 93, legs: [] };
+    const drawn = (m, period, [w, h], extra = {}) => {
+      const el = container(w, h), chart = renderPriceChart(el, m, { period, animate: false, ...extra });
+      return { html: el.outerHTML.replace(/brief-chart-\d+/g, 'brief-chart-#'), legend: chart.legend, corner: chart.freeCorner(72, 44), forced: el.querySelectorAll('.bc-malabel[data-forced="1"]').length };
+    };
+    const views = [...[[262, 292], [317, 340], [332, 340], [926, 470]].map(size => [model, size]), [wall, [332, 340]]];
+    let forced = 0;
+    for (const [m, size] of views) for (const [period, interval] of Object.values(CHART_RANGES)) {
+      const shown = { ...m, interval }, fast = drawn(shown, period, size);
+      expect({ size, period, ...fast }).toEqual({ size, period, ...drawn(shown, period, size, { reference: true }) });
+      forced += fast.forced;
+    }
+    expect(forced).toBeGreaterThan(0);
   });
 });
