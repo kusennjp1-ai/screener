@@ -8,12 +8,18 @@
 
 | 項目 | このcheckoutの入力 | 今回の接続範囲・残件 |
 |---|---|---|
-| 市場全体put/call | 収集・保存済み入力なし | 未取得。機関限定値や13Fオプション件数から代用しない |
+| 市場全体put/call | 収集・保存済み入力なし（2026-10-13時点。**2026-11-15訂正**：下の注を参照） | 未取得。機関限定値や13Fオプション件数から代用しない |
 | 新高値・新安値 | `bookMarketEvidence`の現銘柄集合による過去価格計算 | 取得日時・当時の母集団識別子が不足。生成日時を取得日時に見せず、新契約へ転記しない |
-| S&P500/Nasdaq売り抜け | 既存US benchmarkはSPY/IVV。単一snapshotの独自計算あり | `^GSPC`/`^IXIC`の正式履歴ではない。2指数へ転用せず、IBD準拠と呼ばない |
+| S&P500/Nasdaq売り抜け | 既存US benchmarkはSPY/IVV。単一snapshotの独自計算あり（2026-10-13時点。**2026-11-15訂正**：下の注を参照） | `^GSPC`/`^IXIC`の正式履歴ではない。2指数へ転用せず、IBD準拠と呼ばない |
 | 機関保有者増減 | `data/institutional/sec13f.json.gz`と`openfigi.json`の保存済み正式入力 | 今回の対象。銘柄別の報告運用会社CIK数を生成・保存・UI読込みまで接続 |
 | ベースcount | 端末localStorageの手動記録 | 個人の確認記録であり公開市場入力ではない。今回は接続しない |
 | 突破・接近数 | 固定窓上放れproxy、near_pivot、選別履歴あり | 同じ意味ではない。確認済みの別定義と入力が必要 |
+
+**2026-11-15 訂正（round 3 M10、コード読取）**：上の表の put/call と S&P500/Nasdaq の 2 行は 2026-10-13 の checkout の説明で、今は当てはまらない。
+`frontend/tools/collect-market-trends.py` は定期の公開ビルドで毎回呼ばれ（`.github/workflows/static-site.yml:1001`、`--allow-unavailable` 付き。その前の :999 で `restore-market-trend-source.mjs` が公開済みの入力を戻す）、次の 2 つを集める。
+- `^GSPC`／`^IXIC` の日足：Yahoo の chart API（`query1.finance.yahoo.com/v8/finance/chart/<symbol>`、`instrumentType` が `INDEX` のものだけ）から直近 280 営業日。取得 URL と応答の sha256 を provenance に残す。
+- put/call：Cboe の日次統計（`www.cboe.com/markets/us/options/market-statistics/daily?dt=<日>`）の SUM OF ALL PRODUCTS の calls と puts。母集団は `Cboe SUM OF ALL PRODUCTS (not all US options exchanges)` と明記し、市場全体の値とは呼ばない。
+これを `frontend/tools/export-market-trends.mjs` が market-trends の asset（`market-trends-v1`）にする：指数ごとの分配日（`distributionDays.js`）、フォロースルー判定（`followThroughDay.js`）、終値（`closes`、最大 300）、位置（`state`）、そして `put_call.points`。brief の画面は分配日・FTD・終値・位置を読み、put/call は表示しない（市場環境の計画 OD-M8 の既定）。この 13F の経路（下の節）とは別の経路で、ここで述べる 13F の producer・store はこの asset を読み書きしない。
 
 市場系の実配信bundle `frontend/public/static-data` は不在。13F元SEC ZIPとOpenFIGIの完全な原応答も不在。
 保存済み13F集計は26,210証券・45,987観測、報告期2026-03-31/06-30、提出集計期限2026-08-31、取得2026-09-28。
@@ -111,4 +117,4 @@ Playwrightの`market-history-asset.spec.js`は合成gzip/mappingを実CLIで保�
 
 **読み手**（コード読取、2026-11-15）：`marketLongHistory.js` の `validateLongHistory` は既知のキーを `key in row` で任意に検査し、行をそのまま返す（未知のキーを拒まず、落とさない）。`restore-market-history-source.mjs` と `exportMarketTrends` はこの検査と同じバイトを使う。`audit-market-history.py` は既知のキーだけを独立に再計算し、行のキーを列挙しないので、新しいキーは拒まれないが照合もされない（統合への依頼は docs/round3/market.md の P5 の節）。
 
-**キャッシュ**：`static-site.yml` の長期履歴のキャッシュキーは `hashFiles('frontend/tools/collect-market-history.py')` を含む。このファイルを変える合流のたびに、次の定期実行は長期履歴の全件を 1 回取り直す（このコミットで 1 回、後の True への切り替えでもう 1 回）。取り直しに失敗すると前回の取得分が残り（`updated:false`）、新しいキーは無いままになる。計画（M8）では、新しいキーを読む UI（後のパッケージで作る）は、キーが無いとき「未収録（旧形式）」と出し、0 にしない。
+**キャッシュ**：`static-site.yml` の長期履歴のキャッシュキーは `hashFiles('frontend/tools/collect-market-history.py')` を含む。このファイルを変える合流のたびに、次の定期実行は長期履歴の全件を 1 回取り直す（このコミットで 1 回、後の True への切り替えでもう 1 回）。取り直しに失敗すると前回の取得分が残り（`updated:false`）、新しいキーは無いままになる。新しいキーを読む UI（round 3 MARKET の P6）は、キーが無いとき「未収録（この公開データには含まれていません）」と出し、0 にも率にもしない（計画の「未収録（旧形式）」は訂正：出力が off の今の公開もキーを持たないため）。
