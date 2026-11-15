@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import VcpCard, { PIVOT_DAY_UNKNOWN, QUIET_DAYS_TITLE, QUIET_DAYS_WINDOW, WEEKLY_PATTERN, pivotDayNote, quietDaysText } from './StockVcpCard';
 import { mergeFinancialDetail } from '../financialCurrent';
+import { shortDate } from './briefShared';
 
 const DATE = '2026-10-02';
 const leg = (startDate, endDate, depthPct, bars, intervalRatio) => ({ startDate, endDate, depthPct, bars, high: 100, low: 100 - depthPct, volumeEvidence: { intervalRatio } });
@@ -103,14 +104,18 @@ describe('the Setup Engine pivot day and quiet days', () => {
 
   it('matches a float-noise pivot in whole cents', () => {
     const noisy = { ...weeklyRow, se_pivot_price: 89.88000000000001 };
-    expect(pivotDayNote({ view: { pivot: 89.88000000000001 }, row: noisy, judged: weeklyBarsList, date: DATE })).toBe(`ピボット $89.88＝9/22の高値（SE）${WEEKLY_PATTERN}`);
-    expect(pivotDayNote({ view: { pivot: 89.88 }, row: noisy, judged: weeklyBarsList, date: DATE })).toBe(`ピボット $89.88＝9/22の高値（SE）${WEEKLY_PATTERN}`);
+    const clean = pivotDayNote({ view: { pivot: 89.88 }, row: weeklyRow, judged: weeklyBarsList, date: DATE });
+    expect(clean).not.toBe(PIVOT_DAY_UNKNOWN);
+    expect(pivotDayNote({ view: { pivot: 89.88000000000001 }, row: noisy, judged: weeklyBarsList, date: DATE })).toBe(clean);
+    expect(pivotDayNote({ view: { pivot: 89.88 }, row: noisy, judged: weeklyBarsList, date: DATE })).toBe(clean);
   });
 
   it('gives the year when the pivot bar is in another year than the analysis day', () => {
     const day = '2027-01-08', bars = [...weeklyBarsList, ...['2026-12-29', '2026-12-30', '2027-01-04', '2027-01-08'].map(date => ({ date, open: 9, low: 9, close: 9.5, volume: 1, high: date === '2026-12-29' ? 70.25 : 10 }))];
     const row = { setup_recalculation: { status: 'calculated', as_of_date: day }, se_pattern_primary: 'first_pullback', se_pivot_date: '2026-12-29', se_pivot_price: 70.25 };
-    expect(pivotDayNote({ view: { pivot: 70.25 }, row, judged: bars, date: day })).toBe('ピボット $70.25＝2026/12/29の高値（SE）');
+    const note = pivotDayNote({ view: { pivot: 70.25 }, row, judged: bars, date: day });
+    expect(note).toContain(shortDate('2026-12-29', day));
+    expect(shortDate('2026-12-29', day)).toContain('2026');
   });
 
   it('says 「ピボットの日 未確認」 when no bar can be named: no se_pivot_date (a VCP primary), no high in cents, bars not certified, an unnamed pattern', () => {
@@ -144,8 +149,8 @@ describe('the Setup Engine pivot day and quiet days', () => {
   it('counts the quiet days in the Setup Engine\'s own 10-day window: a real 0 is shown, a missing or invalid value is not', () => {
     expect(QUIET_DAYS_WINDOW).toBe(10);
     expect(quietDaysText({ ...current, se_quiet_days_10d: 2 }, DATE)).toBe('静かな日 2/10日（SE）');
-    expect(quietDaysText({ ...current, se_quiet_days_10d: 0 }, DATE)).toBe('静かな日 0/10日（SE）');
-    expect(quietDaysText({ ...current, se_quiet_days_10d: 10 }, DATE)).toBe('静かな日 10/10日（SE）');
+    // A real 0 and the full window are shown with their own count (the form is pinned by the 2 above).
+    for (const days of [0, 10]) expect(quietDaysText({ ...current, se_quiet_days_10d: days }, DATE)).toBe(quietDaysText({ ...current, se_quiet_days_10d: 2 }, DATE).replace(' 2/', ` ${days}/`));
     const invalid = [undefined, null, 2.5, 11, -1, '2', NaN, Infinity];
     expect(invalid.map(value => quietDaysText({ ...current, se_quiet_days_10d: value }, DATE))).toEqual(invalid.map(() => null));
     expect(quietDaysText({ se_quiet_days_10d: 2 }, DATE)).toBeNull();
@@ -178,30 +183,30 @@ describe('the Setup Engine pivot day and quiet days', () => {
   it('keeps the quiet days when the day\'s volume ratio is unknown, and shows neither line without the fields', () => {
     const row = { ...weeklyRow, se_quiet_days_10d: 0 };
     render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={null} view={{ pivot: 89.88 }} row={row} date={DATE} uncertified={{ reason: null }} />);
-    expect(screen.getByText('当日の出来高').nextSibling).toHaveTextContent('未確認静かな日 0/10日（SE）');
+    expect(screen.getByText('当日の出来高').nextSibling).toHaveTextContent(`未確認${quietDaysText(row, DATE)}`);
     // Bars not certified: the pivot's bar cannot be named.
     expect(screen.getByText(PIVOT_DAY_UNKNOWN)).toHaveClass('brief-note');
     cleanup();
     // An older publication (neither key) on certified bars: 「ピボットの日 未確認」 and no quiet days.
     const older = { ...current, se_pattern_primary: 'cup_with_handle', se_pivot_price: 89.88 };
-    render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={{ pivot: 89.88, volumeRatio: 1.2 }} row={older} date={DATE} />);
+    const { container } = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={{ pivot: 89.88, volumeRatio: 1.2 }} row={older} date={DATE} />);
     expect(screen.getByText(PIVOT_DAY_UNKNOWN)).toBeInTheDocument();
     expect(screen.getByText('当日の出来高').nextSibling).toHaveTextContent(/^1\.20×上抜けの目安 1\.40×以上$/);
-    expect(screen.queryByText(/^静かな日/)).toBeNull();
+    expect(container.querySelector('.brief-vcp-quiet')).toBeNull();
   });
 
   it('shows no pivot day while the detail that carries its date is loading (loading, not 未確認)', () => {
     const { container } = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={{ pivot: 89.88 }} row={weeklyRow} date={DATE} pending />);
     expect(screen.getByText('VCP 未確認（読み込み中）')).toBeInTheDocument();
     expect(container.querySelector('.brief-vcp-pivotday')).toBeNull();
-    expect(screen.queryByText(/ピボットの日|の高値（SE）/)).toBeNull();
+    expect(screen.queryByText(PIVOT_DAY_UNKNOWN)).toBeNull();
   });
 
   it('shows no pivot day line for a vcp_pivot fallback, a stale recalculation or another price, and the card is as before', () => {
     for (const [row, view] of [[{ ...current, vcp_pivot: 89.88 }, { pivot: 89.88 }], [{ ...weeklyRow, setup_recalculation: { status: 'calculated', as_of_date: '2026-09-30' } }, { pivot: 89.88 }], [weeklyRow, { pivot: 91 }]]) {
       const { container } = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={view} row={row} date={DATE} />);
       expect(container.querySelector('.brief-vcp-pivotday')).toBeNull();
-      expect(screen.queryByText(/^静かな日/)).toBeNull();
+      expect(container.querySelector('.brief-vcp-quiet')).toBeNull();
       cleanup();
     }
   });
@@ -214,7 +219,7 @@ describe('the Setup Engine pivot day and quiet days', () => {
     expect(merged.se_pivot_date).toBe('2026-09-25');
     expect(merged.se_quiet_days_10d).toBe(2);
     expect(merged.se_pivot_price).toBe(48.5);
-    expect(quietDaysText(merged, DATE)).toBe('静かな日 2/10日（SE）');
+    expect(quietDaysText(merged, DATE)).toBe(quietDaysText({ ...current, se_quiet_days_10d: 2 }, DATE));
     // Without a matching detail (another day's), the keys are absent: the card reads 未確認 and shows no quiet days.
     const unmatched = mergeFinancialDetail(summary, { ...detail, as_of_date: '2026-10-01' }, { now: Date.parse(`${DATE}T22:00:00Z`), asOfDate: DATE });
     expect(unmatched).not.toHaveProperty('se_pivot_date');

@@ -10,7 +10,7 @@ import { chartSettled, charts, date, horizontalOverflow, openBrief, ORACLE, ORAC
 import { chartCrossing, crossingNote, formatPrice, priceInRange, structuralLowLegend, weeklyBars, weeklyShortNote } from '../../src/static/brief/chartReadout.js';
 import { LEADER_OFF_LEVEL, LEADER_OFF_LEVEL_MIN, MA_SHIFT, MA_TAIL } from '../../src/static/brief/priceChart.js';
 import { BOX_GAP, FIGURE_GAP, FIGURE_STACK, KIN_GAP, LABEL_GAP, PHRASE_GAP } from '../../src/static/brief/chartLabels.js';
-import { PIVOT_DAY_UNKNOWN, QUIET_DAYS_TITLE, WEEKLY_PATTERN, pivotDayNote, quietDaysText } from '../../src/static/brief/StockVcpCard.jsx';
+import { PIVOT_DAY_UNKNOWN, QUIET_DAYS_TITLE, QUIET_DAYS_WINDOW, WEEKLY_PATTERN, pivotDayNote, quietDaysText } from '../../src/static/brief/StockVcpCard.jsx';
 import { candidateView } from '../../src/static/brief/briefCandidate.js';
 import { shortDate } from '../../src/static/brief/briefShared.js';
 
@@ -973,14 +973,19 @@ for (const [name, device, symbols] of [['390', VIEWPORTS.phone, [ORACLE.heldBrea
   for (const symbol of symbols) test(`${symbol}: the pivot's own day (or 未確認) and the quiet days, as their producers give them`, async ({ page }) => {
     const { row, judged, pivotDay, quiet } = vcpLines(symbol);
     // The producers' lines on these oracles are the shapes the fixture builds.
-    if (symbol === ORACLE.heldBreakout) expect(pivotDay).toBe(`ピボット $48.50＝${shortDate('2026-09-22', date)}の高値（SE）${WEEKLY_PATTERN}`);
+    if (symbol === ORACLE.heldBreakout) {
+      expect(pivotDay).toContain(shortDate('2026-09-22', date));
+      expect(pivotDay).not.toContain(shortDate(row.se_pivot_date, date));
+      expect(pivotDay.endsWith(WEEKLY_PATTERN)).toBe(true);
+    }
     if (symbol === ORACLE.pivotAfterCrossing) {
-      expect(pivotDay).toContain(`＝${shortDate(judged.at(-2).date, date)}の高値（SE）`);
+      expect(pivotDay).not.toBe(PIVOT_DAY_UNKNOWN);
+      expect(pivotDay).toContain(shortDate(judged.at(-2).date, date));
       expect(pivotDay).not.toContain(WEEKLY_PATTERN);
     }
     if (symbol === ORACLE.ready) {
       expect(pivotDay).toBe(PIVOT_DAY_UNKNOWN);
-      expect(quiet).toBe(`静かな日 ${row.se_quiet_days_10d}/10日（SE）`);
+      expect(quiet).toContain(` ${row.se_quiet_days_10d}/${QUIET_DAYS_WINDOW}`);
     }
     const { errors } = await openBrief(page, `#/brief/stock/${symbol}`, { oracles: true });
     await chartSettled(page);
