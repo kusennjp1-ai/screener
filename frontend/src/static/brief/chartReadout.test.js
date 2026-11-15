@@ -3,6 +3,8 @@ import { CHART_RANGES, chartContentKey, chartCrossing, chartNotes, chartReadout,
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { ADR_SESSIONS, adrPercent } from './positionSizing';
 import { lastPivotCrossing, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
+import { pivotDistanceText } from './briefCandidate';
+import { signed } from '../positionGeometry';
 
 // The crossing helper is verdict's (breakoutHistory.js, VD1/VD2 write its round-2 body): mocked here, so these
 // tests pin how the chart reads it whatever body it has (plan §2.2 step-0 amendment).
@@ -336,5 +338,73 @@ describe('structuralLowLegend (round 3 C3)', () => {
 
   it('gives nothing for an unknown low: never a price of 0 or —', () => {
     for (const value of [null, undefined, NaN, Infinity]) expect(structuralLowLegend(value)).toBeNull();
+  });
+});
+
+describe('the readout\'s 対ピボット (round 3 C5): the pivot-distance rule, never +0.0% or −0.0%', () => {
+  // The latest close set to `close` (the bars before it climb from 80), read on certified bars against `pivot`.
+  const at = (close, pivot, interval = 'day') => chartReadout({ bars: bars(260, i => (i === 259 ? close : 80 + i * 0.01)), interval }, undefined, { certified: true, pivot });
+  const rule = (close, readout, pivot) => pivotDistanceText({ price: close, pivot, distance: readout.pivotRatio });
+
+  it('reads 「+0.1%未満」 a cent over the pivot and 「−0.1%未満」 a cent under it, daily and weekly alike', () => {
+    for (const interval of ['day', 'week']) {
+      const over = at(89.89, 89.88, interval), under = at(89.87, 89.88, interval);
+      expect(formatPercent(over.pivotRatio)).toBe('+0.0%');
+      expect(over.pivotText).toBe(rule(89.89, over, 89.88));
+      expect(over.pivotText.startsWith('+')).toBe(true);
+      expect(over.pivotText).not.toBe(formatPercent(over.pivotRatio));
+      expect(formatPercent(under.pivotRatio)).toBe('−0.0%');
+      expect(under.pivotText).toBe(rule(89.87, under, 89.88));
+      expect(under.pivotText.startsWith('−')).toBe(true);
+      expect(under.pivotText).not.toBe(formatPercent(under.pivotRatio));
+      // The in-band form is the rule's, whichever cent of the band: the same text as a close 0.04% over or under.
+      expect(over.pivotText).toBe(pivotDistanceText({ price: 100.04, pivot: 100, distance: 0.04 }));
+      expect(under.pivotText).toBe(pivotDistanceText({ price: 99.96, pivot: 100, distance: -0.04 }));
+    }
+  });
+
+  it('reads 「±0.0%」 at the pivot\'s cents, whichever side of the cent the float noise in the pivot falls', () => {
+    const atCents = pivotDistanceText({ price: 89.88, pivot: 89.88, distance: 0 });
+    expect(atCents.startsWith('±')).toBe(true);
+    for (const pivot of [89.88000000000001, 89.88 - 1e-12, 89.88]) {
+      const readout = at(89.88, pivot);
+      expect(readout.pivotText).toBe(rule(89.88, readout, pivot));
+      expect(readout.pivotText).toBe(atCents);
+    }
+    expect(formatPercent(at(89.88, 89.88000000000001).pivotRatio)).toBe('−0.0%');
+    // The rule is the cents', not the percent's: a pivot of 5.004 is at the cents of a close of 5.00 (−0.08%), as every
+    // screen prints it.
+    const cents = at(5, 5.004);
+    expect(formatPercent(cents.pivotRatio)).toBe('−0.1%');
+    expect(cents.pivotText).toBe(atCents);
+  });
+
+  it('prints ordinary distances exactly as before (formatPercent), and never a signed 0.0%', () => {
+    for (const [close, text] of [[101, '+1.0%'], [96.6, '−3.4%'], [112.3, '+12.3%']]) {
+      const readout = at(close, 100);
+      expect(readout.pivotText).toBe(text);
+      expect(readout.pivotText).toBe(formatPercent(readout.pivotRatio));
+    }
+    // Every close from 80 to 120 against a pivot of 100: off the pivot's cents and 0.05% or more away, the text is
+    // formatPercent's; it never reads +0.0% or −0.0%.
+    for (let cents = 8000; cents <= 12000; cents += 7) {
+      const close = cents / 100, readout = at(close, 100);
+      expect(readout.pivotText).not.toMatch(/^[+−]0\.0%$/);
+      if (cents !== 10000 && Math.abs(readout.pivotRatio).toFixed(1) !== '0.0') expect(readout.pivotText).toBe(formatPercent(readout.pivotRatio));
+    }
+  });
+
+  it('keeps formatPercent and positionGeometry.signed the same formula, so outside the band the readout cannot drift', () => {
+    const values = [0, -0, 0.05, -0.05, 0.0499, -0.0499, 0.15, -0.15, 1e-12, -1e-12, 99.95, -99.95, NaN, null, undefined, Infinity, -Infinity];
+    for (let v = -40; v <= 40; v += 0.0137) values.push(v);
+    for (const value of values) expect(formatPercent(value)).toBe(signed(value, 1));
+  });
+
+  it('gives no text where the ratio is unknown: bars not certified, a past bar, or no pivot', () => {
+    const model = { bars: bars(260), interval: 'day' };
+    expect(chartReadout(model, undefined, { certified: false, pivot: 120 })).toMatchObject({ pivotRatio: null, pivotText: null });
+    expect(chartReadout(model, 200, { certified: true, pivot: 120 })).toMatchObject({ pivotRatio: null, pivotText: null });
+    expect(chartReadout(model, undefined, { certified: true, pivot: null })).toMatchObject({ pivotRatio: null, pivotText: null });
+    expect(chartReadout({ bars: bars(260), interval: 'week' }, undefined, { certified: false, pivot: 120 })).toMatchObject({ pivotRatio: null, pivotText: null });
   });
 });

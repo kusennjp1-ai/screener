@@ -2,7 +2,7 @@
 // bars on the chart's interval, every moving average it draws and the volume average, then one bar's
 // values as the readout shows them. Pure; a value whose window is short is null (shown as —), never 0.
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
-import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
+import { BREAKOUT_VOLUME_RATIO, pivotDistanceText, ratioShown } from './briefCandidate';
 import { ADR_SESSIONS, adrState } from './positionSizing';
 import { breakoutBar, lastPivotCrossing, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
 
@@ -201,7 +201,9 @@ export function heavyVolumeBars(model, period) {
  * certified daily bars, the plan's own function) and the distance from the 50-day line, on the daily
  * chart's latest bar: `adr` and `fromSma50` are null (shown as —) on bars not certified, and absent
  * (undefined) on a past bar or the weekly chart, where they do not apply. `unverified` is true when the
- * bars are not certified: the readout names them 未検証の足 and qualifies the change and volume ratio.
+ * bars are not certified: the readout names them 未検証の足 and qualifies the change and volume ratio. `pivotText` is the
+ * pivot ratio as every screen prints a distance from the pivot (pivotDistanceText: 「±0.0%」 at the pivot's cents,
+ * 「+0.1%未満」/「−0.1%未満」 within 0.05% of it, never 「+0.0%」/「−0.0%」); null when the ratio is.
  */
 export function chartReadout(model, index, { certified = false, pivot = null, auditHigh = null } = {}) {
   const series = chartSeries(model);
@@ -214,6 +216,7 @@ export function chartReadout(model, index, { certified = false, pivot = null, au
   const daily = latest && !weekly;
   const ma50 = series.averages.find(a => a.key === 'ma50')?.values[i];
   const adr = daily ? (certified === true ? adrState(model.bars) : { value: null, reason: '日足が分析日で未検証' }) : null;
+  const pivotRatio = judge && finite(pivot) && pivot > 0 ? (bar.close / pivot - 1) * 100 : null;
   return {
     index: i, latest, weekly, unverified: certified !== true,
     adr: adr ? adr.value : undefined, adrReason: adr?.reason ?? null, adrSessions: ADR_SESSIONS,
@@ -225,7 +228,7 @@ export function chartReadout(model, index, { certified = false, pivot = null, au
     volume: finite(bar.volume) ? bar.volume : null, volumeText: formatShares(bar.volume),
     volumeRatio: finite(average) && average > 0 && finite(bar.volume) ? bar.volume / average : null, volumeBasis: `${series.volumeLength}${series.unit}`,
     averages: series.averages.map(a => ({ key: a.key, label: a.label, short: a.short, value: finite(a.values[i]) ? a.values[i] : null })),
-    pivotRatio: judge && finite(pivot) && pivot > 0 ? (bar.close / pivot - 1) * 100 : null,
+    pivotRatio, pivotText: pivotRatio === null ? null : pivotDistanceText({ price: bar.close, pivot, distance: pivotRatio }),
     fromHigh: judge && finite(auditHigh) && auditHigh > 0 ? (bar.close / auditHigh - 1) * 100 : null,
   };
 }

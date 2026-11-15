@@ -8,6 +8,7 @@ beforeAll(async () => { await loadPriceChart(); });
 import { AUDIT_VERSION } from '../qualificationAudit';
 import { lastPivotCrossing } from './breakoutHistory';
 import { structuralLowLegend } from './chartReadout';
+import { pivotDistanceText } from './briefCandidate';
 
 // The crossing helper is verdict's (VD1/VD2 write its round-2 body): the chart's tests mock it (plan §2.2), keeping
 // the rest of the module (the conclusion's crossingEvent) as it is.
@@ -132,6 +133,41 @@ describe('brief stock chart card', () => {
     render(<StockView data={audited('2026-10-01')} />);
     expect(screen.getByTestId('brief-price-chart').querySelector('.bc-high52')).toBeNull();
     expect(screen.getByRole('group', { name: '最新の足の値' })).not.toHaveTextContent('52週高値');
+  });
+
+  it('prints the distance to the pivot as every screen does: in band a cent over or under it, 「±0.0%」 only at its cents (round 3 C5)', () => {
+    // The latest close on whole cents (81.23, inside its bar's range), so a pivot a cent away is off its cents.
+    const list = bars();
+    list[list.length - 1] = { ...list.at(-1), close: 81.23 };
+    const pivotItem = () => [...screen.getByRole('group', { name: '最新の足の値' }).querySelectorAll('.ro-item')].find(node => node.textContent.startsWith('対ピボット'));
+    const atCents = pivotDistanceText({ price: 81.23, pivot: 81.23, distance: 0 });
+    for (const [pivot, sign] of [[81.22, '+'], [81.24, '−'], [81.23000000000002, '±'], [81.22999999999999, '±']]) {
+      render(<StockView data={{ ...data(true), bars: list, view: { ...view, pivot, upper: pivot * 1.05 } }} />);
+      const text = pivotDistanceText({ price: 81.23, pivot, distance: (81.23 / pivot - 1) * 100 });
+      expect(pivotItem().textContent).toBe(`対ピボット${text}`);
+      expect(text.startsWith(sign)).toBe(true);
+      // 「±0.0%」 at the pivot's cents only; a cent away is the in-band form, never a signed 0.0%.
+      if (sign === '±') expect(text).toBe(atCents); else expect(text).not.toBe(atCents);
+      expect(pivotItem().textContent).not.toMatch(/[+−]0\.0%$/);
+      cleanup();
+    }
+    // Bars not certified for the analysis date: no distance to the pivot at all.
+    render(<StockView data={{ ...data(false), bars: list, view: { ...view, pivot: 81.22, upper: 85 } }} />);
+    expect(pivotItem()).toBeUndefined();
+  });
+
+  it('labels the distance to the pivot 「ピボット」 below 1024px with 「対」 for screen readers, and 「対ピボット」 at 1024px and wider (round 3 C5)', () => {
+    const list = bars(), close = list.at(-1).close;
+    const label = () => [...screen.getByRole('group', { name: '最新の足の値' }).querySelectorAll('.ro-item')].find(node => node.textContent.startsWith('対ピボット')).querySelector('i');
+    const visible = node => [...node.childNodes].filter(child => !(child.nodeType === 1 && child.classList.contains('sr-only'))).map(child => child.textContent).join('');
+    render(<StockView data={{ ...data(true), view: { ...view, pivot: close * 0.99, upper: close * 1.04 } }} />);
+    expect(label().textContent).toBe('対ピボット');
+    expect(label().querySelector('.sr-only')).toHaveTextContent(/^対$/);
+    expect(visible(label())).toBe('ピボット');
+    cleanup();
+    render(<StockView data={{ ...data(true), view: { ...view, pivot: close * 0.99, upper: close * 1.04 } }} wide />);
+    expect(label().textContent).toBe('対ピボット');
+    expect(label().querySelector('.sr-only')).toBeNull();
   });
 
   it('names the contraction marks only when they are drawn, shortly on a phone, with ▼▲ explained in the 注記', () => {
