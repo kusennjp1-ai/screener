@@ -608,7 +608,9 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
   - It adds 「（週足の型）」 when `PIVOT_TIMEFRAMES[se_pattern_primary] === 'weekly'`, read through `Object.hasOwn`.
 - **No bar** gives 「ピボットの日 未確認」 (`PIVOT_DAY_UNKNOWN`). The cases: no `se_pivot_date`, a pattern outside the table, no bar whose high is the pivot in cents, or bars not certified.
   - `se_pivot_date` itself is never printed, and nothing is guessed.
-- **Where it shows:** a `<p className="brief-note brief-vcp-pivotday">` directly under the 「Setup Engine：土台…」 note.
+- **Where it shows (as delivered in CH-3; changed by round-1 order 2, see "C4 placement in the base note"):** a
+  `<p className="brief-note brief-vcp-pivotday">` directly under the 「Setup Engine：土台…」 note. Since 85971ae4 it ends that note as a
+  span when the note is shown, and is its own note only when it is not.
   - 「（週足の型）」 is its own inline-block span, so a wrap at 320 moves it whole.
   - Nothing renders while `pending` is true: the detail that carries the date has not arrived, which is loading, not 未確認.
 
@@ -801,9 +803,27 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 | a failed breakout (ブレイク失敗) | `STOCK_LINE` 3388 | 3271 | +117 | no |
 
 - **Which placement is kept, and why: variant A.** On 'stalls' the two placements are the same DOM (a tie, 3145 either way). Where the
-  base note is shown, variant A is lower and reads as the base followed by its day. At 375 the day moves whole to the note's second
-  line: 「Setup Engine：土台 17週・深さ 18%・」 / 「ピボットの日 未確認」 (screenshot `r4/shots-85971ae/375-ZZRD.png`). At 390 and 1440 it
-  is one line.
+  base note is shown, variant A measured lower in every view below, and it reads as the base followed by its day:
+  - ZZRD (the one fixture with a base note; its day is 「ピボットの日 未確認」): at 375 the day moves whole to the note's second line,
+    「Setup Engine：土台 17週・深さ 18%・」 / 「ピボットの日 未確認」 (screenshot `r4/shots-85971ae/375-ZZRD.png`); at 390 and 1440 one line.
+  - **The common real-data shape, a base plus a dated weekly line** (scratch `audit3/r3-chart/measure/c4a-zzhb.spec.js`: ZZHB with
+    `se_base_length_weeks` 6 and `se_base_depth_pct` 12 mutated in, so its base note shows with 「（独自近似は未確認）」; variant A at
+    ee3d76f2 against the own-note placement of 8d122b46's StockVcpCard.jsx and brief-chart.css put back in the working tree for the run,
+    then restored; screenshots `r4/c4a-zzhb/`):
+
+| ZZHB with a base | VCP card, own note → A | Stock screen, own note → A | Where the day sits under A |
+|---|---|---|---|
+| 320 | 451.1 → **441.1** | 2578 → **2568** | lines 3–4 of the base note; 「（週足の型）」 wraps whole to line 4 |
+| 375 | 392.9 → **362.5** | 2430 → **2399** | after 「（独自近似は未確認）・」 on the base note's second line, no added line |
+| 390 | 372.5 → **362.5** | 2391 → **2381** | the base note's second line |
+| 1440 | 317.1 → **305.1** | 1832 → 1832 | the base note's second line |
+
+  - Horizontal overflow 0 and the card's own overflow 0 in all 8 views; no page errors.
+  - **On the rebuild render** (`out/ee3d76f/render/probe-reduce.json` `notes`, 320/390/1440 × 4 periods, against CH-3's producer read
+    `c4-rebuild-08bebfc.json`; `r4/c4a-rebuild-notes.py`): the producer's line is rendered in **352 of 352** views of the 37 ready rows,
+    **292 of them at the end of the base note** after 「・」 (31 rows, e.g. PCRX 「Setup Engine：土台 58週・深さ 32%（独自近似と異なります）・
+    ピボット $36.45＝10/26の高値（SE）（週足の型）」) and 60 as its own note (6 rows, e.g. MGRC). The render probe records no VCP card
+    heights, so the rebuild's heights under A are **未検証**.
 - **What 'stalls' would need:** content ≤ 3145. With rule 9's 12px kept, that is `STOCK_CAP` = 3056 + 101 − 12 = **3145**, i.e. an
   allowance of +101 over step 0 instead of +80 (+21px). The C4 line itself is 30.4px (a 20.4px note line plus the card's 10px gap).
 - **A scratch measurement for the base-less case (numbers only, never committed, file restored):** the day as a `<small>` in the
@@ -872,7 +892,8 @@ detail held by `detailGate` until the loading state is measured; load 7.10 → 7
   - It shows only where C4 and R's spec meet, at integration; R's branch does not have C4.
   - The cap is 「verdict's +80 over step 0」 less 12px of headroom. C4's line, about 31px, is not in that allowance.
   - **(a)** Track R or integration raises `STOCK_CAP` by C4's measured 31px (3124 → 3155). The frozen budgets (brief-compact.spec.js `BUDGET.stock` 3400, `STOCK_LINE` 3388) are not reached.
-  - **(b)** Hold C4: `git revert ff4349b2 08bebfc7` (tests, then code); this record stays.
+  - **(b)** Hold C4: `git revert ff4349b2 08bebfc7` (tests, then code); this record stays. Since round 1 this is
+    `git revert 85971ae4 ff4349b2 08bebfc7`.
   - **(c)** Another placement for the line, which needs a new order. No placement in CHART's files fits about 9px for a text line.
   - Nothing outside CHART's list was edited.
 - **For CH-4:** this failure is known, and it is C4's. It is not a regression of C1–C3.
@@ -995,6 +1016,10 @@ These are recorded in the C1 section header below and in `audit3/r3-chart/pre-c1
 - **No timings were taken.** C1 is next; its timings are taken at integration on an idle machine.
 
 ### For the conductor (CH-4)
+
+> **Decided in the conductor's round 1** (see "Round-1 orders" at the end): C5 = option 1, delivered in ee3d76f2; C3 accepted as delivered
+> (HUM at 320 and the folded 「上抜け」/「枠＝収縮」 keys go to the owner as notes, no rank swap in round 3); C4's `STOCK_CAP` stays an open
+> integration request after variant A measured FAIL. The bullets below are the CH-4 record as written then.
 
 - **The full suite shows the known C4 × brief-decision failure.** See STEP 1. The (a)/(b)/(c) decision in the C4 section is still open.
 - **C5 is still held.** `readout_zero_rendered` stays 4, and the four rows' readouts still differ from their verdicts in all 16 views (C5 section).
@@ -1252,6 +1277,10 @@ The rest is jsdom building the markup (`_node`, `Attr.setup`, the HTML parser) a
 
 ### For the conductor (CH-5)
 
+> **Decided in the conductor's round 1:** C1 is accepted as output-identical; the ≤ 200 ms target is not reached, there is no yielding in
+> round 3, the waiver stays and the figure goes to OD2; the counting timing is integration's. The open decisions listed below were
+> decided as recorded in "Round-1 orders" at the end. The bullets below are the CH-5 record as written then.
+
 - **C1 is output-identical and committed.** The 1440 first-load target of ≤ 200 ms is **not reached** in this session: 306 against base's 498 ms, interleaved and advisory.
   - Per the order, the owner waiver stays and the figure goes to OD2.
   - The same-run ratio, 0.61, projects to about 192–218 ms against quiet base readings and about 480 ms against CI's 779. Both projections are 未検証.
@@ -1307,6 +1336,10 @@ Logs and load files are in `audit3/r3-chart/r4/`. Nothing below is a timing.
 - brief-compact.spec.js + brief-phone.spec.js + brief-decision.spec.js at ee3d76f2: **92 passed, 1 failed** (4.1 min; load 6.82 → 10.06).
   The failure is the known `brief-decision.spec.js:269` 'stalls' at 375×812, 3145 against 3124 (C4 section). compact + phone: 66 of 66.
 - brief-decision.spec.js, whole, at 85971ae4: 26 passed, 1 failed (the same case); the C4 block of brief-chart.spec.js at 85971ae4: 4 passed.
+- **The other twelve static specs** at 14779f35 (the frontend is ee3d76f2's), one invocation: accessibility 10, flow 16, freshness 20,
+  fundamentals 29, invariants 36, legacy-redirects 2, market-phone 36, market 19, plan 16, rows 58, sell 8, watch 26: **276 passed**
+  (9.6 min; load 2.22 → 4.74).
+- **So all 17 static spec files ran on the final frontend: 453 passed, 1 failed (the known 'stalls'), 2 skipped (R's fixmes).**
 
 **Other checks**
 - `npm run lint` at ee3d76f2: **0 errors, 4 warnings**, all in files outside the track (App.jsx, StockDetails.jsx, MetricInfoPopover.jsx,
@@ -1329,8 +1362,8 @@ Logs and load files are in `audit3/r3-chart/r4/`. Nothing below is a timing.
   it (the layout-shift table). Whether a real published detail carries `se_pivot_date` and `se_quiet_days_10d` is read after a release.
 - **The rebuild at 320 and 1440 for C5's four rows:** the render probe covers 390 (counts) and the scratch render 375/390; 1440 is wide
   (label unchanged) and 320 already wraps the second line (fixtures: no row gained at 320). Not rendered on real data at 320/1440.
-- **brief-market.spec.js / brief-market-phone.spec.js and the other stock-screen specs** were run as listed above; anything not listed
-  there was not run in this round.
+- **Every static spec file ran on the final frontend** (above). Nothing in the Playwright suite is left unrun in this round.
+- **The rebuild's VCP card heights under variant A**: the render probe records none; only the fixture shapes above were measured.
 
 ## Track CHART: closing summary (after the conductor's round-1 orders)
 
