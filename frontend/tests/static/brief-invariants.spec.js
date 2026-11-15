@@ -282,6 +282,55 @@ test.describe('a failed breakout counts in the watch tile', () => {
   });
 });
 
+// Round 3 R5: a failed breakout past its 10-session window is neutral context on the stock screen only: it is never a hit and
+// counts nowhere. ZZAR's pivot is 2% above its price, crossed 15 sessions ago and closed back under it the next session; on
+// 2.2× volume the stock screen carries the line, on light volume (the control) it does not (the two volumes are swapped with a
+// bar two sessions before the crossing, so every value the rows read is the same). Today's tiles and watch rows and the watch
+// tab read the same on both.
+const pastWindow = (symbol, heavy) => {
+  const pivot = Math.round(rowBySymbol[symbol].current_price * 1.02 * 100) / 100;
+  return { ...onRow(symbol, row => { row.se_pivot_price = pivot; }),
+    charts: served => {
+      const bars = served[`${symbol}.json`].bars, n = bars.length, at = n - 16, average = bars.slice(at - 50, at).reduce((sum, bar) => sum + bar.volume, 0) / 50;
+      Object.assign(bars[at - 1], { open: pivot * 0.985, close: pivot * 0.985 }); fit(bars[at - 1]);
+      Object.assign(bars[at], { open: pivot * 0.99, close: pivot * 1.01 }); fit(bars[at]);
+      for (let i = at + 1; i < n - 1; i++) if (bars[i].close >= pivot * 0.98) { Object.assign(bars[i], { open: pivot * 0.975, close: pivot * 0.97 }); fit(bars[i]); }
+      const [loud, quiet] = [Math.ceil(average * 2.2), Math.round(average * 0.8)];
+      [bars[at].volume, bars[at - 2].volume] = heavy ? [loud, quiet] : [quiet, loud];
+    } };
+};
+test.describe('round 3 R5: a failed breakout after its window counts nowhere', () => {
+  test.use(phone(375));
+  test('Today\'s tiles and watch rows and the watch tab read the same with the stock screen\'s line as without it', async ({ page, context }) => {
+    const watch = { 'research-watch': ['ZZAR', 'ZZNV', 'ZZSD'] };
+    const read = async on => {
+      const summary = on.getByTestId('brief-summary'), rows = on.getByRole('region', { name: 'ウォッチの状況' }).locator('[data-symbol]');
+      await expect(summary.getByRole('link', { name: /ウォッチの注意/ }).locator('b')).toHaveText(/\d+件/);
+      await expect(rows.first()).toBeVisible();
+      const today = { tiles: await summary.innerText(), watch: await rows.evaluateAll(nodes => nodes.map(node => [node.dataset.symbol, node.textContent])) };
+      await on.goto('/#/brief/watch');
+      const tab = on.getByRole('region', { name: 'ウォッチ中の銘柄' }).getByTestId('brief-candidate');
+      await expect(tab).toHaveCount(watch['research-watch'].length);
+      return { ...today, tab: await tab.evaluateAll(nodes => nodes.map(node => [node.dataset.symbol, node.textContent])) };
+    };
+    const plain = await context.newPage(), quiet = await openBrief(plain, '#/brief', { storage: watch, mutate: pastWindow('ZZAR', false) });
+    const control = await read(plain);
+    // The control's stock screen has no line (the light breakout never failed by the check's rule).
+    await plain.goto('/#/brief/stock/ZZAR');
+    await expect(plain.getByTestId('brief-sell')).toBeVisible();
+    await expect(plain.getByTestId('brief-failed-context')).toHaveCount(0);
+    expect(quiet.errors).toEqual([]);
+    await plain.close();
+    const { errors } = await openBrief(page, '#/brief', { storage: watch, mutate: pastWindow('ZZAR', true) });
+    expect(await read(page)).toEqual(control);
+    // Not vacuous: this variant's stock screen carries the line, in the conclusion and the sell card.
+    await page.goto('/#/brief/stock/ZZAR');
+    await expect(page.getByTestId('brief-sell')).toBeVisible();
+    await expect(page.getByTestId('brief-failed-context')).toHaveCount(2);
+    expect(errors).toEqual([]);
+  });
+});
+
 // Round 3 R1 (crossings count from the pivot's own bar): the watch rows, Today and the stock screen read one bound, so a
 // stock says one sell wording everywhere. ZZNR's crossing came before its pivot formed (no 崩れ anywhere); ZZHB's came after
 // its pivot's bar (its chip, whatever it is, is the same on every surface). The chip is sellChipView's on the bounded checks:

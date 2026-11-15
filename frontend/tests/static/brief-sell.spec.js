@@ -1,10 +1,10 @@
 // Daily brief sell side on the stock screen: the sell card's qualifier beside a fired check, on synthetic data.
 // (The watch rows and the watch tile that count a broken setup are brief-watch.spec.js's.)
 import { test, expect } from '@playwright/test';
-import { chartSettled, date, openBrief, ORACLE, ORACLE_CHARTS, ORACLE_ROWS, rowBySymbol, SEC_SYMBOL } from './brief-fixture.js';
+import { charts, chartSettled, date, horizontalOverflow, openBrief, ORACLE, ORACLE_CHARTS, ORACLE_ROWS, rowBySymbol, SEC_SYMBOL } from './brief-fixture.js';
 import { candidateView, distanceText } from '../../src/static/brief/briefCandidate.js';
 import { crossingFloor } from '../../src/static/brief/breakoutHistory.js';
-import { noBreakoutSincePivot, sellChipView, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from '../../src/static/brief/briefSell.js';
+import { failedBreakoutContext, noBreakoutSincePivot, sellChipView, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from '../../src/static/brief/briefSell.js';
 import { shortDate } from '../../src/static/brief/briefShared.js';
 import { diagnoseBookChart } from '../../src/static/bookChartDiagnostics.js';
 
@@ -160,6 +160,75 @@ for (const [width, options] of [[390, phone(390, 844)], [1440, { viewport: { wid
     const chip = sellChipView(sells(from));
     expect(chip?.text ?? null).not.toBe(WEAKNESS_ROW_CHIP);
     if (chip) await expect(conclusion.locator('.brief-tags')).toContainText(chip.full ?? chip.text);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 R5: a failed breakout past its 10-session window. ZZAR's pivot is set 2% above its price, crossed 15 sessions ago on
+// 2.2× the prior 50-day volume and closed back under it the next session, under it since: its failed-breakout check is clear
+// (the window is the breakout's), and the conclusion and the sell card each carry one neutral, dated line
+// (failedBreakoutContext). The control is the same breakout on light volume (0.8×, no failed breakout, no line), with the volumes
+// swapped with a bar two sessions before it, so every other value the screens read (the last day's volume ratio included) is the same.
+const R5 = 'ZZAR';
+const r5Pivot = Math.round(rowBySymbol[R5].current_price * 1.02 * 100) / 100;
+function pastWindow(bars, heavy) {
+  const n = bars.length, at = n - 16, average = bars.slice(at - 50, at).reduce((sum, bar) => sum + bar.volume, 0) / 50;
+  Object.assign(bars[at - 1], { open: r5Pivot * 0.985, close: r5Pivot * 0.985 }); fit(bars[at - 1]);
+  Object.assign(bars[at], { open: r5Pivot * 0.99, close: r5Pivot * 1.01 }); fit(bars[at]);
+  for (let i = at + 1; i < n - 1; i++) if (bars[i].close >= r5Pivot * 0.98) { Object.assign(bars[i], { open: r5Pivot * 0.975, close: r5Pivot * 0.97 }); fit(bars[i]); }
+  const [loud, quiet] = [Math.ceil(average * 2.2), Math.round(average * 0.8)];
+  [bars[at].volume, bars[at - 2].volume] = heavy ? [loud, quiet] : [quiet, loud];
+}
+const r5Mutate = heavy => ({
+  rows: rows => { rows.find(r => r.symbol === R5).se_pivot_price = r5Pivot; },
+  details: details => { for (const detail of Object.values(details)) if (detail.symbol === R5) detail.se_pivot_price = r5Pivot; },
+  charts: served => pastWindow(served[`${R5}.json`].bars, heavy),
+});
+/** The stock screen's own path in node (StockView: candidateView, stockSells with crossingFloor) on the served variant. */
+const r5Sells = heavy => {
+  const bars = structuredClone(charts[`${R5}.json`].bars); pastWindow(bars, heavy);
+  const row = { ...rowBySymbol[R5], se_pivot_price: r5Pivot };
+  const view = candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, date);
+  return { bars, sells: stockSells({ judged: bars, diagnostics: null, view, from: crossingFloor(bars, row) }) };
+};
+const r5Card = async page => {
+  const conclusion = page.getByTestId('brief-conclusion'), sell = page.getByTestId('brief-sell');
+  await expect(sell).toBeVisible();
+  return { gate: await conclusion.getAttribute('data-gate'), tone: await conclusion.getAttribute('class'), title: await conclusion.locator('strong').first().innerText(),
+    checks: await sell.locator('li').evaluateAll(items => items.map(li => [li.querySelector('.brief-check').className, li.textContent])) };
+};
+for (const [width, options] of [[320, phone(320)], [390, phone(390, 844)], [1440, { viewport: { width: 1440, height: 900 } }]]) test.describe(`round 3 R5: a failed breakout after its window at ${width}px`, () => {
+  test.use(options);
+  test('the conclusion and the sell card show the producer\'s line once each, neutral, with no sideways scroll; nothing else changes', async ({ page, context }) => {
+    const { sells } = r5Sells(true), expected = sells.failedContext;
+    // The producers first: past the window the check is clear and the line is there; the light control has none.
+    expect(sells.weakness.find(check => check.key === 'failedBreakout').state).toBe('clear');
+    expect(expected?.text).toMatch(/^ブレイク失敗後（\d+\/\d+上抜け→\d+\/\d+割れ・その後の安値 −\d+\.\d%）$/);
+    expect(expected).toEqual(failedBreakoutContext(r5Sells(true).bars.slice(-252), r5Pivot));
+    expect('failedContext' in r5Sells(false).sells).toBe(false);
+    const { errors } = await openBrief(page, `#/brief/stock/${R5}`, { mutate: r5Mutate(true) });
+    const lines = page.getByTestId('brief-failed-context');
+    await expect(page.getByTestId('brief-sell')).toBeVisible();
+    await expect(lines).toHaveCount(2);
+    for (const card of [page.getByTestId('brief-conclusion'), page.getByTestId('brief-sell')]) {
+      const line = card.getByTestId('brief-failed-context');
+      await expect(line).toHaveText(expected.text);
+      await expect(line).toBeVisible();
+      // Inside its card: never wider than the card, never cut off.
+      const [box, outer] = [await line.boundingBox(), await card.boundingBox()];
+      expect(box.x).toBeGreaterThanOrEqual(outer.x);
+      expect(box.x + box.width).toBeLessThanOrEqual(outer.x + outer.width + 0.5);
+      expect(await line.evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+    }
+    expect(await horizontalOverflow(page)).toBe(0);
+    // Neutral: the call, its tone and every sell check (state and words) read as on the light control, which has no line.
+    const shown = await r5Card(page);
+    const plain = await context.newPage(), quiet = await openBrief(plain, `#/brief/stock/${R5}`, { mutate: r5Mutate(false) });
+    const control = await r5Card(plain);
+    await expect(plain.getByTestId('brief-failed-context')).toHaveCount(0);
+    expect(shown).toEqual(control);
+    expect(quiet.errors).toEqual([]);
+    await plain.close();
     expect(errors).toEqual([]);
   });
 });
