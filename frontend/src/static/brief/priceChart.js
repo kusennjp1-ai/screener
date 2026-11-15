@@ -122,11 +122,13 @@ export function dateTicks(bars, plotWidth, { dense = false } = {}) {
  *   stop, entry, r2, r3, structuralLow, auditHigh, gaps:[{date,direction}], earnings (earningsCall: {date,days,soon})|null,
  *   crossing:{date,volumeRatio}|null (the pivot crossing on certified bars), sellMarks }
  * @param {object} options { period, animate, fast, signal, onScrub(index into the interval's bars | null), selected, carry
- *   (the levels whose names go to the right axis: set by the renderer itself when it lays the chart out again) }
+ *   (the levels whose names go to the right axis: set by the renderer itself when it lays the chart out again),
+ *   reference (TEST ONLY: true bypasses every shortcut that only makes the layout cheaper, so a test can check that the
+ *   chart drawn without them is byte for byte the same; the app never passes it) }
  * @returns the controller (null without bars); its `legend` lists the legend items the card keeps shown ([key, text])
  */
 export function renderPriceChart(el, model, options = {}) {
-  const { period = 130, animate = true, fast = false, signal, onScrub, selected = null, carry = [] } = options;
+  const { period = 130, animate = true, fast = false, signal, onScrub, selected = null, carry = [], reference = false } = options;
   const k = fast ? 0.5 : 1;
   const W = Math.max(240, Math.round(el.clientWidth)), H = Math.max(240, Math.round(el.clientHeight));
   // Weekly mode: 10/30/40-week averages stand in for the 50/150/200-day lines (same colours).
@@ -318,6 +320,20 @@ export function renderPriceChart(el, model, options = {}) {
     }
     return count + (box.y1 > rsTop + rsH - 2 && box.y0 < rsTop + rsH ? leadBoxes.filter(lead => overlaps(box, lead)).length : 0);
   };
+  // The same count with each candle's and volume bar's box edges worked out once (the same sums, so the same numbers)
+  // and no box built per bar: solid() runs for each of the thousands of spots a label may try.
+  const candleX0 = bars.map((_, i) => x(i) - cw / 2 - 2), candleX1 = bars.map((_, i) => x(i) + cw / 2 + 2);
+  const volX0 = bars.map((_, i) => x(i) - vw / 2 - 1), volX1 = bars.map((_, i) => x(i) + vw / 2 + 1), volFoot = volTop + volH;
+  const solidCount = reference ? solid : box => {
+    const a = Math.max(0, Math.floor(box.x0 / bw) - 1), b = Math.min(n - 1, Math.ceil(box.x1 / bw) + 1);
+    let count = 0;
+    for (let i = a; i <= b; i++) {
+      if (candleTop[i] !== null && box.x0 < candleX1[i] && box.x1 > candleX0[i] && box.y0 < candleBottom[i] && box.y1 > candleTop[i]) count++;
+      if (volTops[i] !== null && box.x0 < volX1[i] && box.x1 > volX0[i] && box.y0 < volFoot && box.y1 > volTops[i]) count++;
+      if (ry && box.y1 > rsTop && box.y0 < rsTop + rsH && i < b && rs[i] != null && rs[i + 1] != null && segmentCrosses([x(i), ry(rs[i])], [x(i + 1), ry(rs[i + 1])], box)) count++;
+    }
+    return count + (box.y1 > rsTop + rsH - 2 && box.y0 < rsTop + rsH ? leadBoxes.filter(lead => overlaps(box, lead)).length : 0);
+  };
   const levelYs = [model.pivot, model.stop, model.auditHigh, entryDistinct ? model.entry : null, model.r2, model.r3].filter(inRange).map(v => ({ x0: 0, y: y(v) }));
   if (inRange(model.structuralLow)) levelYs.push({ x0: pw * 0.6, y: y(model.structuralLow) });
   // The averages across a box, and all the lines across it: the level lines and the averages (each counted once).
@@ -335,7 +351,7 @@ export function renderPriceChart(el, model, options = {}) {
   const struckBy = zone ? [...levelYs, { x0: zone.x, y: zone.top }] : levelYs;
   const strikeWithin = (box, d) => { const yc = (box.y0 + box.y1) / 2; return struckBy.some(level => box.x1 + 2 > level.x0 && Math.abs(level.y - yc) <= d); };
   const strike = box => strikeWithin(box, 5.5);
-  const placer = labelPlacer({ solid, soft, strike });
+  const placer = labelPlacer({ solid: solidCount, soft, strike, reference });
   // A level line still through a label's glyphs (no clear spot near its place) is cut under them (the level lines' mask:
   // its hole spans 6px above and below the label's centre, every line that close), so the label never reads as struck
   // through; an average across a label is cut under it too (its own mask: a line through 「109.67」 reads as 109:67).
@@ -567,15 +583,32 @@ export function renderPriceChart(el, model, options = {}) {
   };
   // Every line's end is held in the gutter first: no other line's leader runs past it (it would read as joined to it).
   for (const end of ends) placer.take({ x0: pw - 2.5, x1: pw - 0.5, y0: end.y - 1.5, y1: end.y + 1.5, leader: 'end', key: end.key });
+  // A name's candidate spots depend on its line's end only (its height, its place in `order`, its width), never on the
+  // try nor on the other names: one set per end serves the first placement and every retry, so the spots' order, and
+  // what never changes for a spot (the candles under it, the lines across it), is worked out once (chartLabels memo).
+  const nameSpots = new Map();
   const placeName = (end, offLevel = LEADER_OFF_LEVEL) => {
     const w = width(end.body, true), lx = pw - 7 - w, lo = Math.floor(Math.min(end.at, end.y) - MA_FAR), hi = Math.ceil(Math.max(end.at, end.y) + MA_FAR);
     const cost = (x0, yc) => { const d = Math.abs(yc - end.at); return (d > MA_NEAR ? 1000 : 0) + d + lx - x0; };
     const near = { cost: MA_NEAR + MA_SHIFT, x: [lx - MA_SHIFT, lx], y: [end.at - MA_NEAR, end.at + MA_NEAR] };
+    // What the leader's tests read at one left edge (its own line's height 3px right of the name) and on one row (a level
+    // line along it) is the same for every spot there: it is worked out once per left edge and per row.
+    const lineBeside = new Map(), alongLevel = new Map();
+    const lineRight = x0 => {
+      if (reference) return lineAt(end.shown, x0 + w + 3) ?? Infinity;
+      if (!lineBeside.has(x0)) lineBeside.set(x0, lineAt(end.shown, x0 + w + 3) ?? Infinity);
+      return lineBeside.get(x0);
+    };
+    const levelAlong = yc => {
+      if (reference) return struckBy.some(level => level.x0 < pw - 1.5 && Math.abs(level.y - yc) <= offLevel);
+      if (!alongLevel.has(yc)) alongLevel.set(yc, struckBy.some(level => level.x0 < pw - 1.5 && Math.abs(level.y - yc) <= offLevel));
+      return alongLevel.get(yc);
+    };
     // Beside the line's end: straight down or up to the name; a name moved left: on to its right end. None at the end
     // itself (within 3px of its height), nor for a moved name its own line runs into (within 3px, 3px right of it).
     const leaderOf = (x0, yc) => {
       const shifted = x0 < lx - 1;
-      if (shifted ? Math.abs((lineAt(end.shown, x0 + w + 3) ?? Infinity) - yc) <= 3 : Math.abs(yc - end.y) <= 3) return null;
+      if (shifted ? Math.abs(lineRight(x0) - yc) <= 3 : Math.abs(yc - end.y) <= 3) return null;
       return { tip: shifted ? yc : yc + (end.y > yc ? 6 : -6), shifted, to: x0 + w + 2 };
     };
     // Its segments as boxes: the vertical part 2px wide in the axis gutter, the horizontal part 4px tall; null (no such
@@ -583,13 +616,18 @@ export function renderPriceChart(el, model, options = {}) {
     const leader = (x0, yc) => {
       const path = leaderOf(x0, yc);
       if (!path) return [];
-      if (path.shifted && struckBy.some(level => level.x0 < pw - 1.5 && Math.abs(level.y - yc) <= offLevel)) return null;
+      if (path.shifted && levelAlong(yc)) return null;
       const segments = [{ x0: pw - 2.5, x1: pw - 0.5, y0: Math.min(end.y, path.tip) - 1, y1: Math.max(end.y, path.tip) + 1, leader: 'v', key: end.key, from: end.y, up: path.tip < end.y, tip: path.tip }];
       if (path.shifted) segments.push({ x0: path.to, x1: pw - 1.5, y0: yc - 2, y1: yc + 2, leader: 'h', key: end.key, from: end.y, up: path.tip < end.y, tip: path.tip });
       return segments;
     };
     // Every 1px across and down (a name fits between two candles a coarser grid steps over), up to MA_SHIFT_FAR left.
-    const label = placer.put(w, spots({ x0: lx - MA_SHIFT_FAR, x1: lx, ys: lineOf(lo, hi, 1), step: 1, inside: inPlot, cost, near }), { half: 6.5, slack: 0, perCandle: 6, leader, kin: 'ma' });
+    let grid = reference ? null : nameSpots.get(end);
+    if (!grid) {
+      grid = spots({ x0: lx - MA_SHIFT_FAR, x1: lx, ys: lineOf(lo, hi, 1), step: 1, inside: inPlot, cost, near });
+      if (!reference) nameSpots.set(end, grid);
+    }
+    const label = placer.put(w, grid, { half: 6.5, slack: 0, perCandle: 6, leader, kin: 'ma' });
     return { end, w, label, leaderOf };
   };
   // In the order of their ends (top first). When a name finds no spot at all, or only over candles, the names go again

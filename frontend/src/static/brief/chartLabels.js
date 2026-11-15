@@ -25,6 +25,8 @@ export const kinGap = (a, b) => (a === 'plan' && b === 'plan' ? KIN_GAP.plan : (
 /** An average's name and a depth (alone) one above the other keep FIGURE_STACK between their boxes (「150／−8%／200」 reads as one column of names). */
 export const FIGURE_STACK = 6;
 const stackGap = (a, b) => ((a === 'ma' && b === 'leg') || (a === 'leg' && b === 'ma') ? FIGURE_STACK : 0);
+// The widest gap clash() keeps across between two boxes (two leaders' parts keep none, a label and a leader BOX_GAP).
+const CLASH_REACH = Math.max(KIN_GAP.plan, KIN_GAP.figure, LABEL_GAP, BOX_GAP);
 /** Two leaders meet when they share more than this much of their length (each box reaches past its line by up to 2px). */
 export const LEADER_SLACK = 2;
 /** The default x step of a search (data-search names the step; the test that checks a forced label re-runs the same spots). */
@@ -138,16 +140,19 @@ export function segmentCrosses([xa, ya], [xb, yb], box) {
 /**
  * @param {object} p `solid(box)` counts the candles (or volume bars) a box overlaps; `soft(box)` counts the lines that
  *   cross it (or says whether one does); `strike(box)` whether a level line runs through its glyphs (a label that asks
- *   for it, with `hard`).
+ *   for it, with `hard`). `reference` (TEST ONLY) bypasses every shortcut that only makes the search cheaper, so a test
+ *   can check that the spots taken are the same without them.
  * @returns the placer: `take(box)` reserves a box (a tag, a mark, a caption), `release(box)` frees one, `hits(box)` says
  *   whether it overlaps a reserved box, `place(w, spots, options)` reserves and returns the first spot by the rule, and
  *   `put(w, spots, options)` places a label a later one may move (see repair), `drop(label)` takes it back out,
  *   `settle()` gives a forced label the candle-free spot a later move freed, and `snapshot()`/`restore(state)` keep
  *   and bring back the whole state.
  */
-export function labelPlacer({ solid = () => 0, soft = () => false, strike = () => false } = {}) {
+export function labelPlacer({ solid = () => 0, soft = () => false, strike = () => false, reference = false } = {}) {
   const boxes = [];
   const clash = (a, b) => {
+    // Two boxes further apart across than the widest gap (CLASH_REACH) never meet, whatever their kinds.
+    if (!reference && (a.x0 >= b.x1 + CLASH_REACH || a.x1 <= b.x0 - CLASH_REACH)) return false;
     let gap;
     // An average's last stretch (`tail`) is taken for every label but an average's name (the names sit at their
     // lines' ends): a depth there reads as the end of the line.
@@ -184,19 +189,25 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
   // FIGURE_STACK of it), so a box is checked against those in its bands and the next ones only (thousands of spots are
   // tried against tens of boxes).
   const bands = new Map(), bandsOf = box => { const out = []; for (let k = Math.floor(box.y0 / BAND); k <= Math.floor(box.y1 / BAND); k++) out.push(k); return out; };
-  const hits = box => {
+  // The averages' last stretches (`tail`) meet only a label that is not an average's name (see clash): they are kept in
+  // bands of their own, looked at only for such a label (the names and the leaders try thousands of spots past them).
+  const tails = new Map(), bandsFor = box => (box.tail && !reference ? tails : bands);
+  const meetsTails = box => !reference && Boolean(box.label) && box.kin !== 'ma' && !box.tail;
+  const scan = (map, box) => {
     for (let k = Math.floor((box.y0 - FIGURE_STACK) / BAND), last = Math.floor((box.y1 + FIGURE_STACK) / BAND); k <= last; k++) {
-      const list = bands.get(k);
+      const list = map.get(k);
       if (list) for (const b of list) if (clash(box, b)) return true;
     }
     return false;
   };
-  const take = box => { boxes.push(box); for (const k of bandsOf(box)) { if (!bands.has(k)) bands.set(k, []); bands.get(k).push(box); } return box; };
+  const hits = box => scan(bands, box) || (meetsTails(box) ? scan(tails, box) : false);
+  const take = box => { boxes.push(box); const map = bandsFor(box); for (const k of bandsOf(box)) { if (!map.has(k)) map.set(k, []); map.get(k).push(box); } return box; };
   const release = box => {
     const i = boxes.indexOf(box);
     if (i < 0) return;
     boxes.splice(i, 1);
-    for (const k of bandsOf(box)) { const list = bands.get(k), j = list.indexOf(box); if (j >= 0) list.splice(j, 1); }
+    const map = bandsFor(box);
+    for (const k of bandsOf(box)) { const list = map.get(k), j = list.indexOf(box); if (j >= 0) list.splice(j, 1); }
   };
   // A placed label holds its box and its leader's segments (`extra`): taken and freed together.
   const takeAt = at => { take(at.box); at.extra?.forEach(take); return at; };
@@ -233,6 +244,8 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
    */
   const place = (w, spotsIn, { forced = true, slack = Infinity, half = 7, perCandle = Infinity, kin = null, hard = 0, leader = null, fewest = false, apart = false, strike: strikeOf = strike } = {}) => {
     const s = asSpots(spotsIn), known = memo(s, w, half, strikeOf), reach = Math.max(slack, hard);
+    // The box a spot is tested with (hits keeps none): a spot's own box is built only once no reserved box is in its way.
+    const probe = { x0: 0, x1: 0, y0: 0, y1: 0, label: true, kin };
     let first = null, plain = null, best = null, worst = Infinity;
     for (let k = 0; k < s.n; k++) {
       s.fill(k);
@@ -242,8 +255,19 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
       // Over candles: only a forced label's fallback, and none once a candle-free spot is found.
       if (count > 0 && (!forced || first)) continue;
       if (apart && known.strike(k)) continue;
-      const box = { x0: x, x1: x + w, y0: yc - half, y1: yc + half, label: true, kin };
-      if (hits(box)) continue;
+      // A spot over candles is taken only when it scores less than the best one so far: one that does not is passed
+      // before its box and its leader are tried (neither changes anything, so the same spot wins).
+      const score = count > 0 ? (Number.isFinite(perCandle) ? count * perCandle + cost : count) : 0;
+      if (count > 0 && score >= worst && !reference) continue;
+      let box;
+      if (reference) {
+        box = { x0: x, x1: x + w, y0: yc - half, y1: yc + half, label: true, kin };
+        if (hits(box)) continue;
+      } else {
+        probe.x0 = x; probe.x1 = x + w; probe.y0 = yc - half; probe.y1 = yc + half;
+        if (hits(probe)) continue;
+        box = { x0: x, x1: x + w, y0: yc - half, y1: yc + half, label: true, kin };
+      }
       const extra = leader ? leader(x, yc) : [];
       if (!extra || extra.some(hits)) continue;
       if (count === 0) {
@@ -251,10 +275,7 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
         if (!struck && !crossed && (!first || cost <= first.cost + slack)) return takeAt({ x, yc, box, extra, forced: false });
         if (!first) first = { x, yc, box, extra, cost };
         if (!struck && (!plain || (fewest && crossed < plain.crossed)) && cost <= first.cost + hard) plain = { x, yc, box, extra, crossed };
-      } else {
-        const score = Number.isFinite(perCandle) ? count * perCandle + cost : count;
-        if (score < worst) { best = { x, yc, box, extra }; worst = score; }
-      }
+      } else if (score < worst) { best = { x, yc, box, extra }; worst = score; }
     }
     const free = plain ?? first;
     if (free) return takeAt({ x: free.x, yc: free.yc, box: free.box, extra: free.extra, forced: false });
@@ -286,9 +307,13 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
       // The labels in its way; a box no movable label holds (a tag, a mark, a caption) keeps the spot taken.
       const blockers = new Set();
       let fixed = false;
-      for (const one of mine) for (let b = Math.floor((one.y0 - FIGURE_STACK) / BAND); b <= Math.floor((one.y1 + FIGURE_STACK) / BAND) && !fixed; b++) for (const theirs of bands.get(b) ?? []) {
-        if (!clash(one, theirs)) continue;
-        if (theirs.of?.at && labels.includes(theirs.of)) blockers.add(theirs.of); else { fixed = true; break; }
+      for (const one of mine) {
+        // An average's last stretch is no movable label's: one in the way keeps the spot taken.
+        if (!fixed && meetsTails(one) && scan(tails, one)) fixed = true;
+        for (let b = Math.floor((one.y0 - FIGURE_STACK) / BAND); b <= Math.floor((one.y1 + FIGURE_STACK) / BAND) && !fixed; b++) for (const theirs of bands.get(b) ?? []) {
+          if (!clash(one, theirs)) continue;
+          if (theirs.of?.at && labels.includes(theirs.of)) blockers.add(theirs.of); else { fixed = true; break; }
+        }
       }
       if (fixed || !blockers.size || blockers.size > 2 || [...blockers].some(other => stuck.get(other) >= 2)) continue;
       blockers.forEach(other => releaseAt(other.at));
@@ -346,6 +371,7 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
   const restore = state => {
     boxes.length = 0;
     bands.clear();
+    tails.clear();
     state.boxes.forEach(take);
     labels.length = 0;
     for (const [label, at] of state.labels) { label.at = at; labels.push(own(label)); }
