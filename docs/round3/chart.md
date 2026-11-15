@@ -334,7 +334,96 @@ node $H/probe/diff.mjs $H/probe/probe-24f1210-oracles.json $H/probe/probe-f4b1e4
   - The probes of the reverted C5 commit (`probe-5437727*.json`) were deleted too.
 - **Load:** the probe ran at 1-min load 4.80 → 7.93 → 7.55. The probe is not a timing.
 
-## C5 (package CH-2): held. Implemented, measured, reverted
+## C5: the readout's 対ピボット follows the pivot-distance rule (held in CH-2; delivered by the conductor's round-1 order 1, option 1)
+
+### C5 delivered (round-1 order 1: option 1; 実測 at ee3d76f2)
+
+**Commit:** ee3d76f2 `fix(frontend): print the readout's 対ピボット by the pivot-distance rule`.
+- It re-applies 5437727b (it reverts 02d820e1, made with `git revert --no-commit` and its own message): `chartReadout()` gives
+  `pivotText = pivotDistanceText({ price: bar.close, pivot, distance: pivotRatio })` (briefCandidate.js imported, not edited), and the
+  Readout prints it.
+- **The label, option 1:** below 1024px (`compact`) the visible label is 「ピボット」 with 「対」 for screen readers,
+  `<i><span className="sr-only">対</span>ピボット</i>`, exactly as the same line writes 「52週」高値から. At 1024px and wider it stays
+  「対ピボット」. No other label, gap or font changed.
+- **Tests (producer-only):**
+  - chartReadout.test.js: a cent over and a cent under the pivot (daily and weekly) equal `pivotDistanceText`, carry the right sign and
+    differ from `formatPercent`'s 「±0.0」 forms; at the pivot's cents, with float noise either side (89.88000000000001, 89.88 − 1e-12) and
+    the 5.004/5.00 cents case, the text equals the rule's at-cents text; ordinary distances equal `formatPercent`; a sweep of closes
+    80–120 never prints a signed 0.0%; `formatPercent` ≡ `positionGeometry.signed`; no text where the ratio is unknown.
+  - StockChartCard.test.jsx: the rendered item is 「対ピボット」 + `pivotDistanceText` a cent over, a cent under and at the cents (both
+    float-noise sides), never a signed 0.0%; no item on uncertified bars; **the label through the component**: below 1024px the `<i>`
+    has an sr-only 「対」 and the visible text 「ピボット」, at 1024px and wider it reads 「対ピボット」 with no sr-only part.
+
+**Gates, all CI-faithful on 4424 (Chrome for Testing 147 headless shell, CI fonts, node 22, reduced motion, settled)**
+
+(a) **0fa62fd6's spec, unedited, and brief-chart.spec.js:669, unedited:** brief-chart.spec.js whole at ee3d76f2, **47 passed**. The ZZPG
+block (375: the readout keeps 3 rows and the card 508 on every period) is byte-identical to 0fa62fd6's, and line 669 (`not.toContainText
+('対ピボット')` on unverified bars) was last changed by 95e1fbd8, a base commit. Playwright reads textContent, which keeps the sr-only 「対」,
+so both read the item as before.
+
+(b) **The readout's second-line slack** (`audit3/r3-chart/measure/readout-measure4.spec.js`: readout-measure.spec.js's own measurement,
+extended to every period; 30 default stocks and 8 oracle stocks × 4 periods = 152 views per width; before = 8d122b46, after = the C5 source
+of ee3d76f2, uncommitted at the time and identical to it; load 4.55 → 7.83 before, 2.87 → 4.02 after):
+
+| Width | Set | Second line's slack before (min / median / max) | After | Views gaining a row | Card height changes |
+|---|---|---|---|---|---|
+| 320 | default (120) | −38.45 / −38.45 / −31.36 (2 rows) | −26.45 / −26.45 / −19.36 (2 rows) | 0 | 0 |
+| 320 | oracles (32) | −38.45 / −38.45 / −28.44 (2 rows) | −50.45 / −26.45 / −16.44 (2 rows) | 0 | 0 |
+| **375** | **default (120)** | **16.55 / 16.55 / 23.64** | **28.55 / 28.55 / 35.64** | **0** | **0** |
+| **375** | **oracles (32)** | **16.55 / 16.55 / 26.56** | **4.55 / 28.55 / 38.56** (ZZPG 4.55) | **0** | **0** |
+| 390 | default (120) | 31.55 / 31.55 / 38.64 | 43.55 / 43.55 / 50.64 | 0 | 0 |
+| 390 | oracles (32) | 31.55 / 31.55 / 41.56 | 19.55 / 43.55 / 53.56 | 0 | 0 |
+
+- The short label frees exactly 12.00px in every view. ZZPG's in-band text takes 24.00px more than 「+0.0%」, so its 375 slack goes
+  16.55 → 4.55: it keeps one row.
+- The readout's row count, each line's row count and the readout's height are identical before and after in all 456 views. So is the chart
+  card's height.
+- Outputs: `audit3/r3-chart/r4/readout4-before-8d122b4/`, `readout4-after-c5/`; summary `node r4/readout4-summary.mjs <before> <after>`.
+
+(c) **The probes** (`$H/probe/run-probe.sh <worktree> 4424 default|oracles` at ee3d76f2; load 4.58 → 9.21 → 8.02):
+- default `probe-ee3d76f.json` sha256 `69ce3c5a…ea326`; oracles `probe-ee3d76f-oracles.json` `172cd16a…60f2`.
+- Proof script `audit3/r3-chart/r4/c5-probe-proof.mjs` against `probe-45601a2*.json` (it rebuilds the head's `html` from the base's and
+  fails on any other difference); `$H/probe/diff.mjs --texts` output in `r4/diff-45601a2-ee3d76f.txt` and `r4/diff-oracles-45601a2-ee3d76f.txt`.
+- **Default probe: 728 of 972 views differ** (labels 368 of 492, values 360 of 480).
+  - The only differing field is `html`, so **every SVG field is byte-identical**.
+  - In each of the 728 views the head's html is the base's with the readout item 「対ピボット」 replaced in place by 「ピボット」 (same
+    font in the label probe). The 728 are exactly the base views under 1024px whose card shows the item.
+  - No 1440 view differs. No default stock is in the band, so no readout text changes.
+  - Card heights: equal in 972 of 972.
+- **Oracle probe: 208 of 264 views differ** (labels 104 of 132, values 104 of 132), `html` only.
+  - 200 views: the label rewrite, again exactly the base views under 1024px with the item.
+  - **ZZPG, 32 views** (4 periods × 4 widths, labels and values): 「+0.0%」 → 「+0.1%未満」. At 1440 (8 views) that text is the only change.
+  - Card heights: equal in 264 of 264, ZZPG's 508 at 375 included.
+
+(d) **The rebuild** (11-12 rebuild; rebuild counts, never the publication's):
+- **Command:** `$H/build/run-build.sh <worktree>` (ee3d76f), then the scratch `audit3/r3-chart/r4/c5-rebuild/c5-rebuild-render.mjs` on the
+  production builds of 45601a2 (before) and ee3d76f (after), served by the harness's `serve.mjs` with the rebuild's `serve/` answered as
+  render-probe.mjs answers it, reduced motion, settled after each period click; then `r4/c5-rebuild/compare.mjs`.
+  - `serve/` and `rows.jsonl` are hard links to `out/45601a2/`'s: no file of the snapshot pipeline changed between 45601a2 and ee3d76f
+    (`git diff --name-only 45601a2 ee3d76f` names only CHART's card, readout, VCP and CSS files, their tests, the spec, the doc and
+    priceChart.js's whitespace).
+  - The verdict's text is `pivotDistanceText` (the snapshot bundle's briefCandidate) of the stock screen's view in `work/sell-eval.jsonl`.
+
+| Row | Close / pivot | Verdict | Readout before (375 and 390, 3m/6m/1y/週足) | After | Equal | Rows | Card |
+|---|---|---|---|---|---|---|---|
+| PCRX | 36.46 / 36.45 | 「+0.1%未満」 | 「+0.0%」 ×8 | 「+0.1%未満」 ×8 | 8/8 | 3 → 3 | 508 → 508 |
+| PFIS | 72.85 / 72.87 | 「−0.1%未満」 | 「−0.0%」 ×8 | 「−0.1%未満」 ×8 | 8/8 | 3 → 3 | 508 → 508 |
+| TECH | 72.84 / 72.83 | 「+0.1%未満」 | 「+0.0%」 ×8 | 「+0.1%未満」 ×8 | 8/8 | 3 → 3 | 508 → 508 |
+| LNTH | 101.25 / 101.27 | 「−0.1%未満」 | 「−0.0%」 ×8 | 「−0.1%未満」 ×8 | 8/8 | 3 → 3 | 508 → 508 |
+
+- **16/16 at 375 and 16/16 at 390**: the readout text equals the verdict's, the weekly readout included. The readout's rows (3), its height
+  (48) and the card (508) equal the pre-change ones in every view; overflow 0; no page errors. The visible label is 「ピボット」 in all 32.
+- **`readout_zero_rendered`: 4 → 0** (`$H/snapshot/run-render.sh <worktree> 4424 reduce` at ee3d76f, into `out/ee3d76f/render/`; load in
+  `r4/render-ee3d76f.load`). Every other field of `counts-render.json` is identical to 45601a2's.
+  - **The harness's count alone would pass vacuously.** `counts-render.py` matches 「対ピボット」 in the readout's whitespace-collapsed
+    innerText, and below 1024px innerText now reads 「対 ピボット」 (the sr-only 「対」 is a block). So the 0 was re-counted with
+    `対\s*ピボット` (`r4/readout-recount.py`): **4 at 45601a2 and 0 at ee3d76f**, over the same 168 readouts at 390 that carry the item.
+    The four rows read 「対 ピボット+0.1%未満」/「対 ピボット−0.1%未満」 in innerText.
+  - This is an integration note for the shared harness (not edited here): its pattern should tolerate the space.
+
+**C5 suites, lint and build:** in "Round-1 orders: checks" at the end of this record.
+
+### The CH-2 record (held, implemented, measured, reverted)
 
 **Commits:**
 - 5437727b `fix(frontend): print the readout's 対ピボット by the pivot-distance rule` implemented the order as written:
@@ -684,6 +773,88 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
   - The published detail-only path stays **未検証**, as above.
   - The quiet-days text is not in the probe's `notes` filter, so it was not read from the render. CH-3's 37/37 is the producer read.
 
+### C4 placement in the base note (round-1 order 2: variant A; 実測 at 85971ae4)
+
+**Commit:** 85971ae4 `feat(frontend): write the Setup Engine pivot's day in the base note's own line`.
+- **Variant A as ordered:** when the 「Setup Engine：土台 …」 note is shown (`engine`), the pivot's day is written inside that same
+  `<p className="brief-note brief-vcp-engine">`, after the base text, as one inline-block `<span className="brief-vcp-pivotday">` (the
+  spec's locator still reads it, and 「（週足の型）」 stays whole inside it). With no base note, the day is its own note as before.
+- Same producers (`pivotDayNote`, `PIVOT_DAY_UNKNOWN`, `WEEKLY_PATTERN`). The only copy added is the separator 「・」 between the two
+  phrases, exported as `PIVOT_DAY_SEPARATOR` and asserted through it. It sits outside the span, so the span's text equals `pivotDayNote`.
+- CSS: `.brief-vcp-engine .brief-vcp-pivotday { display: inline-block; }` beside the existing weekly rule.
+- Tests: StockVcpCard.test.jsx (the day is a SPAN ending the base note after the separator; with no base it is its own P note; a base with
+  no day reads as before); brief-chart.spec.js's C4 block checks the placement on ZZRD (in the base note) and ZZHB/ZZNR (own note).
+
+**The outcome is FAIL: `brief-decision.spec.js:269` ('stalls') still measures 3145 against `STOCK_CAP` 3124 at 375.**
+- **Why variant A cannot reach it:** the 'stalls' state is the default fixture's ZZNV (`SEC_SYMBOL`), and no default row carries
+  `se_base_length_weeks`/`se_base_depth_pct`. So `engine` is null there, the base note is absent (`.brief-vcp-engine` count 0, measured),
+  and the day stays its own note. The same holds in the other two capped states.
+- **brief-decision.spec.js, the whole file** (CI-faithful, 4424, unedited; load 10.12 → 12.95): **26 passed, 1 failed**, the 'stalls'
+  case at 375×812: Expected ≤ 3124, Received 3145. No re-run was needed.
+- **The headroom of every capped state** (a scratch copy of the spec that records `content()` where the spec asserts it,
+  `audit3/r3-chart/r4/decision-measure/`; load 10.93 → 8.54):
+
+| State (375×812) | Cap | Content | Headroom | Base note shown |
+|---|---|---|---|---|
+| a breakout 25 sessions on that stalls | `STOCK_CAP` 3124 | **3145** | **−21** | no |
+| … that was pulled back to the pivot after a run | `STOCK_CAP` 3124 | 3031 | +93 | no |
+| a failed breakout (ブレイク失敗) | `STOCK_LINE` 3388 | 3271 | +117 | no |
+
+- **Which placement is kept, and why: variant A.** On 'stalls' the two placements are the same DOM (a tie, 3145 either way). Where the
+  base note is shown, variant A is lower and reads as the base followed by its day. At 375 the day moves whole to the note's second
+  line: 「Setup Engine：土台 17週・深さ 18%・」 / 「ピボットの日 未確認」 (screenshot `r4/shots-85971ae/375-ZZRD.png`). At 390 and 1440 it
+  is one line.
+- **What 'stalls' would need:** content ≤ 3145. With rule 9's 12px kept, that is `STOCK_CAP` = 3056 + 101 − 12 = **3145**, i.e. an
+  allowance of +101 over step 0 instead of +80 (+21px). The C4 line itself is 30.4px (a 20.4px note line plus the card's 10px gap).
+- **A scratch measurement for the base-less case (numbers only, never committed, file restored):** the day as a `<small>` in the
+  「ピボット」 tile of the dl when no base note is shown. 'Stalls' 3132 (−8), 'pulled back' 3018, ブレイク失敗 3258. Also FAIL: the tile
+  row gains one 17.4px line. It was not adopted: it is outside the ordered placement, and a dated line (ZZHB 「ピボット $48.50＝9/22の
+  高値（SE）（週足の型）」) in a half-width tile would wrap two or three times. A 'stalls' content of 3132 would still need `STOCK_CAP`
+  3132 (+88 over step 0). No placement that adds a line can pass: the state has 9–10px of headroom without C4 (derived: 3145 − 30.4),
+  and the shortest added line is the tile's 17.4px.
+
+**Heights again** (`audit3/r3-chart/measure/c4-heights.spec.js` at 85971ae4, oracles, reduced motion, settled; load 7.38 → 8.54).
+Before = 503102f (no C4), C4 = 08bebfc (own note), A = 85971ae4:
+
+| Stock screen content | 320 | 375 | 390 |
+|---|---|---|---|
+| ZZNV | 3308 → 3338 → **3338** | 3044 → 3075 → **3075** | 2954 → 2985 → **2985** |
+| ZZHB | 2476 → 2527 → **2527** | 2348 → 2379 → **2379** | 2330 → 2361 → **2361** |
+| ZZRD | 2621 → 2686 → **2676** | 2496 → 2543 → **2533** | 2496 → 2543 → **2513** |
+
+| VCP card | 320 | 375 | 390 | 1440 |
+|---|---|---|---|---|
+| ZZNV | 459.9 → 490.3 → **490.3** | 422.1 → 452.5 → **452.5** | 422.1 → 452.5 → **452.5** | 434.7 → 467.1 → **467.1** |
+| ZZHB | 349.5 → 400.3 → **400.3** | 311.7 → 342.1 → **342.1** | 311.7 → 342.1 → **342.1** | 252.3 → 284.7 → **284.7** |
+| ZZRD | 490.3 → 555.5 → **545.5** | 452.5 → 500.3 → **490.3** | 452.5 → 500.3 → **469.9** | 467.1 → 517.5 → **485.1** |
+
+- Only ZZRD changes, the one oracle with a base note: −10 at 320 and 375, −30 at 390, −32.4 on the 1440 card. The other six oracle
+  stocks are unchanged from 08bebfc in every view.
+- Horizontal overflow 0 and no page errors in all 36 views; the chart card's height is unchanged.
+
+**Probes (rule 16):** `run-probe.sh … default` and `… oracles` at 85971ae4 (it also holds order 3's whitespace fix) → sha256
+`1127e3b8…2342` and `d2e88172…d2a3`, **`cmp`-identical to `probe-45601a2.json` and `probe-45601a2-oracles.json`** (load 4.76 → 12.07).
+
+**The dump** (`$H/dump/run-dump.sh <worktree> 4424` at 85971ae4; load 6.83 → 5.72): sha256 `8ccec66c…3d56`, **byte-identical to
+`dump-57fdcd6.json`** (C4's own-note placement). No default screen shows a base note, so nothing moves. Against dump-8849bf9 the comparison
+is the CH-3 one, unchanged: 24 screens differ, each by 「ピボットの日 未確認」, plus C2's 注記 sentence on ZZNV 週足
+(`r4/dump-compare-8849bf9-85971ae.txt`, identical to `dump-compare-8849bf9-57fdcd6.txt` but for the name).
+
+**The layout shift when the research detail arrives** (scratch `audit3/r3-chart/measure/c4-shift.spec.js`, 375×812, reduced motion; the
+detail held by `detailGate` until the loading state is measured; load 7.10 → 7.36):
+- ZZRD is served as a publication serves it: `se_pivot_date` and `se_quiet_days_10d` only in its detail (export-research.mjs `listFields`
+  omits both), with a `research_detail_path` on the list row. ZZNV is the default fixture's, with its own detail and neither key.
+
+| 375 | Loading | Loaded | Shift | The two lines' share | Of which |
+|---|---|---|---|---|---|
+| ZZRD | 2364 | 2533 | +169 | **37** | the day's second line in the base note 20, 「静かな日 2/10日（SE）」 17 |
+| ZZNV | 2331 | 3075 | +744 | **31** | 「ピボットの日 未確認」 as its own note (30.4 + rounding) |
+
+- The share is the content with `.brief-vcp-pivotday` and `.brief-vcp-quiet` hidden, subtracted from the loaded content. The rest of each
+  shift is the detail's own content, which arrived after loading before C4 too: the VCP measurement (ZZRD) and, on ZZNV, the detail's
+  fundamentals and SEC card.
+- While loading, the VCP card says 「VCP 未確認（読み込み中）」 and shows neither line (pending is loading, not 未確認).
+
 ### For integration
 
 - **Vocabulary for CONTEXT.md:**
@@ -694,7 +865,9 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
   - the dump on the 24 screens above;
   - the oracle stock heights, as in the table;
   - 375 stock screens +30 or +31, ZZRD +47.
-- **Integration request: brief-decision.spec.js `STOCK_CAP` (track R's file; a decision for the conductor).**
+- **Integration request: brief-decision.spec.js `STOCK_CAP` (track R's file), still open after round-1 order 2 (variant A: FAIL).**
+  The numbers are in "C4 placement in the base note" above: 'stalls' 3145 at 375, so `STOCK_CAP` 3145 (+101 over step 0 with the 12px kept).
+  The CH-3 wording below is kept for the record.
   - C4's line makes `brief-decision.spec.js:269` (the 'stalls' case) fail at 375: 3145 against 3124 (see Tests and checks).
   - It shows only where C4 and R's spec meet, at integration; R's branch does not have C4.
   - The cap is 「verdict's +80 over step 0」 less 12px of headroom. C4's line, about 31px, is not in that allowance.
@@ -1094,24 +1267,98 @@ The rest is jsdom building the markup (`_node`, `Attr.setup`, the HTML parser) a
 - **None new.** C1 changes no output, so the H5 baselines integration re-takes are not shifted by it.
 - **The timings that count are integration's:** the first load and the period switch on an idle machine, and CI's Design Acceptance 1440 median.
 
-## Track CHART: closing summary (after CH-5)
+## Round-1 orders from the conductor (after CH-5)
+
+The conductor verified the track at 8d122b46 and issued four orders. Commits, in order:
+
+| Commit | Order | What |
+|---|---|---|
+| d1c5d56f | 3 (minor) | `style(frontend)`: priceChart.js `const w =Math.min(` → `const w = Math.min(`. Whitespace only (`git diff -w` is empty). |
+| 85971ae4 | 2 (major) | C4 variant A: the pivot's day inside the Setup Engine base note. Measured FAIL on 'stalls' (section C4 above). |
+| ee3d76f2 | 1 (major) | C5 with option 1: `pivotDistanceText` in the readout, 「ピボット」 with an sr-only 「対」 below 1024px (section C5 above). |
+| (this doc) | 4 (minor) and the records | The decisions below; the C4 and C5 sections; this section and the closing summary. |
+
+**Decisions recorded (order 4):**
+- **C5 = option 1** (the narrower label below 1024px). Delivered in ee3d76f2; every gate held.
+- **C3 = accepted as delivered.** HUM at 320 on 1y and 週足 keeps the low hidden (as at base; 26.63px and 53.97px short). At 320 the
+  「上抜け」 key and 「枠＝収縮」 fold in the low's place by the existing rank order, and both stay in the 注記. Both go to the owner as
+  notes; no rank swap in round 3.
+- **C1 = accepted as output-identical.** The ≤ 200 ms target is not reached (306 against base's 498 ms, interleaved, advisory). No yielding
+  in round 3; the waiver stays and the figure goes to OD2. The counting timing is integration's.
+
+### Round-1 orders: checks (実測, CI-faithful, 4424; the 1-min load before → after in parentheses)
+
+Logs and load files are in `audit3/r3-chart/r4/`. Nothing below is a timing.
+
+**vitest** (`cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run`)
+- Targeted, before each commit: StockVcpCard.test.jsx + StockVcpCard.oracles.test.jsx **24 passed** (85971ae4); StockChartCard.test.jsx +
+  chartReadout.test.js + briefCandidate.test.js (untouched) **102 passed** (ee3d76f2).
+- **The full suite at ee3d76f2: 249 files, 4062 tests; 4059 passed, 3 failed** (load 5.20 → 8.68). The three are 20 s timeouts under load
+  in `tools/export-market-trends.test.mjs` (2) and `tools/restore-market-trend-source.test.mjs` (1), the same three the conductor saw at
+  8d122b46. **Re-run of those two files alone: 47 of 47 passed** (load 7.98 → 8.35). The track touches nothing under `frontend/tools`.
+  The suite has 8 more tests than at 8d122b46: 1 in StockVcpCard.test.jsx, 2 in StockChartCard.test.jsx, 5 in chartReadout.test.js.
+  `priceChart.identity.test.js` passed inside the full run.
+
+**Playwright** (`npx playwright test -c audit3/r3-chart/pw-147.config.mjs`, AUDIT_PORT=4424; no re-run was needed)
+- brief-chart.spec.js, whole, at ee3d76f2: **47 passed** (5.4 min; load 7.74 → 9.40). It includes 0fa62fd6's ZZPG test (ZZPG at 375: 3
+  readout rows, card 508 on every period), whose block is byte-identical to 0fa62fd6's, and line 669, last changed by 95e1fbd8 (base).
+- brief-oracles.spec.js (frozen, not edited) at ee3d76f2: **38 passed, 2 skipped** (track R's R1/R2 fixmes; load 9.14 → 7.33). Every active
+  assertion passed, ZZHB's green arrow included.
+- brief-compact.spec.js + brief-phone.spec.js + brief-decision.spec.js at ee3d76f2: **92 passed, 1 failed** (4.1 min; load 6.82 → 10.06).
+  The failure is the known `brief-decision.spec.js:269` 'stalls' at 375×812, 3145 against 3124 (C4 section). compact + phone: 66 of 66.
+- brief-decision.spec.js, whole, at 85971ae4: 26 passed, 1 failed (the same case); the C4 block of brief-chart.spec.js at 85971ae4: 4 passed.
+
+**Other checks**
+- `npm run lint` at ee3d76f2: **0 errors, 4 warnings**, all in files outside the track (App.jsx, StockDetails.jsx, MetricInfoPopover.jsx,
+  StaticMarketContext.jsx: the base's). eslint on every touched file before each commit: clean.
+- **Build** (`$H/build/run-build.sh <worktree>` → `build-ee3d76f.json`; load 6.11 → 8.16): `npm run build` entry **131.53 kB gzip**
+  (C1's 131.45 → +0.08; line 134.00). Design-acceptance entry 375,452 raw / 131,166 gzip -9 (vite 131.34 kB). The lazy priceChart chunk is
+  44,160 raw bytes, as at C1. Superseded `build/npm-build-45601a2` deleted; `build-45601a2.json` kept.
+- **The dump at ee3d76f2** (`$H/dump/run-dump.sh <worktree> 4424`; sha256 `1b535cb5…d239`; load 9.68 → 4.87) against dump-57fdcd6
+  (= 85971ae4's): **36 screens identical, 6 differ**, the six 375 stock screens (ZZAR, ZZHW, ZZNV, ZZNV 週足, ZZSD-broken, ZZZF). In
+  each, innerText 「対ピボットx%」 becomes 「対」 + 「ピボットx%」; in the boxes, the item narrows by 12px (94.5 → 82.5), one sr-only box is
+  added and the 「高値から」 item moves 12px left; content and page heights are identical (`r4/dump-compare-57fdcd6-ee3d76f.txt`,
+  `r4/dump-boxes-57fdcd6-ee3d76f.txt`). 1440 is identical.
+- Ownership gate (`check-ownership.py CHART <worktree> 45603f06…`) before each commit: `OWNERSHIP OK (CHART): 15 paths`.
+- Every commit message ends with exactly the two trailer lines.
+
+### Round-1 orders: 未検証
+
+- **Timings.** None were taken in this round; C5 and C4's placement add no chart work. Every counting timing is integration's.
+- **A publication's detail-only path in a browser** for C4's two keys: measured here only with the fixture served as a publication serves
+  it (the layout-shift table). Whether a real published detail carries `se_pivot_date` and `se_quiet_days_10d` is read after a release.
+- **The rebuild at 320 and 1440 for C5's four rows:** the render probe covers 390 (counts) and the scratch render 375/390; 1440 is wide
+  (label unchanged) and 320 already wraps the second line (fixtures: no row gained at 320). Not rendered on real data at 320/1440.
+- **brief-market.spec.js / brief-market-phone.spec.js and the other stock-screen specs** were run as listed above; anything not listed
+  there was not run in this round.
+
+## Track CHART: closing summary (after the conductor's round-1 orders)
 
 | Item | Package | State | Gate (rule 16) |
 |---|---|---|---|
 | C2: the 週足 week count from the plot to the 注記 | CH-1 | delivered | Expected diff: only 週足 views changed, no other label moved, none newly forced or missing; the forced count never rose. |
-| C3: the last contraction's 安値 price kept in the 320 legend | CH-2 | delivered; 12 of 13 rebuild stocks in every period (HUM hidden at 320 in 1y and 週足) | Expected diff: card text only (ZZRL, ZZRW at 320). |
-| C5: the readout's 対ピボット by the pivot-distance rule | CH-2 | **held** (implemented, then reverted: the card grew at 375); `readout_zero_rendered` stays 4 | none (not delivered) |
-| C4: the Setup Engine pivot's own day and the quiet days on the VCP card | CH-3 | delivered; **one cross-track failure** (`brief-decision.spec.js:269`, 3145 against `STOCK_CAP` 3124 at 375) | Probe byte-identical; dump and heights shift as stated. |
-| C1: the averages' name search made cheaper | CH-5 | delivered, output-identical; 1440 first load 498 → 306 ms (advisory), target ≤ 200 not reached | Probes, oracle probe, real-data render probes and counts all byte-identical to P. |
+| C3: the last contraction's 安値 price kept in the 320 legend | CH-2 | delivered, **accepted as delivered** (round 1); 12 of 13 rebuild stocks in every period (HUM hidden at 320 in 1y and 週足, as at base) | Expected diff: card text only (ZZRL, ZZRW at 320). |
+| C5: the readout's 対ピボット by the pivot-distance rule | CH-2 held; **delivered in round 1 (option 1)**, ee3d76f2 | delivered; `readout_zero_rendered` 4 → 0; PCRX, PFIS, TECH, LNTH 16/16 at 375 and 16/16 at 390 | Expected diff: `html` only — the label under 1024px (728 default, 200 oracle views) and ZZPG's 「+0.0%」→「+0.1%未満」 (32 views); every SVG field and card height identical. |
+| C4: the Setup Engine pivot's own day and the quiet days on the VCP card | CH-3; placement re-done in round 1 (variant A, 85971ae4) | delivered; **one cross-track failure stays** (`brief-decision.spec.js:269`, 3145 against `STOCK_CAP` 3124 at 375: variant A cannot reach a state with no base note) | Probe byte-identical; dump byte-identical to CH-3's; ZZRD's heights fall (−10/−10/−30, card −32.4 at 1440). |
+| C1: the averages' name search made cheaper | CH-5 | delivered, output-identical, **accepted** (round 1); 1440 first load 498 → 306 ms (advisory), target ≤ 200 not reached, no yielding, waiver stays (OD2) | Probes, oracle probe, real-data render probes and counts all byte-identical to P. |
 
-- **Entry chunk** (rule 21; `npm run build`, gzip): STEP 0 130.28 kB → CH-1 130.38 → CH-2 130.60 → C4 131.44 → C1 131.45 kB.
-  - Net **+1.17 kB**, 2.55 kB under the 134.00 line.
-  - C1's +0.01 kB is the changed chunk-name hashes only: the entry is byte-identical to P's once they are normalised.
-  - pivotBar.js (C4, H1) is now in the entry chunk; R1 imports it too.
-  - The lazy priceChart chunk is 43,099 raw at STEP 0, 42,801 after C2, and 44,160 after C1.
-- **Integration requests, all open:**
-  1. `STOCK_CAP` in brief-decision.spec.js (track R's file): options (a) raise by 31px to 3155, (b) hold C4, (c) a new placement.
+- **Entry chunk** (rule 21; `npm run build`, gzip): STEP 0 130.28 kB → CH-1 130.38 → CH-2 130.60 → C4 131.44 → C1 131.45 → round 1 (ee3d76f)
+  **131.53 kB**.
+  - Net **+1.25 kB**, 2.47 kB under the 134.00 line. Round 1 adds +0.08 kB: C5's `pivotDistanceText` call and label, and C4's span.
+  - The design-acceptance build's entry: 375,167 → 375,452 raw bytes, gzip -9 131,079 → 131,166 (vite 131.25 → 131.34 kB).
+  - The lazy priceChart chunk is byte-identical in size to C1's (44,160 raw); its gzip differs by 1 byte (chunk-name hashes).
+  - C5's code is the readout (chartReadout.js, StockChartCard.jsx), which renders before the lazy chunk, so it stays in the entry chunk.
+- **Integration requests:**
+  1. **`STOCK_CAP` in brief-decision.spec.js (track R's file), open:** 'stalls' measures 3145 at 375. Passing it needs `STOCK_CAP` = 3145
+     (3056 + 101 − 12), i.e. +21px of allowance. The other capped states have +93 ('pulled back') and +117 (ブレイク失敗 against
+     `STOCK_LINE`). The alternative is holding C4 (`git revert 85971ae4 ff4349b2 08bebfc7`).
   2. Vocabulary for CONTEXT.md: 「ピボットの日」 and 「静かな日」 (C4).
-  3. The H5 baselines integration re-takes shift by C2 (the probe and the oracle probe: 週足; the dump: ZZNV 週足; the 1440 週足 card +21.19), C3 (the oracle probe: ZZRL/ZZRW at 320; render counts) and C4 (the dump on 24 screens; stock heights). C1 shifts none.
-  4. Decisions for the conductor: C5 (options 1–3), C3's HUM at 320 and the arrow key at 320 (a rank swap in `legendItems` if the arrow's key should win), and yielding for the ≤ 200 ms target (OD2).
-- **Nothing was pushed.** No production action was taken. No file outside CHART's paths was edited (ownership gate OK on every commit).
+  3. The H5 baselines integration re-takes shift by C2 (probes: 週足; dump: ZZNV 週足; the 1440 週足 card +21.19), C3 (oracle probe:
+     ZZRL/ZZRW at 320; render counts), C4 (dump on 24 screens; stock heights) and **C5 (probes: the readout label under 1024px in every
+     view with the item, ZZPG's text; the dump's six 375 stock screens: the label split and the 高値から item 12px left, heights equal;
+     render counts: `readout_zero_rendered` 0)**.
+     C1 shifts none.
+  4. **The harness's `counts-render.py` readout pattern** (shared scratch, not edited): it needs 「対ピボット」 contiguous in innerText, which
+     the compact label splits. Use `対\s*ピボット` so the count cannot pass vacuously.
+  5. Notes for the owner: C3's HUM at 320 and the folded 「上抜け」/「枠＝収縮」 keys at 320; C1's ≤ 200 ms (OD2).
+- **Nothing was pushed.** No production action was taken. No file outside CHART's paths was edited (ownership gate OK before every commit).
