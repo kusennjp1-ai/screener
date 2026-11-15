@@ -4,7 +4,10 @@ import { test, expect } from '@playwright/test';
 import { date, marketTrends, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
 import { followThroughView } from '../../src/static/brief/briefEnvironment.js';
-import { BREADTH_LEGEND, STOCK_OUTCOME_UNTESTED } from '../../src/static/reference/marketTabStudy.js';
+import { BREADTH_LEGEND, marketTabStudy, STOCK_OUTCOME_UNTESTED } from '../../src/static/reference/marketTabStudy.js';
+import { marketCardView } from '../../src/static/brief/marketTabModel.js';
+import { marketTabParts } from '../../src/static/brief/marketTabGroups.js';
+import { readFileSync } from 'node:fs';
 import { TAGS } from '../../src/static/reference/marketRegimeReference.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
@@ -383,7 +386,12 @@ test.describe('round 2 at 375×812: an FTD-upgraded uptrend', () => {
     // The row's words for that record are the producer's (M2: an FTD 35 sessions old reads 「前回のFTD」).
     await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(followThroughView(JSON.parse(marketTrends().text).indices[0].followThrough, date).b);
     await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(`前回のFTD ${gspc}`);
-    await expect(basis.locator('p')).toHaveText(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', `局面判定はSPYのFTD（${md}）による上昇トレンド。^GSPCの日足ではFTD ${gspc}。この目安はSPYが50日線の下のため0%（独自判定）`, /^独自の目安：/]);
+    // Round 3: the 銘柄側 line first (M6) and the 0% note last (M5), each the producer's words for the served asset.
+    const served = { data: JSON.parse(marketTrends().text) }, market50 = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
+    const reference = JSON.parse(readFileSync(new URL('../../src/static/reference/market-regime-reference-v1.json', import.meta.url), 'utf8'));
+    const stockSide = marketCardView({ market: market50, trends: served, date, tab: marketTabParts }).stockSide, zeroCap = marketTabStudy({ trends: served, reference, date, market: market50 }).zeroCap;
+    expect(zeroCap).toMatch(/0%は独自設定で、検証された水準ではありません。$/);
+    await expect(basis.locator('p')).toHaveText([stockSide, '根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', `局面判定はSPYのFTD（${md}）による上昇トレンド。^GSPCの日足ではFTD ${gspc}。この目安はSPYが50日線の下のため0%（独自判定）`, /^独自の目安：/, zeroCap]);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
