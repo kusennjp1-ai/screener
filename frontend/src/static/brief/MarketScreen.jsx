@@ -6,7 +6,7 @@ import { HistoricalBreadth } from '../components/MarketHistoryExplorer';
 import MarketUpdateStatus from '../components/MarketUpdateStatus';
 import useMediaQuery from '../useMediaQuery';
 import { marketUpdateState } from '../marketUpdateState';
-import { bare, ftdPrevious, sentence, shortDate, trendsStatus } from './briefModel';
+import { bare, ftdPrevious, sentence, shortDate, trendsStatus, FTD_PREVIOUS_NAME } from './briefModel';
 import { Expander, Parts, ScreenNotes } from './briefPrimitives';
 import { jumpTo } from './jump';
 import { barDay } from './briefNav';
@@ -69,7 +69,7 @@ function IndexChart({ closes, name = 'S&P 500', distribution, distributionEnd, f
   // than FTD_RECENT_SESSIONS keeps its ◆ and reads 「前回のFTD」 (ftdPrevious, the フォロースルーデー row's own reading) on its
   // label and in the aria-label; the legend keeps 「◆ FTD」 (the glyph's meaning), since 「◆ 前回のFTD」 wraps it to a second
   // line at 320px beside the phone's S&P／Nasdaq switch (measured: +22px).
-  const ftdName = ftdAt >= 0 && ftdPrevious(ft) ? '前回のFTD' : 'FTD';
+  const ftdName = ftdAt >= 0 && ftdPrevious(ft) ? FTD_PREVIOUS_NAME : 'FTD';
   const ftdWord = ftdAt >= 0 ? `${ftdName} ${shortDate(points[ftdAt].date, chartEnd)}${ft.state === 'ftd_failed' && isDay(ft.failedDate) ? `（失敗 ${shortDate(ft.failedDate, chartEnd)}）` : ft.state === 'ftd_failed' ? '（失敗）' : ''}` : null;
   const words = [ftdWord, lowAt >= 0 ? `反発の安値 ${shortDate(points[lowAt].date, chartEnd)}` : null].filter(Boolean);
   const svg = <svg className="brief-index is-detail" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"

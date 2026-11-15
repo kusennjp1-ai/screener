@@ -13,7 +13,7 @@ import { followThroughDay } from '../followThroughDay';
 import { exposureRuleText } from '../reference/marketTabStudy.js';
 import { marketCardView, num, RULE_TEXT, signedPercent } from './marketTabModel';
 import { marketTabParts } from './marketTabGroups';
-import { followThroughView, BREAKOUT_HOLD_NAME } from './briefEnvironment';
+import { followThroughView, BREAKOUT_HOLD_NAME, FTD_PREVIOUS_NAME } from './briefEnvironment';
 /** The breakout row's name inside a pattern (its （） are literal). */
 const BREAKOUT_PATTERN = BREAKOUT_HOLD_NAME.replace(/[（）]/g, '\\$&');
 import { followThroughDetail } from '../reference/marketTabStudy.js';
@@ -60,7 +60,7 @@ describe('brief market card: market tab', () => {
     // The fixture's FTD is 40 sessions old: the producer's words (M2: 「前回のFTD 8/7」, the count first in the em line).
     const own = followThroughView(confirmed('2026-10-02'), '2026-10-02');
     expect(spx).toHaveTextContent(`S&P${own.b}${own.em}`);
-    expect(spx).toHaveTextContent('S&P前回のFTD 8/740日前・+1.4%・反発4日目・FTD後の有効な分配日2');
+    expect(spx).toHaveTextContent(`S&P${FTD_PREVIOUS_NAME} 8/740日前・+1.4%・反発4日目・FTD後の有効な分配日2`);
     expect(ndx).toHaveTextContent('NAS反発3日目安値9/29・4日目以降の+1.2%上昇待ち');
     expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日');
     for (const element of tiles()) {
@@ -141,8 +141,8 @@ describe('brief market card: market tab', () => {
     // A confirmed FTD whose record carries no ftd event has no rally-low date: the ◆ only, no ○.
     // 260 closes: the 200-day line starts inside the 130-session window, so the label names its first day.
     // The FTD is 40 sessions old (FTD_RECENT_SESSIONS 25): its ◆ stays and reads 「前回のFTD」 (M2).
-    expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（\d+\/\d+〜）（2026-05-26〜2026-10-02）。有効な分配日 0日。前回のFTD 8\/7。目盛り 5,482〜5,801$/ })).toBeInTheDocument();
-    expect(document.querySelector('.brief-index-mark.is-ftd')).toHaveTextContent('◆前回のFTD 8/7');
+    expect(screen.getByRole('img', { name: new RegExp(`^S&P 500 の終値と50日線・200日線（\\d+/\\d+〜）（2026-05-26〜2026-10-02）。有効な分配日 0日。${FTD_PREVIOUS_NAME} 8/7。目盛り 5,482〜5,801$`) })).toBeInTheDocument();
+    expect(document.querySelector('.brief-index-mark.is-ftd')).toHaveTextContent(`◆${FTD_PREVIOUS_NAME} 8/7`);
     // The legend keeps the glyph's meaning (「◆ 前回のFTD」 wraps it at 320px beside the phone's switch).
     expect(document.querySelector('.brief-index-legend .is-ftd')).toHaveTextContent(/^◆ FTD$/);
   });

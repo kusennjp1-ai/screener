@@ -4,7 +4,7 @@
 // hands the result to the 地合い card (marketCardView's `study`). Every number comes from the published market-trends
 // asset or the generated reference (market-regime-reference-v1.json): nothing here types a percentage of the app's own,
 // changes a rule, a threshold or the verdict. The one typed figure is a citation (FTD_SOURCE_GAINS), never a rule.
-import { bare, distributionCount, ftdPrevious, gspcFollowThrough, nasdaqNote, shortDate, trendsStatus, under6, FTD_RECENT_SESSIONS, FTD_TEXT } from '../brief/briefModel';
+import { bare, distributionCount, ftdPrevious, gspcFollowThrough, nasdaqNote, shortDate, trendsStatus, under6, FTD_PREVIOUS_NAME, FTD_RECENT_SESSIONS, FTD_TEXT } from '../brief/briefModel';
 import { DISTRIBUTION_TEXT, num, signedPercent, SURVIVORSHIP_NOTE, verdictBasis } from '../brief/marketTabModel';
 import { KEY_ABSENT } from '../brief/marketTabGroups';
 import { FTD_MIN_DECLINE } from '../followThroughDay.js';
@@ -223,7 +223,7 @@ export function followThroughDetail(indices = null, date = null) {
   const details = [
     `FTDの基準は独自設定（${FTD_TEXT.gain}・${FTD_TEXT.minDay}〜${FTD_TEXT.maxDay}日目・高値から${FTD_TEXT.decline}以上の下落後）。${FTD_SOURCE_GAINS}。`,
     '失敗の判定はFTD当日の安値を終値で割ったとき（独自・出典より早く出る場合があります）。',
-    `「n日前」はFTDの日からの営業日数で、${FTD_RECENT_SESSIONS}営業日を過ぎた確認は「前回のFTD」と表示します（独自設定）。`,
+    `「n日前」はFTDの日からの営業日数で、${FTD_RECENT_SESSIONS}営業日を過ぎた確認は「${FTD_PREVIOUS_NAME}」と表示します（独自設定）。`,
     'FTDの状態ごとの過去の傾向は、下の「過去の傾向」を参照。',
   ];
   // With the published indices (the market tab), each confirmed index's current decline (M8e) and the +3% days (M9).
@@ -539,7 +539,7 @@ export function regimeCause(market, context, basis, date, { gspc = null } = {}) 
 function ownFtdLine(block, gspc, date) {
   if (!['correction', 'downtrend'].includes(block.regime) || gspc?.available !== true || gspc.state !== 'confirmed' || !isDay(date) || gspc.asOf !== date) return null;
   const day = isDay(gspc.ftd?.date) ? `（${shortDate(gspc.ftd.date, date)}）` : '';
-  return `下の^GSPCの${ftdPrevious(gspc) ? '前回のFTD' : 'FTD'}${day}は指数の別集計で、高値から${FTD_TEXT.decline}未満の下落では取り消しません（独自設定）`;
+  return `下の^GSPCの${ftdPrevious(gspc) ? FTD_PREVIOUS_NAME : 'FTD'}${day}は指数の別集計で、高値から${FTD_TEXT.decline}未満の下落では取り消しません（独自設定）`;
 }
 
 /** Where the Nasdaq's figures and line come from (the switch's source line on the desktop, the 注記 on a phone). */

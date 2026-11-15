@@ -6,12 +6,12 @@ import { test, expect } from '@playwright/test';
 import { date, marketTrends, openBrief, VIEWPORTS, horizontalOverflow, sessions } from './brief-fixture.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
 import { distributionDetail } from '../../src/static/reference/marketTabStudy.js';
-import { followThroughView, ftdPrevious, BREAKOUT_HOLD_NAME } from '../../src/static/brief/briefEnvironment.js';
+import { followThroughView, ftdPrevious, BREAKOUT_HOLD_NAME, FTD_PREVIOUS_NAME } from '../../src/static/brief/briefEnvironment.js';
 
 const STALE = sessions.at(-3), STALE_MD = STALE.slice(5).split('-').map(Number).join('/'), DATE_MD = date.slice(5).split('-').map(Number).join('/');
 /** The served ^GSPC follow-through record (the fixture's: an FTD 35 sessions old) and the row's words for it, from the producer (M2). */
 const gspcRecord = (options = {}) => JSON.parse(marketTrends(options).text).indices[0].followThrough;
-const GSPC = gspcRecord(), GSPC_VIEW = followThroughView(GSPC, date), FTD_WORD = ftdPrevious(GSPC) ? '前回のFTD' : 'FTD';
+const GSPC = gspcRecord(), GSPC_VIEW = followThroughView(GSPC, date), FTD_WORD = ftdPrevious(GSPC) ? FTD_PREVIOUS_NAME : 'FTD';
 const escape = text => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 const row = (market, label) => market.locator('.brief-env-row').filter({ has: market.page().locator('small', { hasText: label }) });
 /** Below 1024px the market tab shows one section at a time behind its tabs; the desktop shows them all. */

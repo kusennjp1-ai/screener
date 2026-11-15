@@ -9,7 +9,7 @@ import { test, expect } from '@playwright/test';
 import { date, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 import { DISTRIBUTION_TEXT, RULE_TEXT, verdictBasis, verdictWaiting } from '../../src/static/brief/marketTabModel.js';
 import { DISTRIBUTION_BRIDGE, exposureRuleText, followThroughDetail, publishedMarketContext, regimeCause } from '../../src/static/reference/marketTabStudy.js';
-import { followThroughView, marketTileNote, marketTileSuffix, MARKET_TILE_SUFFIX } from '../../src/static/brief/briefEnvironment.js';
+import { followThroughView, marketTileNote, marketTileSuffix, FTD_PREVIOUS_NAME, MARKET_TILE_SUFFIX } from '../../src/static/brief/briefEnvironment.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
 import { readFileSync } from 'node:fs';
 import { marketCardView } from '../../src/static/brief/marketTabModel.js';
@@ -318,7 +318,7 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M2 at ${wid
     const views = seen.value.indices.map(index => followThroughView(index.followThrough, date)), pairs = ftdRow(page).locator('.brief-ftd-row');
     await expect(pairs.locator('b')).toHaveText(views.map(view => view.b));
     for (const [i, view] of views.entries()) await expect(pairs.nth(i)).toContainText(`${view.b}${view.em}`);
-    if (['old', 'behind', 'switch', 'oldSwitch'].includes(key)) expect(views[0]).toMatchObject({ b: expect.stringMatching(/^前回のFTD \d+\/\d+$/), em: expect.stringMatching(/^35日前・/), previous: true });
+    if (['old', 'behind', 'switch', 'oldSwitch'].includes(key)) expect(views[0]).toMatchObject({ b: expect.stringMatching(new RegExp(`^${FTD_PREVIOUS_NAME} \\d+/\\d+$`)), em: expect.stringMatching(/^35日前・/), previous: true });
     if (key === 'recent') expect(views[0]).toMatchObject({ b: expect.stringMatching(/^確認 \d+\/\d+$/), em: expect.stringMatching(/^12日前・/) });
     if (key === 'absent') expect(views.map(view => view.b)).toEqual(['未集計', '未集計']);
     // The count leads the em line, so the value keeps one line even at 320px.
@@ -333,7 +333,7 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M2 at ${wid
       await expect(verdict.locator('strong')).toHaveText(CLOSED.label);
       await verdict.locator('details.brief-exposure-basis > summary').click();
       const cause = regimeCause(CLOSED, publishedMarketContext({ as_of_date: date, market_context: CORRECTION_BLOCK }, { date }), verdictBasis(CLOSED, date), date, { gspc: seen.value.indices[0].followThrough });
-      expect(cause).toContain('下の^GSPCの前回のFTD（');
+      expect(cause).toContain(`下の^GSPCの${FTD_PREVIOUS_NAME}（`);
       await expect(verdict.locator('.brief-verdict-cause')).toHaveText(cause);
     }
     expect(errors).toEqual([]);
@@ -366,8 +366,8 @@ test.describe('M2 at 320px: the ◆ of an FTD 120 sessions old', () => {
     await marketReady(page);
     const frame = page.getByRole('region', { name: '地合い' }).locator('.brief-index-frame');
     const day = seen.value.indices[0].followThrough.ftd.date.slice(5).split('-').map(Number).join('/');
-    await expect(frame.locator('.brief-index-mark.is-ftd')).toHaveText(`◆前回のFTD ${day}`);
-    await expect(frame.getByRole('img')).toHaveAttribute('aria-label', new RegExp(`。前回のFTD ${day}。目盛り`));
+    await expect(frame.locator('.brief-index-mark.is-ftd')).toHaveText(`◆${FTD_PREVIOUS_NAME} ${day}`);
+    await expect(frame.getByRole('img')).toHaveAttribute('aria-label', new RegExp(`。${FTD_PREVIOUS_NAME} ${day}。目盛り`));
     await expect(page.locator('.brief-index-legend .is-ftd')).toHaveText('◆ FTD');
     const box = await frame.boundingBox(), label = await frame.locator('.brief-index-mark-label').boundingBox();
     expect(label.x).toBeGreaterThanOrEqual(box.x);

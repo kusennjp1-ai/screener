@@ -255,7 +255,12 @@ export const FTD_RECENT_SESSIONS = 25;
  * available, confirmed and carries a whole count, else null (an older record without it is never given one).
  */
 export const ftdSessionsSince = ft => ft?.available === true && ft.state === 'confirmed' && Number.isSafeInteger(ft.ftd?.sessionsSince) && ft.ftd.sessionsSince >= 0 ? ft.ftd.sessionsSince : null;
-/** A confirmed FTD older than FTD_RECENT_SESSIONS (「前回のFTD」): the フォロースルーデー row, its ◆ and the cause line read it alike. */
+/**
+ * What a confirmed FTD older than FTD_RECENT_SESSIONS is called (M2): the one copy of the word, read by the フォロースルーデー
+ * row (followThroughView), the index chart's ◆ (MarketScreen), the opened row and the cause lines (marketTabStudy).
+ */
+export const FTD_PREVIOUS_NAME = '前回のFTD';
+/** A confirmed FTD older than FTD_RECENT_SESSIONS (FTD_PREVIOUS_NAME): the フォロースルーデー row, its ◆ and the cause line read it alike. */
 export const ftdPrevious = ft => { const n = ftdSessionsSince(ft); return n !== null && n > FTD_RECENT_SESSIONS; };
 /**
  * A decline (in %, positive) under the 6% line is never rounded up onto it: 5.96 reads 5.96, not 6.0 beside 「6%未満」 (two
@@ -285,7 +290,7 @@ export function followThroughView(ft, date) {
     // A confirmed FTD is a state, not a green light: no 'zone' tone (the 1990-2026 study found no established edge).
     // The sessions since the FTD lead the em line (「35日前」, 「当日」): in the value they wrap it to a second line on a 320px
     // phone (measured), so the value keeps 「確認 M/D」 or 「前回のFTD M/D」 and the opened row says the days are sessions.
-    case 'confirmed': return { b: `${ftdPrevious(ft) ? '前回のFTD' : '確認'}${isoDay(ftd?.date) ? ` ${at(ftd.date)}` : ''}`, asOf,
+    case 'confirmed': return { b: `${ftdPrevious(ft) ? FTD_PREVIOUS_NAME : '確認'}${isoDay(ftd?.date) ? ` ${at(ftd.date)}` : ''}`, asOf,
       ...(ftdPrevious(ft) ? { previous: true } : {}),
       em: join([(n => n === null ? null : n === 0 ? '当日' : `${n}日前`)(ftdSessionsSince(ft)),finite(ftd?.gainPct) ? `+${ftd.gainPct.toFixed(1)}%` : null, whole(ftd?.attemptDay) ? `反発${ftd.attemptDay}日目` : null, whole(ftd?.distributionSince) ? `FTD後の有効な分配日${ftd.distributionSince}` : null]) };
     case 'rally_attempt': return { b: whole(attempt?.day) ? `反発${attempt.day}日目` : '反発中', asOf,

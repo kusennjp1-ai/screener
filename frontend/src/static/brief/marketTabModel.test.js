@@ -10,7 +10,7 @@ import { marketUpdateState } from '../marketUpdateState';
 import { historyTakeaway, sectorRanks } from './marketTabHistory';
 import { marketTabParts, BREAKOUT_EARLY_SESSIONS, BREAKOUT_FAILURE_PERCENT, BREAKOUT_NOT_PIVOT, KEY_ABSENT, STAGE_LEGEND_NAMES, STAGE_REPLAY_NOTE, STOCK_SIDE_HEAD } from './marketTabGroups';
 import { gspcFtdWords, marketRegimeContext, marketTabStudy, nasdaqNote, publishedIndexState, publishedMarketContext, regimeCause, regimeKey, signalTagText, REGIME_NAMES, TAG_MEANINGS, TT_POPULATION } from '../reference/marketTabStudy.js';
-import { followThroughView, marketTileSuffix, BREAKOUT_HOLD_NAME, MARKET_TILE_SUFFIX } from './briefEnvironment';
+import { followThroughView, marketTileSuffix, BREAKOUT_HOLD_NAME, FTD_PREVIOUS_NAME, MARKET_TILE_SUFFIX } from './briefEnvironment';
 import { capText } from '../portfolioPlan';
 import reference from '../reference/market-regime-reference-v1.json' with { type: 'json' };
 import exchange from '../__fixtures__/nyse-sessions-2024-2026.json' with { type: 'json' };
@@ -55,7 +55,7 @@ describe('market tab view model: a complete, current publication', () => {
     expect(item(model, 'dist').rows.map(r => [r.name, r.b, r.asOf])).toEqual([['S&P', '3日', null], ['NAS', '4日', null]]);
     // The fixture's FTD is 40 sessions old: the producer's 「前回のFTD 8/7」 (M2).
     expect(item(model, 'ftd').rows.map(r => [r.name, r.b])).toEqual([['S&P', followThroughView(confirmed('2026-10-02'), '2026-10-02').b], ['NAS', '反発3日目']]);
-    expect(item(model, 'ftd').rows[0]).toMatchObject({ b: '前回のFTD 8/7', previous: true });
+    expect(item(model, 'ftd').rows[0]).toMatchObject({ b: `${FTD_PREVIOUS_NAME} 8/7`, previous: true });
     expect(strings(model.groups).join(' ')).not.toMatch(BARE);
   });
 
@@ -659,7 +659,7 @@ describe('market tab: the basis line names the regime\'s cause (MK1, MK4)', () =
     // Where the basis does not name the regime (新規購入を抑制, 50日線割れ, 長期トレンド警戒), the line names it.
     const held = { label: '新規購入を抑制', cap: 0, regime: 'correction', ftdUpgraded: false };
     // trends()'s ^GSPC record of the day is a confirmed FTD 40 sessions old: the line says it is the index's own count (M2).
-    expect(verdict(held, manifest(block({ regime: 'correction', distribution_days: 3 }))).cause).toBe('局面判定の分配日：SPY 3日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます。下の^GSPCの前回のFTD（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）');
+    expect(verdict(held, manifest(block({ regime: 'correction', distribution_days: 3 }))).cause).toBe(`局面判定の分配日：SPY 3日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます。下の^GSPCの${FTD_PREVIOUS_NAME}（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
     expect(verdict(held, manifest(block({ regime: 'correction', distribution_days: 3 })), gspc(attempt(DATE))).cause).toBe('局面判定の分配日：SPY 3日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます');
     const weak = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'uptrend_under_pressure', ftdUpgraded: false };
     expect(verdict(weak, manifest(block({ distribution_days: null }))).cause).toBe('局面判定の分配日（SPY）は未収録。局面判定は「上昇に圧力」で、分配日のほか50日線・200日線と参加度も見ます');

@@ -12,7 +12,7 @@ import { biasTag, ddGradeState, ftdRecent, INDEX_SYMBOLS, meanLowerStates, refer
 import { indexSummary } from './indexSummary.js';
 import { capText, MARKET_CAPS } from '../portfolioPlan';
 import { exposureRuleText } from './marketTabStudy.js';
-import { ftdPrevious, FTD_RECENT_SESSIONS, FTD_TEXT, NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
+import { ftdPrevious, FTD_PREVIOUS_NAME, FTD_RECENT_SESSIONS, FTD_TEXT, NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
 import { REFERENCE_CHECKS, verdictBasis } from '../brief/marketTabModel.js';
 import { attempt, confirmed, days, failed, trends } from '../../test/fixtures/marketTrends';
 
@@ -206,7 +206,7 @@ describe('the FTD\'s age (M2)', () => {
     expect(details).toEqual([
       `FTDの基準は独自設定（${FTD_TEXT.gain}・${FTD_TEXT.minDay}〜${FTD_TEXT.maxDay}日目・高値から${FTD_TEXT.decline}以上の下落後）。${FTD_SOURCE_GAINS}。`,
       '失敗の判定はFTD当日の安値を終値で割ったとき（独自・出典より早く出る場合があります）。',
-      `「n日前」はFTDの日からの営業日数で、${FTD_RECENT_SESSIONS}営業日を過ぎた確認は「前回のFTD」と表示します（独自設定）。`,
+      `「n日前」はFTDの日からの営業日数で、${FTD_RECENT_SESSIONS}営業日を過ぎた確認は「${FTD_PREVIOUS_NAME}」と表示します（独自設定）。`,
       'FTDの状態ごとの過去の傾向は、下の「過去の傾向」を参照。',
     ]);
     expect(details[0]).toBe('FTDの基準は独自設定（+1.2%・4〜15日目・高値から6%以上の下落後）。出典ごとの上昇率の目安：1.0%〜1.25%（IBD）、1.7%（William O\'Neil + Co.）（二次資料経由・未確認）。');
@@ -225,7 +225,7 @@ describe('the FTD\'s age (M2)', () => {
   const LINE = '局面判定の分配日：SPY 7日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます';
   it('says under a correction that the same day\'s confirmed ^GSPC FTD is the index\'s own count, not withdrawn under a 6% decline', () => {
     expect(cause('correction', at(12))).toBe(`${LINE}。下の^GSPCのFTD（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
-    expect(cause('downtrend', at(26))).toBe('局面判定の分配日：SPY 7日（ストーリング日を含む数え方）。局面判定は「下降トレンド」で、分配日のほか50日線・200日線と参加度も見ます。下の^GSPCの前回のFTD（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）');
+    expect(cause('downtrend', at(26))).toBe(`局面判定の分配日：SPY 7日（ストーリング日を含む数え方）。局面判定は「下降トレンド」で、分配日のほか50日線・200日線と参加度も見ます。下の^GSPCの${FTD_PREVIOUS_NAME}（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
     // Without the FTD's date the clause leaves the date out, never guessed.
     expect(cause('correction', { ...at(12), ftd: { sessionsSince: 12 } })).toBe(`${LINE}。下の^GSPCのFTDは指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
   });
@@ -239,7 +239,7 @@ describe('the FTD\'s age (M2)', () => {
     expect(regimeCause(up, block('confirmed_uptrend'), verdictBasis(up, DATE), DATE, { gspc: at(12) })).toBe('局面判定の分配日：SPY 7日（ストーリング日を含む数え方）');
     // Through the study: the ^GSPC record of the day comes from the series (gspcFollowThrough).
     const value = make(), market = held('correction'), manifest = { markets: { US: { as_of_date: DATE, market_context: block('correction') } } };
-    expect(marketTabStudy({ trends: value, reference, date: DATE, market, manifest }).cause).toBe(`${LINE}。下の^GSPCの前回のFTD（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
+    expect(marketTabStudy({ trends: value, reference, date: DATE, market, manifest }).cause).toBe(`${LINE}。下の^GSPCの${FTD_PREVIOUS_NAME}（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
   });
 });
 

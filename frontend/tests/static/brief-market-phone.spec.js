@@ -3,7 +3,7 @@
 import { test, expect } from '@playwright/test';
 import { date, marketTrends, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
-import { followThroughView } from '../../src/static/brief/briefEnvironment.js';
+import { followThroughView, FTD_PREVIOUS_NAME } from '../../src/static/brief/briefEnvironment.js';
 import { BREADTH_LEGEND, marketTabStudy, STOCK_OUTCOME_UNTESTED } from '../../src/static/reference/marketTabStudy.js';
 import { marketCardView } from '../../src/static/brief/marketTabModel.js';
 import { marketTabParts } from '../../src/static/brief/marketTabGroups.js';
@@ -385,7 +385,7 @@ test.describe('round 2 at 375×812: an FTD-upgraded uptrend', () => {
     const gspc = sessions.at(-36).slice(5).split('-').map(Number).join('/');
     // The row's words for that record are the producer's (M2: an FTD 35 sessions old reads 「前回のFTD」).
     await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(followThroughView(JSON.parse(marketTrends().text).indices[0].followThrough, date).b);
-    await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(`前回のFTD ${gspc}`);
+    await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(`${FTD_PREVIOUS_NAME} ${gspc}`);
     // Round 3: the 銘柄側 line first (M6) and the 0% note last (M5), each the producer's words for the served asset.
     const served = { data: JSON.parse(marketTrends().text) }, market50 = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
     const reference = JSON.parse(readFileSync(new URL('../../src/static/reference/market-regime-reference-v1.json', import.meta.url), 'utf8'));
