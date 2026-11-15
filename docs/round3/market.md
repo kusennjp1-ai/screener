@@ -609,7 +609,7 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 - **`zeroCapNote({ market, regime, reference, date })`**：判定が `modelMarket` の 50日線割れ（`verdictBasis` が「SPY は 50日線の下・200日線の上」と読む状態）で、目安が 0% のときだけ文を返す。それ以外の判定（上昇トレンド・上昇に圧力・長期トレンド警戒・新規購入を抑制・未確認）は null。
   - 文は必ず「0%は独自設定で、検証された水準ではありません。」で終わる。0% は `capText(market.cap)` から出す。
   - 数字は、^GSPC 自身の 50・200 日線の区分（過去の傾向が判定したもの：`marketRegimeContext` の `^GSPC.ma.quadrant` の項目。長期履歴の ^GSPC 終値に `indexSummary`）が `above200_below50` で、その日付が分析日のときだけ付ける（指揮役の訂正どおり、SPY の判定ラベルではなく ^GSPC の区分で結合する）。
-  - 数字の形：「^GSPC・21営業日で5%以上の下げ：この状態 15%〔未確立〕／両線の上 10%〔S&P・Nasdaqとも〕／全期間 16%。0%は独自設定で、検証された水準ではありません。」（合成データの描画。数字はすべてコミット済みの参照 JSON の行から読む）。
+  - 数字の形：「^GSPC・21営業日で5%以上の下げ：この状態 a%〔未確立〕／両線の上 b%〔S&P・Nasdaqとも〕／全期間 c%。0%は独自設定で、検証された水準ではありません。」（a・b・c はコミット済みの参照 JSON の行から読む。この文書には数字を書かない）。
     - a＝その区分の行の `pDd5`、b＝`above_both` の行の `pDd5`、c＝その行の `comparatorPDd5`（全期間）。21 と 5 は参照の `outcome` から。
     - それぞれの状態に自分のタグ（`stateTag`）を付ける。今は `above200_below50` が〔未確立〕。
     - 指示に加えて、その状態の行に〔偏り〕（`biasTag`）があれば付ける（今はどちらにも無い。数字が注意書きを失わないため）。
@@ -658,6 +658,8 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 5. **M5 の〔偏り〕**：指示は「各状態の stateTag」。行に〔偏り〕があるときはそれも付ける（今の参照では付かないので、画面の文は指示の形と同じ）。
 6. **MarketCard.test.jsx を変えた**（パッケージのファイル一覧にないが、このトラックの所有。P3 と同じ）。MarketDetailCard（MarketScreen.jsx）のテストがここにあり、折りたたみの段落一覧・凡例・ステージの凡例・脚注の照合が変わったため。照合は producer（`marketCardView`＋`marketTabParts`、`marketTabStudy`）から作るようにした。
 7. **brief-market-phone.spec.js の FTD 格上げのテスト（d522ce7c）**：折りたたみの段落を全部並べて照合していた。M6 の先頭行と M5 の最後の行が加わったので、producer の文を前後に足した。最初の関門 (1) で 1 件失敗して見つけた（下記）。
+8. **系列が ready でないとき、銘柄側の行は出さない**（null）。指示の「欠測の項は各行の absent の語」は、系列が読めたうえで項が欠けるときに当てはめた。読み込み中・取得失敗・データなしのときは、3 項とも同じ語（「読み込み中…」「取得できません」など）が並ぶだけになり、そのことはカードの StatusAlert とタブの各群がすでに言う。長期履歴だけが無い・整合性エラーのときは、行を出して 3 項とも「未配信」「確認できません」と書く。
+9. **1 営業日遅れの状態の折りたたみの見出しは 320／375 で 52.2px**（44〜48px の線の外）。P4 の前から同じ高さ（実測、下の表の注）で、このパッケージでは変えていない。新しい spec はこの状態だけ 53px までを許している。
 
 ### 高さ（実測、変更前→変更後）
 
@@ -707,7 +709,7 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
   - 新しいテスト 19 件（M5・M6・M7）は単独でも通過（40.9 秒）。
 - **(2) 凍結 spec（無編集）**：123 件通過、2 件スキップ（brief-oracles の R1／R2 の test.fixme）、1 件失敗、6.8 分。/proc/loadavg は 4.88→8.22。
   - 失敗は brief-freshness.spec.js の「two sessions later on the desktop」（銘柄画面 ZZNV、時計を 2 営業日進めた上部バーの文。受け取った文は「分析基準日 10/2（金）引け・米国株」で、遅れの表示に切り替わる前に読んだ形）。このパッケージは上部バーと鮮度の計算を触っていない。
-  - 負荷の下の取りこぼしとして、brief-freshness.spec.js だけを 1 回再実行した：20 件すべて通過（54.2 秒、/proc/loadavg 7.72→9.49）。**再実行が必要だった**ことをここに書く。
+  - 時間切れではなく照合の不一致。負荷の下で遅れの表示に切り替わる前に読んだもの（推論）として、brief-freshness.spec.js だけを 1 回再実行した：20 件すべて通過（54.2 秒、/proc/loadavg 7.72→9.49）。**再実行が必要だった**ことをここに書く。
   - brief-compact・brief-phone・brief-oracles・brief-freshness・brief-fixture は 45603f06 から差分 0（`git diff --stat`）。
 - **(3) dump**：`r3-harness/dump/run-dump.sh <W> 4433` → `dump-d522ce7.json`（sha256 4cdddcf3…c4471a6983、42 画面、エラー 0）。/proc/loadavg は 8.80→6.40。
   - P3 の dump（3051554）との差（`gate/dumpdiff-d522ce7-vs-3051554.txt`）は市場の 5 画面だけ。Today・銘柄・候補・ウォッチの画面は完全に一致した。
@@ -727,6 +729,7 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 - **関係ファイルの vitest**：`npx vitest run src/static/brief/MarketCard.test.jsx src/static/brief/marketTabModel.test.js src/static/reference src/static/brief/MarketScreen.test.jsx` → 5 ファイル、169 件通過（M7 の前）。M7 の後の MarketCard.test.jsx と marketTabModel.test.js は 2 ファイル 127 件通過。
 - **vitest 全体（d522ce7c の木、1 回）**：`npx vitest run`（SESSION_CALENDAR_PYTHON と FINANCIAL_REPLAY_PYTHON を指定）→ 247 ファイル、4034 件すべて通過、251.6 秒。/proc/loadavg は 3.65→5.82。他のトラックと共有の負荷下の時間なので、参考値（advisory）。
 - **eslint**：45603f06 から変えた .js／.jsx／.mjs の 18 ファイルで指摘 0。
+- **関門の外の spec**：tests/static の全 spec を、変えた要素と文（exposure-basis、brief-verdict-why、brief-regime-foot、brief-signals、stagelegend、天井圏、関係未確認、下げの割合）で grep した。当たるのは MARKET の 3 つの spec だけ。市場タブを開く brief-accessibility.spec.js と brief-invariants.spec.js も 1 回走らせた：`AUDIT_MATCH='brief-(accessibility|invariants)\.spec'` → 46 件通過（2.1 分、/proc/loadavg 0.92→4.73）。
 - **所有の関門**：毎コミット前に `check-ownership.py MARKET` で OWNERSHIP OK（21 paths）。
 
 ### 未検証
