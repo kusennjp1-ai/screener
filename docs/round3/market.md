@@ -587,8 +587,8 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 
 - **M4 のタイルの高さ（判断 1）**：375 で 97.8→115.8px。受け入れるか、TodayView／brief.css で接尾辞の置き方を変えるかを決めてほしい。
 - **年をまたぐ前回の FTD（判断 2）**：320 で +24px。受け入れるか、日付の書き方を変えるか（shortDate は共有）を決めてほしい。
-- **gspcFtdWords（FTD 格上げの原因行）は「^GSPCの日足ではFTD 8/7」のまま。** 古い ^GSPC の FTD を「前回の」と言うかは指示になかったので変えていない。
-- **「前回のFTD」の語は 3 つのソース（briefEnvironment.js、MarketScreen.jsx、marketTabStudy.js）と spec に直接書いてある。** 行と原因行の照合は producer 経由だが、チャートの照合は語を直接書いている。1 つの定数にまとめるなら関門の通し直しが要る。
+- **gspcFtdWords（FTD 格上げの原因行）は「^GSPCの日足ではFTD 8/7」のまま。** 古い ^GSPC の FTD を「前回の」と言うかは指示になかったので変えていない。→ 指揮役の指示 第 1 回で直した（dc4a02ec、下の「指揮役の指示 第 1 回」）。
+- **「前回のFTD」の語は 3 つのソース（briefEnvironment.js、MarketScreen.jsx、marketTabStudy.js）と spec に直接書いてある。** 行と原因行の照合は producer 経由だが、チャートの照合は語を直接書いている。1 つの定数にまとめるなら関門の通し直しが要る。→ 指揮役の指示 第 1 回で `FTD_PREVIOUS_NAME` にまとめた（56945c8b）。
 - **CONTEXT.md の語彙**（統合時に移す）
   - 「前回のFTD」：確認から `FTD_RECENT_SESSIONS`（25）営業日を過ぎた、アプリ自身の指数の FTD 記録。今の FTD としては読まない。
   - 「反発n日目」：目安 0% の日に、同日の指数の記録がラリー試行（rally_attempt）のときの Today の接尾辞。n は試行の日数。
@@ -927,11 +927,11 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 | M8c | 上抜け維持（確定分） | 「早期（上抜け後5営業日・独自）：9件中 33% が −7%に到達」、5 件未満は「3件（5件未満のため率は非表示）」（`earlyBreakoutLine`）、「52週高値抜けで、ベースのピボットではありません」、「確定分は10〜29営業日前の上抜けを、その後10営業日で判定」 | 行の率と同じ行（率が無ければ最新の行） |
 | M8d | 分配日（25日） | 最後の行に「ストーリング日（独自近似・IBDの定義は非公開・本数に含めません）：S&P 1日／NAS 0日」。指数が古い日なら「（10/1時点）」、不可・取り下げは「算出不可（理由）」（`stallingLine`） | 各指数の `stalling` |
 | M8e | フォロースルーデー | 「S&P：現在の下落 −2.6%（高値9/29→安値10/1）・6%で調整判定（独自設定）」（`currentLegLine`） | 各指数の `followThrough`（confirmed だけ） |
-| M9 | フォロースルーデー | 「+3%以上の上昇日：S&P 直近279営業日でk回／NAS 直近279営業日でk回（弱気相場・調整中に多い。買いの合図ではありません）」（`bigUpDayLine`）。終値の無い公開は「未収録（旧形式）」 | 各指数の検証済みの `closes` |
+| M9 | フォロースルーデー | 「+3%以上の上昇日（独自設定）：S&P 直近279営業日でk回／NAS 直近279営業日でk回（弱気相場・調整中に多い。買いの合図ではありません）」（`bigUpDayLine`）。終値の無い公開は「未収録（旧形式）」 | 各指数の検証済みの `closes` |
 
 - **M8c の名前**は「上抜け維持（確定分）」（`BREAKOUT_HOLD_NAME`、briefEnvironment.js）。注意サインの文「上抜け維持（確定分）が30%に低下」、注意サインの判定項目、銘柄側の 1 行（P4）、旧形式の未収録の行が同じ定数を読む。行のラベルは `BREAKOUT_HOLD_LABEL`（同じ値）。理由は判断 1。
 - **M8e**：followThroughDay は confirmed の状態で、FTD 後の高値からの今の足を `peak`・`low`・`declinePct` として公開している（6% の調整判定と同じ `decline()`）。新しいキーは足していない。表示は confirmed で `declinePct` が有限かつ `100 × FTD_MIN_DECLINE` 未満のときだけ。状態機械は 6% 以上で confirmed を抜けるので、フィクスチャの合成値 7.6 には何も出ない。既存の 6 未満の丸めのガード（`under6`、briefEnvironment.js の関数の中から出して export した。followThroughView の動作は同じ）を使う：5.996 は「−5.99%」、0.04 は「−0.04%」、0 は「0.0%」（「−0.0%」にしない）。分析日より古い記録は「NAS（10/1時点）：…」。
-- **M9**：`BIG_UP_DAY = 0.03`（marketTabStudy.js。出典はミネルヴィニ本人の投稿の +3%〔市場計画 MM-19：2020-04-06、2025-03-07〕、ここでの使い方は独自設定）。前日の終値より +3% 以上上がった日を k、比較の回数 `closes.length − 1` を N とする。浮動小数の誤差だけを `1e-12` で吸収する（1070 → 1102.10 はちょうど +3.00% だが、比は 1.0299999999999998 と計算される）。読み手が取り下げた終値は「算出不可（指数の終値の形式を確認できません）」。
+- **M9**：`BIG_UP_DAY = 0.03`（marketTabStudy.js。出典はミネルヴィニ本人の投稿の +3%〔市場計画 MM-19：2020-04-06、2025-03-07〕、ここでの使い方は独自設定）。行の見出しは `BIG_UP_HEAD`＝「+3%以上の上昇日（独自設定）」で、定数から作る（指揮役の指示 第 1 回、cd9bf520。出典の名前や引用は行に入れず、文書にだけ書く）。前日の終値より +3% 以上上がった日を k、比較の回数 `closes.length − 1` を N とする。浮動小数の誤差だけを `1e-12` で吸収する（1070 → 1102.10 はちょうど +3.00% だが、比は 1.0299999999999998 と計算される）。読み手が取り下げた終値は「算出不可（指数の終値の形式を確認できません）」。
 - **分配日の開いた行の 2 行目**は「（ストーリング日なし・…）」を「（ストーリング日を含まない・…）」に変えた。すぐ下の「ストーリング日…：S&P 1日」と並ぶと「なし」が 0 日に読めるため。
 
 **M10（文書）**
@@ -1055,13 +1055,56 @@ CI の浅いチェックアウトには 8849bf9 が無いことがあるので�
 - **エントリチャンク**：131.64 kB（+1.36 kB、STEP 0 比）。ほかのトラックと合わせて 134.00 kB の線に入るかを統合で確かめてほしい。
 
 
+## 指揮役の指示 第 1 回（トラックの検証の後の修正）
+
+指揮役が 35ae8759 で検証して出した 4 つの指示（major 1、minor 3）。コミットは d484c645（指示 4）、56945c8b（指示 3）、dc4a02ec（指示 2）、cd9bf520（指示 1）と、この文書の更新。
+
+### 指示 1（major）：+3% の日の閾値に「独自設定」を画面で付ける（M9、cd9bf520）
+
+- `BIG_UP_HEAD` を定数から「+3%以上の上昇日（独自設定）」にした（`` `+${num(BIG_UP_DAY * 100)}%以上の上昇日（独自設定）` ``）。`BIG_UP_NOTE` は変えていない。出典（ミネルヴィニの投稿）の名前や引用は行に入れず、文書にだけ書く（市場計画の規則 8）。
+- 行は開いたフォロースルーデー行の最後の 1 行だけなので、閉じた高さは変わらない。brief-market-r3.spec.js の P6 の閉じた高さの照合（320／375／390、4 状態、`toBe(PRE_P6…)`）がそのまま通った。
+- marketTabStudy.test.js の定数の固定を新しい見出しにした。brief-market-r3.spec.js の照合は見出しと注意書きを定数（`BIG_UP_HEAD`、`BIG_UP_NOTE`）から作り、正規表現には escape を通す。MarketCard.test.jsx には +3% の文の照合が無い（足していない）。
+
+### 指示 2（minor）：FTD 格上げの原因行でも古い ^GSPC の FTD を「前回のFTD」と言う（M2、dc4a02ec）
+
+- `gspcFtdWords` は `ftdPrevious(ft)` のとき「^GSPCの日足では前回のFTD 8/13」、それ以外は「^GSPCの日足ではFTD 8/13」。整数の `sessionsSince` が無い記録は今までどおり「FTD」。
+- vitest：25 営業日（「FTD」）と 26 営業日（「前回のFTD」）、数の無い記録と null・−1・2.5・'30'（「FTD」）、局面判定の FTD と同じ日（null）。原因行全体も 25／26 で照合した。フィクスチャの FTD は 40 営業日前なので、marketTabModel.test.js と MarketCard.test.jsx の原因行の期待値は「前回のFTD」になった（定数から作る）。
+- brief-market-phone.spec.js の原因行は、配信した資産と ftdUpgraded が配信する manifest から `marketTabStudy(...).cause`（regimeCause）で作る。空振りしないように、`ftdPrevious(record)` が true であること、`gspcFtdWords` の文に「前回のFTD M/D」があること、原因行がその文を含むことも照合する。
+- 高さ（実測、scratch の ftdup-measure.spec.js、4 状態〔FTD 格上げ、＋50日線割れの指数、＋S&P／Nasdaq の切替、両方〕× 320／375／390／1440。変更前は指示 2 の前のコードで原因行が「^GSPCの日足ではFTD 8/13」、変更後は cd9bf520 で「^GSPCの日足では前回のFTD 8/13」）：閉じた高さ・リード・開いた高さ・原因行の行数はすべて変わらない（320：1448／1390／1444／1386、原因行 4 行。375：1300／1242／1281／1223、3 行。390：1277／1219／1259／1201、3 行。1440：2529／2568／2565／2604、2 行）。電話では原因行は閉じた折りたたみの中にある。
+
+### 指示 3（minor）：「前回のFTD」の語を 1 か所にする（56945c8b）
+
+- `FTD_PREVIOUS_NAME = '前回のFTD'` を briefEnvironment.js から export した（briefModel.js は `export *` で再 export）。followThroughView、IndexChart の ◆（MarketScreen.jsx）、ownFtdLine、followThroughDetail、gspcFtdWords（指示 2）が読む。unit テストと 3 つの市場の spec は語を書かずに定数を import する。残る「前回のFTD」はコメントとテスト名だけ。
+- 見える文は変えていない：cd9bf520 の dump は dump-35ae875.json とバイト単位で同じ（sha256 cbb64b4f…c7d5ce）。指示 1 と指示 2 で変わる行（開いたフォロースルーデー行の +3% の行、FTD 格上げの原因行）は dump の 42 画面のどれにも無い（35ae875 の dump で 0 件）ので、dump は全体が同じになる。
+
+### 指示 4（minor）：export-market-trends.test.mjs の 2 件に 60 秒の時間を付ける（d484c645）
+
+- 'writes raw and derived data with exact content hashes and binds the manifest reference' と 'replays identical selected seed and manifest bytes from a foreign cwd, ignoring a spoofed cwd seed' の `it()` の第 3 引数に `60_000` を付けた。ほかは変えていない。
+- ファイル単体（cd9bf520、負荷 4.5→5.3、参考値）：59 件通過、2 件は 12.3 秒と 13.9 秒。
+
+### 実測（cd9bf520 のコード。負荷は共有マシンのもので、時間はすべて参考値）
+
+- 関係する vitest（MarketCard、briefEnvironment、marketTabModel、marketTabStudy）：184 件通過。
+- 全 vitest（SESSION_CALENDAR_PYTHON と FINANCIAL_REPLAY_PYTHON あり）：247 ファイル、4092 件通過、1 回目で exit 0（負荷 5.5→10.2）。
+- Playwright（CI と同じ：Chrome for Testing 147 headless shell、CI のフォント、ポート 4433、1 worker、再実行なし）
+  - brief-market、brief-market-phone、brief-market-r3：146 件通過（負荷 0.3→7.9）。
+  - brief-oracles、brief-compact、brief-phone：104 件通過、2 件 skip（R1／R2 の test.fixme）（負荷 7.7→6.8）。
+- eslint（変えた js／jsx）：exit 0。所有の関門：各コミットの前に OWNERSHIP OK (MARKET)、29 パス。
+- dump（`$H/dump/run-dump.sh`、cd9bf52）：42 画面、エラー 0、sha256 cbb64b4f…c7d5ce＝dump-35ae875.json（`cmp` で同一）。
+- ビルド（`$H/build/run-build.sh`、cd9bf52）：エントリチャンク 131.66 kB gzip（35ae875 の 131.64 から +0.02、生で +15 バイト、`FTD_PREVIOUS_NAME` の export。STEP 0 の 130.28 から +1.38、134.00 の線の内側）。遅延チャンク MarketScreen は 33.17→33.19 kB gzip。
+
+### 未検証
+
+- 実際の ^GSPC の記録で原因行と +3% の行がどう読まれるか（FTD 格上げの状態になるか、^GSPC の FTD が 25 営業日を過ぎているか、+3% の日の回数）。次の公開を読むまで分からない。期待値の数字は書かない。
+- 時間の計測は取っていない（このトラックは時間の関門を持たない）。
+
 ## トラック全体のまとめ（統合で使うもの）
 
 ### CONTEXT.md に移す語彙（統合のときに。このトラックでは CONTEXT.md を変えていない）
 
 | 語 | 意味 | 出どころ |
 |---|---|---|
-| 前回のFTD | 確認から `FTD_RECENT_SESSIONS`（25）営業日を過ぎた、アプリ自身の指数の FTD 記録。今の FTD としては読まない | P3（M2） |
+| 前回のFTD | 確認から `FTD_RECENT_SESSIONS`（25）営業日を過ぎた、アプリ自身の指数の FTD 記録。今の FTD としては読まない。語は `FTD_PREVIOUS_NAME`（briefEnvironment.js）の 1 か所だけにあり、行・◆・開いた行・2 つの原因行（ownFtdLine、gspcFtdWords）が読む | P3（M2）、第 1 回の指示 |
 | 反発n日目 | 目安 0% の日に、同日の指数の記録がラリー試行（rally_attempt）のときの Today の地合いタイルの接尾辞。n は試行の日数 | P3（M4） |
 | 分配日の参考／注意 | 有効な分配日が 5〜6 日は参考（○、注意の件数に入れない）、7 日以上は注意（▲）。独自設定 | P2（M3） |
 | 銘柄側（参考） | 判定のそばの参考の 1 行（TT 達成数とその 1 か月前、上抜け維持（確定分）の率と件数、リーダーの健全度と銘柄数）。目安は読まない。注意サインに数えない | P4（M6） |
@@ -1071,7 +1114,7 @@ CI の浅いチェックアウトには 8849bf9 が無いことがあるので�
 | うち終値でも更新 | 52 週の新高値のうち、終値でも直前 251 営業日の高値を上回った銘柄数（`newHighsClose`） | P5・P6（M8b） |
 | RS推計90以上（コホート） | 20 営業日前に TT 達成かつ RS推計 90 以上で今日も観測されている銘柄（`rs90Cohort`）と、その 50 日線の上の割合。IBD RS ではない | P5・P6（M8a） |
 | 現在の下落（FTD 後） | 確認済みの FTD の後の高値から、その後の最安値日の終値までの下落率（followThroughDay の `declinePct`）。6% で調整判定（独自設定） | P6（M8e） |
-| +3%以上の上昇日 | 前日の終値より +3% 以上上がった日の回数（〔参考〕、買いの合図ではない）。+3% はミネルヴィニの数字、使い方は独自設定 | P6（M9） |
+| +3%以上の上昇日 | 前日の終値より +3% 以上上がった日の回数（〔参考〕、買いの合図ではない）。+3% はミネルヴィニの数字、使い方は独自設定。画面の見出しは「+3%以上の上昇日（独自設定）」 | P6（M9）、第 1 回の指示 |
 | 同日の記録 | `sameDayFollowThrough` が返す、分析日と同じ日の指数の判定記録 | P2（M1a） |
 | 更新待ちの判定 | 後の取引日が引けたのに公開が来ていないときの、市場タブの結論文 | P2（M1e） |
 | 0% の注記 | 50日線割れの判定の 0% が独自設定で検証されていないことを言う文 | P4（M5） |
@@ -1091,14 +1134,14 @@ CI の浅いチェックアウトには 8849bf9 が無いことがあるので�
 ### 統合への依頼（全パッケージ。このトラックでは変えていない）
 
 - **P2**：market-regime-study.mjs の説明（41 行、762 行）が「DISTRIBUTION_WARN で注意」のまま。M1c のラベルが所有外の画面（entryReadiness、buildPortfolioPlan の blockers、PortfolioPlanDrawer／PortfolioDecision）に届く。200 日線の下の +27px を受け入れるか。M1e の猶予を足すか。▲と○の組の短い形のデザインの確認。
-- **P3**：M4 のタイルの高さ（TodayView／brief.css）。年をまたぐ前回の FTD の 320 の +24px（shortDate は共有）。gspcFtdWords の「^GSPCの日足ではFTD 8/7」は「前回の」と言わない。「前回のFTD」の語が 3 つのソースと spec に直接書いてある。
+- **P3**：M4 のタイルの高さ（TodayView／brief.css）。年をまたぐ前回の FTD の 320 の +24px（shortDate は共有）。（gspcFtdWords の「前回の」と、「前回のFTD」の語の 1 か所へのまとめは、指揮役の指示 第 1 回で直した。）
 - **P4**：注意サインの見出しの「参考 M件」が注意の日に琥珀色になる（brief.css）。marketRegimeReference.js:75 のコメントと同 test.js:41 のテスト名が古い凡例の語。過去の傾向の脚注の「値動きが荒い」を残すか。metricGlossary.js:139 の「3=天井圏」。
 - **P5**：audit-market-history.py に 5 つのキーの独立の再計算を足す（on の前に）。ストーリング日に backend の 5% の外し方を入れるか（入れるなら method id を変える）。
 - **P6**（詳しくは P6 の節の「統合への依頼」）：
   - **frontend/src/static/components/MarketHistoryExplorer.jsx:14 の長期推移の指標名「ブレイクアウトの成功率」**（所有外）。1440 では同じ市場画面で環境の行の「上抜け維持（確定分）」と並ぶ。同じ `BREAKOUT_HOLD_NAME` を読むようにそろえるとよい。そのとき brief-market.spec.js:97 の照合も直す（このトラックの spec だが、所有外のファイルの語なので触れていない）。
   - market-regime-study.mjs:201・785 の同じ旧名（研究ツールの出力。記録の結果ファイルは変えない）。
   - 上抜けの行の名前（判断 1）を受け入れるか。
-  - export-market-trends.test.mjs の 2 件に明示の時間を付ける（通るときも 14〜19 秒で、既定の 20 秒に近い）。
+  - export-market-trends.test.mjs の 2 件に明示の時間を付ける（通るときも 14〜19 秒で、既定の 20 秒に近い）。→ 指揮役の指示 第 1 回で 60 秒にした（d484c645）。
   - CONTEXT.md の語彙（上の表）。
 - **エントリチャンク**：P6 の関門 (4) の 131.64 kB（STEP 0 の 130.28 kB から +1.36 kB）。統合で 134.00 kB の線に入るかを、ほかのトラックと合わせて確かめてほしい。
 
