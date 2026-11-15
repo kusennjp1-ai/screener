@@ -898,7 +898,7 @@ Only `priceChart.js` and `chartLabels.js` changed. The grid, the costs, the gaps
    - The segments, their keys, `from`, `up`, `tip` and the leader kinds are built exactly as at P.
 
 **Not done, and why:**
-- The `carry` second layout (the whole chart drawn again for a level's name) is untouched. Identity could not be proved cheaply. It is 13 of the 608 fixture models.
+- The `carry` second layout (the whole chart drawn again for a level's name) is untouched: a shortcut there was not attempted. It is 13 of the 608 fixture models.
 - Yielding to the main thread: not implemented (see the timings).
 
 ### C1 profile: where the time went, before (P) and after (head), 実測 (advisory, shared machine)
@@ -957,12 +957,15 @@ The rest is jsdom building the markup (`_node`, `Attr.setup`, the HTML parser) a
 - Changes 3, 6 and 7 change no counter: they make each call cheaper. Their share is inside the head's totals above.
 - `retry` 81, `replay` 70, `placeName` 2,705, `repair` 1,300 and `carry_render` 6 are the same at P and head, so the same work is reached.
 
-**Stop decision.** Gains have not flattened to zero: on a cold SWKS render the names are still about half the render. I stopped for two reasons.
-- Every further change re-opens all four proofs (a)–(d): a snapshot, a render, both probes and the full Playwright suite.
-- The figures below show that even a zero-cost name search would not reach ≤ 200 ms in this session's scale.
-  - In p3's browser breakdown of 8849bf9 (`audit3/p3-phone-chart-speed/timing/instr-snapshot.json`), the names were 93–131 ms of a 229–250 ms chart task, about half.
-  - Here base reads 498 ms. Removing the whole name search from it would leave about 250 ms.
-  - Head's 306 ms already saves about 190 ms.
+**Stop decision.** I stopped **before the gains flattened**: on a cold SWKS render the names are still about half the render, so the name search is not exhausted.
+- I stopped because every further change re-opens all four proofs (a)–(d): a snapshot, a render, both probes and the full Playwright suite.
+- **The transferable figure is the same-run ratio,** head / base = 306 / 498 = **0.61** (first load, below). Projections from it are **未検証**:
+  - against the README's quiet base readings (313–355 ms), about 192–218 ms, which is borderline for ≤ 200;
+  - against CI's Design Acceptance 779 ms (PR #145), about 480 ms.
+- p3's browser breakdown of 8849bf9 (`audit3/p3-phone-chart-speed/timing/instr-snapshot.json`, another session) had the names at 93–131 ms of a 229–250 ms chart task, about half. It is context, not a measurement of this tree.
+- **Two levers remain:**
+  - more identity-preserving work on the name search: `hits` against reserved boxes, then the spots' heap;
+  - yielding (not implemented, as ordered).
 
 ### C1 identity proofs (all four, 実測)
 
@@ -992,9 +995,11 @@ The rest is jsdom building the markup (`_node`, `Attr.setup`, the HTML parser) a
 - The bundles were rebuilt from `git show 57fdcd68:` and `git show HEAD:`. The head bundle equals the one used during development except for esbuild's path comments.
 
 **(c) Fixture probes** (`$H/probe/run-probe.sh $W 4424` and `… 4424 oracles`, at 45601a2; 0 page errors; load 9.54 → 11.16 and 10.17 → 8.98):
-- `probe-45601a2.json` sha256 `1127e3b88c52ee79c3f16e2474d3eda5b0a01b92de78e89e86f54e327bc62342`: `cmp` with `probe-57fdcd6.json`, **identical**.
-- `probe-45601a2-oracles.json` sha256 `d2e881720b434b64f2fa114661c77cecf5debe939782665d5543f1a9b163d2a3`: `cmp` with `probe-57fdcd6-oracles.json`, **identical**.
-- `node $H/probe/diff.mjs … --texts`: **0 of 972** and **0 of 264** views differ.
+- `probe-45601a2.json` sha256 `1127e3b88c52ee79c3f16e2474d3eda5b0a01b92de78e89e86f54e327bc62342`: **equal** to P's frozen hash (`probe-57fdcd6.json`, the C1 header table and `pre-c1-baselines.txt`).
+- `probe-45601a2-oracles.json` sha256 `d2e881720b434b64f2fa114661c77cecf5debe939782665d5543f1a9b163d2a3`: **equal** to P's frozen hash (`probe-57fdcd6-oracles.json`).
+- sha256 equality is the identity claim. The head's two files were re-hashed in this session.
+- When the probes were taken, `node $H/probe/diff.mjs <P> <head> --texts` printed 「0 of 972 views differ」 and 「0 of 264 views differ」 (`audit3/r3-chart/diff-57fdcd6-45601a2.txt`, `diff-oracles-57fdcd6-45601a2.txt`).
+- P's probe files were deleted in the clean-up, so the `cmp` and the diff can no longer be re-run; their `.sha256` stubs are kept.
 
 **(d) Real data, the 11-12 rebuild** (`$H/snapshot/run-snapshot.sh $W` 8.8 min, load 9.30 → 4.10; `$H/build/run-build.sh $W`; `$H/snapshot/run-render.sh $W 4424 reduce`: 476 renders and the 2 readout targets, 0 errors, load 2.27 → 1.14):
 
@@ -1014,7 +1019,7 @@ The rest is jsdom building the markup (`_node`, `Attr.setup`, the HTML parser) a
 **First load, 1440 Today** (`$H/timing/wait-quiet.sh 0.5 600 $H/timing/run-timing.sh $W 4424 /home/user/screener/.claude/worktrees/r3-base 7`; the 8849bf9 base and the head interleaved in one run):
 - `wait-quiet` waited 45 s. Load 0.56 at the start, 4.05 at the end: the loads rose during the run with the run's own Chrome. The host calibration was 925 → 934 ms.
 - Validity rule: the 1-min load was under 1.0 at the start, and SWKS was in the pane 7/7 for both trees.
-  - `ps_before` lists only the run's own chrome-headless and node, and `claude` at 3.1%.
+  - The processes in `ps_before` appear to be the run's own chrome-headless and node (00:07 elapsed), and `claude` at 3.1%. That is inferred, not checked.
   - The rule was met at the start only. The load during the runs was 1–4, and head's in-page calibration was slower than base's (25.3–42.8 ms against 18.9–31.0). So this is a **valid-at-start but advisory** reading.
 
 | Tree | longest task in design-review's window, per run | median | chart task median | chart was the longest |
@@ -1046,7 +1051,7 @@ The rest is jsdom building the markup (`_node`, `Attr.setup`, the HTML parser) a
   - The harness's gzip -9 figure moves 131,076 → 131,079 bytes (npm run build 131.44 → 131.45 kB). Those 3 bytes are the new hash strings, not code.
   - **Lazy priceChart chunk:** 42,801 → 44,160 raw (+1,359) and 18,071 → 18,546 gzip -9 (+475; the harness's figures). C1's code is in the lazy chunk only.
 - **vitest:**
-  - The five named files and the identity file: 6 files, 150 tests passed (127.7 s; load 7.60 → 9.87; `c1/vitest-targeted.log`).
+  - **The five named files and the identity file, in the full run at HEAD:** priceChart.test.js 50, priceChart.identity.test.js 43, StockChartCard.test.jsx 21, StockView.test.jsx 9, chartLabels.test.js 24 and PriceChart.test.jsx 3, so 150 tests passed. A targeted run before the commit gave the same 6 files and 150 tests (`c1/vitest-targeted.log`).
   - **Full:** `cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run`.
     - **249 files, 4,054 tests: 4,053 passed, 1 failed** (351 s; load 3.07 → 6.25; `audit3/r3-chart/vitest-full-45601a2.log`).
     - The failure is `tools/export-market-trends.test.mjs` 「writes raw and derived data with exact content hashes and binds the manifest reference」: `Test timed out in 20000ms`. It is not CHART's file.
@@ -1076,8 +1081,10 @@ The rest is jsdom building the markup (`_node`, `Attr.setup`, the HTML parser) a
 
 - **C1 is output-identical and committed.** The 1440 first-load target of ≤ 200 ms is **not reached** in this session: 306 against base's 498 ms, interleaved and advisory.
   - Per the order, the owner waiver stays and the figure goes to OD2.
-  - Further identity-preserving work on the name search is possible. For example, the names' `hits` against reserved boxes is still the largest label cost, and the spots' heap is the next.
-  - On the measured shares, though, even a zero-cost search leaves the chart task above 200 ms in this session's scale. Yielding is the remaining lever, and it is the conductor's decision.
+  - The same-run ratio, 0.61, projects to about 192–218 ms against quiet base readings and about 480 ms against CI's 779. Both projections are 未検証.
+  - **Two levers remain:**
+    - more identity-preserving name-search work (`hits` against reserved boxes, then the spots' heap; the names are still about half of a cold SWKS render);
+    - yielding, which is the conductor's decision.
 - **Open decisions carried from earlier packages, unchanged by C1:** C4 × `STOCK_CAP` (a, b or c), C5 (options 1–3), C3's HUM at 320 and the arrow key folding at 320.
   - C1 changes no output, so none of them interacts with it.
   - Any of them, once decided, moves the chart's outputs. That is integration's re-baseline, not a C1 re-proof, unless it touches priceChart.js or chartLabels.js. Then rerun `priceChart.identity.test.js` and `render.mjs ab`.
