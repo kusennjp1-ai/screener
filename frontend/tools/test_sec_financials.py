@@ -931,6 +931,29 @@ class Q4EpsReferenceBrowserAdmission(unittest.TestCase):
         # The units the browser never needs: the numerator is USD (as netIncome) and the shares are a count.
         self.assertEqual((sec.Q4_REFERENCE_NUMERATOR_UNIT, sec.Q4_REFERENCE_SHARE_UNIT), ("USD", "shares"))
 
+    def test_the_quarter_day_bounds_match_the_browser_admission(self):
+        # The producer keeps its 70-105 day quarter as bare literals in tag_points and derive_fourth_quarters, so the browser's
+        # SEC_Q4_REFERENCE_QUARTER_DAYS is read from the source and checked against both behaviours at each bound and one past it.
+        import json, re
+        from datetime import date, timedelta
+        days = json.loads(re.search(r"SEC_Q4_REFERENCE_QUARTER_DAYS = Object\.freeze\((\{.*?\})\);", self.source()).group(1))
+        self.assertEqual(sorted(days), ["max", "min"])
+        lo, hi = days["min"], days["max"]
+        self.assertEqual((lo, hi), (70, 105))
+        span = lambda start, n: (start.isoformat(), (start + timedelta(days=n - 1)).isoformat())
+        def flow(n):
+            start, end = span(date(2024, 1, 1), n)
+            f = {"facts": {"us-gaap": {"NetIncomeLoss": {"units": {"USD": [{"start": start, "end": end, "filed": "2025-03-01", "form": "10-Q", "val": 10, "accn": "a-1"}]}}}}}
+            return sec.tag_points(f, "NetIncomeLoss", "USD", False, "2025-06-01")
+        def remainder(n):
+            point = lambda start, end, value, accession: {"start": start, "end": end, "filed": "2024-03-01", "value": value, "tag": "NetIncomeLoss", "unit": "USD", "accession": accession, "form": "10-Q", "derived": False}
+            chain = [point("2023-01-01", "2023-03-31", 1, "q-1"), point("2023-04-01", "2023-06-30", 1, "q-2"), point("2023-07-01", "2023-09-30", 1, "q-3")]
+            year = dict(point("2023-01-01", span(date(2023, 10, 1), n)[1], 10, "fy"), form="10-K")
+            return [p for p in sec.derive_fourth_quarters(chain, [year]) if p["derived"] == sec.DERIVED_Q4]
+        for n, kept in ((lo - 1, False), (lo, True), (hi, True), (hi + 1, False)):
+            self.assertEqual(len(flow(n)), int(kept), f"tag_points, {n} days")
+            self.assertEqual(len(remainder(n)), int(kept), f"derive_fourth_quarters, {n} days")
+
     @unittest.skipUnless(__import__("shutil").which("node"), "node runs src/static/bookFinancialAdmission.js")
     def test_a_record_written_with_emission_on_passes_the_browser_admission(self):
         import copy, json, subprocess

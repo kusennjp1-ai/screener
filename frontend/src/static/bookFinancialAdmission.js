@@ -71,10 +71,16 @@ function admitInvalidDetail(detail) {
 }
 
 // Round 3 (D3): the 独自計算・参考 fiscal-Q4 EPS (sec-financials.py's q4_eps_reference). It is never a quarterly.eps point
-// and never counts toward any gate or score (OD1). Mirrors Q4_REFERENCE_METHOD, Q4_REFERENCE_NUMERATOR_TAGS,
-// Q4_REFERENCE_SHARE_TAGS and Q4_REFERENCE_MAX in tools/sec-financials.py (test_sec_financials.py compares them).
+// and never counts toward any gate or score (OD1). Every constant below is 独自設定 (the brief's own choice, not an SEC or
+// Minervini rule) and mirrors tools/sec-financials.py; test_sec_financials.py compares each with the producer.
+// 独自設定: the method's name (Q4_REFERENCE_METHOD).
 export const SEC_Q4_REFERENCE_METHOD = 'q4-ni-over-q4-diluted-shares-v1';
+// 独自設定: the numerator and share-count tags (Q4_REFERENCE_NUMERATOR_TAGS, Q4_REFERENCE_SHARE_TAGS).
 export const SEC_Q4_REFERENCE_TAGS = Object.freeze({"numerator": ["NetIncomeLossAvailableToCommonStockholdersDiluted", "NetIncomeLossAvailableToCommonStockholdersBasic", "NetIncomeLoss"], "shares": ["WeightedAverageNumberOfDilutedSharesOutstanding"]});
+// 独自設定: an entry's quarter is min to max days long, both ends counted: the 70-105 day quarter that tag_points reads and
+// that derive_fourth_quarters keeps as the fiscal-Q4 remainder (bare literals there; the test checks both behaviours).
+export const SEC_Q4_REFERENCE_QUARTER_DAYS = Object.freeze({"min": 70, "max": 105});
+// 独自設定: at most this many entries per record, the newest kept (Q4_REFERENCE_MAX).
 export const SEC_Q4_REFERENCE_MAX = 4;
 const Q4_REFERENCE_KEYS = ['end', 'start', 'value', 'method', 'numerator', 'shares'];
 const referenceSource = (source, tags) => plain(source) && sameKeys(source, ['tag', 'components']) && tags.includes(source.tag)
@@ -82,15 +88,15 @@ const referenceSource = (source, tags) => plain(source) && sameKeys(source, ['ta
 const quarterDays = (start, end) => (Date.parse(end) - Date.parse(start)) / 86400000 + 1;
 /**
  * One reference entry in its exact shape: { end, start, value, method, numerator: { tag, components[4] }, shares: { tag,
- * components[4] } }, a 70-105 day quarter (both ends counted) ending on or before `asOfDate`, a finite value, the method and
- * tags above. The card's reader (fundamentalsExplain.js q4EpsReference) applies the same check to every entry it shows.
+ * components[4] } }, a quarter of SEC_Q4_REFERENCE_QUARTER_DAYS (70-105 days, both ends counted) ending on or before
+ * `asOfDate`, a finite value, the method and tags above. The card's reader (fundamentalsExplain.js q4EpsReference) applies the same check to every entry it shows.
  */
 export function q4ReferenceEntryValid(entry, asOfDate) {
   if (!plain(entry) || !sameKeys(entry, Q4_REFERENCE_KEYS)) return false;
   const { end, start, value, method, numerator, shares } = entry;
   if (!day(start) || !day(end) || start > end || !day(asOfDate) || end > asOfDate) return false;
   const days = quarterDays(start, end);
-  return days >= 70 && days <= 105 && number(value) && method === SEC_Q4_REFERENCE_METHOD
+  return days >= SEC_Q4_REFERENCE_QUARTER_DAYS.min && days <= SEC_Q4_REFERENCE_QUARTER_DAYS.max && number(value) && method === SEC_Q4_REFERENCE_METHOD
     && referenceSource(numerator, SEC_Q4_REFERENCE_TAGS.numerator) && referenceSource(shares, SEC_Q4_REFERENCE_TAGS.shares);
 }
 /**
