@@ -49,6 +49,8 @@ Market indices <as_of_date>: <symbol> last=<日付|-> historical=<true|false> dd
 | `ftd` | `followThrough.ftd.date` | `-` |
 | `decline` | `followThrough.declinePct` の小数 2 桁（負なら U+2212） | `-` |
 
+**P5（M8d、コミット 3e3af808）で行末に ` stalling=<本数|unavailable(<理由>)> stallingDates=[<日付,…>]|-` を足した。** この 2 欄だけは、出力が off の間は asset ではなく同じ build の値（`buildMarketTrendsWithStalling` の `stalling`）を読む。詳しくは下の P5 の節。
+
 決めたこと（計画の書式からの補い）は次のとおり。
 
 - **`ddDates` は書式に `-` の形が無いので補った。** 本数が出せない指数で `ddDates=-` とした。`[]` は「0 日」と同じ意味になるため（規則 1）。
@@ -751,3 +753,129 @@ em の先頭に経過日数を置いたときの S&P の FTD 行の高さ（閉�
 - **CONTEXT.md の語彙**（統合時に移す）
   - 「銘柄側の 1 行」：判定のそばの参考の 1 行（TT 達成数とその 1 か月前、上抜けの率と件数、リーダーの健全度と銘柄数）。目安は読まない。注意サインに数えない。
   - 「0% の注記」：50日線割れの判定の 0% が独自設定で検証されていないことを言う文。^GSPC の区分が同じ日のときだけ調査の数字を付ける。
+
+## M8a〜M8d：producer の追加、出力は off（パッケージ P5）
+
+コミット（すべて claude/r3-market、push なし）：
+
+- fc3bc60d M8a〜M8c（`frontend/tools/collect-market-history.py`）と、その unittest（`test_collect_market_history.py`）
+- 3e3af808 M8d（`frontend/tools/export-market-trends.mjs`）と、その vitest（`export-market-trends.test.mjs`）
+- このコミットの文書（この節、M0 の節の 1 段落、docs/MARKET_HISTORY_PRODUCER.md の追記）
+- 両方の producer とも `EMIT_R3_MARKET_FIELDS` は **off**（Python は `False`、JS は `false`）。規則 18 により、新しいキーを読む UI が Pages に出たのを読取で確かめた後の追従コミットでだけ on にする（このパッケージではしない）。
+- UI（marketLongHistory.js、marketTrendAsset.js、marketTabModel.js、marketTabStudy.js の読み手と表示）はこのパッケージに含まない。src/ は 1 行も変えていない。
+
+### 作ったもの
+
+**長期履歴 collector（M8a〜M8c、collect-market-history.py）**
+
+`build()` が 5 つの値を各営業日について計算する。既存の約束事（`sufficient` の条件、`val`、`leaderCohort` の 20 営業日のずらし、上抜けのマスク、銘柄ごとの値は `try` の中のローカルで作り、成功した銘柄だけ足す）にそのまま従った。
+
+| キー | 定義 | null |
+|---|---|---|
+| `rs90Cohort` | 20 営業日前（`LEADER_LOOKBACK_SESSIONS`）に `rs90TemplateCount` と同じ集合（`template30 & rs>=90`）にいて、今日も観測されている銘柄の数 | `leaderCohort` と同じ条件 |
+| `rs90CohortAbove50` | そのうち今日 50 日線の上（`over50`） | 同上 |
+| `newHighsClose` | 終値 > 上抜けの規則の `prior_high`（直前 251 営業日の高値の最大） | 当日が `sufficient` でない |
+| `breakoutsEarlyJudged` | 5〜9 営業日前の既存の `breakout` のうち、後の 5 営業日の安値がすべて観測されたもの | 9 営業日前〜当日のどれかが `sufficient` でない |
+| `breakoutsEarlyFailed` | そのうち後の 5 営業日の最安値 ≤ 上抜けの終値 ×（1 − `BREAKOUT_FAILURE_DRAWDOWN`） | 同上 |
+
+- **定数**：`BREAKOUT_EARLY_SESSIONS = 5`（独自設定、新規）。窓の幅は `BREAKOUT_HOLD_SESSIONS − BREAKOUT_EARLY_SESSIONS`（=5）で作るので、5〜9 営業日前の窓は 10〜29 営業日前の確定分の窓と構造上重ならない。−7% は既存の `BREAKOUT_FAILURE_DRAWDOWN`。新しい閾値はこの 1 つだけ。
+- **部分集合の確認（コード読取）**：rs90 の集合は `template30 & (rs>=90)`、コホートの集合は `template30 & (rs>=70)`。RS 90 以上は 70 以上を含むので、指示どおり部分集合になっている（止める必要はなかった）。
+- **M8b の答え（コード読取）**：`newHighsClose ≤ newHighs` は**定義上成り立つ**。`parse_series` は 高値 ≥ max(始値, 終値, 安値) の足だけを残し（欠けた足は全欄 NaN）、`new_high` は同じ `f.high.shift(1).rolling(251)` の窓を当日高値で比べる。終値 > 窓の最大なら高値 ≥ 終値 > 窓の最大。よってテストで全行について確かめている。
+- **`EMIT_R3_MARKET_FIELDS = False`** の間は、行にも `indicator_policy` にも何も足さない（`indicator_policy` はモジュールの `INDICATOR_POLICY` そのもの）。True のときは全行に 5 つのキーを書き、`indicator_policy` に `rs90_cohort`、`new_highs_close`、`breakout_early` を足した新しい dict を書く（モジュールの dict は変えない）。定数は `build()` の中で呼び出しのたびに読む（テストが patch で切り替えられる）。
+- **ログ**：`build(..., log=None)` に引数を足した。`collect()` が `log=lambda line: print(line, flush=True)` を渡し、最新の営業日の値を 1 行出す。出力に書くかどうかに関わらず同じ値。
+  `Market history r3 fields <日付> (emission off): rs90Cohort=<n|unavailable> rs90CohortAbove50=… newHighsClose=… breakoutsEarlyJudged=… breakoutsEarlyFailed=…`
+  - 値は `build()` の戻り値にも `summary`（`--report` に書かれる）にも入れない。`collect()` のテストは `build` をただの dict に差し替えるので、ログは `build()` の中から出す。
+
+**market-trends exporter（M8d、export-market-trends.mjs）**
+
+- **`stallingDays({ bars, asOfDate })`**（純関数、export）：`{available:true, method, dates:[…]}` または `{available:false, method, reason}`。分析日に生きているストーリング日を古い順に返す。
+  - 条件は backend の近似（backend/app/services/market_regime.py の `STALL_MAX_GAIN`、`STALL_NEAR_HIGH_PCT`、`_distribution_days` の `DIST_WINDOW`）と同じ：0 < 上昇率 ≤ +0.2%（`close/前日close − 1`、pandas の `pct_change` と同じ計算）、出来高が前日を上回る、終値が日中レンジ（> 0）の下半分、終値がその日を含む 25 営業日の終値の最高値から 3% 以内。分配日と同じく当日が 0 日目で、25 営業日後に失効。
+  - 定数：`STALLING_METHOD = 'stalling-up0.2-higher-volume-lower-half-near3-age25-v1'`、`STALLING_MAX_GAIN = 0.002`、`STALLING_NEAR_HIGH = 0.03`、`STALLING_WINDOW_SESSIONS = 25`。backend の値と同じ（計画の値とも同じ）。IBD は定義を公開していないので独自設定と書いた。テストは backend のファイルの 3 つの定数を読んで照らす。
+  - 不可（`available:false`＋理由、空の一覧にはしない）：日付が無い・不正、バーが配列でない、日付の無いバー、分析日にバーが無い、日付の重複・逆順、OHLCV のどれかが正の有限数でない、高値 < max(始値, 終値, 安値)、安値 > min(始値, 終値)、49 本未満。
+  - バーには取引日の一覧が無いので、この関数は日の欠けを見られない。exporter は distributionDays が取引日と照らして `available` にしたときだけ呼び、そうでなければその理由をそのまま渡す（followThrough と同じ）。
+- **`buildMarketTrendsWithStalling(source, options)`**（export）：`{payload, stalling}` を返す。`stalling` は `{'^GSPC': …, '^IXIC': …}` で、出力の on／off に関わらず計算する。`emitR3MarketFields`（既定は `EMIT_R3_MARKET_FIELDS`）が true のときだけ、各指数のオブジェクトの `followThrough` の後に `stalling` を書く。`buildMarketTrends(source, options)` はその `payload` を返すだけになった。
+- **分配日とは混ぜない**：ストーリング日は分配日の本数（`latest`、`lastObserved`）、`points`、`events` に入れない（テストで、on と off の `points`・`events`・`latest`・`lastObserved`・`followThrough`・`closes`・`state` が等しいことを確かめた）。
+- **M0 のログ行**：`marketIndexLogLines(payload, {stalling})` に引数を足し、行末に ` stalling=<本数|unavailable(<理由>)> stallingDates=[…]|-` を出す。指数の `stalling` が書かれていればそれを、無ければ同じ build の値を読む。どちらも無ければ `unavailable(-)` と `-`（0 にしない）。`exportMarketTrends` は同じ build の `stalling` を渡すので、出力が off でも本数と日付が出る。
+
+### 計画・指示からの補いと判断
+
+1. **backend との違い（決めてほしい）**：backend はストーリング日を分配日と同じ列に OR してから失効を数えるので、**後の終値が その日の終値の 5% 以上上に来たストーリング日も外す**（`DIST_EXPIRY_RALLY`）。指示の条件と method id（`…-age25-v1`）にはこれが無いので、指示どおり 25 営業日の失効だけにした。定数（0.2%、3%、25）は backend と同じ。backend の数え方にそろえるなら、5% の外し方（backend は終値、`distributionDays.js` は後日の高値で 5%）を決め、method id も変える必要がある。
+2. **短い履歴**：backend の 25 営業日の終値の最高値は `rolling(25, min_periods=1)` で、系列の最初の方では短い窓を使う。ここでは生きている窓（最後の 25 営業日）の各日に 25 本の窓がそろうことを求め、49 本未満は不可にした。実際の指数の系列（280 本）では違いは出ない（下の照合で 0 件）。
+3. **M8c の「判定済み」**：指示は「5〜9 営業日前の上抜けの件数」。既存の確定分（`matured`）が後の 10 営業日の安値がすべて観測されたものだけを数えるのに合わせ、後の 5 営業日の安値がすべて観測されたものだけを数えた（欠けた日に −7% に届いたかもしれないので、判定しない）。テストに、欠けた足のある上抜けが数えられない例を入れた。
+4. **ログの読み先（M0 の約束の例外）**：M0 の行は「asset に書いた値だけを読む」約束だった。出力が off の間はストーリングが asset に無いので、この 2 欄だけは同じ build の値を読む。M0 の節にもその旨を書いた。
+5. **既存テストの変更**（どれも自分の package のファイル）：M0 の行の正規表現に 2 欄を足した。(c) の 2 つの `toEqual` に `stalling:'unavailable(-)'`、`stallingDates:'-'` を足した（側の値を渡していないため）。foreign cwd の再生テストと「書いた行をログに出す」テストは、`marketIndexLogLines` に同じ build の `stalling` を渡して照らすようにした。
+
+### テスト
+
+**Python（test_collect_market_history.py、`R3MarketFieldTests` の 6 件）**
+
+- 入力：110 銘柄・560 営業日の合成。乱数の傾向（RS の散らばり）に、設計した銘柄を足した：5〜9 営業日前の上抜け 4 件（後の 3・5 営業日目に −10% の安値、6 営業日目に −10%〔5 日の外〕、届かない）、後の 2 営業日目の足が欠けた上抜け 1 件、高値だけが新高値の銘柄、20 営業日前に RS 上位で今日 50 日線を割った銘柄。最後の日は 0 < 失敗 < 判定、0 < 50 日線の上 < rs90Cohort < leaderCohort、上抜けの日は 0 < newHighsClose < newHighs（どれも 0 や上限に張り付かない）。
+- 各定義を、テストの中に別に書いたスカラーの再計算（audit-market-history.py と同じ作り：バーから移動平均・テンプレート・RS 順位・上抜けを 1 銘柄ずつ数える）と、最後の 25 営業日について 5 つのキーとも照合。
+- 出力 off：どの行にも 5 つのキーが無い、`indicator_policy` はモジュールの dict そのもの。off の出力のバイト ＝ on の出力から 5 つのキーと 3 つの定義を除いたもののバイト（時計を固定）。
+- null の規則：12 銘柄が 1 日欠けて 253 営業日 観測率が 90% を下回る入力で、`rs90Cohort` の null ⇔ `leaderCohort` の null、`newHighsClose` の null ⇔ 当日の不足、上抜けの早期 2 つの null ⇔ 9 営業日前〜当日のどれかの不足を全行で確かめ、戻った後の 9 日・20 日の境目も確かめた。99 銘柄だけの入力では 5 つとも null（0 にしない）。
+- 検査：全行で上の 5 つの不等式と、値が null か 0 以上の整数であること。
+- ログ：on でも off でも同じ 1 行で、値は on の最後の行と同じ。99 銘柄だけの入力では 5 つとも `unavailable`。
+
+**vitest（export-market-trends.test.mjs、describe「stalling days (M8d)」の 16 件）**
+
+- 定数が backend のファイルの値と同じで、出力が off であること。
+- すべての条件を満たす日が 1 日だけ見つかること、そして各条件が 1 つだけ欠けた 6 通り（変わらず、下げ、+0.21%、出来高が同じ、出来高が少ない、上半分）で見つからないこと。+0.19% とレンジのちょうど中央は見つかり、レンジ 0 は見つからないこと。
+- 25 営業日の終値の最高値から 2.9% は見つかり、3.1% は見つからないこと。窓の外（26 営業日前）の高い終値は数えないこと。
+- 失効：0 日目と 24 日目は残り、25 日目に消えること。
+- 不可：49 本未満、空、無し、不正な日付、分析日のバーが無い、null のバー、出来高 null・0、終値 NaN、高値 < 終値、日付の重複。49 本ちょうどは可。
+- コミット済みの実データ（data/market-trend-source-2026-10-23.json）：^GSPC は 2026-07-27 を分析日にすると `['2026-07-27']`、2026-10-23 では `[]`。
+- 出力 off のバイト：`JSON.stringify(buildMarketTrends(…))` の sha256 が、変更前（45603f06 のコード）に取った値と一致すること（`ed029467…932e2df6`、1 営業日遅れの形で `242bbf6f…6ad6a29`）。on から `stalling` を除いたものが off と同じバイトであること。
+- 出力 on の形：2026-07-27 までの入力で ^GSPC の `stalling` が `{available:true, method, dates:['2026-07-27']}`、分配日の欄が off と同じ、その日は分配日の event に無い。ログ行は on（asset から）と off（同じ build から）で同じ。指数が不可のとき・その日の出典が無いときは指数の理由、1 営業日遅れの指数は自分の最後の日で計算すること。
+
+### 実測（このワークツリー）
+
+- **Python（CI と同じコマンド、ワークツリーの直下で）**：`$S/audit/r1-step0/cal-venv/bin/python -m unittest discover -s frontend/tools -p "test_collect_market*.py"` → 33 件 OK（31.9 秒）。所有していない test_collect_market_environment.py と test_collect_market_trends.py は無編集で通過（変更前は 27 件 OK）。
+- **vitest（指示の一覧）**：`npx vitest run tools/export-market-trends.test.mjs tools/export-research-order.test.mjs tools/market-history-producer.test.mjs tools/market-history-transport.test.mjs src/static/marketLongHistory.test.js src/static/marketTrendAsset.test.js`（PATH の先頭 /opt/node22/bin、SESSION_CALENDAR_PYTHON と FINANCIAL_REPLAY_PYTHON を指定）→ 6 ファイル、189 件通過。
+- **eslint**：`npx eslint tools/export-market-trends.mjs tools/export-market-trends.test.mjs` → 指摘 0。
+- **collector の出力のバイト（変更前のコードとの比較、コミットしない scratch のスクリプト）**：`git show 45603f06:frontend/tools/collect-market-history.py` を読み込み、同じ入力・固定した時計で `encode(build(…))` を比べた（`$S/audit3/r3-market-p5/identity.py`）。3 つの入力すべてでバイトが一致：
+  - 設計した合成入力（393,631 バイト、sha256 0d3e2d71…）
+  - 同じ入力で 12 銘柄が 1 日欠けたもの（420,890 バイト、30015d1d…）
+  - test_collect_market_environment.py の 110 銘柄の入力に業種の分類を付けたもの（1,116,570 バイト、6dd27eca…）
+- **ストーリング日の backend との照合（コミットしない scratch のスクリプト）**：コミット済みの実バー（^GSPC／^IXIC、各 280 本、2025-09-15〜2026-10-23）で、49 本目以降の各日を分析日として `stallingDays` を計算し、backend の `_distribution_days` と同じ式（`market_regime.py` の定数を読み込む）のストーリングの列の最後の 25 営業日と比べた（`$S/audit3/r3-market-p5/parity.py`、/home/user/screener/backend/venv の Python）。各指数 232 日、不一致 0。この期間に backend の式がストーリングとした日は ^GSPC 2025-10-21・2025-12-05・2026-01-02・2026-07-27、^IXIC 2026-01-28・2026-05-22。2026-10-23 を分析日とすると両指数とも 0 日（ログ行は `stalling=0 stallingDates=[]`）。
+  - backend の 5% の外し方は比べていない（判断 1）。この期間の値でそれが違いを生むかは確かめていない。
+- **所有の関門**：各コミットの前に `python3 -I $S/audit3/check-ownership.py MARKET <W> 45603f06…` → `OWNERSHIP OK (MARKET): 23 paths`。
+
+### 推論（11-12 の再構築の代理。公開値ではない）
+
+`$S/audit3/r3-market-p5/proxy_r3.py`：このトラックの HEAD の `build()` を定数を patch で on にして、11-12 の上流の日足 bundle（`audit3/snapshot/build/dl/px/daily-price-us-20261112.json.gz`、2 年分）の、snapshot が検証済みとした 4421 銘柄に掛けた（audit-market/inventory/scripts/long_history_proxy.py と同じ入力と包絡の補修。ネットワークなし、1 分 28 秒）。
+
+- 既存のキー：11-12 までの 31 日について、前の代理（7f0ff13 の collector、`long-history-proxy.json`）とすべてのキーが一致。
+- **M8a**：11-12 は `rs90Cohort` 233、うち 50 日線の上 105（45.1%）。計画の代理値「233 銘柄中 45.1%」と一致。
+- **M8b**：11-05 は `newHighs` 281 のうち `newHighsClose` 46、11-04 は 278 のうち 180。計画の代理値と一致。11-12 は 74 のうち 21。
+- **M8c**：11-12 は 146 件中 43 件が −7% 到達（29.5%）。同じ日の確定分の失敗は 245 件中 99 件（40.4%）。
+  - 計画の問い（09-22〜09-29 に確定分より先に上がるか）：早期の割合は 09-17 の 22.2%（10/45）から 09-22 に 33.9%、09-24 に 48.1%、09-25 に 50.0%（40/80）と上がり、09-29 の 45.7% から 10-01 には 25.0% に下がった。確定分の失敗は 09-17 の 43.9% から 09-25 に 49.8%、10-01〜10-02 に 56.4〜56.5% が山。早期の山（09-25）は確定分の山（10-01〜10-02）より約 4 営業日早く、上がり幅も大きい（+27.8pp 対 +12.6pp）。代理の上での読みで、公開値ではない。
+- 最新の日のログ行（代理）：`Market history r3 fields 2026-11-12 (emission on): rs90Cohort=233 rs90CohortAbove50=105 newHighsClose=21 breakoutsEarlyJudged=146 breakoutsEarlyFailed=43`
+- 公開された長期履歴（Yahoo の 6 年分、公開銘柄集合）での値は、次回の公開の CI ログを読むまで未検証。期待値は書かない。
+
+### 読取による確認（計画が未検証のまま残していたもの）
+
+- **指示にあった 4 ファイル**（`market-history-producer.mjs`、`export-market-history.mjs`、`market-history-store.mjs`、`market-history.node.mjs`）は 13F の市場指標履歴の経路で、長期履歴（`market-history-source.json`）を読まない。grep で `leaderCohort`・`rs90TemplateCount`・`breakoutsHeld`・`market-history-source`・`long_history` は 0 件（market-history.node.mjs の `newHighs` は 13F の別の契約の `latest.newHighs`）。したがって「行のキーの許可リストは無い」は成り立つが、この経路とは無関係という意味での答え。
+- **長期履歴が実際に通る経路**：`collect-market-history.py` → `market-history-source.json` → `restore-market-history-source.mjs`（`verifyLongHistorySource` で検査し、公開 series の `long_history` と `isDeepStrictEqual` で照合）→ `exportMarketTrends`（`verifyLongHistorySource` → `validateLongHistory`、`payload.long_history={...history}`）。`validateLongHistory` は既知のキーだけを `key in row` で検査して行をそのまま返し、未知のキーを拒まず落とさない。照合も同じバイトどうし。新しいキーで止まる所は無かった。
+- `restore-market-trend-source.mjs` は `buildMarketTrends` で投影して、指数に points があるか・put/call の値が合うかだけを見る。公開済みの series とは比べないので、`stalling` を on にしても復元は止まらない。
+- `indicator_policy` を読むコードは collector と 2 つのテスト（`assertIn('stage')`、`assertIn('leader_health')`）だけ。
+- **audit-market-history.py**（85 行目）：既知のキーだけを独立に再計算し（`extended` は `if key in points[day]` のときだけ照合）、行のキーを列挙しないので、新しいキーは拒まれないが照合もされない。
+- **8849bf9 の `marketLongHistory.js`／`marketTrendAsset.js` が新しいキー入りの asset を受け入れて表示を変えないこと**（計画 M8 のリリース順 2）は、UI のパッケージのテストで確かめる。このパッケージでは実行していない（未検証）。
+
+### 運用上の注意（キャッシュ）
+
+`static-site.yml:979` の長期履歴のキャッシュキーは `market-long-history-v1-<日付>-${{ hashFiles('frontend/tools/collect-market-history.py') }}`。**collect-market-history.py を変える合流は、そのたびにキャッシュキーを変える**ので、次の定期実行は長期履歴の全件（約 6 年分・公開銘柄すべて）を 1 回取り直す。このパッケージの合流で 1 回、後の on への切り替え（同じファイルを変える）でもう 1 回起きる。取り直しに失敗すると、前回の取得分がそのまま残り（`updated:false`）、新しいキーは単に無い。この取り直しは計画に織り込み済みで、検証のための再実行はしない。
+
+### 未検証
+
+- 公開された長期履歴での 5 つの値と、公開された ^GSPC／^IXIC でのストーリング日（次回の公開の CI ログの 2 種類の行で読む）。期待値は書かない。
+- backend の 5% の外し方を入れたときの違い（判断 1）。
+- 8849bf9 の読み手が on の asset を受け入れること（UI のパッケージで確かめる）。
+- 定期実行の全件取り直しにかかる時間と、成功するか。
+- 時間の計測はしていない（上の秒数は負荷下の参考値）。
+
+### 統合への依頼・報告（このトラックでは変えていない）
+
+- **audit-market-history.py に 5 つのキーの独立の再計算を足す**（計画 M8 の書き方。このパッケージでは編集禁止）。今の `wanted` の窓（標本日の 9 営業日前〜当日と 20 営業日前）は `rs90Cohort`（`_template` と並べて rs90 の集合を持てばよい）と `newHighsClose`（標本日の終値と直前 251 営業日の高値）には足りるが、`breakoutsEarly*` には足りない：5〜9 営業日前の上抜けは、その日の 251 営業日前からの高値と 50 営業日の出来高、後の 5 営業日の安値が要る。on に切り替える追従コミットの前に入れるのがよい。
+- **backend の 5% の外し方をストーリング日に入れるか**（判断 1）。入れるなら method id を変える。
+- **on への切り替え**は、UI が Pages に出たのを読取で確かめた後、Python と JS の 2 つの定数を同じ追従コミットで変える（それぞれ全件の取り直しが 1 回起きる。上の注意）。
+- **CONTEXT.md の語彙**（統合時に移す）：「早期（上抜け後5営業日）」＝5〜9 営業日前の上抜けを後の 5 営業日の安値で読んだ割合（独自設定）。「ストーリング日（独自近似）」＝backend と同じ条件の、分配日に数えない別の集計。「終値でも更新」＝`newHighsClose`。「RS推計90以上のコホート」＝`rs90Cohort`。
