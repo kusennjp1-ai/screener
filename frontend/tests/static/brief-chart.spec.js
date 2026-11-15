@@ -6,10 +6,13 @@
 // name over candles while a clear spot is near its line's end, no leader through a label, no two labels read as one
 // phrase, no level line through a label uncut).
 import { test, expect } from '@playwright/test';
-import { chartSettled, charts, date, horizontalOverflow, openBrief, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
+import { chartSettled, charts, date, horizontalOverflow, openBrief, ORACLE, ORACLE_CHARTS, ORACLE_ROWS, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
 import { chartCrossing, crossingNote, formatPrice, priceInRange, structuralLowLegend, weeklyBars, weeklyShortNote } from '../../src/static/brief/chartReadout.js';
 import { LEADER_OFF_LEVEL, LEADER_OFF_LEVEL_MIN, MA_SHIFT, MA_TAIL } from '../../src/static/brief/priceChart.js';
 import { BOX_GAP, FIGURE_GAP, FIGURE_STACK, KIN_GAP, LABEL_GAP, PHRASE_GAP } from '../../src/static/brief/chartLabels.js';
+import { PIVOT_DAY_UNKNOWN, QUIET_DAYS_TITLE, WEEKLY_PATTERN, pivotDayNote, quietDaysText } from '../../src/static/brief/StockVcpCard.jsx';
+import { candidateView } from '../../src/static/brief/briefCandidate.js';
+import { shortDate } from '../../src/static/brief/briefShared.js';
 
 const DOCK_TOP = 788; // 844 − the 56px dock at 390×844
 // Measure only after the finite animations finish (the last price's pulse repeats for ever).
@@ -951,6 +954,45 @@ test.describe('the 安値 price in the legend at 320×640', () => {
       expect(structuralLowLegend(model.structuralLow).map(([, text]) => text), `${what}: the low's legend text`).toContain(await shownLow(page));
     }
     expect(tagged, `${symbol}: periods with the 「安値」 tag`).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 C4: the VCP card names the Setup Engine pivot's own bar (pivotBar, H1) and the Setup Engine's quiet days. The
+// expected lines are the card's producers on the oracles' rows and bars (the screen's pivot is candidateView's). ZZHB's
+// weekly pattern labels its pivot week by the Friday (9/25) while the pivot's bar is the Tuesday (9/22); ZZNR's daily
+// pattern is the day before the analysis day; ZZRD's VCP primary publishes no pivot date, so its day is 未確認.
+const oracleRow = symbol => ORACLE_ROWS.find(row => row.symbol === symbol);
+const vcpLines = symbol => {
+  const row = oracleRow(symbol), judged = ORACLE_CHARTS[row.chart_path.split('/').pop()].bars;
+  const view = candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, date);
+  return { row, judged, pivotDay: pivotDayNote({ view, row, judged, date }), quiet: quietDaysText(row, date) };
+};
+for (const [name, device, symbols] of [['390', VIEWPORTS.phone, [ORACLE.heldBreakout, ORACLE.pivotAfterCrossing, ORACLE.ready]], ['1440', VIEWPORTS.desktop, [ORACLE.heldBreakout]]]) test.describe(`the Setup Engine pivot day and quiet days on the VCP card at ${name}`, () => {
+  test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
+  for (const symbol of symbols) test(`${symbol}: the pivot's own day (or 未確認) and the quiet days, as their producers give them`, async ({ page }) => {
+    const { row, judged, pivotDay, quiet } = vcpLines(symbol);
+    // The producers' lines on these oracles are the shapes the fixture builds.
+    if (symbol === ORACLE.heldBreakout) expect(pivotDay).toBe(`ピボット $48.50＝${shortDate('2026-09-22', date)}の高値（SE）${WEEKLY_PATTERN}`);
+    if (symbol === ORACLE.pivotAfterCrossing) {
+      expect(pivotDay).toContain(`＝${shortDate(judged.at(-2).date, date)}の高値（SE）`);
+      expect(pivotDay).not.toContain(WEEKLY_PATTERN);
+    }
+    if (symbol === ORACLE.ready) {
+      expect(pivotDay).toBe(PIVOT_DAY_UNKNOWN);
+      expect(quiet).toBe(`静かな日 ${row.se_quiet_days_10d}/10日（SE）`);
+    }
+    const { errors } = await openBrief(page, `#/brief/stock/${symbol}`, { oracles: true });
+    await chartSettled(page);
+    const card = page.locator('section[aria-labelledby="brief-vcp-title"]');
+    await expect(card.locator('.brief-vcp-pivotday'), `${symbol}: the pivot day`).toHaveText(pivotDay);
+    const shown = card.locator('.brief-vcp-quiet');
+    if (quiet) {
+      await expect(shown, `${symbol}: the quiet days`).toHaveText(quiet);
+      await expect(shown).toHaveAttribute('title', QUIET_DAYS_TITLE);
+      await expect(card.locator('dt', { hasText: '当日の出来高' }).locator('+ dd')).toContainText(quiet);
+    } else await expect(shown, `${symbol}: no quiet days without the field`).toHaveCount(0);
+    expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
 });

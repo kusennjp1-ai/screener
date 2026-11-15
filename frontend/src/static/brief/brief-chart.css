@@ -183,3 +183,9 @@
 @media (min-width: 1024px) {
   .brief-right[data-more]::after { content: ''; position: sticky; bottom: -24px; z-index: 4; display: block; height: 28px; margin-top: -28px; background: linear-gradient(to bottom, transparent, var(--ground)); pointer-events: none; }
 }
+
+/* Round 3 C4, the VCP card: the Setup Engine pivot's day keeps 「（週足の型）」 whole when its line wraps (320), and the
+   Setup Engine's quiet days take their own line under the day's volume and its 上抜けの目安 (on the desktop too, so the
+   two notes never run together as one phrase). */
+.brief-vcp-pivotday .brief-vcp-weekly { display: inline-block; }
+.brief-dl dd small.brief-vcp-quiet { display: block; margin-left: 0; }
