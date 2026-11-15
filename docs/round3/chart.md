@@ -170,14 +170,57 @@ Notice lines in 週足 views fell from 91 to 1 at 320 and from 61 to 1 at 375, 3
 - The design-acceptance build: 372,422 → 372,644 raw bytes (+222); gzip -9 129,915 → 130,024 (+109).
 - The lazy priceChart chunk: 43,099 → 42,801 raw (−298); gzip -9 18,228 → 18,071 (−157).
 
-### 未検証
+### 未検証 (as of CH-1; the first two were measured in CH-4)
 
-- **The real-data acceptance.** Forced 週足 lines at 390 should fall by the weekly notice lines (about 62 of 114 on the rebuild; 60 of 111 on the 39 CI-bar views). This is measured in CH-4.
-- **The dump and heights harnesses** were not re-run.
-  - Expected: on ZZNV 週足 at 375 the 注記 summary counts one more note, and its list holds the sentence; at 1440 the card gains the sentence.
-  - Phone stock-screen heights should be unchanged, because the 注記 is closed by default. That is inferred, not measured.
-- **The 最新足 corner in the browser** (vitest only).
+- **The real-data acceptance.** Forced 週足 lines at 390 should fall by the weekly notice lines (about 62 of 114 on the rebuild; 60 of 111 on the 39 CI-bar views). **Measured in CH-4:** see the next subsection.
+- **The dump and heights harnesses** were not re-run in CH-1. **Measured in CH-4** (CH-4 section): the dump's ZZNV 週足 screens show the move and the 注記 count 6 → 7 at 375; phone chart cards are unchanged; the 1440 週足 card is +21.1875.
+- **The 最新足 corner in the browser** (vitest only). Still 未検証.
 - **No timings were taken.** C2 removes work from the label pass; any timing effect is measured at integration.
+
+### Real-data acceptance (CH-4, 実測 at 57fdcd68; 11-12 rebuild counts, never the publication's)
+
+**Commands** (port 4424; the tree is the `git archive` of 57fdcd68, clean):
+
+```
+$H/snapshot/run-snapshot.sh <worktree>              # → $H/snapshot/out/57fdcd6/
+$H/build/run-build.sh <worktree>                    # → $H/build/build-57fdcd6.json (dist-t for the render)
+$H/snapshot/run-render.sh <worktree> 4424 reduce    # → out/57fdcd6/render/{probe-reduce.json, readout/, counts-render.json}
+node audit3/r3-chart/render-compare.mjs out/c61bf96/render/probe-reduce.json out/57fdcd6/render/probe-reduce.json
+node audit3/r3-chart/render-card-classes.mjs <same two files>
+```
+
+- `render-compare.mjs` matches every SVG text by text, class and occurrence and compares every recorded field (box, forced, visibility, opacity, fill, contrast, layer, group). It also requires the view's other SVG fields to be identical: aria, chart size, plot, gridlines, tags, level lines, zone, legs, lows, dry-up note, RS, earnings, breakout, sells and gaps. The PNG path is left out, since it holds the out-dir name.
+- Sanity: c61bf96 against 8849bf9 (the same code) gives 476 of 476 views identical.
+
+**The order's counts (`counts-render.json`, 390, certified 週足 views):**
+
+| Count | c61bf96 (STEP 0) | 57fdcd6 | Expected |
+|---|---|---|---|
+| `weekly_forced_390_certified` forced lines (40 views) | 114 | **29** | 114 − 62 = 52 |
+| … weekly notice lines | 62 | **0** | 0 |
+| … all notice lines | 85 | **0** | — |
+| `weekly_forced_390_ci_bars` forced lines (39 views) | 111 | **29** | 111 − 60 = 51 |
+| … weekly notice lines | 60 | **0** | 0 |
+| … all notice lines | 82 | **0** | — |
+| views with a forced weekly notice (CI bars) | 30 of 39 | 0 of 39 | 0 |
+
+**The fall is 23 lines (22 on CI bars) larger than the weekly notice lines. Every one of the extra lines is the remaining notice 「収縮は未確認」 returning to a candle-free spot.**
+- The remaining notice block is now one line instead of three or four, so the placer finds it a clear spot.
+- The 23 certified views are AMAL, BB, BWIN, CEPO, CZFS, DRI, FCNCA, FMAO, GLBE, HAFC, HTFL, IDT, LARK, LTC, NBTB, OPK, RNW, SIG, SONO, SWKS, TECH, WSFS and WSM. BB is the one proxy-bar view, so 22 are on CI bars.
+- The 8 unverified symbols (BHB, DSGR, EMR, EQH, GEO, HCI, IQV, NATL) gain the same at 390. They are outside the certified count.
+- The non-notice forced labels are the same set in every certified 週足 view at 390: 29 before, 29 after, with the same texts.
+
+**Gated claim 「no other label changes position」: held, with no exception.**
+- **357 non-週足 views** (3 periods × 48 at 320, 48 at 390 and 23 at 1440) are identical in every SVG field and every text.
+- **All 119 週足 views differ.** The only differences are the removed weekly notice texts and the box of the remaining 「収縮は未確認」 (78 views).
+  - Removed: 「2年分はありません」 in 119 views (78 forced); 「週足は直近N週分（YYYY/MM〜）。」 in 71 (39 forced); at 320 the split pair 「週足は直近N週分」 + 「（YYYY/MM〜）。」 in 48 (39 forced).
+  - 「収縮は未確認」 moved in 78 views and went from forced to clear in 61 of them (30 at 320, 31 at 390). The other 17 moved without being forced, before or after (4 at 320, 4 at 390, 9 at 1440).
+  - Other labels: **0 moved, 0 newly forced, 0 un-forced, 0 missing, 0 added.**
+- **Forced texts over all 476 views:** 637 → 381 (−256): 195 removed forced weekly lines, plus 61 「収縮は未確認」 no longer forced. No view's forced count rose.
+- **Card side** (outside the SVG; not part of this gate):
+  - `card_h` differs only in the 23 週足 views at 1440: +21, the C2 sentence in the card's notes.
+  - The `notes` field differs in all 476 views. It reads every `.brief-note` of the screen, so it carries C4's VCP-card line, and on 週足 it loses the in-plot 「週足は直近…」. Nothing else in it differs.
+  - `legendItems`/`legendHidden` differ through C3 (see C3).
 
 ### For the conductor
 
@@ -329,6 +372,26 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 - C5's code is ready: `git revert 02d820e1` re-applies 5437727b. Any option keeps 「±0.0%」 only at the cents and never prints 「+0.0%」/「−0.0%」.
 - 0fa62fd6's spec (ZZPG at 375: the readout keeps 3 rows and the card 508 on every period) goes red on the as-ordered text by design. Under option 3 it is updated on purpose; under options 1 and 2 it stays as it is.
 
+### C5 real-data read (CH-4, 実測 at 57fdcd68; 11-12 rebuild; C5 still held)
+
+**No decision on C5 reached this package, so the readout code is STEP 0's.** The order's 「readout_zero_rendered 4 → 0」 therefore does not hold.
+- `counts-render.json` `readout_zero_rendered`: **4 → 4** (LNTH, PCRX, PFIS, TECH; 3m, 6m and 1y at 390). This is identical to c61bf96.
+- `counts.json` `readout_zero_mismatch`: 4, identical to c61bf96.
+
+**Command:** `node audit3/r3-chart/c5-readout.mjs out/57fdcd6/bundle.mjs out/57fdcd6`.
+- It sets the rendered readout's 対ピボット (the render probe, 390, every period) beside `pivotDistanceText` of the stock screen's view for the same row. The view's price, pivot and distance come from `work/sell-eval.jsonl`, the harness mirror of StockView.
+- The output is identical to the same script on c61bf96.
+
+| Row | Close / pivot | Verdict (`pivotDistanceText`) | Readout at 390, 3m / 6m / 1y / 週足 | Equal |
+|---|---|---|---|---|
+| PCRX | 36.46 / 36.45 | 「+0.1%未満」 | 「+0.0%」 ×4 | 0 of 4 |
+| PFIS | 72.85 / 72.87 | 「−0.1%未満」 | 「−0.0%」 ×4 | 0 of 4 |
+| TECH | 72.84 / 72.83 | 「+0.1%未満」 | 「+0.0%」 ×4 | 0 of 4 |
+| LNTH | 101.25 / 101.27 | 「−0.1%未満」 | 「−0.0%」 ×4 | 0 of 4 |
+
+- The weekly readout prints the same 「±0.0%」 forms, because the last week's close is the last session's close. counts-render does not count 週足, so the weekly column is read from the probe here.
+- **The width question is now on real data too.** These four are the rebuild's in-band rows, so under the as-ordered text their 375 readouts would take the extra 24px. The render probe has no 375 views, so whether they wrap is **未検証**.
+
 ### CH-2 tests and checks (実測, at 3de9a0a9: the source of f4b1e404; 1-min load in parentheses)
 
 **vitest** (`cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run <files>`)
@@ -361,9 +424,9 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 - The C3 code is the legend's fold in the card shell (StockChartCard.jsx) and its texts (chartReadout.js), not chart drawing. It runs before the lazy chunk loads, so it stays in the entry chunk.
 - Superseded outputs deleted: `snapshot/trees/24f1210` and `build/npm-build-24f1210`. `build-24f1210.json`, the 1 KB summary the deltas above cite, is kept.
 
-### CH-2 未検証
+### CH-2 未検証 (as of CH-2; the real-data acceptance was measured in CH-4, next subsection)
 
-- **The real-data acceptance** (CH-4): at 320, the low's price on the card in 13/13 rebuild stocks that draw the tag, in every period. **It is not assured.**
+- **The real-data acceptance** (CH-4): at 320, the low's price on the card in 13/13 rebuild stocks that draw the tag, in every period. **It is not assured.** CH-4 measured it: 12 of 13 in every period, and HUM in 2 of 4.
   - At 320 週足 beside the RS item, 「安値 68.16」 fit with 17.05px to spare. A price three characters longer (e.g. 1,234.56 against 68.16: two figures and a comma, about 18px) would reach rung (4), the item hidden.
   - The daily periods' 「収縮の安値 xx」 had 13.05px to spare, so two more figures would fall back to 「安値 xx」.
   - The rebuild's prices and RS items decide it.
@@ -372,9 +435,55 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
   - Expected: no change, because the legend change is inside the card and the card height is unchanged in every probe view.
 - **No timings were taken.** C3 can add at most three fold passes on a phone, only when the low's full text does not fit. Its cost is measured at integration with C1.
 
-### CH-2 for the conductor and integration
+### C3 real-data acceptance (CH-4, 実測 at 57fdcd68; 11-12 rebuild counts, never the publication's)
 
-- **C5 needs a decision** (options 1–3 in the C5 section above). Nothing outside CHART's files has been changed for it. Option 2 would need a change to `briefCandidate.js`, which is outside CHART's list.
+**Commands** (the same snapshot, build and render as C2's CH-4 subsection; port 4424):
+- `counts-render.json` → `low_legend_hidden_320`.
+- `render-compare.mjs` / `render-card-classes.mjs` → the legend fields per view.
+- The harness render probe records neither the form shown (`data-fit`) nor the legend's height. A scratch copy of render-probe.mjs reads them instead, with the same navigation and settling, the same server and the same CI setup:
+  ```
+  audit3/r3-chart/c3-legend/run-legend.sh 57fdcd6 4424 c3-legend/targets-320-390.json c3-legend/out-57fdcd6   # 384 views, 0 errors
+  node audit3/r3-chart/c3-legend/analyse-legend.mjs c3-legend/out-57fdcd6/legend-reduce.json out/57fdcd6/render/probe-reduce.json
+  ```
+  - It reads each legend item's key, fold, rank, `data-fit`, `hidden`, order and box, plus the legend's height and its distinct line tops.
+  - For the low item it also reads the width of each of the three texts, in a hidden clone inside the card, and the room the fold's own rule leaves beside the items that must stay.
+  - Its card heights equal the harness render probe's in 384 of 384 views.
+
+**`low_legend_hidden_320`:** 13 stocks draw the 安値 tag at 320, in all 4 periods each. They are ADI, BMO, CFBK, CTKB, HUM, LCNB, MGRC, NDSN, PCRX, PRGS, PRTH, RDNT and RMBI.
+- Hidden in every period: **13 → 0**.
+- **Hidden in some period: HUM only, in 1y and 週足.**
+- So the low's price is on the card in **12 of 13 stocks in every period**, and in HUM's 3m and 6m. The plan's 13/13 is **not met for HUM's 1y and 週足.**
+
+**Which text each 320 view shows** (52 views with the low item; c61bf96: hidden in all 52):
+
+| Text | Views | Where |
+|---|---|---|
+| 「最後の収縮の安値 xx」 (long) | 0 | — (on the rebuild the full text never fits at 320) |
+| 「収縮の安値 xx」 (short) | 38 | the 3 daily periods of 12 stocks, and HUM's 3m and 6m |
+| 「安値 xx」 (tag) | 12 | 週足 of the 12 stocks other than HUM |
+| hidden (rung 4) | 2 | HUM 1y, HUM 週足 |
+
+**HUM's two views, measured** (price 434.09; the 320 legend's room is 262px with an 8px gap, and the fold allows +0.5):
+- The texts are 149.05px (long), 113.05px (short) and 77.05px (「安値 434.09」), swatch included.
+
+| View | Items that must stay (px) | Free on the better line | Shortfall of 「安値 434.09」 |
+|---|---|---|---|
+| HUM 1y | line 1: 「50 150 200日線」 135.08 + 「ピボット」 61; line 2: the RS item 231.42 | 50.42 | **26.63px** |
+| HUM 週足 | line 1: 「10週線」「30週線」「40週線」 3 × 50.36 + 「ピボット」 61; line 2: the RS item 231.42 | 23.08 | **53.97px** |
+
+- 「ピボット」 is a kept (unfoldable) item for HUM. With it, no text of the low's fits either line.
+  - A price-only text would be about 53px, which would still miss both views.
+  - So this is the plan's 「If two lines cannot hold it, the item does not ship and the measured overflow is reported」 for these two views. No code was changed for it.
+
+**Gate on the rebuild:**
+- **No legend is taller than two lines:** 192 of 192 views at 320 and 192 of 192 at 390 show 2 line tops and a 34px legend.
+- **Card heights identical to c61bf96's histogram:** 320 {489: 95, 505: 61, 521: 36}; 390 {508: 192}.
+- **The SVG is identical** in every non-週足 view, as C2's subsection shows. 週足 views differ only by C2's notice.
+
+**Also at 390** (the ladder runs below 1024px; the order did not list this). HUM 1y and HUM 週足 had the low hidden at 390 before. Now they show it:
+- 1y shows 「収縮の安値 434.09」; 「損切り」 and 「枠＝収縮」 fold instead.
+- 週足 shows 「安値 434.09」; 「枠＝収縮」 folds instead.
+- Both stay two lines and 508px. This is the low's rank 1 (first foldable) doing what it is for. Every other 390 view shows the long text, and its legend differs only in the item's `textContent`, which now holds the three spans. (options 1–3 in the C5 section above). Nothing outside CHART's files has been changed for it. Option 2 would need a change to `briefCandidate.js`, which is outside CHART's list.
 - **No integration request for C3.** No file outside CHART's list needs a change. No test outside CHART's files reads the low's text.
 - **The H5 oracle baselines** shift by the 20 views above (320 ZZRL/ZZRW, 375 ZZRL/ZZRW 週足; card text only). The default probe does not shift.
 
@@ -549,10 +658,22 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 
 - **The detail-only path in a browser.** The oracle rows carry both keys on the list row itself. The detail merge is covered only by the `mergeFinancialDetail` vitest and by reading the code: export-research.mjs `listFields` omits both keys, and the detail is the whole row.
 - **Whether a published research detail carries `se_pivot_date` and `se_quiet_days_10d`.** Not checked until a release is read; no production action was taken.
-- **The entry-chunk delta.** StockVcpCard.jsx now imports pivotBar.js, which no production module imported before, so it joins the entry chunk. CH-4 reports this as ordered; no build was run here.
+- **The entry-chunk delta.** StockVcpCard.jsx now imports pivotBar.js, which no production module imported before, so it joins the entry chunk. No build was run in CH-3. **CH-4 measured it** (CH-4 section): +0.84 kB gzip over CH-2.
 - **Timings.** None were taken.
 - **brief-market.spec.js and brief-market-phone.spec.js** were not run. Neither opens a stock screen, and the dump's market screens are identical.
 - **The headroom left in the other `STOCK_CAP` states** of brief-decision.spec.js (they pass) was not measured.
+
+### C4 on the rendered rebuild screen (CH-4, 実測 at 57fdcd68; 11-12 rebuild)
+
+- **Command:** the CH-4 render, with `notes` read from `out/57fdcd6/render/probe-reduce.json`. That field reads every `.brief-note` of the screen, so it carries the VCP card's pivot-day line. A scratch read compared it with CH-3's no-browser `c4-rebuild-08bebfc.json`.
+- **All 37 ready rows are among the rendered stocks.** In **352 of 352** of their views (296 on CI bars, 56 on proxy bars; 320/390/1440 × 4 periods), the rendered line equals CH-3's producer read. Examples:
+  - SWKS 「ピボット $89.88＝9/28の高値（SE）（週足の型）」;
+  - ADI 「ピボット $415.18＝10/13の高値（SE）（週足の型）」;
+  - BB 「ピボット $8.86＝10/12の高値（SE）（週足の型）」;
+  - EMR 「ピボットの日 未確認」 (bars not certified).
+- **The detail-only path is still not exercised.** The rebuild's `serve/research.json` is full rows: `se_pivot_date` is on 4,421 of 5,955 rows, and SWKS carries `se_quiet_days_10d` 3. So the render reads both keys from the row itself, and the probe's 404 for every other path never stands in for a detail.
+  - The published detail-only path stays **未検証**, as above.
+  - The quiet-days text is not in the probe's `notes` filter, so it was not read from the render. CH-3's 37/37 is the producer read.
 
 ### For integration
 
@@ -573,3 +694,164 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
   - **(c)** Another placement for the line, which needs a new order. No placement in CHART's files fits about 9px for a text line.
   - Nothing outside CHART's list was edited.
 - **For CH-4:** this failure is known, and it is C4's. It is not a regression of C1–C3.
+
+## CH-4: the pre-C1 checkpoint
+
+**P = 57fdcd686ac27f9b2992ceee109e34b9d871972c** (`57fdcd68 docs(round3): record the brief-decision STOCK_CAP failure C4 causes and the budget wording`). It is CH-3's head.
+- **No code was changed in this package.** No check exposed a defect in CHART's files that a fix in them could remove (see "For the conductor").
+- So every measurement below is from P. Outputs are named `57fdcd6`.
+- The only commit after P is this record. `git diff --name-only 57fdcd68..HEAD` lists `docs/round3/chart.md` only, so P stays the pre-C1 head for C1's purposes.
+- **Load:** the 1-min load average is in parentheses, before → after. The machine was shared with another track and another workflow. No figure here is a timing.
+
+### STEP 1: suites (実測 at P)
+
+- **Full vitest:** `cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run`.
+  - **248 files, 4007 tests passed** (260 s; load 4.73 → 5.15). That is STEP 0's 247/3983 plus this track's 1 file and 24 tests.
+  - Log: `audit3/r3-chart/vitest-full-57fdcd6.log`.
+- **Full static Playwright, CI-faithful:** `cd frontend && PATH=/opt/node22/bin:$PATH FONTCONFIG_FILE=…/ci-fonts/fonts.conf AUDIT_PORT=4424 npx playwright test -c audit3/r3-chart/pw-147.config.mjs` (no AUDIT_MATCH).
+  - **456 tests: 453 passed, 2 skipped, 1 failed** (25.2 min; load 4.44 → 12.83). No re-run was needed for a timeout.
+  - **The 2 skips** are track R's `test.fixme('R1: …')` and `test.fixme('R2: …')` in brief-oracles.spec.js. They are the only fixme/skip in `tests/static`. Every active brief-oracles assertion passed, ZZHB's green arrow included.
+  - **The failure is the known one, C4's** (C4 section, "For integration"): `brief-decision.spec.js:269` 「a breakout still in the zone 25 sessions on that stalls waits for the next pivot, its tiles 参考」 at 375×812, line 281, content **3145** against `STOCK_CAP` **3124**.
+    - Re-run alone (`… playwright test -c … tests/static/brief-decision.spec.js -g 'stalls waits for the next pivot'`): the same 3145 against 3124 (load 11.71 → 11.66). It is a layout height, not a timeout.
+    - No other spec failed, including brief-market.spec.js and brief-market-phone.spec.js, which CH-3 had not run.
+  - So the order's 「0 failures」 does not hold at P. The cause is the open C4 × `STOCK_CAP` decision, not C1–C3.
+  - Log: `audit3/r3-chart/pw-full-57fdcd6.log`; re-run: `pw-decision-rerun-57fdcd6.log`.
+- **Lint:** `npm run lint` → **0 errors, 4 warnings** (the base's four: App.jsx, StockDetails.jsx, MetricInfoPopover.jsx, StaticMarketContext.jsx). Load 8.22 → 7.95.
+
+### STEP 2: fixture gates (実測 at P)
+
+**Probes:**
+- Commands: `$H/probe/run-probe.sh <worktree> 4424` and `… 4424 oracles`. 0 page errors; load 4.48 → 4.81 → 6.28.
+- `probe-57fdcd6.json` sha256 `1127e3b8…bc62342`. It is **byte-identical** (cmp) to CH-2's `probe-f4b1e40.json`, and so to CH-1's `probe-24f1210.json`.
+- `probe-57fdcd6-oracles.json` sha256 `d2e88172…63d2a3`. It is **byte-identical** (cmp) to CH-2's `probe-f4b1e40-oracles.json`.
+- `node $H/probe/diff.mjs <CH-2 probe> <P probe> --texts`: 0 of 972 and 0 of 264 views differ.
+- So C4 (CH-3) changed nothing the probe reads. **The C1 probe baseline does not depend on the C4 decision:** holding or keeping C4 leaves both probe files as they are.
+- CH-2's probe files were deleted after this comparison; their sha256 stubs are in `audit3/r3-chart/`.
+
+**Cumulative statement against the base probes** (8849bf9 / STEP 0 `probe-oracles-step0.json`; `diff.mjs --texts` and `audit3/r3-chart/compare-c2.mjs`):
+- **Default set, 243 of 972 views differ: 123 label views and 120 value views, all 週足.** The diff and the comparer's output are identical to CH-1's (`cmp` of both outputs, with the head name normalised).
+  - 3m, 6m and 1y: 0 views differ, at every width and theme.
+  - 週足 labels: 31 at 320, 30 at 375, 31 at 390 and 31 at 1440, counting ZZNV dark at 320, 390 and 1440. Values: 30 per width.
+  - The classes of difference are those in C2's gate table: the removed weekly notice texts, the remaining notice block's boxes (ZZLI's 「収縮は未確認」), their halos, ZZLI 週足 375's one mask hole, and at 1440 the card's one added sentence and +21.1875 card height.
+  - Labels other than the notice that moved: **none**. Newly forced or missing: none.
+- **Oracle set, 78 of 264 views differ.** That is CH-1's 66 (33 label + 33 value, all 週足) plus C3's 12 views that CH-1 did not already count (ZZRL and ZZRW 3m/6m/1y at 320, labels and values).
+  - Every non-CH-1 difference is C3's card text: the comparer's `unexpected` list is exactly C3's stated 20 html changes (10 label + 10 value views).
+  - SVG: as CH-1 (only ZZHB's 「収縮は未確認」 moved). No other label moved.
+
+**Dump** (`$H/dump/run-dump.sh <worktree> 4424` → `dump-57fdcd6.json`, sha256 `8ccec66c…c43d56`; load 0.66 → 2.86):
+- It is byte-identical to CH-3's `dump-ff4349b.json` (the same source), which was then deleted as superseded.
+- Against `dump-8849bf9.json` (`audit3/r3-chart/dump-compare.py`), **18 screens are identical:** every 375 list ×4 filters ×2 watchlists, 375 Today ×2, 375 watch ×2, 375 market ×4 tabs, and 1440 market and its tab count.
+- **24 screens differ.** Each gains 「ピボットの日 未確認」, C4's line on a default row without `se_pivot_date`, and the blank lines around it.
+  - 6 stock screens at 375 and 6 at 1440.
+  - 1440's 4 lists × 2 watchlists, Today × 2 and watch × 2. Their right pane shows a stock, so the order's "Today, 候補 and ウォッチ byte-identical" holds at 375 only.
+- **ZZNV 週足** also shows C2: the in-plot 「週足は直近58週分（2025/08〜）。」「2年分はありません」 become 「週足は2025/08〜の58週分（2年分はありません）」.
+  - At 375 the sentence goes into the closed 注記, whose summary reads 「注記（計算方法・出典 7件）」 (was 6).
+  - At 1440 it goes into the card's notes.
+- **375 content heights:** ZZAR 2488 → 2518, ZZHW 2591 → 2621, ZZNV and ZZNV 週足 3044 → 3075, ZZSD-broken 2615 → 2646, ZZZF 2567 → 2597. No 1440 height changed.
+- **C3 shows nowhere in the dump.** The legend text is unchanged at 375 and 1440 on the default rows.
+
+**Heights** (`$H/heights/run-heights.sh <worktree> 4424` → `heights-57fdcd6.json`, compared with `heights-c61bf96.json`; load 4.16 → 5.60):
+- Unchanged: Today **1342**, 候補 **593**, ウォッチ **442**, 市場 **1228 / 1300 / 1322**.
+- **Stock ZZNV: 3044 → 3075** (C4's line; the line is 3388).
+- **Chart card at 320/375/390:** unchanged.
+  - 508 on every daily period.
+  - 492 on 週足 at 320.
+  - 508 on 週足 at 375 and 390, except ZZLI's 490 (as at STEP 0).
+- **Chart card at 1440:** 週足 622.375 ×18 / 643.5625 ×12 → **643.5625 ×18 / 664.75 ×12** (+21.1875, C2's sentence). Every other 1440 period is unchanged.
+- **VCP card at 375:** 422.1 → 452.5 (ZZAR, ZZHW, ZZNV, ZZZF), 294.3 → 324.7 (ZZSD-broken).
+
+### STEP 3: real data (実測 at P; every number is the 11-12 rebuild's, never the publication's)
+
+**Commands:**
+- `$H/snapshot/run-snapshot.sh <worktree>`: 7.7 min; load 3.90 → 3.97.
+- `$H/build/run-build.sh <worktree>`: load 3.88 → 4.94.
+- `$H/snapshot/run-render.sh <worktree> 4424 reduce`: 476 renders and the 2 readout targets, 0 errors; load 4.89 → 6.41.
+
+**Identity with STEP 0's kept outputs (`out/c61bf96`):** `rows.jsonl`, `ready43.jsonl` and `serve/research.json` are byte-identical (and equal SNAP's). So are `counts.json` and `work/sell-eval.jsonl`, and `serve/charts/` has no differing file. CHART touches neither selection nor the Setup Engine.
+
+**The items** (each detailed in its own section above):
+
+| Count (`counts-render.json` unless noted) | c61bf96 | 57fdcd6 | Verdict |
+|---|---|---|---|
+| C2 `weekly_forced_390_certified` forced lines / weekly-notice lines | 114 / 62 | **29 / 0** | Held. The extra −23 are 「収縮は未確認」 placed clear; no label moved. |
+| C2 `weekly_forced_390_ci_bars` | 111 / 60 | **29 / 0** | Held. The extra −22 are the same. |
+| C3 `low_legend_hidden_320`: stocks with the tag / hidden in every period | 13 / 13 | **13 / 0** | HUM is hidden in 1y and 週足 (shortfall 26.63 / 53.97px). The 13/13 is not met there. |
+| C3: legends taller than 2 lines at 320 (scratch probe) | — | **0 of 192** | Held. |
+| C5 `readout_zero_rendered` | 4 | **4** | C5 is held: not delivered. |
+| card heights 320 / 390 | {489: 95, 505: 61, 521: 36} / {508: 192} | identical | Held. |
+| card heights 1440 | {684: 14, 704: 9, 705: 2, 725: 10, 726: 15, 746: 23, 748: 3, 768: 16} | {705: 16, 725: 19, 726: 15, 746: 23, 748: 3, 768: 16} | The 23 週足 views +21 (684 → 705 ×14, 704 → 725 ×9). No other view changed. |
+| `legs_drawn_ci_ready` | 9 / 30 | 9 / 30 | Unchanged. |
+| `dry_up_bracket_ready` | 2 / 37 | 2 / 37 | Unchanged. |
+| unverified symbols | 8 | the same 8 | Unchanged. |
+
+**Entry chunk** (rule 21; `$H/build/build-57fdcd6.json`):
+- `npm run build` entry: **131.44 kB gzip** (375.60 kB raw).
+  - STEP 0 (c61bf96) 130.28: **+1.16 kB**.
+  - CH-1 130.38, CH-2 130.60: C4 alone is **+0.84 kB**.
+  - **2.56 kB under the 134.00 line.**
+- Design-acceptance build entry: 375,167 raw / 131,076 gzip -9 bytes. CH-2: 373,134 / 130,213 (+2,033 / +863). STEP 0: 372,422 / 129,915.
+- **Lazy priceChart chunk:** 42,801 raw / 18,071 gzip -9.
+  - Its raw size is unchanged since CH-1 (C2's −298 against STEP 0's 43,099).
+  - Against CH-2's 18,072 its gzip is 1 byte smaller. The chunk imports `./index-<hash>.js`, and that name changed with the entry chunk (same length), so this is not new code. CH-2's build tree had been deleted, so the bytes were not diffed.
+  - No CHART item since C2 put code in it, because C3's and C4's code is not chart drawing.
+- **pivotBar.js now ships in the entry chunk** through StockVcpCard.jsx. R1 will import it too, so it is counted once at integration.
+  - Alone it is 879 bytes minified and 548 gzip -9 (`npx esbuild src/static/brief/pivotBar.js --bundle --minify`). That is an estimate: inside the chunk its marginal gzip is smaller.
+  - The rest of C4's +2,033 raw is StockVcpCard.jsx's producers and markup.
+
+### STEP 4: the frozen pre-C1 baselines (for CH-5)
+
+These are recorded in the C1 section header below and in `audit3/r3-chart/pre-c1-baselines.txt`, with the exact normalisation commands. They are exempt from the "delete superseded" rule until C1 is proven.
+- **Deleted now:** CH-2's `probe-f4b1e40.json` and `probe-f4b1e40-oracles.json` (with their raw dirs) and CH-3's `dump-ff4349b.json`. CH-1's probes were deleted in CH-2.
+
+### CH-4 未検証
+
+- **The publication's counts.** Every count above is the 11-12 rebuild's. Nothing was read from a publication, and no production action was taken.
+- **The detail carrying `se_pivot_date` and `se_quiet_days_10d` on a real publication.** The rebuild serves full rows, so the detail-only path was not exercised (see C4).
+- **The C5 readouts at 375 on real data.** The render probe has no 375 views.
+- **The quiet-days text in the real-data render.** It was read through its producer only (CH-3).
+- **The 最新足 corner in the browser** (C2; vitest only).
+- **No timings were taken.** C1 is next; its timings are taken at integration on an idle machine.
+
+### For the conductor (CH-4)
+
+- **The full suite shows the known C4 × brief-decision failure.** See STEP 1. The (a)/(b)/(c) decision in the C4 section is still open.
+- **C5 is still held.** `readout_zero_rendered` stays 4, and the four rows' readouts still differ from their verdicts in all 16 views (C5 section).
+  - The decision (options 1–3 in the C5 section) is still open.
+  - If option 1 or 2 is chosen, it is a change in CHART's or R's files. It moves P, so the C1 baselines would be re-frozen after it.
+- **C3 does not reach 13/13 on the rebuild.** HUM's 1y and 週足 at 320 keep the low hidden: its 3-figure price, the kept 「ピボット」 and the RS item leave 50.42px and 23.08px against 77.05px. This is reported as the plan says, not fixed.
+  - A fix would need a shorter must-stay item or another item allowed to fold before the low, which is a design decision.
+- **C3 at 390 on the rebuild:** HUM 1y and 週足 now show the low, and 「損切り」/「枠＝収縮」 fold in its place. It is within the gate (two lines, 508), but it was not in the order's expected list.
+
+### Integration requests (CH-4)
+
+- **No new request.** The open ones are unchanged:
+  - C4's `STOCK_CAP` in brief-decision.spec.js (track R's file);
+  - the vocabulary 「ピボットの日」 and 「静かな日」 for CONTEXT.md.
+- **The harness's p4 copies need no mirroring.** No caller's crossing or readiness wiring changed in this track.
+- **The H5 baselines integration re-takes shift as stated:**
+  - the probe and oracle probe by C2 (and C3 in the oracles);
+  - the dump by C2 and C4 on the 24 screens above;
+  - the heights by C4 (stock screens) and C2 (1440 週足 card);
+  - the render counts by C2 and C3 as in the STEP 3 table.
+
+## C1 (package CH-5): speed, output-identical. Frozen pre-C1 baselines
+
+C1 must reproduce these byte for byte. They are from P = 57fdcd68 and kept in scratch (never committed). The list and the commands are also in `audit3/r3-chart/pre-c1-baselines.txt`.
+
+| Baseline | Path (`$H` = scratch `audit3/r3-harness`) | sha256 |
+|---|---|---|
+| 492-view label + 480 value probe | `$H/probe/probe-57fdcd6.json` | `1127e3b88c52ee79c3f16e2474d3eda5b0a01b92de78e89e86f54e327bc62342` |
+| Oracle probe (132 + 132 views) | `$H/probe/probe-57fdcd6-oracles.json` | `d2e881720b434b64f2fa114661c77cecf5debe939782665d5543f1a9b163d2a3` |
+| Real-data render probe (476 views), normalised | `$H/snapshot/out/57fdcd6/render/probe-reduce.json` | `c889d746e341a81109498a6351b3675cfb7f487170ada4e5b8425d42d4198cc6` |
+| Readout render probe (PFIS, LNTH at 390), normalised | `$H/snapshot/out/57fdcd6/render/readout/probe-reduce.json` | `9854506c6e726b272772bc2010a971174d985874f29ff797a225a2c463f8cd11` |
+| Render counts | `$H/snapshot/out/57fdcd6/render/counts-render.json` | `b47a77583c27c17963a255bc3190f69f5cca6729abfa0d55bb82844d9602346b` |
+| Snapshot payload manifest, less the three tree-named files | `manifest.sh $H/snapshot/out/57fdcd6`, then `grep -v` of `./bundle.mjs` and the two `probe-reduce.json` (4,437 lines) | `8feeeb730090e6f0fddbe6d2a821cea0f21bbb12302b028ab1395a31e9128209` |
+| The archived tree with its dist-t | `$H/snapshot/trees/57fdcd6/` | — (the archive of P) |
+
+- **Normalisation:** `sed "s/<head7>/<T>/g" <file> | sha256sum`. The two render probes and `bundle.mjs` embed the tree name (the tree field and each PNG path).
+  - Checked here: 8849bf9 and c61bf96, which have identical code, give the same normalised render-probe hash.
+  - The two fixture probes embed no tree name, so `cmp` applies directly.
+- **The probe baselines do not depend on the C4 decision.** Holding C4 (`git revert ff4349b2 08bebfc7`) changes no file the probe or the render probe's SVG fields read. It would change the render probe's `notes` field, and with it the normalised render-probe hash.
+  - If C4 is held before C1, re-freeze the render probe and the manifest.
+  - If C5 lands before C1, re-freeze the oracle probe (ZZPG's readout), the render probes (the four rows' readouts) and the manifest.
+  - In CH-2, the as-ordered C5 left the default probe's sha256 unchanged, but any C5 variant must be re-checked.
