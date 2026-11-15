@@ -237,6 +237,15 @@ describe('contractions end before the pivot\'s breakout (R6)', () => {
     // The candidate's highest bar just before the cut has no bar after it under the cut: also the zigzag's anchor.
     const edge = measure(s, { ...engine, se_candidates: [{ ...candidate, start_date: s.bars[c - 1].date }] });
     expect(edge.base.source).toBe('algorithm');
+    // From the handle's low the closes rise into the breakout, so the candidate's highest bar before the cut is c − 1
+    // itself (the anchor needs a bar after it under the cut): the zigzag's anchor again, never a bar at the cut.
+    const rising = { ...candidate, start_date: s.bars[s.marks[3]].date };
+    expect(Math.max(...s.bars.slice(s.marks[3], c).map(bar => bar.high))).toBe(s.bars[c - 1].high);
+    const risingBase = measure(s, { ...engine, se_candidates: [rising] });
+    expect(risingBase.base.source).toBe('algorithm');
+    expect(risingBase.base.startDate).toBe(s.bars[s.marks[0]].date);
+    // Without the cut the same candidate anchors on the rally's high after the breakout.
+    expect(index(s.bars, measure(s, withoutDate({ ...engine, se_candidates: [rising] })).base.startDate)).toBeGreaterThanOrEqual(c);
   });
 
   it('leaves the reviewer\'s intervals as they are and reports the cut beside them', () => {
