@@ -13,6 +13,7 @@ import { BOX_GAP, FIGURE_GAP, FIGURE_STACK, KIN_GAP, LABEL_GAP, PHRASE_GAP } fro
 import { PIVOT_DAY_SEPARATOR, PIVOT_DAY_UNKNOWN, QUIET_DAYS_TITLE, QUIET_DAYS_WINDOW, WEEKLY_PATTERN, pivotDayNote, quietDaysText } from '../../src/static/brief/StockVcpCard.jsx';
 import { candidateView } from '../../src/static/brief/briefCandidate.js';
 import { shortDate } from '../../src/static/brief/briefShared.js';
+import { money } from '../../src/static/positionGeometry.js';
 
 const DOCK_TOP = 788; // 844 − the 56px dock at 390×844
 // Measure only after the finite animations finish (the last price's pulse repeats for ever).
@@ -1004,6 +1005,34 @@ for (const [name, device, symbols] of [['390', VIEWPORTS.phone, [ORACLE.heldBrea
       await expect(shown).toHaveAttribute('title', QUIET_DAYS_TITLE);
       await expect(card.locator('dt', { hasText: '当日の出来高' }).locator('+ dd')).toContainText(quiet);
     } else await expect(shown, `${symbol}: no quiet days without the field`).toHaveCount(0);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 C4, the conductor's round-2 decision: with no Setup Engine base note, a pivot day that is only 「ピボットの日 未確認」
+// is a note of its own at 1024px and wider and is not shown below that (the phone stock screen's height budget); a dated day
+// and 未確認 inside the base note show at every width (the cases above). ZZNV is the default fixture's: its screen pivot is a
+// current Setup Engine pivot with no se_pivot_date and no base length or depth, so its day is 未確認 and no base note shows.
+for (const [name, device, wide] of [['390', VIEWPORTS.phone, false], ['1440', VIEWPORTS.desktop, true]]) test.describe(`a 未確認 pivot day with no base note at ${name}`, () => {
+  test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
+  test(`ZZNV: ${wide ? 'the day is a note of its own that reads 未確認' : 'no note of its own that only reads 未確認'}`, async ({ page }) => {
+    const row = rowBySymbol.ZZNV, judged = charts['ZZNV.json'].bars;
+    const view = candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, date);
+    const pivotDay = pivotDayNote({ view, row, judged, date });
+    // The producer gives the 未確認 line on this row (so the count of 0 below is the width's doing, not a missing line).
+    expect(pivotDay).toBe(PIVOT_DAY_UNKNOWN);
+    const { errors } = await openBrief(page, '#/brief/stock/ZZNV');
+    await chartSettled(page);
+    const card = page.locator('section[aria-labelledby="brief-vcp-title"]');
+    // The research detail has arrived: while it loads the card shows no pivot day at all (loading, not 未確認).
+    await expect(card.locator('.brief-footprint'), 'ZZNV: the VCP measured, not loading').not.toHaveText(/読み込み中/);
+    await expect(card.locator('dt', { hasText: 'ピボット' }).locator('+ dd')).toContainText(money(view.pivot));
+    await expect(card.locator('.brief-vcp-engine'), 'ZZNV: no Setup Engine base note').toHaveCount(0);
+    if (wide) {
+      await expect(card.locator('p.brief-vcp-pivotday'), 'ZZNV: the day as its own note').toHaveText(pivotDay);
+      await expect(card.locator('.brief-vcp-pivotday')).toHaveCount(1);
+    } else await expect(card.locator('.brief-vcp-pivotday'), 'ZZNV: no 未確認 note of its own below 1024px').toHaveCount(0);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

@@ -80,8 +80,10 @@ function legLength(leg, bars, weekly) {
  * emphasises that contraction on the chart (`chartRef`). `interval` is the chart's ('week' counts weeks).
  * The Setup Engine's base is shown beside the result when it is current, with a mark when they differ, and the Setup
  * Engine pivot's own day (pivotDayNote) after it in the same note (one inline-block span after 「・」, so a wrap moves the
- * day whole to the note's next line); with no base shown, the day is a note of its own. 当日の出来高 adds the Setup Engine's
- * quiet days (quietDaysText).
+ * day whole to the note's next line), dated or 未確認, at every width. With no base shown, a dated day is a note of its own at
+ * every width; a day that is only 「ピボットの日 未確認」 is a note of its own at 1024px and wider (`wide`) and is not shown
+ * below that (the phone stock screen's height budget; round 3 C4, the conductor's round-2 decision). 当日の出来高 adds the
+ * Setup Engine's quiet days (quietDaysText).
  * `pending` (the research detail or the bars still loading) and `uncertified` ({ reason }: the bars are
  * not certified for the analysis date) leave the VCP 未確認 and say why. While `pending`, the pivot's day is not shown
  * at all: the detail that carries its date has not arrived (loading, not 未確認).
@@ -133,7 +135,7 @@ export default function VcpCard({ technical, bars, judged, view, wide, chartRef 
           : '測定できる収縮が2回以上ないため、VCPは未確認です。'}</p>
     </>}
     {engine ? <p className="brief-note brief-vcp-engine">Setup Engine：土台 {engine.weeks === null ? '未確認' : `${Math.round(engine.weeks)}週`}・深さ {engine.depth === null ? '未確認' : `${engine.depth.toFixed(0)}%`}{disagree ? '（独自近似と異なります）' : !print ? '（独自近似は未確認）' : ''}{pivotDayText ? <>{PIVOT_DAY_SEPARATOR}<span className="brief-vcp-pivotday">{pivotDayText}</span></> : null}</p> : null}
-    {!engine && pivotDayText ? <p className="brief-note brief-vcp-pivotday">{pivotDayText}</p> : null}
+    {!engine && pivotDayText && (wide || pivotDay !== PIVOT_DAY_UNKNOWN) ? <p className="brief-note brief-vcp-pivotday">{pivotDayText}</p> : null}
     <dl className="brief-dl">
       <div><dt>最後の収縮の出来高</dt><dd>{finite(dry) ? <>{times(dry)}<small>直前50日平均比</small></> : '未確認'}</dd></div>
       <div><dt>上げ下げ出来高比（50日）</dt><dd>{(() => { const v = upDownVolume(judged); return v ? <>{v.ratio.toFixed(2)}<small>{wide ? UPDOWN_INLINE : '1超は買いが優勢'}</small></> : '未確認'; })()}</dd></div>

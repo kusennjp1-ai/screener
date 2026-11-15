@@ -205,17 +205,60 @@ describe('the Setup Engine pivot day and quiet days', () => {
 
   it('keeps the quiet days when the day\'s volume ratio is unknown, and shows neither line without the fields', () => {
     const row = { ...weeklyRow, se_quiet_days_10d: 0 };
-    render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={null} view={{ pivot: 89.88 }} row={row} date={DATE} uncertified={{ reason: null }} />);
+    // At 1024px and wider (`wide`), where a 未確認 day with no base note is a note of its own.
+    render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={null} view={{ pivot: 89.88 }} row={row} date={DATE} uncertified={{ reason: null }} wide />);
     expect(screen.getByText('当日の出来高').nextSibling).toHaveTextContent(`未確認${quietDaysText(row, DATE)}`);
     // Bars not certified: the pivot's bar cannot be named.
     expect(screen.getByText(PIVOT_DAY_UNKNOWN)).toHaveClass('brief-note');
     cleanup();
     // An older publication (neither key) on certified bars: 「ピボットの日 未確認」 and no quiet days.
     const older = { ...current, se_pattern_primary: 'cup_with_handle', se_pivot_price: 89.88 };
-    const { container } = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={{ pivot: 89.88, volumeRatio: 1.2 }} row={older} date={DATE} />);
+    const { container } = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={{ pivot: 89.88, volumeRatio: 1.2 }} row={older} date={DATE} wide />);
     expect(screen.getByText(PIVOT_DAY_UNKNOWN)).toBeInTheDocument();
     expect(screen.getByText('当日の出来高').nextSibling).toHaveTextContent(/^1\.20×上抜けの目安 1\.40×以上$/);
     expect(container.querySelector('.brief-vcp-quiet')).toBeNull();
+  });
+
+  it('below 1024px gives no note of its own to a day that is only 未確認; every dated day and the base note\'s 未確認 stay at every width', () => {
+    const vcp = { ...current, se_pattern_primary: 'vcp', se_pivot_price: 89.88, se_quiet_days_10d: 2 };
+    const view = { pivot: 89.88, volumeRatio: 1.2 };
+    // (a) No base note and no pivot bar (a VCP primary on certified bars; a weekly pattern on uncertified bars), below 1024px.
+    for (const [row, judged] of [[vcp, weeklyBarsList], [weeklyRow, null]]) {
+      expect(pivotDayNote({ view, row, judged, date: DATE })).toBe(PIVOT_DAY_UNKNOWN);
+      const { container } = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={judged} view={view} row={row} date={DATE} wide={false} />);
+      expect(container.querySelector('.brief-vcp-engine')).toBeNull();
+      expect(container.querySelectorAll('.brief-vcp-pivotday')).toHaveLength(0);
+      expect(screen.queryByText(PIVOT_DAY_UNKNOWN)).toBeNull();
+      cleanup();
+      // (b) The same row at 1024px and wider: the day is a note of its own that reads 未確認.
+      const wide = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={judged} view={view} row={row} date={DATE} wide />).container;
+      const own = wide.querySelectorAll('p.brief-vcp-pivotday');
+      expect(own).toHaveLength(1);
+      expect(own[0]).toHaveClass('brief-note');
+      expect(own[0].textContent).toBe(PIVOT_DAY_UNKNOWN);
+      cleanup();
+    }
+    // The quiet days do not depend on the width.
+    render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={view} row={vcp} date={DATE} wide={false} />);
+    expect(screen.getByText('当日の出来高').nextSibling).toHaveTextContent(quietDaysText(vcp, DATE));
+    cleanup();
+    // (c) No base note and a dated day, below 1024px: the day is still a note of its own.
+    const dated = pivotDayNote({ view, row: weeklyRow, judged: weeklyBarsList, date: DATE });
+    expect(dated).not.toBe(PIVOT_DAY_UNKNOWN);
+    const narrow = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={view} row={weeklyRow} date={DATE} wide={false} />).container;
+    const own = narrow.querySelectorAll('p.brief-vcp-pivotday');
+    expect(own).toHaveLength(1);
+    expect(own[0].textContent).toBe(dated);
+    cleanup();
+    // (d) A base note and no pivot bar, below 1024px: 未確認 stays in the base note's own span, after the separator.
+    const based = { ...vcp, se_base_length_weeks: 14, se_base_depth_pct: 12.6 };
+    expect(pivotDayNote({ view, row: based, judged: weeklyBarsList, date: DATE })).toBe(PIVOT_DAY_UNKNOWN);
+    const base = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={view} row={based} date={DATE} wide={false} />).container;
+    const span = base.querySelectorAll('.brief-vcp-engine span.brief-vcp-pivotday');
+    expect(span).toHaveLength(1);
+    expect(span[0].textContent).toBe(PIVOT_DAY_UNKNOWN);
+    expect(base.querySelector('.brief-vcp-engine').textContent.endsWith(`${PIVOT_DAY_SEPARATOR}${PIVOT_DAY_UNKNOWN}`)).toBe(true);
+    expect(base.querySelectorAll('p.brief-vcp-pivotday')).toHaveLength(0);
   });
 
   it('shows no pivot day while the detail that carries its date is loading (loading, not 未確認)', () => {
