@@ -1418,3 +1418,259 @@ P1 の後、自動の収縮（v3）は上抜けの足をまたがない。だか
   - 注文の呼び出し名 computePlan は、実際には positionPlan。
   - 理由の文は注文の例（「収縮は上抜け後の値動きのみ（収縮には数えません）」、24 字）より短くし、入れ子の括弧を避けた。
 - 片づけ：このパッケージのハーネスの出力はビルドの 89116e6 だけ（json、trees/89116e6、npm-build-89116e6）。古くなった P1 の b141086 の trees と npm-build は消した（json とログは P1 の記録が引くので残した）。スクラッチの束 `$T/r6/p2-bundle`、`tally-p2.mjs`、`fixture-stops-p2.mjs`、改変テストの出力は、指揮者の確認のために残した。probe・dump・スナップショットは作っていない。
+
+## R6（記録）. ゲートと再構築の数（パッケージ R6-P3）
+
+このパッケージはコードを変えない。変えたのはこの記録（docs/round3/verdict.md）だけ。
+
+- 測った HEAD は **ed945a9**（R6-P1・P2 のコミットと P2 の記録の後）。コードは 89116e6 と同じ（`git -C $W diff --stat 89116e6 ed945a9 -- frontend backend` は空）。
+- この記録のコミットで HEAD は動く。差は verdict.md だけ（下の「パッケージ R6-P3 の記録」）。
+- 「前」は b80ab95e（R5 の後、R6 の前）、「後」は ed945a9。
+- Node で読む束（実測）。
+  - HEAD の束 `$T/r6/p3-bundle` は、P2 の束 `$T/r6/p2-bundle`（d298e19）と entry のパスの注釈 1 行だけが違う（diff）。P1・P2 の数を同じコードで取り直したことになる。
+  - 前の束は P1 の `$T/r6/before-bundle`（`git archive b80ab95e`）。
+
+### 予想した差（規則 16。ブラウザを一度も走らせる前に書いた）
+
+- 方法：`node $T/r6/p3-expected.mjs`（→ `$T/r6/p3-expected.json`、メモ `$T/r6/p3-expected-diff.md`）。
+  - フィクスチャ（brief-fixture.js）は読むだけ。
+  - 各行で `pivotBreakout(bars,row).state` を出し、アプリがチャートに渡すものを前と後で比べた。比べたのは、収縮、`legsValid`、`dryUpLeg`、構造の損切り（`breakoutDate` は positionPlan と同じ）。
+  - 期間ごとに、priceChart.js が収縮から読むものを、そのコードの式どおりに計算した。収縮の枠（`firstOnOrAfter`・`lastOnOrBefore`）、安値を結ぶ線、買いゾーンの帯の始まり、出来高の枯渇の括弧（`b − a > 3`）、aria、「収縮は未確認」 の注記、構造の安値。
+- **既定の 30 行**：状態はすべて unknown（30/30）。`se_pivot_date` を持つ行は 0。チャートへの入力は 30/30 で前と同じ。
+  - だから予想は、**492 枚の probe と dump はバイト単位で同じ**。
+- **オラクル 8 行**
+
+| オラクル | 状態（ピボットの足 → 上抜けの足） | 収縮 | チャートの入力 |
+|---|---|---|---|
+| ZZRL・ZZRW・ZZRD・ZZPM・ZZQF | unknown | 同じ | 同じ |
+| ZZNR | none（10/01、まだ上で引けていない） | 同じ | 同じ |
+| ZZPG | cut（9/23 → 9/30） | 同じ。T1〜T3 は 5/05・6/17・8/25 に終わる | 同じ（構造は前の土台 8/27 のまま） |
+| **ZZHB** | cut（9/22 → 9/28、measuredThrough 9/25） | 前：T1 4/28〜6/17 −23.3% の 1 つで無効（描かれない）。後：T1 と T2 9/22〜9/25 48.50→46.64 −3.8%、有効 | **変わる**。構造は unknown（収縮を測定できません）→ ok 46.64（9/25） |
+
+- ZZHB の損切りの線は 46.50 のまま。`stopSource` は 'setting' で、構造の損切りは選んだ銘柄だけ。価格の目盛り（ピボット・上限・損切り）も変わらない。だからローソク足・移動平均・出来高は変わらない。
+- **予想した差の範囲**：ZZHB のラベルの 16 枚と値の 16 枚（3m・6m・1y・週足 × 320・375・390・1440）だけ。ZZRL の暗色の画面を含め、ほかはすべて同じ。
+- ZZHB の期間ごとの予想（モデルから正確に）
+
+| 期間 | 収縮の枠（窓の中の足の番号） | 安値を結ぶ線 | 買いゾーンの帯の始まり（足） | 出来高の枯渇 |
+|---|---|---|---|---|
+| 3m（07-02〜10-02） | T2 [56..59] だけ（T1 は窓の前の 6/17 に終わる） | なし（枠 1 つ） | 45 → 0 | なし（b − a = 3。4 以上が要る） |
+| 6m（03-30〜10-02） | T1 [20..55]、T2 [121..124] | あり | 110 → 20 | なし（3） |
+| 1y（2025-10-06〜） | T1 [140..175]、T2 [241..244] | あり | 230 → 140 | なし（3） |
+| 週足（2025-08-29〜） | T1 [35..42]、T2 [56..56] | あり | 38 → 35 | なし（0） |
+
+- どの期間・幅でも、次が変わると予想した。
+  - aria：「、収縮は未確認」 → 「、値幅の収縮 23%→4%」。aria は全部の収縮を読むので、3m でも変わる。
+  - 「収縮は未確認」 の注記は消える。
+  - T のラベル：3m は T2 だけ（「T2」「−4%」 か 「T2 −4%」）。ほかは T1 と T2。
+  - 構造の安値 46.64 の線（bc-structural、0.6 pw から）。320・375・390（幅 480 未満）では右の軸に 「安値」 のタグ。1440 では 「最後の収縮の安値 46.64」 の名前かタグ。
+  - 凡例：「最後の収縮の安値 46.64」、「収縮の安値を結ぶ線」、「枠＝値幅の収縮」（1440）または 「枠＝収縮」（1024 未満）が増える。
+  - 「出来高の枯渇」 はどの画面にも出ない。
+- ラベルの置き場に任せたところ（ZZHB の画面の中だけで動いてよいとしたもの）
+  - ほかのラベルの位置。
+  - 右の軸のタグの積み重ね。損切り 46.50 と新しい 46.64 のタグが引き出し線で重なり、近くの目盛りの数字が消えうる。
+  - 1024 未満の凡例の折りたたみ。
+  - カードの高さ。
+
+### 実際の差（実測）と予想との照合
+
+- **492 枚の probe**：`probe-ed945a9.json` は `probe-8849bf9.json` と**バイト単位で同じ**（cmp。sha256 b5f29cff…39fa2）。
+- **dump**：`dump-ed945a9.json` は `dump-8849bf9.json` と**バイト単位で同じ**（cmp。sha256 cba0a2f2…c3555）。
+- **オラクルの probe**：`node $H/probe/diff.mjs $H/probe/probe-d5b3e42-oracles.json $H/probe/probe-ed945a9-oracles.json --texts`（→ `$T/r6/p3-oracle-diff.txt`）。
+  - 基準の sha256 は 5df9eb3c…78db で、`probe-verify-b80ab95-oracles.json` と同じ。つまり b80ab95e の木。
+  - 結果：**264 枚のうち 32 枚が違う。すべて ZZHB**（ラベル 16・値 16）。ページのエラーは 0 → 0。
+  - ほかのオラクルの画面はすべて同じ。ZZRL の暗色も同じ。
+- 予想どおりだったもの（32 枚すべてで確かめた）
+  - 違う画面の組。
+  - 期間ごとの枠：3m は T2 だけ、ほかは T1 と T2。
+  - 安値を結ぶ線：3m は無く（`lows` は空）、ほかはある。
+  - 買いゾーンの帯の始まり。1440 では x 594 → 0、726 → 132、789 → 481、562 → 518。足の番号 0・20・140・35 と一致する。
+  - aria は 「収縮は未確認」 → 「値幅の収縮 23%→4%」 だけが違う（残りの文は同じ）。
+  - 「収縮は未確認」 の注記が消える。
+  - T のラベル：3m は 「T2 −4%」 か 「T2」「−4%」、ほかは T1 と T2。
+  - 「安値」 のタグ：320・375・390 のすべて。1440 は 4 期間とも名前 「最後の収縮の安値 46.64」。
+  - 凡例に 「最後の収縮の安値 46.64」 と 「枠＝値幅の収縮」／「枠＝収縮」 が増える。
+  - 「出来高の枯渇」 は無い。
+  - 32 枚すべてで、ローソク足・出来高・移動平均の線・目盛りの線・価格の目盛り・画面の大きさが同じ。
+- 予想の範囲に入れていた種類の差（置き場・タグ・凡例で決まったもの）
+  - 目盛りの数字が消えた：「45」（3m・6m の 320・375・390）と 「40」（1y の 320）。タグの積み重ねの近く。
+  - 1024 未満の凡例の折りたたみ。
+    - 3m では 「10日線」「21日EMA」 が見える凡例から外れた。
+    - 多くの画面で 「損切り」 が外れた。損切りの線、「損切り −7.0%」 の名前、46.50 のタグはチャートに残る。
+    - 320 では 「収縮の安値を結ぶ線」 が出ない。375 の週足では、それと 「枠＝収縮」 が出ない。
+  - カードの高さ：390 の 6m・1y が 490 → 508。1440 の 3m が 664.75 → 684.75、6m が 685.94 → 705.94。
+- **予想に書いていなかったもの（言い訳にせず報告する）**
+  - ZZHB の 1y・320 で、150 日線の名前 「150」（bc-malabel-ma150）が出なくなった。
+  - T1 −23%・T2 −4% と 「安値」 のタグが置き場をとった後、置き場がこの名前の場所を見つけられなかった。
+  - priceChart.js の 「どこも空いていなければ出さない」 の振る舞いで、ほかの 31 枚では起きていない。
+  - priceChart.js は持ち物でないので直していない。CHART・統合への依頼（下の 7）。
+
+### オラクル以外のブラウザの検査（実測）
+
+- brief-oracles.spec.js の次の検査は、そのまま通った（下の表の Playwright）。
+  - ZZHB の緑の矢印（9/28）。
+  - ZZPG の 3 つの収縮と前の土台。
+  - ZZRD の 3 つの縮む収縮（producer から count 3・contracting true）。
+  - R1・R2 の目標。
+- ZZRD の footprint の文は、前も後も 「VCP 17週 18/5 3T」（モデルの出力、実測）。spec はこの文字列そのものではなく、producer の値を確かめる。
+- ZZHB の VCP カードの文（モデルでは 「VCP 22週 23/4 2T」）と、試算の構造の安値 46.64 を、描いた画面で読む検査は無い（**未検証**。モデルの出力だけ）。
+
+### 再構築での数（再現スナップショットの数、11-12。公開版の数ではない）
+
+- 入力は `$H/snapshot/out/d5b3e42`。新しいスナップショットは作っていない。行は export-research.mjs と同じに作った（研究の行と、rows.jsonl の setup_engine からの se_candidates・se_explain）。
+- コマンド：`node $T/r6/tally-p3.mjs $H/snapshot/out/d5b3e42 $T/r6/before-bundle/bundle.mjs $T/r6/p3-bundle/bundle.mjs $T/r6/tally-p3-ed945a9.json $H/snapshot/out/c61bf96/counts.json`（→ `$T/r6/tally-p3-ed945a9.out`、4 秒）。
+- 構造の損切りは P1・P2 と同じ近似。
+  - 買値は、終値がピボット以上なら終値、でなければピボット。
+  - HEAD の `breakoutDate` は positionPlan と同じ `pivotBreakout(judged, row).breakoutDate`。
+- 「土台の準備完了 30」 は P1 と同じ組（c61bf96 の準備完了で、CI と同じ日足の 30 行）。「このブランチの準備完了 19」 は d5b3e42 の組。
+
+| 数（前 b80ab95e → 後 ed945a9。すべて再現スナップショットの数） | 掲載 980 | TT 8/8 の 614 | 土台の準備完了 30 | このブランチの準備完了 19 |
+|---|---|---|---|---|
+| pivotCut の状態 unknown / none / cut | 86 / 224 / 670 | 60 / 110 / 444 | 0 / 11 / 19 | 0 / 7 / 12 |
+| 収縮を描く行（certified かつ measurementsValid） | 187 → 229 | 118 → 155 | 8 → 7 | 5 → 5 |
+| 　外れた行 / 加わった行 | 52 / 94 | 35 / 72 | CFBK・CTKB / TRST | CFBK / TRST |
+| 「押しが毎回浅くなっています」 の行（表示中で footprint().contracting === true） | 131 → 153 | 86 → 104 | 7 → 7 | 4 → 4 |
+| 状態 cut の行で、上抜けの日かその後に終わる収縮がある行 | 304 → **0** | 208 → 0 | 5 → 0 | 4 → 0 |
+| 　そのうち表示中 | 98 → **0** | 63 → 0 | 4 → 0 | 3 → 0 |
+| 構造の損切り（state・low・lowDate）が変わった行 | 184 | 130 | 5 | 4 |
+| 　stop と reason も比べたとき（P1 の 190 の数え方） | 190 | 134 | 5 | 4 |
+| 　状態 cut 以外の行での変化 | 0 | 0 | 0 | 0 |
+| 構造の安値が、上抜けの日かその後の脚から来る行 | 76 → **0** | 46 → 0 | 4 → 0 | 3 → 0 |
+| 直らない行：pivotBar が null（状態 unknown） | 86 | 60 | 0 | 0 |
+| 　そのうち収縮を描く行 | 12 | 9 | 0 | 0 |
+| 状態 cut で、後の収縮が 1 つ / 0 | 222 / 8 | 155 / 4 | 11 / 2 | 5 / 2 |
+| 　そのうち前は収縮が 2 つ以上（1 つになった / 0 になった） | 57 / 0 | 39 / 0 | 2 / 0 | 1 / 0 |
+| 　そのうち前に収縮を描いていた行 | 46 | 32 | 2（CFBK・CTKB） | 1（CFBK） |
+| 後で、深さが 0 以下の収縮を持つ行 / 収縮 2 つ未満から footprint が出る行 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+
+- 前と後の 「描く」「浅く」「損切り」 の数は P1（187 → 229、131 → 153）と P2（184、190、76 → 0）の数とすべて一致した。
+- **構造の損切りの state の移り変わり**（state・low・lowDate が変わった行）
+
+| 移り変わり | 掲載 980 | TT 8/8 の 614 | 土台の準備完了 30 | このブランチの準備完了 19 |
+|---|---|---|---|---|
+| unknown → tooDeep | 67 | 53 | 0 | 0 |
+| unknown → ok | 32 | 25 | 1 | 1 |
+| ok → unknown | 27 | 21 | 2 | 1 |
+| tooDeep → unknown | 18 | 10 | 0 | 0 |
+| ok → ok（安値が変わる） | 12 | 7 | 1 | 0 |
+| tooDeep → tooDeep | 10 | 8 | 0 | 0 |
+| ok → tooDeep | 7 | 2 | 0 | 1 |
+| tooDeep → ok | 7 | 3 | 1 | 1 |
+| unknown → overLimit | 3 | 1 | 0 | 0 |
+| overLimit → unknown | 1 | 0 | 0 | 0 |
+| 計 | 184 | 130 | 5 | 4 |
+
+- 例（再現スナップショット）
+  - HUM（上抜け 11/11）：前は ok、安値 434.09（11/12、上抜けの次の日の押し）、損切り 431.92。後は unknown（収縮を測定できません）。収縮は T1 10/09〜11/02 −12.5% と、無効な T2 11/09〜11/10 −5.8% で、描かない。
+  - LIND（上抜け 10/01）：前は tooDeep、安値 30.57（11/04、上抜けの 1 か月後）。後は unknown（収縮を測定できません）。収縮は T1 8/14〜9/10 −30.5% の 1 つ。
+  - ADI（準備完了 30 の 1 行）：前は tooDeep、安値 354.72（11/06、上抜けの後の T4）。後は ok、382（10/23、T2）。
+- **直らない行（pivotBar が null）の原因**（pivotBar の検査の順：型 → 日付 → 値 → 一致する足）
+
+| 原因 | 掲載 980 | うち描く | TT 8/8 の 614 | うち描く | 準備完了 30 |
+|---|---|---|---|---|---|
+| vcp の主パターン（日付が無い） | 0 | 0 | 0 | 0 | 0 |
+| se_pivot_date が無い | 0 | 0 | 0 | 0 | 0 |
+| se_pivot_price が無い（±25% の規則で消えた。P1 で確認） | 76 | 12 | 53 | 9 | 0 |
+| 高値がピボットとセントで一致する足が無い | 10 | 0 | 7 | 0 | 0 |
+
+  - 描く 12 行は CDNA、CHYM、ABNB、HAS、AIRT、ARL、CIX、CRCT、JAKK、PERI、SOPH、TLS（P1 と同じ）。
+  - 掲載の行の主パターンは、cup_with_handle 902、nr7_inside_day 52、three_weeks_tight 22、high_tight_flag 4。vcp は 0。
+- **収縮が 1 つ・0 の行**（状態 cut、後）
+  - 230 行すべて（222 と 8）で、モデルの出力は次のとおりだった。だから VCP カードの道は 「VCP 未確認」 で、最後の収縮の出来高も 「未確認」。
+    - `footprint()` が null。
+    - `measurementsValid` false、`depthsContract` null、`volumeContracts` null。
+    - 深さが 0 以下の収縮は無い。
+    - 収縮 0 の行は `finalContractionVolume` も null。
+  - 根拠は StockVcpCard.jsx:35-36（`print = footprint(...)`、print が無ければ dry も null）と :72-75（「VCP 未確認」 と 「測定できる収縮が2回以上ないため、VCPは未確認です。」）。
+  - 0 も 「縮小」「浅く」 も言わない。数は 1 つの収縮を 1 つとして持つ（`legs.length` 1）。
+  - 収縮 0 の 8 行はどれも `base` を持つ。土台の高値は確かめられたが、収縮が無い形。P1 のテストの 「基準も無い」 形とは別だが、どちらも footprint は null。
+  - ほかに、状態 cut の 244 行（全体では 365 行）は、前も後も vcp が null。日足の検査（「日足の順序・重複・OHLCVに異常」）で測定しない行で、R6 では変わらない。
+- **実データの描いた画面**（`$H/snapshot/run-render.sh`）は走らせていない。HEAD のスナップショット（約 300 MB）が要るため。実データのチャートは**未検証**。根拠はモデルの出力と、フィクスチャ・オラクルの probe。
+
+### 古い公開版（規則「古い公開版は正直に描く」）
+
+- 注文の予想は 「古い公開版には se_pivot_date が無いので、新しい UI は状態 unknown で測り直し、今と同じものを出す」 だった。**銘柄の画面ではそうならない**。
+- 根拠（読んで確認、実測は再構築）
+  1. 8849bf9 の export-research.mjs:226-229 は、行から book_* と sec_admission を除いたすべての欄を詳細に書く。
+  2. 8849bf9 の再構築では、研究の行 5,955 のうち 4,421 が `se_pivot_date` を持つ（`$H/snapshot/out/8849bf9/serve/research.json`）。recalculate-setups.py が Setup Engine の値をすべて se_ を付けて書くため。R1 の前、インデックスには無かったが、詳細にはある。
+  3. 銘柄の画面の行は `mergeFinancialDetail(summary, detail)`（financialCurrent.js:253、`{ ...detail, ...summary }`）。
+  4. 公開された証拠は v2 なので、StockView.jsx:49-51 は v3 の測定で測り直す。
+- だから、古い公開版でも、詳細が届いた後の銘柄の画面では pivotBreakout の切れ目がかかる。詳細が届くまでは 「VCP 未確認（読み込み中）」。
+- 一覧・ウォッチの行（古いインデックスには se_pivot_date が無い）は収縮を描かないので、影響はない。
+- 古い UI（v2）が v3 の証拠を受け取った場合は、P1 のとおり、自分のコードで測り直す。
+- 公開版そのものでこれを読んではいない（**未検証**）。公開版での効き目は、リリースの後に読むまで未検証。
+
+### 準備（規則 19 はあたらない）
+
+- `git -C $W diff --stat b80ab95e ed945a9 -- backend frontend/tools` の出力は空（実測）。
+- R6 は準備・ステージ・選定・トレンドテンプレートの入力を一つも変えない。準備・選定・トレンドテンプレート・結論のゲートは、VCP の証拠も構造の損切りも読まない（P1・P2 の grep）。
+- だから H4 と 908 は再実行していない。このブランチの数は R3b の記録のまま。
+  - H4：エントリー 29/588、対照 21/575、+1.3pp（+1.280pp）、G8 の不合格 46／185。
+  - 凍結 908：「DISCRIMINATION (entry − control): FIRE±5 +25.8pp, SETUP +52.0pp」。
+
+### 実測（R6-P3。コマンドと結果。時刻は日本時間 11-16。負荷のもとの時間はすべて参考）
+
+`S=/tmp/claude-0/-home-user-screener/c937365f-db46-520a-bbf4-94843e169170/scratchpad`、`T=$S/audit3/r3-verdict`、`H=$S/audit3/r3-harness`、`W=/home/user/screener/.claude/worktrees/r3-verdict`。環境は `PATH=/opt/node22/bin:$PATH`、`FONTCONFIG_FILE=$S/ci-fonts/fonts.conf`、`SESSION_CALENDAR_PYTHON=$S/audit/r1-step0/cal-venv/bin/python`、`FINANCIAL_REPLAY_PYTHON=$S/replay-venv/bin/python`。HEAD はすべて ed945a9（clean）。
+
+| 検査 | コマンド | 時刻・時間 | 結果 | 負荷（前 → 後） |
+|---|---|---|---|---|
+| 1. 予想した差 | `node $T/r6/p3-expected.mjs > $T/r6/p3-expected.json`（メモ `p3-expected-diff.md`） | 08:12–08:13（ブラウザの前） | 上の 「予想した差」 | — |
+| 2. 492 枚の probe | `$H/probe/run-probe.sh $W 4423 ; cmp $H/probe/probe-8849bf9.json $H/probe/probe-ed945a9.json`（`$T/r6/p3-probe.out`） | 08:13–08:16、194 秒 | 492 ラベル・480 値の画面、エラー 0。**バイト単位で同じ**（sha256 b5f29cff…39fa2） | 0.00 → 1.40 |
+| 3. オラクルの probe | `$H/probe/run-probe.sh $W 4423 oracles ; node $H/probe/diff.mjs $H/probe/probe-d5b3e42-oracles.json $H/probe/probe-ed945a9-oracles.json --texts`（`$T/r6/p3-probe-oracles.out`、`p3-oracle-diff.txt`） | 08:16–08:18、73 秒 | 8 銘柄、132 ラベル・132 値の画面、エラー 0（sha256 730f4df9…9d80c）。264 枚のうち 32 枚（ZZHB だけ）が違う。上の照合のとおり。予想に無かったのは 1y・320 の 「150」 の 1 つ | 1.24 → 2.22 |
+| 4. dump | `$H/dump/run-dump.sh $W 4423 ; cmp $H/dump/dump-8849bf9.json $H/dump/dump-ed945a9.json`（`$T/r6/p3-dump.out`） | 08:19–08:20、102 秒 | 42 画面、エラー 0。**バイト単位で同じ**（sha256 cba0a2f2…c3555） | 0.78 → 0.68 |
+| 5. Playwright（注文の 9 ファイル） | `cd $W/frontend && AUDIT_PORT=4423 AUDIT_MATCH='brief-(oracles\|plan\|decision\|invariants\|sell\|watch\|chart\|compact\|phone)\.spec\.js' npx playwright test -c $T/pw.config.mjs`（`$T/r6/p3-pw-ed945a9.out`） | 08:20–08:34、13.9 分 | 275 本：**274 通過・1 skip**。skip は brief-invariants.spec.js:389 の `test.fixme('INTEGRATION: …')` だけ。brief-chart.spec.js（39 本、R6 で初めて走らせた）も通過。brief-oracles.spec.js の 40 本はすべて通過（ZZHB の緑の矢印、ZZPG、ZZRD、R1・R2）。このファイルの `test.fixme(` は 0（3 行目の注釈だけ）、基準からの差は R1・R2 の切り替えの 2 行だけ（`git diff --stat 45603f06 HEAD -- frontend/tests/static/brief-oracles.spec.js`）。やり直しは無し | 0.63 → 3.03 |
+| 6. 全部の vitest | `cd $W/frontend && npx vitest run`（`$T/r6/p3-vitest-full-ed945a9.out`） | 08:35–08:39、226 秒 | 250 ファイル・4,054 本：**4,053 通過・1 失敗・skip 0**。失敗は StockChartCard.test.jsx の 「names the contraction marks only when they are drawn…」（版の文字列 v2、CHART の持ち物。P1・P2 と同じ 1 本）。d5b3e42 は 248 ファイル・4,034 本すべて通過。差は R6 の 2 ファイル・20 本（14 ＋ 6） | 1.55 → 5.14 |
+| 7. eslint | `cd $W/frontend && npx eslint src/static/bookTechnicalEvidence.js src/static/brief/positionSizing.js src/static/bookTechnicalEvidence.test.js src/static/brief/positionSizing.test.js src/static/bookTechnicalEvidencePivot.test.js src/static/brief/positionSizingBreakout.test.js`（`$T/r6/p3-eslint.out`。注文の 4 つに R6 の新しいテスト 2 つを足した） | 08:39、2 秒 | エラー 0・警告 0 | 3.74 → 3.74 |
+| 8. ビルド（規則 21） | `$H/build/run-build.sh $W`（`$H/build/build-ed945a9.json`） | 08:39–08:40、21 秒 | 入口のチャンク **132.23 kB gzip**（raw 378.01）。89116e6 と同じ。d5b3e42 の 131.72 から **R6 で ＋0.51**（P1 ＋0.34、P2 ＋0.17）。R の累計は STEP 0 の 130.28 から ＋1.95。線 134.00 まで 1.77 | 3.44 → 2.89 |
+| 9. 準備 | `git -C $W diff --stat b80ab95e HEAD -- backend frontend/tools` | 08:40 | 出力は空 | — |
+| 10. 凍結・ほかの持ち物 | `git -C $W diff --stat b80ab95e HEAD`、`python3 -I $S/audit3/check-ownership.py R $W 45603f065f054cd48c812a3003f3a71ffd91cf45` | 08:40 | 5 ファイルだけ：bookTechnicalEvidence.js、そのテスト bookTechnicalEvidencePivot.test.js、positionSizing.js、そのテスト positionSizingBreakout.test.js、docs/round3/verdict.md。`OWNERSHIP OK (R): 46 paths` | — |
+| 再構築の数 | `node $T/r6/tally-p3.mjs …`（上の 「再構築での数」） | 08:15、4 秒 | 上の表 | 1.48 → 1.53 |
+
+- 時間はすべて負荷のもとの参考で、時間の検査は無い。
+- 再構築の数の集計（ブラウザを使わない Node の 4 秒）は、492 枚の probe の途中で走らせた。注文の 「一つずつ」 から外れたが、probe はバイト単位で同じだった。
+- やり直しが要った Playwright は無い。
+
+### 未検証（R6-P3）
+
+- 公開版での数と表示。すべて再構築の数で、公開版での効き目はリリースの後に読むまで未検証。
+- 古い公開版の詳細が `se_pivot_date` を持つこと。コードと 8849bf9 の再構築で確かめたが、公開されたファイルは読んでいない。
+- 実データの描いた画面（run-render.sh を走らせていない）。ラベルの重なりも含む（HUM・LIND・ADI・RDNT など）。
+- ZZHB の VCP カード・試算のカードの描いた文（モデルの出力だけ）。
+- 新しい理由 POST_BREAKOUT_LEGS_REASON の画面（P2 のまま。フィクスチャにも再構築にも当たる行が無い）。
+- レビュー担当者の区間を持つ行での数（再構築の行には区間が無い）。
+- 時間は一つも測っていない（このパッケージに時間の検査は無い）。
+
+### 統合・ほかのトラックへの依頼（ここではしていない）
+
+1. **briefChartModel.footprint()**（CHART・統合）：状態が 'cut' のとき、土台の週数を `vcp.pivotCut.measuredThrough` で終える。今は、土台の高値が上回られていなければ最後の足まで数える（HUM 型）。
+2. **StockVcpCard**（CHART・統合）：一般の 「測定できる収縮が2回以上ないため」 に代わる文が要る。
+   - 収縮が 1 つだけのとき：調べの案 「収縮は1回のみ（縮小は判定できません・独自算出）」。
+   - 上抜けの後の収縮を外したとき：そう言う文。
+   - 再構築で、収縮が 1 つの行は 222、そのうち前は 2 つ以上だった行は 57（上の表）。
+3. **StockVerdict の VCP のチップ**：色は footprint の `brokeOut`（`vcp.base.brokeOut`、StockVerdict.jsx:149）だけを読む。HUM 型（土台の高値がピボットより上）では、ピボットの上抜けの後も 'zone' のままになりうる。
+4. **CONTEXT.md の語彙**（統合で）
+   - **上抜けの足（pivot breakout bar／pivot cut）**：ピボットの足より後で、終値がピボットのセントを初めて上回った足。
+   - **上抜け後の値動き**：その足からの値動き。自動の収縮には数えない（独自判定）。
+5. **写し**：ハーネスの p4 のスクリプトの写しと、デザインの試作は、このモジュールの古い写しを持つ。統合で合わせるか、古いと明記する。
+6. **P1・P2 からの依頼（そのまま）**
+   - `frontend/src/static/brief/StockChartCard.test.jsx:143` の版の文字列 `'book-technical-evidence-v2'`（CHART）。直すまで全部の vitest でこの 1 本が落ちる（下の表）。
+   - 書き出し側の行の欄（P1 で読んで確認。統合で変えるものは無い）。
+   - readiness.py の `contraction_unconfirmed`（R3c）は R6 の切れ目を持たない。バックエンドに移すかは指揮者の判断。食い違う行は数えていない。
+   - 切れ目の直前の無効な短い区間（HUM・TW・MCBS・PANL・KOF・NTRS）は直していない（P1 の判断待ち）。
+7. **新しく見つけたもの（CHART）**：ZZHB の 1y・320 で、150 日線の名前 「150」 が出なくなる（上の照合）。置き場の 「空きが無ければ出さない」 の振る舞いで、priceChart.js は持ち物でない。統合でオラクルの probe を取り直すとき、この 1 枚を予想に入れるか、置き場で直すかを決めてほしい。
+8. **注文の前提の訂正**：古い公開版でも、銘柄の画面では切れ目がかかる（上の 「古い公開版」）。
+
+### パッケージ R6-P3 の記録
+
+- コミット：この記録（`docs(round3): record the R6 gates and rebuild counts`）だけ。コードは変えていない。コミットの前に `OWNERSHIP OK (R)`。
+- 測った HEAD は ed945a9。この記録の後の HEAD との差は verdict.md だけ。
+- 注文と違えたところ
+  - eslint に、R6 の新しいテストのファイル 2 つ（bookTechnicalEvidencePivot.test.js、positionSizingBreakout.test.js）を足した。R6 のテストはこの 2 つにあるため。
+  - 直らない行の原因に 「se_pivot_price が無い」 を足した。注文の 3 つ（vcp の主パターン、一致する足が無い、se_pivot_date が無い）のうち 2 つは 0 行で、実際の原因の大半がこれだったため。
+  - 「古い公開版は状態 unknown で今と同じ」 は書かなかった。コードと再構築がそうならないことを示したため（上の 「古い公開版」）。
+  - 再構築の数の集計は、probe と並んで走った（上）。
+  - 実データの描いた画面（run-render.sh）は走らせていない。HEAD のスナップショット（約 300 MB）が要り、注文が全部の再構築を禁じているため。
+- 片づけ
+  - 古くなったこのトラックの出力として、P2 のビルドの `snapshot/trees/89116e6`（40 MB）と `build/npm-build-89116e6`（19 MB）を消した。`build-89116e6.json` とログは P2 の記録が引くので残した。
+  - 8849bf9・土台・b80ab95・d5b3e42 の出力と、ほかのトラックの出力は触っていない。
+  - 新しい出力は残した：probe-ed945a9（.json と -oracles.json）、dump-ed945a9、build-ed945a9、trees/ed945a9。
+  - スクラッチは `$T/r6/` の p3-*（予想・照合・ログ）、tally-p3.mjs、tally-p3-ed945a9.{json,out}、p3-bundle、p3-expect-bundle。コミットしていない。
