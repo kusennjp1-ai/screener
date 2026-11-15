@@ -647,7 +647,7 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 
 ## R3b. ゲート 8 はブリーフが示すステージを読む（パッケージ R-P4）
 
-コミット 53b82cb `feat(scanner): gate 8 reads the published stage`（ゴールデンを含む）。**採用**（下の3条件をすべて満たした。判断の規則と予測は測定の前に `$T/r3b/r3b-decision-rule.txt` に書いた）。統合で落とすなら、このコミットだけを revert すればよい（R3a・R3c とは別の行を変えている）。
+コミット 53b82cb `feat(scanner): gate 8 reads the published stage`（ゴールデンを含む）。**採用**（下の3条件をすべて満たした。判断の規則と予測は測定の前に `$T/r3b/r3b-decision-rule.txt` に書いた）。統合で落とすなら、このコミットだけを revert すればよい（実測：`git diff 53b82cb^ 53b82cb | git apply -R --check` は HEAD 46cde70 の木に衝突なく当たり、53b82cb の backend の差は `git diff fb2db3c HEAD -- backend` とバイト一致。だから revert の後の backend は fb2db3c と同じ。後のコミットは backend に触れていない）。
 
 ### 規則
 
@@ -736,7 +736,7 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 1. 凍結の probe の説明（probe_setup_ready_908.py:39-41「"SE stage" is … (``quick_stage_check``), the input to gate 8」）は、R3b の後はスキャナーのステージになる。probe は凍結なので統合で直す（数え方は変わらない）。
 2. docs/setup_engine/se_h4_formula_dictionary_operator_runbook.md:81・644 の `quick_stage_check` の記述（このトラックの所有の外）。backend/tests/unit/golden/test_golden_scanner.py:105 のコメントも古い（挙動には関係ない）。
 3. 語彙（CONTEXT.md）：ゲート 8 ＝スキャナーが公開するステージが 2（None は合格）。
-4. **オーナーへ**：R3b は H4 の差を +0.8 → +1.3pp に上げ、再構築の掲載の準備を 29 → 26 にする。新しく準備になる AVTR・SHEL・VSTM はどれもピボットを越えて戻った行（`pivot_already_crossed`）。オーナーは採用を拒める（OD10）。
+4. **オーナーへ**：R3b は H4 の差を +0.8 → +1.3pp に上げる（ただしエントリー 1 点の増加と対照 2 点の減少で、R4 で見積もった標準誤差 約 ±1.2pp の内。「下がらない」という採用の条件は満たすが、改善の証拠としては弱い）。再構築の掲載の準備は 29 → 26 になる。新しく準備になる AVTR・SHEL・VSTM はどれもピボットを越えて戻った行（`pivot_already_crossed`）。オーナーは採用を拒める（OD10）。
 
 ## R4. ゲート 3・4・6 の代案の評価（評価だけ。パッケージ R-P4）
 
@@ -867,7 +867,7 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 
 ### OD10 への短い勧め（採用はオーナーの判断。このラウンドではどれも出荷しない）
 
-- **ゲート 3**：今のまま出さない。
+- **ゲート 3**：今のまま出さない。G3′ はゲート 3 からハンドルの古さを外すが、ゲート 1 の setup_score は今も品質と検出器の readiness_score から合成される（setup_engine_scanner.py の `SETUP_SCORE_WEIGHTS`）ので、古さの影響は残る。
   - G3′ は H4 の差を ＋0.76 → ＋1.9〜＋2.1pp に上げる。しかし標準誤差（約 ±1.2pp）を少し超えるだけで、ゲート 3 の合格率は 26.6% → 12〜18% に下がる。
   - 準備の行は半分ほど入れ替わり、加わる行は値動きの小さい銀行に寄る。
   - 進めるなら、締まりを値動きに対する比（ADR に対する比など）にして測り直す（未検証）。
@@ -876,6 +876,7 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
   - 外れるのは R3c の 14 行（R3b ありなら AVTR・SHEL・VSTM を含む 14 行）。止まったピボットはブリーフの表示（停滞）で扱う。
 - **ゲート 6**：代案を検討する価値がいちばんある。
   - 3 つとも合格率を同じにしたまま、H4 の差を大きく上げる（＋7〜＋12pp。上抜け日を除いても ＋11〜＋17pp）。
+  - 注意：H4 のエントリーは買いの日で、対照はそうではない。だから買いの日の出来高を許すゲートは、probe の作りの上で有利になる。上抜け日を除いた列は、この偏りの一部しか取り除かない。
   - 第一の候補は **G6a**（5 本の平均 ≤ 0.90）。反転は 5.19 → 1.86 と安定し、再構築の準備の入れ替わりは最も少ない（37 → 35）。上抜け日の準備も 3 件と少ない。
   - G6b はいちばん安定する（1.09）。ただし準備を 37 → 22 に減らす。
   - G6c は差が最も大きい。しかし反転が増え（5.68）、上抜け日を 19 件通し、ピボットに頼るので勧めない。
@@ -888,12 +889,17 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 - G3′ と G4′ の安定性（20 本での反転）。測ったのはゲート 6 だけ。
 - 締まりを値動きに対する比にした G3′。
 - 銀行に寄ることの原因。推論にとどまる。
+- G3′ のもとでもゲート 1 に残る、ハンドルの古さの影響の大きさ。
 
 ### 実測（R4。コマンドと結果。時刻は日本時間。負荷のもとの時間はすべて参考）
 
 - 再構築：`$T/r4/r4_rebuild.py $H/snapshot/out/24bf6b9 $H/snapshot/out/53b82cb $T/r4/rebuild-24bf6b9.json`。上の再構築の数と切りは、すべてこの出力から取った。ゲート 3 の内訳は `$T/r4/g3_breakdown.py`。
 - 908 の記録：`cd $T/r4/tree-fb2db3c/backend && DATABASE_URL="postgresql://local/none" …/python $T/r4/r4_908_capture.py $T/r4/capture-fb2db3c.jsonl $T/r3/h4-r3a.json`。13:12〜13:20、負荷 6.38 → 2.02。不一致 0、ペイロードの欠け 0。
 - 908 の評価：`$T/r4/r4_908_eval.py capture-fb2db3c.jsonl rebuild-24bf6b9.json h4-alts.json $T/r3b/h4-r3b.json`。R3b の置き換えは実際の probe と一致した。
+- 908 の検査（`$T/r4/check_908.py capture-fb2db3c.jsonl` → `$T/r4/check_908.out`）：
+  - ゲートまで届いた 1,141 点すべてで、スクリプトの 1 日の規則（≤ 0.8）がエンジンのゲート 6（`volume_above_dryup_cap`）と一致した（不一致 0）。出来高の比も記録の `volume_vs_50d` と一致した（不一致 0）。
+  - G3′ の土台の高値の出どころ：エントリーは起点から 536・60 本 42、対照は起点から 497・60 本 66。908 でも大半は候補の起点から測っている。
+- frontend/tools/test_recalculate_setups.py：10 件通過（R3b の後）。`stage_ok`・`stage_not_ok` を使うテストのファイル（test_setup_engine_contract.py、golden/test_golden_scanner.py、test_setup_engine_screener.py、test_explain_builder.py）は、どれも gate-1・gate-5・赤線で走らせた。
 - `git diff 6b66e7a HEAD -- backend frontend` は空。R4 はドキュメントだけ。
 
 ### パッケージ R-P4 の記録
