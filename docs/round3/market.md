@@ -1052,7 +1052,7 @@ CI の浅いチェックアウトには 8849bf9 が無いことがあるので�
 - **market-regime-study.mjs:201・785 の「ブレイクアウト成功率」**（所有外の研究ツールの出力の名前）。reference-sources の結果ファイル（ci-results-run41844557380.md）は記録なので変えない。次の版の研究で名前をそろえるかは統合の判断。
 - **上抜けの行の名前**（判断 1）：「上抜け維持（確定分）」を受け入れるか、「上抜けの維持（確定分）」に戻して 320 のリーダー区画の +14px を受け入れるか。戻すなら `BREAKOUT_HOLD_NAME` の 1 定数と spec の高さの値だけ。
 - **export-market-trends.test.mjs の 2 件の時間の余裕**：通るときも 14〜19 秒で、20 秒の既定の線に近い（負荷 8.8 で 2 件とも時間切れ）。テストに明示の時間（たとえば 60 秒）を付けるのがよい。このファイルは MARKET の所有だが、P6 の一覧にないので変えていない。
-- **エントリチャンク**：131.64 kB（+1.36 kB、STEP 0 比）。ほかのトラックと合わせて 134.00 kB の線に入るかを統合で確かめてほしい。
+- **エントリチャンク**：131.64 kB（+1.36 kB、STEP 0 比）。指揮役の指示 第 1 回の後は 131.66 kB（+1.38 kB）。ほかのトラックと合わせて 134.00 kB の線に入るかを統合で確かめてほしい。
 
 
 ## 指揮役の指示 第 1 回（トラックの検証の後の修正）
@@ -1082,14 +1082,14 @@ CI の浅いチェックアウトには 8849bf9 が無いことがあるので�
 - 'writes raw and derived data with exact content hashes and binds the manifest reference' と 'replays identical selected seed and manifest bytes from a foreign cwd, ignoring a spoofed cwd seed' の `it()` の第 3 引数に `60_000` を付けた。ほかは変えていない。
 - ファイル単体（cd9bf520、負荷 4.5→5.3、参考値）：59 件通過、2 件は 12.3 秒と 13.9 秒。
 
-### 実測（cd9bf520 のコード。負荷は共有マシンのもので、時間はすべて参考値）
+### 実測（cd9bf520 のコード。その上はこの文書だけ。負荷は共有マシンのもので、時間はすべて参考値）
 
-- 関係する vitest（MarketCard、briefEnvironment、marketTabModel、marketTabStudy）：184 件通過。
+- 関係する vitest（MarketCard、briefEnvironment、marketTabModel、marketTabStudy）：184 件通過（文書のコミットの後の HEAD で）。
 - 全 vitest（SESSION_CALENDAR_PYTHON と FINANCIAL_REPLAY_PYTHON あり）：247 ファイル、4092 件通過、1 回目で exit 0（負荷 5.5→10.2）。
 - Playwright（CI と同じ：Chrome for Testing 147 headless shell、CI のフォント、ポート 4433、1 worker、再実行なし）
   - brief-market、brief-market-phone、brief-market-r3：146 件通過（負荷 0.3→7.9）。
   - brief-oracles、brief-compact、brief-phone：104 件通過、2 件 skip（R1／R2 の test.fixme）（負荷 7.7→6.8）。
-- eslint（変えた js／jsx）：exit 0。所有の関門：各コミットの前に OWNERSHIP OK (MARKET)、29 パス。
+- eslint（この回に変えた js／jsx／mjs の 11 ファイル、export-market-trends.test.mjs を含む）：exit 0。所有の関門：この回のコミット（56945c8b 以降）の前ごとと最後の HEAD で OWNERSHIP OK (MARKET)、29 パス。d484c645 は前のセッションのコミットで、その時点の関門の記録はこのセッションでは見ていない（最後の HEAD の関門はそれを含む差分全体を見ている）。
 - dump（`$H/dump/run-dump.sh`、cd9bf52）：42 画面、エラー 0、sha256 cbb64b4f…c7d5ce＝dump-35ae875.json（`cmp` で同一）。
 - ビルド（`$H/build/run-build.sh`、cd9bf52）：エントリチャンク 131.66 kB gzip（35ae875 の 131.64 から +0.02、生で +15 バイト、`FTD_PREVIOUS_NAME` の export。STEP 0 の 130.28 から +1.38、134.00 の線の内側）。遅延チャンク MarketScreen は 33.17→33.19 kB gzip。
 
@@ -1143,7 +1143,7 @@ CI の浅いチェックアウトには 8849bf9 が無いことがあるので�
   - 上抜けの行の名前（判断 1）を受け入れるか。
   - export-market-trends.test.mjs の 2 件に明示の時間を付ける（通るときも 14〜19 秒で、既定の 20 秒に近い）。→ 指揮役の指示 第 1 回で 60 秒にした（d484c645）。
   - CONTEXT.md の語彙（上の表）。
-- **エントリチャンク**：P6 の関門 (4) の 131.64 kB（STEP 0 の 130.28 kB から +1.36 kB）。統合で 134.00 kB の線に入るかを、ほかのトラックと合わせて確かめてほしい。
+- **エントリチャンク**：P6 の関門 (4) の 131.64 kB（STEP 0 の 130.28 kB から +1.36 kB）、指揮役の指示 第 1 回の後（cd9bf520）は 131.66 kB（+1.38 kB）。統合で 134.00 kB の線に入るかを、ほかのトラックと合わせて確かめてほしい。
 
 ### 次回の公開を読むまで未検証のもの（期待値の数字は書かない）
 
