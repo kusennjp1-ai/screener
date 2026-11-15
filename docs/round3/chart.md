@@ -867,3 +867,244 @@ C1 must reproduce these byte for byte. They are from P = 57fdcd68 and kept in sc
   - If C4 is held before C1, re-freeze the render probe and the manifest.
   - If C5 lands before C1, re-freeze the oracle probe (ZZPG's readout), the render probes (the four rows' readouts) and the manifest.
   - In CH-2, the as-ordered C5 left the default probe's sha256 unchanged, but any C5 variant must be re-checked.
+
+### C1: what changed (c8b2c54a code, 45601a25 tests; P = 57fdcd68)
+
+Only `priceChart.js` and `chartLabels.js` changed. The grid, the costs, the gaps, the constants, the retry loop and the label order are as at P. Every shortcut is a test-only `reference: true` option away: `renderPriceChart(el, model, { reference: true })` passes it to `labelPlacer`, and the second layout (`carry`) forwards it, because it spreads `options`. The app never passes it.
+
+1. **One candidate set per average's line end** (`nameSpots`, priceChart.js).
+   - A name's spots depend only on its end (`end.at`, `end.y`, `w`). They do not depend on `offLevel` or on the try.
+   - So the `spots()` object built for the first placement serves every retry. Its lazily ordered prefix and its memo (`solid`, `soft`, `strike` per spot) are worked out once per render.
+   - The memo key (`w`, `half`, `struck`) is the same on every try (`half: 6.5`, the placer's own `strike`). `fill()` only extends the ordered prefix. The memo holds pure functions of the spot's box. `restore()` touches neither, so no placer state leaks through the shared object.
+   - Unit test: `chartLabels.test.js` 「places a label again from a reused candidate set (after restore) exactly where a new set does」.
+2. **A spot over candles that cannot beat the best so far is passed early** (`place`, chartLabels.js).
+   - Its score (`count × perCandle + cost`, or `count`) is computed before `hits` and the leader, not after.
+   - A spot with `score ≥ worst` would be passed anyway, and neither `hits` nor `leader` changes state. So the same spot wins.
+3. **Candles and volume bars counted from per-bar edges** (`solidCount`, priceChart.js).
+   - Each bar's box edges are worked out once (the same sums as `solid`), and no box object is built per bar.
+   - `solid` stays for every other caller and for `reference`.
+4. **Boxes further apart across than the widest gap are never compared** (`CLASH_REACH` in `clash`).
+   - `CLASH_REACH` = max(`KIN_GAP.plan` 36, `KIN_GAP.figure` 26, `LABEL_GAP` 16, `BOX_GAP` 3) = 36.
+   - Every `clash` path ends in `a.x0 < b.x1 + gap && a.x1 > b.x0 − gap` with `gap ≤ 36`, or needs the boxes to overlap across. So `a.x0 ≥ b.x1 + 36` or `a.x1 ≤ b.x0 − 36` is false on every path.
+5. **The averages' last stretches (`tail`) sit in bands of their own** (`tails`, chartLabels.js).
+   - A tail box meets only a box with `label` whose `kin` is not `'ma'` (the `clash` tail branch). So `hits` scans `tails` only for such a box (`meetsTails`).
+   - `take`, `release` and `restore` keep the two maps in step.
+   - `repair` still treats a tail in the way as fixed. A tail has no `of`, so it was fixed at P too, and a fixed spot is passed whatever the blockers were.
+   - Unit test: 「keeps an average's last stretch in the way of a label being repaired, never of a name」.
+6. **One reused probe box per `place` call.** A spot is tested with `probe`, and its own box is built only once nothing is in its way. `hits` keeps no box.
+7. **Leader tests cached per left edge and per row** (`lineBeside`, `alongLevel` in `placeName`).
+   - The line's height 3px right of a moved name depends only on `x0`. Whether a level runs along the row depends only on `yc` (and the call's `offLevel`).
+   - The caches live inside one `placeName` call, so `offLevel` is fixed within each.
+   - The segments, their keys, `from`, `up`, `tip` and the leader kinds are built exactly as at P.
+
+**Not done, and why:**
+- The `carry` second layout (the whole chart drawn again for a level's name) is untouched. Identity could not be proved cheaply. It is 13 of the 608 fixture models.
+- Yielding to the main thread: not implemented (see the timings).
+
+### C1 profile: where the time went, before (P) and after (head), 実測 (advisory, shared machine)
+
+Scratch tools in `audit3/r3-chart/c1/`:
+- `capture/`: the chart models recorded from the browser. There are 608 fixture models (the default and oracle sets at 320/375/390/1440) and 476 real-data models (the 11-12 rebuild at P), 1,084 deduplicated.
+- `build-bundles.mjs`: esbuild bundles of P's files (`ref/`, = `git show 57fdcd68:…`, checked with `diff`) and of HEAD's (`head-final/`, = `git show HEAD:…`).
+- `render.mjs`: draws a matrix in jsdom (modes `ab`, `bench`, `each`). `instrument.py` makes counted and timed copies. `profsum.mjs` gives self time per function from a `.cpuprofile`.
+
+**Self time per function, fixture matrix (608 models, one pass, `node --cpu-prof one.mjs <bundle> 1 '*' '*' '*' -- <8 fixture model files>`; load 5.35 → 5.68):**
+
+| Function | P (37,077 ms sampled) | head (29,449 ms sampled) |
+|---|---|---|
+| garbage collector | 7,226 ms (19.5%) | 7,169 ms (24.3%) |
+| `clash` | 4,382 (11.8%) | 2,235 (7.6%) |
+| `hits` (head: `scan` + `hits`) | 3,760 (10.1%) | 2,235 + 312 (8.7%) |
+| `solid` (head: `solidCount`) | 3,315 (8.9%) | 1,496 (5.1%) |
+| `place` | 2,085 (5.6%) | 1,171 (4.0%) |
+| `s.fill` + `batch` (the spots' heap) | 978 + 974 (5.3%) | 756 + 803 (5.3%) |
+| `soft`, `segmentCrosses` | 363 + 375 | 342 + 324 |
+| the label search together (these rows less GC) | about 16.2 s (44%) | about 9.7 s (33%) |
+
+The rest is jsdom building the markup (`_node`, `Attr.setup`, the HTML parser) and `fmt`. They are about the same in both.
+
+**SWKS 6か月 at 1440, the first-load chart** (`models/swks-6m-1440.json`, 30 renders per process, `one.mjs`; three interleaved pairs, load 5.69 → 5.01):
+- P: 3,140 / 3,110 / 2,668 ms. head: 2,087 / 2,371 / 2,289 ms.
+- Per render, by the medians: about 104 → 76 ms (−26%).
+- Under `--cpu-prof`, head's remaining label search (`place`, `clash`, `scan`, `batch`, `solidCount`, `segmentCrosses`, `spots`, `hits`, the two `cost`s) is about 0.79 s of about 3.0 s of rendering (26%).
+- A single cold render (`render.mjs each`, instrumented, 3 processes each, load 5.88 → 5.90):
+  - P: render 211 / 227 / 221 ms, the names 151 / 160 / 138.
+  - head: render 111 / 138 / 124 ms, the names 62 / 74 / 76.
+  - The names are still about half of a cold SWKS render (10 `placeName` calls: the first pass and one retry).
+
+**Node micro-benchmark, fixture matrix** (`node render.mjs bench 5 reffinal headfinal -- <8 fixture model files>`; CPU time of the renders only, P and head interleaved, after one warm-up pass; load 2.26 → 4.45):
+- P: 38,442 / 39,171 / 38,688 / 38,887 / 40,453 ms, **median 38,887**.
+- head: 30,526 / 31,685 / 29,124 / 29,776 / 31,902 ms, **median 30,526 (−21.5%)**.
+- placeName (instrumented bundles, wall time; `node render-names.mjs bench 3 instreffinal instheadfinal -- <8 fixture model files>`, interleaved; load 7.66 → 6.60):
+  - P: 27,211 / 30,855 / 31,769 ms, **median 30,855**.
+  - head: 15,164 / 15,543 / 15,819 ms, **median 15,543 (−49.6%)**.
+  - Instrumented render: medians 50,475 → 34,407 ms.
+  - An earlier 3-run reading of the same bundles kept only the last run: P 32,211 → head 16,884 ms (render 53,079 → 36,202).
+
+**What each change did, by its counters** (real-data matrix, 476 models, instrumented, one pass each, from the build-up in `c1/prof-real-*.json`):
+- The timers in those files are not comparable across steps, because the instrumentation changed between s2 and s3. So each change is credited by what it counts, not by its ms.
+
+| Counter (476 models) | P | after 1 (one set per end) | after 2 (early pass) | head (after 3–7) |
+|---|---|---|---|---|
+| spots ordered (`fill_pop`) | 7,056,833 | 2,844,866 | 2,844,866 | 2,844,866 |
+| candle counts computed (`solid_miss`) | 7,055,567 | 2,844,539 | 2,844,539 | 2,844,539 |
+| spots that reach `hits` (`place_visit`) | 3,051,695 | 3,051,695 | 1,472,518 | 1,472,518 |
+| leader calls | 2,920,313 | 2,920,313 | 1,439,036 | 1,439,036 |
+| `hits` calls | 10,396,677 | 10,396,677 | 6,147,178 | 6,147,178 |
+| `clash` calls | 200,934,438 | — | — | 46,833,130, of which 16,227,016 end at `CLASH_REACH` |
+| `clash` calls against a tail | 115,485,847 | — | — | 191,326 |
+
+- Changes 3, 6 and 7 change no counter: they make each call cheaper. Their share is inside the head's totals above.
+- `retry` 81, `replay` 70, `placeName` 2,705, `repair` 1,300 and `carry_render` 6 are the same at P and head, so the same work is reached.
+
+**Stop decision.** Gains have not flattened to zero: on a cold SWKS render the names are still about half the render. I stopped for two reasons.
+- Every further change re-opens all four proofs (a)–(d): a snapshot, a render, both probes and the full Playwright suite.
+- The figures below show that even a zero-cost name search would not reach ≤ 200 ms in this session's scale.
+  - In p3's browser breakdown of 8849bf9 (`audit3/p3-phone-chart-speed/timing/instr-snapshot.json`), the names were 93–131 ms of a 229–250 ms chart task, about half.
+  - Here base reads 498 ms. Removing the whole name search from it would leave about 250 ms.
+  - Head's 306 ms already saves about 190 ms.
+
+### C1 identity proofs (all four, 実測)
+
+**(a) Committed vitest determinism check.**
+- `renderPriceChart`'s and `labelPlacer`'s test-only `reference` option bypasses every shortcut. The JSDoc says TEST ONLY.
+- **`priceChart.identity.test.js`** (new file; deviation, see below):
+  - It draws every fixture stock (30) and every oracle chart in `tests/static/brief-fixture.js`, plus 4 crowded charts (`wall`, `tall`, `capped`, `levels`).
+  - Each is drawn × the 4 periods × the plot boxes of 320/375/390/1440 (262×292, 317×340, 332×340, 926×470), with and without `reference`.
+  - It asserts the outerHTML (uid normalised), the aria-label, the legend, the two `freeCorner` answers, and the retry and layout counts are identical.
+  - Its last test asserts the matrix reached the names' retries, the full replay, forced names and a second layout (`carry`).
+  - The models are built from each fixture row and its bars (Setup Engine pivot, measured legs). They are close to, not exactly, the stock screen's plan; the browser probes (c) cover the exact plan.
+- **`priceChart.test.js`:** this file's own chart at the 4 sizes and a wall of bars at 390 (names forced), with and without `reference`.
+- **`chartLabels.test.js`:**
+  - seeded scenes of every kind of box placed with and without the shortcuts;
+  - a reused candidate set after `restore()` placing exactly where a fresh one does;
+  - a tail in the way of a repaired label but never of a name.
+- **Deviation:** the matrix is in its own file, not in `priceChart.test.js` as ordered.
+  - The browser fixture reads its session calendar through `node:fs` and Node's URL, so it does not load under priceChart.test.js's jsdom environment.
+  - The new file runs under `@vitest-environment node` with a jsdom document of its own.
+  - It is in CHART's paths (`OWNERSHIP OK (CHART): 15 paths`).
+  - Duration: 124.8 s for 43 tests under load 7.6–9.9 (longest test 6.6 s against a 120 s per-test timeout). In the full run it took 99.7 s.
+
+**(b) Scratch A/B against P's real files** (`node render.mjs ab reffinal headfinal headfinal:reference=1 -- <the 9 model files>`; load 3.38 → 3.52):
+- **1,084 models** (608 fixture + 476 real-data views, deduplicated).
+- Each is drawn with P's `priceChart.js`/`chartLabels.js`, the head's, and the head's with `reference`. The outerHTML (uid normalised), aria-label, legend and two `freeCorner` answers are compared byte for byte.
+- **0 differing.** The three cumulative sha256 are all `dfacbf1c349f8d39e31a696e5092e1a2cb41ac7e3770cce7b3d509aa642be052`.
+- The bundles were rebuilt from `git show 57fdcd68:` and `git show HEAD:`. The head bundle equals the one used during development except for esbuild's path comments.
+
+**(c) Fixture probes** (`$H/probe/run-probe.sh $W 4424` and `… 4424 oracles`, at 45601a2; 0 page errors; load 9.54 → 11.16 and 10.17 → 8.98):
+- `probe-45601a2.json` sha256 `1127e3b88c52ee79c3f16e2474d3eda5b0a01b92de78e89e86f54e327bc62342`: `cmp` with `probe-57fdcd6.json`, **identical**.
+- `probe-45601a2-oracles.json` sha256 `d2e881720b434b64f2fa114661c77cecf5debe939782665d5543f1a9b163d2a3`: `cmp` with `probe-57fdcd6-oracles.json`, **identical**.
+- `node $H/probe/diff.mjs … --texts`: **0 of 972** and **0 of 264** views differ.
+
+**(d) Real data, the 11-12 rebuild** (`$H/snapshot/run-snapshot.sh $W` 8.8 min, load 9.30 → 4.10; `$H/build/run-build.sh $W`; `$H/snapshot/run-render.sh $W 4424 reduce`: 476 renders and the 2 readout targets, 0 errors, load 2.27 → 1.14):
+
+| File | P (57fdcd6) | head (45601a2) |
+|---|---|---|
+| `render/probe-reduce.json` (normalised, `sed "s/<head7>/<T>/g"`) | `c889d746…` | `c889d746…`, identical |
+| `render/readout/probe-reduce.json` (normalised) | `9854506c…` | `9854506c…`, identical |
+| `render/counts-render.json` | `b47a7758…` | `b47a7758…`, byte-identical |
+| `counts.json` | `4b1866dd…` | `4b1866dd…`, byte-identical |
+| manifest less the 3 tree-named files (4,437 lines) | `8feeeb73…` | `8feeeb73…`, `cmp` identical |
+| `bundle.mjs` (normalised) | `31c168df…` | `31c168df…` |
+
+`rows.jsonl`, `ready43.jsonl` and `serve/research.json` equal SNAP's, as at P.
+
+### C1 timings (ADVISORY: a shared 4-CPU machine; the counting timings are re-taken at integration on an idle machine)
+
+**First load, 1440 Today** (`$H/timing/wait-quiet.sh 0.5 600 $H/timing/run-timing.sh $W 4424 /home/user/screener/.claude/worktrees/r3-base 7`; the 8849bf9 base and the head interleaved in one run):
+- `wait-quiet` waited 45 s. Load 0.56 at the start, 4.05 at the end: the loads rose during the run with the run's own Chrome. The host calibration was 925 → 934 ms.
+- Validity rule: the 1-min load was under 1.0 at the start, and SWKS was in the pane 7/7 for both trees.
+  - `ps_before` lists only the run's own chrome-headless and node, and `claude` at 3.1%.
+  - The rule was met at the start only. The load during the runs was 1–4, and head's in-page calibration was slower than base's (25.3–42.8 ms against 18.9–31.0). So this is a **valid-at-start but advisory** reading.
+
+| Tree | longest task in design-review's window, per run | median | chart task median | chart was the longest |
+|---|---|---|---|---|
+| 8849bf9 (base) | 529, 424, 498, 494, 477, 549, 508 | **498** | 498 | 7/7 |
+| 45601a2 (head, C1) | 396, 290, 299, 375, 264, 306, 414 | **306** | 306 | 7/7 |
+
+- **The target of ≤ 200 ms is not reached:** 306 ms against base's 498 in the same run (−39%).
+  - This session reads base about 1.5× slower than the README's quiet readings (313–355 ms). So the absolute figure is not comparable with the target.
+  - The counting figure is integration's on an idle machine, and CI's Design Acceptance (779 ms median on PR #145) is 未検証 here.
+- **The rest of the chart task** is building the markup and the levels before the names (in p3's breakdown, about 24 + 31 + 8 + 7 ms of base's task), React's commit and GC.
+  - Yielding (drawing the labels in a second task) was not implemented, as ordered.
+  - It would change PriceChart's synchronous contract: the draw, the `legend` the card reads and the controller would exist before the labels. It would also change what 'settled' means for the probes and H3's `chartSettled`. The conductor decides.
+
+**Period switch at 390 and 1440** (`$H/timing/run-period.sh`, `PERIOD_NAME` overrides; medians of 120 switches):
+
+| Run | started (JST) | load before → after | 390 median | 1440 median |
+|---|---|---|---|---|
+| head 45601a2 (`period-45601a2-c1`; wait-quiet 360 s) | 18:22 | 0.45 → 1.64 | **192.5** | 204.0 |
+| base 8849bf9 (`period-8849bf9-c1chart`; wait-quiet hit its 600 s cap) | 18:42 | 3.64 → 6.91 | **207.0** | 213.0 |
+| head 45601a2 again (`period-45601a2-c1b`; no wait) | 19:03 | 5.04 → 7.04 | **191.5** | 217.5 |
+
+- The three runs were about 20 minutes apart under different loads, so they are not strictly back to back. Head's 390 switch is not slower than base's in either head run, including the one under the heavier load.
+
+### C1 other checks (実測 at 45601a2)
+
+- **Build** (`$H/build/run-build.sh $W` → `$H/build/build-45601a2.json`):
+  - The entry chunk is **byte-identical to P's once the three hashed chunk names it imports are normalised**: `index-*`, `priceChart-*` and `MarketScreen-*` in the design-acceptance build, `cmp` after `sed`. MarketScreen's chunk is identical too.
+  - The harness's gzip -9 figure moves 131,076 → 131,079 bytes (npm run build 131.44 → 131.45 kB). Those 3 bytes are the new hash strings, not code.
+  - **Lazy priceChart chunk:** 42,801 → 44,160 raw (+1,359) and 18,071 → 18,546 gzip -9 (+475; the harness's figures). C1's code is in the lazy chunk only.
+- **vitest:**
+  - The five named files and the identity file: 6 files, 150 tests passed (127.7 s; load 7.60 → 9.87; `c1/vitest-targeted.log`).
+  - **Full:** `cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run`.
+    - **249 files, 4,054 tests: 4,053 passed, 1 failed** (351 s; load 3.07 → 6.25; `audit3/r3-chart/vitest-full-45601a2.log`).
+    - The failure is `tools/export-market-trends.test.mjs` 「writes raw and derived data with exact content hashes and binds the manifest reference」: `Test timed out in 20000ms`. It is not CHART's file.
+    - Re-run alone (`npx vitest run tools/export-market-trends.test.mjs`): **37/37 passed**, that test 14.1 s (load 4.87 → 3.57). The same timeout and the same re-run pass happened in CH-2 (`vitest-rerun-export-market-trends.log`).
+    - Counts: CH-4's 248 files / 4,007 tests plus the identity file and 47 tests (43 identity, 3 chartLabels.test.js, 1 priceChart.test.js).
+- **Lint** (`npm run lint`): 0 errors, 4 warnings (the base's four); load 6.70 → 7.43.
+- **Full static Playwright, CI-faithful, 4424:** `cd frontend && PATH=/opt/node22/bin:$PATH FONTCONFIG_FILE=…/ci-fonts/fonts.conf AUDIT_PORT=4424 npx playwright test -c audit3/r3-chart/pw-147.config.mjs`.
+  - **456 tests: 453 passed, 2 skipped, 1 failed** (26.2 min; load 3.02 → 8.82; `audit3/r3-chart/pw-full-45601a2.log`). No re-run was needed for a timeout.
+  - The 2 skips are track R's `test.fixme('R1: …')` and `test.fixme('R2: …')`. Every active brief-oracles assertion passed, ZZHB's green arrow included.
+  - **The failure is the known C4 one, as at P:** `brief-decision.spec.js:269` 「… stalls waits for the next pivot, its tiles 参考」 at 375×812, line 281, **3145** against `STOCK_CAP` **3124**.
+  - Re-run alone (`-g 'stalls waits for the next pivot'`): the same 3145 against 3124 (load 8.32 → 8.62). It is a layout height, not a timeout, and C1 does not touch it (C1 changes no output).
+  - So the order's 「0 failures」 does not hold, for the same reason as at P: the open C4 × `STOCK_CAP` decision.
+- **Ownership gate:** `OWNERSHIP OK (CHART): 15 paths`.
+- **Clean-up after the proofs:**
+  - Deleted P's `$H/snapshot/out/57fdcd6/` (302 MB), `$H/snapshot/trees/57fdcd6/`, `$H/probe/probe-57fdcd6{,-oracles}.json` with their `raw/` dirs, and `$H/build/npm-build-57fdcd6/`.
+  - The probes' `.sha256` stubs, `build-57fdcd6.json` and P's manifests in `audit3/r3-chart/` are kept.
+  - The head's (45601a2) outputs are kept. Nothing of 8849bf9, c61bf96, the base or another track was touched.
+
+### C1 未検証
+
+- **The idle-machine first-load timing and the period switch.** Every figure above is advisory; integration re-takes them.
+- **CI's Design Acceptance 1440 median.** It was last read at 779 ms on PR #145. Not read for this tree, because no PR or dispatch is allowed.
+- **The browser share of the remaining name search.** The browser was not profiled with instrumentation in this package; the name-search shares above are from node/jsdom.
+- **Real-data timing.** The first load reads the rebuild's SWKS only.
+
+### For the conductor (CH-5)
+
+- **C1 is output-identical and committed.** The 1440 first-load target of ≤ 200 ms is **not reached** in this session: 306 against base's 498 ms, interleaved and advisory.
+  - Per the order, the owner waiver stays and the figure goes to OD2.
+  - Further identity-preserving work on the name search is possible. For example, the names' `hits` against reserved boxes is still the largest label cost, and the spots' heap is the next.
+  - On the measured shares, though, even a zero-cost search leaves the chart task above 200 ms in this session's scale. Yielding is the remaining lever, and it is the conductor's decision.
+- **Open decisions carried from earlier packages, unchanged by C1:** C4 × `STOCK_CAP` (a, b or c), C5 (options 1–3), C3's HUM at 320 and the arrow key folding at 320.
+  - C1 changes no output, so none of them interacts with it.
+  - Any of them, once decided, moves the chart's outputs. That is integration's re-baseline, not a C1 re-proof, unless it touches priceChart.js or chartLabels.js. Then rerun `priceChart.identity.test.js` and `render.mjs ab`.
+
+### Integration requests (CH-5)
+
+- **None new.** C1 changes no output, so the H5 baselines integration re-takes are not shifted by it.
+- **The timings that count are integration's:** the first load and the period switch on an idle machine, and CI's Design Acceptance 1440 median.
+
+## Track CHART: closing summary (after CH-5)
+
+| Item | Package | State | Gate (rule 16) |
+|---|---|---|---|
+| C2: the 週足 week count from the plot to the 注記 | CH-1 | delivered | Expected diff: only 週足 views changed, no other label moved, none newly forced or missing; the forced count never rose. |
+| C3: the last contraction's 安値 price kept in the 320 legend | CH-2 | delivered; 12 of 13 rebuild stocks in every period (HUM hidden at 320 in 1y and 週足) | Expected diff: card text only (ZZRL, ZZRW at 320). |
+| C5: the readout's 対ピボット by the pivot-distance rule | CH-2 | **held** (implemented, then reverted: the card grew at 375); `readout_zero_rendered` stays 4 | none (not delivered) |
+| C4: the Setup Engine pivot's own day and the quiet days on the VCP card | CH-3 | delivered; **one cross-track failure** (`brief-decision.spec.js:269`, 3145 against `STOCK_CAP` 3124 at 375) | Probe byte-identical; dump and heights shift as stated. |
+| C1: the averages' name search made cheaper | CH-5 | delivered, output-identical; 1440 first load 498 → 306 ms (advisory), target ≤ 200 not reached | Probes, oracle probe, real-data render probes and counts all byte-identical to P. |
+
+- **Entry chunk** (rule 21; `npm run build`, gzip): STEP 0 130.28 kB → CH-1 130.38 → CH-2 130.60 → C4 131.44 → C1 131.45 kB.
+  - Net **+1.17 kB**, 2.55 kB under the 134.00 line.
+  - C1's +0.01 kB is the changed chunk-name hashes only: the entry is byte-identical to P's once they are normalised.
+  - pivotBar.js (C4, H1) is now in the entry chunk; R1 imports it too.
+  - The lazy priceChart chunk is 43,099 raw at STEP 0, 42,801 after C2, and 44,160 after C1.
+- **Integration requests, all open:**
+  1. `STOCK_CAP` in brief-decision.spec.js (track R's file): options (a) raise by 31px to 3155, (b) hold C4, (c) a new placement.
+  2. Vocabulary for CONTEXT.md: 「ピボットの日」 and 「静かな日」 (C4).
+  3. The H5 baselines integration re-takes shift by C2 (the probe and the oracle probe: 週足; the dump: ZZNV 週足; the 1440 週足 card +21.19), C3 (the oracle probe: ZZRL/ZZRW at 320; render counts) and C4 (the dump on 24 screens; stock heights). C1 shifts none.
+  4. Decisions for the conductor: C5 (options 1–3), C3's HUM at 320 and the arrow key at 320 (a rank swap in `legendItems` if the arrow's key should win), and yielding for the ≤ 200 ms target (OD2).
+- **Nothing was pushed.** No production action was taken. No file outside CHART's paths was edited (ownership gate OK on every commit).
