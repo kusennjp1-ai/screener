@@ -611,6 +611,9 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 - **Where it shows (as delivered in CH-3; changed by round-1 order 2, see "C4 placement in the base note"):** a
   `<p className="brief-note brief-vcp-pivotday">` directly under the 「Setup Engine：土台…」 note. Since 85971ae4 it ends that note as a
   span when the note is shown, and is its own note only when it is not.
+  - **Since ac76a7e7 (the conductor's round-2 decision):** with no base note, a day that is only 「ピボットの日 未確認」 is its own note
+    at 1024px and wider (`wide`) and is not shown below that. A dated day is shown at every width, and 未確認 inside the base note
+    stays at every width. See "Round-2 orders from the conductor".
   - 「（週足の型）」 is its own inline-block span, so a wrap at 320 moves it whole.
   - Nothing renders while `pending` is true: the detail that carries the date has not arrived, which is loading, not 未確認.
 
@@ -630,6 +633,8 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 **Corrections to the plan, as ordered:**
 - ZZHB's line names **9/22**, the Tuesday whose high is the pivot. 9/25 is the Friday label, and 9/28 is the crossing day of the verdict's 「9/28に上抜け・4営業日前」, which this line does not repeat.
 - Every stock whose screen pivot is a current Setup Engine pivot with no matching bar gains 「ピボットの日 未確認」, default fixture stocks included. The default rows carry no `se_pivot_date`. See the dump below.
+  - **Superseded below 1024px by ac76a7e7:** the default rows also have no base length or depth, so their 未確認 was a note of its own,
+    and below 1024px it is no longer shown. The default stocks now gain it only at 1440 (dump: 18 screens, all at 1440).
 
 ### Gate
 
@@ -661,6 +666,7 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
 - **Before:** at 503102f, CH-2's head, without C4. These equal STEP 0's §4 table exactly.
 - **After:** at 08bebfc7, the same source as HEAD.
 - Load: before not recorded; after 3.65 → 5.22.
+- **Round 2 (ac76a7e7) supersedes the rows of the stocks whose day is a lone 未確認 below 1024px** (ZZNV, ZZPM, ZZQF, ZZRL, ZZRW): at 320, 375 and 390 they are back to the before column exactly. Measured in "Round-2 orders from the conductor". ZZHB, ZZNR, ZZPG and ZZRD and every 1440 figure are unchanged.
 
 | Stock screen content | 320 | 375 | 390 |
 |---|---|---|---|
@@ -699,6 +705,8 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
   - ZZZF 2567 → 2597
 - **1440:** no page or content height changes.
 - **So the H5 dump baseline shifts on these 24 screens.**
+- **Round 2 (ac76a7e7):** the six 375 stock screens lose the line again and are back to 8849bf9's heights; only the 18 screens at 1440
+  still differ by it. See "Round-2 orders from the conductor".
 
 ### Tests and checks (実測)
 
@@ -850,6 +858,8 @@ Before = 503102f (no C4), C4 = 08bebfc (own note), A = 85971ae4:
 
 - Only ZZRD changes, the one oracle with a base note: −10 at 320 and 375, −30 at 390, −32.4 on the 1440 card. The other six oracle
   stocks are unchanged from 08bebfc in every view.
+- **Round 2 (ac76a7e7):** ZZNV's rows at 320/375/390 are back to the before column (3308/3044/2954, card 459.9/422.1/422.1); its 1440
+  card stays 467.1. ZZHB and ZZRD are unchanged.
 - Horizontal overflow 0 and no page errors in all 36 views; the chart card's height is unchanged.
 
 **Probes (rule 16):** `run-probe.sh … default` and `… oracles` at 85971ae4 (it also holds order 3's whitespace fix) → sha256
@@ -870,6 +880,8 @@ detail held by `detailGate` until the loading state is measured; load 7.10 → 7
 | ZZRD | 2364 | 2533 | +169 | **37** | the day's second line in the base note 20, 「静かな日 2/10日（SE）」 17 |
 | ZZNV | 2331 | 3075 | +744 | **31** | 「ピボットの日 未確認」 as its own note (30.4 + rounding) |
 
+- **Round 2 (ac76a7e7):** ZZNV now reads 2331 → 3044, +713, share **0** (no pivot-day line at 375); ZZRD is unchanged.
+
 - The share is the content with `.brief-vcp-pivotday` and `.brief-vcp-quiet` hidden, subtracted from the loaded content. The rest of each
   shift is the detail's own content, which arrived after loading before C4 too: the VCP measurement (ZZRD) and, on ZZNV, the detail's
   fundamentals and SEC card.
@@ -885,6 +897,11 @@ detail held by `detailGate` until the loading state is measured; load 7.10 → 7
   - the dump on the 24 screens above;
   - the oracle stock heights, as in the table;
   - 375 stock screens +30 or +31, ZZRD +47.
+- **Superseded by the conductor's round-2 decision (ac76a7e7):** below 1024px a stock with no base note shows no standalone
+  「ピボットの日 未確認」, so 'stalls' measures 3114 against 3124 and brief-decision.spec.js passes unedited (27/27). The request is now
+  only for showing that line below 1024px: it needs `STOCK_CAP` 3145 (+21) in R's file and is held until then (closing summary,
+  request 1). The H5 baseline bullets above are superseded there too: the dump shifts on the 18 screens at 1440 only, and the 375
+  stock screens are back to 8849bf9's heights. The round-1 and CH-3 wording below is kept for the record.
 - **Integration request: brief-decision.spec.js `STOCK_CAP` (track R's file), still open after round-1 order 2 (variant A: FAIL).**
   The numbers are in "C4 placement in the base note" above: 'stalls' 3145 at 375, so `STOCK_CAP` 3145 (+101 over step 0 with the 12px kept).
   The CH-3 wording below is kept for the record.
@@ -1365,29 +1382,161 @@ Logs and load files are in `audit3/r3-chart/r4/`. Nothing below is a timing.
 - **Every static spec file ran on the final frontend** (above). Nothing in the Playwright suite is left unrun in this round.
 - **The rebuild's VCP card heights under variant A**: the render probe records none; only the fixture shapes above were measured.
 
-## Track CHART: closing summary (after the conductor's round-1 orders)
+## Round-2 orders from the conductor (after cb97eaa8)
+
+The conductor re-measured the track at cb97eaa8. The full static Playwright run had 453 passed, 2 skipped and 1 failed: brief-decision.spec.js:269 ('stalls', 375×812), content 3145 against `STOCK_CAP` 3124.
+- Variant A cannot reach that state: ZZNV has no Setup Engine base note, so 「ピボットの日 未確認」 is its own 30.4px note there.
+- No added line fits: the state has 9–10px of slack, and the shortest added line is 17.4px.
+- **Decision:** below 1024px, a stock with no base note gets no standalone 未確認 line. Every dated line stays at every width, and so does 未確認 inside the base note.
+
+| Commit | Order | What |
+|---|---|---|
+| ac76a7e7 | 1–3 (major) | `fix(frontend)`: the one condition and the doc comment; StockVcpCard.test.jsx cases (a)–(d); the spec's ZZNV case. |
+| (this doc) | 4–5 | The acceptance below, the C4 section, the closing summary and the integration requests. |
+
+### What changed (ac76a7e7)
+
+- **StockVcpCard.jsx: one condition.** The standalone note renders only when `!engine && pivotDayText && (wide || pivotDay !== PIVOT_DAY_UNKNOWN)`.
+  - `wide` is StockView's prop, which BriefApp sets from `useMediaQuery('(min-width:1024px)')`.
+  - The component's doc comment says so.
+  - `git diff cb97eaa8 ac76a7e7 -- frontend/src/static/brief/StockVcpCard.jsx` is that line and the comment, nothing else.
+- **Unchanged:** the producers (`pivotDayNote`, `PIVOT_DAY_UNKNOWN`, `WEEKLY_PATTERN`, `quietDaysText`), the base-note span (dated or 未確認), the dated standalone note at every width, the standalone 未確認 note at 1024px and wider, the quiet days, and brief-chart.css.
+  - `se_pivot_date` is never printed, and nothing is guessed. Below 1024px a lone 未確認 shows nothing; it never shows a date or 0.
+  - The screen's pivot itself still shows in the card's 「ピボット」 tile with its source.
+- **StockVcpCard.test.jsx.** Every case goes through the producers.
+  - A new test covers the four ordered cases:
+    - (a) `wide` false, no base, no pivot bar: no `.brief-vcp-pivotday` element. Two rows: a VCP primary on certified bars, and a weekly pattern on uncertified bars. Each asserts `pivotDayNote` = `PIVOT_DAY_UNKNOWN` first.
+    - (b) the same rows with `wide`: the own note's text equals `PIVOT_DAY_UNKNOWN`;
+    - (c) `wide` false, no base, dated: the own note is still there and equals `pivotDayNote`;
+    - (d) `wide` false with a base note and no bar: 未確認 is still the base note's span, after `PIVOT_DAY_SEPARATOR`.
+  - It also checks that the quiet days do not depend on the width.
+  - The existing test 「keeps the quiet days when the day's volume ratio is unknown…」 rendered with no `wide` and expected the standalone 未確認. Its two renders now pass `wide`, so they test the 1024px-and-wider case they describe.
+- **brief-chart.spec.js: a new describe**, after the C4 loop.
+  - `git diff cb97eaa8 ac76a7e7` of the spec has 0 removed lines: one import (`money`) and the describe. The ZZHB, ZZNR and ZZRD cases are unedited.
+  - ZZNV is the default fixture's stock. Before the assertions, the test checks:
+    - `pivotDayNote` on its row and bars is `PIVOT_DAY_UNKNOWN`;
+    - the VCP card is not loading;
+    - the 「ピボット」 tile shows `money(view.pivot)`;
+    - `.brief-vcp-engine` count is 0.
+  - At 390 there are 0 `.brief-vcp-pivotday` elements. At 1440 `p.brief-vcp-pivotday` has the text `PIVOT_DAY_UNKNOWN`.
+- **Mutation checks (実測):** the old condition was put back in the working tree, then restored.
+  - The new vitest failed at (a): expected length 0, got 1.
+  - The spec's 390 case failed (Expected 0, Received 1), and its 1440 case passed.
+
+### Round-2 acceptance (実測 at ac76a7e7, CI-faithful, 4424; the 1-min load before → after in parentheses)
+
+Logs and load files are in `audit3/r3-chart/r5/`. Nothing below is a timing.
+
+**brief-decision.spec.js (track R's file, unedited: `git diff 45603f06 -- tests/static/brief-decision.spec.js` is empty)**
+- The whole file: **27 passed** (48.2 s; load 3.73 → 4.34). No re-run was needed.
+- The three capped states, recorded by the scratch copy `r4/decision-measure/` (27 passed, load 0.86 → 4.05; `r5/decision-heights-ac76a7e.jsonl`):
+
+| State (375×812) | Cap | Content: round 1 → now | Headroom now | VCP card | Standalone pivot day |
+|---|---|---|---|---|---|
+| a breakout 25 sessions on that stalls | `STOCK_CAP` 3124 | 3145 → **3114** | **+10** | 452.5 → 422.1 | 1 → 0 |
+| … that was pulled back to the pivot after a run | `STOCK_CAP` 3124 | 3031 → 3001 | +123 | 324.7 → 294.3 | 1 → 0 |
+| a failed breakout (ブレイク失敗) | `STOCK_LINE` 3388 | 3271 → 3240 | +148 | 452.5 → 422.1 | 1 → 0 |
+
+- All three are ZZNV-based states with no base note (`.brief-vcp-engine` count 0). The line was 30.4px on the VCP card and 30–31px of content.
+
+**Full static Playwright** (`npx playwright test -c audit3/r3-chart/pw-147.config.mjs`, all 17 spec files, one invocation; 20.0 min; load 0.82 → 3.91)
+- **456 passed, 2 skipped, 0 failed.** No re-run was needed.
+- 456 = the conductor's 454 expected plus the 2 new ZZNV cases in brief-chart.spec.js.
+- The 2 skips are brief-oracles.spec.js's `test.fixme('R1: …')` and `test.fixme('R2: …')`, the only skips in `tests/static`. Every active assertion passed, ZZHB's green arrow included.
+- The C4 block alone, before the commit: 6 passed (ZZHB, ZZNR, ZZRD at 390; ZZHB at 1440; ZZNV at 390 and 1440; load 0.31 → 1.07).
+
+**Probes (rule 16)**
+- `$H/probe/run-probe.sh <worktree> 4424`: 492 label views, 480 value views, 0 errors. sha256 `69ce3c5a…a326`, **`cmp`-identical to probe-ee3d76f.json** (load 3.67 → 2.05).
+- `… 4424 oracles`: 132 + 132 views, 0 errors. sha256 `172cd16a…60f2`, **`cmp`-identical to probe-ee3d76f-oracles.json** (load 1.59 → 1.55).
+- The identical new JSON files and their raw directories were deleted; `probe-ac76a7e{,-oracles}.json.sha256` are kept.
+
+**The dump** (`$H/dump/run-dump.sh <worktree> 4424` → `dump-ac76a7e.json`, sha256 `eeeb11a2…3a03`; 42 screens, 0 errors; load 1.11 → 1.35)
+- **Against dump-ee3d76f** (`dump-compare.py` → `r5/dump-compare-ee3d76f-ac76a7e.txt`): **36 identical, 6 differ.**
+  - The six are the 375 stock screens: ZZAR, ZZHW, ZZNV, ZZNV 週足, ZZSD-broken and ZZZF.
+  - Each loses 「ピボットの日 未確認」 and the blank innerText lines around it, and nothing else in its text.
+  - Content: ZZAR 2518 → 2488, ZZHW 2621 → 2591, ZZNV 3075 → 3044, ZZNV 週足 3075 → 3044, ZZSD-broken 2646 → 2615, ZZZF 2597 → 2567.
+  - Every 1440 screen is identical, 未確認 still there.
+- **The 375 screens that return to their pre-C4 text: those same six.** Against dump-8849bf9 (`r5/dump-compare-8849bf9-ac76a7e.txt`, `r5/dump-boxes-8849bf9-ac76a7e.txt`):
+  - Their page and content heights equal 8849bf9's exactly.
+  - Their text differs only by the other items:
+    - C5: 「対ピボットx%」 becomes 「対」 + 「ピボットx%」;
+    - C2, on ZZNV 週足 only: the in-plot week count becomes the 注記 sentence, and the 注記 count goes from 6 to 7.
+  - Their boxes differ only by:
+    - C5's readout items (the item 12px narrower, one sr-only box, 「高値から」 12px left);
+    - C3's `span.lg-form-long` in the legend (f4b1e404; five of the six, not ZZSD-broken);
+    - on ZZNV 週足, C2's 注記 list items.
+  - No VCP card box differs from 8849bf9's.
+- The 18 screens at 1440 still differ from 8849bf9 by 「ピボットの日 未確認」 (and C2 on ZZNV 週足), as before. The 18 identical screens are unchanged.
+
+**Oracle stock heights** (scratch `measure/c4-heights.spec.js`, oracles, reduced motion, settled → `r5/c4-heights-ac76a7e/`; 36 passed; load 2.80 → 1.72). Before = 503102f (no C4), A = 85971ae4, now = ac76a7e7:
+- **Back to pre-C4 exactly at 320, 375 and 390, in both content and VCP card:** the five oracle stocks whose day is a lone 未確認 (ZZNV, ZZPM, ZZQF, ZZRL, ZZRW). At 375:
+  - ZZNV 3044 → 3075 → **3044**, card 422.1 → 452.5 → **422.1**;
+  - ZZPM and ZZRW 2483 → 2513 → **2483**;
+  - ZZQF 2985 → 3016 → **2985**;
+  - ZZRL 2509 → 2540 → **2509**.
+- **Unchanged from A:**
+  - ZZHB, ZZNR and ZZPG, whose own note is dated, keep it at every width;
+  - ZZRD keeps 未確認 in its base note at every width.
+- **1440:** every content height (1832) and every VCP card is unchanged from A. The standalone 未確認 still shows on ZZNV, ZZPM, ZZQF, ZZRL and ZZRW.
+- The chart card height is unchanged in all 36 views; horizontal overflow 0 and no page errors in all 36.
+
+**The layout shift when the detail arrives** (scratch `measure/c4-shift.spec.js`, 375×812 → `r5/c4-shift-ac76a7e/`; 2 passed; load 1.34 → 1.13)
+- ZZNV: loading 2331 → loaded **3044**, a shift of +713, the C4 lines' share **0** (it was +744 with a share of 31).
+- ZZRD: unchanged (2364 → 2533, +169, share 37: the day's second line in its base note and the quiet days).
+
+**The rebuild (derived, not re-rendered).** `r5/c4-lone-unknown.py` over the ee3d76f render probe (`out/ee3d76f/render/probe-reduce.json`, 320/390/1440) and CH-3's producer read finds **0 views** where 「ピボットの日 未確認」 was a note of its own.
+- The 6 uncertified rows' 未確認 sits in their base notes: 24 views at 320 and 24 at 390.
+- The 60 own-note views are all dated.
+- The decision changes only that case, so the rebuild's 352 of 352 views keep their rendered line. This is derived from the earlier render, which was not re-run at ac76a7e7.
+
+**Other checks**
+- **Full vitest** (`cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run`):
+  - **249 files, 4063 passed, 0 failed** (266 s; load 1.04 → 5.34). It is 4062 + the 1 new StockVcpCard test.
+  - No timeouts this time.
+  - Before the commit: StockVcpCard.test.jsx + StockVcpCard.oracles.test.jsx, 25 passed.
+- **`npm run lint`:** **0 errors, 4 warnings**, the base's four (App.jsx, StockDetails.jsx, MetricInfoPopover.jsx, StaticMarketContext.jsx). eslint on the three touched files before the commit: clean.
+- **Build** (`$H/build/run-build.sh <worktree>` → `build-ac76a7e.json`; an archive of HEAD):
+  - `npm run build` entry **131.54 kB gzip**: +0.01 against 131.53, +1.26 over STEP 0's 130.28, and 2.46 under the 134.00 line.
+  - The design-acceptance entry is 375,465 raw / 131,170 gzip -9 (vite 131.35 kB), against 375,452 / 131,166.
+  - The lazy priceChart chunk is 44,160 raw bytes, unchanged.
+  - The superseded `build/npm-build-ee3d76f` was deleted.
+- **Ownership gate** before each commit: `OWNERSHIP OK (CHART): 15 paths`. Every commit message ends with exactly the two trailer lines. Nothing was pushed.
+
+### Round-2 orders: 未検証
+
+- **Timings.** None were taken; the change removes one line of DOM and adds no work.
+- **The rebuild render at ac76a7e7.** The rebuild statement above is derived from the ee3d76f render.
+- **A real publication.** Whether a real published detail carries `se_pivot_date` and `se_quiet_days_10d` is still read only after a release, as before.
+
+## Track CHART: closing summary (after the conductor's round-2 orders)
 
 | Item | Package | State | Gate (rule 16) |
 |---|---|---|---|
 | C2: the 週足 week count from the plot to the 注記 | CH-1 | delivered | Expected diff: only 週足 views changed, no other label moved, none newly forced or missing; the forced count never rose. |
 | C3: the last contraction's 安値 price kept in the 320 legend | CH-2 | delivered, **accepted as delivered** (round 1); 12 of 13 rebuild stocks in every period (HUM hidden at 320 in 1y and 週足, as at base) | Expected diff: card text only (ZZRL, ZZRW at 320). |
 | C5: the readout's 対ピボット by the pivot-distance rule | CH-2 held; **delivered in round 1 (option 1)**, ee3d76f2 | delivered; `readout_zero_rendered` 4 → 0; PCRX, PFIS, TECH, LNTH 16/16 at 375 and 16/16 at 390 | Expected diff: `html` only — the label under 1024px (728 default, 200 oracle views) and ZZPG's 「+0.0%」→「+0.1%未満」 (32 views); every SVG field and card height identical. |
-| C4: the Setup Engine pivot's own day and the quiet days on the VCP card | CH-3; placement re-done in round 1 (variant A, 85971ae4) | delivered; **one cross-track failure stays** (`brief-decision.spec.js:269`, 3145 against `STOCK_CAP` 3124 at 375: variant A cannot reach a state with no base note) | Probe byte-identical; dump byte-identical to CH-3's; ZZRD's heights fall (−10/−10/−30, card −32.4 at 1440). |
+| C4: the Setup Engine pivot's own day and the quiet days on the VCP card | CH-3; placement re-done in round 1 (variant A, 85971ae4); **round 2: no lone 未確認 below 1024px** (ac76a7e7) | delivered; **the suite is green**: 'stalls' 3114 against `STOCK_CAP` 3124 at 375, brief-decision.spec.js 27/27, full static 456 passed / 2 skipped / 0 failed. Below 1024px a stock with no base note and no pivot bar shows no pivot-day line (held for `STOCK_CAP` 3145, request 1) | Probes byte-identical; round 2's dump differs from round 1's only on the six 375 stock screens (the line removed, heights back to 8849bf9's); ZZRD's heights fall in round 1 (−10/−10/−30, card −32.4 at 1440). |
 | C1: the averages' name search made cheaper | CH-5 | delivered, output-identical, **accepted** (round 1); 1440 first load 498 → 306 ms (advisory), target ≤ 200 not reached, no yielding, waiver stays (OD2) | Probes, oracle probe, real-data render probes and counts all byte-identical to P. |
 
 - **Entry chunk** (rule 21; `npm run build`, gzip): STEP 0 130.28 kB → CH-1 130.38 → CH-2 130.60 → C4 131.44 → C1 131.45 → round 1 (ee3d76f)
-  **131.53 kB**.
-  - Net **+1.25 kB**, 2.47 kB under the 134.00 line. Round 1 adds +0.08 kB: C5's `pivotDistanceText` call and label, and C4's span.
-  - The design-acceptance build's entry: 375,167 → 375,452 raw bytes, gzip -9 131,079 → 131,166 (vite 131.25 → 131.34 kB).
+  131.53 → round 2 (ac76a7e) **131.54 kB**.
+  - Net **+1.26 kB**, 2.46 kB under the 134.00 line. Round 1 adds +0.08 kB: C5's `pivotDistanceText` call and label, and C4's span.
+    Round 2 adds +0.01 kB: the width test.
+  - The design-acceptance build's entry: 375,167 → 375,452 → 375,465 raw bytes, gzip -9 131,079 → 131,166 → 131,170 (vite 131.25 →
+    131.34 → 131.35 kB).
   - The lazy priceChart chunk is byte-identical in size to C1's (44,160 raw); its gzip differs by 1 byte (chunk-name hashes).
   - C5's code is the readout (chartReadout.js, StockChartCard.jsx), which renders before the lazy chunk, so it stays in the entry chunk.
 - **Integration requests:**
-  1. **`STOCK_CAP` in brief-decision.spec.js (track R's file), open:** 'stalls' measures 3145 at 375. Passing it needs `STOCK_CAP` = 3145
-     (3056 + 101 − 12), i.e. +21px of allowance. The other capped states have +93 ('pulled back') and +117 (ブレイク失敗 against
-     `STOCK_LINE`). The alternative is holding C4 (`git revert 85971ae4 ff4349b2 08bebfc7`).
+  1. **Showing 「ピボットの日 未確認」 on stocks with no base note below 1024px needs `STOCK_CAP` 3145 (+21) in brief-decision.spec.js
+     (track R's file); it is held until then.** Since ac76a7e7 that line is not shown below 1024px, so the suite passes unedited:
+     'stalls' 3114 against 3124 (+10), 'pulled back' 3001 (+123), ブレイク失敗 3240 against `STOCK_LINE` 3388 (+148). With the line,
+     'stalls' measured 3145 (round 1): `STOCK_CAP` = 3056 + 101 − 12 = 3145. Restoring it is the one condition in StockVcpCard.jsx
+     (drop `(wide || pivotDay !== PIVOT_DAY_UNKNOWN)`) plus the tests that pin the decision (StockVcpCard.test.jsx's below-1024px case
+     and brief-chart.spec.js's ZZNV describe).
   2. Vocabulary for CONTEXT.md: 「ピボットの日」 and 「静かな日」 (C4).
   3. The H5 baselines integration re-takes shift by C2 (probes: 週足; dump: ZZNV 週足; the 1440 週足 card +21.19), C3 (oracle probe:
-     ZZRL/ZZRW at 320; render counts), C4 (dump on 24 screens; stock heights) and **C5 (probes: the readout label under 1024px in every
+     ZZRL/ZZRW at 320; render counts), C4 (dump on the 18 screens at 1440 only; the 375 stock screens are back to 8849bf9's heights;
+     oracle stock heights: ZZHB, ZZNR, ZZPG and ZZRD below 1024px, and the VCP card at 1440) and **C5 (probes: the readout label under 1024px in every
      view with the item, ZZPG's text; the dump's six 375 stock screens: the label split and the 高値から item 12px left, heights equal;
      render counts: `readout_zero_rendered` 0)**.
      C1 shifts none.
