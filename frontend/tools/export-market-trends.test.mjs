@@ -5,7 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
-import { buildMarketTrends,exportMarketTrends,indexClosesFrom,indexState,verifyLongHistorySource,selectLongHistorySource,selectRuntimeLongHistorySource,marketIndexLogLines,INDEX_CLOSES_MAX } from './export-market-trends.mjs';
+import { buildMarketTrends,buildMarketTrendsWithStalling,exportMarketTrends,indexClosesFrom,indexState,verifyLongHistorySource,selectLongHistorySource,selectRuntimeLongHistorySource,marketIndexLogLines,stallingDays,INDEX_CLOSES_MAX,EMIT_R3_MARKET_FIELDS,STALLING_METHOD,STALLING_MAX_GAIN,STALLING_NEAR_HIGH,STALLING_WINDOW_SESSIONS } from './export-market-trends.mjs';
 import { INDEX_CLOSES_MAX as CONTRACT_CLOSES_MAX, indexCloses as contractCloses } from '../src/test/fixtures/publishedContracts.js';
 import { indexSummary } from '../src/static/reference/indexSummary.js';
 import { FOLLOW_THROUGH_METHOD } from '../src/static/followThroughDay.js';
@@ -233,7 +233,9 @@ describe('market trend source projection',()=>{
    const replayEntry=JSON.parse(stdout.at(-1));
    expect(replayEntry).toEqual(entry);
    const ref=entry.assets.market_trends;
-   expect(stdout.slice(0,-1)).toEqual(marketIndexLogLines(JSON.parse(readFileSync(resolve(replay,ref.path),'utf8'))));
+   // Round 3 M8d: with emission off, the stalling fields come from the same build, not from the written series.
+   const {stalling}=buildMarketTrendsWithStalling(source(),{asOfDate});
+   expect(stdout.slice(0,-1)).toEqual(marketIndexLogLines(JSON.parse(readFileSync(resolve(replay,ref.path),'utf8')),{stalling}));
    expect(readFileSync(resolve(replay,ref.path))).toEqual(readFileSync(resolve(normal,ref.path)));
    expect(readFileSync(resolve(replay,ref.source_path))).toEqual(readFileSync(resolve(normal,ref.source_path)));
   }finally{rmSync(scratch,{recursive:true,force:true});}
@@ -252,8 +254,8 @@ describe('market trend source projection',()=>{
 });
 // Round 3 M0: one CI log line per index, read from the asset's own objects (docs/round3/market.md).
 describe('market index log lines (M0)',()=>{
- const LINE=/^Market indices (\S+): (\S+) last=(\S+) historical=(true|false) dd=(.+?) ddDates=(.+?) ft=(.+?) day=(\S+) ftd=(\S+) decline=(\S+)$/;
- const parse=line=>{const m=LINE.exec(line);expect(m,line).not.toBeNull();const [,asOf,symbol,last,historical,dd,ddDates,ft,day,ftd,decline]=m;return {asOf,symbol,last,historical,dd,ddDates,ft,day,ftd,decline};};
+ const LINE=/^Market indices (\S+): (\S+) last=(\S+) historical=(true|false) dd=(.+?) ddDates=(.+?) ft=(.+?) day=(\S+) ftd=(\S+) decline=(\S+) stalling=(.+?) stallingDates=(\S+)$/;
+ const parse=line=>{const m=LINE.exec(line);expect(m,line).not.toBeNull();const [,asOf,symbol,last,historical,dd,ddDates,ft,day,ftd,decline,stalling,stallingDates]=m;return {asOf,symbol,last,historical,dd,ddDates,ft,day,ftd,decline,stalling,stallingDates};};
  const activeDates=index=>`[${index.events.filter(event=>event.state==='active').map(event=>event.date).join(',')}]`;
  const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
  it('(a) prints a current index from its last point, dated count, active distribution dates and follow-through',()=>{
@@ -289,14 +291,15 @@ describe('market index log lines (M0)',()=>{
   const input=source();input.indices[1].bars[100].volume=null;
   const out=buildMarketTrends(input,{asOfDate:input.as_of_date}),lines=marketIndexLogLines(out),[sp,nasdaq]=lines.map(parse),index=out.indices[1];
   expect(index.available).toBe(false);
-  expect(nasdaq).toEqual({asOf:'2026-10-23',symbol:'^IXIC',last:'-',historical:'false',dd:`unavailable(${index.reason})`,ddDates:'-',ft:`unavailable(${index.followThrough.reason})`,day:'-',ftd:'-',decline:'-'});
+  // Round 3 M8d: no stalling side input here, so stalling is unavailable(-) on both lines, never 0.
+  expect(nasdaq).toEqual({asOf:'2026-10-23',symbol:'^IXIC',last:'-',historical:'false',dd:`unavailable(${index.reason})`,ddDates:'-',ft:`unavailable(${index.followThrough.reason})`,day:'-',ftd:'-',decline:'-',stalling:'unavailable(-)',stallingDates:'-'});
   expect(index.reason).toMatch(/ゼロ件とは扱いません/);
   expect(lines[1]).not.toMatch(/ dd=\d| ft=\d| ddDates=\[/);
   expect(sp).toMatchObject({last:'2026-10-23',dd:'5',ft:'confirmed'});
   // No source of the date: both indices print their reason.
   const missing=buildMarketTrends(source(),{asOfDate:'2026-10-26'});
   marketIndexLogLines(missing).map(parse).forEach((field,i)=>{
-   expect(field).toEqual({asOf:'2026-10-26',symbol:missing.indices[i].symbol,last:'-',historical:'false',dd:`unavailable(${missing.indices[i].reason})`,ddDates:'-',ft:`unavailable(${missing.indices[i].followThrough.reason})`,day:'-',ftd:'-',decline:'-'});
+   expect(field).toEqual({asOf:'2026-10-26',symbol:missing.indices[i].symbol,last:'-',historical:'false',dd:`unavailable(${missing.indices[i].reason})`,ddDates:'-',ft:`unavailable(${missing.indices[i].followThrough.reason})`,day:'-',ftd:'-',decline:'-',stalling:'unavailable(-)',stallingDates:'-'});
   });
   // A collector reason (a Python str(error)) stays on one line and cannot start a workflow command.
   const failed=source();failed.indices[1]={symbol:'^IXIC',bars:[],unavailable_reason:'HTTP 404\n::error::Not Found'};
@@ -326,7 +329,8 @@ describe('market index log lines (M0)',()=>{
   const root=mkdtempSync(resolve(tmpdir(),'market-trends-log-')),log=vi.spyOn(console,'log').mockImplementation(()=>{});
   try{
    const bytes=readFileSync(resolve('data/market-trend-source-2026-10-23.json')),built=buildMarketTrends(JSON.parse(bytes),{asOfDate:'2026-10-23',sourceSha256:sha(bytes)});
-   const body=JSON.stringify(built),lines=marketIndexLogLines(built);
+   const body=JSON.stringify(built),lines=marketIndexLogLines(built,{stalling:buildMarketTrendsWithStalling(JSON.parse(bytes),{asOfDate:'2026-10-23'}).stalling});
+   expect(lines.every(line=>/ stalling=0 stallingDates=\[\]$/.test(line))).toBe(true);
    expect(JSON.stringify(built)).toBe(body);
    // Before the long-history capture was retrieved (as above), so the written series is buildMarketTrends' payload alone.
    const entry={},result=await exportMarketTrends({root,entry,asOfDate:'2026-10-23',evaluatedAt:Date.parse('2026-10-26T22:00:00Z')});
@@ -336,5 +340,134 @@ describe('market index log lines (M0)',()=>{
    expect(result).toEqual(built);
    expect(log.mock.calls).toEqual(lines.map(line=>[line]));
   }finally{log.mockRestore();rmSync(root,{recursive:true,force:true});}
+ });
+});
+// Round 3 M8d: stalling days beside the distribution count, written only with EMIT_R3_MARKET_FIELDS (docs/round3/market.md).
+describe('stalling days (M8d)',()=>{
+ const sha=bytes=>createHash('sha256').update(bytes).digest('hex');
+ const dayOf=k=>new Date(Date.UTC(2026,0,1)+k*86400000).toISOString().slice(0,10);
+ // Rising closes that sit at the top of each day's range (close = high), so no baseline session can stall.
+ const rising=n=>Array.from({length:n},(_,k)=>{const close=100*1.005**k;return {date:dayOf(k),open:close/1.004,high:close,low:close/1.004*.998,close,volume:1000+k};});
+ // Session `at`: up `gain` on a higher volume, in the lower part of its range (close − low = 1/6 of the range).
+ const stall=(bars,at,{gain=.001,volume=100,lowFactor=.999,highFactor=1.005}={})=>{
+  const close=bars[at-1].close*(1+gain);
+  bars[at]={date:bars[at].date,open:close,high:close*highFactor,low:close*lowFactor,close,volume:bars[at-1].volume+volume};
+  return bars;
+ };
+ const last=bars=>bars.at(-1).date;
+ it('mirrors the backend constants and is off',()=>{
+  expect(EMIT_R3_MARKET_FIELDS).toBe(false);
+  expect([STALLING_MAX_GAIN,STALLING_NEAR_HIGH,STALLING_WINDOW_SESSIONS]).toEqual([0.002,0.03,25]);
+  const backend=readFileSync(resolve('../backend/app/services/market_regime.py'),'utf8');
+  expect(backend).toMatch(/^STALL_MAX_GAIN = 0\.002\b/m);expect(backend).toMatch(/^STALL_NEAR_HIGH_PCT = 0\.03\b/m);expect(backend).toMatch(/^DIST_WINDOW = 25\b/m);
+ });
+ it('finds a session that meets every condition',()=>{
+  const bars=stall(rising(60),59);
+  expect(stallingDays({bars,asOfDate:last(bars)})).toEqual({available:true,method:STALLING_METHOD,dates:[last(bars)]});
+  expect(stallingDays({bars:rising(60),asOfDate:last(bars)})).toEqual({available:true,method:STALLING_METHOD,dates:[]});
+ });
+ it.each([
+  ['an unchanged close',{gain:0}],
+  ['a down close',{gain:-.001}],
+  ['an up close above +0.2%',{gain:.0021}],
+  ['volume equal to the previous session',{volume:0}],
+  ['lower volume',{volume:-1}],
+  ['a close in the upper half',{lowFactor:.995,highFactor:1.001}],
+ ])('rejects %s alone',(_,change)=>{
+  const bars=stall(rising(60),59,change);
+  expect(stallingDays({bars,asOfDate:last(bars)})).toEqual({available:true,method:STALLING_METHOD,dates:[]});
+ });
+ it('keeps +0.19% and a close at the range midpoint, and needs a non-zero range',()=>{
+  for(const change of [{gain:.0019},{lowFactor:.997,highFactor:1.003}]){
+   const bars=stall(rising(60),59,change);
+   expect(stallingDays({bars,asOfDate:last(bars)}).dates).toEqual([last(bars)]);
+  }
+  const flat=stall(rising(60),59);flat[59]={...flat[59],open:flat[59].close,high:flat[59].close,low:flat[59].close};
+  expect(stallingDays({bars:flat,asOfDate:last(flat)}).dates).toEqual([]);
+ });
+ it('needs a close within 3% of the 25-session closing high',()=>{
+  for(const [spike,dates] of [[1.029,1],[1.031,0]]){
+   const bars=stall(rising(60),59),close=bars[59].close;
+   // One earlier close inside the 25-session window, `spike` above the stalling close.
+   bars[40]={...bars[40],open:close*spike,high:close*spike,low:close*spike*.99,close:close*spike};
+   expect(stallingDays({bars,asOfDate:last(bars)}).dates).toHaveLength(dates);
+   // Outside the window (26 sessions earlier) the same close does not count.
+   const outside=stall(rising(60),59);outside[33]={...bars[40],date:outside[33].date};
+   expect(stallingDays({bars:outside,asOfDate:last(outside)}).dates).toEqual([last(outside)]);
+  }
+ });
+ it('expires after 25 sessions, as a distribution day does',()=>{
+  const bars=stall(rising(90),50);
+  expect(stallingDays({bars,asOfDate:bars[50].date}).dates).toEqual([bars[50].date]);
+  expect(stallingDays({bars,asOfDate:bars[50+24].date}).dates).toEqual([bars[50].date]);
+  expect(stallingDays({bars,asOfDate:bars[50+25].date}).dates).toEqual([]);
+ });
+ it('is unavailable on bad, missing or short OHLCV, never an empty list',()=>{
+  const ok=rising(60),date=last(ok);
+  const cases={
+   short:{bars:rising(48),asOfDate:rising(48).at(-1).date},
+   empty:{bars:[],asOfDate:date},none:{asOfDate:date},badDate:{bars:ok,asOfDate:'2026-02-30'},
+   noBarOnDate:{bars:ok,asOfDate:dayOf(60)},
+   nullBar:{bars:[...ok.slice(0,30),null,...ok.slice(30)],asOfDate:date},
+   missingVolume:{bars:ok.map((bar,i)=>i===20?{...bar,volume:null}:bar),asOfDate:date},
+   zeroVolume:{bars:ok.map((bar,i)=>i===20?{...bar,volume:0}:bar),asOfDate:date},
+   nanClose:{bars:ok.map((bar,i)=>i===20?{...bar,close:NaN}:bar),asOfDate:date},
+   highBelowClose:{bars:ok.map((bar,i)=>i===20?{...bar,high:bar.close*.99}:bar),asOfDate:date},
+   duplicate:{bars:[...ok.slice(0,21),ok[20],...ok.slice(21)],asOfDate:date},
+  };
+  for(const [name,input] of Object.entries(cases)){
+   const value=stallingDays(input);
+   expect(value,name).toEqual({available:false,method:STALLING_METHOD,reason:expect.any(String)});
+   expect(value.reason.length,name).toBeGreaterThan(0);
+  }
+  expect(stallingDays({bars:rising(49),asOfDate:rising(49).at(-1).date}).available).toBe(true);
+  expect(stallingDays()).toMatchObject({available:false});
+ });
+ it('finds the real ^GSPC stalling day of 2026-07-27 on the committed bars',()=>{
+  const [sp]=source().indices;
+  expect(stallingDays({bars:sp.bars,asOfDate:'2026-07-27'}).dates).toEqual(['2026-07-27']);
+  expect(stallingDays({bars:sp.bars,asOfDate:'2026-10-23'}).dates).toEqual([]);
+ });
+ it('leaves the payload bytes of the base commit unchanged while emission is off',()=>{
+  const bytes=readFileSync(resolve('data/market-trend-source-2026-10-23.json'));
+  // sha256 of JSON.stringify(buildMarketTrends(…)) at 45603f06, taken before stalling existed (docs/round3/market.md).
+  const built=buildMarketTrends(JSON.parse(bytes),{asOfDate:'2026-10-23',sourceSha256:sha(bytes)});
+  expect(sha(JSON.stringify(built))).toBe('ed029467dc598143690d59bf3296e9015a5ac6025bb1acbe7886ef59932e2df6');
+  const late=source();late.indices[0].bars.pop();
+  expect(sha(JSON.stringify(buildMarketTrends(late,{asOfDate:'2026-10-23'})))).toBe('242bbf6fbb59a38eede73dc72acbbc9c0a473581d4e2a4ee57f8ab0d86ad6a29');
+  for(const index of built.indices)expect('stalling' in index).toBe(false);
+  const on=buildMarketTrends(JSON.parse(bytes),{asOfDate:'2026-10-23',sourceSha256:sha(bytes),emitR3MarketFields:true});
+  expect(JSON.stringify({...on,indices:on.indices.map(({stalling,...index})=>index)})).toBe(JSON.stringify(built));
+ });
+ it('writes the shape with emission on and never mixes stalling days into the distribution count',()=>{
+  // The committed bars up to 2026-07-27: the ^GSPC stalling day is the last session.
+  const date='2026-07-27',input=source();input.as_of_date=date;for(const index of input.indices)index.bars=index.bars.filter(bar=>bar.date<=date);
+  const off=buildMarketTrendsWithStalling(structuredClone(input),{asOfDate:date}),on=buildMarketTrendsWithStalling(structuredClone(input),{asOfDate:date,emitR3MarketFields:true});
+  const [sp,nasdaq]=on.payload.indices;
+  expect(sp.stalling).toEqual({available:true,method:STALLING_METHOD,dates:[date]});
+  expect(nasdaq.stalling).toEqual({available:true,method:STALLING_METHOD,dates:[]});
+  expect(on.stalling).toEqual(off.stalling);expect(on.stalling['^GSPC']).toBe(sp.stalling);
+  for(const [i,index] of on.payload.indices.entries()){
+   const plain=off.payload.indices[i];
+   for(const key of ['points','events','latest','lastObserved','followThrough','closes','state'])expect(index[key],key).toEqual(plain[key]);
+  }
+  expect(sp.events.some(event=>event.date===date)).toBe(false);
+  expect(sp.points.at(-1)).toMatchObject({date,distribution:false});
+  // Written or not, the log line is the same.
+  expect(marketIndexLogLines(on.payload)).toEqual(marketIndexLogLines(off.payload,{stalling:off.stalling}));
+  expect(marketIndexLogLines(on.payload)[0]).toMatch(new RegExp(` stalling=1 stallingDates=\\[${date}\\]$`));
+ });
+ it('carries the index\'s own reason when the index is unavailable, and a historical index\'s own last date',()=>{
+  const broken=source();broken.indices[1].bars[100].volume=null;
+  const out=buildMarketTrends(broken,{asOfDate:broken.as_of_date,emitR3MarketFields:true});
+  expect(out.indices[1].stalling).toEqual({available:false,method:STALLING_METHOD,reason:out.indices[1].reason});
+  expect(out.indices[1].reason).toMatch(/ゼロ件とは扱いません/);
+  const missing=buildMarketTrends(source(),{asOfDate:'2026-10-26',emitR3MarketFields:true});
+  for(const index of missing.indices)expect(index.stalling).toEqual({available:false,method:STALLING_METHOD,reason:index.reason});
+  const lines=marketIndexLogLines(missing);
+  for(const [i,line] of lines.entries())expect(line.endsWith(` stalling=unavailable(${missing.indices[i].reason}) stallingDates=-`)).toBe(true);
+  const late=source();late.indices[0].bars=late.indices[0].bars.filter(bar=>bar.date<='2026-07-27');
+  const [sp]=buildMarketTrends(late,{asOfDate:late.as_of_date,emitR3MarketFields:true}).indices;
+  expect(sp).toMatchObject({historical:true,stalling:{available:true,method:STALLING_METHOD,dates:['2026-07-27']}});
  });
 });
