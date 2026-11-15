@@ -13,7 +13,9 @@ import { followThroughDay } from '../followThroughDay';
 import { exposureRuleText } from '../reference/marketTabStudy.js';
 import { marketCardView, num, RULE_TEXT, signedPercent } from './marketTabModel';
 import { marketTabParts } from './marketTabGroups';
-import { followThroughView } from './briefEnvironment';
+import { followThroughView, BREAKOUT_HOLD_NAME } from './briefEnvironment';
+/** The breakout row's name inside a pattern (its （） are literal). */
+const BREAKOUT_PATTERN = BREAKOUT_HOLD_NAME.replace(/[（）]/g, '\\$&');
 import { followThroughDetail } from '../reference/marketTabStudy.js';
 import { indexState } from '../../../tools/export-market-trends.mjs';
 
@@ -51,7 +53,7 @@ describe('brief market card: market tab', () => {
     expect(tile('TT達成数')).toHaveTextContent(/^TT達成数30銘柄観測200中30\+5 1か月比⌄$/);
     expect(tile('200日線より上')).toHaveTextContent(/^200日線より上45\.0%\+5\.0pt 1か月比⌄$/);
     expect(tile('RS推計90以上のTT達成（独自）')).toHaveTextContent('8銘柄−2 1か月比');
-    expect(tile('ブレイクアウト成功率')).toHaveTextContent('75%8件で判定');
+    expect(tile(BREAKOUT_HOLD_NAME)).toHaveTextContent('75%8件で判定');
     expect(tile('リーダーの健全度')).toHaveTextContent('70%20営業日前のTT達成30銘柄が対象');
     expect(tile('52週の新高値・新安値')).toHaveTextContent('新高値40新安値12');
     const [spx, ndx] = tile('フォロースルーデー（独自判定）').querySelectorAll('.brief-ftd-row');
@@ -111,14 +113,14 @@ describe('brief market card: market tab', () => {
     // series names no method, so its check has no tag. The rules and their thresholds are unchanged.
     expect(signals().querySelector('b')).toHaveTextContent(/^▲ 注意 1件・参考 3件（独自判定）$/);
     expect(signals()).toHaveClass('is-warn');
-    expect(within(signals()).getAllByRole('listitem').map(li => li.textContent)).toEqual(['▲S&Pの分配日が25日間で7日', '○新安値（30）が新高値（10）を上回る〔参考〕', '○ステージ4（40%）がステージ2（20%）を上回る〔参考〕', '○ブレイクアウトの成功率が30%に低下〔参考〕']);
+    expect(within(signals()).getAllByRole('listitem').map(li => li.textContent)).toEqual(['▲S&Pの分配日が25日間で7日', '○新安値（30）が新高値（10）を上回る〔参考〕', '○ステージ4（40%）がステージ2（20%）を上回る〔参考〕', `○${BREAKOUT_HOLD_NAME}が30%に低下〔参考〕`]);
     expect(within(signals()).getAllByRole('listitem').map(li => li.className)).toEqual(['', 'is-reference', 'is-reference', 'is-reference']);
     // That the signs never move the guide is said once, in the guide's own disclosure (MK6).
     expect(signals()).not.toHaveTextContent('目安');
     expect(tile('分配日（25日）')).toHaveTextContent(/^▲注意分配日（25日）S&P7日▲注意：7日以上NAS4日⌄$/);
     expect(tile('52週の新高値・新安値')).toHaveTextContent(/^○参考52週の新高値・新安値新高値10新安値30○参考：新高値より多い/);
     expect(tile('52週の新高値・新安値')).not.toHaveClass('is-warn');
-    expect(tile('ブレイクアウト成功率')).toHaveTextContent(/^○参考ブレイクアウト成功率30%10件で判定.*参考：40%未満/);
+    expect(tile(BREAKOUT_HOLD_NAME)).toHaveTextContent(new RegExp(`^○参考${BREAKOUT_PATTERN}30%10件で判定.*参考：40%未満`));
     expect(tile('ステージ構成')).toHaveTextContent('ステージ2 20%参考：ステージ4がステージ2より多い');
     expect(tile('50日線より上').querySelector('.brief-env-status')).toBeEmptyDOMElement();
     expect(group('指数のトレンド')).toHaveTextContent('▲ 注意 1');
@@ -255,12 +257,12 @@ describe('brief market card: market tab', () => {
 
   it('names what an older long-history schema never recorded once per group, and what it could not judge', () => {
     show(trends({ rows: oldSchema(breadth('2026-10-02')) }));
-    for (const label of ['TT達成数', '200日線より上', 'ブレイクアウト成功率', 'RS推計90以上のTT達成（独自）', 'リーダーの健全度', 'ステージ構成']) expect(tile(label)).toBeNull();
+    for (const label of ['TT達成数', '200日線より上', BREAKOUT_HOLD_NAME, 'RS推計90以上のTT達成（独自）', 'リーダーの健全度', 'ステージ構成']) expect(tile(label)).toBeNull();
     expect(screen.getByTestId('brief-missing-breadth')).toHaveTextContent(/^旧形式の長期集計（10\/2）には未収録：200日線より上・TT達成数$/);
-    expect(screen.getByTestId('brief-missing-leaders')).toHaveTextContent(/^旧形式の長期集計（10\/2）には未収録：RS推計90以上のTT達成（独自）・ブレイクアウト成功率・リーダーの健全度・ステージ構成$/);
+    expect(screen.getByTestId('brief-missing-leaders')).toHaveTextContent(new RegExp(`^旧形式の長期集計（10/2）には未収録：RS推計90以上のTT達成（独自）・${BREAKOUT_PATTERN}・リーダーの健全度・ステージ構成$`));
     expect(tile('50日線より上')).toHaveTextContent('43.0%');
     expect(tile('先導株数（価格条件）')).toHaveTextContent('20銘柄');
-    expect(signals()).toHaveTextContent('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率（旧形式の長期集計に未収録）');
+    expect(signals()).toHaveTextContent(`判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・${BREAKOUT_HOLD_NAME}（旧形式の長期集計に未収録）`);
     expect(signals().querySelector('details')).toBeNull();
     for (const element of tiles()) expect(element.textContent).not.toMatch(bare);
   });
@@ -270,7 +272,7 @@ describe('brief market card: market tab', () => {
     phone(oldSchema(breadth('2026-10-02')));
     const fold = signals().querySelector('details');
     expect(fold.open).toBe(false);
-    expect(fold.querySelector('summary')).toHaveTextContent(/^判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率$/);
+    expect(fold.querySelector('summary')).toHaveTextContent(new RegExp(`^判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・${BREAKOUT_PATTERN}$`));
     expect(fold.querySelector('.brief-expander-body')).toHaveTextContent(/^理由：旧形式の長期集計に未収録$/);
     cleanup();
     // Two reasons: each with the checks it applies to.
@@ -547,7 +549,7 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     show(value);
     fireEvent.click(toggle('分配日（25日）'));
     const panel = document.getElementById(toggle('分配日（25日）').getAttribute('aria-controls'));
-    expect([...panel.querySelectorAll('p')].map(p => p.textContent).slice(0, 4)).toEqual(['目安の判定はSPYの別集計', '下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・7日以上で注意、5〜6日は参考）', 'S&P：9/14・9/22・9/30（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）', 'NAS：有効な分配日の日付を確認できません']);
+    expect([...panel.querySelectorAll('p')].map(p => p.textContent).slice(0, 4)).toEqual(['目安の判定はSPYの別集計', '下の分配日は^GSPC/^IXICの別集計（ストーリング日を含まない・7日以上で注意、5〜6日は参考）', 'S&P：9/14・9/22・9/30（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）', 'NAS：有効な分配日の日付を確認できません']);
   });
 
   it('says the breadth groups are today\'s names traced back: under their headers on the desktop, in the 注記 on a phone', () => {
@@ -1048,7 +1050,7 @@ describe('brief market card: the 銘柄側 line (M6)', () => {
   const rows = () => breadth('2026-10-02', i => (i === 8 ? { trendTemplateCount: 25 } : {}));
   it('is the first line inside the closed fold on a phone and the line under the basis on the desktop, plain and never a sign', () => {
     const value = trends({ rows: rows() }), line = marketCardView({ market: UP, trends: value, date: '2026-10-02', tab: marketTabParts }).stockSide;
-    expect(line).toBe('銘柄側（参考・目安は変えません）：TT達成 30（1か月前 25）・ブレイクアウト成功率 75%（8件）・リーダーの健全度 70%（30銘柄）');
+    expect(line).toBe(`銘柄側（参考・目安は変えません）：TT達成 30（1か月前 25）・${BREAKOUT_HOLD_NAME} 75%（8件）・リーダーの健全度 70%（30銘柄）`);
     card(value, false);
     const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
     expect(fold).not.toHaveAttribute('open');
@@ -1070,6 +1072,6 @@ describe('brief market card: the 銘柄側 line (M6)', () => {
     expect(document.querySelector('.brief-verdict-stock')).toBeNull();
     cleanup();
     card(trends({ rows: oldSchema(breadth('2026-10-02')) }), true);
-    expect(document.querySelector('.brief-verdict-stock')).toHaveTextContent(/^銘柄側（参考・目安は変えません）：TT達成 未収録・ブレイクアウト成功率 未収録・リーダーの健全度 未収録$/);
+    expect(document.querySelector('.brief-verdict-stock')).toHaveTextContent(new RegExp(`^銘柄側（参考・目安は変えません）：TT達成 未収録・${BREAKOUT_PATTERN} 未収録・リーダーの健全度 未収録$`));
   });
 });

@@ -4,7 +4,7 @@
 // here adds a threshold, a status or a verdict. Each value keeps the session it describes.
 import { bifurcation, environmentPoint, BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT, SPLIT_RULE } from '../marketLongHistory';
 import { indexSummary } from '../reference/indexSummary.js';
-import { distributionCount, environmentRules, followThroughView, latestKnown, marketTone, shortDate, trendsStatus, ENV_RULES, FTD_TEXT } from './briefModel';
+import { distributionCount, environmentRules, followThroughView, latestKnown, marketTone, shortDate, trendsStatus, BREAKOUT_HOLD_NAME, ENV_RULES, FTD_TEXT } from './briefModel';
 import { isoDay } from './briefShared';
 
 const finite = Number.isFinite;
@@ -50,6 +50,15 @@ export const signedPercent = value => { const r = Number(value.toFixed(1)); retu
 /** A change of a share or a rate, in percentage points (never read as a return). */
 export const pointChange = (value, digits = 1) => { const r = Number(value.toFixed(digits)); return `${sign(r)}${Math.abs(r).toFixed(digits)}pt`; };
 
+/** The sessions the breakout row judges (the collector's BREAKOUT_HOLD_SESSIONS 10 and BREAKOUT_WINDOW_SESSIONS 20; a test reads them). */
+export const BREAKOUT_WINDOW_TEXT = '10〜29営業日前';
+/**
+ * The breakout row's label (M8c): its name, 「上抜けの維持（確定分）」, with the sessions it judges said in the opened row. The
+ * label with them, 「上抜けの維持（確定分・10〜29営業日前）」, wraps the closed row (measured, CI fonts: 85→117.5px at 320,
+ * 65→97.5px at 375 and 65→78.7px at 390), so it is not used.
+ */
+export const BREAKOUT_HOLD_LABEL = BREAKOUT_HOLD_NAME;
+
 // ---- rule text (基準) -------------------------------------------------------------------------
 // Printed beside each row from the same constants the rules use, so the words cannot drift from them.
 // The distribution-day definition is the exporter's method (distributionDays.js DISTRIBUTION_METHOD).
@@ -62,7 +71,7 @@ export const RULE_TEXT = Object.freeze({
   template: `ミネルヴィニのトレンドテンプレート8条件（RS推計70以上を含む）をすべて満たす銘柄数。${ENV_RULES.templateSessions}営業日で${ENV_RULES.templateDropPercent}%以上減ると注意サインです（${ENV_RULES.templateSessions}営業日前が${ENV_RULES.templateMinBase}銘柄以上のとき）。`,
   leaderCount: '株価条件のトレンドテンプレート（安値条件25%）とRS推計70以上を満たす銘柄数。TT達成数の旧集計で、注意サインの基準はありません。',
   rs90: 'TT達成銘柄のうちRS推計（独自計算）が90以上の銘柄数。IBDの公式RSではありません。注意サインの基準はありません。',
-  breakout: `価格条件を満たし、終値で過去251営業日の高値を超え、出来高が直前50日平均の1.4倍以上だった上抜け（10〜29営業日前）のうち、その後10営業日の安値が上抜け日の終値から−7%に届かなかった割合。${BREAKOUT_MIN_SAMPLE}件未満は率を出しません。${ENV_RULES.breakoutHoldBelow}%未満で注意サインです。`,
+  breakout: `価格条件を満たし、終値で過去251営業日の高値を超え、出来高が直前50日平均の1.4倍以上だった上抜け（${BREAKOUT_WINDOW_TEXT}）のうち、その後10営業日の安値が上抜け日の終値から−7%に届かなかった割合。${BREAKOUT_MIN_SAMPLE}件未満は率を出しません。${ENV_RULES.breakoutHoldBelow}%未満で注意サインです。`,
   leaders: `20営業日前のTT達成銘柄のうち、終値が50日線の上にある割合（${LEADER_MIN_COHORT}銘柄未満は率を出しません）。${ENV_RULES.leaderHealthBelow}%未満で注意サインです。`,
   stage: `200日線の傾き・株価の傾き・200日線との位置から日ごとに判定した、${STAGE_NAMES.map((name, i) => `${i + 1} ${name}`).join('・')}の割合。ステージ4がステージ2を上回ると注意サインです。`,
 });
@@ -258,12 +267,12 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const whyNot = !last || !('breakoutsJudged' in last) ? null : judgedNow === null ? '判定期間に観測不足の日を含む' : judgedNow < BREAKOUT_MIN_SAMPLE ? `${judgedNow}件（${BREAKOUT_MIN_SAMPLE}件未満のため率は非表示）` : '成功数を確認できません';
   const breakoutRule = rule('breakout');
   const breakout = (() => {
-    const base = { key: 'breakout', label: 'ブレイクアウト成功率', metric: 'breakoutHoldPercent', rule: RULE_TEXT.breakout };
+    const base = { key: 'breakout', label: BREAKOUT_HOLD_LABEL, metric: 'breakoutHoldPercent', rule: RULE_TEXT.breakout };
     if (rate) {
       const before = monthBefore(rows, rate, 'breakoutHoldPercent'), range = yearRange(rows, rate, 'breakoutHoldPercent'), newest = rate.index === rows.length - 1;
       return { ...base, valued: true, b: `${num(rate.value)}%`, asOf: older(rate.date), change: before === null ? null : pointChange(rate.value - before, 0), range, position: rangePosition(range), format: value => `${num(value)}%`,
         note: newest ? `${rate.row.breakoutsJudged}件で判定` : `${rate.row.breakoutsJudged}件で判定${whyNot ? `・最新は${whyNot}` : ''}`,
-        detail: newest && Number.isSafeInteger(rate.row.breakoutsHeld) ? `10〜29営業日前の上抜け${rate.row.breakoutsJudged}件のうち${rate.row.breakoutsHeld}件が10日間で−7%に届かず` : null,
+        detail: newest && Number.isSafeInteger(rate.row.breakoutsHeld) ? `${BREAKOUT_WINDOW_TEXT}の上抜け${rate.row.breakoutsJudged}件のうち${rate.row.breakoutsHeld}件が10日間で−7%に届かず` : null,
         warn: Boolean(breakoutRule?.fired), flag: breakoutRule?.fired ? `${ENV_RULES.breakoutHoldBelow}%未満` : null };
     }
     if (judgedNow !== null && judgedNow < BREAKOUT_MIN_SAMPLE) return { ...base, valued: true, b: `${judgedNow}件`, asOf: older(last.date), note: `${BREAKOUT_MIN_SAMPLE}件未満のため率は非表示` };

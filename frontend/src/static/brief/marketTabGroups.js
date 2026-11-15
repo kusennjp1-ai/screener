@@ -4,8 +4,8 @@
 // ships in the market tab's chunk, never with Today. Nothing here adds a threshold, a status or a verdict.
 import { BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT } from '../marketLongHistory';
 import { indexSummary } from '../reference/indexSummary.js';
-import { distributionCount, shortDate, ENV_RULES } from './briefModel';
-import { delta, DISTRIBUTION_TEXT, groupDate, indexCloses, monthBefore, num, pointChange, rangePosition, RULE_TEXT, STAGE_FIELDS, YEAR, yearRange } from './marketTabModel';
+import { distributionCount, shortDate, BREAKOUT_HOLD_NAME, ENV_RULES } from './briefModel';
+import { delta, BREAKOUT_HOLD_LABEL, BREAKOUT_WINDOW_TEXT, DISTRIBUTION_TEXT, groupDate, indexCloses, monthBefore, num, pointChange, rangePosition, RULE_TEXT, STAGE_FIELDS, YEAR, yearRange } from './marketTabModel';
 
 const finite = Number.isFinite;
 
@@ -24,6 +24,52 @@ function ftdSignal(name, ft, date) {
 export const STAGE_LEGEND_NAMES = Object.freeze(['底固め', '上昇（加速中）', '横ばい・天井圏', '下降']);
 /** The opened stage row (M7): the long history's stages are its own daily judgement, without the scanner's stage-2 base exception. */
 export const STAGE_REPLAY_NOTE = 'スキャナーのステージ2ベース例外は再生していません（独自集計）';
+
+// ---- the round 3 sub-lines of opened rows (M8a-M8c) ------------------------------------------------------------------
+// Each is a plain line of its opened row (never a value, a flag, a ▲ or a 「?」 of the row or its section), read from the same
+// long-history row as the row's own value, so the row's date covers it. A key the publication does not carry (every
+// publication while the collector's EMIT_R3_MARKET_FIELDS is off) reads 未収録 with that reason, never 0 and never a rate.
+
+/** Why a sub-line has no value: the publication does not carry its key (an older one, or one written with the key off). */
+export const KEY_ABSENT = '未収録（この公開データには含まれていません）';
+/** The early read's sessions after a breakout (the collector's BREAKOUT_EARLY_SESSIONS, 独自設定; a test reads it). */
+export const BREAKOUT_EARLY_SESSIONS = 5;
+/** The drawdown a breakout fails at, in % (the collector's BREAKOUT_FAILURE_DRAWDOWN 0.07; a test reads it). */
+export const BREAKOUT_FAILURE_PERCENT = 7;
+/** What the breakout row counts, said in its opened row (M8c): the long history's 52-week-high breakouts, not a base's pivot. */
+export const BREAKOUT_NOT_PIVOT = '52週高値抜けで、ベースのピボットではありません';
+/** The breakout row's window, said in its opened row while the label is the short name (M8c). */
+const BREAKOUT_WINDOW_LINE = `確定分は${BREAKOUT_WINDOW_TEXT}の上抜けを、その後10営業日で判定`;
+const RS90_HEAD = 'RS推計90以上', CLOSE_HIGHS_HEAD = 'うち終値でも更新', EARLY_HEAD = `早期（上抜け後${BREAKOUT_EARLY_SESSIONS}営業日・独自）`;
+
+/**
+ * Under リーダーの健全度 (M8a): the RS推計90 part of the cohort (rs90Cohort, the 20-session-earlier trend-template names with
+ * RS推計 90 or more, as observed today) and its share above the 50-day line, 「RS推計90以上：n銘柄中 x%」; below
+ * LEADER_MIN_COHORT the count only. No threshold sits between the two rates.
+ */
+export function rs90CohortLine(row) {
+  if (!row || !('rs90Cohort' in row)) return `${RS90_HEAD}：${KEY_ABSENT}`;
+  const n = row.rs90Cohort;
+  if (!Number.isSafeInteger(n)) return `${RS90_HEAD}：未算出（観測不足の日を含む）`;
+  if (n < LEADER_MIN_COHORT) return `${RS90_HEAD}：${num(n)}銘柄（${LEADER_MIN_COHORT}銘柄未満のため率は非表示）`;
+  return finite(row.rs90HealthPercent) ? `${RS90_HEAD}：${num(n)}銘柄中 ${num(row.rs90HealthPercent)}%` : `${RS90_HEAD}：${num(n)}銘柄（50日線の上の数を確認できません）`;
+}
+/** Under 新高値・新安値 (M8b): the new highs whose close also cleared the prior high, 「うち終値でも更新 n」. */
+export function closeHighsLine(row) {
+  if (!row || !('newHighsClose' in row)) return `${CLOSE_HIGHS_HEAD}：${KEY_ABSENT}`;
+  return Number.isSafeInteger(row.newHighsClose) ? `${CLOSE_HIGHS_HEAD} ${num(row.newHighsClose)}` : `${CLOSE_HIGHS_HEAD}：未算出（観測率90%未満）`;
+}
+/**
+ * Under the breakout row (M8c): the breakouts of 5–9 sessions earlier read on their next BREAKOUT_EARLY_SESSIONS sessions,
+ * 「早期（上抜け後5営業日・独自）：n件中 x% が −7%に到達」; below BREAKOUT_MIN_SAMPLE the count only. No good or bad word.
+ */
+export function earlyBreakoutLine(row) {
+  if (!row || !('breakoutsEarlyJudged' in row)) return `${EARLY_HEAD}：${KEY_ABSENT}`;
+  const n = row.breakoutsEarlyJudged;
+  if (!Number.isSafeInteger(n)) return `${EARLY_HEAD}：未算出（判定期間に観測不足の日を含む）`;
+  if (n < BREAKOUT_MIN_SAMPLE) return `${EARLY_HEAD}：${num(n)}件（${BREAKOUT_MIN_SAMPLE}件未満のため率は非表示）`;
+  return finite(row.breakoutEarlyFailedPercent) ? `${EARLY_HEAD}：${num(n)}件中 ${num(row.breakoutEarlyFailedPercent)}% が −${BREAKOUT_FAILURE_PERCENT}%に到達` : `${EARLY_HEAD}：${num(n)}件（到達数を確認できません）`;
+}
 
 /** The 銘柄側 line's head (M6): the stock side, for reference, beside a guide it does not move. */
 export const STOCK_SIDE_HEAD = '銘柄側（参考・目安は変えません）';
@@ -48,7 +94,7 @@ function stockSideLine({ ready, rows, last, date, known, tt, breakout, health })
   const rate = known('breakoutHoldPercent');
   const terms = [
     tt.valued && ttHit ? { name: STOCK_SIDE_TT, value: num(ttHit.value), asOf: tt.asOf, extra: ttBefore === null ? '1か月前の値なし' : `1か月前 ${num(ttBefore)}` } : { name: STOCK_SIDE_TT, value: tt.b },
-    breakout.valued ? { name: breakout.label, value: breakout.b, asOf: breakout.asOf, extra: rate ? `${num(rate.row.breakoutsJudged)}件` : null } : { name: breakout.label, value: breakout.b },
+    breakout.valued ? { name: BREAKOUT_HOLD_NAME, value: breakout.b, asOf: breakout.asOf, extra: rate ? `${num(rate.row.breakoutsJudged)}件` : null } : { name: BREAKOUT_HOLD_NAME, value: breakout.b },
     health.item.valued ? { name: health.item.label, value: health.item.b, asOf: health.item.asOf, extra: health.cohort === null ? null : `${num(health.cohort)}銘柄` } : { name: health.item.label, value: health.item.b },
   ];
   // The long history's own session, when it is older than the analysis date (the rows' asOf of that session reads the same).
@@ -83,7 +129,7 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
       const splitReason = !hasField('above200Percent') ? schemaReason : (history.sp500 || []).filter(p => finite(p.close)).length < YEAR ? '指数の履歴が1年に満たない' : '最新の値なし';
       check('split', 'breadth', '指数と個別株の乖離', Boolean(split), split?.warning ? `指数は1年高値${split.fromHigh > -0.05 ? 'の水準' : `まで${Math.abs(split.fromHigh).toFixed(1)}%`}なのに、200日線より上の銘柄は${num(split.above200Percent, 1)}%（指数と個別株の乖離）` : null, split?.date, splitReason);
       check('lows', 'breadth', '新高値・新安値', Boolean(highsLows), lowsLead ? `新安値（${num(highsLows.value.newLows)}）が新高値（${num(highsLows.value.newHighs)}）を上回る` : null, highsLows?.date, envReason('lows', ['newHighs']));
-      const env = [['template', 'breadth', 'TT達成数の急減', ['trendTemplateCount']], ['stage', 'leaders', 'ステージ構成', ['stage1']], ['leaders', 'leaders', 'リーダーの健全度', ['leaderCohort']], ['breakout', 'leaders', 'ブレイクアウト成功率', ['breakoutsJudged']]];
+      const env = [['template', 'breadth', 'TT達成数の急減', ['trendTemplateCount']], ['stage', 'leaders', 'ステージ構成', ['stage1']], ['leaders', 'leaders', 'リーダーの健全度', ['leaderCohort']], ['breakout', 'leaders', BREAKOUT_HOLD_NAME, ['breakoutsJudged']]];
       for (const [key, group, label, fields] of env) { const r = rule(key); check(key, group, label, r.judged, r.text, last?.date, envReason(key, fields)); }
     }
   }
@@ -128,7 +174,9 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
   const extremesItem = highsLows ? { key: 'extremes', label: '52週の新高値・新安値', className: 'brief-dist', metric: 'highsLows', rule: RULE_TEXT.extremes, warn: lowsLead,
     note: `差 ${delta(highsLows.value.newHighs - highsLows.value.newLows)}`, rows: [
       { name: '新高値', valued: true, b: num(highsLows.value.newHighs), asOf: extremesAsOf },
-      { name: '新安値', valued: true, b: num(highsLows.value.newLows), asOf: extremesAsOf, warn: lowsLead, flag: lowsLead ? '新高値より多い' : null }] }
+      { name: '新安値', valued: true, b: num(highsLows.value.newLows), asOf: extremesAsOf, warn: lowsLead, flag: lowsLead ? '新高値より多い' : null }],
+    // M8b: the same row's close-based new highs, the opened row's first line (the main value and its sign are unchanged).
+    detail: closeHighsLine(highsLows.row) }
     : { key: 'extremes', label: '52週の新高値・新安値', metric: 'highsLows', rule: RULE_TEXT.extremes, ...absent('newHighs') };
 
   const rs90 = count('rs90', 'RS推計90以上のTT達成（独自）', 'rs90TemplateCount', 'trendTemplateCount', RULE_TEXT.rs90);
@@ -137,12 +185,17 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
   const cohortNow = last && Number.isSafeInteger(last.leaderCohort) ? last.leaderCohort : null;
   const healthBase = { key: 'health', label: 'リーダーの健全度', metric: 'leaderHealthPercent', rule: RULE_TEXT.leaders };
   // A newest cohort too small for a rate is today's state; an older rate is not shown in its place.
-  const healthItem = cohortNow !== null && cohortNow < LEADER_MIN_COHORT ? { ...healthBase, valued: true, b: `${cohortNow}銘柄`, asOf: older(last.date), note: `20営業日前のTT達成が${LEADER_MIN_COHORT}銘柄未満のため率は非表示` }
+  // M8a: the RS推計90 part of the cohort, from the row the value reads (the newest for a small cohort, the rate's own row).
+  const healthItem = cohortNow !== null && cohortNow < LEADER_MIN_COHORT ? { ...healthBase, valued: true, b: `${cohortNow}銘柄`, asOf: older(last.date), note: `20営業日前のTT達成が${LEADER_MIN_COHORT}銘柄未満のため率は非表示`, details: [rs90CohortLine(last)] }
     : health ? (() => { const before = monthBefore(rows, health, 'leaderHealthPercent'), range = yearRange(rows, health, 'leaderHealthPercent');
       return { ...healthBase, valued: true, b: `${num(health.value)}%`, asOf: older(health.date), change: before === null ? null : pointChange(health.value - before, 0), range, position: rangePosition(range), format: value => `${num(value)}%`,
-        note: `20営業日前のTT達成${num(health.row.leaderCohort)}銘柄が対象`, detail: `${num(health.row.leaderCohort)}銘柄のうち${num(health.row.leaderCohortAbove50)}銘柄が50日線の上`,
+        note: `20営業日前のTT達成${num(health.row.leaderCohort)}銘柄が対象`, detail: `${num(health.row.leaderCohort)}銘柄のうち${num(health.row.leaderCohortAbove50)}銘柄が50日線の上`, details: [rs90CohortLine(health.row)],
         warn: Boolean(leadersRule?.fired), flag: leadersRule?.fired ? `${ENV_RULES.leaderHealthBelow}%未満` : null }; })()
       : { ...healthBase, ...absent('leaderCohort') };
+  // M8c: the breakout row's opened lines, from the row its value reads (the rate's own row, else the newest): the early read,
+  // what it counts, and its window while the label is the short name. The row's value, rule and sign are unchanged.
+  const rateHit = known('breakoutHoldPercent'), breakoutRow = rateHit ? rateHit.row : last;
+  const breakoutItem = breakout.missing || !breakoutRow ? breakout : { ...breakout, details: [earlyBreakoutLine(breakoutRow), BREAKOUT_NOT_PIVOT, ...(BREAKOUT_HOLD_LABEL.includes(BREAKOUT_WINDOW_TEXT) ? [] : [BREAKOUT_WINDOW_LINE])] };
   const stageHit = known(STAGE_FIELDS);
   const stageItem = stageHit ? { key: 'stage', label: 'ステージ構成', className: 'is-stage', metric: 'stages', rule: RULE_TEXT.stage, valued: true, b: `ステージ2 ${num(stageHit.value.stage2Percent, 0)}%`, asOf: older(stageHit.date),
     warn: Boolean(stageRule?.fired), flag: stageRule?.fired ? 'ステージ4がステージ2より多い' : null, stages: STAGE_FIELDS.map((field, i) => ({ k: i + 1, name: STAGE_LEGEND_NAMES[i], share: stageHit.value[field] })), details: [STAGE_REPLAY_NOTE] }
@@ -161,7 +214,7 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
   const groups = [
     makeGroup('index', '指数のトレンド', '上昇トレンドは続いているか', '指数', [ftdItem, distItem], 'index'),
     makeGroup('breadth', '市場の参加度', '多くの銘柄が上昇に加わっているか', '参加度', [a200, a50, extremesItem, tt, leaderSubstitute].filter(Boolean), 'history'),
-    makeGroup('leaders', 'リーダーの健全性', '先導株が崩れていないか', 'リーダー', [rs90, breakout, healthItem, stageItem], 'history'),
+    makeGroup('leaders', 'リーダーの健全性', '先導株が崩れていないか', 'リーダー', [rs90, breakoutItem, healthItem, stageItem], 'history'),
   ];
 
   // The 指数 panel's S&P／Nasdaq switch (market tab): the Nasdaq only from a publication that carries its closes. Its

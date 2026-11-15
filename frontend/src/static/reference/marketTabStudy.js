@@ -4,8 +4,10 @@
 // hands the result to the 地合い card (marketCardView's `study`). Every number comes from the published market-trends
 // asset or the generated reference (market-regime-reference-v1.json): nothing here types a percentage of the app's own,
 // changes a rule, a threshold or the verdict. The one typed figure is a citation (FTD_SOURCE_GAINS), never a rule.
-import { bare, distributionCount, ftdPrevious, gspcFollowThrough, nasdaqNote, shortDate, trendsStatus, FTD_RECENT_SESSIONS, FTD_TEXT } from '../brief/briefModel';
+import { bare, distributionCount, ftdPrevious, gspcFollowThrough, nasdaqNote, shortDate, trendsStatus, under6, FTD_RECENT_SESSIONS, FTD_TEXT } from '../brief/briefModel';
 import { DISTRIBUTION_TEXT, num, signedPercent, SURVIVORSHIP_NOTE, verdictBasis } from '../brief/marketTabModel';
+import { KEY_ABSENT } from '../brief/marketTabGroups';
+import { FTD_MIN_DECLINE } from '../followThroughDay.js';
 import { indexSummary } from './indexSummary.js';
 import { capText, MARKET_CAPS } from '../portfolioPlan';
 import { biasTag, ddGradeState, ftdRecent, ftdState, highState, meanLowerStates, quadrantState, referencePeriod, referenceState, signalTags, stateTag, validReference, BIAS_SHARE, INDEX_SYMBOLS, SIGNAL_INDICATORS, TAGS } from './marketRegimeReference.js';
@@ -153,13 +155,38 @@ export function nasdaqFigures(state, date) {
 
 /** The opened 分配日 row's first line: the verdict's guide reads SPY's own count (the regime's, inside 目安と判定の基準). */
 export const DISTRIBUTION_BRIDGE = '目安の判定はSPYの別集計';
+/** The two indices of the opened rows' per-index lines, in the rows' own order and names. */
+const INDEX_ROWS = Object.freeze([['S&P', '^GSPC'], ['NAS', '^IXIC']]);
+const findIndex = (indices, symbol) => (indices || []).find(entry => entry?.symbol === symbol) || null;
+/** An index's own session when it is older than the analysis date: its distribution count's last point. */
+const olderSession = (item, date) => { const hit = distributionCount(item); return hit && isDay(date) && hit.date < date ? hit.date : null; };
+
+/** The stalling line's head (M8d): the app's own approximation, apart from the count. */
+export const STALLING_HEAD = 'ストーリング日（独自近似・IBDの定義は非公開・本数に含めません）';
+/**
+ * The opened 分配日 row's stalling days (M8d): each index's live stalling days (indices[i].stalling, the exporter's
+ * stallingDays on the same bars, read by readMarketTrends), 「S&P n日」, dated by the index's own last session when it is
+ * older than the analysis date; an unavailable or withdrawn record says its reason, never 0; an index without the key says
+ * 未収録 with its reason, and both without it say so once. Never part of the count, its grade or its sign.
+ */
+export function stallingLine(indices, date) {
+  const parts = INDEX_ROWS.map(([name, symbol]) => {
+    const item = findIndex(indices, symbol);
+    if (!item || !('stalling' in item)) return null;
+    const value = item.stalling, older = olderSession(item, date);
+    if (value?.available === true && Array.isArray(value.dates)) return `${name} ${num(value.dates.length)}日${older ? `（${shortDate(older, date)}時点）` : ''}`;
+    return `${name} 算出不可（${bare(typeof value?.reason === 'string' && value.reason ? value.reason : 'ストーリング日を確認できません')}）`;
+  });
+  if (parts.every(part => part === null)) return `${STALLING_HEAD}：${KEY_ABSENT}`;
+  return `${STALLING_HEAD}：${parts.map((part, i) => part ?? `${INDEX_ROWS[i][0]} ${KEY_ABSENT}`).join('／')}`;
+}
 /**
  * The opened 分配日 row: that the guide reads SPY's own count (DISTRIBUTION_BRIDGE), the method in one sentence with its two
  * grades, each index's active distribution days with the sessions left on the oldest (a later high can remove a day
  * earlier), and each index's last year of counts (gaps stay gaps), each named by its index (`name`) in its caption.
  */
 export function distributionDetail(indices, date) {
-  const details = [DISTRIBUTION_BRIDGE, `下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・${DISTRIBUTION_TEXT.caution}で注意、${DISTRIBUTION_TEXT.reference}は参考）`];
+  const details = [DISTRIBUTION_BRIDGE, `下の分配日は^GSPC/^IXICの別集計（ストーリング日を含まない・${DISTRIBUTION_TEXT.caution}で注意、${DISTRIBUTION_TEXT.reference}は参考）`];
   const yearLines = [];
   for (const [name, symbol] of [['S&P', '^GSPC'], ['NAS', '^IXIC']]) {
     const item = (indices || []).find(entry => entry?.symbol === symbol), hit = distributionCount(item);
@@ -176,6 +203,7 @@ export function distributionDetail(indices, date) {
     const values = series.filter(finite);
     if (values.length >= 200 && Math.max(...values) > Math.min(...values)) yearLines.push({ label: `${name}の分配日`, name, range: { lo: Math.min(...values), hi: Math.max(...values), series }, format: value => `${num(value)}日` });
   }
+  details.push(stallingLine(indices, date));
   return { details, yearLines };
 }
 
@@ -191,13 +219,70 @@ export const FTD_SOURCE_GAINS = '出典ごとの上昇率の目安：1.0%〜1.25
  * sessions), and where its past tendency is (the 「過去の傾向」 block below, whose figures are each index's own: none is put
  * on this row, so the S&P's figure never sits beside the Nasdaq's line).
  */
-export function followThroughDetail() {
-  return { details: [
+export function followThroughDetail(indices = null, date = null) {
+  const details = [
     `FTDの基準は独自設定（${FTD_TEXT.gain}・${FTD_TEXT.minDay}〜${FTD_TEXT.maxDay}日目・高値から${FTD_TEXT.decline}以上の下落後）。${FTD_SOURCE_GAINS}。`,
     '失敗の判定はFTD当日の安値を終値で割ったとき（独自・出典より早く出る場合があります）。',
     `「n日前」はFTDの日からの営業日数で、${FTD_RECENT_SESSIONS}営業日を過ぎた確認は「前回のFTD」と表示します（独自設定）。`,
     'FTDの状態ごとの過去の傾向は、下の「過去の傾向」を参照。',
-  ] };
+  ];
+  // With the published indices (the market tab), each confirmed index's current decline (M8e) and the +3% days (M9).
+  if (Array.isArray(indices)) details.push(...INDEX_ROWS.map(([name, symbol]) => currentLegLine(name, findIndex(indices, symbol)?.followThrough, date)).filter(Boolean), bigUpDayLine(indices, date));
+  return { details };
+}
+
+/** A current decline in words (M8e): under the 6% line never rounded onto it (under6), a tiny one never 「−0.0%」. */
+const legText = value => { const v = Math.abs(value), one = Number(v.toFixed(1));
+  return one >= 6 ? `−${under6(v)}%` : one > 0 ? `−${v.toFixed(1)}%` : Number(v.toFixed(2)) > 0 ? `−${v.toFixed(2)}%` : '0.0%'; };
+/**
+ * One index's current decline under a confirmed FTD (M8e, no new key): followThroughDay publishes, in the confirmed state, the
+ * leg from the post-FTD peak (`peak`, `low`, `declinePct`: the same decline its 6% correction test uses), so the opened row
+ * says 「S&P：現在の下落 −2.3%（高値9/28→安値10/1）・6%で調整判定（独自設定）」, dated by the record's own session when it is
+ * older than the analysis date. Only under the 6% line (the state machine leaves 'confirmed' at 6% or more, so a record at or
+ * above it is not this state's), and nothing without a decline (no pullback since the peak) or for any other state.
+ */
+export function currentLegLine(name, ft, date) {
+  if (ft?.available !== true || ft.state !== 'confirmed' || !finite(ft.declinePct) || !(ft.declinePct >= 0 && ft.declinePct < 100 * FTD_MIN_DECLINE)) return null;
+  const at = isDay(ft.asOf) && isDay(date) && ft.asOf < date ? `（${shortDate(ft.asOf, date)}時点）` : '';
+  const span = isDay(ft.peak?.date) && isDay(ft.low?.date) ? `（高値${shortDate(ft.peak.date, date)}→安値${shortDate(ft.low.date, date)}）` : '';
+  return `${name}${at}：現在の下落 ${legText(ft.declinePct)}${span}・${FTD_TEXT.decline}で調整判定（独自設定）`;
+}
+
+/**
+ * A +3% day (M9): Minervini's own figure for the big up days that dominate bear markets and corrections and are rare in a
+ * sustained bull market (his posts of 2020-04-06 and 2025-03-07, market plan MM-19); counting them here is the app's own
+ * setting (独自設定), context only, never a signal. A close at least this far above the previous close counts.
+ */
+export const BIG_UP_DAY = 0.03;
+/** Floating point only: a close exactly +3.00% above (e.g. 1070 → 1102.10, whose ratio is 1.0299999999999998) still counts. */
+const RATIO_SLACK = 1e-12;
+/** The +3% days in validated closes ([{date, close}], consecutive sessions): { sessions: the comparisons, count, date }, or null. */
+export function bigUpDays(closes) {
+  if (!Array.isArray(closes) || closes.length < 2) return null;
+  let count = 0;
+  for (let i = 1; i < closes.length; i++) if (closes[i].close / closes[i - 1].close - 1 >= BIG_UP_DAY - RATIO_SLACK) count++;
+  return { sessions: closes.length - 1, count, date: closes.at(-1).date };
+}
+/** The M9 line's head and its caveat, from BIG_UP_DAY. */
+export const BIG_UP_HEAD = `+${num(BIG_UP_DAY * 100)}%以上の上昇日`;
+export const BIG_UP_NOTE = '弱気相場・調整中に多い。買いの合図ではありません';
+/**
+ * The opened フォロースルーデー row's +3% days (M9): for each index, from its validated closes (indices[i].closes, read by
+ * readMarketTrends), 「S&P 直近N営業日でk回」 with N the comparisons made, dated by the closes' last day when it is older than
+ * the analysis date, then the caveat once. Closes the reader withdrew say why; a publication without closes (before round 2)
+ * says 未収録（旧形式）. No colour, no ▲, never counted as a sign.
+ */
+export function bigUpDayLine(indices, date) {
+  const parts = INDEX_ROWS.map(([name, symbol]) => {
+    const item = findIndex(indices, symbol);
+    if (typeof item?.closes_error === 'string' && item.closes_error) return `${name} 算出不可（${bare(item.closes_error)}）`;
+    if (!item || !Array.isArray(item.closes)) return null;
+    const read = bigUpDays(item.closes);
+    if (!read) return `${name} 算出不可（比べる終値がありません）`;
+    return `${name} 直近${num(read.sessions)}営業日で${num(read.count)}回${isDay(date) && read.date < date ? `（${shortDate(read.date, date)}時点）` : ''}`;
+  });
+  if (parts.every(part => part === null)) return `${BIG_UP_HEAD}：未収録（旧形式）`;
+  return `${BIG_UP_HEAD}：${parts.map((part, i) => part ?? `${INDEX_ROWS[i][0]} 未収録（旧形式）`).join('／')}（${BIG_UP_NOTE}）`;
 }
 
 // ---- the study block (過去の傾向) ----------------------------------------------------------------------------
@@ -492,7 +577,7 @@ export function marketTabStudy({ trends, reference, date = null, market = null, 
     // The checks whose tag is 〔参考〕: the card counts them apart from the warnings, with a neutral ○.
     referenceKeys: Object.keys(signalTagsByKey).filter(key => signalTagsByKey[key].includes(TAGS.breadth)),
     distribution: ready ? distributionDetail(indices, date) : null,
-    followThrough: ready ? followThroughDetail() : null,
+    followThrough: ready ? followThroughDetail(indices, date) : null,
     nasdaq: ready ? nasdaqNote(byName.NAS?.followThrough, date) : null,
     nasdaqPosition, nasdaqFigures: nasdaqFigures(nasdaqPosition?.state, date),
     regime, zeroCap: zeroCapNote({ market, regime, reference: ref, date }),

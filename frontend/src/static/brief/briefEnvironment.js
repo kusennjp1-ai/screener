@@ -9,6 +9,11 @@ import { bare, isoDay, sentence, shortDate } from './briefShared';
  * screen); the market tab prints its 基準 lines from these same numbers so the two cannot drift.
  */
 export const ENV_RULES = Object.freeze({ templateSessions: 10, templateMinBase: 20, templateDropPercent: 20, leaderHealthBelow: 50, breakoutHoldBelow: 40 });
+/**
+ * The breakout row's name (M8c): the breakouts of 10–29 sessions earlier, judged (確定分) on their next ten sessions. The rule's
+ * sentence, the warning summary's check, the 銘柄側 line and the row's label (marketTabModel's BREAKOUT_HOLD_LABEL) read it.
+ */
+export const BREAKOUT_HOLD_NAME = '上抜け維持（確定分）';
 
 /**
  * Each deterioration rule on the newest long-history point (environmentPoint rows), in a fixed order:
@@ -26,7 +31,7 @@ export function environmentRules(rows) {
   const leadersJudged = Boolean(last) && finite(last.leaderHealthPercent);
   rule('leaders', leadersJudged, leadersJudged && last.leaderHealthPercent < ENV_RULES.leaderHealthBelow, leadersJudged ? `20営業日前のTT達成銘柄のうち、50日線より上は${last.leaderHealthPercent.toFixed(0)}%` : null);
   const breakoutJudged = Boolean(last) && finite(last.breakoutHoldPercent);
-  rule('breakout', breakoutJudged, breakoutJudged && last.breakoutHoldPercent < ENV_RULES.breakoutHoldBelow, breakoutJudged ? `ブレイクアウトの成功率が${last.breakoutHoldPercent.toFixed(0)}%に低下` : null);
+  rule('breakout', breakoutJudged, breakoutJudged && last.breakoutHoldPercent < ENV_RULES.breakoutHoldBelow, breakoutJudged ? `${BREAKOUT_HOLD_NAME}が${last.breakoutHoldPercent.toFixed(0)}%に低下` : null);
   return rules;
 }
 
@@ -253,6 +258,11 @@ export const ftdSessionsSince = ft => ft?.available === true && ft.state === 'co
 /** A confirmed FTD older than FTD_RECENT_SESSIONS (「前回のFTD」): the フォロースルーデー row, its ◆ and the cause line read it alike. */
 export const ftdPrevious = ft => { const n = ftdSessionsSince(ft); return n !== null && n > FTD_RECENT_SESSIONS; };
 /**
+ * A decline (in %, positive) under the 6% line is never rounded up onto it: 5.96 reads 5.96, not 6.0 beside 「6%未満」 (two
+ * decimals, the second floored when it would round to 6.00). Used where a decline under 6% is printed beside the 6% line.
+ */
+export const under6 = value => Number(value.toFixed(2)) < 6 ? value.toFixed(2) : (Math.floor(value * 100) / 100).toFixed(2);
+/**
  * Compact tile text for one index's follow-through state (this app's own judgement):
  * { b, em, asOf } where asOf is set when the judgement is older than the analysis date.
  * A confirmed FTD says how many sessions ago it was, first in its em line (「12日前」, 「当日」 on its own session; the opened
@@ -267,8 +277,7 @@ export function followThroughView(ft, date) {
   if (ft.available !== true) return { b: '算出不可', em: typeof ft.reason === 'string' && ft.reason ? ft.reason : '指数データを確認できません', asOf: null };
   const asOf = isoDay(ft.asOf) && isoDay(date) && ft.asOf < date ? shortDate(ft.asOf, date) : null;
   const at = value => shortDate(value, date), whole = value => Number.isSafeInteger(value) && value >= 0;
-  // A decline under the 6% line is never rounded up onto it (5.96% reads −5.96%, not −6.0% beside 「6%未満」).
-  const under6 = value => Number(value.toFixed(2)) < 6 ? value.toFixed(2) : (Math.floor(value * 100) / 100).toFixed(2);
+  // A decline under the 6% line is never rounded up onto it (5.96% reads −5.96%, not −6.0% beside 「6%未満」: under6).
   const fall = finite(ft.declinePct) ? (value => `−${ft.state === 'no_correction' && Number(value.toFixed(1)) >= 6 ? under6(value) : value.toFixed(1)}%`)(Math.abs(ft.declinePct)) : null;
   const join = parts => parts.filter(Boolean).join('・');
   const { ftd, attempt, low, peak } = ft;
