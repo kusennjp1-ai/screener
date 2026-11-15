@@ -796,6 +796,8 @@ So the order's text and "the card height at any width" cannot both hold. At 375,
   no day reads as before); brief-chart.spec.js's C4 block checks the placement on ZZRD (in the base note) and ZZHB/ZZNR (own note).
 
 **The outcome is FAIL: `brief-decision.spec.js:269` ('stalls') still measures 3145 against `STOCK_CAP` 3124 at 375.**
+- **Round 2 (ac76a7e7):** with no lone 未確認 below 1024px, 'stalls' measures 3114 and the file passes 27/27 unedited. See
+  "Round-2 orders from the conductor".
 - **Why variant A cannot reach it:** the 'stalls' state is the default fixture's ZZNV (`SEC_SYMBOL`), and no default row carries
   `se_base_length_weeks`/`se_base_depth_pct`. So `engine` is null there, the base note is absent (`.brief-vcp-engine` count 0, measured),
   and the day stays its own note. The same holds in the other two capped states.
@@ -892,7 +894,7 @@ detail held by `detailGate` until the loading state is measured; load 7.10 → 7
 - **Vocabulary for CONTEXT.md:**
   - 「ピボットの日」: the bar whose high is the Setup Engine pivot, found by pivotBar (H1) on certified bars; 未確認 when there is none.
   - 「静かな日」: the Setup Engine's `quiet_days_10d` over its own 10 sessions.
-- **Both fields are detail-only on a publication.** While the detail loads, no pivot-day line shows. When the detail fails, or on an older publication without the keys, the card reads 「ピボットの日 未確認」 and shows no quiet days. It never shows 0 or a guessed date.
+- **Both fields are detail-only on a publication.** While the detail loads, no pivot-day line shows. When the detail fails, or on an older publication without the keys, the card reads 「ピボットの日 未確認」 and shows no quiet days (since ac76a7e7, below 1024px with no base note it shows no pivot-day line instead). It never shows 0 or a guessed date.
 - **The H5 baselines shift:**
   - the dump on the 24 screens above;
   - the oracle stock heights, as in the table;
@@ -1484,10 +1486,12 @@ Logs and load files are in `audit3/r3-chart/r5/`. Nothing below is a timing.
 - ZZNV: loading 2331 → loaded **3044**, a shift of +713, the C4 lines' share **0** (it was +744 with a share of 31).
 - ZZRD: unchanged (2364 → 2533, +169, share 37: the day's second line in its base note and the quiet days).
 
-**The rebuild (derived, not re-rendered).** `r5/c4-lone-unknown.py` over the ee3d76f render probe (`out/ee3d76f/render/probe-reduce.json`, 320/390/1440) and CH-3's producer read finds **0 views** where 「ピボットの日 未確認」 was a note of its own.
-- The 6 uncertified rows' 未確認 sits in their base notes: 24 views at 320 and 24 at 390.
-- The 60 own-note views are all dated.
-- The decision changes only that case, so the rebuild's 352 of 352 views keep their rendered line. This is derived from the earlier render, which was not re-run at ac76a7e7.
+**The rebuild (derived, not re-rendered).** The ee3d76f render probe (`out/ee3d76f/render/probe-reduce.json`) covers 48 stocks and 476 views: 192 at 320, 192 at 390 and 92 at 1440. Read by `r5/c4-lone-unknown-all.py`, which takes every rendered stock, not only the 37 ready rows:
+- **0 views** have 「ピボットの日 未確認」 as a note of its own, at any width.
+- Every 未確認 ends a base note: 32 views at 320 and 32 at 390. These include the 6 uncertified ready rows' 24 per width.
+- `r5/c4-lone-unknown.py` restricts the same read to the 37 ready rows and CH-3's producer read. Their 60 own-note views are all dated.
+- The decision changes only a lone 未確認, so no rendered rebuild view changes. The ready rows' 352 of 352 keep their rendered line.
+- This is derived from the earlier render, which was not re-run at ac76a7e7.
 
 **Other checks**
 - **Full vitest** (`cd frontend && PATH=/opt/node22/bin:$PATH SESSION_CALENDAR_PYTHON=… FINANCIAL_REPLAY_PYTHON=… npx vitest run`):
@@ -1500,12 +1504,22 @@ Logs and load files are in `audit3/r3-chart/r5/`. Nothing below is a timing.
   - The design-acceptance entry is 375,465 raw / 131,170 gzip -9 (vite 131.35 kB), against 375,452 / 131,166.
   - The lazy priceChart chunk is 44,160 raw bytes, unchanged.
   - The superseded `build/npm-build-ee3d76f` was deleted.
+- **Deleted superseded harness outputs (this track's own):**
+  - `$H/build/npm-build-ee3d76f`;
+  - the identical `probe-ac76a7e{,-oracles}.json` and their raw directories;
+  - `$H/dump/dump-57fdcd6.json`, which the round-1 record above cites as a comparison base. Its `.sha256` is kept, and so is
+    `r4/dump-compare-57fdcd6-ee3d76f.txt`.
+  - `dump-ee3d76f.json`, `probe-ee3d76f{,-oracles}.json` and `build-ee3d76f.json` are kept as round 2's references.
 - **Ownership gate** before each commit: `OWNERSHIP OK (CHART): 15 paths`. Every commit message ends with exactly the two trailer lines. Nothing was pushed.
 
 ### Round-2 orders: 未検証
 
 - **Timings.** None were taken; the change removes one line of DOM and adds no work.
 - **The rebuild render at ac76a7e7.** The rebuild statement above is derived from the ee3d76f render.
+- **A browser between 1024 and 1439px.** Only 390 and 1440 were run for the new case; the 1024px boundary rests on `wide` (BriefApp's
+  `(min-width:1024px)`) and the unit cases.
+- **Changes beyond order 1's 'change nothing else', all in tests:** the existing unit test now passes `wide`, and the spec gains one import
+  (`money`, the card's own formatter).
 - **A real publication.** Whether a real published detail carries `se_pivot_date` and `se_quiet_days_10d` is still read only after a release, as before.
 
 ## Track CHART: closing summary (after the conductor's round-2 orders)
