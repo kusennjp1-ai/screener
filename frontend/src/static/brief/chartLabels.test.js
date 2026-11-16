@@ -288,6 +288,111 @@ describe('chart label placer', () => {
     expect(segmentCrosses([15, 0], [15, 30], box)).toBe(true);
   });
 
+  // Round 3 C1: the placer's shortcuts (a reused candidate set, a spot over candles passed before its box and leader are
+  // tried, boxes far apart across never compared, the averages' last stretches kept apart, one box to test a spot with)
+  // change no spot. Seeded scenes of every kind of reserved box are placed twice, as the chart places them and with
+  // `reference` (every shortcut bypassed), and every label, every reserved box and the order of both must be the same.
+  const seeded = seed => () => { seed = (seed + 0x6d2b79f5) | 0; let t = Math.imul(seed ^ (seed >>> 15), 1 | seed); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+  function scene(seed) {
+    const r = seeded(seed), pick = list => list[Math.floor(r() * list.length)], int = (a, b) => a + Math.floor(r() * (b - a + 1));
+    // Candle columns: a few, or (a crowded scene) enough that many labels go over them.
+    const cols = Array.from({ length: r() < 0.4 ? int(60, 140) : int(4, 14) }, () => { const x0 = int(0, 300), y0 = int(0, 200); return { x0, x1: x0 + int(2, 8), y0, y1: y0 + int(10, 80) }; });
+    const lines = Array.from({ length: int(0, 3) }, () => int(10, 210));
+    const fixed = Array.from({ length: int(6, 30) }, (_, i) => {
+      const x0 = int(0, 320), y0 = int(0, 220), box = { x0, x1: x0 + int(1, 40), y0, y1: y0 + int(1, 16) };
+      const kind = pick(['label', 'label', 'tail', 'tail', 'tail', 'plain', 'v', 'h', 'end']);
+      if (kind === 'label') return { ...box, label: true, kin: pick([null, 'ma', 'leg', 'tn', 'plan']) };
+      if (kind === 'tail') return { ...box, tail: true };
+      if (kind === 'plain') return box;
+      const from = int(0, 220);
+      return { ...box, leader: kind, key: pick(['ma50', 'ma150', 'ma200']), from, up: r() < 0.5, tip: from + int(-30, 30), id: i };
+    });
+    const labels = Array.from({ length: int(3, 9) }, () => {
+      const w = int(8, 60), x0 = int(0, 200), ys = Array.from({ length: int(1, 30) }, (_, i) => int(0, 20) + i * int(1, 6)), ax = int(0, 260), ay = int(0, 200);
+      const leaderKey = pick([null, null, 'ma50', 'ma150']), endY = int(0, 220);
+      return {
+        w, grid: { x0, x1: x0 + int(0, 120), ys, step: pick([1, 2, 8]), cost: (x, yc) => Math.abs(x - ax) + 2 * Math.abs(yc - ay), near: r() < 0.5 ? { cost: 40, x: [ax - 30, ax + 30], y: [ay - 15, ay + 15] } : null },
+        options: { forced: r() < 0.8, slack: pick([0, 24, Infinity]), half: pick([6.5, 7]), perCandle: pick([Infinity, 6]), kin: pick([null, 'ma', 'leg', 'tn', 'plan']), hard: pick([0, 0, 60]), fewest: r() < 0.3, apart: r() < 0.2 },
+        // A leader as the averages' names have one: no leader at its line's end, none on rows ending in 7, else a
+        // vertical part in the gutter and (moved left) a horizontal one; fresh boxes every call.
+        leader: leaderKey && ((x, yc) => {
+          if (Math.abs(yc - endY) <= 3) return [];
+          if (Math.round(yc) % 10 === 7) return null;
+          const shifted = x < 150, tip = shifted ? yc : yc + (endY > yc ? 6 : -6), part = { key: leaderKey, from: endY, up: tip < endY, tip };
+          const out = [{ x0: 318, x1: 320, y0: Math.min(endY, tip) - 1, y1: Math.max(endY, tip) + 1, leader: 'v', ...part }];
+          if (shifted) out.push({ x0: x + w + 2, x1: 319, y0: yc - 2, y1: yc + 2, leader: 'h', ...part });
+          return out;
+        }),
+      };
+    });
+    return {
+      solid: box => cols.filter(c => box.x0 < c.x1 && box.x1 > c.x0 && box.y0 < c.y1 && box.y1 > c.y0).length,
+      soft: box => lines.filter(y => y > box.y0 && y < box.y1).length,
+      strike: box => lines.some(y => Math.abs(y - (box.y0 + box.y1) / 2) <= 5.5),
+      fixed, labels,
+    };
+  }
+  // A scene placed by one placer: the fixed boxes, every label put in order, then (from a snapshot) the labels again in
+  // reverse order with the same candidate sets (`reuse`) or new ones, settled; every label's spot and every box, in order.
+  function placeScene(seed, { reference, reuse }) {
+    const sc = scene(seed), placer = labelPlacer({ solid: sc.solid, soft: sc.soft, strike: sc.strike, reference });
+    sc.fixed.forEach(box => placer.take({ ...box }));
+    const sets = sc.labels.map(label => spots(label.grid)), setOf = i => (reuse ? sets[i] : spots(sc.labels[i].grid));
+    const put = i => placer.put(sc.labels[i].w, setOf(i), { ...sc.labels[i].options, leader: sc.labels[i].leader || null });
+    const spot = label => (label.at ? [label.at.x, label.at.yc, label.at.forced, label.at.extra.map(e => [e.leader, e.x0, e.x1, e.y0, e.y1])] : null);
+    const state = placer.snapshot();
+    const firstRound = sc.labels.map((_, i) => put(i)).map(spot);
+    placer.restore(state);
+    const again = sc.labels.map((_, i) => sc.labels.length - 1 - i).map(i => put(i));
+    placer.settle();
+    return { firstRound, secondRound: again.map(spot), boxes: placer.boxes.map(b => [b.x0, b.x1, b.y0, b.y1, b.label ?? null, b.kin ?? null, b.tail ?? null, b.leader ?? null]) };
+  }
+
+  it('places every label of a scene on the same spot with and without its shortcuts (seeded scenes of every kind of box)', () => {
+    let placed = 0, forced = 0, led = 0;
+    for (let seed = 1; seed <= 160; seed++) {
+      const fast = placeScene(seed, { reference: false, reuse: true }), plain = placeScene(seed, { reference: true, reuse: false });
+      expect({ seed, ...fast }).toEqual({ seed, ...plain });
+      for (const at of [...fast.firstRound, ...fast.secondRound].filter(Boolean)) { placed++; if (at[2]) forced++; if (at[3].length) led++; }
+    }
+    // The scenes reach the shortcuts' paths: labels placed clear, over candles, and with a leader.
+    expect(placed).toBeGreaterThan(300);
+    expect(forced).toBeGreaterThan(20);
+    expect(led).toBeGreaterThan(20);
+  });
+
+  it('places a label again from a reused candidate set (after restore) exactly where a new set does, whatever was placed with it before', () => {
+    const grid = { x0: 90, x1: 160, ys: [50, 54, 58, 62, 66, 70], step: 1, cost: (x, yc) => Math.abs(x - 140) + Math.abs(yc - 60), near: { cost: 20, x: [120, 160], y: [50, 70] } };
+    const placer = labelPlacer({ solid });
+    placer.take({ x0: 0, x1: 300, y0: 0, y1: 30 });
+    const state = placer.snapshot(), shared = spots(grid);
+    // The first try orders part of the set and works out its candles, then is undone.
+    const first = placer.put(18, shared, { half: 6.5, slack: 0, perCandle: 6 });
+    placer.take({ x0: 150, x1: 170, y0: 40, y1: 90 });
+    expect(shared.ready).toBeGreaterThan(0);
+    placer.restore(state);
+    // A box the second try has that the first had not: the reused set and a new one find the same spot.
+    placer.take({ x0: 0, x1: 92, y0: 52, y1: 68 });
+    const where = at => at && { x: at.x, yc: at.yc, forced: at.forced, box: [at.box.x0, at.box.x1, at.box.y0, at.box.y1] };
+    const again = where(placer.put(18, shared, { half: 6.5, slack: 0, perCandle: 6 }).at);
+    const fresh = labelPlacer({ solid });
+    fresh.take({ x0: 0, x1: 300, y0: 0, y1: 30 });
+    fresh.take({ x0: 0, x1: 92, y0: 52, y1: 68 });
+    expect(again).toEqual(where(fresh.put(18, spots(grid), { half: 6.5, slack: 0, perCandle: 6 }).at));
+    expect(first.at).not.toBeNull();
+  });
+
+  it('keeps an average\'s last stretch in the way of a label being repaired, never of a name (the tails kept apart)', () => {
+    for (const reference of [false, true]) {
+      const placer = labelPlacer({ solid, reference });
+      placer.take({ x0: 40, x1: 60, y0: 14, y1: 26, tail: true });
+      // A depth whose only candle-free spot is on the tail stays over candles; a name takes that spot.
+      const depth = placer.put(14, { list: [[100, 60, 0], [44, 20, 1]] }, { kin: 'leg' });
+      expect({ reference, at: depth.at }).toMatchObject({ reference, at: { x: 100, forced: true } });
+      expect({ reference, at: placer.put(14, { list: [[100, 60, 0], [44, 20, 1]] }, { kin: 'ma' }).at }).toMatchObject({ reference, at: { x: 44, forced: false } });
+    }
+  });
+
   it('writes the reserved box, and the search only for a forced label', () => {
     expect(placedAttrs({ box: { x0: 1, x1: 2, y0: 3, y1: 4 }, forced: false }, '0 1 2|3')).toBe('data-box="1.0 2.0 3.0 4.0"');
     expect(placedAttrs({ box: { x0: 1, x1: 2, y0: 3, y1: 4 }, forced: true }, '0 1 2|3')).toBe('data-box="1.0 2.0 3.0 4.0" data-forced="1" data-search="0 1 2|3"');

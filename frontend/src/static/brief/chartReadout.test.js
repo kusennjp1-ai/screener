@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
-import { chartContentKey, chartCrossing, chartNotes, chartReadout, crossingNote, earningsMarker, chartSeries, ema, formatPercent, formatPrice, formatShares, formatVolume, heavyVolumeBars, shortAveragesDrawn, shortAveragesShown, priceInRange, weeklyBars, weeklyRangeLabel } from './chartReadout';
+import { CHART_RANGES, chartContentKey, chartCrossing, chartNotes, chartReadout, crossingNote, earningsMarker, chartSeries, ema, formatPercent, formatPrice, formatShares, formatVolume, heavyVolumeBars, shortAveragesDrawn, shortAveragesShown, priceInRange, structuralLowLegend, weeklyBars, weeklyRangeLabel, weeklyShortNote } from './chartReadout';
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { ADR_SESSIONS, adrPercent } from './positionSizing';
 import { lastPivotCrossing, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
+import { pivotDistanceText } from './briefCandidate';
+import { signed } from '../positionGeometry';
 
 // The crossing helper is verdict's (breakoutHistory.js, VD1/VD2 write its round-2 body): mocked here, so these
 // tests pin how the chart reads it whatever body it has (plan §2.2 step-0 amendment).
@@ -149,6 +151,44 @@ describe('the chart footnotes', () => {
     expect(chartNotes({ bars: list, interval: 'day', period: 130, crossing: { ...crossing, tone: 'zone', reason: null } })).toContain('チャートの印：緑の矢印＝終値がピボットを上抜けた日（出来高1.4×以上、直近の終値もピボット以上。検証済みの日足）。');
     expect(chartNotes({ bars: [], interval: 'day', period: 130 })).toEqual([]);
   });
+
+  it('say second, on the weekly chart only and under two years of weeks, how many weeks it draws from which month', () => {
+    const weekly = CHART_RANGES['2yw'][0];
+    // 515 weekdays from a Monday are 103 whole weeks; 520 are 104 (two years).
+    const short = bars(515), full = bars(520);
+    expect(weeklyBars(short)).toHaveLength(weekly - 1);
+    expect(weeklyBars(full)).toHaveLength(weekly);
+    // The count and the month of the first week's first session (YYYY/MM, as on the date axis).
+    const sentence = weeklyShortNote(weeklyBars(short));
+    expect(sentence).toContain('2026/01〜');
+    expect(sentence).toContain(`の${weekly - 1}週分`);
+    const notes = chartNotes({ bars: short, interval: 'week', period: weekly });
+    expect(notes[0]).toBe('—＝必要な本数に足りない値（移動平均・出来高の倍率）');
+    expect(notes[1]).toBe(sentence);
+    expect(notes.filter(note => note.startsWith('週足は'))).toHaveLength(1);
+    // A first week cut by the start of the data is not counted, and the month is its next week's.
+    const cut = bars(300).slice(2), weeks = weeklyBars(cut);
+    expect(weeks[0].start).toBe('2026-01-12');
+    const cutNote = chartNotes({ bars: cut, interval: 'week', period: weekly })[1];
+    expect(cutNote).toBe(weeklyShortNote(weeks));
+    expect(cutNote).toContain('2026/01〜');
+    expect(cutNote).toContain(`の${weeks.length}週分`);
+    expect(weeks.length).toBe(weeklyBars(bars(300)).length - 1);
+    // Not at two years of weeks, never on a daily period, and never without bars or without a whole week (never 「0週分」).
+    expect(weeklyShortNote(weeklyBars(full))).toBeNull();
+    expect(chartNotes({ bars: full, interval: 'week', period: weekly }).join('')).not.toContain('週足は');
+    for (const [, [period, interval]] of Object.entries(CHART_RANGES).filter(([key]) => key !== '2yw')) {
+      expect(chartNotes({ bars: short, interval, period }).join('')).not.toContain('週足は');
+      expect(chartNotes({ bars: bars(280), interval, period }).join('')).not.toContain('週足は');
+    }
+    expect(chartNotes({ bars: [], interval: 'week', period: weekly })).toEqual([]);
+    expect(chartNotes({ bars: null, interval: 'week', period: weekly })).toEqual([]);
+    // Three sessions from a Wednesday: a partial first week only, so no whole week.
+    const partial = bars(10).slice(2, 5);
+    expect(weeklyBars(partial)).toEqual([]);
+    expect(chartNotes({ bars: partial, interval: 'week', period: weekly })).toEqual(['—＝必要な本数に足りない値（移動平均・出来高の倍率）']);
+    for (const none of [null, undefined, []]) expect(weeklyShortNote(none)).toBeNull();
+  });
 });
 
 describe('the readout in round 2', () => {
@@ -285,5 +325,86 @@ describe('the chart helpers the card and the screen share', () => {
     expect(priceInRange(model, 65, 50)).toBe(false);
     expect(priceInRange(model, 65, null)).toBe(false);
     expect(chartContentKey({ ...model, crossing: { date: 'd', tone: 'zone' } }, 65)).not.toBe(chartContentKey({ ...model, crossing: { date: 'd', tone: 'neutral' } }, 65));
+  });
+});
+
+describe('structuralLowLegend (round 3 C3)', () => {
+  it('gives the legend\'s texts for the last contraction\'s low, longest first, each with the price formatPrice prints', () => {
+    expect(structuralLowLegend(84.03425682638421)).toEqual([['long', '最後の収縮の安値 84.03'], ['short', '収縮の安値 84.03'], ['tag', '安値 84.03']]);
+    // The price as the chart prints it below 1024px and wider alike: two decimals, thousands grouped.
+    for (const [, text] of structuralLowLegend(1234.5)) expect(text.endsWith(` ${formatPrice(1234.5)}`)).toBe(true);
+    expect(formatPrice(1234.5)).toBe('1,234.50');
+  });
+
+  it('gives nothing for an unknown low: never a price of 0 or —', () => {
+    for (const value of [null, undefined, NaN, Infinity]) expect(structuralLowLegend(value)).toBeNull();
+  });
+});
+
+describe('the readout\'s 対ピボット (round 3 C5): the pivot-distance rule, never +0.0% or −0.0%', () => {
+  // The latest close set to `close` (the bars before it climb from 80), read on certified bars against `pivot`.
+  const at = (close, pivot, interval = 'day') => chartReadout({ bars: bars(260, i => (i === 259 ? close : 80 + i * 0.01)), interval }, undefined, { certified: true, pivot });
+  const rule = (close, readout, pivot) => pivotDistanceText({ price: close, pivot, distance: readout.pivotRatio });
+
+  it('reads 「+0.1%未満」 a cent over the pivot and 「−0.1%未満」 a cent under it, daily and weekly alike', () => {
+    for (const interval of ['day', 'week']) {
+      const over = at(89.89, 89.88, interval), under = at(89.87, 89.88, interval);
+      expect(formatPercent(over.pivotRatio)).toBe('+0.0%');
+      expect(over.pivotText).toBe(rule(89.89, over, 89.88));
+      expect(over.pivotText.startsWith('+')).toBe(true);
+      expect(over.pivotText).not.toBe(formatPercent(over.pivotRatio));
+      expect(formatPercent(under.pivotRatio)).toBe('−0.0%');
+      expect(under.pivotText).toBe(rule(89.87, under, 89.88));
+      expect(under.pivotText.startsWith('−')).toBe(true);
+      expect(under.pivotText).not.toBe(formatPercent(under.pivotRatio));
+      // The in-band form is the rule's, whichever cent of the band: the same text as a close 0.04% over or under.
+      expect(over.pivotText).toBe(pivotDistanceText({ price: 100.04, pivot: 100, distance: 0.04 }));
+      expect(under.pivotText).toBe(pivotDistanceText({ price: 99.96, pivot: 100, distance: -0.04 }));
+    }
+  });
+
+  it('reads 「±0.0%」 at the pivot\'s cents, whichever side of the cent the float noise in the pivot falls', () => {
+    const atCents = pivotDistanceText({ price: 89.88, pivot: 89.88, distance: 0 });
+    expect(atCents.startsWith('±')).toBe(true);
+    for (const pivot of [89.88000000000001, 89.88 - 1e-12, 89.88]) {
+      const readout = at(89.88, pivot);
+      expect(readout.pivotText).toBe(rule(89.88, readout, pivot));
+      expect(readout.pivotText).toBe(atCents);
+    }
+    expect(formatPercent(at(89.88, 89.88000000000001).pivotRatio)).toBe('−0.0%');
+    // The rule is the cents', not the percent's: a pivot of 5.004 is at the cents of a close of 5.00 (−0.08%), as every
+    // screen prints it.
+    const cents = at(5, 5.004);
+    expect(formatPercent(cents.pivotRatio)).toBe('−0.1%');
+    expect(cents.pivotText).toBe(atCents);
+  });
+
+  it('prints ordinary distances exactly as before (formatPercent), and never a signed 0.0%', () => {
+    for (const [close, text] of [[101, '+1.0%'], [96.6, '−3.4%'], [112.3, '+12.3%']]) {
+      const readout = at(close, 100);
+      expect(readout.pivotText).toBe(text);
+      expect(readout.pivotText).toBe(formatPercent(readout.pivotRatio));
+    }
+    // Every close from 80 to 120 against a pivot of 100: off the pivot's cents and 0.05% or more away, the text is
+    // formatPercent's; it never reads +0.0% or −0.0%.
+    for (let cents = 8000; cents <= 12000; cents += 7) {
+      const close = cents / 100, readout = at(close, 100);
+      expect(readout.pivotText).not.toMatch(/^[+−]0\.0%$/);
+      if (cents !== 10000 && Math.abs(readout.pivotRatio).toFixed(1) !== '0.0') expect(readout.pivotText).toBe(formatPercent(readout.pivotRatio));
+    }
+  });
+
+  it('keeps formatPercent and positionGeometry.signed the same formula, so outside the band the readout cannot drift', () => {
+    const values = [0, -0, 0.05, -0.05, 0.0499, -0.0499, 0.15, -0.15, 1e-12, -1e-12, 99.95, -99.95, NaN, null, undefined, Infinity, -Infinity];
+    for (let v = -40; v <= 40; v += 0.0137) values.push(v);
+    for (const value of values) expect(formatPercent(value)).toBe(signed(value, 1));
+  });
+
+  it('gives no text where the ratio is unknown: bars not certified, a past bar, or no pivot', () => {
+    const model = { bars: bars(260), interval: 'day' };
+    expect(chartReadout(model, undefined, { certified: false, pivot: 120 })).toMatchObject({ pivotRatio: null, pivotText: null });
+    expect(chartReadout(model, 200, { certified: true, pivot: 120 })).toMatchObject({ pivotRatio: null, pivotText: null });
+    expect(chartReadout(model, undefined, { certified: true, pivot: null })).toMatchObject({ pivotRatio: null, pivotText: null });
+    expect(chartReadout({ bars: bars(260), interval: 'week' }, undefined, { certified: false, pivot: 120 })).toMatchObject({ pivotRatio: null, pivotText: null });
   });
 });
