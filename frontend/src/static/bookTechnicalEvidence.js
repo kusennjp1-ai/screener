@@ -1,6 +1,13 @@
 import { auditDailyBars } from './qualificationAudit.js';
+// The pivot's own bar (round 3 STEP 0 H1). Only this module, with its extension: export-research.mjs loads this file under
+// plain Node, and brief/pivotBar.js imports nothing (breakoutHistory.js is not imported here; its crossingFloor is
+// pivotBar(...).index by definition, which the tests assert).
+import { pivotBar } from './brief/pivotBar.js';
 
-export const BOOK_TECHNICAL_VERSION = 'book-technical-evidence-v2';
+// v3 (round 3 R6): contractions are measured only on the bars before the pivot's breakout bar. StockView uses published
+// evidence of the current version as it is and measures an older version again on the certified bars, so this bump
+// makes an already-published detail re-measured under the new code instead of showing its post-breakout legs.
+export const BOOK_TECHNICAL_VERSION = 'book-technical-evidence-v3';
 const finite = n => typeof n === 'number' && Number.isFinite(n);
 const mean = xs => xs.reduce((sum, x) => sum + x, 0) / xs.length;
 const validDate = date => typeof date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(date) && Number.isFinite(Date.parse(date)) && new Date(date).toISOString().slice(0, 10) === date;
@@ -76,7 +83,11 @@ function measuredLeg(bars, start, end) {
 // so a base that deepened reads as one deeper first contraction. A pullback whose high is in the lower
 // half of the previous contraction's range is the base still repairing, not a contraction. The last
 // contraction needs only the noise floor, so a tight 2–4% final T is kept. Measurement stops where the
-// price first trades above the base high.
+// price first trades above the base high, and never runs into the pivot's breakout (round 3 R6, 独自判定): when the
+// row's Setup Engine pivot has its own bar (pivotBar) and a later close above the pivot's cents (pivotBreakout), the
+// lookback, the base high and every contraction are those of the bars before that close, i.e. exactly what this
+// measurement gives on the bars up to the last session before the breakout. The price action from the breakout on is
+// never a contraction of that pivot. Without such a bar or close (pivotBreakout state 'unknown' or 'none'), nothing changes.
 const VCP_LOOKBACK = 150, ATR_SESSIONS = 20, ATR_MULTIPLE = 1.5, DEPTH_FRACTION = 0.3, FINAL_FLOOR_PCT = 1.5, MAX_LEGS = 6, REPAIR_FRACTION = 0.5;
 export const VCP_METHOD = Object.freeze({ lookback: VCP_LOOKBACK, atrSessions: ATR_SESSIONS, atrMultiple: ATR_MULTIPLE, depthFraction: DEPTH_FRACTION, finalFloorPct: FINAL_FLOOR_PCT, maxLegs: MAX_LEGS, repairFraction: REPAIR_FRACTION });
 
@@ -93,32 +104,68 @@ function atrPercent(bars) {
   return out;
 }
 
-/** The Setup Engine's base (its primary pattern's dates) when the recalculation is current for `date`. */
-function setupBase(row, bars, date) {
+/**
+ * The Setup Engine's base (its primary pattern's dates) when the recalculation is current for `date`. `limit` (the
+ * pivot's breakout bar index, or bars.length without one) confines it to the bars before the breakout: the anchor is
+ * searched only under `limit` and needs a bar after it under `limit`; otherwise null (the zigzag's anchor is used).
+ */
+function setupBase(row, bars, date, limit = bars.length) {
   const calculation = row?.setup_recalculation;
   if (calculation?.status !== 'calculated' || calculation.as_of_date !== date) return null;
   const primary = row?.se_pattern_primary;
   const candidate = Array.isArray(row?.se_candidates) && primary && primary !== 'none' ? row.se_candidates.find(c => c?.pattern === primary) : null;
   if (!candidate || !validDate(candidate.start_date)) return null;
   const start = bars.findIndex(b => b.date >= candidate.start_date);
-  let end = bars.length - 1;
+  let end = limit - 1;
   if (validDate(candidate.end_date)) while (end > start && bars[end].date > candidate.end_date) end--;
   if (start < 0 || end <= start) return null;
   let anchor = start;
   for (let i = start; i <= end; i++) if (bars[i].high > bars[anchor].high) anchor = i;
-  return anchor < bars.length - 1 ? { anchor, source: 'setup-engine', pattern: primary, startDate: candidate.start_date } : null;
+  return anchor < limit - 1 ? { anchor, source: 'setup-engine', pattern: primary, startDate: candidate.start_date } : null;
 }
 
-function automaticLegs(bars, setup) {
-  const atr = atrPercent(bars), n = bars.length;
+/**
+ * Where the row's Setup Engine pivot broke out in `bars` (round 3 R6, 独自判定; no new threshold): the cut the automatic
+ * contraction measurement stops at.
+ * - The pivot's own bar is pivotBar(bars, row) (H1). Null (no or a malformed se_pivot_date, a vcp primary, no pivot, no
+ *   bar whose high is the pivot in cents): `{ state: 'unknown', pivotDate: null, breakoutDate: null, index: null,
+ *   measuredThrough: null }`, and nothing is cut.
+ * - The breakout bar is the FIRST bar after the pivot's bar whose close, in whole cents, is above `se_pivot_price` in
+ *   whole cents (the field pivotBar reads). A close at the pivot's cents is a touch, never the breakout; a bar without a
+ *   finite close is passed over. A later close back under the pivot and a re-cross never move it.
+ * - No such close yet: `{ state: 'none', pivotDate, breakoutDate: null, index: null, measuredThrough: null }`, nothing cut.
+ * - Found: `{ state: 'cut', pivotDate, breakoutDate, index, measuredThrough }`, `index` the breakout bar's index in
+ *   `bars` and `measuredThrough` the date of the bar before it (the last bar a contraction may use).
+ * crossingFloor (brief/breakoutHistory.js) is pivotBar(bars, row)?.index, so this cut starts from the same bar as every
+ * crossing reader.
+ */
+export function pivotBreakout(bars, row) {
+  const bar = pivotBar(bars, row);
+  if (!bar) return { state: 'unknown', pivotDate: null, breakoutDate: null, index: null, measuredThrough: null };
+  const pivot = Math.round(row.se_pivot_price * 100);
+  for (let i = bar.index + 1; i < bars.length; i++) {
+    const close = bars[i]?.close;
+    if (finite(close) && Math.round(close * 100) > pivot) return { state: 'cut', pivotDate: bar.date, breakoutDate: bars[i].date, index: i, measuredThrough: bars[i - 1].date };
+  }
+  return { state: 'none', pivotDate: bar.date, breakoutDate: null, index: null, measuredThrough: null };
+}
+
+/**
+ * The automatic legs. `cut` (pivotBreakout's index, or null) is the pivot's breakout bar: the zigzag's lookback and every
+ * contraction end before it. The ATR comes from the whole series (it is trailing, so its values before `cut` are those of
+ * the bars before it). The base's end, brokeOut and breakoutDate keep their meaning on the whole series: the first bar
+ * after the anchor whose high is above the base high.
+ */
+function automaticLegs(bars, setup, cut = null) {
+  const atr = atrPercent(bars), n = bars.length, end = cut ?? n;
   const floorAt = i => ATR_MULTIPLE * (atr[i] ?? atr.find(v => v !== null) ?? 0);
   const drop = (h, l) => (bars[h].high - bars[l].low) / bars[h].high * 100;
   const rise = (l, i) => (bars[i].high - bars[l].low) / bars[l].low * 100;
   let anchor = setup?.anchor ?? null;
   if (anchor === null) {
     // Pass 1: confirmed swing highs with the ATR threshold; the base high is the highest of them.
-    let mode = 'up', ext = Math.max(0, n - VCP_LOOKBACK);
-    for (let i = ext + 1; i < n; i++) {
+    let mode = 'up', ext = Math.max(0, end - VCP_LOOKBACK);
+    for (let i = ext + 1; i < end; i++) {
       if (mode === 'up') {
         if (bars[i].high > bars[ext].high) ext = i;
         else if (drop(ext, i) >= floorAt(ext)) { if (anchor === null || bars[ext].high > bars[anchor].high) anchor = ext; mode = 'down'; ext = i; }
@@ -134,6 +181,8 @@ function automaticLegs(bars, setup) {
   base.endDate = bars[stop - 1].date;
   base.brokeOut = stop < n;
   if (base.brokeOut) base.breakoutDate = bars[stop].date;
+  // The contractions end at the base's breakout or before the pivot's breakout bar, whichever comes first.
+  const limit = Math.min(stop, end);
   const legs = [];
   const push = (a, b) => {
     let leg = { a, b };
@@ -145,7 +194,7 @@ function automaticLegs(bars, setup) {
     legs.push({ ...leg, depth: drop(leg.a, leg.b) });
   };
   let mode = 'down', hi = anchor, lo = null;
-  for (let i = anchor + 1; i < stop; i++) {
+  for (let i = anchor + 1; i < limit; i++) {
     if (mode === 'down') {
       if (lo === null || bars[i].low < bars[lo].low) lo = i;
       else if (rise(lo, i) >= Math.max(floorAt(lo), DEPTH_FRACTION * drop(hi, lo))) { push(hi, lo); mode = 'up'; hi = i; lo = null; }
@@ -156,18 +205,21 @@ function automaticLegs(bars, setup) {
   else if (mode === 'up') {
     // The final contraction: only the noise floor (1.5%, or one ATR20 when that is larger) applies.
     let low = null;
-    for (let j = hi + 1; j < stop; j++) if (low === null || bars[j].low < bars[low].low) low = j;
+    for (let j = hi + 1; j < limit; j++) if (low === null || bars[j].low < bars[low].low) low = j;
     if (low !== null && drop(hi, low) >= Math.max(FINAL_FLOOR_PCT, atr[hi] ?? 0)) push(hi, low);
   }
   return { base, legs: legs.map(({ a, b }) => measuredLeg(bars, a, b)), found: legs.length };
 }
 
 function contractions(bars, review, { row = null, date = null } = {}) {
+  // The pivot's breakout (R6): informational on the reviewer's intervals, the cut of the automatic measurement.
+  const { index: cut, ...pivotCut } = pivotBreakout(bars, row);
   const result = { scope: 'OHLCV実測を伴う通常VCPの候補。パワープレー等の例外は別評価',
-    certification: false, source: 'algorithm', reviewer: null, errors: [], legs: [], base: null,
+    certification: false, source: 'algorithm', reviewer: null, errors: [], legs: [], base: null, pivotCut,
     limitations: ['ベース高値（直近150本で確定した最高のスイング高値、またはSetup Engineの現在のベース）からのジグザグ測定は独自近似',
       '反転幅は1.5×ATR20と直前の収縮の深さの3割の大きい方。最後の収縮は雑音下限（1.5%とATR20の大きい方）のみ',
       '前の収縮の安値を割り込んだ押しは同じ下げとして前の収縮に含め、前の収縮の値幅の下半分からの押しは土台の修復中として数えない',
+      '自動測定では、ピボットの日足の後に終値が初めてピボットを上回った日（上抜け）からの値動きを収縮に数えない（独自判定）',
       '出来高区間平均は売り枯れの代理指標', 'ベース全体の位置・ステージ・買い場は別途確認'] };
   if (review != null) {
     result.source = 'reviewer-intervals';
@@ -185,7 +237,8 @@ function contractions(bars, review, { row = null, date = null } = {}) {
     }
     if (result.errors.length) { result.legs = []; return result; }
   } else {
-    const measured = automaticLegs(bars, setupBase(row, bars, date));
+    const limit = pivotCut.state === 'cut' ? cut : bars.length;
+    const measured = automaticLegs(bars, setupBase(row, bars, date, limit), pivotCut.state === 'cut' ? cut : null);
     result.base = measured.base;
     result.legs = measured.legs.slice(-MAX_LEGS);
     // More contractions than the six kept: the first kept one is not the base's first.
@@ -201,6 +254,14 @@ function contractions(bars, review, { row = null, date = null } = {}) {
   result.finalContractionVolume = legs.at(-1)?.volumeEvidence ?? null;
   result.method = '古い順に日中高値→安値を実測。全隣接収縮を比較し、スコアによる欠損補填なし';
   return result;
+}
+
+/**
+ * The contraction measurement on `bars` as buildBookTechnicalEvidence's `vcp` (without the OHLCV audit, which the caller
+ * owes): the reviewer's intervals when `review` is given, else the automatic legs for `row` on the analysis `date`.
+ */
+export function measureContractions(bars, { row = null, date = null, review = null } = {}) {
+  return contractions(bars, review, { row, date });
 }
 
 export function buildBookTechnicalEvidence(row, payload, date, { benchmark = null, review = null } = {}) {

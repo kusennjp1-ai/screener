@@ -1106,6 +1106,7 @@
         "rs_rating_ok"
       ],
       "failed_checks": [
+        "price_pinned",
         "volume_above_dryup_cap",
         "rs_leadership_insufficient",
         "stage_not_ok",
@@ -1124,7 +1125,8 @@
         "vcp:vcp_volume_contraction_unconfirmed",
         "vcp:vcp_right_edge_drying_unconfirmed",
         "vcp:vcp_score_below_legacy_threshold",
-        "vcp:vcp_insufficient_bases"
+        "vcp:vcp_insufficient_bases",
+        "contraction_unconfirmed"
       ]
     }
   }

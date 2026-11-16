@@ -597,11 +597,13 @@ class TestSetupReadinessRegressions:
         assert payload["setup_ready"] is True
         assert explain["failed_checks"] == []
         # The other detectors' misses and the stub are kept as diagnostics, inside explain,
-        # each named after its detector.
+        # each named after its detector. A steady advance has no measured contraction, so the
+        # round-3 setup diagnostic follows them; it never fails readiness either.
         assert explain["diagnostics"] == [
             "cup_with_handle:not_detected",
             "cup_with_handle:cup_structure_not_found",
             "double_bottom:not_implemented",
+            "contraction_unconfirmed",
         ]
         assert "not_implemented" not in explain["failed_checks"]
 
@@ -639,6 +641,7 @@ class TestSetupReadinessRegressions:
         assert explain["diagnostics"] == [
             "needs_more_history:insufficient_data",
             "needs_more_history:daily_bars_lt_400",
+            "contraction_unconfirmed",
         ]
 
     def test_a_detector_that_raises_makes_the_scan_an_error_not_a_ready_row(self):
@@ -675,3 +678,408 @@ class TestSetupReadinessRegressions:
         noted = build_setup_engine_payload(**ready, diagnostics=["cup_with_handle:not_detected"])
         assert noted["setup_ready"] is True
         assert noted["explain"]["diagnostics"] == ["cup_with_handle:not_detected"]
+
+
+class TestSetupDiagnostics:
+    """Round 3 R3c: three setup diagnostics for ``explain.diagnostics``. Each fires on its
+    shape, is absent when its input is missing (unknown is not a finding), and never fails
+    readiness."""
+
+    @staticmethod
+    def _frame(closes, *, spread: float = 0.005, end: str = "2025-12-19") -> pd.DataFrame:
+        closes = np.asarray(closes, dtype=float)
+        index = pd.bdate_range(end=pd.Timestamp(end), periods=len(closes))
+        return pd.DataFrame(
+            {"Open": closes, "High": closes * (1 + spread), "Low": closes * (1 - spread),
+             "Close": closes, "Volume": np.full(len(closes), 1e6)},
+            index=index,
+        )
+
+    @staticmethod
+    def _ramp(*legs):
+        """Piecewise-linear closes: legs of (target, sessions) from a start value."""
+        out = [float(legs[0])]
+        for target, sessions in legs[1:]:
+            start = out[-1]
+            out.extend(start + (target - start) * (k + 1) / sessions for k in range(sessions))
+        return out
+
+    def _diagnostics(self, frame, *, pattern, timeframe, pivot, pivot_date, **candidate):
+        from app.analysis.patterns.readiness import setup_diagnostics
+
+        cand = {"pattern": pattern, "timeframe": timeframe, "pivot_price": pivot, "pivot_date": pivot_date, **candidate}
+        return setup_diagnostics(
+            frame, pattern_primary=pattern, pivot_price=pivot, pivot_date=pivot_date, candidates=[cand],
+        )
+
+    def test_constants_are_named_and_unchanged(self):
+        from app.analysis.patterns import config
+
+        assert config.PIVOT_ALREADY_CROSSED_PCT == 3.0
+        assert config.PIVOT_BELOW_BASE_HIGH_PCT == 5.0
+
+    # -- pivot_already_crossed ------------------------------------------------
+
+    def _pivot_frame(self, after_close: float):
+        """A daily pivot on bar 99 (high = pivot), then one close at ``after_close`` on bar 100."""
+        closes = [50.0] * 99 + [50.0, after_close, 50.0]
+        frame = self._frame(closes, spread=0.0)
+        frame.iloc[99, frame.columns.get_loc("High")] = 51.0
+        return frame, frame.index[99].date().isoformat()
+
+    def test_pivot_already_crossed_fires_on_a_close_above_pivot_plus_three_percent_after_its_bar(self):
+        frame, day = self._pivot_frame(after_close=51.0 * 1.031)
+        found = self._diagnostics(frame, pattern="nr7_inside_day", timeframe="daily", pivot=51.0, pivot_date=day)
+        assert "pivot_already_crossed" in found
+
+    def test_pivot_already_crossed_needs_more_than_three_percent(self):
+        frame, day = self._pivot_frame(after_close=51.0 * 1.029)
+        found = self._diagnostics(frame, pattern="nr7_inside_day", timeframe="daily", pivot=51.0, pivot_date=day)
+        assert "pivot_already_crossed" not in found
+
+    def test_pivot_already_crossed_is_absent_without_the_pivots_bar(self):
+        frame, day = self._pivot_frame(after_close=60.0)
+        for pivot_date, timeframe, pivot in ((None, "daily", 51.0), ("2025-13-01", "daily", 51.0),
+                                             (day, "daily", 51.5), (day, "daily", None)):
+            found = self._diagnostics(frame, pattern="nr7_inside_day", timeframe=timeframe, pivot=pivot,
+                                      pivot_date=pivot_date)
+            assert "pivot_already_crossed" not in found, (pivot_date, timeframe, pivot)
+        # No candidate of the primary's pattern: its timeframe (and so its pivot's bar) is unknown.
+        from app.analysis.patterns.readiness import setup_diagnostics
+
+        assert "pivot_already_crossed" not in setup_diagnostics(
+            frame, pattern_primary="nr7_inside_day", pivot_price=51.0, pivot_date=day, candidates=[])
+
+    def test_a_weekly_label_bounds_at_the_latest_bar_of_its_week_with_the_pivots_high(self):
+        """The W-FRI label is the week's Friday; the pivot's bar is Wednesday (its high in cents).
+        A close far above the pivot on the Tuesday before it is not a crossing; Thursday's is."""
+        from app.analysis.patterns.readiness import daily_bars_from_frame, pivot_bar_index
+
+        closes = [50.0] * 100
+        frame = self._frame(closes, spread=0.0, end="2025-12-19")  # ends on a Friday
+        tue, wed, thu = frame.index[-4], frame.index[-3], frame.index[-2]
+        frame.loc[wed, "High"] = 51.0
+        frame.loc[tue, "Close"] = 60.0
+        frame.loc[tue, "High"] = 60.0
+        label = frame.index[-1].date().isoformat()
+        bars = daily_bars_from_frame(frame)
+        assert pivot_bar_index(bars, pivot_price=51.0, pivot_date=label, timeframe="weekly") == len(frame) - 3
+        found = self._diagnostics(frame, pattern="cup_with_handle", timeframe="weekly", pivot=51.0, pivot_date=label)
+        assert "pivot_already_crossed" not in found
+        frame.loc[thu, "Close"] = 53.0
+        found = self._diagnostics(frame, pattern="cup_with_handle", timeframe="weekly", pivot=51.0, pivot_date=label)
+        assert "pivot_already_crossed" in found
+
+    def test_cents_round_half_up_as_javascript_does(self):
+        """pivotBar.js compares Math.round(price × 100): 10.125 is 1013 cents (Python's round gives 1012)."""
+        from app.analysis.patterns.readiness import _cents, daily_bars_from_frame, pivot_bar_index
+
+        assert _cents(10.125) == 1013 and round(10.125 * 100) == 1012
+        frame = self._frame([10.0] * 30, spread=0.0)
+        frame.iloc[-1, frame.columns.get_loc("High")] = 10.13
+        bars = daily_bars_from_frame(frame)
+        day = frame.index[-1].date().isoformat()
+        assert pivot_bar_index(bars, pivot_price=10.125, pivot_date=day, timeframe="daily") == len(frame) - 1
+
+    # -- pivot_below_base_high ------------------------------------------------
+
+    def _cup_frame(self, pivot_high: float):
+        """A left lip at 100 (a Friday), a cup, then a handle whose high is the pivot."""
+        closes = self._ramp(80.0, (100.0, 40), (75.0, 30), (pivot_high, 30), (pivot_high - 3, 5), (pivot_high - 1, 5))
+        frame = self._frame(closes, spread=0.0)
+        top = frame.index[40]
+        frame.loc[top, "High"] = 100.0
+        handle = frame.index[100]
+        return frame, top, handle
+
+    def test_pivot_below_base_high_fires_more_than_five_percent_under_the_left_lip(self):
+        frame, top, handle = self._cup_frame(pivot_high=94.0)
+        day = handle.date().isoformat()
+        found = self._diagnostics(frame, pattern="first_pullback", timeframe="daily", pivot=94.0, pivot_date=day,
+                                  start_date=handle.date().isoformat(), metrics={"left_lip_date": top.date().isoformat()})
+        assert "pivot_below_base_high" in found
+
+    def test_pivot_below_base_high_is_absent_within_five_percent_or_without_a_base_start(self):
+        frame, top, handle = self._cup_frame(pivot_high=96.0)
+        day = handle.date().isoformat()
+        found = self._diagnostics(frame, pattern="first_pullback", timeframe="daily", pivot=96.0, pivot_date=day,
+                                  metrics={"left_lip_date": top.date().isoformat()})
+        assert "pivot_below_base_high" not in found
+        frame, top, handle = self._cup_frame(pivot_high=94.0)
+        day = handle.date().isoformat()
+        # The handle's own start is the start: no left lip, no finding (the window holds the handle only).
+        found = self._diagnostics(frame, pattern="first_pullback", timeframe="daily", pivot=94.0, pivot_date=day,
+                                  start_date=day)
+        assert "pivot_below_base_high" not in found
+        found = self._diagnostics(frame, pattern="first_pullback", timeframe="daily", pivot=94.0, pivot_date=day)
+        assert "pivot_below_base_high" not in found
+
+    # -- contraction_unconfirmed ----------------------------------------------
+
+    def _contracting(self):
+        """An advance to 100, then three progressively shallower contractions (20%, 10%, 4%)."""
+        return self._ramp(70.0, (100.0, 60), (80.0, 15), (97.0, 15), (87.0, 10), (95.0, 10), (91.0, 6),
+                          (94.0, 4), (93.6, 5))
+
+    def test_contraction_measurement_finds_three_contractions_so_no_diagnostic(self):
+        from app.analysis.patterns.readiness import contraction_measurements_valid, daily_bars_from_frame
+
+        frame = self._frame(self._contracting())
+        assert contraction_measurements_valid(daily_bars_from_frame(frame), None) is True
+        assert "contraction_unconfirmed" not in self._diagnostics(
+            frame, pattern="vcp", timeframe="daily", pivot=None, pivot_date=None)
+
+    def test_contraction_unconfirmed_fires_on_a_steady_advance(self):
+        frame = self._frame(self._ramp(50.0, (90.0, 200)))
+        assert "contraction_unconfirmed" in self._diagnostics(
+            frame, pattern="vcp", timeframe="daily", pivot=None, pivot_date=None)
+
+    def test_contraction_unconfirmed_is_absent_when_a_bar_is_missing(self):
+        from app.analysis.patterns.readiness import contraction_measurements_valid, daily_bars_from_frame
+
+        frame = self._frame(self._ramp(50.0, (90.0, 200)))
+        frame.iloc[150, frame.columns.get_loc("High")] = np.nan
+        assert contraction_measurements_valid(daily_bars_from_frame(frame), None) is None
+        assert "contraction_unconfirmed" not in self._diagnostics(
+            frame, pattern="vcp", timeframe="daily", pivot=None, pivot_date=None)
+
+    # -- never readiness ------------------------------------------------------
+
+    def test_the_diagnostics_never_fail_readiness(self):
+        from app.analysis.patterns.readiness import SETUP_DIAGNOSTICS
+        from app.scanners.setup_engine_scanner import build_setup_engine_payload
+
+        ready = dict(
+            setup_score=80, quality_score=80, readiness_score=95, distance_to_pivot_pct=0,
+            pattern_primary="vcp", pattern_confidence=70,
+        )
+        noted = build_setup_engine_payload(**ready, diagnostics=list(SETUP_DIAGNOSTICS))
+        assert noted["setup_ready"] is True
+        assert noted["explain"]["failed_checks"] == []
+        assert noted["explain"]["diagnostics"] == [
+            "contraction_unconfirmed", "pivot_already_crossed", "pivot_below_base_high",
+        ]
+
+    def test_contraction_reads_the_setup_engine_base_as_the_payload_publishes_its_dates(self):
+        """The brief anchors the base on the primary's published start/end dates (a cup's handle
+        dates are lifted from its metrics). Anchored on the last 3% of the base, no sequence is
+        found, so the diagnostic fires although the algorithm alone finds three contractions."""
+        frame = self._frame(self._contracting())
+        start, end = frame.index[-12].date().isoformat(), frame.index[-6].date().isoformat()
+        found = self._diagnostics(frame, pattern="cup_with_handle", timeframe="weekly", pivot=None, pivot_date=None,
+                                  metrics={"handle_start_date": start, "handle_end_date": end})
+        assert "contraction_unconfirmed" in found
+        assert "contraction_unconfirmed" not in self._diagnostics(
+            frame, pattern="cup_with_handle", timeframe="weekly", pivot=None, pivot_date=None)
+
+
+class TestPricePinned:
+    """Round 3 R3a: ``price_pinned`` fails readiness when the brief's low-activity rule holds
+    (priceActivity.js, R2(a), ported with the same constants). Missing data is never pinned."""
+
+    @staticmethod
+    def _bars(closes, spreads, *, end: str = "2025-12-19") -> pd.DataFrame:
+        closes = np.asarray(closes, dtype=float)
+        spreads = np.broadcast_to(np.asarray(spreads, dtype=float), closes.shape)
+        index = pd.bdate_range(end=pd.Timestamp(end), periods=len(closes))
+        return pd.DataFrame(
+            {"Open": closes, "High": closes * (1 + spreads / 2), "Low": closes * (1 - spreads / 2),
+             "Close": closes, "Volume": np.full(len(closes), 1e6)},
+            index=index,
+        )
+
+    def _gapped(self, *, before: int = 80, gap: float = 40.0, after: int = 25, pin: float = 0.004):
+        """priceActivity.test.js ``gapped``: ±3% swings, a one-day move of ``gap`` %, then a pin."""
+        closes = [20 * (1 + 0.03 * np.sin(i)) for i in range(before)]
+        spreads = [0.04] * before
+        level = closes[-1] * (1 + gap / 100)
+        closes.append(level)
+        spreads.append(pin)
+        for i in range(1, after + 1):
+            closes.append(level * (1 + (pin / 4 if i % 2 else -pin / 4)))
+            spreads.append(pin)
+        return self._bars(closes, spreads)
+
+    @staticmethod
+    def _activity(frame):
+        from app.analysis.patterns.readiness import daily_bars_from_frame, price_activity
+
+        return price_activity(daily_bars_from_frame(frame))
+
+    def test_a_gap_inside_the_window_that_pins_is_since_gap(self):
+        assert self._activity(self._gapped()).reason == "since_gap"
+        assert self._activity(self._gapped(gap=-30.0, after=20)).reason == "since_gap"
+
+    def test_a_gap_older_than_the_window_or_too_few_sessions_or_too_small_is_not_since_gap(self):
+        assert self._activity(self._gapped(after=70, pin=0.012)).reason != "since_gap"
+        assert self._activity(self._gapped(after=14, pin=0.012)).low is False
+        assert self._activity(self._gapped(after=15, pin=0.012)).reason == "since_gap"
+        assert self._activity(self._gapped(gap=9.0, pin=0.012)).low is False
+
+    def test_adr20_alone_and_the_sixty_session_range(self):
+        climb = [10 * 1.003 ** i for i in range(80)]
+        assert self._activity(self._bars(climb, 0.003)).reason == "adr"
+        assert self._activity(self._bars(climb, 0.02)).low is False
+        narrow = self._bars([50.0] * 70, 0.01)
+        assert self._activity(narrow).reason == "range60"
+
+    def test_missing_or_short_bars_are_never_pinned(self):
+        from app.analysis.patterns.readiness import price_pinned
+
+        pinned = self._gapped()
+        assert price_pinned(pinned) is True
+        assert price_pinned(pinned.iloc[-59:]) is False
+        no_low = pinned.copy()
+        no_low.iloc[-3, no_low.columns.get_loc("Low")] = np.nan
+        assert self._activity(no_low).low is False
+        no_close = pinned.copy()
+        no_close.iloc[-40, no_close.columns.get_loc("Close")] = np.nan
+        # The since-gap rule is unknown without that close; ADR20 still reads its own (valid) bars.
+        assert self._activity(no_close).reason == "adr"
+        assert price_pinned(pd.DataFrame()) is False
+
+    def test_a_pinned_price_fails_readiness_as_a_failed_check_never_a_gate(self):
+        """The ideal VCP of TestSetupReadinessRegressions, but its last 30 sessions pinned after a
+        +40% gap: not ready, and ``price_pinned`` is the one failed check (the ten gates pass)."""
+        from app.analysis.patterns.readiness import PRICE_PINNED
+
+        cases = TestSetupReadinessRegressions()
+        stock, spy = cases._frames()
+        level = float(stock["Close"].iloc[-31]) * 1.4
+        pin = stock.index[-30:]
+        stock.loc[pin, "Close"] = level
+        stock.loc[pin, "Open"] = level
+        stock.loc[pin, "High"] = level * 1.001
+        stock.loc[pin, "Low"] = level * 0.999
+        scanner = SetupEngineScanner()
+        pivot = level * 1.01
+
+        class _IdealVcp(PatternDetector):
+            name = "vcp"
+
+            def detect(self, detector_input, parameters):
+                del detector_input, parameters
+                return PatternDetectorResult.detected(
+                    self.name,
+                    PatternCandidateModel(
+                        pattern="vcp", timeframe="daily", source_detector=self.name, pivot_price=pivot,
+                        pivot_type="vcp_pivot", quality_score=85.0, readiness_score=88.0, confidence=0.8,
+                    ),
+                )
+
+        scanner._aggregator = SetupEngineAggregator(detectors=[_IdealVcp()])
+        result = scanner.scan_stock("PIN", StockData(symbol="PIN", price_data=stock, benchmark_data=spy))
+        payload = result.details["setup_engine"]
+        assert payload["setup_ready"] is False and result.passes is False
+        assert payload["explain"]["failed_checks"] == [PRICE_PINNED]
+        assert PRICE_PINNED not in payload["explain"]["diagnostics"]
+
+
+class TestPublishedStageParity:
+    """Round 3 R3b: gate 8 reads the stage the Minervini scanner publishes for the same bars
+    (``WeinsteinstageAnalyzer.determine_stage`` with SMA150 and the 52-week high), with and
+    without the orchestrator's precomputed context, and requires stage 2 (None passes)."""
+
+    _N = 350
+
+    @classmethod
+    def _frame(cls, close: np.ndarray, volume: float = 2_000_000.0) -> pd.DataFrame:
+        index = pd.bdate_range(end=pd.Timestamp("2025-12-19"), periods=len(close))
+        return pd.DataFrame(
+            {"Open": close * 0.998, "High": close * 1.008, "Low": close * 0.992, "Close": close,
+             "Volume": np.full(len(close), volume)},
+            index=index,
+        )
+
+    @classmethod
+    def _shapes(cls) -> dict[str, np.ndarray]:
+        n = cls._N
+        rng = np.random.default_rng(7)
+        leader = 50 * 1.003 ** np.arange(n) * (1 + rng.normal(0, 0.002, n))
+        # A flat 200-day line with a small lift at the end: the quick check's stage 1 (it
+        # passed gate 8), the scanner's stage 3 (above a flat line).
+        flat = 50 * (1 + rng.normal(0, 0.003, n))
+        flat[-40:] = flat[-40:] * np.linspace(1.0, 1.04, 40)
+        # A pullback under the 50-day line in a rising trend: the quick check's stage 3 (it
+        # failed gate 8), the scanner's stage 2.
+        pullback = 50 * 1.003 ** np.arange(n)
+        pullback[-12:] = pullback[-13] * np.linspace(0.99, 0.93, 12)
+        pullback = pullback * (1 + rng.normal(0, 0.001, n))
+        decline = 80 * 0.997 ** np.arange(n) * (1 + rng.normal(0, 0.002, n))
+        return {"leader": leader, "flat_200": flat, "pullback": pullback, "decline": decline}
+
+    @classmethod
+    def _spy(cls) -> pd.DataFrame:
+        rng = np.random.default_rng(11)
+        return cls._frame(400 * (1 + rng.normal(0, 0.002, cls._N)), volume=5e7)
+
+    @staticmethod
+    def _stock_data(stock: pd.DataFrame, spy: pd.DataFrame, *, precomputed: bool) -> StockData:
+        from app.scanners.scan_orchestrator import _build_precomputed_scan_context
+
+        data = StockData(symbol="X", price_data=stock, benchmark_data=spy)
+        if precomputed:
+            data.precomputed_scan_context = _build_precomputed_scan_context(data)
+            assert data.precomputed_scan_context is not None
+        return data
+
+    @staticmethod
+    def _quick_stage(close: np.ndarray) -> int:
+        from app.scanners.criteria.stage_analysis import quick_stage_check
+
+        series = pd.Series(close)
+        ma_200 = series.rolling(200).mean()
+        return quick_stage_check(
+            float(close[-1]), float(series.rolling(50).mean().iloc[-1]),
+            float(series.rolling(150).mean().iloc[-1]), float(ma_200.iloc[-1]), float(ma_200.iloc[-21]),
+        )
+
+    @pytest.mark.parametrize("precomputed", [False, True], ids=["raw", "precomputed"])
+    def test_gate_8_receives_the_stage_the_scanner_publishes(self, precomputed):
+        from app.scanners.minervini_scanner import MinerviniScanner
+
+        spy = self._spy()
+        published = {}
+        for name, close in self._shapes().items():
+            data = self._stock_data(self._frame(close), spy, precomputed=precomputed)
+            scanner_stage = MinerviniScanner().scan_stock("X", data).details["stage"]
+            payload = SetupEngineScanner().scan_stock("X", data).details["setup_engine"]
+            assert payload["stage"] == scanner_stage, name
+            explain = payload["explain"]
+            if scanner_stage == 2:
+                assert "stage_ok" in explain["passed_checks"] and "stage_not_ok" not in explain["failed_checks"], name
+            else:
+                assert "stage_not_ok" in explain["failed_checks"] and "stage_ok" not in explain["passed_checks"], name
+            published[name] = scanner_stage
+        assert published == {"leader": 2, "flat_200": 3, "pullback": 2, "decline": 4}
+
+    def test_the_two_classifiers_disagree_and_gate_8_follows_the_published_one(self):
+        """The cases R3b changes: a flat 200-day line (quick 1, scanner 3) now fails, and a
+        pullback under the 50-day line (quick 3, scanner 2) now passes."""
+        shapes = self._shapes()
+        assert self._quick_stage(shapes["flat_200"]) == 1
+        assert self._quick_stage(shapes["pullback"]) == 3
+        spy = self._spy()
+        flat = SetupEngineScanner().scan_stock(
+            "X", self._stock_data(self._frame(shapes["flat_200"]), spy, precomputed=False),
+        ).details["setup_engine"]
+        assert flat["stage"] == 3 and "stage_not_ok" in flat["explain"]["failed_checks"]
+        pullback = SetupEngineScanner().scan_stock(
+            "X", self._stock_data(self._frame(shapes["pullback"]), spy, precomputed=False),
+        ).details["setup_engine"]
+        assert pullback["stage"] == 2 and "stage_ok" in pullback["explain"]["passed_checks"]
+
+    def test_a_missing_200_day_line_is_no_stage_and_passes(self):
+        """Without a 200-day line there is no stage (None), and gate 8 passes it: a missing
+        stage is never a failure. (The data policy needs 252 bars before any gate runs, so a
+        scan only reaches this through a gap in the closes.)"""
+        from app.scanners.criteria.moving_averages import MovingAverageAnalyzer
+        from app.scanners.criteria.relative_strength import RelativeStrengthCalculator
+
+        close = self._shapes()["leader"].copy()
+        close[-150:-100] = np.nan
+        stock = self._frame(close)
+        context = SetupEngineScanner._compute_context(
+            stock, None, "X", MovingAverageAnalyzer(), RelativeStrengthCalculator(),
+        )
+        assert context["stage"] is None

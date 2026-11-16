@@ -6,6 +6,11 @@
 // unknown. The structural stop is chosen per stock: one stock's structure never sets another's stop.
 import { finite } from '../researchEngine';
 import { buyGate, marketGuidePercent, PLAN_BLOCKED, templateReference } from './buyGate';
+import { pivotBar } from './pivotBar';
+import { shortDate } from './briefShared';
+// The pivot's breakout bar (round 3 R6): one definition of the cut for the contraction measurement and this stop. It
+// imports only qualificationAudit and pivotBar, neither of which imports this module, so there is no cycle.
+import { pivotBreakout } from '../bookTechnicalEvidence';
 
 // The plan's gate is the conclusion's (buyGate.js); these two live there and keep their old import path.
 export { PLAN_BLOCKED, templateReference };
@@ -158,27 +163,77 @@ export function adrState(judged, sessions = ADR_SESSIONS) {
 export const adrPercent = (judged, sessions = ADR_SESSIONS) => adrState(judged, sessions).value;
 
 const unknownStructural = reason => ({ state: 'unknown', low: null, lowDate: null, stop: null, percent: null, buffer: STRUCTURAL_STOP_BUFFER_PERCENT, reason });
+const isoDay = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
+
+/**
+ * The structural stop's reason when the measured base is a previous one (round 3 R2(b)): 「前の土台（M/Dに上抜け済み）」, M/D the
+ * base's breakout date as the brief writes dates (shortDate, against the analysis date `asOf`).
+ */
+export const previousBaseReason = (breakoutDate, asOf = null) => `前の土台（${shortDate(breakoutDate, asOf)}に上抜け済み）`;
+
+/**
+ * The structural stop's reason when every measured leg ends on or after the pivot's breakout (round 3 R6): those moves come
+ * after the breakout and are not this base's contractions, so none of their lows is this plan's stop.
+ */
+export const POST_BREAKOUT_LEGS_REASON = '収縮はすべてピボットの上抜けの後の値動き';
+/**
+ * The structural stop's reason when a bar dated after the chosen leg's low has a low under it (round 3 R6, 独自判定, no new
+ * threshold): the price has already traded through that contraction's low, so it is not this stock's stop today.
+ */
+export const UNDERCUT_LOW_REASON = '最後の収縮の安値をその後の日足が割り込み済み';
+/** A leg's end: its endDate when that is an ISO day, else its lowDate (a hand-built leg may carry only the low's date). */
+const legEnd = leg => (isoDay(leg.endDate) ? leg.endDate : leg.lowDate);
+/** The leg ends on or after the pivot's breakout `cut` (an ISO day). A leg whose end is not an ISO day is not dated against it. */
+const afterBreakout = (leg, cut) => isoDay(legEnd(leg)) && legEnd(leg) >= cut;
 
 /**
  * The structural stop: the low of the base's last measured contraction (technical.vcp, only with valid
  * measurements: the last leg whose low is under the pivot, since a leg above it is a pullback after the
  * breakout) less STRUCTURAL_STOP_BUFFER_PERCENT, checked against the bars certified for the analysis date
  * (`judged`, or null). Never falls back to a fixed percentage: unknown says why.
+ * A base that broke out before the pivot's own bar (`pivotDate`, pivotBar's date: `vcp.base.brokeOut` with a
+ * `base.breakoutDate` earlier than it) is a previous base: its contractions are not this pivot's, so their low is never this
+ * plan's stop (unknown, previousBaseReason; round 3 R2(b)). Without a pivot bar's date, or with a breakout on or after it, the
+ * rule does not apply.
+ * A leg that ends on or after the pivot's breakout (`breakoutDate`, an ISO day: pivotBreakout's breakoutDate, the first close
+ * above the pivot's cents after the pivot's bar) is price action after the breakout, never a candidate (round 3 R6; no new
+ * threshold). Its end is legEnd's. The last kept leg under the pivot is used; every leg excluded is unknown with
+ * POST_BREAKOUT_LEGS_REASON; kept legs all above the pivot keep the reason they have today. The kept legs are chosen from
+ * after R2(b): the measurement-date checks and R2(b) run on today's leg, so wherever the call without `breakoutDate` gives
+ * previousBaseReason or a measurement-date mismatch, this call gives the same (with no leg under the pivot at all, the
+ * reason is POST_BREAKOUT_LEGS_REASON only when every leg is excluded). Without a valid `breakoutDate` (null, undefined,
+ * malformed) nothing is excluded and the result is today's.
+ * A chosen leg whose low a later bar has already traded under (a bar of `judged` dated after its lowDate whose finite low is
+ * under it, past onBar's relative tolerance 1e-9) is unknown with UNDERCUT_LOW_REASON, with no low, stop or percent (round 3
+ * R6, 独自判定). It applies with or without `breakoutDate`, after every check above and the entry's, so every input that is
+ * unknown without it reads the same; only a usable state ('ok', 'tooShallow', 'overLimit', 'tooDeep', 'above') can become it.
  * @returns {StructuralStop}
  */
-export function structuralStop({ technical, judged, entry, pivot }) {
+export function structuralStop({ technical, judged, entry, pivot, pivotDate = null, breakoutDate = null }) {
   if (!Array.isArray(judged) || !judged.length) return unknownStructural('日足が分析日で未検証');
   const vcp = technical?.vcp;
   const legs = vcp?.measurementsValid === true && Array.isArray(vcp.legs) ? vcp.legs : [];
   if (!legs.length || !legs.every(item => finite(item?.low) && item.low > 0 && typeof item.lowDate === 'string')) return unknownStructural('収縮を測定できません');
   if (!finite(pivot) || pivot <= 0) return unknownStructural('ピボットが未確認');
-  const leg = [...legs].reverse().find(item => item.low < pivot);
-  if (!leg) return unknownStructural('最後の収縮がピボットより上（上抜け後の押し）');
+  // R6: the legs that end before the pivot's breakout (all of them without a valid breakoutDate).
+  const cut = isoDay(breakoutDate) ? breakoutDate : null;
+  const kept = cut ? legs.filter(item => !afterBreakout(item, cut)) : legs;
+  const aboveReason = kept.length ? '最後の収縮がピボットより上（上抜け後の押し）' : POST_BREAKOUT_LEGS_REASON;
+  const last = [...legs].reverse().find(item => item.low < pivot);
+  if (!last) return unknownStructural(aboveReason);
   // The measurement must be of these bars: same last session and the low on the bar it names.
   if (typeof technical.as_of_date === 'string' && technical.as_of_date !== judged.at(-1)?.date) return unknownStructural('収縮の測定日が日足と不一致');
-  const bar = judged.find(item => item?.date === leg.lowDate);
-  if (!bar || !finite(bar.low) || Math.abs(bar.low - leg.low) > Math.abs(leg.low) * 1e-9) return unknownStructural('収縮の測定日が日足と不一致');
+  const onBar = item => { const bar = judged.find(each => each?.date === item.lowDate); return Boolean(bar) && finite(bar.low) && Math.abs(bar.low - item.low) <= Math.abs(item.low) * 1e-9; };
+  if (!onBar(last)) return unknownStructural('収縮の測定日が日足と不一致');
+  const base = vcp.base;
+  if (base?.brokeOut === true && isoDay(base.breakoutDate) && isoDay(pivotDate) && base.breakoutDate < pivotDate) return unknownStructural(previousBaseReason(base.breakoutDate, judged.at(-1)?.date));
+  // R6: the base's last contraction among the kept legs (the same leg without a cut).
+  const leg = cut ? [...kept].reverse().find(item => item.low < pivot) : last;
+  if (!leg) return unknownStructural(aboveReason);
+  if (leg !== last && !onBar(leg)) return unknownStructural('収縮の測定日が日足と不一致');
   if (!finite(entry) || entry <= 0) return unknownStructural('買値が未確認');
+  // R6: a later bar already traded under the leg's low (onBar's tolerance): that level is not today's stop.
+  if (judged.some(bar => isoDay(bar?.date) && bar.date > leg.lowDate && finite(bar.low) && leg.low - bar.low > Math.abs(leg.low) * 1e-9)) return unknownStructural(UNDERCUT_LOW_REASON);
   // Already at or under the contraction's low: there is no stop below it to place.
   if (leg.low >= entry) return { state: 'above', low: leg.low, lowDate: leg.lowDate, stop: null, percent: null, buffer: STRUCTURAL_STOP_BUFFER_PERCENT, reason: null };
   const stop = leg.low * (1 - STRUCTURAL_STOP_BUFFER_PERCENT / 100);
@@ -210,7 +265,10 @@ export function positionPlan(view, settings = {}, { market = null, template = nu
   const basis = view?.state === 'zone' ? 'price' : view?.state === 'wait' ? 'pivot' : finite(view?.price) && finite(view?.pivot) && view.price >= view.pivot ? 'price' : 'pivot';
   const entry = finite(view?.pivot) && finite(view?.price) ? (basis === 'price' ? view.price : view.pivot) : null;
   if (!finite(entry) || entry <= 0) return null;
-  const structural = structuralStop({ technical, judged, entry, pivot: view.pivot });
+  // The pivot's own bar (H1 pivotBar, from the view's row and the certified bars): a base that broke out before it is a previous one.
+  // Its breakout (R6 pivotBreakout, the same bars and row): a leg that ends on or after it is never the stop's contraction.
+  const structural = structuralStop({ technical, judged, entry, pivot: view.pivot, pivotDate: pivotBar(judged, view.row)?.date ?? null,
+    breakoutDate: pivotBreakout(judged, view.row).breakoutDate });
   // This stock's own structural stop, only when the viewer chose it for this symbol and it is usable.
   const stopSource = structural.state === 'ok' && cleanStructuralSymbols(input.structuralSymbols).includes(view.symbol) ? 'structural' : 'setting';
   const pct = stopSource === 'structural' ? structural.percent : clampPlanSetting('stopPercent', finite(input.stopPercent) ? input.stopPercent : STOP_DEFAULT_PERCENT);

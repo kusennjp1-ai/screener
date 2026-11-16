@@ -322,3 +322,56 @@ def build_setup_engine_parameters(
     params = SetupEngineParameters(**values)
     assert_valid_setup_engine_parameters(params)
     return params
+
+
+# ── Setup diagnostics (round 3 R3c) ─────────────────
+# Reported in ``explain.diagnostics`` only: they never fail readiness and never enter
+# ``failed_checks`` (readiness.py ``setup_diagnostics``; setup_engine_screener.py).
+
+#: ``pivot_already_crossed``: a daily close more than this % above the pivot on a bar after
+#: the pivot's own bar (独自設定, round 3 R3c; p1 measured highs more than 3% above it).
+PIVOT_ALREADY_CROSSED_PCT: float = 3.0
+
+#: ``pivot_below_base_high``: the pivot more than this % under the highest high from the
+#: base's first bar to the pivot's own bar (独自設定, round 3 R3c; p1's 5% under the high).
+PIVOT_BELOW_BASE_HIGH_PCT: float = 5.0
+
+# ``contraction_unconfirmed``: the brief's automatic contraction measurement, whose failure the
+# chart shows as 「収縮は未確認」 (frontend/src/static/bookTechnicalEvidence.js, VCP_METHOD; 独自近似).
+# The same values, restated; tests/unit/test_setup_engine_parameters.py parses the JS constants
+# and pins these to them, so the two sides cannot drift.
+#: The sessions the base high is searched over when the Setup Engine gives no base.
+CONTRACTION_LOOKBACK_SESSIONS: int = 150
+#: ATR's sessions (a trailing true-range mean, as a % of the close).
+CONTRACTION_ATR_SESSIONS: int = 20
+#: A reversal counts when it moves at least this many ATR20s …
+CONTRACTION_ATR_MULTIPLE: float = 1.5
+#: … and at least this fraction of the previous contraction's depth.
+CONTRACTION_DEPTH_FRACTION: float = 0.3
+#: The last contraction needs only this noise floor (%), or one ATR20 when that is larger.
+CONTRACTION_FINAL_FLOOR_PCT: float = 1.5
+#: The contractions kept (the latest ones); a valid sequence has 2 to this many.
+CONTRACTION_MAX_LEGS: int = 6
+#: A pullback whose high is in the lower part (this fraction) of the previous contraction's
+#: range is the base still repairing, not a contraction.
+CONTRACTION_REPAIR_FRACTION: float = 0.5
+
+
+# ── Pinned price (round 3 R3a) ──────────────────────
+# ``price_pinned`` fails readiness (passed with the caller's failed checks, never an 11th gate):
+# the brief's low-activity rule, frontend/src/static/priceActivity.js (round 3 R2(a)), with the
+# same values. tests/unit/test_setup_engine_parameters.py parses the JS constants and pins these.
+#: The sessions the range is measured over (the last N daily bars).
+PRICE_ACTIVITY_SESSIONS: int = 60
+#: A range under this % over those sessions is low activity (the brief's 低変動・監視のみ rule).
+LOW_RANGE_PERCENT: float = 5.0
+#: ADR20's sessions (独自設定; the mean of high ÷ low − 1 over the last N bars).
+ACTIVITY_ADR_SESSIONS: int = 20
+#: ADR20 under this % is low activity (独自設定, round 3 R2; the owner confirms it: OD6).
+LOW_ADR_PERCENT: float = 0.5
+#: A one-day close-to-close move of at least this % is a gap (独自設定, round 3 R2; OD6).
+GAP_MOVE_PERCENT: float = 10.0
+#: The high/low range of the sessions after the gap under this % is pinned (独自設定; OD6).
+SINCE_GAP_RANGE_PERCENT: float = 3.0
+#: … over at least this many sessions after the gap's bar (独自設定; OD6).
+SINCE_GAP_MIN_SESSIONS: int = 15

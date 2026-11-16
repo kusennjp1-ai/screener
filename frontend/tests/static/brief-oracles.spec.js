@@ -210,7 +210,7 @@ test.describe('oracle shapes, through the producers', () => {
 });
 
 test.describe('round-3 targets (each owning track flips its own)', () => {
-  test.fixme('R1: ZZNR has no ブレイク失敗 and no arrow before its pivot\'s bar', async ({ page }) => {
+  test('R1: ZZNR has no ブレイク失敗 and no arrow before its pivot\'s bar', async ({ page }) => {
     const row = oracleRow(ORACLE.pivotAfterCrossing), bars = certified(row, chartOf(row)), view = viewOf(row), bar = pivotBar(bars, row);
     const from = crossingFloor(bars, row), sells = stockSells({ judged: bars, diagnostics: null, view, from });
     // No crossing after the pivot's bar: the failed-breakout check reads clear (never null or unknown).
@@ -235,7 +235,7 @@ test.describe('round-3 targets (each owning track flips its own)', () => {
     expect(errors).toEqual([]);
   });
 
-  test.fixme('R2: ZZPG is low activity (PLAN_BLOCKED.low) and never pairs its stop with the base before the gap', async ({ page, context }) => {
+  test('R2: ZZPG is low activity (PLAN_BLOCKED.low) and never pairs its stop with the base before the gap', async ({ page, context }) => {
     const row = oracleRow(ORACLE.postGapPin), bars = certified(row, chartOf(row)), view = viewOf(row);
     // R2(a): low activity blocks the plan.
     expect(row.price_activity.lowRange).toBe(true);

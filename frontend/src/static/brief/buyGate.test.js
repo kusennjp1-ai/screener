@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { baseCurrent, breakoutEvent, candidateView, earningsCall, POSITION_NAMES, trendTemplate } from './briefCandidate';
-import { crossingEvent } from './breakoutHistory';
-import { baseCheck, buyGate, HEAVY_DOWN_NOTE, marketGuidePercent, PLAN_BLOCKED, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, templateReference } from './buyGate';
+import { crossingEvent, crossingFloor } from './breakoutHistory';
+import { stockSells } from './briefSell';
+import { baseCheck, buyGate, HEAVY_DOWN_NOTE, lowActivityNote, marketGuidePercent, PLAN_BLOCKED, SE_BELOW_FLOOR_CHECK, SE_CONFIDENCE_FLOOR, templateReference } from './buyGate';
+import { lowActivityReason } from '../priceActivity';
 import { conditionNote } from '../missingCondition';
+import { positionPlan } from './positionSizing';
 import { withAuditFixture } from '../testAuditFixture';
 
 const DAY = '2026-10-02';
@@ -81,6 +84,24 @@ describe('the one buy gate', () => {
     expect(gateOf({}, { broken: true })).toMatchObject({ kind: 'broken', note: null, reason: '崩れ', reference: true });
     // A check that is not a hit breaks nothing.
     expect(gateOf({}, { sells: sells({ ...failed, state: 'unknown' }) })).toMatchObject({ kind: 'breakout', reference: false });
+  });
+
+  it('a pivot dated after a heavy crossing (ZZNR\'s shape, TT 8/8) is a failed breakout without a floor and not with crossingFloor', () => {
+    // Certified bars ending on DAY: a 2.2x crossing 7 sessions back, back under the pivot, the NR7 pivot's own bar (high on
+    // the pivot) the day before DAY, and DAY's close 1% under the pivot.
+    const day = i => new Date(Date.UTC(2026, 5, 1) + i * 86400000).toISOString().slice(0, 10);
+    const closes = [...Array(60).fill(95), 102, 103, 101, 99, 98, 97, 98.5];
+    const bars = [...closes.map((close, i) => ({ date: day(i), close, high: i === 66 ? 100 : close * 1.005, low: close * 0.995, volume: i === 60 ? 22000 : 10000 })),
+      { date: DAY, close: 99, high: 99.5, low: 98.5, volume: 10000 }];
+    const { view, template } = subject({ price: 99, se_pattern_primary: 'nr7_inside_day', se_pivot_date: bars[66].date });
+    expect(template.qualified).toBe(true);
+    const from = crossingFloor(bars, view.row);
+    expect(from).toBe(66);
+    const gate = from => buyGate({ view, template, market: OPEN, earnings: null, judged: bars, sells: stockSells({ judged: bars, diagnostics: null, view, from }) });
+    expect(gate(null)).toMatchObject({ kind: 'failedBreakout', reason: '崩れ' });
+    const bounded = gate(from);
+    expect(bounded.kind).not.toBe('failedBreakout');
+    expect(bounded).toMatchObject({ kind: 'near', reason: null, reference: false });
   });
 
   it('an unmet RS estimate alone is counted in the one-line title and named with its threshold (conditionNote)', () => {
@@ -168,5 +189,52 @@ describe('the one buy gate', () => {
     expect(ext).toMatchObject({ kind: 'ext', tone: 'ext', blocked: PLAN_BLOCKED.ext, reference: false });
     expect(gateOf({ price: 112 }, { market: HOLD })).toMatchObject({ kind: 'ext', reason: '地合い', reference: false });
     expect(buyGate({ view: null })).toMatchObject({ kind: 'unjudged', reason: null, blocked: null, trialOnly: true });
+  });
+});
+
+describe('the low-activity call (round 3 R2)', () => {
+  it('keeps the position\'s title and PLAN_BLOCKED.low, and names the rule that held in the note', () => {
+    const sinceGap = { range60pct: 49, lowRange: true, reason: 'since_gap', adr20pct: 0.15, gap: { date: '2026-08-27', pct: 44.4, sessions: 25, rangePct: 0.8 } };
+    for (const activity of [{ range60pct: 3, lowRange: true }, sinceGap, { range60pct: 19, lowRange: true, reason: 'adr', adr20pct: 0.39, gap: null }]) {
+      const { view } = subject({ price_activity: activity });
+      const gate = gateOf({ price_activity: activity });
+      expect(view.state).toBe('low');
+      expect(gate).toMatchObject({ kind: 'lowActivity', tone: 'neutral', title: '低変動・監視のみ', note: lowActivityNote(view), units: [], reference: false, moved: false, blocked: PLAN_BLOCKED.low });
+      expect(gate.note).toBe(`${lowActivityReason(activity, DAY)}（独自設定）。`);
+    }
+    expect(PLAN_BLOCKED.low).toBe('低変動・監視のみ：新規の試算はしません');
+    expect(gateOf({ price_activity: sinceGap }).note).toBe('8/27の窓開け（+44%）後25営業日の値幅3%未満（独自設定）。');
+  });
+
+  it('leaves a template failure first, and every other position as before', () => {
+    expect(gateOf({ rs: 50, price_activity: { range60pct: 3, lowRange: true } }).kind).toBe('template');
+    expect(gateOf({ corporate_action: { cash_acquisition: true } })).toMatchObject({ kind: 'unjudged', title: '買収合意・対象外', note: null, blocked: PLAN_BLOCKED.acq });
+  });
+});
+
+// Round 3 R5: the failed breakout's context after its window rides on the sell checks (failedContext) for the conclusion and the
+// sell card only: the gate and the plan read exactly as without it.
+describe('a failed breakout after its window (round 3 R5)', () => {
+  // Certified bars ending on DAY: under the pivot of 100, a close above it on 2.2x, back under the next session and under it
+  // for the 12 sessions since, the last close 99 (the row's price).
+  const closes = [...Array(200).fill(95), 102, 98, 97, 96, 90, 92, 94, 95, 96, 97, 98, 98, 99];
+  const judged = closes.map((close, i) => ({ date: new Date(Date.parse(DAY) - (closes.length - 1 - i) * 86400000).toISOString().slice(0, 10),
+    open: close, high: close * 1.005, low: close * 0.995, close, volume: i === 200 ? 22000 : 10000 }));
+
+  it('leaves the gate (kind, reason, reference and every other field) and the plan as without the line', () => {
+    const kinds = [];
+    for (const [over, market] of [[{ price: 99 }, OPEN], [{ price: 99 }, HOLD], [{ price: 99 }, null], [{ price: 99, rs: 50 }, OPEN]]) {
+      const { view, template } = subject(over);
+      const sells = stockSells({ judged, diagnostics: null, view, from: crossingFloor(judged, view.row) });
+      const { failedContext, ...without } = sells;
+      expect(failedContext?.text).toMatch(/^ブレイク失敗後（/);
+      const gate = value => buyGate({ view, template, market, sells: value, earnings: earningsCall(view, NOW), judged });
+      expect(gate(sells)).toEqual(gate(without));
+      kinds.push([gate(sells).kind, gate(sells).reason, gate(sells).reference]);
+      const plan = value => positionPlan(view, {}, { market, template, judged, sells: value });
+      expect(plan(sells)).toEqual(plan(without));
+    }
+    // Not vacuous: the calls differ by the market and the template, never by the line.
+    expect(kinds).toEqual([['near', null, false], ['marketHold', '地合い', true], ['marketUnknown', '地合い未確認', true], ['template', 'TT未達', true]]);
   });
 });

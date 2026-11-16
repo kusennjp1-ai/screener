@@ -546,7 +546,11 @@ SETUP_ENGINE_FIELD_SPECS: tuple[SetupEngineFieldSpec, ...] = (
         nullable=True,
         unit=None,
         source_module="backend/app/scanners/setup_engine_screener.py",
-        description="Weinstein stage 1-4 via quick_stage_check() MA structure analysis.",
+        description=(
+            "Weinstein stage 1-4: the Minervini scanner's published stage "
+            "(WeinsteinstageAnalyzer.determine_stage with SMA150 and the 52-week high). "
+            "Gate 8 requires 2; None passes."
+        ),
     ),
     SetupEngineFieldSpec(
         name="ma_alignment_score",

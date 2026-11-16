@@ -63,6 +63,8 @@ export default function SellCard({ sells, reason, wide }) {
     <h2 id="brief-sell-title">売りのサイン<small>（独自判定）</small></h2>
     {sells ? <>
       <p className="brief-note">{sells.advance ? `起点（直近1年の安値）${shortDate(sells.advance.startDate, sells.asOf)} の ${price(sells.advance.low)} から ${signed(sells.advance.gainPct)}・${sells.advance.sessions}営業日。` : `起点（直近1年の安値）から +${SELL_RULES.advanceMinPercent}%以上・${SELL_RULES.advanceMinSessions}営業日以上の上昇局面ではないため、起点以来の下落は判定しません。`}{strengthNote(sells)}{status}</p>
+      {/* A failed breakout past its window (failedBreakoutContext, round 3 R5): neutral context outside the fold, never a check. */}
+      {sells.failedContext ? <p className="brief-note" data-testid="brief-failed-context">{sells.failedContext.text}</p> : null}
       {shown.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
       {quiet.length > 0 && <Expander id="stock-sell-quiet" summary={[count('clear') ? `サインなし ${count('clear')}件` : null, count('na') ? `判定せず ${count('na')}件` : null].filter(Boolean).join('・')}>
         {quiet.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}

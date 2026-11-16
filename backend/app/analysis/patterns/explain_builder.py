@@ -87,7 +87,8 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
     - Gate 6 (volume dry-up): volume <= cap — **permissive** (None passes);
       a volume above the cap fails as ``volume_above_dryup_cap``
     - Gate 7 (RS leadership): rs_vs_spy > 0 or rs_line_new_high — **permissive** (both None passes)
-    - Gate 8 (stage): stage in (1, 2) — **semi-permissive** (None passes, 3/4 fail)
+    - Gate 8 (stage): stage == 2 — **semi-permissive** (None passes; 1, 3 and 4 fail).
+      The stage is the one the Minervini scanner publishes (round 3 R3b).
     - Gate 9 (MA alignment): ma_alignment_score >= min — **permissive** (None passes)
     - Gate 10 (RS rating): rs_rating >= min — **permissive** (None passes)
 
@@ -167,10 +168,10 @@ def build_explain_payload(inp: ExplainBuilderInput) -> ExplainResult:
         else:
             passed.append("rs_leadership_ok")
 
-        # Gate 8: Stage (semi-permissive: None passes, stage 1/2 pass, 3/4 fail)
-        if inp.stage is None:
-            passed.append("stage_ok")
-        elif inp.stage in (1, 2):
+        # Gate 8: Stage 2 (round 3 R3b: the Minervini scanner's published stage). Semi-
+        # permissive: None (no 200-day line) passes, since a missing stage is never a
+        # failure; stage 1, 3 and 4 fail.
+        if inp.stage is None or inp.stage == 2:
             passed.append("stage_ok")
         else:
             failed.append("stage_not_ok")

@@ -66,7 +66,8 @@
         "vcp:vcp_score_below_legacy_threshold",
         "vcp:vcp_insufficient_bases",
         "nr7_inside_day:not_detected",
-        "nr7_inside_day:nr7_inside_day_trigger_not_found"
+        "nr7_inside_day:nr7_inside_day_trigger_not_found",
+        "contraction_unconfirmed"
       ]
     }
   }

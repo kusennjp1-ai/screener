@@ -5,7 +5,10 @@
 // stock's structural stop, keeps the keyboard focus and never sets another stock's stop; a stock beyond
 // the buy zone gets no plan, and the chart draws no stop for it.
 import { test, expect } from '@playwright/test';
-import { openBrief, horizontalOverflow, rowBySymbol, SEC_SYMBOL } from './brief-fixture.js';
+import { chartSettled, date, openBrief, horizontalOverflow, ORACLE, ORACLE_CHARTS, ORACLE_ROWS, rowBySymbol, SEC_SYMBOL } from './brief-fixture.js';
+import { PLAN_BLOCKED } from '../../src/static/brief/buyGate.js';
+import { previousBaseReason } from '../../src/static/brief/positionSizing.js';
+import { buildBookTechnicalEvidence } from '../../src/static/bookTechnicalEvidence.js';
 
 const phone = (width, height = 844) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
@@ -300,6 +303,60 @@ test.describe('round 2: the plan card at 320px', () => {
     expect(await outside(page)).toEqual([]);
     expect(await smallText(page)).toEqual([]);
     expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 R2 on ZZPG (PCRX's shape): (a) low activity since its gap blocks the plan (PLAN_BLOCKED.low, no shares, no stop on the
+// chart); (b) on a row without the flag (an older publication's 60-session range only), the plan is made but its stop is never
+// paired with the base the gap broke out of: the structural stop reads 未確認 with 前の土台 (previousBaseReason) and no
+// 「損切りが収縮の中」. A missing price_activity is never low.
+test.describe('round 3 R2: the plan of a stock pinned after a gap', () => {
+  test.use({ ...phone(390), contextOptions: { reducedMotion: 'reduce' } });
+  const pinned = ORACLE_ROWS.find(row => row.symbol === ORACLE.postGapPin);
+  const chart = ORACLE_CHARTS[pinned.chart_path.split('/').pop()];
+  const range60 = () => { const recent = chart.bars.slice(-60); return (Math.max(...recent.map(b => b.high)) / Math.min(...recent.map(b => b.low)) - 1) * 100; };
+  const onPinned = fn => ({ rows: rows => { fn(rows.find(row => row.symbol === pinned.symbol)); } });
+  const open = (page, mutate) => openBrief(page, `#/brief/stock/${pinned.symbol}`, { oracles: true, ...(mutate ? { mutate } : {}) });
+
+  test('low activity: the reason in place of a plan, no shares, no warning and no stop on the chart', async ({ page }) => {
+    expect(pinned.price_activity).toMatchObject({ lowRange: true, reason: 'since_gap' });
+    const { errors } = await open(page);
+    await chartReady(page);
+    await chartSettled(page);
+    await expect(plan(page).getByTestId('brief-plan-blocked')).toHaveText(PLAN_BLOCKED.low);
+    await expect(page.getByTestId('brief-shares')).toHaveCount(0);
+    await expect(page.getByTestId('brief-plan-warn')).toHaveCount(0);
+    await expect(page.getByTestId('brief-price-chart').locator('.bc-stopgroup')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('without the flag: shares, the structural stop 未確認 (前の土台), no 「損切りが収縮の中」 on the card or the tile', async ({ page }) => {
+    const { vcp } = buildBookTechnicalEvidence(pinned, chart, date);
+    expect(vcp.base).toMatchObject({ brokeOut: true });
+    const reason = previousBaseReason(vcp.base.breakoutDate, date);
+    const { errors } = await open(page, onPinned(row => { row.price_activity = { range60pct: range60(), lowRange: false }; }));
+    await chartReady(page);
+    await expect(page.getByTestId('brief-shares')).toBeVisible();
+    await chartSettled(page);
+    const structural = plan(page).locator('.brief-structural');
+    await expect(structural).toHaveAttribute('data-state', 'unknown');
+    await expect(structural).toHaveText(`構造上の損切り目安：収縮の安値 未確認（${reason}）`);
+    await expect(page.getByTestId('brief-plan-warn')).toHaveCount(0);
+    await expect(page.getByTestId('brief-conclusion').locator('.brief-tilequal', { hasText: '収縮の中' })).toHaveCount(0);
+    await expect(plan(page)).not.toContainText(PLAN_BLOCKED.low);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+
+  test('a missing price_activity is never low and never a 0', async ({ page }) => {
+    const { errors } = await open(page, onPinned(row => { delete row.price_activity; }));
+    await chartReady(page);
+    await expect(page.getByTestId('brief-shares')).toBeVisible();
+    await chartSettled(page);
+    await expect(page.getByTestId('brief-conclusion')).not.toHaveAttribute('data-gate', 'lowActivity');
+    await expect(page.locator('#brief-main')).not.toContainText('低変動');
+    await expect(page.locator('#brief-main')).not.toContainText(/値幅0%|ADR）0/);
     expect(errors).toEqual([]);
   });
 });

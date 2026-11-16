@@ -309,13 +309,20 @@ class TestGate7RsLeadership:
 
 
 class TestGate8Stage:
+    """Gate 8 requires stage 2 (round 3 R3b: the Minervini scanner's published stage)."""
+
     def test_stage_2_passes(self):
         result = build_explain_payload(_default_input(stage=2))
         assert "stage_ok" in result.explain.to_payload()["passed_checks"]
+        assert result.derived_ready is True
 
-    def test_stage_1_passes(self):
+    def test_stage_1_fails(self):
+        """A basing stage 1 (e.g. a flat 200-day line) is not stage 2 and fails."""
         result = build_explain_payload(_default_input(stage=1))
-        assert "stage_ok" in result.explain.to_payload()["passed_checks"]
+        payload = result.explain.to_payload()
+        assert payload["failed_checks"] == ["stage_not_ok"]
+        assert "stage_ok" not in payload["passed_checks"]
+        assert result.derived_ready is False
 
     def test_stage_3_fails(self):
         result = build_explain_payload(_default_input(stage=3))
@@ -326,9 +333,10 @@ class TestGate8Stage:
         assert "stage_not_ok" in result.explain.to_payload()["failed_checks"]
 
     def test_stage_none_passes_semi_permissive(self):
-        """Gate 8 is semi-permissive: None -> stage_ok."""
+        """Gate 8 is semi-permissive: None (no 200-day line) -> stage_ok; missing never fails."""
         result = build_explain_payload(_default_input(stage=None))
         assert "stage_ok" in result.explain.to_payload()["passed_checks"]
+        assert result.derived_ready is True
 
 
 # ── Gate 9: MA alignment (permissive) ────────────
@@ -613,3 +621,17 @@ class TestDetectorDiagnostics:
         assert result.derived_ready is False
         assert result.explain.to_payload()["failed_checks"] == ["outside_early_zone"]
         assert result.diagnostics == ("cup_with_handle:not_detected",)
+
+    def test_the_round_3_setup_diagnostics_never_fail_readiness(self):
+        """R3c: contraction_unconfirmed, pivot_already_crossed and pivot_below_base_high travel the
+        same channel: returned in ``diagnostics``, never in the failed list, readiness unmoved."""
+        from app.analysis.patterns.readiness import SETUP_DIAGNOSTICS
+
+        assert SETUP_DIAGNOSTICS == ("contraction_unconfirmed", "pivot_already_crossed", "pivot_below_base_high")
+        ready = build_explain_payload(_default_input(diagnostics=SETUP_DIAGNOSTICS))
+        assert ready.derived_ready is True
+        assert ready.explain.to_payload()["failed_checks"] == []
+        assert ready.diagnostics == SETUP_DIAGNOSTICS
+        blocked = build_explain_payload(_default_input(distance_to_pivot_pct=6.0, diagnostics=SETUP_DIAGNOSTICS))
+        assert blocked.derived_ready is False
+        assert blocked.explain.to_payload()["failed_checks"] == ["outside_early_zone"]
