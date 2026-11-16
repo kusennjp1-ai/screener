@@ -608,6 +608,7 @@ scanner の 9 ファイルだけが変わり、どれも `explain.diagnostics` �
 
 - **掲載の CI の日足の行**（612 行）：バックエンドの `price_pinned` の集合＝ブリーフの lowRange の集合（serve/research.json の `price_activity`、R2 の定義）。18 行で、違いは 0：ARX, BMBL, BWIN, CCC, CEPO, CZR, DV, LNTH, OGN, PAYO, PCRX, PRTH, PTC, RNW, SAFT, SLAB, TECH, VREX。代理の日足の掲載行でも 6 行（BOW, DSGR, HZO, ITGR, LXFR, PAG）で一致（ただしブリーフの公開版では代理の日足は認証されない：R2 の注意）。
 - **関数どうし**（`$T/r3/pa-js.mjs` と `$T/r3/pa-py.py` → `$T/r3/pa-parity.json`）：再構築の入力の全 5,955 行で、再計算と同じ日足（受け入れた束の日足、または代理の包み）に priceActivity.js と Python の `price_activity` をかけ、`lowRange` と `reason` が 5,955 行すべてで一致（当たり 291 対 291）。再計算できた 4,421 行では、バックエンドの `price_pinned` 124 行＝JS の lowRange 124 行（違い 0）。
+- **公開する lowRange と price_pinned の 1 行の差（再構築の数）**：研究インデックス（serve/research.json、5,955 行）では `price_activity.lowRange` が 125 行、`setup_recalculation.reason` の `price_pinned` が 124 行で、違う行は GDL の 1 行だけ。GDL は掲載外（rows.jsonl の 980 行に無い）で、再計算の status は 'calculated'。research.json の `price_activity` は監査済みのチャートの日足で測り、lowRange が true（reason 'range60'、range60pct 3.16）。再計算は代理の包みの日足で走り（`$T/r3/pa-js.jsonl` の GDL は basis 'proxy'、lowRange false）、バックエンドは張り付きとしない。同じ日足どうしの関数の一致は 5,955／5,955 のまま。違いは日足の源の違いで、定義の違いではない。
 
 ### 規則 18（UI より先にデータを出さない）
 
