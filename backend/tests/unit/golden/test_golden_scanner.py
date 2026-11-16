@@ -101,8 +101,9 @@ def _build_scanner_3wt_strict() -> tuple[dict[str, Any], dict[str, Any]]:
         "readiness_score": (69, 95),
         "required_readiness_fields": _STANDARD_READINESS_FIELDS,
         # 7 of 8 context gates pass (volume_sufficient fails: volume_vs_50d=1.0 > 0.8 cap)
-        # Note: stage_ok omitted because tight ±0.3% jitter can make
-        # price ≈ MA50, causing quick_stage_check() to return Stage 3
+        # Note: stage_ok is not listed. Since round 3 R3b gate 8 reads the
+        # Minervini scanner's published stage; the committed snapshot has
+        # stage 2 and stage_ok among the passed checks.
         "passed_contains": [
             "setup_score_ok", "quality_floor_ok", "readiness_floor_ok",
             "in_early_zone", "atr14_within_limit",
