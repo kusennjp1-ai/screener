@@ -9,6 +9,14 @@
 .brief-fin-scope { margin: 0; }
 .brief-fin-gaps .brief-expander-body, .brief-fin-missing .brief-expander-body { padding-inline: 0; }
 .brief-fin-gaps .brief-expander-summary small > span { white-space: nowrap; }
+/* 「（Q4算出）」 wraps as a whole, never inside itself. */
+.brief-fin .brief-q4-mark { white-space: nowrap; }
+/* Round 3 D3: a 独自計算・参考 fiscal-Q4 EPS. Its bar stays the grey 値なし rect, with a thicker, darker dash than every 値なし
+   bar (brief.css dashes .q-unknown thinly); its axis rate is grey in a dashed cell (an outline: the cell keeps its size),
+   never in the EPS colour; the desktop legend's swatch shows the same dash. */
+.brief-quarters .q-unknown.is-reference { stroke: var(--text-2); stroke-width: 2px; stroke-dasharray: 4 2; }
+.brief-q-axis .q-eps-t.is-reference { color: var(--text-3); outline: 1px dashed var(--text-3); outline-offset: -1px; border-radius: 4px; }
+.brief-q-legend .q-key-reference { box-sizing: border-box; background: var(--surface-2); border: 2px dashed var(--text-2); }
 @media (max-width: 1023.98px) {
   /* The parts are said by the Code 33 text (only a 未達 keeps them). */
   .brief-fin .brief-code33-parts.is-said { display: none; }

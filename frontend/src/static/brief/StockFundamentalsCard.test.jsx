@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
 import FundamentalsCard, { EPS_NOTE } from './StockFundamentalsCard';
-import { EARNINGS_CHIP_NOTE, NO_REVENUE_CONCEPT, secStatus } from '../fundamentalsExplain.js';
+import { EARNINGS_CHIP_NOTE, NO_REVENUE_CONCEPT, Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, Q4_DERIVED_SOURCE_NOTE, Q4_REFERENCE_LEGEND, secStatus } from '../fundamentalsExplain.js';
+import { admitBookFinancialsDetailed, SEC_Q4_REFERENCE_METHOD } from '../bookFinancialAdmission';
 import { bookFinancialCurrent } from '../bookFinancialCurrent';
 import { financialHistory } from '../financialHistory';
 import { code33Layered } from '../code33Reference';
@@ -86,7 +87,7 @@ describe('brief fundamentals card', () => {
     for (const key of ['revenue', 'netIncome']) derive(baseOnly.quarterly[key].find(p => p.end === '2025-06-30'));
     let scope = card(financial(baseOnly));
     expect(tile(scope, '売上 前年比')).toHaveTextContent('+100%2026-06期・前期 +60%・前年同期はQ4算出');
-    expect(scope.getByText(/^出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで・売上\/純利益のQ4は10-K年度値−3四半期で算出$/)).toBeInTheDocument();
+    expect(scope.getByText(`出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで${Q4_DERIVED_SOURCE_NOTE}`)).toBeInTheDocument();
     expect(tile(scope, '純利益率')).not.toHaveTextContent('Q4算出');
     cleanup();
     // Both the quarter and its base are derived: the source names the derivation once.
@@ -94,12 +95,12 @@ describe('brief fundamentals card', () => {
     for (const key of ['revenue', 'netIncome']) for (const end of ['2025-06-30', '2026-06-30']) derive(both.quarterly[key].find(p => p.end === end));
     scope = card(financial(both));
     expect(tile(scope, '売上 前年比')).toHaveTextContent('・前年同期はQ4算出');
-    expect(scope.getByText(/^出典：SEC XBRL（10-K 2026-07-30 提出）・2026-06期まで・売上\/純利益のQ4は10-K年度値−3四半期で算出$/)).toBeInTheDocument();
+    expect(scope.getByText(`出典：SEC XBRL（10-K 2026-07-30 提出）・2026-06期まで${Q4_DERIVED_SOURCE_NOTE}`)).toBeInTheDocument();
     cleanup();
     // Neither derived: no derivation note anywhere.
     scope = card(financial(tenQFiler()));
     expect(tile(scope, '売上 前年比')).not.toHaveTextContent('Q4算出');
-    expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent('年度値−3四半期で算出');
+    expect(screen.getByTestId('brief-fundamentals')).not.toHaveTextContent(/Q4算出|10-K年度値−3四半期/);
   });
 
   it('tells a swing from a loss to a profit as a fact (黒字転換), never as a growth rate', () => {
@@ -393,5 +394,286 @@ describe('round-2 card copy (plan DT1-DT4, DT7, DT10)', () => {
     const wide = show(financial(secRecord({ symbol: 'AAA', asOfDate: DATE })), true);
     expect(wide).toHaveTextContent(/^.*EPS は報告値（希薄化）/);
     expect(wide).not.toHaveTextContent('業績チップ');
+  });
+});
+
+// Round 3 D4: every quote of a derived fiscal Q4 on the card says 「Q4算出」 (the one term), and the source line keys the
+// axis's short 「算出」 on a phone whenever a quarter is derived, even when no tile is (ZZQF's shape).
+describe('round-3 D4: a derived fiscal Q4 is marked Q4算出 wherever it is quoted', () => {
+  const DATE = '2026-11-04', now = Date.parse('2026-11-04T12:00:00Z');
+  const financial = book_financials => {
+    const row = { symbol: 'AAA', market: 'US', as_of_date: DATE, book_financials };
+    const book = bookFinancialCurrent(book_financials, 'AAA', DATE, now, row);
+    const report = book?.current ? book.report : null;
+    return { report, sec: secStatus(row, book), history: null, historyRetrievedAt: null, code33: code33Layered(report, null, DATE) };
+  };
+  const show = (value, wide = false) => { render(<FundamentalsCard financial={value} wide={wide} />); return screen.getByTestId('brief-fundamentals'); };
+  const derive = point => Object.assign(point, { form: '10-K', derived: 'fiscal-year-minus-three-quarters', components: ['fy', 'q1', 'q2', 'q3'] });
+  const deriveAt = (record, ends) => { for (const key of ['revenue', 'netIncome']) for (const end of ends) derive(record.quarterly[key].find(p => p.end === end)); return record; };
+  const tileNote = (node, label) => [...node.querySelectorAll('.brief-fact')].find(tile => tile.querySelector('small').textContent === label).querySelector('em');
+  const settled = node => [...node.querySelectorAll('.brief-code33 p')].map(p => p.textContent).find(text => text.startsWith('未達の根拠：'));
+  // ZZQF's shape: a June fiscal year whose September 10-Q is filed, Q4 EPS untagged, the June Q4s derived inside the window.
+  const QF = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+    ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30'], ['2026-07-01', '2026-09-30']];
+  const zzqf = () => {
+    const value = secRecord({ symbol: 'AAA', asOfDate: DATE, quarters: QF, eps: [1, 1, 1, 1.05, 1.1, 1.3, 1.4, 1.8, 1.9], revenue: [80, 85, 90, 95, 100, 110, 122, 136, 150], netIncome: [8, 9, 10, 11, 12, 14, 16, 19, 23] });
+    value.quarterly.eps = value.quarterly.eps.filter(p => !p.end.endsWith('06-30'));
+    value.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4.05, { form: '10-K' }), secPoint('eps', ['2025-07-01', '2026-06-30'], 5.6, { form: '10-K' })];
+    return deriveAt(value, ['2025-06-30', '2026-06-30']);
+  };
+  // Eight quarters to 2026-06 (a June fiscal year), each test deriving its own quarters.
+  const EIGHT = QF.slice(0, 8);
+  const year = (options = {}) => secRecord({ symbol: 'AAA', asOfDate: DATE, quarters: EIGHT, ...options });
+
+  it('keys the axis 算出 on a phone from the source line when a quarter is derived but no tile is (ZZQF), and marks the 前期 it quotes', () => {
+    const node = show(financial(zzqf()));
+    expect([...node.querySelectorAll('.brief-q-axis > span > i')].map(cell => cell.textContent)).toEqual(['', '', '算出', '', '', '', '算出', '']);
+    expect(node.querySelector('.brief-fin-source').textContent).toBe(`出典：SEC XBRL（10-Q 2026-10-30 提出）・2026-09期まで${Q4_DERIVED_SOURCE_NOTE}`);
+    // The sales tile quotes the June quarter as 前期: its rate rests on a derived Q4, so it says so; the mark never breaks.
+    expect(tileNote(node, '売上 前年比').textContent).toBe(`2026-09期・前期 +43%${Q4_DERIVED_MARK}`);
+    expect(tileNote(node, '売上 前年比').querySelector('.brief-q4-mark').textContent).toBe(Q4_DERIVED_MARK);
+    // EPS is never derived: its 前期 is the reason, never a mark; the margin tile names its own quarter only.
+    expect(tileNote(node, 'EPS 前年比').textContent).toBe('2026-09期・前期 Q4のEPSは年次報告のみ');
+    expect(tileNote(node, '純利益率').textContent).toBe('2026-09期');
+    // The phone legend stays on its one line, with no derivation item (the source line keys 算出).
+    expect([...node.querySelectorAll('.brief-q-legend span')].map(span => span.textContent)).toEqual(['EPS', '売上', '前年比%・下段は純利益率%', '値なし']);
+  });
+
+  it('on the desktop keys 算出 with the legend item and the card note in place, so a derived row alone adds no source note', () => {
+    const node = show(financial(zzqf()), true);
+    expect(Q4_DERIVED_LEGEND).toBe('算出＝Q4算出（10-K年度値−3四半期）');
+    expect([...node.querySelectorAll('.brief-q-legend span')].map(span => span.textContent)).toContain(Q4_DERIVED_LEGEND);
+    expect(node).toHaveTextContent('「Q4算出」と表示します');
+    expect(node.querySelector('.brief-fin-source').textContent).toBe('出典：SEC XBRL（10-Q 2026-10-30 提出）・2026-09期まで');
+    expect(tileNote(node, '売上 前年比').textContent).toBe(`2026-09期・前期 +43%${Q4_DERIVED_MARK}`);
+    cleanup();
+    // A tile that rests on a derived Q4 keeps the source note at every width (ZZNV's case).
+    const tile = show(financial(deriveAt(year(), ['2025-06-30', '2026-06-30'])), true);
+    expect(tile.querySelector('.brief-fin-source').textContent.endsWith(Q4_DERIVED_SOURCE_NOTE)).toBe(true);
+    expect(tileNote(tile, '売上 前年比').textContent).toBe('2026-06期・前期 +60%・前年同期はQ4算出');
+    cleanup();
+    // No derived quarter: no note, no legend item, no mark on either layout.
+    for (const wide of [false, true]) {
+      const plain = show(financial(year()), wide);
+      expect(plain.querySelector('.brief-fin-source').textContent).toBe('出典：SEC XBRL（10-Q 2026-07-30 提出）・2026-06期まで');
+      expect(plain.querySelector('.brief-q4-mark')).toBeNull();
+      expect([...plain.querySelectorAll('.brief-q-legend span')].map(span => span.textContent)).not.toContain(Q4_DERIVED_LEGEND);
+      cleanup();
+    }
+  });
+
+  it('marks each quarter of a 未達 sentence whose rate rests on a derived Q4: sales and margin, never EPS', () => {
+    // EPS +40 → +30, sales +60 → +30 and margin 12.0% → 10.0% all fall in the June quarter, whose sales and net income are derived.
+    const all = deriveAt(year({ eps: [1, 1, 1, 1, 1.1, 1.2, 1.4, 1.3], revenue: [100, 100, 100, 100, 110, 130, 160, 130], netIncome: [10, 10, 10, 10, 11, 14.3, 19.2, 13] }), ['2026-06-30']);
+    let node = show(financial(all));
+    expect(settled(node)).toBe(`未達の根拠：EPS 前年比が2026-03期 +40% → 2026-06期 +30%と伸びが鈍化しています。売上 前年比が2026-03期 +60% → 2026-06期 +30%${Q4_DERIVED_MARK}と伸びが鈍化しています。`
+      + `純利益率が2026-03期 12.0% → 2026-06期 10.0%${Q4_DERIVED_MARK}と下がっています。`);
+    expect(node.querySelectorAll('.brief-code33 .brief-q4-mark')).toHaveLength(2);
+    cleanup();
+    // Only the year-ago base of the June sales rate is derived: the rate still rests on it (salesBaseDerived); the margin does not.
+    const falling = { revenue: [100, 100, 100, 100, 110, 130, 160, 130] };
+    node = show(financial(deriveAt(year(falling), ['2025-06-30'])));
+    expect(settled(node)).toBe(`未達の根拠：売上 前年比が2026-03期 +60% → 2026-06期 +30%${Q4_DERIVED_MARK}と伸びが鈍化しています。`);
+    cleanup();
+    // The earlier quarter of the pair is the derived one: the mark follows its value.
+    node = show(financial(deriveAt(year(falling), ['2026-03-31'])));
+    expect(settled(node)).toBe(`未達の根拠：売上 前年比が2026-03期 +60%${Q4_DERIVED_MARK} → 2026-06期 +30%と伸びが鈍化しています。`);
+    cleanup();
+    // Neither quarter rests on a derived Q4: no mark.
+    node = show(financial(year(falling)));
+    expect(settled(node)).toBe('未達の根拠：売上 前年比が2026-03期 +60% → 2026-06期 +30%と伸びが鈍化しています。');
+    expect(node.querySelector('.brief-q4-mark')).toBeNull();
+    cleanup();
+    // A loss quarter is said as a fact, and EPS is never marked even beside a derived quarter.
+    node = show(financial(deriveAt(year({ eps: [1, 1, 1, 1, 1.1, 1.2, 1.4, -12] }), ['2026-06-30'])));
+    expect(settled(node)).toBe('未達の根拠：EPS 前年比が2026-03期 +40% → 2026-06期は赤字（EPS −12.00）です。');
+  });
+});
+
+// Round 3 D3: the 独自計算・参考 fiscal-Q4 EPS. One line under the Code 33 box at every width (never folded), and on the reference
+// quarter's grey EPS bar a thicker dash, a grey dashed axis rate and, on the desktop, a legend item. Nothing else changes.
+describe('round-3 D3: the reference fiscal-Q4 EPS is shown on the card and changes nothing else', () => {
+  const DATE = '2026-11-04', now = Date.parse('2026-11-04T12:00:00Z');
+  const financial = book_financials => {
+    const row = { symbol: 'AAA', market: 'US', as_of_date: DATE, book_financials };
+    const book = bookFinancialCurrent(book_financials, 'AAA', DATE, now, row);
+    const report = book?.current ? book.report : null;
+    return { report, sec: secStatus(row, book), history: null, historyRetrievedAt: null, code33: code33Layered(report, null, DATE) };
+  };
+  const QF = [['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'], ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'],
+    ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31'], ['2026-01-01', '2026-03-31'], ['2026-04-01', '2026-06-30'], ['2026-07-01', '2026-09-30']];
+  // ZZQF's shape (built here): Q4 EPS only in the 10-K, the June revenue and net income derived inside the window.
+  const zzqf = () => {
+    const value = secRecord({ symbol: 'AAA', asOfDate: DATE, quarters: QF, eps: [1, 1, 1, 1.05, 1.1, 1.3, 1.4, 1.8, 1.9], revenue: [80, 85, 90, 95, 100, 110, 122, 136, 150], netIncome: [8, 9, 10, 11, 12, 14, 16, 19, 23] });
+    value.quarterly.eps = value.quarterly.eps.filter(p => !p.end.endsWith('06-30'));
+    value.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 4.05, { form: '10-K' }), secPoint('eps', ['2025-07-01', '2026-06-30'], 5.6, { form: '10-K' })];
+    for (const key of ['revenue', 'netIncome']) for (const end of ['2025-06-30', '2026-06-30']) Object.assign(value.quarterly[key].find(p => p.end === end), { form: '10-K', derived: 'fiscal-year-minus-three-quarters', components: ['fy', 'q1', 'q2', 'q3'] });
+    return value;
+  };
+  const entry = (end, start, value, extra = {}) => ({ end, start, value, method: SEC_Q4_REFERENCE_METHOD,
+    numerator: { tag: 'NetIncomeLoss', components: ['fy', 'q1', 'q2', 'q3'] }, shares: { tag: 'WeightedAverageNumberOfDilutedSharesOutstanding', components: ['fy', 'q1', 'q2', 'q3'] }, ...extra });
+  const june = () => [entry('2025-06-30', '2025-04-01', 1.05), entry('2026-06-30', '2026-04-01', 1.8)];
+  const keyed = (list = june()) => ({ ...zzqf(), q4EpsReference: list });
+  const LINE = '参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.80（純利益÷希薄化株数）→ 前年比 +71%（前年同期も参考値）';
+  const show = (value, wide = false) => { const { container } = render(<FundamentalsCard financial={value} wide={wide} />); return container.querySelector('[data-testid="brief-fundamentals"]'); };
+  const texts = (node, selector) => [...node.querySelectorAll(selector)].map(item => item.textContent);
+  // Everything on the card that judges or quotes a value, as text.
+  const quoted = node => ({ tiles: texts(node, '.brief-fact'), chips: texts(node, '.brief-fin-quality li'), box: texts(node, '.brief-code33'), parts: texts(node, '.brief-code33-parts li'),
+    source: texts(node, '.brief-fin-source'), gaps: texts(node, '.brief-q-gaps li'), table: texts(node, '.brief-qtable tr') });
+  const geometry = node => [...node.querySelectorAll('.brief-quarters rect, .brief-quarters line')].map(item => ['x', 'y', 'width', 'height', 'x1', 'x2', 'y1', 'y2'].map(name => item.getAttribute(name)).join(','));
+
+  it('shows the line once, on the card and not in a fold at either width; Code 33 stays 未確認 and every quoted value is unchanged', () => {
+    for (const wide of [false, true]) {
+      const node = show(financial(keyed()), wide);
+      const lines = node.querySelectorAll('.brief-fin-reference');
+      expect(lines).toHaveLength(1);
+      expect(lines[0].textContent).toBe(LINE);
+      expect(lines[0].className).toBe('brief-note brief-fin-reference');
+      expect(lines[0].closest('details')).toBeNull();
+      // Under the Code 33 box (and its parts).
+      expect(node.querySelector('.brief-code33').compareDocumentPosition(lines[0]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(node.querySelector('.brief-code33 strong').textContent).toBe('Code 33 未確認');
+      const withKey = quoted(node);
+      cleanup();
+      const plain = show(financial(zzqf()), wide);
+      expect(withKey).toEqual(quoted(plain));
+      expect(plain.querySelector('.brief-fin-reference')).toBeNull();
+      cleanup();
+    }
+  });
+
+  it('keeps the reference quarter\'s grey EPS bar in place with a thicker dash and a grey dashed axis rate; the scale ignores it', () => {
+    let node = show(financial(keyed()));
+    // Every rect and the base line keep their place and size (the bars' scale never includes the reference).
+    expect(geometry(node)).toEqual(geometry(show(financial(zzqf()))));
+    // Below 1024px only the quarter the 参考 line names (2026-06) is marked; the older reference quarter is a plain 値なし bar.
+    const rects = [...node.querySelectorAll('.brief-quarters rect.q-unknown')];
+    const marked = [...node.querySelectorAll('.brief-quarters rect.is-reference')];
+    expect(marked.map(rect => [rect.getAttribute('class'), rect.querySelector('title').textContent])).toEqual([
+      ['q-unknown is-reference', '2026-06期 EPS 前年比：Q4のEPSは年次報告のみ・参考（独自計算）Q4 EPS ≈ 1.80 → 前年比 +71%（前年同期も参考値）']]);
+    expect(rects.filter(rect => rect.querySelector('title').textContent.startsWith('2025-06期 EPS')).map(rect => [rect.getAttribute('class'), rect.querySelector('title').textContent]))
+      .toEqual([['q-unknown', '2025-06期 EPS 前年比：Q4のEPSは年次報告のみ']]);
+    cleanup();
+    // On the desktop (the legend keys the dash) every shown reference quarter is marked.
+    const wideMarked = [...show(financial(keyed()), true).querySelectorAll('.brief-quarters rect.is-reference')];
+    expect(wideMarked.map(rect => rect.getAttribute('class'))).toEqual(['q-unknown is-reference', 'q-unknown is-reference']);
+    expect(wideMarked.map(rect => rect.querySelector('title').textContent)).toEqual([
+      '2025-06期 EPS 前年比：Q4のEPSは年次報告のみ・参考（独自計算）Q4 EPS ≈ 1.05',
+      '2026-06期 EPS 前年比：Q4のEPSは年次報告のみ・参考（独自計算）Q4 EPS ≈ 1.80 → 前年比 +71%（前年同期も参考値）']);
+    cleanup();
+    node = show(financial(keyed()));
+    // The axis: the 2026-06 rate in the four-character form, grey and dashed (never the EPS colour); 2025-06 has no rate and stays —.
+    const eps = [...node.querySelectorAll('.brief-q-axis .q-eps-t')];
+    expect(eps.map(cell => [cell.textContent, cell.className])[2]).toEqual(['—', 'q-eps-t is-unknown']);
+    expect(eps.map(cell => [cell.textContent, cell.className])[6]).toEqual(['+71', 'q-eps-t is-reference']);
+    expect(node.querySelectorAll('.brief-q-axis .is-reference')).toHaveLength(1);
+    // The quarter still counts in 値なしの理由 with its own reason.
+    expect(texts(node, '.brief-q-gaps li')).toContain('EPS 前年比：25-06・26-06期はQ4のEPSは年次報告のみ');
+    // The phone legend keeps its four items (the line says 参考); the desktop legend keys the dash.
+    expect(texts(node, '.brief-q-legend span')).toEqual(['EPS', '売上', '前年比%・下段は純利益率%', '値なし']);
+    cleanup();
+    const desktop = show(financial(keyed()), true);
+    expect(texts(desktop, '.brief-q-legend span').at(-1)).toBe(Q4_REFERENCE_LEGEND);
+    expect(desktop.querySelector('.brief-q-legend span:last-child i').className).toBe('q-key-reference');
+    expect(Q4_REFERENCE_LEGEND).toBe('太い破線＝参考（独自計算・判定に使わない）');
+  });
+
+  it('a loss reference reads 赤字 in its dashed cell, and a reference without a rate keeps — and drops the line\'s tail', () => {
+    let node = show(financial(keyed([entry('2025-06-30', '2025-04-01', 1.05), entry('2026-06-30', '2026-04-01', -0.25)])));
+    expect([...node.querySelectorAll('.brief-q-axis .q-eps-t')].map(cell => [cell.textContent, cell.className])[6]).toEqual(['赤字', 'q-eps-t is-reference']);
+    expect(node.querySelector('.brief-fin-reference').textContent).toBe('参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ −0.25（純利益÷希薄化株数）→ 前年比 −124%（前年同期も参考値）');
+    cleanup();
+    node = show(financial(keyed([entry('2026-06-30', '2026-04-01', 1.8)])));
+    expect(node.querySelector('.brief-fin-reference').textContent).toBe('参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.80（純利益÷希薄化株数）');
+    expect(node.querySelectorAll('.brief-q-axis .is-reference')).toHaveLength(0);
+    expect(node.querySelectorAll('.brief-quarters rect.is-reference')).toHaveLength(1);
+  });
+
+  // Conductor's order (round 3, round 1 of review): below 1024px every dashed reference cell of the axis (a rate or 赤字) is named
+  // 参考 in unfolded text on the card. A reported 2024-06 EPS (in its 10-K) gives the 2025-06 reference a rate (+17) beside the
+  // newest's (+71); the 参考 line names only the newest, so a phone marks only that quarter and the desktop's legend keys the rest.
+  const reported2406 = () => {
+    const value = zzqf();
+    value.quarterly.eps.unshift(secPoint('eps', ['2024-04-01', '2024-06-30'], 0.9, { form: '10-K', accession: '0000000001-24-063010' }));
+    return value;
+  };
+  // The YY-MM期 of each dashed reference cell of the axis that no unfolded text of the card (outside a closed fold and the bars'
+  // SVG) names together with 「参考」.
+  const unkeyed = node => {
+    const said = [...node.querySelectorAll('p, li')].filter(item => !item.closest('details:not([open])') && !item.closest('svg')).map(item => item.textContent).filter(text => text.includes('参考'));
+    return [...node.querySelectorAll('.brief-q-axis .q-eps-t.is-reference')].map(cell => {
+      const [year, month] = [...cell.parentElement.children].map(item => item.textContent);
+      return `${year.replace('年', '')}-${month.replace('月', '').padStart(2, '0')}期`;
+    }).filter(period => !said.some(text => text.includes(period)));
+  };
+  const column = (node, i) => [node.querySelectorAll('.brief-quarters g')[i].outerHTML, node.querySelectorAll('.brief-q-axis > span')[i].outerHTML];
+
+  it('below 1024px every dashed reference cell is the quarter the 参考 line names; the desktop marks each one and its legend keys them', () => {
+    const value = { ...reported2406(), q4EpsReference: june() };
+    // The record passes admission and both references carry a rate: +17 on the reported 2024-06 EPS, +71 on the 2025-06 reference.
+    expect(admitBookFinancialsDetailed(value, { symbol: 'AAA', asOfDate: DATE, evaluatedAt: now, row: { symbol: 'AAA', market: 'US' } }).reason).toBeNull();
+    expect(financial(value).sec.q4Reference).toEqual([{ end: '2025-06-30', value: 1.05, yoy: expect.closeTo(100 * (1.05 / 0.9 - 1), 9), yoyBase: 'reported' },
+      { end: '2026-06-30', value: 1.8, yoy: expect.closeTo(100 * (1.8 / 1.05 - 1), 9), yoyBase: 'reference' }]);
+    const plain = show(financial(reported2406()));
+    const before = { quoted: quoted(plain), geometry: geometry(plain), column: column(plain, 2) };
+    cleanup();
+    const phone = show(financial(value));
+    // At least one dashed cell, and each is named 参考 on the card: the newest (+71) by the 参考 line.
+    expect([...phone.querySelectorAll('.brief-q-axis .q-eps-t.is-reference')].map(cell => cell.textContent)).toEqual(['+71']);
+    expect(unkeyed(phone)).toEqual([]);
+    expect(phone.querySelector('.brief-fin-reference').textContent).toBe(LINE);
+    // The older reference quarter (2025-06) reads exactly as without the key: a plain 値なし bar (its title included) and 「—」.
+    expect(column(phone, 2)).toEqual(before.column);
+    expect([...phone.querySelectorAll('.brief-q-axis .q-eps-t')].map(cell => [cell.textContent, cell.className])[2]).toEqual(['—', 'q-eps-t is-unknown']);
+    expect(phone.querySelectorAll('.brief-quarters rect.is-reference')).toHaveLength(1);
+    expect(quoted(phone)).toEqual(before.quoted);
+    expect(geometry(phone)).toEqual(before.geometry);
+    expect(texts(phone, '.brief-q-legend span')).toEqual(['EPS', '売上', '前年比%・下段は純利益率%', '値なし']);
+    cleanup();
+    // The desktop prints both reference rates in dashed cells and marks both bars; its legend (not folded) keys the dash.
+    const desktop = show(financial(value), true);
+    expect([...desktop.querySelectorAll('.brief-q-axis .q-eps-t.is-reference')].map(cell => cell.textContent)).toEqual(['+17', '+71']);
+    expect(desktop.querySelectorAll('.brief-quarters rect.is-reference')).toHaveLength(2);
+    const key = [...desktop.querySelectorAll('.brief-q-legend span')].find(item => item.textContent === Q4_REFERENCE_LEGEND);
+    expect(key?.querySelector('i').className).toBe('q-key-reference');
+    expect(key.closest('details')).toBeNull();
+  });
+
+  it('below 1024px a newest reference without a rate leaves no dashed cell, even when an older one has a rate (赤字)', () => {
+    // A loss 2025-06 reference (赤字 against the reported 2024-06 EPS) is no base for 2026-06, so the newest has no rate.
+    const value = { ...reported2406(), q4EpsReference: [entry('2025-06-30', '2025-04-01', -0.2), entry('2026-06-30', '2026-04-01', 1.8)] };
+    expect(financial(value).sec.q4Reference.map(item => [item.end, item.yoy === null])).toEqual([['2025-06-30', false], ['2026-06-30', true]]);
+    const phone = show(financial(value));
+    expect(phone.querySelectorAll('.brief-q-axis .is-reference')).toHaveLength(0);
+    expect(unkeyed(phone)).toEqual([]);
+    expect(phone.querySelector('.brief-fin-reference').textContent).toBe('参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.80（純利益÷希薄化株数）');
+    // Only the named quarter's bar keeps the reference dash.
+    expect([...phone.querySelectorAll('.brief-quarters rect.is-reference')].map(rect => rect.querySelector('title').textContent)).toEqual(['2026-06期 EPS 前年比：Q4のEPSは年次報告のみ・参考（独自計算）Q4 EPS ≈ 1.80']);
+    cleanup();
+    const desktop = show(financial(value), true);
+    expect([...desktop.querySelectorAll('.brief-q-axis .q-eps-t.is-reference')].map(cell => cell.textContent)).toEqual(['赤字']);
+    expect(texts(desktop, '.brief-q-legend span').at(-1)).toBe(Q4_REFERENCE_LEGEND);
+  });
+
+  it('without a reference, or with a malformed one, the card\'s DOM is exactly the record\'s without the key', () => {
+    for (const wide of [false, true]) {
+      const before = show(financial(zzqf()), wide).outerHTML;
+      cleanup();
+      expect(before).not.toMatch(/is-reference|brief-fin-reference|q-key-reference|参考/);
+      for (const list of [june().map(item => ({ ...item, method: 'q4-other-v1' })), june().reverse(), [], [entry('2025-09-30', '2025-07-01', 1.1)]]) {
+        expect(show(financial(keyed(list)), wide).outerHTML).toBe(before);
+        cleanup();
+      }
+    }
+  });
+
+  it('the stock screen\'s chips (the conclusion\'s and the card\'s) read the same with and without the key', () => {
+    for (const wide of [false, true]) {
+      const chips = value => { render(<StockView data={{ ...data(true), date: DATE, financial: financial(value) }} wide={wide} />); const list = texts(document.body, '.brief-chip'); cleanup(); return list; };
+      const plain = chips(zzqf());
+      // The conclusion's earnings chip and the card's quality chips are among them.
+      expect(plain).toEqual(expect.arrayContaining(['EPS +73%・売上 +50%（26-09期）', 'EPS前年比≥25%（直近4期）未確認', '年間EPS最高 未確認']));
+      expect(chips(keyed())).toEqual(plain);
+    }
   });
 });

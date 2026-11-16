@@ -1,5 +1,5 @@
 import { fixedMinus, signed } from '../positionGeometry';
-import { code33Explain, code33Parts, EARNINGS_CHIP_NOTE, fundamentalTiles, fundamentalsSource, NO_REVENUE_CONCEPT, quarterReason, secStatus } from '../fundamentalsExplain.js';
+import { code33Explain, code33Parts, EARNINGS_CHIP_NOTE, fundamentalTiles, fundamentalsSource, NO_REVENUE_CONCEPT, Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, q4DerivedRate, q4DerivedSourceNote, Q4_REFERENCE_LEGEND, q4ReferenceLine, q4ReferenceNamed, q4ReferenceTitle, quarterReason, secStatus } from '../fundamentalsExplain.js';
 import { Expander } from './briefPrimitives';
 
 const finite = Number.isFinite;
@@ -12,6 +12,9 @@ export const EPS_NOTE = CARD_NOTE + EARNINGS_CHIP_NOTE;
 // What the SEC quarters cannot tell (shown in the card's fold on phones, in place on the desktop).
 const OUT_OF_SCOPE = '対象外：予想・サプライズ・予想修正・調整後EPS';
 const CAUTION_POINTS = 20;
+// 「（Q4算出）」 never breaks inside itself: a tile note or a sentence wraps before the mark (a 390px tile once split it 「（Q4」「算出）」).
+const withMarks = text => typeof text !== 'string' || !text.includes(Q4_DERIVED_MARK) ? text
+  : text.split(Q4_DERIVED_MARK).flatMap((part, i) => i ? [<span key={i} className="brief-q4-mark">{Q4_DERIVED_MARK}</span>, part] : [part]);
 
 const shortPeriod = row => row.end.slice(2, 7);
 const monthIndex = end => Number(end.slice(0, 4)) * 12 + Number(end.slice(5, 7));
@@ -50,7 +53,9 @@ const growthShort = (value, row, metric) => {
   return rounded > 999 ? '>999' : rounded < -999 ? '<−99' : `${rounded > 0 ? '+' : rounded < 0 ? '−' : '±'}${Math.abs(rounded)}`;
 };
 
-function QuarterBars({ rows, wide, notes = null }) {
+// `reference` (round 3 D3): the 独自計算・参考 fiscal-Q4 EPS by quarter end (secStatus' q4Reference), or null. Display only: it
+// never enters the bars' scale (`known`), the rows or the 値なし reasons, and its bar keeps the grey 値なし rect.
+function QuarterBars({ rows, wide, notes = null, reference = null }) {
   const known = rows.flatMap(r => [r.epsYoY, r.salesYoY]).filter(finite);
   if (!known.length) return null;
   // Growth above and below the base line share one scale; a fall is never cut off at the bottom.
@@ -66,24 +71,30 @@ function QuarterBars({ rows, wide, notes = null }) {
       <line x1="0" x2={W} y1={base} y2={base} className="q-base" />
       {rows.map((r, i) => {
         const cx = i * 48 + 24, period = `${r.end.slice(0, 7)}期`;
+        const ref = reference?.get(r.end) ?? null;
         const bar = (v, side, cls, metric, name) => finite(v)
           ? <rect className={`${cls} grow-y`} style={{ '--i': i }} x={cx + (side < 0 ? -15 : 1)} width="14" y={v >= 0 ? base - v * unit : base} height={Math.max(1, Math.abs(v) * unit)} rx="2"><title>{`${period} ${name} ${signed(v, 0)}`}</title></rect>
-          : <rect className="q-unknown" x={cx + (side < 0 ? -15 : 1)} width="14" y={base >= 28 ? base - 24 : base} height="24" rx="2"><title>{`${period} ${name}：${quarterReason(r, metric)}`}</title></rect>;
+          : metric === 'eps' && ref
+            // The same grey rect in the same place, with a thicker dashed outline; its title gives the reference after the reason.
+            ? <rect className="q-unknown is-reference" x={cx + (side < 0 ? -15 : 1)} width="14" y={base >= 28 ? base - 24 : base} height="24" rx="2"><title>{`${period} ${name}：${quarterReason(r, metric)}・${q4ReferenceTitle(ref)}`}</title></rect>
+            : <rect className="q-unknown" x={cx + (side < 0 ? -15 : 1)} width="14" y={base >= 28 ? base - 24 : base} height="24" rx="2"><title>{`${period} ${name}：${quarterReason(r, metric)}`}</title></rect>;
         return <g key={r.end}>{bar(r.epsYoY, -1, 'q-eps', 'eps', 'EPS 前年比')}{bar(r.salesYoY, 1, 'q-sales', 'sales', '売上 前年比')}</g>;
       })}
     </svg>
     {/* Each quarter's period, EPS and sales growth, margin and Q4 derivation as HTML under its bars (12px at every width). */}
     <div className="brief-q-axis" aria-hidden="true" style={{ '--n': rows.length }}>
       {rows.map(r => {
-        // Grey only for 値なし (—): 黒字 and 赤字 are known facts and keep the row's colour.
-        const eps = growthShort(r.epsYoY, r, 'eps'), sales = growthShort(r.salesYoY, r, 'sales');
+        // Grey only for 値なし (—): 黒字 and 赤字 are known facts and keep the row's colour. A reference quarter with a rate prints
+        // it in the same four characters (a loss reads 赤字), grey in a dashed cell, never in the EPS colour.
+        const ref = reference?.get(r.end) ?? null, refRate = ref && finite(ref.yoy) ? growthShort(ref.yoy, { ...r, eps: ref.value, epsYoYReason: null }, 'eps') : null;
+        const eps = refRate ?? growthShort(r.epsYoY, r, 'eps'), sales = growthShort(r.salesYoY, r, 'sales');
         return <span key={r.end}><span>{r.end.slice(2, 4)}年</span><span>{Number(r.end.slice(5, 7))}月</span>
-          <span className={`q-eps-t${eps === '—' ? ' is-unknown' : ''}`}>{eps}</span><span className={`q-sales-t${sales === '—' ? ' is-unknown' : ''}`}>{sales}</span>
+          <span className={refRate ? 'q-eps-t is-reference' : `q-eps-t${eps === '—' ? ' is-unknown' : ''}`}>{eps}</span><span className={`q-sales-t${sales === '—' ? ' is-unknown' : ''}`}>{sales}</span>
           <b>{marginShort(r.margin)}</b>{derived && <i>{r.derived ? '算出' : ''}</i>}</span>;
       })}
     </div>
-    {wide ? <p className="brief-q-legend"><span><i className="q-key-eps" />EPS 前年比</span><span><i className="q-key-sales" />売上 前年比</span><span>棒の下＝前年比(%)・下段＝純利益率(%)</span>{derived && <span>算出＝Q4を10-K年度値−3四半期で算出</span>}<span><i className="q-key-unknown" />灰色＝値なし{gaps.length ? '（理由は下記）' : ''}</span></p>
-      // A phone keeps the legend on one line; the Q4 derivation is already named by the source line.
+    {wide ? <p className="brief-q-legend"><span><i className="q-key-eps" />EPS 前年比</span><span><i className="q-key-sales" />売上 前年比</span><span>棒の下＝前年比(%)・下段＝純利益率(%)</span>{derived && <span>{Q4_DERIVED_LEGEND}</span>}<span><i className="q-key-unknown" />灰色＝値なし{gaps.length ? '（理由は下記）' : ''}</span>{reference && <span><i className="q-key-reference" />{Q4_REFERENCE_LEGEND}</span>}</p>
+      // A phone keeps the legend on one line; the source line names the Q4 derivation whenever a row is derived (q4DerivedSourceNote).
       : <p className="brief-q-legend"><span><i className="q-key-eps" />EPS</span><span><i className="q-key-sales" />売上</span><span>前年比%・下段は純利益率%</span><span><i className="q-key-unknown" />値なし</span></p>}
     {wide ? <>{gapList}<p className="brief-note brief-fin-scope">{OUT_OF_SCOPE}</p></>
       : <Expander id="stock-fin-gaps" className="brief-fin-gaps" summary={summary}>
@@ -141,19 +152,21 @@ function Code33Parts({ report, explained, hidden }) {
 }
 
 // The two quarters behind each known 未達 (bookFinancialEvidence's settled), named by the series they compare.
-const SETTLED = [['epsAcceleration', 'EPS 前年比'], ['salesAcceleration', '売上 前年比'], ['marginImprovement', '純利益率']];
+const SETTLED = [['epsAcceleration', 'EPS 前年比', 'eps'], ['salesAcceleration', '売上 前年比', 'sales'], ['marginImprovement', '純利益率', 'margin']];
 const periodOf = end => `${end.slice(0, 7)}期`;
 const epsText = value => fixedMinus(value, 2);
 function settledText(report) {
-  const sentences = SETTLED.filter(([key]) => report?.[key] === 'fail' && report.settled?.[key]).map(([key, name]) => {
+  const sentences = SETTLED.filter(([key]) => report?.[key] === 'fail' && report.settled?.[key]).map(([key, name, metric]) => {
     const { from, to } = report.settled[key], margin = key === 'marginImprovement';
     // Two rates that round alike keep one decimal, so the sentence never reads 「+30% → +30%と鈍化」.
     const digits = !margin && signed(from.value, 0) === signed(to.value, 0) && from.value !== to.value ? 1 : 0;
     const format = value => margin ? `${fixedMinus(value, 1)}%` : signed(value, digits);
-    const quarter = report.rows?.find(row => row.end === to.end);
+    const rowOf = end => report.rows?.find(row => row.end === end), quarter = rowOf(to.end);
+    // Each quoted quarter whose rate rests on a derived Q4 says so right after its value (sales and margin; never EPS).
+    const mark = end => q4DerivedRate(rowOf(end), metric) ? Q4_DERIVED_MARK : '';
     if (key === 'epsAcceleration' && finite(quarter?.eps) && quarter.eps < 0) return `${name}が${periodOf(from.end)} ${format(from.value)} → ${periodOf(to.end)}は赤字（EPS ${epsText(quarter.eps)}）です。`;
     const change = to.value < from.value ? margin ? 'と下がっています' : 'と伸びが鈍化しています' : 'と横ばいです';
-    return `${name}が${periodOf(from.end)} ${format(from.value)} → ${periodOf(to.end)} ${format(to.value)}${change}。`;
+    return `${name}が${periodOf(from.end)} ${format(from.value)}${mark(from.end)} → ${periodOf(to.end)} ${format(to.value)}${mark(to.end)}${change}。`;
   });
   return sentences.length ? `未達の根拠：${sentences.join('')}` : null;
 }
@@ -217,7 +230,10 @@ export default function FundamentalsCard({ financial, wide }) {
   const yahoo = !rows.length && history?.valid && history.quarterly?.length ? yahooTiles(history) : null;
   const tiles = rows.length ? fundamentalTiles(report) : yahoo || ['EPS 前年比', '売上 前年比', '純利益率'].map(label => ({ label, value: null, short: '—', note: sec.short }));
   const stamp = utcStamp(financial?.historyRetrievedAt);
-  const source = rows.length ? `${fundamentalsSource(report)}${tiles.some(t => t.derived) ? '・売上/純利益のQ4は10-K年度値−3四半期で算出' : ''}`
+  // The source line says Q4算出 when a tile rests on a derived Q4 and, on a phone, whenever a quarter on the card is one (the
+  // axis prints 算出 under it and the phone legend has no room to key it). The desktop's legend keys that 算出 under the same
+  // flag as the axis and its card note says 「Q4算出」 in place, so there a row alone adds no line (the card keeps its height).
+  const source = rows.length ? `${fundamentalsSource(report)}${q4DerivedSourceNote(wide ? [] : rows, tiles)}`
     : yahoo ? `出典：参考 Yahoo 四半期値（${stamp ? `取得 ${stamp} UTC・` : ''}提出日未確認）` : null;
   // The card states the EPS growth it knows beside an untagged fiscal-Q4 EPS (interim), and marks a Yahoo-only result 参考.
   const explain = code33Explain(report, sec, code33, { interim: true });
@@ -231,14 +247,22 @@ export default function FundamentalsCard({ financial, wide }) {
   const qualityNotes = details.length > 0 && <ul className="brief-q-gaps brief-fin-quality-notes" aria-label="業績の質の根拠">{details.map(text => <li key={text}>{text}</li>)}</ul>;
   const facts = <div className="brief-facts is-fin">{tiles.map(t => <div className="brief-fact" key={t.label} title={t.title}><small>{t.label}</small>
     {t.turnaround ? <><b>黒字転換</b><em>{`${t.turnaround.end.slice(0, 7)}期・前年 ${fixedMinus(t.turnaround.from, 2)} → ${fixedMinus(t.turnaround.to, 2)}`}</em></>
-      : <><b>{t.value ?? t.short}</b><em>{t.note}</em></>}</div>)}</div>;
-  const box = <div className={`brief-code33 tone-${tone}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>{boxTitle}</strong><p>{explain.text}</p>{settled && <p>{settled}</p>}</div></div>;
+      : <><b>{t.value ?? t.short}</b><em>{withMarks(t.note)}</em></>}</div>)}</div>;
+  const box = <div className={`brief-code33 tone-${tone}`}><span className="brief-code33-mark" aria-hidden="true">33</span><div><strong>{boxTitle}</strong><p>{explain.text}</p>{settled && <p>{withMarks(settled)}</p>}</div></div>;
   // On a phone the parts are hidden where the Code 33 text names each one (達成, Q4 EPS, other) or none is known;
   // a 未達, and a known part beside 8期未満・欠け・古い, stay visible.
   const partStates = code33Parts(report)?.parts.map(([, state]) => state) || [];
   const said = ['pass', 'q4_eps', 'other'].includes(explain.kind) || partStates.every(state => state === 'unknown');
   const parts = code33?.source !== 'yahoo' && <Code33Parts report={report} explained={explain.kind === 'q4_eps'} hidden={!wide && explain.state !== 'fail' && said} />;
   const bars = rows.length && yoyKnown;
+  // Round 3 D3: the 独自計算・参考 fiscal-Q4 EPS (secStatus' q4Reference, on a current record only). Display only: one line under
+  // the Code 33 box at every width (never in a fold) and the bars' reference marks; nothing else on the card reads it.
+  const q4Reference = sec.state === 'ok' && Array.isArray(sec.q4Reference) ? sec.q4Reference.filter(entry => rows.some(row => row.end === entry?.end)) : [];
+  const named = q4ReferenceNamed(q4Reference), referenceLine = named ? q4ReferenceLine(q4Reference) : null;
+  // A quarter is marked (dashed bar, dashed axis rate) only where the card keys it in unfolded text: on the desktop every shown
+  // one (Q4_REFERENCE_LEGEND, under the same `wide`), below 1024px only the quarter the 参考 line names (the phone legend has no
+  // reference item). Any other reference quarter on a phone reads exactly as a plain 値なし bar and 「—」.
+  const reference = named ? new Map((wide ? q4Reference : [named]).map(entry => [entry.end, entry])) : null;
   const missing = !rows.length && !yahoo;
   return <section className="brief-card in brief-fin" style={{ '--i': 5 }} aria-labelledby="brief-fin-title" data-testid="brief-fundamentals">
     <div><h2 id="brief-fin-title">業績の加速</h2>{source && <p className="brief-note brief-fin-source">{source}</p>}</div>
@@ -254,10 +278,11 @@ export default function FundamentalsCard({ financial, wide }) {
         {quality && <ul className="brief-fin-quality" aria-label="業績の質（SEC XBRL）">{quality.map(chip => <li key={chip.text} className={`brief-chip${chip.tone ? ` tone-${chip.tone}` : ''}`} title={chip.title || undefined}>{chip.text}</li>)}</ul>}
         {/* What each quality chip compared: under the chips on the desktop (and beside a quarter table), in the bars' fold on a phone. */}
         {(wide || !bars) && qualityNotes}
-        {rows.length ? yoyKnown ? <QuarterBars rows={rows} wide={wide} notes={wide ? null : qualityNotes || null} /> : <><QuarterTable rows={rows} /><p className="brief-note">{noYoYText(rows)}</p><p className="brief-note brief-fin-scope">{OUT_OF_SCOPE}</p></>
+        {rows.length ? yoyKnown ? <QuarterBars rows={rows} wide={wide} notes={wide ? null : qualityNotes || null} reference={reference} /> : <><QuarterTable rows={rows} /><p className="brief-note">{noYoYText(rows)}</p><p className="brief-note brief-fin-scope">{OUT_OF_SCOPE}</p></>
           : explain.kind !== 'no_sec' && <p className="brief-note">{sec.long}</p>}
         {box}
         {parts}
+        {referenceLine && <p className="brief-note brief-fin-reference">{referenceLine}</p>}
       </>}
     {wide && <p className="brief-note">{CARD_NOTE}</p>}
   </section>;

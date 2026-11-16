@@ -2,7 +2,9 @@
 // failure states, the publication's SEC coverage (delivery failure, not requested, refused), the phone's
 // compact card and its text floor, on synthetic data.
 import { test, expect } from '@playwright/test';
-import { openBrief, sessions, VIEWPORTS, horizontalOverflow, SEC_SYMBOL, date, now, rowBySymbol } from './brief-fixture.js';
+import { chartSettled, openBrief, sessions, VIEWPORTS, horizontalOverflow, SEC_SYMBOL, date, now, rowBySymbol } from './brief-fixture.js';
+import { Q4_DERIVED_LEGEND, Q4_DERIVED_MARK, Q4_DERIVED_SOURCE_NOTE, Q4_REFERENCE_LEGEND, q4ReferenceLine } from '../../src/static/fundamentalsExplain.js';
+import { SEC_Q4_REFERENCE_METHOD } from '../../src/static/bookFinancialAdmission.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 // How many line boxes a word of a node's text sits on (1: it never breaks); null when the word is absent.
@@ -16,6 +18,14 @@ const lineBoxes = (locator, word) => locator.evaluate((node, word) => {
   }
   return null;
 }, word);
+// Every label under the bars fits its own quarter's column (a label wider than its column runs into the next one).
+const wider = card => card.locator('.brief-q-axis > span > *').evaluateAll(nodes => nodes.filter(node => node.getBoundingClientRect().width > node.parentElement.getBoundingClientRect().width + 0.5)
+  .map(node => `${node.textContent} ${node.getBoundingClientRect().width.toFixed(1)}>${node.parentElement.getBoundingClientRect().width.toFixed(1)}`));
+// Axis cells, quality chips and legend items that are cut or run past the card's right edge.
+const cutCells = card => card.locator('.brief-q-axis > span > *, .brief-fin-quality li, .brief-q-legend span').evaluateAll(nodes => nodes.filter(node => node.scrollWidth > node.clientWidth + 0.5 || node.getBoundingClientRect().right > node.closest('[data-testid="brief-fundamentals"]').getBoundingClientRect().right + 0.5).map(node => node.textContent));
+// How many line boxes a node's text sits on and how much of its own box the text leaves over (rule 9: one line, 6px or more).
+const lineFit = locator => locator.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); const rects = [...range.getClientRects()];
+  return { lines: new Set(rects.map(rect => Math.round(rect.top))).size, slack: node.getBoundingClientRect().width - (Math.max(...rects.map(rect => rect.right)) - Math.min(...rects.map(rect => rect.left))) }; });
 // The ZZNV record with one change to its quarters (the base fixture never changes).
 const zznv = change => ({ details: details => { change(details['ZZNV-detail.json'].book_financials.quarterly); } });
 const point = (series, end) => series.find(item => item.end === end);
@@ -26,7 +36,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   test('fundamentals show the latest SEC quarter with its source and say why a value is missing', async ({ page }) => {
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
     const card = page.getByTestId('brief-fundamentals');
-    await expect(card.getByText('出典：SEC XBRL（10-K 2026-08-09 提出）・2026-06期まで・売上/純利益のQ4は10-K年度値−3四半期で算出')).toBeVisible();
+    await expect(card.getByText(`出典：SEC XBRL（10-K 2026-08-09 提出）・2026-06期まで${Q4_DERIVED_SOURCE_NOTE}`)).toBeVisible();
     const epsTile = card.locator('.brief-fact').filter({ hasText: 'EPS 前年比' });
     await expect(epsTile).toContainText('+40%');
     await expect(epsTile).toContainText('2026-03期・最新 2026-06期はQ4のEPSは年次報告のみ');
@@ -182,7 +192,8 @@ test.describe('the compact fundamentals card', () => {
       const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { mutate: zznv(quarterly => { point(quarterly.revenue, '2026-06-30').value = 130; }) });
       const card = page.getByTestId('brief-fundamentals');
       await expect(card.getByText('Code 33 未達')).toBeVisible();
-      await expect(card.getByText('未達の根拠：売上 前年比が2026-03期 +60% → 2026-06期 +30%と伸びが鈍化しています。')).toBeVisible();
+      // The June quarter's sales are a derived Q4, so its rate says Q4算出 (round 3 D4).
+      await expect(card.getByText(`未達の根拠：売上 前年比が2026-03期 +60% → 2026-06期 +30%${Q4_DERIVED_MARK}と伸びが鈍化しています。`)).toBeVisible();
       const parts = card.getByRole('list', { name: 'Code 33 の3条件' });
       await expect(parts).toBeVisible();
       await expect(parts.locator('li')).toHaveText(['EPS の加速未確認', '売上の加速未達', '純利益率の上昇達成']);
@@ -194,9 +205,6 @@ test.describe('the compact fundamentals card', () => {
 
   test.describe('320', () => {
     test.use({ viewport: { width: 320, height: 700 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
-    // Every label under the bars fits its own quarter's column (a label wider than its column runs into the next one).
-    const wider = card => card.locator('.brief-q-axis > span > *').evaluateAll(nodes => nodes.filter(node => node.getBoundingClientRect().width > node.parentElement.getBoundingClientRect().width + 0.5)
-      .map(node => `${node.textContent} ${node.getBoundingClientRect().width.toFixed(1)}>${node.parentElement.getBoundingClientRect().width.toFixed(1)}`));
 
     test('nothing overflows and no axis cell is cut', async ({ page }) => {
       const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
@@ -204,8 +212,7 @@ test.describe('the compact fundamentals card', () => {
       await expect(card.getByText(/^出典：SEC XBRL/)).toBeVisible();
       await card.locator('.brief-fin-gaps > summary').click();
       expect(await horizontalOverflow(page)).toBe(0);
-      const cut = await card.locator('.brief-q-axis > span > *, .brief-fin-quality li, .brief-q-legend span').evaluateAll(nodes => nodes.filter(node => node.scrollWidth > node.clientWidth + 0.5 || node.getBoundingClientRect().right > node.closest('[data-testid="brief-fundamentals"]').getBoundingClientRect().right + 0.5).map(node => node.textContent));
-      expect(cut).toEqual([]);
+      expect(await cutCells(card)).toEqual([]);
       expect(await wider(card)).toEqual([]);
       await page.goto('/#/brief/stock/ZZAR');
       const line = page.getByTestId('brief-fundamentals').getByText('業績：SEC未配信・Code 33 未確認');
@@ -257,7 +264,7 @@ test.describe('the compact fundamentals card', () => {
       await expect(card.getByText(/^出典：SEC XBRL/)).toBeVisible();
       await expect(card.locator('details')).toHaveCount(0);
       for (const locator of [card.getByRole('list', { name: '値なしの理由' }), card.getByRole('list', { name: 'Code 33 の3条件' }), card.getByText('対象外：予想・サプライズ・予想修正・調整後EPS'),
-        card.getByText('算出＝Q4を10-K年度値−3四半期で算出'), card.getByText(/^EPS は報告値（希薄化）/), card.locator('.brief-code33-mark'), card.getByRole('list', { name: '業績の質の根拠' })]) await expect(locator).toBeVisible();
+        card.getByText(Q4_DERIVED_LEGEND), card.getByText(/^EPS は報告値（希薄化）/), card.locator('.brief-code33-mark'), card.getByRole('list', { name: '業績の質の根拠' })]) await expect(locator).toBeVisible();
       // The step-0 layout (5ae744d; its dump's desktop1440 stock ZZNV and the same boxes measured on that tree): the
       // card is the grid's left tile at x 464, 470 wide; its three tiles sit in one row at x 17, 165 and 313 within it,
       // 140 wide, and the chart, the Code 33 box and the parts keep x 17, 436 wide. Only the order below the tiles
@@ -413,8 +420,7 @@ test.describe('round-2 fundamentals copy', () => {
         await expect(caution).toBeVisible();
         await settled(page);
         // One line box, with at least 6px of the line left over (rule 9).
-        const fit = await caution.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); const rects = [...range.getClientRects()];
-          return { lines: new Set(rects.map(rect => Math.round(rect.top))).size, slack: node.getBoundingClientRect().width - (Math.max(...rects.map(rect => rect.right)) - Math.min(...rects.map(rect => rect.left))) }; });
+        const fit = await lineFit(caution);
         expect(fit.lines, `${width}px`).toBe(1);
         expect(fit.slack, `${width}px`).toBeGreaterThanOrEqual(6);
       }
@@ -445,6 +451,230 @@ test.describe('round-2 fundamentals copy', () => {
       await expect(card(page)).toContainText('−');
       expect(await asciiMinus(page)).toEqual([]);
       expect(await horizontalOverflow(page)).toBe(0);
+      expect(errors).toEqual([]);
+    });
+  });
+});
+
+// Round 3 D4 (plan §5, p2-6): oracle ZZQF has derived June Q4s inside the window and no derived tile. Every quote of a
+// derived Q4 says 「Q4算出」: on a phone the source line keys the axis's 「算出」 in view (not in a fold), the sales tile's
+// 前期 carries the mark on one line, nothing is cut or overflows, the quality chips keep their slack, and the stock
+// screen stays within its 3388px line at 375. On the desktop the legend keys 「算出」 and the card does not grow.
+test.describe('round-3 D4: a derived Q4 is marked Q4算出 wherever it is quoted (ZZQF)', () => {
+  const card = page => page.getByTestId('brief-fundamentals');
+  const open = async page => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZQF', { oracles: true });
+    await expect(card(page).locator('.brief-fin-source')).toBeVisible();
+    await expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down').first()).toBeAttached();
+    await chartSettled(page);
+    return errors;
+  };
+  // Every quality chip sits on one line, leaves 6px of its own box and ends 6px or more before the card's content edge.
+  const chipFit = async page => {
+    const fits = [];
+    for (const chip of await card(page).locator('.brief-fin-quality li').all()) {
+      const { lines, slack } = await lineFit(chip);
+      const room = await chip.evaluate(node => node.parentElement.getBoundingClientRect().right - node.getBoundingClientRect().right);
+      fits.push({ text: await chip.textContent(), lines, slack: Math.round(slack * 10) / 10, room: Math.round(room * 10) / 10 });
+    }
+    return fits;
+  };
+  const sourceText = '出典：SEC XBRL（10-Q 2026-10-01 提出）・2026-09期まで';
+  const salesNote = `2026-09期・前期 +43%${Q4_DERIVED_MARK}`;
+
+  for (const [width, height] of [[320, 640], [375, 812], [390, 844]]) test.describe(`${width}`, () => {
+    test.use({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, contextOptions: { reducedMotion: 'reduce' } });
+
+    test('the source line keys 算出 in view, the 前期 says Q4算出 on one line, and nothing is cut', async ({ page }) => {
+      const errors = await open(page);
+      const source = card(page).locator('.brief-fin-source');
+      await expect(source).toHaveText(`${sourceText}${Q4_DERIVED_SOURCE_NOTE}`);
+      expect(await source.evaluate(node => node.closest('details:not([open])') === null)).toBe(true);
+      // The axis prints 算出 under the derived June quarters; the phone legend stays on one line without it.
+      expect(await card(page).locator('.brief-q-axis > span > i').allTextContents()).toEqual(['', '', '算出', '', '', '', '算出', '']);
+      await expect(card(page).locator('.brief-q-legend span')).toHaveText(['EPS', '売上', '前年比%・下段は純利益率%', '値なし']);
+      const sales = card(page).locator('.brief-fact').filter({ hasText: '売上 前年比' }).locator('em');
+      await expect(sales).toHaveText(salesNote);
+      expect(await lineBoxes(sales, Q4_DERIVED_MARK)).toBe(1);
+      expect(await horizontalOverflow(page)).toBe(0);
+      expect(await cutCells(card(page))).toEqual([]);
+      expect(await wider(card(page))).toEqual([]);
+      const chips = await chipFit(page);
+      expect(chips.length).toBeGreaterThanOrEqual(2);
+      for (const chip of chips) {
+        expect(chip.lines, chip.text).toBe(1);
+        expect(chip.slack, chip.text).toBeGreaterThanOrEqual(6);
+        expect(chip.room, chip.text).toBeGreaterThanOrEqual(6);
+      }
+      // The stock screen's content height (brief-compact.spec.js's measure): within its 3388px line at 375.
+      const content = await page.evaluate(() => Math.round(document.querySelector('#brief-main .brief-stack').getBoundingClientRect().bottom + scrollY));
+      if (width === 375) expect(content).toBeLessThanOrEqual(3388);
+      expect(errors).toEqual([]);
+    });
+  });
+
+  test.describe('1440', () => {
+    test.use({ ...VIEWPORTS.desktop, contextOptions: { reducedMotion: 'reduce' } });
+    test('the legend keys 算出 with the one term, the card note says Q4算出, and the card keeps its STEP 0 height', async ({ page }) => {
+      const errors = await open(page);
+      await expect(card(page).getByText(Q4_DERIVED_LEGEND)).toBeVisible();
+      await expect(card(page).getByText(/^EPS は報告値（希薄化）/)).toContainText('「Q4算出」と表示します');
+      // A derived row alone adds no source note on the desktop (the legend and the card note key it; the card keeps its height).
+      await expect(card(page).locator('.brief-fin-source')).toHaveText(sourceText);
+      await expect(card(page).locator('.brief-fact').filter({ hasText: '売上 前年比' }).locator('em')).toHaveText(salesNote);
+      expect(await horizontalOverflow(page)).toBe(0);
+      expect(await cutCells(card(page))).toEqual([]);
+      // STEP 0 (c61bf96, CI-faithful): ZZQF's 1440 card measured 846.8px.
+      expect(Math.round((await card(page).boundingBox()).height * 2) / 2).toBeLessThanOrEqual(847);
+      expect(errors).toEqual([]);
+    });
+  });
+});
+
+// Round 3 D3 (plan §5): oracle ZZQF with the 独自計算・参考 fiscal-Q4 EPS added here (the fixture stays frozen) for its two derived
+// June Q4s. The card shows one 参考 line under the Code 33 box, in view at every width; the reference bars keep their geometry;
+// the quarter still counts in 値なしの理由; every chip on the screen, the tiles and Code 33 (未確認) read as without the key;
+// nothing is cut or overflows; a malformed reference renders exactly as none. The screen's height is logged at each width.
+test.describe('round-3 D3: the reference fiscal-Q4 EPS on ZZQF is shown and changes nothing else', () => {
+  const card = page => page.getByTestId('brief-fundamentals');
+  const entry = (end, start, value) => ({ end, start, value, method: SEC_Q4_REFERENCE_METHOD,
+    numerator: { tag: 'NetIncomeLoss', components: [`0000000001-${end.slice(2, 4)}-${end.slice(5, 7)}${end.slice(8)}10`, 'q-1', 'q-2', 'q-3'] },
+    shares: { tag: 'WeightedAverageNumberOfDilutedSharesOutstanding', components: [`0000000001-${end.slice(2, 4)}-${end.slice(5, 7)}${end.slice(8)}10`, 'q-1', 'q-2', 'q-3'] } });
+  const june = () => [entry('2025-06-30', '2025-04-01', 1.05), entry('2026-06-30', '2026-04-01', 1.8)];
+  const withReference = list => ({ details: details => { details['ZZQF-detail.json'].book_financials.q4EpsReference = list; } });
+  // A reported 2024-06 EPS in its 10-K (before the fixture's first quarter), so the 2025-06 reference has a reported base.
+  const reported2406 = details => {
+    const eps = details['ZZQF-detail.json'].book_financials.quarterly.eps;
+    eps.unshift({ ...eps[0], end: '2024-06-30', start: '2024-04-01', value: 0.9, form: '10-K', filed: '2024-08-09', accession: '0000000001-24-063010' });
+  };
+  // The YY-MM期 of each dashed reference cell of the axis that no visible text of the card outside a closed fold names with 「参考」.
+  const unkeyed = node => node.evaluate(root => {
+    const said = [...root.querySelectorAll('p, li')].filter(item => item.checkVisibility() && !item.closest('details:not([open])') && !item.closest('svg'))
+      .map(item => item.innerText).filter(text => text.includes('参考'));
+    return [...root.querySelectorAll('.brief-q-axis .q-eps-t.is-reference')].map(cell => {
+      const [year, month] = [...cell.parentElement.children].map(item => item.textContent);
+      return `${year.replace('年', '')}-${month.replace('月', '').padStart(2, '0')}期`;
+    }).filter(period => !said.some(text => text.includes(period)));
+  });
+  // One quarter's bars and axis column as markup.
+  const column = (page, i) => card(page).evaluate((root, i) => [root.querySelectorAll('.brief-quarters g')[i].outerHTML, root.querySelectorAll('.brief-q-axis > span')[i].outerHTML], i);
+  // The copy through its producer: 2026-06 at 1.80 against the 2025-06 reference at 1.05 (fundamentalsExplain.test.js pins the words).
+  const LINE = q4ReferenceLine([{ end: '2026-06-30', value: 1.8, yoy: (1.8 / 1.05 - 1) * 100, yoyBase: 'reference' }]);
+  const open = async (page, mutate) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZQF', { oracles: true, ...(mutate ? { mutate } : {}) });
+    await expect(card(page).locator('.brief-fin-source')).toBeVisible();
+    await expect(page.getByTestId('brief-price-chart').locator('svg rect.bc-up, svg rect.bc-down').first()).toBeAttached();
+    await chartSettled(page);
+    return errors;
+  };
+  // What must read the same with and without the key, and the heights it may change.
+  const read = async page => {
+    const node = card(page);
+    const same = {
+      rects: await node.locator('.brief-quarters rect').evaluateAll(rects => rects.map(rect => { const box = rect.getBoundingClientRect(), svg = rect.ownerSVGElement.getBoundingClientRect();
+        return [...['x', 'y', 'width', 'height'].map(name => rect.getAttribute(name)), (box.top - svg.top).toFixed(1), box.height.toFixed(1)].join(','); })),
+      chips: await page.locator('.brief-chip').allTextContents(),
+      tiles: await node.locator('.brief-fact').allTextContents(),
+      gaps: await node.locator('ul[aria-label="値なしの理由"] li').allTextContents(),
+      fold: await node.locator('.brief-fin-gaps > summary').allTextContents(),
+      code33: await node.locator('.brief-code33').allTextContents(),
+      source: await node.locator('.brief-fin-source').textContent(),
+    };
+    const content = await page.evaluate(() => Math.round(document.querySelector('#brief-main .brief-stack').getBoundingClientRect().bottom + scrollY));
+    return { same, axis: await node.locator('.brief-q-axis > span > *').allTextContents(), content, card: Math.round((await node.boundingBox()).height * 10) / 10 };
+  };
+
+  for (const [width, height] of [[320, 640], [375, 812], [390, 844], [1440, 900]]) test.describe(`${width}`, () => {
+    const desktop = width >= 1024;
+    test.use(desktop ? { ...VIEWPORTS.desktop, contextOptions: { reducedMotion: 'reduce' } }
+      : { viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, contextOptions: { reducedMotion: 'reduce' } });
+
+    test('the 参考 line is in view on the card; bars, chips, reasons and Code 33 read as without the key; a malformed one renders as none', async ({ page }) => {
+      const errors = await open(page);
+      const plain = await read(page);
+      expect(await card(page).locator('.brief-fin-reference').count()).toBe(0);
+      const keyed = await page.context().newPage(), bad = await page.context().newPage();
+      try {
+        const keyedErrors = await open(keyed, withReference(june()));
+        const line = card(keyed).locator('.brief-fin-reference');
+        await expect(line).toHaveCount(1);
+        await expect(line).toBeVisible();
+        await expect(line).toHaveText(LINE);
+        expect(await line.evaluate(node => node.closest('details:not([open])') === null && node.closest('[data-testid="brief-fundamentals"]') !== null)).toBe(true);
+        // Under the Code 33 box.
+        expect(await line.evaluate(node => Boolean(node.closest('[data-testid="brief-fundamentals"]').querySelector('.brief-code33').compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING))).toBe(true);
+        const value = await read(keyed);
+        expect(value.same).toEqual(plain.same);
+        expect(value.same.code33[0]).toMatch(/^(33)?Code 33 未確認/);
+        // Only the 2026-06 EPS cell of the axis changes: it prints the rate in a grey dashed cell, never the EPS colour.
+        const changed = value.axis.map((text, i) => [i, plain.axis[i], text]).filter(([, a, b]) => a !== b);
+        expect(changed.map(([, a, b]) => [a, b])).toEqual([['—', '+71']]);
+        const cells = await card(keyed).locator('.brief-q-axis .q-eps-t').evaluateAll(nodes => nodes.map(node => ({ text: node.textContent, cls: node.className, color: getComputedStyle(node).color, outline: getComputedStyle(node).outlineStyle })));
+        const ref = cells.find(cell => cell.cls.includes('is-reference')), unknown = cells.find(cell => cell.cls.includes('is-unknown')), known = cells.find(cell => cell.cls === 'q-eps-t');
+        expect(ref).toMatchObject({ text: '+71', outline: 'dashed', color: unknown.color });
+        expect(ref.color).not.toBe(known.color);
+        // The reference bars (both on the desktop, only the one the 参考 line names on a phone): a thicker dash than every 値なし
+        // bar, the same rect.
+        const dash = await card(keyed).locator('.brief-quarters rect.q-unknown').evaluateAll(nodes => nodes.map(node => [node.classList.contains('is-reference'), getComputedStyle(node).strokeDasharray, getComputedStyle(node).strokeWidth]));
+        const marked = dash.filter(([is]) => is), unmarked = dash.filter(([is]) => !is);
+        expect(marked).toHaveLength(desktop ? 2 : 1);
+        expect(unmarked.length).toBeGreaterThan(0);
+        for (const item of marked) expect(item.slice(1)).not.toEqual(unmarked[0].slice(1));
+        // The desktop legend keys the dash; the phone legend keeps its four items (the line says 参考).
+        if (desktop) await expect(card(keyed).getByText(Q4_REFERENCE_LEGEND)).toBeVisible();
+        else await expect(card(keyed).locator('.brief-q-legend span')).toHaveText(['EPS', '売上', '前年比%・下段は純利益率%', '値なし']);
+        expect(await horizontalOverflow(keyed)).toBe(0);
+        expect(await cutCells(card(keyed))).toEqual([]);
+        expect(await wider(card(keyed))).toEqual([]);
+        // The stock screen's content height (brief-compact.spec.js's measure): within its 3388px line at 375, logged at each width.
+        if (width === 375) expect(value.content).toBeLessThanOrEqual(3388);
+        console.log(`D3-HEIGHTS ${width} ${JSON.stringify({ content: [plain.content, value.content], card: [plain.card, value.card] })}`);
+        expect(keyedErrors).toEqual([]);
+        // A malformed reference (another method on every entry) renders exactly as none.
+        const badErrors = await open(bad, withReference(june().map(item => ({ ...item, method: 'q4-other-v1' }))));
+        expect(await read(bad)).toEqual(plain);
+        expect(await card(bad).locator('.brief-fin-reference, .is-reference, .q-key-reference').count()).toBe(0);
+        expect(badErrors).toEqual([]);
+      } finally { await keyed.close(); await bad.close(); }
+      expect(errors).toEqual([]);
+    });
+
+    // Conductor's order (round 1 of review): below 1024px every dashed reference cell of the axis is named 参考 in unfolded text on
+    // the card. A reported 2024-06 EPS gives the 2025-06 reference a rate (+17) beside the newest's (+71); the 参考 line names only
+    // 2026-06, so a phone marks only that quarter and its 2025-06 column reads exactly as without the key; the desktop prints both
+    // rates in dashed cells and its legend keys the dash.
+    test('every dashed reference cell is keyed on the card: a phone marks only the quarter the 参考 line names, the desktop legend keys each', async ({ page }) => {
+      const errors = await open(page, { details: reported2406 });
+      const plain = await read(page);
+      const plainColumn = await column(page, 2);
+      const keyed = await page.context().newPage();
+      try {
+        const keyedErrors = await open(keyed, { details: details => { reported2406(details); details['ZZQF-detail.json'].book_financials.q4EpsReference = june(); } });
+        await expect(card(keyed).locator('.brief-fin-reference')).toHaveText(LINE);
+        const cells = await card(keyed).locator('.brief-q-axis .q-eps-t.is-reference').allTextContents();
+        const value = await read(keyed);
+        expect(value.same).toEqual(plain.same);
+        if (desktop) {
+          expect(cells).toEqual(['+17', '+71']);
+          const key = card(keyed).locator('.brief-q-legend span').filter({ hasText: Q4_REFERENCE_LEGEND });
+          await expect(key).toHaveCount(1);
+          await expect(key).toBeVisible();
+          expect(await key.evaluate(node => node.closest('details:not([open])') === null && node.querySelector('i.q-key-reference') !== null)).toBe(true);
+        } else {
+          // At least one dashed cell, each named 参考 by visible, unfolded text on the card; the older reference quarter is plain.
+          expect(cells).toEqual(['+71']);
+          expect(await unkeyed(card(keyed))).toEqual([]);
+          expect(await column(keyed, 2)).toEqual(plainColumn);
+          expect((await card(keyed).locator('.brief-q-axis .q-eps-t').evaluateAll(nodes => nodes.map(node => [node.textContent, node.className])))[2]).toEqual(['—', 'q-eps-t is-unknown']);
+          await expect(card(keyed).locator('.brief-quarters rect.is-reference')).toHaveCount(1);
+          await expect(card(keyed).locator('.brief-q-legend span')).toHaveText(['EPS', '売上', '前年比%・下段は純利益率%', '値なし']);
+          if (width === 375) expect(value.content).toBeLessThanOrEqual(3388);
+        }
+        expect(await horizontalOverflow(keyed)).toBe(0);
+        expect(await cutCells(card(keyed))).toEqual([]);
+        expect(await wider(card(keyed))).toEqual([]);
+        expect(keyedErrors).toEqual([]);
+      } finally { await keyed.close(); }
       expect(errors).toEqual([]);
     });
   });

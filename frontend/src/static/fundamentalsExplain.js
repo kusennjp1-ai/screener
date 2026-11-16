@@ -3,8 +3,8 @@
 // (tools/report-data-coverage.mjs applies it to the published bundle). Never fills a gap.
 import { instrumentApplicability } from './instrumentApplicability.js';
 import { fixedMinus, signed } from './positionGeometry.js';
-import { SEC_RECORD_SCHEMA } from './bookFinancialAdmission.js';
-import { BOOK_QUARTER_MAX_AGE_DAYS } from './bookFinancialEvidence.js';
+import { q4ReferenceEntryValid, SEC_Q4_REFERENCE_MAX, SEC_RECORD_SCHEMA } from './bookFinancialAdmission.js';
+import { BOOK_QUARTER_MAX_AGE_DAYS, yoyDetail } from './bookFinancialEvidence.js';
 import { bookFinancialCurrent } from './bookFinancialCurrent.js';
 import { code33Layered } from './code33Reference.js';
 
@@ -125,7 +125,11 @@ export function secStatus(row, book, { detail = null, coverage = null } = {}) {
   // (only annual EPS or net income reported): nothing to verify, so it is not 検証不可.
   const written = key => Array.isArray(data.quarterly?.[key]) && data.quarterly[key].length === 0;
   if (!book.report.valid && ['available', 'partial'].includes(data.status) && data.symbol === row.symbol && data.as_of_date === book.report.date && written('eps') && written('revenue')) return make('no_quarterly_values');
-  if (book.current) return make('ok', { latestEnd: book.report.rows.at(-1)?.end ?? null });
+  if (book.current) {
+    // Round 3 D3: the 独自計算・参考 fiscal-Q4 EPS travels here for the card's display only, and only when there is one.
+    const q4Reference = q4EpsReference(data, book.report);
+    return make('ok', { latestEnd: book.report.rows.at(-1)?.end ?? null, ...(q4Reference.length ? { q4Reference } : {}) });
+  }
   if (book.reason === 'stale_book_period' && book.report?.valid) {
     const latestEnd = book.report.rows.at(-1).end, pending = book.report.fiscalQ4Pending;
     // 古い only when the newest filing, a 10-K included, is too old; a recent 10-K whose Q4 has no quarterly value says so.
@@ -197,6 +201,25 @@ export function wholePercent(value) {
   return whole === 0 ? 0 : whole;
 }
 
+// 「Q4算出」 is the one term for a fiscal Q4 whose sales and net income are the 10-K's fiscal-year values minus three
+// quarters (never EPS): every quote of such a quarter on the card carries it, and the source line keys the axis's 「算出」.
+export const Q4_DERIVED_MARK = '（Q4算出）';
+export const Q4_DERIVED_SOURCE_NOTE = '・Q4算出：売上/純利益のQ4は10-K年度値−3四半期';
+export const Q4_DERIVED_LEGEND = '算出＝Q4算出（10-K年度値−3四半期）';
+/**
+ * Whether a row's quoted `metric` ('eps', 'sales' or 'margin') rests on a derived fiscal Q4: a sales rate when its own
+ * quarter or its year-ago base is one, a margin when its quarter's revenue or net income is one, and never EPS.
+ */
+export function q4DerivedRate(row, metric) {
+  if (!row) return false;
+  if (metric === 'sales') return (row.salesDerived ?? row.derived) === true || row.salesBaseDerived === true;
+  return metric === 'margin' && row.derived === true;
+}
+/** The source line's note when any quarter on the card is a derived Q4 (the axis marks every such row) or a tile rests on one, else ''. */
+export function q4DerivedSourceNote(rows, tiles = []) {
+  return (rows || []).some(row => row?.derived) || (tiles || []).some(tile => tile?.derived) ? Q4_DERIVED_SOURCE_NOTE : '';
+}
+
 /**
  * The three fundamentals tiles from SEC quarterly rows: the newest quarter that has a
  * value, its period, and why a newer quarter (or every quarter) has none.
@@ -217,8 +240,10 @@ export function fundamentalTiles(report) {
     const row = rows[index], previous = rows[index - 1];
     // A sales rate compared with a derived Q4 base says so; the margin uses only its own quarter.
     const baseDerived = metric === 'sales' && row.salesBaseDerived === true;
+    // The quarter before, quoted as 前期, says Q4算出 when its own rate rests on a derived Q4 (sales only; EPS never is).
+    const before = previous => finite(previous[key]) ? `${format(previous[key])}${q4DerivedRate(previous, metric) ? Q4_DERIVED_MARK : ''}` : quarterReason(previous, metric);
     const note = (row === newest
-      ? metric === 'margin' ? ym(row.end) : `${ym(row.end)}・前期 ${previous ? finite(previous[key]) ? format(previous[key]) : quarterReason(previous, metric) : 'なし'}`
+      ? metric === 'margin' ? ym(row.end) : `${ym(row.end)}・前期 ${previous ? before(previous) : 'なし'}`
       : `${ym(row.end)}・最新 ${ym(newest.end)}は${quarterReason(newest, metric)}`) + (baseDerived ? '・前年同期はQ4算出' : '');
     const derived = metric === 'sales' ? (row.salesDerived ?? row.derived) === true || baseDerived : metric === 'margin' && row.derived === true;
     return { label, value: format(row[key]), short: null, note, end: row.end, derived, ...(turnaround ? { turnaround } : {}) };
@@ -563,4 +588,69 @@ export function fundamentalsCoverageWarning(coverage, { date = null } = {}) {
   if (!known(total)) return null;
   const counts = `${coverage.with_quarters}/${total}銘柄`;
   return { text: `業績データ：この公開のSEC記録は${counts} — 業績の判定は未確認が多くなります`, short: `業績データ欠け：SEC記録は${counts}` };
+}
+
+// ---- Round 3 D3: the 独自計算・参考 fiscal-Q4 EPS (display only; never counted toward any gate, chip or score: OD1) ----
+
+/** The desktop legend item that keys a reference quarter's EPS bar (a thicker, darker dash than every 値なし bar's). */
+export const Q4_REFERENCE_LEGEND = '太い破線＝参考（独自計算・判定に使わない）';
+/**
+ * The record's 独自計算・参考 fiscal-Q4 EPS for display only, `q4EpsReference(record, report)` → [] or
+ * [{ end, value, yoy, yoyBase: 'reported' | 'reference' | null }], oldest first. `record` is the row's book_financials and
+ * `report` its bookFinancialEvidence report. The browser never runs admission, so this checks the list itself: one that is
+ * not 1 to SEC_Q4_REFERENCE_MAX entries with strictly increasing ends is absent, and an entry is dropped when it fails
+ * admission's entry check (q4ReferenceEntryValid), ends on a quarter written in quarterly.eps, or is not a fiscal-Q4 row of
+ * the card's window (report.rows.slice(-8)) without EPS. The rate is yoyDetail's (bookFinancialEvidence, no second base
+ * rule) over the reported EPS points and the shown entries as points (a reported point wins on a shared end): `yoy` is null
+ * whenever yoyDetail names a reason (no base, a loss or zero base, a period mismatch), and `yoyBase` says whether the base is a
+ * reported EPS or itself a reference. Nothing here reaches a row, epsYoY, epsFloor, chipQuarter, sec_summary, a chip or a score.
+ */
+export function q4EpsReference(record, report) {
+  const list = record?.q4EpsReference;
+  if (!Array.isArray(list) || list.length < 1 || list.length > SEC_Q4_REFERENCE_MAX || !report?.valid || !Array.isArray(report.rows) || !isoDay(report.date) || record.as_of_date !== report.date) return [];
+  const ends = list.map(entry => entry?.end);
+  if (!ends.every((end, index) => isoDay(end) && (!index || end > ends[index - 1]))) return [];
+  const written = Array.isArray(record.quarterly?.eps) ? record.quarterly.eps : [];
+  // The reported EPS points as bookFinancialEvidence read them (its series check is all or nothing): none when it refused them.
+  const reported = (report.refusedSeries || []).includes('eps') ? [] : written;
+  const writtenEnds = new Set(written.map(point => point?.end));
+  const rows = new Map(report.rows.slice(-8).map(row => [row.end, row]));
+  const shown = list.filter(entry => q4ReferenceEntryValid(entry, report.date) && !writtenEnds.has(entry.end) && rows.get(entry.end)?.fiscalQ4 === true && rows.get(entry.end).eps === null);
+  const points = [...reported.map(point => ({ end: point.end, start: point.start, value: point.value, source: 'reported' })),
+    ...shown.filter(entry => !reported.some(point => point.end === entry.end)).map(entry => ({ end: entry.end, start: entry.start, value: entry.value, source: 'reference' }))]
+    .sort((a, b) => (a.end < b.end ? -1 : a.end > b.end ? 1 : 0));
+  return shown.map(entry => {
+    const detail = yoyDetail(points, entry.end);
+    const known = detail.reason === null && finite(detail.value);
+    return { end: entry.end, value: entry.value, yoy: known ? detail.value : null, yoyBase: known ? detail.base.source : null };
+  });
+}
+// 「Q4 EPS ≈ 1.23（純利益÷希薄化株数）→ 前年比 +45%」: the rate as the brief prints it (wholePercent, U+2212), only when known.
+function referenceFacts(entry, { method = true } = {}) {
+  const rate = finite(entry.yoy) ? `→ 前年比 ${growth(entry.yoy)}${entry.yoyBase === 'reference' ? '（前年同期も参考値）' : ''}` : '';
+  // The arrow follows the closing bracket directly, or a space after the EPS.
+  return `Q4 EPS ≈ ${fixedMinus(entry.value, 2)}${method ? `（純利益÷希薄化株数）${rate}` : rate ? ` ${rate}` : ''}`;
+}
+const referenceEntry = entry => Boolean(entry) && isoDay(entry.end) && finite(entry.value);
+/**
+ * The one reference quarter the card's 参考 line names: the newest shown entry of q4EpsReference's list, or null. Below 1024px
+ * the card marks only this quarter on its bars and axis (the phone legend has no reference item, so the line is the key);
+ * the desktop marks every shown one, keyed by Q4_REFERENCE_LEGEND.
+ */
+export function q4ReferenceNamed(reference) {
+  const entry = Array.isArray(reference) ? reference.at(-1) : null;
+  return referenceEntry(entry) ? entry : null;
+}
+/**
+ * The card's one line for the reference quarter q4ReferenceNamed gives, or null without one:
+ * 「参考（独自計算・判定に使わない）：26-06期 Q4 EPS ≈ 1.23（純利益÷希薄化株数）→ 前年比 +45%」. Without a rate the tail
+ * 「→ 前年比 …」 is left out (never +0%); a base that is itself a reference adds 「（前年同期も参考値）」.
+ */
+export function q4ReferenceLine(reference) {
+  const entry = q4ReferenceNamed(reference);
+  return entry ? `参考（独自計算・判定に使わない）：${yyMm(entry.end)} ${referenceFacts(entry)}` : null;
+}
+/** The reference quarter's EPS bar title after its 値なし reason: 「参考（独自計算）Q4 EPS ≈ 1.23 → 前年比 +45%」, or null. */
+export function q4ReferenceTitle(entry) {
+  return referenceEntry(entry) ? `参考（独自計算）${referenceFacts(entry, { method: false })}` : null;
 }

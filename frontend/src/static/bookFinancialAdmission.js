@@ -18,7 +18,9 @@ const DERIVABLE_FIELDS = new Set(['revenue', 'netIncome']);
 const RECORD_KEYS = ['schema_version', 'symbol', 'cik', 'as_of_date', 'retrieved_at', 'source', 'status', 'quarterly', 'annualEps', 'limitations'];
 // Round 2 (plan §2.3): a record may also list the fiscal years whose Q4 could not be derived, and an
 // invalid_payload record names its cause. Both are optional: older records lack them.
-const OPTIONAL_RECORD_KEYS = ['derivation_gaps'];
+// Round 3 (D3): an available or partial record may also carry `q4EpsReference`, the 独自計算・参考 fiscal-Q4 EPS
+// (tools/sec-financials.py, emission off until OD1). Optional and strict; never on an unavailable record.
+const OPTIONAL_RECORD_KEYS = ['derivation_gaps', 'q4EpsReference'];
 const UNAVAILABLE_KEYS = new Set(['schema_version', 'symbol', 'as_of_date', 'status', 'reason', 'error', 'retrieved_at', 'forms', 'invalid_detail']);
 export const DERIVATION_GAP_REASONS = Object.freeze(['tag_mismatch', 'broken_chain', 'no_annual']);
 export const INVALID_DETAIL_MESSAGE_MAX = 200;
@@ -68,6 +70,45 @@ function admitInvalidDetail(detail) {
     && text(detail.message, INVALID_DETAIL_MESSAGE_MAX) && Number.isSafeInteger(detail.requested_cik) && detail.requested_cik > 0 && (detail.received_cik === null || cikValue(detail.received_cik));
 }
 
+// Round 3 (D3): the 独自計算・参考 fiscal-Q4 EPS (sec-financials.py's q4_eps_reference). It is never a quarterly.eps point
+// and never counts toward any gate or score (OD1). Every constant below is 独自設定 (the brief's own choice, not an SEC or
+// Minervini rule) and mirrors tools/sec-financials.py; test_sec_financials.py compares each with the producer.
+// 独自設定: the method's name (Q4_REFERENCE_METHOD).
+export const SEC_Q4_REFERENCE_METHOD = 'q4-ni-over-q4-diluted-shares-v1';
+// 独自設定: the numerator and share-count tags (Q4_REFERENCE_NUMERATOR_TAGS, Q4_REFERENCE_SHARE_TAGS).
+export const SEC_Q4_REFERENCE_TAGS = Object.freeze({"numerator": ["NetIncomeLossAvailableToCommonStockholdersDiluted", "NetIncomeLossAvailableToCommonStockholdersBasic", "NetIncomeLoss"], "shares": ["WeightedAverageNumberOfDilutedSharesOutstanding"]});
+// 独自設定: an entry's quarter is min to max days long, both ends counted: the 70-105 day quarter that tag_points reads and
+// that derive_fourth_quarters keeps as the fiscal-Q4 remainder (bare literals there; the test checks both behaviours).
+export const SEC_Q4_REFERENCE_QUARTER_DAYS = Object.freeze({"min": 70, "max": 105});
+// 独自設定: at most this many entries per record, the newest kept (Q4_REFERENCE_MAX).
+export const SEC_Q4_REFERENCE_MAX = 4;
+const Q4_REFERENCE_KEYS = ['end', 'start', 'value', 'method', 'numerator', 'shares'];
+const referenceSource = (source, tags) => plain(source) && sameKeys(source, ['tag', 'components']) && tags.includes(source.tag)
+  && Array.isArray(source.components) && source.components.length === 4 && source.components.every(item => text(item));
+const quarterDays = (start, end) => (Date.parse(end) - Date.parse(start)) / 86400000 + 1;
+/**
+ * One reference entry in its exact shape: { end, start, value, method, numerator: { tag, components[4] }, shares: { tag,
+ * components[4] } }, a quarter of SEC_Q4_REFERENCE_QUARTER_DAYS (70-105 days, both ends counted) ending on or before
+ * `asOfDate`, a finite value, the method and tags above. The card's reader (fundamentalsExplain.js q4EpsReference) applies the same check to every entry it shows.
+ */
+export function q4ReferenceEntryValid(entry, asOfDate) {
+  if (!plain(entry) || !sameKeys(entry, Q4_REFERENCE_KEYS)) return false;
+  const { end, start, value, method, numerator, shares } = entry;
+  if (!day(start) || !day(end) || start > end || !day(asOfDate) || end > asOfDate) return false;
+  const days = quarterDays(start, end);
+  return days >= SEC_Q4_REFERENCE_QUARTER_DAYS.min && days <= SEC_Q4_REFERENCE_QUARTER_DAYS.max && number(value) && method === SEC_Q4_REFERENCE_METHOD
+    && referenceSource(numerator, SEC_Q4_REFERENCE_TAGS.numerator) && referenceSource(shares, SEC_Q4_REFERENCE_TAGS.shares);
+}
+/**
+ * `q4EpsReference`: 1 to SEC_Q4_REFERENCE_MAX valid entries with strictly increasing ends, none ending on a quarter whose EPS
+ * is reported in quarterly.eps (a reported EPS is never shadowed). `value` is the record, read after its series are admitted.
+ */
+function admitQ4Reference(list, value, asOfDate) {
+  if (!Array.isArray(list) || list.length < 1 || list.length > SEC_Q4_REFERENCE_MAX) return false;
+  const reported = new Set(value.quarterly.eps.map(point => point.end));
+  return list.every((entry, index) => q4ReferenceEntryValid(entry, asOfDate) && (!index || entry.end > list[index - 1].end) && !reported.has(entry.end));
+}
+
 function admitSeries(points, field, asOfDate, annual = false) {
   return Array.isArray(points) && points.length <= MAX_POINTS &&
     points.every((point, index) => admitPoint(point, field, asOfDate, annual) && (!index || point.end > points[index - 1].end));
@@ -115,6 +156,8 @@ export function admitBookFinancialsDetailed(value, { symbol, asOfDate, evaluated
   if (series) return refuse(`series:${series}`);
   if (!admitSeries(value.annualEps, 'eps', asOfDate, true)) return refuse('series:annualEps');
   if (!Array.isArray(value.limitations) || value.limitations.length > 10 || !value.limitations.every(item => text(item, 200))) return refuse('keys');
+  // Last, so every existing check keeps its reason; quarterly.eps is an admitted series here.
+  if (Object.hasOwn(value, 'q4EpsReference') && !admitQ4Reference(value.q4EpsReference, value, asOfDate)) return refuse('keys');
   return { value, reason: null };
 }
 
