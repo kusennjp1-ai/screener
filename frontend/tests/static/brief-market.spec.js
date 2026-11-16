@@ -94,7 +94,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const chart = history.locator('.market-history-explorer').getByRole('img');
     await expect(metrics.getByRole('button', { name: 'トレンドテンプレート達成数' })).toHaveAttribute('aria-pressed', 'true');
     await expect(chart).toHaveAccessibleName(new RegExp(`^トレンドテンプレート達成数の長期推移。.*から${date}。`));
-    for (const [label, readout] of [['ステージ構成', 'ステージ2'], ['移動平均線の上', '200日線上'], ['ブレイクアウトの成功率', '10日間 −7%に届かず']]) {
+    for (const [label, readout] of [['ステージ構成', 'ステージ2'], ['移動平均線の上', '200日線上'], [BREAKOUT_HOLD_NAME, '10日間 −7%に届かず']]) {
       await metrics.getByRole('button', { name: label }).click();
       await expect(metrics.getByRole('button', { name: label })).toHaveAttribute('aria-pressed', 'true');
       await expect(metrics.getByRole('button', { name: 'トレンドテンプレート達成数' })).toHaveAttribute('aria-pressed', 'false');
