@@ -3,6 +3,10 @@
 // wording. This app's own judgement (独自判定); unknown inputs never become a state.
 import { finite } from '../researchEngine';
 import { bare, isoDay, sentence, shortDate } from './briefShared';
+// The ^GSPC record of the analysis date (gspcFollowThrough) is the market tab's only: it lives in marketTabEnvironment.js,
+// re-exported here so its importers are unchanged, and gspcFtdDisagrees below reads it.
+import { gspcFollowThrough } from './marketTabEnvironment';
+export { gspcFollowThrough };
 
 /**
  * Thresholds of the long-history deterioration notes. They are this app's own (labelled 独自判定 on
@@ -83,17 +87,6 @@ export const nasdaqInCorrection = ft => ft?.available === true && NASDAQ_CAUTION
  * 「NAS調整中」 and 「反発n日目」 (`rally(n)`, n the rally attempt's day; a test measures it for every day of the attempt window).
  */
 export const MARKET_TILE_SUFFIX = Object.freeze({ ftd: 'FTD確認済み', nasdaq: 'NAS調整中', rally: day => `反発${day}日目` });
-/**
- * The app's own ^GSPC follow-through record (indices[^GSPC].followThrough: the market tab's フォロースルーデー row and its
- * ◆ mark) when it is available and judged on the analysis date's session, else null (an older or missing record is
- * nothing to compare). The regime's FTD is SPY's (backend market_regime.py: its own low anchor and volume rule), so the
- * two can legitimately differ on one day.
- */
-export function gspcFollowThrough(trends) {
-  if (trendsStatus(trends).state !== 'ready') return null;
-  const ft = (trends.data.indices || []).find(item => item?.symbol === '^GSPC')?.followThrough;
-  return ft?.available === true && isoDay(ft.asOf) && ft.asOf === trends.data.as_of_date ? ft : null;
-}
 /**
  * One index's follow-through record (indices[symbol].followThrough) only when it is judged on the market-trends asset's own
  * session and that session is the published one: the series is ready, the record is available, its asOf is the asset's

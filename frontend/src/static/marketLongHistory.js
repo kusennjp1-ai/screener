@@ -36,14 +36,9 @@ export function bifurcation(history){
  const high=Math.max(...sp.slice(-252).map(row=>row.close)),close=sp.at(-1).close,fromHigh=100*(close/high-1);
  return {date:last.date,fromHigh,above200Percent:last.above200Percent,warning:fromHigh>=-SPLIT_RULE.nearHighPercent&&last.above200Percent<SPLIT_RULE.above200Below};
 }
-export function historyWindow(points,months,asOfDate){
- if(!day(asOfDate)||!Number.isSafeInteger(months)||months<1||months>60)return [];
- const end=new Date(`${asOfDate}T00:00:00Z`),cutoff=new Date(end);
- cutoff.setUTCDate(1);cutoff.setUTCMonth(cutoff.getUTCMonth()-months);
- cutoff.setUTCDate(Math.min(end.getUTCDate(),new Date(Date.UTC(cutoff.getUTCFullYear(),cutoff.getUTCMonth()+1,0)).getUTCDate()));
- const from=cutoff.toISOString().slice(0,10);
- return (points||[]).filter(point=>day(point.date)&&point.date>=from&&point.date<=asOfDate);
-}
+// The display window lives in marketHistoryWindow.js, which only the lazily loaded market screen's charts import (re-exported
+// here, with its file extension for the plain-Node tools that load this module).
+export { historyWindow } from './marketHistoryWindow.js';
 /**
  * notAfter bounds the capture's retrieval instant: the build keeps its own clock (default). The browser reader has no
  * publication instant and passes Infinity, so it checks only the lower bound (retrieved on or after as_of_date).

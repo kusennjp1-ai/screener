@@ -6,6 +6,10 @@ import { bifurcation, environmentPoint, BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT, 
 import { indexSummary } from '../reference/indexSummary.js';
 import { distributionCount, environmentRules, followThroughView, latestKnown, marketTone, shortDate, trendsStatus, BREAKOUT_HOLD_NAME, ENV_RULES, FTD_TEXT } from './briefModel';
 import { isoDay } from './briefShared';
+// The market tab's own values (the S&P／Nasdaq switch's closes, a group's shared date, the index position's signed
+// percent, the stage fields and the survivorship note) live in marketTabOnly.js, which only the lazily loaded market
+// screen pulls in; they are re-exported here so their importers are unchanged.
+export { groupDate, indexCloses, signedPercent, STAGE_FIELDS, SURVIVORSHIP_NOTE } from './marketTabOnly';
 
 const finite = Number.isFinite;
 /** Sessions in a year and in a month, as the long history counts them (marketTabHistory.js reads the same). */
@@ -28,25 +32,18 @@ export const distributionGrade = value => !finite(value) ? null : value >= DISTR
 /** The grades in words, from the two constants (never typed beside them): 「7日以上」, 「5〜6日」. */
 export const DISTRIBUTION_TEXT = Object.freeze({ caution: `${DISTRIBUTION_CAUTION}日以上`, reference: `${DISTRIBUTION_REFERENCE}〜${DISTRIBUTION_CAUTION - 1}日` });
 /**
- * The breadth series are today's names traced back (the long history's current-universe retrospective): said
- * under the 参加度 and リーダー headers on the desktop, in the 注記 on a phone and in the long history's takeaway.
- */
-export const SURVIVORSHIP_NOTE = '現在の銘柄で過去をさかのぼった集計（上場廃止銘柄を含まない）';
-/**
  * The warning-summary checks whose rule the market-regime study could not confirm (〔参考〕: every breadth rule of the
  * committed reference, market-regime-reference-v1.json). They are counted apart from the warnings and marked with a
  * neutral ○, never a ▲. The market tab reads them from the reference itself (marketTabStudy's referenceKeys); Today,
  * which never loads the reference, reads this list, and a test keeps the two equal, so the screens mark one rule alike.
  */
 export const REFERENCE_CHECKS = Object.freeze(['split', 'lows', 'template', 'stage', 'leaders', 'breakout']);
-export const STAGE_FIELDS = ['stage1Percent', 'stage2Percent', 'stage3Percent', 'stage4Percent'];
 export const STAGE_NAMES = ['底固め', '上昇', '天井圏', '下降'];
 
 // Only ever called with a finite number: a unit is never appended to an unknown value.
 export const num = (value, digits = 0) => value.toLocaleString('ja-JP', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const sign = value => value > 0 ? '+' : value < 0 ? '−' : '±';
 export const delta = value => `${sign(value)}${Math.abs(value).toLocaleString('ja-JP')}`;
-export const signedPercent = value => { const r = Number(value.toFixed(1)); return `${sign(r)}${Math.abs(r).toFixed(1)}%`; };
 /** A change of a share or a rate, in percentage points (never read as a return). */
 export const pointChange = (value, digits = 1) => { const r = Number(value.toFixed(digits)); return `${sign(r)}${Math.abs(r).toFixed(digits)}pt`; };
 
@@ -129,16 +126,6 @@ export function basisConflict(basis, summary, date) {
   return `判定の根拠はスキャン時点のSPY、この数値は長期履歴の^GSPC終値（${shortDate(summary.date, date)}）です。${fifty && long ? '50日線・200日線' : fifty ? '50日線' : '200日線'}との位置が一致していません。`;
 }
 
-/**
- * An index series of closes the market tab can chart (indices[i].closes, plan §2.3, validated by readMarketTrends):
- * at least the chart's 60 sessions, else null. Older publications have none: then there is no S&P／Nasdaq switch.
- */
-export function indexCloses(item) {
-  const closes = Array.isArray(item?.closes) ? item.closes.filter(point => finite(point?.close)) : [];
-  return closes.length >= 60 ? closes : null;
-}
-
-
 // The behind sentence's second half: the phone's market tab keeps it in the screen's 注記.
 const PER_ITEM_DATES = '日付が異なる項目には個別に日付を付けています。';
 
@@ -170,12 +157,6 @@ export function marketDating({ date, historyDate, indexDates }) {
     todayNote: `${todayParts.join('・')}時点（${md(date)}分は再集計待ち）`,
     // Every source on one older session: Today's note dates them all, so its tiles carry no date of their own.
     blockAsOf: single ? md(sources[0]) : null, verdictDate: `判定 ${md(date)}` };
-}
-
-/** The one session every valued item of a group describes, when they all agree on an older one. */
-export function groupDate(items) {
-  const valued = items.flatMap(item => item?.rows ? item.rows : [item]).filter(item => item?.valued);
-  return valued.length && valued.every(item => item.asOf && item.asOf === valued[0].asOf) ? valued[0].asOf : null;
 }
 
 /**
@@ -262,24 +243,6 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const distAsOf = !distAsOfParts.length ? null : distAsOfParts.length === 2 && distAsOfParts[0].hit.date === distAsOfParts[1].hit.date ? shortDate(distAsOfParts[0].hit.date, date) : distAsOfParts.map(d => `${d.name} ${shortDate(d.hit.date, date)}`).join('・');
   const distReasons = ready ? dist.filter(d => !d.hit).map(d => `${d.name}の分配日：${d.item?.reason || '指数データを確認できません。'}`) : [];
 
-  // Breakout success: a rate needs at least BREAKOUT_MIN_SAMPLE judged breakouts on that session.
-  const rate = known('breakoutHoldPercent');
-  const judgedNow = last && Number.isSafeInteger(last.breakoutsJudged) ? last.breakoutsJudged : null;
-  const whyNot = !last || !('breakoutsJudged' in last) ? null : judgedNow === null ? '判定期間に観測不足の日を含む' : judgedNow < BREAKOUT_MIN_SAMPLE ? `${judgedNow}件（${BREAKOUT_MIN_SAMPLE}件未満のため率は非表示）` : '成功数を確認できません';
-  const breakoutRule = rule('breakout');
-  const breakout = (() => {
-    const base = { key: 'breakout', label: BREAKOUT_HOLD_LABEL, metric: 'breakoutHoldPercent', rule: RULE_TEXT.breakout };
-    if (rate) {
-      const before = monthBefore(rows, rate, 'breakoutHoldPercent'), range = yearRange(rows, rate, 'breakoutHoldPercent'), newest = rate.index === rows.length - 1;
-      return { ...base, valued: true, b: `${num(rate.value)}%`, asOf: older(rate.date), change: before === null ? null : pointChange(rate.value - before, 0), range, position: rangePosition(range), format: value => `${num(value)}%`,
-        note: newest ? `${rate.row.breakoutsJudged}件で判定` : `${rate.row.breakoutsJudged}件で判定${whyNot ? `・最新は${whyNot}` : ''}`,
-        detail: newest && Number.isSafeInteger(rate.row.breakoutsHeld) ? `${BREAKOUT_WINDOW_TEXT}の上抜け${rate.row.breakoutsJudged}件のうち${rate.row.breakoutsHeld}件が10日間で−7%に届かず` : null,
-        warn: Boolean(breakoutRule?.fired), flag: breakoutRule?.fired ? `${ENV_RULES.breakoutHoldBelow}%未満` : null };
-    }
-    if (judgedNow !== null && judgedNow < BREAKOUT_MIN_SAMPLE) return { ...base, valued: true, b: `${judgedNow}件`, asOf: older(last.date), note: `${BREAKOUT_MIN_SAMPLE}件未満のため率は非表示` };
-    return whyNot ? { ...base, b: '未算出', note: whyNot } : { ...base, ...absent('breakoutsJudged') };
-  })();
-
   // 52-week highs and lows: the existing warning when new lows outnumber new highs.
   const highsLows = known(['newHighs', 'newLows']);
   const lowsLead = highsLows ? highsLows.value.newLows > highsLows.value.newHighs : false;
@@ -320,7 +283,7 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const conflict = basisConflict(verdict.basis, summary, date);
   // The market tab's warning summary, its three groups, its index switch and its 銘柄側 line (`tab`: marketTabParts,
   // marketTabGroups.js, which only the lazily loaded market screen passes), so Today, which reads none of them, never ships them.
-  const { signals = null, groups = null, series = null, stockSide = null } = tab ? tab({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, judgedNow, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, breakout, distWarn, spx, ndx, summary }) : {};
+  const { signals = null, groups = null, series = null, stockSide = null } = tab ? tab({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, distWarn, spx, ndx, summary }) : {};
 
   // ---- Today: exactly four facts ----
   // Today's 分配日 tile: ▲ and amber only at 7 or more; a 5–6 count reads 参考 in the warning's place, the other 参考 tiles'

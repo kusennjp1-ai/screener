@@ -6,6 +6,7 @@ import { BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT } from '../marketLongHistory';
 import { indexSummary } from '../reference/indexSummary.js';
 import { distributionCount, shortDate, BREAKOUT_HOLD_NAME, ENV_RULES } from './briefModel';
 import { delta, BREAKOUT_HOLD_LABEL, BREAKOUT_WINDOW_TEXT, DISTRIBUTION_TEXT, groupDate, indexCloses, monthBefore, num, pointChange, rangePosition, RULE_TEXT, STAGE_FIELDS, YEAR, yearRange } from './marketTabModel';
+import { breakoutView } from './marketTabOnly';
 
 const finite = Number.isFinite;
 
@@ -108,7 +109,9 @@ function stockSideLine({ ready, rows, last, date, known, tt, breakout, health })
  * The market tab's `{ signals, groups, series, stockSide }` from marketCardView's shared values (`ctx`, its own names): pass it
  * as marketCardView's `tab` option.
  */
-export function marketTabParts({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, judgedNow, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, breakout, distWarn, spx, ndx, summary }) {
+export function marketTabParts({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, distWarn, spx, ndx, summary }) {
+  // The breakout row and the newest session's judged count: the market tab's only (marketTabOnly.js), so Today never computes them.
+  const { breakout, judgedNow } = breakoutView({ rows, last, known, rule, older, absent });
   // ---- warning summary: every existing rule, fired or not, and the ones that could not be judged ----
   const schemaReason = '旧形式の長期集計に未収録';
   const envReason = (key, fields) => !history ? null : !last ? '長期集計に観測日なし' : fields.some(field => !hasField(field)) ? schemaReason
