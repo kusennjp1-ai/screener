@@ -9,6 +9,7 @@ import { AUDIT_VERSION } from '../qualificationAudit';
 import { lastPivotCrossing } from './breakoutHistory';
 import { structuralLowLegend } from './chartReadout';
 import { pivotDistanceText } from './briefCandidate';
+import { BOOK_TECHNICAL_VERSION } from '../bookTechnicalEvidence';
 
 // The crossing helper is verdict's (VD1/VD2 write its round-2 body): the chart's tests mock it (plan §2.2), keeping
 // the rest of the module (the conclusion's crossingEvent) as it is.
@@ -177,7 +178,7 @@ describe('brief stock chart card', () => {
     render(<StockView data={data(true)} />);
     expect(legend()).not.toContain('収縮');
     cleanup();
-    const measured = { ...data(true), technical: { version: 'book-technical-evidence-v2', vcp: { source: 'algorithm', legs: legsOf(bars()[150].high), measurementsValid: true, depthsContract: true } } };
+    const measured = { ...data(true), technical: { version: BOOK_TECHNICAL_VERSION, vcp: { source: 'algorithm', legs: legsOf(bars()[150].high), measurementsValid: true, depthsContract: true } } };
     render(<StockView data={measured} />);
     expect(legend()).toContain('収縮の安値');
     expect(legend()).toContain('枠＝収縮');
@@ -311,7 +312,7 @@ describe('the last contraction\'s low in the legend below 1024px (round 3 C3)', 
   const list = bars();
   const legs = [{ startDate: day(150), endDate: day(160), depthPct: 9, high: list[150].high, low: list[158].low, lowDate: day(158), bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.8 } },
     { startDate: day(170), endDate: day(180), depthPct: 4, high: list[170].high, low: list[175].low, lowDate: day(175), bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.7 } }];
-  const based = { ...data(true), bars: list, technical: { version: 'book-technical-evidence-v2', vcp: { source: 'algorithm', legs, measurementsValid: true, depthsContract: true } },
+  const based = { ...data(true), bars: list, technical: { version: BOOK_TECHNICAL_VERSION, vcp: { source: 'algorithm', legs, measurementsValid: true, depthsContract: true } },
     chart: { data: { rs_line: list.map((b, i) => ({ time: b.date, value: 1 + i / 1000 })) }, isError: false } };
   const low = list[175].low, item = () => document.querySelector('.brief-legend [data-key="low"]');
   const state = () => Object.fromEntries([...document.querySelector('.brief-legend').children].map(node => [node.dataset.key, node.hidden ? 'hidden' : node.style.order]));
