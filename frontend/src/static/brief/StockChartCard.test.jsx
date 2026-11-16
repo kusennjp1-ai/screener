@@ -307,14 +307,16 @@ describe('brief stock chart card', () => {
 });
 
 describe('the last contraction\'s low in the legend below 1024px (round 3 C3)', () => {
-  // Two measured contractions whose lows are on the bars they name (the plan's structural low is the last one's: 84.03),
-  // and an RS line, so the legend keeps two items that must stay (the averages and the RS line's meaning).
+  // Two measured contractions whose lows are on the bars they name (the plan's structural low is the last one's: 80.77),
+  // and an RS line, so the legend keeps two items that must stay (the averages and the RS line's meaning). The last one's
+  // low is on the last bar, so no later bar undercuts it (round 3 R6-P4: a low a later bar has traded under is not a
+  // usable structural stop).
   const list = bars();
   const legs = [{ startDate: day(150), endDate: day(160), depthPct: 9, high: list[150].high, low: list[158].low, lowDate: day(158), bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.8 } },
-    { startDate: day(170), endDate: day(180), depthPct: 4, high: list[170].high, low: list[175].low, lowDate: day(175), bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.7 } }];
+    { startDate: day(170), endDate: list[199].date, depthPct: 4, high: list[170].high, low: list[199].low, lowDate: list[199].date, bars: 30, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.7 } }];
   const based = { ...data(true), bars: list, technical: { version: BOOK_TECHNICAL_VERSION, vcp: { source: 'algorithm', legs, measurementsValid: true, depthsContract: true } },
     chart: { data: { rs_line: list.map((b, i) => ({ time: b.date, value: 1 + i / 1000 })) }, isError: false } };
-  const low = list[175].low, item = () => document.querySelector('.brief-legend [data-key="low"]');
+  const low = list[199].low, item = () => document.querySelector('.brief-legend [data-key="low"]');
   const state = () => Object.fromEntries([...document.querySelector('.brief-legend').children].map(node => [node.dataset.key, node.hidden ? 'hidden' : node.style.order]));
 
   it('keeps the low first among the foldable items, with each of its texts below 1024px and the full one only at 1024px and wider', () => {
@@ -323,7 +325,7 @@ describe('the last contraction\'s low in the legend below 1024px (round 3 C3)', 
     expect(item().dataset.rank).toBe('1');
     expect([...item().querySelectorAll('.lg-form')].map(node => [node.className, node.textContent])).toEqual(structuralLowLegend(low).map(([form, text]) => [`lg-form lg-form-${form}`, text]));
     // The plan's structural low is the last contraction's low (its price, through the producer, is checked above).
-    expect(low).toBeCloseTo(84.03, 2);
+    expect(low).toBeCloseTo(80.77, 2);
     // Unmeasured (jsdom gives the legend no width), the fold leaves the full text on.
     expect(item().dataset.fit).toBeUndefined();
     cleanup();
