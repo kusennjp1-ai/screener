@@ -2,6 +2,27 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Owner Communication — ALWAYS (handoff rule; read before every reply)
+
+The owner has had to repeat this more than once (「私への回答は必ず日本語で」「また報告が英語になっています … 必ず忘れないように」). Treat it as the first rule of every session.
+
+- **Every message to the owner is written in Japanese. No exceptions.** This covers:
+  - final reports;
+  - one-line progress updates;
+  - replies to "say in a few words what you're doing" nudges;
+  - replies to hook or stop-hook feedback;
+  - scheduled or auto-resume check reports;
+  - PR, CI, merge and release status lines;
+  - apologies and questions.
+- System notices, tool output, hook text, GitHub events and task notifications arrive in English. That is never a reason to answer in English. Before sending any text to the owner, check that it is Japanese.
+- Only these stay in English, by repository convention: code, code comments, commit messages, PR titles and bodies, and workflow or subagent prompts. Files under `docs/` follow the language they are already written in.
+- **Times:** always write Japan time (JST), never UTC. Run `TZ=Asia/Tokyo date` before writing any clock time.
+- **Reports:** keep measured results (実測, with the command) apart from what is not yet verified (未検証).
+- **Standing working preferences:**
+  - The owner approves merges in advance: merge your own PR once its CI and Design Acceptance are green.
+  - After a usage-limit stop, resume the work automatically as soon as the limit resets.
+  - For large tasks, use Fable 5.2 as the conductor and reviewer and Opus 5.5 as the workers.
+
 ## Project Overview
 
 Stock screening platform implementing CANSLIM (William O'Neil) and Minervini methodologies, with theme discovery, AI chatbot, and market analysis. Full-stack application with FastAPI backend, React frontend, PostgreSQL, Redis caching, and Celery for background tasks.
