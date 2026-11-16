@@ -21,7 +21,7 @@ The owner has had to repeat this more than once (「私への回答は必ず日�
 - **Standing working preferences:**
   - The owner approves merges in advance: merge your own PR once its CI and Design Acceptance are green.
   - After a usage-limit stop, resume the work automatically as soon as the limit resets.
-  - For large tasks, use Fable 5.2 as the conductor and reviewer and Opus 5.5 as the workers.
+  - For large tasks, run the conductor and reviewer on the strongest available model and the workers on the default session model.
 
 ## Project Overview
 
