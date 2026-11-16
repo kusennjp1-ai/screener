@@ -43,7 +43,9 @@
 .brief-regime-foot { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-3); text-wrap: pretty; }
 
 /* The exposure guide's basis: a quiet fold under the meter on a phone, one line on the desktop. */
-.brief-exposure-basis, .brief-exposure-nasdaq { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+.brief-exposure-basis, .brief-exposure-nasdaq, .brief-exposure-zero { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
+/* The 銘柄側 line (M6): the basis line's quiet form, never amber and never a ▲ (it is no sign). */
+.brief-verdict-stock { margin: 0; font-size: 12px; line-height: 1.6; color: var(--text-2); }
 .brief-verdict .brief-exposure-basis > summary { padding: 0; font-size: 12px; font-weight: 400; color: var(--text-2); }
 .brief-verdict .brief-exposure-basis .brief-expander-body { padding: 0 0 4px; }
 .brief-verdict .brief-exposure-basis .brief-expander-body p { font-size: 12px; line-height: 1.6; color: var(--text-2); }
@@ -90,6 +92,14 @@
 @media (min-width: 768px) {
   .brief-index-switch { justify-self: start; grid-template-columns: repeat(2, minmax(120px, auto)); }
   .brief-index-switch button { min-height: 32px; }
+}
+
+/* A group with both marks (▲ 注意 and ○ 参考): on a phone they take the short form (「▲ 1」「○ 1」, MarketScreen's Group) on one
+   row, with an older session's date on the row under them, so the pair stays within the heading and its question and the
+   head keeps its height (a single mark's column: 22px, or 44px with the date). The desktop keeps the words, stacked. */
+@media (max-width: 1023px) {
+  .brief-env-meta.is-pair { display: grid; grid-template-columns: auto auto; justify-content: end; column-gap: 4px; row-gap: 2px; padding-top: 0; }
+  .brief-env-meta.is-pair > .brief-env-asof { grid-column: 1 / -1; justify-self: end; }
 }
 
 /* A sign the study tags 〔参考〕 is counted apart: a neutral ○ in the summary, on its row and on its group, never amber. */

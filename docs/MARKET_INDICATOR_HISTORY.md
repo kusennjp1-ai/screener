@@ -2,6 +2,11 @@
 
 2026-10-11 / baseline `8cf7d9b231a5926696d261da51a4bab531f33cfa`
 
+> **状態（2026-11-15、round 3 M10、grep で確認）：未実装。** `payload.market_indicator_history` を書く producer は無い（`frontend/src`、`frontend/tools`、`backend`、`.github` のどこにも書く処理が無い）。
+> - 表示の受け口 `frontend/src/static/marketIndicatorHistory.js` は残っているが、アプリの画面はどこも import しない。読むのは tools の 4 ファイル（`market-history-producer.mjs`、`market-history-store.mjs`、`market-history.node.mjs`、`fixtures/market-history.mjs`）とそのテストだけ。この文書が挙げる市場ページ（`StaticBreadthPage`）と `MarketIndicatorHistory` の部品は #127 で画面ごと外れ、今の checkout に無い。
+> - ローカル専用の `export-market-history.mjs`（13F の報告運用会社数だけ、docs/MARKET_HISTORY_PRODUCER.md）は、ローカルの store の manifest の `assets.market_indicator_history` に参照を書く。ワークフローからは呼ばれない。
+> - 9 系列のうち、分配日（^GSPC／^IXIC）、新高値・新安値は別の経路（market-trends の asset と長期履歴、docs/brief-and-market-environment.md）で公開されている。put/call は collect-market-trends.py が集めて market-trends の asset に入るが、brief は表示しない。この契約の `series` にはどれも入らない。
+
 この変更は表示・履歴・欠損処理だけを対象とする。データ取得、財務 capture/admission、年次 EPS、購入条件、公開条件、認証、CI、売り抜け日算定ルールは変更しない。ローカル専用で、push・PR・merge・Actions・公開は実施しない。
 
 ## 現コードの監査

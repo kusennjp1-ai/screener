@@ -617,5 +617,303 @@ class BrowserAdmission(unittest.TestCase):
             capture_output=True, text=True, check=True, timeout=60)
         self.assertEqual(json.loads(run.stdout), {**{symbol: True for symbol in results}, "FUTURE": False})
 
+# Round 3 (D3): the 独自計算・参考 fiscal-Q4 EPS, emission off. A calendar-year filer: Q1-Q3 in 10-Qs, the year in its 10-K.
+SHARES_TAG = "WeightedAverageNumberOfDilutedSharesOutstanding"
+REF_QUARTERS = (("01-01", "03-31"), ("04-01", "06-30"), ("07-01", "09-30"))
+# Q1-Q3 net income and weighted diluted shares, the annual weighted count as a filer reports it (an integer), the
+# Q1-Q3 diluted EPS as reported (rounded to the cent) and the Q4 net income.
+REF_YEAR = {"ni": (100e6, 110e6, 120e6, 140e6), "shares": (100e6, 101e6, 102e6, 101_509_589), "eps": (1.00, 1.09, 1.18)}
+
+def ref_q4_shares(spec):
+    """The expected Q4 weighted shares: (annual x 365 - Q1 x 90 - Q2 x 91 - Q3 x 92) / 92 days."""
+    q1, q2, q3, annual = spec["shares"]
+    return (annual * 365 - (q1 * 90 + q2 * 91 + q3 * 92)) / 92
+
+def ref_payload(years, numerators=("NetIncomeLoss",), reported_q4=(), shares=True):
+    """companyfacts for {year: spec} (REF_YEAR's shape). Each numerator tag carries the same net income; a year in
+    `reported_q4` also tags its Q4 net income, Q4 shares and Q4 EPS in the 10-K. Revenue keeps the record available."""
+    concepts = {}
+    def add(tag, unit, row):
+        concepts.setdefault(tag, {"units": {}})["units"].setdefault(unit, []).append(row)
+    for year, spec in years.items():
+        for q, (s, e) in enumerate(REF_QUARTERS):
+            end = f"{year}-{e}"
+            row = lambda val: {"start": f"{year}-{s}", "end": end, "val": val, "filed": (sec.date.fromisoformat(end) + sec.timedelta(days=30)).isoformat(), "form": "10-Q", "accn": f"q-{end}"}
+            for tag in numerators:
+                add(tag, "USD", row(spec["ni"][q]))
+            if shares:
+                add(SHARES_TAG, "shares", row(spec["shares"][q]))
+            if spec["eps"][q] is not None:
+                add("EarningsPerShareDiluted", "USD/shares", row(spec["eps"][q]))
+            add("Revenues", "USD", row(1000 + q))
+        tenk = lambda start, val: {"start": start, "end": f"{year}-12-31", "val": val, "filed": f"{year + 1}-02-20", "form": "10-K", "accn": f"k-{year}"}
+        for tag in numerators:
+            add(tag, "USD", tenk(f"{year}-01-01", sum(spec["ni"])))
+        if shares:
+            add(SHARES_TAG, "shares", tenk(f"{year}-01-01", spec["shares"][3]))
+        add("EarningsPerShareDiluted", "USD/shares", tenk(f"{year}-01-01", spec.get("annual_eps", 4.6)))
+        add("Revenues", "USD", tenk(f"{year}-01-01", 4100))
+        if year in reported_q4:
+            for tag in numerators:
+                add(tag, "USD", tenk(f"{year}-10-01", spec["ni"][3]))
+            if shares:
+                add(SHARES_TAG, "shares", tenk(f"{year}-10-01", spec["q4_shares"]))
+            add("EarningsPerShareDiluted", "USD/shares", tenk(f"{year}-10-01", spec["q4_eps"]))
+    return {"cik": 1, "facts": {"us-gaap": concepts}}
+
+def drop(payload, tag, end, start=None):
+    """The payload without the tag's facts ending on `end` (only the one starting on `start`, when given)."""
+    for rows in payload["facts"]["us-gaap"][tag]["units"].values():
+        rows[:] = [r for r in rows if not (r["end"] == end and (start is None or r["start"] == start))]
+    return payload
+
+def reference(payload, as_of="2026-03-01"):
+    record = sec.normalize(payload, "ZZQ", 1, as_of, "2026-03-01T10:00:00.000Z")
+    return sec.q4_eps_reference(payload, as_of, sec.series(payload, "eps", as_of), sec.trim_cutoff(record["quarterly"]))
+
+class Q4EpsReference(unittest.TestCase):
+    """The reference fiscal-Q4 EPS (plan §5 D3): exact Q4 net income over approximate Q4 diluted shares, never in quarterly.eps."""
+
+    def test_a_tiling_year_gives_q4_net_income_over_q4_diluted_shares(self):
+        entries, samples, refusals = reference(ref_payload({2025: REF_YEAR}))
+        self.assertEqual(entries, [{"end": "2025-12-31", "start": "2025-10-01", "value": round(140e6 / ref_q4_shares(REF_YEAR), 4), "method": "q4-ni-over-q4-diluted-shares-v1",
+            "numerator": {"tag": "NetIncomeLoss", "components": ["k-2025", "q-2025-03-31", "q-2025-06-30", "q-2025-09-30"]},
+            "shares": {"tag": SHARES_TAG, "components": ["k-2025", "q-2025-03-31", "q-2025-06-30", "q-2025-09-30"]}}])
+        self.assertEqual(entries[0]["value"], 1.3592)
+        self.assertAlmostEqual(ref_q4_shares(REF_YEAR), 103e6, delta=1)
+        self.assertEqual(refusals, sec.Counter())
+        # Q1-Q3: net income / weighted shares against the reported EPS, one sample each; no Q4 EPS is reported.
+        self.assertEqual(samples, {"q4": [], "q1_q3": [(1.0, 1.0), (1.0891, 1.09), (1.1765, 1.18)]})
+
+    def test_the_numerator_tags_are_tried_in_order_and_the_tag_used_is_recorded(self):
+        tags = sec.Q4_REFERENCE_NUMERATOR_TAGS
+        self.assertEqual(tags, ("NetIncomeLossAvailableToCommonStockholdersDiluted", "NetIncomeLossAvailableToCommonStockholdersBasic", "NetIncomeLoss"))
+        self.assertEqual(reference(ref_payload({2025: REF_YEAR}, numerators=tags))[0][0]["numerator"]["tag"], tags[0])
+        # The diluted tag without its annual value, or with a broken chain, falls back to the next tag that tiles.
+        for broken in (lambda p: drop(p, tags[0], "2025-12-31"), lambda p: drop(p, tags[0], "2025-06-30")):
+            entries, _, refusals = reference(broken(ref_payload({2025: REF_YEAR}, numerators=tags)))
+            self.assertEqual((entries[0]["numerator"]["tag"], entries[0]["value"], refusals), (tags[1], 1.3592, sec.Counter()))
+        self.assertEqual(reference(ref_payload({2025: REF_YEAR}, numerators=tags[2:]))[0][0]["numerator"]["tag"], "NetIncomeLoss")
+
+    def test_q4_shares_outside_the_band_read_as_a_split(self):
+        # The 10-K restates the year for a 2-for-1 split while the 10-Qs stay pre-split; or the remainder is negative.
+        for annual in (2 * 101_509_589, 50_000_000):
+            spec = dict(REF_YEAR, shares=(*REF_YEAR["shares"][:3], annual))
+            entries, samples, refusals = reference(ref_payload({2025: spec}))
+            self.assertEqual((entries, refusals), ([], sec.Counter({"split_band": 1})), annual)
+            self.assertEqual(len(samples["q1_q3"]), 3)
+        self.assertEqual(sec.Q4_REFERENCE_SHARE_BAND, 0.10)
+
+    def test_a_missing_or_misaligned_fact_stays_unknown(self):
+        cases = {
+            "no_shares": [lambda p: drop(p, SHARES_TAG, "2025-06-30"), lambda p: drop(p, SHARES_TAG, "2025-12-31")],
+            # The fiscal year is still known from its annual EPS and share count.
+            "no_numerator": [lambda p: drop(p, "NetIncomeLoss", "2025-12-31")],
+            "no_tiling": [lambda p: drop(p, "NetIncomeLoss", "2025-06-30"),
+                lambda p: (drop(p, SHARES_TAG, "2025-06-30"), p["facts"]["us-gaap"][SHARES_TAG]["units"]["shares"].append(
+                    {"start": "2025-04-02", "end": "2025-06-30", "val": 101e6, "filed": "2025-07-30", "form": "10-Q", "accn": "q-2025-06-30"}))[1]],
+        }
+        for reason, mutations in cases.items():
+            for mutate in mutations:
+                payload = ref_payload({2025: REF_YEAR})
+                mutate(payload)
+                entries, _, refusals = reference(payload)
+                self.assertEqual((entries, refusals), ([], sec.Counter({reason: 1})), reason)
+        # A filer that tags no weighted diluted shares at all.
+        self.assertEqual(reference(ref_payload({2025: REF_YEAR}, shares=False))[2], sec.Counter({"no_shares": 1}))
+
+    def test_a_loss_quarter_where_diluted_equals_basic_gives_a_negative_reference(self):
+        # Q4 is a loss: its diluted count equals basic (anti-dilution), below Q1-Q3's diluted counts but within the band.
+        q4_shares = 99_500_000
+        annual = round((100e6 * 90 + 101e6 * 91 + 102e6 * 92 + q4_shares * 92) / 365)
+        spec = dict(REF_YEAR, ni=(100e6, 110e6, 120e6, -60e6), shares=(100e6, 101e6, 102e6, annual))
+        entries, _, refusals = reference(ref_payload({2025: spec}))
+        self.assertEqual(refusals, sec.Counter())
+        self.assertEqual(entries[0]["value"], round(-60e6 / ref_q4_shares(spec), 4))
+        self.assertLess(entries[0]["value"], 0)
+        self.assertAlmostEqual(entries[0]["value"], -60e6 / q4_shares, places=3)
+
+    def test_a_q1_q3_check_failure_stays_unknown_but_is_still_sampled(self):
+        off = dict(REF_YEAR, eps=(1.00, 1.30, 1.18))
+        entries, samples, refusals = reference(ref_payload({2025: off}))
+        self.assertEqual((entries, refusals), ([], sec.Counter({"check_failed": 1})))
+        # Sampled before the check: the failing quarter's own pair is in the Q1-Q3 accuracy.
+        self.assertIn((1.0891, 1.30), samples["q1_q3"])
+        missing = reference(ref_payload({2025: dict(REF_YEAR, eps=(1.00, None, 1.18))}))
+        self.assertEqual((missing[0], missing[2], len(missing[1]["q1_q3"])), ([], sec.Counter({"check_failed": 1}), 2))
+        # A net income of 0 fails the check (there is nothing to compare against).
+        zero = reference(ref_payload({2025: dict(REF_YEAR, ni=(0, 110e6, 120e6, 140e6), eps=(0.0, 1.09, 1.18))}))
+        self.assertEqual((zero[0], zero[2]), ([], sec.Counter({"check_failed": 1})))
+        # Within 2% passes: 1.09 x 101M = 110.09M against 110M.
+        self.assertEqual(sec.Q4_REFERENCE_CHECK_TOLERANCE, 0.02)
+
+    def test_a_filer_that_tags_its_q4_eps_gets_no_entry_and_contributes_a_q4_sample(self):
+        spec = dict(REF_YEAR, q4_shares=103e6, q4_eps=1.36)
+        payload = ref_payload({2025: spec}, reported_q4=(2025,))
+        entries, samples, refusals = reference(payload)
+        self.assertEqual((entries, refusals), ([], sec.Counter()))
+        # The reported Q4 net income and shares are set aside: the reference is still the annual remainder.
+        self.assertEqual(samples["q4"], [(1.3592, 1.36)])
+        self.assertEqual(len(samples["q1_q3"]), 3)
+        record = sec.normalize(payload, "ZZQ", 1, "2026-03-01")
+        self.assertEqual(record["quarterly"]["eps"][-1]["end"], "2025-12-31")
+
+    def test_entries_stay_in_the_record_window_and_the_newest_are_kept(self):
+        payload = ref_payload({year: REF_YEAR for year in range(2019, 2026)})
+        entries, samples, refusals = reference(payload)
+        # The record's cutoff is 2022-12-27 (TRIM_DAYS before the newest end, 2025-12-31): older years are neither entries nor refusals.
+        self.assertEqual([e["end"] for e in entries], ["2022-12-31", "2023-12-31", "2024-12-31", "2025-12-31"])
+        self.assertEqual(refusals, sec.Counter())
+        self.assertEqual(len(samples["q1_q3"]), 21)
+        from unittest.mock import patch
+        with patch.object(sec, "Q4_REFERENCE_MAX", 2):
+            self.assertEqual([e["end"] for e in reference(payload)[0]], ["2024-12-31", "2025-12-31"])
+        # The window, not the cap, bounds the entries; a refused year before the window is not tallied.
+        old = ref_payload({**{year: REF_YEAR for year in range(2019, 2026)}, 2020: dict(REF_YEAR, eps=(1.00, 1.30, 1.18))})
+        with patch.object(sec, "Q4_REFERENCE_MAX", 10):
+            entries, _, refusals = reference(old)
+        self.assertEqual(([e["end"] for e in entries], refusals), (["2022-12-31", "2023-12-31", "2024-12-31", "2025-12-31"], sec.Counter()))
+        self.assertEqual(sec.Q4_REFERENCE_MAX, 4)
+        # Without a cutoff (a record with neither EPS nor revenue) nothing is trimmed but the cap.
+        self.assertEqual(len(sec.q4_eps_reference(payload, "2026-03-01", sec.series(payload, "eps", "2026-03-01"))[0]), 4)
+
+    def test_quarterly_eps_is_never_filled_and_tags_are_unchanged(self):
+        payload = ref_payload({2025: REF_YEAR}, numerators=sec.Q4_REFERENCE_NUMERATOR_TAGS)
+        record = sec.normalize(payload, "ZZQ", 1, "2026-03-01")
+        self.assertEqual([p["end"] for p in record["quarterly"]["eps"]], ["2025-03-31", "2025-06-30", "2025-09-30"])
+        self.assertEqual(sorted(record["quarterly"]), sorted(sec.TAGS))
+        listed = {tag for tags, _ in sec.TAGS.values() for tag in tags}
+        self.assertNotIn(SHARES_TAG, listed)
+        self.assertNotIn("NetIncomeLossAvailableToCommonStockholdersDiluted", listed)
+        self.assertNotIn("shares", {unit for _, unit in sec.TAGS.values()})
+
+class Q4EpsReferenceEmission(unittest.TestCase):
+    """Emission off: every written record is byte-identical to today's; the computation runs apart from normalize."""
+
+    def fetch(self, payload, **kw):
+        from unittest.mock import patch
+        with patch.object(sec, "now_iso", lambda: "2026-03-01T10:00:00.000Z"):
+            return sec.fetch_symbol("ZZQ", {"ZZQ": 1}, "2026-03-01", get=lambda url: payload, **kw)
+
+    def base(self, payload):
+        return sec.normalize(payload, "ZZQ", 1, "2026-03-01", "2026-03-01T10:00:00.000Z")
+
+    def test_emission_off_writes_the_record_byte_identical_with_or_without_share_facts(self):
+        import json
+        self.assertIs(sec.Q4_EPS_REFERENCE_EMIT, False)
+        dump = lambda value: json.dumps(value, ensure_ascii=False, allow_nan=False)
+        with_shares = ref_payload({year: REF_YEAR for year in range(2022, 2026)}, numerators=("NetIncomeLoss", "NetIncomeLossAvailableToCommonStockholdersDiluted"))
+        without = ref_payload({year: REF_YEAR for year in range(2022, 2026)}, shares=False)
+        expected = dump(self.base(without))
+        tallied = []
+        self.assertEqual(dump(self.fetch(with_shares, q4_reference=lambda *args: tallied.append(args))), expected)
+        self.assertEqual(dump(self.fetch(without)), expected)
+        # The reference was computed (4 entries) and only tallied.
+        self.assertEqual(len(tallied[0][0]), 4)
+        self.assertNotIn("q4EpsReference", dump(self.fetch(with_shares)))
+
+    def test_emission_on_attaches_exactly_the_entries(self):
+        from unittest.mock import patch
+        payload = ref_payload({2025: REF_YEAR})
+        with patch.object(sec, "Q4_EPS_REFERENCE_EMIT", True):
+            record = self.fetch(payload)
+        entries = record.pop("q4EpsReference")
+        self.assertEqual(record, self.base(payload))
+        self.assertEqual(len(entries), 1)
+        self.assertEqual(sorted(entries[0]), ["end", "method", "numerator", "shares", "start", "value"])
+        self.assertEqual((sorted(entries[0]["numerator"]), sorted(entries[0]["shares"])), (["components", "tag"], ["components", "tag"]))
+        self.assertEqual((len(entries[0]["numerator"]["components"]), len(entries[0]["shares"]["components"])), (4, 4))
+        # Nothing to attach: the key stays absent even with emission on.
+        with patch.object(sec, "Q4_EPS_REFERENCE_EMIT", True):
+            self.assertNotIn("q4EpsReference", self.fetch(ref_payload({2025: REF_YEAR}, shares=False)))
+
+    def test_a_raising_computation_leaves_the_record_as_normalize_returned_it_and_is_tallied_as_error(self):
+        from unittest.mock import patch
+        payload = ref_payload({2025: REF_YEAR})
+        def boom(*args, **kwargs):
+            raise ZeroDivisionError("injected")
+        tallied = []
+        with patch.object(sec, "q4_eps_reference", boom), patch.object(sec, "Q4_EPS_REFERENCE_EMIT", True):
+            record = self.fetch(payload, q4_reference=lambda *args: tallied.append(args))
+            out = sec.collect(["ZZQ"], "2026-03-01", get=lambda url: {"0": {"ticker": "ZZQ", "cik_str": 1}} if url.endswith("company_tickers.json") else payload, sleep=lambda _: None)
+        self.assertEqual(record, self.base(payload))
+        self.assertEqual(record["status"], "available")
+        self.assertEqual(tallied, [([], {"q4": [], "q1_q3": []}, sec.Counter({"error": 1}))])
+        self.assertEqual(out["results"]["ZZQ"]["status"], "available")
+        self.assertEqual(out["q4_reference"]["refused"]["error"], 1)
+        self.assertEqual(out["q4_reference"]["entries"], 0)
+        # An unreadable payload never reaches the reference.
+        self.assertEqual(self.fetch({"cik": 999, "facts": {}}, q4_reference=lambda *args: tallied.append(args))["reason"], "invalid_payload")
+        self.assertEqual(len(tallied), 1)
+
+class Q4EpsReferenceAccuracy(unittest.TestCase):
+    """The run's accuracy line: aggregates only, null (never 0) where nothing was measured."""
+
+    def test_the_accuracy_arithmetic(self):
+        acc = sec.q4_reference_accuracy
+        self.assertEqual(acc([]), {"n": 0, "median_abs_error": None, "within_1c_or_2pct": None, "share": None})
+        # Errors 0, 0.03, 0.05, 0.02: the median is 0.025; only the exact one is within 1 cent or 2% of the reported value.
+        self.assertEqual(acc([(1.00, 1.00), (1.03, 1.00), (2.05, 2.00), (0.50, 0.52)]), {"n": 4, "median_abs_error": 0.025, "within_1c_or_2pct": 1, "share": 0.25})
+        # Exactly 1 cent, and exactly 2% (0.10 of 5.00), are within; a cent and a half on a small EPS is not.
+        self.assertEqual(acc([(1.23, 1.22), (5.10, 5.00), (0.115, 0.10)]), {"n": 3, "median_abs_error": 0.015, "within_1c_or_2pct": 2, "share": 0.6667})
+        self.assertEqual(acc([(-0.52, -0.50)]), {"n": 1, "median_abs_error": 0.02, "within_1c_or_2pct": 0, "share": 0.0})
+
+    def test_collect_tallies_every_record_read(self):
+        payloads = {1: ref_payload({2025: REF_YEAR}), 2: ref_payload({2025: dict(REF_YEAR, q4_shares=103e6, q4_eps=1.36)}, reported_q4=(2025,)),
+            3: ref_payload({2025: dict(REF_YEAR, eps=(1.00, 1.30, 1.18))}), 4: ref_payload({2025: REF_YEAR}, shares=False), 5: {"cik": 999, "facts": {}}}
+        for cik in payloads:
+            payloads[cik]["cik"] = cik if cik != 5 else 999
+        def get(url):
+            if url.endswith("company_tickers.json"):
+                return {str(c): {"ticker": f"S{c}", "cik_str": c} for c in payloads}
+            return payloads[int(url.rsplit("CIK", 1)[1].split(".")[0])]
+        out = sec.collect([f"S{c}" for c in payloads], "2026-03-01", get=get, sleep=lambda _: None)
+        summary = out["q4_reference"]
+        self.assertEqual(summary, {"emit": False, "records_with_reference": 1, "entries": 1,
+            "refused": {"no_numerator": 0, "no_tiling": 0, "no_shares": 1, "split_band": 0, "check_failed": 1, "not_finite": 0, "error": 0},
+            "q4": {"n": 1, "median_abs_error": 0.0008, "within_1c_or_2pct": 1, "share": 1.0},
+            "q1_q3": {"n": 9, "median_abs_error": 0.0009, "within_1c_or_2pct": 8, "share": 0.8889}})
+        self.assertTrue(all("q4EpsReference" not in r for r in out["results"].values()))
+        self.assertNotIn("q4_reference", out["results"]["S1"])
+
+    def test_main_logs_the_line_and_writes_only_the_aggregate_at_file_level(self):
+        import contextlib, gzip, io, json, os, sys, tempfile
+        from unittest.mock import patch
+        payload = ref_payload({2025: REF_YEAR})
+        get = lambda url: {"0": {"ticker": "ZZQ", "cik_str": 1}} if url.endswith("company_tickers.json") else payload
+        real = sec.collect
+        cwd = os.getcwd()
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "public/static-data").mkdir(parents=True)
+            (root / "public/research-daily.json").write_text(json.dumps({"as_of_date": "2026-03-01", "candidates": {"minervini": [{"symbol": "ZZQ"}]}}), encoding="utf-8")
+            summary_path = root / "summary.md"
+            out = io.StringIO()
+            try:
+                os.chdir(directory)
+                with patch.object(sec, "collect", lambda symbols, as_of: real(symbols, as_of, get=get, sleep=lambda _: None)), patch.object(sys, "argv", ["sec-financials.py"]), \
+                        patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary_path)}), contextlib.redirect_stdout(out):
+                    sec.main()
+            finally:
+                os.chdir(cwd)
+            raw = gzip.decompress((root / "public/static-data/book-financials.json.gz").read_bytes())
+            written = json.loads(raw)
+            step = summary_path.read_text(encoding="utf-8")
+        expected = {"emit": False, "records_with_reference": 1, "entries": 1,
+            "refused": {"no_numerator": 0, "no_tiling": 0, "no_shares": 0, "split_band": 0, "check_failed": 0, "not_finite": 0, "error": 0},
+            "q4": {"n": 0, "median_abs_error": None, "within_1c_or_2pct": None, "share": None},
+            "q1_q3": {"n": 3, "median_abs_error": 0.0009, "within_1c_or_2pct": 3, "share": 1.0}}
+        self.assertEqual(written["coverage"]["q4_reference"], expected)
+        line = f"SEC q4 reference accuracy 2026-03-01: {json.dumps(expected, ensure_ascii=False)}"
+        self.assertEqual(sec.q4_reference_line("2026-03-01", expected), line)
+        self.assertIn(line, out.getvalue().splitlines())
+        self.assertIn(f"- {line}", step.splitlines())
+        self.assertIn('"emit": false', line)
+        self.assertNotIn(b"q4EpsReference", raw)
+        self.assertNotIn("q4_reference", written)
+        self.assertNotIn("q4_reference", written["results"]["ZZQ"])
+        # The existing coverage keys keep their values beside the new aggregate.
+        self.assertEqual({key: written["coverage"][key] for key in ("available", "partial", "unavailable", "q4_revenue_derived")}, {"available": 1, "partial": 0, "unavailable": 0, "q4_revenue_derived": 1})
+
 if __name__ == "__main__":
     unittest.main()

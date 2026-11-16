@@ -37,8 +37,10 @@ Round-2 definitions, kept so the figures stay comparable:
     under "other failed checks". A missing volume ratio or pivot distance
     is ``breakout_day_unknown_n``.
   * "Minervini stage" is ``MinerviniScanner`` details['stage'] (round 2's
-    stage-2 share). "SE stage" is the Setup Engine payload's ``stage``
-    (``quick_stage_check``), the input to gate 8.
+    stage-2 share). "SE stage" is the Setup Engine payload's ``stage``, the
+    input to gate 8. Since round 3 R3b it is the stage the Minervini scanner
+    publishes (``WeinsteinstageAnalyzer.determine_stage``), no longer
+    ``quick_stage_check``; gate 8 requires stage 2 and passes None.
 
 Readiness gates (``app/analysis/patterns/explain_builder.py``): 1 setup
 score, 2 quality, 3 readiness, 4 early zone, 5 ATR14, 6 volume dry-up,

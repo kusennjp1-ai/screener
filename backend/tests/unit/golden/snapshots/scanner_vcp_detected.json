@@ -491,7 +491,8 @@
         "high_tight_flag:not_detected",
         "high_tight_flag:pole_return_below_threshold",
         "nr7_inside_day:not_detected",
-        "nr7_inside_day:nr7_inside_day_trigger_not_found"
+        "nr7_inside_day:nr7_inside_day_trigger_not_found",
+        "contraction_unconfirmed"
       ]
     }
   }

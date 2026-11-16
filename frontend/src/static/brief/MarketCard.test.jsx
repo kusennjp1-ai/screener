@@ -11,7 +11,12 @@ import reference from '../reference/market-regime-reference-v1.json' with { type
 import { marketTabStudy } from '../reference/marketTabStudy.js';
 import { followThroughDay } from '../followThroughDay';
 import { exposureRuleText } from '../reference/marketTabStudy.js';
-import { num, signedPercent } from './marketTabModel';
+import { marketCardView, num, RULE_TEXT, signedPercent } from './marketTabModel';
+import { marketTabParts } from './marketTabGroups';
+import { followThroughView, BREAKOUT_HOLD_NAME, FTD_PREVIOUS_NAME } from './briefEnvironment';
+/** The breakout row's name inside a pattern (its （） are literal). */
+const BREAKOUT_PATTERN = BREAKOUT_HOLD_NAME.replace(/[（）]/g, '\\$&');
+import { followThroughDetail } from '../reference/marketTabStudy.js';
 import { indexState } from '../../../tools/export-market-trends.mjs';
 
 /** Today's card, or with `detail` the market tab's (MarketScreen.jsx, the tab's lazy chunk). */
@@ -48,11 +53,14 @@ describe('brief market card: market tab', () => {
     expect(tile('TT達成数')).toHaveTextContent(/^TT達成数30銘柄観測200中30\+5 1か月比⌄$/);
     expect(tile('200日線より上')).toHaveTextContent(/^200日線より上45\.0%\+5\.0pt 1か月比⌄$/);
     expect(tile('RS推計90以上のTT達成（独自）')).toHaveTextContent('8銘柄−2 1か月比');
-    expect(tile('ブレイクアウト成功率')).toHaveTextContent('75%8件で判定');
+    expect(tile(BREAKOUT_HOLD_NAME)).toHaveTextContent('75%8件で判定');
     expect(tile('リーダーの健全度')).toHaveTextContent('70%20営業日前のTT達成30銘柄が対象');
     expect(tile('52週の新高値・新安値')).toHaveTextContent('新高値40新安値12');
     const [spx, ndx] = tile('フォロースルーデー（独自判定）').querySelectorAll('.brief-ftd-row');
-    expect(spx).toHaveTextContent('S&P確認 8/7+1.4%・反発4日目・FTD後の有効な分配日2');
+    // The fixture's FTD is 40 sessions old: the producer's words (M2: 「前回のFTD 8/7」, the count first in the em line).
+    const own = followThroughView(confirmed('2026-10-02'), '2026-10-02');
+    expect(spx).toHaveTextContent(`S&P${own.b}${own.em}`);
+    expect(spx).toHaveTextContent(`S&P${FTD_PREVIOUS_NAME} 8/740日前・+1.4%・反発4日目・FTD後の有効な分配日2`);
     expect(ndx).toHaveTextContent('NAS反発3日目安値9/29・4日目以降の+1.2%上昇待ち');
     expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日');
     for (const element of tiles()) {
@@ -60,8 +68,11 @@ describe('brief market card: market tab', () => {
       expect(element.querySelector('.brief-env-status')).toBeEmptyDOMElement();
     }
     expect(screen.getByRole('img', { name: /^ステージ構成 ステージ1 25\.0%、ステージ2 35\.0%、ステージ3 20\.0%、ステージ4 20\.0%$/ })).toBeInTheDocument();
-    // The stage legend names each stage.
-    expect(tile('ステージ構成')).toHaveTextContent('1 底固め 25%2 上昇 35%3 天井圏 20%4 下降 20%');
+    // The stage legend names each stage (M7: stage 2 advancing only, stage 3 flat or topping).
+    expect(tile('ステージ構成')).toHaveTextContent('1 底固め 25%2 上昇（加速中） 35%3 横ばい・天井圏 20%4 下降 20%');
+    // Opened, the row says the scanner's stage-2 base exception is not replayed, then its rule.
+    fireEvent.click(toggle('ステージ構成'));
+    expect([...tile('ステージ構成').querySelectorAll('.brief-env-detail p')].map(p => p.textContent)).toEqual(['スキャナーのステージ2ベース例外は再生していません（独自集計）', `基準${RULE_TEXT.stage}`]);
   });
 
   it('opens a row to its details, its rule and a link that opens the metric in the long history', () => {
@@ -95,20 +106,21 @@ describe('brief market card: market tab', () => {
   it('names each fired warning in a sentence under the verdict, beside its value and on its group', () => {
     const rows = breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30, stage1: 40, stage2: 40, stage4: 80, breakoutsJudged: 10, breakoutsHeld: 3 } : {}));
     const value = trends({ rows });
-    value.data.indices[0] = index('^GSPC', '2026-10-02', 6, '2026-10-02', confirmed('2026-10-02'));
+    // Seven S&P distribution days: the index warning (M3: 5–6 is a reference).
+    value.data.indices[0] = index('^GSPC', '2026-10-02', 7, '2026-10-02', confirmed('2026-10-02'));
     show(value);
     // Breadth checks carry 〔参考〕 from the study reference and are counted apart with a neutral ○ (MK9); this index
     // series names no method, so its check has no tag. The rules and their thresholds are unchanged.
     expect(signals().querySelector('b')).toHaveTextContent(/^▲ 注意 1件・参考 3件（独自判定）$/);
     expect(signals()).toHaveClass('is-warn');
-    expect(within(signals()).getAllByRole('listitem').map(li => li.textContent)).toEqual(['▲S&Pの分配日が25日間で6日', '○新安値（30）が新高値（10）を上回る〔参考〕', '○ステージ4（40%）がステージ2（20%）を上回る〔参考〕', '○ブレイクアウトの成功率が30%に低下〔参考〕']);
+    expect(within(signals()).getAllByRole('listitem').map(li => li.textContent)).toEqual(['▲S&Pの分配日が25日間で7日', '○新安値（30）が新高値（10）を上回る〔参考〕', '○ステージ4（40%）がステージ2（20%）を上回る〔参考〕', `○${BREAKOUT_HOLD_NAME}が30%に低下〔参考〕`]);
     expect(within(signals()).getAllByRole('listitem').map(li => li.className)).toEqual(['', 'is-reference', 'is-reference', 'is-reference']);
     // That the signs never move the guide is said once, in the guide's own disclosure (MK6).
     expect(signals()).not.toHaveTextContent('目安');
-    expect(tile('分配日（25日）')).toHaveTextContent(/^▲注意分配日（25日）S&P6日▲注意：5日以上NAS4日⌄$/);
+    expect(tile('分配日（25日）')).toHaveTextContent(/^▲注意分配日（25日）S&P7日▲注意：7日以上NAS4日⌄$/);
     expect(tile('52週の新高値・新安値')).toHaveTextContent(/^○参考52週の新高値・新安値新高値10新安値30○参考：新高値より多い/);
     expect(tile('52週の新高値・新安値')).not.toHaveClass('is-warn');
-    expect(tile('ブレイクアウト成功率')).toHaveTextContent(/^○参考ブレイクアウト成功率30%10件で判定.*参考：40%未満/);
+    expect(tile(BREAKOUT_HOLD_NAME)).toHaveTextContent(new RegExp(`^○参考${BREAKOUT_PATTERN}30%10件で判定.*参考：40%未満`));
     expect(tile('ステージ構成')).toHaveTextContent('ステージ2 20%参考：ステージ4がステージ2より多い');
     expect(tile('50日線より上').querySelector('.brief-env-status')).toBeEmptyDOMElement();
     expect(group('指数のトレンド')).toHaveTextContent('▲ 注意 1');
@@ -128,7 +140,11 @@ describe('brief market card: market tab', () => {
     expect(screen.getByText('判定の根拠はスキャン時点のSPY、この数値は長期履歴の^GSPC終値（10/2）です。50日線・200日線との位置が一致していません。')).toBeInTheDocument();
     // A confirmed FTD whose record carries no ftd event has no rally-low date: the ◆ only, no ○.
     // 260 closes: the 200-day line starts inside the 130-session window, so the label names its first day.
-    expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（\d+\/\d+〜）（2026-05-26〜2026-10-02）。有効な分配日 0日。FTD 8\/7。目盛り 5,482〜5,801$/ })).toBeInTheDocument();
+    // The FTD is 40 sessions old (FTD_RECENT_SESSIONS 25): its ◆ stays and reads 「前回のFTD」 (M2).
+    expect(screen.getByRole('img', { name: new RegExp(`^S&P 500 の終値と50日線・200日線（\\d+/\\d+〜）（2026-05-26〜2026-10-02）。有効な分配日 0日。${FTD_PREVIOUS_NAME} 8/7。目盛り 5,482〜5,801$`) })).toBeInTheDocument();
+    expect(document.querySelector('.brief-index-mark.is-ftd')).toHaveTextContent(`◆${FTD_PREVIOUS_NAME} 8/7`);
+    // The legend keeps the glyph's meaning (「◆ 前回のFTD」 wraps it at 320px beside the phone's switch).
+    expect(document.querySelector('.brief-index-legend .is-ftd')).toHaveTextContent(/^◆ FTD$/);
   });
 
   it('shows one section at a time behind phone tabs that carry each group\'s ▲ count and move by arrow keys', () => {
@@ -137,9 +153,9 @@ describe('brief market card: market tab', () => {
       return <MemoryRouter><Card market={UP} trends={value} date="2026-10-02" detail switcher section={section} onSection={setSection}
         history={<section aria-label="市場環境の推移">long history</section>} /></MemoryRouter>;
     }
-    // Six S&P distribution days fire an index warning; more new lows than highs is a 〔参考〕 sign, never a tab's ▲.
+    // Seven S&P distribution days fire an index warning; more new lows than highs is a 〔参考〕 sign, never a tab's ▲.
     const value = trends({ rows: breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30 } : {})) });
-    value.data.indices[0] = index('^GSPC', '2026-10-02', 6, '2026-10-02', confirmed('2026-10-02'));
+    value.data.indices[0] = index('^GSPC', '2026-10-02', 7, '2026-10-02', confirmed('2026-10-02'));
     render(<Phone />);
     const tablist = screen.getByRole('tablist', { name: '市場タブの表示' });
     const tabs = within(tablist).getAllByRole('tab');
@@ -215,7 +231,7 @@ describe('brief market card: market tab', () => {
     for (const name of ['指数のトレンド', '市場の参加度', 'リーダーの健全性']) expect(screen.getByRole('group', { name: `${name} 10/1時点の値` })).toBeInTheDocument();
     expect(document.querySelector('.brief-fact-asof')).toBeNull();
     expect(signals()).toHaveTextContent('注意サインなし（10/1時点・独自判定）');
-    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('確認 8/7');
+    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent(followThroughView(confirmed('2026-10-01'), '2026-10-02').b);
     expect(screen.getByRole('img', { name: /ステージ構成 .*（10\/1時点）$/ })).toBeInTheDocument();
   });
 
@@ -241,12 +257,12 @@ describe('brief market card: market tab', () => {
 
   it('names what an older long-history schema never recorded once per group, and what it could not judge', () => {
     show(trends({ rows: oldSchema(breadth('2026-10-02')) }));
-    for (const label of ['TT達成数', '200日線より上', 'ブレイクアウト成功率', 'RS推計90以上のTT達成（独自）', 'リーダーの健全度', 'ステージ構成']) expect(tile(label)).toBeNull();
+    for (const label of ['TT達成数', '200日線より上', BREAKOUT_HOLD_NAME, 'RS推計90以上のTT達成（独自）', 'リーダーの健全度', 'ステージ構成']) expect(tile(label)).toBeNull();
     expect(screen.getByTestId('brief-missing-breadth')).toHaveTextContent(/^旧形式の長期集計（10\/2）には未収録：200日線より上・TT達成数$/);
-    expect(screen.getByTestId('brief-missing-leaders')).toHaveTextContent(/^旧形式の長期集計（10\/2）には未収録：RS推計90以上のTT達成（独自）・ブレイクアウト成功率・リーダーの健全度・ステージ構成$/);
+    expect(screen.getByTestId('brief-missing-leaders')).toHaveTextContent(new RegExp(`^旧形式の長期集計（10/2）には未収録：RS推計90以上のTT達成（独自）・${BREAKOUT_PATTERN}・リーダーの健全度・ステージ構成$`));
     expect(tile('50日線より上')).toHaveTextContent('43.0%');
     expect(tile('先導株数（価格条件）')).toHaveTextContent('20銘柄');
-    expect(signals()).toHaveTextContent('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率（旧形式の長期集計に未収録）');
+    expect(signals()).toHaveTextContent(`判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・${BREAKOUT_HOLD_NAME}（旧形式の長期集計に未収録）`);
     expect(signals().querySelector('details')).toBeNull();
     for (const element of tiles()) expect(element.textContent).not.toMatch(bare);
   });
@@ -256,7 +272,7 @@ describe('brief market card: market tab', () => {
     phone(oldSchema(breadth('2026-10-02')));
     const fold = signals().querySelector('details');
     expect(fold.open).toBe(false);
-    expect(fold.querySelector('summary')).toHaveTextContent(/^判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率$/);
+    expect(fold.querySelector('summary')).toHaveTextContent(new RegExp(`^判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・${BREAKOUT_PATTERN}$`));
     expect(fold.querySelector('.brief-expander-body')).toHaveTextContent(/^理由：旧形式の長期集計に未収録$/);
     cleanup();
     // Two reasons: each with the checks it applies to.
@@ -296,7 +312,7 @@ describe('brief market card: market tab', () => {
     expect(screen.getByRole('alert')).toHaveTextContent(/^長期市場履歴の整合性を確認できないため、長期集計を表示しません（検証項目: 取得日時）。分配日・フォロースルーデーは指数データから表示しています。$/);
     expect(screen.getByText('指数の履歴は長期集計の整合性を確認できないため表示しません。')).toBeInTheDocument();
     expect(tile('分配日（25日）')).toHaveTextContent('S&P3日NAS4日');
-    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent('確認 8/7');
+    expect(tile('フォロースルーデー（独自判定）')).toHaveTextContent(followThroughView(confirmed('2026-10-02'), '2026-10-02').b);
     expect(group('市場の参加度')).toHaveTextContent('長期集計の整合性を確認できないため表示しません。');
     expect(signals()).toHaveTextContent(/^注意サインなし（独自判定）長期集計がないため、分配日とFTDだけを判定しています。$/);
   });
@@ -341,7 +357,7 @@ describe('brief market card: Today', () => {
   it('keeps the four buy-or-wait facts and links to the market tab for the rest', () => {
     show(trends(), { detail: false });
     expect(tiles().map(element => element.querySelector('small').textContent)).toEqual(['分配日（25日）', 'TT達成数', '200日線より上', '52週の新高値・新安値']);
-    expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P3日NAS4日5日以上で注意$/);
+    expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P3日NAS4日7日以上で注意$/);
     expect(tile('TT達成数')).toHaveTextContent('30銘柄');
     expect(tile('52週の新高値・新安値')).toHaveTextContent('高40安12差 +28');
     expect(screen.queryByText(/フォロースルーデー/)).toBeNull();
@@ -355,10 +371,10 @@ describe('brief market card: Today', () => {
   it('marks a warning with ▲ and a word on the side that fired, and names a stand-in for an older schema', () => {
     const rows = oldSchema(breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 5, newLows: 9 } : {})));
     const value = trends({ rows, legacy: true });
-    value.data.indices[0] = index('^GSPC', '2026-10-02', 5, '2026-10-02', undefined, true);
+    value.data.indices[0] = index('^GSPC', '2026-10-02', 7, '2026-10-02', undefined, true);
     show(value, { detail: false });
     expect(tiles().map(element => element.querySelector('small').textContent)).toEqual(['分配日（25日）', '先導株数（価格条件）', '50日線より上', '52週の新高値・新安値']);
-    expect(tile('分配日（25日）')).toHaveTextContent('S&P▲注意 5日NAS4日注意：S&Pが5日以上');
+    expect(tile('分配日（25日）')).toHaveTextContent('S&P▲注意 7日NAS4日注意：S&Pが7日以上');
     expect(tile('分配日（25日）')).toHaveClass('is-warn');
     // The new-lows rule is one the study could not confirm (〔参考〕 on the market tab): 参考 in the warning's place, never amber.
     expect(tile('52週の新高値・新安値')).toHaveTextContent(/^52週の新高値・新安値高5安9参考：新安値が新高値より多い$/);
@@ -482,15 +498,16 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     const rows = breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30 } : {}));
     const make = () => { const value = trends({ rows }); value.data.indices = [index('^GSPC', '2026-10-02', 6, '2026-10-02', failed('2026-10-02')), index('^IXIC', '2026-10-02', 5, '2026-10-02', failed('2026-10-02'))].map(item => sessionsOf({ ...item, method: DD })); return value; };
     show(make());
-    // Each fired distribution count carries its graded bucket's tag (MK2): 6 and 5 days are the 5–6 bucket.
-    expect(within(signals()).getAllByRole('listitem').map(li => li.textContent)).toEqual(['▲S&Pの分配日が25日間で6日〔未確立〕', '▲NASの分配日が25日間で5日〔未確立〕', '▲S&PのFTDが失敗（10/2）〔S&Pのみ〕〔偏り〕', '▲NASのFTDが失敗（10/2）〔未確立〕', '○新安値（30）が新高値（10）を上回る〔参考〕']);
-    expect(signals().querySelector('b')).toHaveTextContent(/^▲ 注意 4件・参考 1件（独自判定）$/);
+    // Each fired distribution count carries its graded bucket's tag (MK2): 6 and 5 days are the 5–6 bucket, counted as 参考
+    // with a neutral ○ (M3); the tag is the study's own word for that bucket.
+    expect(within(signals()).getAllByRole('listitem').map(li => li.textContent)).toEqual(['○S&Pの分配日が25日間で6日〔未確立〕', '○NASの分配日が25日間で5日〔未確立〕', '▲S&PのFTDが失敗（10/2）〔S&Pのみ〕〔偏り〕', '▲NASのFTDが失敗（10/2）〔未確立〕', '○新安値（30）が新高値（10）を上回る〔参考〕']);
+    expect(signals().querySelector('b')).toHaveTextContent(/^▲ 注意 2件・参考 3件（独自判定）$/);
     expect(signals().querySelector('.brief-signals-tags')).toHaveTextContent(/^〔参考〕は、2021〜2026年の参加度データ（現在の銘柄で過去をさかのぼった集計・上場廃止銘柄を含まない）の検証で/);
     // Every tag shown is defined in the sentence.
     for (const tag of ['〔S&Pのみ〕', '〔未確立〕', '〔偏り〕']) expect(signals().querySelector('.brief-signals-tags').textContent).toContain(`${tag}は`);
     cleanup();
     phone(make());
-    expect(signals().querySelector('.brief-signals-tags')).toHaveTextContent(/^〔参考〕＝2021〜26年の検証で関係未確認$/);
+    expect(signals().querySelector('.brief-signals-tags')).toHaveTextContent(/^〔参考〕＝指数の下げとの関係は未確認$/);
     expect(document.querySelector('.brief-screen-notes')).toHaveTextContent('注意サインの印：〔参考〕は、2021〜2026年の参加度データ');
     cleanup();
     // No 〔参考〕 tag shown, no legend.
@@ -511,7 +528,9 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
     // The Nasdaq note applies (positive verdict, Nasdaq on a rally attempt): the summary names the fold and its short form.
     expect(fold.querySelector('summary')).toHaveTextContent(/^目安と判定の基準・Nasdaqは反発3日目（判定はSPYのみ）$/);
-    expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual(['根拠（10/2スキャン時点）：S&P 500（SPY）が50日線・200日線の上で、局面判定（分配日・FTDなど）が「上昇トレンド」',
+    // The 銘柄側 line (M6) first, then the basis, the Nasdaq note and the guide.
+    const stockSide = marketCardView({ market: UP, trends: trends(), date: '2026-10-02', tab: marketTabParts }).stockSide;
+    expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual([stockSide, '根拠（10/2スキャン時点）：S&P 500（SPY）が50日線・200日線の上で、局面判定（分配日・FTDなど）が「上昇トレンド」',
       '判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は反発3日目（FTD未確認・独自判定）。', exposureRuleText()]);
     expect(fold).not.toHaveAttribute('open');
     cleanup();
@@ -530,7 +549,7 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     show(value);
     fireEvent.click(toggle('分配日（25日）'));
     const panel = document.getElementById(toggle('分配日（25日）').getAttribute('aria-controls'));
-    expect([...panel.querySelectorAll('p')].map(p => p.textContent).slice(0, 3)).toEqual(['下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・5日以上で注意）', 'S&P：9/14・9/22・9/30（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）', 'NAS：有効な分配日の日付を確認できません']);
+    expect([...panel.querySelectorAll('p')].map(p => p.textContent).slice(0, 4)).toEqual(['目安の判定はSPYの別集計', '下の分配日は^GSPC/^IXICの別集計（ストーリング日を含まない・7日以上で注意、5〜6日は参考）', 'S&P：9/14・9/22・9/30（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）', 'NAS：有効な分配日の日付を確認できません']);
   });
 
   it('says the breadth groups are today\'s names traced back: under their headers on the desktop, in the 注記 on a phone', () => {
@@ -588,6 +607,20 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     expect(low.style.left).toBe(`${(100 * x(79) / 600).toFixed(2)}%`);
   });
 
+  it('keeps 「FTD」 on the ◆ of an FTD within FTD_RECENT_SESSIONS, and opens the row to its rule, the cited rises and 過去の傾向 (M2)', () => {
+    const recent = { ...confirmed('2026-10-02'), ftd: { ...confirmed('2026-10-02').ftd, sessionsSince: 25 } };
+    show(trends({ sp500: closes('2026-10-02', 300), follow: [recent, attempt('2026-10-02')] }));
+    expect(screen.getByRole('img', { name: /^S&P 500 の終値と50日線/ }).getAttribute('aria-label')).toMatch(/。FTD 8\/7。目盛り/);
+    expect(document.querySelector('.brief-index-mark.is-ftd')).toHaveTextContent('◆FTD 8/7');
+    expect(document.querySelector('.brief-index-legend .is-ftd')).toHaveTextContent('◆ FTD');
+    const row = tile('フォロースルーデー（独自判定）');
+    expect(row.querySelector('.brief-ftd-row')).toHaveTextContent(`S&P確認 8/725日前・`);
+    fireEvent.click(row.querySelector('.brief-env-toggle'));
+    const lines = [...row.querySelectorAll('.brief-env-detail p')].map(p => p.textContent);
+    expect(lines.slice(0, 4)).toEqual(followThroughDetail().details);
+    expect(lines.at(-1)).toMatch(/^基準/);
+  });
+
   it('says a failed FTD failed on its ◆, draws no ○ without the FTD\'s own low, and puts a label near the top under its ◆', () => {
     show(trends({ sp500: closes('2026-10-02', 300), follow: [failed('2026-10-02'), attempt('2026-10-02')] }));
     const mark = document.querySelector('.brief-index-mark.is-ftd');
@@ -613,7 +646,7 @@ describe('brief market card: the market-regime study and its honesty rules', () 
     expect(shown.size).toBeGreaterThan(2);
     expect(new Set(key.match(/〔[^〕]+〕(?=＝)/g))).toEqual(shown);
     expect(key).toMatch(/^割合は、その日の終値から21営業日以内に終値で5%以上下げた日の割合です。全期間は、その項目を判定できた全営業日での割合です。/);
-    expect(regime().querySelector('.brief-regime-key + .brief-regime-foot')).toHaveTextContent('この欄は下げの割合だけを示し、平均リターンが低かった状態はどちらの指数にもありません。');
+    expect(regime().querySelector('.brief-regime-key + .brief-regime-foot')).toHaveTextContent('この欄は下げの頻度の比較です（21営業日・^GSPC／^IXIC）。平均リターンが低かった状態はどちらの指数にもありません。');
   });
 
   it('keeps the 50-day cell as narrow as a value without 200 closes: a dash, the words read out and the reason in the 注記', () => {
@@ -711,11 +744,16 @@ describe('brief market card: round 2', () => {
   it('says why an FTD-upgraded uptrend keeps the guide at 0%: inside 目安と判定の基準 on a phone, in place on the desktop', () => {
     const market = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
     const manifest = { as_of_date: '2026-10-02', markets: { US: { as_of_date: '2026-10-02', market_context: { as_of_date: '2026-10-02', regime: 'confirmed_uptrend', distribution_days: 1, ftd_date: '2026-09-18', ftd_days_since: 10, exposure_pct: 40, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows' } } } };
-    // The regime's FTD is SPY's (9/18); the tab's own ^GSPC record of the day confirmed one on 8/7: each is attributed.
-    const LINE = '局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足ではFTD 8/7。この目安はSPYが50日線の下のため0%（独自判定）';
+    // The regime's FTD is SPY's (9/18); the tab's own ^GSPC record of the day confirmed one on 8/7, 40 sessions ago: each
+    // is attributed, the older one as 「前回のFTD」 (M2).
+    const LINE = `局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足では${FTD_PREVIOUS_NAME} 8/7。この目安はSPYが50日線の下のため0%（独自判定）`;
     render(<MemoryRouter><Card market={market} trends={trends()} date="2026-10-02" detail switcher section="index" onSection={() => {}} {...studyProps(trends(), '2026-10-02', reference, false, { market, manifest })} /></MemoryRouter>);
     const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
-    expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', LINE, exposureRuleText()]);
+    // The fixture's long history has no ^GSPC closes, so the 0% note (M5) is its closing sentence alone.
+    const zeroCap = marketTabStudy({ trends: trends(), reference, date: '2026-10-02', market, manifest }).zeroCap;
+    expect(zeroCap).toBe('0%は独自設定で、検証された水準ではありません。');
+    const stockSide = marketCardView({ market, trends: trends(), date: '2026-10-02', tab: marketTabParts }).stockSide;
+    expect([...fold.querySelectorAll('p')].map(p => p.textContent)).toEqual([stockSide, '根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', LINE, exposureRuleText(), zeroCap]);
     expect(fold).not.toHaveAttribute('open');
     // The label, the meter and the cap are unchanged.
     expect(screen.getByTestId('brief-regime')).toHaveTextContent('50日線割れ（弱含み・独自判定）');
@@ -753,7 +791,7 @@ describe('brief market card: round 2', () => {
     sessionStorage.clear();
     // A group with marks or a date of its own: they take the question's line under the heading, the date still names the group.
     const older = withCloses();
-    older.data.indices[0] = index('^GSPC', '2026-10-02', 6, '2026-10-02', confirmed('2026-10-02'));
+    older.data.indices[0] = index('^GSPC', '2026-10-02', 7, '2026-10-02', confirmed('2026-10-02'));
     phone(older);
     const marked = document.querySelector('.brief-env-group.is-index > .brief-env-head');
     expect(marked.querySelector('.brief-env-title > .brief-env-meta.is-inline')).toHaveTextContent('▲ 注意 1');
@@ -827,7 +865,7 @@ describe('brief market card: round 2', () => {
   it('says the disclosure that signs never move the guide exactly once on the market tab, with warnings and the study', () => {
     const rows = breadth('2026-10-02', (i, n) => (i === n - 1 ? { newHighs: 10, newLows: 30 } : {}));
     const value = trends({ rows });
-    value.data.indices[0] = index('^GSPC', '2026-10-02', 6, '2026-10-02', confirmed('2026-10-02'));
+    value.data.indices[0] = index('^GSPC', '2026-10-02', 7, '2026-10-02', confirmed('2026-10-02'));
     const count = () => (document.body.textContent.match(/目安を変え/g) || []).length;
     show(value);
     expect(count()).toBe(1);
@@ -858,5 +896,183 @@ describe('brief market card: round 2', () => {
     const labels = [...document.querySelectorAll('.brief-index-scale')].map(node => node.textContent);
     expect(labels).toEqual(['−71', '−200']);
     expect(labels.join('')).not.toMatch(/-\d/);
+  });
+});
+
+// ---- Round 3 (market track): the market tab's lead while a newer session has closed (M1e) -------------------------------
+describe('brief market card: a verdict older than the last closed session (M1e)', () => {
+  const lead = () => screen.getByTestId('brief-regime').querySelector('.brief-verdict-head p').textContent;
+  const card = (props, { switcher = false, market = UP } = {}) => render(<MemoryRouter><Card market={market} trends={trends()} date="2026-10-02" detail switcher={switcher} section="index" onSection={() => {}} {...studyProps(trends(), '2026-10-02', reference, !switcher)} {...props} /></MemoryRouter>);
+  it('says the judgement is 10/2\'s and waits for a new publication: the long form on the desktop, one line on a phone', () => {
+    card({ update: { target: '2026-10-05' } });
+    expect(lead()).toBe('10/2引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）');
+    // The label, the meter and the cap are unchanged.
+    expect(screen.getByTestId('brief-regime').querySelector('strong')).toHaveTextContent('上昇トレンド（独自判定）');
+    expect(screen.getByTestId('brief-regime').querySelector('.brief-exposure b')).toHaveTextContent(/^最大 50%$/);
+    cleanup();
+    card({ update: { target: '2026-10-05' } }, { switcher: true });
+    expect(lead()).toBe('10/2時点の判定・更新待ち');
+    cleanup();
+    // The verdict's day is the last closed session, no calendar, or a 0% guide: the lead as before.
+    for (const [props, options, text] of [[{ update: { target: '2026-10-02' } }, {}, '新規の買いを検討できます。'], [{ update: { target: null } }, { switcher: true }, '新規の買いを検討できます。'], [{}, {}, '新規の買いを検討できます。'],
+      [{ update: { target: '2026-10-05' } }, { switcher: true, market: { label: '50日線割れ（弱含み・独自判定）', cap: 0 } }, '新規の買いは控えます（独自判定）。']]) {
+      card(props, options);
+      expect(lead()).toBe(text);
+      cleanup();
+    }
+  });
+  it('never changes Today\'s card, which takes no calendar', () => {
+    render(<MemoryRouter><Card market={UP} trends={trends()} date="2026-10-02" update={{ target: '2026-10-05' }} /></MemoryRouter>);
+    expect(screen.getByTestId('brief-regime')).toHaveTextContent('上昇トレンド（独自判定）新規の買いを検討できる地合い。エクスポージャーの目安は最大 50%（独自判定）。');
+  });
+});
+
+// ---- Round 3 (market track): distribution days in two grades (M3) ------------------------------------------------------
+describe('brief market card: distribution days in two grades, 5–6 参考 and 7 or more 注意 (M3)', () => {
+  /** Both index series with the study's method and these active-day counts on the analysis date. */
+  const counts = (sp, nas) => { const value = trends(); value.data.indices = [index('^GSPC', '2026-10-02', sp, '2026-10-02', confirmed('2026-10-02')), index('^IXIC', '2026-10-02', nas, '2026-10-02', attempt('2026-10-02'))].map(item => sessionsOf({ ...item, method: DD })); return value; };
+  const head = () => signals().querySelector('b').textContent;
+  const items = () => within(signals()).queryAllByRole('listitem').map(li => [li.textContent, li.className]);
+  const row = name => [...tile('分配日（25日）').querySelectorAll('.brief-ftd-row')].find(element => element.querySelector('.brief-ftd-index').textContent === name);
+
+  it('says the summary\'s three forms: 注意 only, 参考 only and both', () => {
+    show(counts(7, 3));
+    expect(head()).toBe('▲ 注意サイン 1件（独自判定）');
+    expect(items()).toEqual([['▲S&Pの分配日が25日間で7日〔S&P・Nasdaqとも〕', '']]);
+    cleanup();
+    show(counts(5, 3));
+    expect(head()).toBe('注意 0件・参考 1件（独自判定）');
+    expect(signals()).not.toHaveClass('is-warn');
+    expect(items()).toEqual([['○S&Pの分配日が25日間で5日〔未確立〕', 'is-reference']]);
+    cleanup();
+    show(counts(7, 6));
+    expect(head()).toBe('▲ 注意 1件・参考 1件（独自判定）');
+    expect(items()).toEqual([['▲S&Pの分配日が25日間で7日〔S&P・Nasdaqとも〕', ''], ['○NASの分配日が25日間で6日〔未確立〕', 'is-reference']]);
+    cleanup();
+    show(counts(4, 3));
+    expect(head()).toBe('注意サインなし（独自判定）');
+  });
+
+  it('marks the row: ▲ 注意 amber at 7, a neutral ○ 参考 at 5–6, nothing at 4; the group and the phone tab count only the ▲', () => {
+    show(counts(5, 4));
+    expect(tile('分配日（25日）')).not.toHaveClass('is-warn');
+    expect(tile('分配日（25日）').querySelector('.brief-env-status')).toHaveClass('is-reference');
+    expect(tile('分配日（25日）').querySelector('.brief-env-status')).toHaveTextContent(/^○参考$/);
+    expect(row('S&P').querySelector('b')).not.toHaveClass('is-warn');
+    expect(row('S&P').querySelector('.brief-flag')).toHaveClass('is-reference');
+    expect(row('S&P').querySelector('.brief-flag')).toHaveTextContent(/^○参考：5〜6日・参考$/);
+    expect(row('NAS').querySelector('.brief-flag')).toBeNull();
+    expect(group('指数のトレンド')).toHaveTextContent('○ 参考 1');
+    expect(group('指数のトレンド')).not.toHaveTextContent('▲');
+    cleanup();
+    show(counts(7, 5));
+    expect(tile('分配日（25日）')).toHaveClass('is-warn');
+    expect(tile('分配日（25日）').querySelector('.brief-env-status')).toHaveTextContent(/^▲注意$/);
+    expect(row('S&P').querySelector('b')).toHaveClass('is-warn');
+    expect(row('S&P').querySelector('.brief-flag')).not.toHaveClass('is-reference');
+    expect(row('S&P').querySelector('.brief-flag')).toHaveTextContent(/^▲注意：7日以上$/);
+    expect(row('NAS').querySelector('.brief-flag')).toHaveClass('is-reference');
+    expect(group('指数のトレンド')).toHaveTextContent('▲ 注意 1○ 参考 1');
+    cleanup();
+    // A phone's 指数 tab carries the ▲ count only.
+    phone(counts(6, 5));
+    expect(within(screen.getByRole('tablist', { name: '市場タブの表示' })).getAllByRole('tab')[0].textContent).not.toMatch(/▲/);
+  });
+
+  it('keeps the words of both head marks on the desktop, and on a phone takes the tabs\' short form, beside the heading or the switch', () => {
+    // The desktop: the words show.
+    show(counts(7, 5));
+    expect([...document.querySelectorAll('.brief-env-group.is-index .brief-env-meta .brief-env-state')].map(node => node.textContent)).toEqual(['▲ 注意 1', '○ 参考 1']);
+    cleanup();
+    // A phone, beside the heading (no switch): 「▲ 1」「○ 1」 on one row (is-pair), each word kept for assistive tech.
+    phone(counts(7, 5));
+    const stacked = document.querySelector('.brief-env-group.is-index .brief-env-meta.is-pair');
+    expect([...stacked.querySelectorAll('.brief-env-state')].map(node => node.textContent)).toEqual(['▲注意 1', '○参考 1']);
+    expect([...stacked.querySelectorAll('.brief-env-state .sr-only')].map(node => node.textContent)).toEqual(['注意', '参考']);
+    cleanup();
+    // Beside the switch (the Nasdaq's closes): 「▲ 1」「○ 1」 on screen, each word kept for assistive tech.
+    const value = counts(7, 5), nas = days('2026-10-02', 280).map((date, i) => ({ date, close: 16000 + i * 10 }));
+    value.data.indices[1] = { ...value.data.indices[1], closes: nas, state: indexState(nas, '2026-10-02') };
+    phone(value);
+    const marks = [...document.querySelectorAll('.brief-env-group.is-index .brief-env-meta.is-inline .brief-env-state')];
+    expect(marks.map(node => node.textContent)).toEqual(['▲注意 1', '○参考 1']);
+    expect(marks.map(node => node.querySelector('.sr-only').textContent)).toEqual(['注意', '参考']);
+    cleanup();
+    // A single mark beside the switch keeps its word.
+    const single = counts(7, 3); single.data.indices[1] = { ...single.data.indices[1], closes: nas, state: indexState(nas, '2026-10-02') };
+    phone(single);
+    expect([...document.querySelectorAll('.brief-env-group.is-index .brief-env-meta.is-inline .brief-env-state')].map(node => node.textContent)).toEqual(['▲ 注意 1']);
+  });
+
+  it('says Today\'s tile in three forms: 注意 amber with ▲ at 7, 参考 without either at 5–6, else the warning line', () => {
+    show(counts(7, 5), { detail: false });
+    expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P▲注意 7日NAS5日注意：S&Pが7日以上$/);
+    expect(tile('分配日（25日）')).toHaveClass('is-warn');
+    cleanup();
+    show(counts(6, 5), { detail: false });
+    expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P6日NAS5日参考：S&P・NASが5〜6日$/);
+    expect(tile('分配日（25日）')).not.toHaveClass('is-warn');
+    expect(tile('分配日（25日）').querySelector('em')).not.toHaveClass('is-warn');
+    expect(tile('分配日（25日）').querySelector('.brief-warnmark')).toBeNull();
+    cleanup();
+    show(counts(4, 3), { detail: false });
+    expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P4日NAS3日7日以上で注意$/);
+  });
+});
+
+// ---- Round 3 (M5): the 50日線割れ verdict's 0% inside 目安と判定の基準 ---------------------------------------------------------
+describe('brief market card: the 50日線割れ verdict\'s 0% (M5)', () => {
+  const BELOW_50 = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'correction', ftdUpgraded: false };
+  /** The long history's ^GSPC under its 50-day line and over its 200-day line on the analysis date. */
+  const below50 = () => trends({ sp500: closes('2026-10-02', 300, 5000, 5).map((point, i) => i === 299 ? { ...point, close: 6200 } : point) });
+  const card = (value, market, wide) => render(<MemoryRouter><Card market={market} trends={value} date="2026-10-02" detail switcher={!wide} section="index" onSection={() => {}} {...studyProps(value, '2026-10-02', reference, wide, { market })} /></MemoryRouter>);
+  it('ends 目安と判定の基準 with the study\'s ^GSPC figures for that cell and the 0% as untested: in the fold on a phone, in place on the desktop', () => {
+    const value = below50(), note = marketTabStudy({ trends: value, reference, date: '2026-10-02', market: BELOW_50 }).zeroCap;
+    expect(note).toMatch(/^\^GSPC・21営業日で5%以上の下げ：この状態 \d+%〔未確立〕／両線の上 \d+%〔S&P・Nasdaqとも〕／全期間 \d+%。0%は独自設定で、検証された水準ではありません。$/);
+    card(value, BELOW_50, false);
+    const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
+    expect(fold).not.toHaveAttribute('open');
+    expect([...fold.querySelectorAll('p')].at(-1)).toHaveTextContent(note);
+    expect(fold.querySelector('p.brief-exposure-zero')).toHaveTextContent(note);
+    cleanup();
+    card(value, BELOW_50, true);
+    const verdict = screen.getByTestId('brief-regime');
+    expect(verdict.querySelector('p.brief-exposure-basis + p.brief-exposure-zero')).toHaveTextContent(note);
+    cleanup();
+    // Any other verdict: no note.
+    card(value, UP, true);
+    expect(screen.getByTestId('brief-regime').querySelector('.brief-exposure-zero')).toBeNull();
+  });
+});
+
+// ---- Round 3 (M6): the 銘柄側 line beside the verdict ---------------------------------------------------------------------
+describe('brief market card: the 銘柄側 line (M6)', () => {
+  const card = (value, wide, market = UP) => render(<MemoryRouter><Card market={market} trends={value} date="2026-10-02" detail switcher={!wide} section="index" onSection={() => {}} {...studyProps(value, '2026-10-02', reference, wide, { market })} /></MemoryRouter>);
+  const rows = () => breadth('2026-10-02', i => (i === 8 ? { trendTemplateCount: 25 } : {}));
+  it('is the first line inside the closed fold on a phone and the line under the basis on the desktop, plain and never a sign', () => {
+    const value = trends({ rows: rows() }), line = marketCardView({ market: UP, trends: value, date: '2026-10-02', tab: marketTabParts }).stockSide;
+    expect(line).toBe(`銘柄側（参考・目安は変えません）：TT達成 30（1か月前 25）・${BREAKOUT_HOLD_NAME} 75%（8件）・リーダーの健全度 70%（30銘柄）`);
+    card(value, false);
+    const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
+    expect(fold).not.toHaveAttribute('open');
+    expect(fold.querySelector('p')).toHaveTextContent(line);
+    expect(fold.querySelector('p').className).toBe('brief-verdict-stock');
+    // The summary still names the fold only (the line adds nothing to the closed height).
+    expect(fold.querySelector('summary')).toHaveTextContent(/^目安と判定の基準・Nasdaqは反発3日目（判定はSPYのみ）$/);
+    cleanup();
+    card(value, true);
+    const verdict = screen.getByTestId('brief-regime');
+    expect(verdict.querySelector('.brief-verdict-why + .brief-verdict-stock')).toHaveTextContent(line);
+    expect(verdict.querySelector('.brief-verdict-stock')).not.toHaveTextContent(/▲|○|注意/);
+    expect(verdict.querySelector('.brief-verdict-stock').className).toBe('brief-verdict-stock');
+    // The warning summary is the same with or without the line: it is no sign.
+    expect(signals()).not.toHaveTextContent('銘柄側');
+  });
+  it('shows no line before the series is ready, and says each term\'s own absent words once it is', () => {
+    card({ loading: true }, true);
+    expect(document.querySelector('.brief-verdict-stock')).toBeNull();
+    cleanup();
+    card(trends({ rows: oldSchema(breadth('2026-10-02')) }), true);
+    expect(document.querySelector('.brief-verdict-stock')).toHaveTextContent(new RegExp(`^銘柄側（参考・目安は変えません）：TT達成 未収録・${BREAKOUT_PATTERN} 未収録・リーダーの健全度 未収録$`));
   });
 });

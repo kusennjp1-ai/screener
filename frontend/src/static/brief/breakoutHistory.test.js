@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { BREAKOUT_VOLUME_RATIO, breakoutEvent, candidateView, LIST_FILTERS, ratioShown, rowEvent, TOUCH_HELD_NOTE, UNDATED_EVENT } from './briefCandidate';
+import { BREAKOUT_VOLUME_RATIO, breakoutEvent, candidateView, distanceText, LIST_FILTERS, ratioShown, rowEvent, TOUCH_HELD_NOTE, UNDATED_EVENT } from './briefCandidate';
 import { chartCrossing } from './chartReadout';
 import { breakoutBar, crossingEvent, crossingFloor, CROSSING_LOOKBACK_SESSIONS, floorOf, lastPivotCrossing, pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
-import { sellSignals, SELL_RULES, stockSells } from './briefSell';
+import { noBreakoutSincePivot, sellSignals, SELL_RULES, stockSells } from './briefSell';
+import { pivotBar } from './pivotBar';
+import { shortDate } from './briefShared';
 import { withAuditFixture } from '../testAuditFixture';
 
 const DATE = '2026-10-02';
@@ -302,10 +304,90 @@ describe('the crossing floor seam (crossingFloor and `from`)', () => {
   const crossedAgo = ago => { const at = 70 - ago - 1; return series([...Array(at).fill(95), ...Array(ago).fill(102), 103], i => (i === at ? 16000 : 10000)); };
   const NO_FLOOR = [undefined, null, 'x', -1, 1.5, Number.NaN];
 
-  it('crossingFloor is null in STEP 0 for every row (R1 replaces this with its body\'s contract)', () => {
-    const row = { se_pattern_primary: 'nr7_inside_day', se_pivot_date: DATE, se_pivot_price: 100 };
-    for (const list of Object.values(cases)) for (const r of [row, null, undefined, {}]) expect(crossingFloor(list, r)).toBeNull();
-    expect(crossingFloor(null, row)).toBeNull();
+  /** A row whose Setup Engine pivot (`pivot`) is dated `date`: an NR7 (daily) pattern unless `extra` says otherwise. */
+  const pivotRow = (date, extra = {}) => ({ se_pattern_primary: 'nr7_inside_day', se_pivot_date: date, se_pivot_price: pivot, ...extra });
+  /** `list` with bar i's high on the pivot's cents (the bar that formed the pivot). */
+  const withHigh = (list, i, high = pivot) => list.map((bar, j) => (j === i ? { ...bar, high } : bar));
+  const failedOf = checks => checks.weakness.find(check => check.key === 'failedBreakout');
+
+  it('crossingFloor is the pivot bar\'s own index (pivotBar): the daily bar dated se_pivot_date, a weekly label\'s max-high bar', () => {
+    // Daily (nr7_inside_day): the bar dated se_pivot_date itself, when its high is the pivot in cents.
+    const daily66 = withHigh(cases.failed, 66);
+    expect(crossingFloor(daily66, pivotRow(daily66[66].date))).toBe(66);
+    expect(crossingFloor(daily66, pivotRow(daily66[66].date))).toBe(pivotBar(daily66, pivotRow(daily66[66].date)).index);
+    // In float noise the pivot still compares in cents.
+    expect(crossingFloor(daily66, pivotRow(daily66[66].date, { se_pivot_price: 100.00000000001 }))).toBe(66);
+    // Weekly (cup_with_handle): se_pivot_date is the week's Friday label (09-25); the pivot's bar is that week's Tuesday
+    // (09-22), the latest bar of the week whose high is the pivot; a match after the label (Saturday 09-26) is not its week.
+    const friday = '2026-09-25', tuesday = cases.failed.findIndex(bar => bar.date === '2026-09-22');
+    expect([new Date(`${friday}T00:00:00Z`).getUTCDay(), new Date(`${cases.failed[tuesday].date}T00:00:00Z`).getUTCDay()]).toEqual([5, 2]);
+    const weekly = withHigh(withHigh(withHigh(cases.failed, tuesday - 1), tuesday), tuesday + 4);
+    expect(weekly[tuesday + 4].date).toBe('2026-09-26');
+    expect(crossingFloor(weekly, pivotRow(friday, { se_pattern_primary: 'cup_with_handle' }))).toBe(tuesday);
+    // Read as a daily pattern, the same Friday label has no bar of its own whose high is the pivot.
+    expect(crossingFloor(weekly, pivotRow(friday))).toBeNull();
+  });
+
+  it('crossingFloor is null whenever pivotBar is: then every reader is exactly the unbounded one', () => {
+    const list = withHigh(cases.failed, 66), date = list[66].date;
+    const { se_pivot_date: _absent, ...summary } = pivotRow(date);
+    void _absent;
+    const nulls = {
+      // An index row that does not carry the field (every publication before R1's list field).
+      'no se_pivot_date': [list, summary],
+      'a null se_pivot_date': [list, pivotRow(null)],
+      'a malformed se_pivot_date': [list, pivotRow('2026-9-30')],
+      'no pivot': [list, pivotRow(date, { se_pivot_price: null })],
+      'a pivot of 0': [list, pivotRow(date, { se_pivot_price: 0 })],
+      // A vcp primary publishes no pivot date (vcp_wrapper.py: pivot_date is None).
+      vcp: [list, pivotRow(null, { se_pattern_primary: 'vcp' })],
+      'a pattern outside the table': [list, pivotRow(date, { se_pattern_primary: 'double_bottom' })],
+      'no primary pattern': [list, pivotRow(date, { se_pattern_primary: null })],
+      'no matching bar': [cases.failed, pivotRow(date)],
+      'no bars': [[], pivotRow(date)],
+      'null bars': [null, pivotRow(date)],
+      'no row': [list, null],
+    };
+    for (const [name, [bars, row]] of Object.entries(nulls)) expect({ name, floor: crossingFloor(bars, row) }).toEqual({ name, floor: null });
+    // With that null floor the failed breakout is exactly the unbounded check (a hit, as before R1).
+    expect(failedOf(sellSignals(list, SELL_RULES, { view, from: crossingFloor(list, summary) }))).toEqual(failedOf(sellSignals(list, SELL_RULES, { view })));
+    expect(failedOf(sellSignals(list, SELL_RULES, { view }))).toMatchObject({ state: 'hit' });
+  });
+
+  it('a pivot dated after a heavy crossing (MGRC\'s shape) has no crossing, no breakout, no arrow and no failed breakout', () => {
+    // A 2x crossing 7 sessions back, back under the pivot, then the NR7 pivot's own bar the day before the last.
+    const list = withHigh(daily([...Array(60).fill(95), 102, 103, 101, 99, 98, 97, 98.5, 98], [60]), 66), row = pivotRow(list[66].date);
+    const from = crossingFloor(list, row), last = list.at(-1);
+    expect(from).toBe(66);
+    // Without the floor: the crossing before the pivot formed is a ブレイク失敗 and a grey arrow (today's reading).
+    expect(chartCrossing(list, pivot)).toMatchObject({ date: list[60].date, sessionsAgo: 7, reason: 'below_pivot' });
+    expect(failedOf(sellSignals(list, SELL_RULES, { view }))).toMatchObject({ state: 'hit', crossDate: list[60].date });
+    // With it: nothing at or after the pivot's bar.
+    expect(pivotCrossings(list, pivot, { from })).toEqual([]);
+    expect(lastPivotCrossing(list, pivot, { from })).toBeNull();
+    expect(breakoutBar(list, pivot, lastPivotCrossing(list, pivot), { from })).toBeNull();
+    expect(chartCrossing(list, pivot, { from })).toBeNull();
+    // The failed breakout reads clear, and says why: no breakout since this pivot's bar (younger than the 10 sessions).
+    const failed = failedOf(stockSells({ judged: list, diagnostics: null, view, from }));
+    expect(failed).toMatchObject({ state: 'clear', detail: noBreakoutSincePivot(shortDate(list[from].date, last.date), distanceText((last.close / pivot - 1) * 100)) });
+    expect(failed).not.toHaveProperty('crossDate');
+  });
+
+  it('a pivot dated after a crossing the stock held: the conclusion never stays green from the crossing before the pivot', () => {
+    // A 1.6x crossing 5 sessions back that held; the pivot's bar (high on the pivot, close at it) 2 sessions back; then above.
+    // The close before the pivot's bar was already above the pivot, so no crossing exists at or after it (R1 leaves this
+    // case so, docs/round3/verdict.md): the event is undated (tone wait), never the old crossing's green.
+    const closes = [...Array(64).fill(95), 102, 103, 101.5, 100, 101, 103], at = 64;
+    const list = withHigh(series(closes, i => (i === at ? 16000 : 10000)), 67), viewOf = after(), from = crossingFloor(list, pivotRow(list[67].date));
+    expect(from).toBe(67);
+    expect(crossingEvent(viewOf, list)).toMatchObject({ kind: 'after', tone: 'zone', crossed: { index: at } });
+    expect(crossingEvent(viewOf, list, { from })).toMatchObject({ kind: 'undated', tone: 'wait', crossed: null });
+    expect(chartCrossing(list, pivot, { from })).toBeNull();
+    // The rows' own event (the analysis day's breakout from under the pivot, as the rows say it) is never touched by the floor.
+    const today = verdict(audited('D', { price: 103, change: 5, volume: 2 }));
+    expect(breakoutEvent(today)).toMatchObject({ tone: 'zone' });
+    expect(crossingEvent(today, list, { from })).toEqual(crossingEvent(today, list));
+    expect(crossingEvent(today, list, { from })).toEqual(breakoutEvent(today));
   });
 
   it('only a non-negative integer is a floor', () => {
@@ -360,6 +442,12 @@ describe('the crossing floor seam (crossingFloor and `from`)', () => {
     const k = 60, failed = checks => checks.weakness.find(check => check.key === 'failedBreakout');
     const touched = closes => daily(closes, [k + 1]).map((bar, i) => (i === k ? { ...bar, high: pivot } : bar));
     const held = touched([...Array(k).fill(95), 100, 102, 103, 102.5]), fell = touched([...Array(k).fill(95), 100, 102, 99, 98]);
+    // The app's floor for an NR7 pivot dated on bar k is k itself (crossingFloor): the breakout on k + 1 is kept.
+    const appFloor = list => crossingFloor(list, { se_pattern_primary: 'nr7_inside_day', se_pivot_date: list[k].date, se_pivot_price: pivot });
+    expect([appFloor(held), appFloor(fell)]).toEqual([k, k]);
+    expect(chartCrossing(held, pivot, { from: appFloor(held) })).toEqual(chartCrossing(held, pivot));
+    expect(crossingEvent({ ...after(), asOf: held.at(-1).date }, held, { from: appFloor(held) })).toMatchObject({ kind: 'after', crossed: { index: k + 1 } });
+    expect(failed(stockSells({ judged: fell, diagnostics: null, view, from: appFloor(fell) }))).toMatchObject({ state: 'hit', crossDate: fell[k + 1].date });
     expect(lastPivotCrossing(held, pivot, { from: k })).toMatchObject({ index: k });
     expect(breakoutBar(held, pivot, lastPivotCrossing(held, pivot, { from: k }), { from: k })).toMatchObject({ index: k + 1, date: held[k + 1].date });
     // The chart's arrow: green on bar k + 1 with no floor and with the floor k; none with the floor k + 1.
@@ -377,7 +465,8 @@ describe('the crossing floor seam (crossingFloor and `from`)', () => {
   });
 
   it('a floor past the last bar (`from: bars.length`) admits no crossing and reads the failed breakout clear', () => {
-    // MGRC's shape when the floor is the bar after a pivot dated on the analysis day itself.
+    // The shape a floor one bar after the pivot's would give MGRC (its pivot is dated on the analysis day itself); R1's floor
+    // is the pivot's own bar, the last one (n − 1), which reads the same here (the stock screen's oracle ZZNR is dated a day earlier).
     const failed = checks => checks.weakness.find(check => check.key === 'failedBreakout');
     for (const list of [cases.failed, cases.long]) {
       const from = list.length;

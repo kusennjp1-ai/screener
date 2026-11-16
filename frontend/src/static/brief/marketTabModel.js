@@ -4,18 +4,33 @@
 // here adds a threshold, a status or a verdict. Each value keeps the session it describes.
 import { bifurcation, environmentPoint, BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT, SPLIT_RULE } from '../marketLongHistory';
 import { indexSummary } from '../reference/indexSummary.js';
-import { distributionCount, environmentRules, followThroughView, latestKnown, marketTone, shortDate, trendsStatus, ENV_RULES, FTD_TEXT } from './briefModel';
+import { distributionCount, environmentRules, followThroughView, latestKnown, marketTone, shortDate, trendsStatus, BREAKOUT_HOLD_NAME, ENV_RULES, FTD_TEXT } from './briefModel';
+import { isoDay } from './briefShared';
+// The market tab's own values (the S&P／Nasdaq switch's closes, a group's shared date, the index position's signed
+// percent, the stage fields and the survivorship note) live in marketTabOnly.js, which only the lazily loaded market
+// screen pulls in; they are re-exported here so their importers are unchanged.
+export { groupDate, indexCloses, signedPercent, STAGE_FIELDS, SURVIVORSHIP_NOTE } from './marketTabOnly';
 
 const finite = Number.isFinite;
 /** Sessions in a year and in a month, as the long history counts them (marketTabHistory.js reads the same). */
 export const YEAR = 252, MONTH = 21;
-/** The existing distribution warning: 5 or more active distribution days on an index. */
+/**
+ * The market-regime study's binary split of the distribution count (5 or more active days against 4 or fewer):
+ * tools/market-regime-study.mjs reads it into APP_RULES (dd.binary), tools/market-regime-reference.mjs refuses a study whose
+ * appRules.DISTRIBUTION_WARN differs, and the committed reference carries it as ddWarn. No longer a warning line of the
+ * screens by itself: they grade the count with DISTRIBUTION_REFERENCE and DISTRIBUTION_CAUTION.
+ */
 export const DISTRIBUTION_WARN = 5;
 /**
- * The breadth series are today's names traced back (the long history's current-universe retrospective): said
- * under the 参加度 and リーダー headers on the desktop, in the 注記 on a phone and in the long history's takeaway.
+ * The screens' two grades of one index's active distribution days (独自設定), on the study's graded buckets (dd.graded: 5–6
+ * and 7 or more; only 7 or more was robust on both indices): 5–6 is 参考 (a neutral ○, never a warning, never in a ▲
+ * count), 7 or more a ▲ 注意. A test keeps them equal to the committed reference's buckets.ddGrades.
  */
-export const SURVIVORSHIP_NOTE = '現在の銘柄で過去をさかのぼった集計（上場廃止銘柄を含まない）';
+export const DISTRIBUTION_REFERENCE = 5, DISTRIBUTION_CAUTION = 7;
+/** A count's grade: 'caution' (7 or more), 'reference' (5–6) or null (4 or fewer, or no count). */
+export const distributionGrade = value => !finite(value) ? null : value >= DISTRIBUTION_CAUTION ? 'caution' : value >= DISTRIBUTION_REFERENCE ? 'reference' : null;
+/** The grades in words, from the two constants (never typed beside them): 「7日以上」, 「5〜6日」. */
+export const DISTRIBUTION_TEXT = Object.freeze({ caution: `${DISTRIBUTION_CAUTION}日以上`, reference: `${DISTRIBUTION_REFERENCE}〜${DISTRIBUTION_CAUTION - 1}日` });
 /**
  * The warning-summary checks whose rule the market-regime study could not confirm (〔参考〕: every breadth rule of the
  * committed reference, market-regime-reference-v1.json). They are counted apart from the warnings and marked with a
@@ -23,30 +38,38 @@ export const SURVIVORSHIP_NOTE = '現在の銘柄で過去をさかのぼった�
  * which never loads the reference, reads this list, and a test keeps the two equal, so the screens mark one rule alike.
  */
 export const REFERENCE_CHECKS = Object.freeze(['split', 'lows', 'template', 'stage', 'leaders', 'breakout']);
-export const STAGE_FIELDS = ['stage1Percent', 'stage2Percent', 'stage3Percent', 'stage4Percent'];
 export const STAGE_NAMES = ['底固め', '上昇', '天井圏', '下降'];
 
 // Only ever called with a finite number: a unit is never appended to an unknown value.
 export const num = (value, digits = 0) => value.toLocaleString('ja-JP', { minimumFractionDigits: digits, maximumFractionDigits: digits });
 const sign = value => value > 0 ? '+' : value < 0 ? '−' : '±';
 export const delta = value => `${sign(value)}${Math.abs(value).toLocaleString('ja-JP')}`;
-export const signedPercent = value => { const r = Number(value.toFixed(1)); return `${sign(r)}${Math.abs(r).toFixed(1)}%`; };
 /** A change of a share or a rate, in percentage points (never read as a return). */
 export const pointChange = (value, digits = 1) => { const r = Number(value.toFixed(digits)); return `${sign(r)}${Math.abs(r).toFixed(digits)}pt`; };
+
+/** The sessions the breakout row judges (the collector's BREAKOUT_HOLD_SESSIONS 10 and BREAKOUT_WINDOW_SESSIONS 20; a test reads them). */
+export const BREAKOUT_WINDOW_TEXT = '10〜29営業日前';
+/**
+ * The breakout row's label (M8c): its name, 「上抜け維持（確定分）」 (BREAKOUT_HOLD_NAME), with the sessions it judges said in
+ * the opened row. The label with them, 「上抜けの維持（確定分・10〜29営業日前）」, wraps the closed row (measured, CI fonts:
+ * 85→117.5px at 320, 65→97.5px at 375 and 65→78.7px at 390), and so does 「上抜けの維持（確定分）」 at 320 (85→98.7px), so
+ * neither is used.
+ */
+export const BREAKOUT_HOLD_LABEL = BREAKOUT_HOLD_NAME;
 
 // ---- rule text (基準) -------------------------------------------------------------------------
 // Printed beside each row from the same constants the rules use, so the words cannot drift from them.
 // The distribution-day definition is the exporter's method (distributionDays.js DISTRIBUTION_METHOD).
 export const RULE_TEXT = Object.freeze({
   ftd: `${FTD_TEXT.decline}以上の下落（高値の終値から安値日の終値まで）の後、反発${FTD_TEXT.minDay}〜${FTD_TEXT.maxDay}日目に出来高増を伴う${FTD_TEXT.gain}以上の上昇。確認後にFTD当日の安値を終値で下回ると失敗で、注意サインです。`,
-  dist: `指数が前日比0.2%を超えて下落し、出来高が前日より多かった日。25営業日で失効し、その後の高値が分配日の終値から5%以上上がっても除外します。${DISTRIBUTION_WARN}日以上で注意サインです。`,
+  dist: `指数が前日比0.2%を超えて下落し、出来高が前日より多かった日。25営業日で失効し、その後の高値が分配日の終値から5%以上上がっても除外します。除外の基準は資料により5%／6%で、当アプリは後日の高値で5%です（独自選択）。${DISTRIBUTION_TEXT.caution}で注意サイン、${DISTRIBUTION_TEXT.reference}は参考です（独自設定）。`,
   above200: `終値が200日線より上の銘柄の割合（観測できた銘柄のうち）。S&P 500が1年高値から${SPLIT_RULE.nearHighPercent}%以内なのに${SPLIT_RULE.above200Below}%未満のとき「指数と個別株の乖離」で注意サインです。`,
   above50: '終値が50日線より上の銘柄の割合（観測できた銘柄のうち）。注意サインの基準はありません。',
   extremes: '52週の高値・安値を更新した銘柄数。新安値が新高値を上回ると注意サインです。',
   template: `ミネルヴィニのトレンドテンプレート8条件（RS推計70以上を含む）をすべて満たす銘柄数。${ENV_RULES.templateSessions}営業日で${ENV_RULES.templateDropPercent}%以上減ると注意サインです（${ENV_RULES.templateSessions}営業日前が${ENV_RULES.templateMinBase}銘柄以上のとき）。`,
   leaderCount: '株価条件のトレンドテンプレート（安値条件25%）とRS推計70以上を満たす銘柄数。TT達成数の旧集計で、注意サインの基準はありません。',
   rs90: 'TT達成銘柄のうちRS推計（独自計算）が90以上の銘柄数。IBDの公式RSではありません。注意サインの基準はありません。',
-  breakout: `価格条件を満たし、終値で過去251営業日の高値を超え、出来高が直前50日平均の1.4倍以上だった上抜け（10〜29営業日前）のうち、その後10営業日の安値が上抜け日の終値から−7%に届かなかった割合。${BREAKOUT_MIN_SAMPLE}件未満は率を出しません。${ENV_RULES.breakoutHoldBelow}%未満で注意サインです。`,
+  breakout: `価格条件を満たし、終値で過去251営業日の高値を超え、出来高が直前50日平均の1.4倍以上だった上抜け（${BREAKOUT_WINDOW_TEXT}）のうち、その後10営業日の安値が上抜け日の終値から−7%に届かなかった割合。${BREAKOUT_MIN_SAMPLE}件未満は率を出しません。${ENV_RULES.breakoutHoldBelow}%未満で注意サインです。`,
   leaders: `20営業日前のTT達成銘柄のうち、終値が50日線の上にある割合（${LEADER_MIN_COHORT}銘柄未満は率を出しません）。${ENV_RULES.leaderHealthBelow}%未満で注意サインです。`,
   stage: `200日線の傾き・株価の傾き・200日線との位置から日ごとに判定した、${STAGE_NAMES.map((name, i) => `${i + 1} ${name}`).join('・')}の割合。ステージ4がステージ2を上回ると注意サインです。`,
 });
@@ -103,16 +126,6 @@ export function basisConflict(basis, summary, date) {
   return `判定の根拠はスキャン時点のSPY、この数値は長期履歴の^GSPC終値（${shortDate(summary.date, date)}）です。${fifty && long ? '50日線・200日線' : fifty ? '50日線' : '200日線'}との位置が一致していません。`;
 }
 
-/**
- * An index series of closes the market tab can chart (indices[i].closes, plan §2.3, validated by readMarketTrends):
- * at least the chart's 60 sessions, else null. Older publications have none: then there is no S&P／Nasdaq switch.
- */
-export function indexCloses(item) {
-  const closes = Array.isArray(item?.closes) ? item.closes.filter(point => finite(point?.close)) : [];
-  return closes.length >= 60 ? closes : null;
-}
-
-
 // The behind sentence's second half: the phone's market tab keeps it in the screen's 注記.
 const PER_ITEM_DATES = '日付が異なる項目には個別に日付を付けています。';
 
@@ -146,10 +159,17 @@ export function marketDating({ date, historyDate, indexDates }) {
     blockAsOf: single ? md(sources[0]) : null, verdictDate: `判定 ${md(date)}` };
 }
 
-/** The one session every valued item of a group describes, when they all agree on an older one. */
-export function groupDate(items) {
-  const valued = items.flatMap(item => item?.rows ? item.rows : [item]).filter(item => item?.valued);
-  return valued.length && valued.every(item => item.asOf && item.asOf === valued[0].asOf) ? valued[0].asOf : null;
+/**
+ * The market tab's verdict lead while a newer session has closed than the verdict's own (M1e): `target` is the last
+ * session the exchange calendar says has closed (marketUpdateState's target), `date` the verdict's (the analysis date).
+ * Only while the guide is open (cap > 0), so 「新規の買いを検討できます」 never stands on an older session's judgement:
+ * { lead, short } naming that session, else null (a current verdict, a closed guide, or no valid target or date:
+ * nothing is inferred without the calendar). The label, the tone, the cap and every gate are not this function's.
+ */
+export function verdictWaiting({ market, date, target }) {
+  if (!(market?.cap > 0) || market.state === 'unknown' || !isoDay(target) || !isoDay(date) || !(date < target)) return null;
+  const md = shortDate(date, date);
+  return { lead: `${md}引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）`, short: `${md}時点の判定・更新待ち` };
 }
 
 // ---- the card ---------------------------------------------------------------------------------
@@ -162,8 +182,12 @@ export function groupDate(items) {
  * the warning summary's study tags and their words, the 〔参考〕 checks counted apart, the opened 分配日 row's detail, the
  * Nasdaq note and position, the judge side's cause under the basis and whom TT達成数 counts. Without it (Today) none of
  * these is shown. `series` is the 指数 panel's S&P／Nasdaq switch, only from a publication with the Nasdaq's closes.
+ * `update` is the market tab's `{ target }`: the last session the exchange calendar says has closed (marketUpdateState's
+ * target, computed by the screen from the clock; this model never reads one). With a valid target after the verdict's day
+ * and an open guide, the verdict's lead says the judgement is that older session's and waits for a new publication
+ * (verdictWaiting); its label, tone, cap, Today's `text` and every gate stay as they are. Today passes none.
  */
-export function marketCardView({ market, marketLoading = false, trends, date, study = null, tab = null }) {
+export function marketCardView({ market, marketLoading = false, trends, date, study = null, tab = null, update = null }) {
   const status = trendsStatus(trends), ready = status.state === 'ready';
   const history = ready ? trends.data.long_history || null : null;
   const longError = ready && !history && typeof trends.data.long_history_error === 'string' ? trends.data.long_history_error : null;
@@ -212,28 +236,12 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
 
   // Distribution days: each index with its own last observed session.
   const dist = [['S&P', spx], ['NAS', ndx]].map(([name, item]) => ({ name, item, hit: distributionCount(item) }));
-  const distWarn = dist.some(d => d.hit && d.hit.value >= DISTRIBUTION_WARN);
+  // Graded (M3): 7 or more is a warning, 5–6 a reference; distWarn is the warning only.
+  for (const d of dist) d.grade = d.hit ? distributionGrade(d.hit.value) : null;
+  const distWarn = dist.some(d => d.grade === 'caution');
   const distAsOfParts = dist.filter(d => d.hit && date && d.hit.date < date);
   const distAsOf = !distAsOfParts.length ? null : distAsOfParts.length === 2 && distAsOfParts[0].hit.date === distAsOfParts[1].hit.date ? shortDate(distAsOfParts[0].hit.date, date) : distAsOfParts.map(d => `${d.name} ${shortDate(d.hit.date, date)}`).join('・');
   const distReasons = ready ? dist.filter(d => !d.hit).map(d => `${d.name}の分配日：${d.item?.reason || '指数データを確認できません。'}`) : [];
-
-  // Breakout success: a rate needs at least BREAKOUT_MIN_SAMPLE judged breakouts on that session.
-  const rate = known('breakoutHoldPercent');
-  const judgedNow = last && Number.isSafeInteger(last.breakoutsJudged) ? last.breakoutsJudged : null;
-  const whyNot = !last || !('breakoutsJudged' in last) ? null : judgedNow === null ? '判定期間に観測不足の日を含む' : judgedNow < BREAKOUT_MIN_SAMPLE ? `${judgedNow}件（${BREAKOUT_MIN_SAMPLE}件未満のため率は非表示）` : '成功数を確認できません';
-  const breakoutRule = rule('breakout');
-  const breakout = (() => {
-    const base = { key: 'breakout', label: 'ブレイクアウト成功率', metric: 'breakoutHoldPercent', rule: RULE_TEXT.breakout };
-    if (rate) {
-      const before = monthBefore(rows, rate, 'breakoutHoldPercent'), range = yearRange(rows, rate, 'breakoutHoldPercent'), newest = rate.index === rows.length - 1;
-      return { ...base, valued: true, b: `${num(rate.value)}%`, asOf: older(rate.date), change: before === null ? null : pointChange(rate.value - before, 0), range, position: rangePosition(range), format: value => `${num(value)}%`,
-        note: newest ? `${rate.row.breakoutsJudged}件で判定` : `${rate.row.breakoutsJudged}件で判定${whyNot ? `・最新は${whyNot}` : ''}`,
-        detail: newest && Number.isSafeInteger(rate.row.breakoutsHeld) ? `10〜29営業日前の上抜け${rate.row.breakoutsJudged}件のうち${rate.row.breakoutsHeld}件が10日間で−7%に届かず` : null,
-        warn: Boolean(breakoutRule?.fired), flag: breakoutRule?.fired ? `${ENV_RULES.breakoutHoldBelow}%未満` : null };
-    }
-    if (judgedNow !== null && judgedNow < BREAKOUT_MIN_SAMPLE) return { ...base, valued: true, b: `${judgedNow}件`, asOf: older(last.date), note: `${BREAKOUT_MIN_SAMPLE}件未満のため率は非表示` };
-    return whyNot ? { ...base, b: '未算出', note: whyNot } : { ...base, ...absent('breakoutsJudged') };
-  })();
 
   // 52-week highs and lows: the existing warning when new lows outnumber new highs.
   const highsLows = known(['newHighs', 'newLows']);
@@ -259,9 +267,12 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const dating = marketDating({ date, historyDate, indexDates: dist.filter(d => d.hit).map(d => ({ name: d.name, date: d.hit.date })) });
   const tone = marketTone(market);
   const exposure = market?.cap > 0 ? Math.round(market.cap * 100) : market && market.state !== 'unknown' ? 0 : null;
+  const waiting = verdictWaiting({ market, date, target: update?.target ?? null });
   const verdict = {
     tone, pending, exposure, label: market?.label || (pending ? '判定を読み込み中…' : '市場未確認'),
-    lead: market?.cap > 0 ? '新規の買いを検討できます。' : market?.state === 'unknown' ? '市場の状態を確認できません。新規の買いは見送ります。' : market ? '新規の買いは控えます（独自判定）。' : pending ? '市場の判定を読み込み中です。' : '市場の判定を読み込めません。新規の買いは見送ります。',
+    lead: waiting ? waiting.lead : market?.cap > 0 ? '新規の買いを検討できます。' : market?.state === 'unknown' ? '市場の状態を確認できません。新規の買いは見送ります。' : market ? '新規の買いは控えます（独自判定）。' : pending ? '市場の判定を読み込み中です。' : '市場の判定を読み込めません。新規の買いは見送ります。',
+    // The phone's one-line form of a waiting lead (MarketDetailCard picks it below 1024px); null otherwise.
+    leadShort: waiting ? waiting.short : null,
     text: market?.cap > 0 ? `新規の買いを検討できる地合い。エクスポージャーの目安は最大 ${Math.round(market.cap * 100)}%（独自判定）。` : market?.state === 'unknown' ? '市場の状態を確認できません。新規の買いは見送ります。' : market ? '新規の買いは控えます（独自判定）。' : pending ? '市場の判定を読み込み中です。' : '市場の判定を読み込めません。新規の買いは見送ります。',
     basis: verdictBasis(market, date), date: market && market.state !== 'unknown' ? dating.verdictDate : null,
     nasdaq: market?.cap > 0 ? study?.nasdaq ?? null : null,
@@ -270,16 +281,20 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   verdict.cause = study?.cause ?? null;
   const summary = ready ? indexSummary(history?.sp500) : null;
   const conflict = basisConflict(verdict.basis, summary, date);
-  // The market tab's warning summary, its three groups and its index switch (`tab`: marketTabParts, marketTabGroups.js,
-  // which only the lazily loaded market screen passes), so Today, which reads none of them, never ships them.
-  const { signals = null, groups = null, series = null } = tab ? tab({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, judgedNow, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, breakout, distWarn, spx, ndx, summary }) : {};
+  // The market tab's warning summary, its three groups, its index switch and its 銘柄側 line (`tab`: marketTabParts,
+  // marketTabGroups.js, which only the lazily loaded market screen passes), so Today, which reads none of them, never ships them.
+  const { signals = null, groups = null, series = null, stockSide = null } = tab ? tab({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, distWarn, spx, ndx, summary }) : {};
 
   // ---- Today: exactly four facts ----
-  const distPairs = dist.map(d => d.hit ? { name: d.name, value: `${num(d.hit.value)}日`, warn: d.hit.value >= DISTRIBUTION_WARN } : { name: d.name, value: '算出不可' });
-  const heavy = dist.filter(d => d.hit && d.hit.value >= DISTRIBUTION_WARN).map(d => d.name);
+  // Today's 分配日 tile: ▲ and amber only at 7 or more; a 5–6 count reads 参考 in the warning's place, the other 参考 tiles'
+  // form and length (never amber, no ▲); else the warning's line.
+  const distPairs = dist.map(d => d.hit ? { name: d.name, value: `${num(d.hit.value)}日`, warn: d.grade === 'caution' } : { name: d.name, value: '算出不可' });
+  const graded = grade => dist.filter(d => d.grade === grade).map(d => d.name);
+  const heavy = graded('caution'), noted = graded('reference');
   const todayDist = !ready ? { key: 'dist', label: '分配日（25日）', ...absent('') }
     : dist.every(d => !d.hit) ? { key: 'dist', label: '分配日（25日）', b: '算出不可', em: 'S&P・NAS' }
-      : { key: 'dist', label: '分配日（25日）', valued: true, pairs: distPairs, asOf: distAsOf, warn: distWarn, em: distWarn ? `注意：${heavy.join('・')}が${DISTRIBUTION_WARN}日以上` : `${DISTRIBUTION_WARN}日以上で注意` };
+      : { key: 'dist', label: '分配日（25日）', valued: true, pairs: distPairs, asOf: distAsOf, warn: distWarn,
+        em: heavy.length ? `注意：${heavy.join('・')}が${DISTRIBUTION_TEXT.caution}` : noted.length ? `参考：${noted.join('・')}が${DISTRIBUTION_TEXT.reference}` : `${DISTRIBUTION_TEXT.caution}で注意` };
   // A fired rule the study could not confirm reads 参考 on Today too, in the warning's place and length, never amber.
   const todayMark = (key, warn) => !warn ? { warn: false, word: null } : isReference(key) ? { warn: false, word: '参考' } : { warn: true, word: '注意' };
   const ttMark = todayMark('template', tt.warn), a200Mark = todayMark('split', a200.warn), lowsMark = todayMark('lows', lowsLead);
@@ -291,7 +306,7 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
     : { key: 'extremes', label: '52週の新高値・新安値', ...absent('newHighs') };
   const today = [todayDist, todayTT, todayA200, todayExtremes];
 
-  return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons, series,
+  return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons, series, stockSide,
     // Whether the TT達成数 row shows a value (its population note belongs beside it only then), and why the Nasdaq's
     // published closes were withdrawn (readMarketTrends' closes_error: the switch is then missing for that reason).
     ttShown: tt.valued === true, nasdaqClosesError: ready && typeof ndx?.closes_error === 'string' && ndx.closes_error ? ndx.closes_error : null,

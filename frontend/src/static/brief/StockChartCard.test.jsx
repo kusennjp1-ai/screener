@@ -7,6 +7,9 @@ import { loadPriceChart } from './priceChartLoader';
 beforeAll(async () => { await loadPriceChart(); });
 import { AUDIT_VERSION } from '../qualificationAudit';
 import { lastPivotCrossing } from './breakoutHistory';
+import { structuralLowLegend } from './chartReadout';
+import { pivotDistanceText } from './briefCandidate';
+import { BOOK_TECHNICAL_VERSION } from '../bookTechnicalEvidence';
 
 // The crossing helper is verdict's (VD1/VD2 write its round-2 body): the chart's tests mock it (plan §2.2), keeping
 // the rest of the module (the conclusion's crossingEvent) as it is.
@@ -133,6 +136,41 @@ describe('brief stock chart card', () => {
     expect(screen.getByRole('group', { name: '最新の足の値' })).not.toHaveTextContent('52週高値');
   });
 
+  it('prints the distance to the pivot as every screen does: in band a cent over or under it, 「±0.0%」 only at its cents (round 3 C5)', () => {
+    // The latest close on whole cents (81.23, inside its bar's range), so a pivot a cent away is off its cents.
+    const list = bars();
+    list[list.length - 1] = { ...list.at(-1), close: 81.23 };
+    const pivotItem = () => [...screen.getByRole('group', { name: '最新の足の値' }).querySelectorAll('.ro-item')].find(node => node.textContent.startsWith('対ピボット'));
+    const atCents = pivotDistanceText({ price: 81.23, pivot: 81.23, distance: 0 });
+    for (const [pivot, sign] of [[81.22, '+'], [81.24, '−'], [81.23000000000002, '±'], [81.22999999999999, '±']]) {
+      render(<StockView data={{ ...data(true), bars: list, view: { ...view, pivot, upper: pivot * 1.05 } }} />);
+      const text = pivotDistanceText({ price: 81.23, pivot, distance: (81.23 / pivot - 1) * 100 });
+      expect(pivotItem().textContent).toBe(`対ピボット${text}`);
+      expect(text.startsWith(sign)).toBe(true);
+      // 「±0.0%」 at the pivot's cents only; a cent away is the in-band form, never a signed 0.0%.
+      if (sign === '±') expect(text).toBe(atCents); else expect(text).not.toBe(atCents);
+      expect(pivotItem().textContent).not.toMatch(/[+−]0\.0%$/);
+      cleanup();
+    }
+    // Bars not certified for the analysis date: no distance to the pivot at all.
+    render(<StockView data={{ ...data(false), bars: list, view: { ...view, pivot: 81.22, upper: 85 } }} />);
+    expect(pivotItem()).toBeUndefined();
+  });
+
+  it('labels the distance to the pivot 「ピボット」 below 1024px with 「対」 for screen readers, and 「対ピボット」 at 1024px and wider (round 3 C5)', () => {
+    const list = bars(), close = list.at(-1).close;
+    const label = () => [...screen.getByRole('group', { name: '最新の足の値' }).querySelectorAll('.ro-item')].find(node => node.textContent.startsWith('対ピボット')).querySelector('i');
+    const visible = node => [...node.childNodes].filter(child => !(child.nodeType === 1 && child.classList.contains('sr-only'))).map(child => child.textContent).join('');
+    render(<StockView data={{ ...data(true), view: { ...view, pivot: close * 0.99, upper: close * 1.04 } }} />);
+    expect(label().textContent).toBe('対ピボット');
+    expect(label().querySelector('.sr-only')).toHaveTextContent(/^対$/);
+    expect(visible(label())).toBe('ピボット');
+    cleanup();
+    render(<StockView data={{ ...data(true), view: { ...view, pivot: close * 0.99, upper: close * 1.04 } }} wide />);
+    expect(label().textContent).toBe('対ピボット');
+    expect(label().querySelector('.sr-only')).toBeNull();
+  });
+
   it('names the contraction marks only when they are drawn, shortly on a phone, with ▼▲ explained in the 注記', () => {
     const legsOf = high => [{ startDate: day(150), endDate: day(160), depthPct: 9, high, low: high * 0.91, bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.8 } },
       { startDate: day(170), endDate: day(180), depthPct: 4, high, low: high * 0.96, bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.7 } }];
@@ -140,7 +178,7 @@ describe('brief stock chart card', () => {
     render(<StockView data={data(true)} />);
     expect(legend()).not.toContain('収縮');
     cleanup();
-    const measured = { ...data(true), technical: { version: 'book-technical-evidence-v2', vcp: { source: 'algorithm', legs: legsOf(bars()[150].high), measurementsValid: true, depthsContract: true } } };
+    const measured = { ...data(true), technical: { version: BOOK_TECHNICAL_VERSION, vcp: { source: 'algorithm', legs: legsOf(bars()[150].high), measurementsValid: true, depthsContract: true } } };
     render(<StockView data={measured} />);
     expect(legend()).toContain('収縮の安値');
     expect(legend()).toContain('枠＝収縮');
@@ -265,5 +303,81 @@ describe('brief stock chart card', () => {
     fireEvent.click(within(screen.getByRole('group', { name: '表示期間' })).getByRole('button', { name: /^週足/ }));
     const readout = screen.getByRole('group', { name: /^最新の足（\d\d\/\d\d〜\d\d\/\d\dの週）の値$/ });
     expect(readout.querySelector('.ro-date').textContent).toMatch(/^\d\d\/\d\d週$/);
+  });
+});
+
+describe('the last contraction\'s low in the legend below 1024px (round 3 C3)', () => {
+  // Two measured contractions whose lows are on the bars they name (the plan's structural low is the last one's: 80.77),
+  // and an RS line, so the legend keeps two items that must stay (the averages and the RS line's meaning). The last one's
+  // low is on the last bar, so no later bar undercuts it (round 3 R6-P4: a low a later bar has traded under is not a
+  // usable structural stop).
+  const list = bars();
+  const legs = [{ startDate: day(150), endDate: day(160), depthPct: 9, high: list[150].high, low: list[158].low, lowDate: day(158), bars: 11, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.8 } },
+    { startDate: day(170), endDate: list[199].date, depthPct: 4, high: list[170].high, low: list[199].low, lowDate: list[199].date, bars: 30, validPeak: true, lowAfterPeak: true, volumeEvidence: { intervalRatio: 0.7 } }];
+  const based = { ...data(true), bars: list, technical: { version: BOOK_TECHNICAL_VERSION, vcp: { source: 'algorithm', legs, measurementsValid: true, depthsContract: true } },
+    chart: { data: { rs_line: list.map((b, i) => ({ time: b.date, value: 1 + i / 1000 })) }, isError: false } };
+  const low = list[199].low, item = () => document.querySelector('.brief-legend [data-key="low"]');
+  const state = () => Object.fromEntries([...document.querySelector('.brief-legend').children].map(node => [node.dataset.key, node.hidden ? 'hidden' : node.style.order]));
+
+  it('keeps the low first among the foldable items, with each of its texts below 1024px and the full one only at 1024px and wider', () => {
+    render(<StockView data={based} />);
+    expect(item().dataset.fold).toBe('true');
+    expect(item().dataset.rank).toBe('1');
+    expect([...item().querySelectorAll('.lg-form')].map(node => [node.className, node.textContent])).toEqual(structuralLowLegend(low).map(([form, text]) => [`lg-form lg-form-${form}`, text]));
+    // The plan's structural low is the last contraction's low (its price, through the producer, is checked above).
+    expect(low).toBeCloseTo(80.77, 2);
+    // Unmeasured (jsdom gives the legend no width), the fold leaves the full text on.
+    expect(item().dataset.fit).toBeUndefined();
+    cleanup();
+    render(<StockView data={based} wide />);
+    expect(item().querySelector('.lg-form')).toBeNull();
+    expect(item().textContent).toBe(structuralLowLegend(low)[0][1]);
+  });
+
+  // Mocked layout: the legend is 300px wide with no gap; the averages' item is 100px (line 1) and the RS line's 250px
+  // (line 2); every other item is 40px; the low's width is per text (its data-fit, the full text without one).
+  let restore = [];
+  afterEach(() => { for (const undo of restore.reverse()) undo(); restore = []; });
+  const layout = lowWidths => {
+    const rect = Element.prototype.getBoundingClientRect, width = Object.getOwnPropertyDescriptor(Element.prototype, 'clientWidth');
+    const widths = { mas: 100, rs: 250 };
+    Element.prototype.getBoundingClientRect = function getBoundingClientRect() {
+      if (!this.parentElement?.classList.contains('brief-legend')) return rect.call(this);
+      const w = this.dataset.key === 'low' ? lowWidths[this.dataset.fit ?? 'long'] : widths[this.dataset.key] ?? 40;
+      return { x: 0, y: 0, left: 0, top: 0, width: w, height: 16, right: w, bottom: 16 };
+    };
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get() { return this.classList.contains('brief-legend') ? 300 : width.get.call(this); } });
+    restore.push(() => { Element.prototype.getBoundingClientRect = rect; }, () => { delete HTMLElement.prototype.clientWidth; });
+  };
+  // The legend as today's fold leaves it when the low fits neither line: hidden, and the others placed by rank in its absence.
+  const today = { mas: '0', rs: '1', low: 'hidden', sell: '0', lows: '0', heavydown: '0', boxes: '0', pivot: '0', stop: '1' };
+
+  it('shows the full text when it fits', () => {
+    layout({ long: 150, short: 110, tag: 70 });
+    render(<StockView data={based} />);
+    expect(item().dataset.fit).toBeUndefined();
+    expect(state()).toEqual({ mas: '0', rs: '1', low: '0', sell: '0', lows: '1', heavydown: 'hidden', boxes: 'hidden', pivot: 'hidden', stop: 'hidden' });
+  });
+
+  it('shows the shorter text when only it fits, and the items it displaces fold in its place', () => {
+    layout({ long: 220, short: 150, tag: 70 });
+    render(<StockView data={based} />);
+    expect(item().dataset.fit).toBe('short');
+    expect(state()).toEqual({ mas: '0', rs: '1', low: '0', sell: '0', lows: '1', heavydown: 'hidden', boxes: 'hidden', pivot: 'hidden', stop: 'hidden' });
+  });
+
+  it('falls back to the tag\'s own name when only 「安値 xx」 fits', () => {
+    layout({ long: 220, short: 210, tag: 150 });
+    render(<StockView data={based} />);
+    expect(item().dataset.fit).toBe('tag');
+    expect(state()).toEqual({ mas: '0', rs: '1', low: '0', sell: '0', lows: '1', heavydown: 'hidden', boxes: 'hidden', pivot: 'hidden', stop: 'hidden' });
+  });
+
+  it('folds the low when no text fits, leaving every other item as today\'s fold places it', () => {
+    layout({ long: 220, short: 210, tag: 205 });
+    render(<StockView data={based} />);
+    expect(item().hidden).toBe(true);
+    expect(item().dataset.fit).toBeUndefined();
+    expect(state()).toEqual(today);
   });
 });

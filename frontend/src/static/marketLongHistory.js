@@ -16,9 +16,14 @@ export function environmentPoint(row){
  const share=key=>cover&&count(row[key])?100*row[key]/cover:null;
  const judged=count(row.breakoutsJudged)?row.breakoutsJudged:null;
  const cohort=count(row.leaderCohort)?row.leaderCohort:null;
+ // Round 3 M8a, M8c (optional keys): the RS推計90 cohort's share above its 50-day line and the early reads' failure share,
+ // under the same minimums as their siblings (LEADER_MIN_COHORT, BREAKOUT_MIN_SAMPLE); a smaller or unknown base stays null.
+ const rs90=count(row.rs90Cohort)?row.rs90Cohort:null,early=count(row.breakoutsEarlyJudged)?row.breakoutsEarlyJudged:null;
  return {...row,stage1Percent:share('stage1'),stage2Percent:share('stage2'),stage3Percent:share('stage3'),stage4Percent:share('stage4'),
   breakoutHoldPercent:judged!==null&&judged>=BREAKOUT_MIN_SAMPLE&&count(row.breakoutsHeld)?100*row.breakoutsHeld/judged:null,
-  leaderHealthPercent:cohort!==null&&cohort>=LEADER_MIN_COHORT&&count(row.leaderCohortAbove50)?100*row.leaderCohortAbove50/cohort:null};
+  leaderHealthPercent:cohort!==null&&cohort>=LEADER_MIN_COHORT&&count(row.leaderCohortAbove50)?100*row.leaderCohortAbove50/cohort:null,
+  rs90HealthPercent:rs90!==null&&rs90>=LEADER_MIN_COHORT&&count(row.rs90CohortAbove50)?100*row.rs90CohortAbove50/rs90:null,
+  breakoutEarlyFailedPercent:early!==null&&early>=BREAKOUT_MIN_SAMPLE&&count(row.breakoutsEarlyFailed)?100*row.breakoutsEarlyFailed/early:null};
 }
 /**
  * Index near its high while few stocks are above their 200-day line: the "bifurcated market" Minervini has described.
@@ -31,14 +36,9 @@ export function bifurcation(history){
  const high=Math.max(...sp.slice(-252).map(row=>row.close)),close=sp.at(-1).close,fromHigh=100*(close/high-1);
  return {date:last.date,fromHigh,above200Percent:last.above200Percent,warning:fromHigh>=-SPLIT_RULE.nearHighPercent&&last.above200Percent<SPLIT_RULE.above200Below};
 }
-export function historyWindow(points,months,asOfDate){
- if(!day(asOfDate)||!Number.isSafeInteger(months)||months<1||months>60)return [];
- const end=new Date(`${asOfDate}T00:00:00Z`),cutoff=new Date(end);
- cutoff.setUTCDate(1);cutoff.setUTCMonth(cutoff.getUTCMonth()-months);
- cutoff.setUTCDate(Math.min(end.getUTCDate(),new Date(Date.UTC(cutoff.getUTCFullYear(),cutoff.getUTCMonth()+1,0)).getUTCDate()));
- const from=cutoff.toISOString().slice(0,10);
- return (points||[]).filter(point=>day(point.date)&&point.date>=from&&point.date<=asOfDate);
-}
+// The display window lives in marketHistoryWindow.js, which only the lazily loaded market screen's charts import (re-exported
+// here, with its file extension for the plain-Node tools that load this module).
+export { historyWindow } from './marketHistoryWindow.js';
 /**
  * notAfter bounds the capture's retrieval instant: the build keeps its own clock (default). The browser reader has no
  * publication instant and passes Infinity, so it checks only the lower bound (retrieved on or after as_of_date).
@@ -82,6 +82,21 @@ export function validateLongHistory(source,asOfDate,notAfter=Date.now()){
   if('leaderCohort' in row)assert(row.leaderCohort===null||(sufficient&&count(row.leaderCohort)&&row.leaderCohort<=row.coverage),'leader cohort count/coverage gate');
   if('leaderCohortAbove50' in row)assert(row.leaderCohortAbove50===null||(count(row.leaderCohortAbove50)&&count(row.leaderCohort)&&row.leaderCohortAbove50<=row.leaderCohort),'leader cohort subset');
   if('breakoutsHeld' in row)assert(row.breakoutsHeld===null||(count(row.breakoutsHeld)&&count(row.breakoutsJudged)&&row.breakoutsHeld<=row.breakoutsJudged),'breakout follow-through');
+  // Round 3 M8a-M8c, optional (collect-market-history.py writes them only once EMIT_R3_MARKET_FIELDS is on): each is null or
+  // a count under its sibling's gate. The RS推計90 cohort is part of the leader cohort (RS 90 or more is RS 70 or more), a
+  // close above the prior 251-session high is a session high above it, and the early reads are window sums like
+  // breakoutsJudged (no bound by the coverage), failed ones among those judged.
+  if('rs90Cohort' in row){
+   assert(row.rs90Cohort===null||(sufficient&&count(row.rs90Cohort)&&row.rs90Cohort<=row.coverage),'RS90 cohort count/coverage gate');
+   assert(row.rs90Cohort===null||!('leaderCohort' in row)||(count(row.leaderCohort)&&row.rs90Cohort<=row.leaderCohort),'RS90 cohort subset of leader cohort');
+  }
+  if('rs90CohortAbove50' in row)assert(row.rs90CohortAbove50===null||(count(row.rs90CohortAbove50)&&count(row.rs90Cohort)&&row.rs90CohortAbove50<=row.rs90Cohort),'RS90 cohort above-50 subset');
+  if('newHighsClose' in row){
+   assert(row.newHighsClose===null||(sufficient&&count(row.newHighsClose)&&row.newHighsClose<=row.coverage),'close new highs count/coverage gate');
+   assert(row.newHighsClose===null||(count(row.newHighs)&&row.newHighsClose<=row.newHighs),'close new highs subset of new highs');
+  }
+  if('breakoutsEarlyJudged' in row)assert(row.breakoutsEarlyJudged===null||count(row.breakoutsEarlyJudged),'early breakout count');
+  if('breakoutsEarlyFailed' in row)assert(row.breakoutsEarlyFailed===null||(count(row.breakoutsEarlyFailed)&&count(row.breakoutsEarlyJudged)&&row.breakoutsEarlyFailed<=row.breakoutsEarlyJudged),'early breakout failures among judged');
   assert(number(row.coveragePercent)&&Math.abs(row.coveragePercent-100*row.coverage/Math.max(row.eligibleUniverse,1))<.001,'coverage percent');
   assert(i>=9||row.ratio_10day===null,'ratio warmup');
   if(i>=9&&row.ratio_10day!==null){

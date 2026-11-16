@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { bifurcation, environmentPoint, historyWindow, BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT } from '../marketLongHistory';
+import { BREAKOUT_HOLD_NAME } from '../brief/briefEnvironment';
 import { SECTORS } from '../sectorDefinitions';
 import { TrendChart } from './MarketTrendDashboard';
 import MetricDisclosure from './MetricDisclosure';
@@ -11,7 +12,7 @@ const metrics={
  stages:{label:'ステージ構成',unit:'%',lines:[{key:'stage1Percent',label:'ステージ1',color:'var(--wait)'},{key:'stage2Percent',label:'ステージ2',color:'var(--zone)'},{key:'stage3Percent',label:'ステージ3',color:'var(--ext)'},{key:'stage4Percent',label:'ステージ4',color:'var(--neg)'}],globalOnly:true},
  movingAverages:{label:'移動平均線の上',unit:'%',lines:[{key:'above50Percent',label:'50日線上',color:'var(--zone)'},{key:'above200Percent',label:'200日線上',color:'var(--wait)'}],globalOnly:true},
  leaderHealthPercent:{label:'リーダーの健全度',unit:'%',lines:[{key:'leaderHealthPercent',label:'20営業日前のTT達成銘柄のうち50日線の上',color:'var(--zone)'}],globalOnly:true},
- breakoutHoldPercent:{label:'ブレイクアウトの成功率',unit:'%',lines:[{key:'breakoutHoldPercent',label:'10日間 −7%に届かず',color:'var(--zone)'}],globalOnly:true},
+ breakoutHoldPercent:{label:BREAKOUT_HOLD_NAME,unit:'%',lines:[{key:'breakoutHoldPercent',label:'10日間 −7%に届かず',color:'var(--zone)'}],globalOnly:true},
  highsLows:{label:'新高値・新安値',unit:'銘柄',lines:[{key:'newHighs',label:'52週の新高値',color:'var(--zone)'},{key:'newLows',label:'52週の新安値',color:'var(--neg)'}],globalOnly:true,everySchema:true},
  above50Percent:{label:'50日線上',unit:'%'},leaderCount:{label:'先導株数（価格条件）',unit:'銘柄'},ratio_10day:{label:'4%騰落・10日レシオ',unit:'倍',globalOnly:true}};
 const linesFor=(key,config)=>config.lines||[{key,label:config.label,color:'var(--zone)'}];

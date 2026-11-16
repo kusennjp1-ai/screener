@@ -258,6 +258,9 @@ scan.charts={...scan.charts,...correctionMeta,path:chartIndexPath};
  * @property {string} as_of_date 'YYYY-MM-DD'
  * `sec_summary`: SecSummary in src/static/fundamentalsExplain.js (read through secSummary), from the admitted SEC record only.
  * `se_pattern_primary`: the Setup Engine primary pattern id (string or null), added to listFields.
+ * `se_pivot_date`: the Setup Engine pivot's date ('YYYY-MM-DD', a weekly pattern's Friday week label, or null; vcp publishes
+ *   none), added to listFields (round 3 R1, OD7) so the index row bounds pivot crossings as the stock screen does
+ *   (crossingFloor/pivotBar in src/static/brief); an index without it (older publications) leaves them unbounded.
  * The manifest's US entry:
  * @typedef {object} MarketContext `markets.US.market_context`, only when every US row that carries these fields agrees (else null)
  * @property {string} as_of_date the analysis date
@@ -270,7 +273,7 @@ scan.charts={...scan.charts,...correctionMeta,path:chartIndexPath};
  * @property {'backend-market-regime-v1'} method
  * @property {'scan-rows'} source
  */
-const listFields = ([...FINANCIAL_FIELDS,...CORRECTION_METADATA_FIELDS].join(' ')+' name product_name quoteType quote_type cusip isin cik issuer_cik instrument_identity instrument_applicability financial_identity financial_current financial_publication_input as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price vcp_pivot se_pattern_confidence se_pattern_primary se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
+const listFields = ([...FINANCIAL_FIELDS,...CORRECTION_METADATA_FIELDS].join(' ')+' name product_name quoteType quote_type cusip isin cik issuer_cik instrument_identity instrument_applicability financial_identity financial_current financial_publication_input as_of_date eps_growth_quarterly eps_growth_annual institutional_evidence setup_recalculation price_quality corporate_action price_activity chart_path symbol company_name exchange currency market current_price price_change_1d adv_usd gics_sector ibd_industry_group ibd_group_rank passes_template rs_rating rs_method rs_universe_size rs_as_of_date eps_rating composite_rating annual_eps_growth_3y institutional_sponsors_increasing eps_growth_yy sales_growth_yy se_volume_vs_50d market_regime market_above_50dma market_above_200dma technical_audit financial_history entry_evidence se_pivot_price se_pivot_date vcp_pivot se_pattern_confidence se_pattern_primary se_setup_ready vcp_detected se_base_length_weeks se_base_depth_pct research_detail_path week_52_high_distance').split(' ');
 const researchIndex = {...currentEvaluation,summary_storage:'canonical-detail-v1',as_of_date:scan.as_of_date, rows:[...compactRows.values()].map(row => {
   const summary=Object.fromEntries(listFields.filter(k=>Object.hasOwn(row,k)).map(k=>[k,row[k]]));
   // Transport retains only the two original scalar inputs used by the five

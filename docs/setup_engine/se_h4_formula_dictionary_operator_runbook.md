@@ -78,7 +78,7 @@ All 31 fields from `SETUP_ENGINE_FIELD_SPECS` (`models.py:235-484`):
 | 19 | `rs_line_new_high` | `bool` | — | No | `rs_current ≥ max(rs[−252:])` | [§4](#4-readiness-feature-fields) |
 | 20 | `rs_vs_spy_65d` | `float` | pct | Yes | `100 × (rs / rs[−65] − 1)` | [§4](#4-readiness-feature-fields) |
 | 21 | `rs_vs_spy_trend_20d` | `float` | ratio | Yes | `slope(rs, window=20)` | [§4](#4-readiness-feature-fields) |
-| 22 | `stage` | `int` | — | Yes | Weinstein stage 1–4 via `quick_stage_check()` | [§5](#5-context-fields) |
+| 22 | `stage` | `int` | — | Yes | Weinstein stage 1–4: the Minervini scanner's published stage (`WeinsteinstageAnalyzer.determine_stage`, round 3 R3b) | [§5](#5-context-fields) |
 | 23 | `ma_alignment_score` | `float` | pct | Yes | Minervini MA alignment (50>150>200) | [§5](#5-context-fields) |
 | 24 | `rs_rating` | `float` | pct | Yes | Multi-period weighted RS (50 = matching SPY) | [§5](#5-context-fields) |
 | 25 | `candidates` | `list[PatternCandidate]` | — | No | All detector candidates (calibrated) | [§7](#7-candidate-sub-object-reference) |
@@ -641,7 +641,12 @@ These three fields are computed in the screener's `_compute_context()` method (`
 **Formula:**
 
 ```python
-stage = quick_stage_check(current_price, ma_50, ma_150, ma_200, ma_200_month_ago)
+# Round 3 R3b: the stage the Minervini scanner publishes (SetupEngineScanner._published_stage),
+# fed as minervini_scanner.py feeds it (reversed 200-day line, closes and volumes).
+stage = WeinsteinstageAnalyzer().determine_stage(
+    current_price, ma_200, ma_200_rev, prices_rev, volumes_rev,
+    ma_150=ma_150, high_52w=high_52w,
+)["stage"]
 ```
 
 **Source:** `setup_engine_screener.py:326-329`
@@ -664,7 +669,7 @@ stage = quick_stage_check(current_price, ma_50, ma_150, ma_200, ma_200_month_ago
 | Any MA is `NaN` (< 200 bars) | `None` | All context fields nulled |
 | `data_policy = "insufficient"` | `None` | Pipeline nulled |
 
-**Consumed by:** Gate 8 (`stage_ok`). Stage 1 and 2 pass. Stage 3 and 4 fail. `None` passes (semi-permissive).
+**Consumed by:** Gate 8 (`stage_ok`). Stage 2 passes. Stage 1, 3 and 4 fail. `None` passes (semi-permissive).
 
 ---
 
@@ -776,7 +781,7 @@ Individual detectors may emit their own passed/failed checks (e.g., `tight_band_
 | `atr14_within_limit` / `atr14_pct_exceeds_limit` | 5 | [`atr14_pct_max_for_ready`](se_h1_parameter_catalog.md#45-supplemental-readiness-controls) |
 | `volume_sufficient` / `volume_above_dryup_cap` | 6 | [`volume_vs_50d_max_for_ready`](se_h1_parameter_catalog.md#45-supplemental-readiness-controls) (0.8; the dry-up cap) |
 | `rs_leadership_ok` / `rs_leadership_insufficient` | 7 | (implicit: `rs_vs_spy_65d > 0` or `rs_line_new_high`) |
-| `stage_ok` / `stage_not_ok` | 8 | (implicit: `stage ∈ {1, 2}`) |
+| `stage_ok` / `stage_not_ok` | 8 | (implicit: `stage == 2`; `None` passes) |
 | `ma_alignment_ok` / `ma_alignment_insufficient` | 9 | [`context_ma_alignment_min_pct`](se_h1_parameter_catalog.md#46-context-gates) |
 | `rs_rating_ok` / `rs_rating_insufficient` | 10 | [`context_rs_rating_min`](se_h1_parameter_catalog.md#46-context-gates) |
 
@@ -1106,7 +1111,7 @@ When adjusting multiple parameters simultaneously:
    → "atr14_pct_exceeds_limit"        → Gate 5: check atr14_pct vs 8.0
    → "volume_above_dryup_cap"         → Gate 6 volume dry-up cap: volume_vs_50d ≤ volume_vs_50d_max_for_ready (0.8)
    → "rs_leadership_insufficient"     → Gate 7: check rs_vs_spy_65d and rs_line_new_high
-   → "stage_not_ok"                   → Gate 8: check stage value (must be 1 or 2)
+   → "stage_not_ok"                   → Gate 8: check stage value (must be 2)
    → "ma_alignment_insufficient"      → Gate 9: check ma_alignment_score vs 60.0
    → "rs_rating_insufficient"         → Gate 10: check rs_rating vs 50.0
    → "insufficient_data"              → Data policy: check bar counts

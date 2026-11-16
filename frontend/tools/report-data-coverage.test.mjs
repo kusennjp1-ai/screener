@@ -8,9 +8,23 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { encodeResearchIndex } from '../src/static/researchTransport.js';
 import { secPoint, secRecord, secUnavailable } from '../src/test/fixtures/secRecord.js';
-import { briefRows, compareSecCarryForward, coverageWarnings, EPS_UNKNOWN_CAUSES, epsUnknownCauses, secEvidenceLine, SETUP_CONFIDENCE_FLOOR, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, fundamentalsSummaryTable, invokedAsCommand, publishedCoverage, publishedFundamentalsReport, runPublished, secAdmissionState, secRefusalReason, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
+import { briefLiquid, briefRows, compareSecCarryForward, coverageWarnings, EPS_UNKNOWN_CAUSES, epsUnknownCauses, secEvidenceLine, SETUP_CONFIDENCE_FLOOR, environmentCoverage, finalEnvironmentRow, fundamentalsCoverage, fundamentalsCoverageBlock, formatSecAdmission, fundamentalsSummaryTable, invokedAsCommand, publishedCoverage, publishedFundamentalsReport, Q4_EPS_CAUSES, runPublished, secAdmissionState, secRefusalReason, setupReadyLiquidity, validFundamentalsCoverageBlock } from './report-data-coverage.mjs';
+import { filterRanked } from '../src/static/researchPresentation.js';
+import { bookFinancialEvidence } from '../src/static/bookFinancialEvidence.js';
 
 const write = async (path, value) => { await mkdir(dirname(path), { recursive: true }); await writeFile(path, JSON.stringify(value)); };
+// The brief's liquidity bars, found by scanning values through the brief's own filterRanked (never quoted here): double
+// until a row is listed, then bisect to adjacent numbers. `at` is the lowest listed value, `under` the highest unlisted one.
+const listedByBrief = row => filterRanked([{ row, assessment: null }], { liquidOnly: true }).length === 1;
+function scanBar(field, other) {
+  let under = 0, at = 1;
+  while (at < Number.MAX_VALUE && !listedByBrief({ [field]: at, [other]: Number.MAX_VALUE })) { under = at; at *= 2; }
+  for (let mid = under + (at - under) / 2; mid !== under && mid !== at; mid = under + (at - under) / 2) {
+    if (listedByBrief({ [field]: mid, [other]: Number.MAX_VALUE })) at = mid; else under = mid;
+  }
+  return { under, at };
+}
+const BARS = { price: scanBar('current_price', 'adv_usd'), adv: scanBar('adv_usd', 'current_price') };
 
 describe('data coverage report', () => {
   it('counts same-day SEC evidence and history, and never treats stale or missing inputs as known', () => {
@@ -362,7 +376,7 @@ describe('round-2 measurements in the published report (plan DT4, DT9): diagnost
     try {
       // A derivation gap that is not an object: the round-2 gap count cannot read it.
       const odd = { ...secRecord({ symbol: 'ODD' }), derivation_gaps: [null] };
-      const cases = { ODD: { book_financials: odd }, FINE: { book_financials: secRecord({ symbol: 'FINE' }), se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date } } };
+      const cases = { ODD: { book_financials: odd }, FINE: { book_financials: secRecord({ symbol: 'FINE' }), se_setup_ready: true, setup_recalculation: { status: 'calculated', as_of_date: date }, current_price: BARS.price.at, adv_usd: BARS.adv.at } };
       const rowsOut = Object.keys(cases).map(symbol => ({ symbol, market: 'US', as_of_date: date, research_detail_path: `research-details/${symbol}.json` }));
       for (const row of rowsOut) await write(join(root, `static-data/${row.research_detail_path}`), { ...row, ...cases[row.symbol] });
       await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows: rowsOut }));
@@ -372,6 +386,10 @@ describe('round-2 measurements in the published report (plan DT4, DT9): diagnost
       // Round 1 counted both rows (the SEC record of each, the readiness of FINE).
       expect(report).toMatchObject({ listed: 2, sec_record: 2, setup_ready: { pass: 1 } });
       expect(report.round2).toEqual({ unavailable: expect.stringMatching(/null/) });
+      // Round 3 (D2): Code 33's parts, the EPS ≥ 25% floor and the liquidity split are round-1 side and survive the throw.
+      expect(report.code33_parts).toEqual({ eps_acceleration: { pass: 2, fail: 0, unknown: 0 }, sales_acceleration: { pass: 2, fail: 0, unknown: 0 }, margin_improvement: { pass: 2, fail: 0, unknown: 0 }, eps_acceleration_pass_symbols: ['ODD', 'FINE'] });
+      expect(report.eps_floor_25).toEqual({ last2: { pass: 2, fail: 0, unknown: 0 }, last4: { pass: 0, fail: 2, unknown: 0 } });
+      expect(report.setup_ready_liquidity).toEqual({ liquid: { pass: 1, fail: 0, unknown: 0 }, illiquid: { pass: 0, fail: 0, unknown: 1 }, missing_price_or_adv: 1 });
       const lines = []; const code = await runPublished(['--published', '--root', root], { env: {}, log: line => lines.push(line), now });
       expect(code).toBe(0);
       expect(lines.some(line => line.startsWith('::warning::Round-2 coverage measurements unavailable: '))).toBe(true);
@@ -428,5 +446,173 @@ describe('round-2 measurements in the published report (plan DT4, DT9): diagnost
       expect(unknown.some(line => line.includes('Setup readiness passes on 0'))).toBe(false);
       expect(secEvidenceLine(null)).toBeNull();
     } finally { await rm(root, { recursive: true, force: true }); }
+  });
+});
+
+describe('round 3 (D2): Code 33\'s parts named honestly, the EPS ≥ 25% floor, Q4-only and the liquidity split (diagnostic only)', () => {
+  const date = '2026-02-01', now = Date.parse('2026-02-01T12:00:00Z');
+  // One publication whose listed rows are `cases` (symbol → detail fields), in this order.
+  async function publication(cases) {
+    const root = await mkdtemp(join(tmpdir(), 'published-d2-'));
+    const rowsOut = Object.keys(cases).map(symbol => ({ symbol, market: 'US', as_of_date: date, research_detail_path: `research-details/${symbol}.json` }));
+    for (const row of rowsOut) await write(join(root, `static-data/${row.research_detail_path}`), { ...row, book_financials: null, ...cases[row.symbol] });
+    await write(join(root, 'static-data/research.json'), encodeResearchIndex({ as_of_date: date, financial_evaluated_at: now, rows: rowsOut }));
+    await write(join(root, 'static-data/manifest.json'), { markets: { US: { as_of_date: date, assets: { research: { path: 'research.json' } } } } });
+    await write(join(root, 'qualification-audit.json'), { as_of_date: date, results: rowsOut.map(({ symbol }) => ({ symbol, methods: { minervini: { qualified: true, failed: 0, unknown: 0 } } })) });
+    return root;
+  }
+  const withRoot = async (cases, check) => { const root = await publication(cases); try { return await check(root); } finally { await rm(root, { recursive: true, force: true }); } };
+  const tenQ = symbol => { const value = secRecord({ symbol }); value.quarterly.eps = value.quarterly.eps.filter(p => !p.end.endsWith('12-31')); value.annualEps = [secPoint('eps', ['2024-01-01', '2024-12-31'], 4), secPoint('eps', ['2025-01-01', '2025-12-31'], 5.5)]; return value; };
+  const records = () => {
+    const filer = tenQ('Q4EPS');
+    return { PASS: secRecord({ symbol: 'PASS' }), Q4EPS: filer, FALL: secRecord({ symbol: 'FALL', netIncome: [12, 11, 10, 9, 13.2, 14.3, 16, 18] }),
+      YOUNG: secRecord({ symbol: 'YOUNG', quarters: [['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31']] }), FPI: secUnavailable({ symbol: 'FPI', reason: 'no_quarterly', forms: ['20-F'] }), NONE: null };
+  };
+
+  it('counts Code 33\'s three parts under their own names, with the numbers the old sec_conditions gave on the same records', async () => {
+    // Recorded from the unchanged tool (45603f06, blob 09c3b81) on these records: eps {pass 2, unknown 2}, sales {pass 3,
+    // unknown 1}, margin {pass 2, fail 1, unknown 1}, q4_eps_missing 1 (round 1 only).
+    const details = records();
+    const parts = { eps_acceleration: { pass: 2, fail: 0, unknown: 2 }, sales_acceleration: { pass: 3, fail: 0, unknown: 1 }, margin_improvement: { pass: 2, fail: 1, unknown: 1 } };
+    const daily = { as_of_date: date, candidates: { minervini: Object.keys(details).map(symbol => ({ symbol })) } };
+    const round1 = fundamentalsCoverage({ daily, sec: { as_of_date: date, results: Object.fromEntries(Object.entries(details).filter(([, value]) => value)) }, history: null, now });
+    expect(round1.code33_parts).toEqual({ ...parts, q4_eps_missing: 1 });
+    expect(round1).not.toHaveProperty('sec_conditions');
+    await withRoot(Object.fromEntries(Object.entries(details).map(([symbol, record]) => [symbol, { book_financials: record }])), async root => {
+      const report = await publishedCoverage({ root, now });
+      expect(report.code33_parts).toEqual({ ...parts, eps_acceleration_pass_symbols: ['PASS', 'FALL'] });
+      expect(report).not.toHaveProperty('sec_conditions');
+      // EPS acceleration is not the EPS ≥ 25% floor: FALL's acceleration passes while its own floor rows are counted apart.
+      expect(report.eps_floor_25).toEqual({ last2: { pass: 2, fail: 0, unknown: 2 }, last4: { pass: 0, fail: 3, unknown: 1 } });
+      const json = JSON.stringify(await publishedFundamentalsReport({ root, now }));
+      expect(json).not.toContain('sec_conditions');
+    });
+  });
+
+  it('lists the first symbols whose EPS acceleration passed, in listed order, capped at the limit', async () => {
+    const cases = { P1: { book_financials: secRecord({ symbol: 'P1' }) }, SLOW: { book_financials: secRecord({ symbol: 'SLOW', eps: [1, 1, 1, 1, 1.1, 1.2, 1.1, 1.1] }) },
+      P2: { book_financials: secRecord({ symbol: 'P2' }) }, P3: { book_financials: secRecord({ symbol: 'P3' }) } };
+    await withRoot(cases, async root => {
+      expect((await publishedCoverage({ root, now })).code33_parts).toMatchObject({ eps_acceleration: { pass: 3, fail: 1, unknown: 0 }, eps_acceleration_pass_symbols: ['P1', 'P2', 'P3'] });
+      // The cap bounds the list only, never the count.
+      expect((await publishedCoverage({ root, now, limit: 2 })).code33_parts).toMatchObject({ eps_acceleration: { pass: 3 }, eps_acceleration_pass_symbols: ['P1', 'P2'] });
+    });
+  });
+
+  it('counts the card\'s EPS ≥ 25% chip over the latest 2 and 4 quarters as bookFinancialEvidence judges it', async () => {
+    const recordsBy = { UP: secRecord({ symbol: 'UP', eps: [1, 1, 1, 1, 1.3, 1.3, 1.4, 1.8] }), PASS: secRecord({ symbol: 'PASS' }), SLOW: secRecord({ symbol: 'SLOW', eps: [1, 1, 1, 1, 1.1, 1.2, 1.1, 1.1] }),
+      YOUNG: secRecord({ symbol: 'YOUNG', quarters: [['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31']] }) };
+    // The producer's own verdicts on each record (pass, fail and unknown are all present).
+    const floor = symbol => { const evidence = bookFinancialEvidence(recordsBy[symbol], symbol, date); return [evidence.epsFloor[2].at25, evidence.epsFloor[4].at25]; };
+    expect(Object.fromEntries(Object.keys(recordsBy).map(symbol => [symbol, floor(symbol)]))).toEqual({ UP: ['pass', 'pass'], PASS: ['pass', 'fail'], SLOW: ['fail', 'fail'], YOUNG: ['unknown', 'unknown'] });
+    // A row without a current SEC report is not counted at all (never a fail, never 0 of the chip).
+    const cases = { ...Object.fromEntries(Object.entries(recordsBy).map(([symbol, record]) => [symbol, { book_financials: record }])), NONE: {} };
+    await withRoot(cases, async root => {
+      expect((await publishedCoverage({ root, now })).eps_floor_25).toEqual({ last2: { pass: 2, fail: 1, unknown: 1 }, last4: { pass: 1, fail: 2, unknown: 1 } });
+    });
+  });
+
+  it('counts a row in q4_only only when every enumerated cause is a fiscal Q4 without EPS, the two causes checked apart', async () => {
+    // ZZNV's shape: the newest row is a fiscal Q4 whose EPS only the 10-K reports.
+    const latest = tenQ('Q4LATEST');
+    // ZZQF's shape: a fiscal-Q4 row (a June year) inside the latest four quarters, present with sales and net income but
+    // without EPS (the 10-K reports it only for the year).
+    const q4Row = secRecord({ symbol: 'Q4ROW' }); q4Row.quarterly.eps = q4Row.quarterly.eps.filter(p => p.end !== '2025-06-30');
+    q4Row.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 5, { form: '10-K', filed: '2025-08-20', accession: 'k-25' })];
+    // The other fiscal_q4_untagged branch: the fiscal-Q4 row is missing altogether inside the latest four quarters.
+    const quarters = [['2023-10-01', '2023-12-31'], ['2024-01-01', '2024-03-31'], ['2024-04-01', '2024-06-30'], ['2024-07-01', '2024-09-30'], ['2024-10-01', '2024-12-31'],
+      ['2025-01-01', '2025-03-31'], ['2025-04-01', '2025-06-30'], ['2025-07-01', '2025-09-30'], ['2025-10-01', '2025-12-31']];
+    const inside = secRecord({ symbol: 'Q4INSIDE', quarters, eps: [1, 1, 1, 1, 1, 1.1, 1.2, 1.4, 1.8], revenue: [100, 100, 100, 100, 100, 110, 130, 160, 200], netIncome: [10, 10, 10, 10, 10, 11, 14, 19, 26] });
+    for (const key of ['eps', 'revenue', 'netIncome']) inside.quarterly[key] = inside.quarterly[key].filter(p => p.end !== '2025-06-30');
+    inside.annualEps = [secPoint('eps', ['2024-07-01', '2025-06-30'], 5, { form: '10-K', filed: '2025-08-20', accession: 'k-25' })];
+    // A Q4 cause plus a loss a year earlier: a Q4 EPS alone would not settle it.
+    const mixed = tenQ('Q4MIXED'); mixed.quarterly.eps.find(p => p.end === '2024-03-31').value = -0.1;
+    // No enumerated cause at all (a missing year-ago EPS reads no_base, which epsUnknownCauses does not track): never Q4-only.
+    const noBase = secRecord({ symbol: 'NOBASE' }); noBase.quarterly.eps = noBase.quarterly.eps.filter(p => p.end !== '2024-06-30');
+    const cases = [[latest, ['latest_row_fiscal_q4_without_eps'], 1], [q4Row, ['fiscal_q4_untagged'], 1], [inside, ['fiscal_q4_untagged'], 1], [mixed, ['latest_row_fiscal_q4_without_eps', 'prior_year_loss_or_zero'], 0], [noBase, [], 0]];
+    expect(Q4_EPS_CAUSES).toEqual(['latest_row_fiscal_q4_without_eps', 'fiscal_q4_untagged']);
+    for (const [record, all, q4Only] of cases) {
+      expect(epsUnknownCauses(bookFinancialEvidence(record, record.symbol, date)).all, record.symbol).toEqual(all);
+      // One-row publications, so each count is that row's alone.
+      await withRoot({ [record.symbol]: { book_financials: record } }, async root => {
+        const report = await publishedCoverage({ root, now });
+        expect(report.round2.eps_unknown, record.symbol).toMatchObject({ with_current_report: 1, q4_only: q4Only });
+      });
+    }
+    // Together: the three Q4 shapes count, the mixed and cause-less rows do not.
+    await withRoot(Object.fromEntries(cases.map(([record]) => [record.symbol, { book_financials: record }])), async root => {
+      expect((await publishedCoverage({ root, now })).round2.eps_unknown).toMatchObject({ with_current_report: 5, q4_only: 3,
+        any: { latest_row_fiscal_q4_without_eps: 2, fiscal_q4_untagged: 2, prior_year_loss_or_zero: 1 } });
+    });
+  });
+
+  it('reads the brief\'s own liquidity rule, never its numbers, and agrees with filterRanked on the boundary rows', () => {
+    // The scan found a bar for each field; just under it is unlisted, at it is listed.
+    for (const bar of [BARS.price, BARS.adv]) { expect(Number.isFinite(bar.at) && bar.at > 0 && bar.under < bar.at).toBe(true); }
+    const prices = [BARS.price.under, BARS.price.at], advs = [BARS.adv.under, BARS.adv.at];
+    const odd = [null, undefined, Number.NaN, Infinity, '50', -1, 0];
+    const rows = [...prices.flatMap(price => advs.map(adv => ({ current_price: price, adv_usd: adv }))),
+      ...odd.flatMap(value => [{ current_price: value, adv_usd: BARS.adv.at }, { current_price: BARS.price.at, adv_usd: value }])];
+    for (const row of rows) expect(briefLiquid(row), JSON.stringify(row)).toBe(filterRanked([{ row, assessment: null }], { liquidOnly: true }).length === 1);
+    // Only the row at both bars is listed.
+    expect(rows.filter(briefLiquid)).toEqual([{ current_price: BARS.price.at, adv_usd: BARS.adv.at }]);
+    // filterRanked would throw on a row that is not an object; the report reads it as not listed.
+    for (const row of [null, undefined, 'AAA', 5]) expect(briefLiquid(row)).toBe(false);
+  });
+
+  it('splits setup readiness by liquidity, counts a row without a price or ADV as illiquid and missing, and is 未計測 without any', () => {
+    const liquid = { current_price: BARS.price.at, adv_usd: BARS.adv.at }, thin = { current_price: BARS.price.under, adv_usd: BARS.adv.at };
+    const calculated = { status: 'calculated', as_of_date: date };
+    const rows = [{ ...liquid, se_setup_ready: true, setup_recalculation: calculated }, { ...liquid, se_setup_ready: false, setup_recalculation: calculated },
+      { ...thin, se_setup_ready: true, setup_recalculation: calculated }, { current_price: null, adv_usd: BARS.adv.at, se_setup_ready: true, setup_recalculation: calculated },
+      { ...liquid, se_setup_ready: true, setup_recalculation: { status: 'unavailable', as_of_date: date } }, { adv_usd: BARS.adv.at }];
+    expect(setupReadyLiquidity(rows)).toEqual({ liquid: { pass: 1, fail: 1, unknown: 1 }, illiquid: { pass: 2, fail: 0, unknown: 1 }, missing_price_or_adv: 2 });
+    // An older publication (no row with both a finite price and ADV): the split is unknown, never "all illiquid".
+    expect(setupReadyLiquidity([{ se_setup_ready: true, setup_recalculation: calculated }, { current_price: BARS.price.at }, { adv_usd: BARS.adv.at }])).toBeNull();
+    expect(setupReadyLiquidity([])).toBeNull();
+    expect(setupReadyLiquidity(null)).toBeNull();
+  });
+
+  it('puts the split beside setup_ready in the published report, its pass counts summing to setup_ready, and prints the new rows', async () => {
+    const calculated = { status: 'calculated', as_of_date: date };
+    const cases = {
+      LIQ: { book_financials: tenQ('LIQ'), current_price: BARS.price.at, adv_usd: BARS.adv.at, se_setup_ready: true, setup_recalculation: calculated },
+      THIN: { book_financials: secRecord({ symbol: 'THIN' }), current_price: BARS.price.under, adv_usd: BARS.adv.at, se_setup_ready: true, setup_recalculation: calculated },
+      BARE: { se_setup_ready: false, setup_recalculation: calculated },
+    };
+    await withRoot(cases, async root => {
+      const report = await publishedCoverage({ root, now });
+      expect(Object.keys(report).indexOf('setup_ready_liquidity')).toBe(Object.keys(report).indexOf('setup_ready') + 1);
+      expect(report.setup_ready).toEqual({ pass: 2, fail: 1, unknown: 0 });
+      expect(report.setup_ready_liquidity).toEqual({ liquid: { pass: 1, fail: 0, unknown: 0 }, illiquid: { pass: 1, fail: 1, unknown: 0 }, missing_price_or_adv: 1 });
+      const table = fundamentalsSummaryTable(await publishedFundamentalsReport({ root, now }));
+      expect(table).toContain('| Code 33 parts (listed, SEC) | EPS acceleration pass 1, fail 0, unknown 1; sales acceleration pass 2, fail 0, unknown 0; margin improvement pass 2, fail 0, unknown 0 |');
+      expect(table).toContain('| EPS ≥25% (listed, SEC; the card\'s chip) | latest 2 quarters pass 1, fail 0, unknown 1; latest 4 quarters pass 0, fail 2, unknown 0 |');
+      expect(table).toContain('| setup readiness: liquid / illiquid (the brief\'s liquidity rule, measurement only) | liquid pass 1, fail 0, unknown 0 / illiquid pass 1, fail 1, unknown 0 (no price or ADV 1) |');
+      expect(table).toMatch(/\| EPS acceleration unknown \(current SEC report\) \| 1: latest_row_fiscal_q4_without_eps 1; fiscal-Q4 share 100\.0%; Q4-only \(upper bound\) 1; without a current report 1 \|/);
+      expect(table).not.toContain('SEC conditions');
+    });
+    // An older publication without price and ADV on its rows: 未計測 in the table, never a split.
+    await withRoot({ OLD: { se_setup_ready: true, setup_recalculation: calculated } }, async root => {
+      const report = await publishedFundamentalsReport({ root, now });
+      expect(report.coverage.setup_ready_liquidity).toBeNull();
+      expect(fundamentalsSummaryTable(report)).toContain('| setup readiness: liquid / illiquid (the brief\'s liquidity rule, measurement only) | 未計測 |');
+    });
+  });
+});
+
+describe('round 3 (D3): the reference fiscal-Q4 EPS accuracy rides on the SEC evidence line (aggregates only, emission off)', () => {
+  it('prints the published file\'s coverage.q4_reference in the SEC evidence line, nulls kept as null', () => {
+    // The aggregate tools/sec-financials.py writes at file level (q4_reference_summary); no symbol and no record key.
+    const q4Reference = { emit: false, records_with_reference: 1, entries: 1,
+      refused: { no_numerator: 0, no_tiling: 0, no_shares: 2, split_band: 0, check_failed: 1, not_finite: 0, error: 0 },
+      q4: { n: 0, median_abs_error: null, within_1c_or_2pct: null, share: null }, q1_q3: { n: 3, median_abs_error: 0.0009, within_1c_or_2pct: 3, share: 1 } };
+    const file = { schema_version: 2, as_of_date: '2026-03-01', coverage: { eligible: 1, requested: 1, q4_reference: q4Reference }, results: { ZZQ: secRecord({ symbol: 'ZZQ', asOfDate: '2026-03-01' }) } };
+    const line = secEvidenceLine(file);
+    expect(line).toContain(`"q4_reference":${JSON.stringify(q4Reference)}`);
+    expect(line).toContain('"q4":{"n":0,"median_abs_error":null,"within_1c_or_2pct":null,"share":null}');
+    expect(line).not.toContain('q4EpsReference');
+    // An older file without the aggregate prints the line as before.
+    expect(secEvidenceLine({ ...file, coverage: { eligible: 1, requested: 1 } })).not.toContain('q4_reference');
   });
 });

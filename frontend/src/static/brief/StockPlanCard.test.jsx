@@ -23,11 +23,14 @@ const data = (certified, end) => ({
 const UP = { label: '上昇トレンド（独自判定）', cap: 0.5 };
 /** A trend template whose eight rules and daily-bar integrity rule all pass. */
 const PASS = { passed: 8, failed: 0, unknown: 0, integrity: { state: 'pass' } };
-/** Certified bars whose bar 190 holds the last measured contraction's low (96: 4.5% under the 100 entry). */
+/**
+ * Certified bars whose last bar holds the last measured contraction's low (96: 4.5% under the 100 entry), so no later bar
+ * undercuts it (round 3 R6-P4: a low a later bar has traded under is not a usable structural stop).
+ */
 const measured = (low = 96) => {
   const list = bars();
-  list[190] = { ...list[190], low };
-  return { judged: list, technical: { as_of_date: DATE, vcp: { measurementsValid: true, legs: [{ low: 80, lowDate: list[170].date }, { low, lowDate: list[190].date }] } } };
+  list[199] = { ...list[199], low };
+  return { judged: list, technical: { as_of_date: DATE, vcp: { measurementsValid: true, legs: [{ low: 80, lowDate: list[170].date }, { low, lowDate: list[199].date }] } } };
 };
 /** The plan card with its hook, as the stock view wires them. */
 function Harness({ planView = view, market = UP, template = PASS, technical = null, judged = null, certified = true, broken = false, earningsSoon = false, chartRef = { current: null }, wide = false, call = null }) {

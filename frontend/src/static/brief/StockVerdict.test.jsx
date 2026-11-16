@@ -3,8 +3,9 @@ import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
 import StockVerdict from './StockVerdict';
 import { breakoutEvent, candidateView, earningsCall, trendTemplate } from './briefCandidate';
-import { HEAVY_DOWN_NOTE, SE_CONFIDENCE_FLOOR } from './buyGate';
-import { WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
+import { HEAVY_DOWN_NOTE, lowActivityNote, PLAN_BLOCKED, SE_CONFIDENCE_FLOOR } from './buyGate';
+import { lowActivityReason } from '../priceActivity';
+import { failedBreakoutContext, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
 import { code33ChipView } from '../fundamentalsExplain.js';
 import { positionPlan } from './positionSizing';
 import { conditionNote } from '../missingCondition';
@@ -129,6 +130,39 @@ describe('the conclusion says why there is no buy', () => {
     // default, the stop and the shares carry 既定条件 (Track F's contract), and nothing reads 参考.
     expect(tiles(card)).toEqual([['買いの範囲', '100.00', '〜105.00'], ['損切り −7.0%', '93.93', '買値 101.00', '既定条件'], ['株数', '88株', 'リスク $625', '既定条件']]);
     expect(quals(card)).toEqual(['既定条件', '既定条件']);
+  });
+
+  // Round 3 R2: a low-activity row names the rule that held under its title (one producer, lowActivityReason, 独自設定), so a
+  // since-gap pin never reads 低変動 beside a 60-session range that is plainly wide. The acquisition and 判定不可 lines are unchanged.
+  it('names why a row is 低変動・監視のみ under the title, through the reason producer', () => {
+    const shapes = [
+      { range60pct: 3.2, lowRange: true },
+      { range60pct: 3.2, lowRange: true, reason: 'range60', adr20pct: 0.4, gap: null },
+      { range60pct: 49.0, lowRange: true, reason: 'since_gap', adr20pct: 0.15, gap: { date: '2026-08-27', pct: 44.4, sessions: 25, rangePct: 0.8 } },
+      { range60pct: 19.2, lowRange: true, reason: 'adr', adr20pct: 0.39, gap: null },
+    ];
+    for (const activity of shapes) {
+      const row = audited({ price_activity: activity });
+      const card = conclusionOf({ row });
+      expect(card.getAttribute('data-gate')).toBe('lowActivity');
+      expect(card.className).toContain('tone-neutral');
+      expect(title(card)).toBe('低変動・監視のみ');
+      const view = candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, DAY);
+      expect(sub(card)).toBe(lowActivityNote(view));
+      expect(sub(card)).toBe(`${lowActivityReason(activity, DAY)}（独自設定）。`);
+      expect(positionPlan(view, {}, { market: OPEN })).toEqual({ blocked: PLAN_BLOCKED.low });
+      cleanup();
+    }
+    expect(lowActivityNote(candidateView({ row: audited({ price_activity: shapes[0] }), assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, DAY))).toBe('60日値幅5%未満（独自設定）。');
+    // An acquisition keeps today's line; a row that is not low activity (or has no price_activity) is never 低変動.
+    const acquired = conclusionOf({ row: audited({ corporate_action: { cash_acquisition: true } }) });
+    expect([acquired.getAttribute('data-gate'), title(acquired), sub(acquired)]).toEqual(['unjudged', '買収合意・対象外', '買い位置を判定できません。']);
+    cleanup();
+    for (const activity of [{ range60pct: 30, lowRange: false, reason: null, adr20pct: null, gap: null }, undefined]) {
+      const card = conclusionOf({ row: audited({ price_activity: activity }) });
+      expect(title(card)).not.toContain('低変動');
+      cleanup();
+    }
   });
 
   it('counts an unmet RS estimate in the one-line title and names it with its value and threshold under it, marking the position and the prices 参考', () => {
@@ -326,6 +360,42 @@ describe('the conclusion says why there is no buy', () => {
     const caution = conclusionOf({ sells: sells('caution') });
     expect([title(caution), caution.className.includes('tone-zone')]).toEqual(['10/2に上抜け・出来高1.60×', true]);
     expect([...caution.querySelectorAll('.brief-tags .brief-chip')].map(node => node.textContent)).toContain('50日線の下（大商いの割れは未確認）');
+  });
+
+  // Round 3 R5: a failed breakout past its 10-session window is one neutral line under the call (failedBreakoutContext, carried
+  // on the sell checks), whatever the call; the call, its tone and line, the meter, the tiles and the chips read as without it.
+  it('dates a failed breakout after its window in one neutral line under the call, and changes nothing else', () => {
+    // Certified bars ending on DAY: under the pivot of 100, a close above it on 2.2x, back under the next session and under
+    // it for the 12 sessions since, the last close 99 (the row's price).
+    const barsOf = closes => closes.map((close, i) => ({ date: new Date(Date.parse(DAY) - (closes.length - 1 - i) * 86400000).toISOString().slice(0, 10),
+      open: close, high: close * 1.005, low: close * 0.995, close, volume: i === 200 ? 22000 : 10000 }));
+    const judged = barsOf([...Array(200).fill(95), 102, 98, 97, 96, 90, 92, 94, 95, 96, 97, 98, 98, 99]);
+    const sells = stockSells({ judged, diagnostics: null, view: { symbol: 'AAA', state: 'wait', pivot: 100, distance: -1 } });
+    const context = failedBreakoutContext(judged, 100);
+    expect(sells.failedContext).toEqual(context);
+    const { failedContext, ...without } = sells;
+    const read = card => ({ gate: card.dataset.gate, tone: card.className, title: title(card), sub: sub(card), tiles: tiles(card), quals: quals(card),
+      meter: meter(card)?.getAttribute('aria-label') ?? null, chips: [...card.querySelectorAll('.brief-tags .brief-chip')].map(node => [node.textContent, node.className]) });
+    for (const market of [OPEN, { label: '50日線割れ（弱含み・独自判定）', cap: 0 }]) {
+      const card = conclusionOf({ row: audited({ price: 99 }), market, sells });
+      const lines = card.querySelectorAll('[data-testid="brief-failed-context"]');
+      expect(lines).toHaveLength(1);
+      expect(lines[0].textContent).toBe(failedContext.text);
+      // Neutral: a plain line of the call (no tone of its own), its two parts kept whole on a phone line.
+      expect([lines[0].tagName, lines[0].className]).toEqual(['P', '']);
+      expect([...lines[0].querySelectorAll('.brief-nowrap')].map(node => node.textContent)).toEqual(failedContext.units);
+      const shown = read(card);
+      cleanup();
+      const plain = conclusionOf({ row: audited({ price: 99 }), market, sells: without });
+      expect(plain.querySelectorAll('[data-testid="brief-failed-context"]')).toHaveLength(0);
+      expect(shown).toEqual(read(plain));
+      cleanup();
+    }
+    // Back under the pivot three sessions ago: the failed-breakout call says it, and there is no line.
+    const recent = barsOf([...Array(200).fill(95), 102, 98, 97, 99]);
+    const hit = conclusionOf({ row: audited({ price: 99 }), sells: stockSells({ judged: recent, diagnostics: null, view: { symbol: 'AAA', state: 'wait', pivot: 100, distance: -1 } }) });
+    expect(hit.dataset.gate).toBe('failedBreakout');
+    expect(hit.querySelectorAll('[data-testid="brief-failed-context"]')).toHaveLength(0);
   });
 
   // Track A's footprint says when the base was already broken out of (I4, requested by Track A).

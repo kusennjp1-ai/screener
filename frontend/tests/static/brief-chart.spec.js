@@ -6,10 +6,14 @@
 // name over candles while a clear spot is near its line's end, no leader through a label, no two labels read as one
 // phrase, no level line through a label uncut).
 import { test, expect } from '@playwright/test';
-import { date, horizontalOverflow, openBrief, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
-import { chartCrossing, crossingNote, priceInRange } from '../../src/static/brief/chartReadout.js';
+import { chartSettled, charts, date, horizontalOverflow, openBrief, ORACLE, ORACLE_CHARTS, ORACLE_ROWS, rowBySymbol, rows, VIEWPORTS } from './brief-fixture.js';
+import { chartCrossing, crossingNote, formatPrice, priceInRange, structuralLowLegend, weeklyBars, weeklyShortNote } from '../../src/static/brief/chartReadout.js';
 import { LEADER_OFF_LEVEL, LEADER_OFF_LEVEL_MIN, MA_SHIFT, MA_TAIL } from '../../src/static/brief/priceChart.js';
 import { BOX_GAP, FIGURE_GAP, FIGURE_STACK, KIN_GAP, LABEL_GAP, PHRASE_GAP } from '../../src/static/brief/chartLabels.js';
+import { PIVOT_DAY_SEPARATOR, PIVOT_DAY_UNKNOWN, QUIET_DAYS_TITLE, QUIET_DAYS_WINDOW, WEEKLY_PATTERN, pivotDayNote, quietDaysText } from '../../src/static/brief/StockVcpCard.jsx';
+import { candidateView } from '../../src/static/brief/briefCandidate.js';
+import { shortDate } from '../../src/static/brief/briefShared.js';
+import { money } from '../../src/static/positionGeometry.js';
 
 const DOCK_TOP = 788; // 844 − the 56px dock at 390×844
 // Measure only after the finite animations finish (the last price's pulse repeats for ever).
@@ -52,6 +56,10 @@ const scaled = charts => { withRsLine(charts); for (const chart of Object.values
 const CARD_CAP = 520, CARD_LINE = CARD_CAP - 12;
 /** Lines of the legend's shown items (their distinct tops). */
 const legendLines = page => page.locator('.brief-legend').evaluate(node => new Set([...node.children].filter(item => !item.hidden && item.getClientRects().length).map(item => Math.round(item.getBoundingClientRect().top))).size);
+/** The text the legend's last-contraction-low item shows (its displayed form only), or null when it is folded or absent. */
+const shownLow = page => page.locator('.brief-legend').evaluate(node => { const item = node.querySelector('[data-key="low"]'); return item && !item.hidden && item.getClientRects().length ? item.innerText.trim() : null; });
+/** The legend's shown text (the items it displays, each as displayed). */
+const shownLegend = page => page.locator('.brief-legend').evaluate(node => [...node.children].filter(item => !item.hidden && item.getClientRects().length).map(item => item.innerText.trim()).join(' '));
 /** Each readout line's horizontal slack: its width less its items and gaps (one row each, so it never wraps). */
 const readoutSlack = page => page.locator('.brief-readout').evaluate(node => [...node.querySelectorAll('.ro-line')].map(line => {
   const items = [...line.children].filter(item => item.getClientRects().length), gap = parseFloat(getComputedStyle(line).columnGap) || 0;
@@ -78,31 +86,35 @@ const collisions = page => page.getByTestId('brief-price-chart').evaluate(chart 
 });
 /** A price as the chart may print it: two decimals, and on an axis tag none from 1,000 up. */
 const priceTexts = value => [2, ...(Math.abs(value) >= 1000 ? [0] : [])].map(digits => value.toLocaleString('en-US', { minimumFractionDigits: digits, maximumFractionDigits: digits }));
+/** The model and period the card's chart drew (PriceChart's props, from React's record of them); null before a chart. */
+const drawnModel = page => page.getByTestId('brief-price-chart').evaluate(chart => {
+  const key = Object.keys(chart).find(name => name.startsWith('__reactFiber$'));
+  let owner = key ? chart[key] : null;
+  while (owner && !(owner.memoizedProps?.model?.bars && Number.isFinite(owner.memoizedProps.period))) owner = owner.return;
+  if (!owner) return null;
+  // The node keeps the fiber that created it, which React may since have swapped for its alternate (the props of an
+  // earlier render): the chart's current fiber is the one of its type in the root's current tree.
+  let root = owner;
+  while (root.return) root = root.return;
+  let current = null;
+  for (const stack = [root.stateNode?.current]; stack.length && !current;) {
+    const fiber = stack.pop();
+    if (fiber) { if (fiber.type === owner.type) current = fiber; else stack.push(fiber.sibling, fiber.child); }
+  }
+  const { model, period } = current?.memoizedProps || {};
+  return model ? { period, model: { bars: model.bars, interval: model.interval, pivot: model.pivot, upper: model.upper, stop: model.stop, auditHigh: model.auditHigh, structuralLow: model.structuralLow, entry: model.entry, r2: model.r2, r3: model.r3 } } : null;
+});
+/** The names the legend gives the last contraction's low (structuralLowLegend's texts without the price), longest first. */
+const lowNames = value => structuralLowLegend(value).map(([, text]) => text.slice(0, -(formatPrice(value).length + 1)));
 /**
  * The levels the chart's model puts in its price range (priceInRange, the renderer's own range): the 52-week high, the
  * pivot, the stop, the last contraction's low, the plan's entry, 2R and 3R, and the zone's top. The model is the one the
  * card drew (PriceChart's props, from React's record of them), never read off the drawing: a level the renderer left out
- * leaves no trace there. Each with its line's selector, its name (none: its line only), its prices (priceTexts) and its
- * own tag's key.
+ * leaves no trace there. Each with its line's selector, its name or names (none: its line only), its prices (priceTexts)
+ * and its own tag's key.
  */
 async function levelsInRange(page) {
-  const drawn = await page.getByTestId('brief-price-chart').evaluate(chart => {
-    const key = Object.keys(chart).find(name => name.startsWith('__reactFiber$'));
-    let owner = key ? chart[key] : null;
-    while (owner && !(owner.memoizedProps?.model?.bars && Number.isFinite(owner.memoizedProps.period))) owner = owner.return;
-    if (!owner) return null;
-    // The node keeps the fiber that created it, which React may since have swapped for its alternate (the props of an
-    // earlier render): the chart's current fiber is the one of its type in the root's current tree.
-    let root = owner;
-    while (root.return) root = root.return;
-    let current = null;
-    for (const stack = [root.stateNode?.current]; stack.length && !current;) {
-      const fiber = stack.pop();
-      if (fiber) { if (fiber.type === owner.type) current = fiber; else stack.push(fiber.sibling, fiber.child); }
-    }
-    const { model, period } = current?.memoizedProps || {};
-    return model ? { period, model: { bars: model.bars, interval: model.interval, pivot: model.pivot, upper: model.upper, stop: model.stop, auditHigh: model.auditHigh, structuralLow: model.structuralLow, entry: model.entry, r2: model.r2, r3: model.r3 } } : null;
-  });
+  const drawn = await drawnModel(page);
   if (!drawn) return null;
   const { model, period } = drawn, finite = Number.isFinite;
   // The entry only apart from the pivot (the renderer draws it then: at the pivot it is the pivot's line).
@@ -111,7 +123,8 @@ async function levelsInRange(page) {
     ['the 52-week high', model.auditHigh, 'line.bc-high52', '52週高', 'high52'],
     ['the pivot', model.pivot, 'line.bc-pivot', 'ピボット', 'pivot'],
     ['the stop', model.stop, 'line.bc-stop', '損切り', 'stop'],
-    ['the last contraction\'s low', model.structuralLow, 'line.bc-structural', '最後の収縮の安値', 'low'],
+    // Below 1024px the legend may give the low a shorter name (the fold's measured fallback), each with its price.
+    ['the last contraction\'s low', model.structuralLow, 'line.bc-structural', finite(model.structuralLow) ? lowNames(model.structuralLow) : null, 'low'],
     ['the entry', entry, 'line.bc-entry', '買値', 'entry'],
     ['2R', model.r2, 'line.bc-r2', '2R', 'r2'],
     ['3R', model.r3, 'line.bc-r3', '3R', 'r3'],
@@ -379,7 +392,12 @@ const labelAudit = async page => { const ranged = await levelsInRange(page); ret
   // the text that names the level (「52週高 123.45」, 「最後の収縮の安値 106.85」), or on the level's own tag beside its name.
   if (!ranged) out.push('the chart\'s model was not found');
   const card = chart.closest('.brief-chartcard');
-  const ownText = node => { const copy = node.cloneNode(true); copy.querySelectorAll('.sr-only').forEach(inner => inner.remove()); return copy.textContent.trim(); };
+  // The text a node shows: the screen readers' own words and the texts it holds but does not display left out.
+  const ownText = node => {
+    const parts = [], walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let text = walker.nextNode(); text; text = walker.nextNode()) if (text.parentElement.getClientRects().length && !text.parentElement.closest('.sr-only')) parts.push(text.textContent);
+    return parts.join('').trim();
+  };
   const carriers = [
     ...texts.map(text => ({ text: text.name, tag: text.node.closest('g.bc-tag')?.dataset.tag ?? null })),
     ...[...card.querySelectorAll('.brief-legend > span, .brief-readout .ro-item')].filter(node => node.getClientRects().length).map(node => ({ text: ownText(node), tag: null })),
@@ -388,7 +406,7 @@ const labelAudit = async page => { const ranged = await levelsInRange(page); ret
     const line = chart.querySelector(level.line);
     if (!line || line.getAttribute('visibility') === 'hidden') out.push(`${level.what} ${level.prices[0]}: in range, its line not drawn`);
     if (!level.name) continue;
-    const named = carriers.filter(carrier => carrier.text.startsWith(level.name));
+    const names = [].concat(level.name), named = carriers.filter(carrier => names.some(name => carrier.text.startsWith(name)));
     const priced = named.some(carrier => level.prices.some(price => carrier.text.includes(price))) || (named.length > 0 && level.tag && carriers.some(carrier => carrier.tag === level.tag && level.prices.includes(carrier.text)));
     if (!priced) out.push(`${level.what} ${level.prices[0]}: in range, ${named.length ? 'its price' : 'its name'} nowhere in the card`);
   }
@@ -453,7 +471,14 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     expect(weeks).toBeLessThan(104);
     await weekly.click();
     await expect(chart).toHaveAttribute('aria-label', new RegExp(`^${target} の週足チャート（.*〜${date}）`));
-    await expect(chart.locator('.bc-notice').first()).toHaveText(new RegExp(`^週足は直近${weeks}週分（\\d{4}/\\d{2}〜）。$`));
+    await chartSettled(page, { redraw: true });
+    // The week count and its first month are a sentence of the 注記 (on the card at 1440), never a notice in the plot.
+    const sentence = weeklyShortNote(weeklyBars(charts[rowBySymbol[target].chart_path.split('/').pop()].bars));
+    expect(sentence).toContain(`の${weeks}週分`);
+    const notes = page.locator(phone ? '.brief-screen-notes' : '.brief-chartcard .brief-chart-notes');
+    await expect(notes).toHaveCount(1);
+    await expect(notes.locator('li').filter({ hasText: sentence })).toHaveCount(1);
+    await expect(chart.locator('svg text').filter({ hasText: /週足は|2年分はありません/ })).toHaveCount(0);
     await expect(page.locator('.brief-legend')).toContainText('10週線');
     expect(errors).toEqual([]);
   });
@@ -538,8 +563,13 @@ test.describe('390×844 phone', () => {
       await expect(page.locator('.bc-rshigh .bc-rstext')).toHaveText('RS新高値');
       expect(tag.x, `${what}: RS新高値 in the axis column`).toBeGreaterThan(plot.x + plot.width - 70);
       expect(tag.x > caption.x + caption.width || tag.y > caption.y + caption.height || tag.y + tag.height < caption.y, `${what}: caption and tag apart`).toBe(true);
-      // The structural low is a 「安値」 tag on a phone, its price in the legend.
-      if (await page.locator('[data-tag="low"]').count()) await expect(page.locator('.brief-legend [data-key="low"]')).toHaveText(/^最後の収縮の安値 [\d,]+\.\d{2}$/);
+      // The structural low is a 「安値」 tag on a phone, its price in the legend: the item shows one of its texts (the full
+      // one, or the shorter one the fold measured to fit), and the screen's 注記 explains the tag when the item is folded.
+      if (await page.locator('[data-tag="low"]').count()) {
+        await expect(page.locator('.brief-legend [data-key="low"]'), `${what}: the low's legend item`).toHaveCount(1);
+        const { model } = await drawnModel(page), shown = await shownLow(page);
+        if (shown !== null) expect(structuralLowLegend(model.structuralLow).map(([, text]) => text), `${what}: the low's legend text`).toContain(shown);
+      }
       await expect(page.locator('.bc-structural-text')).toHaveCount(0);
       // The 52-week high's short form beside its line, or (no spot there) its name over its price on its tag.
       const high = page.locator('.bc-levelnote.bc-high52-text');
@@ -873,6 +903,137 @@ test.describe('the chart card at 320×640', () => {
       expect((await page.locator('.brief-chartcard').boundingBox()).height, `${symbol} ${label}: card height`).toBeLessThanOrEqual(CARD_LINE);
       expect(await legendLines(page), `${symbol} ${label}: legend lines`).toBeLessThanOrEqual(2);
     }
+    expect(errors).toEqual([]);
+  });
+});
+
+// At 375 the readout's second line (出来高, 対ピボット, 高値から) has about 16px to spare (round 3 C5, held: see
+// docs/round3/chart.md): a 対ピボット text wider than 「+0.0%」 by more than that adds a row and takes the card past its
+// 520px cap. ZZPG closes within 0.05% of its pivot: on every period the readout keeps 3 rows and the card its STEP 0 508px.
+test.describe('the readout of a close within 0.05% of the pivot at 375×812', () => {
+  test.use({ ...NARROWEST, viewport: { width: 375, height: 812 }, contextOptions: { reducedMotion: 'reduce' } });
+  test('ZZPG keeps the readout in 3 rows and the card at 508px on every period', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZPG', { oracles: true });
+    await chartSettled(page);
+    for (const label of ['3か月', '6か月', '1年', /^週足/]) {
+      const button = page.getByRole('group', { name: '表示期間' }).getByRole('button', { name: label });
+      await button.click();
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
+      await chartSettled(page, { redraw: true });
+      const what = `ZZPG ${label}`;
+      await expect(page.locator('.brief-readout .ro-item').filter({ hasText: /^対ピボット/ }), `${what}: the distance to the pivot`).toHaveCount(1);
+      expect(await readoutRows(page), `${what}: readout rows`).toBeLessThanOrEqual(3);
+      expect((await page.locator('.brief-chartcard').boundingBox()).height, `${what}: card height`).toBe(508);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 C3: at 320 the last contraction's low keeps its price on the card whenever the plot draws its 「安値」 tag. Beside
+// the RS line's item (ZZRL) its full text fits neither line, so the fold shows the shorter one it measured to fit (never a
+// third line): the legend stays two 16px lines (34px) and the card its STEP 0 height (the oracles: 476 on the daily periods,
+// 492 on 週足; the fixture stock ZZNV: 508 and 492).
+test.describe('the 安値 price in the legend at 320×640', () => {
+  test.use({ ...NARROWEST, contextOptions: { reducedMotion: 'reduce' } });
+  for (const [symbol, oracles, daily] of [['ZZRD', true, 476], ['ZZRL', true, 476], ['ZZNV', false, 508]]) test(`${symbol}: two legend lines, the low's price shown on every period that tags it, the card at its height`, async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${symbol}`, oracles ? { oracles: true } : {});
+    await chartSettled(page);
+    let tagged = 0;
+    for (const [label, height] of [['3か月', daily], ['6か月', daily], ['1年', daily], [/^週足/, 492]]) {
+      const button = page.getByRole('group', { name: '表示期間' }).getByRole('button', { name: label });
+      await button.click();
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
+      await chartSettled(page, { redraw: true });
+      const what = `${symbol} ${label}`;
+      expect(await legendLines(page), `${what}: legend lines`).toBeLessThanOrEqual(2);
+      expect((await page.locator('.brief-legend').boundingBox()).height, `${what}: legend height`).toBe(34);
+      expect((await page.locator('.brief-chartcard').boundingBox()).height, `${what}: card height`).toBe(height);
+      if (!await page.getByTestId('brief-price-chart').locator('g.bc-tag[data-tag="low"]').count()) continue;
+      tagged++;
+      const { model } = await drawnModel(page);
+      expect(await shownLegend(page), `${what}: the low's price in the legend`).toContain(formatPrice(model.structuralLow));
+      expect(structuralLowLegend(model.structuralLow).map(([, text]) => text), `${what}: the low's legend text`).toContain(await shownLow(page));
+    }
+    expect(tagged, `${symbol}: periods with the 「安値」 tag`).toBeGreaterThan(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 C4: the VCP card names the Setup Engine pivot's own bar (pivotBar, H1) and the Setup Engine's quiet days. The
+// expected lines are the card's producers on the oracles' rows and bars (the screen's pivot is candidateView's). ZZHB's
+// weekly pattern labels its pivot week by the Friday (9/25) while the pivot's bar is the Tuesday (9/22); ZZNR's daily
+// pattern is the day before the analysis day; ZZRD's VCP primary publishes no pivot date, so its day is 未確認.
+const oracleRow = symbol => ORACLE_ROWS.find(row => row.symbol === symbol);
+const vcpLines = symbol => {
+  const row = oracleRow(symbol), judged = ORACLE_CHARTS[row.chart_path.split('/').pop()].bars;
+  const view = candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, date);
+  return { row, judged, pivotDay: pivotDayNote({ view, row, judged, date }), quiet: quietDaysText(row, date) };
+};
+for (const [name, device, symbols] of [['390', VIEWPORTS.phone, [ORACLE.heldBreakout, ORACLE.pivotAfterCrossing, ORACLE.ready]], ['1440', VIEWPORTS.desktop, [ORACLE.heldBreakout]]]) test.describe(`the Setup Engine pivot day and quiet days on the VCP card at ${name}`, () => {
+  test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
+  for (const symbol of symbols) test(`${symbol}: the pivot's own day (or 未確認) and the quiet days, as their producers give them`, async ({ page }) => {
+    const { row, judged, pivotDay, quiet } = vcpLines(symbol);
+    // The producers' lines on these oracles are the shapes the fixture builds.
+    if (symbol === ORACLE.heldBreakout) {
+      expect(pivotDay).toContain(shortDate('2026-09-22', date));
+      expect(pivotDay).not.toContain(shortDate(row.se_pivot_date, date));
+      expect(pivotDay.endsWith(WEEKLY_PATTERN)).toBe(true);
+    }
+    if (symbol === ORACLE.pivotAfterCrossing) {
+      expect(pivotDay).not.toBe(PIVOT_DAY_UNKNOWN);
+      expect(pivotDay).toContain(shortDate(judged.at(-2).date, date));
+      expect(pivotDay).not.toContain(WEEKLY_PATTERN);
+    }
+    if (symbol === ORACLE.ready) {
+      expect(pivotDay).toBe(PIVOT_DAY_UNKNOWN);
+      expect(quiet).toContain(` ${row.se_quiet_days_10d}/${QUIET_DAYS_WINDOW}`);
+    }
+    const { errors } = await openBrief(page, `#/brief/stock/${symbol}`, { oracles: true });
+    await chartSettled(page);
+    const card = page.locator('section[aria-labelledby="brief-vcp-title"]');
+    await expect(card.locator('.brief-vcp-pivotday'), `${symbol}: the pivot day`).toHaveText(pivotDay);
+    // With the Setup Engine's base note shown (ZZRD), the day ends that note after the separator; otherwise it is its own note.
+    const base = card.locator('.brief-vcp-engine');
+    await expect(base, `${symbol}: the Setup Engine base note`).toHaveCount(symbol === ORACLE.ready ? 1 : 0);
+    if (symbol === ORACLE.ready) {
+      await expect(base.locator('.brief-vcp-pivotday'), `${symbol}: the day inside the base note`).toHaveCount(1);
+      expect((await base.textContent()).endsWith(`${PIVOT_DAY_SEPARATOR}${pivotDay}`), `${symbol}: base note then the day`).toBe(true);
+    } else await expect(card.locator('p.brief-vcp-pivotday'), `${symbol}: the day as its own note`).toHaveCount(1);
+    const shown = card.locator('.brief-vcp-quiet');
+    if (quiet) {
+      await expect(shown, `${symbol}: the quiet days`).toHaveText(quiet);
+      await expect(shown).toHaveAttribute('title', QUIET_DAYS_TITLE);
+      await expect(card.locator('dt', { hasText: '当日の出来高' }).locator('+ dd')).toContainText(quiet);
+    } else await expect(shown, `${symbol}: no quiet days without the field`).toHaveCount(0);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 C4, the conductor's round-2 decision: with no Setup Engine base note, a pivot day that is only 「ピボットの日 未確認」
+// is a note of its own at 1024px and wider and is not shown below that (the phone stock screen's height budget); a dated day
+// and 未確認 inside the base note show at every width (the cases above). ZZNV is the default fixture's: its screen pivot is a
+// current Setup Engine pivot with no se_pivot_date and no base length or depth, so its day is 未確認 and no base note shows.
+for (const [name, device, wide] of [['390', VIEWPORTS.phone, false], ['1440', VIEWPORTS.desktop, true]]) test.describe(`a 未確認 pivot day with no base note at ${name}`, () => {
+  test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
+  test(`ZZNV: ${wide ? 'the day is a note of its own that reads 未確認' : 'no note of its own that only reads 未確認'}`, async ({ page }) => {
+    const row = rowBySymbol.ZZNV, judged = charts['ZZNV.json'].bars;
+    const view = candidateView({ row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, date);
+    const pivotDay = pivotDayNote({ view, row, judged, date });
+    // The producer gives the 未確認 line on this row (so the count of 0 below is the width's doing, not a missing line).
+    expect(pivotDay).toBe(PIVOT_DAY_UNKNOWN);
+    const { errors } = await openBrief(page, '#/brief/stock/ZZNV');
+    await chartSettled(page);
+    const card = page.locator('section[aria-labelledby="brief-vcp-title"]');
+    // The research detail has arrived: while it loads the card shows no pivot day at all (loading, not 未確認).
+    await expect(card.locator('.brief-footprint'), 'ZZNV: the VCP measured, not loading').not.toHaveText(/読み込み中/);
+    await expect(card.locator('dt', { hasText: 'ピボット' }).locator('+ dd')).toContainText(money(view.pivot));
+    await expect(card.locator('.brief-vcp-engine'), 'ZZNV: no Setup Engine base note').toHaveCount(0);
+    if (wide) {
+      await expect(card.locator('p.brief-vcp-pivotday'), 'ZZNV: the day as its own note').toHaveText(pivotDay);
+      await expect(card.locator('.brief-vcp-pivotday')).toHaveCount(1);
+    } else await expect(card.locator('.brief-vcp-pivotday'), 'ZZNV: no 未確認 note of its own below 1024px').toHaveCount(0);
+    expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
 });

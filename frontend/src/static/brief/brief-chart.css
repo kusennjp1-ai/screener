@@ -83,6 +83,10 @@
 .brief-legend .lg-breakoutglyph.is-zone path { stroke: var(--zone); }
 .brief-legend .lg-heavydown { display: inline-block; width: 8px; height: 10px; margin-right: 4px; vertical-align: -1px; background: var(--ext); }
 .brief-legend > span[hidden] { display: none; }
+/* Below 1024px the last contraction's low holds each of its texts: the full one, or the shorter one the fold measured
+   to fit (data-fit, set by StockChartCard's useTwoLineLegend). */
+.brief-legend .lg-form { display: none; }
+.brief-legend > span:not([data-fit]) > .lg-form-long, .brief-legend > [data-fit="short"] > .lg-form-short, .brief-legend > [data-fit="tag"] > .lg-form-tag { display: inline; }
 .brief-legend i.lg-pivot { border-top-color: var(--zone); }
 .brief-legend i.lg-stop { border-top-color: var(--neg); }
 .brief-legend i.lg-lows { border-top-color: var(--text-2); border-top-style: dotted; }
@@ -179,3 +183,10 @@
 @media (min-width: 1024px) {
   .brief-right[data-more]::after { content: ''; position: sticky; bottom: -24px; z-index: 4; display: block; height: 28px; margin-top: -28px; background: linear-gradient(to bottom, transparent, var(--ground)); pointer-events: none; }
 }
+
+/* Round 3 C4, the VCP card: the Setup Engine pivot's day keeps 「（週足の型）」 whole when its line wraps (320); written in the
+   Setup Engine's base note it is one inline-block, so a wrap moves the whole day to the note's next line. The Setup
+   Engine's quiet days take their own line under the day's volume and its 上抜けの目安 (on the desktop too, so the two notes
+   never run together as one phrase). */
+.brief-vcp-pivotday .brief-vcp-weekly, .brief-vcp-engine .brief-vcp-pivotday { display: inline-block; }
+.brief-dl dd small.brief-vcp-quiet { display: block; margin-left: 0; }

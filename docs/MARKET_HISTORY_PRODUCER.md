@@ -8,12 +8,18 @@
 
 | 項目 | このcheckoutの入力 | 今回の接続範囲・残件 |
 |---|---|---|
-| 市場全体put/call | 収集・保存済み入力なし | 未取得。機関限定値や13Fオプション件数から代用しない |
+| 市場全体put/call | 収集・保存済み入力なし（2026-10-13時点。**2026-11-15訂正**：下の注を参照） | 未取得。機関限定値や13Fオプション件数から代用しない |
 | 新高値・新安値 | `bookMarketEvidence`の現銘柄集合による過去価格計算 | 取得日時・当時の母集団識別子が不足。生成日時を取得日時に見せず、新契約へ転記しない |
-| S&P500/Nasdaq売り抜け | 既存US benchmarkはSPY/IVV。単一snapshotの独自計算あり | `^GSPC`/`^IXIC`の正式履歴ではない。2指数へ転用せず、IBD準拠と呼ばない |
+| S&P500/Nasdaq売り抜け | 既存US benchmarkはSPY/IVV。単一snapshotの独自計算あり（2026-10-13時点。**2026-11-15訂正**：下の注を参照） | `^GSPC`/`^IXIC`の正式履歴ではない。2指数へ転用せず、IBD準拠と呼ばない |
 | 機関保有者増減 | `data/institutional/sec13f.json.gz`と`openfigi.json`の保存済み正式入力 | 今回の対象。銘柄別の報告運用会社CIK数を生成・保存・UI読込みまで接続 |
 | ベースcount | 端末localStorageの手動記録 | 個人の確認記録であり公開市場入力ではない。今回は接続しない |
 | 突破・接近数 | 固定窓上放れproxy、near_pivot、選別履歴あり | 同じ意味ではない。確認済みの別定義と入力が必要 |
+
+**2026-11-15 訂正（round 3 M10、コード読取）**：上の表の put/call と S&P500/Nasdaq の 2 行は 2026-10-13 の checkout の説明で、今は当てはまらない。
+`frontend/tools/collect-market-trends.py` は定期の公開ビルドで毎回呼ばれ（`.github/workflows/static-site.yml:1001`、`--allow-unavailable` 付き。その前の :999 で `restore-market-trend-source.mjs` が公開済みの入力を戻す）、次の 2 つを集める。
+- `^GSPC`／`^IXIC` の日足：Yahoo の chart API（`query1.finance.yahoo.com/v8/finance/chart/<symbol>`、`instrumentType` が `INDEX` のものだけ）から直近 280 営業日。取得 URL と応答の sha256 を provenance に残す。
+- put/call：Cboe の日次統計（`www.cboe.com/markets/us/options/market-statistics/daily?dt=<日>`）の SUM OF ALL PRODUCTS の calls と puts。母集団は `Cboe SUM OF ALL PRODUCTS (not all US options exchanges)` と明記し、市場全体の値とは呼ばない。
+これを `frontend/tools/export-market-trends.mjs` が market-trends の asset（`market-trends-v1`）にする：指数ごとの分配日（`distributionDays.js`）、フォロースルー判定（`followThroughDay.js`）、終値（`closes`、最大 300）、位置（`state`）、そして `put_call.points`。brief の画面は分配日・FTD・終値・位置を読み、put/call は表示しない（市場環境の計画 OD-M8 の既定）。この 13F の経路（下の節）とは別の経路で、ここで述べる 13F の producer・store はこの asset を読み書きしない。
 
 市場系の実配信bundle `frontend/public/static-data` は不在。13F元SEC ZIPとOpenFIGIの完全な原応答も不在。
 保存済み13F集計は26,210証券・45,987観測、報告期2026-03-31/06-30、提出集計期限2026-08-31、取得2026-09-28。
@@ -88,3 +94,27 @@ Playwrightの`market-history-asset.spec.js`は合成gzip/mappingを実CLIで保�
 保存先の正式な公開bindingは外部`publication.json`とそこに記載されたmanifest SHA/transportであり、既存のstore/parent receipt・`_transport`拒否は有効なまま。`markets.US.publication`などの保存文字列は現在のruntimeで正式bindingとして信頼されない。今回の修正は、既存5種類のown marker（publication、publication_receipt、publication_authority、data_manifest_sha256、transport）をmanifest rootと選択US entryの双方で拒否する**曖昧入力への保守的hardening**であり、正式な公開検証を突破する脆弱性の修正という主張ではない。未選択市場を再帰探索する範囲には広げない。
 
 拒否は書込み前とlock取得後の両方で確認し、既存snapshot/catalog/manifest bytesを保つ。修正前はstore36中7件、producer67中12件の新対照が失敗し、修正後はproducer68件（追加の一覧件数矛盾対照を含む）・store36件が成功。UIコード・財務ルール・固定exporter・公開gateは無変更。
+
+## 2026-11-15 追記：長期履歴 collector の任意キー（round 3 M8a〜M8c、出力は off）
+
+この文書のここまでの節は 13F の市場指標履歴（`market-history-producer.mjs`、`market-indicator-snapshot-v1`）の経路。この節は別の経路、`frontend/tools/collect-market-history.py` が書く長期履歴（`market-history-source.json`、`market-long-history-v1`）の `breadth` の行についてである。13F の経路（`market-history-producer.mjs`、`export-market-history.mjs`、`market-history-store.mjs`）は長期履歴を読まず、下のキーにも触れない。
+
+**出力の切り替え**：`EMIT_R3_MARKET_FIELDS = False`（モジュール定数）。round 3 計画の規則 18（UI が先）により、新しいキーを読む UI が Pages に出たことを確かめた後の追従コミットでだけ True にする。
+
+- False の間：`build()` は 5 つの値を計算するが、行にも `indicator_policy` にも書かない。出力は、このキーが無かったときとバイト単位で同じ（docs/round3/market.md の P5 の節に実測）。値は CI ログに 1 行だけ出す（`collect()` が `build(..., log=print)` を渡す）：
+  `Market history r3 fields <最新の営業日> (emission off): rs90Cohort=<n|unavailable> rs90CohortAbove50=… newHighsClose=… breakoutsEarlyJudged=… breakoutsEarlyFailed=…`
+- True のとき：5 つのキーを全行に書き、`indicator_policy` に `rs90_cohort`、`new_highs_close`、`breakout_early` の 3 つの定義を足す（モジュールの `INDICATOR_POLICY` 自体は変えない）。
+
+| キー | 定義 | null になるとき |
+|---|---|---|
+| `rs90Cohort` | 20 営業日前（`LEADER_LOOKBACK_SESSIONS`）に `rs90TemplateCount` の集合（30% テンプレート成立かつ RS推計 90 以上。IBD RS ではない）にいて、今日も観測されている銘柄の数。RS 90 以上は RS 70 以上を含むので、`leaderCohort` の部分集合 | `leaderCohort` と同じ（今日か 20 営業日前が観測率の条件を満たさない） |
+| `rs90CohortAbove50` | そのうち今日 50 日線より上の数 | 同上 |
+| `newHighsClose` | 終値が直前 251 営業日の高値の最大（上抜けの規則の `prior_high`）を上回った数。`newHighs` は同じ窓を当日高値で比べ、`parse_series` は高値 ≥ 終値の足だけを残すので、`newHighsClose ≤ newHighs` | 当日が観測率の条件を満たさない |
+| `breakoutsEarlyJudged` | 5〜9 営業日前の上抜け（既存の `breakouts` と同じ定義）のうち、後の 5 営業日（`BREAKOUT_EARLY_SESSIONS = 5`、独自設定）の安値がすべて観測されたものの数 | 9 営業日前から当日までのどれかの日が観測率の条件を満たさない |
+| `breakoutsEarlyFailed` | そのうち後の 5 営業日の安値が上抜けの終値 ×（1 − 7%）以下に届いた数（−7% は既存の `BREAKOUT_FAILURE_DRAWDOWN`。`held` の補集合と同じ向き） | 同上 |
+
+検査（テストで固定）：`rs90Cohort ≤ leaderCohort`、`rs90CohortAbove50 ≤ rs90Cohort`、`rs90CohortAbove50 ≤ leaderCohortAbove50`、`newHighsClose ≤ newHighs`、`breakoutsEarlyFailed ≤ breakoutsEarlyJudged`。
+
+**読み手**（コード読取、2026-11-15）：`marketLongHistory.js` の `validateLongHistory` は既知のキーを `key in row` で任意に検査し、行をそのまま返す（未知のキーを拒まず、落とさない）。`restore-market-history-source.mjs` と `exportMarketTrends` はこの検査と同じバイトを使う。`audit-market-history.py` は既知のキーだけを独立に再計算し、行のキーを列挙しないので、新しいキーは拒まれないが照合もされない（統合への依頼は docs/round3/market.md の P5 の節）。
+
+**キャッシュ**：`static-site.yml` の長期履歴のキャッシュキーは `hashFiles('frontend/tools/collect-market-history.py')` を含む。このファイルを変える合流のたびに、次の定期実行は長期履歴の全件を 1 回取り直す（このコミットで 1 回、後の True への切り替えでもう 1 回）。取り直しに失敗すると前回の取得分が残り（`updated:false`）、新しいキーは無いままになる。新しいキーを読む UI（round 3 MARKET の P6）は、キーが無いとき「未収録（この公開データには含まれていません）」と出し、0 にも率にもしない（計画の「未収録（旧形式）」は訂正：出力が off の今の公開もキーを持たないため）。

@@ -6,7 +6,7 @@ import { HistoricalBreadth } from '../components/MarketHistoryExplorer';
 import MarketUpdateStatus from '../components/MarketUpdateStatus';
 import useMediaQuery from '../useMediaQuery';
 import { marketUpdateState } from '../marketUpdateState';
-import { bare, sentence, shortDate, trendsStatus } from './briefModel';
+import { bare, ftdPrevious, sentence, shortDate, trendsStatus, FTD_PREVIOUS_NAME } from './briefModel';
 import { Expander, Parts, ScreenNotes } from './briefPrimitives';
 import { jumpTo } from './jump';
 import { barDay } from './briefNav';
@@ -65,8 +65,12 @@ function IndexChart({ closes, name = 'S&P 500', distribution, distributionEnd, f
     : ['confirmed', 'ftd_failed'].includes(ft.state) ? (Array.isArray(ft.events) ? ft.events : []).find(e => e?.type === 'ftd' && e.date === ft.ftd?.date)?.lowDate : null;
   const lowAt = find(rallyLow);
   const at = i => ({ left: `${(100 * x(i) / W).toFixed(2)}%`, top: `${(100 * y(points[i].close) / H).toFixed(2)}%` });
-  // A failed FTD keeps its ◆ but says it failed, so the mark never reads as a standing follow-through.
-  const ftdWord = ftdAt >= 0 ? `FTD ${shortDate(points[ftdAt].date, chartEnd)}${ft.state === 'ftd_failed' && isDay(ft.failedDate) ? `（失敗 ${shortDate(ft.failedDate, chartEnd)}）` : ft.state === 'ftd_failed' ? '（失敗）' : ''}` : null;
+  // A failed FTD keeps its ◆ but says it failed, so the mark never reads as a standing follow-through. A confirmed FTD older
+  // than FTD_RECENT_SESSIONS keeps its ◆ and reads 「前回のFTD」 (ftdPrevious, the フォロースルーデー row's own reading) on its
+  // label and in the aria-label; the legend keeps 「◆ FTD」 (the glyph's meaning), since 「◆ 前回のFTD」 wraps it to a second
+  // line at 320px beside the phone's S&P／Nasdaq switch (measured: +22px).
+  const ftdName = ftdAt >= 0 && ftdPrevious(ft) ? FTD_PREVIOUS_NAME : 'FTD';
+  const ftdWord = ftdAt >= 0 ? `${ftdName} ${shortDate(points[ftdAt].date, chartEnd)}${ft.state === 'ftd_failed' && isDay(ft.failedDate) ? `（失敗 ${shortDate(ft.failedDate, chartEnd)}）` : ft.state === 'ftd_failed' ? '（失敗）' : ''}` : null;
   const words = [ftdWord, lowAt >= 0 ? `反発の安値 ${shortDate(points[lowAt].date, chartEnd)}` : null].filter(Boolean);
   const svg = <svg className="brief-index is-detail" viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img"
     aria-label={`${name} の終値と${lineNames}（${points[0].date}〜${chartEnd}）。有効な分配日 ${marks.length}日${words.length ? `。${words.join('、')}` : ''}。目盛り ${scale(lo)}〜${scale(hi)}`}>
@@ -173,17 +177,22 @@ function EnvRow({ item, groupAsOf, onOpenMetric }) {
  * takes the marks' slot beside the heading, and the marks and date, when there are any, take the question's line under
  * the heading: the head keeps its two lines and the switch adds no row of its own.
  */
-function Group({ group, caveat = null, control = null, children }) {
+function Group({ group, caveat = null, control = null, compact = false, children }) {
   const head = useId();
+  // Both marks on a phone (`compact`, below 1024px) take the section tabs' short form, 「▲ 1」「○ 1」 with the word for
+  // assistive tech (M3: one index at 7 or more beside the other at 5–6): beside the switch the pair and a date keep the
+  // question's one line, and beside the heading the pair sits on one row above the date (brief-market-history.css), so the
+  // head keeps its height. A single mark, and the desktop, keep the words.
+  const pair = group.fired > 0 && group.references > 0, word = text => compact && pair ? <span className="sr-only">{text}</span> : ` ${text}`;
   const meta = (group.fired > 0 || group.references > 0 || group.asOf) ? <>
-    {group.fired > 0 && <span className="brief-env-state"><span aria-hidden="true">▲</span> 注意 {group.fired}</span>}
-    {group.references > 0 && <span className="brief-env-state is-reference"><span aria-hidden="true">○</span> 参考 {group.references}</span>}
+    {group.fired > 0 && <span className="brief-env-state"><span aria-hidden="true">▲</span>{word('注意')} {group.fired}</span>}
+    {group.references > 0 && <span className="brief-env-state is-reference"><span aria-hidden="true">○</span>{word('参考')} {group.references}</span>}
     {group.asOf && <span className="brief-env-asof" id={`${head}-d`}>{group.asOf}時点の値</span>}
   </> : null;
   return <div className={`brief-env-group is-${group.id}`} role="group" aria-labelledby={`brief-env-${group.id}${group.asOf ? ` ${head}-d` : ''}`}>
     <div className={`brief-env-head${control ? ' has-control' : ''}`}>
       <div className="brief-env-title"><h3 id={`brief-env-${group.id}`} tabIndex={-1}>{group.title}</h3>{control && meta ? <span className="brief-env-meta is-inline">{meta}</span> : <span>{group.question}</span>}</div>
-      {control || (meta && <div className="brief-env-meta">{meta}</div>)}
+      {control || (meta && <div className={`brief-env-meta${pair ? ' is-pair' : ''}`}>{meta}</div>)}
     </div>
     {caveat && <p className="brief-env-caveat">{caveat}</p>}
     {group.unavailable ? <p className="brief-missing">{group.unavailable}</p> : children}
@@ -277,9 +286,9 @@ function SectionTabs({ panels, active, onSelect }) {
  * judge side's cause under the basis and two notes) and `studyBlock`, the 「過去の傾向」 fold (at the end of the 指数 panel
  * on a phone, across the card on the desktop).
  */
-export function MarketDetailCard({ market, marketLoading = false, trends, date, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, study = null, studyBlock = null }) {
-  const view = marketCardView({ market, marketLoading, trends, date, study, tab: marketTabParts });
-  const { status, verdict, dating, signals, conflict, groups, chart } = view;
+export function MarketDetailCard({ market, marketLoading = false, trends, date, onOpenMetric, switcher = false, section = null, onSection, history = null, historyUnknown = null, study = null, studyBlock = null, update = null }) {
+  const view = marketCardView({ market, marketLoading, trends, date, study, tab: marketTabParts, update });
+  const { status, verdict, dating, signals, conflict, groups, chart, stockSide } = view;
   const chartStatus = chartStatusOf(view, status);
   // The 指数 panel's S&P／Nasdaq switch (only with the Nasdaq's published closes): one index at a time, its figures, its
   // chart and its marks; the switch replaces what the panel shows and never adds an index's block beside the other.
@@ -340,6 +349,11 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
   const nas = switcher || view.series ? null : view.nasdaqFigures;
   // The judge side's cause (or the FTD upgrade's disclosure): one line after the verdict's basis.
   const cause = verdict.cause ? <p className="brief-verdict-why brief-verdict-cause">{verdict.cause}</p> : null;
+  // The 銘柄側 line (marketTabParts' stockSide, M6): the leaders' three values, for reference, beside a guide they do not move;
+  // never coloured, never a sign. First inside the phone's fold (its closed height is unchanged), under the basis on the desktop.
+  const stockLine = stockSide && (verdict.exposure !== null || verdict.basis) ? <p className="brief-verdict-stock">{stockSide}</p> : null;
+  // The 50日線割れ verdict's 0%: the app's own untested setting, with ^GSPC's study figures for that cell (zeroCapNote, M5).
+  const zeroCap = verdict.exposure !== null && study?.zeroCap ? <p className="brief-exposure-zero">{study.zeroCap}</p> : null;
 
   return <section className="brief-card brief-market is-detail in" style={{ '--i': 1 }} aria-labelledby="brief-market-title">
     {/* On a phone a lag is said in the stamp slot (the rest is in the 注記); the desktop keeps the full line. */}
@@ -348,24 +362,30 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
     {dating.lagNote && !switcher && <p className="brief-note brief-asof brief-lag" role="note">{dating.lagNote}</p>}
     <div className="brief-lead">
       <div className={`brief-verdict is-lead tone-${verdict.tone}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}>
-        <div className="brief-verdict-head"><VerdictMark verdict={verdict} /><div><strong><Label text={verdict.label} /></strong>{verdict.date && <span className="brief-verdict-date numeric">{verdict.date}</span>}<p>{verdict.lead}</p></div></div>
+        {/* A lead that waits for a new publication (verdictWaiting) takes its one-line form on a phone. */}
+        <div className="brief-verdict-head"><VerdictMark verdict={verdict} /><div><strong><Label text={verdict.label} /></strong>{verdict.date && <span className="brief-verdict-date numeric">{verdict.date}</span>}<p>{switcher && verdict.leadShort ? verdict.leadShort : verdict.lead}</p></div></div>
         {/* On a narrow phone the label breaks before の目安, never leaving 「安」 alone. */}
         {verdict.exposure !== null && <div className="brief-exposure"><small><span className="brief-frag">エクスポージャー</span><span className="brief-frag">の目安</span></small><b className="numeric">{verdict.exposure > 0 ? `最大 ${verdict.exposure}%` : '0%'}</b><span className="brief-exposure-track" aria-hidden="true"><i style={{ width: `${verdict.exposure}%` }} /></span></div>}
-        {/* 目安と判定の基準, in the same order on both: the verdict's basis, while the verdict is positive the Nasdaq's
-            own state, then how the guide is set (from MARKET_CAPS). One fold under the meter on a phone, whose summary
-            names the fold and, when it applies, the Nasdaq note's short form; in place on the desktop. */}
+        {/* 目安と判定の基準, in the same order on both: the verdict's basis, the 銘柄側 line (first in the phone's fold), the
+            regime's cause, while the verdict is positive the Nasdaq's own state, then how the guide is set (from MARKET_CAPS)
+            and, under a 50日線割れ verdict, that its 0% is untested. One fold under the meter on a phone, whose summary names
+            the fold and, when it applies, the Nasdaq note's short form; in place on the desktop. */}
         {switcher && (verdict.exposure !== null || verdict.basis)
           ? <Expander id="market-exposure-rule" className="brief-exposure-basis" summary={verdict.nasdaq ? <Parts text={`目安と判定の基準・${verdict.nasdaq.short}`} /> : '目安と判定の基準'}>
+            {stockLine}
             {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
             {cause}
             {verdict.nasdaq && <p>{verdict.nasdaq.long}</p>}
             {verdict.exposure !== null && <p>{exposureRuleText()}</p>}
+            {zeroCap}
           </Expander>
           : <>
             {verdict.basis && <p className="brief-verdict-why">{verdict.basis.text}</p>}
+            {stockLine}
             {cause}
             {verdict.nasdaq && <p className="brief-exposure-nasdaq">{verdict.nasdaq.long}</p>}
             {verdict.exposure !== null && <p className="brief-exposure-basis">{exposureRuleText()}</p>}
+            {zeroCap}
           </>}
       </div>
       {signals && <Signals signals={signals} inline={!switcher} />}
@@ -373,7 +393,7 @@ export function MarketDetailCard({ market, marketLoading = false, trends, date, 
     <StatusAlert view={view} trends={trends} detail />
     {switcher && panels.length > 0 && <div ref={tabsRef} className="brief-switchbar"><SectionTabs panels={panels} active={active} onSelect={select} /></div>}
     <div className="brief-env-groups">
-      {groups.map(group => panel(group.id, <Group key={group.id} group={group} caveat={!switcher && (group.id === 'breadth' || group.id === 'leaders') ? SURVIVORSHIP_NOTE : null} control={group.id === 'index' && switcher ? indexSwitch : null}>
+      {groups.map(group => panel(group.id, <Group key={group.id} group={group} caveat={!switcher && (group.id === 'breadth' || group.id === 'leaders') ? SURVIVORSHIP_NOTE : null} control={group.id === 'index' && switcher ? indexSwitch : null} compact={switcher}>
         {group.id === 'index' && <div className="brief-index-block">
           {!switcher && indexSwitch}
           {summary && <div className="brief-index-stats" role="group" aria-label={shown && shown.key !== 'spx' ? `${shown.name}（^IXICの日足、${shortDate(summary.date, date)}）` : `S&P 500（長期履歴の^GSPC終値、${shortDate(summary.date, date)}）`}>
@@ -462,8 +482,11 @@ export default function MarketScreen({ brief }) {
   // With the Nasdaq's closes the 指数 panel switches between the indices and shows the Nasdaq's figures itself.
   const nasdaqSwitch = status.state === 'ready' && Boolean(indexCloses((trends.data.indices || []).find(item => item?.symbol === '^IXIC')));
   const historyError = !history && typeof trends?.data?.long_history_error === 'string';
-  // The 推移 tab's 「?」 on a phone: no long history to show, or one that is not the latest session's.
-  const update = status.state === 'ready' && history ? marketUpdateState(trends.data).state : null;
+  // The exchange calendar's last closed session (marketUpdateState, on the clock), whenever the series is ready: the verdict's
+  // lead waits for a new publication when it is after the verdict's day (M1e). The 推移 tab's 「?」 on a phone reads the
+  // state only with a long history: none to show, or one that is not the latest session's.
+  const schedule = status.state === 'ready' ? marketUpdateState(trends.data) : null;
+  const update = history ? schedule?.state ?? null : null;
   const historyUnknown = status.state === 'loading' || update === 'current' ? null : update === 'pending' ? '更新待ち' : '未確認';
   const historySection = <section className={wide ? 'brief-card brief-history in' : 'brief-history is-section'} style={wide ? { '--i': 2 } : undefined} aria-labelledby="brief-history-title">
     <div className="brief-step"><h2 id="brief-history-title" tabIndex={-1}>市場環境の推移</h2></div>
@@ -487,7 +510,7 @@ export default function MarketScreen({ brief }) {
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け・米国株` : '日付未確認'}</small><h1>市場</h1></header>
     <MarketDetailCard market={brief.market} marketLoading={brief.marketLoading} trends={trends} date={brief.date} onOpenMetric={openMetric}
       switcher={!wide} section={section} onSection={setSection} history={wide ? null : historySection} historyUnknown={historyUnknown}
-      study={study}
+      study={study} update={schedule ? { target: schedule.target } : null}
       studyBlock={<RegimeContext context={study.regime} wide={wide} nasdaq={study.nasdaqPosition?.state && !nasdaqSwitch ? study.nasdaqFigures : null} />} />
     {wide && historySection}
   </>;

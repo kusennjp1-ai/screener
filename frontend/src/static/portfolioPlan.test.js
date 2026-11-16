@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buildPortfolioPlan, modelMarket, MARKET_CAPS } from './portfolioPlan';
-import { exposureRuleText } from './reference/marketTabStudy.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { exposureRuleText, BACKEND_BREADTH_GUARD, REGIME_NAMES } from './reference/marketTabStudy.js';
 import { marketTone } from './brief/briefModel';
 import { withAuditFixture } from './testAuditFixture';
 
@@ -78,11 +80,36 @@ describe('the exposure guide\'s caps and their disclosure', () => {
   it('prints the disclosure from MARKET_CAPS, so a changed cap changes the words', () => {
     expect(MARKET_CAPS).toEqual({ confirmed_uptrend: 0.5, uptrend_under_pressure: 0.25, otherwise: 0 });
     expect(Object.isFrozen(MARKET_CAPS)).toBe(true);
-    expect(exposureRuleText()).toBe('独自の目安：上昇トレンド 最大50%・上昇に圧力 最大25%・それ以外 0%（S&P 500（SPY）の50日線・200日線と局面判定から。バックエンドの局面判定の目安とは別）。注意サインも指数の過去の傾向も目安を変えません。');
+    expect(exposureRuleText()).toBe('独自の目安：上昇トレンド 最大50%・上昇に圧力 最大25%・それ以外 0%（S&P 500（SPY）の50日線・200日線と局面判定から。バックエンドの局面判定の目安とは別）。注意サインも指数の過去の傾向も目安を変えません。'
+      + '目安は口座資金に対する新規の建玉合計の上限です。水準（50%・25%）は検証していない独自設定です。'
+      + '局面判定（バックエンド）は、スキャン対象のうち200日線より上が40%未満でSPYが1年高値から3%以内のとき「上昇に圧力」に下げることがあり、その日は目安が最大25%になります（独自判定）。発動の有無は公開値に含まれません。');
     expect(exposureRuleText({ ...MARKET_CAPS, confirmed_uptrend: 0.4 })).toContain('上昇トレンド 最大40%・上昇に圧力 最大25%');
     expect(exposureRuleText({ ...MARKET_CAPS, uptrend_under_pressure: 0 })).toContain('上昇に圧力 0%・それ以外 0%');
     expect(exposureRuleText({ ...MARKET_CAPS, otherwise: 0.1 })).toContain('それ以外 最大10%');
     expect(exposureRuleText({ ...MARKET_CAPS, confirmed_uptrend: 0.4 })).not.toBe(exposureRuleText());
+  });
+
+  it('says what a cap limits and that its levels are untested, every level from the caps (M1d)', () => {
+    expect(exposureRuleText()).toContain('目安は口座資金に対する新規の建玉合計の上限です。');
+    expect(exposureRuleText({ ...MARKET_CAPS, confirmed_uptrend: 0.4 })).toContain('水準（40%・25%）は検証していない独自設定です。');
+    expect(exposureRuleText({ ...MARKET_CAPS, uptrend_under_pressure: 0.3 })).toContain('水準（50%・30%）は');
+    // A level that is closed (0%) is no level of its own; with none open the sentence still says the levels are untested.
+    expect(exposureRuleText({ ...MARKET_CAPS, uptrend_under_pressure: 0 })).toContain('水準（50%）は');
+    expect(exposureRuleText({ confirmed_uptrend: 0, uptrend_under_pressure: 0, otherwise: 0 })).toContain('水準は検証していない独自設定です。');
+    // No replayed outcome is printed beside the levels.
+    expect(exposureRuleText()).not.toMatch(/\d+%対|対\s*\d+%|再生/);
+  });
+
+  it('discloses the backend\'s breadth guard from its own constants, with the guide it lowers to (M1b)', () => {
+    // The mirror is the backend's (market_regime.py BREADTH_ROT_PCT and BREADTH_DIVERGENCE_NEAR_HIGH): read, never retyped.
+    const backend = readFileSync(resolve('../backend/app/services/market_regime.py'), 'utf8');
+    const rot = Number(/^BREADTH_ROT_PCT = ([\d.]+)/m.exec(backend)?.[1]), near = Number(/^BREADTH_DIVERGENCE_NEAR_HIGH = ([\d.]+)/m.exec(backend)?.[1]);
+    expect(BACKEND_BREADTH_GUARD).toEqual({ above200Below: rot, nearHighPercent: Math.round(near * 100) });
+    expect(Object.isFrozen(BACKEND_BREADTH_GUARD)).toBe(true);
+    expect(exposureRuleText()).toContain(`200日線より上が${rot}%未満でSPYが1年高値から${Math.round(near * 100)}%以内のとき「${REGIME_NAMES.uptrend_under_pressure}」に下げることがあり、その日は目安が最大25%になります（独自判定）。発動の有無は公開値に含まれません。`);
+    expect(exposureRuleText({ ...MARKET_CAPS, uptrend_under_pressure: 0.2 })).toContain('その日は目安が最大20%になります');
+    // The signs-and-study sentence still comes first, unchanged.
+    expect(exposureRuleText().indexOf('注意サインも指数の過去の傾向も目安を変えません。')).toBeLessThan(exposureRuleText().indexOf('局面判定（バックエンド）'));
   });
 
   it('caps every known state that is not an uptrend at MARKET_CAPS.otherwise, the disclosure\'s 「それ以外」; an unknown market stays 0', () => {
@@ -109,8 +136,8 @@ describe('the exposure guide\'s caps and their disclosure', () => {
     expect(Object.fromEntries(Object.entries(cases).map(([name, rows]) => [name, verdict(modelMarket(rows))]))).toEqual({
       confirmed: { label: '上昇トレンド（独自判定）', cap: 0.5 },
       pressure: { label: '上昇に圧力（独自判定）', cap: 0.25 },
-      correction: { label: '新規購入を抑制', cap: 0 },
-      below200: { label: '長期トレンド警戒', cap: 0 },
+      correction: { label: '新規購入を抑制（独自判定）', cap: 0 },
+      below200: { label: '長期トレンド警戒（独自判定）', cap: 0 },
       below50: { label: '50日線割れ（弱含み・独自判定）', cap: 0 },
       unknown50: { label: '市場未確認', cap: 0, state: 'unknown' },
       noRegime: { label: '市場未確認', cap: 0, state: 'unknown' },
@@ -137,6 +164,6 @@ describe('the FTD-upgraded uptrend (MK1)', () => {
   });
   it('leaves the label and the cap as they were: the guide stays 0% under either line', () => {
     expect(modelMarket([fixture('W', { market_above_50dma: false })])).toMatchObject({ label: '50日線割れ（弱含み・独自判定）', cap: 0 });
-    expect(modelMarket([fixture('L', { market_above_200dma: false })])).toMatchObject({ label: '長期トレンド警戒', cap: 0 });
+    expect(modelMarket([fixture('L', { market_above_200dma: false })])).toMatchObject({ label: '長期トレンド警戒（独自判定）', cap: 0 });
   });
 });

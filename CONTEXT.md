@@ -147,11 +147,11 @@ The qualifiers on the stock's level tiles: 参考 when the stock is no buy candi
 ### Round 2 terms
 
 **ブレイク失敗（独自判定）**:
-A breakout of today's pivot on 1.4× or more of the prior 50-day volume, within `failedBreakoutSessions` (10, 独自判定) sessions of the breakout itself (a run of touches may begin earlier), followed by a last close back under the pivot. A close at the pivot's cents is a touch (ピボット到達), not a breakout: the breakout is the first later close above the pivot, on that day's volume. It is a broken setup: the conclusion is neutral, the plan is 参考, the watch tile counts it, its headline leads the watch row and a watched focus row carries the same 崩れ chip (▲, the app's caution mark: see ▲ / ▼).
+A breakout of today's pivot on 1.4× or more of the prior 50-day volume, within `failedBreakoutSessions` (10, 独自判定) sessions of the breakout itself (a run of touches may begin earlier), followed by a last close back under the pivot. A close at the pivot's cents is a touch (ピボット到達), not a breakout: the breakout is the first later close above the pivot, on that day's volume. It is a broken setup: the conclusion is neutral, the plan is 参考, the watch tile counts it, its headline leads the watch row and a watched focus row carries the same 崩れ chip (▲, the app's caution mark: see ▲ / ▼). From round 3 only breakouts from the pivot's own bar count (**上抜けの下限**); after the window the stock screen may add the neutral **ブレイク失敗後** line, which is no check.
 _Avoid_: 失敗ブレイク, だまし
 
 **上抜けからN営業日**:
-The sessions since the latest close that broke above today's pivot (`lastPivotCrossing`, up to 60 sessions back; after a touch at the pivot's cents, the first close above it), named in the stock conclusion as 「M/Dに上抜け・N営業日前」, or 「ピボット到達からN営業日」 (wait, the touch's date in the line under it) when a touch was never followed by a close above. 「上抜けから60営業日超」 when every close in that window is at or above the pivot. Without a dated crossing the stock conclusion reads 「上抜け日 未確認」 and is never green. The rows have no bars (owner decision §9-11) and compare the day's two closes with the pivot in whole cents, as the conclusion and the chart do: a row whose previous close was already above the pivot's cents keeps its plain 「● 買いゾーン +x%」, green while the market is open and the base is current, and ranks below the day's events. A previous close at the pivot's cents is a touch only when the closes before it were below the pivot, and the rows cannot see those closes: it may as well be a pullback onto the pivot after an earlier breakout. So a close above the pivot's cents after one at them reads 「上抜け日 未確認」 on the rows (wait, never green or dated; 「うち上抜け」 leaves it out and the 上抜け filter counts it as 未確認), and a second close at the pivot's cents reads 「ピボットと同値のまま」 (wait). The conclusion tells them apart from certified bars: after a touch from below, the first close above it is that day's breakout (「M/Dに上抜け・出来高N×」 on the day's volume) or 「ピボット到達からN営業日」 while it stays on the cents; after an earlier close above the pivot, the breakout is dated from that close, on its volume and under the 停滞 / 押し戻し rule, as the chart's arrow marks it. The chart's arrow turns grey once the breakout is older than `staleBreakoutSessions`. Recording in the published audit whether the run at the pivot's cents began from below would let the rows date it too; that is a transport change for the owner.
+The sessions since the latest close that broke above today's pivot (`lastPivotCrossing`, up to 60 sessions back and, from round 3, no earlier than the pivot's own bar, **上抜けの下限**; after a touch at the pivot's cents, the first close above it), named in the stock conclusion as 「M/Dに上抜け・N営業日前」, or 「ピボット到達からN営業日」 (wait, the touch's date in the line under it) when a touch was never followed by a close above. 「上抜けから60営業日超」 when every close in that window is at or above the pivot. Without a dated crossing the stock conclusion reads 「上抜け日 未確認」 and is never green. The rows have no bars (owner decision §9-11) and compare the day's two closes with the pivot in whole cents, as the conclusion and the chart do: a row whose previous close was already above the pivot's cents keeps its plain 「● 買いゾーン +x%」, green while the market is open and the base is current, and ranks below the day's events. A previous close at the pivot's cents is a touch only when the closes before it were below the pivot, and the rows cannot see those closes: it may as well be a pullback onto the pivot after an earlier breakout. So a close above the pivot's cents after one at them reads 「上抜け日 未確認」 on the rows (wait, never green or dated; 「うち上抜け」 leaves it out and the 上抜け filter counts it as 未確認), and a second close at the pivot's cents reads 「ピボットと同値のまま」 (wait). The conclusion tells them apart from certified bars: after a touch from below, the first close above it is that day's breakout (「M/Dに上抜け・出来高N×」 on the day's volume) or 「ピボット到達からN営業日」 while it stays on the cents; after an earlier close above the pivot, the breakout is dated from that close, on its volume and under the 停滞 / 押し戻し rule, as the chart's arrow marks it. The chart's arrow turns grey once the breakout is older than `staleBreakoutSessions`. Recording in the published audit whether the run at the pivot's cents began from below would let the rows date it too; that is a transport change for the owner.
 
 **ピボット到達 / ピボットと同値のまま**:
 A close at the pivot's cents after a close under it: 「M/Dにピボット到達」, green on that day only, as a stock arriving at its buy point. A later close at the pivot's cents is still a touch only while every close since the arrival stayed on the cents; the rows cannot see that far back, so they say what they see (「ピボットと同値のまま」, wait). The conclusion reads the bars: 「ピボット到達からN営業日」 (緑はピボット到達の当日のみ, 独自判定) while no close has broken out since the touch, or the earlier breakout's date when a close went above the pivot before this pullback onto it. Without certified bars it claims neither (ピボットに届いた日を確認できない).
@@ -160,7 +160,7 @@ A close at the pivot's cents after a close under it: 「M/Dにピボット到達
 The distance from the pivot to one decimal: 「±0.0%」 only at the pivot's cents (whichever side of the cent the float noise in a published pivot falls), 「+0.1%未満」 or 「−0.1%未満」 for a cent or more over or under the pivot that rounds to 0.0%; never 「+0.0%」 or 「−0.0%」. A close at the pivot's cents that the shared position rule still puts just under the pivot reads 「ピボット接近（ピボットと同値）」, never 「あと0.1%未満」.
 
 **▲ / ▼**:
-▲ is the app's amber caution mark wherever it appears: 買いゾーン超過, 下落日の大商い, 分配日, the market tab's 注意, and 崩れ / ブレイク失敗; the words beside it always name which. On the price chart ▼ is 上昇の加速 (a holder's sell-into-strength sign). On the sector table ▲N and ▼N are a rank that rose or fell N places, not a caution. The glyphs are hidden from assistive tech; the text names the event.
+▲ is the app's amber caution mark wherever it appears: 買いゾーン超過, 下落日の大商い, 分配日 (from round 3 only at 7 days or more; 5–6 take the neutral ○, see **分配日の参考／注意**), the market tab's 注意, and 崩れ / ブレイク失敗; the words beside it always name which. On the price chart ▼ is 上昇の加速 (a holder's sell-into-strength sign). On the sector table ▲N and ▼N are a rank that rose or fell N places, not a caution. The glyphs are hidden from assistive tech; the text names the event.
 
 **停滞 / 押し戻し**:
 A stock still in the buy zone `staleBreakoutSessions` (10, 独自判定) sessions after its crossing turns to wait: 停滞 when no certified close since the crossing went above the zone's top, 押し戻し when one did and the stock came back. New buying waits for the next pivot (次のピボット待ち).
@@ -187,7 +187,7 @@ The publication is older than the last closed NYSE session past `FRESHNESS_GRACE
 A trend-template row with N conditions that could not be judged and none failed. Never 「あと0条件」; with failures too it reads 「未達N・未確認M」.
 
 **未収録**:
-A field this publication does not carry (an older publication, before the field existed). Distinct from 未確認, which is a field that was published but could not be judged.
+A field this publication does not carry (an older publication, before the field existed). Distinct from 未確認, which is a field that was published but could not be judged. The market tab's long form is 「未収録（この公開データには含まれていません）」 (`KEY_ABSENT`, marketTabGroups.js), used both for an older publication and for the round-3 market fields while their emission is off (`EMIT_R3_MARKET_FIELDS`); never 0 or a rate.
 
 **未検証の足**:
 Bars not certified for the analysis date. OHLC and moving averages still draw; the day change and volume ratio read 「（未検証）」, and nothing that judges the stock (pivot ratio, crossing mark, ADR, RS lead) is drawn from them.
@@ -196,7 +196,7 @@ Bars not certified for the analysis date. OHLC and moving averages still draw; t
 Today's 地合い tile suffix and the verdict's sub-line when the guide is open while the Nasdaq is in correction, a rally attempt or a failed FTD. The verdict, its tone and the caps are judged on SPY only (判定はSPYのみ).
 
 **FTD確認済み**:
-The 地合い tile suffix when the guide is 0% while the backend regime is an FTD-upgraded uptrend (`ftdUpgraded`); the basis line says why the guide stays 0%.
+The 地合い tile suffix when the guide is 0% while the backend regime is an FTD-upgraded uptrend (`ftdUpgraded`); the basis line says why the guide stays 0%. From round 3 it shows only when the same day's ^GSPC record (**同日の記録**) is `confirmed`; one session behind, the tile has no suffix.
 
 **参考（市場の注意サイン）**:
 A market check marked 〔参考〕 is counted apart from the 注意 signs (「▲ 注意サイン N件・参考 M件」), takes a neutral ○ and never sets a tab's ▲.
@@ -209,6 +209,117 @@ A fiscal quarter named by its year and end month (YY-MM). It is a period, not a 
 
 **RS線 新高値**:
 The RS line (never RS推計) at a new high on the analysis date. The rows read only the published `rs_line_high` dated for that day (`publishedRsLineHigh`): absent is 未収録 there, a published null is 未確認. The stock view reads the same field and, when the row has none for that day (an older publication, such as a UI-only republish, or one dated for another day), falls back to `rsLineNewHigh` on the bars certified for that day; a published null stays 未確認.
+
+### Round 3 terms
+
+Fundamentals and SEC (track DATA):
+
+**code33_parts（Code 33 の3つの部分）**:
+The coverage report's count of Code 33's three parts on listed rows: EPS acceleration, sales acceleration and margin improvement (`code33_parts.{eps_acceleration, sales_acceleration, margin_improvement}`, report-data-coverage.mjs), with `eps_acceleration_pass_symbols` (the first 25 passing listed symbols, for a hand check against filings). EPS acceleration (加速) is a rise in the quarterly EPS growth rate, not the EPS ≥ 25% floor (that is **eps_floor_25**). Code 33 stays a bonus, never a gate.
+_Avoid_: the EPS condition, the 25% count
+
+**eps_floor_25**:
+The card's 「EPS ≥25%」 chip counted over listed rows with a current SEC report, for the latest 2 and 4 quarters (`eps_floor_25.{last2, last4}`, read from bookFinancialEvidence's `epsFloor[2|4].at25`; the report defines no threshold of its own).
+
+**q4_only**:
+`round2.eps_unknown.q4_only`: listed rows whose EPS acceleration is unknown and whose listed causes are all fiscal-Q4 causes (`Q4_EPS_CAUSES`: `fiscal_q4_untagged`, `latest_row_fiscal_q4_without_eps`). An upper bound: causes `epsUnknownCauses` does not list (no base, an ambiguous base, a non-Q4 row not reported) can hide behind a Q4 cause. A row with no listed cause is not counted.
+
+**setup_ready_liquidity**:
+setup_ready split by the brief's own liquidity rule (`briefLiquid`, `setupReadyLiquidity`, report-data-coverage.mjs: `filterRanked`'s liquidOnly, the call useBriefData makes; no price or dollar-volume line is copied). Measurement only. A row without a finite price or ADV counts as illiquid and in `missing_price_or_adv`; when no listed row has both, the split is null (未計測), never "all illiquid".
+
+**Q4算出**:
+The one term for a fiscal Q4 derived as the 10-K year less three quarters (`Q4_DERIVED_MARK` 「（Q4算出）」, `Q4_DERIVED_SOURCE_NOTE`, `Q4_DERIVED_LEGEND`, fundamentalsExplain.js), on sales and margin only, never EPS (`q4DerivedRate`). The quarter table's axis cell reads 「算出」: on a phone the source line keys it whenever a row in the window is derived (`q4DerivedSourceNote`); on the desktop the legend keys it, and the source line names it only when a tile is derived.
+
+**参考 Q4 EPS / 独自計算・判定に使わない**:
+A 独自計算・参考 fiscal-Q4 EPS for filers that report the fourth quarter only in the 10-K: Q4 net income over Q4 diluted weighted shares (method `q4-ni-over-q4-diluted-shares-v1`, `Q4_REFERENCE_METHOD`, sec-financials.py; its bands and checks are 独自設定). 「独自計算・判定に使わない」 names a value that enters no verdict, score, filter or sort; Code 33 stays 未確認 for that quarter, and the value is never counted (OD1). In round 3 only the producer ships: it logs `SEC q4 reference accuracy <date>` and writes the file-level `coverage.q4_reference` aggregate, and `Q4_EPS_REFERENCE_EMIT = False`, so no record carries `q4EpsReference`. Its display (admission of the key, the card's 参考 line and dashed marks) was held at integration (commit cc326e9a), so today's admission refuses a record with the key. Emission waits until the revert of that hold is live on Pages and the owner has seen the accuracy line.
+
+**SEC payload cik**:
+The run's log-only count of how each received companyfacts payload wrote its `cik`, by outcome (`cik_kind`: int, digits, missing, null, text, bool, not_object or another JSON type; the `SEC payload cik <date>` log line and the step summary). Never in a record. `payload_cik` reads a non-negative int or 1–10 ASCII digits as the CIK; anything else, a missing or null cik included, still fails the identity check (PayloadMismatch, OD13).
+
+Readiness and the verdict (track R):
+
+**ピボットの足 / 上抜けの下限**:
+ピボットの足 is the daily bar that made the Setup Engine pivot (`pivotBar`, pivotBar.js): the day's bar for a daily pattern; for a weekly pattern the last bar in `se_pivot_date`'s week whose high equals the pivot in whole cents; null when there is none, never guessed. 上抜けの下限 (the crossing floor, `crossingFloor` = `pivotBar(bars, row)?.index`, breakoutHistory.js) is that bar itself: the failed-breakout check, the conclusion's crossing, the chart's arrow, the watch rows and Today count crossings only from it. A close on the pivot's bar cannot clear its own high, so it is at most a touch, and the breakout is dated on a later bar. With no floor (no `se_pivot_date`, no matching bar, a vcp pattern) every reader is unbounded as before. The stock screen reads `se_pivot_date` from the index row only (useBriefData.js drops a detail-only one), so on a publication whose index lacks it every screen is unbounded alike. A clear check whose pivot bar is inside the window reads 「このピボット（M/D）以降の上抜けなし」 (`noBreakoutSincePivot`).
+
+**低変動・監視のみ（3つの規則）**:
+A row whose `price_activity.lowRange` holds (priceActivity.js, written by the exporter). The first rule that holds is its `reason`: `range60`, the 60-session high-to-low range under `LOW_RANGE_PERCENT` (5%, the brief's rule from before round 3); `since_gap`, ギャップ後の低変動: the largest one-day close-to-close move in 60 sessions is `GAP_MOVE_PERCENT` (10%) or more and the `SINCE_GAP_MIN_SESSIONS` (15) or more sessions after it range under `SINCE_GAP_RANGE_PERCENT` (3%); `adr`, ADR20 (the mean of high ÷ low − 1 over `ACTIVITY_ADR_SESSIONS`, 20) under `LOW_ADR_PERCENT` (0.5%). Those last four are 独自設定 (OD6). A missing value, or fewer than 60 bars, never makes a row low. The conclusion and entry readiness print the rule with 「（独自設定）」 (`lowActivityReason`, `lowActivityNote`), the plan is blocked (`PLAN_BLOCKED.low`) and flagged rows sort last. The since-gap text calls the move 窓開け although it is close to close, so a one-day run without an opening gap is also called 窓開け.
+
+**前の土台**:
+A contraction base that broke out (`base.brokeOut`, `base.breakoutDate`) before the pivot's bar. Its low is never this pivot's structural stop: the stop reads 「前の土台（M/Dに上抜け済み）」 (`previousBaseReason`, positionSizing.js), with no fixed percentage in its place.
+
+**price_pinned**:
+The Setup Engine readiness failed check for the same three low-activity rules, ported to Python with the same constants (readiness.py `price_pinned`; config.py, pinned to priceActivity.js by test_setup_engine_parameters.py). The screener passes it with the caller's failed checks, so it fails `derived_ready`; it is not an 11th gate, and the ten gates keep their names and order.
+
+**contraction_unconfirmed / pivot_already_crossed / pivot_below_base_high**:
+Three Setup Engine diagnostics in `explain.diagnostics` only (readiness.py `setup_diagnostics`): never in `failed_checks`, never readiness, and present only when found (a missing value is no finding). `contraction_unconfirmed`: the brief's automatic contraction measurement, ported, finds no valid run (the chart's 「収縮は未確認」). It still ports the measurement from before the pivot-breakout cut (**上抜けの足**), so on cut rows it can disagree with the brief. `pivot_already_crossed`: a close after the pivot's bar more than `PIVOT_ALREADY_CROSSED_PCT` (3%, 独自設定) above the pivot. `pivot_below_base_high`: the pivot more than `PIVOT_BELOW_BASE_HIGH_PCT` (5%, 独自設定) under the base's high; a record, never a verdict.
+
+**ゲート8（ステージ）**:
+Setup Engine readiness gate 8 reads the stage the Minervini scanner publishes (`_published_stage`, setup_engine_screener.py, through the scanner's own `WeinsteinstageAnalyzer.determine_stage`) and requires stage 2; None (a missing moving average) passes. The payload's `stage` (the index's `se_stage`) is the same value. It is readiness input only: the trend template stays the 8 published conditions, and stage is never a 9th veto.
+
+**ブレイク失敗後**:
+The stock screen's neutral, dated line after a failed breakout's window: 「ブレイク失敗後（M/D上抜け→M/D割れ・その後の安値 −x.x%）」 (`failedBreakoutContext`, briefSell.js), in the conclusion and outside the sell card's fold. It shows only when the check is clear, the last close is under the pivot's cents, and the first close back under the pivot came within `failedBreakoutSessions` (10) of a breakout on 1.40× volume or more; the low is the lowest low since that close, from the pivot. It is no check: no chip, mark, tile, count or plan change, and no new threshold (OD9).
+
+**上抜けの足（ピボットの上抜け）**:
+The first bar after the pivot's bar whose close is above `se_pivot_price` in whole cents (`pivotBreakout(bars, row)`, bookTechnicalEvidence.js; 独自判定, no threshold); a close at the cents is a touch. Its state is `unknown` without a pivot bar, `none` before any close above, or `cut` with `measuredThrough` the day before. Contractions are measured only on the bars before it (`vcp.pivotCut`; `BOOK_TECHNICAL_VERSION` v3, so the screen re-measures published v2 evidence). It is the pivot's breakout, not the base's: `base.breakoutDate` (the first high above the base's high) keeps its meaning. The cut reads the same row as the crossing floor, so it is off on a publication whose index lacks `se_pivot_date`.
+
+**上抜け後の値動き**:
+Price action from the pivot's breakout on. It is never a contraction (T), and the structural stop never takes a leg that ends on or after the breakout (`structuralStop`'s `breakoutDate`); when every leg is excluded the stop is unknown with `POST_BREAKOUT_LEGS_REASON` 「収縮はすべてピボットの上抜けの後の値動き」.
+
+**割り込み済みの収縮の安値**:
+A chosen last contraction low that a later certified bar's low has traded under. It is never a structural stop (独自判定): the stop is unknown with `UNDERCUT_LOW_REASON` 「最後の収縮の安値をその後の日足が割り込み済み」, with no low, stop or percent, and no fallback to a fixed percentage or an earlier leg. The rule does not read `se_pivot_date`.
+
+The market (track MARKET):
+
+**前回のFTD**:
+The app's own index FTD record confirmed more than `FTD_RECENT_SESSIONS` (25) sessions ago; never read as a current FTD. The word lives only in `FTD_PREVIOUS_NAME` (briefEnvironment.js), which the FTD row, the ◆, the opened row and both cause lines read.
+
+**反発n日目**:
+Today's 地合い tile suffix while the guide is 0% and the same day's ^GSPC or ^IXIC record is a rally attempt; n is the attempt's day (`MARKET_TILE_SUFFIX.rally`, briefEnvironment.js).
+
+**分配日の参考／注意**:
+Effective distribution days graded in two steps (marketTabModel.js, 独自設定): 5–6 (`DISTRIBUTION_REFERENCE`) are 参考 (○, not counted among the 注意 signs), 7 or more (`DISTRIBUTION_CAUTION`) are 注意 (▲).
+
+**銘柄側（参考）**:
+The reference line beside the market verdict (`STOCK_SIDE_HEAD` 「銘柄側（参考・目安は変えません）」, marketTabGroups.js): TT達成数 and its value a month earlier, the **上抜け維持（確定分）** rate and count, and the leaders' health and count. It does not move the guide and is no 注意 sign.
+
+**上抜け維持（確定分）**:
+Of the 52-week-high breakouts 10–29 sessions ago, the share that did not reach −7% in the next 10 sessions (`BREAKOUT_HOLD_NAME`, briefEnvironment.js; the long-run explorer uses the same name). Formerly ブレイクアウト成功率. A 52-week-high breakout, not a base pivot's (`BREAKOUT_NOT_PIVOT`).
+_Avoid_: ブレイクアウトの成功率
+
+**早期（上抜け後5営業日）**:
+The breakouts 5–9 sessions ago, read on the lows of the following `BREAKOUT_EARLY_SESSIONS` (5) sessions: the share that reached −7% (独自設定). Its window never overlaps the 確定分 window.
+
+**ストーリング日（独自近似）**:
+An approximation of the backend's conditions: an up day of +0.2% or less on higher volume, closing in the lower half of the day's range, within 3% of the 25-day closing high, expiring after 25 sessions (`STALLING_METHOD`, export-market-trends.mjs). IBD's definition is not public. Counted apart, never in the distribution count. Unlike the backend it does not drop a day after a later close 5% above it; that is settled before emission.
+
+**うち終値でも更新**:
+Of the 52-week new highs, the stocks whose close also cleared the prior 251-session high (`newHighsClose`).
+
+**RS推計90以上（コホート）**:
+The stocks that met the trend template with RS推計 of 90 or more 20 sessions ago and are still observed (`rs90Cohort`), and the share of them above their 50-day line (`rs90CohortAbove50`). RS推計, never IBD RS.
+
+**現在の下落（FTD 後）**:
+After a confirmed FTD, the fall from the high to the close of the lowest day since (followThroughDay's `declinePct`); 6% is where the app judges a correction (独自設定).
+
+**+3%以上の上昇日**:
+The count of days up 3% or more on the prior close (〔参考〕, not a buy signal; the heading is `BIG_UP_HEAD` 「+3%以上の上昇日（独自設定）」, marketTabStudy.js). The +3% is Minervini's figure; how the app uses it is 独自設定.
+
+**同日の記録**:
+The index's judged record dated the analysis day (`sameDayFollowThrough`, briefEnvironment.js): a ready series, an available record, and `asOf` equal to the asset's and the manifest's date.
+
+**更新待ちの判定**:
+The market tab's verdict sentence once a later session has closed and no publication has come (`verdictWaiting`, marketTabModel.js): 「M/D引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）」. No grace period: it shows from the next session's close until the publication lands, while the bar's stale warning waits `FRESHNESS_GRACE_HOURS`.
+
+**0% の注記**:
+The sentence saying that the 50日線割れ verdict's 0% is 独自設定 and untested.
+
+The chart and the VCP card (track CHART):
+
+**ピボットの日**:
+The VCP card's line naming the pivot's own bar, found by `pivotBar` on certified bars: 「ピボット $X＝M/Dの高値（SE）」, with 「（週足の型）」 for a weekly pattern (`pivotDayNote`, StockVcpCard.jsx). Shown only when the screen's pivot is the current Setup Engine pivot in whole cents. 「ピボットの日 未確認」 (`PIVOT_DAY_UNKNOWN`) when there is no bar; `se_pivot_date` itself is never printed. The day ends the base note when one shows; a standalone 未確認 shows only at 1024px and wider. It reads the index row, so a publication whose index lacks `se_pivot_date` reads 未確認.
+
+**静かな日**:
+「静かな日 N/10日（SE）」 (`quietDaysText`, StockVcpCard.jsx): the Setup Engine's `quiet_days_10d` over its own 10 sessions (`QUIET_DAYS_WINDOW`, the field's window, not a threshold of the brief's), days whose volume is under 0.8× its 50-day average and whose true range is under ATR14. A real 0 prints 0/10; a missing or invalid value prints nothing.
 
 ## Relationships
 

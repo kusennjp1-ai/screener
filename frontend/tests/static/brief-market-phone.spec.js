@@ -3,6 +3,12 @@
 import { test, expect } from '@playwright/test';
 import { date, marketTrends, openBrief, sessions, VIEWPORTS, horizontalOverflow } from './brief-fixture.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
+import { followThroughView, ftdPrevious, FTD_PREVIOUS_NAME } from '../../src/static/brief/briefEnvironment.js';
+import { BREADTH_LEGEND, gspcFtdWords, marketTabStudy, STOCK_OUTCOME_UNTESTED } from '../../src/static/reference/marketTabStudy.js';
+import { marketCardView } from '../../src/static/brief/marketTabModel.js';
+import { marketTabParts } from '../../src/static/brief/marketTabGroups.js';
+import { readFileSync } from 'node:fs';
+import { TAGS } from '../../src/static/reference/marketRegimeReference.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 
@@ -115,9 +121,10 @@ test.describe('the study block and the guide\'s basis at 375×812', () => {
     await expect(basis).toContainText('根拠（10/2スキャン時点）：S&P 500（SPY）が50日線・200日線の上');
     await expect(basis).toContainText('独自の目安：上昇トレンド 最大50%・上昇に圧力 最大25%・それ以外 0%');
     await expect(study.locator('li').first()).toBeVisible();
-    // The 〔参考〕 legend is short on a phone; the full sentence is in the 注記.
-    await expect(market.locator('.brief-signals-tags')).toHaveText('〔参考〕＝2021〜26年の検証で関係未確認');
+    // The 〔参考〕 legend is short on a phone; the full sentence, its years and what it never tested (M6) are in the 注記.
+    await expect(market.locator('.brief-signals-tags')).toHaveText(`${TAGS.breadth}＝${BREADTH_LEGEND}`);
     await expect(page.locator('.brief-screen-notes')).toContainText('注意サインの印：〔参考〕は、2021〜2026年の参加度データ');
+    await expect(page.locator('.brief-screen-notes')).toContainText(`${STOCK_OUTCOME_UNTESTED}）。`);
     await expect(page.locator('.brief-screen-notes')).toContainText('参加度・リーダーの値は、現在の銘柄で過去をさかのぼった集計（上場廃止銘柄を含まない）です。');
     const small = await page.locator(B_TEXT).evaluateAll(nodes => nodes.filter(node => node.getClientRects().length).filter(node => parseFloat(getComputedStyle(node).fontSize) < 12).map(node => node.textContent.slice(0, 30)));
     expect(small).toEqual([]);
@@ -376,8 +383,24 @@ test.describe('round 2 at 375×812: an FTD-upgraded uptrend', () => {
     const md = sessions.at(-8).slice(5).split('-').map(Number).join('/');
     // The regime's FTD (SPY, the block's date) and the tab's own ^GSPC record (its FTD on another day) are each attributed.
     const gspc = sessions.at(-36).slice(5).split('-').map(Number).join('/');
-    await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(`確認 ${gspc}`);
-    await expect(basis.locator('p')).toHaveText(['根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', `局面判定はSPYのFTD（${md}）による上昇トレンド。^GSPCの日足ではFTD ${gspc}。この目安はSPYが50日線の下のため0%（独自判定）`, /^独自の目安：/]);
+    // The row's words for that record are the producer's (M2: an FTD 35 sessions old reads 「前回のFTD」).
+    await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(followThroughView(JSON.parse(marketTrends().text).indices[0].followThrough, date).b);
+    await expect(market.locator('.brief-env-row').filter({ has: page.locator('small', { hasText: 'フォロースルーデー' }) })).toContainText(`${FTD_PREVIOUS_NAME} ${gspc}`);
+    // Round 3: the 銘柄側 line first (M6) and the 0% note last (M5), each the producer's words for the served asset.
+    const served = { data: JSON.parse(marketTrends().text) }, market50 = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
+    const reference = JSON.parse(readFileSync(new URL('../../src/static/reference/market-regime-reference-v1.json', import.meta.url), 'utf8'));
+    const stockSide = marketCardView({ market: market50, trends: served, date, tab: marketTabParts }).stockSide, zeroCap = marketTabStudy({ trends: served, reference, date, market: market50 }).zeroCap;
+    expect(zeroCap).toMatch(/0%は独自設定で、検証された水準ではありません。$/);
+    // The cause line is the producer's for the served asset and the manifest ftdUpgraded serves (regimeCause through the
+    // study). Its ^GSPC words are gspcFtdWords': that FTD is 35 sessions old, so they call it what the row above does.
+    const manifest = { markets: { US: { as_of_date: date } } };
+    ftdUpgraded.manifest(manifest);
+    const record = served.data.indices[0].followThrough, own = gspcFtdWords(record, sessions.at(-8), date);
+    const cause = marketTabStudy({ trends: served, reference, date, market: market50, manifest }).cause;
+    expect(ftdPrevious(record)).toBe(true);
+    expect(own).toContain(`${FTD_PREVIOUS_NAME} ${gspc}`);
+    expect(cause).toContain(`（${md}）による上昇トレンド。${own}。`);
+    await expect(basis.locator('p')).toHaveText([stockSide, '根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下', cause, /^独自の目安：/, zeroCap]);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

@@ -29,6 +29,7 @@ import { financialHistory } from '../src/static/financialHistory.js';
 import { code33Layered } from '../src/static/code33Reference.js';
 import { code33Explain, code33Parts, COVERAGE_WARNINGS, fundamentalTiles, secStatus, secSummary } from '../src/static/fundamentalsExplain.js';
 import { decodeResearchIndex } from '../src/static/researchTransport.js';
+import { filterRanked } from '../src/static/researchPresentation.js';
 import { setupReadiness } from '../src/static/setupReadiness.js';
 import { environmentPoint } from '../src/static/marketLongHistory.js';
 import { LONG_HISTORY_ENVIRONMENT_KEYS } from '../src/static/marketUpdateState.js';
@@ -49,8 +50,10 @@ export function fundamentalsCoverage({ daily, sec, history, audit = null, now = 
   const symbols = [...new Set([...['minervini', 'minervini2'].flatMap(method => (daily?.candidates?.[method] || []).map(row => row.symbol)), ...briefRows(audit, date)])];
   const out = { as_of_date: date, candidates: symbols.length, sec: { same_day: sec?.as_of_date === date, available: 0, partial: 0, unavailable: 0, missing: 0 },
     history: { same_day: history?.as_of_date === date, available: 0, missing: 0 }, code33: { sec: 0, yahoo: 0, unknown: 0 },
-    // Each SEC condition separately: a fiscal-Q4 EPS reported only annually leaves EPS (and so Code 33) unknown.
-    sec_conditions: { eps: { pass: 0, fail: 0, unknown: 0 }, sales: { pass: 0, fail: 0, unknown: 0 }, margin: { pass: 0, fail: 0, unknown: 0 }, q4_eps_missing: 0 }, unknown_symbols: [] };
+    // Code 33's three parts separately: EPS acceleration (the quarterly EPS growth rate rising), not the EPS ≥ 25% floor
+    // (the card's chip, counted apart in the --published report's eps_floor_25). A fiscal-Q4 EPS reported only annually
+    // leaves EPS acceleration (and so Code 33) unknown: q4_eps_missing.
+    code33_parts: { eps_acceleration: { pass: 0, fail: 0, unknown: 0 }, sales_acceleration: { pass: 0, fail: 0, unknown: 0 }, margin_improvement: { pass: 0, fail: 0, unknown: 0 }, q4_eps_missing: 0 }, unknown_symbols: [] };
   for (const symbol of symbols) {
     const evidence = sec?.as_of_date === date ? sec.results?.[symbol] : null;
     if (!evidence) out.sec.missing++; else out.sec[evidence.status] = (out.sec[evidence.status] || 0) + 1;
@@ -60,8 +63,8 @@ export function fundamentalsCoverage({ daily, sec, history, audit = null, now = 
     const series = raw ? financialHistory(raw, symbol, date, now) : null;
     const report = book?.current ? book.report : null;
     if (report?.valid) {
-      const c = out.sec_conditions;
-      c.eps[report.epsAcceleration]++; c.sales[report.salesAcceleration]++; c.margin[report.marginImprovement]++;
+      const c = out.code33_parts;
+      c.eps_acceleration[report.epsAcceleration]++; c.sales_acceleration[report.salesAcceleration]++; c.margin_improvement[report.marginImprovement]++;
       if (code33Parts(report)?.q4Eps) c.q4_eps_missing++;
     }
     const layered = code33Layered(report, series, date);
@@ -273,6 +276,13 @@ export const INCOMPLETE_REPORT_WARN_SHARE = 0.01;
 /** Why EPS acceleration stays unknown, in the order a row's first cause is taken (DT4; §9-20 reads fiscal_q4_untagged). */
 export const EPS_UNKNOWN_CAUSES = Object.freeze(['under_8_quarters', 'gap', 'latest_row_fiscal_q4_without_eps', 'fiscal_q4_untagged', 'prior_year_loss_or_zero', 'period_mismatch']);
 /**
+ * The two causes that are a fiscal Q4 without EPS (the newest row, or one inside the latest four). A row whose every cause is
+ * one of these is counted in eps_unknown.q4_only: an UPPER BOUND of the rows a fiscal-Q4 EPS alone would settle, because
+ * epsUnknownCauses does not enumerate every reason a row's EPS growth is missing (no_base, ambiguous_base, or not_reported on
+ * a row that is not a fiscal Q4), so such a row can still hide behind a Q4 cause.
+ */
+export const Q4_EPS_CAUSES = Object.freeze(['latest_row_fiscal_q4_without_eps', 'fiscal_q4_untagged']);
+/**
  * Every cause behind an unknown EPS acceleration of a valid SEC report, independently of Code 33: fewer than 8 quarters,
  * a gap in the latest four (a missing fiscal-Q4 row counts as fiscal_q4_untagged, not as a gap), the latest row a
  * fiscal Q4 without EPS, an earlier fiscal Q4 without EPS, a loss or zero a year earlier, or periods that differ.
@@ -322,6 +332,35 @@ export async function chartWindowSource({ producer = new URL('./producer-price-h
   return { producer: producerText === null ? null : producerPeriod, exporter: exporterText === null ? null : longest, period, years: years(period), covers_3y: period ? years(period) >= 3 : null };
 }
 
+const finiteNumber = value => typeof value === 'number' && Number.isFinite(value);
+/**
+ * Whether the brief lists this row under its own liquidity rule: the call useBriefData makes on the candidate list
+ * (filterRanked with liquidOnly), so the report never copies the rule's numbers. False for a row that is not an object.
+ */
+export function briefLiquid(row) {
+  if (!plainObject(row)) return false;
+  return filterRanked([{ row, assessment: null }], { liquidOnly: true }).length === 1;
+}
+const liquidityEntry = row => ({ priced: finiteNumber(row?.current_price) && finiteNumber(row?.adv_usd), liquid: briefLiquid(row), state: setupReadiness(row).state });
+const liquidityTally = entries => {
+  // An older publication with no price and ADV on any listed row cannot be split: 未計測, never "all illiquid".
+  if (!entries.some(entry => entry.priced)) return null;
+  const out = { liquid: { pass: 0, fail: 0, unknown: 0 }, illiquid: { pass: 0, fail: 0, unknown: 0 }, missing_price_or_adv: 0 };
+  for (const entry of entries) {
+    // A row without a finite price or ADV is not listed by the brief: illiquid, and counted apart as missing.
+    out[entry.liquid ? 'liquid' : 'illiquid'][entry.state]++;
+    if (!entry.priced) out.missing_price_or_adv++;
+  }
+  return out;
+};
+/**
+ * Setup readiness (setupReadiness's state) split by the brief's own liquidity rule (briefLiquid): measurement only, no rule
+ * reads it. Null (未計測) when no row carries a finite current_price and adv_usd.
+ */
+export function setupReadyLiquidity(rows) {
+  return liquidityTally((Array.isArray(rows) ? rows : []).map(liquidityEntry));
+}
+
 /**
  * What the brief can actually show for each row it lists, read from the published
  * research index and canonical details (the logical files, before transport packing).
@@ -344,16 +383,24 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
     code33_unknown_reason: Object.fromEntries(UNKNOWN_KINDS.map(kind => [kind, 0])),
     // A Yahoo-only Code 33 is a reference (参考), counted apart from the SEC result it never replaces.
     code33_reference: { pass: 0, fail: 0 },
-    sec_conditions: { eps: { pass: 0, fail: 0, unknown: 0 }, sales: { pass: 0, fail: 0, unknown: 0 }, margin: { pass: 0, fail: 0, unknown: 0 } },
+    // Code 33's three parts on a valid current SEC report. eps_acceleration is Code 33's EPS acceleration (the quarterly EPS
+    // growth rate rising), NOT the EPS ≥ 25% floor (eps_floor_25 below). eps_acceleration_pass_symbols: the first `limit`
+    // listed symbols whose EPS acceleration passed, for a hand check against the filings.
+    code33_parts: { eps_acceleration: { pass: 0, fail: 0, unknown: 0 }, sales_acceleration: { pass: 0, fail: 0, unknown: 0 }, margin_improvement: { pass: 0, fail: 0, unknown: 0 }, eps_acceleration_pass_symbols: [] },
+    // The card's EPS ≥ 25% chip over the latest 2 and 4 quarters, as bookFinancialEvidence's epsFloor[2|4].at25 judges it on a
+    // valid current SEC report (no threshold is defined here). Measurement only.
+    eps_floor_25: { last2: { pass: 0, fail: 0, unknown: 0 }, last4: { pass: 0, fail: 0, unknown: 0 } },
     // Measurement only (no rule reads these here): readiness of the setup detector and the fill of base and group-rank fields.
-    setup_ready: { pass: 0, fail: 0, unknown: 0 }, filled: { se_base_length_weeks: 0, se_base_depth_pct: 0, ibd_group_rank: 0 }, listed_without_sec: [] };
+    // setup_ready_liquidity splits setup_ready by the brief's own liquidity rule (briefLiquid); null (未計測) when no listed row
+    // carries a finite price and ADV.
+    setup_ready: { pass: 0, fail: 0, unknown: 0 }, setup_ready_liquidity: null, filled: { se_base_length_weeks: 0, se_base_depth_pct: 0, ibd_group_rank: 0 }, listed_without_sec: [] };
   const finite = value => typeof value === 'number' && Number.isFinite(value);
   const failedChecks = new Map(), epsPrimary = Object.fromEntries([...EPS_UNKNOWN_CAUSES, 'other'].map(cause => [cause, 0])), epsAny = Object.fromEntries(EPS_UNKNOWN_CAUSES.map(cause => [cause, 0]));
   const invalid = { count: 0, by_cause: {}, symbols: [] }, gaps = { fiscal_q4: 0, other: 0, derivation_gaps: {}, empty_revenue: 0 };
   const withoutSec = { rows: 0, yahoo_tile: 0, ages: [] }, confidence = { below_floor: 0, missing: 0, floor_check_named: 0 };
   const market = { distribution_days: 0, ftd_date: 0 }, asOfFields = new Set();
-  let epsUnknown = 0, epsNoCurrent = 0, qualified = 0, round2Error = null;
-  const notCalculated = new Map();
+  let epsUnknown = 0, epsNoCurrent = 0, epsQ4Only = 0, qualified = 0, round2Error = null;
+  const notCalculated = new Map(), liquidity = [];
   const auditRows = new Map((audit?.results || []).map(row => [row.symbol, row]));
   const qualifiedSet = new Set(briefRows(audit, date).filter(symbol => auditRows.get(symbol)?.methods?.minervini?.qualified));
   for (const symbol of listed) {
@@ -369,13 +416,22 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
     if (['available', 'partial'].includes(row.book_financials?.status)) out.with_quarters_listed++;
     out.sec_state[sec.state] = (out.sec_state[sec.state] || 0) + 1;
     if (report) fundamentalTiles(report).forEach((tile, i) => { if (tile.value !== null) out.tiles[['eps', 'sales', 'margin'][i]]++; });
-    if (report?.valid) { out.sec_conditions.eps[report.epsAcceleration]++; out.sec_conditions.sales[report.salesAcceleration]++; out.sec_conditions.margin[report.marginImprovement]++; }
+    if (report?.valid) {
+      const parts = out.code33_parts;
+      parts.eps_acceleration[report.epsAcceleration]++; parts.sales_acceleration[report.salesAcceleration]++; parts.margin_improvement[report.marginImprovement]++;
+      if (report.epsAcceleration === 'pass' && parts.eps_acceleration_pass_symbols.length < limit) parts.eps_acceleration_pass_symbols.push(symbol);
+      for (const [quarters, key] of [[2, 'last2'], [4, 'last4']]) {
+        const state = report.epsFloor?.[quarters]?.at25;
+        if (Object.hasOwn(out.eps_floor_25[key], state ?? '')) out.eps_floor_25[key][state]++;
+      }
+    }
     // Yahoo alone is never a pass (or a fail): a Yahoo-only result counts as unknown here (kind 'yahoo') and as a reference apart.
     const secState = code33.source === 'yahoo' ? 'unknown' : code33.state;
     out.code33[secState]++;
     if (code33.source === 'yahoo' && code33.state !== 'unknown') out.code33_reference[code33.state]++;
     if (secState === 'unknown') out.code33_unknown_reason[explain.kind] = (out.code33_unknown_reason[explain.kind] || 0) + 1;
     out.setup_ready[setupReadiness(row).state]++;
+    liquidity.push(liquidityEntry(row));
     for (const key of Object.keys(out.filled)) if (finite(row[key])) out.filled[key]++;
     // The round-2 measurements (a)–(j) are diagnostic: one that throws on a row shape the fixtures lack stops them only
     // (out.round2 then says why), never the round-1 coverage above or the SEC carry comparison that reads it.
@@ -397,6 +453,8 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
       const anyReport = book?.report?.valid ? book.report : null;
       if (report?.epsAcceleration === 'unknown') {
         const causes = epsUnknownCauses(report); epsUnknown++; epsPrimary[causes.primary]++; for (const cause of causes.all) epsAny[cause]++;
+        // Every enumerated cause a fiscal Q4 without EPS: an upper bound (Q4_EPS_CAUSES says why).
+        if (causes.all.length && causes.all.every(cause => Q4_EPS_CAUSES.includes(cause))) epsQ4Only++;
       } else if (!report?.valid) epsNoCurrent++;
       // (d) Why a record could not be read.
       if (row.book_financials?.reason === 'invalid_payload') {
@@ -423,6 +481,8 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
       for (const key of Object.keys(row)) if (/^ibd_group.*(as_of|date)/.test(key) || /^group_rank.*(as_of|date)/.test(key)) asOfFields.add(key);
     } catch (error) { round2Error = error; }
   }
+  // Round 1 (before the round-2 early return): the liquidity split of the readiness counted above.
+  out.setup_ready_liquidity = liquidityTally(liquidity);
   if (round2Error) { out.round2 = { unavailable: String(round2Error?.message || round2Error).slice(0, 200) }; return out; }
   try {
     const top = [...failedChecks.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 10);
@@ -445,7 +505,8 @@ export async function publishedCoverage({ root = 'public', now = Date.now(), lim
         not_calculated: [...notCalculated.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 5),
         incomplete_report: [...notCalculated.entries()].filter(([why]) => why.includes(INCOMPLETE_REPORT)).reduce((sum, [, n]) => sum + n, 0) },
       setup_confidence: { floor: SETUP_CONFIDENCE_FLOOR, ...confidence },
-      eps_unknown: { with_current_report: epsUnknown, without_current_report: epsNoCurrent, primary: epsPrimary, any: epsAny,
+      // q4_only is an UPPER BOUND (Q4_EPS_CAUSES): rows whose every enumerated cause is a fiscal Q4 without EPS.
+      eps_unknown: { with_current_report: epsUnknown, without_current_report: epsNoCurrent, primary: epsPrimary, any: epsAny, q4_only: epsQ4Only,
         fiscal_q4_share: epsUnknown ? (epsPrimary.fiscal_q4_untagged + epsPrimary.latest_row_fiscal_q4_without_eps) / epsUnknown : null },
       invalid_payload: invalid,
       gaps,
@@ -523,8 +584,11 @@ export function fundamentalsSummaryTable(report, { label = null } = {}) {
     `| not requested / no same-day input | ${cell(b.not_requested)} / ${cell(b.not_fetched)} |`, `| refused by reason | ${cell(b.refused_by_reason)} |`,
     `| SEC states (listed) | ${cell(Object.fromEntries(Object.entries(c.sec_state).filter(([, n]) => n)))} |`,
     `| Code 33 (listed, SEC only) | ${cell(c.code33)}; unknown: ${cell(Object.fromEntries(Object.entries(c.code33_unknown_reason).filter(([, n]) => n)))}${c.code33_reference ? `; Yahoo reference (counted unknown): ${cell(c.code33_reference)}` : ''} |`,
-    `| SEC conditions (listed) | EPS ${cell(c.sec_conditions.eps)}; sales ${cell(c.sec_conditions.sales)}; margin ${cell(c.sec_conditions.margin)} |`,
+    // Code 33's acceleration parts, not the EPS ≥ 25% floor (the next row).
+    `| Code 33 parts (listed, SEC) | EPS acceleration ${cell(c.code33_parts?.eps_acceleration)}; sales acceleration ${cell(c.code33_parts?.sales_acceleration)}; margin improvement ${cell(c.code33_parts?.margin_improvement)} |`,
+    `| EPS ≥25% (listed, SEC; the card's chip) | latest 2 quarters ${cell(c.eps_floor_25?.last2)}; latest 4 quarters ${cell(c.eps_floor_25?.last4)} |`,
     `| setup readiness (listed, measurement only) | ${cell(c.setup_ready)} |`,
+    `| setup readiness: liquid / illiquid (the brief's liquidity rule, measurement only) | ${c.setup_ready_liquidity ? `liquid ${cell(c.setup_ready_liquidity.liquid)} / illiquid ${cell(c.setup_ready_liquidity.illiquid)} (no price or ADV ${c.setup_ready_liquidity.missing_price_or_adv})` : '未計測'} |`,
     `| filled (listed, measurement only) | ${cell(c.filled)} of ${cell(c.listed)} |`];
   const r = c.round2;
   if (r?.unavailable) lines.push(`| round-2 measurements | 未計測 (${r.unavailable}) |`);
@@ -534,7 +598,7 @@ export function fundamentalsSummaryTable(report, { label = null } = {}) {
     lines.push(`| setup: top failed checks (listed) | ${pair(r.setup_readiness.top_failed_checks)} |`,
       `| setup: not calculated, top reasons (listed) / no complete report | ${pair(r.setup_readiness.not_calculated)} / ${cell(r.setup_readiness.incomplete_report)} |`,
       `| setup confidence under ${r.setup_confidence.floor} (mirrors the backend floor test) / missing / floor check named | ${r.setup_confidence.below_floor} / ${r.setup_confidence.missing} / ${r.setup_confidence.floor_check_named} |`,
-      `| EPS acceleration unknown (current SEC report) | ${r.eps_unknown.with_current_report}: ${cell(Object.fromEntries(Object.entries(r.eps_unknown.primary).filter(([, n]) => n)))}; fiscal-Q4 share ${percent(r.eps_unknown.fiscal_q4_share)}; without a current report ${r.eps_unknown.without_current_report} |`,
+      `| EPS acceleration unknown (current SEC report) | ${r.eps_unknown.with_current_report}: ${cell(Object.fromEntries(Object.entries(r.eps_unknown.primary).filter(([, n]) => n)))}; fiscal-Q4 share ${percent(r.eps_unknown.fiscal_q4_share)}; Q4-only (upper bound) ${cell(r.eps_unknown.q4_only)}; without a current report ${r.eps_unknown.without_current_report} |`,
       `| invalid_payload by cause | ${r.invalid_payload.count}: ${cell(r.invalid_payload.by_cause)}${r.invalid_payload.symbols.length ? ` (${r.invalid_payload.symbols.join(' ')})` : ''} |`,
       `| quarter gaps: fiscal Q4 / other; derivation gaps; no revenue concept | ${r.gaps.fiscal_q4} / ${r.gaps.other}; ${cell(r.gaps.derivation_gaps)}; ${r.gaps.empty_revenue} |`,
       `| without SEC quarters: rows / Yahoo tile / latest period age | ${r.without_sec.rows} / ${r.without_sec.yahoo_tile} / ${r.without_sec.latest_period_age_days ? `p50 ${r.without_sec.latest_period_age_days.p50}d, max ${r.without_sec.latest_period_age_days.max}d (${r.without_sec.older_than_190_days} over 190d)` : '未計測'} |`,

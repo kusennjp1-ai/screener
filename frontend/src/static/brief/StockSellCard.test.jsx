@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
-import { WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
+import SellCard from './StockSellCard';
+import { failedBreakoutContext, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
 
 const DATE = '2026-10-02';
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -105,5 +106,69 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
   it('shows everything open on the desktop, each footnote in place on its card and no 注記 (the sell card)', () => {
     render(<StockView data={{ ...data(true), template: allMet }} wide />);
     expect(within(screen.getByTestId('brief-sell')).getByText(/^保有中の判断材料です。複合警告は『株式トレード 基本と原則』の観点.*売買の推奨ではありません。$/)).toBeInTheDocument();
+  });
+});
+
+// Round 3 R5: a failed breakout past its 10-session window is one neutral, dated line on the card (failedBreakoutContext),
+// outside the fold and outside every check: the checks, their states and the card's status read as without it.
+describe('the sell card dates a failed breakout after its window (round 3 R5)', () => {
+  // 200 sessions under the pivot of 100, a close above it on 2.2x the prior volume, back under the next session and under
+  // it for the 12 sessions since; the last bar is the analysis day.
+  const failedBars = () => {
+    const closes = [...Array(200).fill(95), 102, 98, 97, 96, 90, 92, 94, 95, 96, 97, 98, 98, 99];
+    return closes.map((close, i) => ({ date: i === closes.length - 1 ? DATE : day(i), open: close, high: close * 1.005, low: close * 0.995, close, volume: i === 200 ? 22000 : 10000 }));
+  };
+  const failedView = { ...view, distance: -1, price: 99 };
+  const lines = node => within(node).queryAllByTestId('brief-failed-context');
+
+  it('renders the producer\'s line once, as a plain note outside the fold, on a phone and on the desktop', () => {
+    const judged = failedBars(), context = failedBreakoutContext(judged, 100);
+    expect(context).not.toBeNull();
+    for (const wide of [false, true]) {
+      render(<StockView data={{ ...data(true), view: failedView, bars: judged }} wide={wide} />);
+      const sell = screen.getByTestId('brief-sell');
+      expect(lines(sell)).toHaveLength(1);
+      const [line] = lines(sell);
+      expect(line.textContent).toBe(context.text);
+      // Neutral: a plain note (no tone, no check glyph), never a check row and never folded.
+      expect(line.tagName).toBe('P');
+      expect(line.className).toBe('brief-note');
+      expect(line.closest('li')).toBeNull();
+      expect(line.closest('details')).toBeNull();
+      // The failed-breakout check is still clear with its own sentence, and nothing fired.
+      const check = within(sell).getByText(/^出来高を伴う上抜け後のピボット割れ/).closest('li');
+      expect(check.querySelector('.is-sell-clear')).toBeTruthy();
+      expect(check).toHaveTextContent('直近10営業日にピボットの上抜けなし（終値はピボット比 −1.0%）');
+      expect(sell.querySelectorAll('.is-sell-hit')).toHaveLength(0);
+      cleanup();
+    }
+  });
+
+  it('keeps every check, its state and the card\'s status line as without the line', () => {
+    const judged = failedBars(), sells = stockSells({ judged, diagnostics: null, view: failedView });
+    const { failedContext, ...without } = sells;
+    expect(failedContext).toBeTruthy();
+    const card = value => {
+      const { container } = render(<SellCard sells={value} wide />);
+      const out = { checks: [...container.querySelectorAll('li')].map(li => [li.querySelector('.brief-check').className, li.textContent]), notes: [...container.querySelectorAll('.brief-note')].filter(node => !node.dataset.testid).map(node => node.textContent) };
+      cleanup();
+      return out;
+    };
+    expect(card(sells)).toEqual(card(without));
+    render(<SellCard sells={without} wide />);
+    expect(lines(screen.getByTestId('brief-sell'))).toHaveLength(0);
+  });
+
+  it('shows no line without one: inside the window (the hit says it) or for any other card', () => {
+    // Back under the pivot three sessions ago: the check's hit, no line.
+    const closes = [...Array(200).fill(95), 102, 98, 97, 99];
+    const recent = closes.map((close, i) => ({ date: i === closes.length - 1 ? DATE : day(i), open: close, high: close * 1.005, low: close * 0.995, close, volume: i === 200 ? 22000 : 10000 }));
+    render(<StockView data={{ ...data(true), view: failedView, bars: recent }} />);
+    const sell = screen.getByTestId('brief-sell');
+    expect(within(sell).getByText(/^出来高を伴う上抜け後のピボット割れ/).closest('li').querySelector('.is-sell-hit')).toBeTruthy();
+    expect(lines(sell)).toHaveLength(0);
+    cleanup();
+    render(<StockView data={data(true)} />);
+    expect(lines(screen.getByTestId('brief-sell'))).toHaveLength(0);
   });
 });

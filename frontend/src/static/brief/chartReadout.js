@@ -2,7 +2,7 @@
 // bars on the chart's interval, every moving average it draws and the volume average, then one bar's
 // values as the readout shows them. Pure; a value whose window is short is null (shown as —), never 0.
 import { RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
-import { BREAKOUT_VOLUME_RATIO, ratioShown } from './briefCandidate';
+import { BREAKOUT_VOLUME_RATIO, pivotDistanceText, ratioShown } from './briefCandidate';
 import { ADR_SESSIONS, adrState } from './positionSizing';
 import { breakoutBar, lastPivotCrossing, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
 
@@ -150,6 +150,13 @@ const grouped = (value, digits) => value.toLocaleString('en-US', { minimumFracti
  * the decimals from 1,000 up, as the chart's price tags do.
  */
 export const formatPrice = (value, { compact = false } = {}) => (finite(value) ? grouped(value, compact && Math.abs(value) >= 1000 ? 0 : 2) : '—');
+/**
+ * The legend's texts for the last contraction's low (its price, as formatPrice prints it), longest first: the full
+ * name, and below 1024px the shorter ones the legend falls back to when the full one fits neither of its two lines
+ * (measured: StockChartCard's useTwoLineLegend), down to the plot's own tag name 「安値」. [form, text] pairs; null when
+ * the low is unknown.
+ */
+export const structuralLowLegend = value => (finite(value) ? [['long', `最後の収縮の安値 ${formatPrice(value)}`], ['short', `収縮の安値 ${formatPrice(value)}`], ['tag', `安値 ${formatPrice(value)}`]] : null);
 /** A signed percent, e.g. +2.2% / −0.8% / ±0.0%, or — when unknown. */
 export const formatPercent = (value, digits = 1) => (finite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : '±'}${Math.abs(value).toFixed(digits)}%` : '—');
 // The unit is chosen after rounding, so 999,600 reads 1M, never 1000K.
@@ -194,7 +201,9 @@ export function heavyVolumeBars(model, period) {
  * certified daily bars, the plan's own function) and the distance from the 50-day line, on the daily
  * chart's latest bar: `adr` and `fromSma50` are null (shown as —) on bars not certified, and absent
  * (undefined) on a past bar or the weekly chart, where they do not apply. `unverified` is true when the
- * bars are not certified: the readout names them 未検証の足 and qualifies the change and volume ratio.
+ * bars are not certified: the readout names them 未検証の足 and qualifies the change and volume ratio. `pivotText` is the
+ * pivot ratio as every screen prints a distance from the pivot (pivotDistanceText: 「±0.0%」 at the pivot's cents,
+ * 「+0.1%未満」/「−0.1%未満」 within 0.05% of it, never 「+0.0%」/「−0.0%」); null when the ratio is.
  */
 export function chartReadout(model, index, { certified = false, pivot = null, auditHigh = null } = {}) {
   const series = chartSeries(model);
@@ -207,6 +216,7 @@ export function chartReadout(model, index, { certified = false, pivot = null, au
   const daily = latest && !weekly;
   const ma50 = series.averages.find(a => a.key === 'ma50')?.values[i];
   const adr = daily ? (certified === true ? adrState(model.bars) : { value: null, reason: '日足が分析日で未検証' }) : null;
+  const pivotRatio = judge && finite(pivot) && pivot > 0 ? (bar.close / pivot - 1) * 100 : null;
   return {
     index: i, latest, weekly, unverified: certified !== true,
     adr: adr ? adr.value : undefined, adrReason: adr?.reason ?? null, adrSessions: ADR_SESSIONS,
@@ -218,19 +228,27 @@ export function chartReadout(model, index, { certified = false, pivot = null, au
     volume: finite(bar.volume) ? bar.volume : null, volumeText: formatShares(bar.volume),
     volumeRatio: finite(average) && average > 0 && finite(bar.volume) ? bar.volume / average : null, volumeBasis: `${series.volumeLength}${series.unit}`,
     averages: series.averages.map(a => ({ key: a.key, label: a.label, short: a.short, value: finite(a.values[i]) ? a.values[i] : null })),
-    pivotRatio: judge && finite(pivot) && pivot > 0 ? (bar.close / pivot - 1) * 100 : null,
+    pivotRatio, pivotText: pivotRatio === null ? null : pivotDistanceText({ price: bar.close, pivot, distance: pivotRatio }),
     fromHigh: judge && finite(auditHigh) && auditHigh > 0 ? (bar.close / auditHigh - 1) * 100 : null,
   };
 }
 
+/** Two years of weeks: the weekly period's length (CHART_RANGES['2yw']). */
+const TWO_YEARS_OF_WEEKS = CHART_RANGES['2yw'][0];
 /**
  * The weekly period's button: 「週足2年」 only when two years of weeks exist, otherwise the honest count. Without
  * bars (a chart not delivered, failed or still loading) the count is unknown, never 0: 「週足（本数 未確認）」.
  */
 export function weeklyRangeLabel(bars) {
   const count = weeklyBars(bars).length;
-  return !count ? '週足（本数 未確認）' : count >= 104 ? '週足2年' : `週足（${count}週）`;
+  return !count ? '週足（本数 未確認）' : count >= TWO_YEARS_OF_WEEKS ? '週足2年' : `週足（${count}週）`;
 }
+/**
+ * The 注記's sentence for a weekly chart under two years of weeks (`weeks`, weeklyBars of the chart): the month of the
+ * first week's first session (YYYY/MM, as on the date axis) and the week count. Null with no weeks (never 「0週分」) or
+ * with two years of them.
+ */
+export const weeklyShortNote = weeks => (weeks?.length && weeks.length < TWO_YEARS_OF_WEEKS ? `週足は${(weeks[0].start || weeks[0].date).slice(0, 7).replace('-', '/')}〜の${weeks.length}週分（2年分はありません）` : null);
 
 /** Why a drawn crossing is grey, not green (chartCrossing's `reason`), for the 注記. */
 const CROSSING_REASONS = {
@@ -250,7 +268,8 @@ export function crossingNote(crossing) {
 
 /**
  * The chart's footnotes for the screen's 注記 (in place on the card at 1024px and wider). Each one is
- * stated once and only when it applies; every N is counted from the data.
+ * stated once and only when it applies; every N is counted from the data. A weekly chart under two years of
+ * weeks says so second (weeklyShortNote).
  * @param {object} p { bars, interval, period, short (the 10/21-day lines are drawn), rsLead (rsLeadMarks of
  *   the certified bars, or null), gaps (shown gap days), sellMarks (the phone legend names ▼▲ without their
  *   meaning), adr (the readout shows ADR and the distance from the 50-day line), crossing (chartCrossing of
@@ -263,6 +282,9 @@ export function chartNotes({ bars, interval, period, short = shortAveragesDrawn(
   const series = chartSeries({ bars, interval, short });
   const n = Math.min(period, series.all.length), from = series.all.length - n;
   const notes = ['—＝必要な本数に足りない値（移動平均・出来高の倍率）'];
+  // Under two years of weeks the weekly chart says how many it draws, here (not in the plot).
+  const weeklyNote = series.weekly ? weeklyShortNote(series.all) : null;
+  if (weeklyNote) notes.push(weeklyNote);
   if (series.averages.some(a => a.short)) notes.push('10日線・21日EMAは独自計算です。');
   const partial = series.averages.filter(a => !a.short).map(a => ({ a, count: a.values.slice(from).filter(v => v !== null).length })).filter(({ count }) => count < n);
   if (partial.length) notes.push(`${partial.map(({ a, count }) => (count ? `${a.label}線は直近${count}本のみ` : `${a.label}線は描けません`)).join('・')}（${series.weekly ? '週足' : '日足'}が足りないため）。`);

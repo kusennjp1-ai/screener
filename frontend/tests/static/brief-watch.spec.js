@@ -4,8 +4,11 @@
 // budgets and row heights with a broken setup, and the list's rows across a stock round trip, on synthetic data.
 // (The sell card's qualifier is brief-sell.spec.js's.)
 import { test, expect } from '@playwright/test';
-import { openBrief, charts, date, rows, rowBySymbol, horizontalOverflow, sessions } from './brief-fixture.js';
+import { openBrief, charts, date, rows, rowBySymbol, horizontalOverflow, sessions, ORACLE, ORACLE_CHARTS, ORACLE_ROWS } from './brief-fixture.js';
 import { candidateView, rowSecChip } from '../../src/static/brief/briefCandidate.js';
+import { crossingFloor } from '../../src/static/brief/breakoutHistory.js';
+import { sellChipView, stockSells } from '../../src/static/brief/briefSell.js';
+import { diagnoseBookChart } from '../../src/static/bookChartDiagnostics.js';
 import { EARNINGS_CHIP_NOTE } from '../../src/static/fundamentalsExplain.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
@@ -147,6 +150,52 @@ test.describe('the watch tile', () => {
     const limited = page.getByRole('region', { name: 'ウォッチ中の銘柄' }).locator('.brief-chip', { hasText: '売りのサイン 未確認（上限12銘柄）' });
     await expect(limited).toHaveCount(1);
     await expect(limited).toBeVisible();
+    expect(errors).toEqual([]);
+  });
+});
+
+// Round 3 R1: a crossing before the pivot's own bar is no breakout of it (crossingFloor), so a failed breakout the watch
+// rows and the tile would have counted is not one. ZZNR (MGRC's shape: a 2.1× crossing seven sessions back, then an NR7
+// pivot the day before the analysis day, the last close under it) beside ZZSD with a broken setup: the tile counts ZZSD
+// only, as it did with ZZSD alone, and ZZNR's watch rows carry no 崩れ chip and no ▲.
+test.describe('round 3 R1: a pivot dated after a heavy crossing on a watched stock', () => {
+  test.use(phone(390, 844));
+  const nr = ORACLE_ROWS.find(row => row.symbol === ORACLE.pivotAfterCrossing), chart = ORACLE_CHARTS[nr.chart_path.split('/').pop()];
+  const nrView = candidateView({ row: nr, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } }, date);
+  /** ZZNR's sell checks as the watch rows compute them (useWatchSellChecks), with the app's floor or without one. */
+  const nrSells = from => stockSells({ judged: chart.bars, diagnostics: diagnoseBookChart(nr, chart, date), view: nrView, from });
+  test('the watch tile counts ZZSD only, and ZZNR\'s rows on Today and the watch tab carry no 崩れ chip or ▲', async ({ page, context }) => {
+    // The producers first: without the floor ZZNR is a broken setup (the tile would read one more), with it not.
+    expect(nrSells(null).breakdownHits).toBe(1);
+    expect(sellChipView(nrSells(null))).toMatchObject({ text: WEAKNESS, tone: 'ext' });
+    const bounded = nrSells(crossingFloor(chart.bars, nr));
+    expect(bounded.breakdownHits).toBe(0);
+    expect(sellChipView(bounded)?.tone ?? null).not.toBe('ext');
+    const tile = on => on.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
+    // ZZSD alone, read first: its broken setup is the one count.
+    const plain = await context.newPage(), alone = await openBrief(plain, '#/brief', { oracles: true, storage: { 'research-watch': ['ZZSD'] }, mutate: broken('ZZSD') });
+    await expect(tile(plain)).toContainText('ウォッチの注意1件1銘柄を確認・保有未登録');
+    expect(alone.errors).toEqual([]);
+    await plain.close();
+    const { errors } = await openBrief(page, '#/brief', { oracles: true, storage: { 'research-watch': ['ZZNR', 'ZZSD'] }, mutate: broken('ZZSD') });
+    await expect(tile(page)).toContainText('ウォッチの注意1件2銘柄を確認・保有未登録');
+    await expect(tile(page)).toHaveAttribute('href', '#/brief/stock/ZZSD');
+    const today = page.getByRole('region', { name: 'ウォッチの状況' });
+    const nrRow = today.locator('[data-symbol="ZZNR"]');
+    await expect(nrRow).toBeVisible();
+    await expect(today.locator('[data-symbol="ZZSD"]')).toContainText(WEAKNESS);
+    await expect(nrRow).not.toContainText(WEAKNESS);
+    await expect(nrRow).not.toContainText(nrSells(null).weakness.find(check => check.key === 'failedBreakout').headline);
+    expect(await nrRow.locator('.brief-event-icon').textContent()).not.toBe('▲');
+    expect(await nrRow.locator('.brief-sellchip.tone-ext').count()).toBe(0);
+    await page.goto('/#/brief/watch');
+    const list = page.getByRole('region', { name: 'ウォッチ中の銘柄' }).getByTestId('brief-candidate');
+    await expect(list).toHaveCount(2);
+    // The broken setup first, ZZNR after it with no 崩れ chip.
+    await expect.poll(() => list.evaluateAll(nodes => nodes.map(node => node.dataset.symbol))).toEqual(['ZZSD', 'ZZNR']);
+    await expect(list.nth(0)).toContainText(WEAKNESS);
+    await expect(list.nth(1)).not.toContainText(WEAKNESS);
+    expect(await list.nth(1).locator('.tone-ext').count()).toBe(0);
     expect(errors).toEqual([]);
   });
 });

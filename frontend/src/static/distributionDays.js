@@ -1,6 +1,7 @@
 // Basic distribution rule, not IBD's editorial count (stalling is not inferred).
 // Primary definition: https://shop.investors.com/Images/promotional/Wizards-QA.pdf
 // Expiry reference: https://www.investors.com/how-to-invest/investors-corner/how-to-spot-major-stock-market-tops/
+// Removal after a later rally: sources differ (5% or 6% above the day's close); this app uses 5% on a later session's high (独自選択).
 export const DISTRIBUTION_METHOD = 'index-down-strictly-over-0.2-higher-volume-age25-high5-v1';
 const positive = value => typeof value === 'number' && Number.isFinite(value) && value > 0;
 const day = value => typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value) && Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0,10) === value;
