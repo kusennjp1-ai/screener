@@ -115,6 +115,19 @@ INDICATOR_POLICY = {
     'leader_health': 'Of the stocks that met the trend template (30% variant, RS >= 70) 20 sessions earlier and are still observed, how many close above their 50-day SMA today. Unknown unless both sessions meet the coverage gate.',
     'breakout': 'A session closing above the prior 251-session high on at least 1.4x the prior 50-session average volume while the 30% price template holds. Judged after 10 later sessions: failed if any low in them is at least 7% below the breakout close. Reported for breakouts dated 10 to 29 sessions before each date.',
 }
+# Round 3 M8c (独自設定): an early read of the same breakouts on the first five sessions after each one.
+BREAKOUT_EARLY_SESSIONS = 5
+# Round 3 M8a-M8c (round 3 plan rule 18, UI before data): the five optional breadth keys below are computed and
+# logged on every run, but written (with their INDICATOR_POLICY entries) only once this is True. It stays False
+# until the round-3 UI that reads them is confirmed on Pages, and is flipped only by that later follow-up commit;
+# while it is False the output is byte-identical to the output before these keys existed.
+EMIT_R3_MARKET_FIELDS = False
+R3_MARKET_FIELDS = ('rs90Cohort', 'rs90CohortAbove50', 'newHighsClose', 'breakoutsEarlyJudged', 'breakoutsEarlyFailed')
+R3_INDICATOR_POLICY = {
+    'rs90_cohort': 'Of the leader cohort (the stocks that met the trend template, 30% variant with RS >= 70, 20 sessions earlier and are still observed), rs90Cohort counts those whose same-day proprietary RS was also >= 90 on that earlier session (the rs90TemplateCount stocks of that session; not IBD RS), and rs90CohortAbove50 those of them closing above their 50-day SMA today. Unknown unless both sessions meet the coverage gate.',
+    'new_highs_close': 'Stocks whose close is above the prior 251-session high (the breakout rule\'s prior high); newHighs compares the session high with the same window, so newHighsClose <= newHighs.',
+    'breakout_early': 'Breakouts dated 5 to 9 sessions before each date, judged on their first 5 later sessions (独自設定): breakoutsEarlyJudged counts those whose 5 later lows are all observed, breakoutsEarlyFailed those with a low in them at least 7% below the breakout close. Unknown unless every session from 9 sessions before the date to the date meets the coverage gate. It does not overlap the 10-29-session window of breakoutsJudged.',
+}
 
 def classify_stages(close, ma200, weights, sxx):
     """Vectorised replay of WeinsteinStageAnalyzer._classify_stage; 0 means not classifiable."""
@@ -136,9 +149,10 @@ def classify_stages(close, ma200, weights, sxx):
         [2,4,3,3,1,1], default=np.where(above,3,4))
     return np.where(known,stage,0)
 
-def build(records, errors, symbols, sessions, target, classification=None):
+def build(records, errors, symbols, sessions, target, classification=None, log=None):
     import numpy as np
     import pandas as pd
+    emit = EMIT_R3_MARKET_FIELDS  # read at call time
     count = len(sessions)
     covered = np.zeros(count, dtype=int)
     expected = np.full(count, len(symbols), dtype=int)
@@ -153,6 +167,7 @@ def build(records, errors, symbols, sessions, target, classification=None):
     above150 = np.zeros(count, dtype=int); above200 = above150.copy()
     stages = {stage:np.zeros(count, dtype=int) for stage in (1,2,3,4)}
     breakouts_new = np.zeros(count, dtype=int); breakouts_matured = breakouts_new.copy(); breakouts_held = breakouts_new.copy()
+    highs_close = np.zeros(count, dtype=int); breakouts_early = highs_close.copy(); breakouts_early_failed = highs_close.copy()
     slope_weights = np.arange(STAGE_PRICE_TREND_SESSIONS-1,-1,-1,dtype=float)
     slope_x = np.arange(STAGE_PRICE_TREND_SESSIONS,dtype=float); slope_sxx = float(((slope_x-slope_x.mean())**2).sum())
     memberships=(classification or {}).get('memberships',{})
@@ -205,6 +220,14 @@ def build(records, errors, symbols, sessions, target, classification=None):
             later_low=f.low.iloc[::-1].rolling(BREAKOUT_HOLD_SESSIONS,min_periods=BREAKOUT_HOLD_SESSIONS).min().iloc[::-1].shift(-1)
             matured=breakout & later_low.notna().to_numpy()
             held=matured & (later_low > c*(1-BREAKOUT_FAILURE_DRAWDOWN)).to_numpy()
+            # Round 3 M8b: the close above the breakout rule's own prior_high (high-based new_high is unchanged).
+            # parse_series keeps only bars with high >= close, so this is a subset of new_high.
+            new_high_close=good & (c>prior_high).to_numpy()
+            # Round 3 M8c: the same breakouts read on their first BREAKOUT_EARLY_SESSIONS later sessions. As
+            # `matured` needs all ten later lows, an early read needs all five; failed is the complement of `held`.
+            early_low=f.low.iloc[::-1].rolling(BREAKOUT_EARLY_SESSIONS,min_periods=BREAKOUT_EARLY_SESSIONS).min().iloc[::-1].shift(-1)
+            early=breakout & early_low.notna().to_numpy()
+            early_failed=early & (early_low <= c*(1-BREAKOUT_FAILURE_DRAWDOWN)).to_numpy()
             proof={'symbol':symbol,'first_trade_date':meta.get('firstTradeDate'),'valid_bars':int(c.count()),'excluded_extreme_dates':meta['excluded_extreme_dates'], **record['provenance']}
         except Exception as error:
             parse_errors[symbol]=str(error); continue
@@ -216,6 +239,7 @@ def build(records, errors, symbols, sessions, target, classification=None):
         above150 += is_above150; above200 += is_above200
         for value,counts in stages.items():counts += in_stage[value]
         breakouts_new += breakout; breakouts_matured += matured; breakouts_held += held
+        highs_close += new_high_close; breakouts_early += early; breakouts_early_failed += early_failed
         provenance.append(proof)
     ranks=pd.DataFrame(momentum).rank(axis=1,method='average',ascending=True)
     eligible_rs=np.isfinite(momentum).sum(axis=1)
@@ -227,10 +251,20 @@ def build(records, errors, symbols, sessions, target, classification=None):
     cohort_members=np.zeros_like(template30)
     cohort_members[LEADER_LOOKBACK_SESSIONS:]=(template30 & (rs>=70))[:-LEADER_LOOKBACK_SESSIONS]
     cohort=(cohort_members & observed).sum(axis=1); cohort_above50=(cohort_members & observed & over50).sum(axis=1)
+    # Round 3 M8a: the cohort members that were also in the rs90TemplateCount mask then (RS >= 90 implies RS >= 70,
+    # so these are cohort members), observed today exactly as leaderCohort is.
+    rs90_members=np.zeros_like(template30)
+    rs90_members[LEADER_LOOKBACK_SESSIONS:]=(template30 & (rs>=90))[:-LEADER_LOOKBACK_SESSIONS]
+    rs90_cohort=(rs90_members & observed).sum(axis=1); rs90_cohort_above50=(rs90_members & observed & over50).sum(axis=1)
     # Breakouts dated 10..29 sessions earlier: every one has its full ten-session
     # follow-through window on or before the reported date (no look-ahead).
     window=lambda array:pd.Series(array,dtype=float).rolling(BREAKOUT_WINDOW_SESSIONS,min_periods=BREAKOUT_WINDOW_SESSIONS).sum().shift(BREAKOUT_HOLD_SESSIONS).to_numpy()
     matured_window=window(breakouts_matured); held_window=window(breakouts_held)
+    # Round 3 M8c: breakouts dated BREAKOUT_EARLY_SESSIONS..BREAKOUT_HOLD_SESSIONS-1 (5..9) sessions earlier. Each has
+    # its five later sessions on or before the date, and the window ends where the 10..29-session window starts.
+    early_span=BREAKOUT_HOLD_SESSIONS-BREAKOUT_EARLY_SESSIONS
+    early_window=lambda array:pd.Series(array,dtype=float).rolling(early_span,min_periods=early_span).sum().shift(BREAKOUT_EARLY_SESSIONS).to_numpy()
+    early_judged_window=early_window(breakouts_early); early_failed_window=early_window(breakouts_early_failed)
     for group,columns in group_columns.items():group_data[group]['leaderCount']=(template[:,columns] & (rs[:,columns]>=70)).sum(axis=1)
     sufficient=(expected>0)&(covered/np.maximum(expected,1)>=.9)&(eligible_rs>=100)
     up10=pd.Series(np.where(sufficient,ups,np.nan)).rolling(10,min_periods=10).sum().to_numpy()
@@ -238,11 +272,19 @@ def build(records, errors, symbols, sessions, target, classification=None):
     # Include warmup observations so every displayed five-year ratio can be
     # independently checked against its ten consecutive constituent sessions.
     start=(years_before(date.fromisoformat(target),5)-timedelta(days=20)).isoformat()
+    def r3_values(i):
+        # Round 3 M8a-M8c for session i, under the same null rules as leaderCohort and breakoutsJudged.
+        valid=bool(sufficient[i])
+        cohort_known=valid and i>=LEADER_LOOKBACK_SESSIONS and bool(sufficient[i-LEADER_LOOKBACK_SESSIONS])
+        early_known=valid and bool(np.isfinite(early_judged_window[i])) and bool(sufficient[max(0,i-BREAKOUT_HOLD_SESSIONS+1):i+1].all())
+        return {'rs90Cohort':int(rs90_cohort[i]) if cohort_known else None,'rs90CohortAbove50':int(rs90_cohort_above50[i]) if cohort_known else None,
+            'newHighsClose':int(highs_close[i]) if valid else None,
+            'breakoutsEarlyJudged':int(early_judged_window[i]) if early_known else None,'breakoutsEarlyFailed':int(early_failed_window[i]) if early_known else None}
     points=[]
     for i,day in enumerate(sessions):
         if day < start: continue
         valid=bool(sufficient[i]); val=lambda array:int(array[i]) if valid else None
-        points.append({'date':day,'coverage':int(covered[i]),'universe':len(symbols),'eligibleUniverse':int(expected[i]),'coveragePercent':round(float(covered[i]/max(expected[i],1)*100),3),
+        point={'date':day,'coverage':int(covered[i]),'universe':len(symbols),'eligibleUniverse':int(expected[i]),'coveragePercent':round(float(covered[i]/max(expected[i],1)*100),3),
             'above50':val(above),'above50Percent':float(above[i]/covered[i]*100) if valid else None,'newHighs':val(highs),'newLows':val(lows),'leaderCount':val(leaders),
             'trendTemplateCount':val(trend_template),'trendTemplatePercent':float(trend_template[i]/covered[i]*100) if valid else None,'rs90TemplateCount':val(strong_leaders),
             'above150':val(above150),'above150Percent':float(above150[i]/covered[i]*100) if valid else None,'above200':val(above200),'above200Percent':float(above200[i]/covered[i]*100) if valid else None,
@@ -252,7 +294,13 @@ def build(records, errors, symbols, sessions, target, classification=None):
             'leaderCohort':int(cohort[i]) if valid and i>=LEADER_LOOKBACK_SESSIONS and bool(sufficient[i-LEADER_LOOKBACK_SESSIONS]) else None,
             'leaderCohortAbove50':int(cohort_above50[i]) if valid and i>=LEADER_LOOKBACK_SESSIONS and bool(sufficient[i-LEADER_LOOKBACK_SESSIONS]) else None,
             'stocks_up_4pct':val(ups),'stocks_down_4pct':val(downs),'ratio_10day':float(up10[i]/down10[i]) if len(points)>=9 and np.isfinite(up10[i]) and np.isfinite(down10[i]) and down10[i]>0 else None,
-            'reason':None if valid else '独立カレンダーに沿う253日足の観測率90%またはRS母集団100銘柄を満たしません。'})
+            'reason':None if valid else '独立カレンダーに沿う253日足の観測率90%またはRS母集団100銘柄を満たしません。'}
+        if emit:point.update(r3_values(i))
+        points.append(point)
+    if log:
+        # Round 3 M8: the newest session's values for the CI log, written to the output or not (rule 18).
+        newest=r3_values(count-1) if count else dict.fromkeys(R3_MARKET_FIELDS)
+        log(f"Market history r3 fields {sessions[-1] if count else '-'} (emission {'on' if emit else 'off'}): "+' '.join(f"{key}={'unavailable' if newest[key] is None else newest[key]}" for key in R3_MARKET_FIELDS))
     index=[]; sector_series={}; extra_provenance=[]
     for symbol in ['^GSPC','SPY',*SECTORS]:
         if symbol not in records: continue
@@ -281,7 +329,7 @@ def build(records, errors, symbols, sessions, target, classification=None):
             series.append({'date':day,'coverage':observed,'eligibleUniverse':eligible,'above50':above50,'above50Percent':above50/observed*100 if valid else None,'leaderCount':int(arrays['leaderCount'][i]) if valid else None})
         sector_breadth.append({'sector':group,'universe':len(group_columns[group]),'points':series})
     return {'schema_version':'market-long-history-v1','market':'US','as_of_date':target,'retrieved_at':datetime.now(timezone.utc).isoformat(),
-        'indicator_policy':INDICATOR_POLICY,'price_policy':{'basis':'split-adjusted-close-no-dividend','ambiguous_daily_ratio_at_least':1.8,'ambiguous_daily_ratio_at_most':.55,'rolling_sessions':253,'minimum_coverage':.9,'unknown_inception':'retained in expected denominator','extreme_move_limitation':'A real extreme move can also be excluded; no split/corporate-action certification is claimed.'},
+        'indicator_policy':{**INDICATOR_POLICY,**R3_INDICATOR_POLICY} if emit else INDICATOR_POLICY,'price_policy':{'basis':'split-adjusted-close-no-dividend','ambiguous_daily_ratio_at_least':1.8,'ambiguous_daily_ratio_at_most':.55,'rolling_sessions':253,'minimum_coverage':.9,'unknown_inception':'retained in expected denominator','extreme_move_limitation':'A real extreme move can also be excluded; no split/corporate-action certification is claimed.'},
         'universe':{'basis':'current-published-universe-retrospective','symbols':symbols,'sha256':digest(encode(symbols)),'historical_membership_verified':False,'historical_fundamentals_verified':False},
         'calendar':{'provider':'pandas_market_calendars:NYSE','sessions':sessions},'breadth':points,'sp500':index,'sectorRotation':{'lookback_sessions':126,'classification':'11 Select Sector SPDR ETF proxies; not official IBD industry groups or ratings','frames':frames},
         'classification':classification,'sectorBreadth':sector_breadth if classification else [],'provenance':provenance+extra_provenance,'errors':{**errors,**parse_errors}}
@@ -396,7 +444,7 @@ def collect(target, symbols, classification, cache, output, workers=3, allow_una
             if record: records[symbol]=record
             else: errors[symbol]=error
             if i%100==0 or i==total: print(json.dumps({'done':i,'total':total,'errors':len(errors)}),flush=True)
-    result=build(records,errors,symbols,sessions,target,classification)
+    result=build(records,errors,symbols,sessions,target,classification,log=lambda line:print(line,flush=True))
     result['calendar']['version']=mcal.__version__
     valid=[r for r in result['breadth'] if r['newHighs'] is not None]
     summary={'target':target,'output':str(destination),'symbols':len(symbols),'failures':len(result['errors']),'valid_breadth_sessions':len(valid),'first_valid':valid[0]['date'] if valid else None,'last_valid':valid[-1]['date'] if valid else None,'sector_frames':len(result['sectorRotation']['frames']),'elapsed_seconds':round(time.monotonic()-started,3)}

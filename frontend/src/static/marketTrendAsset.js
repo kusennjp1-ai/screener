@@ -40,6 +40,20 @@ function closesValid(closes,points,asOfDate){
  const days=points.slice(-closes.length);
  return closes.every((point,i)=>plain(point)&&validDay(point.date)&&point.date<=asOfDate&&(!i||point.date>closes[i-1].date)&&finite(point.close)&&point.close>0&&days[i]?.date===point.date);
 }
+/**
+ * Round 3 M8d, optional (the exporter writes it only once EMIT_R3_MARKET_FIELDS is on): an index's stalling days,
+ * {available:true, method, dates} or {available:false, method, reason}. They are computed on the same bars and last date as
+ * the distribution count, so they carry no date of their own: each is one of the index's own last STALLING_SESSIONS points
+ * (a stalling day expires after 25 sessions, as a distribution day does), oldest first. Any method id is read (the screens
+ * say which they describe).
+ */
+export const STALLING_SESSIONS=25;
+function stallingValid(value,points){
+ if(!plain(value)||typeof value.method!=='string'||!value.method)return false;
+ if(value.available===false)return typeof value.reason==='string'&&value.reason.length>0;
+ const live=new Set(points.slice(-STALLING_SESSIONS).map(point=>point?.date));
+ return value.available===true&&points.length>0&&Array.isArray(value.dates)&&value.dates.every((date,i)=>validDay(date)&&live.has(date)&&(!i||date>value.dates[i-1]));
+}
 // A malformed optional field is withdrawn with a reason; it never blanks the distribution count beside it.
 // Like lastObserved, a judgement belongs to its own index: computed on the same bars, so dated on their last point.
 function readIndex(index,asOfDate){
@@ -52,6 +66,8 @@ function readIndex(index,asOfDate){
  }
  // Malformed closes are withdrawn alone (the market tab then has no S&P／Nasdaq switch); the counts beside them stay.
  if('closes' in index&&!closesValid(index.closes,points,asOfDate)){delete out.closes;out.closes_error='指数の終値の形式を確認できません。';}
+ // Malformed stalling days are withdrawn alone, as a follow-through record is: the distribution count stays.
+ if('stalling' in index&&!stallingValid(index.stalling,points))out.stalling={available:false,method:typeof index.stalling?.method==='string'&&index.stalling.method?index.stalling.method:null,reason:'ストーリング日の形式を確認できません。'};
  return out;
 }
 export function readMarketTrends(value,entry){

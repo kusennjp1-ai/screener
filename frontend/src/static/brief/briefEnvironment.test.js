@@ -64,13 +64,19 @@ describe('market tile suffix', () => {
   const ready = (nas, extra = {}, gspc = ftd('confirmed')) => ({ data: { as_of_date: DATE, indices: [{ symbol: '^GSPC', followThrough: gspc }, { symbol: '^IXIC', followThrough: nas }], ...extra } });
   const manifest = { as_of_date: DATE, markets: { US: { as_of_date: DATE } } };
 
-  it('says FTD確認済み while the guide is 0% under an FTD-upgraded uptrend, before anything else', async () => {
+  it('says FTD確認済み while the guide is 0% under an FTD-upgraded uptrend, only with the same day\'s confirmed ^GSPC record (M1a)', async () => {
     const { marketTileSuffix, MARKET_TILE_SUFFIX } = await import('./briefEnvironment');
     const upgraded = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
+    // The app's own ^GSPC record of the analysis date confirms the FTD (ready()'s default): the suffix, before anything else.
     expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('correction')), manifest })).toBe('FTD確認済み');
-    // It needs no market-trends data: the verdict's rows carry the regime.
-    expect(marketTileSuffix({ market: upgraded, trends: { loading: true }, manifest: null })).toBe('FTD確認済み');
-    expect(marketTileSuffix({ market: { ...upgraded, label: '長期トレンド警戒' }, trends: null })).toBe(MARKET_TILE_SUFFIX.ftd);
+    expect(marketTileSuffix({ market: { ...upgraded, label: '長期トレンド警戒（独自判定）' }, trends: ready(ftd('correction')), manifest: null })).toBe(MARKET_TILE_SUFFIX.ftd);
+    // Without a ready series there is no record to back it: no suffix (round 2 said it from the rows' regime alone).
+    expect(marketTileSuffix({ market: upgraded, trends: { loading: true }, manifest: null })).toBeNull();
+    expect(marketTileSuffix({ market: { ...upgraded, label: '長期トレンド警戒（独自判定）' }, trends: null })).toBeNull();
+    // A record one session behind, a rally attempt on the day, or a manifest of another date: no suffix.
+    expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('correction'), {}, ftd('confirmed', '2026-10-01')), manifest })).toBeNull();
+    expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('correction'), {}, ftd('rally_attempt')), manifest })).toBeNull();
+    expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('correction')), manifest: { markets: { US: { as_of_date: '2026-10-01' } } } })).toBeNull();
     // A 0% guide that is not an FTD upgrade has no suffix.
     expect(marketTileSuffix({ market: { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'correction', ftdUpgraded: false }, trends: ready(ftd('correction')), manifest })).toBeNull();
   });
@@ -101,12 +107,31 @@ describe('market tile suffix', () => {
       expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('confirmed'), {}, ftd(state)), manifest })).toBeNull();
     }
     expect(gspcFtdDisagrees(ready(ftd('confirmed')))).toBe(false);
-    // An older ^GSPC record, an unavailable one or no series: nothing to compare, so the judge side's FTD stands.
-    for (const gspc of [ftd('rally_attempt', '2026-10-01'), { available: false, method: 'm', reason: 'x' }, null]) {
+    expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('confirmed')), manifest })).toBe(MARKET_TILE_SUFFIX.ftd);
+    // An older ^GSPC record, an unavailable one or no series: nothing to compare (gspcFtdDisagrees null), and nothing backs
+    // the FTD either, so Today says no 「FTD確認済み」 (M1a; the market tab's cause line still explains the 0%).
+    for (const gspc of [ftd('confirmed', '2026-10-01'), ftd('rally_attempt', '2026-10-01'), { available: false, method: 'm', reason: 'x' }, null]) {
       expect(gspcFtdDisagrees(ready(ftd('confirmed'), {}, gspc))).toBeNull();
-      expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('confirmed'), {}, gspc), manifest })).toBe(MARKET_TILE_SUFFIX.ftd);
+      expect(marketTileSuffix({ market: upgraded, trends: ready(ftd('confirmed'), {}, gspc), manifest })).toBeNull();
     }
     expect(gspcFtdDisagrees({ loading: true })).toBeNull();
+  });
+
+  it('reads one index\'s follow-through record only when it is the published day\'s (sameDayFollowThrough)', async () => {
+    const { sameDayFollowThrough } = await import('./briefEnvironment');
+    const value = ready(ftd('rally_attempt'), {}, ftd('confirmed'));
+    expect(sameDayFollowThrough(value, manifest, '^GSPC')).toMatchObject({ state: 'confirmed', asOf: DATE });
+    expect(sameDayFollowThrough(value, manifest, '^IXIC')).toMatchObject({ state: 'rally_attempt', asOf: DATE });
+    // No manifest (or one without the market's date) checks the series alone.
+    expect(sameDayFollowThrough(value, null, '^GSPC')).toMatchObject({ state: 'confirmed' });
+    expect(sameDayFollowThrough(value, { markets: {} }, '^GSPC')).toMatchObject({ state: 'confirmed' });
+    // A manifest of another day, a record one session behind, an unavailable record, none, or no ready series: null.
+    expect(sameDayFollowThrough(value, { markets: { US: { as_of_date: '2026-10-01' } } }, '^GSPC')).toBeNull();
+    expect(sameDayFollowThrough(ready(ftd('confirmed'), {}, ftd('confirmed', '2026-10-01')), manifest, '^GSPC')).toBeNull();
+    expect(sameDayFollowThrough(ready(ftd('confirmed'), {}, { available: false, method: 'm', reason: 'x' }), manifest, '^GSPC')).toBeNull();
+    expect(sameDayFollowThrough({ data: { as_of_date: DATE, indices: [{ symbol: '^GSPC' }] } }, manifest, '^GSPC')).toBeNull();
+    expect(sameDayFollowThrough(value, manifest, '^DJI')).toBeNull();
+    for (const trends of [null, { loading: true }, { error: new Error('x') }, { data: { ...value.data, as_of_date: 'x' } }]) expect(sameDayFollowThrough(trends, manifest, '^GSPC')).toBeNull();
   });
 
   it('says NAS調整中 while the guide is open and the Nasdaq is in correction, on a rally attempt (or one that expired) or after a failed FTD, judged today', async () => {
@@ -129,9 +154,72 @@ describe('market tile suffix', () => {
   });
 
   it('keeps every suffix within 7 full-width characters (a half-width letter counts as half)', async () => {
-    const { MARKET_TILE_SUFFIX } = await import('./briefEnvironment');
+    const { FTD_TEXT, MARKET_TILE_SUFFIX } = await import('./briefEnvironment');
     const width = text => [...text].reduce((sum, ch) => sum + (/[\x20-\x7e]/.test(ch) ? 0.5 : 1), 0);
-    for (const text of Object.values(MARKET_TILE_SUFFIX)) expect(width(text)).toBeLessThanOrEqual(7);
+    // 「反発n日目」 on every day of a rally attempt (it expires after FTD_TEXT.maxDay), and a three-digit day besides.
+    const texts = [MARKET_TILE_SUFFIX.ftd, MARKET_TILE_SUFFIX.nasdaq, ...Array.from({ length: FTD_TEXT.maxDay }, (_, i) => MARKET_TILE_SUFFIX.rally(i + 1)), MARKET_TILE_SUFFIX.rally(999)];
+    expect(Object.keys(MARKET_TILE_SUFFIX)).toEqual(['ftd', 'nasdaq', 'rally']);
+    for (const text of texts) expect(width(text)).toBeLessThanOrEqual(7);
+    expect(MARKET_TILE_SUFFIX.rally(3)).toBe('反発3日目');
+  });
+
+  // M4: while the guide is 0% (no FTD upgrade), Today's tile says how far the same day's rally attempt has come.
+  const CLOSED = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'correction', ftdUpgraded: false };
+  const rally = (day, asOf = DATE, low = '2026-09-29') => ({ ...ftd('rally_attempt', asOf), low: { date: low, low: 100 }, attempt: { startDate: '2026-09-30', day } });
+
+  it('says 反発n日目 at 0% when the same day\'s ^GSPC or ^IXIC record is in a rally attempt, the larger day with both (M4)', async () => {
+    const { marketTileSuffix, MARKET_TILE_SUFFIX } = await import('./briefEnvironment');
+    expect(marketTileSuffix({ market: CLOSED, trends: ready(rally(3)), manifest })).toBe('反発3日目');
+    expect(marketTileSuffix({ market: CLOSED, trends: ready(ftd('correction'), {}, rally(5)), manifest })).toBe(MARKET_TILE_SUFFIX.rally(5));
+    // Both indices on a rally attempt of different days: the larger, whichever index it is.
+    expect(marketTileSuffix({ market: CLOSED, trends: ready(rally(3), {}, rally(5)), manifest })).toBe('反発5日目');
+    expect(marketTileSuffix({ market: CLOSED, trends: ready(rally(12), {}, rally(5)), manifest })).toBe('反発12日目');
+    // Every 0% verdict that is no FTD upgrade, and no manifest (the series alone is checked).
+    for (const label of ['長期トレンド警戒（独自判定）', '新規購入を抑制（独自判定）']) expect(marketTileSuffix({ market: { ...CLOSED, label }, trends: ready(rally(3)), manifest: null })).toBe('反発3日目');
+  });
+
+  it('never says 反発n日目 for another state, another day\'s record, a missing day, an open guide or an FTD upgrade (M4)', async () => {
+    const { marketTileSuffix } = await import('./briefEnvironment');
+    // No other state is a rally attempt: no new correction is defined here (the exporter's 6% gate decides).
+    for (const state of ['correction', 'attempt_expired', 'confirmed', 'no_correction', 'ftd_failed']) {
+      expect(marketTileSuffix({ market: CLOSED, trends: ready({ ...ftd(state), attempt: { startDate: '2026-09-30', day: 3 } }, {}, { ...ftd(state), attempt: { startDate: '2026-09-30', day: 3 } }), manifest })).toBeNull();
+    }
+    // Unavailable records, none, or no ready series.
+    expect(marketTileSuffix({ market: CLOSED, trends: ready({ available: false, method: 'm', reason: 'x' }, {}, null), manifest })).toBeNull();
+    expect(marketTileSuffix({ market: CLOSED, trends: ready(undefined, {}, undefined), manifest })).toBeNull();
+    for (const trends of [null, { loading: true }, { error: true, failureReason: new Error('x') }]) expect(marketTileSuffix({ market: CLOSED, trends, manifest })).toBeNull();
+    // A record of another day (the series one session behind) or a manifest of another date: never today's.
+    expect(marketTileSuffix({ market: CLOSED, trends: ready(rally(3, '2026-10-01')), manifest })).toBeNull();
+    expect(marketTileSuffix({ market: CLOSED, trends: ready(rally(3)), manifest: { markets: { US: { as_of_date: '2026-10-01' } } } })).toBeNull();
+    // Of two indices, a record of another day is left out and the other one's day is said.
+    expect(marketTileSuffix({ market: CLOSED, trends: ready(rally(3), {}, rally(9, '2026-10-01')), manifest })).toBe('反発3日目');
+    // A day that is not a positive whole number: none (never 「反発中」 or 「反発0日目」).
+    for (const day of [0, -1, 2.5, null, undefined, '3']) expect(marketTileSuffix({ market: CLOSED, trends: ready(rally(day)), manifest })).toBeNull();
+    expect(marketTileSuffix({ market: CLOSED, trends: ready({ ...rally(3), attempt: null }), manifest })).toBeNull();
+    // An open guide keeps 「NAS調整中」; an FTD upgrade keeps 「FTD確認済み」 or nothing (one suffix at most).
+    expect(marketTileSuffix({ market: OPEN, trends: ready(rally(3)), manifest })).toBe('NAS調整中');
+    const upgraded = { ...CLOSED, regime: 'confirmed_uptrend', ftdUpgraded: true };
+    expect(marketTileSuffix({ market: upgraded, trends: ready(rally(3)), manifest })).toBe('FTD確認済み');
+    expect(marketTileSuffix({ market: upgraded, trends: ready(rally(3), {}, rally(5)), manifest })).toBeNull();
+    // An unknown verdict, or a cap that is not a number.
+    expect(marketTileSuffix({ market: { label: '市場未確認', cap: 0, state: 'unknown' }, trends: ready(rally(3)), manifest })).toBeNull();
+    expect(marketTileSuffix({ market: { ...CLOSED, cap: undefined }, trends: ready(rally(3)), manifest })).toBeNull();
+  });
+
+  it('explains 反発n日目 with each index, its day and its rally low, the rule (独自判定) and an unchanged verdict (M4)', async () => {
+    const { marketTileNote, marketTileSuffix, FTD_TEXT } = await import('./briefEnvironment');
+    const rule = `${FTD_TEXT.minDay}日目以降の${FTD_TEXT.gain}上昇待ち（独自判定）。判定と目安は変わりません。`;
+    expect(marketTileNote({ market: CLOSED, trends: ready(rally(3)), manifest })).toBe(`Nasdaq総合は安値9/29から反発3日目。${rule}`);
+    expect(marketTileNote({ market: CLOSED, trends: ready(rally(3), {}, rally(5, DATE, '2026-09-25')), manifest })).toBe(`S&P 500は安値9/25から反発5日目、Nasdaq総合は安値9/29から反発3日目。${rule}`);
+    expect(marketTileNote({ market: CLOSED, trends: ready(ftd('correction'), {}, rally(5, DATE, '2026-09-25')), manifest })).toBe(`S&P 500は安値9/25から反発5日目。${rule}`);
+    // Without the low's date the low is left out, never guessed.
+    expect(marketTileNote({ market: CLOSED, trends: ready({ ...rally(3), low: null }), manifest })).toBe(`Nasdaq総合は反発3日目。${rule}`);
+    // The note goes with the suffix: none without it.
+    const input = { market: CLOSED, trends: ready(rally(3)), manifest };
+    expect(marketTileSuffix(input)).toBe('反発3日目');
+    expect(marketTileNote({ ...input, trends: ready(rally(3, '2026-10-01')) })).toBeNull();
+    expect(marketTileNote({ ...input, market: { ...CLOSED, regime: 'confirmed_uptrend', ftdUpgraded: true } })).toBeNull();
+    expect(marketTileNote({ ...input, manifest: { markets: { US: { as_of_date: '2026-10-01' } } } })).toBeNull();
   });
 
   it('names the Nasdaq correction by one condition, shared with the market tab\'s note', async () => {
@@ -192,11 +280,41 @@ describe('market tab helpers', () => {
     expect(sentence('長期市場履歴: universe')).toBe('長期市場履歴: universe。');
   });
 
+  it('says how many sessions ago a confirmed FTD was, and 前回のFTD after FTD_RECENT_SESSIONS (M2)', async () => {
+    const { followThroughView, ftdPrevious, ftdSessionsSince, FTD_PREVIOUS_NAME, FTD_RECENT_SESSIONS } = await import('./briefEnvironment');
+    const confirmed = (sessionsSince, over = {}) => ({ available: true, method: 'rally-attempt-gain1.2-day4-15-decline6-v1', asOf: '2026-10-02', state: 'confirmed', peak: { date: '2026-07-01', close: 100 }, low: { date: '2026-08-01', low: 90 },
+      declinePct: 9.1, attempt: null, ftd: { date: '2026-09-16', attemptDay: 4, gainPct: 1.43, volumeRatio: 1.2, ...(sessionsSince === undefined ? {} : { sessionsSince }), distributionSince: 2 }, failedDate: null, events: [], ...over });
+    const view = (n, over) => followThroughView(confirmed(n, over), '2026-10-02');
+    expect(FTD_RECENT_SESSIONS).toBe(25);
+    // The one copy of the word (the row, the ◆, the opened row and the cause lines read it; the tests below read it too).
+    expect(FTD_PREVIOUS_NAME).toBe('前回のFTD');
+    // sessionsSince counts the sessions after the FTD's day: 0 is the FTD's own session.
+    expect(view(0)).toEqual({ b: '確認 9/16', em: '当日・+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
+    expect(view(12)).toEqual({ b: '確認 9/16', em: '12日前・+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
+    expect(view(FTD_RECENT_SESSIONS)).toEqual({ b: '確認 9/16', em: '25日前・+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
+    // Older than the window: 前回のFTD, flagged, and still no tone (never green, never amber).
+    expect(view(FTD_RECENT_SESSIONS + 1)).toEqual({ b: `${FTD_PREVIOUS_NAME} 9/16`, em: '26日前・+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null, previous: true });
+    expect(view(152).b).toBe(`${FTD_PREVIOUS_NAME} 9/16`);
+    expect(view(152).tone).toBeUndefined();
+    // No usable count (an older record, a negative or fractional one): today's words, nothing guessed.
+    for (const n of [undefined, null, -1, 2.5, '30']) expect(view(n)).toEqual({ b: '確認 9/16', em: '+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
+    // Without the FTD's date the count still stands, the date is never invented; an older record keeps its date.
+    expect(view(30, { ftd: { sessionsSince: 30 } })).toMatchObject({ b: FTD_PREVIOUS_NAME, em: '30日前', previous: true });
+    expect(view(30, { asOf: '2026-10-01' })).toMatchObject({ b: `${FTD_PREVIOUS_NAME} 9/16`, asOf: '10/1' });
+    // The predicate the row, the ◆ and the cause line share: confirmed records only.
+    expect([0, 25, 26].map(n => ftdPrevious(confirmed(n)))).toEqual([false, false, true]);
+    expect([0, 25, 26].map(n => ftdSessionsSince(confirmed(n)))).toEqual([0, 25, 26]);
+    for (const ft of [{ ...confirmed(40), state: 'ftd_failed' }, { ...confirmed(40), available: false }, confirmed(undefined), null, undefined]) {
+      expect(ftdPrevious(ft)).toBe(false);
+      expect(ftdSessionsSince(ft)).toBeNull();
+    }
+  });
+
   it('words every follow-through state compactly and dates an older judgement', async () => {
-    const { followThroughView } = await import('./briefEnvironment');
+    const { followThroughView, FTD_PREVIOUS_NAME } = await import('./briefEnvironment');
     const base = { available: true, method: 'rally-attempt-gain1.2-day4-15-decline6-v1', asOf: '2026-10-02', peak: { date: '2026-09-10', close: 100 }, low: { date: '2026-09-29', low: 90 }, declinePct: 7.24, attempt: { startDate: '2026-09-30', day: 3 }, ftd: null, failedDate: null, events: [] };
     const view = (over, date = '2026-10-02') => followThroughView({ ...base, ...over }, date);
-    expect(view({ state: 'confirmed', ftd: { date: '2026-08-07', attemptDay: 4, gainPct: 1.43, volumeRatio: 1.2, sessionsSince: 40, distributionSince: 2 } })).toMatchObject({ b: '確認 8/7', em: '+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null });
+    expect(view({ state: 'confirmed', ftd: { date: '2026-08-07', attemptDay: 4, gainPct: 1.43, volumeRatio: 1.2, sessionsSince: 40, distributionSince: 2 } })).toMatchObject({ b: `${FTD_PREVIOUS_NAME} 8/7`, em: '40日前・+1.4%・反発4日目・FTD後の有効な分配日2', asOf: null, previous: true });
     expect(view({ state: 'rally_attempt' })).toMatchObject({ b: '反発3日目', em: '安値9/29・4日目以降の+1.2%上昇待ち' });
     expect(view({ state: 'correction', attempt: null })).toMatchObject({ b: '調整中', em: '高値9/10から−7.2%' });
     expect(view({ state: 'attempt_expired', attempt: { startDate: '2026-09-01', day: 17 } })).toMatchObject({ b: '15日以内のFTDなし', em: '安値9/29を維持・反発17日目' });

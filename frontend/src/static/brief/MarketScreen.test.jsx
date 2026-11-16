@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import MarketScreen from './MarketScreen';
@@ -102,5 +102,53 @@ describe('brief market screen', () => {
     show({ loading: false, error: true, data: undefined, failureReason: new TypeError('Failed to fetch') });
     const history = screen.getByRole('region', { name: '市場環境の推移' });
     expect(within(history).getByRole('alert')).toHaveTextContent(/^長期履歴を取得できません（通信エラー）。$/);
+  });
+});
+
+// ---- Round 3 (market track): the screen hands the exchange calendar's last closed session to the card (M1e) -------------
+describe('brief market screen: a verdict older than the last closed session', () => {
+  const schedule = { provider: 'pandas_market_calendars:NYSE', valid_until: '2026-10-08T23:00:00Z',
+    sessions: ['2026-10-01', '2026-10-02', '2026-10-05', '2026-10-06', '2026-10-07'].map(date => ({ date, close_at: `${date}T20:00:00Z` })) };
+  const withSchedule = (value, extra = {}) => ({ ...value, data: { ...value.data, refresh_schedule: schedule, ...extra } });
+  const lead = () => screen.getByTestId('brief-regime').querySelector('.brief-verdict-head p').textContent;
+  beforeEach(() => { atWidth(375); vi.useFakeTimers({ toFake: ['Date'] }); });
+  afterEach(() => vi.useRealTimers());
+
+  it('waits for a new publication once a later session has closed, with or without a long history', () => {
+    vi.setSystemTime(new Date('2026-10-06T09:00:00Z'));
+    show(withSchedule(history300()));
+    expect(lead()).toBe('10/2時点の判定・更新待ち');
+    cleanup();
+    // Without the long history the target is still read (the 推移 tab's own state is not).
+    const { long_history, ...noHistory } = history300().data;
+    expect(long_history).toBeTruthy();
+    show(withSchedule({ loading: false, error: false, data: noHistory }));
+    expect(lead()).toBe('10/2時点の判定・更新待ち');
+  });
+
+  it('keeps the lead on the verdict\'s own session, and without a calendar', () => {
+    vi.setSystemTime(new Date('2026-10-02T21:00:00Z'));
+    show(withSchedule(history300()));
+    expect(lead()).toBe('新規の買いを検討できます。');
+    cleanup();
+    vi.setSystemTime(new Date('2026-10-06T09:00:00Z'));
+    show(history300());
+    expect(lead()).toBe('新規の買いを検討できます。');
+  });
+});
+
+// ---- Round 3 (M5): the screen hands its verdict to the study, so a 50日線割れ verdict's fold says the 0% is untested ----------
+describe('brief market screen: the 50日線割れ verdict\'s 0% (M5)', () => {
+  beforeEach(() => atWidth(375));
+  it('ends the closed 目安と判定の基準 fold with the 0% note for a 50日線割れ verdict, and has none for an open guide', () => {
+    const value = history300();
+    render(<MemoryRouter><MarketScreen brief={{ trends: value, date: '2026-10-02', market: { label: '50日線割れ（弱含み・独自判定）', cap: 0 }, marketLoading: false }} /></MemoryRouter>);
+    const fold = screen.getByTestId('brief-regime').querySelector('details.brief-exposure-basis');
+    expect(fold).not.toHaveAttribute('open');
+    // This history has no ^GSPC closes: the closing sentence alone, no study figure.
+    expect(fold.querySelector('p.brief-exposure-zero')).toHaveTextContent(/^0%は独自設定で、検証された水準ではありません。$/);
+    cleanup();
+    show(history300());
+    expect(screen.getByTestId('brief-regime').querySelector('.brief-exposure-zero')).toBeNull();
   });
 });

@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
-import { basisConflict, delta, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, REFERENCE_CHECKS, RULE_TEXT, signedPercent, verdictBasis, yearRange } from './marketTabModel';
+import { basisConflict, delta, BREAKOUT_HOLD_LABEL, BREAKOUT_WINDOW_TEXT, distributionGrade, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, DISTRIBUTION_CAUTION, DISTRIBUTION_REFERENCE, DISTRIBUTION_TEXT, DISTRIBUTION_WARN, REFERENCE_CHECKS, RULE_TEXT, signedPercent, STAGE_NAMES, verdictBasis, verdictWaiting, yearRange } from './marketTabModel';
+import { DISTRIBUTION_METHOD } from '../distributionDays';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT } from '../marketLongHistory';
+import { distributionDetail, stallingLine, DISTRIBUTION_BRIDGE } from '../reference/marketTabStudy.js';
+import { marketUpdateState } from '../marketUpdateState';
 import { historyTakeaway, sectorRanks } from './marketTabHistory';
-import { marketTabParts } from './marketTabGroups';
+import { marketTabParts, BREAKOUT_EARLY_SESSIONS, BREAKOUT_FAILURE_PERCENT, BREAKOUT_NOT_PIVOT, KEY_ABSENT, STAGE_LEGEND_NAMES, STAGE_REPLAY_NOTE, STOCK_SIDE_HEAD } from './marketTabGroups';
 import { gspcFtdWords, marketRegimeContext, marketTabStudy, nasdaqNote, publishedIndexState, publishedMarketContext, regimeCause, regimeKey, signalTagText, REGIME_NAMES, TAG_MEANINGS, TT_POPULATION } from '../reference/marketTabStudy.js';
-import { marketTileSuffix, MARKET_TILE_SUFFIX } from './briefEnvironment';
+import { followThroughView, marketTileSuffix, BREAKOUT_HOLD_NAME, FTD_PREVIOUS_NAME, MARKET_TILE_SUFFIX } from './briefEnvironment';
 import { capText } from '../portfolioPlan';
 import reference from '../reference/market-regime-reference-v1.json' with { type: 'json' };
 import exchange from '../__fixtures__/nyse-sessions-2024-2026.json' with { type: 'json' };
@@ -44,10 +50,12 @@ describe('market tab view model: a complete, current publication', () => {
     expect(item(model, 'rs90')).toMatchObject({ b: '8銘柄', change: '−2' });
     expect(item(model, 'breakout')).toMatchObject({ b: '75%', note: '8件で判定', detail: '10〜29営業日前の上抜け8件のうち6件が10日間で−7%に届かず', warn: false });
     expect(item(model, 'health')).toMatchObject({ b: '70%', note: '20営業日前のTT達成30銘柄が対象', detail: '30銘柄のうち21銘柄が50日線の上' });
-    expect(item(model, 'stage')).toMatchObject({ b: 'ステージ2 35%', stages: [{ k: 1, name: '底固め', share: 25 }, { k: 2, name: '上昇', share: 35 }, { k: 3, name: '天井圏', share: 20 }, { k: 4, name: '下降', share: 20 }] });
+    expect(item(model, 'stage')).toMatchObject({ b: 'ステージ2 35%', stages: [{ k: 1, name: '底固め', share: 25 }, { k: 2, name: '上昇（加速中）', share: 35 }, { k: 3, name: '横ばい・天井圏', share: 20 }, { k: 4, name: '下降', share: 20 }] });
     expect(item(model, 'extremes').rows.map(r => [r.name, r.b, r.warn || false])).toEqual([['新高値', '40', false], ['新安値', '12', false]]);
     expect(item(model, 'dist').rows.map(r => [r.name, r.b, r.asOf])).toEqual([['S&P', '3日', null], ['NAS', '4日', null]]);
-    expect(item(model, 'ftd').rows.map(r => [r.name, r.b])).toEqual([['S&P', '確認 8/7'], ['NAS', '反発3日目']]);
+    // The fixture's FTD is 40 sessions old: the producer's 「前回のFTD 8/7」 (M2).
+    expect(item(model, 'ftd').rows.map(r => [r.name, r.b])).toEqual([['S&P', followThroughView(confirmed('2026-10-02'), '2026-10-02').b], ['NAS', '反発3日目']]);
+    expect(item(model, 'ftd').rows[0]).toMatchObject({ b: `${FTD_PREVIOUS_NAME} 8/7`, previous: true });
     expect(strings(model.groups).join(' ')).not.toMatch(BARE);
   });
 
@@ -63,7 +71,7 @@ describe('market tab view model: a complete, current publication', () => {
 
   it('keeps Today at its four tiles, each side of a pair named', () => {
     expect(model.today.map(f => f.label)).toEqual(['分配日（25日）', 'TT達成数', '200日線より上', '52週の新高値・新安値']);
-    expect(model.today[0]).toMatchObject({ pairs: [{ name: 'S&P', value: '3日', warn: false }, { name: 'NAS', value: '4日', warn: false }], em: '5日以上で注意', warn: false });
+    expect(model.today[0]).toMatchObject({ pairs: [{ name: 'S&P', value: '3日', warn: false }, { name: 'NAS', value: '4日', warn: false }], em: '7日以上で注意', warn: false });
     expect(model.today[1]).toMatchObject({ b: '30銘柄', em: '1か月で +5' });
     expect(model.today[3].pairs).toEqual([{ name: '高', value: '40' }, { name: '安', value: '12', warn: false }]);
   });
@@ -72,20 +80,21 @@ describe('market tab view model: a complete, current publication', () => {
 describe('market tab view model: fired warnings', () => {
   const rows = breadth('2026-10-02', (i, n) => (i === n - 1 ? { trendTemplateCount: 20, newHighs: 10, newLows: 30, stage1: 60, stage2: 40, stage3: 20, stage4: 80, breakoutsJudged: 10, breakoutsHeld: 3, leaderCohortAbove50: 9 } : {}), 260);
   const value = trends({ rows, sp500: closes('2026-10-02') });
-  value.data.indices[0] = index('^GSPC', '2026-10-02', 6, '2026-10-02', confirmed('2026-10-02'));
+  // 7 days: the distribution warning (M3: 5–6 is a reference, tested below).
+  value.data.indices[0] = index('^GSPC', '2026-10-02', 7, '2026-10-02', confirmed('2026-10-02'));
   const model = view(value);
   // The same publication under a reference that confirmed every breadth rule (no 参考 check): every fired rule is a warning.
   const robust = cardView({ market: UP, trends: value, date: '2026-10-02', study: { referenceKeys: [] } });
 
   it('lists every existing rule that fired, in page order, in plain sentences', () => {
     expect(model.signals.fired.map(s => [s.key, s.text])).toEqual([
-      ['dist-S&P', 'S&Pの分配日が25日間で6日'],
+      ['dist-S&P', 'S&Pの分配日が25日間で7日'],
       ['split', '指数は1年高値の水準なのに、200日線より上の銘柄は45.0%（指数と個別株の乖離）'],
       ['lows', '新安値（30）が新高値（10）を上回る'],
       ['template', 'トレンドテンプレート達成数が10営業日で33%減少'],
       ['stage', 'ステージ4（40%）がステージ2（20%）を上回る'],
       ['leaders', '20営業日前のTT達成銘柄のうち、50日線より上は30%'],
-      ['breakout', 'ブレイクアウトの成功率が30%に低下']]);
+      ['breakout', `${BREAKOUT_HOLD_NAME}が30%に低下`]]);
     expect(model.signals.unjudged).toEqual([]);
     // The breadth rules the study could not confirm (REFERENCE_CHECKS) are counted apart, Today and the market tab alike.
     expect(model.signals.fired.map(s => s.reference)).toEqual([false, true, true, true, true, true, true]);
@@ -96,7 +105,7 @@ describe('market tab view model: fired warnings', () => {
   });
 
   it('flags each fired value with the rule it crossed, built from the same constants', () => {
-    expect(item(model, 'dist').rows[0]).toMatchObject({ warn: true, flag: '5日以上' });
+    expect(item(model, 'dist').rows[0]).toMatchObject({ warn: true, flag: '7日以上' });
     expect(item(model, 'dist').rows[1].warn).toBe(false);
     // A 参考 rule keeps its flag and its words, as 参考 (reference) instead of a warning.
     for (const [key, flag] of [['a200', '指数が1年高値から5%以内で50%未満'], ['tt', '10日で20%以上減少'], ['breakout', '40%未満'], ['health', '50%未満'], ['stage', 'ステージ4がステージ2より多い']]) {
@@ -107,11 +116,11 @@ describe('market tab view model: fired warnings', () => {
     expect(item(robust, 'extremes').rows[1]).toMatchObject({ warn: true, flag: '新高値より多い' });
     expect(item(model, 'a50').warn).toBeUndefined();
     // Today reads 参考 in the warning's place and length, never amber; an index warning stays 注意.
-    expect(model.today.map(f => [f.em, f.warn])).toEqual([['注意：S&Pが5日以上', true], ['参考：10日で20%以上減少', false], ['参考：指数と個別株の乖離', false], ['参考：新安値が新高値より多い', false]]);
+    expect(model.today.map(f => [f.em, f.warn])).toEqual([['注意：S&Pが7日以上', true], ['参考：10日で20%以上減少', false], ['参考：指数と個別株の乖離', false], ['参考：新安値が新高値より多い', false]]);
     expect(model.today[3].pairs).toEqual([{ name: '高', value: '10' }, { name: '安', value: '30', warn: false }]);
     expect(model.warnings.map(w => [w.key, w.reference])).toEqual([['template', true], ['stage', true], ['leaders', true], ['breakout', true]]);
     expect(model.split).toMatchObject({ warning: true, reference: true });
-    expect(robust.today.map(f => [f.em, f.warn])).toEqual([['注意：S&Pが5日以上', true], ['注意：10日で20%以上減少', true], ['注意：指数と個別株の乖離', true], ['注意：新安値が新高値より多い', true]]);
+    expect(robust.today.map(f => [f.em, f.warn])).toEqual([['注意：S&Pが7日以上', true], ['注意：10日で20%以上減少', true], ['注意：指数と個別株の乖離', true], ['注意：新安値が新高値より多い', true]]);
     expect(robust.warnings.every(w => w.reference === false) && robust.split.reference === false).toBe(true);
   });
 
@@ -132,7 +141,7 @@ describe('market tab view model: an older long-history schema', () => {
     expect(group(model, 'breadth').items.map(i => i.key)).toEqual(['a50', 'extremes', 'leaderCount']);
     expect(group(model, 'breadth').missing).toBe('旧形式の長期集計（10/2）には未収録：200日線より上・TT達成数');
     expect(group(model, 'leaders').items).toEqual([]);
-    expect(group(model, 'leaders').missing).toBe('旧形式の長期集計（10/2）には未収録：RS推計90以上のTT達成（独自）・ブレイクアウト成功率・リーダーの健全度・ステージ構成');
+    expect(group(model, 'leaders').missing).toBe(`旧形式の長期集計（10/2）には未収録：RS推計90以上のTT達成（独自）・${BREAKOUT_HOLD_NAME}・リーダーの健全度・ステージ構成`);
     expect(item(model, 'leaderCount')).toMatchObject({ label: '先導株数（価格条件）', b: '20銘柄', rule: RULE_TEXT.leaderCount });
     // No TT達成数 row (the price-only count stands in), so nothing explains whom it counts; nor without a long history.
     expect(model.ttShown).toBe(false);
@@ -141,12 +150,12 @@ describe('market tab view model: an older long-history schema', () => {
 
   it('says which rules it could not judge and why, never reading their absence as all clear', () => {
     expect(model.signals.fired).toEqual([]);
-    expect(model.signals.reasons).toEqual([{ reason: '旧形式の長期集計に未収録', labels: ['指数と個別株の乖離', 'TT達成数の急減', 'ステージ構成', 'リーダーの健全度', 'ブレイクアウト成功率'] }]);
+    expect(model.signals.reasons).toEqual([{ reason: '旧形式の長期集計に未収録', labels: ['指数と個別株の乖離', 'TT達成数の急減', 'ステージ構成', 'リーダーの健全度', BREAKOUT_HOLD_NAME] }]);
   });
 
   it('keeps four tiles on Today, each named by what it shows', () => {
     expect(model.today.map(f => [f.label, f.b || f.pairs.map(p => p.value).join('・'), f.em])).toEqual([
-      ['分配日（25日）', '3日・4日', '5日以上で注意'],
+      ['分配日（25日）', '3日・4日', '7日以上で注意'],
       ['先導株数（価格条件）', '20銘柄', 'TT達成数は旧形式で未収録'],
       ['50日線より上', '43.0%', '200日線は旧形式で未収録'],
       ['52週の新高値・新安値', '40・12', '差 +28']]);
@@ -283,6 +292,9 @@ describe('market tab helpers', () => {
   it('words the basis of each verdict from its scan inputs, and only says the inputs differ', () => {
     expect(verdictBasis({ label: '上昇に圧力（独自判定）', cap: 0.25 }, '2026-10-02').text).toBe('根拠（10/2スキャン時点）：S&P 500（SPY）は50日線・200日線の上で、局面判定が「上昇に圧力」');
     expect(verdictBasis({ label: '長期トレンド警戒', cap: 0 }, '2026-10-02')).toMatchObject({ above50: null, above200: false });
+    // modelMarket's labels carry （独自判定） (M1c): the basis reads them by their prefix, so the words are unchanged.
+    expect(verdictBasis({ label: '長期トレンド警戒（独自判定）', cap: 0 }, '2026-10-02')).toEqual(verdictBasis({ label: '長期トレンド警戒', cap: 0 }, '2026-10-02'));
+    expect(verdictBasis({ label: '新規購入を抑制（独自判定）', cap: 0 }, '2026-10-02')).toEqual({ text: '根拠（10/2スキャン時点）：S&P 500（SPY）は50日線・200日線の上で、局面判定が上昇トレンドではない', above50: true, above200: true });
     expect(verdictBasis({ label: '市場未確認', cap: 0, state: 'unknown' }, '2026-10-02')).toBeNull();
     const basis = verdictBasis(UP, '2026-10-02');
     expect(basisConflict(basis, { date: '2026-10-02', vsMa: -1, vs200: 3 }, '2026-10-02')).toBe('判定の根拠はスキャン時点のSPY、この数値は長期履歴の^GSPC終値（10/2）です。50日線との位置が一致していません。');
@@ -354,7 +366,7 @@ const context = (value, date = '2026-10-02', ref = reference) => marketRegimeCon
 const lines = ctx => ctx.indices.map(block => [block.name, block.items.map(item => item.text)]);
 const study = (value, date = '2026-10-02', ref = reference) => marketTabStudy({ trends: value, reference: ref, date });
 const BANNED = /上がりやすい|下がりやすい|安全|底打ち|オールクリア|今日の確率/;
-const FOOTER = '状態ごとの過去の割合で、組み合わせた確率ではありません。これらは同じ事実（下げの最中・直後は値動きが荒い）を別の形で数えたもので、2指数は連動しているため独立の確認ではありません。この欄は下げの割合だけを示し、平均リターンが低かった状態はどちらの指数にもありません。指数の結果で、個別銘柄の値ではありません。出典：market-regime-study-v2（CI run 41844557380）、^GSPC・^IXIC日足 1990-01-02〜2026-11-03';
+const FOOTER = '状態ごとの過去の割合で、組み合わせた確率ではありません。これらは同じ事実（下げの最中・直後は値動きが荒い）を別の形で数えたもので、2指数は連動しているため独立の確認ではありません。この欄は下げの頻度の比較です（21営業日・^GSPC／^IXIC）。平均リターンが低かった状態はどちらの指数にもありません。指数の結果で、個別銘柄の値ではありません。出典：market-regime-study-v2（CI run 41844557380）、^GSPC・^IXIC日足 1990-01-02〜2026-11-03';
 
 describe('market tab: 過去の傾向 (market-regime study block)', () => {
   it('joins the fixture\'s S&P state to the study: above both lines and further below its high, 0.29 from the edge', () => {
@@ -400,7 +412,8 @@ describe('market tab: 過去の傾向 (market-regime study block)', () => {
     Object.assign(ref.indicators['^IXIC.ftd.state'].states.ftd_failed, { labelMean: 'robust', meanDirection: 'lower' });
     const footer = context(regimeTrends(), '2026-10-02', ref).footer;
     expect(footer).not.toContain('平均リターン');
-    expect(footer).toContain('この欄は下げの割合だけを示します。');
+    // What the block compares is said either way (M5).
+    expect(footer).toContain('この欄は下げの頻度の比較です（21営業日・^GSPC／^IXIC）。指数の結果で');
   });
 
   it('never shows the baseline as a state\'s value or combines states: each share is its own row\'s', () => {
@@ -490,8 +503,9 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
     const model = cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
     // A fired distribution check takes its count's graded bucket (MK2): S&P 6 days is 5–6, NAS 7 days is 7 or more.
     expect(model.signals.fired.map(c => [c.key, c.tags])).toEqual([['dist-S&P', ['〔未確立〕']], ['dist-NAS', ['〔S&P・Nasdaqとも〕']], ['ftd-S&P', ['〔S&Pのみ〕', '〔偏り〕']], ['ftd-NAS', ['〔未確立〕']], ['lows', ['〔参考〕']]]);
-    expect(model.signals.legend).toBe('〔参考〕＝2021〜26年の検証で関係未確認');
-    expect(model.signals.tagNote).toBe('〔参考〕は、2021〜2026年の参加度データ（現在の銘柄で過去をさかのぼった集計・上場廃止銘柄を含まない）の検証で、その後の指数の下げとの関係を確認できなかった注意サインです（全体として偶然と区別できない結果）。'
+    // The legend says what the study did not find (M6); its years and what it never tested are in the note.
+    expect(model.signals.legend).toBe('〔参考〕＝指数の下げとの関係は未確認');
+    expect(model.signals.tagNote).toBe('〔参考〕は、2021〜2026年の参加度データ（現在の銘柄で過去をさかのぼった集計・上場廃止銘柄を含まない）の検証で、その後の指数の下げとの関係を確認できなかった注意サインです（全体として偶然と区別できない結果・個別株のブレイクアウト成績との関係は未検証）。'
       + '〔S&P・Nasdaqとも〕〔S&Pのみ〕〔未確立〕は、1990〜2026年の指数の日足で、その状態のあと21営業日以内に5%以上下げた割合を調べた結果です（〔S&P・Nasdaqとも〕は両指数で確認、〔S&Pのみ〕はS&Pでのみ確認、〔未確立〕はその指数では確認できず、〔偏り〕はその状態の日の60%以上が検証期間の前半か後半に集中）。'
       + '確認は、偶然では説明しにくい差（p≤0.05）が、期間の前半・後半とも同じ向きで出たことです。');
     // That the signs never change the guide is said once, in the guide's own disclosure (MK6), not after the tags.
@@ -549,18 +563,22 @@ describe('market tab: study tags on the warning summary, the Nasdaq note and the
     value.data.indices[1] = { ...value.data.indices[1], latest: { date: '2026-10-02', value: 0 }, lastObserved: { date: '2026-10-02', value: 0 }, points: [{ date: '2026-10-02', value: 0 }], events: [] };
     const dist = model => model.groups[0].items.find(i => i.key === 'dist');
     const opened = dist(cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) }));
-    expect(opened.details).toEqual(['下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・5日以上で注意）', 'S&P：9/14・9/22・9/30（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）', 'NAS：有効な分配日なし']);
+    expect(opened.details).toEqual(['目安の判定はSPYの別集計', '下の分配日は^GSPC/^IXICの別集計（ストーリング日を含まない・7日以上で注意、5〜6日は参考）', 'S&P：9/14・9/22・9/30（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）', 'NAS：有効な分配日なし', stallingLine(value.data.indices, '2026-10-02')]);
     expect(opened.yearLines.map(line => [line.label, line.range.series.length, line.range.series.filter(v => v === null).length, line.range.lo, line.range.hi, line.format(3)])).toEqual([['S&Pの分配日', 252, 0, 0, 8, '3日']]);
     // Dates that do not add up to the count are not listed.
-    expect(dist(cardView({ market: UP, trends: trends(), date: '2026-10-02', study: study(trends()) })).details.slice(1)).toEqual(['S&P：有効な分配日の日付を確認できません', 'NAS：有効な分配日の日付を確認できません']);
+    expect(dist(cardView({ market: UP, trends: trends(), date: '2026-10-02', study: study(trends()) })).details.slice(2)).toEqual(['S&P：有効な分配日の日付を確認できません', 'NAS：有効な分配日の日付を確認できません', stallingLine(trends().data.indices, '2026-10-02')]);
     // Today (no study) has no detail lines.
     expect(dist(view(trends())).details).toBeUndefined();
   });
 
   it('never tones a confirmed FTD as a buy zone (the model the row reads; the card never drew the tone)', () => {
     const ftd = view(trends()).groups[0].items.find(i => i.key === 'ftd');
-    expect(ftd.rows[0]).toMatchObject({ name: 'S&P', b: '確認 8/7' });
+    expect(ftd.rows[0]).toMatchObject({ name: 'S&P', b: followThroughView(confirmed('2026-10-02'), '2026-10-02').b });
     expect(ftd.rows[0].tone).toBeUndefined();
+    // A recent one (within FTD_RECENT_SESSIONS) reads 確認 and is not toned either.
+    const recent = view(trends({ follow: [{ ...confirmed('2026-10-02'), ftd: { ...confirmed('2026-10-02').ftd, sessionsSince: 12 } }, attempt('2026-10-02')] })).groups[0].items.find(i => i.key === 'ftd');
+    expect(recent.rows[0]).toMatchObject({ name: 'S&P', b: '確認 8/7', em: '12日前・+1.4%・反発4日目・FTD後の有効な分配日2', warn: false });
+    expect(recent.rows[0].tone).toBeUndefined();
   });
 });
 
@@ -580,9 +598,10 @@ describe('market tab: the basis line names the regime\'s cause (MK1, MK4)', () =
   const gspc = ft => trends({ follow: [ft, attempt(DATE)] });
 
   it('says an FTD-upgraded uptrend keeps the guide at 0%, naming the regime\'s SPY FTD, its date only from the regime\'s block', () => {
-    // The regime's FTD (9/18) and the tab's own ^GSPC record (8/7) differ: the line attributes each.
-    expect(verdict(below50, manifest(upgradedBlock)).cause).toBe('局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足ではFTD 8/7。この目安はSPYが50日線の下のため0%（独自判定）');
-    expect(verdict(below200, manifest(upgradedBlock)).cause).toBe('局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足ではFTD 8/7。この目安はSPYが200日線の下のため0%（独自判定）');
+    // The regime's FTD (9/18) and the tab's own ^GSPC record (8/7) differ: the line attributes each. That FTD is 40
+    // sessions old, so the line calls it 「前回のFTD」 as the row below does (M2).
+    expect(verdict(below50, manifest(upgradedBlock)).cause).toBe(`局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足では${FTD_PREVIOUS_NAME} 8/7。この目安はSPYが50日線の下のため0%（独自判定）`);
+    expect(verdict(below200, manifest(upgradedBlock)).cause).toBe(`局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足では${FTD_PREVIOUS_NAME} 8/7。この目安はSPYが200日線の下のため0%（独自判定）`);
     // The same FTD day on both: nothing to attribute.
     expect(verdict(below50, manifest({ ...upgradedBlock, ftd_date: '2026-08-07' })).cause).toBe('局面判定はSPYのFTD（8/7）による上昇トレンド。この目安はSPYが50日線の下のため0%（独自判定）');
     // Without the block (an older publication) or with a null date, the date is left out, never guessed from ^GSPC, and
@@ -606,10 +625,11 @@ describe('market tab: the basis line names the regime\'s cause (MK1, MK4)', () =
     expect(marketTileSuffix({ market: below50, trends: gspc(failed(DATE)), manifest: upgraded })).toBeNull();
     // Agree: a confirmed FTD on the record of the day; the tile keeps its suffix.
     expect(marketTileSuffix({ market: below50, trends: gspc(confirmed(DATE)), manifest: upgraded })).toBe(MARKET_TILE_SUFFIX.ftd);
-    // Unavailable: a ^GSPC record of an older session, or none: nothing is compared, the tile keeps its suffix.
-    for (const ft of [attempt('2026-10-01'), { available: false, method: 'x', reason: 'y' }]) {
+    // Unavailable: a ^GSPC record of an older session, or none: nothing is compared on the tab, and nothing backs the FTD
+    // on Today either, so the tile drops its suffix (M1a: only the same day's confirmed record says 「FTD確認済み」).
+    for (const ft of [attempt('2026-10-01'), confirmed('2026-10-01'), { available: false, method: 'x', reason: 'y' }]) {
       expect(verdict(below50, upgraded, gspc(ft)).cause).not.toContain('^GSPC');
-      expect(marketTileSuffix({ market: below50, trends: gspc(ft), manifest: upgraded })).toBe(MARKET_TILE_SUFFIX.ftd);
+      expect(marketTileSuffix({ market: below50, trends: gspc(ft), manifest: upgraded })).toBeNull();
     }
     expect(gspcFtdWords(null, '2026-09-18', DATE)).toBeNull();
   });
@@ -639,7 +659,9 @@ describe('market tab: the basis line names the regime\'s cause (MK1, MK4)', () =
     expect(verdict(pressure, manifest(block({ distribution_days: 0 }))).cause).toBe(`局面判定の分配日：SPY 0日（ストーリング日を含む数え方）。${READS}`);
     // Where the basis does not name the regime (新規購入を抑制, 50日線割れ, 長期トレンド警戒), the line names it.
     const held = { label: '新規購入を抑制', cap: 0, regime: 'correction', ftdUpgraded: false };
-    expect(verdict(held, manifest(block({ regime: 'correction', distribution_days: 3 }))).cause).toBe('局面判定の分配日：SPY 3日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます');
+    // trends()'s ^GSPC record of the day is a confirmed FTD 40 sessions old: the line says it is the index's own count (M2).
+    expect(verdict(held, manifest(block({ regime: 'correction', distribution_days: 3 }))).cause).toBe(`局面判定の分配日：SPY 3日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます。下の^GSPCの${FTD_PREVIOUS_NAME}（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
+    expect(verdict(held, manifest(block({ regime: 'correction', distribution_days: 3 })), gspc(attempt(DATE))).cause).toBe('局面判定の分配日：SPY 3日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます');
     const weak = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'uptrend_under_pressure', ftdUpgraded: false };
     expect(verdict(weak, manifest(block({ distribution_days: null }))).cause).toBe('局面判定の分配日（SPY）は未収録。局面判定は「上昇に圧力」で、分配日のほか50日線・200日線と参加度も見ます');
     // The regime's name is said once: never beside the basis line's own, never as a cause through a colon.
@@ -675,14 +697,14 @@ describe('market tab: 〔参考〕 signs are counted apart from the warnings (MK
     expect(model.signals.fired[0].text).toBe('新安値（30）が新高値（10）を上回る');
   });
   it('keeps an index warning a ▲ warning, and marks the same 参考 rules on Today, which never loads the study', () => {
-    const value = make([6, 4]), model = cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
+    const value = make([7, 4]), model = cardView({ market: UP, trends: value, date: '2026-10-02', study: study(value) });
     expect([model.signals.warnings, model.signals.references]).toEqual([1, 1]);
     expect(model.groups.map(g => [g.id, g.fired, g.references])).toEqual([['index', 1, 0], ['breadth', 0, 1], ['leaders', 0, 0]]);
     const today = cardView({ market: UP, trends: value, date: '2026-10-02' });
     expect([today.signals.warnings, today.signals.references]).toEqual([1, 1]);
     expect(today.groups.map(g => [g.fired, g.references])).toEqual([[1, 0], [0, 1], [0, 0]]);
     expect(today.today.find(fact => fact.key === 'extremes')).toMatchObject({ warn: false, em: '参考：新安値が新高値より多い' });
-    expect(today.today.find(fact => fact.key === 'dist')).toMatchObject({ warn: true, em: '注意：S&Pが5日以上' });
+    expect(today.today.find(fact => fact.key === 'dist')).toMatchObject({ warn: true, em: '注意：S&Pが7日以上' });
   });
 
   it('marks on Today exactly the checks the study reference tags 〔参考〕 (REFERENCE_CHECKS against the reference)', () => {
@@ -735,5 +757,314 @@ describe('market tab: the S&P／Nasdaq switch from the Nasdaq\'s published close
     value.data.indices[1] = { ...value.data.indices[1], closes_error: '指数の終値の形式を確認できません。' };
     expect(cardView({ market: UP, trends: value, date: '2026-10-02' })).toMatchObject({ series: null, nasdaqClosesError: '指数の終値の形式を確認できません。' });
     expect(cardView({ market: UP, trends: trends(), date: '2026-10-02' }).nasdaqClosesError).toBeNull();
+  });
+});
+
+// ---- Round 3 (market track): the verdict's lead while a newer session has closed (M1e) ---------------------------------
+describe('market tab: the verdict lead waits for a new publication (M1e)', () => {
+  const DATE = '2026-10-02';
+  const caps = [['上昇トレンド（独自判定）', 0.5], ['上昇に圧力（独自判定）', 0.25], ['50日線割れ（弱含み・独自判定）', 0]];
+  const LONG = '10/2引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）', SHORT = '10/2時点の判定・更新待ち';
+  /** The exchange calendar the exporter writes (refresh_schedule): 10/2 and the sessions after it, each closing at 20:00Z. */
+  const schedule = { provider: 'pandas_market_calendars:NYSE', valid_until: '2026-10-08T23:00:00Z',
+    sessions: ['2026-10-01', '2026-10-02', '2026-10-05', '2026-10-06', '2026-10-07'].map(date => ({ date, close_at: `${date}T20:00:00Z` })) };
+  const scheduled = (value, at) => marketUpdateState({ ...value.data, refresh_schedule: schedule }, Date.parse(at));
+
+  it('waits only while the guide is open and a session after the verdict\'s day has closed', () => {
+    for (const [label, cap] of caps) {
+      const market = { label, cap };
+      // The verdict's own day is the last closed session: the lead is unchanged.
+      expect(verdictWaiting({ market, date: DATE, target: DATE })).toBeNull();
+      // A newer session has closed: an open guide's lead names the verdict's session; a 0% guide already says 控えます.
+      expect(verdictWaiting({ market, date: DATE, target: '2026-10-05' })).toEqual(cap > 0 ? { lead: LONG, short: SHORT } : null);
+    }
+    // Nothing is inferred without the calendar, a valid date or a known market.
+    for (const target of [null, undefined, 'x', '2026-10-01']) expect(verdictWaiting({ market: UP, date: DATE, target })).toBeNull();
+    expect(verdictWaiting({ market: UP, date: null, target: '2026-10-05' })).toBeNull();
+    expect(verdictWaiting({ market: { label: '市場未確認', cap: 0.5, state: 'unknown' }, date: DATE, target: '2026-10-05' })).toBeNull();
+    expect(verdictWaiting({ market: null, date: DATE, target: '2026-10-05' })).toBeNull();
+  });
+
+  it('replaces the market tab\'s lead only: the label, tone, cap, Today\'s text and the basis stay', () => {
+    for (const [label, cap] of caps) {
+      const market = { label, cap, regime: 'confirmed_uptrend' };
+      const current = cardView({ market, trends: trends(), date: DATE, update: { target: DATE } }).verdict;
+      const behind = cardView({ market, trends: trends(), date: DATE, update: { target: '2026-10-05' } }).verdict;
+      const none = cardView({ market, trends: trends(), date: DATE }).verdict;
+      expect(current).toEqual(none);
+      expect(behind.lead).toBe(cap > 0 ? LONG : none.lead);
+      expect(behind.leadShort).toBe(cap > 0 ? SHORT : null);
+      expect(none.leadShort).toBeNull();
+      const rest = value => Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'lead' && key !== 'leadShort'));
+      expect(rest(behind)).toEqual(rest(none));
+      expect(behind.text).toBe(none.text);
+    }
+  });
+
+  it('reads the target from marketUpdateState: a verdict two sessions old waits; a long history one session behind does not', () => {
+    // The clock after 10/5's close: the verdict's 10/2 is older than the last closed session.
+    const late = scheduled(trends(), '2026-10-06T09:00:00Z');
+    expect(late.target).toBe('2026-10-05');
+    expect(cardView({ market: UP, trends: trends(), date: DATE, update: { target: late.target } }).verdict).toMatchObject({ lead: LONG, leadShort: SHORT, label: UP.label, exposure: 50, tone: 'zone' });
+    // The long history ends on 10/1 while the verdict's day is current: marketUpdateState says pending (the 推移 tab's
+    // 更新待ち), yet its target is the verdict's own day, so the lead is unchanged.
+    const lagging = trends({ asOf: '2026-10-01', date: DATE });
+    const pending = scheduled(lagging, '2026-10-02T21:00:00Z');
+    expect([pending.state, pending.target]).toEqual(['pending', DATE]);
+    expect(cardView({ market: UP, trends: lagging, date: DATE, update: { target: pending.target } }).verdict.lead).toBe('新規の買いを検討できます。');
+    // No refresh_schedule (or one that is invalid): unknown, no target, the lead unchanged.
+    const unknown = marketUpdateState(trends().data, Date.parse('2026-10-06T09:00:00Z'));
+    expect([unknown.state, unknown.target]).toEqual(['unknown', null]);
+    expect(cardView({ market: UP, trends: trends(), date: DATE, update: { target: unknown.target } }).verdict.lead).toBe('新規の買いを検討できます。');
+    expect(marketUpdateState({ ...trends().data, refresh_schedule: { ...schedule, provider: 'x' } }, Date.parse('2026-10-06T09:00:00Z')).target).toBeNull();
+  });
+});
+
+// ---- Round 3 (market track): two grades of distribution days (M3) -----------------------------------------------------
+describe('market tab: distribution days in two grades, 5–6 参考 and 7 or more 注意 (M3)', () => {
+  const DATE = '2026-10-02';
+  /** Both index series with the study's method and `counts` active days on the analysis date (null: not computable). */
+  const graded = counts => { const value = trends(); value.data.indices = value.data.indices.map((item, i) => counts[i] === null
+    ? { ...item, available: false, points: [], latest: null, lastObserved: null, reason: '指数OHLCVに欠測・重複・不正値があります。ゼロ件とは扱いません。' }
+    : sessionsOf({ ...item, method: DD, points: [{ ...item.points[0], value: counts[i] }], latest: { ...item.latest, value: counts[i] }, lastObserved: { ...item.lastObserved, value: counts[i] } })); return value; };
+  const tab = counts => { const value = graded(counts); return cardView({ market: UP, trends: value, date: DATE, study: study(value) }); };
+  const today = counts => marketCardView({ market: UP, trends: graded(counts), date: DATE });
+  const dist = model => model.groups[0].items.find(i => i.key === 'dist');
+  const checks = model => model.signals.fired.filter(c => c.key.startsWith('dist-')).map(c => [c.key, c.text, c.reference]);
+
+  it('keeps the study\'s binary split and the method, and grades on the committed reference\'s own buckets', () => {
+    // DISTRIBUTION_WARN stays the study's split (tools/market-regime-study.mjs, the reference's ddWarn); the screens read the grades.
+    expect(DISTRIBUTION_WARN).toBe(5);
+    expect(reference.buckets.ddWarn).toBe(DISTRIBUTION_WARN);
+    expect([DISTRIBUTION_REFERENCE, DISTRIBUTION_CAUTION]).toEqual([5, 7]);
+    expect(reference.buckets.ddGrades.slice(-2)).toEqual([[DISTRIBUTION_REFERENCE, DISTRIBUTION_CAUTION - 1], [DISTRIBUTION_CAUTION, null]]);
+    expect(DISTRIBUTION_TEXT).toEqual({ caution: '7日以上', reference: '5〜6日' });
+    expect(DISTRIBUTION_METHOD).toBe('index-down-strictly-over-0.2-higher-volume-age25-high5-v1');
+    expect(DISTRIBUTION_METHOD).toBe(reference.methods.distribution);
+    expect([0, 4, 5, 6, 7, 12, null, undefined, NaN].map(distributionGrade)).toEqual([null, null, 'reference', 'reference', 'caution', 'caution', null, null, null]);
+  });
+
+  it('states both grades and the removal rule in the row\'s 基準 and in the opened row, from the constants', () => {
+    expect(RULE_TEXT.dist).toBe('指数が前日比0.2%を超えて下落し、出来高が前日より多かった日。25営業日で失効し、その後の高値が分配日の終値から5%以上上がっても除外します。除外の基準は資料により5%／6%で、当アプリは後日の高値で5%です（独自選択）。7日以上で注意サイン、5〜6日は参考です（独自設定）。');
+    const { details } = distributionDetail(graded([3, 4]).data.indices, DATE);
+    expect(details.slice(0, 2)).toEqual([DISTRIBUTION_BRIDGE, '下の分配日は^GSPC/^IXICの別集計（ストーリング日を含まない・7日以上で注意、5〜6日は参考）']);
+    expect(DISTRIBUTION_BRIDGE).toBe('目安の判定はSPYの別集計');
+    // No hand-typed study claim beside a 5–6 count (the study's words are its tag and its own 過去の傾向 line).
+    expect([RULE_TEXT.dist, ...details].join('')).not.toMatch(/全期間並み|過去は/);
+  });
+
+  it('counts 4 as nothing, 5 and 6 as 参考 and 7 as a warning, on the summary, the row and Today; a missing count is never 0', () => {
+    for (const [count, grade] of [[4, null], [5, 'reference'], [6, 'reference'], [7, 'caution']]) {
+      const model = tab([count, 3]), row = dist(model).rows[0], fact = today([count, 3]).today[0];
+      // The check fires at 5 or more with the same sentence; 5–6 is counted apart as 参考 (never in a ▲ count).
+      expect(checks(model)).toEqual(grade ? [['dist-S&P', `S&Pの分配日が25日間で${count}日`, grade === 'reference']] : []);
+      expect([model.signals.warnings, model.groups[0].fired, model.groups[0].references]).toEqual(grade === 'caution' ? [1, 1, 0] : grade === 'reference' ? [0, 0, 1] : [0, 0, 0]);
+      expect(model.signals.references).toBe(grade === 'reference' ? 1 : 0);
+      // The index checks can always raise a warning: a 5–6 count never makes 注意 判定不可.
+      expect(model.signals.warnable).toBeGreaterThanOrEqual(4);
+      expect([row.warn, row.reference ?? false, row.flag]).toEqual(grade === 'caution' ? [true, false, '7日以上'] : grade === 'reference' ? [false, true, '5〜6日・参考'] : [false, false, null]);
+      expect([dist(model).warn, dist(model).reference ?? false]).toEqual([grade === 'caution', grade === 'reference']);
+      expect([fact.warn, fact.pairs[0].warn, fact.em]).toEqual(grade === 'caution' ? [true, true, '注意：S&Pが7日以上'] : grade === 'reference' ? [false, false, '参考：S&Pが5〜6日'] : [false, false, '7日以上で注意']);
+    }
+    // Not computable: unjudged with its reason, 算出不可 on the row and on Today, never 0 days and never a grade.
+    const missing = tab([null, 3]);
+    expect(missing.signals.unjudged.map(c => c.key)).toContain('dist-S&P');
+    expect(dist(missing).rows[0]).toMatchObject({ name: 'S&P', b: '算出不可' });
+    expect(dist(missing).rows[0].warn).toBeUndefined();
+    expect(today([null, 3]).today[0].pairs[0]).toEqual({ name: 'S&P', value: '算出不可' });
+    expect(today([null, 3]).today[0].em).toBe('7日以上で注意');
+    expect(today([null, null]).today[0]).toMatchObject({ b: '算出不可', em: 'S&P・NAS' });
+  });
+
+  it('keeps a 7 a ▲ warning beside a 5, on its side only: the 5 stays 参考', () => {
+    const model = tab([7, 5]);
+    expect(checks(model)).toEqual([['dist-S&P', 'S&Pの分配日が25日間で7日', false], ['dist-NAS', 'NASの分配日が25日間で5日', true]]);
+    expect([model.signals.warnings, model.groups[0].fired, model.groups[0].references]).toEqual([1, 1, 1]);
+    expect(dist(model).rows.map(r => [r.name, r.warn, r.reference ?? false, r.flag])).toEqual([['S&P', true, false, '7日以上'], ['NAS', false, true, '5〜6日・参考']]);
+    expect([dist(model).warn, dist(model).reference ?? false]).toEqual([true, false]);
+    const fact = today([7, 5]).today[0];
+    expect([fact.warn, fact.pairs.map(p => p.warn), fact.em]).toEqual([true, [true, false], '注意：S&Pが7日以上']);
+    // Both at 7 or more, and both at 5–6: the names join.
+    expect(today([8, 7]).today[0].em).toBe('注意：S&P・NASが7日以上');
+    expect(today([6, 5]).today[0]).toMatchObject({ warn: false, em: '参考：S&P・NASが5〜6日' });
+    expect(today([5, 9]).today[0]).toMatchObject({ warn: true, em: '注意：NASが7日以上' });
+  });
+
+  it('keeps Today\'s three forms no longer than the round-2 warning lines (the frozen 320 and first-screen checks)', () => {
+    // Full-width characters count 2, as the tile renders them.
+    const width = text => [...text].reduce((sum, c) => sum + (c.codePointAt(0) <= 0xff ? 1 : 2), 0);
+    expect(width('7日以上で注意')).toBe(width('5日以上で注意'));
+    expect(width('注意：S&Pが7日以上')).toBe(width('注意：S&Pが5日以上'));
+    expect(width('参考：S&Pが5〜6日')).toBeLessThanOrEqual(width('注意：S&Pが5日以上'));
+    expect(width('参考：S&P・NASが5〜6日')).toBeLessThanOrEqual(width('注意：S&P・NASが5日以上'));
+    // A 5–6 tile reads like the other 参考 tiles: the word, a colon, the finding.
+    expect(today([5, 3]).today[0].em).toMatch(/^参考：/);
+  });
+});
+
+// ---- Round 3 (M6): the 銘柄側 line beside the verdict --------------------------------------------------------------------
+describe('market tab: the 銘柄側 line (M6)', () => {
+  const DATE = '2026-10-02';
+  const line = (value, date = DATE) => view(value, { date }).stockSide;
+  // Row 8 is 21 sessions before the newest (row 29): TT達成's one-month value.
+  const current = () => trends({ rows: breadth(DATE, i => (i === 8 ? { trendTemplateCount: 25 } : {})) });
+
+  it('reads TT達成 with its count a month earlier, the breakout row\'s rate with its sample and the health with its cohort, from the rows shown', () => {
+    const model = view(current());
+    expect(model.stockSide).toBe(`${STOCK_SIDE_HEAD}：TT達成 30（1か月前 25）・${BREAKOUT_HOLD_NAME} 75%（8件）・リーダーの健全度 70%（30銘柄）`);
+    // Each term is its row's own value and label (the breakout row's label, so a renamed row cannot drift from the line).
+    expect([item(model, 'tt').b, item(model, 'tt').detail]).toEqual(['30銘柄', '観測200中30銘柄・1か月前 25銘柄']);
+    expect([item(model, 'breakout').label, item(model, 'breakout').b, item(model, 'breakout').note]).toEqual([BREAKOUT_HOLD_NAME, '75%', '8件で判定']);
+    expect([item(model, 'health').label, item(model, 'health').b, item(model, 'health').note]).toEqual(['リーダーの健全度', '70%', '20営業日前のTT達成30銘柄が対象']);
+    expect(STOCK_SIDE_HEAD).toBe('銘柄側（参考・目安は変えません）');
+    // Today never asks for it (no tab), and nothing is shown before the series is ready.
+    expect(marketCardView({ market: UP, trends: current(), date: DATE }).stockSide).toBeNull();
+    expect(view({ loading: true }).stockSide).toBeNull();
+    expect(view({ loading: false, error: true }).stockSide).toBeNull();
+  });
+
+  it('says each missing term in its row\'s own words, never 0', () => {
+    const short = trends({ rows: breadth(DATE, () => ({}), 10) });
+    expect(line(short)).toBe(`${STOCK_SIDE_HEAD}：TT達成 30（1か月前の値なし）・${BREAKOUT_HOLD_NAME} 75%（8件）・リーダーの健全度 70%（30銘柄）`);
+    expect(line(trends({ rows: oldSchema(breadth(DATE)) }))).toBe(`${STOCK_SIDE_HEAD}：TT達成 未収録・${BREAKOUT_HOLD_NAME} 未収録・リーダーの健全度 未収録`);
+    expect(line(trends({ history: false }))).toBe(`${STOCK_SIDE_HEAD}：TT達成 未配信・${BREAKOUT_HOLD_NAME} 未配信・リーダーの健全度 未配信`);
+    const broken = trends({ history: false }); broken.data.long_history_error = '長期集計の整合性を確認できません。';
+    expect(line(broken)).toBe(`${STOCK_SIDE_HEAD}：TT達成 確認できません・${BREAKOUT_HOLD_NAME} 確認できません・リーダーの健全度 確認できません`);
+    expect(line(trends({ rows: [] }))).toBe(`${STOCK_SIDE_HEAD}：TT達成 未算出・${BREAKOUT_HOLD_NAME} 未算出・リーダーの健全度 未算出`);
+    // The trend template unknown on every session, the breakouts unjudged on the newest: each its row's word.
+    const unknown = trends({ rows: breadth(DATE, (i, n) => ({ trendTemplateCount: null, ...(i === n - 1 ? { breakoutsJudged: null } : {}), leaderCohortAbove50: null })) });
+    const model = view(unknown);
+    expect([item(model, 'tt').b, item(model, 'health').b]).toEqual(['未算出', '未算出']);
+    expect(model.stockSide).toBe(`${STOCK_SIDE_HEAD}：TT達成 未算出・${BREAKOUT_HOLD_NAME} 75%（10/1時点・8件）・リーダーの健全度 未算出`);
+    expect(item(model, 'breakout')).toMatchObject({ b: '75%', asOf: '10/1' });
+    for (const text of [line(short), line(unknown), line(trends({ rows: [] }))]) expect(text).not.toMatch(/ 0[件銘%（]|NaN|undefined|null/);
+  });
+
+  it('prints a sample too small for a rate as its count alone, as the rows do', () => {
+    // Every session's breakouts too few for a rate (an older rate would be the row's, dated), the newest cohort too small.
+    const small = trends({ rows: breadth(DATE, (i, n) => ({ breakoutsJudged: 3, breakoutsHeld: 2, ...(i === n - 1 ? { leaderCohort: 8, leaderCohortAbove50: 6 } : {}) })) });
+    const model = view(small);
+    expect([item(model, 'breakout').b, item(model, 'health').b]).toEqual(['3件', '8銘柄']);
+    expect(model.stockSide).toBe(`${STOCK_SIDE_HEAD}：TT達成 30（1か月前 30）・${BREAKOUT_HOLD_NAME} 3件・リーダーの健全度 8銘柄`);
+    expect(model.stockSide).not.toMatch(/\d+%/);
+  });
+
+  it('dates a long history older than the analysis date once, and a term older than the others on its own', () => {
+    const older = trends({ asOf: '2026-10-01', date: DATE });
+    expect(line(older)).toBe(`銘柄側（10/1時点・参考・目安は変えません）：TT達成 30（1か月前 30）・${BREAKOUT_HOLD_NAME} 75%（8件）・リーダーの健全度 70%（30銘柄）`);
+    // The breakout rate of an older session than TT達成 and the health: that term alone carries its date.
+    const mixed = trends({ rows: breadth(DATE, (i, n) => (i === n - 1 ? { breakoutsJudged: null } : {})) });
+    expect(item(view(mixed), 'breakout').asOf).toBe('10/1');
+    expect(line(mixed)).toBe(`${STOCK_SIDE_HEAD}：TT達成 30（1か月前 30）・${BREAKOUT_HOLD_NAME} 75%（10/1時点・8件）・リーダーの健全度 70%（30銘柄）`);
+  });
+
+  it('never colours or counts the line: a fired breakout or leaders rule keeps its own mark on its row only', () => {
+    const weak = trends({ rows: breadth(DATE, (i, n) => (i === n - 1 ? { breakoutsHeld: 2, leaderCohortAbove50: 9 } : {})) });
+    const model = view(weak), study = marketTabStudy({ trends: weak, reference, date: DATE }), tagged = cardView({ market: UP, trends: weak, date: DATE, study });
+    // Both rules fired; each is a 参考 rule (○ on its row, never ▲), as before.
+    expect([item(model, 'breakout'), item(model, 'health')].map(row => [row.reference, row.warn, row.flag])).toEqual([[true, false, '40%未満'], [true, false, '50%未満']]);
+    expect(model.stockSide).toBe(`${STOCK_SIDE_HEAD}：TT達成 30（1か月前 30）・${BREAKOUT_HOLD_NAME} 25%（8件）・リーダーの健全度 30%（30銘柄）`);
+    expect(model.stockSide).not.toMatch(/▲|注意|○/);
+    // The warning summary counts the two fired rules, as before, and nothing else.
+    expect(tagged.signals.fired.map(c => c.key)).toEqual(['leaders', 'breakout']);
+    expect([tagged.signals.warnings, tagged.signals.references]).toEqual([0, 2]);
+  });
+});
+
+// ---- Round 3 (M7): the stage legend under the bar --------------------------------------------------------------------------
+describe('market tab: the stage legend (M7)', () => {
+  it('names stage 2 advancing only and stage 3 flat or topping in the legend alone; the rule, its names, the shares and the sign are unchanged', () => {
+    const model = view(trends({ rows: breadth('2026-10-02', (i, n) => (i === n - 1 ? { stage2: 30, stage4: 50 } : {})) }));
+    const stage = item(model, 'stage');
+    expect(stage.stages.map(s => s.name)).toEqual([...STAGE_LEGEND_NAMES]);
+    expect(STAGE_LEGEND_NAMES).toEqual(['底固め', '上昇（加速中）', '横ばい・天井圏', '下降']);
+    // RULE_TEXT.stage (and every other reader of STAGE_NAMES) keeps the names it had.
+    expect(STAGE_NAMES).toEqual(['底固め', '上昇', '天井圏', '下降']);
+    expect(RULE_TEXT.stage).toBe('200日線の傾き・株価の傾き・200日線との位置から日ごとに判定した、1 底固め・2 上昇・3 天井圏・4 下降の割合。ステージ4がステージ2を上回ると注意サインです。');
+    // The opened row says the long history does not replay the scanner's stage-2 base exception.
+    expect(stage.details).toEqual([STAGE_REPLAY_NOTE]);
+    expect(STAGE_REPLAY_NOTE).toBe('スキャナーのステージ2ベース例外は再生していません（独自集計）');
+    // The shares and the stage4 > stage2 sign (a 参考 rule) as before.
+    expect(stage.stages.map(s => s.share)).toEqual([25, 15, 20, 25]);
+    expect([stage.reference, stage.flag]).toEqual([true, 'ステージ4がステージ2より多い']);
+    expect(model.warnings.map(w => w.key)).toContain('stage');
+  });
+});
+
+// Round 3 M8a-M8c: the opened rows' sub-lines from the long history's optional keys. Every publication lacks the keys while the
+// collector's EMIT_R3_MARKET_FIELDS is off, so 未収録 is what a reader sees first: never 0, never a rate, never a 「?」.
+describe('market tab: the round 3 sub-lines of the leader and breadth rows (M8a-M8c)', () => {
+  const R3 = { rs90Cohort: 12, rs90CohortAbove50: 5, newHighsClose: 9, breakoutsEarlyJudged: 8, breakoutsEarlyFailed: 2 };
+  const lastRow = over => trends({ rows: breadth('2026-10-02', (i, n) => i === n - 1 ? over : {}) });
+  const every = over => trends({ rows: breadth('2026-10-02', () => over) });
+  const opened = (model, key) => { const row = item(model, key); return [row.detail, ...(row.details || [])].filter(Boolean); };
+  const COLLECTOR = readFileSync(resolve('tools/collect-market-history.py'), 'utf8');
+  const constant = name => Number(new RegExp(`^${name} = ([0-9.]+)`, 'm').exec(COLLECTOR)?.[1]);
+
+  it('pins the early read, the drawdown and the window to the collector\'s constants', () => {
+    expect(BREAKOUT_EARLY_SESSIONS).toBe(constant('BREAKOUT_EARLY_SESSIONS'));
+    expect(BREAKOUT_FAILURE_PERCENT / 100).toBe(constant('BREAKOUT_FAILURE_DRAWDOWN'));
+    const hold = constant('BREAKOUT_HOLD_SESSIONS'), span = constant('BREAKOUT_WINDOW_SESSIONS');
+    expect(BREAKOUT_WINDOW_TEXT).toBe(`${hold}〜${hold + span - 1}営業日前`);
+    expect(RULE_TEXT.breakout).toContain(`上抜け（${BREAKOUT_WINDOW_TEXT}）`);
+  });
+
+  it('says 未収録 with its reason on a publication without the keys, and changes no value, mark or section state', () => {
+    const model = view(trends());
+    expect(opened(model, 'health')).toEqual(['30銘柄のうち21銘柄が50日線の上', `RS推計90以上：${KEY_ABSENT}`]);
+    expect(opened(model, 'extremes')).toEqual([`うち終値でも更新：${KEY_ABSENT}`]);
+    expect(opened(model, 'breakout')).toEqual(['10〜29営業日前の上抜け8件のうち6件が10日間で−7%に届かず', `早期（上抜け後5営業日・独自）：${KEY_ABSENT}`, BREAKOUT_NOT_PIVOT, '確定分は10〜29営業日前の上抜けを、その後10営業日で判定']);
+    expect(KEY_ABSENT).toBe('未収録（この公開データには含まれていません）');
+    // The rows' own values, marks and the sections' 「?」 are those of the same rows with the keys.
+    const keyed = view(every(R3)), without = (value, keys) => Object.fromEntries(Object.entries(value).filter(([key]) => !keys.includes(key)));
+    const strip = m => JSON.stringify(m.groups.map(g => ({ ...g, items: g.items.map(entry => without(entry, ['detail', 'details', 'format'])) })));
+    expect(strip(keyed)).toBe(strip(model));
+    expect(model.groups.map(g => g.unknown)).toEqual(keyed.groups.map(g => g.unknown));
+    for (const line of [...opened(model, 'health'), ...opened(model, 'extremes'), ...opened(model, 'breakout')]) expect(line).not.toMatch(/(^|[^0-9])0(銘柄|件|%)|▲|○/);
+  });
+
+  it('M8a: the RS推計90 part of the cohort and its share above the 50-day line, from the row the health value reads', () => {
+    expect(opened(view(lastRow(R3)), 'health').at(-1)).toBe('RS推計90以上：12銘柄中 42%');
+    expect(opened(view(lastRow({ rs90Cohort: LEADER_MIN_COHORT, rs90CohortAbove50: 0 })), 'health').at(-1)).toBe(`RS推計90以上：${LEADER_MIN_COHORT}銘柄中 0%`);
+    expect(opened(view(lastRow({ rs90Cohort: LEADER_MIN_COHORT - 1, rs90CohortAbove50: 4 })), 'health').at(-1)).toBe(`RS推計90以上：${LEADER_MIN_COHORT - 1}銘柄（${LEADER_MIN_COHORT}銘柄未満のため率は非表示）`);
+    expect(opened(view(lastRow({ rs90Cohort: null, rs90CohortAbove50: null })), 'health').at(-1)).toBe('RS推計90以上：未算出（観測不足の日を含む）');
+    // A cohort too small for the health rate reads the newest row, as the row's own count does.
+    const small = view(lastRow({ leaderCohort: 6, leaderCohortAbove50: 3, rs90Cohort: 2, rs90CohortAbove50: 1 }));
+    expect(item(small, 'health').b).toBe('6銘柄');
+    expect(opened(small, 'health')).toEqual(['RS推計90以上：2銘柄（10銘柄未満のため率は非表示）']);
+    // An older rate (the newest cohort unknown) reads its own row: one date covers the value and the line.
+    const older = view(trends({ rows: breadth('2026-10-02', (i, n) => i === n - 1 ? { leaderCohort: null, leaderCohortAbove50: null, rs90Cohort: null, rs90CohortAbove50: null } : i === n - 2 ? R3 : {}) }));
+    expect(item(older, 'health').asOf).toBe('10/1');
+    expect(opened(older, 'health').at(-1)).toBe('RS推計90以上：12銘柄中 42%');
+    // The note that RS推計 is the app's own stays beside the row.
+    expect(item(view(trends()), 'rs90').rule).toBe(RULE_TEXT.rs90);
+    expect(RULE_TEXT.rs90).toContain('IBDの公式RSではありません');
+  });
+
+  it('M8b: the new highs whose close also cleared the prior high, under the row\'s unchanged value and sign', () => {
+    const base = view(trends()), keyed = view(lastRow({ newHighsClose: 9 }));
+    expect(opened(keyed, 'extremes')).toEqual(['うち終値でも更新 9']);
+    expect(opened(view(lastRow({ newHighsClose: 0 })), 'extremes')).toEqual(['うち終値でも更新 0']);
+    expect(opened(view(lastRow({ newHighsClose: null })), 'extremes')).toEqual(['うち終値でも更新：未算出（観測率90%未満）']);
+    const rest = { ...item(keyed, 'extremes') }, was = { ...item(base, 'extremes') };
+    delete rest.detail; delete was.detail;
+    expect(JSON.stringify(rest)).toBe(JSON.stringify(was));
+    expect([rest.rows[0].b, rest.note, rest.warn]).toEqual(['40', '差 +28', false]);
+  });
+
+  it('M8c: the early read on the breakout row, the count alone under the minimum sample, and what the row counts', () => {
+    const early = model => opened(model, 'breakout').find(line => line.startsWith('早期'));
+    expect(early(view(lastRow(R3)))).toBe(`早期（上抜け後${BREAKOUT_EARLY_SESSIONS}営業日・独自）：8件中 25% が −${BREAKOUT_FAILURE_PERCENT}%に到達`);
+    expect(early(view(lastRow({ breakoutsEarlyJudged: BREAKOUT_MIN_SAMPLE, breakoutsEarlyFailed: 0 })))).toBe('早期（上抜け後5営業日・独自）：5件中 0% が −7%に到達');
+    expect(early(view(lastRow({ breakoutsEarlyJudged: BREAKOUT_MIN_SAMPLE - 1, breakoutsEarlyFailed: 1 })))).toBe('早期（上抜け後5営業日・独自）：4件（5件未満のため率は非表示）');
+    expect(early(view(lastRow({ breakoutsEarlyJudged: null, breakoutsEarlyFailed: null })))).toBe('早期（上抜け後5営業日・独自）：未算出（判定期間に観測不足の日を含む）');
+    // The row keeps its name, value, rule and sign; the label is the short name and the window is in the opened row.
+    const row = item(view(lastRow(R3)), 'breakout');
+    expect([row.label, row.b, row.rule]).toEqual([BREAKOUT_HOLD_LABEL, '75%', RULE_TEXT.breakout]);
+    expect(BREAKOUT_HOLD_LABEL).toBe(BREAKOUT_HOLD_NAME);
+    expect(row.details.slice(1)).toEqual([BREAKOUT_NOT_PIVOT, `確定分は${BREAKOUT_WINDOW_TEXT}の上抜けを、その後10営業日で判定`]);
+    for (const line of row.details) expect(line).not.toMatch(/良|悪|健全|弱い|強い|注意/);
+    // An older schema without the breakout row has no sub-lines either (the row is named in the group's 未収録 line).
+    expect(item(view(trends({ rows: oldSchema(breadth('2026-10-02')) })), 'breakout')).toBeUndefined();
   });
 });

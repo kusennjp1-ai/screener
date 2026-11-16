@@ -9,6 +9,11 @@ import { bare, isoDay, sentence, shortDate } from './briefShared';
  * screen); the market tab prints its 基準 lines from these same numbers so the two cannot drift.
  */
 export const ENV_RULES = Object.freeze({ templateSessions: 10, templateMinBase: 20, templateDropPercent: 20, leaderHealthBelow: 50, breakoutHoldBelow: 40 });
+/**
+ * The breakout row's name (M8c): the breakouts of 10–29 sessions earlier, judged (確定分) on their next ten sessions. The rule's
+ * sentence, the warning summary's check, the 銘柄側 line and the row's label (marketTabModel's BREAKOUT_HOLD_LABEL) read it.
+ */
+export const BREAKOUT_HOLD_NAME = '上抜け維持（確定分）';
 
 /**
  * Each deterioration rule on the newest long-history point (environmentPoint rows), in a fixed order:
@@ -26,7 +31,7 @@ export function environmentRules(rows) {
   const leadersJudged = Boolean(last) && finite(last.leaderHealthPercent);
   rule('leaders', leadersJudged, leadersJudged && last.leaderHealthPercent < ENV_RULES.leaderHealthBelow, leadersJudged ? `20営業日前のTT達成銘柄のうち、50日線より上は${last.leaderHealthPercent.toFixed(0)}%` : null);
   const breakoutJudged = Boolean(last) && finite(last.breakoutHoldPercent);
-  rule('breakout', breakoutJudged, breakoutJudged && last.breakoutHoldPercent < ENV_RULES.breakoutHoldBelow, breakoutJudged ? `ブレイクアウトの成功率が${last.breakoutHoldPercent.toFixed(0)}%に低下` : null);
+  rule('breakout', breakoutJudged, breakoutJudged && last.breakoutHoldPercent < ENV_RULES.breakoutHoldBelow, breakoutJudged ? `${BREAKOUT_HOLD_NAME}が${last.breakoutHoldPercent.toFixed(0)}%に低下` : null);
   return rules;
 }
 
@@ -73,9 +78,11 @@ export const NASDAQ_CAUTION_STATES = Object.freeze(['correction', 'rally_attempt
 /** The Nasdaq follow-through record (indices[^IXIC].followThrough) is one of NASDAQ_CAUTION_STATES. */
 export const nasdaqInCorrection = ft => ft?.available === true && NASDAQ_CAUTION_STATES.includes(ft.state);
 
-/** The suffixes of Today's 地合い tile, at most 7 full-width characters each (TodayView joins one after 「・」). */
-export const MARKET_TILE_SUFFIX = Object.freeze({ ftd: 'FTD確認済み', nasdaq: 'NAS調整中' });
-
+/**
+ * The suffixes of Today's 地合い tile, at most 7 full-width characters each (TodayView joins one after 「・」): 「FTD確認済み」,
+ * 「NAS調整中」 and 「反発n日目」 (`rally(n)`, n the rally attempt's day; a test measures it for every day of the attempt window).
+ */
+export const MARKET_TILE_SUFFIX = Object.freeze({ ftd: 'FTD確認済み', nasdaq: 'NAS調整中', rally: day => `反発${day}日目` });
 /**
  * The app's own ^GSPC follow-through record (indices[^GSPC].followThrough: the market tab's フォロースルーデー row and its
  * ◆ mark) when it is available and judged on the analysis date's session, else null (an older or missing record is
@@ -87,31 +94,66 @@ export function gspcFollowThrough(trends) {
   const ft = (trends.data.indices || []).find(item => item?.symbol === '^GSPC')?.followThrough;
   return ft?.available === true && isoDay(ft.asOf) && ft.asOf === trends.data.as_of_date ? ft : null;
 }
+/**
+ * One index's follow-through record (indices[symbol].followThrough) only when it is judged on the market-trends asset's own
+ * session and that session is the published one: the series is ready, the record is available, its asOf is the asset's
+ * as_of_date, and when the manifest names the US market's date (manifest.markets.US.as_of_date) it is that date. Else null:
+ * an older record, an unavailable one, none, or no ready series is never read as today's (Today's 地合い tile suffixes).
+ */
+export function sameDayFollowThrough(trends, manifest, symbol) {
+  if (trendsStatus(trends).state !== 'ready') return null;
+  const date = trends.data.as_of_date, published = manifest?.markets?.US?.as_of_date;
+  if (!isoDay(date) || (published !== undefined && published !== date)) return null;
+  const ft = (trends.data.indices || []).find(item => item?.symbol === symbol)?.followThrough;
+  return ft?.available === true && ft.asOf === date ? ft : null;
+}
 /** Whether that day's ^GSPC record reads anything but a confirmed FTD (true / false), or null with nothing to compare. */
 export function gspcFtdDisagrees(trends) {
   const ft = gspcFollowThrough(trends);
   return ft ? ft.state !== 'confirmed' : null;
 }
 
+/** The two indices in Today's words (the market tab's Nasdaq note names the Nasdaq the same way). */
+const INDEX_WORDS = Object.freeze({ '^GSPC': 'S&P 500', '^IXIC': 'Nasdaq総合' });
+/**
+ * The indices of the same day (sameDayFollowThrough) in a rally attempt with a known day: state 'rally_attempt' and a
+ * positive whole attempt.day, in the order ^GSPC, ^IXIC. Only an index the exporter's 6% gate already put in a rally attempt
+ * (followThroughDay.js): no correction is defined here, and a correction, an expired attempt, a confirmed or failed FTD,
+ * no correction, an unavailable record or a record of another day is none.
+ */
+function rallyAttempts(trends, manifest) {
+  return ['^GSPC', '^IXIC'].map(symbol => ({ symbol, ft: sameDayFollowThrough(trends, manifest, symbol) }))
+    .filter(({ ft }) => ft?.state === 'rally_attempt' && Number.isSafeInteger(ft.attempt?.day) && ft.attempt.day > 0);
+}
+
+/** What Today's 地合い tile adds (marketTileSuffix's reading): { kind, suffix, attempts } or null. */
+function tileReading({ market = null, trends = null, manifest = null } = {}) {
+  if (!market || market.state === 'unknown') return null;
+  if (market.ftdUpgraded === true && market.cap === 0) return sameDayFollowThrough(trends, manifest, '^GSPC')?.state === 'confirmed' ? { kind: 'ftd', suffix: MARKET_TILE_SUFFIX.ftd } : null;
+  if (market.cap === 0) {
+    const attempts = rallyAttempts(trends, manifest);
+    return attempts.length ? { kind: 'rally', suffix: MARKET_TILE_SUFFIX.rally(Math.max(...attempts.map(({ ft }) => ft.attempt.day))), attempts } : null;
+  }
+  if (!(market.cap > 0)) return null;
+  return nasdaqInCorrection(sameDayFollowThrough(trends, manifest, '^IXIC')) ? { kind: 'nasdaq', suffix: MARKET_TILE_SUFFIX.nasdaq } : null;
+}
+
 /**
  * A short suffix for the 地合い tile on Today (plan MK11), from the market verdict (prepared.market), the market-trends
  * query (brief.trends) and the published manifest (brief.manifest.data, or null): at most one, else null.
  *  - 「FTD確認済み」 when the guide is 0% while the backend's regime is an FTD-upgraded uptrend (modelMarket's ftdUpgraded),
- *    unless the app's own ^GSPC record for that day reads no confirmed FTD (gspcFtdDisagrees): Today never asserts an FTD
- *    the market tab's own index record contradicts (the tab still explains the 0%).
+ *    only when the app's own ^GSPC record of the same day confirms it (sameDayFollowThrough's state 'confirmed'): no record,
+ *    an older one (series one session behind), an unavailable one or any other state gives no suffix, so Today never asserts
+ *    an FTD it cannot back with that day's index record (the market tab's cause line still explains the 0%).
+ *  - otherwise, while the guide is 0% (cap 0, not an FTD upgrade), 「反発n日目」 when the same day's ^GSPC or ^IXIC record is
+ *    in a rally attempt with a known day (rallyAttempts); with both, the larger day (M4). The rest is in marketTileNote.
  *  - otherwise 「NAS調整中」 while the guide is open and the Nasdaq's own follow-through state is one of
- *    NASDAQ_CAUTION_STATES, judged on the analysis date's session: an older state (series one session behind) is never
- *    shown as today's, so it gives no suffix.
+ *    NASDAQ_CAUTION_STATES, judged on the same day (sameDayFollowThrough): an older state is never shown as today's, so it
+ *    gives no suffix.
  * Never a cap, a tone or a verdict of its own.
  */
-export function marketTileSuffix({ market = null, trends = null, manifest = null } = {}) {
-  if (!market || market.state === 'unknown') return null;
-  if (market.ftdUpgraded === true && market.cap === 0) return gspcFtdDisagrees(trends) === true ? null : MARKET_TILE_SUFFIX.ftd;
-  if (!(market.cap > 0) || trendsStatus(trends).state !== 'ready') return null;
-  const date = trends.data.as_of_date, published = manifest?.markets?.US?.as_of_date;
-  if (!isoDay(date) || (published !== undefined && published !== date)) return null;
-  const ft = (trends.data.indices || []).find(item => item?.symbol === '^IXIC')?.followThrough;
-  return nasdaqInCorrection(ft) && ft.asOf === date ? MARKET_TILE_SUFFIX.nasdaq : null;
+export function marketTileSuffix(input = {}) {
+  return tileReading(input)?.suffix ?? null;
 }
 
 /**
@@ -133,14 +175,24 @@ export function nasdaqNote(ft, date) {
 }
 
 /**
- * The explanation of Today's 地合い tile suffix (marketTileSuffix, same input), or null without one: for 「NAS調整中」 the
- * market tab's own Nasdaq note (nasdaqNote's long form: the verdict reads the S&P 500 only, the Nasdaq's state is the
- * app's own judgement), for the tile's title, assistive tech and Today's notes. 「FTD確認済み」 is explained on the market tab.
+ * The explanation of Today's 地合い tile suffix (marketTileSuffix, same input), or null without one, for the tile's title,
+ * assistive tech and Today's notes:
+ *  - 「NAS調整中」: the market tab's own Nasdaq note (nasdaqNote's long form: the verdict reads the S&P 500 only, the
+ *    Nasdaq's state is the app's own judgement);
+ *  - 「反発n日目」: each index in a rally attempt with its own day and its rally low's date, what the attempt waits for
+ *    (FTD_TEXT, 独自判定) and that the verdict and the guide do not change (M4);
+ *  - 「FTD確認済み」 is explained on the market tab.
  */
 export function marketTileNote(input = {}) {
-  if (marketTileSuffix(input) !== MARKET_TILE_SUFFIX.nasdaq) return null;
-  const ft = (input.trends.data.indices || []).find(item => item?.symbol === '^IXIC')?.followThrough;
-  return nasdaqNote(ft, input.trends.data.as_of_date)?.long ?? null;
+  const reading = tileReading(input);
+  if (reading?.kind === 'nasdaq') {
+    const ft = (input.trends.data.indices || []).find(item => item?.symbol === '^IXIC')?.followThrough;
+    return nasdaqNote(ft, input.trends.data.as_of_date)?.long ?? null;
+  }
+  if (reading?.kind !== 'rally') return null;
+  const date = input.trends.data.as_of_date;
+  const parts = reading.attempts.map(({ symbol, ft }) => `${INDEX_WORDS[symbol]}は${isoDay(ft.low?.date) ? `安値${shortDate(ft.low.date, date)}から` : ''}反発${ft.attempt.day}日目`);
+  return `${parts.join('、')}。${FTD_TEXT.minDay}日目以降の${FTD_TEXT.gain}上昇待ち（独自判定）。判定と目安は変わりません。`;
 }
 
 /**
@@ -193,8 +245,35 @@ export function distributionCount(index) {
 // later close can sit lower. The post-FTD count is the distribution days still active (25-session window).
 export const FTD_TEXT = Object.freeze({ minDay: 4, maxDay: 15, gain: '+1.2%', decline: '6%' });
 /**
+ * A confirmed FTD more than this many sessions after its day reads 「前回のFTD」, never as the current one (独自設定, M2): the
+ * study's combo.ftd_recent window (market-regime-reference-v1.json buckets.ftdRecentSessions). Today's chunk never loads
+ * the reference, so the number is a constant here; a test pins it to the reference's.
+ */
+export const FTD_RECENT_SESSIONS = 25;
+/**
+ * The sessions after a confirmed FTD's day (the exporter's ftd.sessionsSince: 0 on the FTD's own session) when the record is
+ * available, confirmed and carries a whole count, else null (an older record without it is never given one).
+ */
+export const ftdSessionsSince = ft => ft?.available === true && ft.state === 'confirmed' && Number.isSafeInteger(ft.ftd?.sessionsSince) && ft.ftd.sessionsSince >= 0 ? ft.ftd.sessionsSince : null;
+/**
+ * What a confirmed FTD older than FTD_RECENT_SESSIONS is called (M2): the one copy of the word, read by the フォロースルーデー
+ * row (followThroughView), the index chart's ◆ (MarketScreen), the opened row and the cause lines (marketTabStudy).
+ */
+export const FTD_PREVIOUS_NAME = '前回のFTD';
+/** A confirmed FTD older than FTD_RECENT_SESSIONS (FTD_PREVIOUS_NAME): the フォロースルーデー row, its ◆ and the cause line read it alike. */
+export const ftdPrevious = ft => { const n = ftdSessionsSince(ft); return n !== null && n > FTD_RECENT_SESSIONS; };
+/**
+ * A decline (in %, positive) under the 6% line is never rounded up onto it: 5.96 reads 5.96, not 6.0 beside 「6%未満」 (two
+ * decimals, the second floored when it would round to 6.00). Used where a decline under 6% is printed beside the 6% line.
+ */
+export const under6 = value => Number(value.toFixed(2)) < 6 ? value.toFixed(2) : (Math.floor(value * 100) / 100).toFixed(2);
+/**
  * Compact tile text for one index's follow-through state (this app's own judgement):
  * { b, em, asOf } where asOf is set when the judgement is older than the analysis date.
+ * A confirmed FTD says how many sessions ago it was, first in its em line (「12日前」, 「当日」 on its own session; the opened
+ * row says the days are sessions); one older than FTD_RECENT_SESSIONS reads 「前回のFTD 8/13」 with `previous: true` and no
+ * tone. The count is the sessions after the FTD's day, so it reads 「n日前」 (never 「n日目」). A record without a whole
+ * count keeps 「確認 M/D」 and its em as before.
  * A missing field (older publication) or an unavailable input never becomes a state.
  */
 export function followThroughView(ft, date) {
@@ -203,15 +282,17 @@ export function followThroughView(ft, date) {
   if (ft.available !== true) return { b: '算出不可', em: typeof ft.reason === 'string' && ft.reason ? ft.reason : '指数データを確認できません', asOf: null };
   const asOf = isoDay(ft.asOf) && isoDay(date) && ft.asOf < date ? shortDate(ft.asOf, date) : null;
   const at = value => shortDate(value, date), whole = value => Number.isSafeInteger(value) && value >= 0;
-  // A decline under the 6% line is never rounded up onto it (5.96% reads −5.96%, not −6.0% beside 「6%未満」).
-  const under6 = value => Number(value.toFixed(2)) < 6 ? value.toFixed(2) : (Math.floor(value * 100) / 100).toFixed(2);
+  // A decline under the 6% line is never rounded up onto it (5.96% reads −5.96%, not −6.0% beside 「6%未満」: under6).
   const fall = finite(ft.declinePct) ? (value => `−${ft.state === 'no_correction' && Number(value.toFixed(1)) >= 6 ? under6(value) : value.toFixed(1)}%`)(Math.abs(ft.declinePct)) : null;
   const join = parts => parts.filter(Boolean).join('・');
   const { ftd, attempt, low, peak } = ft;
   switch (ft.state) {
     // A confirmed FTD is a state, not a green light: no 'zone' tone (the 1990-2026 study found no established edge).
-    case 'confirmed': return { b: isoDay(ftd?.date) ? `確認 ${at(ftd.date)}` : '確認', asOf,
-      em: join([finite(ftd?.gainPct) ? `+${ftd.gainPct.toFixed(1)}%` : null, whole(ftd?.attemptDay) ? `反発${ftd.attemptDay}日目` : null, whole(ftd?.distributionSince) ? `FTD後の有効な分配日${ftd.distributionSince}` : null]) };
+    // The sessions since the FTD lead the em line (「35日前」, 「当日」): in the value they wrap it to a second line on a 320px
+    // phone (measured), so the value keeps 「確認 M/D」 or 「前回のFTD M/D」 and the opened row says the days are sessions.
+    case 'confirmed': return { b: `${ftdPrevious(ft) ? FTD_PREVIOUS_NAME : '確認'}${isoDay(ftd?.date) ? ` ${at(ftd.date)}` : ''}`, asOf,
+      ...(ftdPrevious(ft) ? { previous: true } : {}),
+      em: join([(n => n === null ? null : n === 0 ? '当日' : `${n}日前`)(ftdSessionsSince(ft)),finite(ftd?.gainPct) ? `+${ftd.gainPct.toFixed(1)}%` : null, whole(ftd?.attemptDay) ? `反発${ftd.attemptDay}日目` : null, whole(ftd?.distributionSince) ? `FTD後の有効な分配日${ftd.distributionSince}` : null]) };
     case 'rally_attempt': return { b: whole(attempt?.day) ? `反発${attempt.day}日目` : '反発中', asOf,
       em: join([isoDay(low?.date) ? `安値${at(low.date)}` : null, `${FTD_TEXT.minDay}日目以降の${FTD_TEXT.gain}上昇待ち`]) };
     case 'correction': return { b: '調整中', asOf, em: fall ? `高値${isoDay(peak?.date) ? at(peak.date) : ''}から${fall}` : `${FTD_TEXT.decline}以上の下落` };

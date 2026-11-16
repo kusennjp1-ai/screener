@@ -5,8 +5,14 @@
 import { test, expect } from '@playwright/test';
 import { date, marketTrends, openBrief, VIEWPORTS, horizontalOverflow, sessions } from './brief-fixture.js';
 import { indexState } from '../../tools/export-market-trends.mjs';
+import { distributionDetail } from '../../src/static/reference/marketTabStudy.js';
+import { followThroughView, ftdPrevious, BREAKOUT_HOLD_NAME, FTD_PREVIOUS_NAME } from '../../src/static/brief/briefEnvironment.js';
 
 const STALE = sessions.at(-3), STALE_MD = STALE.slice(5).split('-').map(Number).join('/'), DATE_MD = date.slice(5).split('-').map(Number).join('/');
+/** The served ^GSPC follow-through record (the fixture's: an FTD 35 sessions old) and the row's words for it, from the producer (M2). */
+const gspcRecord = (options = {}) => JSON.parse(marketTrends(options).text).indices[0].followThrough;
+const GSPC = gspcRecord(), GSPC_VIEW = followThroughView(GSPC, date), FTD_WORD = ftdPrevious(GSPC) ? FTD_PREVIOUS_NAME : 'FTD';
+const escape = text => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 const row = (market, label) => market.locator('.brief-env-row').filter({ has: market.page().locator('small', { hasText: label }) });
 /** Below 1024px the market tab shows one section at a time behind its tabs; the desktop shows them all. */
 const section = async (page, name) => { const tab = page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab', { name: new RegExp(`^${name}`) }); if (await tab.count()) { await tab.click(); await expect(tab).toHaveAttribute('aria-selected', 'true'); } };
@@ -44,14 +50,15 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(market.getByTestId('brief-regime')).toBeVisible();
     // The market tab's chart adds the 200-day line and the FTD day (Today's keeps the 50-day line); the base
     // fixture's follow-through record has no ftd event, so there is no rally-low date and no ○.
-    await expect(market.getByRole('img', { name: /^S&P 500 の終値と50日線・200日線（.*〜2026-10-02）。有効な分配日 3日。FTD 8\/13。目盛り [\d,]+〜[\d,]+$/ })).toBeVisible();
+    // Its FTD is older than FTD_RECENT_SESSIONS: the ◆ stays and reads 「前回のFTD」 (M2).
+    await expect(market.getByRole('img', { name: new RegExp(`^S&P 500 の終値と50日線・200日線（.*〜2026-10-02）。有効な分配日 3日。${FTD_WORD} 8/13。目盛り [\\d,]+〜[\\d,]+$`) })).toBeVisible();
     // Verdict first, then the evidence grouped in decision order: index trend, participation, leaders.
     await expect(market.locator('.brief-env-group h3')).toHaveText(['指数のトレンド', '市場の参加度', 'リーダーの健全性']);
     // A phone shows the index section first, the others behind tabs that count their warnings and mark, with a
     // neutral 「?」, a section holding a check that could not be judged (here TT達成数の急減 and リーダーの健全度). The
     // fixture's one fired check (新安値) is 〔参考〕: counted apart, it never sets a tab's ▲.
     if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度?未確認あり', 'リーダー?未確認あり', '推移']);
-    await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', '200日線より上', '50日線より上', '52週の新高値・新安値', 'TT達成数', 'RS推計90以上のTT達成（独自）', 'ブレイクアウト成功率', 'リーダーの健全度', 'ステージ構成']);
+    await expect(market.locator('.brief-fact small')).toContainText(['フォロースルーデー（独自判定）', '分配日（25日）', '200日線より上', '50日線より上', '52週の新高値・新安値', 'TT達成数', 'RS推計90以上のTT達成（独自）', BREAKOUT_HOLD_NAME, 'リーダーの健全度', 'ステージ構成']);
     // The fixture has more new lows (3) than new highs (2): one sentence under the verdict. The study could not confirm the
     // rule (〔参考〕), so it is counted apart: ○ 参考 on its row and group, never ▲ 注意 (MK9).
     const signals = market.getByRole('group', { name: '注意サイン（独自判定）' });
@@ -63,7 +70,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(market.getByRole('group', { name: /^市場の参加度/ }).locator('.brief-env-state')).toHaveText('○ 参考 1');
     const follow = market.locator('.brief-ftd');
     await expect(follow.locator('.brief-ftd-row')).toHaveCount(2);
-    await expect(follow.locator('.brief-ftd-row').first()).toContainText(/S&P確認 \d+\/\d+\+1\.6%・反発5日目・FTD後の有効な分配日3/);
+    await expect(follow.locator('.brief-ftd-row').first()).toContainText(`S&P${GSPC_VIEW.b}${GSPC_VIEW.em}`);
     await expect(follow.locator('.brief-ftd-row').last()).toContainText(/NAS反発3日目安値\d+\/\d+・4日目以降/);
     // A row shows its value and one-month change; opening it shows the count behind the share and the rule.
     const above50 = row(market, '50日線より上');
@@ -169,7 +176,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(market.getByRole('group', { name: '注意サイン（独自判定）' })).toContainText(`（${STALE_MD}時点・独自判定）`);
     // Each group whose values all describe the older session says so once; its rows carry no date of their own.
     for (const [tab, name] of [['指数', '指数のトレンド'], ['参加度', '市場の参加度'], ['リーダー', 'リーダーの健全性']]) { await section(page, tab); await expect(market.getByRole('group', { name: `${name} ${STALE_MD}時点の値` })).toBeVisible(); }
-    await expect(market.locator('.brief-ftd .brief-ftd-row')).toHaveText([/^S&P確認 /, /^NAS反発3日目/]);
+    await expect(market.locator('.brief-ftd .brief-ftd-row')).toHaveText([new RegExp(`^S&P${escape(followThroughView(gspcRecord({ historyEnd: STALE }), date).b)}`), /^NAS反発3日目/]);
     await expect(market.locator('.brief-fact-asof')).toHaveCount(0);
     await section(page, '推移');
     const history = page.getByRole('region', { name: '市場環境の推移' });
@@ -191,16 +198,16 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
     const market = page.getByRole('region', { name: '地合い' });
     await expect(market.getByTestId('brief-missing-breadth')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：200日線より上・TT達成数`);
-    await expect(market.getByTestId('brief-missing-leaders')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：RS推計90以上のTT達成（独自）・ブレイクアウト成功率・リーダーの健全度・ステージ構成`);
+    await expect(market.getByTestId('brief-missing-leaders')).toHaveText(`旧形式の長期集計（${DATE_MD}）には未収録：RS推計90以上のTT達成（独自）・${BREAKOUT_HOLD_NAME}・リーダーの健全度・ステージ構成`);
     // A phone's tabs mark the sections that hold 未収録 values or unjudged checks, and the history awaiting its update.
     if (phone) await expect(page.getByRole('tablist', { name: '市場タブの表示' }).getByRole('tab')).toHaveText(['指数', '参加度?未確認あり', 'リーダー?未確認あり', '推移?更新待ち']);
     // The desktop says which checks and why on one line; a phone names them on the summary line and folds the reason.
     const unjudged = market.getByRole('group', { name: '注意サイン（独自判定）' });
     if (phone) {
-      await expect(unjudged.locator('summary')).toHaveText('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率');
+      await expect(unjudged.locator('summary')).toHaveText(`判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・${BREAKOUT_HOLD_NAME}`);
       await unjudged.locator('summary').click();
       await expect(unjudged.getByText('理由：旧形式の長期集計に未収録')).toBeVisible();
-    } else await expect(unjudged).toContainText('判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・ブレイクアウト成功率（旧形式の長期集計に未収録）');
+    } else await expect(unjudged).toContainText(`判定していない項目 5件：指数と個別株の乖離・TT達成数の急減・ステージ構成・リーダーの健全度・${BREAKOUT_HOLD_NAME}（旧形式の長期集計に未収録）`);
     await expect(market.locator('.brief-fact small')).toHaveText(['フォロースルーデー（独自判定）', '分配日（25日）', '50日線より上', '52週の新高値・新安値', '先導株数（価格条件）']);
     for (const fact of await market.locator('.brief-fact').all()) await expect(fact).not.toContainText(/未取得|未確認|未算出/);
     await section(page, '推移');
@@ -287,13 +294,15 @@ test.describe('desktop 1440px: the study block and the guide\'s basis', () => {
     const { errors } = await openBrief(page, '#/brief/market', { mutate: { trends: value => { published().trends(value); lowDate = value.indices[0].followThrough.events[0].lowDate; pullback = value.indices[0].followThrough.low.date; } } });
     const frame = page.getByRole('region', { name: '地合い' }).locator('.brief-index-frame');
     // The ○ is the rally low the FTD confirmed (its ftd event), never the record's later pullback low.
-    await expect(frame.getByRole('img')).toHaveAttribute('aria-label', new RegExp(`。FTD 8/13、反発の安値 ${md(lowDate)}。目盛り`));
+    await expect(frame.getByRole('img')).toHaveAttribute('aria-label', new RegExp(`。${FTD_WORD} 8/13、反発の安値 ${md(lowDate)}。目盛り`));
     expect(await frame.getByRole('img').getAttribute('aria-label')).not.toContain(`反発の安値 ${md(pullback)}`);
     const ma200 = frame.locator('svg.brief-index path.brief-index-ma200');
     await expect(ma200).toHaveCount(1);
     expect(await ma200.getAttribute('d')).toMatch(/^M[\d.]+,[\d.]+(L[\d.]+,[\d.]+){50,}$/);
     expect(await ma200.evaluate(path => getComputedStyle(path).strokeDasharray)).not.toBe('none');
-    await expect(frame.locator('.brief-index-mark.is-ftd')).toHaveText('◆FTD 8/13');
+    await expect(frame.locator('.brief-index-mark.is-ftd')).toHaveText(`◆${FTD_WORD} 8/13`);
+    // The legend keeps the glyph's meaning: 「◆ 前回のFTD」 would wrap it at 320px beside the phone's switch (M2).
+    await expect(page.getByRole('region', { name: '地合い' }).locator('.brief-index-legend .is-ftd')).toHaveText('◆ FTD・○ 反発の安値');
     await expect(frame.locator('.brief-index-mark.is-low')).toHaveText('○');
     const box = await frame.boundingBox();
     for (const mark of await frame.locator('.brief-index-mark, .brief-index-mark-label, .brief-index-scale').all()) {
@@ -338,9 +347,12 @@ test.describe('desktop 1440px: the study block and the guide\'s basis', () => {
     const dist = row(market, '分配日（25日）');
     await dist.getByRole('button').first().click();
     const detail = dist.locator('.brief-env-detail');
-    await expect(detail.locator('p').first()).toHaveText('下の分配日は^GSPC/^IXICの別集計（ストーリング日なし・5日以上で注意）');
-    await expect(detail.locator('p').nth(1)).toHaveText(/^S&P：\d+\/\d+・\d+\/\d+・\d+\/\d+（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）$/);
-    await expect(detail.locator('p').nth(2)).toHaveText(/^NAS：(\d+\/\d+・){3}\d+\/\d+（最も古い日はあと4営業日で失効・後日の高値で早く除外される場合あり）$/);
+    // The opened row's first lines are the producer's (the guide reads SPY's own count; this row's method and its grades).
+    const [bridge, method] = distributionDetail([], date).details;
+    await expect(detail.locator('p').first()).toHaveText(bridge);
+    await expect(detail.locator('p').nth(1)).toHaveText(method);
+    await expect(detail.locator('p').nth(2)).toHaveText(/^S&P：\d+\/\d+・\d+\/\d+・\d+\/\d+（最も古い日はあと6営業日で失効・後日の高値で早く除外される場合あり）$/);
+    await expect(detail.locator('p').nth(3)).toHaveText(/^NAS：(\d+\/\d+・){3}\d+\/\d+（最も古い日はあと4営業日で失効・後日の高値で早く除外される場合あり）$/);
     await expect(detail.getByRole('img', { name: /^S&Pの分配日の直近1年の推移。/ })).toBeVisible();
     await expect(detail.getByRole('img', { name: /^NASの分配日の直近1年の推移。/ })).toBeVisible();
     expect(errors).toEqual([]);

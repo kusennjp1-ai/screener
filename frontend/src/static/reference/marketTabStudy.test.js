@@ -3,11 +3,16 @@
 // guide's disclosure (that is said once, in exposureRuleText).
 import { describe, expect, it } from 'vitest';
 import reference from './market-regime-reference-v1.json' with { type: 'json' };
-import { distributionDetail, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, regimeCause, signalTagText } from './marketTabStudy.js';
+import { bigUpDayLine, bigUpDays, currentLegLine, distributionDetail, followThroughDetail, gspcFtdWords, marketRegimeContext, marketTabStudy, nasdaqNote, publishedMarketContext, regimeCause, signalTagText, stallingLine, zeroCapNote, BIG_UP_DAY, BIG_UP_HEAD, BIG_UP_NOTE, FTD_SOURCE_GAINS, STALLING_HEAD } from './marketTabStudy.js';
+import { KEY_ABSENT } from '../brief/marketTabGroups';
+import { followThroughDay, FTD_MIN_DECLINE } from '../followThroughDay';
+import { shortDate } from '../brief/briefShared';
 import { CONTRACT_DATE, marketContext, marketContextUnknown } from '../../test/fixtures/publishedContracts.js';
-import { ddGradeState, stateTag, TAGS } from './marketRegimeReference.js';
+import { biasTag, ddGradeState, ftdRecent, INDEX_SYMBOLS, meanLowerStates, referenceState, stateTag, TAGS } from './marketRegimeReference.js';
+import { indexSummary } from './indexSummary.js';
+import { capText, MARKET_CAPS } from '../portfolioPlan';
 import { exposureRuleText } from './marketTabStudy.js';
-import { NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
+import { followThroughView, ftdPrevious, FTD_PREVIOUS_NAME, FTD_RECENT_SESSIONS, FTD_TEXT, NASDAQ_CAUTION_STATES } from '../brief/briefEnvironment.js';
 import { REFERENCE_CHECKS, verdictBasis } from '../brief/marketTabModel.js';
 import { attempt, confirmed, days, failed, trends } from '../../test/fixtures/marketTrends';
 
@@ -44,7 +49,10 @@ describe('the warning summary\'s study inputs', () => {
   it('explains the tags shown without repeating the guide\'s disclosure, which exposureRuleText says once (MK6)', () => {
     const fired = [{ key: 'dist-S&P', tags: [TAGS.unestablished] }, { key: 'lows', tags: [TAGS.breadth] }];
     const { note, legend } = signalTagText(reference, fired);
-    expect(legend).toBe('〔参考〕＝2021〜26年の検証で関係未確認');
+    expect(legend).toBe('〔参考〕＝指数の下げとの関係は未確認');
+    // The years and what the breadth study never tested are said in the note (in the legend they add lines on a phone).
+    expect(note).toContain('〔参考〕は、2021〜2026年の参加度データ');
+    expect(note).toContain('（全体として偶然と区別できない結果・個別株のブレイクアウト成績との関係は未検証）。');
     expect(note).not.toMatch(/目安|基準と/);
     expect(note.endsWith('その指数では確認できず）。')).toBe(true);
     expect(exposureRuleText()).toContain('注意サインも指数の過去の傾向も目安を変えません。');
@@ -181,5 +189,315 @@ describe('published market context', () => {
       ['an unknown regime', { ...block, regime: 'bull' }], ['a negative count', { ...block, distribution_days: -1 }], ['a count of 0.5', { ...block, distribution_days: 0.5 }], ['a count as text', { ...block, distribution_days: '4' }],
       ['a future FTD', { ...block, ftd_date: '2026-10-05' }], ['an FTD that is not a day', { ...block, ftd_date: '9/18' }], ['an exposure as text', { ...block, exposure_pct: '55' }]]) expect(read(value)).toBeNull();
     expect(read(block, { as_of_date: '2026-10-01' })).toBeNull();
+  });
+});
+
+// ---- Round 3 (M2): the FTD's age, its opened row and the cause line under a correction ---------------------------------
+describe('the FTD\'s age (M2)', () => {
+  const at = (sessionsSince, asOf = DATE) => ({ ...confirmed(asOf), ftd: { ...confirmed(asOf).ftd, sessionsSince } });
+  it('pins FTD_RECENT_SESSIONS (Today\'s chunk never loads the reference) to the study\'s combo.ftd_recent window', () => {
+    expect(FTD_RECENT_SESSIONS).toBe(reference.buckets.ftdRecentSessions);
+    // 前回のFTD is exactly what the study does not count as recent: they agree on both sides of the line.
+    for (const n of [0, 1, 24, 25, 26, 152]) expect([n, ftdPrevious(at(n))]).toEqual([n, !ftdRecent(at(n), reference)]);
+  });
+
+  it('opens the row to the app\'s own rule from FTD_TEXT, the rises by source as a second-hand citation, the failure, 前回のFTD and 過去の傾向', () => {
+    const { details } = followThroughDetail();
+    expect(details).toEqual([
+      `FTDの基準は独自設定（${FTD_TEXT.gain}・${FTD_TEXT.minDay}〜${FTD_TEXT.maxDay}日目・高値から${FTD_TEXT.decline}以上の下落後）。${FTD_SOURCE_GAINS}。`,
+      '失敗の判定はFTD当日の安値を終値で割ったとき（独自・出典より早く出る場合があります）。',
+      `「n日前」はFTDの日からの営業日数で、${FTD_RECENT_SESSIONS}営業日を過ぎた確認は「${FTD_PREVIOUS_NAME}」と表示します（独自設定）。`,
+      'FTDの状態ごとの過去の傾向は、下の「過去の傾向」を参照。',
+    ]);
+    expect(details[0]).toBe('FTDの基準は独自設定（+1.2%・4〜15日目・高値から6%以上の下落後）。出典ごとの上昇率の目安：1.0%〜1.25%（IBD）、1.7%（William O\'Neil + Co.）（二次資料経由・未確認）。');
+    // No study figure is put on the row: neither index's past share sits beside the other's line.
+    for (const line of details.slice(1)) expect(line).not.toMatch(/\d+(\.\d+)?%/);
+    // The market tab passes the published indices: the same four lines first, then the round 3 lines (M8e, M9).
+    const value = make(), tab = marketTabStudy({ trends: value, reference, date: DATE }).followThrough;
+    expect(tab).toEqual(followThroughDetail(value.data.indices, DATE));
+    expect(tab.details.slice(0, 4)).toEqual(details);
+    expect(marketTabStudy({ trends: { loading: true }, reference, date: DATE }).followThrough).toBeNull();
+  });
+
+  const block = (regime, over = {}) => ({ as_of_date: DATE, regime, distribution_days: 7, ftd_date: null, ftd_days_since: null, exposure_pct: 0, guard: null, method: 'backend-market-regime-v1', source: 'scan-rows', ...over });
+  const held = regime => ({ label: '新規購入を抑制（独自判定）', cap: 0, regime, ftdUpgraded: false });
+  const cause = (regime, gspc) => regimeCause(held(regime), block(regime), verdictBasis(held(regime), DATE), DATE, { gspc });
+  const LINE = '局面判定の分配日：SPY 7日（ストーリング日を含む数え方）。局面判定は「調整」で、分配日のほか50日線・200日線と参加度も見ます';
+  it('says under a correction that the same day\'s confirmed ^GSPC FTD is the index\'s own count, not withdrawn under a 6% decline', () => {
+    expect(cause('correction', at(12))).toBe(`${LINE}。下の^GSPCのFTD（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
+    expect(cause('downtrend', at(26))).toBe(`局面判定の分配日：SPY 7日（ストーリング日を含む数え方）。局面判定は「下降トレンド」で、分配日のほか50日線・200日線と参加度も見ます。下の^GSPCの${FTD_PREVIOUS_NAME}（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
+    // Without the FTD's date the clause leaves the date out, never guessed.
+    expect(cause('correction', { ...at(12), ftd: { sessionsSince: 12 } })).toBe(`${LINE}。下の^GSPCのFTDは指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
+  });
+
+  it('calls the ^GSPC FTD of an FTD-upgraded 0% cause line 「前回のFTD」 past FTD_RECENT_SESSIONS, as the row below does', () => {
+    const upgraded = { label: '50日線割れ（弱含み・独自判定）', cap: 0, regime: 'confirmed_uptrend', ftdUpgraded: true };
+    const spy = block('confirmed_uptrend', { distribution_days: 1, ftd_date: '2026-09-18', ftd_days_since: 10, exposure_pct: 40 });
+    const line = gspc => regimeCause(upgraded, spy, verdictBasis(upgraded, DATE), DATE, { gspc });
+    // On the line (25 sessions) the FTD is still the current one; one session past it, 「前回のFTD」.
+    expect(gspcFtdWords(at(FTD_RECENT_SESSIONS), '2026-09-18', DATE)).toBe('^GSPCの日足ではFTD 8/7');
+    expect(gspcFtdWords(at(FTD_RECENT_SESSIONS + 1), '2026-09-18', DATE)).toBe(`^GSPCの日足では${FTD_PREVIOUS_NAME} 8/7`);
+    expect(line(at(FTD_RECENT_SESSIONS))).toBe('局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足ではFTD 8/7。この目安はSPYが50日線の下のため0%（独自判定）');
+    expect(line(at(FTD_RECENT_SESSIONS + 1))).toBe(`局面判定はSPYのFTD（9/18）による上昇トレンド。^GSPCの日足では${FTD_PREVIOUS_NAME} 8/7。この目安はSPYが50日線の下のため0%（独自判定）`);
+    // The word is the row's (followThroughView) and the ◆'s (ftdPrevious) for the same record.
+    expect(followThroughView(at(FTD_RECENT_SESSIONS + 1), DATE).b).toBe(`${FTD_PREVIOUS_NAME} 8/7`);
+    // A record without a whole count keeps today's words: nothing is guessed.
+    const { sessionsSince, ...uncounted } = confirmed(DATE).ftd;
+    expect(sessionsSince).toBe(40);
+    expect(gspcFtdWords({ ...confirmed(DATE), ftd: uncounted }, '2026-09-18', DATE)).toBe('^GSPCの日足ではFTD 8/7');
+    for (const n of [null, -1, 2.5, '30']) expect(gspcFtdWords(at(n), '2026-09-18', DATE)).toBe('^GSPCの日足ではFTD 8/7');
+    // The same FTD day as the regime's: nothing to attribute, at any age.
+    expect(gspcFtdWords(at(FTD_RECENT_SESSIONS + 1), '2026-08-07', DATE)).toBeNull();
+  });
+
+  it('adds nothing for a record of another day, another state, no record, or a regime that is no correction', () => {
+    expect(cause('correction', at(12, '2026-10-01'))).toBe(LINE);
+    for (const ft of [attempt(DATE), failed(DATE), { available: false, method: 'm', reason: 'x' }, null]) expect(cause('correction', ft)).toBe(LINE);
+    const pressure = { label: '上昇に圧力（独自判定）', cap: 0.25, regime: 'uptrend_under_pressure', ftdUpgraded: false };
+    expect(regimeCause(pressure, block('uptrend_under_pressure'), verdictBasis(pressure, DATE), DATE, { gspc: at(12) })).not.toContain('^GSPC');
+    const up = { label: '上昇トレンド（独自判定）', cap: 0.5, regime: 'confirmed_uptrend', ftdUpgraded: false };
+    expect(regimeCause(up, block('confirmed_uptrend'), verdictBasis(up, DATE), DATE, { gspc: at(12) })).toBe('局面判定の分配日：SPY 7日（ストーリング日を含む数え方）');
+    // Through the study: the ^GSPC record of the day comes from the series (gspcFollowThrough).
+    const value = make(), market = held('correction'), manifest = { markets: { US: { as_of_date: DATE, market_context: block('correction') } } };
+    expect(marketTabStudy({ trends: value, reference, date: DATE, market, manifest }).cause).toBe(`${LINE}。下の^GSPCの${FTD_PREVIOUS_NAME}（8/7）は指数の別集計で、高値から6%未満の下落では取り消しません（独自設定）`);
+  });
+});
+
+// ---- Round 3 (M5): the 50日線割れ verdict's 0% and what the 過去の傾向 block compares ----------------------------------------
+describe('the 50日線割れ verdict\'s 0% (M5)', () => {
+  const BELOW_50 = { label: '50日線割れ（弱含み・独自判定）', cap: MARKET_CAPS.otherwise, state: 'weak', regime: 'correction', ftdUpgraded: false };
+  const CLOSING = `${capText(0)}は独自設定で、検証された水準ではありません。`;
+  /** ^GSPC closes ending on `end`, rising, with the last close `last` (6200: under its 50-day line, over its 200-day line). */
+  const sp500 = (end = DATE, n = 300, last = 6200, gap = null) => days(end, n).map((date, i) => ({ date, close: i === n - 1 ? last : i === gap ? null : 5000 + i * 5 }));
+  const withHistory = closes => { const value = make(); value.data.long_history = { ...value.data.long_history, sp500: closes }; return value; };
+  const note = (value, { market = BELOW_50, ref = reference, date = DATE } = {}) => zeroCapNote({ market, regime: marketRegimeContext({ history: value.data.long_history || null, trends: value, reference: ref, date }), reference: ref, date });
+  /** The expected line, from the reference's rows and the readers' tags (no percentage typed here). */
+  const figures = (ref = reference) => {
+    const row = referenceState(ref, '^GSPC.ma.quadrant', 'above200_below50'), both = referenceState(ref, '^GSPC.ma.quadrant', 'above_both');
+    const tags = (state, entry) => [stateTag(ref, 'ma.quadrant', '^GSPC', state), biasTag(entry)].filter(Boolean).join('');
+    return `^GSPC・${ref.outcome.horizonSessions}営業日で${Math.abs(ref.outcome.drawdownPercent)}%以上の下げ：この状態 ${Math.round(row.pDd5)}%${tags('above200_below50', row)}／両線の上 ${Math.round(both.pDd5)}%${tags('above_both', both)}／全期間 ${Math.round(row.comparatorPDd5)}%。${CLOSING}`;
+  };
+
+  it('joins ^GSPC\'s own cell of the analysis date, as 過去の傾向 judged it, and always ends with the 0% being untested', () => {
+    const value = withHistory(sp500()), summary = indexSummary(value.data.long_history.sp500);
+    expect([summary.vsMa < 0, summary.vs200 > 0, summary.date]).toEqual([true, true, DATE]);
+    const line = note(value);
+    expect(line).toBe(figures());
+    expect(line.endsWith(CLOSING)).toBe(true);
+    // The state is not established on the S&P (〔未確立〕): its tag is printed, never left out.
+    expect(stateTag(reference, 'ma.quadrant', '^GSPC', 'above200_below50')).toBe(TAGS.unestablished);
+    expect(line).toContain(`この状態 ${Math.round(referenceState(reference, '^GSPC.ma.quadrant', 'above200_below50').pDd5)}%${TAGS.unestablished}／`);
+    // The block keeps its own line for that state; the note prints each of its three rows once.
+    const block = marketRegimeContext({ history: value.data.long_history, trends: value, reference, date: DATE }).indices[0].items.find(item => item.indicator === '^GSPC.ma.quadrant');
+    expect([block.state, block.stateDate]).toEqual(['above200_below50', DATE]);
+    for (const word of ['この状態', '両線の上', '全期間']) expect(line.split(word)).toHaveLength(2);
+    // Through the study, with the verdict MarketScreen hands it.
+    expect(marketTabStudy({ trends: value, reference, date: DATE, market: BELOW_50 }).zeroCap).toBe(line);
+    // An FTD-upgraded 50日線割れ (the regime confirmed_uptrend) is the same below-50 state with the same 0%.
+    expect(note(value, { market: { ...BELOW_50, regime: 'confirmed_uptrend', ftdUpgraded: true } })).toBe(line);
+  });
+
+  it('keeps each state\'s own 〔偏り〕 beside its tag, from the reference', () => {
+    const ref = structuredClone(reference);
+    ref.indicators['^GSPC.ma.quadrant'].states.above_both.firstHalfShare = 70;
+    expect(note(withHistory(sp500()), { ref })).toBe(figures(ref));
+    expect(figures(ref)).toContain(`${stateTag(ref, 'ma.quadrant', '^GSPC', 'above_both')}${TAGS.bias}／全期間`);
+  });
+
+  it('says the closing sentence alone, no number, when the cell cannot be joined', () => {
+    const cases = [
+      ['no long history', trends({ history: false })],
+      ['an empty ^GSPC history', withHistory([])],
+      ['fewer than 200 closes (no 200-day line, the cell\'s window)', withHistory(sp500(DATE, 150))],
+      ['an unknown close inside the last 200 (the trailing run never bridges it)', withHistory(sp500(DATE, 300, 6200, 250))],
+      ['the last close of an older session', withHistory(sp500(days(DATE, 2)[0]))],
+      ['above both lines', withHistory(sp500(DATE, 300, 7000))],
+      ['under both lines', withHistory(sp500(DATE, 300, 5500))],
+    ];
+    for (const [name, value] of cases) expect([name, note(value)]).toEqual([name, CLOSING]);
+    // An invalid reference, or a reference row without a share (a null pDd5 is valid in the reference), prints no number.
+    const value = withHistory(sp500());
+    expect(note(value, { ref: null })).toBe(CLOSING);
+    expect(note(value, { ref: { ...reference, outcome: { ...reference.outcome, horizonSessions: 10 } } })).toBe(CLOSING);
+    for (const [state, over] of [['above_both', { pDd5: null }], ['above_both', { labelDd5: 'insufficient' }], ['above200_below50', { pDd5: null }], ['above200_below50', { labelDd5: 'insufficient' }], ['above200_below50', { comparatorPDd5: null }]]) {
+      const ref = structuredClone(reference);
+      Object.assign(ref.indicators['^GSPC.ma.quadrant'].states[state], over);
+      expect([state, over, note(value, { ref })]).toEqual([state, over, CLOSING]);
+    }
+    const ref = structuredClone(reference);
+    delete ref.indicators['^GSPC.ma.quadrant'].states.above200_below50;
+    expect(note(value, { ref })).toBe(CLOSING);
+    // A date the cell is not dated (the analysis date after the history's last close).
+    expect(note(value, { date: '2026-10-05' })).toBe(CLOSING);
+  });
+
+  it('says nothing for any verdict but 50日線割れ, or a 50日線割れ whose guide is not 0%', () => {
+    const value = withHistory(sp500());
+    for (const market of [{ label: '上昇トレンド（独自判定）', cap: 0.5 }, { label: '上昇に圧力（独自判定）', cap: 0.25 }, { label: '長期トレンド警戒（独自判定）', cap: 0 }, { label: '新規購入を抑制（独自判定）', cap: 0 },
+      { label: '市場未確認', cap: 0, state: 'unknown' }, { label: '市場条件未確認', cap: 0, state: 'unknown' }, null, { ...BELOW_50, cap: 0.25 }]) expect([market, note(value, { market })]).toEqual([market, null]);
+    expect(marketTabStudy({ trends: value, reference, date: DATE }).zeroCap).toBeNull();
+  });
+});
+
+describe('what the 過去の傾向 block compares (M5)', () => {
+  const footer = (value, ref = reference) => marketRegimeContext({ history: value.data.long_history, trends: value, reference: ref, date: DATE }).footer;
+  const COMPARES = `この欄は下げの頻度の比較です（${reference.outcome.horizonSessions}営業日・${INDEX_SYMBOLS.join('／')}）。`;
+  const NO_LOWER = '平均リターンが低かった状態はどちらの指数にもありません。';
+  const sp500 = last => days(DATE, 300).map((date, i) => ({ date, close: i === 299 ? last : 5000 + i * 5 }));
+  const correction = { ...attempt(DATE), state: 'correction', attempt: null };
+
+  it('says it compares the frequency of declines, and no state had a lower mean while the reference says so', () => {
+    expect(meanLowerStates(reference)).toEqual([]);
+    // No shown state with a robust higher mean: nothing is named.
+    const value = make();
+    value.data.long_history = { ...value.data.long_history, sp500: sp500(7000) };
+    const plain = footer(value);
+    expect(plain).toContain(`独立の確認ではありません。${COMPARES}${NO_LOWER}指数の結果で、個別銘柄の値ではありません。`);
+    expect(plain).not.toContain('平均リターンは高め');
+    expect(plain).not.toMatch(/どの状態でも|振れ幅/);
+  });
+
+  it('names a shown state 「平均リターンは高め」 only by its own row, with the index that shows it', () => {
+    const value = make();
+    value.data.long_history = { ...value.data.long_history, sp500: sp500(6200) };
+    // The Nasdaq in the same cell: its own row has no robust mean, so only the S&P is named.
+    value.data.indices[1] = { ...value.data.indices[1], state: { date: DATE, close: 18000, vs50: -2, vs200: 3, fromHigh: -4, fullYear: true } };
+    expect(referenceState(reference, '^GSPC.ma.quadrant', 'above200_below50')).toMatchObject({ labelMean: 'robust', meanDirection: 'higher' });
+    expect(referenceState(reference, '^IXIC.ma.quadrant', 'above200_below50').labelMean).not.toBe('robust');
+    expect(footer(value)).toContain(`${COMPARES}${NO_LOWER}表示中の状態のうち、200日線の上・50日線の下（S&P）は平均リターンは高めでした。指数の結果で`);
+    // Both indices in a correction (each row robust and higher): one state, both indices named.
+    for (const item of value.data.indices) item.followThrough = { ...correction };
+    expect(footer(value)).toContain('表示中の状態のうち、200日線の上・50日線の下（S&P）、調整中（S&P・Nasdaq）は平均リターンは高めでした。');
+  });
+
+  it('says nothing of lower means once the reference has one, and still names a shown higher row', () => {
+    const ref = structuredClone(reference);
+    Object.assign(ref.indicators['^IXIC.ftd.state'].states.ftd_failed, { labelMean: 'robust', meanDirection: 'lower' });
+    const value = make();
+    value.data.long_history = { ...value.data.long_history, sp500: sp500(6200) };
+    const text = footer(value, ref);
+    expect(text).toContain(`${COMPARES}表示中の状態のうち、200日線の上・50日線の下（S&P）は平均リターンは高めでした。指数の結果で`);
+    expect(text).not.toContain(NO_LOWER);
+    value.data.long_history = { ...value.data.long_history, sp500: sp500(7000) };
+    expect(footer(value, ref)).toContain(`独立の確認ではありません。${COMPARES}指数の結果で`);
+  });
+});
+
+// ---- round 3: the stalling line (M8d), the current decline under a confirmed FTD (M8e) and the +3% days (M9) -----------
+describe('the opened 分配日 row\'s stalling days (M8d)', () => {
+  const live = (item, k) => item.points.at(-1 - k).date;
+  const withStalling = (value, records) => { value.data.indices.forEach((item, i) => { if (records[i] !== undefined) item.stalling = records[i]; }); return value; };
+  const at = value => stallingLine(value.data.indices, DATE);
+  it('says 未収録 with its reason when the publication has no stalling key (every one while emission is off)', () => {
+    expect(at(make())).toBe(`${STALLING_HEAD}：${KEY_ABSENT}`);
+    expect(STALLING_HEAD).toBe('ストーリング日（独自近似・IBDの定義は非公開・本数に含めません）');
+    // The row's method line says the count has none, and the stalling line is the row's last line.
+    const { details } = distributionDetail(make().data.indices, DATE);
+    expect(details[1]).toBe('下の分配日は^GSPC/^IXICの別集計（ストーリング日を含まない・7日以上で注意、5〜6日は参考）');
+    expect(details.at(-1)).toBe(`${STALLING_HEAD}：${KEY_ABSENT}`);
+  });
+  it('counts each index\'s live days, 0日 for an empty list, the reason of an unavailable or withdrawn record, and dates an older index', () => {
+    const value = make(), method = 'stalling-up0.2-higher-volume-lower-half-near3-age25-v1';
+    withStalling(value, [{ available: true, method, dates: [live(value.data.indices[0], 4), live(value.data.indices[0], 1)] }, { available: true, method, dates: [] }]);
+    expect(at(value)).toBe(`${STALLING_HEAD}：S&P 2日／NAS 0日`);
+    withStalling(value, [undefined, { available: false, method, reason: '指数OHLCVに欠測・重複・不正値があります。ゼロ件とは扱いません。' }]);
+    expect(at(value)).toBe(`${STALLING_HEAD}：S&P 2日／NAS 算出不可（指数OHLCVに欠測・重複・不正値があります。ゼロ件とは扱いません）`);
+    // One index with the key, the other without: each says its own.
+    const one = make();delete one.data.indices[1].stalling;withStalling(one, [{ available: true, method, dates: [] }]);
+    expect(at(one)).toBe(`${STALLING_HEAD}：S&P 0日／NAS ${KEY_ABSENT}`);
+    // Withdrawn by the reader (readMarketTrends' own reason).
+    const withdrawn = make();withStalling(withdrawn, [{ available: false, method, reason: 'ストーリング日の形式を確認できません。' }, { available: true, method, dates: [] }]);
+    expect(at(withdrawn)).toBe(`${STALLING_HEAD}：S&P 算出不可（ストーリング日の形式を確認できません）／NAS 0日`);
+    // An index series ending a session early is dated by its own last session.
+    const older = trends({ asOf: '2026-10-01', date: DATE });withStalling(older, [{ available: true, method, dates: [] }, { available: true, method, dates: ['2026-10-01'] }]);
+    expect(stallingLine(older.data.indices, DATE)).toBe(`${STALLING_HEAD}：S&P 0日（10/1時点）／NAS 1日（10/1時点）`);
+  });
+  it('leaves the 過去の傾向 join (method ids, the 280-session window) and the row\'s count unchanged by the round 3 keys', () => {
+    const plain = make(), keyed = make(), method = 'stalling-up0.2-higher-volume-lower-half-near3-age25-v1';
+    for (const item of keyed.data.indices) item.stalling = { available: true, method, dates: [item.points.at(-2).date] };
+    for (const row of keyed.data.long_history.breadth) Object.assign(row, { rs90Cohort: 12, rs90CohortAbove50: 5, newHighsClose: 9, breakoutsEarlyJudged: 8, breakoutsEarlyFailed: 2 });
+    const ctx = value => marketRegimeContext({ history: value.data.long_history, trends: value, reference, date: DATE });
+    expect(ctx(keyed)).toEqual(ctx(plain));
+    expect(ctx(plain).indices.flatMap(block => block.items).filter(entry => !entry.reason).map(entry => entry.indicator)).toEqual(expect.arrayContaining(['^GSPC.dd.graded', '^GSPC.ftd.state', '^IXIC.dd.graded']));
+    const study = value => marketTabStudy({ trends: value, reference, date: DATE });
+    expect(study(keyed).signalTags).toEqual(study(plain).signalTags);
+    expect(study(keyed).distribution.details.slice(0, -1)).toEqual(study(plain).distribution.details.slice(0, -1));
+  });
+});
+
+describe('the current decline under a confirmed FTD (M8e)', () => {
+  /** Daily bars from closes (and optional lows / volumes): open at the previous close, high and low around the session. */
+  const bars = (closes, { lows = {}, volumes = {} } = {}) => closes.map((close, i) => { const open = i ? closes[i - 1] : close;
+    return { date: days('2026-10-02', closes.length)[i], open, high: Math.max(open, close) + 0.2, low: lows[i] ?? Math.min(open, close) - 0.2, close, volume: volumes[i] ?? 1000 }; });
+  // A 8% decline to day 5, a rally attempt from day 6, an FTD on its 4th day (+1.5% on higher volume), a new high, then a pullback.
+  const BASE = [100, 98, 96, 94, 93, 92, 92.5, 93, 93.4, 94.8, 96, 95, 93.5, 94];
+  const run = (closes, extra = {}) => followThroughDay({ symbol: '^GSPC', bars: bars(closes, { volumes: { 9: 2000 }, ...extra }), asOfDate: '2026-10-02', distributionEvents: [] });
+  const line = (ft, date = '2026-10-02') => followThroughDetail([{ symbol: '^GSPC', followThrough: ft }, { symbol: '^IXIC', followThrough: attempt(date) }], date).details;
+  it('reads the real state machine\'s leg after an FTD: the decline its 6% test uses, the peak and the low, through the producer', () => {
+    const ft = run(BASE);
+    expect(ft.state).toBe('confirmed');
+    expect(ft.ftd.date).toBe(days('2026-10-02', BASE.length)[9]);
+    expect([ft.peak.close, ft.declinePct < 100 * FTD_MIN_DECLINE]).toEqual([96, true]);
+    const expected = `S&P：現在の下落 −${ft.declinePct.toFixed(1)}%（高値${shortDate(ft.peak.date, '2026-10-02')}→安値${shortDate(ft.low.date, '2026-10-02')}）・${FTD_TEXT.decline}で調整判定（独自設定）`;
+    expect(currentLegLine('S&P', ft, '2026-10-02')).toBe(expected);
+    expect(expected).toBe('S&P：現在の下落 −2.6%（高値9/29→安値10/1）・6%で調整判定（独自設定）');
+    expect(line(ft)).toContain(expected);
+    // The four lines of the row come first, unchanged; the Nasdaq's rally attempt adds no decline line.
+    expect(line(ft).slice(0, 4)).toEqual(followThroughDetail().details);
+    expect(line(ft).filter(text => text.includes('現在の下落'))).toEqual([expected]);
+  });
+  it('shows nothing once the pullback reaches 6%: the state machine has left the confirmed state', () => {
+    const ft = run([...BASE.slice(0, -2), 92, 90]);
+    expect(ft.state).not.toBe('confirmed');
+    expect(currentLegLine('S&P', ft, '2026-10-02')).toBeNull();
+  });
+  it('shows nothing at a new high (no decline), for the synthetic 7.6 of a confirmed record, for any other state or an unavailable record', () => {
+    const ft = run([...BASE.slice(0, -4), 96, 97]);
+    expect([ft.state, ft.declinePct]).toEqual(['confirmed', null]);
+    expect(currentLegLine('S&P', ft, '2026-10-02')).toBeNull();
+    expect(currentLegLine('S&P', { ...confirmed('2026-10-02'), declinePct: 7.6 }, '2026-10-02')).toBeNull();
+    for (const record of [attempt('2026-10-02'), failed('2026-10-02'), { available: false, method: 'x', reason: 'r' }, undefined]) expect(currentLegLine('S&P', record, '2026-10-02')).toBeNull();
+  });
+  it('never rounds a decline under 6% onto 6.0, never prints −0.0, and dates an older record', () => {
+    const at = declinePct => currentLegLine('S&P', { ...confirmed('2026-10-02'), declinePct }, '2026-10-02');
+    expect(at(5.996)).toMatch(/^S&P：現在の下落 −5\.99%（/);
+    expect(at(5.95)).toMatch(/^S&P：現在の下落 −5\.95%（/);
+    expect(at(5.94)).toMatch(/^S&P：現在の下落 −5\.9%（/);
+    expect(at(0.04)).toMatch(/^S&P：現在の下落 −0\.04%（/);
+    expect(at(0)).toMatch(/^S&P：現在の下落 0\.0%（/);
+    expect(currentLegLine('NAS', { ...confirmed('2026-10-01'), declinePct: 2 }, '2026-10-02')).toBe('NAS（10/1時点）：現在の下落 −2.0%（高値7/1→安値8/1）・6%で調整判定（独自設定）');
+  });
+});
+
+describe('the +3% days (M9)', () => {
+  const series = changes => changes.reduce((list, change) => [...list, Math.round(list.at(-1) * (1 + change) * 100) / 100], [1000]).map((close, i, all) => ({ date: days('2026-10-02', all.length)[i], close }));
+  const indices = (sp, nas) => [{ symbol: '^GSPC', ...(sp === undefined ? {} : { closes: sp }) }, { symbol: '^IXIC', ...(nas === undefined ? {} : { closes: nas }) }];
+  it('pins the constant and counts closes at least +3% above the previous one over the comparisons made', () => {
+    expect(BIG_UP_DAY).toBe(0.03);
+    // The head says the threshold is the app's own (独自設定), built from the constant.
+    expect(BIG_UP_HEAD).toBe('+3%以上の上昇日（独自設定）');
+    expect(BIG_UP_HEAD.startsWith(`+${BIG_UP_DAY * 100}%`)).toBe(true);
+    expect(bigUpDays(series([0.01, -0.02, 0.005]))).toEqual({ sessions: 3, count: 0, date: '2026-10-02' });
+    expect(bigUpDays(series([0.031, -0.02, 0.045, 0.01, 0.0305]))).toEqual({ sessions: 5, count: 3, date: '2026-10-02' });
+    // Exactly +3.00% counts, also where the ratio's floating point falls just under 1.03; +2.99% does not.
+    expect(1102.1 / 1070 - 1 < 0.03).toBe(true);
+    expect(bigUpDays([{ date: '2026-10-01', close: 1070 }, { date: '2026-10-02', close: 1102.1 }]).count).toBe(1);
+    expect(bigUpDays([{ date: '2026-10-01', close: 1000 }, { date: '2026-10-02', close: 1029.9 }]).count).toBe(0);
+    expect(bigUpDays([{ date: '2026-10-02', close: 1000 }])).toBeNull();
+    expect(bigUpDays(undefined)).toBeNull();
+  });
+  it('says each index\'s count in one line with the caveat once, dates an older series, and says 未収録（旧形式） without closes', () => {
+    const sp = series([0.031, -0.02, 0.045]), nas = series([0.01, 0.002]);
+    expect(bigUpDayLine(indices(sp, nas), '2026-10-02')).toBe(`${BIG_UP_HEAD}：S&P 直近3営業日で2回／NAS 直近2営業日で0回（${BIG_UP_NOTE}）`);
+    expect(BIG_UP_NOTE).toBe('弱気相場・調整中に多い。買いの合図ではありません');
+    const behind = sp.slice(0, -1);
+    expect(bigUpDayLine(indices(behind, nas), '2026-10-02')).toBe(`${BIG_UP_HEAD}：S&P 直近2営業日で1回（10/1時点）／NAS 直近2営業日で0回（${BIG_UP_NOTE}）`);
+    expect(bigUpDayLine(indices(), '2026-10-02')).toBe(`${BIG_UP_HEAD}：未収録（旧形式）`);
+    expect(bigUpDayLine(indices(sp), '2026-10-02')).toBe(`${BIG_UP_HEAD}：S&P 直近3営業日で2回／NAS 未収録（旧形式）（${BIG_UP_NOTE}）`);
+    // Closes the reader withdrew say why, never 0.
+    const withdrawn = indices(undefined, nas);withdrawn[0].closes_error = '指数の終値の形式を確認できません。';
+    expect(bigUpDayLine(withdrawn, '2026-10-02')).toBe(`${BIG_UP_HEAD}：S&P 算出不可（指数の終値の形式を確認できません）／NAS 直近2営業日で0回（${BIG_UP_NOTE}）`);
+    // It is the opened フォロースルーデー row's last line on the market tab.
+    expect(followThroughDetail(indices(sp, nas), '2026-10-02').details.at(-1)).toBe(bigUpDayLine(indices(sp, nas), '2026-10-02'));
   });
 });
