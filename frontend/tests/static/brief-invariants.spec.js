@@ -381,12 +381,10 @@ test.describe('round 3 R1: one sell wording per stock, bounded by the pivot\'s o
     expect(errors).toEqual([]);
   });
 
-  // INTEGRATION (docs/round3/verdict.md, "Integration requests"): useStockData builds the stock screen's row as
-  // {...detail, ...summary} (useBriefData.js, mergeFinancialDetail), so on an older publication whose index lacks
-  // se_pivot_date while a detail carries it, the stock screen is bounded and the watch row is not. The one-line fix in
-  // useBriefData.js (not this track's file) drops a detail-only se_pivot_date from the merged row; until it lands this
-  // fails on the stock-screen side (its data-gate is the bounded call, not failedBreakout).
-  test.fixme('INTEGRATION: an index without se_pivot_date and a detail with it leave the stock screen and the watch row both unbounded', async ({ page }) => {
+  // INTEGRATION (docs/round3/verdict.md, "Integration requests"): on an older publication whose index lacks se_pivot_date
+  // while a detail carries it, the stock screen and the watch row both stay unbounded. The line in useBriefData.js that
+  // drops a detail-only se_pivot_date from the merged row landed at integration.
+  test('INTEGRATION: an index without se_pivot_date and a detail with it leave the stock screen and the watch row both unbounded', async ({ page }) => {
     const nr = ORACLE_ROWS.find(row => row.symbol === ORACLE.pivotAfterCrossing), path = `research-details/${nr.symbol}-detail.json`;
     const mutate = {
       rows: rows => { const row = rows.find(item => item.symbol === nr.symbol); delete row.se_pivot_date; row.research_detail_path = path; },

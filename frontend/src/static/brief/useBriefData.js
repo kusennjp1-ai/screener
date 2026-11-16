@@ -121,8 +121,14 @@ export function useStockData(symbol, brief) {
   });
   const clockRows = useMemo(() => [summary, detail.data?.value].filter(Boolean), [summary, detail.data]);
   const financialNow = Math.max(bundle.evaluatedNow ?? Date.now(), useFinancialClock(clockRows));
-  const row = useMemo(() => summary ? mergeFinancialDetail(summary, detail.data?.value, { now: financialNow, asOfDate: bundle.data?.date, generation: version,
-    detailGeneration: detail.data?.generation, expectedDetailPath: summary.research_detail_path, detailPath: detail.data?.path }) : null, [summary, detail.data, financialNow, bundle.data?.date, version]);
+  const row = useMemo(() => {
+    if (!summary) return null;
+    const merged = mergeFinancialDetail(summary, detail.data?.value, { now: financialNow, asOfDate: bundle.data?.date, generation: version,
+      detailGeneration: detail.data?.generation, expectedDetailPath: summary.research_detail_path, detailPath: detail.data?.path });
+    // The crossing floor, the contraction cut and the pivot's day read the index row only (round 3 R1/R6/C4), so an older publication whose index lacks the field renders as before on every screen.
+    if (!Object.hasOwn(summary, 'se_pivot_date')) delete merged.se_pivot_date;
+    return merged;
+  }, [summary, detail.data, financialNow, bundle.data?.date, version]);
   const chartPath = row?.chart_path || null;
   const chart = useQuery({
     queryKey: [...staticChartKeys.payload(symbol, chartPath), version],
