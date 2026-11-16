@@ -109,6 +109,8 @@
   - 理由：今のどの公開でも表示は使われない（`Q4_EPS_REFERENCE_EMIT = False`）。計画は D3 を切り離せる作りにした。作る側と `SEC q4 reference accuracy` のログの行は残るので、オーナーは OD1 が求める数を受け取れる。
   - **OD1 の既定（「出力オフのまま作る」）からの、記録した逸脱**：表示はトラックのブランチ上で作ったが、出荷しない。
   - **規則 18 の帰結**：出力は、**保留のコミットの差し戻し（revert）が Pages に出た後でなければ** on にできない。「round 3 の UI が Pages に出た後」では足りない。
+  - 指揮者の決定の原文（B1）：
+    > This is a recorded deviation from OD1's default 'built with emission off' (the display is built, on the track branch, not shipped). CONSEQUENCE (rule 18): emission may be switched on only after THE REVERT OF THE HOLD COMMIT is live on Pages, not merely 'the round-3 UI'. Write it that way everywhere.
     - data.md の OD1 の文（「round 3 の UI が Pages で動いていることを確かめた後」）は、この保留で置き換わる。data.md は DATA の文書なので編集していない。
   - **戻し方**：`git revert cc326e9a`。
     - ただし、この HEAD のエントリー 133.85 に表示の約 1.33 を足すと約 135.2 で、134.00 を超える。足し算の見込みで、測っていない。
@@ -137,7 +139,9 @@
 - **C4 ZZHB の 1y／320**：R6 の後、150 日線の名前「150」は描かれない（その場所を「T1 −23%」がとる）。
   - 配置器の規則「空きが無ければ描かない」の通り。計画は配置器の作り直しを禁じる。
   - オラクルの差分の予想の中にある。オーナーに伝える（下の (e)）。
-- **C5 useBriefData.js の 1 行の帰結**：下の (e) 4。
+- **C5 useBriefData.js の 1 行の帰結**：下の (e) 4。指揮者の決定の原文（C5）：
+  > The useBriefData.js line makes every reader of the pivot's date use the index row. On today's live publication (index has no se_pivot_date) the stock screen therefore shows 「ピボットの日 未確認」 at 1024px and wider, no crossing floor and no contraction cut, exactly as the watch rows, until the first data publication from the new exporter. Honest (未確認, never a guess) and one wording per stock; recorded for the owner.
+  - 統合の注記：R6-P4 の割り込みの規則は `se_pivot_date` を読まないので、そのような公開でも計画のカードで効く。だから計画のカードは「前とまったく同じ」ではない（R6 の指揮者の記録では、割り込まれた使える損切りは R6 の前の木の再構築で 5 行）。
 
 ### D. オーナーの既定のまま出荷するもの
 
@@ -288,7 +292,7 @@
 11. **1440 の最初の表示の最長タスク**は 241ms（8849bf9 は 334ms）で、まだ 200ms を超える。保留の承認はそのまま（OD2）。
 12. **M1e の結論文**は、次の取引日の引けから新しい公開が届くまで（推論では毎取引日 約 14 時間）出る。上部のバーの「古い」は 28 時間後。
 13. **統合の測定で見つかり、どのトラックの記録にも無く、指揮者の決定もまだ無いもの**（直していない）。
-    - 実データで、配置器が強制で置くラベルが、STEP 0 より 17 画面で増えた（CHART だけの木より 27 画面）。
+    - 再構築の描画（11-12、476 画面）で、配置器が強制で置くラベルが、STEP 0 より 17 画面で増えた（CHART だけの木より 27 画面）。
       - 対象は BMO・CFBK・GLBE・HAFC・NBTB・TRST・WSM の 320／390 の画面。どれも R6 が測り直した銘柄で、新しい収縮の T ラベル。
       - フィクスチャの関門（492 画面の forcedUp は空）はこれを見ない。重なりの目視は していない。
     - 320 の安値の札の集合が 13 → 9、週足の強制の行が 29 → 24（R6・R2 による。帰属は済み）。
@@ -302,7 +306,7 @@ CI と同じ設定 ＝ Chrome for Testing 147 の headless shell、CI のフォ�
 
 | # | 検査 | 結果 | 測った木・時刻・負荷 | コマンド |
 |---|---|---|---|---|
-| 1 | git | 4 つの head は祖先。所有の外の編集は (b) の表のとおり（9 ファイル＋トラックのファイルの再編集）。大きなファイル・基準の形のファイル・zip は無い。trailer と木の清潔さは、最後の docs のコミットの後に確かめる（この作業の最終の確認） | HEAD、15:1x、0.00 | `git merge-base --is-ancestor`、`git diff --name-only 45603f06 HEAD`、`git diff --stat <head> HEAD -- <track files>` |
+| 1 | git | 4 つの head は祖先。所有の外の編集は (b) の表のとおり（9 ファイル＋トラックのファイルの再編集）。docs の 4 コミットの後で、45603f06..HEAD の 141 本すべてが Conventional Commits で、最後の 2 行がちょうど指示の 2 行の trailer。trailer の外にモデル名は無い。大きなファイル・基準の形のファイル・zip は無い（114 ファイル、最大はトラックの記録 verdict.md の 1906 行）。`git status` は空 | HEAD、15:1x〜15:3x、0.00 | `git merge-base --is-ancestor`、`git diff --name-only 45603f06 HEAD`、`git diff --stat <head> HEAD -- <track files>`、`git rev-list 45603f06..HEAD` の各本文の最後の 2 行、`git diff --numstat 45603f06..HEAD` |
 | 2a | vitest 全部 | 252 ファイル・4264 本すべて通過、失敗 0 | bbcb8753、12:28〜12:33、0.55 → 3.38 | `npx vitest run`（SESSION_CALENDAR_PYTHON・FINANCIAL_REPLAY_PYTHON つき） |
 | 2b | 静的 Playwright 全部 | 570 本通過・失敗 0・スキップ 0（24.5 分）。R1／R2 の目標と INTEGRATION のテストが有効 | bbcb8753、12:43〜13:08、2.74 → 4.00 | `npx playwright test -c $S/audit3/r3-integration/pw.config.mjs --workers=1` |
 | 2c | lint | エラー 0、警告 4（8849bf9 からある 4 つ） | bbcb8753、12:34 | `npm run lint` |
@@ -311,20 +315,20 @@ CI と同じ設定 ＝ Chrome for Testing 147 の headless shell、CI のフォ�
 | 2f | test_sec_financials ＋ export／8k | 54 本 OK（DATA の 57 から、保留が test_sec_financials.py の表示側の 61 行を外した）、test_export_financial_history 4 本 OK、test_sec_8k_samples 5 本 OK | bbcb8753（sec-financials.py と test は cc326e9a から不変）、15:11、0.00 | `cd frontend/tools && python3 -m unittest test_sec_financials test_export_financial_history test_sec_8k_samples`（PATH に Node 22） |
 | 2g | 集め手のテスト | 34 本 OK | 71daaf65 の後（P3、12:05）。frontend/tools は 71daaf65 から HEAD まで不変（`git diff --quiet`） | `cal-venv/bin/python -m unittest discover -s frontend/tools -p "test_collect_market*.py"` |
 | 3a | backend のゲート | gate-1 304・gate-2 47・gate-3 152・gate-4 21・gate-5 43 通過、gate-check OK | 8e45a596、11:05〜11:06、3.23 → 2.27。backend は 8e45a596 から HEAD まで不変（`git diff --quiet 8e45a596 HEAD -- backend`） | `make gate-1 … gate-5 gate-check PYTHON=/home/user/screener/backend/venv/bin/python` |
-| 3b | 赤線（red line） | 293 本集めて 293 本通過 | 8e45a596、11:07 | backend の pytest（tests/unit/scanners・services・golden・test_scan_orchestrator.py） |
+| 3b | 赤線（red line） | 293 本集めて（collected 293）293 本通過 | 8e45a596、11:07 | P2 の実行（ログの先頭は tests/unit/scanners から。範囲は R の指揮者と同じ赤線の範囲と読んだ。正確なコマンドはログに無い） |
 | 3c | 凍結の 908 | `DISCRIMINATION (entry − control): FIRE±5 +25.8pp, SETUP +52.0pp`（不変。SETUP 列は Markets360 のもの、p1-5） | 8e45a596、11:08、1.89 → 2.04 | `backend/scripts/validate_trade_ideas.py` |
 | 3d | H4（補助のプローブ） | setup_ready 29/588（4.9%）対 21/575（3.7%）、+1.3pp（STEP 0 は 28/588 対 23/575、+0.8pp）。G8 46/588 対 185/575（STEP 0 は 34 対 178）。SE のステージ 2 は 532 対 378（STEP 0 は 528 対 300）。price_pinned はその他の失敗にエントリー 2・対照 2。G1〜G7・G9・G10 は STEP 0 と同じ。上抜け日のエントリー 215 件で準備 0 | 8e45a596、11:04〜11:12、0.14 で開始、482 秒 | `backend/scripts/probe_setup_ready_908.py --json …` |
-| 3e | プローブの docstring | 注釈だけ（コミットの本文：docstring を除いた AST は同じ） | 8e45a596 | `git show 8e45a596 -- backend/scripts/probe_setup_ready_908.py` |
+| 3e | プローブの docstring | 45603f06 との差は、モジュールの docstring の中の 5 行（「SE stage」の定義）だけ。コードの行は変わらない（コミットの本文は、docstring を除いた AST が同じと言う） | HEAD、P6 | `git diff 45603f06 HEAD -- backend/scripts/probe_setup_ready_908.py` |
 | 4 | build | エントリー 133.85 kB ≦ 134.00。MarketScreen 34.03 kB、priceChart 18.57 kB（Design Acceptance の build） | bbcb8753、12:26、0.02 | `$H/build/run-build.sh <worktree>` |
 | 5a | 492 画面のプローブ | ラベル 492・値 480・エラー 0、sha256 69ce3c5a…a326（CHART だけの木と同じ）。8849bf9 との差は CHART の項目だけ。週足でない SVG は同じ、週足は注意書きの行が消えるだけ、強制の数はどの画面でも増えない、カードの高さは 1440 週足だけ +21.19、C5 のラベル、注記の文。aria の変化 0 | bbcb8753、13:55〜13:57、1.72 | `$H/probe/run-probe.sh <worktree> 4425`、`node $H/probe/diff.mjs … --texts`、CHART の `gate.mjs` |
 | 5b | オラクルのプローブ | ラベル 132・値 132・エラー 0、sha256 98bd4cf2…b930。CHART だけの木との差は ZZHB・ZZNR・ZZPG（R6・R1・R2）、R だけの木との差は C2・C3・C5。両方が変えた 84 画面で、合流の差は 2 つの和にちょうど等しい。名指しされていないが帰属のあるもの：ZZNR の 1440 のカード −21.19（R1）、ZZPG の 1440 の 3m／6m のカード −20 と凡例の埋め戻し（R2） | bbcb8753、13:57〜13:59、2.12 | `$H/probe/run-probe.sh <worktree> 4425 oracles` |
-| 5c | ダンプ | 42 画面・エラー 0、sha256 aaf7ae71…509e。8849bf9 と違う 31 画面はすべて帰属あり（C4 の 1440 の 18 画面、C2、C5 の 375 の 6 画面、M3「7日以上で注意」、MARKET の画面、c7b8e6c8 の名前、D4「Q4算出」の 10 画面）。R による差は無い。高さは 1440 の市場 2519（MARKET だけと同じ）のほかは同じ。B2 はダンプが同じ（5a の上） | bbcb8753、13:59〜14:00、2.30 | `$H/dump/run-dump.sh <worktree> 4425` |
+| 5c | ダンプ | 42 画面・エラー 0、sha256 aaf7ae71…509e。8849bf9 と違う 31 画面はすべて帰属あり（C4 の 1440 の 18 画面、C2、C5 の 375 の 6 画面、M3「7日以上で注意」、MARKET の画面、c7b8e6c8 の名前、D4「Q4算出」の 10 画面）。R による差は無い。高さは 1440 の市場 2519（MARKET だけと同じ）のほかは同じ。B2 はダンプが同じ（(c) B2） | bbcb8753、13:59〜14:00、2.30 | `$H/dump/run-dump.sh <worktree> 4425` |
 | 6 | 高さの台帳（375×812） | 下の表 | bbcb8753、14:00〜14:08 | `$H/heights/run-heights.sh`、MARKET の測定の spec の写し、STEP 0 のオラクルの高さの spec、brief-decision.spec.js の写し |
 | 7 | 再構築の数（11-12） | 下の表。予想どおりで、それ以外の動きはすべて帰属あり | bbcb8753、13:22〜13:27（スナップショット）、13:54〜14:06（数と描画） | `$H/snapshot/run-snapshot.sh <worktree> --keep`、数の集計、`$H/snapshot/run-render.sh <worktree> 4425 reduce`（読み取りの型を `対\s*ピボット` に直した写し） |
 | 8 | C1 の時間（静かな機械） | 1440 の最初の表示：8849bf9 と交互に 7 回、中央値 241ms（8849bf9 は 334ms）。200ms 以下は **満たさない**。保留の承認はそのまま。390 の期間の切り替え：182.5ms（8849bf9 は 190.5）、1440 は 190.0（197.5） | 開始 13:30:26、loadavg 0.50（有効）。期間は 14:36:27 に 0.10、14:47:31 に 0.52 | `$H/timing/wait-quiet.sh 0.5 600 $H/timing/run-timing.sh <worktree> 4425 <r3-base> 7`、`… run-period.sh` |
 | 9 | 合流した作り手の文言の規則 | 統合の作業者は走らせていない（指揮者の検証に回す） | — | — |
 | 10 | 規則 18 | 出力のスイッチは 3 つとも off（`Q4_EPS_REFERENCE_EMIT = False`、`EMIT_R3_MARKET_FIELDS = False`、`EMIT_R3_MARKET_FIELDS=false`）。admission の `OPTIONAL_RECORD_KEYS` は `['derivation_gaps']` だけなので、`q4EpsReference` を持つ記録は `keys` で拒む。frontend/src に `q4EpsReference` は無く、作り手も出さない。INTEGRATION のテスト（古い公開は前と同じに描く）は 2b の中で通った | HEAD、15:1x | `grep -n` |
-| 11 | 文書 | STATE.md に「EPS 合格」「EPS 条件」・旧名のキーが無いこと、出力の前提が保留の差し戻しを名指すこと、実測と未検証の分離、再構築の数のラベル。最後の確認で grep する | この記録の後 | `grep -rn …` |
+| 11 | 文書 | STATE.md と CONTEXT.md に「EPS 合格」「EPS 条件」・旧名のキーが無い（grep の出力は空）。出力の前提は、STATE.md の「次の行動」5 と「絶対の制約」で保留の差し戻しを名指す。STATE.md の「絶対の制約」は前の版と同じ行に、出力の 1 行を足しただけ（`diff`）。出力のスイッチは 3 つとも off。`npm run lint` はエラー 0・警告 4 | HEAD、15:2x〜15:3x | `grep -rn 'EPS 合格\|EPS 条件\|sec_conditions' docs/STATE.md CONTEXT.md`、`diff <(git show <前>:docs/STATE.md …) …`、`npm run lint` |
 
 ### 高さ（375×812。P5、bbcb8753）
 
@@ -395,7 +399,7 @@ CI と同じ設定 ＝ Chrome for Testing 147 の headless shell、CI のフォ�
   - R6 の新しい理由（「…割り込み済み」「収縮はすべて…」）は、フィクスチャにも再構築の描画にも出ない。描いていない（320 の折り返しを含む）。
   - 「最後の収縮の安値」の線を失う 61 行も描いていない。
   - AVTR・SHEL・VSTM（新しく準備）は、描画の対象の 48 銘柄に入っていない。
-  - 強制のラベルが増えた 17／27 画面の重なりは、目視していない。
+  - 再構築の描画で強制のラベルが増えた 17／27 画面の重なりは、目視していない。
 - **CI と Design Acceptance**：走らせていない（起動しない）。PR #145 の Design Acceptance は 1440 の最長タスクの中央値を 779ms と測った（指揮者の記録）。統合の木での CI の値は未検証。
 - **`contraction_unconfirmed` がブリーフと違う回数**：数えていない（readiness.py への切れ目の移植は、していない）。
 - **保留を戻したときのエントリーの大きさ**：この HEAD では測っていない（見込み 約 135.2）。
