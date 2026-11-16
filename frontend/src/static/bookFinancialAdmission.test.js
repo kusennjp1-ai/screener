@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { admitBookFinancials, admitBookFinancialsDetailed, DERIVATION_GAP_REASONS, INVALID_DETAIL_MESSAGE_MAX, q4ReferenceEntryValid, SEC_Q4_REFERENCE_MAX, SEC_Q4_REFERENCE_METHOD, SEC_Q4_REFERENCE_TAGS, SEC_REFUSAL_REASONS, SEC_UNAVAILABLE_REASONS } from './bookFinancialAdmission';
+import { admitBookFinancials, admitBookFinancialsDetailed, DERIVATION_GAP_REASONS, INVALID_DETAIL_MESSAGE_MAX, SEC_REFUSAL_REASONS, SEC_UNAVAILABLE_REASONS } from './bookFinancialAdmission';
 import { DERIVED_Q4 } from './bookFinancialEvidence';
 import { secRecord, secUnavailable } from '../test/fixtures/secRecord';
 import { DERIVATION_GAP_REASONS as CONTRACT_GAP_REASONS, INVALID_DETAIL_MESSAGE_MAX as CONTRACT_MESSAGE_MAX, secDerivationGaps, secInvalidDetail } from '../test/fixtures/publishedContracts';
@@ -170,108 +170,5 @@ describe('the round-2 record additions (plan §2.3): optional, and admitted only
       { reason: 'invalid_payload', invalid_detail: { ...detail, headers: {} } }]) {
       expect(admitBookFinancialsDetailed(secUnavailable(bad), context())).toEqual({ value: null, reason: 'keys' });
     }
-  });
-});
-
-// Round 3 D3 (plan §5): the 独自計算・参考 fiscal-Q4 EPS is an optional, strict key. A record without it is admitted exactly as
-// before; any malformed entry refuses the whole record with the existing reason 'keys' (no new refusal reason).
-describe('round-3 D3: the optional q4EpsReference key', () => {
-  // A 10-K filer: its fiscal Q4 EPS (each December quarter) is only in the annual report, so quarterly.eps has no point there.
-  const tenK = () => { const record = secRecord(); record.quarterly.eps = record.quarterly.eps.filter(p => !p.end.endsWith('12-31')); return record; };
-  const entry = (end, start, value = 1.36, extra = {}) => ({ end, start, value, method: SEC_Q4_REFERENCE_METHOD,
-    numerator: { tag: 'NetIncomeLoss', components: ['k-1', 'q-1', 'q-2', 'q-3'] }, shares: { tag: 'WeightedAverageNumberOfDilutedSharesOutstanding', components: ['k-1', 'q-1', 'q-2', 'q-3'] }, ...extra });
-  const entries = () => [entry('2024-12-31', '2024-10-01', 1.02), entry('2025-12-31', '2025-10-01', 1.36)];
-  const withReference = (list = entries(), record = tenK()) => ({ ...record, q4EpsReference: list });
-  const detailed = value => admitBookFinancialsDetailed(value, context());
-
-  it('mirrors the producer: one method, the numerator and share tags, at most four entries; the refusal reasons are unchanged', () => {
-    expect(SEC_Q4_REFERENCE_METHOD).toBe('q4-ni-over-q4-diluted-shares-v1');
-    expect(SEC_Q4_REFERENCE_TAGS).toEqual({ numerator: ['NetIncomeLossAvailableToCommonStockholdersDiluted', 'NetIncomeLossAvailableToCommonStockholdersBasic', 'NetIncomeLoss'],
-      shares: ['WeightedAverageNumberOfDilutedSharesOutstanding'] });
-    expect(SEC_Q4_REFERENCE_MAX).toBe(4);
-    expect(SEC_REFUSAL_REASONS).toEqual(['schema', 'symbol', 'as_of', 'retrieved_window', 'keys', 'cik_url', 'series:eps', 'series:revenue', 'series:netIncome', 'series:inventory', 'series:receivables', 'series:annualEps', 'not_corporate']);
-  });
-
-  it('admits a valid list as the identical record, and a record without the key exactly as before', () => {
-    const listed = withReference();
-    expect(detailed(listed)).toEqual({ value: listed, reason: null });
-    expect(admit(listed)).toBe(listed);
-    for (const tag of SEC_Q4_REFERENCE_TAGS.numerator) {
-      const value = withReference([entry('2025-12-31', '2025-10-01', -0.25, { numerator: { tag, components: ['a', 'b', 'c', 'd'] } })]);
-      expect(admit(value)).toBe(value);
-    }
-    // Four entries, one per fiscal year; a partial record may carry it too.
-    const four = secRecord({ quarters: [['2022-10-01', '2022-12-31'], ['2023-10-01', '2023-12-31'], ['2024-10-01', '2024-12-31'], ['2025-10-01', '2025-12-31']], eps: [], revenue: [10, 11, 12, 13], netIncome: [1, 1, 1, 1] });
-    four.status = 'partial';
-    const full = { ...four, q4EpsReference: ['2022', '2023', '2024', '2025'].map(year => entry(`${year}-12-31`, `${year}-10-01`)) };
-    expect(admit(full)).toBe(full);
-    // The same record without the key: the identical admission as before D3.
-    for (const record of [secRecord(), tenK()]) expect(detailed(record)).toEqual({ value: record, reason: null });
-  });
-
-  const bad = [
-    ['an extra entry key', list => { list[0].note = 'x'; }],
-    ['a missing entry key', list => { delete list[1].start; }],
-    ['a missing numerator', list => { delete list[1].numerator; }],
-    ['a __proto__ entry key', list => JSON.parse(JSON.stringify(list).replace('"end"', '"__proto__":{},"end"'))],
-    ['another method', list => { list[1].method = 'q4-ni-over-q4-basic-shares-v1'; }],
-    ['a numerator tag outside the list', list => { list[1].numerator.tag = 'ProfitLoss'; }],
-    ['a share tag outside the list', list => { list[1].shares.tag = 'WeightedAverageNumberOfSharesOutstandingBasic'; }],
-    ['an extra key in the shares', list => { list[1].shares.unit = 'shares'; }],
-    ['three components', list => { list[1].numerator.components = ['a', 'b', 'c']; }],
-    ['five components', list => { list[1].shares.components = ['a', 'b', 'c', 'd', 'e']; }],
-    ['an empty component', list => { list[1].numerator.components[2] = ' '; }],
-    ['a NaN value', list => { list[1].value = NaN; }],
-    ['an infinite value', list => { list[1].value = Infinity; }],
-    ['a value as text', list => { list[1].value = '1.36'; }],
-    ['an end after the as-of date', list => { list.push(entry('2026-03-31', '2026-01-01')); }],
-    ['a start after its end', list => { list[1].start = '2026-01-01'; }],
-    ['a quarter longer than 105 days', list => { list[1].start = '2025-09-01'; }],
-    ['a quarter shorter than 70 days', list => { list[1].start = '2025-11-01'; }],
-    ['an invalid day', list => { list[1].end = '2025-12-32'; }],
-    ['unordered ends', list => list.reverse()],
-    ['a repeated end', list => { list[0] = entry('2025-12-31', '2025-10-01'); }],
-    // Ordered and well formed, but 2025-09-30's EPS is reported: a reported EPS is never shadowed.
-    ['an end that has a reported EPS point', list => { list[0] = entry('2025-09-30', '2025-07-01'); }],
-    ['more than four entries', () => ['2021', '2022', '2023', '2024', '2025'].map(year => entry(`${year}-12-31`, `${year}-10-01`))],
-    ['an empty list', () => []],
-    ['an entry that is not an object', list => { list[0] = 1.02; }],
-  ];
-  for (const [name, mutate] of bad) it(`refuses ${name} as keys`, () => {
-    const list = entries();
-    const changed = mutate(list) || list;
-    const record = withReference(changed);
-    expect(detailed(record)).toEqual({ value: null, reason: 'keys' });
-    expect(admit(record)).toBeNull();
-  });
-
-  it('refuses a list that is not an array, and the key on an unavailable record', () => {
-    // (Spread, not withReference: its default would fill an undefined list.)
-    for (const value of [null, {}, entry('2025-12-31', '2025-10-01'), 'q4', undefined]) expect(detailed({ ...tenK(), q4EpsReference: value })).toEqual({ value: null, reason: 'keys' });
-    for (const reason of SEC_UNAVAILABLE_REASONS) expect(detailed(secUnavailable({ reason, q4EpsReference: entries() }))).toEqual({ value: null, reason: 'keys' });
-  });
-
-  it('keeps every existing reason first, and a derived EPS point in quarterly.eps is still refused as series:eps', () => {
-    for (const record of [secRecord(), withReference()]) {
-      Object.assign(record.quarterly.eps.at(-1), { derived: DERIVED_Q4, components: ['a', 'b', 'c', 'd'] });
-      expect(detailed(record)).toEqual({ value: null, reason: 'series:eps' });
-    }
-    expect(detailed({ ...withReference(), symbol: 'OTHER' })).toEqual({ value: null, reason: 'symbol' });
-    const broken = withReference([]); broken.quarterly.eps[0].form = '8-K';
-    expect(detailed(broken)).toEqual({ value: null, reason: 'series:eps' });
-    const unknown = withReference(); unknown.quarterly = { ...unknown.quarterly, extra: [] };
-    expect(detailed(unknown)).toEqual({ value: null, reason: 'keys' });
-  });
-
-  it('q4ReferenceEntryValid: the one entry check the card reader shares', () => {
-    expect(q4ReferenceEntryValid(entry('2025-12-31', '2025-10-01'), '2026-02-01')).toBe(true);
-    // Both ends count: 70 and 105 days are quarters, 69 and 106 are not.
-    expect(q4ReferenceEntryValid(entry('2025-12-31', '2025-10-23'), '2026-02-01')).toBe(true);
-    expect(q4ReferenceEntryValid(entry('2025-12-31', '2025-10-24'), '2026-02-01')).toBe(false);
-    expect(q4ReferenceEntryValid(entry('2025-12-31', '2025-09-18'), '2026-02-01')).toBe(true);
-    expect(q4ReferenceEntryValid(entry('2025-12-31', '2025-09-17'), '2026-02-01')).toBe(false);
-    expect(q4ReferenceEntryValid(entry('2025-12-31', '2025-10-01'), '2025-12-30')).toBe(false);
-    expect(q4ReferenceEntryValid(entry('2025-12-31', '2025-10-01'), null)).toBe(false);
-    expect(q4ReferenceEntryValid(null, '2026-02-01')).toBe(false);
   });
 });
