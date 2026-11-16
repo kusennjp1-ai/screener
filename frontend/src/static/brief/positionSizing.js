@@ -176,6 +176,11 @@ export const previousBaseReason = (breakoutDate, asOf = null) => `前の土台�
  * after the breakout and are not this base's contractions, so none of their lows is this plan's stop.
  */
 export const POST_BREAKOUT_LEGS_REASON = '収縮はすべてピボットの上抜けの後の値動き';
+/**
+ * The structural stop's reason when a bar dated after the chosen leg's low has a low under it (round 3 R6, 独自判定, no new
+ * threshold): the price has already traded through that contraction's low, so it is not this stock's stop today.
+ */
+export const UNDERCUT_LOW_REASON = '最後の収縮の安値をその後の日足が割り込み済み';
 /** A leg's end: its endDate when that is an ISO day, else its lowDate (a hand-built leg may carry only the low's date). */
 const legEnd = leg => (isoDay(leg.endDate) ? leg.endDate : leg.lowDate);
 /** The leg ends on or after the pivot's breakout `cut` (an ISO day). A leg whose end is not an ISO day is not dated against it. */
@@ -198,6 +203,10 @@ const afterBreakout = (leg, cut) => isoDay(legEnd(leg)) && legEnd(leg) >= cut;
  * previousBaseReason or a measurement-date mismatch, this call gives the same (with no leg under the pivot at all, the
  * reason is POST_BREAKOUT_LEGS_REASON only when every leg is excluded). Without a valid `breakoutDate` (null, undefined,
  * malformed) nothing is excluded and the result is today's.
+ * A chosen leg whose low a later bar has already traded under (a bar of `judged` dated after its lowDate whose finite low is
+ * under it, past onBar's relative tolerance 1e-9) is unknown with UNDERCUT_LOW_REASON, with no low, stop or percent (round 3
+ * R6, 独自判定). It applies with or without `breakoutDate`, after every check above and the entry's, so every input that is
+ * unknown without it reads the same; only a usable state ('ok', 'tooShallow', 'overLimit', 'tooDeep', 'above') can become it.
  * @returns {StructuralStop}
  */
 export function structuralStop({ technical, judged, entry, pivot, pivotDate = null, breakoutDate = null }) {
@@ -223,6 +232,8 @@ export function structuralStop({ technical, judged, entry, pivot, pivotDate = nu
   if (!leg) return unknownStructural(aboveReason);
   if (leg !== last && !onBar(leg)) return unknownStructural('収縮の測定日が日足と不一致');
   if (!finite(entry) || entry <= 0) return unknownStructural('買値が未確認');
+  // R6: a later bar already traded under the leg's low (onBar's tolerance): that level is not today's stop.
+  if (judged.some(bar => isoDay(bar?.date) && bar.date > leg.lowDate && finite(bar.low) && leg.low - bar.low > Math.abs(leg.low) * 1e-9)) return unknownStructural(UNDERCUT_LOW_REASON);
   // Already at or under the contraction's low: there is no stop below it to place.
   if (leg.low >= entry) return { state: 'above', low: leg.low, lowDate: leg.lowDate, stop: null, percent: null, buffer: STRUCTURAL_STOP_BUFFER_PERCENT, reason: null };
   const stop = leg.low * (1 - STRUCTURAL_STOP_BUFFER_PERCENT / 100);

@@ -1,11 +1,12 @@
 // @vitest-environment node
 // Round 3 R6 (the structural stop): a leg that ends on or after the pivot's breakout (pivotBreakout's breakoutDate, the first
 // close above the pivot's cents after the pivot's bar) is price action after the breakout, never the stop's contraction. The
-// shapes are built here, with their own bars; positionSizing.test.js is unchanged.
+// shapes are built here, with their own bars. The chosen leg's low already traded under by a later bar is not today's stop either
+// (the second describe, the conductor's order 1 of round 1).
 import { describe, expect, it } from 'vitest';
 import { calendarAt, tradingDays } from '../testMarketCalendarFixture.js';
 import { buildBookTechnicalEvidence, measureContractions, pivotBreakout } from '../bookTechnicalEvidence';
-import { PLAN_DEFAULTS, POST_BREAKOUT_LEGS_REASON, positionPlan, previousBaseReason, structuralStop, STRUCTURAL_STOP_BUFFER_PERCENT } from './positionSizing';
+import { PLAN_DEFAULTS, planLevels, POST_BREAKOUT_LEGS_REASON, positionPlan, previousBaseReason, structuralStop, STRUCTURAL_STOP_BUFFER_PERCENT, UNDERCUT_LOW_REASON } from './positionSizing';
 
 const round = value => Math.round(value * 100) / 100;
 const ABOVE_REASON = structuralStop({ technical: { vcp: { measurementsValid: true, legs: [{ low: 101, lowDate: '2026-01-01' }] } }, judged: [{ date: '2026-01-01', low: 101 }], entry: 102, pivot: 100 }).reason;
@@ -17,10 +18,11 @@ const unknown = reason => ({ state: 'unknown', low: null, lowDate: null, stop: n
  * HUM's shape (as in bookTechnicalEvidencePivot.test.js): a linear advance from 50 to 100, then each [length, close] turn.
  * Prices are whole cents: open = close, high 0.3% above and low 0.3% below. `marks[k]` is the advance's top (k = 0) and
  * each turn's end. The 96.29 handle high (marks[2]) is the pivot's bar; the closes cross it on marks[4], and the last three
- * bars dip to 93.60 (low 93.32), under the pivot, after the breakout.
+ * bars dip to `tail` (93.60 by default, low 93.32), under the pivot, after the breakout. ADI's shape is `tail` 88 (low 87.74):
+ * the dip after the breakout trades under the handle's 89.73 low.
  */
-function hum() {
-  const turns = [[25, 80], [20, 96], [8, 90], [6, 97], [3, 93.6]], count = 320;
+function hum(tail = 93.6) {
+  const turns = [[25, 80], [20, 96], [8, 90], [6, 97], [3, tail]], count = 320;
   const advance = count - 1 - turns.reduce((sum, [length]) => sum + length, 0);
   const closes = [];
   for (let i = 0; i <= advance; i++) closes.push(50 + 50 * i / advance);
@@ -43,7 +45,7 @@ const reviewed = (s, pairs) => ({ as_of_date: s.date, vcp: measureContractions(s
 
 /** 60 calendar-day bars (high 102, low 100, close 100) and legs of [low's bar, low, end's bar or null] with each low on its bar. */
 const day = i => new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString().slice(0, 10);
-const plain = () => Array.from({ length: 60 }, (_, i) => ({ date: day(i), open: 100, high: 102, low: 100, close: 100, volume: 1000 }));
+const plain = (count = 60) => Array.from({ length: count }, (_, i) => ({ date: day(i), open: 100, high: 102, low: 100, close: 100, volume: 1000 }));
 const dated = (list, legs) => {
   for (const [at, low] of legs) list[at] = { ...list[at], low };
   return { as_of_date: list.at(-1).date, vcp: { measurementsValid: true, legs: legs.map(([at, low, end]) => ({ low, lowDate: list[at].date, ...(end === null ? {} : { endDate: list[end].date }) })) } };
@@ -106,8 +108,9 @@ describe('the structural stop never takes a leg that ends on or after the pivot\
   });
 
   it('without a valid breakoutDate (null, undefined, malformed) the result is the one without the parameter', () => {
-    const fixture = (low, entry, pivot) => { const list = plain(); return { technical: dated(list, [[40, 90, null], [50, low, null]]), judged: list, entry, pivot }; };
-    const cases = { ok: fixture(96, 100, 100), tooDeep: fixture(88, 100, 100), above: fixture(100.3, 100, 101), abovePivot: fixture(103, 106, 89) };
+    // `count` bars: the 'above' case ends on its low's bar, so no later bar (low 100) trades under its 100.3.
+    const fixture = (low, entry, pivot, count = 60) => { const list = plain(count); return { technical: dated(list, [[40, 90, null], [50, low, null]]), judged: list, entry, pivot }; };
+    const cases = { ok: fixture(96, 100, 100), tooDeep: fixture(88, 100, 100), above: fixture(100.3, 100, 101, 51), abovePivot: fixture(103, 106, 89) };
     for (const [state, args] of Object.entries(cases)) {
       const today = structuralStop(args);
       expect(today.state).toBe(state === 'abovePivot' ? 'unknown' : state);
@@ -154,5 +157,110 @@ describe('the structural stop never takes a leg that ends on or after the pivot\
     expect(own.structural).toMatchObject({ state: 'ok', low: evidence.vcp.legs.at(-1).low });
     expect(own.structural).toEqual(structuralStop({ technical: evidence, judged: s.bars, entry: s.pivot, pivot: s.pivot, pivotDate: cut.pivotDate }));
     expect(own.structural).toEqual(plan.structural);
+  });
+});
+
+describe('the structural stop is never a low a later bar already traded under (round 3 R6, conductor order 1)', () => {
+  /** The 60 plain bars with legs [[40, 92, 42], [50, 95, 52]]: today's result is ok, the low 95 of bar 50. */
+  const base = () => { const list = plain(); return { list, args: { technical: dated(list, [[40, 92, 42], [50, 95, 52]]), judged: list, entry: 100, pivot: 100 } }; };
+  /** The same input with bar `at`'s low set to `low` (a new array; the evidence is unchanged). */
+  const dip = (args, at, low) => ({ ...args, judged: args.judged.map((bar, i) => (i === at ? { ...bar, low } : bar)) });
+
+  it('ADI: the kept leg under the pivot, then a bar after the breakout under its low: unknown with the reason, no low, stop or percent', () => {
+    const s = hum(88), cut = pivotBreakout(s.bars, s.row);
+    expect(cut).toMatchObject({ state: 'cut', index: s.marks[4] });
+    const technical = reviewed(s, [[s.marks[2], s.marks[3]], [s.marks[4], s.marks[5]]]);
+    const [t1, t2] = technical.vcp.legs;
+    expect(t1.low).toBeLessThan(s.pivot);
+    const after = s.bars.filter(bar => bar.date > t1.lowDate);
+    expect(Math.min(...after.map(bar => bar.low))).toBeLessThan(t1.low);
+    const args = { technical, judged: s.bars, entry: s.pivot, pivot: s.pivot, pivotDate: cut.pivotDate, breakoutDate: cut.breakoutDate };
+    expect(structuralStop(args)).toEqual(unknown(UNDERCUT_LOW_REASON));
+    // HUM's own tail (93.32, above T1's low) keeps T1's low (the first test). Without breakoutDate the leg is T2, the dip itself,
+    // whose low is the last bar's: no later bar is under it, so the call before R6 is unchanged.
+    expect(t2.lowDate).toBe(s.bars.at(-1).date);
+    const { breakoutDate, ...without } = args;
+    expect(breakoutDate).toBe(cut.breakoutDate);
+    expect(structuralStop(without)).toMatchObject({ low: t2.low, lowDate: t2.lowDate, reason: null });
+    expect(UNDERCUT_LOW_REASON).not.toBe(POST_BREAKOUT_LEGS_REASON);
+  });
+
+  it('applies with or without breakoutDate, and to every usable state (ok, tooDeep, overLimit, tooShallow, above)', () => {
+    const { args } = base();
+    expect(structuralStop(args)).toMatchObject({ state: 'ok', low: 95 });
+    const under = dip(args, 57, 94.5);
+    expect(structuralStop(under)).toEqual(unknown(UNDERCUT_LOW_REASON));
+    // A breakoutDate that excludes no leg (after both ends) reads the same.
+    expect(structuralStop({ ...under, breakoutDate: day(55) })).toEqual(unknown(UNDERCUT_LOW_REASON));
+    for (const [entry, state] of [[100, 'ok'], [110, 'tooDeep'], [104.7, 'overLimit'], [95.4, 'tooShallow'], [95, 'above']]) {
+      expect(structuralStop({ ...args, entry }).state).toBe(state);
+      expect(structuralStop({ ...under, entry })).toEqual(unknown(UNDERCUT_LOW_REASON));
+    }
+  });
+
+  it('a later low equal to the leg\'s low, or within onBar\'s tolerance, keeps today\'s result; just past it does not', () => {
+    const { args } = base(), today = structuralStop(args);
+    expect(structuralStop(dip(args, 57, 95))).toEqual(today);
+    expect(structuralStop(dip(args, 57, 95 * (1 - 0.5e-9)))).toEqual(today);
+    expect(structuralStop(dip(args, 57, 95 * (1 - 2e-9)))).toEqual(unknown(UNDERCUT_LOW_REASON));
+    // A later bar without a finite low, or without an ISO date, is not read (the last session stays the measurement's).
+    expect(structuralStop(dip(args, 57, null))).toEqual(today);
+    const odd = [...args.judged.slice(0, -1), { date: 'later', low: 50 }, { low: 50 }, args.judged.at(-1)];
+    expect(structuralStop({ ...args, judged: odd })).toEqual(today);
+  });
+
+  it('a low under the leg\'s low only before its low\'s date (or under an earlier leg\'s low only) changes nothing', () => {
+    const { args } = base(), today = structuralStop(args);
+    for (const at of [41, 45, 49]) expect(structuralStop(dip(args, at, 80))).toEqual(today);
+    // Legs [[40, 96, 42], [50, 92, 52]]: bar 45 under the first leg's 96 but after it, before the chosen leg's low.
+    const list = plain(), technical = dated(list, [[40, 96, 42], [50, 92, 52]]), other = { technical, judged: list, entry: 100, pivot: 100 };
+    expect(structuralStop(dip(other, 45, 94))).toEqual(structuralStop(other));
+    expect(structuralStop(other)).toMatchObject({ state: 'ok', low: 92 });
+  });
+
+  it('wherever today\'s call is unknown for another reason, a later undercut changes nothing (each reason from its producer)', () => {
+    const cases = [];
+    // R2(b): a previous base, with and without a cut.
+    const prev = plain();
+    prev[55] = { ...prev[55], high: 100 };
+    const technical = dated(prev, [[40, 95, 41], [50, 92, 51]]);
+    technical.vcp.base = { startDate: prev[30].date, brokeOut: true, breakoutDate: prev[52].date };
+    const prevArgs = { technical, judged: prev, entry: 100, pivot: 100, pivotDate: prev[55].date };
+    cases.push([prevArgs, previousBaseReason(prev[52].date, prev.at(-1).date)], [{ ...prevArgs, breakoutDate: prev[45].date }, previousBaseReason(prev[52].date, prev.at(-1).date)]);
+    // A measurement of other bars, and a kept leg off its bar.
+    const { args } = base();
+    cases.push([{ ...args, technical: { ...args.technical, as_of_date: '2020-01-01' } }, MISMATCH_REASON]);
+    const moved = args.judged.map((bar, i) => (i === 40 ? { ...bar, low: 93 } : bar));
+    cases.push([{ ...args, judged: moved, breakoutDate: day(51) }, MISMATCH_REASON]);
+    // Legs all above the pivot (kept), and every leg excluded by the cut.
+    const high = plain(), above = dated(high, [[40, 101, 42], [50, 100.5, 52]]);
+    cases.push([{ technical: above, judged: high, entry: 103, pivot: 100 }, ABOVE_REASON], [{ technical: above, judged: high, entry: 103, pivot: 100, breakoutDate: high[30].date }, POST_BREAKOUT_LEGS_REASON]);
+    cases.push([{ ...args, breakoutDate: day(42) }, POST_BREAKOUT_LEGS_REASON]);
+    // The entry unknown: its reason comes first (the rule sits after the entry check).
+    const entryReason = structuralStop({ ...args, entry: null }).reason;
+    cases.push([{ ...args, entry: null }, entryReason]);
+    expect(entryReason).not.toBe(UNDERCUT_LOW_REASON);
+    for (const [input, reason] of cases) {
+      expect(structuralStop(input)).toEqual(unknown(reason));
+      expect(structuralStop(dip(input, 58, 50))).toEqual(unknown(reason));
+    }
+  });
+
+  it('through positionPlan on the real pivotBreakout and P1\'s own evidence: unknown, so no structural low, no stop inside the base, no structural width', () => {
+    const s = hum(88), cut = pivotBreakout(s.bars, s.row);
+    const subject = { symbol: 'AAA', state: 'wait', position: 'wait', asOf: s.date, qualified: true, distance: -2.8, volumeRatio: 1, rs: 80, passed: 9, pivot: s.pivot, price: s.bars.at(-1).close, row: s.row };
+    const evidence = buildBookTechnicalEvidence(s.row, s.payload, s.date), kept = evidence.vcp.legs.at(-1);
+    expect(evidence.vcp.measurementsValid).toBe(true);
+    expect(evidence.vcp.legs.every(leg => leg.endDate < cut.breakoutDate)).toBe(true);
+    expect(s.bars.slice(cut.index).some(bar => bar.low < kept.low)).toBe(true);
+    const plan = positionPlan(subject, PLAN_DEFAULTS, { technical: evidence, judged: s.bars });
+    expect(plan.structural).toEqual(unknown(UNDERCUT_LOW_REASON));
+    expect(plan).toMatchObject({ stopInsideBase: null, structuralDeep: null, stopSource: 'setting' });
+    expect(planLevels(plan).structuralLow).toBeNull();
+    // Chosen for this stock, the structural stop is not usable: the stop setting stays.
+    expect(positionPlan(subject, { ...PLAN_DEFAULTS, structuralSymbols: ['AAA'] }, { technical: evidence, judged: s.bars })).toMatchObject({ stopSource: 'setting', stopPercent: PLAN_DEFAULTS.stopPercent });
+    // HUM's own tail (93.32, above the kept low): today's usable stop at the kept low.
+    const h = hum(), own = buildBookTechnicalEvidence(h.row, h.payload, h.date);
+    expect(positionPlan({ ...subject, price: h.bars.at(-1).close, row: h.row }, PLAN_DEFAULTS, { technical: own, judged: h.bars }).structural).toMatchObject({ state: 'ok', low: own.vcp.legs.at(-1).low });
   });
 });

@@ -293,8 +293,10 @@ describe('position plan: structural stop (F3)', () => {
     expect(positionPlan(view({ price: 100 }), { ...PLAN_DEFAULTS, structuralSymbols: ['AAA'] }, { technical: evidence, judged: list }).stopInsideBase).toBe(false);
     // Unknown when the low is unknown (no certified bars) or at the entry: null, never false.
     expect(positionPlan(view({ price: 100 }), PLAN_DEFAULTS, { technical: evidence, judged: null })).toMatchObject({ stopInsideBase: null, structuralDeep: null });
-    const probe = bars();
-    expect(positionPlan(view({ price: 100, pivot: 101 }), PLAN_DEFAULTS, { technical: technical(probe, 50, 100.3), judged: probe })).toMatchObject({ stopInsideBase: null, structuralDeep: null });
+    // The low on the last bar (no later bar under it, round 3 R6): the 'above' state, so the low is at the entry.
+    const probe = bars(51), atEntry = positionPlan(view({ price: 100, pivot: 101 }), PLAN_DEFAULTS, { technical: technical(probe, 50, 100.3), judged: probe });
+    expect(atEntry).toMatchObject({ stopInsideBase: null, structuralDeep: null });
+    expect(atEntry.structural.state).toBe('above');
   });
 
   it('too deep at 10% or more (見送り候補); over the 9.5% input limit; under 1% or at the low is not used', () => {
@@ -309,10 +311,11 @@ describe('position plan: structural stop (F3)', () => {
     expect(STOP_LIMIT_PERCENT).toBe(9.5);
     const tight = bars();
     expect(structuralStop({ technical: technical(tight, 50, 99.8), judged: tight, entry: 100, pivot: 100 }).state).toBe('tooShallow');
-    // The entry at or under the contraction's low (the price has undercut it): no stop below it, whatever the buffer.
-    const probe = bars();
+    // The entry at or under the contraction's low (the price has undercut it): no stop below it, whatever the buffer. The low is on
+    // the last bar, so no later bar trades under it (round 3 R6).
+    const probe = bars(51);
     expect(structuralStop({ technical: technical(probe, 50, 100.3), judged: probe, entry: 100, pivot: 101 })).toMatchObject({ state: 'above', low: 100.3, lowDate: probe[50].date, stop: null, percent: null });
-    const above = bars();
+    const above = bars(51);
     expect(structuralStop({ technical: technical(above, 50, 101), judged: above, entry: 100, pivot: 102 }).state).toBe('above');
   });
 });
