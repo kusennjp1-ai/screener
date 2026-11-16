@@ -1473,6 +1473,7 @@ P1 の後、自動の収縮（v3）は上抜けの足をまたがない。だか
 
 ### 実際の差（実測）と予想との照合
 
+- **ファイルの置き換え（後から足した注記、指揮者の注文 2）**：この節と下の 「実測（R6-P3）」 の表が引く `probe-ed945a9.json` と `probe-ed945a9-oracles.json` は、指揮者の確認のときに HEAD b09dd79 で取り直したバイト単位で同じもの（`probe-b09dd79.json` sha256 b5f29cff…39fa2、`probe-b09dd79-oracles.json` sha256 730f4df9…9d80c）に置き換えられ、ed945a9 の json・raw・`snapshot/trees/ed945a9`・`build/npm-build-ed945a9` は消された（.sha256 は残る）。b09dd79 の probe もその後、R6-P4 の 9486eb7 の同じハッシュの出力に置き換えた（下の 「R6-P4」 の 「片づけ」）。ハッシュは同じなので、この節の照合はそのまま成り立つ。
 - **492 枚の probe**：`probe-ed945a9.json` は `probe-8849bf9.json` と**バイト単位で同じ**（cmp。sha256 b5f29cff…39fa2）。
 - **dump**：`dump-ed945a9.json` は `dump-8849bf9.json` と**バイト単位で同じ**（cmp。sha256 cba0a2f2…c3555）。
 - **オラクルの probe**：`node $H/probe/diff.mjs $H/probe/probe-d5b3e42-oracles.json $H/probe/probe-ed945a9-oracles.json --texts`（→ `$T/r6/p3-oracle-diff.txt`）。
@@ -1684,4 +1685,221 @@ P1 の後、自動の収縮（v3）は上抜けの足をまたがない。だか
   - 古くなったこのトラックの出力として、P2 のビルドの `snapshot/trees/89116e6`（40 MB）と `build/npm-build-89116e6`（19 MB）を消した。`build-89116e6.json` とログは P2 の記録が引くので残した。
   - 8849bf9・土台・b80ab95・d5b3e42 の出力と、ほかのトラックの出力は触っていない。
   - 新しい出力は残した：probe-ed945a9（.json と -oracles.json）、dump-ed945a9、build-ed945a9、trees/ed945a9。
+    - 後の注記（指揮者の注文 2）：このうち probe の 2 つの json、raw、trees/ed945a9、npm-build-ed945a9 は、指揮者が b09dd79 で同じハッシュの出力を取り直した後に消した（.sha256 と build-ed945a9.json は残る）。dump-ed945a9.json は R6-P4 が 9486eb7 の同じハッシュの dump を取った後に消した。今それぞれを読むなら、同じハッシュの 9486eb7 の出力を読む（R6-P4 の 「片づけ」）。
   - スクラッチは `$T/r6/` の p3-*（予想・照合・ログ）、tally-p3.mjs、tally-p3-ed945a9.{json,out}、p3-bundle、p3-expect-bundle。コミットしていない。
+
+## R6（続き）. 構造の損切りは、その後の日足が割り込んだ安値をとらない（パッケージ R6-P4、指揮者の注文 1・2・3）
+
+P1 の後、構造の損切りの収縮は上抜けの前で終わる。だから、その後の足がもうその安値を割り込んでいることがある。それでも structuralStop は使える状態（ok・tooDeep・overLimit）を返していた。値動きが通り抜けた水準を、この銘柄の今の損切りとして出していた。古い水準を今日のものとして出すことになる。
+
+- 指揮者の再構築の数（b80ab95e → b09dd79）：その後の足に割り込まれた安値を持つ行は、ok 3 → 32、tooDeep 1 → 27、overLimit 1 → 2。
+- 例（再構築の数）：ADI（準備完了 30 の 1 行）は ok、安値 382（10/23）、損切り 380.09。10/27 の上抜けの後、11/06 に 354.72 まで下げた。
+- P1 の記録の移り変わりの表（上の 「unknown → ok 32」 など）は、その後の足を見ていなかった。訂正は下の 「再構築での数」。
+
+### 規則（positionSizing.js の structuralStop。独自判定。新しいしきい値は無い）
+
+- 選んだ脚（leg）の lowDate より後の日付（ISO の日）を持つ judged の足のうち、一つでも有限の安値が leg.low より下なら、unknown にする。
+  - 「下」の判定は、onBar と同じ相対の許し 1e-9 を超えて下。
+  - 理由は新しく書き出した定数 `UNDERCUT_LOW_REASON`：「最後の収縮の安値をその後の日足が割り込み済み」。22 字で、入れ子の括弧は無い（StockPlanCard が 「（理由）」 で包む）。
+  - low・lowDate・stop・percent は null。固定の％にも 0 にもしない。前の脚に戻って選び直すこともしない。
+- breakoutDate があってもなくても効く。b80ab95e の証拠の CUZ・FMAO・PFIS（切れ目の前からの 3 行）にも当たる（下の表）。
+- 置き場所：今のすべての検査の後。R2(b)、残った脚の照合、さらに買値の検査（「買値が未確認」）の後で、'above' の前。
+  - **注文の文と違えたところ**：注文は 「R2(b) と残った脚の照合の後」 で、買値の検査の前か後かは言っていない。後に置いたので、今 unknown を返す入力は、どれも今と同じもの（同じ理由）を返す。変わりうるのは使える状態（ok・tooShallow・overLimit・tooDeep・above）だけ。
+  - 'above' は low と lowDate を返すので、その前に置いた。
+  - positionPlan の買値は、いつも有限で正なので（そうでなければ null を返す）、画面で 「買値が未確認」 が先に出ることはない。
+- 新しいレコードのキー・警告コード・インデックスの欄は無い。理由は画面の側で計算する。規則 18 は当たらない。
+- 下流：planLevels の `structuralLow`、`stopInsideBase`、`structuralDeep` は、この理由のとき null になる。だからチャートの 「最後の収縮の安値」 の線・タグ・凡例と、プランのカードの 「収縮の中」 の警告は出ない。構造の損切りを選んだ銘柄でも 'ok' でないので、損切りは設定のまま（`stopSource` 'setting'）。
+
+### テスト（positionSizingBreakout.test.js に新しい describe の 6 本。理由はすべて書き出した定数か作り手の呼び出しから）
+
+1. **ADI の形**：HUM の形で、上抜けの後の押しを 88 まで深くした（安値 87.74）。取っ手の安値 89.73 を割る。
+   - レビュー担当者の区間で測る。T1（取っ手）は残り、T2（上抜けの後の押し）は外れる。
+   - breakoutDate ありでは toEqual unknown（UNDERCUT_LOW_REASON）。
+   - breakoutDate なしでは T2（押しそのもの。安値は最後の足）で、後の足が割らないので今と同じ。
+2. breakoutDate のあり・なしと、5 つの使える状態（ok・tooDeep・overLimit・tooShallow・above）のすべてで、後の足が割れば unknown。
+3. 注文の (b)：後の安値が脚の安値と同じなら今と同じ。許しの内（95×(1−0.5e-9)）も今と同じ。許しを超える（95×(1−2e-9)）と unknown。有限でない安値の足と、ISO の日を持たない足は読まない。
+4. 注文の (c)：脚の lowDate より前だけの割り込み（足 41・45・49）では変わらない。前の脚の安値だけを割る足でも変わらない。
+5. 注文の (d)：今 unknown を返す 8 つの入力で、後の足を割らせても同じものを返す。
+   - 前の土台（切れ目なし・あり）。
+   - 測定日の不一致。
+   - 残った脚の照合の不一致。
+   - ピボットより上（今の理由）。
+   - 全部外れた（POST_BREAKOUT_LEGS_REASON。2 通り）。
+   - 買値が未確認（置き場所を固定する）。
+6. 注文の (e)：positionPlan と、本物の pivotBreakout と、P1 自身の証拠（buildBookTechnicalEvidence）を使う。
+   - ADI の形では、plan.structural は unknown（UNDERCUT_LOW_REASON）。stopInsideBase・structuralDeep は null、planLevels の structuralLow も null。構造を選んだ銘柄でも `stopSource` 'setting'。
+   - HUM の形（押しの安値 93.32 は残った脚の安値より上）では、今と同じ ok。
+- 既存のファイルの直し（どちらも R の持ち物）
+  - positionSizing.test.js の 3 か所。'above' の 2 つ（:314・:316）と stopInsideBase の null（:297）は、後の足（安値 100）が 100.3 と 101 の安値を割っていた。
+    - 新しい規則では、前の 2 つは落ちた。:297 は通ったが、理由が違った（'above' ではなく unknown）。
+    - 3 つとも、安値を最後の足に置き（`bars(51)`）、'above' をそのまま確かめるようにした。:297 には state 'above' の検査を足した。
+    - P2 の記録の 「positionSizing.test.js は変えていない」 は、このパッケージで変わった。
+  - positionSizingBreakout.test.js の既存のテスト 4 の 'above' の形も、同じく 51 本の足にした。
+  - 既存のテスト 5（R2(b)）は、もともと (d) の一つ。切れ目 45 で残る脚 95（足 40）を、足 50 の 92 が割るが、前の土台が先に返る。新しい規則でもそのまま通る。
+
+### 改変テスト（実測。`cp` で控え、`cmp` で戻したことを確かめた）
+
+- A：規則を消した → 新しい 6 本のうち 1・2・3・6 が落ちた（ADI の (a) を含む）。4・5 は 「変わらない」 を確かめるので通る（`$T/r6/p4-mutation.out`）。
+- B：許しを消した（`bar.low < leg.low`）→ 3 だけが落ちた（`$T/r6/p4-mutation-B.out`）。
+- C：規則を買値の検査の前に置いた → 5 だけが落ちた（`$T/r6/p4-mutation-C.out`）。
+
+### フィクスチャとオラクル（ブラウザの前に Node で。規則 16）
+
+- `node $T/r6/fixture-stops-p4.mjs`（→ `fixture-stops-p4.out`）：b09dd79 のコード（p3-bundle）と、この規則のコード（p4-bundle、9486eb7 と同じ）を比べた。日足は certifyBars が certified のときだけ。
+- **既定の 30 行**：構造の損切りの状態は ok 28・overLimit 1・unknown 1。変わる行は 0。
+  - 後の足がどの安値も割らない。
+  - P3 の 「状態はすべて unknown」 は pivotBreakout の状態のことで、損切りの状態ではない。バイト単位で同じなのは、30 行が unknown だからではなく、割る足が無いから。
+- **オラクル 8 行**：変わる行は 0。
+  - ZZHB は ok 46.64（9/25）のまま。その後の一番低い安値は 47.20（9/28）。
+  - ZZPG は前の土台（8/27）。ZZRL・ZZRW・ZZRD・ZZPM・ZZQF・ZZNR は ok で、その後に低い安値は無い。
+- 予想（ブラウザの前に書いた。`$T/r6/p4-expected-diff.md`）
+  - 492 枚の probe と dump は、8849bf9 とバイト単位で同じ。
+  - オラクルの probe は、`probe-b09dd79-oracles.json`（sha256 730f4df9…9d80c）とバイト単位で同じ。
+- 実際（実測、下の表の 2・3・4）：**3 つともバイト単位で同じ**。照合する差は無い。
+  - probe-9486eb7.json の sha256 は b5f29cff…39fa2。
+  - probe-9486eb7-oracles.json の sha256 は 730f4df9…9d80c。
+  - dump-9486eb7.json の sha256 は cba0a2f2…c3555。
+
+### 再構築での数（再現スナップショットの数、11-12。公開版の数ではない）
+
+- 入力は `$H/snapshot/out/d5b3e42`。新しいスナップショットは作っていない。行と損切りの近似は P1〜P3 と同じ。
+  - 買値は、終値がピボット以上なら終値、でなければピボット。
+  - breakoutDate は positionPlan と同じ `pivotBreakout(judged, row).breakoutDate`。
+- 束は 3 つ：前 b80ab95e（`$T/r6/before-bundle`）、b09dd79（`$T/r6/p3-bundle`。コードは ed945a9 と同じ）、HEAD 9486eb7（`$T/r6/p4-bundle`）。
+- 割り込みの数え方は指揮者の check.mjs と同じ：lowDate より後の足で、有限の安値が low − |low|×1e-9 より下。
+- コマンド：`node $T/r6/tally-p4.mjs $H/snapshot/out/d5b3e42 $T/r6/before-bundle/bundle.mjs $T/r6/p3-bundle/bundle.mjs $T/r6/p4-bundle/bundle.mjs $T/r6/tally-p4-9486eb7.json $H/snapshot/out/c61bf96/counts.json`（→ `tally-p4-9486eb7.out`）。
+
+| 数（再構築の数） | 掲載 980 | TT 8/8 の 614 | 土台の準備完了 30 | このブランチの準備完了 19 |
+|---|---|---|---|---|
+| 証拠（VCP）が b09dd79 と違う行 | 0 | 0 | 0 | 0 |
+| 構造の安値を後の足が割り込む行（state 別）：b80ab95e | ok 3・tooDeep 1・overLimit 1 | ok 3・tooDeep 1・overLimit 1 | ok 1 | ok 1 |
+| 　同じく b09dd79（P1・P2 の後、この規則の前） | ok 32・tooDeep 27・overLimit 2 | ok 17・tooDeep 17・overLimit 1 | ok 3 | ok 2・tooDeep 1 |
+| 　同じく HEAD 9486eb7 | **0** | 0 | 0 | 0 |
+| 構造の損切りが変わった行（b09dd79 → HEAD、結果の全部の欄） | 61 | 35 | 3 | 3 |
+| 　ok → unknown（新しい理由） | 32 | 17 | 3 | 2 |
+| 　tooDeep → unknown（新しい理由） | 27 | 17 | 0 | 1 |
+| 　overLimit → unknown（新しい理由） | 2 | 1 | 0 | 0 |
+| 　変わった行のうち、割り込まれていなかった行 / 形が違う行（low・stop・percent が null でない、理由が違う） | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 |
+| 　割り込まれていたのに変わらなかった行 | 0 | 0 | 0 | 0 |
+| 割り込まれていない行と、そのうち結果が変わった行（深く等しいかで比べた） | 919 / **0** | 579 / 0 | 27 / 0 | 16 / 0 |
+| 新しい理由の行のうち、最後の終値が前の損切りより下の行 | 12 | 1 | 0 | 0 |
+| breakoutDate なしの呼び出しでの移り変わり（b09dd79 → HEAD） | ok→unknown 32・tooDeep→unknown 27・overLimit→unknown 2 | 17・17・1 | 3・0・0 | 2・1・0 |
+| 参考：b80ab95e の証拠に HEAD の structuralStop（breakoutDate なし） | ok→unknown 3・tooDeep→unknown 1・overLimit→unknown 1。割り込みは 0 に | 同じ 5 行 | ok→unknown 1 | ok→unknown 1 |
+
+- 割り込みの数は、指揮者の check.mjs の数（b80ab95e：ok 3・tooDeep 1・overLimit 1、HEAD b09dd79：ok 32・tooDeep 27・overLimit 2）と一致した。注文の予想（ok 32→0、tooDeep 27→0、overLimit 2→0）のとおり。
+- 変わった 61 行は、すべて 「割り込まれていた」 行で、すべて unknown・新しい理由・low・lowDate・stop・percent が null。割り込まれていない 919 行は、結果のすべての欄が b09dd79 と深く等しい。tooShallow と above の行で割り込まれていたものは、b09dd79 にも 0 だった。
+- 準備完了の行で変わるのは、ADI・RDNT・FMAO（土台の準備完了 30）と、ADI・FMAO・VSTM（このブランチの準備完了 19）。
+- 最後の終値が前の損切りより下の 12 行：FRSH・NUTX・NEOG・NHC・ZYME・BMY・AFCG・FCBC・FRHC・SMWB（ok。指揮者の 10 行と同じ）と、CRSR・FET（tooDeep）。
+- 参考の行は、v2 の証拠に HEAD の structuralStop をあてた場合。b80ab95e のときから割り込まれていた CUZ・FMAO・PFIS（ok）、GDRX（overLimit）、USEA（tooDeep）の 5 行が、新しい理由になる。画面は古い版の証拠を v3 で測り直すので、実際にはこの道を通らない。
+  - CUZ は、b09dd79 の証拠では 「収縮を測定できません」 のままで、変わらない。FMAO・PFIS・GDRX・USEA は、b09dd79 でも割り込まれていて、上の 61 行に入る。
+- 例（再構築の数）
+  - ADI（準備完了）：b09dd79 は ok、安値 382（10/23）、損切り 380.09。HEAD は unknown（新しい理由）。11/06 に 354.72。
+  - CSX：ok、損切り 50.08（8/20 の安値 50.33）。その後に、その下で引けた日が 37 日ある（指揮者の check.out）。HEAD は unknown。
+  - NUTX：ok、損切り 205.31。最後の終値は 171.41。HEAD は unknown。
+  - HQY：ok、安値 100.55（10/28）。11/06 の安値 100.54 が 0.01 下にある。許しの 1e-9 を超えるので、HEAD は unknown。
+- **P1 の記録の訂正**（上の 「構造の損切りの state の移り変わり」 の表。b80ab95e → b09dd79 の、state・low・lowDate の 184 行）
+  - P1 は、新しい安値をその後の足と比べていなかった。今の規則で割り込みになる行を数えた（掲載 980）。
+
+| P1 の移り変わり | 行 | そのうち今は割り込み（unknown） |
+|---|---|---|
+| unknown → tooDeep | 67 | 19 |
+| unknown → ok | 32 | 15 |
+| ok → unknown | 27 | 0 |
+| tooDeep → unknown | 18 | 0 |
+| ok → ok（安値が変わる） | 12 | 8 |
+| tooDeep → tooDeep | 10 | 6 |
+| ok → tooDeep | 7 | 2 |
+| tooDeep → ok | 7 | 7 |
+| unknown → overLimit | 3 | 1 |
+| overLimit → unknown | 1 | 0 |
+| 計 | 184 | 58 |
+
+  - 61 行のうち、残りの 3 行（FMAO・PFIS・GDRX）は P1 で変わらなかった行で、b80ab95e のときから割り込まれていた。
+  - tooDeep → ok の 7 行は、すべて今は割り込み。前の損切りは上抜けの後の押しの安値（深い）で、P1 はそれを上抜けの前の高い安値に替えた。その押しが、新しい安値を割っていた。ADI はこの 1 行。
+
+### 準備（規則 19 はあたらない）
+
+- 準備・選定・トレンドテンプレート・ステージ・結論のゲートは、構造の損切りを読まない（P2 の grep のまま）。
+- このパッケージが変えたのは positionSizing.js とそのテスト 2 つだけ。`git -C $W diff --stat b09dd797 HEAD -- backend frontend/tools` は空（実測）。
+- 証拠（VCP の測定）は、980 行すべてで b09dd79 と深く等しい（上の表）。
+- だから H4 と 908 は再実行していない。このブランチの数は R3b の記録のまま。
+  - H4：エントリー 29/588、対照 21/575、+1.3pp（+1.280pp）、G8 の不合格 46／185。
+  - 凍結 908：「DISCRIMINATION (entry − control): FIRE±5 +25.8pp, SETUP +52.0pp」。
+- 準備完了の行では、プランのカードの構造の損切りが変わる（上の 3 行）。準備そのものは変わらない。
+
+### 統合・ほかのトラックへの依頼（R6-P4）
+
+1. **StockPlanCard.test.jsx（どのトラックの持ち物でもない。統合で）**：この規則で 5 本が落ちる。
+   - 落ちる 5 本
+     - 「the structural button sets this stock's stop there…」
+     - 「one stock's structural stop never becomes another stock's stop…」
+     - 「wide, it names the low…」
+     - 「a structural stop of 10% or more is a reason to pass…」
+     - 「warns in one ext line when the stop sits inside the last contraction…」
+   - 原因はテストの形。`measured()` は脚の安値 96 を足 190 に置くが、足 191〜199 の安値は 87〜90 前後で、どれもその下にある。だから正しい規則なら、どれも 「割り込み済み」 になる。
+   - 直し（検証済みの差分 `$T/r6/p4-stockplancard.patch`）：`measured()` の安値を最後の足（199）に置く。2 行と注釈だけの変更。
+   - スクラッチの写し `$T/patch-tree-p4` で確かめた。中身は `git archive HEAD frontend`、node_modules はリンク。HEAD の archive との `diff -rq` の差は、このファイルと node_modules のリンクだけ。
+     - StockPlanCard.test.jsx の 25 本はすべて通った。
+     - StockView.test.jsx・positionSizing.test.js・positionSizingBreakout.test.js を合わせた 4 ファイル 74 本もすべて通った（実測）。
+   - 直すまで、全部の vitest でこの 5 本が落ちる（下の表）。
+2. **StockChartCard.test.jsx:143**（CHART。P1 の依頼 1 のまま）。
+3. **注文 3（コミットの文の訂正）**：d298e19 のコミットの文は 「前の unknown の理由はすべて変わらない」 と言う。実際は、ピボットより下の脚が無く、全部の脚が外れたとき、理由は POST_BREAKOUT_LEGS_REASON になる（89116e6 で注釈を直した。P2 の 「検査の順番と R2(b)」 に書いた）。コミットは書き換えない。**統合の PR の注記に、この訂正を繰り返すこと。**
+4. CONTEXT.md の語彙（統合で）：**割り込み済みの収縮の安値**。最後の収縮の安値のうち、その後の日足の安値がそれより下にあるもの。構造の損切りには使わない（独自判定）。
+
+### 実測（R6-P4。コマンドと結果。時刻は日本時間 11-16。負荷のもとの時間はすべて参考）
+
+記号は R6-P3 と同じ（`S`・`T`・`H`・`W`、PATH、FONTCONFIG_FILE、SESSION_CALENDAR_PYTHON、FINANCIAL_REPLAY_PYTHON）。コードの HEAD は 9486eb7（clean）。
+
+| 検査 | コマンド | 時刻・時間 | 結果 | 負荷（前 → 後） |
+|---|---|---|---|---|
+| 1. 予想（ブラウザの前） | `node $T/r6/fixture-stops-p4.mjs`（→ `fixture-stops-p4.out`）、メモ `$T/r6/p4-expected-diff.md` | 09:29–09:31（ブラウザの前。probe は 09:31:25 から） | 既定の 30 行とオラクルの 8 行で、構造の損切りが変わる行は 0（上） | — |
+| 2. 492 枚の probe | `$H/probe/run-probe.sh $W 4423 ; cmp $H/probe/probe-8849bf9.json $H/probe/probe-9486eb7.json`（`$T/r6/p4-probe.out`） | 09:31–09:34、192 秒 | 492 ラベル・480 値の画面、エラー 0。**バイト単位で同じ**（sha256 b5f29cff…39fa2） | 0.39 → 1.95 |
+| 3. オラクルの probe | `$H/probe/run-probe.sh $W 4423 oracles ; cmp $H/probe/probe-b09dd79-oracles.json $H/probe/probe-9486eb7-oracles.json`（`$T/r6/p4-probe-oracles.out`） | 09:34–09:35、68 秒 | 8 銘柄、132 ラベル・132 値の画面、エラー 0。**b09dd79 とバイト単位で同じ**（sha256 730f4df9…9d80c）。予想どおり差は無い | 1.95 → 2.54 |
+| 4. dump | `$H/dump/run-dump.sh $W 4423 ; cmp $H/dump/dump-8849bf9.json $H/dump/dump-9486eb7.json`（`$T/r6/p4-dump.out`） | 09:35–09:37、102 秒 | 42 画面、エラー 0。**バイト単位で同じ**（sha256 cba0a2f2…c3555） | 2.54 → 1.73 |
+| 5. Playwright（CI と同じ） | `cd $W/frontend && AUDIT_PORT=4423 AUDIT_MATCH='brief-(oracles\|plan\|chart)\.spec\.js' npx playwright test -c $T/pw.config.mjs`（`$T/r6/p4-pw-9486eb7.out`） | 09:37–09:45、7.8 分 | 98 本すべて通過（oracles 40・chart 39・plan 19）。skip 0、やり直し 0。brief-oracles.spec.js は変えていない（基準との差は R1・R2 の 2 行だけ。`test.fixme(` は 3 行目の注釈だけ）。ZZHB の緑の矢印、ZZPG、R1・R2 の目標、plan の構造の損切りの検査を含む | 1.32 → 3.64 |
+| 6. 再構築の数 | `node $T/r6/tally-p4.mjs …`（上） | 09:45、5 秒（ブラウザの後） | 上の表 | 2.39 → 2.39 |
+| 7. eslint | `cd $W/frontend && npx eslint src/static/bookTechnicalEvidence.js src/static/brief/positionSizing.js src/static/bookTechnicalEvidence.test.js src/static/brief/positionSizing.test.js src/static/bookTechnicalEvidencePivot.test.js src/static/brief/positionSizingBreakout.test.js`（`$T/r6/p4-eslint.out`） | 09:46、2 秒 | エラー 0・警告 0 | 1.94 → 1.94 |
+| 8. ビルド（規則 21） | `$H/build/run-build.sh $W`（`$H/build/build-9486eb7.json`。コードは HEAD の archive。木は verdict.md だけが dirty） | 09:46、24 秒 | 入口のチャンク **132.28 kB gzip**（raw 378.20）。b09dd79 の 132.23 から **＋0.05**。R の累計は STEP 0 の 130.28 から ＋2.00。線 134.00 まで 1.72 | 1.78 → 1.95 |
+| 9. 全部の vitest | `cd $W/frontend && npx vitest run`（`$T/r6/p4-vitest-full-9486eb7.out`） | 09:46–09:51、255 秒 | 250 ファイル・4,060 本：**4,054 通過・6 失敗**。失敗の 1 本は既知の StockChartCard.test.jsx:143（CHART）。残りの 5 本は StockPlanCard.test.jsx（どのトラックの持ち物でもない。上の依頼 1。スクラッチの写しでは直しで 25 本すべて通る）。持ち物のテストはすべて通過。b09dd79 の 4,054 本 ＋ 新しい 6 本 | 1.65 → 4.83 |
+| 10. 注文の vitest | `npx vitest run src/static/brief/positionSizing.test.js src/static/brief/positionSizingBreakout.test.js` | 09:27 | 2 ファイル・40 本すべて通過（28 ＋ 12） | — |
+| 11. 改変テスト A・B・C | 上 | 09:28–09:29 | 上 | — |
+| 12. 所有の検査 | `python3 -I $S/audit3/check-ownership.py R $W 45603f065f054cd48c812a3003f3a71ffd91cf45` | 9486eb7 とこの記録の前 | `OWNERSHIP OK (R): 46 paths` | — |
+| 13. 触らない場所 | `git -C $W diff --stat b09dd797 HEAD -- backend frontend/tools frontend/tests` | 09:53 | 出力は空 | — |
+
+- 時間はすべて負荷のもとの参考で、時間の検査は無い。
+- ブラウザの検査は一つずつ走らせた。Node の集計（6）はブラウザの後に走らせた。
+- やり直しが要った Playwright は無い。
+
+### 未検証（R6-P4）
+
+- 新しい理由の画面。StockPlanCard の 320px での折り返しを含む。フィクスチャとオラクルにはこの理由の行が無い。描いて確かめていない。
+- 公開版での数と表示。すべて再構築の数。
+- 実データの描いた画面（run-render.sh を走らせていない）。チャートから 「最後の収縮の安値」 の線が消える 61 行の見え方も含む。
+- StockPlanCard.test.jsx の直しの、統合の木での結果。確かめたのはスクラッチの写しだけ。
+- 割り込みを 「安値」 で見るか 「終値」 で見るか。注文のとおり安値で判定した。終値で判定した数（指揮者の 10 行、ここで数えた 12 行）は数えただけで、規則にはしていない。
+- 時間は一つも測っていない（このパッケージに時間の検査は無い）。
+
+### パッケージ R6-P4 の記録
+
+- コミット（どれも所有の検査 `OWNERSHIP OK (R): 46 paths` の後）
+  - 9486eb7 `fix(frontend): never offer a structural stop the price already traded under`：positionSizing.js と、そのテスト 2 つ。
+  - この記録（`docs(round3): record R6-P4 (the structural stop's undercut rule)`）。
+- 注文と違えたところ
+  - 置き場所を買値の検査の後にした（上の 「規則」）。
+  - 注文の 「全部の vitest で落ちるのは既知の 1 本（StockChartCard.test.jsx:143）だけ」 という予想は成り立たない。持ち物でない StockPlanCard.test.jsx の 5 本も落ちる（上の依頼 1）。
+  - positionSizing.test.js の 3 か所を直した（上の 「テスト」）。
+  - Playwright に brief-chart.spec.js を足した。構造の安値をチャートで確かめるスペックで、grep で当たったため。
+- 片づけ
+  - 古くなったこのトラックの出力を消した（新しい出力がバイト単位で同じか、取り直した後）。.sha256・build-*.json・ログは残した。
+    - `probe-b09dd79.json`・`probe-b09dd79-oracles.json` と、その raw。同じハッシュの `probe-9486eb7.json`・`probe-9486eb7-oracles.json` に置き換わる。
+    - `dump-ed945a9.json` と、その raw とログ。同じハッシュの `dump-9486eb7.json` に置き換わる。
+    - `build/npm-build-b09dd79` と `snapshot/trees/b09dd79`（ビルドは 9486eb7 で取り直した）。
+  - 新しい出力は残した：probe-9486eb7（.json と -oracles.json と raw）、dump-9486eb7（raw も）、build-9486eb7.json、npm-build-9486eb7、trees/9486eb7。
+  - 8849bf9・土台・b80ab95・d5b3e42 の出力と、ほかのトラックの出力は触っていない。
+  - スクラッチ（コミットしていない）は `$T/r6/` に置いた。指揮者の確認のために残した。
+    - 束：p4-bundle。
+    - スクリプト：fixture-stops-p4.mjs、tally-p4.mjs、explore-p4.mjs、p4-browser.sh。
+    - 結果：p4-expected-diff.md、fixture-stops-p4.out、tally-p4-9486eb7.{json,out,load}、p4-*.out、p4-mutation*.out。
+    - 差分：p4-stockplancard.patch。
+    - スクラッチの写し：`$T/patch-tree-p4`（14 MB）。
+    - 控え：ps-before-p4-mutation.js。
