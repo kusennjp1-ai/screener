@@ -20,7 +20,7 @@ import { freshness, freshnessLine } from './briefFreshness';
 import TodayView from './TodayView';
 import ListView, { listShown, listSource, watchOrder } from './ListView';
 import StockScreen from './StockScreen';
-import { loadedStockView, loadStockView } from './stockViewLoader';
+import { loadedStockView, loadStockView, STOCK_TAP_WAIT_MS } from './stockViewLoader';
 // The chart renderer's loader stays in the shell (the stock screen that draws charts is a lazy chunk): its idle-time
 // prefetch of the renderer's chunk runs once the first screen is idle, as before.
 import { loadPriceChart } from './priceChartLoader';
@@ -160,17 +160,22 @@ export default function BriefApp() {
       document.querySelectorAll('.brief-row-title b').forEach(element => { element.style.viewTransitionName = ''; });
       go(`/brief/stock/${encodeURIComponent(ticker)}`, { kind: wide ? 'pane' : 'forward', state: { from: origin }, before: () => { if (title && !wide) title.style.viewTransitionName = 'brief-ticker'; } });
     };
+    clearTimeout(opening.current?.timer);
     opening.current = null;
     if (wide || loadedStockView()) { navigate(); return; }
-    // A phone opens the stock once its chunk has settled, loaded or failed: the page transition never captures an empty
-    // screen, and a failed load still reaches the screen's own message. Only the last tap opens, and none once the screen
-    // has changed meanwhile. The chart renderer's chunk is fetched alongside, not after.
-    const tap = { hash: window.location.hash };
+    // A phone opens the stock once its chunk has settled, loaded or failed, so the page transition does not capture the
+    // screen's loading line and a failed load reaches the screen's own message; but never later than STOCK_TAP_WAIT_MS
+    // after the tap: on a stalled connection the screen then opens on its loading line, which gives way to the screen (or
+    // its message) when the chunk settles. Whichever comes first opens it, once; only the last tap opens, and none once the
+    // screen has changed meanwhile. The chart renderer's chunk is fetched alongside, not after.
+    const tap = { hash: window.location.hash, timer: 0 };
     opening.current = tap;
     loadPriceChart().catch(() => null);
-    const settled = () => { if (opening.current !== tap) return; opening.current = null; if (window.location.hash === tap.hash) navigate(); };
+    const settled = () => { if (opening.current !== tap) return; opening.current = null; clearTimeout(tap.timer); if (window.location.hash === tap.hash) navigate(); };
+    tap.timer = setTimeout(settled, STOCK_TAP_WAIT_MS);
     loadStockView().then(settled, settled);
   }, [go, from, wide, view]);
+  useEffect(() => () => clearTimeout(opening.current?.timer), []);
   const notify = useCallback(text => {
     clearTimeout(toastTimer.current);
     setToast({ id: Date.now(), text, ticker: null });

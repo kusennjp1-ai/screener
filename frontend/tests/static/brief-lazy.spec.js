@@ -2,9 +2,11 @@
 // once the first screen is idle. When it cannot be loaded (offline before the service worker had it, or a deploy replaced
 // it) the screen says so with a 44px 再読み込み, never an empty screen; the browser keeps a failed module import for the
 // page's life, so the button reloads the page, which then draws the screen. A phone opens a stock once the chunk has
-// settled, so the page transition never captures a screen still loading.
+// settled, so the page transition does not capture a screen still loading, but never later than STOCK_TAP_WAIT_MS after
+// the tap: on a stalled connection the tap opens the stock on its loading line.
 import { test, expect } from '@playwright/test';
 import { chartSettled, openBrief, VIEWPORTS } from './brief-fixture.js';
+import { STOCK_TAP_WAIT_MS } from '../../src/static/brief/stockViewLoader.js';
 
 // The dev server serves the module itself; a build serves StockView-<hash>.js.
 const STOCK_CHUNK = /\/StockView(-[\w-]+)?\.jsx?(\?.*)?$/;
@@ -43,17 +45,33 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`the stock
 test.describe('a phone opens a stock with its screen whole', () => {
   test.use(VIEWPORTS.phone);
   // Every DOM change from here on: a stock address showing no conclusion, or the screen's loading line, is an empty frame.
+  // Each is kept with its time after the first tap (a capturing click listener), so a loading line can be placed against
+  // the bound.
   const watchFrames = page => page.evaluate(() => {
     window.__briefFrames = [];
+    window.__briefTap = null;
+    addEventListener('click', () => { window.__briefTap ??= performance.now(); }, { capture: true });
     new MutationObserver(() => {
       const main = document.getElementById('brief-main');
       if (!main) return;
-      if (main.innerText.includes('銘柄データを読み込み中…')) window.__briefFrames.push(`loading line at ${location.hash}`);
-      else if (location.hash.startsWith('#/brief/stock/') && !main.querySelector('[data-testid="brief-conclusion"], .brief-stock-failed')) window.__briefFrames.push(`empty stock screen at ${location.hash}`);
+      const at = performance.now();
+      if (main.innerText.includes('銘柄データを読み込み中…')) window.__briefFrames.push({ frame: `loading line at ${location.hash}`, at });
+      else if (location.hash.startsWith('#/brief/stock/') && !main.querySelector('[data-testid="brief-conclusion"], .brief-stock-failed')) window.__briefFrames.push({ frame: `empty stock screen at ${location.hash}`, at });
     }).observe(document.body, { childList: true, subtree: true, characterData: true });
   });
-  const frames = page => page.evaluate(() => window.__briefFrames);
+  const frames = page => page.evaluate(() => window.__briefFrames.map(({ frame }) => frame));
+  // The frames with their milliseconds after the first tap.
+  const timedFrames = page => page.evaluate(() => window.__briefFrames.map(({ frame, at }) => ({ frame, ms: at - window.__briefTap })));
   const firstRow = page => page.getByTestId('brief-candidate').first();
+  // A tap never shows the loading line before the bound: the timer cannot fire early (2 ms for the two clocks' rounding).
+  const notBeforeBound = list => list.filter(({ frame, ms }) => frame.startsWith('loading line') && ms < STOCK_TAP_WAIT_MS - 2);
+  // The chunk's request, held until the test releases it.
+  const holdChunk = async page => {
+    let release;
+    const held = new Promise(resolve => { release = resolve; });
+    await page.route(STOCK_CHUNK, async route => { await held; await route.fallback(); });
+    return release;
+  };
 
   test('after the idle-time prefetch: the row opens the whole screen at once', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief');
@@ -73,24 +91,79 @@ test.describe('a phone opens a stock with its screen whole', () => {
   });
 
   test('before the chunk has landed: the tap waits for it, then opens the whole screen', async ({ page }) => {
-    let release;
-    const held = new Promise(resolve => { release = resolve; });
-    await page.route(STOCK_CHUNK, async route => { await held; await route.fallback(); });
+    const release = await holdChunk(page);
     const { errors } = await openBrief(page, '#/brief');
     await expect(firstRow(page)).toBeVisible();
     await watchFrames(page);
     const symbol = await firstRow(page).getAttribute('data-symbol');
     await firstRow(page).click();
     // Held: Today stays as it is, and no stock screen appears without its content.
-    await page.waitForTimeout(600);
     await expect(page).toHaveURL(/#\/brief$/);
     await expect(firstRow(page)).toBeVisible();
+    // Released at once, well inside the bound: the screen opens when the chunk settles. (The dev server serves the chunk's
+    // modules one by one; should they take longer than the bound, the loading line shows, but never before it.)
     release();
     await expect(page).toHaveURL(new RegExp(`#/brief/stock/${symbol}$`));
     await expect(page.getByTestId('brief-conclusion')).toBeVisible();
     await chartSettled(page);
-    expect(await frames(page)).toEqual([]);
+    const seen = await timedFrames(page);
+    expect(seen.filter(({ frame }) => !frame.startsWith('loading line'))).toEqual([]);
+    expect(notBeforeBound(seen)).toEqual([]);
     // One history entry for the one tap: back returns to Today.
+    await page.getByRole('button', { name: '戻る' }).click();
+    await expect(page).toHaveURL(/#\/brief$/);
+    expect(errors).toEqual([]);
+  });
+
+  test('on a stalled connection: the tap opens the stock on its loading line at the bound, then the screen', async ({ page }) => {
+    const release = await holdChunk(page);
+    const { errors } = await openBrief(page, '#/brief');
+    await expect(firstRow(page)).toBeVisible();
+    await watchFrames(page);
+    const symbol = await firstRow(page).getAttribute('data-symbol');
+    await firstRow(page).click();
+    // Still held: the stock opens on its loading line, named in the bar, once the bound has passed.
+    await expect(page).toHaveURL(new RegExp(`#/brief/stock/${symbol}$`));
+    await expect(page.getByText(LOADING)).toBeVisible();
+    await expect(page.locator('.brief-bar-title b span').first()).toHaveText(symbol);
+    const [loading] = (await timedFrames(page)).filter(({ frame }) => frame.startsWith('loading line'));
+    // Not before the bound (the timer), and within it plus the page transition's capture frame (300 ms of slack for a
+    // loaded CI machine).
+    expect(loading.ms).toBeGreaterThanOrEqual(STOCK_TAP_WAIT_MS - 2);
+    expect(loading.ms).toBeLessThan(STOCK_TAP_WAIT_MS + 300);
+    release();
+    await expect(page.getByTestId('brief-conclusion')).toBeVisible();
+    await expect(page.getByText(LOADING)).toHaveCount(0);
+    await chartSettled(page);
+    const seen = await timedFrames(page);
+    expect(seen.filter(({ frame }) => !frame.startsWith('loading line'))).toEqual([]);
+    expect(notBeforeBound(seen)).toEqual([]);
+    // One history entry for the one tap (the chunk's settling after the bound opens nothing more): back returns to Today.
+    await page.getByRole('button', { name: '戻る' }).click();
+    await expect(page).toHaveURL(/#\/brief$/);
+    expect(errors).toEqual([]);
+  });
+
+  test('on a stalled connection: of two taps only the last opens, once', async ({ page }) => {
+    const release = await holdChunk(page);
+    const { errors } = await openBrief(page, '#/brief');
+    await expect(page.getByTestId('brief-candidate').nth(1)).toBeVisible();
+    await watchFrames(page);
+    // Two taps in a row while the chunk is held (in one task, so both fall inside the first tap's bound).
+    const [first, last] = await page.evaluate(() => [...document.querySelectorAll('[data-testid="brief-candidate"]')].slice(0, 2).map(row => { row.click(); return row.dataset.symbol; }));
+    expect(first).not.toBe(last);
+    await expect(page).toHaveURL(new RegExp(`#/brief/stock/${last}$`));
+    await expect(page.getByText(LOADING)).toBeVisible();
+    release();
+    await expect(page.getByTestId('brief-conclusion')).toBeVisible();
+    await expect(page.locator('.brief-bar-title b span').first()).toHaveText(last);
+    await chartSettled(page);
+    expect(page.url()).toMatch(new RegExp(`#/brief/stock/${last}$`));
+    const seen = await timedFrames(page);
+    expect(seen.filter(({ frame }) => !frame.startsWith('loading line'))).toEqual([]);
+    expect(seen.filter(({ frame }) => frame.includes(first))).toEqual([]);
+    expect(notBeforeBound(seen)).toEqual([]);
+    // One history entry: back returns to Today.
     await page.getByRole('button', { name: '戻る' }).click();
     await expect(page).toHaveURL(/#\/brief$/);
     expect(errors).toEqual([]);
