@@ -20,6 +20,10 @@ import { freshness, freshnessLine } from './briefFreshness';
 import TodayView from './TodayView';
 import ListView, { listShown, listSource, watchOrder } from './ListView';
 import StockScreen from './StockScreen';
+import { loadedStockView, loadStockView } from './stockViewLoader';
+// The chart renderer's loader stays in the shell (the stock screen that draws charts is a lazy chunk): its idle-time
+// prefetch of the renderer's chunk runs once the first screen is idle, as before.
+import { loadPriceChart } from './priceChartLoader';
 import { BarQuote } from './BriefParts';
 import { Toast } from './briefPrimitives';
 import { ICON } from './briefIcons';
@@ -29,7 +33,10 @@ import { barDay, recallScroll, rememberScroll, stepTarget, useBriefBack, useTran
 // It is fetched once the first screen is idle, so a tap on 市場 rarely waits for it.
 const loadMarketScreen = () => import('./MarketScreen');
 const MarketScreen = lazy(loadMarketScreen);
-
+// The stock screen's body is its own chunk too (stockViewLoader.js), fetched with the market tab's once the first screen is
+// idle. Where a stock is on the first screen (the stock pane at 1024px and wider, or a stock's own address) it is fetched
+// at once, beside the data.
+if (typeof window !== 'undefined' && (window.matchMedia?.('(min-width:1024px)').matches || /^#\/brief\/stock\//.test(window.location.hash))) loadStockView().catch(() => {});
 
 /** Brings a row between the bar and the dock when it is not already there. */
 function reveal(row) {
@@ -144,12 +151,25 @@ export default function BriefApp() {
   const [kept, setKept] = useState(null);
   const selected = symbol || (wide && view !== 'market' ? (kept && sequence.includes(kept) ? kept : sequence[0] || null) : null);
   useEffect(() => { if (selected) setKept(selected); }, [selected]);
+  const opening = useRef(null);
   const open = useCallback((ticker, trigger, origin = from) => {
     // A phone remembers where this screen was, to come back to it (Today's watch rows open the watch list's sequence).
     if (!wide && view !== 'stock') rememberScroll(view, ticker, window.scrollY);
-    document.querySelectorAll('.brief-row-title b').forEach(element => { element.style.viewTransitionName = ''; });
     const title = trigger?.querySelector?.('.brief-row-title b');
-    go(`/brief/stock/${encodeURIComponent(ticker)}`, { kind: wide ? 'pane' : 'forward', state: { from: origin }, before: () => { if (title && !wide) title.style.viewTransitionName = 'brief-ticker'; } });
+    const navigate = () => {
+      document.querySelectorAll('.brief-row-title b').forEach(element => { element.style.viewTransitionName = ''; });
+      go(`/brief/stock/${encodeURIComponent(ticker)}`, { kind: wide ? 'pane' : 'forward', state: { from: origin }, before: () => { if (title && !wide) title.style.viewTransitionName = 'brief-ticker'; } });
+    };
+    opening.current = null;
+    if (wide || loadedStockView()) { navigate(); return; }
+    // A phone opens the stock once its chunk has settled, loaded or failed: the page transition never captures an empty
+    // screen, and a failed load still reaches the screen's own message. Only the last tap opens, and none once the screen
+    // has changed meanwhile. The chart renderer's chunk is fetched alongside, not after.
+    const tap = { hash: window.location.hash };
+    opening.current = tap;
+    loadPriceChart().catch(() => null);
+    const settled = () => { if (opening.current !== tap) return; opening.current = null; if (window.location.hash === tap.hash) navigate(); };
+    loadStockView().then(settled, settled);
   }, [go, from, wide, view]);
   const notify = useCallback(text => {
     clearTimeout(toastTimer.current);
@@ -225,7 +245,8 @@ export default function BriefApp() {
   const showList = useCallback(filter => { setListState(state => ({ ...state, filter, query: '' })); setListLimits(state => ({ ...state, list: undefined })); go('/brief/list', { kind: 'tab' }); }, [go]);
   const todayNav = useMemo(() => ({ list: showList, market: () => go('/brief/market', { kind: 'tab' }), watch: () => go('/brief/watch', { kind: 'tab' }) }), [go, showList]);
   useEffect(() => {
-    const idle = window.requestIdleCallback ? window.requestIdleCallback(() => loadMarketScreen().catch(() => {}), { timeout: 4000 }) : setTimeout(() => loadMarketScreen().catch(() => {}), 1500);
+    const prefetch = () => { loadMarketScreen().catch(() => {}); loadStockView().catch(() => {}); };
+    const idle = window.requestIdleCallback ? window.requestIdleCallback(prefetch, { timeout: 4000 }) : setTimeout(prefetch, 1500);
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
   }, []);
   const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} wide={wide} nav={todayNav} onUnwatch={toggleWatch} ageNote={ageLine?.note || null} />
