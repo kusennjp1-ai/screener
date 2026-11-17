@@ -1,0 +1,314 @@
+{
+ "tree": "01066eb",
+ "date": "2026-10-02",
+ "fixture_now": "2026-10-03T16:35:00.000Z",
+ "sessions_tail": [
+  "2026-09-30",
+  "2026-10-01",
+  "2026-10-02"
+ ],
+ "schedule": {
+  "valid_until": "2026-10-07T23:00:00Z",
+  "sessions": [
+   "2026-09-28@20:00Z",
+   "2026-09-29@20:00Z",
+   "2026-09-30@20:00Z",
+   "2026-10-01@20:00Z",
+   "2026-10-02@20:00Z",
+   "2026-10-05@20:00Z",
+   "2026-10-06@20:00Z",
+   "2026-10-07@20:00Z"
+  ]
+ },
+ "markets": {
+  "m50": "上昇トレンド（独自判定） cap 0.5",
+  "m25": "上昇に圧力（独自判定） cap 0.25",
+  "m0": "50日線割れ（弱含み・独自判定） cap 0"
+ },
+ "cases": [
+  {
+   "name": "fixture clock (FINANCIAL_TEST_NOW, a Saturday; openBrief pins every spec here)",
+   "clock": "2026-10-03T16:35:00.000Z",
+   "weekday": "Sat",
+   "marketUpdateState": {
+    "state": "current",
+    "target": "2026-10-02"
+   },
+   "freshness": {
+    "state": "current",
+    "missing": []
+   },
+   "barAge": null,
+   "verdictWaiting": {
+    "m50": null,
+    "m25": null,
+    "m0": null
+   }
+  },
+  {
+   "name": "(a) weekday mid-session: Mon 10/5 11:00 ET",
+   "clock": "2026-10-05T15:00:00Z",
+   "weekday": "Mon",
+   "marketUpdateState": {
+    "state": "current",
+    "target": "2026-10-02"
+   },
+   "freshness": {
+    "state": "current",
+    "missing": []
+   },
+   "barAge": null,
+   "verdictWaiting": {
+    "m50": null,
+    "m25": null,
+    "m0": null
+   }
+  },
+  {
+   "name": "(b) 10 minutes after the US close: Mon 10/5 16:10 ET (yard PENDING)",
+   "clock": "2026-10-05T20:10:00Z",
+   "weekday": "Mon",
+   "marketUpdateState": {
+    "state": "pending",
+    "target": "2026-10-05"
+   },
+   "freshness": {
+    "state": "pending",
+    "missing": [
+     "2026-10-05"
+    ]
+   },
+   "barAge": null,
+   "verdictWaiting": {
+    "m50": "10/2時点の判定・更新待ち",
+    "m25": "10/2時点の判定・更新待ち",
+    "m0": null
+   }
+  },
+  {
+   "name": "(c) Saturday 10/3 (the fixture clock day)",
+   "clock": "2026-10-03T20:00:00Z",
+   "weekday": "Sat",
+   "marketUpdateState": {
+    "state": "current",
+    "target": "2026-10-02"
+   },
+   "freshness": {
+    "state": "current",
+    "missing": []
+   },
+   "barAge": null,
+   "verdictWaiting": {
+    "m50": null,
+    "m25": null,
+    "m0": null
+   }
+  },
+  {
+   "name": "(c2) the next Saturday 10/10 (past the fixture schedule valid_until)",
+   "clock": "2026-10-10T16:00:00Z",
+   "weekday": "Sat",
+   "marketUpdateState": {
+    "state": "unknown",
+    "target": null
+   },
+   "freshness": {
+    "state": "unknown",
+    "missing": []
+   },
+   "barAge": "unknown:鮮度未確認",
+   "verdictWaiting": {
+    "m50": null,
+    "m25": null,
+    "m0": null
+   }
+  },
+  {
+   "name": "(d) the real wall clock now",
+   "clock": "2026-11-16T16:23:14.801Z",
+   "weekday": "Mon",
+   "marketUpdateState": {
+    "state": "unknown",
+    "target": null
+   },
+   "freshness": {
+    "state": "unknown",
+    "missing": []
+   },
+   "barAge": "unknown:鮮度未確認",
+   "verdictWaiting": {
+    "m50": null,
+    "m25": null,
+    "m0": null
+   }
+  },
+  {
+   "name": "brief-chart.spec.js:715,720 before (same as fixture clock)",
+   "clock": "2026-10-03T16:35:00Z",
+   "weekday": "Sat",
+   "marketUpdateState": {
+    "state": "current",
+    "target": "2026-10-02"
+   },
+   "freshness": {
+    "state": "current",
+    "missing": []
+   },
+   "barAge": null,
+   "verdictWaiting": {
+    "m50": null,
+    "m25": null,
+    "m0": null
+   }
+  },
+  {
+   "name": "brief-chart.spec.js:715,720 on the day",
+   "clock": "2026-10-06T16:00:00Z",
+   "weekday": "Tue",
+   "marketUpdateState": {
+    "state": "pending",
+    "target": "2026-10-05"
+   },
+   "freshness": {
+    "state": "pending",
+    "missing": [
+     "2026-10-05"
+    ]
+   },
+   "barAge": null,
+   "verdictWaiting": {
+    "m50": "10/2時点の判定・更新待ち",
+    "m25": "10/2時点の判定・更新待ち",
+    "m0": null
+   }
+  },
+  {
+   "name": "brief-chart.spec.js:715,720 after",
+   "clock": "2026-10-07T16:00:00Z",
+   "weekday": "Wed",
+   "marketUpdateState": {
+    "state": "pending",
+    "target": "2026-10-06"
+   },
+   "freshness": {
+    "state": "stale",
+    "missing": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "barAge": "warn:2営業日前",
+   "verdictWaiting": {
+    "m50": "10/2時点の判定・更新待ち",
+    "m25": "10/2時点の判定・更新待ち",
+    "m0": null
+   }
+  },
+  {
+   "name": "brief-invariants.spec.js:495,507 the day before",
+   "clock": "2026-10-05T16:00:00Z",
+   "weekday": "Mon",
+   "marketUpdateState": {
+    "state": "current",
+    "target": "2026-10-02"
+   },
+   "freshness": {
+    "state": "current",
+    "missing": []
+   },
+   "barAge": null,
+   "verdictWaiting": {
+    "m50": null,
+    "m25": null,
+    "m0": null
+   }
+  },
+  {
+   "name": "brief-invariants.spec.js:495,507 on the day",
+   "clock": "2026-10-06T16:00:00Z",
+   "weekday": "Tue",
+   "marketUpdateState": {
+    "state": "pending",
+    "target": "2026-10-05"
+   },
+   "freshness": {
+    "state": "pending",
+    "missing": [
+     "2026-10-05"
+    ]
+   },
+   "barAge": null,
+   "verdictWaiting": {
+    "m50": "10/2時点の判定・更新待ち",
+    "m25": "10/2時点の判定・更新待ち",
+    "m0": null
+   }
+  },
+  {
+   "name": "brief-invariants.spec.js:495,507 after",
+   "clock": "2026-10-07T16:00:00Z",
+   "weekday": "Wed",
+   "marketUpdateState": {
+    "state": "pending",
+    "target": "2026-10-06"
+   },
+   "freshness": {
+    "state": "stale",
+    "missing": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "barAge": "warn:2営業日前",
+   "verdictWaiting": {
+    "m50": "10/2時点の判定・更新待ち",
+    "m25": "10/2時点の判定・更新待ち",
+    "m0": null
+   }
+  },
+  {
+   "name": "brief-freshness.spec.js:9,20 TWO_LATER (= brief-market-r3.spec.js:171,194; yard LATE)",
+   "clock": "2026-10-07T09:00:00Z",
+   "weekday": "Wed",
+   "marketUpdateState": {
+    "state": "pending",
+    "target": "2026-10-06"
+   },
+   "freshness": {
+    "state": "stale",
+    "missing": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "barAge": "warn:2営業日前",
+   "verdictWaiting": {
+    "m50": "10/2時点の判定・更新待ち",
+    "m25": "10/2時点の判定・更新待ち",
+    "m0": null
+   }
+  },
+  {
+   "name": "brief-freshness.spec.js:10,20 WITHIN_GRACE",
+   "clock": "2026-10-06T21:00:00Z",
+   "weekday": "Tue",
+   "marketUpdateState": {
+    "state": "pending",
+    "target": "2026-10-06"
+   },
+   "freshness": {
+    "state": "pending",
+    "missing": [
+     "2026-10-05",
+     "2026-10-06"
+    ]
+   },
+   "barAge": null,
+   "verdictWaiting": {
+    "m50": "10/2時点の判定・更新待ち",
+    "m25": "10/2時点の判定・更新待ち",
+    "m0": null
+   }
+  }
+ ]
+}

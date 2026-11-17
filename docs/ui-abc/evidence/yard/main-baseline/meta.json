@@ -1,0 +1,22 @@
+{
+ "tree": "01066eb",
+ "dirty": "clean",
+ "worktree": "/home/user/screener/.claude/worktrees/ui-plan",
+ "port": 4462,
+ "views": null,
+ "modes": null,
+ "started": "2026-11-17T01:09:24.264Z",
+ "load_before": [
+  1.19,
+  0.84,
+  0.67
+ ],
+ "playwright_rc": 0,
+ "ended": "2026-11-17T02:06:59.407Z",
+ "load_after": [
+  0.66,
+  0.85,
+  0.81
+ ],
+ "summary": "660 passed (57.6m)"
+}
