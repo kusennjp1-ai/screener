@@ -33,10 +33,9 @@ import { barDay, recallScroll, rememberScroll, stepTarget, useBriefBack, useTran
 // It is fetched once the first screen is idle, so a tap on 市場 rarely waits for it.
 const loadMarketScreen = () => import('./MarketScreen');
 const MarketScreen = lazy(loadMarketScreen);
-// The stock screen's body is its own chunk too (stockViewLoader.js). Where a stock is on the first screen (the stock pane at
-// 1024px and wider, or a stock's own address) it is fetched at once, beside the data; elsewhere (a phone's Today, 候補,
-// ウォッチ or 市場) once the data and the first rows have committed and the page is idle, so its download and parse never
-// compete with the first rows.
+// The stock screen's body is its own chunk too (stockViewLoader.js), fetched with the market tab's once the first screen is
+// idle. Where a stock is on the first screen (the stock pane at 1024px and wider, or a stock's own address) it is fetched
+// at once, beside the data.
 if (typeof window !== 'undefined' && (window.matchMedia?.('(min-width:1024px)').matches || /^#\/brief\/stock\//.test(window.location.hash))) loadStockView().catch(() => {});
 
 /** Brings a row between the bar and the dock when it is not already there. */
@@ -246,17 +245,10 @@ export default function BriefApp() {
   const showList = useCallback(filter => { setListState(state => ({ ...state, filter, query: '' })); setListLimits(state => ({ ...state, list: undefined })); go('/brief/list', { kind: 'tab' }); }, [go]);
   const todayNav = useMemo(() => ({ list: showList, market: () => go('/brief/market', { kind: 'tab' }), watch: () => go('/brief/watch', { kind: 'tab' }) }), [go, showList]);
   useEffect(() => {
-    const idle = window.requestIdleCallback ? window.requestIdleCallback(() => loadMarketScreen().catch(() => {}), { timeout: 4000 }) : setTimeout(() => loadMarketScreen().catch(() => {}), 1500);
+    const prefetch = () => { loadMarketScreen().catch(() => {}); loadStockView().catch(() => {}); };
+    const idle = window.requestIdleCallback ? window.requestIdleCallback(prefetch, { timeout: 4000 }) : setTimeout(prefetch, 1500);
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
   }, []);
-  // The stock chunk once the data has arrived: this effect runs after the render that commits the first rows (or a screen
-  // with none, such as an empty ウォッチ), and the fetch waits for the next idle time. Where it started at module start,
-  // this call returns the same load.
-  useEffect(() => {
-    if (!loaded) return undefined;
-    const idle = window.requestIdleCallback ? window.requestIdleCallback(() => loadStockView().catch(() => {}), { timeout: 4000 }) : setTimeout(() => loadStockView().catch(() => {}), 1500);
-    return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
-  }, [loaded]);
   const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} wide={wide} nav={todayNav} onUnwatch={toggleWatch} ageNote={ageLine?.note || null} />
     : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} limits={listLimits} setLimits={setListLimits} origin={kept} wide={wide} onUnwatch={toggleWatch} />;
   const watching = symbol && watch.includes(symbol);
