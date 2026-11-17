@@ -58,8 +58,10 @@ test.describe('a phone opens a stock with its screen whole', () => {
   test('after the idle-time prefetch: the row opens the whole screen at once', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief');
     await expect(firstRow(page)).toBeVisible();
-    // The prefetch has landed: the shell's own loader holds the module (the dev server serves the shell's module instance).
-    await page.waitForFunction(() => import('/src/static/brief/stockViewLoader.js').then(loader => loader.loadedStockView() !== null), null, { timeout: 20000 });
+    // The prefetch has landed: the shell's own loader holds the module (the dev server serves the shell's module instance; a
+    // second instance would never load). Polled through page.evaluate, which awaits the import (waitForFunction would take
+    // the returned promise itself as truthy).
+    await expect.poll(() => page.evaluate(() => import('/src/static/brief/stockViewLoader.js').then(loader => loader.loadedStockView() !== null)), { timeout: 20000 }).toBe(true);
     await watchFrames(page);
     const symbol = await firstRow(page).getAttribute('data-symbol');
     await firstRow(page).click();
