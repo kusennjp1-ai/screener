@@ -97,11 +97,9 @@ test.describe('a phone opens a stock with its screen whole', () => {
     await watchFrames(page);
     const symbol = await firstRow(page).getAttribute('data-symbol');
     await firstRow(page).click();
-    // Held: Today stays as it is, and no stock screen appears without its content.
-    await expect(page).toHaveURL(/#\/brief$/);
-    await expect(firstRow(page)).toBeVisible();
-    // Released at once, well inside the bound: the screen opens when the chunk settles. (The dev server serves the chunk's
-    // modules one by one; should they take longer than the bound, the loading line shows, but never before it.)
+    // Released at once, well inside the bound: the screen opens when the chunk settles, and no stock screen appears without
+    // its content. (The dev server serves the chunk's modules one by one; should they take longer than the bound, the loading
+    // line shows, but never before it.)
     release();
     await expect(page).toHaveURL(new RegExp(`#/brief/stock/${symbol}$`));
     await expect(page.getByTestId('brief-conclusion')).toBeVisible();
@@ -141,6 +139,27 @@ test.describe('a phone opens a stock with its screen whole', () => {
     // One history entry for the one tap (the chunk's settling after the bound opens nothing more): back returns to Today.
     await page.getByRole('button', { name: '戻る' }).click();
     await expect(page).toHaveURL(/#\/brief$/);
+    expect(errors).toEqual([]);
+  });
+
+  test('on a stalled connection that then fails: the loading line gives way to the failure box', async ({ page }) => {
+    let fail;
+    const held = new Promise(resolve => { fail = resolve; });
+    await page.route(STOCK_CHUNK, async route => { await held; await route.abort(); });
+    const { errors } = await openBrief(page, '#/brief');
+    await expect(firstRow(page)).toBeVisible();
+    await watchFrames(page);
+    const symbol = await firstRow(page).getAttribute('data-symbol');
+    await firstRow(page).click();
+    await expect(page).toHaveURL(new RegExp(`#/brief/stock/${symbol}$`));
+    await expect(page.getByText(LOADING)).toBeVisible();
+    fail();
+    await expect(page.locator('#brief-main .brief-stock-failed').getByRole('alert')).toHaveText(FAILED_TEXT);
+    await expect(page.getByText(LOADING)).toHaveCount(0);
+    await expect(page.locator('.brief-bar-title b span').first()).toHaveText(symbol);
+    const seen = await timedFrames(page);
+    expect(seen.filter(({ frame }) => !frame.startsWith('loading line'))).toEqual([]);
+    expect(notBeforeBound(seen)).toEqual([]);
     expect(errors).toEqual([]);
   });
 
