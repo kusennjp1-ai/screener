@@ -181,9 +181,11 @@ describe('Today\'s gate card at 1024px and wider (fold in place)', () => {
     expect(textOf('.brief-gate-basis')).toBe(`${verdictBasis(state().market, date).text}（実測）`);
     expect(region().querySelector('.brief-gate-basis-full')).toBeNull();
     expect(region().textContent).toContain(GUIDE_UNTESTED);
-    expect([...region().querySelectorAll('.brief-gate-group h3')].map(node => node.textContent)).toEqual(['判定', '根拠（指数側）', '広がり（参考）', '銘柄側（参考・目安は変えません）']);
+    // The 判定 group has no visible heading (its row's label says 判定 once); the others are headed.
+    expect([...region().querySelectorAll('.brief-gate-group')].map(node => node.getAttribute('aria-label'))).toEqual(['判定', '根拠（指数側）', '広がり（参考）', '銘柄側（参考・目安は変えません）']);
+    expect([...region().querySelectorAll('.brief-gate-group h3')].map(node => node.textContent)).toEqual(['根拠（指数側）', '広がり（参考）', '銘柄側（参考・目安は変えません）']);
     // The 判定 row names the regime's label (without its 独自判定 mark: the row's kind says it).
-    expect(region().querySelector('.brief-gate-group .brief-gate-fact').textContent).toBe('判定上昇トレンド・新規の買いを検討できる独自判定');
+    expect(region().querySelector('.brief-gate-group').textContent).toBe('判定上昇トレンド・新規の買いを検討できる独自判定');
   });
 });
 
