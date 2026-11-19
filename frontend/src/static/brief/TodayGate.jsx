@@ -19,6 +19,12 @@ export const GUIDE_UNTESTED = `目安の水準（${[MARKET_CAPS.confirmed_uptren
 /** The figure's label, breaking only before its （…）. */
 const FigureLabel = ({ text }) => { const at = text.indexOf('（'); return at > 0 ? <>{text.slice(0, at)}<span className="brief-frag">{text.slice(at)}</span></> : text; };
 const Kind = ({ kind }) => <span className="brief-gate-kind">{kind}</span>;
+/**
+ * The headline's kind beside it, 「（独自判定）」, with one break opportunity in its middle (「（独自」「判定）」). It stays one line;
+ * in the waiting form (brief-gate.css: `.is-waiting`) it is set in those two short lines inside the headline's own line height, so
+ * 「12/28時点の判定・更新待ち」 keeps one line at 375px and the waiting form is exactly as tall as the open form.
+ */
+const HeadKind = ({ kind }) => <span className="brief-gate-kind">（{kind.slice(0, 2)}<wbr />{kind.slice(2)}）</span>;
 
 /** One of the gate's own facts (gateFacts): its label, its value or its absent words, its reading and its kind. */
 function GateRow({ fact, blockAsOf = null }) {
@@ -91,7 +97,7 @@ export default function TodayGate({ gate, view, facts, wide, renderFact, statusA
       <h2 id="brief-market-title">{BAND_SUBJECT}</h2>{kickerDate && <span className="numeric">{kickerDate}</span>}{head.age && <span className="numeric is-warn">・{head.age}</span>}
       <Link className="brief-more" to="/brief/market">市場の詳細 <span aria-hidden="true">›</span></Link>
     </div>}
-    {!wide && <p className="brief-gate-headline">{head.headline ? <><b>{head.headline}</b>{head.headlineKind && <span className="brief-gate-kind">（{head.headlineKind}）</span>}</> : <b>読込中</b>}</p>}
+    {!wide && <p className={`brief-gate-headline${gate.state === 'waiting' ? ' is-waiting' : ''}`}>{head.headline ? <><b>{head.headline}</b>{head.headlineKind && <HeadKind kind={head.headlineKind} />}</> : <b>読込中</b>}</p>}
     {/* The figure with its label on one line (the label wraps before its （…） and never under the figure), so the open and
         the waiting forms (「新規買いの目安（10/2時点・独自設定）」) keep one height. */}
     {head.figure && <p className="brief-gate-figure"><small><FigureLabel text={head.figureLabel} /></small><b className="numeric">{head.figure}</b></p>}

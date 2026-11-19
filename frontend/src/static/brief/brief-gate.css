@@ -15,6 +15,11 @@
 .brief-gate-line { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
 .brief-gate-kind { font-size: 12px; font-weight: 400; color: var(--text-2); }
 .brief-gate-headline .brief-gate-kind { white-space: nowrap; }
+/* The waiting form (D18: 「12/28時点の判定・更新待ち」 is up to 250px of the 313px a 375px phone gives the line): its kind is set
+   beside the headline in two short lines (「（独自」「判定）」, 36px wide, 2 x 13.2px inside the headline's 27px line), so the
+   headline keeps one line and the waiting form is exactly as tall as the open form. An inline-block: the text and its reading
+   order are unchanged. */
+.brief-gate-headline.is-waiting .brief-gate-kind { display: inline-block; width: min-content; white-space: normal; word-break: keep-all; overflow-wrap: normal; line-height: 1.1; vertical-align: top; }
 .brief-gate-conds, .brief-gate-met { display: grid; gap: 2px; min-width: 0; }
 .brief-gate-conds small, .brief-gate-met small { font-size: 12px; line-height: 1.4; color: var(--text-2); }
 .brief-gate-conds ul, .brief-gate-met ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 14px; line-height: 1.5; color: var(--text); }
