@@ -81,7 +81,8 @@ test.describe('Today\'s watch card at 390px', () => {
     await page.goto('/#/brief');
     await page.reload();
     const card = page.getByRole('region', { name: 'ウォッチの状況' });
-    const tile = page.getByTestId('brief-summary').locator('li').nth(2);
+    // S1-P4: the watch tile is the second of the two answers (the market's is the gate card's).
+    const tile = page.getByTestId('brief-summary').locator('li').nth(1);
     await expect(card.locator('.brief-event')).toHaveCount(5);
     await expect(card.locator('.brief-morebutton')).toHaveCount(0);
     await expect(card.locator('.brief-sellchip')).toHaveCount(0);
