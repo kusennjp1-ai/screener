@@ -124,6 +124,9 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
       expect(textOf('.brief-gate-figure')).toContain(`新規買いの目安（10/2時点・独自設定）最大${cap === 'm25' ? 25 : 50}%`);
       expect(textOf('.brief-gate-kicker')).toMatch(/^地合い・10\/2（金）引け・2営業日前市場の詳細 ›$/);
       expect(textOf('.brief-gate-kicker .is-warn')).toContain('・2営業日前');
+      // The kicker's words (subject, date, age) are one block that wraps inside the row; the link sits beside it.
+      expect(textOf('.brief-gate-kicker > .brief-gate-kicker-text')).toBe('地合い・10/2（金）引け・2営業日前');
+      expect(region().querySelector('.brief-gate-kicker > .brief-gate-kicker-text + .brief-more').textContent).toBe('市場の詳細 ›');
       expect(region().textContent).not.toMatch(/検討できる|検討可/);
       cleanup();
       // At 1024px and wider the verdict block says the waiting lead in place of 「新規の買いを検討できる地合い…」.

@@ -218,15 +218,17 @@ for (const theme of ['light', 'dark']) test.describe(`the gate's type, inks and 
       const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
       const ground = getComputedStyle(node).backgroundColor;
       const of = selector => [...node.querySelectorAll(selector)].map(el => ({ selector, color: getComputedStyle(el).color, size: parseFloat(getComputedStyle(el).fontSize), weight: getComputedStyle(el).fontWeight }));
-      const items = [...of('.brief-gate-kicker > h2'), ...of('.brief-gate-kicker > .numeric:not(.is-warn)'), ...of('.brief-gate-headline b'), ...of('.brief-gate-kind'), ...of('.brief-gate-figure small'), ...of('.brief-gate-figure b'), ...of('.brief-gate-line'), ...of('.brief-gate-conds li'), ...of('.brief-gate-conds small')];
+      const items = [...of('.brief-gate-kicker h2'), ...of('.brief-gate-kicker .numeric:not(.is-warn)'), ...of('.brief-gate-headline b'), ...of('.brief-gate-kind'), ...of('.brief-gate-figure small'), ...of('.brief-gate-figure b'), ...of('.brief-gate-line'), ...of('.brief-gate-conds li'), ...of('.brief-gate-conds small')];
       // Every text node with a digit in the first fold, with its size.
       const digits = []; const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
       for (let t = walker.nextNode(); t; t = walker.nextNode()) if (/\d/.test(t.textContent) && !t.parentElement.closest('details:not([open]) > .brief-expander-body') && t.parentElement.getClientRects().length) digits.push(parseFloat(getComputedStyle(t.parentElement).fontSize));
       return { inks, warn, ground: rgb(ground), items: items.map(item => ({ ...item, rgb: rgb(item.color) })), digits };
     }, INKS);
     const size = selector => read2.items.filter(item => item.selector === selector).map(item => item.size);
-    // D19: kicker 12, headline 20, figure 26 with its 12px label, the lines 14, kinds 12; no digit under 12px.
-    for (const [selector, px] of [['.brief-gate-kicker > h2', 12], ['.brief-gate-headline b', 20], ['.brief-gate-figure b', 26], ['.brief-gate-figure small', 12], ['.brief-gate-line', 14], ['.brief-gate-conds li', 14], ['.brief-gate-kind', 12]]) for (const value of size(selector)) expect(value).toBe(px);
+    // D19: kicker 12, headline 20, figure 26 with its 12px label, the lines 14, kinds 12; no digit under 12px. Each selector reads
+    // at least one element where the state has it (the kicker's words sit in their own block: descendant selectors).
+    for (const selector of ['.brief-gate-kicker h2', '.brief-gate-headline b', ...(id === 'manifest503' ? [] : ['.brief-gate-kicker .numeric:not(.is-warn)', '.brief-gate-kind', '.brief-gate-figure small', '.brief-gate-figure b', '.brief-gate-line'])]) expect(size(selector).length, selector).toBeGreaterThan(0);
+    for (const [selector, px] of [['.brief-gate-kicker h2', 12], ['.brief-gate-kicker .numeric:not(.is-warn)', 12], ['.brief-gate-headline b', 20], ['.brief-gate-figure b', 26], ['.brief-gate-figure small', 12], ['.brief-gate-line', 14], ['.brief-gate-conds li', 14], ['.brief-gate-kind', 12]]) for (const value of size(selector)) expect(value, selector).toBe(px);
     expect(read2.digits.filter(value => value < 12)).toEqual([]);
     // D17: text inks only (the warning tone only for a late publication's age); contrast >= 4.5 against the card.
     for (const item of read2.items) {
@@ -236,6 +238,17 @@ for (const theme of ['light', 'dark']) test.describe(`the gate's type, inks and 
     // The 銘柄側 rows (fold opened): text inks only and no ▲ (plan §5.3: stock-side numbers carry no colour and no ▲).
     if (id !== 'manifest503') {
       await region(page).locator('.brief-gate-more > summary').click();
+      // The fold's full 根拠 line (the market tab's words, with digits): 14px like the first fold's 根拠 line (D19), its kind 12px,
+      // a text ink (D17) with contrast >= 4.5 against the card, no digit under 12px.
+      const full = region(page).locator('.brief-gate-basis-full');
+      await expect(full).toHaveCount(1);
+      await expect(full).toBeVisible();
+      const basis = await full.evaluate(node => { const style = getComputedStyle(node), kind = node.querySelector('.brief-gate-kind');
+        return { size: parseFloat(style.fontSize), color: style.color, kind: parseFloat(getComputedStyle(kind).fontSize), kindColor: getComputedStyle(kind).color, digits: /\d/.test(node.firstChild.textContent) }; });
+      expect(basis).toMatchObject({ size: 14, kind: 12, digits: true });
+      expect(read2.inks).toContain(basis.color);
+      expect(read2.inks).toContain(basis.kindColor);
+      expect(ratio(basis.color.match(/[\d.]+/g).slice(0, 3).map(Number), read2.ground)).toBeGreaterThanOrEqual(4.5);
       const stock = region(page).getByRole('group', { name: '銘柄側（参考・目安は変えません）' });
       await expect(stock).toBeVisible();
       await expect(stock).not.toContainText('▲');
@@ -330,6 +343,7 @@ for (const width of ['375', '390']) test.describe(`the waiting form at ${width}p
     await expect(region(page)).toHaveAttribute('data-gate', 'open');
     expect(await twoDigits(page, md)).toBe('新規の買いを検討できる（独自判定）');
     const opened = await stackBottom(page);
+    await kickerClear(page);
     for (const [clock, at] of [['pending', PENDING], ['late', LATE]]) {
       await page.clock.setFixedTime(new Date(at));
       await page.reload();
@@ -339,6 +353,8 @@ for (const width of ['375', '390']) test.describe(`the waiting form at ${width}p
       if (clock === 'late') await expect(region(page).locator('.brief-gate-kicker .is-warn')).toHaveText('・12営業日前');
       // The headline keeps one line (its kind beside it, in two short lines).
       expect(await region(page).locator('.brief-gate-headline').evaluate(node => node.getBoundingClientRect().height)).toBeLessThanOrEqual(27.5);
+      // The kicker keeps one line beside its link, its link a whole 44px target over the waiting headline's tag.
+      await kickerClear(page);
       expect(await stackBottom(page), `${clock} ${md}`).toBe(opened);
       expect(await horizontalOverflow(page)).toBe(0);
     }
@@ -369,16 +385,89 @@ test.describe('the governing state in the waiting form at 375px', () => {
   });
 });
 
-test.describe('the first 注目候補 row on a 0% day at 375x812', () => {
-  test.use(WIDTHS[375]);
-  // The two tallest 0% first folds of the yardstick (50日線割れ with the index history disagreeing: the 根拠 line with its
-  // conflict note and two unmet conditions; the FTD form) keep the first focus row above the dock with the default storage.
-  for (const id of ['below50', 'ftd']) test(id, async ({ page }) => {
-    const { errors } = await openBrief(page, '#/brief', STATES[id].open);
+// ---- The kicker row and the first 注目候補 row on 0% days (the conductor's round-2 order on S1-P4) ---------------------------
+/**
+ * The kicker row: its link is a 44px box that answers a tap everywhere in it (it lends 14px above and 13px below its line, over
+ * the headline's half-leading); the kicker's words and the link's label overlap neither each other nor the headline's words, and
+ * stay inside the card; `lines` = how many lines the kicker's words take.
+ */
+const kicker = page => region(page).evaluate(node => {
+  const row = node.querySelector('.brief-gate-kicker'), link = row.querySelector('.brief-more'), headline = node.querySelector('.brief-gate-headline');
+  const rects = (el, skip = null) => { const out = []; const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) { if (!t.nodeValue.trim() || (skip && skip.contains(t))) continue; const range = document.createRange(); range.selectNodeContents(t); out.push(...range.getClientRects()); }
+    return out; };
+  const meets = (a, b) => a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+  const box = link.getBoundingClientRect(), card = node.getBoundingClientRect();
+  const words = rects(row, link), label = rects(link), head = rects(headline);
+  const hits = [];
+  for (const y of [box.top + 1, box.top + box.height / 2, box.bottom - 1]) for (const x of [0.05, 0.5, 0.95]) hits.push(link.contains(document.elementFromPoint(box.left + box.width * x, y)));
+  return { width: box.width, height: box.height, hits: hits.every(Boolean), lines: new Set(words.map(r => Math.round(r.top))).size,
+    overlap: [...words, ...label].some(a => head.some(b => meets(a, b))) || words.some(a => label.some(b => meets(a, b))),
+    inside: [...words, ...label].every(r => r.top >= card.top && r.bottom <= card.bottom && r.left >= card.left && r.right <= card.right) };
+});
+const kickerClear = async (page, lines = 1) => {
+  const k = await kicker(page);
+  expect(Math.min(k.width, k.height)).toBeGreaterThanOrEqual(44);
+  expect(k).toMatchObject({ hits: true, overlap: false, inside: true, lines });
+};
+
+test.describe('the late form at 320px', () => {
+  test.use(WIDTHS[320]);
+  // brief-freshness.spec.js:85's state (ZZNV and ZZSD watched). At 320 the late age does not fit beside the date and the link:
+  // it wraps under the date inside the kicker row's own 44px, so the late form ends where the open and pending forms end, with
+  // the fixture's date and with a two-digit one.
+  for (const md of [null, '12/28']) test(`is as tall as the open form with the date ${md ?? '10/2'}`, async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZSD'] } });
     await readyToday(page);
+    if (md) await twoDigits(page, md);
+    const opened = await stackBottom(page);
+    await kickerClear(page);
+    for (const [clock, at] of [['pending', PENDING], ['late', LATE]]) {
+      await page.clock.setFixedTime(new Date(at));
+      await page.reload();
+      await readyToday(page);
+      await expect(region(page)).toHaveAttribute('data-gate', 'waiting');
+      if (md) await twoDigits(page, md);
+      if (clock === 'late') {
+        const age = region(page).locator('.brief-gate-kicker .is-warn');
+        await expect(age).toHaveText(md ? '・12営業日前' : '・2営業日前');
+        await expect(age).toBeInViewport({ ratio: 1 });
+        expect(await age.evaluate(node => node.scrollWidth <= node.clientWidth + 0.5)).toBe(true);
+      }
+      await kickerClear(page, clock === 'late' ? 2 : 1);
+      expect(await stackBottom(page), `${clock} ${md ?? '10/2'}`).toBe(opened);
+      expect(await horizontalOverflow(page)).toBe(0);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+// Every 0% state of plan S1-P2's table with the fold closed (S1 acceptance 2): the first 注目候補 row ends above the dock at the
+// four sizes of brief-phone.spec.js:27-40 that are not a session behind (375x812, 390x844 and the two installed-PWA sizes, whose
+// bar and dock grow by the notch and home-indicator insets), with no watch list and with the matrix's four watched. The pending
+// and the late clock (10/5 20:10Z, 10/7 09:00Z) keep 「買いは控える」 at 0% (plan D18).
+const ZERO = {
+  below50: [STATES.below50.open, null], below50idx: [{ mutate: compose(below50Rows, belowFiftyIndex) }, null], below200: [STATES.below200.open, null],
+  restrain: [STATES.restrain.open, null], basisconflict: [STATES.basisconflict.open, null], ftd: [STATES.ftd.open, null], ftd5: [STATES.ftd5.open, null],
+  ftdconflict: [STATES.ftdconflict.open, null], 'pend-below50': [STATES.below50.open, PENDING], 'late-below50': [STATES.below50.open, LATE],
+};
+const FOLDS = { '375x812': { device: WIDTHS[375] }, '390x844': { device: WIDTHS[390] }, '375x812 as an installed PWA': { device: WIDTHS[375], insets: { top: 44, bottom: 34 } },
+  '390x844 as an installed PWA': { device: WIDTHS[390], insets: { top: 47, bottom: 34 } } };
+for (const [size, { device, insets }] of Object.entries(FOLDS)) test.describe(`the first 注目候補 row on a 0% day at ${size}`, () => {
+  test.use(device);
+  for (const [id, [input, at]] of Object.entries(ZERO)) for (const [watch, storage] of [['no watch list', undefined], ['four watched', { 'research-watch': ['ZZNV', 'ZZZF', 'ZZSD', 'ZZKS'] }]]) test(`${id}, ${watch}`, async ({ page }) => {
+    if (insets) await (await page.context().newCDPSession(page)).send('Emulation.setSafeAreaInsetsOverride', { insets: { ...insets, left: 0, right: 0 } });
+    const { errors } = await openBrief(page, '#/brief', { ...input, storage });
+    if (at) { await page.clock.setFixedTime(new Date(at)); await page.reload(); }
+    await readyToday(page);
+    await expect(region(page)).toHaveAttribute('data-gate', 'closed');
+    await expect(region(page).locator('.brief-gate-headline')).toHaveText('買いは控える（独自判定）');
+    await expect(region(page).locator('.brief-gate-more')).not.toHaveAttribute('open', '');
+    const dock = await page.locator('.brief-dock').evaluate(node => { const box = node.getBoundingClientRect(); return { top: box.top, height: box.height }; });
+    if (insets) expect(dock.height).toBeGreaterThanOrEqual(56 + insets.bottom);
+    expect(await page.evaluate(() => scrollY)).toBe(0);
     const row = await page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate').first().evaluate(node => node.getBoundingClientRect().bottom);
-    const dock = await page.locator('.brief-dock').evaluate(node => node.getBoundingClientRect().top);
-    expect(row).toBeLessThanOrEqual(dock);
+    expect(row, `${id} ${watch} at ${size}`).toBeLessThanOrEqual(dock.top);
     expect(errors).toEqual([]);
   });
 });
