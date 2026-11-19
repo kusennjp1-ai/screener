@@ -222,6 +222,14 @@ for (const theme of ['light', 'dark']) test.describe(`the gate's type, inks and 
       expect(read2.inks, `${item.selector} ${item.color}`).toContain(item.color);
       expect(ratio(item.rgb, read2.ground)).toBeGreaterThanOrEqual(4.5);
     }
+    // The 銘柄側 rows (fold opened): text inks only and no ▲ (plan §5.3: stock-side numbers carry no colour and no ▲).
+    if (id !== 'manifest503') {
+      await region(page).locator('.brief-gate-more > summary').click();
+      const stock = region(page).getByRole('group', { name: '銘柄側（参考・目安は変えません）' });
+      await expect(stock).toBeVisible();
+      await expect(stock).not.toContainText('▲');
+      for (const color of await stock.locator('small, b, em, .brief-gate-kind').evaluateAll(nodes => nodes.map(node => getComputedStyle(node).color))) expect(read2.inks).toContain(color);
+    }
     if (at) {
       const age = await region(page).locator('.brief-gate-kicker .is-warn').evaluate(node => getComputedStyle(node).color);
       expect(age).toBe(read2.warn);
@@ -241,5 +249,30 @@ for (const [width, device] of Object.entries({ 320: WIDTHS[320], 375: WIDTHS[375
     // Nothing of a value or a note is cut: no ellipsis, no clipped line.
     expect(await page.getByTestId('brief-summary').evaluate(node => [...node.querySelectorAll('small, b, em, .brief-frag')].filter(el => el.scrollWidth > el.clientWidth + 0.5 || getComputedStyle(el).textOverflow === 'ellipsis').length)).toBe(0);
     expect(await page.getByTestId('brief-summary').evaluate(node => [...node.querySelectorAll('li')].every(li => li.scrollHeight <= li.clientHeight + 0.5))).toBe(true);
+  });
+
+  test('確認中 while the sell checks load, and the longest note the watch tile can say, whole', async ({ page }) => {
+    // brief-watch.spec.js:73-82: hold every chart (the sell checks read them) so the tile says 確認中.
+    const files = new Set(['ZZNV.json', 'ZZKS.json', 'ZZZF.json', 'ZZOD.json', 'ZZSD.json']);
+    await openBrief(page, '#/brief/market', { storage: { 'research-watch': ['ZZNV', 'ZZKS', 'ZZZF', 'ZZOD', 'ZZSD'] } });
+    await page.route(url => files.has(url.pathname.split('/').pop()), () => {});
+    // The hash is read once before the reload (a reload right after a hash change can reload the old address).
+    await page.goto('/#/brief');
+    await page.evaluate(() => location.hash);
+    await page.reload();
+    const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
+    await expect(tile).toContainText('確認中5銘柄を確認中・保有未登録');
+    const whole = () => page.getByTestId('brief-summary').evaluate(node => ({ cut: [...node.querySelectorAll('small, b, em, .brief-frag')].filter(el => el.scrollWidth > el.clientWidth + 0.5).length,
+      clipped: [...node.querySelectorAll('li')].filter(li => li.scrollHeight > li.clientHeight + 0.5).length }));
+    expect(await whole()).toEqual({ cut: 0, clipped: 0 });
+    // The longest note watchAttention can give (every part at once, a two-digit total), put in the tile's own markup: it wraps
+    // between its parts, nothing is cut, and the link stays a 44px target.
+    await tile.evaluate(link => {
+      link.querySelector('b').textContent = '未確認';
+      link.querySelector('em').innerHTML = ['3/12を確認・', '対象外1・', '上限超2・', '未確認1・', '一部未確認1・', '保有未登録'].map(part => `<span class="brief-frag">${part}</span>`).join('');
+    });
+    expect(await whole()).toEqual({ cut: 0, clipped: 0 });
+    expect(Math.min(...Object.values(await tile.evaluate(node => { const box = node.getBoundingClientRect(); return { w: box.width, h: box.height }; })))).toBeGreaterThanOrEqual(44);
+    expect(await horizontalOverflow(page)).toBe(0);
   });
 });
