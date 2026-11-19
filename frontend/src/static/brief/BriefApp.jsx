@@ -103,9 +103,10 @@ export default function BriefApp() {
   const age = useFreshness(brief.trends, brief.date);
   const ageLine = useMemo(() => freshnessLine(age, brief.date), [age, brief.date]);
   // The last session the exchange calendar says has closed (marketUpdateState, as the 市場 tab reads it), re-read whenever the
-  // age is (at each close): Today's gate says a waiting verdict from it (verdictWaiting, plan D18).
+  // age is (useFreshness's tick at each close): Today's gate says a waiting verdict from it (verdictWaiting, plan D18). The clock
+  // is read here, beside useFreshness's own, and handed to the pure reader.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- age re-reads the clock at each close
-  const target = useMemo(() => trendsStatus(brief.trends).state === 'ready' ? marketUpdateState(brief.trends.data).target : null, [brief.trends?.data, age]);
+  const target = useMemo(() => trendsStatus(brief.trends).state === 'ready' ? marketUpdateState(brief.trends.data, Date.now()).target : null, [brief.trends?.data, age]);
   const location = useLocation();
   const wide = useMediaQuery('(min-width:1024px)');
   const go = useTransitionNavigate();
