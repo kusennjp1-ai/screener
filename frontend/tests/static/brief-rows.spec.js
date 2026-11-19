@@ -140,7 +140,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate').first()).toBeVisible();
     await expect(page.locator('#brief-focus-title')).toHaveText('注目候補（地合い：買いは控える・監視のみ）');
-    const tile = page.getByTestId('brief-summary').locator('li').nth(1);
+    // S1-P4: the 注目候補 tile is the first of the two answers (the market's is the gate card's).
+    const tile = page.getByTestId('brief-summary').locator('li').nth(0);
     await expect(tile).toContainText('注目候補');
     await expect(tile).not.toHaveClass(/tone-zone/);
     await expect(focus.locator('.tone-zone')).toHaveCount(0);

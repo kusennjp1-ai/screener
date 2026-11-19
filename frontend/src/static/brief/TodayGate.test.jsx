@@ -104,6 +104,10 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
     expect(textOf('.brief-gate-conds')).toMatch(/^再開の条件：未確認$/);
     expect(textOf('details > summary')).toContain('根拠（未確認の項目）');
     cleanup();
+    // Without a publication there is no analysis date: the kicker names the subject alone, never a stray character.
+    mount(<MarketCard market={null} trends={{ data: null }} date={null} wide={false} />);
+    expect(textOf('.brief-gate-kicker')).toBe('地合い市場の詳細 ›');
+    cleanup();
     show(state({ loading: true }));
     expect(textOf('.brief-gate-headline')).toMatch(/^読込中$/);
     expect(region().querySelector('.brief-gate-conds')).toBeNull();
@@ -170,7 +174,9 @@ describe('Today\'s gate card at 1024px and wider (fold in place)', () => {
     expect(region().querySelector('.brief-gate-headline')).toBeNull();
     expect(textOf('.brief-gate-figure')).toMatch(/^新規買いの目安（独自設定）最大50%$/);
     expect(region().textContent).toContain(GUIDE_UNTESTED);
-    expect([...region().querySelectorAll('.brief-gate-group h3')].map(node => node.textContent)).toEqual(['根拠（指数側）', '広がり（参考）', '銘柄側（参考・目安は変えません）']);
+    expect([...region().querySelectorAll('.brief-gate-group h3')].map(node => node.textContent)).toEqual(['判定', '根拠（指数側）', '広がり（参考）', '銘柄側（参考・目安は変えません）']);
+    // The 判定 row names the regime's label (without its 独自判定 mark: the row's kind says it).
+    expect(region().querySelector('.brief-gate-group .brief-gate-fact').textContent).toBe('判定上昇トレンド・新規の買いを検討できる独自判定');
   });
 });
 

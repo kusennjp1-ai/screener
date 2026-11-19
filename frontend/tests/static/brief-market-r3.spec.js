@@ -71,7 +71,10 @@ const todayReady = async page => { await expect(page.getByRole('region', { name:
 const contentHeight = page => page.evaluate(() => Math.round(document.querySelector('#brief-main .brief-stack').getBoundingClientRect().bottom + scrollY));
 /** The bottom of the market tab's lead block: the verdict, the warning summary and the first section tab. */
 const lead = async page => { const market = page.getByRole('region', { name: '地合い' }); return Math.max(...await Promise.all([market.getByTestId('brief-regime'), market.getByRole('group', { name: '注意サイン（独自判定）' }), page.getByRole('tab').first()].map(async locator => { const box = await locator.boundingBox(); return box.y + box.height; }))); };
-const tileHeights = page => page.getByTestId('brief-summary').locator('li').evaluateAll(items => items.map(li => li.getBoundingClientRect().height));
+// S1-P4: Today's market answer and the market track's word are the gate card's (the 地合い tile is gone): its headline and
+// its sign line; the word's sentence is in the gate's fold (closed on a phone, in place from 1024px).
+const gate = page => page.getByRole('region', { name: '地合い', exact: true });
+const gateSign = page => gate(page).locator('.brief-gate-sign');
 const clippedTileText = page => page.evaluate(() => [...document.querySelectorAll('.brief-fact, .brief-kgrid, .brief-summary')].flatMap(tile => [...tile.querySelectorAll('small, b, em')])
   .filter(node => node.getClientRects().length && node.scrollWidth > node.clientWidth).map(node => `${node.textContent} ${node.scrollWidth}>${node.clientWidth}`));
 /** A CSS custom property of the card, resolved to the colour the browser computes. */
@@ -86,16 +89,16 @@ for (const [width, device] of [['375', PHONES[375]], ['390', PHONES[390]]]) test
     const current = await context.newPage();
     await openBrief(current, '#/brief', { mutate: compose(ftdUpgraded, belowFiftyIndex) });
     await todayReady(current);
-    await expect(current.getByTestId('brief-summary').locator('.brief-tile-suffix')).toHaveText(MARKET_TILE_SUFFIX.ftd);
+    // S1-P4: the gate's FTD line (the fixture's FTD is older than 25 sessions: 前回のFTD with its date), never merged.
+    await expect(gateSign(current)).toHaveText(/^前回のFTD \d+\/\d+（参考・目安は 0%のまま：SPYが50日線の下）$/);
     await current.close();
     // The ^GSPC record ends on 10/1 while the analysis is 10/2: nothing backs the FTD on Today, so no suffix.
     const { errors } = await openBrief(page, '#/brief', { historyEnd: sessions.at(-2), mutate: compose(ftdUpgraded, belowFiftyIndex) });
     await todayReady(page);
-    const summary = page.getByTestId('brief-summary');
-    await expect(summary.locator('.brief-tile-suffix')).toHaveCount(0);
-    await expect(summary).not.toContainText(MARKET_TILE_SUFFIX.ftd);
-    await expect(summary.locator('li').first()).toContainText('買いは控える');
-    if (width === '375') for (const height of await tileHeights(page)) expect(Math.abs(height - 97)).toBeLessThanOrEqual(2);
+    // One session behind, the sign is withheld (its own words), never the FTD line.
+    await expect(gateSign(page)).toHaveText('サイン：未確認（10/2分は再集計待ち）');
+    await expect(gate(page)).not.toContainText(MARKET_TILE_SUFFIX.ftd);
+    await expect(gate(page).locator('.brief-gate-headline')).toHaveText('買いは控える（独自判定）');
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
@@ -150,10 +153,11 @@ test.describe('M1c at 375px: SPY under its 200-day line', () => {
     // Today on the same page (the same served data).
     await page.goto('/#/brief');
     await todayReady(page);
-    const tile = page.getByTestId('brief-summary').locator('li').first();
-    await expect(tile.locator('b')).toHaveText('長期トレンド警戒');
-    await expect(tile.locator('.brief-tile-suffix')).toHaveCount(0);
-    for (const height of await tileHeights(page)) expect(Math.abs(height - 97)).toBeLessThanOrEqual(2);
+    // S1-P4: the gate card answers 買いは控える; its fold's 判定 row names the label without its 独自判定 mark (the row's kind
+    // says it), and no sign line is drawn for a Nasdaq without a rally attempt.
+    await expect(gate(page).locator('.brief-gate-headline')).toHaveText('買いは控える（独自判定）');
+    await expect(gate(page).locator('.brief-gate-fold > .brief-gate-group').first().locator('.brief-gate-fact')).toHaveText('判定長期トレンド警戒・買いは控える独自判定');
+    await expect(gateSign(page)).toHaveCount(0);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
@@ -178,10 +182,12 @@ for (const width of ['320', '375']) test.describe(`M1e at ${width}px: the clock 
     await expect(verdict.locator('strong')).toHaveText('上昇トレンド（独自判定）');
     await expect(verdict.locator('.brief-exposure b')).toHaveText('最大 50%');
     expect(await lead(page)).toBeLessThanOrEqual(756);
-    // Today's tile and its gate are not this item's: the open guide still reads 目安≤50% there (OD-M9).
+    // S1-P4 (plan D18): Today's gate card says the same waiting form, the figure dated 10/2, never 検討.
     await page.goto('/#/brief');
     await todayReady(page);
-    await expect(page.getByTestId('brief-summary').locator('li').first()).toContainText('目安≤50%');
+    await expect(gate(page).locator('.brief-gate-headline')).toHaveText(`${waiting.short}（独自判定）`);
+    await expect(gate(page).locator('.brief-gate-figure')).toHaveText('新規買いの目安（10/2時点・独自設定）最大50%');
+    await expect(gate(page)).not.toContainText(/検討できる|検討可/);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });
@@ -384,36 +390,22 @@ test.describe('M2 at 320px: the ◆ of an FTD 120 sessions old', () => {
 const gspcRally = d => ({ trends: value => { const dates = value.indices[0].points.map(point => point.date), last = dates.length - 1;
   Object.assign(value.indices[0].followThrough, { state: 'rally_attempt', low: { date: dates[last - d], low: 4980 }, attempt: { startDate: dates[last - d + 1], day: d }, ftd: null, events: [] }); } });
 const SERVED_MANIFEST = { markets: { US: { as_of_date: date } } };
-const TODAY_LINE = 1400;
+// The owner's Today line (plan S1-P4: was 1400 here, the governing pin's 1388 from S1).
+const TODAY_LINE = 1388;
 
 for (const [width, device] of Object.entries(PHONES)) test.describe(`M4 at ${width}px: 反発n日目 on Today's tile while the guide is 0%`, () => {
   test.use(device);
-  for (const [name, extra] of [['the Nasdaq on day 3', {}], ['both indices, the larger day', gspcRally(5)]]) test(`${name}: the suffix and its note, the FTD確認済み tile's height, unclipped, Today within its line`, async ({ page, context }) => {
-    // The same label with the existing suffix form (an FTD-upgraded uptrend says 「FTD確認済み」 on its second line).
-    const reference = await context.newPage();
-    await openBrief(reference, '#/brief', { mutate: compose(ftdUpgraded, belowFiftyIndex) });
-    await todayReady(reference);
-    await expect(reference.getByTestId('brief-summary').locator('.brief-tile-suffix')).toHaveText(MARKET_TILE_SUFFIX.ftd);
-    const suffixed = await tileHeights(reference);
-    await reference.close();
+  for (const [name, extra] of [['the Nasdaq on day 3', {}], ['both indices, the larger day', gspcRally(5)]]) test(`${name}: the sign line and its note, one line, unclipped, Today within its line`, async ({ page }) => {
     const seen = {};
     const { errors } = await openBrief(page, '#/brief', { mutate: compose(methods, below50Rows, belowFiftyIndex, extra, capture(seen)) });
     await todayReady(page);
     const input = { market: CLOSED, trends: { data: seen.value }, manifest: SERVED_MANIFEST }, days = seen.value.indices.map(index => index.followThrough.attempt?.day ?? 0);
     expect(marketTileSuffix(input)).toBe(MARKET_TILE_SUFFIX.rally(Math.max(...days)));
-    const tile = page.getByTestId('brief-summary').locator('li').first();
-    await expect(tile.locator('b')).toHaveText('50日線割れ（弱含み）');
-    await expect(tile.locator('em')).toContainText('買いは控える');
-    await expect(tile.locator('.brief-tile-suffix')).toHaveText(marketTileSuffix(input));
-    await expect(tile.locator('a')).toHaveAttribute('title', marketTileNote(input));
-    // A 0% label takes two lines on a phone, so its suffix line makes the tile as tall as 「FTD確認済み」 does at 375 and 390
-    // (measured: 115.8px against 97.8px without a suffix) and shorter at 320, where 「FTD確認済み」 wraps; the row stays level.
-    const heights = await tileHeights(page);
-    for (const [i, height] of heights.entries()) {
-      expect(height).toBeLessThanOrEqual(suffixed[i] + 1);
-      if (width !== '320') expect(Math.abs(height - suffixed[i])).toBeLessThanOrEqual(1);
-    }
-    expect(Math.max(...heights) - Math.min(...heights)).toBeLessThanOrEqual(1);
+    // S1-P4: the gate card's sign line says the word on its own line, under the conditions; its sentence is in the fold.
+    await expect(gate(page).locator('.brief-gate-headline')).toHaveText('買いは控える（独自判定）');
+    await expect(gateSign(page)).toHaveText(marketTileSuffix(input));
+    await expect(gate(page).locator('.brief-tile-note')).toHaveText(`${marketTileSuffix(input)}：${marketTileNote(input)}`);
+    expect(await gateSign(page).evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size; })).toBe(1);
     expect(await contentHeight(page)).toBeLessThanOrEqual(TODAY_LINE);
     expect(await clippedTileText(page)).toEqual([]);
     expect(await horizontalOverflow(page)).toBe(0);
@@ -424,13 +416,13 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M4 at ${wid
     const behind = await context.newPage();
     await openBrief(behind, '#/brief', { historyEnd: sessions.at(-2), mutate: compose(methods, below50Rows, belowFiftyIndex) });
     await todayReady(behind);
-    await expect(behind.getByTestId('brief-summary').locator('.brief-tile-suffix')).toHaveCount(0);
-    for (const height of await tileHeights(behind)) if (width === '375') expect(Math.abs(height - 97)).toBeLessThanOrEqual(2);
+    // One session behind: the sign is withheld (its own words), never 反発n日目.
+    await expect(gateSign(behind)).toHaveText('サイン：未確認（10/2分は再集計待ち）');
     await behind.close();
     // The base fixture's open guide keeps 「NAS調整中」 for the same Nasdaq rally attempt.
     const { errors } = await openBrief(page, '#/brief', { mutate: methods });
     await todayReady(page);
-    await expect(page.getByTestId('brief-summary').locator('.brief-tile-suffix')).toHaveText(MARKET_TILE_SUFFIX.nasdaq);
+    await expect(gateSign(page)).toHaveText(MARKET_TILE_SUFFIX.nasdaq);
     expect(errors).toEqual([]);
   });
 });

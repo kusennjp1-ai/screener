@@ -346,9 +346,10 @@ test.describe('the 375×812 budgets with a broken setup', () => {
     await expect(page.getByRole('region', { name: 'ウォッチの状況' }).locator('.brief-sellchip')).toHaveCount(1);
     await settled(page);
     expect(await contentHeight(page)).toBeLessThanOrEqual(budget);
-    // The tiles keep their height: 97 with every stock checked, one note line more with an unlisted symbol.
+    // S1-P4: the two answers are one row of two links: 52 with every stock checked, one note line more with an unlisted
+    // symbol (69; the row was three tiles of 97 / 115).
     const tiles = await page.getByTestId('brief-summary').locator('li').evaluateAll(items => items.map(li => Math.round(li.getBoundingClientRect().height)));
-    for (const height of tiles) expect(Math.abs(height - (watch.length === 4 ? 97 : 115))).toBeLessThanOrEqual(2);
+    for (const height of tiles) expect(Math.abs(height - (watch.length === 4 ? 52 : 69))).toBeLessThanOrEqual(2);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

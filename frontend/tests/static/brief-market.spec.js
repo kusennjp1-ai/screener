@@ -26,14 +26,18 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   test('today\'s 地合い card leads to the market tab and its metric switch', async ({ page }) => {
     const { errors, external } = await openBrief(page, '#/brief');
     const today = page.getByRole('region', { name: '地合い' });
-    await expect(today.getByTestId('brief-regime')).toContainText('上昇トレンド（独自判定）');
-    // The phone's Today keeps the S&P chart for the market tab; its first screen shows the tiles and a candidate.
+    // S1-P4: the phone's Today is the gate card (its answer with 独自判定); the verdict block and the S&P chart are drawn only
+    // from 1024px (the market tab keeps both on a phone).
     if (phone) {
-      await expect(today.locator('.brief-index')).toHaveAttribute('aria-label', /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/);
-      await expect(today.locator('.brief-index')).toBeHidden();
-      await expect(today.getByTestId('brief-regime')).toBeHidden();
-    } else await expect(today.getByRole('img', { name: /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/ })).toBeVisible();
-    await expect(today.locator('.brief-fact small')).toHaveText(['分配日（25日）', 'TT達成数', '200日線より上', '52週の新高値・新安値']);
+      await expect(today.locator('.brief-gate-headline')).toHaveText('新規の買いを検討できる（独自判定）');
+      await expect(today.locator('.brief-index')).toHaveCount(0);
+      await expect(today.getByTestId('brief-regime')).toHaveCount(0);
+    } else {
+      await expect(today.getByTestId('brief-regime')).toContainText('上昇トレンド（独自判定）');
+      await expect(today.getByRole('img', { name: /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/ })).toBeVisible();
+    }
+    // The four facts, in the gate's fold in A's groups (指数側, 広がり, 銘柄側).
+    await expect(today.locator('.brief-fact small')).toHaveText(['分配日（25日）', '52週の新高値・新安値', '200日線より上', 'TT達成数']);
     for (const fact of await today.locator('.brief-fact').all()) await expect(fact).not.toContainText(/未取得|未確認/);
     await expect(today.locator('.brief-asof')).toHaveCount(0);
     await today.getByRole('link', { name: /市場の詳細/ }).click();
@@ -155,7 +159,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     // the note, which dates every source to that one session, so no tile repeats it.
     await expect(today.locator('.brief-fact').filter({ hasText: '分配日（25日）' })).toContainText(/S&P\d+日NAS\d+日/);
     await expect(today.locator('.brief-fact-asof')).toHaveCount(0);
-    if (phone) await expect(today.locator('.brief-index')).toHaveAttribute('aria-label', new RegExp(`^S&P 500 の終値と50日線（.*〜${STALE}）`));
+    // S1-P4: the phone's Today draws no S&P chart (the market tab does); from 1024px it is dated to the older session.
+    if (phone) await expect(today.locator('.brief-index')).toHaveCount(0);
     else await expect(today.getByRole('img', { name: new RegExp(`^S&P 500 の終値と50日線（.*〜${STALE}）`) })).toBeVisible();
 
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
@@ -192,8 +197,9 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const { errors } = await openBrief(page, '#/brief', { schema: 'old' });
     const today = page.getByRole('region', { name: '地合い' });
     // Today keeps four tiles, each named by what it shows.
-    await expect(today.locator('.brief-fact small')).toHaveText(['分配日（25日）', '先導株数（価格条件）', '50日線より上', '52週の新高値・新安値']);
-    await expect(today.locator('.brief-fact').nth(1)).toContainText('TT達成数は旧形式で未収録');
+    // S1-P4: in the gate's fold, in A's groups (指数側, 広がり, 銘柄側).
+    await expect(today.locator('.brief-fact small')).toHaveText(['分配日（25日）', '52週の新高値・新安値', '50日線より上', '先導株数（価格条件）']);
+    await expect(today.locator('.brief-fact').nth(3)).toContainText('TT達成数は旧形式で未収録');
     for (const fact of await today.locator('.brief-fact').all()) await expect(fact).not.toContainText(/未取得|未確認/);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
     const market = page.getByRole('region', { name: '地合い' });
