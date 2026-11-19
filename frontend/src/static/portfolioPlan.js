@@ -42,6 +42,20 @@ export function modelMarket(rows) {
   return { label: '新規購入を抑制（独自判定）', cap: MARKET_CAPS.otherwise, ...known };
 }
 
+/**
+ * The benchmark's two lines as modelMarket reads them: `{ above50, above200 }`, each true / false, or both null when no row
+ * passes modelMarket's own filters (US rows in USD, with a regime and both lines as booleans). A line is false when any of those
+ * rows has it false, as modelMarket's below50 / below200. A sibling of modelMarket, whose return value stays as it is: the
+ * market gate's conditions (marketGate.js resumeConditions) read the lines from here and the regime from modelMarket, never
+ * from the label. Nothing here judges the market: an unknown market's conditions stay unknown there whatever these say.
+ */
+export function marketLines(rows) {
+  const us = rows.filter(r => r.market === 'US' && r.currency === 'USD');
+  const observed = us.filter(r => r.market_regime && typeof r.market_above_50dma === 'boolean' && typeof r.market_above_200dma === 'boolean');
+  if (!observed.length) return { above50: null, above200: null };
+  return { above50: !observed.some(r => r.market_above_50dma === false), above200: !observed.some(r => r.market_above_200dma === false) };
+}
+
 export function preparePortfolioRows(input, now = Date.now()) {
   const rows = input.map(row => projectFinancialRow(row, { now }));
   const counts = new Map();
