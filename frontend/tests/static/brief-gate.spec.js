@@ -55,7 +55,7 @@ const read = page => region(page).evaluate(node => {
   const copy = node.cloneNode(true);
   copy.querySelectorAll('details:not([open]) > .brief-expander-body').forEach(body => body.remove());
   const pick = selector => node.querySelector(selector)?.textContent ?? null;
-  return { first: copy.textContent, all: node.textContent, headline: pick('.brief-gate-headline'), figure: pick('.brief-gate-figure'), basis: pick('.brief-gate-basis'),
+  return { first: copy.textContent, all: node.textContent, headline: pick('.brief-gate-headline'), figure: pick('.brief-gate-figure'), basis: pick('.brief-gate-basis'), basisFull: pick('.brief-gate-basis-full'),
     conds: [...node.querySelectorAll('.brief-gate-conds li')].map(li => li.textContent), sign: pick('.brief-gate-sign'), kicker: pick('.brief-gate-kicker'),
     fold: pick('.brief-gate-more > .brief-expander-body') ?? pick('.brief-gate-fold'), summary: pick('.brief-gate-more > summary'),
     tt: [...node.querySelectorAll('small')].filter(small => /^TT達成/.test(small.textContent)).length };
@@ -92,7 +92,15 @@ for (const [width, device] of Object.entries(WIDTHS)) test.describe(`the gate ca
       // The figure always with its label (独自設定) and its definition, in the first fold.
       expect(r.figure).toBe(`新規買いの目安（独自設定）${s.cap}`);
       expect(r.first).toContain(`${s.cap}＝新規建ての上限（口座比・独自設定）`);
-      expect(r.basis).toMatch(/^根拠（10\/2スキャン時点）：.+（実測）$/);
+      // One 根拠 line: on a phone its short form (ledger step 3: no scan stamp, SPY) with the market tab's words in the fold;
+      // wider, the market tab's words in its place and no second copy.
+      if (!wide) {
+        expect(r.basis).toMatch(/^根拠：SPY(?!.*スキャン時点).+（実測）$/);
+        expect(r.basisFull).toMatch(/^根拠（10\/2スキャン時点）：S&P 500（SPY）.+（実測）$/);
+      } else {
+        expect(r.basis).toMatch(/^根拠（10\/2スキャン時点）：S&P 500（SPY）.+（実測）$/);
+        expect(r.basisFull).toBeNull();
+      }
     } else {
       // Unknown: no figure; no % in the first fold; never 0%, 未達 or a met condition (達成) anywhere on the card (the facts'
       // own values, 「61.0%」 or the label 「TT達成数」, are not the guide); the conditions read 未確認.
@@ -115,6 +123,7 @@ for (const [width, device] of Object.entries(WIDTHS)) test.describe(`the gate ca
     }
     if (s.conflict) {
       expect(r.basis).toContain('（指数の履歴と不一致・下に詳細）');
+      if (!wide) expect(r.basisFull).toContain('（指数の履歴と不一致・下に詳細）');
       expect(r.fold).toContain(s.conflict);
       if (!wide) expect(r.first).not.toContain(s.conflict);
     }
@@ -181,9 +190,11 @@ for (const [width, device] of Object.entries({ 320: WIDTHS[320], 390: WIDTHS[390
 
 for (const [width, device] of Object.entries({ 390: WIDTHS[390], 1440: WIDTHS[1440] })) test.describe(`the 根拠 words at ${width}px`, () => {
   test.use(device);
+  // On a phone the market tab's words are the fold's 根拠 line (the first fold has the short form); wider, the line itself.
   for (const id of ['m50', 'm25', 'below50', 'below200', 'restrain', 'ftdconflict']) test(`are the 市場 tab's in ${id}`, async ({ page }) => {
     await open(page, STATES[id].open);
-    const basis = (await read(page)).basis.replace(/（実測）$/, '').replace('（指数の履歴と不一致・下に詳細）', '');
+    const r = await read(page);
+    const basis = (width === '1440' ? r.basis : r.basisFull).replace(/（実測）$/, '').replace('（指数の履歴と不一致・下に詳細）', '');
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();
     const tab = page.getByRole('region', { name: '地合い', exact: true });
     await expect(tab.locator('.brief-verdict-why').first()).toBeAttached();
@@ -245,6 +256,9 @@ for (const [width, device] of Object.entries({ 320: WIDTHS[320], 375: WIDTHS[375
     await open(page, {}, { storage });
     const links = page.getByTestId('brief-summary').getByRole('link');
     await expect(links).toHaveCount(2);
+    // Each link's label and value stay apart, in its accessible name as on screen.
+    await expect(links.nth(0)).toHaveAccessibleName(/^注目候補 21銘柄 ゾーン5・ ?接近16 /);
+    await expect(links.nth(1)).toHaveAccessibleName(new RegExp(`^ウォッチの注意 ${{ 'no watch list': '未登録', 'four watched': '0件', 'five watched, one unlisted': '未確認' }[name]} `));
     for (const box of await links.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
     // Nothing of a value or a note is cut: no ellipsis, no clipped line.
     expect(await page.getByTestId('brief-summary').evaluate(node => [...node.querySelectorAll('small, b, em, .brief-frag')].filter(el => el.scrollWidth > el.clientWidth + 0.5 || getComputedStyle(el).textOverflow === 'ellipsis').length)).toBe(0);
@@ -274,5 +288,97 @@ for (const [width, device] of Object.entries({ 320: WIDTHS[320], 375: WIDTHS[375
     expect(await whole()).toEqual({ cut: 0, clipped: 0 });
     expect(Math.min(...Object.values(await tile.evaluate(node => { const box = node.getBoundingClientRect(); return { w: box.width, h: box.height }; })))).toBeGreaterThanOrEqual(44);
     expect(await horizontalOverflow(page)).toBe(0);
+  });
+});
+
+// ---- The waiting form's height (the conductor's round-1 order on S1-P4) ----------------------------------------------------
+// brief-watch.spec.js:24-32 (a heavy-volume break of the 50-day line nine sessions ago) and :389-390 (the governing recipe).
+function breakBelow50(bars) {
+  const n = bars.length, at = n - 9;
+  for (let i = 0; i < at; i++) for (const key of ['open', 'high', 'low', 'close']) bars[i][key] *= 1.15;
+  const top = Math.max(...bars.slice(at - 50, at - 1).map(bar => bar.close));
+  Object.assign(bars[at - 1], { open: top, close: top, high: top * 1.005, low: top * 0.995 });
+  bars[at].volume = Math.ceil(bars.slice(at - 50, at).reduce((sum, bar) => sum + bar.volume, 0) / 50 * 2.2);
+}
+const broken = (...symbols) => ({ charts: served => { for (const symbol of symbols) breakBelow50(served[`${symbol}.json`].bars); } });
+const under = rows => { for (const row of rows) if (['ZZKS', 'ZZAR'].includes(row.symbol)) row.se_pivot_price = Math.round(row.current_price * 1.0004 * 100) / 100; };
+const GOVERNING = { storage: { 'research-watch': ['ZZNV', 'ZZZF', 'QQQX', 'ZZSD', 'ZZKS'] }, historyEnd: sessions.at(-2), mutate: { rows: under, charts: served => { broken('ZZSD', 'ZZNV').charts(served); } } };
+const stackBottom = page => page.evaluate(() => Math.round(document.querySelector('#brief-main .brief-stack').getBoundingClientRect().bottom + scrollY));
+/**
+ * The fixture is frozen at 10/2, so a two-digit analysis date is put into the card's own text in place: every M/D the card
+ * prints (kicker, headline, figure label, sign, note) becomes `md`, and a late age becomes two digits (「・12営業日前」).
+ */
+const twoDigits = (page, md) => region(page).evaluate((node, value) => {
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  for (let t = walker.nextNode(); t; t = walker.nextNode()) t.nodeValue = t.nodeValue.replace(/\b\d{1,2}\/\d{1,2}\b/g, value);
+  for (const age of node.querySelectorAll('.brief-gate-kicker .is-warn')) age.textContent = age.textContent.replace(/・(\d)営業日前/, '・1$1営業日前');
+  return node.querySelector('.brief-gate-headline').textContent;
+}, md);
+async function readyToday(page, count = 5) {
+  await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(count);
+  await expect(page.getByTestId('brief-summary')).not.toContainText('確認中', { timeout: 30000 });
+  await settle(page);
+}
+
+for (const width of ['375', '390']) test.describe(`the waiting form at ${width}px`, () => {
+  test.use(WIDTHS[width]);
+  // brief-freshness.spec.js:85's state (ZZNV and ZZSD watched), with a two-digit date: pending and late equal the open form.
+  for (const md of ['12/28', '11/19']) test(`is exactly as tall as the open form with the date ${md}`, async ({ page }) => {
+    const storage = { 'research-watch': ['ZZNV', 'ZZSD'] };
+    const { errors } = await openBrief(page, '#/brief', { storage });
+    await readyToday(page);
+    await expect(region(page)).toHaveAttribute('data-gate', 'open');
+    expect(await twoDigits(page, md)).toBe('新規の買いを検討できる（独自判定）');
+    const opened = await stackBottom(page);
+    for (const [clock, at] of [['pending', PENDING], ['late', LATE]]) {
+      await page.clock.setFixedTime(new Date(at));
+      await page.reload();
+      await readyToday(page);
+      await expect(region(page)).toHaveAttribute('data-gate', 'waiting');
+      expect(await twoDigits(page, md)).toBe(`${md}時点の判定・更新待ち（独自判定）`);
+      if (clock === 'late') await expect(region(page).locator('.brief-gate-kicker .is-warn')).toHaveText('・12営業日前');
+      // The headline keeps one line (its kind beside it, in two short lines).
+      expect(await region(page).locator('.brief-gate-headline').evaluate(node => node.getBoundingClientRect().height)).toBeLessThanOrEqual(27.5);
+      expect(await stackBottom(page), `${clock} ${md}`).toBe(opened);
+      expect(await horizontalOverflow(page)).toBe(0);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('the governing state in the waiting form at 375px', () => {
+  test.use(WIDTHS[375]);
+  // brief-watch.spec.js:395's recipe (five watched, one unlisted; ZZSD and ZZNV broken; rows just under their pivot; one session
+  // behind) at the pending and late clocks with a two-digit date: Today stays inside the owner's 1388px and equal to the open form.
+  test('stays inside 1388px with a two-digit date, as tall as the open form', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', GOVERNING);
+    await readyToday(page);
+    await twoDigits(page, '12/28');
+    const opened = await stackBottom(page);
+    expect(opened).toBeLessThanOrEqual(1388);
+    for (const at of [PENDING, LATE]) {
+      await page.clock.setFixedTime(new Date(at));
+      await page.reload();
+      await readyToday(page);
+      await expect(region(page)).toHaveAttribute('data-gate', 'waiting');
+      expect(await twoDigits(page, '12/28')).toBe('12/28時点の判定・更新待ち（独自判定）');
+      expect(await stackBottom(page)).toBeLessThanOrEqual(1388);
+      expect(await stackBottom(page)).toBe(opened);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('the first 注目候補 row on a 0% day at 375x812', () => {
+  test.use(WIDTHS[375]);
+  // The two tallest 0% first folds of the yardstick (50日線割れ with the index history disagreeing: the 根拠 line with its
+  // conflict note and two unmet conditions; the FTD form) keep the first focus row above the dock with the default storage.
+  for (const id of ['below50', 'ftd']) test(id, async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', STATES[id].open);
+    await readyToday(page);
+    const row = await page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate').first().evaluate(node => node.getBoundingClientRect().bottom);
+    const dock = await page.locator('.brief-dock').evaluate(node => node.getBoundingClientRect().top);
+    expect(row).toBeLessThanOrEqual(dock);
+    expect(errors).toEqual([]);
   });
 });
