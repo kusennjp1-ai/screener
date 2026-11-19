@@ -327,8 +327,9 @@ describe('App static mode', () => {
     expect(within(tabs).getByRole('link', { name: '市場' })).toHaveAttribute('href', '#/brief/market');
     expect(screen.getByRole('region', { name: '地合い' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /市場の詳細/ })).toHaveAttribute('href', '#/brief/market');
-    // Each of Today's three answers is a link to where it is explained.
-    expect(within(screen.getByRole('list', { name: '今日の要点' })).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(['#/brief/market', '#/brief/list', '#/brief/watch']);
+    // Each of Today's answers is a link to where it is explained. S1-P4: two answers under the gate card (the market's link
+    // is the gate card's 市場の詳細 above).
+    expect(within(screen.getByRole('list', { name: '今日の要点' })).getAllByRole('link').map(link => link.getAttribute('href'))).toEqual(['#/brief/list', '#/brief/watch']);
     expect(screen.getByRole('button', { name: /モードに切り替え/ })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: '従来の画面' })).not.toBeInTheDocument();
     expect(screen.queryByRole('checkbox', { name: /アプリを開いたらこの画面を表示/ })).not.toBeInTheDocument();
