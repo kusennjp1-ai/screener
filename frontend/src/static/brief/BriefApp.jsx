@@ -14,9 +14,12 @@ import './brief-fundamentals.css';
 import './brief-decision.css';
 import './brief-plan.css';
 import './brief-watch.css';
+import './brief-gate.css';
 import { useBriefData, useWatchlist, useWatchSellChecks } from './useBriefData';
 import { filterLabel, focusCandidates, memoCandidateView } from './briefCandidate';
 import { freshness, freshnessLine } from './briefFreshness';
+import { trendsStatus } from './briefEnvironment';
+import { marketUpdateState } from '../marketUpdateState';
 import TodayView from './TodayView';
 import ListView, { listShown, listSource, watchOrder } from './ListView';
 import StockScreen from './StockScreen';
@@ -99,6 +102,10 @@ export default function BriefApp() {
   const { watch, toggle, storageError } = useWatchlist();
   const age = useFreshness(brief.trends, brief.date);
   const ageLine = useMemo(() => freshnessLine(age, brief.date), [age, brief.date]);
+  // The last session the exchange calendar says has closed (marketUpdateState, as the 市場 tab reads it), re-read whenever the
+  // age is (at each close): Today's gate says a waiting verdict from it (verdictWaiting, plan D18).
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- age re-reads the clock at each close
+  const target = useMemo(() => trendsStatus(brief.trends).state === 'ready' ? marketUpdateState(brief.trends.data).target : null, [brief.trends?.data, age]);
   const location = useLocation();
   const wide = useMediaQuery('(min-width:1024px)');
   const go = useTransitionNavigate();
@@ -254,7 +261,7 @@ export default function BriefApp() {
     const idle = window.requestIdleCallback ? window.requestIdleCallback(prefetch, { timeout: 4000 }) : setTimeout(prefetch, 1500);
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
   }, []);
-  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} wide={wide} nav={todayNav} onUnwatch={toggleWatch} ageNote={ageLine?.note || null} />
+  const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} wide={wide} nav={todayNav} onUnwatch={toggleWatch} ageNote={ageLine?.note || null} ageLine={ageLine} target={target} />
     : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} limits={listLimits} setLimits={setListLimits} origin={kept} wide={wide} onUnwatch={toggleWatch} />;
   const watching = symbol && watch.includes(symbol);
   const at = selected ? sequence.indexOf(selected) : -1;
