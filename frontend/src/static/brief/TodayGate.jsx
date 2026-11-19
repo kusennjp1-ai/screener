@@ -28,7 +28,7 @@ function GateRow({ fact, blockAsOf = null }) {
 }
 
 /**
- * The fold of Today's gate card (closed on a phone, in place at 1024px and wider): the facts in A's three groups (Today's four
+ * The fold of Today's gate card (closed on a phone, in place at 1024px and wider): the verdict with the regime's label, the facts in A's three groups (Today's four
  * facts with their own dates, and the gate's rows they do not show, each with its kind), then the conditions that are met, the
  * sign's full sentence, the reasons a count is missing, the 参考 notes, the conflict sentences, the full basis and 未検証.
  */
@@ -38,6 +38,11 @@ function GateFold({ gate, view, facts, renderFact, tileLine, cause }) {
   const notes = view.warnings.filter(w => w.reference);
   const conditions = gate.conditions;
   return <div className="brief-gate-fold">
+    {/* 判定: the regime's label with the answer (独自判定); the figure and its definition are the first fold's. */}
+    {byKey.verdict && <div className="brief-gate-group" role="group" aria-label={GATE_GROUPS.verdict}>
+      <h3>{GATE_GROUPS.verdict}</h3>
+      <div className="brief-facts"><GateRow fact={byKey.verdict} blockAsOf={view.dating.blockAsOf} /></div>
+    </div>}
     {Object.entries({ index: GATE_GROUPS.index, breadth: GATE_GROUPS.breadth, stock: GATE_GROUPS.stock }).map(([group, title]) => {
       const own = today.filter(fact => TODAY_FACT_GROUP[fact.key] === group);
       // The 50-day share is a row of its own only when Today's facts do not already show it (an older schema's stand-in).
