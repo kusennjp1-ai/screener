@@ -37,7 +37,7 @@
 .brief-gate-fact b { font-size: 14px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
 .brief-gate-fact em { font-style: normal; font-size: 12px; line-height: 1.45; color: var(--text-2); overflow-wrap: anywhere; }
 .brief-gate .brief-fact .brief-gate-kind, .brief-gate-fact .brief-gate-kind { line-height: 1.45; }
-.brief-gate-basis-full { margin: 0; font-size: 13px; line-height: 1.6; color: var(--text-2); }
+.brief-gate-basis-full { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-2); }
 .brief-gate-more > summary { padding-inline: 0; }
 .brief-gate-more > .brief-expander-body { padding-inline: 0; }
 @media (min-width: 1024px) {
