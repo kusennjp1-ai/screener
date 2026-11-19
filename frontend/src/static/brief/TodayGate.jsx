@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Expander } from './briefPrimitives';
-import { GATE_GROUPS, NO_KIND } from './marketGate';
+import { capText, MARKET_CAPS } from '../portfolioPlan';
+import { BAND_SUBJECT, GATE_GROUPS, NO_KIND } from './marketGate';
 import { num } from './marketTabModel';
 
 /** The kind of each of Today's four facts (marketCardView's `today`), as the gate's fact table names it (FACT_KINDS). */
@@ -9,8 +10,11 @@ const TODAY_FACT_KINDS = Object.freeze({ dist: '実測・参考', tt: '独自集
 const TODAY_FACT_GROUP = Object.freeze({ dist: 'index', extremes: 'index', a200: 'breadth', a50: 'breadth', tt: 'stock', leaderCount: 'stock' });
 /** The gate's own rows the four facts do not already show, by group (gateFacts' keys). */
 const GATE_ROWS = Object.freeze({ index: ['spyLines', 'spyDistribution'], breadth: ['above50'], stock: ['breakout', 'health'] });
-/** What the levels of the guide are: the app's own, never tested (the market tab's exposure rule says the same in full). */
-export const GUIDE_UNTESTED = '目安の水準（最大50%・最大25%・0%）は、検証していない独自設定です（未検証）。';
+/**
+ * What the levels of the guide are: the app's own, never tested (the market tab's exposure rule says the same in full). The
+ * levels are printed from MARKET_CAPS through capText, never typed beside them.
+ */
+export const GUIDE_UNTESTED = `目安の水準（${[MARKET_CAPS.confirmed_uptrend, MARKET_CAPS.uptrend_under_pressure, MARKET_CAPS.otherwise].map(capText).join('・')}）は、検証していない独自設定です（未検証）。`;
 
 /** The figure's label, breaking only before its （…）. */
 const FigureLabel = ({ text }) => { const at = text.indexOf('（'); return at > 0 ? <>{text.slice(0, at)}<span className="brief-frag">{text.slice(at)}</span></> : text; };
@@ -79,10 +83,12 @@ export function SplitAlert({ split }) {
 export default function TodayGate({ gate, view, facts, wide, renderFact, statusAlert, tileLine = null, cause = null }) {
   const { head, basis, conditions, sign } = gate;
   const firing = view.warnings.filter(w => !w.reference);
+  // The kicker's date after the subject (「・10/2（金）引け」), none without an analysis date.
+  const kickerDate = head.kicker.startsWith(`${BAND_SUBJECT}・`) ? head.kicker.slice(BAND_SUBJECT.length) : '';
   const fold = <GateFold gate={gate} view={view} facts={facts} renderFact={renderFact} tileLine={tileLine} cause={cause} />;
   return <>
     {!wide && <div className="brief-gate-kicker">
-      <h2 id="brief-market-title">地合い</h2><span className="numeric">{head.kicker.slice(head.kicker.indexOf('・'))}</span>{head.age && <span className="numeric is-warn">・{head.age}</span>}
+      <h2 id="brief-market-title">{BAND_SUBJECT}</h2>{kickerDate && <span className="numeric">{kickerDate}</span>}{head.age && <span className="numeric is-warn">・{head.age}</span>}
       <Link className="brief-more" to="/brief/market">市場の詳細 <span aria-hidden="true">›</span></Link>
     </div>}
     {!wide && <p className="brief-gate-headline">{head.headline ? <><b>{head.headline}</b>{head.headlineKind && <span className="brief-gate-kind">（{head.headlineKind}）</span>}</> : <b>読込中</b>}</p>}
