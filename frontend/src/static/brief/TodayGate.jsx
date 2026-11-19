@@ -94,8 +94,10 @@ export default function TodayGate({ gate, view, facts, wide, renderFact, statusA
   const kickerDate = head.kicker.startsWith(`${BAND_SUBJECT}・`) ? head.kicker.slice(BAND_SUBJECT.length) : '';
   const fold = <GateFold gate={gate} view={view} facts={facts} renderFact={renderFact} tileLine={tileLine} cause={cause} wide={wide} />;
   return <>
+    {/* The kicker's words in one block that wraps inside the row's 44px (a late age at 320px goes under the date), the link
+        beside it (brief-gate.css). */}
     {!wide && <div className="brief-gate-kicker">
-      <h2 id="brief-market-title">{BAND_SUBJECT}</h2>{kickerDate && <span className="numeric">{kickerDate}</span>}{head.age && <span className="numeric is-warn">・{head.age}</span>}
+      <div className="brief-gate-kicker-text"><h2 id="brief-market-title">{BAND_SUBJECT}</h2>{kickerDate && <span className="numeric">{kickerDate}</span>}{head.age && <span className="numeric is-warn">・{head.age}</span>}</div>
       <Link className="brief-more" to="/brief/market">市場の詳細 <span aria-hidden="true">›</span></Link>
     </div>}
     {!wide && <p className={`brief-gate-headline${gate.state === 'waiting' ? ' is-waiting' : ''}`}>{head.headline ? <><b>{head.headline}</b>{head.headlineKind && <HeadKind kind={head.headlineKind} />}</> : <b>読込中</b>}</p>}

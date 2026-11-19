@@ -3,10 +3,15 @@
    from the type scale (D19): kicker 12px, headline 20px, figure 26px with its 12px label, the rule lines 14px, kind tags 12px.
    This file loads after brief-watch.css, so its rules win a tie. */
 .brief-gate { gap: 8px; }
-.brief-gate-kicker { display: flex; align-items: center; flex-wrap: wrap; column-gap: 0; min-height: 44px; margin: -8px 0 -6px; font-size: 12px; line-height: 1.4; color: var(--text-2); }
+/* The kicker row costs about its 16.8px line of words: the row keeps the link's 44px box and lends 14px of it above (the card's
+   padding) and 13px below (the gap and the headline's half-leading). The words are one block beside the link that wraps inside
+   the 44px box (a late age at 320px goes under the date), so the row is as tall in the open, pending and late forms. The link
+   is raised above the headline it overlaps (no background: nothing shows), so its whole 44px box answers a tap. */
+.brief-gate-kicker { display: flex; align-items: center; flex-wrap: nowrap; column-gap: 0; min-height: 44px; margin: -14px 0 -13px; font-size: 12px; line-height: 1.4; color: var(--text-2); }
+.brief-gate-kicker-text { display: flex; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
 .brief-gate-kicker h2 { font-size: 12px; font-weight: 700; line-height: 1.4; color: var(--text-2); }
 .brief-gate-kicker .is-warn { color: var(--ext); font-weight: 700; }
-.brief-gate-kicker .brief-more { margin-left: auto; }
+.brief-gate-kicker .brief-more { position: relative; z-index: 1; flex: none; margin-left: auto; }
 .brief-gate-headline { min-width: 0; margin: 0; font-size: 20px; line-height: 1.35; color: var(--text); }
 .brief-gate-headline b { font-weight: 700; }
 .brief-gate-figure { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; margin: 0; color: var(--text); }
