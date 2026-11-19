@@ -87,13 +87,13 @@ test.describe('Today\'s watch card at 390px', () => {
     await expect(card.locator('.brief-morebutton')).toHaveCount(0);
     await expect(card.locator('.brief-sellchip')).toHaveCount(0);
     // Nothing is counted before the checks are in: never 0件.
-    await expect(tile).toContainText('ウォッチの注意確認中5銘柄を確認中・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 確認中5銘柄を確認中・保有未登録');
     release();
     // Once every check is in: the broken setup first, then the first rows; the quiet ones fold.
     await expect(card.locator('.brief-event').first()).toContainText(WEAKNESS);
     await expect(card.locator('.brief-event')).toHaveCount(3);
     await expect(card.getByRole('button', { name: 'さらに表示（残り 2件）' })).toBeVisible();
-    await expect(tile).toContainText('ウォッチの注意1件5銘柄を確認・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 1件5銘柄を確認・保有未登録');
     // A check that cannot be made (its chart fails) is 未確認: that row stays in view like a fired one, and
     // the tile no longer says every stock was checked.
     const failing = rowBySymbol.ZZZF.chart_path.split('/').pop();
@@ -113,7 +113,7 @@ test.describe('the watch tile', () => {
   test('one broken setup: 1件, the tile opens that stock, which steps through the watch list flagged first', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZSD'] }, mutate: broken('ZZSD') });
     const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
-    await expect(tile).toContainText('ウォッチの注意1件2銘柄を確認・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 1件2銘柄を確認・保有未登録');
     await expect(tile.locator('..')).toHaveClass(/tone-ext/);
     await expect(tile).toHaveAttribute('href', '#/brief/stock/ZZSD');
     await tile.click();
@@ -128,7 +128,7 @@ test.describe('the watch tile', () => {
   test('two broken setups: 2件, the tile opens the watch tab with them first; no fired check is 0件', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZKS', 'ZZNV', 'ZZSD'] }, mutate: broken('ZZSD', 'ZZNV') });
     const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
-    await expect(tile).toContainText('ウォッチの注意2件3銘柄を確認・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 2件3銘柄を確認・保有未登録');
     await expect(tile).toHaveAttribute('href', '#/brief/watch');
     await tile.click();
     await expect(page).toHaveURL(/#\/brief\/watch$/);
@@ -175,11 +175,11 @@ test.describe('round 3 R1: a pivot dated after a heavy crossing on a watched sto
     const tile = on => on.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
     // ZZSD alone, read first: its broken setup is the one count.
     const plain = await context.newPage(), alone = await openBrief(plain, '#/brief', { oracles: true, storage: { 'research-watch': ['ZZSD'] }, mutate: broken('ZZSD') });
-    await expect(tile(plain)).toContainText('ウォッチの注意1件1銘柄を確認・保有未登録');
+    await expect(tile(plain)).toContainText('ウォッチの注意 1件1銘柄を確認・保有未登録');
     expect(alone.errors).toEqual([]);
     await plain.close();
     const { errors } = await openBrief(page, '#/brief', { oracles: true, storage: { 'research-watch': ['ZZNR', 'ZZSD'] }, mutate: broken('ZZSD') });
-    await expect(tile(page)).toContainText('ウォッチの注意1件2銘柄を確認・保有未登録');
+    await expect(tile(page)).toContainText('ウォッチの注意 1件2銘柄を確認・保有未登録');
     await expect(tile(page)).toHaveAttribute('href', '#/brief/stock/ZZSD');
     const today = page.getByRole('region', { name: 'ウォッチの状況' });
     const nrRow = today.locator('[data-symbol="ZZNR"]');
