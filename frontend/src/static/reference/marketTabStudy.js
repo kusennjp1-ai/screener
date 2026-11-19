@@ -10,6 +10,10 @@ import { KEY_ABSENT } from '../brief/marketTabGroups';
 import { FTD_MIN_DECLINE } from '../followThroughDay.js';
 import { indexSummary } from './indexSummary.js';
 import { capText, MARKET_CAPS } from '../portfolioPlan';
+// The regime's block and names moved to brief/marketGateFacts.js (plan D12), which Today's gate reads too; re-exported here so
+// their importers are unchanged.
+import { publishedMarketContext, REGIME_NAMES } from '../brief/marketGateFacts';
+export { publishedMarketContext, REGIME_NAMES };
 import { biasTag, ddGradeState, ftdRecent, ftdState, highState, meanLowerStates, quadrantState, referencePeriod, referenceState, signalTags, stateTag, validReference, BIAS_SHARE, INDEX_SYMBOLS, SIGNAL_INDICATORS, TAGS } from './marketRegimeReference.js';
 
 const finite = Number.isFinite;
@@ -458,31 +462,12 @@ export function marketRegimeContext({ history, trends, reference, date = null })
 
 // ---- the judge side's cause, the TT population and the Nasdaq's source (market tab only) ------------------------------
 
-const REGIMES = new Set(['confirmed_uptrend', 'uptrend_under_pressure', 'correction', 'downtrend']);
-const count = value => Number.isSafeInteger(value) && value >= 0;
-/**
- * The judge side's market block, `manifest.markets.US.market_context` (plan §2.3, exported by the data track), read
- * raw like publishedFundamentalsCoverage: returned only when it is in shape and dated for the analysis date `date`,
- * else null (an older publication never has it). A null field stays null: a reader says 未収録, never 0.
- */
-export function publishedMarketContext(marketEntry, { date = null } = {}) {
-  const block = marketEntry?.market_context;
-  if (!block || typeof block !== 'object' || Array.isArray(block) || !isDay(date) || block.as_of_date !== date) return null;
-  if (marketEntry.as_of_date !== undefined && marketEntry.as_of_date !== date) return null;
-  if (block.method !== 'backend-market-regime-v1' || block.source !== 'scan-rows' || !REGIMES.has(block.regime)) return null;
-  if (!(block.distribution_days === null || count(block.distribution_days)) || !(block.ftd_days_since === null || count(block.ftd_days_since))) return null;
-  if (!(block.ftd_date === null || (isDay(block.ftd_date) && block.ftd_date <= date)) || !(block.exposure_pct === null || finite(block.exposure_pct))) return null;
-  return block;
-}
-
 /**
  * Whom TT達成数 counts (the 注記 and its opened row): the long history's names, judged on their daily closes by the
  * trend template's price conditions only (RS推計 included), not the candidate list's selection, which also asks a price
  * and a traded value.
  */
 export const TT_POPULATION = 'TT達成数は長期集計の値で、公開中の銘柄を日足の株価条件（RS推計70以上を含むトレンドテンプレート8条件）だけで判定した数です。候補一覧の選定銘柄（株価や売買代金の条件もあり）とは対象が異なります。';
-/** The backend regimes (market_context.regime) in the app's words. */
-export const REGIME_NAMES = Object.freeze({ confirmed_uptrend: '上昇トレンド', uptrend_under_pressure: '上昇に圧力', correction: '調整', downtrend: '下降トレンド' });
 
 /** What the backend regime reads besides the count (market_regime.py: the 50/200-day lines and the breadth guard). */
 const REGIME_READS = '分配日のほか50日線・200日線と参加度も見ます';
