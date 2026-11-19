@@ -219,11 +219,13 @@ describe('D18: verdictWaiting with marketUpdateState().target, as the 市場 tab
   it('gives the 市場 tab\'s answer on every clock: waiting only for an open guide after a newer close', () => {
     const asset = JSON.parse(marketTrends().text);
     const expected = { monMorning: '2026-10-02', fixture: '2026-10-02', pending: '2026-10-05', pastValid: null, later: null, tue: '2026-10-05', wed: '2026-10-06', twoLater: '2026-10-06', withinGrace: '2026-10-06' };
+    // The regime's label without its 独自判定 mark, as the verdict fact prints it (the two markets that can wait).
+    const bare = { m50: '上昇トレンド', m25: '上昇に圧力' };
     for (const [clock, iso] of Object.entries(CLOCK)) {
       const target = marketUpdateState(asset, Date.parse(iso)).target;
       expect(target).toBe(expected[clock]);
       for (const [id, mutate] of Object.entries(MARKETS)) {
-        const { gate, market } = open({ mutate, target });
+        const { gate, market, facts } = open({ mutate, target });
         const tab = marketCardView({ market, trends: { data: asset }, date, update: { target } }).verdict;
         const waits = id !== 'm0' && target !== null && target > date;
         expect(gate.band.state === 'waiting').toBe(waits);
@@ -233,7 +235,9 @@ describe('D18: verdictWaiting with marketUpdateState().target, as the 市場 tab
           expect(gate.band.chip).toBe(`地合い 10/2時点の判定・更新待ち（独自判定）・新規買いの目安 ${capText(market.cap)}（10/2時点・独自設定）`);
           expect(gate.head).toMatchObject({ headline: '10/2時点の判定・更新待ち', headlineWide: tab.lead, figure: capText(market.cap), figureLabel: '新規買いの目安（10/2時点・独自設定）' });
           expect(gate.band.kinds).toEqual({ long: '判定＝独自判定', short: '独自判定' });
-          expect(everyText([gate.band, gate.head, gate.facts])).not.toMatch(/検討可|検討できる/);
+          expect(everyText([gate.band, gate.head, facts])).not.toMatch(/検討可|検討できる/);
+          expect(facts.find(f => f.key === 'verdict').value).toBe(`${bare[id]}・10/2時点の判定・更新待ち`);
+          expect(facts.find(f => f.key === 'guide').asOf).toBe('10/2');
           expect(gate.summary).toBe('根拠と目安が動く条件');
         } else {
           expect(gate.band.line1).toBe(id === 'm0' ? '地合い 買いは控える・目安 0%' : `地合い 検討可・目安 ${capText(market.cap)}`);
