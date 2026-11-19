@@ -83,6 +83,8 @@ export function leaderHealthView({ rows, last, known, rule, older, absent }, det
   return { item: healthItem, cohort: health && !(cohortNow !== null && cohortNow < LEADER_MIN_COHORT) ? health.row.leaderCohort : null };
 }
 
+/** The 銘柄側 line's head (M6): the stock side, for reference, beside a guide it does not move. */
+export const STOCK_SIDE_HEAD = '銘柄側（参考・目安は変えません）';
 /** The TT term's name on the 銘柄側 line (the row's own label is TT達成数). */
 const STOCK_SIDE_TT = 'TT達成';
 
@@ -103,4 +105,27 @@ export function stockSideTerms({ rows, last, date, known, tt, breakout, health }
   // The long history's own session, when it is older than the analysis date (the rows' asOf of that session reads the same).
   const shared = last && date && last.date < date ? shortDate(last.date, date) : null;
   return { terms, shared };
+}
+
+// ---- what the gate reads of the 地合い card's shared values --------------------------------------------------------------
+
+/**
+ * The 地合い card's values the market gate's facts read (marketGate.js gateFacts), from marketCardView's shared values (its own
+ * names): pass it as marketCardView's `facts` option, as the market tab passes `tab`. The breadth rows (a200, a50), TT達成 (tt),
+ * the two indices' distribution counts (dist) and the new highs and lows are the card's own; the breakout row and the leaders'
+ * health are this module's readers, with the raw counts of the rows their rates read (`counts`, null where a count is not a whole
+ * number: a reader never prints 0 for it); the 銘柄側 terms are stockSideTerms'. Null fields mean the series is not ready.
+ */
+export function gateReads(shared) {
+  const { ready, status, rows, last, known, date, tt, a200, a50, dist, highsLows, extremesAsOf } = shared;
+  const { breakout } = breakoutView(shared);
+  const health = leaderHealthView(shared);
+  const whole = value => Number.isSafeInteger(value) && value >= 0 ? value : null;
+  const rate = known('breakoutHoldPercent'), healthRate = known('leaderHealthPercent');
+  const counts = {
+    breakout: rate ? { held: whole(rate.row.breakoutsHeld), judged: whole(rate.row.breakoutsJudged) } : null,
+    health: health.cohort !== null && healthRate ? { above: whole(healthRate.row.leaderCohortAbove50), cohort: whole(health.cohort) } : null,
+  };
+  return { ready, status, tt, a200, a50, dist, highsLows, extremesAsOf, breakout, health, counts,
+    stockSide: ready ? stockSideTerms({ rows, last, date, known, tt, breakout, health }) : null };
 }

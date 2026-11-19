@@ -7,7 +7,7 @@ import { indexSummary } from '../reference/indexSummary.js';
 import { distributionCount, shortDate, BREAKOUT_HOLD_NAME, ENV_RULES } from './briefModel';
 import { delta, BREAKOUT_HOLD_LABEL, BREAKOUT_WINDOW_TEXT, DISTRIBUTION_TEXT, groupDate, indexCloses, num, RULE_TEXT, STAGE_FIELDS, YEAR } from './marketTabModel';
 import { breakoutView } from './marketTabOnly';
-import { leaderHealthView, stockSideTerms } from './marketGateFacts';
+import { leaderHealthView, stockSideTerms, STOCK_SIDE_HEAD } from './marketGateFacts';
 
 const finite = Number.isFinite;
 
@@ -73,8 +73,8 @@ export function earlyBreakoutLine(row) {
   return finite(row.breakoutEarlyFailedPercent) ? `${EARLY_HEAD}：${num(n)}件中 ${num(row.breakoutEarlyFailedPercent)}% が −${BREAKOUT_FAILURE_PERCENT}%に到達` : `${EARLY_HEAD}：${num(n)}件（到達数を確認できません）`;
 }
 
-/** The 銘柄側 line's head (M6): the stock side, for reference, beside a guide it does not move. */
-export const STOCK_SIDE_HEAD = '銘柄側（参考・目安は変えません）';
+// The 銘柄側 line's head (M6) moved to marketGateFacts.js (plan D12), whose group of the gate it names too; re-exported here.
+export { STOCK_SIDE_HEAD };
 
 /**
  * The 銘柄側 line beside the verdict (M6; MT-01, MT-10): what the leaders do, in one line, from the rows the market tab already
