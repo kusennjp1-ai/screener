@@ -39,7 +39,7 @@ describe('marketLines: the two lines under modelMarket\'s own filters', () => {
         : [row({ market_regime: regime, market_above_50dma: above50, market_above_200dma: above200 })];
       const lines = marketLines(rows), market = modelMarket(rows);
       const observed = regime !== null && typeof above50 === 'boolean' && typeof above200 === 'boolean';
-      expect(lines, `${above50}/${above200}/${regime}`).toEqual(observed ? { above50, above200 } : { above50: null, above200: null });
+      expect(lines).toEqual(observed ? { above50, above200 } : { above50: null, above200: null });
       // modelMarket's below200 / below50 are the same reading of the same rows.
       if (market.state !== 'unknown') {
         expect(/^長期トレンド警戒/.test(market.label)).toBe(lines.above200 === false);
