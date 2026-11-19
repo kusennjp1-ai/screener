@@ -127,8 +127,8 @@ test.describe('a failed manifest on Today', () => {
   test('the summary, the focus card and the watch card say the candidates cannot be fetched, never 0', async ({ page }) => {
     await openBrief(page, '#/brief', { fail: 'manifest', storage: { 'research-watch': ['ZZNV'] } });
     const summary = page.getByTestId('brief-summary');
-    await expect(summary).toContainText('注目候補取得できません');
-    await expect(summary).toContainText('ウォッチの注意取得できません1銘柄を登録');
+    await expect(summary).toContainText('注目候補 取得できません');
+    await expect(summary).toContainText('ウォッチの注意 取得できません1銘柄を登録');
     await expect(summary).not.toContainText(/0銘柄|ゾーン0|接近0|未登録/);
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus).toContainText('候補データを取得できません。');

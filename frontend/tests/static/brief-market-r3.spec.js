@@ -154,9 +154,12 @@ test.describe('M1c at 375px: SPY under its 200-day line', () => {
     await page.goto('/#/brief');
     await todayReady(page);
     // S1-P4: the gate card answers 買いは控える; its fold's 判定 row names the label without its 独自判定 mark (the row's kind
-    // says it), and no sign line is drawn for a Nasdaq without a rally attempt.
+    // says it), 判定 printed once (the group has no heading of its own), and no sign line is drawn for a Nasdaq without a rally attempt.
     await expect(gate(page).locator('.brief-gate-headline')).toHaveText('買いは控える（独自判定）');
-    await expect(gate(page).locator('.brief-gate-fold > .brief-gate-group').first().locator('.brief-gate-fact')).toHaveText('判定長期トレンド警戒・買いは控える独自判定');
+    // (The fold is closed at 375px: the group is read in the DOM, as before.)
+    const judged = gate(page).locator('.brief-gate-fold > [role="group"][aria-label="判定"]');
+    await expect(judged).toHaveText('判定長期トレンド警戒・買いは控える独自判定');
+    await expect(judged.locator('h3')).toHaveCount(0);
     await expect(gateSign(page)).toHaveCount(0);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);

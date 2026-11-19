@@ -143,10 +143,10 @@ test.describe('the watch tile', () => {
   test('a quiet watch list reads 0件 once every check is in, beyond the 12-stock limit 未確認（上限12銘柄）', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZKS'] } });
     const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
-    await expect(tile).toContainText('ウォッチの注意0件2銘柄を確認・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 0件2銘柄を確認・保有未登録');
     await page.evaluate(symbols => localStorage.setItem('research-watch', JSON.stringify(symbols)), rows.slice(0, 13).map(row => row.symbol));
     await page.reload();
-    await expect(tile).toContainText('ウォッチの注意未確認12/13を確認・上限超1・保有未登録', { timeout: 30000 });
+    await expect(tile).toContainText('ウォッチの注意 未確認12/13を確認・上限超1・保有未登録', { timeout: 30000 });
     await page.goto('/#/brief/watch');
     const limited = page.getByRole('region', { name: 'ウォッチ中の銘柄' }).locator('.brief-chip', { hasText: '売りのサイン 未確認（上限12銘柄）' });
     await expect(limited).toHaveCount(1);
@@ -252,12 +252,12 @@ test.describe('a watched symbol the publication does not list', () => {
     const card = page.getByRole('region', { name: 'ウォッチの状況' });
     await expect(card.locator('.brief-rows > li').first()).toContainText('QQQX：この公開（10/2引け）の分析対象外');
     const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
-    await expect(tile).toContainText('ウォッチの注意未確認2/3を確認・対象外1・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 未確認2/3を確認・対象外1・保有未登録');
     await expect(tile).not.toContainText(/0件|未登録（/);
     await card.getByRole('button', { name: /^外す/ }).click();
     await expect(page.locator('.brief-toast')).toHaveText(/QQQX をウォッチから外しました/);
     await expect(card.locator('.brief-unlisted')).toHaveCount(0);
-    await expect(tile).toContainText('ウォッチの注意0件2銘柄を確認・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 0件2銘柄を確認・保有未登録');
     await expect(tabs.getByRole('link', { name: /ウォッチ/ }).locator('.brief-count')).toHaveText('2');
     expect(errors).toEqual([]);
   });
