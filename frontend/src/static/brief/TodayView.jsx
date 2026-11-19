@@ -186,11 +186,11 @@ function TodaySummary({ market, counts, attention, state, nav, open, date = null
   const asOf = date ? <span className="sr-only">・{barDay(date)}引け時点</span> : null;
   const breakouts = state === 'ready' && counts?.breakout > 0 ? counts.breakout : 0;
   return <ul className="brief-summary is-two is-links in" style={{ '--i': 0 }} aria-label="今日の要点" data-testid="brief-summary">
-    <li className={`${focus ? `tone-${focus}` : ''}${breakouts ? ' has-sub' : ''}`}><Link className="brief-tile" to="/brief/list" onClick={follow(() => nav.list('focus'))}><small>注目候補</small><b>{state === 'ready' ? `${counts.total}銘柄` : BUNDLE_SHORT[state]}</b><em><Parts text={state === 'ready' ? `ゾーン${counts.zone}・接近${counts.near}` : ''} /></em>{asOf}</Link>
+    <li className={`${focus ? `tone-${focus}` : ''}${breakouts ? ' has-sub' : ''}`}><Link className="brief-tile" to="/brief/list" onClick={follow(() => nav.list('focus'))}><small>注目候補</small>{' '}<b>{state === 'ready' ? `${counts.total}銘柄` : BUNDLE_SHORT[state]}</b><em><Parts text={state === 'ready' ? `ゾーン${counts.zone}・接近${counts.near}` : ''} /></em>{asOf}</Link>
       {/* The day's breakouts among them: a link of its own in a strip under the tile's text (the tile keeps the strip's
           height free, so neither covers the other), breaking only after 「うち」. */}
       {breakouts > 0 && <Link className="brief-tile-sub" to="/brief/list" data-testid="brief-breakout-link" onClick={follow(() => nav.list('breakout'))}><span>うち<span className="brief-nowrap">上抜け{breakouts}<span aria-hidden="true"> ›</span></span></span></Link>}</li>
     <li className={attention.flagged.length ? 'tone-ext' : ''}><Link className="brief-tile" to={one ? `/brief/stock/${encodeURIComponent(one)}` : '/brief/watch'} onClick={follow(event => (one ? open(one, event.currentTarget, 'watch') : nav.watch()))}>
-      <small>ウォッチの注意</small><b>{attention.value}</b><em><Parts text={attention.note} /></em>{asOf}</Link></li>
+      <small>ウォッチの注意</small>{' '}<b>{attention.value}</b><em><Parts text={attention.note} /></em>{asOf}</Link></li>
   </ul>;
 }

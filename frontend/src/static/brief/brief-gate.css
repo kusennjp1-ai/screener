@@ -48,6 +48,6 @@
    wraps under the value, never cut). */
 .brief-summary.is-links li { border-top-width: 3px; }
 .brief-summary.is-links .brief-tile { display: block; min-height: 44px; padding: 6px 10px; line-height: 1.4; }
-.brief-summary.is-links .brief-tile small { margin-right: 6px; font-size: 12px; }
+.brief-summary.is-links .brief-tile small { margin-right: 2px; font-size: 12px; }
 .brief-summary.is-links .brief-tile b { font-size: 14px; }
 .brief-summary.is-links .brief-tile em { display: block; font-size: 12px; line-height: 1.4; }
