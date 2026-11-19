@@ -9,7 +9,7 @@ import { JSDOM } from 'jsdom';
 import { MemoryRouter } from 'react-router-dom';
 import { date, marketTrends, rows as FIXTURE_ROWS, sessions } from '../../../tests/static/brief-fixture.js';
 import { marketLines, modelMarket } from '../portfolioPlan';
-import { marketCardView, verdictBasis } from './marketTabModel';
+import { marketCardView, verdictBasis, verdictBasisShort } from './marketTabModel';
 import { gateReads } from './marketGateFacts';
 import { gateFacts, marketGate } from './marketGate';
 import MarketCard from './MarketCard';
@@ -61,8 +61,11 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
     expect(textOf('.brief-gate-headline')).toMatch(/^新規の買いを検討できる（独自判定）$/);
     expect(textOf('.brief-gate-figure')).toMatch(/^新規買いの目安（独自設定）最大50%$/);
     expect(text).toContain('最大50%＝新規建ての上限（口座比・独自設定）');
-    // The 根拠 words are the market tab's (verdictBasis), with 実測.
-    expect(textOf('.brief-gate-basis')).toContain(`${verdictBasis(input.market, date).text}（実測）`);
+    // The first fold says the 根拠 in its short form (ledger step 3), with 実測; the fold says the market tab's own words.
+    expect(textOf('.brief-gate-basis')).toBe(`${verdictBasisShort(input.market, date)}（実測）`);
+    expect(textOf('.brief-gate-basis')).toBe('根拠：SPYが50日線・200日線の上で、局面判定が「上昇トレンド」（実測）');
+    expect(textOf('.brief-gate-more .brief-gate-basis-full')).toBe(`${verdictBasis(input.market, date).text}（実測）`);
+    expect(firstFold()).not.toContain('スキャン時点');
     expect(textOf('.brief-gate-sign')).toMatch(/^NAS調整中$/);
     // No condition is unmet on a 50% day: no condition line in the first fold; the met ones are in the fold.
     expect(region().querySelector('.brief-gate-conds')).toBeNull();
@@ -154,7 +157,8 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
 
   it('the FTD conflict: the 根拠 line points below, and the fold says the cause line (regimeCause) and nothing is merged', () => {
     show(state({ mutate: compose(ftdUpgraded, belowFiftyIndex, gspcRally(2)) }));
-    expect(textOf('.brief-gate-basis')).toBe('根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下（指数の履歴と不一致・下に詳細）（実測）');
+    expect(textOf('.brief-gate-basis')).toBe('根拠：SPYの終値が50日線の下（指数の履歴と不一致・下に詳細）（実測）');
+    expect(textOf('.brief-gate-more .brief-gate-basis-full')).toBe('根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下（指数の履歴と不一致・下に詳細）（実測）');
     // The ^GSPC record is a rally attempt: no FTD line; the cause line names both reads, in the fold only.
     expect(textOf('.brief-gate-sign')).toBeNull();
     const ftd = sessions.at(-8);
@@ -173,6 +177,9 @@ describe('Today\'s gate card at 1024px and wider (fold in place)', () => {
     expect(region().querySelector('details')).toBeNull();
     expect(region().querySelector('.brief-gate-headline')).toBeNull();
     expect(textOf('.brief-gate-figure')).toMatch(/^新規買いの目安（独自設定）最大50%$/);
+    // The 根拠 line says the market tab's own words here, once (no short form, no second copy in the fold).
+    expect(textOf('.brief-gate-basis')).toBe(`${verdictBasis(state().market, date).text}（実測）`);
+    expect(region().querySelector('.brief-gate-basis-full')).toBeNull();
     expect(region().textContent).toContain(GUIDE_UNTESTED);
     expect([...region().querySelectorAll('.brief-gate-group h3')].map(node => node.textContent)).toEqual(['判定', '根拠（指数側）', '広がり（参考）', '銘柄側（参考・目安は変えません）']);
     // The 判定 row names the regime's label (without its 独自判定 mark: the row's kind says it).

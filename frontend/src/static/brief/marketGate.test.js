@@ -75,7 +75,8 @@ describe('marketBand and the gate in every state of plan S1-P2\'s table', () => 
     expect(gate.sign).toMatchObject({ type: 'nasdaq', text: 'NAS調整中', title: SIGN_TITLE, kind: SIGN_KIND });
     expect(gate.sign.sentence).toMatch(/^判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は反発3日目/);
     expect(gate.summary).toBe('根拠と目安が動く条件');
-    expect(gate.basis).toEqual({ text: '根拠（10/2スキャン時点）：S&P 500（SPY）が50日線・200日線の上で、局面判定（分配日・FTDなど）が「上昇トレンド」', kind: '実測', conflict: false });
+    // The phone's first fold says the short form (ledger step 3); the fold and the wide line the market tab's own words.
+    expect(gate.basis).toEqual({ text: '根拠：SPYが50日線・200日線の上で、局面判定が「上昇トレンド」', full: '根拠（10/2スキャン時点）：S&P 500（SPY）が50日線・200日線の上で、局面判定（分配日・FTDなど）が「上昇トレンド」', kind: '実測', conflict: false });
   });
 
   it('上昇に圧力, 最大25%: the same form with 最大25%', () => {
@@ -195,12 +196,13 @@ describe('marketBand and the gate in every state of plan S1-P2\'s table', () => 
   it('the FTD conflict and the basis conflict: the verdict unchanged, the basis line notes the disagreement', () => {
     const ftd = open({ mutate: compose(ftdUpgraded, belowFiftyIndex, gspcRally(2)) });
     expect(ftd.gate.band.line1).toBe('地合い 買いは控える・目安 0%');
-    expect(ftd.gate.basis).toEqual({ text: '根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下（指数の履歴と不一致・下に詳細）', kind: '実測', conflict: true });
+    expect(ftd.gate.basis).toEqual({ text: '根拠：SPYの終値が50日線の下（指数の履歴と不一致・下に詳細）', full: '根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下（指数の履歴と不一致・下に詳細）', kind: '実測', conflict: true });
     // The ^GSPC record is not a confirmed FTD that day: no FTD sign is asserted.
     expect(ftd.gate.sign?.type).not.toBe('ftd');
     const basis = open({ mutate: ftdUpgraded });
     expect(basis.view.conflict).toMatch(/一致していません。$/);
-    expect(basis.gate.basis.text).toBe('根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下（指数の履歴と不一致・下に詳細）');
+    expect(basis.gate.basis.text).toBe('根拠：SPYの終値が50日線の下（指数の履歴と不一致・下に詳細）');
+    expect(basis.gate.basis.full).toBe('根拠（10/2スキャン時点）：S&P 500（SPY）の終値が50日線の下（指数の履歴と不一致・下に詳細）');
     expect(basis.gate.band.chip).toBe('地合い 50日線割れ（弱含み・独自判定）・新規買いの目安 0%（独自設定）');
   });
 });

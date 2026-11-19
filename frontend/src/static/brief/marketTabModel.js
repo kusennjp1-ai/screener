@@ -115,6 +115,17 @@ export function verdictBasis(market, date) {
 }
 
 /**
+ * verdictBasis's short form, for Today's first fold on a phone (plan S1-P4, ledger step 3): the same sentence, made from it,
+ * without its scan stamp, with SPY for 「S&P 500（SPY）」 and without the regime's inputs 「（分配日・FTDなど）」. The full form
+ * stays in the gate's fold, at 1024px and wider, and on the market tab. Null when verdictBasis gives none.
+ */
+export function verdictBasisShort(market, date) {
+  const basis = verdictBasis(market, date);
+  if (!basis) return null;
+  return `根拠：${basis.text.slice(basis.text.indexOf('：') + 1).replace('S&P 500（SPY）', 'SPY').replace('（分配日・FTDなど）', '')}`;
+}
+
+/**
  * When the verdict's scan-time benchmark position and the long history's ^GSPC close disagree about a
  * moving average, say that the two inputs differ. Nothing is reconciled and the verdict is unchanged.
  */

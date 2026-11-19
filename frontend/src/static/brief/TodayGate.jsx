@@ -42,7 +42,7 @@ function GateRow({ fact, blockAsOf = null }) {
  * facts with their own dates, and the gate's rows they do not show, each with its kind), then the conditions that are met, the
  * sign's full sentence, the reasons a count is missing, the 参考 notes, the conflict sentences, the full basis and 未検証.
  */
-function GateFold({ gate, view, facts, renderFact, tileLine, cause }) {
+function GateFold({ gate, view, facts, renderFact, tileLine, cause, wide }) {
   const byKey = Object.fromEntries(facts.map(fact => [fact.key, fact]));
   const today = view.today;
   const notes = view.warnings.filter(w => w.reference);
@@ -69,7 +69,8 @@ function GateFold({ gate, view, facts, renderFact, tileLine, cause }) {
     {view.split?.warning && view.split.reference && <SplitAlert split={view.split} />}
     {view.conflict && <p className="brief-note brief-gate-conflict">{view.conflict}</p>}
     {cause && <p className="brief-note brief-gate-conflict">{cause}</p>}
-    {gate.basis?.full && <p className="brief-gate-basis-full">{gate.basis.full}</p>}
+    {/* The 根拠 in the market tab's own words (the first fold has its short form on a phone; wider, the line itself is this). */}
+    {gate.basis && !wide && <p className="brief-gate-basis-full">{gate.basis.full}<span className="brief-gate-kind">（{gate.basis.kind}）</span></p>}
     {gate.head.definition && <p className="brief-note">{GUIDE_UNTESTED}</p>}
   </div>;
 }
@@ -91,7 +92,7 @@ export default function TodayGate({ gate, view, facts, wide, renderFact, statusA
   const firing = view.warnings.filter(w => !w.reference);
   // The kicker's date after the subject (「・10/2（金）引け」), none without an analysis date.
   const kickerDate = head.kicker.startsWith(`${BAND_SUBJECT}・`) ? head.kicker.slice(BAND_SUBJECT.length) : '';
-  const fold = <GateFold gate={gate} view={view} facts={facts} renderFact={renderFact} tileLine={tileLine} cause={cause} />;
+  const fold = <GateFold gate={gate} view={view} facts={facts} renderFact={renderFact} tileLine={tileLine} cause={cause} wide={wide} />;
   return <>
     {!wide && <div className="brief-gate-kicker">
       <h2 id="brief-market-title">{BAND_SUBJECT}</h2>{kickerDate && <span className="numeric">{kickerDate}</span>}{head.age && <span className="numeric is-warn">・{head.age}</span>}
@@ -102,7 +103,8 @@ export default function TodayGate({ gate, view, facts, wide, renderFact, statusA
         the waiting forms (「新規買いの目安（10/2時点・独自設定）」) keep one height. */}
     {head.figure && <p className="brief-gate-figure"><small><FigureLabel text={head.figureLabel} /></small><b className="numeric">{head.figure}</b></p>}
     {head.definition && <p className="brief-gate-line">{head.definition}</p>}
-    {basis && <p className="brief-gate-line brief-gate-basis">{basis.text}<span className="brief-gate-kind">（{basis.kind}）</span></p>}
+    {/* One 根拠 line: its short form on a phone (ledger step 3; the full words are in the fold), the full words wider. */}
+    {basis && <p className="brief-gate-line brief-gate-basis">{wide ? basis.full : basis.text}<span className="brief-gate-kind">（{basis.kind}）</span></p>}
     {conditions && conditions.first.length > 0 && <div className="brief-gate-conds">
       {!conditions.allUnknown && <small>{conditions.title}（独自設定）</small>}
       <ul>{conditions.first.map(text => <li key={text}>{text}</li>)}</ul>

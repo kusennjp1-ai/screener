@@ -8,7 +8,7 @@ import { capText, MARKET_CAPS } from '../portfolioPlan';
 import { ftdPrevious, gspcFtdDisagrees, marketTileNote, marketTileSuffix, marketTone, sameDayFollowThrough, trendsStatus, BREAKOUT_HOLD_NAME, FTD_PREVIOUS_NAME, MARKET_TILE_SUFFIX } from './briefEnvironment';
 import { isoDay, shortDate } from './briefShared';
 import { barDay } from './briefNav';
-import { distributionGrade, marketCardView, num, verdictBasis, verdictWaiting, DISTRIBUTION_TEXT } from './marketTabModel';
+import { distributionGrade, marketCardView, num, verdictBasis, verdictBasisShort, verdictWaiting, DISTRIBUTION_TEXT } from './marketTabModel';
 import { gateReads, publishedMarketContext, REGIME_NAMES, STOCK_SIDE_HEAD } from './marketGateFacts';
 
 /** What every band line and the gate name first. */
@@ -151,7 +151,9 @@ export function gateSign({ market = null, trends = null, manifest = null, date =
  *  - `band` (marketBand, with the sign word), `state`;
  *  - `head`: the kicker 「地合い・10/2（金）引け」 with the late age apart (tone 'warn'), the headline and its kind, the wide
  *    headline (the waiting lead at >= 1024), the figure with its label and its definition (none when unknown or loading);
- *  - `basis`: verdictBasis's words with 実測, and 「（指数の履歴と不一致・下に詳細）」 on a basis or FTD conflict;
+ *  - `basis`: verdictBasis's words with 実測, and 「（指数の履歴と不一致・下に詳細）」 on a basis or FTD conflict: `text` the short
+ *    form (verdictBasisShort; the phone's first fold, ledger step 3), `full` the market tab's own words (the fold, and the line
+ *    at 1024px and wider);
  *  - `conditions` (resumeConditions), `sign` (gateSign, with its title and its kind 独自判定), `summary` (the fold's summary), `todayNote` (the card's).
  */
 export function marketGate({ market = null, loading = false, lines = null, date = null, target, late = null, trends = null, manifest = null, view = null } = {}) {
@@ -162,12 +164,13 @@ export function marketGate({ market = null, loading = false, lines = null, date 
   const headline = { loading: null, unknown: '買いは見送り', waiting: waiting?.short, open: '新規の買いを検討できる', closed: '買いは控える' }[state];
   const basis = known ? verdictBasis(market, date) : null;
   const conflict = known && (Boolean(view?.conflict) || (market.ftdUpgraded === true && gspcFtdDisagrees(trends) === true));
+  const note = conflict ? '（指数の履歴と不一致・下に詳細）' : '';
   return {
     state, band,
     head: { kicker: `${BAND_SUBJECT}${isoDay(date) ? `・${barDay(date)}引け` : ''}`, age: band.age, ageTone: band.age ? 'warn' : null,
       headline, headlineKind: known ? '独自判定' : null, headlineWide: waiting ? waiting.lead : headline,
       figure: guide, figureLabel: band.guideLabel, definition: known ? `${guide}＝新規建ての上限（口座比・独自設定）` : null },
-    basis: basis ? { text: `${basis.text}${conflict ? '（指数の履歴と不一致・下に詳細）' : ''}`, kind: '実測', conflict } : null,
+    basis: basis ? { text: `${verdictBasisShort(market, date)}${note}`, full: `${basis.text}${note}`, kind: '実測', conflict } : null,
     conditions: state === 'loading' ? null : resumeConditions(market, lines),
     sign: sign ? { ...sign, title: SIGN_TITLE, kind: SIGN_KIND } : null,
     summary: { loading: null, unknown: '根拠（未確認の項目）', closed: '根拠と再開の条件', open: '根拠と目安が動く条件', waiting: '根拠と目安が動く条件' }[state],
