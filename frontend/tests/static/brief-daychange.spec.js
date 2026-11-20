@@ -47,12 +47,17 @@ const readChanges = page => page.evaluate(() => {
   }) };
 });
 
-/** The rules every day change keeps: its ink by direction and place, the arrow before the sign, the spoken text, contrast. */
+/**
+ * The rules every day change keeps: its ink by direction and place, its size by place (brief-decision.css; D19: no digit
+ * under 12 px), the arrow before the sign, the spoken text, contrast.
+ */
 function checkChanges({ inks, items }) {
   const muted = { row: inks.text3, bar: inks.text2, head: inks.text2 };
+  const sizes = { row: '12px', bar: '13px', head: '16px' };
   for (const item of items) {
     const label = `${item.where} ${item.symbol ?? ''} ${item.text}`;
     expect(item.where, label).not.toBe('other');
+    expect(item.size, label).toBe(sizes[item.where]);
     expect(Object.values(inks), label).toContain(item.color);
     if (/is-(up|down)/.test(item.cls)) {
       expect(item.color, label).toBe(inks.text);
