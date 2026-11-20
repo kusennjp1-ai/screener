@@ -40,7 +40,7 @@ const STATES = {
   below200: { open: { mutate: below200 }, cap: '0%', headline: '買いは控える' },
   restrain: { open: { mutate: restrain }, cap: '0%', headline: '買いは控える', conditions: ['局面判定が上昇トレンド／上昇に圧力：未達（いま 調整）'] },
   lag1: { open: { historyEnd: sessions.at(-2) }, cap: '最大50%', headline: '新規の買いを検討できる', note: '市場の集計は10/1時点（10/2分は再集計待ち）', sign: /^サイン：未確認（10\/2分は再集計待ち）$/ },
-  series404: { open: { fail: 'series' }, cap: '最大50%', headline: '新規の買いを検討できる', alert: '市場推移データを取得できません（配信ファイルが見つかりません）。数値は表示しません。' },
+  series404: { open: { fail: 'series' }, cap: '最大50%', headline: '新規の買いを検討できる', alert: '市場推移データを取得できません（配信ファイルが見つかりません）。市場推移の数値は表示しません。' },
   // The unknown headline names what is unknown (modelMarket's label; the S1 critics' round), never a bare 「買いは見送り」.
   manifest503: { open: { fail: 'manifest' }, cap: null, headline: '市場未確認・買いは見送り', unknown: true },
   partunk: { open: { mutate: partUnknown }, cap: null, headline: '市場未確認・買いは見送り', unknown: true },

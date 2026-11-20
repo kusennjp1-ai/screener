@@ -38,6 +38,8 @@
 .brief-gate-fold { display: grid; gap: 12px; min-width: 0; }
 .brief-gate-group { display: grid; gap: 6px; min-width: 0; }
 .brief-gate-group h3 { margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-2); }
+/* The 判定 row is the group's only row: the whole width, not half of it beside an empty cell. */
+.brief-gate-group.is-verdict .brief-gate-fact { grid-column: 1 / -1; }
 .brief-gate-fact { display: grid; align-content: start; min-width: 0; padding: 6px 10px; border-radius: 12px; background: var(--surface-2); }
 .brief-gate-fact small { font-size: 12px; line-height: 1.45; color: var(--text-2); overflow-wrap: anywhere; }
 .brief-gate-fact b { font-size: 14px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }

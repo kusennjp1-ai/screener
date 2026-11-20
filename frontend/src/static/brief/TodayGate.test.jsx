@@ -150,7 +150,8 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
     expect(firstFold()).toContain('再集計待ち');
     cleanup();
     show(state({ fail: 'series' }));
-    expect(region().querySelector('[role="alert"]').textContent).toContain('数値は表示しません。');
+    // Today names what the failure withholds: the market trends' numbers, not the verdict and guide above it (the S1 critics' round).
+    expect(region().querySelector('[role="alert"]').textContent).toBe('市場推移データを取得できません（配信ファイルが見つかりません）。市場推移の数値は表示しません。');
     expect(region().querySelector('details > .brief-expander-body [role="alert"]')).toBeNull();
   });
 
@@ -214,6 +215,8 @@ describe('Today\'s gate card: whole kind labels and named signs (the S1 critics\
     show(state());
     const rows = [...region().querySelectorAll('.brief-gate-more .brief-gate-group[aria-label="根拠（指数側）"] .brief-facts > div')].map(node => node.querySelector('small').textContent);
     expect(rows).toEqual(['SPY終値（スキャン時点）', '分配日（局面判定が数えるSPY）', '指数の分配日（25日）', '52週の新高値・新安値']);
+    // The 判定 row is its group's only row (brief-gate.css sets it over the whole width).
+    expect(region().querySelector('.brief-gate-more .brief-gate-group.is-verdict').getAttribute('aria-label')).toBe('判定');
     const dist = [...region().querySelectorAll('.brief-fact')].find(node => node.querySelector('small').textContent === '指数の分配日（25日）');
     expect(dist.querySelector('em').textContent).toBe('判定には使わない別集計・7日以上で注意');
   });

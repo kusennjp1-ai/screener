@@ -49,11 +49,15 @@ const WarnMark = () => <span className="brief-warnmark"><span aria-hidden="true"
 /** The verdict's mark by its tone (the market tab draws the same one). */
 export const VerdictMark = ({ verdict }) => <span className="brief-verdict-mark" aria-hidden="true">{verdict.pending ? '…' : verdict.tone === 'zone' ? '●' : verdict.tone === 'ext' ? '▲' : verdict.tone === 'neg' ? '⊘' : '?'}</span>;
 
-/** Why the market trends show nothing, or why the long history was withdrawn (`detail`: the market tab also names the FTD). */
-export function StatusAlert({ view, trends, detail = false }) {
+/**
+ * Why the market trends show nothing, or why the long history was withdrawn (`detail`: the market tab also names the FTD).
+ * `withheld` names what a failure leaves out: Today's card says 「市場推移の数値」, so its verdict and guide (read from the scan's
+ * rows, shown above the alert) never read as withheld numbers.
+ */
+export function StatusAlert({ view, trends, detail = false, withheld = '数値' }) {
   const { status } = view;
   return status.state === 'loading' ? <p className="brief-note" role="status">市場推移を読み込み中…</p>
-    : status.state === 'error' ? <p className="brief-alert" role="alert" data-failure={status.kind}>{trendsAlert(status)}数値は表示しません。</p>
+    : status.state === 'error' ? <p className="brief-alert" role="alert" data-failure={status.kind}>{trendsAlert(status)}{withheld}は表示しません。</p>
       : status.state === 'none' ? <p className="brief-note">市場推移データはこの公開に含まれていません。</p>
         : view.longError ? <p className="brief-alert" role="alert" data-check={trends.data.long_history_error_key || undefined}>{sentence(view.longError)}{detail ? '分配日・フォロースルーデー' : '分配日'}は指数データから表示しています。</p> : null;
 }
@@ -99,7 +103,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
       <div className={`brief-verdict tone-${verdict.tone}${waiting ? ' is-waiting' : ''}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}><VerdictMark verdict={verdict} /><div><strong>{verdict.label}</strong><p>{waiting ? verdict.lead : verdict.text}</p></div></div>
     </>}
     {/* At 1024px and wider the index chart follows the figure and its definition, so the answer and its guide read together. */}
-    <TodayGate gate={gate} view={view} facts={facts} wide={wide} renderFact={renderFact} tileLine={tileLine} cause={cause} statusAlert={<StatusAlert view={view} trends={trends} />}
+    <TodayGate gate={gate} view={view} facts={facts} wide={wide} renderFact={renderFact} tileLine={tileLine} cause={cause} statusAlert={<StatusAlert view={view} trends={trends} withheld="市場推移の数値" />}
       chart={wide ? <IndexChart closes={chart.sp500} distribution={chart.distribution} status={chartStatusOf(view, view.status)} /> : null} />
     {/* Today's candidate rows show RS推計: the card says the judgement and the RS are the app's own, never IBD's (outside the fold). */}
     <p className="brief-note">地合いの判定・各集計・RS推計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。</p>

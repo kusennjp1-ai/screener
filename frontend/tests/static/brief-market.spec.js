@@ -124,7 +124,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   test('a market series that cannot be fetched is named a delivery failure, without its path, and keeps the layout', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { fail: 'series' });
     const today = page.getByRole('region', { name: '地合い' });
-    await expect(today.getByRole('alert')).toHaveText('市場推移データを取得できません（配信ファイルが見つかりません）。数値は表示しません。');
+    // Today names what is withheld (the market trends' numbers; the S1 critics' round), the market tab keeps its words.
+    await expect(today.getByRole('alert')).toHaveText('市場推移データを取得できません（配信ファイルが見つかりません）。市場推移の数値は表示しません。');
     await expect(today.locator('.brief-fact').filter({ hasText: 'TT達成数' })).toContainText('取得できません配信エラー');
     expect(await horizontalOverflow(page)).toBe(0);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();

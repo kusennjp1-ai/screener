@@ -61,7 +61,7 @@ function GateFold({ gate, view, facts, renderFact, tileLine, cause, wide }) {
   return <div className="brief-gate-fold">
     {/* 判定: the regime's label with the answer (独自判定); the figure and its definition are the first fold's. The row's own
         label says 判定, so the group has no visible heading (its name stays for assistive tech). */}
-    {byKey.verdict && <div className="brief-gate-group" role="group" aria-label={GATE_GROUPS.verdict}>
+    {byKey.verdict && <div className="brief-gate-group is-verdict" role="group" aria-label={GATE_GROUPS.verdict}>
       <div className="brief-facts"><GateRow fact={byKey.verdict} blockAsOf={view.dating.blockAsOf} /></div>
     </div>}
     {Object.entries({ index: GATE_GROUPS.index, breadth: GATE_GROUPS.breadth, stock: GATE_GROUPS.stock }).map(([group, title]) => {
