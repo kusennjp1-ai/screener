@@ -102,7 +102,7 @@ export default function TodayGate({ gate, view, facts, wide, renderFact, statusA
   const { head, basis, conditions, sign } = gate;
   const firing = view.warnings.filter(w => !w.reference);
   // The kicker's date after the subject (「・10/2（金）引け」), none without an analysis date; its weekday apart (brief-gate.css
-  // leaves it out beside a late age below 360px).
+  // leaves it out beside a late age below 375px).
   const kickerDate = head.kicker.startsWith(`${BAND_SUBJECT}・`) ? head.kicker.slice(BAND_SUBJECT.length) : '';
   const dated = /^(・[^（]+)(（.）)(.*)$/.exec(kickerDate);
   const fold = <GateFold gate={gate} view={view} facts={facts} renderFact={renderFact} tileLine={tileLine} cause={cause} wide={wide} />;
