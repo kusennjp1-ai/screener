@@ -445,3 +445,29 @@ test.describe('desktop 1440px: round 2', () => {
     expect(errors).toEqual([]);
   });
 });
+
+// ---- S1-P5: the long-run card opens with the question it answers; the 健全度 definition names the analysis date -----------
+/** The subtitle replaces 「株価条件だけで過去にさかのぼった集計」 (18 characters) with a question no longer than it, so it keeps one line. */
+const QUESTION = '株価条件を満たす銘柄は増えているか';
+const LEADER_COHORT = '20営業日前にトレンドテンプレートを満たしていた銘柄のうち、分析基準日も観測でき、終値が50日線の上にある割合です。';
+const lineTops = locator => locator.evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].filter(rect => rect.width > 0).map(rect => Math.round(rect.top))).size; });
+for (const width of [320, 375, 390, 1024, 1440]) test.describe(`the long-run card at ${width}px`, () => {
+  const isPhone = width < 1024;
+  test.use(isPhone ? { viewport: { width, height: 812 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 } : { viewport: { width, height: 900 }, isMobile: false, hasTouch: false, deviceScaleFactor: 1 });
+
+  test('opens with its question on one line, and its 健全度 definition says 分析基準日, never 今日', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/market');
+    await section(page, '推移');
+    const card = page.getByRole('region', { name: '市場環境の推移' }).locator('.market-history-explorer');
+    const subtitle = card.locator(':scope > header > span');
+    await expect(card.locator(':scope > header > h3')).toHaveText('広がりと先導株');
+    await expect(subtitle).toHaveText(QUESTION);
+    expect(await lineTops(subtitle)).toBe(1);
+    await expect(card).not.toContainText('株価条件だけで過去にさかのぼった集計');
+    // The definition sits in the closed disclosure: present in its text, never with 今日.
+    await expect(card).toContainText(LEADER_COHORT);
+    await expect(card).not.toContainText('今日');
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});

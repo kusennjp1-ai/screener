@@ -37,4 +37,16 @@ describe('market environment history', () => {
     expect(screen.getByRole('img', { name: /ステージ構成の長期推移/ })).toBeInTheDocument();
     expect(screen.getByText(/^35(\.0)?%$/)).toBeInTheDocument();
   });
+
+  it('opens with the question it answers and dates the leader cohort by the analysis date, never 「今日」', () => {
+    render(<HistoricalBreadth history={history} />);
+    const card = document.querySelector('.market-history-explorer');
+    // The subtitle is the card's question (it replaces 「株価条件だけで過去にさかのぼった集計」, so the header keeps its lines).
+    expect(card.querySelector(':scope > header > h3')).toHaveTextContent(/^広がりと先導株$/);
+    expect(card.querySelector(':scope > header > span')).toHaveTextContent(/^株価条件を満たす銘柄は増えているか$/);
+    expect(card.textContent).not.toContain('株価条件だけで過去にさかのぼった集計');
+    // The 健全度 definition (inside the closed disclosure) names the day as the app does elsewhere.
+    expect(card.textContent).toContain('20営業日前にトレンドテンプレートを満たしていた銘柄のうち、分析基準日も観測でき、終値が50日線の上にある割合です。');
+    expect(card.textContent).not.toContain('今日');
+  });
 });
