@@ -16,7 +16,7 @@ const metrics={
  highsLows:{label:'新高値・新安値',unit:'銘柄',lines:[{key:'newHighs',label:'52週の新高値',color:'var(--zone)'},{key:'newLows',label:'52週の新安値',color:'var(--neg)'}],globalOnly:true,everySchema:true},
  above50Percent:{label:'50日線上',unit:'%'},leaderCount:{label:'先導株数（価格条件）',unit:'銘柄'},ratio_10day:{label:'4%騰落・10日レシオ',unit:'倍',globalOnly:true}};
 /** The question the long-run card answers, as its subtitle (the market tab's groups open with theirs the same way). */
-export const EXPLORER_QUESTION='株価条件を満たす銘柄は増えているか';
+const EXPLORER_QUESTION='株価条件を満たす銘柄は増えているか';
 const linesFor=(key,config)=>config.lines||[{key,label:config.label,color:'var(--zone)'}];
 const fmt=value=>Number.isFinite(value)?value.toLocaleString('ja-JP',{maximumFractionDigits:2}):'未確認';
 
