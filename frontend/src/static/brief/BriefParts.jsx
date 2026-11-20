@@ -42,8 +42,8 @@ const positionLabel = view => { const event = rowEvent(view); return event ? `${
 
 /**
  * The day's change from the verified previous close (technical_audit for the analysis date), or — with its reason.
- * It is in text ink (plan D17: no green or red outside the chart card), so ↑ / ↓ before the sign says up or down. The
- * arrow is aria-hidden: the accessible text stays 「前日比 +2.0%」. ±0.0% and the unknown change carry no arrow.
+ * It is in text ink, not the candle hues (plan D17), so ↑ / ↓ before the sign says up or down. The arrow is
+ * aria-hidden: the accessible text stays 「前日比 +2.0%」. ±0.0% and the unknown change carry no arrow.
  */
 export function DayChange({ view, className = '' }) {
   const change = finite(view?.change) ? view.change : null;
