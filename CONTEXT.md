@@ -324,7 +324,7 @@ The VCP card's line naming the pivot's own bar, found by `pivotBar` on certified
 ### UI slice S1 terms (the market gate)
 
 **地合いの帯**:
-The one value every surface that states the market verdict in a line reads (`marketBand`, marketGate.js): subject 地合い, the answer, the guide and the kind labels. Its line reads 「地合い 検討可・目安 最大50%」, 「地合い 買いは控える・目安 0%」, 「地合い 10/2時点の判定・更新待ち」 (an open guide once a newer session has closed), 「地合い 未確認・買いは見送り」 or 「地合い 読込中」; the unknown and loading forms carry no figure and no 「%」, and the kind labels sit beside what they label (判定＝独自判定・目安＝独自設定), never as a bare 独自. In slice S1 it is a model only: the bar of 候補 and ウォッチ and the wide bar's chip were not built (the fit proof found states with no form that fits at 320px), so every bar is as before; **地合いゲート** reads its answer and figure from it.
+The one value every surface that states the market verdict in a line reads (`marketBand`, marketGate.js): subject 地合い, the answer, the guide and the kind labels. Its line reads 「地合い 検討可・目安 最大50%」, 「地合い 買いは控える・目安 0%」, 「地合い 10/2時点の判定・更新待ち」 (an open guide once a newer session has closed), 「地合い 未確認・買いは見送り」 or 「地合い 読込中」; the unknown and loading forms carry no figure and no 「%」, and the kind labels sit beside what they label (判定＝独自判定・目安＝独自設定), never as a bare 独自. In slice S1 it is a model only: the bar of 候補 and ウォッチ and the wide bar's chip were not built (the fit proof found states with no form that fits: the waiting forms at 320px and 375px, and a late publication at 0% with both kind labels at every phone width), so every bar is as before; **地合いゲート** reads its answer and figure from it.
 _Avoid_: band (in Japanese copy), 地合いバー
 
 **地合いゲート**:
