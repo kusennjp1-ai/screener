@@ -91,6 +91,14 @@ describe('rows say the day and the decision honestly', () => {
     expect([down.classList.contains('is-down'), down.classList.contains('is-up'), down.textContent, spoken(down)]).toEqual([true, false, '前日比 ↓−0.4%', '前日比 −0.4%']);
     expect(down.querySelector('.brief-daychg-dir').getAttribute('aria-hidden')).toBe('true');
     cleanup();
+    // A change that rounds to 0.0 keeps its raw value's direction (as main's class did): arrow, class and sign by the raw
+    // value, while signed() prints 0.0. Pinned as it stands; signed() and the class rule are shared code, outside D17.
+    for (const [change, cls, text, words] of [[0.04, 'is-up', '前日比 ↑+0.0%', '前日比 +0.0%'], [-0.04, 'is-down', '前日比 ↓−0.0%', '前日比 −0.0%']]) {
+      const near = title({ change }).querySelector('.brief-daychg');
+      expect([[...near.classList].filter(name => /^is-/.test(name)), near.textContent, spoken(near)]).toEqual([[cls], text, words]);
+      expect(near.closest('.brief-row').getAttribute('aria-label')).toContain(`、${words}、`);
+      cleanup();
+    }
     const unknown = title({ change: null });
     const change = unknown.querySelector('.brief-daychg');
     expect(change.textContent).toBe('—前日比 未確認');
