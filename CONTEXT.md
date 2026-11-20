@@ -274,7 +274,10 @@ The market (track MARKET):
 The app's own index FTD record confirmed more than `FTD_RECENT_SESSIONS` (25) sessions ago; never read as a current FTD. The word lives only in `FTD_PREVIOUS_NAME` (briefEnvironment.js), which the FTD row, the ◆, the opened row and both cause lines read.
 
 **反発n日目**:
-The sign line of Today's **地合いゲート** (before slice S1, the 地合い tile's suffix) while the guide is 0% and the same day's ^GSPC or ^IXIC record is a rally attempt; n is the attempt's day (`MARKET_TILE_SUFFIX.rally`, briefEnvironment.js).
+The sign line of Today's **地合いゲート** (before slice S1, the 地合い tile's suffix) while the guide is 0% and the same day's ^GSPC or ^IXIC record is a rally attempt; n is the attempt's day (`MARKET_TILE_SUFFIX.rally`, briefEnvironment.js). The gate's line names the index on the larger day before the word and says what the sign is after it: 「NAS 反発3日目（参考・目安は不変）」 (both indices on the same day: 「S&P・NAS …」; `rallyIndexNames`, `SIGN_NOTE`); the open guide's Nasdaq caution reads 「NAS調整中（参考・目安は不変）」 the same way.
+
+**指数の分配日**:
+The two indices' own effective distribution days over 25 sessions (^GSPC and ^IXIC, 「S&P n日・NAS n日」), counted from the app's index records. Not the count the regime's verdict reads (the backend's SPY count, 「分配日（局面判定が数えるSPY）」, 4日以上で上昇に圧力): on Today's **地合いゲート** fold it is named 「指数の分配日（25日）」 and read 「判定には使わない別集計」 (`INDEX_DISTRIBUTION`, marketGate.js); the 市場 tab's row keeps 「分配日（25日）」.
 
 **分配日の参考／注意**:
 Effective distribution days graded in two steps (marketTabModel.js, 独自設定): 5–6 (`DISTRIBUTION_REFERENCE`) are 参考 (○, not counted among the 注意 signs), 7 or more (`DISTRIBUTION_CAUTION`) are 注意 (▲).
@@ -328,7 +331,7 @@ The one value every surface that states the market verdict in a line reads (`mar
 _Avoid_: band (in Japanese copy), 地合いバー
 
 **地合いゲート**:
-Today's market card (`TodayGate`, model `marketGate`, marketGate.js), in the region named 地合い. On a phone its first fold carries every rule-bearing line and nothing is trimmed: the kicker 「地合い・10/2（金）引け」 (with 「・n営業日前」 in the warning tone on a late publication), the headline (買いは控える, 新規の買いを検討できる, 買いは見送り, or the waiting form of **更新待ちの判定**) with （独自判定）, the **新規買いの目安** with its label and definition, one 根拠 line (実測), each **再開の条件** that is 未達 or 未確認 by name, the sign line, Today's note, each firing ▲ and the status alert. The rest is in one fold (closed on a phone, in place at 1024px and wider): the 判定 row with the regime's label, the facts in three groups (根拠（指数側）, 広がり（参考）, 銘柄側（参考・目安は変えません）) each with its **種別**, the conditions that are met, the sign's sentence, the ○ 参考 notes, the conflict sentences, the full 根拠 and 未検証. It replaced the 地合い tile and the phone's facts block. It adds no state, threshold, score or gate: every word comes from modelMarket's verdict, marketLines, capText, verdictWaiting and verdictBasis.
+Today's market card (`TodayGate`, model `marketGate`, marketGate.js), in the region named 地合い. On a phone its first fold carries every rule-bearing line and nothing is trimmed: the kicker 「地合い・10/2（金）引け」 (with 「・n営業日前」 in the warning tone on a late publication), the headline (買いは控える, 新規の買いを検討できる, 「市場未確認・買いは見送り」 naming what is unknown, or the waiting form of **更新待ちの判定**) with （独自判定）, the **新規買いの目安** with its label and definition, one 根拠 line (実測), each **再開の条件** that is 未達 or 未確認 by name, the sign line, Today's note, each firing ▲ and the status alert. The rest is in one fold (closed on a phone, in place at 1024px and wider): the 判定 row with the regime's label, the facts in three groups (根拠（指数側）, 広がり（参考）, 銘柄側（参考・目安は変えません）) each with its **種別**, the conditions that are met, the sign's sentence, the ○ 参考 notes, the conflict sentences, the full 根拠 and 未検証. It replaced the 地合い tile and the phone's facts block. It adds no state, threshold, score or gate: every word comes from modelMarket's verdict, marketLines, capText, verdictWaiting and verdictBasis.
 _Avoid_: 地合いタイル (removed), market gate (in Japanese copy)
 
 **新規買いの目安**:
