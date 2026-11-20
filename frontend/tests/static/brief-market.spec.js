@@ -457,7 +457,10 @@ for (const width of [320, 375, 390, 1024, 1440]) test.describe(`the long-run car
 
   test('opens with its question on one line, and its 健全度 definition says 分析基準日, never 今日', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/market');
+    // The market screen is a lazy chunk: its verdict first, so that the phone's section tabs exist when 推移 is chosen.
+    await expect(page.getByRole('region', { name: '地合い' }).getByTestId('brief-regime')).toBeVisible();
     await section(page, '推移');
+    if (isPhone) await expect(page.getByRole('tab', { name: '推移' })).toHaveAttribute('aria-selected', 'true');
     const card = page.getByRole('region', { name: '市場環境の推移' }).locator('.market-history-explorer');
     const subtitle = card.locator(':scope > header > span');
     await expect(card.locator(':scope > header > h3')).toHaveText('広がりと先導株');
