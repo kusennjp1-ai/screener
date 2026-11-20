@@ -23,7 +23,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const { errors, external } = await openBrief(page, '#/brief');
     await expect(page.getByRole('heading', { level: 1, name: '10月2日（金）の判断' })).toBeVisible();
     const summary = page.getByTestId('brief-summary');
-    await expect(summary).toContainText('上昇トレンド');
+    // S1-P4: the market's answer is the gate card's (the 地合い region), no longer a tile of the summary.
+    await expect(page.getByRole('region', { name: '地合い', exact: true })).toContainText('上昇トレンド');
     // The whole focus pool (5 in the buy zone, 16 near the pivot), not the five rows shown.
     await expect(summary).toContainText('21銘柄');
     await expect(summary).toContainText('ゾーン5・接近16');

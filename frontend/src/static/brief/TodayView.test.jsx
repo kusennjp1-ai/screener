@@ -6,6 +6,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TodayView, { watchAttention } from './TodayView';
+import { SIGN_NOTE } from './marketGate';
 import { withAuditFixture } from '../testAuditFixture';
 // A Setup Engine base current for 2026-10-02 over the confidence floor (baseCurrent), as the fixture's rows carry; a test
 // that needs a base that is not current overrides it.
@@ -151,22 +152,23 @@ describe('the round-2 seams on Today', () => {
     <TodayView brief={{ bundle: { data: { date: DATE, rankings: { minervini: [] } }, isLoading: false, isError: false }, manifest: { data: manifest, isLoading: false, isError: false }, ranked: [], date: DATE, market: OPEN, marketLoading: false, trends, version: 'v1' }}
       watch={[]} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false} wide nav={{ market() {}, list() {}, watch() {} }} onUnwatch={() => {}} />
   </MemoryRouter></QueryClientProvider>);
-  const note = () => screen.getByTestId('brief-summary').querySelector('li em').textContent;
+  // S1-P4: the 地合い tile is gone; the gate card's sign line says the market track's word (gateSign, from the same seam).
+  const signLine = () => document.querySelector('.brief-gate-sign')?.textContent ?? null;
   afterEach(() => { cleanup(); Object.assign(seams, { suffix: undefined, warning: undefined, suffixCalls: [], warningCalls: [] }); });
 
-  it('asks for the 地合い suffix with the market, the trends and the manifest, and appends one only when there is one', () => {
+  it('asks for the 地合い suffix with the market, the trends and the manifest, and shows one on the gate\'s sign line only when there is one', () => {
     show();
     expect(seams.suffixCalls.at(-1)).toEqual([{ market: OPEN, trends, manifest }]);
-    expect(note()).toBe('検討可・目安≤50%');
+    expect(signLine()).toBeNull();
+    expect(screen.getByTestId('brief-summary').textContent).not.toMatch(/目安≤|検討可/);
     cleanup();
     seams.suffix = '〈suffix〉';
     show();
-    // The cap, then the suffix on its own line (a separator for assistive tech): two lines, as without it.
-    expect(note()).toBe('目安≤50%・〈suffix〉');
-    expect(screen.getByTestId('brief-summary').querySelector('li em .brief-tile-suffix')).toHaveTextContent('〈suffix〉');
+    // The word, then what it is (参考) and that the guide stays as it is (the S1 critics' round: no bare fragment).
+    expect(signLine()).toBe(`〈suffix〉（${SIGN_NOTE}）`);
   });
 
-  it('explains the market track\'s tile suffix in the tile\'s title, for assistive tech and in the notes, led by the tile\'s word', async () => {
+  it('explains the market track\'s suffix in the notes and in the gate\'s fold, led by its word', async () => {
     const { marketTileNote, marketTileSuffix } = await vi.importActual('./briefEnvironment');
     const nas = { data: { as_of_date: DATE, indices: [{ symbol: '^GSPC', followThrough: { available: true, method: 'm', asOf: DATE, state: 'confirmed' } },
       { symbol: '^IXIC', followThrough: { available: true, method: 'm', asOf: DATE, state: 'rally_attempt', attempt: { startDate: '2026-09-29', day: 3 } } }] }, isLoading: false };
@@ -178,20 +180,18 @@ describe('the round-2 seams on Today', () => {
         watch={[]} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false} wide={wide} nav={{ market() {}, list() {}, watch() {} }} onUnwatch={() => {}} />
     </MemoryRouter></QueryClientProvider>);
     today(false);
-    const tile = screen.getByTestId('brief-summary').querySelector('li a');
-    expect(tile.querySelector('.brief-tile-suffix')).toHaveTextContent(suffix);
-    expect(tile.getAttribute('title')).toBe(sentence);
-    expect(tile.querySelector('em .sr-only:last-child')).toHaveTextContent(sentence);
-    // The note names the tile's word first, so a reader can tell which note explains the tile.
+    expect(signLine()).toBe(`${suffix}（${SIGN_NOTE}）`);
+    // The sentence: in the gate's fold (closed on a phone) and in the phone's notes, led by the word.
+    expect(document.querySelector('.brief-gate-more .brief-tile-note')).toHaveTextContent(`${suffix}：${sentence}`);
     expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).toContain(`${suffix}：${sentence}`);
     cleanup();
-    // From 1024px the notes are in place: the same line under the market card, visible without a hover.
+    // From 1024px the fold is in place: the same line, visible without a tap, once.
     today(true);
     expect([...document.querySelectorAll('.brief-tile-note')].map(node => node.textContent)).toEqual([`${suffix}：${sentence}`]);
     cleanup();
-    // Without the suffix: no title and no note.
+    // Without the suffix: no sign line and no note.
     show();
-    expect(screen.getByTestId('brief-summary').querySelector('li a').getAttribute('title')).toBeNull();
+    expect(signLine()).toBeNull();
     expect(document.querySelector('.brief-tile-note')).toBeNull();
   });
 
@@ -234,7 +234,7 @@ describe('round 2 on Today', () => {
     const link = screen.getByTestId('brief-breakout-link');
     expect(link).toHaveTextContent('うち上抜け2 ›');
     expect(link.getAttribute('href')).toBe('/brief/list');
-    expect(link.closest('li')).toBe(tiles()[1]);
+    expect(link.closest('li')).toBe(tiles()[0]);
     // Never nested in the tile's own link.
     expect(link.parentElement.closest('a')).toBeNull();
     link.click();
@@ -242,13 +242,14 @@ describe('round 2 on Today', () => {
     cleanup();
     show({ ranked: [audited('TCH1', 100), audited('NEA1', 97)] });
     expect(screen.queryByTestId('brief-breakout-link')).toBeNull();
-    expect(tiles()[1].textContent).not.toContain('上抜け');
+    expect(tiles()[0].textContent).not.toContain('上抜け');
   });
 
   it('names the analysis date in each tile for assistive tech, the visible text unchanged', () => {
     show({ ranked: [audited('TCH1', 100)] });
     for (const li of tiles()) expect(li.querySelector('a .sr-only')).toHaveTextContent('・10/2（金）引け時点');
-    expect(tiles()[1].querySelector('em').textContent).toBe('ゾーン1・接近0');
+    expect(tiles()).toHaveLength(2);
+    expect(tiles()[0].querySelector('em').textContent).toBe('ゾーン1・接近0');
   });
 
   it('shows a watched stock in the same short form as its focus row', () => {
@@ -312,7 +313,7 @@ describe('Today after the review', () => {
     expect(focusCounts(ranked, DATE)).toMatchObject({ total: 3, reference: 3, breakout: 0 });
     show({ ranked });
     const tiles = [...screen.getByTestId('brief-summary').querySelectorAll(':scope > li')];
-    expect(tiles[1].className).not.toContain('tone-zone');
+    expect(tiles[0].className).not.toContain('tone-zone');
     // The breakout of a pivot that is only a reference is not one of the day's breakouts on Today.
     expect(screen.queryByTestId('brief-breakout-link')).toBeNull();
     const focus = screen.getByRole('region', { name: '注目候補' });
@@ -320,9 +321,10 @@ describe('Today after the review', () => {
     expect([...focus.querySelectorAll('[data-testid="brief-candidate"]')].every(node => node.textContent.includes('土台未確認'))).toBe(true);
     expect(focus.querySelector('.brief-note:last-of-type').textContent).toContain(BASE_UNCHECKED_NOTE);
     cleanup();
-    // One row with a current base: the tile is green again, the note stays while a grey row shows the word.
+    // One row with a current base: the tile stays neutral (its edge is never zone green, plan D17: the S1 critics' round), the
+    // note stays while a grey row shows the word.
     show({ ranked: [...ranked, audited('OK1', 101)] });
-    expect([...screen.getByTestId('brief-summary').querySelectorAll(':scope > li')][1].className).toContain('tone-zone');
+    expect([...screen.getByTestId('brief-summary').querySelectorAll(':scope > li')][0].className).not.toContain('tone-zone');
     expect(document.body.textContent).toContain(BASE_UNCHECKED_NOTE);
     cleanup();
     show({ ranked: [audited('OK1', 101)] });

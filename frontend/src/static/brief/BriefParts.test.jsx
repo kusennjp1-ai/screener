@@ -76,23 +76,41 @@ describe('rows say the day and the decision honestly', () => {
     expect(chipTexts(row({ view: view({ rs: 69.9 }) }).container)).toContain('RS推計 69');
   });
 
-  it('puts the verified day change after the ticker, up and down in their text tokens, — with its reason when unknown', () => {
+  it('puts the verified day change after the ticker, ↑ / ↓ before the sign (aria-hidden), — with its reason when unknown', () => {
     const title = over => row({ view: view(over) }).container.querySelector('.brief-row-title');
+    // What assistive tech reads: the text without the aria-hidden parts.
+    const spoken = node => [...node.childNodes].map(child => child.nodeType === Node.TEXT_NODE ? child.textContent : child.getAttribute('aria-hidden') === 'true' ? '' : spoken(child)).join('');
     const up = title({ change: 2 }).querySelector('.brief-daychg');
-    expect([up.classList.contains('is-up'), up.classList.contains('is-down'), up.textContent]).toEqual([true, false, '前日比 +2.0%']);
+    expect([up.classList.contains('is-up'), up.classList.contains('is-down'), up.textContent, spoken(up)]).toEqual([true, false, '前日比 ↑+2.0%', '前日比 +2.0%']);
+    expect([up.querySelector('.brief-daychg-dir').textContent, up.querySelector('.brief-daychg-dir').getAttribute('aria-hidden')]).toEqual(['↑', 'true']);
+    // The arrow stands right before the sign.
+    expect(up.querySelector('.brief-daychg-dir').nextSibling.textContent).toBe('+2.0%');
+    expect(up.closest('.brief-row').getAttribute('aria-label')).toContain('、前日比 +2.0%、');
     cleanup();
     const down = title({ change: -0.4 }).querySelector('.brief-daychg');
-    expect([down.classList.contains('is-down'), down.classList.contains('is-up')]).toEqual([true, false]);
+    expect([down.classList.contains('is-down'), down.classList.contains('is-up'), down.textContent, spoken(down)]).toEqual([true, false, '前日比 ↓−0.4%', '前日比 −0.4%']);
+    expect(down.querySelector('.brief-daychg-dir').getAttribute('aria-hidden')).toBe('true');
     cleanup();
+    // A change that rounds to 0.0 keeps its raw value's direction (as main's class did): arrow, class and sign by the raw
+    // value, while signed() prints 0.0. Pinned as it stands; signed() and the class rule are shared code, outside D17.
+    for (const [change, cls, text, words] of [[0.04, 'is-up', '前日比 ↑+0.0%', '前日比 +0.0%'], [-0.04, 'is-down', '前日比 ↓−0.0%', '前日比 −0.0%']]) {
+      const near = title({ change }).querySelector('.brief-daychg');
+      expect([[...near.classList].filter(name => /^is-/.test(name)), near.textContent, spoken(near)]).toEqual([[cls], text, words]);
+      expect(near.closest('.brief-row').getAttribute('aria-label')).toContain(`、${words}、`);
+      cleanup();
+    }
     const unknown = title({ change: null });
     const change = unknown.querySelector('.brief-daychg');
     expect(change.textContent).toBe('—前日比 未確認');
+    expect(change.querySelector('.brief-daychg-dir')).toBeNull();
     // After the ticker, before the name.
     expect(unknown.querySelector('b').compareDocumentPosition(change) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(change.compareDocumentPosition(unknown.querySelector('.brief-row-name')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(unknown.closest('.brief-row').getAttribute('aria-label')).toContain('前日比 未確認');
     cleanup();
-    expect(render(<DayChange view={{ change: 0 }} />).container.textContent).toBe('前日比 ±0.0%');
+    const zero = render(<DayChange view={{ change: 0 }} />).container;
+    expect(zero.textContent).toBe('前日比 ±0.0%');
+    expect([zero.querySelector('.brief-daychg-dir'), zero.querySelector('.is-up, .is-down')]).toEqual([null, null]);
   });
 
   it('marks a heavy down day\'s volume as a warning, green only on a verified up day, neutral when the direction is unknown', () => {
@@ -171,12 +189,13 @@ describe('BriefParts seams', () => {
   it('BarQuote shows the price and the verified day change after the ticker, and nothing without a price', () => {
     const quote = view => render(<BarQuote view={view} />).container;
     const small = quote({ price: 110.74, change: -1.25 });
-    expect([small.querySelector('.brief-bar-price').textContent.trim(), small.querySelector('.brief-bar-change').textContent]).toEqual(['$110.74', '前日比 −1.3%']);
+    expect([small.querySelector('.brief-bar-price').textContent.trim(), small.querySelector('.brief-bar-change').textContent]).toEqual(['$110.74', '前日比 ↓−1.3%']);
+    expect(small.querySelector('.brief-bar-change .brief-daychg-dir').getAttribute('aria-hidden')).toBe('true');
     expect(small.querySelector('.brief-bar-price').compareDocumentPosition(small.querySelector('.brief-bar-change')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(small.querySelector('.brief-bar-change').classList.contains('is-down')).toBe(true);
     cleanup();
     // $1,000 and up drops the cents, so the change keeps its place on a 320px phone.
-    expect(quote({ price: 1234.56, change: -12.34 }).textContent).toBe(' $1,235 前日比 −12.3%');
+    expect(quote({ price: 1234.56, change: -12.34 }).textContent).toBe(' $1,235 前日比 ↓−12.3%');
     cleanup();
     // An unverified change is a dash the screen reader says as 前日比 未確認, never 0%.
     const unknown = render(<BarQuote view={{ price: 10, change: null }} />).container;

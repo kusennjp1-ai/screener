@@ -81,18 +81,19 @@ test.describe('Today\'s watch card at 390px', () => {
     await page.goto('/#/brief');
     await page.reload();
     const card = page.getByRole('region', { name: 'ウォッチの状況' });
-    const tile = page.getByTestId('brief-summary').locator('li').nth(2);
+    // S1-P4: the watch tile is the second of the two answers (the market's is the gate card's).
+    const tile = page.getByTestId('brief-summary').locator('li').nth(1);
     await expect(card.locator('.brief-event')).toHaveCount(5);
     await expect(card.locator('.brief-morebutton')).toHaveCount(0);
     await expect(card.locator('.brief-sellchip')).toHaveCount(0);
     // Nothing is counted before the checks are in: never 0件.
-    await expect(tile).toContainText('ウォッチの注意確認中5銘柄を確認中・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 確認中5銘柄を確認中・保有未登録');
     release();
     // Once every check is in: the broken setup first, then the first rows; the quiet ones fold.
     await expect(card.locator('.brief-event').first()).toContainText(WEAKNESS);
     await expect(card.locator('.brief-event')).toHaveCount(3);
     await expect(card.getByRole('button', { name: 'さらに表示（残り 2件）' })).toBeVisible();
-    await expect(tile).toContainText('ウォッチの注意1件5銘柄を確認・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 1件5銘柄を確認・保有未登録');
     // A check that cannot be made (its chart fails) is 未確認: that row stays in view like a fired one, and
     // the tile no longer says every stock was checked.
     const failing = rowBySymbol.ZZZF.chart_path.split('/').pop();
@@ -112,7 +113,7 @@ test.describe('the watch tile', () => {
   test('one broken setup: 1件, the tile opens that stock, which steps through the watch list flagged first', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZSD'] }, mutate: broken('ZZSD') });
     const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
-    await expect(tile).toContainText('ウォッチの注意1件2銘柄を確認・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 1件2銘柄を確認・保有未登録');
     await expect(tile.locator('..')).toHaveClass(/tone-ext/);
     await expect(tile).toHaveAttribute('href', '#/brief/stock/ZZSD');
     await tile.click();
@@ -127,7 +128,7 @@ test.describe('the watch tile', () => {
   test('two broken setups: 2件, the tile opens the watch tab with them first; no fired check is 0件', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZKS', 'ZZNV', 'ZZSD'] }, mutate: broken('ZZSD', 'ZZNV') });
     const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
-    await expect(tile).toContainText('ウォッチの注意2件3銘柄を確認・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 2件3銘柄を確認・保有未登録');
     await expect(tile).toHaveAttribute('href', '#/brief/watch');
     await tile.click();
     await expect(page).toHaveURL(/#\/brief\/watch$/);
@@ -142,10 +143,10 @@ test.describe('the watch tile', () => {
   test('a quiet watch list reads 0件 once every check is in, beyond the 12-stock limit 未確認（上限12銘柄）', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZKS'] } });
     const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
-    await expect(tile).toContainText('ウォッチの注意0件2銘柄を確認・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 0件2銘柄を確認・保有未登録');
     await page.evaluate(symbols => localStorage.setItem('research-watch', JSON.stringify(symbols)), rows.slice(0, 13).map(row => row.symbol));
     await page.reload();
-    await expect(tile).toContainText('ウォッチの注意未確認12/13を確認・上限超1・保有未登録', { timeout: 30000 });
+    await expect(tile).toContainText('ウォッチの注意 未確認12/13を確認・上限超1・保有未登録', { timeout: 30000 });
     await page.goto('/#/brief/watch');
     const limited = page.getByRole('region', { name: 'ウォッチ中の銘柄' }).locator('.brief-chip', { hasText: '売りのサイン 未確認（上限12銘柄）' });
     await expect(limited).toHaveCount(1);
@@ -174,11 +175,11 @@ test.describe('round 3 R1: a pivot dated after a heavy crossing on a watched sto
     const tile = on => on.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
     // ZZSD alone, read first: its broken setup is the one count.
     const plain = await context.newPage(), alone = await openBrief(plain, '#/brief', { oracles: true, storage: { 'research-watch': ['ZZSD'] }, mutate: broken('ZZSD') });
-    await expect(tile(plain)).toContainText('ウォッチの注意1件1銘柄を確認・保有未登録');
+    await expect(tile(plain)).toContainText('ウォッチの注意 1件1銘柄を確認・保有未登録');
     expect(alone.errors).toEqual([]);
     await plain.close();
     const { errors } = await openBrief(page, '#/brief', { oracles: true, storage: { 'research-watch': ['ZZNR', 'ZZSD'] }, mutate: broken('ZZSD') });
-    await expect(tile(page)).toContainText('ウォッチの注意1件2銘柄を確認・保有未登録');
+    await expect(tile(page)).toContainText('ウォッチの注意 1件2銘柄を確認・保有未登録');
     await expect(tile(page)).toHaveAttribute('href', '#/brief/stock/ZZSD');
     const today = page.getByRole('region', { name: 'ウォッチの状況' });
     const nrRow = today.locator('[data-symbol="ZZNR"]');
@@ -251,12 +252,12 @@ test.describe('a watched symbol the publication does not list', () => {
     const card = page.getByRole('region', { name: 'ウォッチの状況' });
     await expect(card.locator('.brief-rows > li').first()).toContainText('QQQX：この公開（10/2引け）の分析対象外');
     const tile = page.getByTestId('brief-summary').getByRole('link', { name: /ウォッチの注意/ });
-    await expect(tile).toContainText('ウォッチの注意未確認2/3を確認・対象外1・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 未確認2/3を確認・対象外1・保有未登録');
     await expect(tile).not.toContainText(/0件|未登録（/);
     await card.getByRole('button', { name: /^外す/ }).click();
     await expect(page.locator('.brief-toast')).toHaveText(/QQQX をウォッチから外しました/);
     await expect(card.locator('.brief-unlisted')).toHaveCount(0);
-    await expect(tile).toContainText('ウォッチの注意0件2銘柄を確認・保有未登録');
+    await expect(tile).toContainText('ウォッチの注意 0件2銘柄を確認・保有未登録');
     await expect(tabs.getByRole('link', { name: /ウォッチ/ }).locator('.brief-count')).toHaveText('2');
     expect(errors).toEqual([]);
   });
@@ -346,9 +347,10 @@ test.describe('the 375×812 budgets with a broken setup', () => {
     await expect(page.getByRole('region', { name: 'ウォッチの状況' }).locator('.brief-sellchip')).toHaveCount(1);
     await settled(page);
     expect(await contentHeight(page)).toBeLessThanOrEqual(budget);
-    // The tiles keep their height: 97 with every stock checked, one note line more with an unlisted symbol.
+    // S1-P4: the two answers are one row of two links: 52 with every stock checked, one note line more with an unlisted
+    // symbol (69; the row was three tiles of 97 / 115).
     const tiles = await page.getByTestId('brief-summary').locator('li').evaluateAll(items => items.map(li => Math.round(li.getBoundingClientRect().height)));
-    for (const height of tiles) expect(Math.abs(height - (watch.length === 4 ? 97 : 115))).toBeLessThanOrEqual(2);
+    for (const height of tiles) expect(Math.abs(height - (watch.length === 4 ? 52 : 69))).toBeLessThanOrEqual(2);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

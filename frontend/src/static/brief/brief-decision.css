@@ -3,10 +3,12 @@
    specificity (this file loads after it). Type sizes 12/13/16; colours only from the theme tokens. */
 
 /* The verified day change after the ticker: a row's title line, the phone bar and the desktop header.
-   Up and down use the text tokens brief.css gives .is-up / .is-down; an unknown change is a muted —. */
+   Up and down are in text ink (plan D17) with ↑ / ↓ before the sign; ±0.0% and an unknown change (a muted —) keep
+   the muted ink. The arrow takes its change's ink and size (the row title's span rule would mute it). */
 .brief-row-title .brief-daychg { flex: none; font-size: 12px; color: var(--text-3); overflow: visible; }
-.brief-row-title .brief-daychg.is-up, .brief-bar-title .brief-bar-change.is-up, .brief-stockhead h2 .brief-daychg.is-up { color: color-mix(in srgb, var(--up) 72%, var(--text)); }
-.brief-row-title .brief-daychg.is-down, .brief-bar-title .brief-bar-change.is-down, .brief-stockhead h2 .brief-daychg.is-down { color: color-mix(in srgb, var(--down) 72%, var(--text)); }
+.brief-row-title .brief-daychg.is-up, .brief-bar-title .brief-bar-change.is-up, .brief-stockhead h2 .brief-daychg.is-up { color: var(--text); }
+.brief-row-title .brief-daychg.is-down, .brief-bar-title .brief-bar-change.is-down, .brief-stockhead h2 .brief-daychg.is-down { color: var(--text); }
+.brief-daychg > .brief-daychg-dir { color: inherit; font-size: inherit; overflow: visible; }
 .brief-bar-title .brief-bar-change { font-size: 13px; font-weight: 400; color: var(--text-2); }
 .brief-stockhead h2 .brief-daychg { font-size: 16px; font-weight: 400; color: var(--text-2); }
 /* The bar's ticker, price and change on one line: the ticker and the change never shrink, so on a narrow

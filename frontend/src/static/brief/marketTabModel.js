@@ -115,6 +115,17 @@ export function verdictBasis(market, date) {
 }
 
 /**
+ * verdictBasis's short form, for Today's first fold on a phone (plan S1-P4, ledger step 3): the same sentence, made from it,
+ * without its scan stamp, with SPY for 「S&P 500（SPY）」 and without the regime's inputs 「（分配日・FTDなど）」. The full form
+ * stays in the gate's fold, at 1024px and wider, and on the market tab. Null when verdictBasis gives none.
+ */
+export function verdictBasisShort(market, date) {
+  const basis = verdictBasis(market, date);
+  if (!basis) return null;
+  return `根拠：${basis.text.slice(basis.text.indexOf('：') + 1).replace('S&P 500（SPY）', 'SPY').replace('（分配日・FTDなど）', '')}`;
+}
+
+/**
  * When the verdict's scan-time benchmark position and the long history's ^GSPC close disagree about a
  * moving average, say that the two inputs differ. Nothing is reconciled and the verdict is unchanged.
  */
@@ -186,8 +197,10 @@ export function verdictWaiting({ market, date, target }) {
  * target, computed by the screen from the clock; this model never reads one). With a valid target after the verdict's day
  * and an open guide, the verdict's lead says the judgement is that older session's and waits for a new publication
  * (verdictWaiting); its label, tone, cap, Today's `text` and every gate stay as they are. Today passes none.
+ * `facts` is the market gate's reader of the same shared values (marketGateFacts.js gateReads), returned as `gate`; without it
+ * `gate` is null and nothing more is computed.
  */
-export function marketCardView({ market, marketLoading = false, trends, date, study = null, tab = null, update = null }) {
+export function marketCardView({ market, marketLoading = false, trends, date, study = null, tab = null, update = null, facts = null }) {
   const status = trendsStatus(trends), ready = status.state === 'ready';
   const history = ready ? trends.data.long_history || null : null;
   const longError = ready && !history && typeof trends.data.long_history_error === 'string' ? trends.data.long_history_error : null;
@@ -283,7 +296,8 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
   const conflict = basisConflict(verdict.basis, summary, date);
   // The market tab's warning summary, its three groups, its index switch and its 銘柄側 line (`tab`: marketTabParts,
   // marketTabGroups.js, which only the lazily loaded market screen passes), so Today, which reads none of them, never ships them.
-  const { signals = null, groups = null, series = null, stockSide = null } = tab ? tab({ ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, distWarn, spx, ndx, summary }) : {};
+  const shared = { ready, status, history, rows, last, hasField, rule, dist, follow, split, highsLows, lowsLead, extremesAsOf, study, isReference, date, absent, groupUnavailable, older, known, count, a200, a50, tt, leaderSubstitute, distWarn, spx, ndx, summary };
+  const { signals = null, groups = null, series = null, stockSide = null } = tab ? tab(shared) : {};
 
   // ---- Today: exactly four facts ----
   // Today's 分配日 tile: ▲ and amber only at 7 or more; a 5–6 count reads 参考 in the warning's place, the other 参考 tiles'
@@ -306,7 +320,7 @@ export function marketCardView({ market, marketLoading = false, trends, date, st
     : { key: 'extremes', label: '52週の新高値・新安値', ...absent('newHighs') };
   const today = [todayDist, todayTT, todayA200, todayExtremes];
 
-  return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons, series, stockSide,
+  return { status, ready, history, longError, dating, verdict, signals, summary, conflict, groups, today, distReasons, series, stockSide, gate: facts ? facts(shared) : null,
     // Whether the TT達成数 row shows a value (its population note belongs beside it only then), and why the Nasdaq's
     // published closes were withdrawn (readMarketTrends' closes_error: the switch is then missing for that reason).
     ttShown: tt.valued === true, nasdaqClosesError: ready && typeof ndx?.closes_error === 'string' && ndx.closes_error ? ndx.closes_error : null,

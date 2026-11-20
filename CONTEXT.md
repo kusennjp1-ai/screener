@@ -274,7 +274,10 @@ The market (track MARKET):
 The app's own index FTD record confirmed more than `FTD_RECENT_SESSIONS` (25) sessions ago; never read as a current FTD. The word lives only in `FTD_PREVIOUS_NAME` (briefEnvironment.js), which the FTD row, the ◆, the opened row and both cause lines read.
 
 **反発n日目**:
-Today's 地合い tile suffix while the guide is 0% and the same day's ^GSPC or ^IXIC record is a rally attempt; n is the attempt's day (`MARKET_TILE_SUFFIX.rally`, briefEnvironment.js).
+The sign line of Today's **地合いゲート** (before slice S1, the 地合い tile's suffix) while the guide is 0% and the same day's ^GSPC or ^IXIC record is a rally attempt; n is the attempt's day (`MARKET_TILE_SUFFIX.rally`, briefEnvironment.js). The gate's line names the index on the larger day before the word and says what the sign is after it: 「NAS 反発3日目（参考・目安は不変）」 (both indices on the same day: 「S&P・NAS …」; `rallyIndexNames`, `SIGN_NOTE`); the open guide's Nasdaq caution reads 「NAS調整中（参考・目安は不変）」 the same way.
+
+**指数の分配日**:
+The two indices' own effective distribution days over 25 sessions (^GSPC and ^IXIC, 「S&P n日・NAS n日」), counted from the app's index records. Not the count the regime's verdict reads (the backend's SPY count, 「分配日（局面判定が数えるSPY）」, 4日以上で上昇に圧力): on Today's **地合いゲート** fold it is named 「指数の分配日（25日）」 and read 「判定には使わない別集計」 (`INDEX_DISTRIBUTION`, marketGate.js); the 市場 tab's row keeps 「分配日（25日）」.
 
 **分配日の参考／注意**:
 Effective distribution days graded in two steps (marketTabModel.js, 独自設定): 5–6 (`DISTRIBUTION_REFERENCE`) are 参考 (○, not counted among the 注意 signs), 7 or more (`DISTRIBUTION_CAUTION`) are 注意 (▲).
@@ -308,7 +311,7 @@ The count of days up 3% or more on the prior close (〔参考〕, not a buy sign
 The index's judged record dated the analysis day (`sameDayFollowThrough`, briefEnvironment.js): a ready series, an available record, and `asOf` equal to the asset's and the manifest's date.
 
 **更新待ちの判定**:
-The market tab's verdict sentence once a later session has closed and no publication has come (`verdictWaiting`, marketTabModel.js): 「M/D引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）」. No grace period: it shows from the next session's close until the publication lands, while the bar's stale warning waits `FRESHNESS_GRACE_HOURS`.
+The market tab's verdict sentence once a later session has closed and no publication has come (`verdictWaiting`, marketTabModel.js): 「M/D引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）」. No grace period: it shows from the next session's close until the publication lands, while the bar's stale warning waits `FRESHNESS_GRACE_HOURS`. Since slice S1 Today says the same with an open guide: the **地合いゲート**'s headline is its short form 「10/2時点の判定・更新待ち」 (the verdict block at 1024px and wider its long form) and the figure is labelled 「新規買いの目安（10/2時点・独自設定）」, never 検討できる. The last closed session (`target`, marketUpdateState's) is always passed in; no pure function reads the clock.
 
 **0% の注記**:
 The sentence saying that the 50日線割れ verdict's 0% is 独自設定 and untested.
@@ -320,6 +323,28 @@ The VCP card's line naming the pivot's own bar, found by `pivotBar` on certified
 
 **静かな日**:
 「静かな日 N/10日（SE）」 (`quietDaysText`, StockVcpCard.jsx): the Setup Engine's `quiet_days_10d` over its own 10 sessions (`QUIET_DAYS_WINDOW`, the field's window, not a threshold of the brief's), days whose volume is under 0.8× its 50-day average and whose true range is under ATR14. A real 0 prints 0/10; a missing or invalid value prints nothing.
+
+### UI slice S1 terms (the market gate)
+
+**地合いの帯**:
+The one value every surface that states the market verdict in a line reads (`marketBand`, marketGate.js): subject 地合い, the answer, the guide and the kind labels. Its line reads 「地合い 検討可・目安 最大50%」, 「地合い 買いは控える・目安 0%」, 「地合い 10/2時点の判定・更新待ち」 (an open guide once a newer session has closed), 「地合い 未確認・買いは見送り」 or 「地合い 読込中」; the unknown and loading forms carry no figure and no 「%」, and the kind labels sit beside what they label (判定＝独自判定・目安＝独自設定), never as a bare 独自. In slice S1 it is a model only: the bar of 候補 and ウォッチ and the wide bar's chip were not built (the fit proof found states with no form that fits: the waiting form at 320px (when late, also at 375px), and a late publication at 0% with both kind labels and the calendar-less bar at every phone width), so every bar is as before; **地合いゲート** reads its answer and figure from it.
+_Avoid_: band (in Japanese copy), 地合いバー
+
+**地合いゲート**:
+Today's market card (`TodayGate`, model `marketGate`, marketGate.js), in the region named 地合い. On a phone its first fold carries every rule-bearing line and nothing is trimmed: the kicker 「地合い・10/2（金）引け」 (with 「・n営業日前」 in the warning tone on a late publication), the headline (買いは控える, 新規の買いを検討できる, 「市場未確認・買いは見送り」 naming what is unknown, or the waiting form of **更新待ちの判定**) with （独自判定）, the **新規買いの目安** with its label and definition, one 根拠 line (実測), each **再開の条件** that is 未達 or 未確認 by name, the sign line, Today's note, each firing ▲ and the status alert. The rest is in one fold (closed on a phone, in place at 1024px and wider): the 判定 row with the regime's label, the facts in three groups (根拠（指数側）, 広がり（参考）, 銘柄側（参考・目安は変えません）) each with its **種別**, the conditions that are met, the sign's sentence, the ○ 参考 notes, the conflict sentences, the full 根拠 and 未検証. It replaced the 地合い tile and the phone's facts block. It adds no state, threshold, score or gate: every word comes from modelMarket's verdict, marketLines, capText, verdictWaiting and verdictBasis.
+_Avoid_: 地合いタイル (removed), market gate (in Japanese copy)
+
+**新規買いの目安**:
+modelMarket's cap printed through `capText`: 「最大50%」, 「最大25%」 or 「0%」 (MARKET_CAPS, unchanged), labelled 「新規買いの目安（独自設定）」 (「新規買いの目安（10/2時点・独自設定）」 in the waiting form) and defined in the first fold as 「最大50%＝新規建ての上限（口座比・独自設定）」 / 「0%＝新規建ての上限（口座比・独自設定）」. Its levels are untested (`GUIDE_UNTESTED`, in the fold). An unknown or loading market has no figure, no definition and no 「%」. It caps new positions as a share of the account; it is not a buy recommendation, and nothing on the stock side moves it. It replaced the tile's 「目安≤N%」.
+_Avoid_: 目安≤N% (the removed tile's form)
+
+**再開の条件**:
+The three conditions in modelMarket's rule order (`resumeConditions`, marketGate.js; `CONDITION_LABELS`): 「SPY終値が200日線の上」, 「SPY終値が50日線の上」 (both read by `marketLines` from the same rows and filter as modelMarket) and 「局面判定が上昇トレンド／上昇に圧力」. Each is 達成, 未達 or 未確認; all three are met exactly when the cap is above 0 (a property test). On a 0% day the list is 「買いの再開の条件（独自設定）」, on an open day 「目安が動く条件（独自設定）」. The first fold names each unmet or unknown one (「SPY終値が50日線の上：未達」, 「局面判定が上昇トレンド／上昇に圧力：未達（いま 調整）」), the met ones are in the fold, and an unknown market reads 「再開の条件：未確認」, never 未達 or 達成. No count of conditions (「n条件中」) is ever printed.
+_Avoid_: n条件中, 達成率
+
+**種別（実測／独自判定／独自設定）**:
+What kind of statement a gate fact is, fixed per fact by `FACT_KINDS` (marketGate.js, pinned by a vitest) from seven kinds (`GATE_KINDS`): 実測 (a measured fact: SPY against its lines, the 根拠 line), 独自判定 (the app's own judgement: the verdict, the signs), 独自設定 (the app's own setting: the guide, the conditions, a threshold), 実測・基準は独自設定 (a measured count read against the app's threshold: the regime's SPY distribution count, **上抜け維持（確定分）**), 実測・参考 (measured, not part of the verdict: the indices' distribution days, new highs and lows, the share above the 200-day and 50-day lines), 独自集計（RS推計を含む） (TT達成; RS推計, never IBD RS) and 独自定義 (the leaders' health). A fact without a value has no kind (「—」, `NO_KIND`) and carries its own absent words, never 0. S1 prints the kind as a tag beside each fact of the gate's fold.
+_Avoid_: 独自 (bare), ソース
 
 ## Relationships
 
@@ -383,4 +408,5 @@ The VCP card's line naming the pivot's own bar, found by `pivotBar` on certified
 - **Universe** row identity remains canonical symbol for now, but `(Market, MIC, local code)` is a required active-row invariant.
 - "Scan-ready Market" previously risked meaning only enabled in Runtime Preferences. Resolution: **Scan Readiness** is a scan-admission decision using Universe data, freshness, field coverage, and Market Workload state.
 - "対象外" appears in three places in the brief. Resolution: SEC's word is always **SEC 対象外** (no CIK), never for a stock this publication merely did not fetch (**SEC 今回未取得**); the fundamentals card's 対象外 is a fund; the watch tile's 対象外N counts watched symbols this publication does not analyse (delisted, renamed or missing), whose state is 未確認, never 0. A sell check that is not judged for a stock (its reason reads 「…のため判定しません」) is **判定せず**, never 対象外. The dock's word for a stock outside its step list is **一覧外**.
+- The breakout row has one name in the app, **上抜け維持（確定分）** (`BREAKOUT_HOLD_NAME`), on the 市場 tab and in the **地合いゲート** alike; the UI plan wrote 上抜けの維持. Resolution: the app prints the constant only; a rename is the owner's decision and changes every surface at once.
 - "RS" alone is ambiguous between the app's rank, the RS line and IBD's RS Rating. Resolution: the rank is **RS推計** (独自計算), the line is **RS線**, and IBD's value is never shown as either.

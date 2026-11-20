@@ -96,6 +96,8 @@ describe('brief market screen', () => {
     expect(within(metrics).getByRole('button', { name: '新高値・新安値' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('img', { name: /^新高値・新安値の長期推移/ })).toBeInTheDocument();
     expect(document.activeElement).toHaveTextContent('広がりと先導株');
+    // The heading's subtitle is the question the long-run card answers.
+    expect(document.activeElement.nextElementSibling).toHaveTextContent(/^株価条件を満たす銘柄は増えているか$/);
   });
 
   it('names a fetch failure of the series in the history section by its cause', () => {

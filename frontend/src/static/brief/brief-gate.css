@@ -1,0 +1,71 @@
+/* Today's gate card (plan S1-P4) inside the 地合い region (MarketCard / TodayGate). Text inks only on every day (D17): no zone
+   green and no up colour on the headline, the figure or the lines; the warning tone only for a late publication's age. Sizes
+   from the type scale (D19): kicker 12px, headline 20px, figure 26px with its 12px label, the rule lines 14px, kind tags 12px.
+   This file loads after brief-watch.css, so its rules win a tie. */
+.brief-gate { gap: 8px; }
+/* The kicker row costs about its 16.8px line of words: the row keeps the link's 44px box and lends 14px of it above (the card's
+   padding) and 13px below (the gap and the headline's half-leading). The words are one block beside the link that could wrap
+   inside the 44px box, so the row is as tall in the open, pending and late forms (a late kicker leaves out its weekday below
+   375px instead, below). The link is raised above the headline it overlaps (no background: nothing shows), so its whole 44px box
+   answers a tap. */
+.brief-gate-kicker { display: flex; align-items: center; flex-wrap: nowrap; column-gap: 0; min-height: 44px; margin: -14px 0 -13px; font-size: 12px; line-height: 1.4; color: var(--text-2); }
+.brief-gate-kicker-text { display: flex; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+.brief-gate-kicker h2 { font-size: 12px; font-weight: 700; line-height: 1.4; color: var(--text-2); }
+.brief-gate-kicker .is-warn { color: var(--ext); font-weight: 700; }
+.brief-gate-kicker .brief-more { position: relative; z-index: 1; flex: none; margin-left: auto; }
+/* Below 375px a late age has little or no room beside the date with its weekday and the link (at 320px 204px of words in 187px;
+   at 360px 0.6px to spare with a two-digit date and age): the kicker leaves out the weekday there (the bar's line 2 says it), so
+   「地合い・10/2引け・2営業日前」 keeps one line in the row's 44px and nothing wraps onto the headline. Only a late kicker. */
+@media (max-width: 374px) {
+  .brief-gate-kicker.has-age .brief-gate-dow { display: none; }
+}
+.brief-gate-headline { min-width: 0; margin: 0; font-size: 20px; line-height: 1.35; color: var(--text); }
+.brief-gate-headline b { font-weight: 700; }
+.brief-gate-figure { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; margin: 0; color: var(--text); }
+.brief-gate-figure small { flex: 1 1 auto; min-width: 0; font-size: 12px; line-height: 1.35; color: var(--text-2); }
+.brief-gate-figure b { flex: none; font-size: 26px; line-height: 1.25; font-weight: 700; white-space: nowrap; }
+.brief-gate-line { margin: 0; font-size: 14px; line-height: 1.5; color: var(--text); overflow-wrap: anywhere; }
+.brief-gate-kind { font-size: 12px; font-weight: 400; color: var(--text-2); }
+.brief-gate-headline .brief-gate-kind { white-space: nowrap; }
+/* The waiting form (D18: 「12/28時点の判定・更新待ち」 is up to 250px of the 313px a 375px phone gives the line): its kind is set
+   beside the headline in two short lines (「（独自」「判定）」, 36px wide, 2 x 13.2px inside the headline's 27px line), so the
+   headline keeps one line and the waiting form is exactly as tall as the open form. An inline-block: the text and its reading
+   order are unchanged. */
+.brief-gate-headline.is-waiting .brief-gate-kind { display: inline-block; width: min-content; white-space: normal; word-break: keep-all; overflow-wrap: normal; line-height: 1.1; vertical-align: top; }
+.brief-gate-conds, .brief-gate-met { display: grid; gap: 2px; min-width: 0; }
+.brief-gate-conds small, .brief-gate-met small { font-size: 12px; line-height: 1.4; color: var(--text-2); }
+.brief-gate-conds ul, .brief-gate-met ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; font-size: 14px; line-height: 1.5; color: var(--text); }
+/* The fold: the facts in three groups, each fact with its kind. */
+.brief-gate-fold { display: grid; gap: 12px; min-width: 0; }
+.brief-gate-group { display: grid; gap: 6px; min-width: 0; }
+.brief-gate-group h3 { margin: 0; font-size: 13px; line-height: 1.4; color: var(--text-2); }
+/* The 判定 row is the group's only row: the whole width, not half of it beside an empty cell. */
+.brief-gate-group.is-verdict .brief-gate-fact { grid-column: 1 / -1; }
+.brief-gate-fact { display: grid; align-content: start; min-width: 0; padding: 6px 10px; border-radius: 12px; background: var(--surface-2); }
+.brief-gate-fact small { font-size: 12px; line-height: 1.45; color: var(--text-2); overflow-wrap: anywhere; }
+.brief-gate-fact b { font-size: 14px; line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
+.brief-gate-fact em { font-style: normal; font-size: 12px; line-height: 1.45; color: var(--text-2); overflow-wrap: anywhere; }
+.brief-gate .brief-fact .brief-gate-kind, .brief-gate-fact .brief-gate-kind { line-height: 1.45; }
+.brief-gate-basis-full { margin: 0; font-size: 14px; line-height: 1.6; color: var(--text-2); }
+.brief-gate-more > summary { padding-inline: 0; }
+.brief-gate-more > .brief-expander-body { padding-inline: 0; }
+@media (min-width: 1024px) {
+  .brief-gate-figure { justify-content: flex-start; }
+  .brief-gate-figure small { flex: none; }
+}
+/* The verdict block at 1024px and wider while a newer session has closed (D18): the waiting lead is the block's statement, at
+   14px in the text ink (D19), not the 12px grey sub-line of a current verdict. */
+.brief-verdict.is-waiting p { font-size: 14px; line-height: 1.5; font-weight: 700; color: var(--text); }
+@media (max-width: 520px) {
+  .brief-gate.brief-market:not(.is-detail) { gap: 6px; padding-block: 12px; }
+}
+/* Today's two remaining answers (注目候補, ウォッチの注意): the 地合い tile is the gate card now. */
+.brief-summary.is-two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Ledger step 1 (plan S1-P4): the two answers as one row of two links, each keeping its value and its whole note (the note
+   wraps under the value, never cut). */
+.brief-summary.is-links li { border-top-width: 3px; }
+.brief-summary.is-links .brief-tile { display: block; min-height: 44px; padding: 6px 10px; line-height: 1.4; }
+.brief-summary.is-links .brief-tile small { margin-right: 2px; font-size: 12px; }
+/* The value is one unit: where it does not fit beside its label (「取得できません」 at 375px) it drops whole under it. */
+.brief-summary.is-links .brief-tile b { font-size: 14px; white-space: nowrap; }
+.brief-summary.is-links .brief-tile em { display: block; font-size: 12px; line-height: 1.4; }

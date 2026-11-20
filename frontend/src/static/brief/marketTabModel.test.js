@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { attempt, breadth, closes, confirmed, days, failed, index, oldSchema, trends, UP } from '../../test/fixtures/marketTrends';
-import { basisConflict, delta, BREAKOUT_HOLD_LABEL, BREAKOUT_WINDOW_TEXT, distributionGrade, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, DISTRIBUTION_CAUTION, DISTRIBUTION_REFERENCE, DISTRIBUTION_TEXT, DISTRIBUTION_WARN, REFERENCE_CHECKS, RULE_TEXT, signedPercent, STAGE_NAMES, verdictBasis, verdictWaiting, yearRange } from './marketTabModel';
+import { basisConflict, delta, BREAKOUT_HOLD_LABEL, BREAKOUT_WINDOW_TEXT, distributionGrade, groupDate, indexCloses, indexSummary, marketCardView, marketDating, pointChange, rangePosition, DISTRIBUTION_CAUTION, DISTRIBUTION_REFERENCE, DISTRIBUTION_TEXT, DISTRIBUTION_WARN, REFERENCE_CHECKS, RULE_TEXT, signedPercent, STAGE_NAMES, verdictBasis, verdictBasisShort, verdictWaiting, yearRange } from './marketTabModel';
 import { DISTRIBUTION_METHOD } from '../distributionDays';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -296,6 +296,21 @@ describe('market tab helpers', () => {
     expect(verdictBasis({ label: '長期トレンド警戒（独自判定）', cap: 0 }, '2026-10-02')).toEqual(verdictBasis({ label: '長期トレンド警戒', cap: 0 }, '2026-10-02'));
     expect(verdictBasis({ label: '新規購入を抑制（独自判定）', cap: 0 }, '2026-10-02')).toEqual({ text: '根拠（10/2スキャン時点）：S&P 500（SPY）は50日線・200日線の上で、局面判定が上昇トレンドではない', above50: true, above200: true });
     expect(verdictBasis({ label: '市場未確認', cap: 0, state: 'unknown' }, '2026-10-02')).toBeNull();
+    // The short form (Today's first fold on a phone) is made from the full one for every verdict that has one: no scan stamp,
+    // SPY for 「S&P 500（SPY）」, without the regime's inputs; none when there is no full form.
+    const shorts = Object.fromEntries(['上昇トレンド（独自判定）', '上昇に圧力（独自判定）', '50日線割れ（弱含み・独自判定）', '長期トレンド警戒（独自判定）', '新規購入を抑制（独自判定）']
+      .map(label => [label, verdictBasisShort({ label, cap: 0 }, '2026-10-02')]));
+    expect(shorts).toEqual({
+      '上昇トレンド（独自判定）': '根拠：SPYが50日線・200日線の上で、局面判定が「上昇トレンド」',
+      '上昇に圧力（独自判定）': '根拠：SPYは50日線・200日線の上で、局面判定が「上昇に圧力」',
+      '50日線割れ（弱含み・独自判定）': '根拠：SPYの終値が50日線の下',
+      '長期トレンド警戒（独自判定）': '根拠：SPYの終値が200日線の下',
+      '新規購入を抑制（独自判定）': '根拠：SPYは50日線・200日線の上で、局面判定が上昇トレンドではない',
+    });
+    // The short form never says what the full one does not: its words after 「SPY」 are the full form's, the regime's inputs left out.
+    for (const label of Object.keys(shorts)) expect(verdictBasis({ label, cap: 0 }, '2026-10-02').text.replace('（分配日・FTDなど）', '')).toContain(shorts[label].slice('根拠：SPY'.length));
+    expect(verdictBasisShort({ label: '市場未確認', cap: 0, state: 'unknown' }, '2026-10-02')).toBeNull();
+    expect(verdictBasisShort(null, '2026-10-02')).toBeNull();
     const basis = verdictBasis(UP, '2026-10-02');
     expect(basisConflict(basis, { date: '2026-10-02', vsMa: -1, vs200: 3 }, '2026-10-02')).toBe('判定の根拠はスキャン時点のSPY、この数値は長期履歴の^GSPC終値（10/2）です。50日線との位置が一致していません。');
     expect(basisConflict(basis, { date: '2026-10-02', vsMa: 1, vs200: 3 }, '2026-10-02')).toBeNull();

@@ -2,8 +2,9 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import useMediaQuery from '../useMediaQuery';
 import { money } from '../positionGeometry';
-import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, earningsCall, focusCandidates, focusCounts, focusHeadingNote, focusTone, memoCandidateView, pivotDistanceText, rowSecChipDrawn, watchEvent } from './briefCandidate';
-import { leadingGroups, marketTileNote, marketTileSuffix, marketTone } from './briefEnvironment';
+import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, earningsCall, focusCandidates, focusCounts, focusHeadingNote, memoCandidateView, pivotDistanceText, rowSecChipDrawn, watchEvent } from './briefCandidate';
+import { leadingGroups, marketTileNote, marketTileSuffix } from './briefEnvironment';
+import { marketLines } from '../portfolioPlan';
 import { EARNINGS_CHIP_NOTE, fundamentalsCoverageWarning, publishedFundamentalsCoverage } from '../fundamentalsExplain.js';
 import { isBreakdown, sellChipView } from './briefSell';
 import MarketCard from './MarketCard';
@@ -80,7 +81,7 @@ export function watchAttention({ state, watched, watchCount, unlisted, sells }) 
  * Today: the three answers, the market card, the focus candidates and the watch list. `nav` holds the
  * moves the summary tiles and links make: market(), list(filter) and watch(); `onUnwatch` removes a symbol.
  */
-export default function TodayView({ brief, watch, open, now, animate, wide, nav, onUnwatch, ageNote = null }) {
+export default function TodayView({ brief, watch, open, now, animate, wide, nav, onUnwatch, ageNote = null, ageLine = null, target = null }) {
   const focus = useMemo(() => focusCandidates(brief.ranked, brief.date, 5, brief.bundle.data), [brief.ranked, brief.date, brief.bundle.data]);
   // The whole pool behind the five rows, so the summary never reads 「接近0」 while near-pivot stocks exist.
   const counts = useMemo(() => focusCounts(brief.ranked, brief.date, brief.bundle.data), [brief.ranked, brief.date, brief.bundle.data]);
@@ -100,6 +101,8 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
   // assistive tech; the notes (the phone's 注記, in place under the market card from 1024px) lead with the tile's word.
   const tileSuffix = marketTileSuffix(tileInput), tileNote = tileSuffix ? marketTileNote(tileInput) : null;
   const tileLine = tileNote ? `${tileSuffix}：${tileNote}` : null;
+  // The gate reads the verdict's two lines from the same rows as modelMarket (marketLines), once per bundle.
+  const lines = useMemo(() => marketLines(brief.bundle.data?.rows || []), [brief.bundle.data]);
   // The first rows of the watch list, plus every row with a sell chip (a fired check, a caution or 未確認,
   // never folded away); the rest open in place and stay open for this session. Nothing folds or moves
   // until every row's check is in, so a row with a signal never appears late from behind the button.
@@ -124,10 +127,9 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
   const uncheckedNote = focus.some(view => baseMuted(view) && sellChipView(sells[view.symbol])?.tone !== 'ext') ? BASE_UNCHECKED_NOTE : null;
   return <>
     <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け・米国株` : '日付未確認'}</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
-    <TodaySummary market={brief.market} marketLoading={brief.marketLoading} suffix={tileSuffix} suffixNote={tileNote} counts={counts} attention={watchAttention({ state, watched, watchCount: watch.length, unlisted, sells })} state={state} nav={nav} open={open} date={brief.date} />
-    <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={brief.trends} date={brief.date} />
-    {/* From 1024px the notes are in place: the tile's 「NAS調整中」 is explained under the market card it summarises. */}
-    {wide && tileLine && <p className="brief-note brief-tile-note">{tileLine}</p>}
+    <TodaySummary counts={counts} attention={watchAttention({ state, watched, watchCount: watch.length, unlisted, sells })} state={state} nav={nav} open={open} date={brief.date} />
+    {/* The 地合い region: the gate card (its fold closed on a phone, in place from 1024px, where the sign's sentence is said in it). */}
+    <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={brief.trends} date={brief.date} manifest={brief.manifest?.data ?? null} lines={lines} target={target} late={ageLine} wide={wide} tileLine={tileLine} />
     {/* Under the market card (the stack gap above it is cancelled in brief-watch.css): on a phone one line, the seam's
         short form when it gives one (the full sentence in its title and the notes); wider, the full sentence. */}
     {coverageWarning && <p className="brief-note brief-coverage-note" title={phone && coverageWarning.short ? coverageWarning.text : undefined}>{phone ? coverageWarning.short || coverageWarning.text : coverageWarning.text}</p>}
@@ -173,30 +175,23 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
 }
 
 /**
- * Three answers first: can I buy, how many setups, does anything I watch need attention. Each tile is a
- * link to where its answer is explained: the market tab, the focus pool as a list, the flagged stock (or
- * the watch tab, flagged rows first).
+ * The two answers under the gate card: how many setups, does anything I watch need attention. Each tile is a link to where its
+ * answer is explained: the focus pool as a list, the flagged stock (or the watch tab, flagged rows first). The market's answer
+ * is the gate card's (MarketCard).
  */
-function TodaySummary({ market, marketLoading, suffix = null, suffixNote = null, counts, attention, state, nav, open, date = null }) {
-  const tone = marketTone(market), focus = focusTone(state, counts, market);
-  // The card below carries 独自判定; the summary keeps only the state (「50日線割れ（弱含み）」).
-  const verdict = market?.label ? market.label.replace(/（(?:(.+)・)?独自判定）$/, (_, inner) => inner ? `（${inner}）` : '') : '市場未確認';
+function TodaySummary({ counts, attention, state, nav, open, date = null }) {
   const one = attention.flagged.length === 1 ? attention.flagged[0] : null;
-  const capNote = market?.cap > 0 ? `目安≤${Math.round(market.cap * 100)}%` : market?.state === 'unknown' || !market ? '買いは見送り' : '買いは控える';
-  const marketNote = !market && marketLoading ? '' : market?.cap > 0 ? `検討可・${capNote}` : capNote;
-  // With the market track's suffix (「NAS調整中」, 「FTD確認済み」), the note keeps its two lines on a phone: the cap
-  // and then the suffix on a line of its own (「検討可」 is what the tile's tone and the cap already say).
-  const showSuffix = Boolean(suffix) && !(!market && marketLoading);
   // Each tile is as of the analysis date: said to assistive tech after the tile's text (the bar shows it on screen).
   const asOf = date ? <span className="sr-only">・{barDay(date)}引け時点</span> : null;
   const breakouts = state === 'ready' && counts?.breakout > 0 ? counts.breakout : 0;
-  return <ul className="brief-summary in" style={{ '--i': 0 }} aria-label="今日の要点" data-testid="brief-summary">
-    <li className={`tone-${tone}`}><Link className="brief-tile" to="/brief/market" title={showSuffix && suffixNote ? suffixNote : undefined} onClick={follow(() => nav.market())}><small>地合い</small><b>{!market && marketLoading ? '読込中' : verdict}</b><em>{showSuffix ? <><Parts text={capNote} /><span className="sr-only">・</span><span className="brief-frag brief-tile-suffix">{suffix}</span>{suffixNote && <span className="sr-only">（{suffixNote}）</span>}</> : <Parts text={marketNote} />}</em>{asOf}</Link></li>
-    <li className={`${focus ? `tone-${focus}` : ''}${breakouts ? ' has-sub' : ''}`}><Link className="brief-tile" to="/brief/list" onClick={follow(() => nav.list('focus'))}><small>注目候補</small><b>{state === 'ready' ? `${counts.total}銘柄` : BUNDLE_SHORT[state]}</b><em><Parts text={state === 'ready' ? `ゾーン${counts.zone}・接近${counts.near}` : ''} /></em>{asOf}</Link>
+  return <ul className="brief-summary is-two is-links in" style={{ '--i': 0 }} aria-label="今日の要点" data-testid="brief-summary">
+    {/* The 注目候補 answer's top edge is neutral on every day (plan D17: the rebuilt tile row is a new element in text inks; zone
+        green beside the gate's 「買いは控える」 or 「更新待ち」 would still read as a buyable day). The watch answer keeps its 崩れ tone. */}
+    <li className={breakouts ? 'has-sub' : undefined}><Link className="brief-tile" to="/brief/list" onClick={follow(() => nav.list('focus'))}><small>注目候補</small>{' '}<b>{state === 'ready' ? `${counts.total}銘柄` : BUNDLE_SHORT[state]}</b><em><Parts text={state === 'ready' ? `ゾーン${counts.zone}・接近${counts.near}` : ''} /></em>{asOf}</Link>
       {/* The day's breakouts among them: a link of its own in a strip under the tile's text (the tile keeps the strip's
           height free, so neither covers the other), breaking only after 「うち」. */}
       {breakouts > 0 && <Link className="brief-tile-sub" to="/brief/list" data-testid="brief-breakout-link" onClick={follow(() => nav.list('breakout'))}><span>うち<span className="brief-nowrap">上抜け{breakouts}<span aria-hidden="true"> ›</span></span></span></Link>}</li>
     <li className={attention.flagged.length ? 'tone-ext' : ''}><Link className="brief-tile" to={one ? `/brief/stock/${encodeURIComponent(one)}` : '/brief/watch'} onClick={follow(event => (one ? open(one, event.currentTarget, 'watch') : nav.watch()))}>
-      <small>ウォッチの注意</small><b>{attention.value}</b><em><Parts text={attention.note} /></em>{asOf}</Link></li>
+      <small>ウォッチの注意</small>{' '}<b>{attention.value}</b><em><Parts text={attention.note} /></em>{asOf}</Link></li>
   </ul>;
 }

@@ -140,7 +140,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate').first()).toBeVisible();
     await expect(page.locator('#brief-focus-title')).toHaveText('注目候補（地合い：買いは控える・監視のみ）');
-    const tile = page.getByTestId('brief-summary').locator('li').nth(1);
+    // S1-P4: the 注目候補 tile is the first of the two answers (the market's is the gate card's).
+    const tile = page.getByTestId('brief-summary').locator('li').nth(0);
     await expect(tile).toContainText('注目候補');
     await expect(tile).not.toHaveClass(/tone-zone/);
     await expect(focus.locator('.tone-zone')).toHaveCount(0);
@@ -153,7 +154,7 @@ const BIG_PRICE = onRow('ZZNV', row => { row.current_price = 1234.56; Object.ass
 for (const width of [320, 390]) test.describe(`the bar at ${width}px`, () => {
   test.use(phoneDevice(width, 844));
 
-  for (const [label, mutate, price, change, tone] of [['a three-digit price', undefined, /^\$\d{3}\.\d{2}$/, '前日比 +2.0%', /is-up/], ['a four-digit price and a two-digit fall', BIG_PRICE, /^\$1,235$/, '前日比 −12.3%', /is-down/]]) {
+  for (const [label, mutate, price, change, tone] of [['a three-digit price', undefined, /^\$\d{3}\.\d{2}$/, '前日比 ↑+2.0%', /is-up/], ['a four-digit price and a two-digit fall', BIG_PRICE, /^\$1,235$/, '前日比 ↓−12.3%', /is-down/]]) {
     test(`carries ${label} and the verified day change, whole, and stays 48px or less`, async ({ page }) => {
       const { errors } = await openBrief(page, '#/brief/stock/ZZNV', mutate ? { mutate } : {});
       await expect(conclusion(page)).toBeVisible();
@@ -189,8 +190,8 @@ test.describe('the desktop header', () => {
   test.use(VIEWPORTS.desktop);
   test('shows the same verified day change as the rows', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/stock/ZZKS');
-    await expect(page.locator('.brief-stockhead h2 .brief-daychg')).toHaveText('前日比 +2.0%');
-    await expect(page.getByRole('region', { name: '注目候補' }).locator('[data-symbol="ZZKS"] .brief-daychg')).toHaveText('前日比 +2.0%');
+    await expect(page.locator('.brief-stockhead h2 .brief-daychg')).toHaveText('前日比 ↑+2.0%');
+    await expect(page.getByRole('region', { name: '注目候補' }).locator('[data-symbol="ZZKS"] .brief-daychg')).toHaveText('前日比 ↑+2.0%');
     expect(errors).toEqual([]);
   });
 });

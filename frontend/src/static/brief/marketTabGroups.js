@@ -5,8 +5,9 @@
 import { BREAKOUT_MIN_SAMPLE, LEADER_MIN_COHORT } from '../marketLongHistory';
 import { indexSummary } from '../reference/indexSummary.js';
 import { distributionCount, shortDate, BREAKOUT_HOLD_NAME, ENV_RULES } from './briefModel';
-import { delta, BREAKOUT_HOLD_LABEL, BREAKOUT_WINDOW_TEXT, DISTRIBUTION_TEXT, groupDate, indexCloses, monthBefore, num, pointChange, rangePosition, RULE_TEXT, STAGE_FIELDS, YEAR, yearRange } from './marketTabModel';
+import { delta, BREAKOUT_HOLD_LABEL, BREAKOUT_WINDOW_TEXT, DISTRIBUTION_TEXT, groupDate, indexCloses, num, RULE_TEXT, STAGE_FIELDS, YEAR } from './marketTabModel';
 import { breakoutView } from './marketTabOnly';
+import { leaderHealthView, stockSideTerms, STOCK_SIDE_HEAD } from './marketGateFacts';
 
 const finite = Number.isFinite;
 
@@ -72,10 +73,8 @@ export function earlyBreakoutLine(row) {
   return finite(row.breakoutEarlyFailedPercent) ? `${EARLY_HEAD}：${num(n)}件中 ${num(row.breakoutEarlyFailedPercent)}% が −${BREAKOUT_FAILURE_PERCENT}%に到達` : `${EARLY_HEAD}：${num(n)}件（到達数を確認できません）`;
 }
 
-/** The 銘柄側 line's head (M6): the stock side, for reference, beside a guide it does not move. */
-export const STOCK_SIDE_HEAD = '銘柄側（参考・目安は変えません）';
-/** The TT term's name on the 銘柄側 line (the row's own label is TT達成数). */
-const STOCK_SIDE_TT = 'TT達成';
+// The 銘柄側 line's head (M6) moved to marketGateFacts.js (plan D12), whose group of the gate it names too; re-exported here.
+export { STOCK_SIDE_HEAD };
 
 /**
  * The 銘柄側 line beside the verdict (M6; MT-01, MT-10): what the leaders do, in one line, from the rows the market tab already
@@ -91,15 +90,8 @@ const STOCK_SIDE_TT = 'TT達成';
  */
 function stockSideLine({ ready, rows, last, date, known, tt, breakout, health }) {
   if (!ready) return null;
-  const ttHit = known('trendTemplateCount'), ttBefore = ttHit ? monthBefore(rows, ttHit, 'trendTemplateCount') : null;
-  const rate = known('breakoutHoldPercent');
-  const terms = [
-    tt.valued && ttHit ? { name: STOCK_SIDE_TT, value: num(ttHit.value), asOf: tt.asOf, extra: ttBefore === null ? '1か月前の値なし' : `1か月前 ${num(ttBefore)}` } : { name: STOCK_SIDE_TT, value: tt.b },
-    breakout.valued ? { name: BREAKOUT_HOLD_NAME, value: breakout.b, asOf: breakout.asOf, extra: rate ? `${num(rate.row.breakoutsJudged)}件` : null } : { name: BREAKOUT_HOLD_NAME, value: breakout.b },
-    health.item.valued ? { name: health.item.label, value: health.item.b, asOf: health.item.asOf, extra: health.cohort === null ? null : `${num(health.cohort)}銘柄` } : { name: health.item.label, value: health.item.b },
-  ];
-  // The long history's own session, when it is older than the analysis date (the rows' asOf of that session reads the same).
-  const shared = last && date && last.date < date ? shortDate(last.date, date) : null;
+  // The terms and the long history's own session when older than the analysis date (marketGateFacts.js, which the gate reads too).
+  const { terms, shared } = stockSideTerms({ rows, last, date, known, tt, breakout, health });
   const text = terms.map(term => { const notes = [term.asOf && term.asOf !== shared ? `${term.asOf}時点` : null, term.extra].filter(Boolean);
     return `${term.name} ${term.value}${notes.length ? `（${notes.join('・')}）` : ''}`; }).join('・');
   return `${shared ? STOCK_SIDE_HEAD.replace('（', `（${shared}時点・`) : STOCK_SIDE_HEAD}：${text}`;
@@ -183,18 +175,9 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
     : { key: 'extremes', label: '52週の新高値・新安値', metric: 'highsLows', rule: RULE_TEXT.extremes, ...absent('newHighs') };
 
   const rs90 = count('rs90', 'RS推計90以上のTT達成（独自）', 'rs90TemplateCount', 'trendTemplateCount', RULE_TEXT.rs90);
-  const leadersRule = rule('leaders'), stageRule = rule('stage');
-  const health = known('leaderHealthPercent');
-  const cohortNow = last && Number.isSafeInteger(last.leaderCohort) ? last.leaderCohort : null;
-  const healthBase = { key: 'health', label: 'リーダーの健全度', metric: 'leaderHealthPercent', rule: RULE_TEXT.leaders };
-  // A newest cohort too small for a rate is today's state; an older rate is not shown in its place.
-  // M8a: the RS推計90 part of the cohort, from the row the value reads (the newest for a small cohort, the rate's own row).
-  const healthItem = cohortNow !== null && cohortNow < LEADER_MIN_COHORT ? { ...healthBase, valued: true, b: `${cohortNow}銘柄`, asOf: older(last.date), note: `20営業日前のTT達成が${LEADER_MIN_COHORT}銘柄未満のため率は非表示`, details: [rs90CohortLine(last)] }
-    : health ? (() => { const before = monthBefore(rows, health, 'leaderHealthPercent'), range = yearRange(rows, health, 'leaderHealthPercent');
-      return { ...healthBase, valued: true, b: `${num(health.value)}%`, asOf: older(health.date), change: before === null ? null : pointChange(health.value - before, 0), range, position: rangePosition(range), format: value => `${num(value)}%`,
-        note: `20営業日前のTT達成${num(health.row.leaderCohort)}銘柄が対象`, detail: `${num(health.row.leaderCohort)}銘柄のうち${num(health.row.leaderCohortAbove50)}銘柄が50日線の上`, details: [rs90CohortLine(health.row)],
-        warn: Boolean(leadersRule?.fired), flag: leadersRule?.fired ? `${ENV_RULES.leaderHealthBelow}%未満` : null }; })()
-      : { ...healthBase, ...absent('leaderCohort') };
+  const stageRule = rule('stage');
+  // The leaders' health row (marketGateFacts.js), with the RS推計90 part of its cohort as the opened row's line (M8a).
+  const { item: healthItem, cohort: healthCohort } = leaderHealthView({ rows, last, known, rule, older, absent }, row => [rs90CohortLine(row)]);
   // M8c: the breakout row's opened lines, from the row its value reads (the rate's own row, else the newest): the early read,
   // what it counts, and its window while the label is the short name. The row's value, rule and sign are unchanged.
   const rateHit = known('breakoutHoldPercent'), breakoutRow = rateHit ? rateHit.row : last;
@@ -230,6 +213,6 @@ export function marketTabParts({ ready, status, history, rows, last, hasField, r
     { key: 'spx', name: 'S&P 500', short: 'S&P', spoken: 'S&P 500', closes: history?.sp500, distribution: spx, distributionEnd: distributionCount(spx)?.date || null, followThrough: spx?.followThrough ?? null, summary },
     { key: 'ndx', name: 'Nasdaq総合', short: 'NAS', spoken: 'Nasdaq総合（NAS）', closes: ndxCloses, distribution: ndx, distributionEnd: distributionCount(ndx)?.date || null, followThrough: ndx?.followThrough ?? null,
       summary: ndxPosition && ndxPosition.date === ndxLast.date && ndxPosition.close === ndxLast.close ? ndxPosition : indexSummary(ndxCloses) }] : null;
-  const stockSide = stockSideLine({ ready, rows, last, date, known, tt, breakout, health: { item: healthItem, cohort: health && !(cohortNow !== null && cohortNow < LEADER_MIN_COHORT) ? health.row.leaderCohort : null } });
+  const stockSide = stockSideLine({ ready, rows, last, date, known, tt, breakout, health: { item: healthItem, cohort: healthCohort } });
   return { signals, groups, series, stockSide };
 }

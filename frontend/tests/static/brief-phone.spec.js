@@ -47,20 +47,21 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
     await expect(market.locator('.brief-note').last()).toHaveText('地合いの判定・各集計・RS推計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。');
     // The dated title stays the page heading for assistive tech; the bar shows the date.
     await expect(page.getByRole('heading', { level: 1, name: '10月2日（金）の判断' })).toBeAttached();
+    // S1-P4: the four facts are in the gate card's fold, closed on a phone; the first fold carries the answer, the labelled
+    // figure, its definition and the 根拠 line.
     await expect(market.locator('.brief-fact')).toHaveCount(4);
-    for (const fact of await market.locator('.brief-fact').all()) await expect(fact).toBeVisible();
+    for (const fact of await market.locator('.brief-fact').all()) await expect(fact).toBeHidden();
+    for (const line of ['.brief-gate-headline', '.brief-gate-figure', '.brief-gate-basis', '.brief-gate-more > summary']) await expect(market.locator(line)).toBeVisible();
     // Tile text reads at 12px or more, including the names of a pair's sides (S&P / NAS, 高 / 安).
     const tileText = await market.locator('.brief-fact small, .brief-fact em, .brief-pair-name').evaluateAll(nodes => nodes.map(node => [node.textContent, parseFloat(getComputedStyle(node).fontSize)]));
     expect(tileText.filter(([, size]) => size < 12)).toEqual([]);
     expect(tileText.map(([text]) => text)).toEqual(expect.arrayContaining(['S&P', 'NAS', '高', '安']));
-    const summary = page.getByTestId('brief-summary');
-    // The fixture's Nasdaq is in correction on the analysis day, so the market track's suffix (marketTileSuffix, its
-    // copy) follows the cap on a line of its own and 「検討可」 gives way (the tile's tone and the cap already say it).
-    // One session behind, the Nasdaq's record is not the analysis day's: no suffix, and the note reads 検討可・目安.
-    await expect(summary.locator('.brief-tile-suffix')).toHaveCount(lag ? 0 : 1);
-    if (lag) await expect(summary).toContainText('検討可・目安≤50%');
-    else { await expect(summary).toContainText('目安≤50%'); await expect(summary).not.toContainText('検討可'); }
-    expect(await summary.locator('.brief-frag', { hasText: '目安≤50%' }).evaluate(node => node.getClientRects().length)).toBe(1);
+    // The fixture's Nasdaq is in correction on the analysis day, so the gate's sign line says the market track's word
+    // (marketTileSuffix). One session behind, the Nasdaq's record is not the analysis day's: the sign is withheld.
+    await expect(market.locator('.brief-gate-sign')).toHaveText(lag ? 'サイン：未確認（10/2分は再集計待ち）' : 'NAS調整中（参考・目安は不変）');
+    // The figure with its label and its definition, each on one line (the tile's 「目安≤50%」 is the gate's figure now).
+    await expect(market.locator('.brief-gate-figure')).toHaveText('新規買いの目安（独自設定）最大50%');
+    expect(await market.locator('.brief-gate-figure b').evaluate(node => node.getClientRects().length)).toBe(1);
     // The bar says the analysis session with its weekday, never today's date.
     await expect(page.locator('.brief-bar-title')).toContainText('分析基準日 10/2（金）引け・米国株');
     await expect(page.locator('.brief-bar-title time')).toHaveAttribute('datetime', '2026-10-02');
@@ -126,8 +127,8 @@ test.describe('a failed manifest on Today', () => {
   test('the summary, the focus card and the watch card say the candidates cannot be fetched, never 0', async ({ page }) => {
     await openBrief(page, '#/brief', { fail: 'manifest', storage: { 'research-watch': ['ZZNV'] } });
     const summary = page.getByTestId('brief-summary');
-    await expect(summary).toContainText('注目候補取得できません');
-    await expect(summary).toContainText('ウォッチの注意取得できません1銘柄を登録');
+    await expect(summary).toContainText('注目候補 取得できません');
+    await expect(summary).toContainText('ウォッチの注意 取得できません1銘柄を登録');
     await expect(summary).not.toContainText(/0銘柄|ゾーン0|接近0|未登録/);
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus).toContainText('候補データを取得できません。');
@@ -389,28 +390,27 @@ test.describe('desktop rows keep still when a stock opens beside them', () => {
 // Today's three answers are links (44px or more, at their own height) to where each is explained.
 for (const [width, device] of Object.entries({ 320: phone(320, 640), 375: phone(375, 812), 390: VIEWPORTS.phone })) test.describe(`Today's tiles at ${width}px`, () => {
   test.use(device);
-  test('each tile is a link of 44px or more, to the market tab, the focus pool and the watch tab', async ({ page }) => {
+  test('each tile is a link of 44px or more, to the focus pool and the watch tab', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief');
     const summary = page.getByTestId('brief-summary');
     await expect(page.getByRole('region', { name: '注目候補' }).getByTestId('brief-candidate')).toHaveCount(5);
+    // S1-P4: two answers (the market's is the gate card's), one row of two links (ledger step 1).
     const tiles = summary.getByRole('link');
-    await expect(tiles).toHaveCount(3);
+    await expect(tiles).toHaveCount(2);
     // Measure once the summary's entrance has finished: mid-slide, a tile reads 4.0000076px taller than its link.
     await summary.evaluate(node => Promise.all(node.getAnimations({ subtree: true })
       .filter(animation => animation.effect?.getComputedTiming().iterations !== Infinity)
       .map(animation => animation.finished.catch(() => null))));
     for (const box of await tiles.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()))) expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(44);
-    // The link fills its tile, and the tile is as tall as before (its text sets it, not the link): 97px at 375
-    // with the default storage, as measured before the tiles became links (brief-watch.spec.js pins the tile
-    // with a watch list).
+    // The link fills its tile, and the row is one link high: 52px at 375 with the default storage (was three tiles of 97px;
+    // brief-watch.spec.js pins the row with a watch list).
     expect(await summary.locator('li').evaluateAll(items => items.every(li => Math.abs(li.getBoundingClientRect().height - li.querySelector('a').getBoundingClientRect().height) <= 4))).toBe(true);
-    if (width === '375') for (const height of await summary.locator('li').evaluateAll(items => items.map(li => li.getBoundingClientRect().height))) expect(Math.abs(height - 97)).toBeLessThanOrEqual(2);
-    await expect(tiles.nth(0)).toHaveAttribute('href', '#/brief/market');
-    await tiles.nth(0).click();
+    if (width === '375') for (const height of await summary.locator('li').evaluateAll(items => items.map(li => li.getBoundingClientRect().height))) expect(Math.abs(height - 52)).toBeLessThanOrEqual(2);
+    await page.getByRole('region', { name: '地合い', exact: true }).getByRole('link', { name: /市場の詳細/ }).click();
     await expect(page).toHaveURL(/#\/brief\/market$/);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
     // 注目候補: the list of the same pool (zone and near), said as a chip that clears it; no segment is pressed.
-    await tiles.nth(1).click();
+    await tiles.nth(0).click();
     await expect(page).toHaveURL(/#\/brief\/list$/);
     const chip = page.getByRole('button', { name: /^注目候補（ゾーン＋接近）\s*21/ });
     await expect(chip).toBeVisible();
@@ -422,7 +422,7 @@ for (const [width, device] of Object.entries({ 320: phone(320, 640), 375: phone(
     await expect(chip).toHaveCount(0);
     await expect(page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ })).toHaveAttribute('aria-pressed', 'true');
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '今日' }).click();
-    await tiles.nth(2).click();
+    await tiles.nth(1).click();
     await expect(page).toHaveURL(/#\/brief\/watch$/);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);

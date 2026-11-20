@@ -4,12 +4,16 @@
 // hands the result to the 地合い card (marketCardView's `study`). Every number comes from the published market-trends
 // asset or the generated reference (market-regime-reference-v1.json): nothing here types a percentage of the app's own,
 // changes a rule, a threshold or the verdict. The one typed figure is a citation (FTD_SOURCE_GAINS), never a rule.
-import { bare, distributionCount, ftdPrevious, gspcFollowThrough, nasdaqNote, shortDate, trendsStatus, under6, FTD_PREVIOUS_NAME, FTD_RECENT_SESSIONS, FTD_TEXT } from '../brief/briefModel';
+import { bare, distributionCount, gspcFollowThrough, nasdaqNote, shortDate, trendsStatus, under6, FTD_PREVIOUS_NAME, FTD_RECENT_SESSIONS, FTD_TEXT } from '../brief/briefModel';
 import { DISTRIBUTION_TEXT, num, signedPercent, SURVIVORSHIP_NOTE, verdictBasis } from '../brief/marketTabModel';
 import { KEY_ABSENT } from '../brief/marketTabGroups';
 import { FTD_MIN_DECLINE } from '../followThroughDay.js';
 import { indexSummary } from './indexSummary.js';
 import { capText, MARKET_CAPS } from '../portfolioPlan';
+// The regime's block and names moved to brief/marketGateFacts.js (plan D12), which Today's gate reads too; re-exported here so
+// their importers are unchanged.
+import { gspcFtdWords, publishedMarketContext, regimeCause, REGIME_NAMES } from '../brief/marketGateFacts';
+export { publishedMarketContext, REGIME_NAMES };
 import { biasTag, ddGradeState, ftdRecent, ftdState, highState, meanLowerStates, quadrantState, referencePeriod, referenceState, signalTags, stateTag, validReference, BIAS_SHARE, INDEX_SYMBOLS, SIGNAL_INDICATORS, TAGS } from './marketRegimeReference.js';
 
 const finite = Number.isFinite;
@@ -458,94 +462,16 @@ export function marketRegimeContext({ history, trends, reference, date = null })
 
 // ---- the judge side's cause, the TT population and the Nasdaq's source (market tab only) ------------------------------
 
-const REGIMES = new Set(['confirmed_uptrend', 'uptrend_under_pressure', 'correction', 'downtrend']);
-const count = value => Number.isSafeInteger(value) && value >= 0;
-/**
- * The judge side's market block, `manifest.markets.US.market_context` (plan §2.3, exported by the data track), read
- * raw like publishedFundamentalsCoverage: returned only when it is in shape and dated for the analysis date `date`,
- * else null (an older publication never has it). A null field stays null: a reader says 未収録, never 0.
- */
-export function publishedMarketContext(marketEntry, { date = null } = {}) {
-  const block = marketEntry?.market_context;
-  if (!block || typeof block !== 'object' || Array.isArray(block) || !isDay(date) || block.as_of_date !== date) return null;
-  if (marketEntry.as_of_date !== undefined && marketEntry.as_of_date !== date) return null;
-  if (block.method !== 'backend-market-regime-v1' || block.source !== 'scan-rows' || !REGIMES.has(block.regime)) return null;
-  if (!(block.distribution_days === null || count(block.distribution_days)) || !(block.ftd_days_since === null || count(block.ftd_days_since))) return null;
-  if (!(block.ftd_date === null || (isDay(block.ftd_date) && block.ftd_date <= date)) || !(block.exposure_pct === null || finite(block.exposure_pct))) return null;
-  return block;
-}
-
 /**
  * Whom TT達成数 counts (the 注記 and its opened row): the long history's names, judged on their daily closes by the
  * trend template's price conditions only (RS推計 included), not the candidate list's selection, which also asks a price
  * and a traded value.
  */
 export const TT_POPULATION = 'TT達成数は長期集計の値で、公開中の銘柄を日足の株価条件（RS推計70以上を含むトレンドテンプレート8条件）だけで判定した数です。候補一覧の選定銘柄（株価や売買代金の条件もあり）とは対象が異なります。';
-/** The backend regimes (market_context.regime) in the app's words. */
-export const REGIME_NAMES = Object.freeze({ confirmed_uptrend: '上昇トレンド', uptrend_under_pressure: '上昇に圧力', correction: '調整', downtrend: '下降トレンド' });
 
-/** What the backend regime reads besides the count (market_regime.py: the 50/200-day lines and the breadth guard). */
-const REGIME_READS = '分配日のほか50日線・200日線と参加度も見ます';
-
-/**
- * What the app's own ^GSPC record of the analysis date (gspcFollowThrough: the フォロースルーデー row and its ◆) reads
- * beside the regime's SPY FTD, in words, only where the two differ: 「^GSPCの日足ではFTD未確認」 / 「…FTD失敗」 for a
- * record that is not a confirmed FTD, 「^GSPCの日足ではFTD 8/13」 for a confirmed one dated otherwise than the regime's
- * known FTD date, 「^GSPCの日足では前回のFTD 8/13」 when that FTD is older than FTD_RECENT_SESSIONS (ftdPrevious, as the
- * row, its ◆ and ownFtdLine call it; a record without a whole count keeps 「FTD」); else null (the same reading, an
- * unknown regime date, or no record of that day to compare).
- */
-export function gspcFtdWords(ft, ftdDate, date) {
-  if (!ft) return null;
-  if (ft.state === 'ftd_failed') return '^GSPCの日足ではFTD失敗';
-  if (ft.state !== 'confirmed') return '^GSPCの日足ではFTD未確認';
-  const own = ft.ftd?.date;
-  return ftdDate && isDay(own) && own !== ftdDate ? `^GSPCの日足では${ftdPrevious(ft) ? FTD_PREVIOUS_NAME : 'FTD'} ${shortDate(own, date)}` : null;
-}
-
-/**
- * One line under the verdict's basis on why the regime (局面判定, the backend's SPY read) reads as it does (inside
- * 「目安と判定の基準」).
- *  - An FTD-upgraded uptrend (modelMarket's ftdUpgraded) whose guide is 0%: the regime is confirmed_uptrend through SPY's
- *    follow-through day while SPY is under a line. The FTD's date comes only from the regime's block (`context`,
- *    publishedMarketContext); without it the date is left out, never guessed from the ^GSPC series. When the app's own
- *    ^GSPC record of that day reads otherwise (`gspc`, gspcFollowThrough), the line says what it reads (gspcFtdWords),
- *    so the two FTD reads on the screen are each attributed. The guide is printed from the cap (capText), never typed.
- *  - Otherwise, with the regime's block for the analysis date: its SPY distribution count (stalling days included), kept
- *    apart from the ^GSPC/^IXIC counts of the 分配日 row. The regime is named only where the basis line does not already
- *    name it (it does for 上昇トレンド and 上昇に圧力). Under any regime but a confirmed uptrend the line adds that the
- *    regime also reads the moving averages and the breadth (REGIME_READS), so a small count never reads as its cause.
- *    A null count reads 未収録, never 0. Under a correction or a downtrend, a confirmed ^GSPC record of the same day adds
- *    that it is the index's separate count (ownFtdLine, M2).
- *  - Without the block (an older publication): null, the basis line alone as before.
- * A block is used only when its regime is the verdict's rows' regime (a market without one borrows none).
- */
-export function regimeCause(market, context, basis, date, { gspc = null } = {}) {
-  if (!market || market.state === 'unknown') return null;
-  const block = context && market.regime && context.regime === market.regime ? context : null;
-  if (market.ftdUpgraded === true && market.cap === 0) {
-    const ftdDate = block?.ftd_date || null, other = gspcFtdWords(gspc, ftdDate, date);
-    return `局面判定はSPYのFTD${ftdDate ? `（${shortDate(ftdDate, date)}）` : ''}による上昇トレンド。${other ? `${other}。` : ''}この目安はSPYが${basis?.above200 === false ? '200日線' : '50日線'}の下のため${capText(market.cap)}（独自判定）`;
-  }
-  const name = block ? REGIME_NAMES[block.regime] : null;
-  if (!name) return null;
-  const count = block.distribution_days === null ? '局面判定の分配日（SPY）は未収録' : `局面判定の分配日：SPY ${num(block.distribution_days)}日（ストーリング日を含む数え方）`;
-  const reads = block.regime !== 'confirmed_uptrend', named = Boolean(basis?.text?.includes(`「${name}」`));
-  const regime = named ? (reads ? `局面判定は${REGIME_READS}` : null) : `局面判定は「${name}」${reads ? `で、${REGIME_READS}` : ''}`;
-  return [count, regime, ownFtdLine(block, gspc, date)].filter(Boolean).join('。');
-}
-
-/**
- * Under a correction or a downtrend, the app's own ^GSPC record of the same day (`gspc`, gspcFollowThrough, dated `date`)
- * that still reads a confirmed FTD (M2): one clause saying it is the index's separate count, which a decline under
- * FTD_TEXT.decline from the high does not withdraw (独自設定), 「前回のFTD」 when older than FTD_RECENT_SESSIONS. A record of
- * another day, any other state or any other regime adds nothing.
- */
-function ownFtdLine(block, gspc, date) {
-  if (!['correction', 'downtrend'].includes(block.regime) || gspc?.available !== true || gspc.state !== 'confirmed' || !isDay(date) || gspc.asOf !== date) return null;
-  const day = isDay(gspc.ftd?.date) ? `（${shortDate(gspc.ftd.date, date)}）` : '';
-  return `下の^GSPCの${ftdPrevious(gspc) ? FTD_PREVIOUS_NAME : 'FTD'}${day}は指数の別集計で、高値から${FTD_TEXT.decline}未満の下落では取り消しません（独自設定）`;
-}
+// The regime's cause line (regimeCause) and its ^GSPC words (gspcFtdWords) moved to brief/marketGateFacts.js (plan D12),
+// which Today's gate reads too; re-exported here so their importers are unchanged.
+export { gspcFtdWords, regimeCause };
 
 /** Where the Nasdaq's figures and line come from (the switch's source line on the desktop, the 注記 on a phone). */
 export const NASDAQ_SOURCE = 'Nasdaq総合の4つの数値と線は、分配日と同じ^IXICの日足（公開データ）から計算しています。';

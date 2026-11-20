@@ -29,6 +29,10 @@ const studyProps = (value, date, ref, wide, { market = null, manifest = null } =
 const show = (value, { date = '2026-10-02', detail = true, market = UP, marketLoading = false, onOpenMetric, ref = reference } = {}) => render(<MemoryRouter><Card market={market} marketLoading={marketLoading} trends={value} date={date} detail={detail} onOpenMetric={onOpenMetric} {...(detail ? studyProps(value, date, ref, true) : {})} /></MemoryRouter>);
 const tiles = () => [...document.querySelectorAll('.brief-fact')];
 const tile = label => tiles().find(element => element.querySelector('small').textContent === label) || null;
+/** Today's fact as main printed it: the tile without the gate's kind tag (S1-P4 adds one after each fact's own lines). */
+const bareTile = label => { const node = tile(label)?.cloneNode(true) ?? null; node?.querySelector('.brief-gate-kind')?.remove(); return node; };
+/** The kind tags of Today's facts, in their order (the gate's fold, plan S1-P4). */
+const factKinds = () => tiles().map(element => element.querySelector('.brief-gate-kind')?.textContent ?? null);
 const toggle = label => within(tile(label)).getAllByRole('button')[0];
 const bare = /未取得|未確認|NaN|undefined|null/;
 const group = name => screen.getByRole('group', { name: new RegExp(`^${name}`) });
@@ -353,13 +357,19 @@ describe('brief market card: market tab', () => {
   });
 });
 
+// Today's 分配日 fact in the gate's fold: the two indices' own count, named apart from the regime's SPY count (the S1 critics'
+// round; the market tab's row keeps 「分配日（25日）」), read with a value as 「判定には使わない別集計」.
+const TODAY_DIST = '指数の分配日（25日）', APART = '判定には使わない別集計・';
+
 describe('brief market card: Today', () => {
   it('keeps the four buy-or-wait facts and links to the market tab for the rest', () => {
     show(trends(), { detail: false });
-    expect(tiles().map(element => element.querySelector('small').textContent)).toEqual(['分配日（25日）', 'TT達成数', '200日線より上', '52週の新高値・新安値']);
-    expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P3日NAS4日7日以上で注意$/);
-    expect(tile('TT達成数')).toHaveTextContent('30銘柄');
-    expect(tile('52週の新高値・新安値')).toHaveTextContent('高40安12差 +28');
+    // S1-P4: the four facts are in the gate's fold, in A's groups (指数側, 広がり, 銘柄側), each with its kind.
+    expect(tiles().map(element => element.querySelector('small').textContent)).toEqual([TODAY_DIST, '52週の新高値・新安値', '200日線より上', 'TT達成数']);
+    expect(factKinds()).toEqual(['実測・参考', '実測・参考', '実測・参考', '独自集計（RS推計を含む）']);
+    expect(bareTile(TODAY_DIST)).toHaveTextContent(/^指数の分配日（25日）S&P3日NAS4日判定には使わない別集計・7日以上で注意$/);
+    expect(bareTile('TT達成数')).toHaveTextContent('30銘柄');
+    expect(bareTile('52週の新高値・新安値')).toHaveTextContent('高40安12差 +28');
     expect(screen.queryByText(/フォロースルーデー/)).toBeNull();
     expect(screen.queryByRole('img', { name: /ステージ構成/ })).toBeNull();
     expect(screen.queryByRole('group', { name: '注意サイン（独自判定）' })).toBeNull();
@@ -373,15 +383,15 @@ describe('brief market card: Today', () => {
     const value = trends({ rows, legacy: true });
     value.data.indices[0] = index('^GSPC', '2026-10-02', 7, '2026-10-02', undefined, true);
     show(value, { detail: false });
-    expect(tiles().map(element => element.querySelector('small').textContent)).toEqual(['分配日（25日）', '先導株数（価格条件）', '50日線より上', '52週の新高値・新安値']);
-    expect(tile('分配日（25日）')).toHaveTextContent('S&P▲注意 7日NAS4日注意：S&Pが7日以上');
-    expect(tile('分配日（25日）')).toHaveClass('is-warn');
+    expect(tiles().map(element => element.querySelector('small').textContent)).toEqual([TODAY_DIST, '52週の新高値・新安値', '50日線より上', '先導株数（価格条件）']);
+    expect(bareTile(TODAY_DIST)).toHaveTextContent(`S&P▲注意 7日NAS4日${APART}注意：S&Pが7日以上`);
+    expect(tile(TODAY_DIST)).toHaveClass('is-warn');
     // The new-lows rule is one the study could not confirm (〔参考〕 on the market tab): 参考 in the warning's place, never amber.
-    expect(tile('52週の新高値・新安値')).toHaveTextContent(/^52週の新高値・新安値高5安9参考：新安値が新高値より多い$/);
+    expect(bareTile('52週の新高値・新安値')).toHaveTextContent(/^52週の新高値・新安値高5安9参考：新安値が新高値より多い$/);
     expect(tile('52週の新高値・新安値')).not.toHaveClass('is-warn');
     expect(tile('52週の新高値・新安値').querySelector('.is-warn, .brief-warnmark')).toBeNull();
-    expect(tile('先導株数（価格条件）')).toHaveTextContent('20銘柄TT達成数は旧形式で未収録');
-    expect(tile('50日線より上')).toHaveTextContent('43.0%200日線は旧形式で未収録');
+    expect(bareTile('先導株数（価格条件）')).toHaveTextContent('20銘柄TT達成数は旧形式で未収録');
+    expect(bareTile('50日線より上')).toHaveTextContent('43.0%200日線は旧形式で未収録');
   });
 
   it('marks the rules the study could not confirm 参考 with a neutral ○, as the market tab does, in the same sentences', () => {
@@ -398,8 +408,8 @@ describe('brief market card: Today', () => {
     expect(split.textContent).toMatch(/^○ 参考：指数は1年高値の水準にありますが、200日線より上の銘柄は45\.0%。指数と個別株が乖離しています（独自判定）。$/);
     // The ○ is a mark only: a screen reader hears 「参考：」 in the ▲'s place.
     for (const node of [...notes.querySelectorAll('li > span:first-child'), split.querySelector('span')]) expect([node.textContent, node.getAttribute('aria-hidden')]).toEqual(['○', 'true']);
-    expect(tile('TT達成数')).toHaveTextContent('参考：10日で20%以上減少');
-    expect(tile('200日線より上')).toHaveTextContent('参考：指数と個別株の乖離');
+    expect(bareTile('TT達成数')).toHaveTextContent('参考：10日で20%以上減少');
+    expect(bareTile('200日線より上')).toHaveTextContent('参考：指数と個別株の乖離');
     for (const label of ['TT達成数', '200日線より上']) expect(tile(label)).not.toHaveClass('is-warn');
     // The market tab marks the same rules 参考 (its study reference) on its rows: one marker for one rule on both screens.
     cleanup();
@@ -412,13 +422,13 @@ describe('brief market card: Today', () => {
     show(trends({ asOf: '2026-10-01', date: '2026-10-02' }), { detail: false });
     expect(screen.getByRole('note')).toHaveTextContent(/^市場の集計は10\/1時点（10\/2分は再集計待ち）$/);
     // The note dates every tile of that one session: none repeats it.
-    expect(tile('TT達成数')).toHaveTextContent(/^TT達成数30銘柄/);
+    expect(bareTile('TT達成数')).toHaveTextContent(/^TT達成数30銘柄/);
     expect(document.querySelector('.brief-fact-asof')).toBeNull();
   });
 
   it('reports a reader failure with its own sentence instead of unknown values', () => {
     show({ loading: false, error: true, data: undefined, failureReason: new Error('市場推移の基準日が一致しません。') }, { detail: false });
-    expect(screen.getByRole('alert')).toHaveTextContent(/^市場推移の基準日が一致しません。数値は表示しません。$/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/^市場推移の基準日が一致しません。その数値は表示しません。$/);
     for (const element of tiles()) expect(element).toHaveTextContent('確認できません整合性エラー');
     expect(document.body.textContent).not.toMatch(/未取得|0・0|。）/);
   });
@@ -426,7 +436,7 @@ describe('brief market card: Today', () => {
   it('calls an offline phone a network failure, and a failed manifest never 未配信', () => {
     const view = show({ loading: false, error: true, data: undefined, failureReason: new TypeError('Failed to fetch') }, { detail: false });
     expect(screen.getByRole('alert')).toHaveTextContent('市場推移データを取得できません（通信エラー）。');
-    expect(tile('TT達成数')).toHaveTextContent('取得できません通信エラー');
+    expect(bareTile('TT達成数')).toHaveTextContent('取得できません通信エラー');
     expect(document.body.textContent).not.toMatch(/整合性|Failed/);
     view.unmount();
     show({ loading: false, error: true, data: undefined, failureKind: 'manifest' }, { detail: false });
@@ -1006,17 +1016,17 @@ describe('brief market card: distribution days in two grades, 5–6 参考 and 7
 
   it('says Today\'s tile in three forms: 注意 amber with ▲ at 7, 参考 without either at 5–6, else the warning line', () => {
     show(counts(7, 5), { detail: false });
-    expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P▲注意 7日NAS5日注意：S&Pが7日以上$/);
-    expect(tile('分配日（25日）')).toHaveClass('is-warn');
+    expect(bareTile(TODAY_DIST)).toHaveTextContent(/^指数の分配日（25日）S&P▲注意 7日NAS5日判定には使わない別集計・注意：S&Pが7日以上$/);
+    expect(tile(TODAY_DIST)).toHaveClass('is-warn');
     cleanup();
     show(counts(6, 5), { detail: false });
-    expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P6日NAS5日参考：S&P・NASが5〜6日$/);
-    expect(tile('分配日（25日）')).not.toHaveClass('is-warn');
-    expect(tile('分配日（25日）').querySelector('em')).not.toHaveClass('is-warn');
-    expect(tile('分配日（25日）').querySelector('.brief-warnmark')).toBeNull();
+    expect(bareTile(TODAY_DIST)).toHaveTextContent(/^指数の分配日（25日）S&P6日NAS5日判定には使わない別集計・参考：S&P・NASが5〜6日$/);
+    expect(tile(TODAY_DIST)).not.toHaveClass('is-warn');
+    expect(tile(TODAY_DIST).querySelector('em')).not.toHaveClass('is-warn');
+    expect(tile(TODAY_DIST).querySelector('.brief-warnmark')).toBeNull();
     cleanup();
     show(counts(4, 3), { detail: false });
-    expect(tile('分配日（25日）')).toHaveTextContent(/^分配日（25日）S&P4日NAS3日7日以上で注意$/);
+    expect(bareTile(TODAY_DIST)).toHaveTextContent(/^指数の分配日（25日）S&P4日NAS3日判定には使わない別集計・7日以上で注意$/);
   });
 });
 
