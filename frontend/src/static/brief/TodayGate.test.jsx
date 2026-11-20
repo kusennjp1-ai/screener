@@ -151,7 +151,7 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
     cleanup();
     show(state({ fail: 'series' }));
     // Today names what the failure withholds: the market trends' numbers, not the verdict and guide above it (the S1 critics' round).
-    expect(region().querySelector('[role="alert"]').textContent).toBe('市場推移データを取得できません（配信ファイルが見つかりません）。市場推移の数値は表示しません。');
+    expect(region().querySelector('[role="alert"]').textContent).toBe('市場推移データを取得できません（配信ファイルが見つかりません）。その数値は表示しません。');
     expect(region().querySelector('details > .brief-expander-body [role="alert"]')).toBeNull();
   });
 

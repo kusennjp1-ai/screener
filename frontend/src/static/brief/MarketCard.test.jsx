@@ -428,7 +428,7 @@ describe('brief market card: Today', () => {
 
   it('reports a reader failure with its own sentence instead of unknown values', () => {
     show({ loading: false, error: true, data: undefined, failureReason: new Error('市場推移の基準日が一致しません。') }, { detail: false });
-    expect(screen.getByRole('alert')).toHaveTextContent(/^市場推移の基準日が一致しません。市場推移の数値は表示しません。$/);
+    expect(screen.getByRole('alert')).toHaveTextContent(/^市場推移の基準日が一致しません。その数値は表示しません。$/);
     for (const element of tiles()) expect(element).toHaveTextContent('確認できません整合性エラー');
     expect(document.body.textContent).not.toMatch(/未取得|0・0|。）/);
   });

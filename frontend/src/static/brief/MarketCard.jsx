@@ -51,7 +51,7 @@ export const VerdictMark = ({ verdict }) => <span className="brief-verdict-mark"
 
 /**
  * Why the market trends show nothing, or why the long history was withdrawn (`detail`: the market tab also names the FTD).
- * `withheld` names what a failure leaves out: Today's card says 「市場推移の数値」, so its verdict and guide (read from the scan's
+ * `withheld` names what a failure leaves out: Today's card says 「その数値」 (the market trends' own), so its verdict and guide (read from the scan's
  * rows, shown above the alert) never read as withheld numbers.
  */
 export function StatusAlert({ view, trends, detail = false, withheld = '数値' }) {
@@ -103,7 +103,7 @@ export default function MarketCard({ market, marketLoading = false, trends, date
       <div className={`brief-verdict tone-${verdict.tone}${waiting ? ' is-waiting' : ''}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}><VerdictMark verdict={verdict} /><div><strong>{verdict.label}</strong><p>{waiting ? verdict.lead : verdict.text}</p></div></div>
     </>}
     {/* At 1024px and wider the index chart follows the figure and its definition, so the answer and its guide read together. */}
-    <TodayGate gate={gate} view={view} facts={facts} wide={wide} renderFact={renderFact} tileLine={tileLine} cause={cause} statusAlert={<StatusAlert view={view} trends={trends} withheld="市場推移の数値" />}
+    <TodayGate gate={gate} view={view} facts={facts} wide={wide} renderFact={renderFact} tileLine={tileLine} cause={cause} statusAlert={<StatusAlert view={view} trends={trends} withheld="その数値" />}
       chart={wide ? <IndexChart closes={chart.sp500} distribution={chart.distribution} status={chartStatusOf(view, view.status)} /> : null} />
     {/* Today's candidate rows show RS推計: the card says the judgement and the RS are the app's own, never IBD's (outside the fold). */}
     <p className="brief-note">地合いの判定・各集計・RS推計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。</p>
