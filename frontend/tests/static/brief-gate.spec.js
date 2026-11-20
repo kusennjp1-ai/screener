@@ -172,7 +172,13 @@ for (const [width, device] of Object.entries({ 320: WIDTHS[320], 390: WIDTHS[390
       expect(r.figure).toBe('新規買いの目安（独自設定）0%');
     } else {
       if (!wide) expect(r.headline).toBe('10/2時点の判定・更新待ち（独自判定）');
-      else await expect(region(page).getByTestId('brief-regime')).toContainText('10/2引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）');
+      else {
+        const lead = region(page).getByTestId('brief-regime').locator('p');
+        await expect(lead).toHaveText('10/2引け時点の判定です。新しい公開を待っています（買いの検討は最新の判定で）');
+        // The waiting lead is the block's statement: 14px bold in the text ink (D19, D17; the S1 critics' round), not a grey sub-line.
+        expect(await lead.evaluate(node => { const probe = document.createElement('span'); node.appendChild(probe); probe.style.color = 'var(--text)';
+          const ink = getComputedStyle(probe).color; probe.remove(); const style = getComputedStyle(node); return [parseFloat(style.fontSize), style.fontWeight, style.color === ink]; })).toEqual([14, '700', true]);
+      }
       expect(r.figure).toBe(`新規買いの目安（10/2時点・独自設定）${s.cap}`);
     }
     if (!wide) {

@@ -4,18 +4,19 @@
    This file loads after brief-watch.css, so its rules win a tie. */
 .brief-gate { gap: 8px; }
 /* The kicker row costs about its 16.8px line of words: the row keeps the link's 44px box and lends 14px of it above (the card's
-   padding) and 13px below (the gap and the headline's half-leading). The words are one block beside the link that wraps inside
-   the 44px box (a late age at 320px goes under the date), so the row is as tall in the open, pending and late forms. The link
-   is raised above the headline it overlaps (no background: nothing shows), so its whole 44px box answers a tap. */
+   padding) and 13px below (the gap and the headline's half-leading). The words are one block beside the link that could wrap
+   inside the 44px box, so the row is as tall in the open, pending and late forms (a late kicker leaves out its weekday below
+   375px instead, below). The link is raised above the headline it overlaps (no background: nothing shows), so its whole 44px box
+   answers a tap. */
 .brief-gate-kicker { display: flex; align-items: center; flex-wrap: nowrap; column-gap: 0; min-height: 44px; margin: -14px 0 -13px; font-size: 12px; line-height: 1.4; color: var(--text-2); }
 .brief-gate-kicker-text { display: flex; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
 .brief-gate-kicker h2 { font-size: 12px; font-weight: 700; line-height: 1.4; color: var(--text-2); }
 .brief-gate-kicker .is-warn { color: var(--ext); font-weight: 700; }
 .brief-gate-kicker .brief-more { position: relative; z-index: 1; flex: none; margin-left: auto; }
-/* Below 360px a late age does not fit beside the date and the link (198px of words in 187px at 320px): the kicker leaves out the
-   weekday there (the bar's line 2 says it), so 「地合い・10/2引け・2営業日前」 keeps one line in the row's 44px and nothing wraps onto
-   the headline. Only a late kicker, only on the narrowest phones. */
-@media (max-width: 359px) {
+/* Below 375px a late age has little or no room beside the date with its weekday and the link (at 320px 204px of words in 187px;
+   at 360px 0.6px to spare with a two-digit date and age): the kicker leaves out the weekday there (the bar's line 2 says it), so
+   「地合い・10/2引け・2営業日前」 keeps one line in the row's 44px and nothing wraps onto the headline. Only a late kicker. */
+@media (max-width: 374px) {
   .brief-gate-kicker.has-age .brief-gate-dow { display: none; }
 }
 .brief-gate-headline { min-width: 0; margin: 0; font-size: 20px; line-height: 1.35; color: var(--text); }
