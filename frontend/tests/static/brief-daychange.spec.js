@@ -4,7 +4,8 @@
 // positive change reads ↑ with 「+」 and a negative one ↓ with 「−」 (U+2212), the arrow is aria-hidden so the accessible
 // text stays 「前日比 +2.0%」, and the contrast against what lies under it is at least 4.5. Today's gate card (S1-P4's new
 // elements) is in text inks too. The stated exceptions keep their hues: the chart card's readout change and the market
-// tab's sector rows. Four rows get a negative, a zero and an unknown change here (mutators; the fixture is unchanged).
+// tab's sector rows. Three rows get a negative, a zero and an unknown change here, beside ZZNV's +2.0% (mutators; the
+// fixture is unchanged).
 import { test, expect } from '@playwright/test';
 import { openBrief, chartSettled, VIEWPORTS } from './brief-fixture.js';
 
