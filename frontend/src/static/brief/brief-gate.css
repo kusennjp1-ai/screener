@@ -12,6 +12,12 @@
 .brief-gate-kicker h2 { font-size: 12px; font-weight: 700; line-height: 1.4; color: var(--text-2); }
 .brief-gate-kicker .is-warn { color: var(--ext); font-weight: 700; }
 .brief-gate-kicker .brief-more { position: relative; z-index: 1; flex: none; margin-left: auto; }
+/* Below 360px a late age does not fit beside the date and the link (198px of words in 187px at 320px): the kicker leaves out the
+   weekday there (the bar's line 2 says it), so 「地合い・10/2引け・2営業日前」 keeps one line in the row's 44px and nothing wraps onto
+   the headline. Only a late kicker, only on the narrowest phones. */
+@media (max-width: 359px) {
+  .brief-gate-kicker.has-age .brief-gate-dow { display: none; }
+}
 .brief-gate-headline { min-width: 0; margin: 0; font-size: 20px; line-height: 1.35; color: var(--text); }
 .brief-gate-headline b { font-weight: 700; }
 .brief-gate-figure { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; margin: 0; color: var(--text); }
@@ -44,6 +50,9 @@
   .brief-gate-figure { justify-content: flex-start; }
   .brief-gate-figure small { flex: none; }
 }
+/* The verdict block at 1024px and wider while a newer session has closed (D18): the waiting lead is the block's statement, at
+   14px in the text ink (D19), not the 12px grey sub-line of a current verdict. */
+.brief-verdict.is-waiting p { font-size: 14px; line-height: 1.5; font-weight: 700; color: var(--text); }
 @media (max-width: 520px) {
   .brief-gate.brief-market:not(.is-detail) { gap: 6px; padding-block: 12px; }
 }
@@ -54,5 +63,6 @@
 .brief-summary.is-links li { border-top-width: 3px; }
 .brief-summary.is-links .brief-tile { display: block; min-height: 44px; padding: 6px 10px; line-height: 1.4; }
 .brief-summary.is-links .brief-tile small { margin-right: 2px; font-size: 12px; }
-.brief-summary.is-links .brief-tile b { font-size: 14px; }
+/* The value is one unit: where it does not fit beside its label (「取得できません」 at 375px) it drops whole under it. */
+.brief-summary.is-links .brief-tile b { font-size: 14px; white-space: nowrap; }
 .brief-summary.is-links .brief-tile em { display: block; font-size: 12px; line-height: 1.4; }

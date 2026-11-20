@@ -37,7 +37,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
       await expect(today.getByRole('img', { name: /^S&P 500 の終値と50日線（.*〜2026-10-02）。有効な分配日 3日$/ })).toBeVisible();
     }
     // The four facts, in the gate's fold in A's groups (指数側, 広がり, 銘柄側).
-    await expect(today.locator('.brief-fact small')).toHaveText(['分配日（25日）', '52週の新高値・新安値', '200日線より上', 'TT達成数']);
+    // The index count's own name in the gate's fold, apart from the regime's SPY count (the S1 critics' round).
+    await expect(today.locator('.brief-fact small')).toHaveText(['指数の分配日（25日）', '52週の新高値・新安値', '200日線より上', 'TT達成数']);
     for (const fact of await today.locator('.brief-fact').all()) await expect(fact).not.toContainText(/未取得|未確認/);
     await expect(today.locator('.brief-asof')).toHaveCount(0);
     await today.getByRole('link', { name: /市場の詳細/ }).click();
@@ -198,7 +199,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const today = page.getByRole('region', { name: '地合い' });
     // Today keeps four tiles, each named by what it shows.
     // S1-P4: in the gate's fold, in A's groups (指数側, 広がり, 銘柄側).
-    await expect(today.locator('.brief-fact small')).toHaveText(['分配日（25日）', '52週の新高値・新安値', '50日線より上', '先導株数（価格条件）']);
+    await expect(today.locator('.brief-fact small')).toHaveText(['指数の分配日（25日）', '52週の新高値・新安値', '50日線より上', '先導株数（価格条件）']);
     await expect(today.locator('.brief-fact').nth(3)).toContainText('TT達成数は旧形式で未収録');
     for (const fact of await today.locator('.brief-fact').all()) await expect(fact).not.toContainText(/未取得|未確認/);
     await page.getByRole('navigation', { name: 'ブリーフの画面' }).getByRole('link', { name: '市場' }).click();

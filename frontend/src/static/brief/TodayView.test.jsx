@@ -6,6 +6,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import TodayView, { watchAttention } from './TodayView';
+import { SIGN_NOTE } from './marketGate';
 import { withAuditFixture } from '../testAuditFixture';
 // A Setup Engine base current for 2026-10-02 over the confidence floor (baseCurrent), as the fixture's rows carry; a test
 // that needs a base that is not current overrides it.
@@ -163,7 +164,8 @@ describe('the round-2 seams on Today', () => {
     cleanup();
     seams.suffix = '〈suffix〉';
     show();
-    expect(signLine()).toBe('〈suffix〉');
+    // The word, then what it is (参考) and that the guide stays as it is (the S1 critics' round: no bare fragment).
+    expect(signLine()).toBe(`〈suffix〉（${SIGN_NOTE}）`);
   });
 
   it('explains the market track\'s suffix in the notes and in the gate\'s fold, led by its word', async () => {
@@ -178,7 +180,7 @@ describe('the round-2 seams on Today', () => {
         watch={[]} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false} wide={wide} nav={{ market() {}, list() {}, watch() {} }} onUnwatch={() => {}} />
     </MemoryRouter></QueryClientProvider>);
     today(false);
-    expect(signLine()).toBe(suffix);
+    expect(signLine()).toBe(`${suffix}（${SIGN_NOTE}）`);
     // The sentence: in the gate's fold (closed on a phone) and in the phone's notes, led by the word.
     expect(document.querySelector('.brief-gate-more .brief-tile-note')).toHaveTextContent(`${suffix}：${sentence}`);
     expect([...document.querySelectorAll('.brief-screen-notes li')].map(li => li.textContent)).toContain(`${suffix}：${sentence}`);
@@ -319,9 +321,10 @@ describe('Today after the review', () => {
     expect([...focus.querySelectorAll('[data-testid="brief-candidate"]')].every(node => node.textContent.includes('土台未確認'))).toBe(true);
     expect(focus.querySelector('.brief-note:last-of-type').textContent).toContain(BASE_UNCHECKED_NOTE);
     cleanup();
-    // One row with a current base: the tile is green again, the note stays while a grey row shows the word.
+    // One row with a current base: the tile stays neutral (its edge is never zone green, plan D17: the S1 critics' round), the
+    // note stays while a grey row shows the word.
     show({ ranked: [...ranked, audited('OK1', 101)] });
-    expect([...screen.getByTestId('brief-summary').querySelectorAll(':scope > li')][0].className).toContain('tone-zone');
+    expect([...screen.getByTestId('brief-summary').querySelectorAll(':scope > li')][0].className).not.toContain('tone-zone');
     expect(document.body.textContent).toContain(BASE_UNCHECKED_NOTE);
     cleanup();
     show({ ranked: [audited('OK1', 101)] });

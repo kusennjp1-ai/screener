@@ -73,8 +73,9 @@ const Fact = ({ fact, blockAsOf = null, kind = null }) => { const asOf = fact.as
 /**
  * Today's 地合い region (plan S1-P4): exactly one region named 地合い on the page. Below 1024px it is the gate card (TodayGate:
  * the answer, the labelled figure and its definition, the basis, the unmet or unknown conditions, the sign, Today's note, the
- * firing ▲ and the status alert, the rest in one closed fold). At 1024px and wider the verdict block (which says the waiting
- * lead of D18 while a newer session has closed: verdictWaiting) and the index chart lead, and the gate's fold is in place.
+ * firing ▲ and the status alert, the rest in one closed fold). At 1024px and wider the verdict block leads (it says the waiting
+ * lead of D18, in the text ink, while a newer session has closed: verdictWaiting), the labelled figure and its definition follow
+ * it, then the index chart, the rest of the gate's lines and its fold in place.
  * Every value shows a number (an older one only with its own date) or the precise reason it has none. `target` is the last
  * session the exchange calendar says has closed (marketUpdateState's target, or null), `lines` marketLines' reading of the
  * verdict's rows, `late` the bar's age line (freshnessLine). The market tab's card (MarketDetailCard) lives in
@@ -95,10 +96,11 @@ export default function MarketCard({ market, marketLoading = false, trends, date
   return <section className={`brief-card brief-market brief-gate in${wide ? ' is-wide' : ''}`} style={{ '--i': 1 }} aria-labelledby="brief-market-title" data-gate={gate.state}>
     {wide && <>
       <div className="brief-step"><span className="brief-step-no" aria-hidden="true">1</span><h2 id="brief-market-title">地合い</h2><Link className="brief-more" to="/brief/market">市場の詳細 <span aria-hidden="true">›</span></Link></div>
-      <div className={`brief-verdict tone-${verdict.tone}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}><VerdictMark verdict={verdict} /><div><strong>{verdict.label}</strong><p>{waiting ? verdict.lead : verdict.text}</p></div></div>
-      <IndexChart closes={chart.sp500} distribution={chart.distribution} status={chartStatusOf(view, view.status)} />
+      <div className={`brief-verdict tone-${verdict.tone}${waiting ? ' is-waiting' : ''}`} data-testid="brief-regime" aria-busy={verdict.pending || undefined}><VerdictMark verdict={verdict} /><div><strong>{verdict.label}</strong><p>{waiting ? verdict.lead : verdict.text}</p></div></div>
     </>}
-    <TodayGate gate={gate} view={view} facts={facts} wide={wide} renderFact={renderFact} tileLine={tileLine} cause={cause} statusAlert={<StatusAlert view={view} trends={trends} />} />
+    {/* At 1024px and wider the index chart follows the figure and its definition, so the answer and its guide read together. */}
+    <TodayGate gate={gate} view={view} facts={facts} wide={wide} renderFact={renderFact} tileLine={tileLine} cause={cause} statusAlert={<StatusAlert view={view} trends={trends} />}
+      chart={wide ? <IndexChart closes={chart.sp500} distribution={chart.distribution} status={chartStatusOf(view, view.status)} /> : null} />
     {/* Today's candidate rows show RS推計: the card says the judgement and the RS are the app's own, never IBD's (outside the fold). */}
     <p className="brief-note">地合いの判定・各集計・RS推計は公開日足からの独自判定・独自集計で、IBDの公式値ではありません。</p>
   </section>;

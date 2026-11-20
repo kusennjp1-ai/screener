@@ -5,7 +5,7 @@
 // market tab's verdictWaiting and verdictBasis, and the 地合い card's shared values: nothing here adds a state, a threshold,
 // a score or a gate, and nothing reads the clock (the last closed session, `target`, is always an argument).
 import { capText, MARKET_CAPS } from '../portfolioPlan';
-import { ftdPrevious, gspcFtdDisagrees, marketTileNote, marketTileSuffix, marketTone, sameDayFollowThrough, trendsStatus, BREAKOUT_HOLD_NAME, FTD_PREVIOUS_NAME, MARKET_TILE_SUFFIX } from './briefEnvironment';
+import { ftdPrevious, gspcFtdDisagrees, marketTileNote, marketTileSuffix, marketTone, rallyIndexNames, sameDayFollowThrough, trendsStatus, BREAKOUT_HOLD_NAME, FTD_PREVIOUS_NAME, MARKET_TILE_SUFFIX } from './briefEnvironment';
 import { isoDay, shortDate } from './briefShared';
 import { barDay } from './briefNav';
 import { distributionGrade, marketCardView, num, verdictBasis, verdictBasisShort, verdictWaiting, DISTRIBUTION_TEXT } from './marketTabModel';
@@ -28,6 +28,16 @@ export const FACT_KINDS = Object.freeze({ verdict: '独自判定', guide: '独�
 export const CONDITION_KIND = '独自設定', SIGN_KIND = '独自判定';
 /** The sign line's head: what it says moves nothing. */
 export const SIGN_TITLE = '上昇再開のサイン（参考・目安は動きません）';
+/**
+ * What a 反発n日目 or NAS調整中 sign line adds after its word in the first fold (the full sentence is in the fold): it is 参考 and
+ * the guide stays as it is. Short, so the line keeps one line at 320px (「NAS 反発3日目（参考・目安は不変）」).
+ */
+export const SIGN_NOTE = '参考・目安は不変';
+/**
+ * The two indices' own distribution count (^GSPC・^IXIC, 25 sessions), apart from the count the regime's verdict reads: its name
+ * and what it is (plan S1-P4: 「判定には使わない別集計」). gateFacts' row and the fold of Today's gate card print these words.
+ */
+export const INDEX_DISTRIBUTION = Object.freeze({ name: '指数の分配日', reading: '判定には使わない別集計' });
 /**
  * The backend regime's distribution count at which an intact uptrend reads 上昇に圧力 (market_regime.py DIST_UNDER_PRESSURE; a
  * test reads the backend's value, never a retyped one).
@@ -126,7 +136,8 @@ function signsBehind(trends, date) {
  * marketTileNote, the same input): { type, suffix, text, sentence } or null.
  *  - 'ftd': an FTD-upgraded regime under a line, confirmed by the same day's ^GSPC record: 「FTD確認済み（参考・目安は 0%のまま：
  *    SPYが50日線の下）」, 「前回のFTD 8/13（…）」 when the FTD is older than FTD_RECENT_SESSIONS;
- *  - 'rally' (反発n日目, cap 0) and 'nasdaq' (NAS調整中, an open guide): the tile's word, its sentence for the fold;
+ *  - 'rally' (反発n日目, cap 0) and 'nasdaq' (NAS調整中, an open guide): the tile's word after the index it counts and before
+ *    SIGN_NOTE (「NAS 反発3日目（参考・目安は不変）」, 「NAS調整中（参考・目安は不変）」), its sentence for the fold;
  *  - 'withheld': no same-day record because the series is behind the analysis date: 「未確認（10/2分は再集計待ち）」.
  * An unknown market, or a series that is not ready, has none.
  */
@@ -139,7 +150,10 @@ export function gateSign({ market = null, trends = null, manifest = null, date =
     const under = lines?.above200 === false ? LINE_NAMES.above200 : lines?.above50 === false ? LINE_NAMES.above50 : null;
     return { type: 'ftd', suffix, text: `${name}（参考・目安は ${capText(market.cap)}のまま${under ? `：SPYが${under}の下` : ''}）`, sentence: null };
   }
-  if (suffix) return { type: suffix === MARKET_TILE_SUFFIX.nasdaq ? 'nasdaq' : 'rally', suffix, text: suffix, sentence: marketTileNote(input) };
+  if (suffix) {
+    const type = suffix === MARKET_TILE_SUFFIX.nasdaq ? 'nasdaq' : 'rally', names = type === 'rally' ? rallyIndexNames(input) : [];
+    return { type, suffix, text: `${names.length ? `${names.join('・')} ` : ''}${suffix}（${SIGN_NOTE}）`, sentence: marketTileNote(input) };
+  }
   if (trendsStatus(trends).state === 'ready' && isoDay(date) && signsBehind(trends, date)) return { type: 'withheld', suffix: null, text: `未確認（${shortDate(date, date)}分は再集計待ち）`, sentence: null };
   return null;
 }
@@ -161,7 +175,8 @@ export function marketGate({ market = null, loading = false, lines = null, date 
   const sign = gateSign({ market, trends, manifest, date, lines });
   const band = marketBand(market, { loading, late, suffix: sign?.suffix ?? null, date, target });
   const { state, waiting, guide } = band, known = judged(state);
-  const headline = { loading: null, unknown: '買いは見送り', waiting: waiting?.short, open: '新規の買いを検討できる', closed: '買いは控える' }[state];
+  // An unknown market names what is unknown (modelMarket's label, 「市場未確認」), so 「買いは見送り」 never reads as a judgement.
+  const headline = { loading: null, unknown: `${market?.label || '市場未確認'}・買いは見送り`, waiting: waiting?.short, open: '新規の買いを検討できる', closed: '買いは控える' }[state];
   const basis = known ? verdictBasis(market, date) : null;
   const conflict = known && (Boolean(view?.conflict) || (market.ftdUpgraded === true && gspcFtdDisagrees(trends) === true));
   const note = conflict ? '（指数の履歴と不一致・下に詳細）' : '';
@@ -214,8 +229,8 @@ export function gateFacts(brief, { lines = null, target, view = null } = {}) {
     reading: `${REGIME_DISTRIBUTION_PRESSURE}日以上で${REGIME_NAMES.uptrend_under_pressure}（独自設定）`,
     tier: grade ? `${grade === 'caution' ? '注意' : '参考'}（${DISTRIBUTION_TEXT[grade]}）` : null });
   const [todayDist, , , todayExtremes] = card.today;
-  fact('indexDistribution', GATE_GROUPS.index, '指数の分配日（^GSPC・^IXIC）', todayDist.valued ? todayDist.pairs.map(pair => `${pair.name} ${pair.value}`).join('・') : todayDist.b,
-    { valued: Boolean(todayDist.valued), reading: '判定には使わない別集計', asOf: todayDist.asOf ?? null });
+  fact('indexDistribution', GATE_GROUPS.index, `${INDEX_DISTRIBUTION.name}（^GSPC・^IXIC）`, todayDist.valued ? todayDist.pairs.map(pair => `${pair.name} ${pair.value}`).join('・') : todayDist.b,
+    { valued: Boolean(todayDist.valued), reading: INDEX_DISTRIBUTION.reading, asOf: todayDist.asOf ?? null });
   fact('extremes', GATE_GROUPS.index, '新高値／新安値', reads.highsLows ? `新高値 ${num(reads.highsLows.value.newHighs)}・新安値 ${num(reads.highsLows.value.newLows)}` : todayExtremes.b,
     { valued: Boolean(reads.highsLows), asOf: reads.extremesAsOf ?? null });
 

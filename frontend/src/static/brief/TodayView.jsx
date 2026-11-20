@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import useMediaQuery from '../useMediaQuery';
 import { money } from '../positionGeometry';
-import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, earningsCall, focusCandidates, focusCounts, focusHeadingNote, focusTone, memoCandidateView, pivotDistanceText, rowSecChipDrawn, watchEvent } from './briefCandidate';
+import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, earningsCall, focusCandidates, focusCounts, focusHeadingNote, memoCandidateView, pivotDistanceText, rowSecChipDrawn, watchEvent } from './briefCandidate';
 import { leadingGroups, marketTileNote, marketTileSuffix } from './briefEnvironment';
 import { marketLines } from '../portfolioPlan';
 import { EARNINGS_CHIP_NOTE, fundamentalsCoverageWarning, publishedFundamentalsCoverage } from '../fundamentalsExplain.js';
@@ -127,7 +127,7 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
   const uncheckedNote = focus.some(view => baseMuted(view) && sellChipView(sells[view.symbol])?.tone !== 'ext') ? BASE_UNCHECKED_NOTE : null;
   return <>
     <header className="brief-hero is-today in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け・米国株` : '日付未確認'}</small><h1>{brief.date ? `${DATE_JA(brief.date)}の判断` : '今日の判断'}</h1></header>
-    <TodaySummary market={brief.market} counts={counts} attention={watchAttention({ state, watched, watchCount: watch.length, unlisted, sells })} state={state} nav={nav} open={open} date={brief.date} />
+    <TodaySummary counts={counts} attention={watchAttention({ state, watched, watchCount: watch.length, unlisted, sells })} state={state} nav={nav} open={open} date={brief.date} />
     {/* The 地合い region: the gate card (its fold closed on a phone, in place from 1024px, where the sign's sentence is said in it). */}
     <MarketCard market={brief.market} marketLoading={brief.marketLoading} trends={brief.trends} date={brief.date} manifest={brief.manifest?.data ?? null} lines={lines} target={target} late={ageLine} wide={wide} tileLine={tileLine} />
     {/* Under the market card (the stack gap above it is cancelled in brief-watch.css): on a phone one line, the seam's
@@ -179,14 +179,15 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
  * answer is explained: the focus pool as a list, the flagged stock (or the watch tab, flagged rows first). The market's answer
  * is the gate card's (MarketCard).
  */
-function TodaySummary({ market, counts, attention, state, nav, open, date = null }) {
-  const focus = focusTone(state, counts, market);
+function TodaySummary({ counts, attention, state, nav, open, date = null }) {
   const one = attention.flagged.length === 1 ? attention.flagged[0] : null;
   // Each tile is as of the analysis date: said to assistive tech after the tile's text (the bar shows it on screen).
   const asOf = date ? <span className="sr-only">・{barDay(date)}引け時点</span> : null;
   const breakouts = state === 'ready' && counts?.breakout > 0 ? counts.breakout : 0;
   return <ul className="brief-summary is-two is-links in" style={{ '--i': 0 }} aria-label="今日の要点" data-testid="brief-summary">
-    <li className={`${focus ? `tone-${focus}` : ''}${breakouts ? ' has-sub' : ''}`}><Link className="brief-tile" to="/brief/list" onClick={follow(() => nav.list('focus'))}><small>注目候補</small>{' '}<b>{state === 'ready' ? `${counts.total}銘柄` : BUNDLE_SHORT[state]}</b><em><Parts text={state === 'ready' ? `ゾーン${counts.zone}・接近${counts.near}` : ''} /></em>{asOf}</Link>
+    {/* The 注目候補 answer's top edge is neutral on every day (plan D17: the rebuilt tile row is a new element in text inks; zone
+        green beside the gate's 「買いは控える」 or 「更新待ち」 would still read as a buyable day). The watch answer keeps its 崩れ tone. */}
+    <li className={breakouts ? 'has-sub' : undefined}><Link className="brief-tile" to="/brief/list" onClick={follow(() => nav.list('focus'))}><small>注目候補</small>{' '}<b>{state === 'ready' ? `${counts.total}銘柄` : BUNDLE_SHORT[state]}</b><em><Parts text={state === 'ready' ? `ゾーン${counts.zone}・接近${counts.near}` : ''} /></em>{asOf}</Link>
       {/* The day's breakouts among them: a link of its own in a strip under the tile's text (the tile keeps the strip's
           height free, so neither covers the other), breaking only after 「うち」. */}
       {breakouts > 0 && <Link className="brief-tile-sub" to="/brief/list" data-testid="brief-breakout-link" onClick={follow(() => nav.list('breakout'))}><span>うち<span className="brief-nowrap">上抜け{breakouts}<span aria-hidden="true"> ›</span></span></span></Link>}</li>

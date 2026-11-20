@@ -25,6 +25,7 @@ const below50Rows = { rows: rows => { for (const row of rows) { row.market_above
 // brief-market-r3.spec.js:383-384 (with d = 2: the FTD conflict of brief-market-phone.spec.js:395-398)
 const gspcRally = d => ({ trends: value => { const dates = value.indices[0].points.map(point => point.date), last = dates.length - 1;
   Object.assign(value.indices[0].followThrough, { state: 'rally_attempt', low: { date: dates[last - d], low: 4980 }, attempt: { startDate: dates[last - d + 1], day: d }, ftd: null, events: [] }); } });
+const partUnknown = { rows: rows => { for (const row of rows) row.market_above_50dma = null; } };
 const compose = (...parts) => Object.fromEntries([...new Set(parts.flatMap(Object.keys))].map(key => [key, value => { for (const part of parts) part[key]?.(value); }]));
 const apply = (fn, value) => { const copy = structuredClone(value); fn?.(copy); return copy; };
 
@@ -66,7 +67,7 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
     expect(textOf('.brief-gate-basis')).toBe('根拠：SPYが50日線・200日線の上で、局面判定が「上昇トレンド」（実測）');
     expect(textOf('.brief-gate-more .brief-gate-basis-full')).toBe(`${verdictBasis(input.market, date).text}（実測）`);
     expect(firstFold()).not.toContain('スキャン時点');
-    expect(textOf('.brief-gate-sign')).toMatch(/^NAS調整中$/);
+    expect(textOf('.brief-gate-sign')).toMatch(/^NAS調整中（参考・目安は不変）$/);
     // No condition is unmet on a 50% day: no condition line in the first fold; the met ones are in the fold.
     expect(region().querySelector('.brief-gate-conds')).toBeNull();
     expect(foldText()).toContain('目安が動く条件（独自設定）SPY終値が200日線・50日線の上：達成局面判定が上昇トレンド／上昇に圧力：達成');
@@ -103,7 +104,7 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
       cleanup();
     }
     show(state({ fail: 'manifest' }));
-    expect(textOf('.brief-gate-headline')).toMatch(/^買いは見送り$/);
+    expect(textOf('.brief-gate-headline')).toMatch(/^市場未確認・買いは見送り$/);
     expect(textOf('.brief-gate-conds')).toMatch(/^再開の条件：未確認$/);
     expect(textOf('details > summary')).toContain('根拠（未確認の項目）');
     cleanup();
@@ -123,7 +124,8 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
       expect(textOf('.brief-gate-headline')).toMatch(/^10\/2時点の判定・更新待ち（独自判定）$/);
       expect(textOf('.brief-gate-figure')).toContain(`新規買いの目安（10/2時点・独自設定）最大${cap === 'm25' ? 25 : 50}%`);
       expect(textOf('.brief-gate-kicker')).toMatch(/^地合い・10\/2（金）引け・2営業日前市場の詳細 ›$/);
-      expect(textOf('.brief-gate-kicker .is-warn')).toContain('・2営業日前');
+      // The 「・」 before the age ends the date's run, so a wrapped age (320px) starts its line with its number.
+      expect(textOf('.brief-gate-kicker .is-warn')).toBe('2営業日前');
       // The kicker's words (subject, date, age) are one block that wraps inside the row; the link sits beside it.
       expect(textOf('.brief-gate-kicker > .brief-gate-kicker-text')).toBe('地合い・10/2（金）引け・2営業日前');
       expect(region().querySelector('.brief-gate-kicker > .brief-gate-kicker-text + .brief-more').textContent).toBe('市場の詳細 ›');
@@ -138,7 +140,7 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
     // A closed guide keeps its words, with the age.
     show(state({ mutate: below50Rows, target: '2026-10-06', late: LATE }));
     expect(textOf('.brief-gate-headline')).toMatch(/^買いは控える（独自判定）$/);
-    expect(textOf('.brief-gate-kicker .is-warn')).toContain('・2営業日前');
+    expect(textOf('.brief-gate-kicker .is-warn')).toBe('2営業日前');
   });
 
   it('keeps Today\'s note, the status alert and the withheld sign in the first fold', () => {
@@ -171,7 +173,64 @@ describe('Today\'s gate card on a phone (fold closed)', () => {
   });
 });
 
+describe('Today\'s gate card: whole kind labels and named signs (the S1 critics\' round)', () => {
+  it('keeps each kind label and each （…） one unit: the headline\'s tag breaks in its middle only in the waiting form', () => {
+    show(state());
+    // The open form: no break opportunity inside 「（独自判定）」 (it drops whole under the headline on a 320px phone).
+    expect(region().querySelector('.brief-gate-headline .brief-gate-kind').innerHTML).toBe('（独自判定）');
+    // The definition and the figure's label: the （…） in one unbreakable run.
+    expect([...region().querySelectorAll('.brief-gate-line .brief-frag, .brief-gate-figure .brief-frag')].map(node => node.textContent)).toEqual(['（独自設定）', '（口座比・独自設定）']);
+    cleanup();
+    show(state({ mutate: below50Rows }));
+    expect([...region().querySelectorAll('.brief-gate-conds li')].map(li => [li.textContent, li.querySelector('.brief-frag')?.textContent ?? null]))
+      .toEqual([['SPY終値が50日線の上：未達', null], ['局面判定が上昇トレンド／上昇に圧力：未達（いま 調整）', '（いま 調整）']]);
+    cleanup();
+    // The waiting form keeps its two short lines inside the headline's height (the whole tag needs 9px more than 375px gives).
+    show(state({ target: '2026-10-06', late: LATE }));
+    expect(region().querySelector('.brief-gate-headline .brief-gate-kind').innerHTML).toBe('（独自<wbr>判定）');
+    // The late kicker: the 「・」 ends the date's run, the age starts with its number; the row is marked for the narrow gap.
+    expect([...region().querySelectorAll('.brief-gate-kicker-text > span')].map(node => node.textContent)).toEqual(['・10/2（金）引け・', '2営業日前']);
+    expect(region().querySelector('.brief-gate-kicker').className).toBe('brief-gate-kicker has-age');
+    cleanup();
+    show(state());
+    expect(region().querySelector('.brief-gate-kicker').className).toBe('brief-gate-kicker');
+    expect([...region().querySelectorAll('.brief-gate-kicker-text > span')].map(node => node.textContent)).toEqual(['・10/2（金）引け']);
+  });
+
+  it('names the index a 反発n日目 counts and says the sign is 参考 and leaves the guide; 市場未確認 names what is unknown', () => {
+    show(state({ mutate: below50Rows }));
+    expect(textOf('.brief-gate-sign')).toBe('NAS 反発3日目（参考・目安は不変）');
+    cleanup();
+    // Both indices in a rally attempt: the one on the larger day (S&P on day 5).
+    show(state({ mutate: compose(below50Rows, gspcRally(5)) }));
+    expect(textOf('.brief-gate-sign')).toBe('S&P 反発5日目（参考・目安は不変）');
+    cleanup();
+    show(state({ mutate: partUnknown }));
+    expect(textOf('.brief-gate-headline')).toBe('市場未確認・買いは見送り');
+    expect(textOf('.brief-gate-conds')).toBe('再開の条件：未確認');
+  });
+
+  it('names the two indices\' own 分配日 apart from the regime\'s SPY count in the fold', () => {
+    show(state());
+    const rows = [...region().querySelectorAll('.brief-gate-more .brief-gate-group[aria-label="根拠（指数側）"] .brief-facts > div')].map(node => node.querySelector('small').textContent);
+    expect(rows).toEqual(['SPY終値（スキャン時点）', '分配日（局面判定が数えるSPY）', '指数の分配日（25日）', '52週の新高値・新安値']);
+    const dist = [...region().querySelectorAll('.brief-fact')].find(node => node.querySelector('small').textContent === '指数の分配日（25日）');
+    expect(dist.querySelector('em').textContent).toBe('判定には使わない別集計・7日以上で注意');
+  });
+});
+
 describe('Today\'s gate card at 1024px and wider (fold in place)', () => {
+  it('sets the labelled figure and its definition under the verdict block, then the index chart; a waiting lead in the text ink', () => {
+    show(state(), { wide: true });
+    const order = [...region().children].map(node => node.matches('[data-testid="brief-regime"]') ? 'verdict' : node.matches('.brief-gate-figure') ? 'figure'
+      : node.matches('svg.brief-index') ? 'chart' : node.matches('.brief-gate-line:not(.brief-gate-basis):not(.brief-gate-sign)') ? 'definition' : node.matches('.brief-gate-basis') ? 'basis' : null).filter(Boolean);
+    expect(order).toEqual(['verdict', 'figure', 'definition', 'chart', 'basis']);
+    expect(region().querySelector('[data-testid="brief-regime"]').className).not.toContain('is-waiting');
+    cleanup();
+    show(state({ target: '2026-10-06', late: LATE }), { wide: true });
+    expect(region().querySelector('[data-testid="brief-regime"]').className).toContain('is-waiting');
+  });
+
   it('leads with the verdict block and the index chart, the gate\'s lines and the fold in place, one region named 地合い', () => {
     show(state(), { wide: true });
     expect(regions()).toHaveLength(1);

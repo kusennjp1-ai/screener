@@ -8,7 +8,7 @@ import { marketUpdateState } from '../marketUpdateState';
 import { freshness, freshnessLine } from './briefFreshness';
 import { marketCardView } from './marketTabModel';
 import { gateReads, REGIME_NAMES } from './marketGateFacts';
-import { BAND_SUBJECT, CONDITION_KIND, CONDITION_LABELS, FACT_KINDS, GATE_GROUPS, GATE_KINDS, NO_KIND, REGIME_DISTRIBUTION_PRESSURE, SIGN_KIND, SIGN_TITLE,
+import { BAND_SUBJECT, CONDITION_KIND, CONDITION_LABELS, FACT_KINDS, GATE_GROUPS, GATE_KINDS, NO_KIND, REGIME_DISTRIBUTION_PRESSURE, SIGN_KIND, SIGN_NOTE, SIGN_TITLE,
   gateFacts, gateSign, marketBand, marketGate, resumeConditions } from './marketGate';
 
 // ---- the states of plan S1-P2's table, opened from the browser fixture (tests/static/brief-fixture.js, frozen) with the
@@ -72,7 +72,9 @@ describe('marketBand and the gate in every state of plan S1-P2\'s table', () => 
     expect(gate.conditions.title).toBe('目安が動く条件');
     expect(gate.conditions.first).toEqual([]);
     expect(gate.conditions.fold).toEqual(['SPY終値が200日線・50日線の上：達成', '局面判定が上昇トレンド／上昇に圧力：達成']);
-    expect(gate.sign).toMatchObject({ type: 'nasdaq', text: 'NAS調整中', title: SIGN_TITLE, kind: SIGN_KIND });
+    // The word with what it is and that the guide stays (the S1 critics' round: never a bare fragment).
+    expect(SIGN_NOTE).toBe('参考・目安は不変');
+    expect(gate.sign).toMatchObject({ type: 'nasdaq', suffix: 'NAS調整中', text: 'NAS調整中（参考・目安は不変）', title: SIGN_TITLE, kind: SIGN_KIND });
     expect(gate.sign.sentence).toMatch(/^判定はS&P 500（SPY）のみに基づきます。Nasdaq総合は反発3日目/);
     expect(gate.summary).toBe('根拠と目安が動く条件');
     // The phone's first fold says the short form (ledger step 3); the fold and the wide line the market tab's own words.
@@ -96,9 +98,17 @@ describe('marketBand and the gate in every state of plan S1-P2\'s table', () => 
     expect(gate.conditions.title).toBe('買いの再開の条件');
     expect(gate.conditions.first).toEqual(['SPY終値が50日線の上：未達', '局面判定が上昇トレンド／上昇に圧力：未達（いま 調整）']);
     expect(gate.conditions.fold).toEqual(['SPY終値が200日線の上：達成']);
-    expect(gate.sign).toMatchObject({ type: 'rally', text: '反発3日目', kind: SIGN_KIND });
+    // The index the count is of (the fixture's Nasdaq), the word, then 参考 and the guide unchanged.
+    expect(gate.sign).toMatchObject({ type: 'rally', suffix: '反発3日目', text: 'NAS 反発3日目（参考・目安は不変）', kind: SIGN_KIND });
     expect(gate.sign.sentence).toMatch(/反発3日目。4日目以降の\+1\.2%上昇待ち（独自判定）。判定と目安は変わりません。$/);
     expect(gate.summary).toBe('根拠と再開の条件');
+  });
+
+  it('a rally sign names the index on the larger day, both when they are on the same day (the S1 critics\' round)', () => {
+    expect(open({ mutate: compose(below50Rows, gspcRally(5)) }).gate.sign).toMatchObject({ type: 'rally', suffix: '反発5日目', text: 'S&P 反発5日目（参考・目安は不変）' });
+    expect(open({ mutate: compose(below50Rows, gspcRally(3)) }).gate.sign).toMatchObject({ type: 'rally', suffix: '反発3日目', text: 'S&P・NAS 反発3日目（参考・目安は不変）' });
+    // An open guide never carries a rally word: the Nasdaq's caution, its index in its own word.
+    expect(open().gate.sign.text).toBe('NAS調整中（参考・目安は不変）');
   });
 
   it('an FTD-upgraded regime under the 50-day line: its own sign line, never merged with a condition, and the regime met in the fold', () => {
@@ -139,7 +149,8 @@ describe('marketBand and the gate in every state of plan S1-P2\'s table', () => 
       expect(gate.band.line1).toBe('地合い 未確認・買いは見送り');
       expect(gate.band.chip).toBe('地合い 未確認・買いは見送り');
       expect(gate.band).toMatchObject({ state: 'unknown', guide: null, guideLabel: null, kinds: null, label: null });
-      expect(gate.head).toMatchObject({ headline: '買いは見送り', headlineKind: null, figure: null, figureLabel: null, definition: null });
+      // The headline names what is unknown (the S1 critics' round), so it never reads as a judgement of the 買いは控える kind.
+      expect(gate.head).toMatchObject({ headline: '市場未確認・買いは見送り', headlineKind: null, figure: null, figureLabel: null, definition: null });
       expect(gate.basis).toBeNull();
       expect(gate.conditions.first).toEqual(['再開の条件：未確認']);
       expect(gate.conditions.fold).toEqual([]);

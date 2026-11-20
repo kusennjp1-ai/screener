@@ -242,7 +242,8 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M3 at ${wid
       await page.goto('/#/brief');
       await todayReady(page);
       const fact = page.locator('.brief-market .brief-fact').filter({ has: page.locator('small', { hasText: '分配日（25日）' }) });
-      await expect(fact.locator('em')).toHaveText(grade === 'caution' ? `注意：S&Pが${DISTRIBUTION_TEXT.caution}` : `参考：S&Pが${DISTRIBUTION_TEXT.reference}`);
+      // Today's fact in the gate's fold is read as the indices' own count (the S1 critics' round), then its grade.
+      await expect(fact.locator('em')).toHaveText(`判定には使わない別集計・${grade === 'caution' ? `注意：S&Pが${DISTRIBUTION_TEXT.caution}` : `参考：S&Pが${DISTRIBUTION_TEXT.reference}`}`);
       if (grade === 'caution') await expect(fact).toHaveClass(/is-warn/);
       else { await expect(fact).not.toHaveClass(/is-warn/); await expect(fact.locator('.brief-warnmark')).toHaveCount(0); }
       expect(await clippedTileText(page)).toEqual([]);
@@ -406,7 +407,8 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M4 at ${wid
     expect(marketTileSuffix(input)).toBe(MARKET_TILE_SUFFIX.rally(Math.max(...days)));
     // S1-P4: the gate card's sign line says the word on its own line, under the conditions; its sentence is in the fold.
     await expect(gate(page).locator('.brief-gate-headline')).toHaveText('買いは控える（独自判定）');
-    await expect(gateSign(page)).toHaveText(marketTileSuffix(input));
+    // The word after the index it counts (the larger day's), with 参考 and the guide unchanged (the S1 critics' round).
+    await expect(gateSign(page)).toHaveText(`${name === 'both indices, the larger day' ? 'S&P' : 'NAS'} ${marketTileSuffix(input)}（参考・目安は不変）`);
     await expect(gate(page).locator('.brief-tile-note')).toHaveText(`${marketTileSuffix(input)}：${marketTileNote(input)}`);
     expect(await gateSign(page).evaluate(node => { const range = document.createRange(); range.selectNodeContents(node); return new Set([...range.getClientRects()].map(rect => Math.round(rect.top))).size; })).toBe(1);
     expect(await contentHeight(page)).toBeLessThanOrEqual(TODAY_LINE);
@@ -425,7 +427,7 @@ for (const [width, device] of Object.entries(PHONES)) test.describe(`M4 at ${wid
     // The base fixture's open guide keeps 「NAS調整中」 for the same Nasdaq rally attempt.
     const { errors } = await openBrief(page, '#/brief', { mutate: methods });
     await todayReady(page);
-    await expect(gateSign(page)).toHaveText(MARKET_TILE_SUFFIX.nasdaq);
+    await expect(gateSign(page)).toHaveText(`${MARKET_TILE_SUFFIX.nasdaq}（参考・目安は不変）`);
     expect(errors).toEqual([]);
   });
 });

@@ -58,7 +58,7 @@ for (const [width, { device, insets, lag }] of Object.entries(FOLD)) test.descri
     expect(tileText.map(([text]) => text)).toEqual(expect.arrayContaining(['S&P', 'NAS', '高', '安']));
     // The fixture's Nasdaq is in correction on the analysis day, so the gate's sign line says the market track's word
     // (marketTileSuffix). One session behind, the Nasdaq's record is not the analysis day's: the sign is withheld.
-    await expect(market.locator('.brief-gate-sign')).toHaveText(lag ? 'サイン：未確認（10/2分は再集計待ち）' : 'NAS調整中');
+    await expect(market.locator('.brief-gate-sign')).toHaveText(lag ? 'サイン：未確認（10/2分は再集計待ち）' : 'NAS調整中（参考・目安は不変）');
     // The figure with its label and its definition, each on one line (the tile's 「目安≤50%」 is the gate's figure now).
     await expect(market.locator('.brief-gate-figure')).toHaveText('新規買いの目安（独自設定）最大50%');
     expect(await market.locator('.brief-gate-figure b').evaluate(node => node.getClientRects().length)).toBe(1);

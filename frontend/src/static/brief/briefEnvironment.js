@@ -108,6 +108,8 @@ export function gspcFtdDisagrees(trends) {
 
 /** The two indices in Today's words (the market tab's Nasdaq note names the Nasdaq the same way). */
 const INDEX_WORDS = Object.freeze({ '^GSPC': 'S&P 500', '^IXIC': 'Nasdaq総合' });
+/** Their short names, as the 地合い card's index rows print them (分配日 and フォロースルーデー: 「S&P」「NAS」). */
+const INDEX_SHORT = Object.freeze({ '^GSPC': 'S&P', '^IXIC': 'NAS' });
 /**
  * The indices of the same day (sameDayFollowThrough) in a rally attempt with a known day: state 'rally_attempt' and a
  * positive whole attempt.day, in the order ^GSPC, ^IXIC. Only an index the exporter's 6% gate already put in a rally attempt
@@ -147,6 +149,17 @@ function tileReading({ market = null, trends = null, manifest = null } = {}) {
  */
 export function marketTileSuffix(input = {}) {
   return tileReading(input)?.suffix ?? null;
+}
+
+/**
+ * The short names (「S&P」, 「NAS」) of the indices whose rally attempt is on the day 「反発n日目」 counts (marketTileSuffix's
+ * larger day), in the order ^GSPC, ^IXIC; [] when the suffix is not a rally's. Today's gate names the index on its sign line.
+ */
+export function rallyIndexNames(input = {}) {
+  const reading = tileReading(input);
+  if (reading?.kind !== 'rally') return [];
+  const day = Math.max(...reading.attempts.map(({ ft }) => ft.attempt.day));
+  return reading.attempts.filter(({ ft }) => ft.attempt.day === day).map(({ symbol }) => INDEX_SHORT[symbol]);
 }
 
 /**

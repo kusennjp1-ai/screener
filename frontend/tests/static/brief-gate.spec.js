@@ -41,8 +41,9 @@ const STATES = {
   restrain: { open: { mutate: restrain }, cap: '0%', headline: '買いは控える', conditions: ['局面判定が上昇トレンド／上昇に圧力：未達（いま 調整）'] },
   lag1: { open: { historyEnd: sessions.at(-2) }, cap: '最大50%', headline: '新規の買いを検討できる', note: '市場の集計は10/1時点（10/2分は再集計待ち）', sign: /^サイン：未確認（10\/2分は再集計待ち）$/ },
   series404: { open: { fail: 'series' }, cap: '最大50%', headline: '新規の買いを検討できる', alert: '市場推移データを取得できません（配信ファイルが見つかりません）。数値は表示しません。' },
-  manifest503: { open: { fail: 'manifest' }, cap: null, headline: '買いは見送り', unknown: true },
-  partunk: { open: { mutate: partUnknown }, cap: null, headline: '買いは見送り', unknown: true },
+  // The unknown headline names what is unknown (modelMarket's label; the S1 critics' round), never a bare 「買いは見送り」.
+  manifest503: { open: { fail: 'manifest' }, cap: null, headline: '市場未確認・買いは見送り', unknown: true },
+  partunk: { open: { mutate: partUnknown }, cap: null, headline: '市場未確認・買いは見送り', unknown: true },
   ftdconflict: { open: { mutate: compose(ftdUpgraded, belowFiftyIndex, gspcRally(2)) }, cap: '0%', headline: '買いは控える', conflict: '^GSPCの日足ではFTD未確認' },
   basisconflict: { open: { mutate: ftdUpgraded }, cap: '0%', headline: '買いは控える', conflict: '一致していません' },
 };
@@ -177,8 +178,10 @@ for (const [width, device] of Object.entries({ 320: WIDTHS[320], 390: WIDTHS[390
     if (!wide) {
       const age = region(page).locator('.brief-gate-kicker .is-warn');
       if (clock === 'late') {
-        // The age is fully visible in the warning tone: in the viewport, not clipped.
-        await expect(age).toHaveText('・2営業日前');
+        // The age is fully visible in the warning tone: in the viewport, not clipped. Its 「・」 ends the date's run (so a wrapped
+        // age starts its line with its number: the S1 critics' round).
+        await expect(age).toHaveText('2営業日前');
+        await expect(region(page).locator('.brief-gate-kicker .numeric:not(.is-warn)')).toHaveText('・10/2（金）引け・');
         await expect(age).toBeInViewport({ ratio: 1 });
         expect(await age.evaluate(node => node.scrollWidth <= node.clientWidth + 0.5)).toBe(true);
       } else await expect(age).toHaveCount(0);
@@ -319,12 +322,12 @@ const GOVERNING = { storage: { 'research-watch': ['ZZNV', 'ZZZF', 'QQQX', 'ZZSD'
 const stackBottom = page => page.evaluate(() => Math.round(document.querySelector('#brief-main .brief-stack').getBoundingClientRect().bottom + scrollY));
 /**
  * The fixture is frozen at 10/2, so a two-digit analysis date is put into the card's own text in place: every M/D the card
- * prints (kicker, headline, figure label, sign, note) becomes `md`, and a late age becomes two digits (「・12営業日前」).
+ * prints (kicker, headline, figure label, sign, note) becomes `md`, and a late age becomes two digits (「12営業日前」).
  */
 const twoDigits = (page, md) => region(page).evaluate((node, value) => {
   const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
   for (let t = walker.nextNode(); t; t = walker.nextNode()) t.nodeValue = t.nodeValue.replace(/\b\d{1,2}\/\d{1,2}\b/g, value);
-  for (const age of node.querySelectorAll('.brief-gate-kicker .is-warn')) age.textContent = age.textContent.replace(/・(\d)営業日前/, '・1$1営業日前');
+  for (const age of node.querySelectorAll('.brief-gate-kicker .is-warn')) age.textContent = age.textContent.replace(/^(\d)営業日前/, '1$1営業日前');
   return node.querySelector('.brief-gate-headline').textContent;
 }, md);
 async function readyToday(page, count = 5) {
@@ -350,7 +353,7 @@ for (const width of ['375', '390']) test.describe(`the waiting form at ${width}p
       await readyToday(page);
       await expect(region(page)).toHaveAttribute('data-gate', 'waiting');
       expect(await twoDigits(page, md)).toBe(`${md}時点の判定・更新待ち（独自判定）`);
-      if (clock === 'late') await expect(region(page).locator('.brief-gate-kicker .is-warn')).toHaveText('・12営業日前');
+      if (clock === 'late') await expect(region(page).locator('.brief-gate-kicker .is-warn')).toHaveText('12営業日前');
       // The headline keeps one line (its kind beside it, in two short lines).
       expect(await region(page).locator('.brief-gate-headline').evaluate(node => node.getBoundingClientRect().height)).toBeLessThanOrEqual(27.5);
       // The kicker keeps one line beside its link, its link a whole 44px target over the waiting headline's tag.
@@ -413,9 +416,10 @@ const kickerClear = async (page, lines = 1) => {
 
 test.describe('the late form at 320px', () => {
   test.use(WIDTHS[320]);
-  // brief-freshness.spec.js:85's state (ZZNV and ZZSD watched). At 320 the late age does not fit beside the date and the link:
-  // it wraps under the date inside the kicker row's own 44px, so the late form ends where the open and pending forms end, with
-  // the fixture's date and with a two-digit one.
+  // brief-freshness.spec.js:85's state (ZZNV and ZZSD watched). At 320 the late age does not fit beside the date with its
+  // weekday and the link: the kicker leaves the weekday out there (the bar's line 2 says it) and keeps one line, so nothing wraps
+  // onto the headline (the S1 critics' round; it wrapped under the date inside the row's 44px before), and the late form ends
+  // where the open and pending forms end, with the fixture's date and with a two-digit one.
   for (const md of [null, '12/28']) test(`is as tall as the open form with the date ${md ?? '10/2'}`, async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZSD'] } });
     await readyToday(page);
@@ -430,11 +434,12 @@ test.describe('the late form at 320px', () => {
       if (md) await twoDigits(page, md);
       if (clock === 'late') {
         const age = region(page).locator('.brief-gate-kicker .is-warn');
-        await expect(age).toHaveText(md ? '・12営業日前' : '・2営業日前');
+        await expect(age).toHaveText(md ? '12営業日前' : '2営業日前');
         await expect(age).toBeInViewport({ ratio: 1 });
         expect(await age.evaluate(node => node.scrollWidth <= node.clientWidth + 0.5)).toBe(true);
+        await expect(region(page).locator('.brief-gate-kicker .brief-gate-dow')).toBeHidden();
       }
-      await kickerClear(page, clock === 'late' ? 2 : 1);
+      await kickerClear(page, 1);
       expect(await stackBottom(page), `${clock} ${md ?? '10/2'}`).toBe(opened);
       expect(await horizontalOverflow(page)).toBe(0);
     }
