@@ -82,7 +82,8 @@ for (const theme of ['light', 'dark']) for (const [day, mutate] of Object.entrie
     for (const [screen, hash] of [['Today', '#/brief'], ['候補', '#/brief/list'], ['ウォッチ', '#/brief/watch']]) test(`${screen}: the rows`, async ({ page }) => {
       const { errors } = await open(page, hash);
       await expect(page.getByTestId('brief-candidate').first()).toBeVisible();
-      if (screen === '候補') await page.getByRole('button', { name: /^選定すべて/ }).click();
+      // 候補 reads the whole selection (選定すべて): a phone lists its first 20 rows, past the five of the default 買いゾーン.
+      if (screen === '候補') { await page.getByRole('button', { name: /^選定すべて/ }).click(); await expect(page.getByTestId('brief-candidate')).toHaveCount(20); }
       const read = await readChanges(page);
       checkChanges(read);
       // The four mutated rows read as stated wherever they are listed (Today lists the top five, ウォッチ the four).
