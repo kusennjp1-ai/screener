@@ -175,8 +175,9 @@
 .brief-stockhead h2 .numeric { font-size: 16px; }
 .brief-stockhead-actions { margin-left: auto; display: flex; gap: 4px; }
 .brief-stockhead-actions .brief-iconbutton { border: 1px solid var(--line); }
-/* Text uses the candle hues mixed toward the body colour so small text keeps 4.5:1 in both themes. */
-.is-up { color: color-mix(in srgb, var(--up) 72%, var(--text)); } .is-down { color: color-mix(in srgb, var(--down) 72%, var(--text)); }
+/* Up and down text is in text ink (plan D17: green and red stay inside the chart card); the chart readout and the
+   sector rows keep their own hues by their own rules. */
+.is-up { color: var(--text); } .is-down { color: var(--text); }
 .brief-call { border-left: 4px solid var(--line-2); }
 .brief-call.tone-zone { border-left-color: var(--zone); } .brief-call.tone-wait { border-left-color: var(--wait); } .brief-call.tone-ext { border-left-color: var(--ext); }
 .brief-call-status { display: flex; gap: 12px; align-items: flex-start; }

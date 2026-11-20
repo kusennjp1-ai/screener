@@ -40,11 +40,16 @@ export function StateChip({ view, muted = false }) {
 /** A row's position for assistive tech: the day's event with the position after it, or the position alone. */
 const positionLabel = view => { const event = rowEvent(view); return event ? `${event.text}（${positionText(view)}）` : positionText(view); };
 
-/** The day's change from the verified previous close (technical_audit for the analysis date), or — with its reason. */
+/**
+ * The day's change from the verified previous close (technical_audit for the analysis date), or — with its reason.
+ * It is in text ink (plan D17: no green or red outside the chart card), so ↑ / ↓ before the sign says up or down. The
+ * arrow is aria-hidden: the accessible text stays 「前日比 +2.0%」. ±0.0% and the unknown change carry no arrow.
+ */
 export function DayChange({ view, className = '' }) {
   const change = finite(view?.change) ? view.change : null;
   if (change === null) return <span className={`brief-daychg${className ? ` ${className}` : ''}`}><span aria-hidden="true">—</span><span className="sr-only">前日比 未確認</span></span>;
-  return <span className={`numeric brief-daychg${change > 0 ? ' is-up' : change < 0 ? ' is-down' : ''}${className ? ` ${className}` : ''}`}><span className="sr-only">前日比 </span>{signed(change)}</span>;
+  const arrow = change > 0 ? '↑' : change < 0 ? '↓' : null;
+  return <span className={`numeric brief-daychg${change > 0 ? ' is-up' : change < 0 ? ' is-down' : ''}${className ? ` ${className}` : ''}`}><span className="sr-only">前日比 </span>{arrow ? <span className="brief-daychg-dir" aria-hidden="true">{arrow}</span> : null}{signed(change)}</span>;
 }
 const dayChangeText = view => finite(view?.change) ? `前日比 ${signed(view.change)}` : '前日比 未確認';
 
