@@ -4,7 +4,7 @@
 // market is unknown or loading; a newer closed session with an open guide never reads 検討; type sizes (D19), text inks (D17)
 // and contrast in both themes. The states are opened with the specs' own mutators, copied with their source lines.
 import { test, expect } from '@playwright/test';
-import { openBrief, sessions, horizontalOverflow, VIEWPORTS } from './brief-fixture.js';
+import { openBrief, sessions, horizontalOverflow, VIEWPORTS, now } from './brief-fixture.js';
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const WIDTHS = { 320: phone(320, 640), 375: phone(375, 812), 390: VIEWPORTS.phone, 1440: VIEWPORTS.desktop };
@@ -447,6 +447,35 @@ test.describe('the late form at 320px', () => {
       }
       await kickerClear(page, 1);
       expect(await stackBottom(page), `${clock} ${md ?? '10/2'}`).toBe(opened);
+      expect(await horizontalOverflow(page)).toBe(0);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('the late form at 360px', () => {
+  // brief-gate.css leaves the late kicker's weekday out below 375px, not only at 320 (at 360 the weekday left 0.6px with a
+  // two-digit date and age): a 360px phone is inside that rule, with the fixture's date and with a two-digit one.
+  test.use(phone(360, 740));
+  test('leaves out the weekday and is as tall as the open form with the date 10/2 and 12/28', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief', { storage: { 'research-watch': ['ZZNV', 'ZZSD'] } });
+    for (const md of [null, '12/28']) {
+      // The open form at the fixture's clock (openBrief's), then the late clock (10/5 and 10/6 closed, nothing published).
+      await page.clock.setFixedTime(new Date(now));
+      await page.reload();
+      await readyToday(page);
+      await expect(region(page)).toHaveAttribute('data-gate', 'open');
+      if (md) await twoDigits(page, md);
+      const opened = await stackBottom(page);
+      await page.clock.setFixedTime(new Date(LATE));
+      await page.reload();
+      await readyToday(page);
+      await expect(region(page)).toHaveAttribute('data-gate', 'waiting');
+      if (md) await twoDigits(page, md);
+      await expect(region(page).locator('.brief-gate-kicker .is-warn')).toHaveText(md ? '12営業日前' : '2営業日前');
+      await expect(region(page).locator('.brief-gate-kicker .brief-gate-dow')).toBeHidden();
+      await kickerClear(page, 1);
+      expect(await stackBottom(page), `late ${md ?? '10/2'}`).toBe(opened);
       expect(await horizontalOverflow(page)).toBe(0);
     }
     expect(errors).toEqual([]);
