@@ -103,8 +103,8 @@ export default function BriefApp() {
   const age = useFreshness(brief.trends, brief.date);
   const ageLine = useMemo(() => freshnessLine(age, brief.date), [age, brief.date]);
   // The last session the exchange calendar says has closed (marketUpdateState, as the 市場 tab reads it), re-read whenever the
-  // age is (useFreshness's tick at each close): Today's gate says a waiting verdict from it (verdictWaiting, plan D18). The clock
-  // is read here, beside useFreshness's own, and handed to the pure reader.
+  // age is (useFreshness's tick at each close): Today's gate and the stock's market line say a waiting verdict from it
+  // (verdictWaiting, plan D18). The clock is read here, beside useFreshness's own, and handed to the pure reader.
   // eslint-disable-next-line react-hooks/exhaustive-deps -- age re-reads the clock at each close
   const target = useMemo(() => trendsStatus(brief.trends).state === 'ready' ? marketUpdateState(brief.trends.data, Date.now()).target : null, [brief.trends?.data, age]);
   const location = useLocation();
@@ -289,9 +289,9 @@ export default function BriefApp() {
       <div className="brief-left"><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
     </main> : <main id="brief-main" tabIndex={-1} className="brief-desk">
       <div className={`brief-left${switched ? ' is-switched' : ''}`}><Tabs current={from} watchCount={watch.length} go={go} /><div className="brief-stack">{left}</div></div>
-      <div className="brief-right" aria-label="選択中の銘柄">{selected ? <StockScreen brief={paneBrief} symbol={selected} watch={watch} onToggleWatch={toggleWatch} step={paneStep} wide ageLine={ageLine} /> : <p className="brief-note brief-pad">銘柄を選ぶと、ここに結論とチャートを表示します。</p>}</div>
+      <div className="brief-right" aria-label="選択中の銘柄">{selected ? <StockScreen brief={paneBrief} symbol={selected} watch={watch} onToggleWatch={toggleWatch} step={paneStep} wide ageLine={ageLine} target={target} /> : <p className="brief-note brief-pad">銘柄を選ぶと、ここに結論とチャートを表示します。</p>}</div>
     </main> : <main id="brief-main" tabIndex={-1} className="brief-main" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>
-      <div className="brief-stack">{view === 'stock' ? <StockScreen brief={brief} symbol={symbol} watch={watch} onToggleWatch={toggleWatch} step={step} /> : left}</div>
+      <div className="brief-stack">{view === 'stock' ? <StockScreen brief={brief} symbol={symbol} watch={watch} onToggleWatch={toggleWatch} step={step} target={target} /> : left}</div>
     </main>}
     {!wide && (view === 'stock' ? <div className="brief-dock brief-actions">
       <button type="button" aria-label="前の候補" onClick={() => step(-1)}>{ICON.back}</button>
