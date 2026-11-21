@@ -207,3 +207,34 @@ test.describe('the 銘柄 line at 390px', () => {
     expect(errors).toEqual([]);
   });
 });
+
+// D5 with both short forms at once: ZZNR (above) with earnings three days after the analysis date (brief-decision.spec.js:26,
+// EARNINGS_SOON, here on ZZNR) on a below-50 day (brief-market-r3.spec.js:305, below50Rows above), so the gate is the 0%
+// marketHold and both the holder chip and the earnings date join the 銘柄 label. At 320 the label wraps only after a 「・」, never
+// inside 銘柄 or a short form; at 375 it is one line.
+const TWO_SHORT_FORMS = { rows: rows => { const row = rows.find(r => r.symbol === 'ZZNR'); row.entry_evidence = { ...row.entry_evidence, earnings: { date: '2026-10-05' } }; below50Rows.rows(rows); } };
+const LABEL = '銘柄・保有なら売りのサイン・決算まで2日';
+/** The 銘柄 label's visual lines (the characters of each, by their tops), each unit's line count (銘柄, each short form), its overflow. */
+const labelFit = page => conclusion(page).locator('.brief-call-label').evaluate(label => {
+  const tops = node => { const out = new Map(), walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) for (let i = 0; i < t.length; i++) { const range = document.createRange(); range.setStart(t, i); range.setEnd(t, i + 1);
+      const box = range.getBoundingClientRect(); if (box.width) { const top = Math.round(box.top); out.set(top, (out.get(top) ?? '') + t.nodeValue[i]); } }
+    return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([, text]) => text); };
+  return { lines: tops(label), units: [...label.querySelectorAll('.brief-call-head, .brief-nowrap')].map(unit => tops(unit).length), overflow: label.scrollWidth - label.clientWidth };
+});
+for (const [width, count] of [['320', 2], ['375', 1]]) test.describe(`the 銘柄 line with two short forms at ${width}px`, () => {
+  test.use({ ...WIDTHS[width], contextOptions: { reducedMotion: 'reduce' } });
+  test(`names the sell chip and the earnings date, in ${count} line${count > 1 ? 's that break only after a 「・」' : ''}`, async ({ page }) => {
+    const { errors } = await openStock(page, { open: { oracles: true, mutate: TWO_SHORT_FORMS }, symbol: 'ZZNR' });
+    await expect(conclusion(page)).toHaveAttribute('data-gate', 'marketHold');
+    await expect(conclusion(page).locator('.brief-call-label')).toHaveText(LABEL);
+    const fit = await labelFit(page);
+    expect(fit.lines.join(''), JSON.stringify(fit)).toBe(LABEL);
+    expect(fit.lines, JSON.stringify(fit)).toHaveLength(count);
+    expect(fit.units, JSON.stringify(fit)).toEqual([1, 1, 1]);
+    for (const text of fit.lines.slice(0, -1)) expect(text, JSON.stringify(fit)).toMatch(/・$/);
+    expect(fit.overflow).toBe(0);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
