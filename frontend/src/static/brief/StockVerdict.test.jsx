@@ -123,7 +123,8 @@ describe('the conclusion says why there is no buy', () => {
     const card = conclusionOf();
     expect(card.className).toContain('tone-zone');
     expect([title(card), sub(card)]).toEqual(['10/2に上抜け・出来高1.60×', 'ピボット比 +1.0%・50日線から +11.1%。ピボットから＋5%までが買いの範囲です。']);
-    expect(card.textContent).not.toContain('本日');
+    // The call is the card, its tiles and its chips (the blocks are pinned just below).
+    expect(card.parentElement.textContent).not.toContain('本日');
     // Plan D5: the pivot meter is not drawn on the stock screen any more (the readout and the call's line give ピボット比), and
     // the tiles and the chips are under the card, in that order, never inside it.
     expect(card.parentElement.querySelector('.brief-meter, [role="img"]')).toBeNull();
@@ -262,7 +263,9 @@ describe('the conclusion says why there is no buy', () => {
     const earnings = date => audited({ entry_evidence: { earnings: { date } } });
     const day0 = conclusionOf({ row: earnings(DAY) });
     expect([title(day0), chips(day0).find(node => node.textContent === '決算当日').className]).toEqual(['決算当日（10/2）：新規買いは見送り候補（独自判定）', 'brief-chip tone-ext']);
-    expect(day0.textContent).not.toContain('0日');
+    // The call is the card, its tiles and its chips: none of them counts 0 days.
+    expect(tiles(day0)).toHaveLength(3);
+    expect(day0.parentElement.textContent).not.toContain('0日');
     cleanup();
     // The analysis is 10/2 and today is 10/4: earnings on 10/13 is 9 days away (11 from the analysis date) and warns.
     expect(title(conclusionOf({ row: earnings('2026-10-13'), now: Date.parse('2026-10-04T15:00:00Z') }))).toBe('決算まで9日（10/13）：新規買いは見送り候補（独自判定）');

@@ -145,7 +145,12 @@ for (const [width, options] of [[390, phone(390, 844)], [1440, { viewport: { wid
     await chartSettled(page);
     const conclusion = page.getByTestId('brief-conclusion');
     await expect(conclusion).not.toHaveAttribute('data-gate', 'failedBreakout');
-    for (const text of [WEAKNESS_ROW_CHIP, WEAKNESS_CHIP, unbounded.headline]) await expect(conclusion).not.toContainText(text);
+    // Plan S2-P1 (D5): the call is the card and, under the chart, its level tiles and its chips; none of the three says it,
+    // each anchored first (three tiles, a chip) so that no negative passes on an absent block.
+    const levels = page.getByTestId('brief-levels'), callChips = page.getByTestId('brief-call-chips');
+    await expect(levels.locator('.brief-kgrid > div')).toHaveCount(3);
+    await expect(callChips.locator('.brief-chip').first()).toBeAttached();
+    for (const block of [conclusion, levels, callChips]) for (const text of [WEAKNESS_ROW_CHIP, WEAKNESS_CHIP, unbounded.headline]) await expect(block).not.toContainText(text);
     const line = page.getByTestId('brief-sell').locator('li').filter({ hasText: bounded.label });
     await expect(line).toHaveCount(1);
     await expect(line.locator('.brief-check')).toHaveClass(/is-sell-clear/);

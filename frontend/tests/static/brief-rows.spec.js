@@ -30,6 +30,16 @@ const clippedTileText = (page, scope = '.brief-fact, .brief-kgrid, .brief-summar
   .map(node => `${node.tagName.toLowerCase()} “${node.textContent}” ${node.scrollWidth}>${node.clientWidth}`), scope);
 
 const conclusion = page => page.getByTestId('brief-conclusion');
+/**
+ * Plan S2-P1 (D5): the call is the card and, under the chart, its level tiles and its chips. A negative reads all three, each
+ * anchored first (three tiles, a chip) so that none passes on an absent block.
+ */
+async function callBlocks(page) {
+  const levels = page.getByTestId('brief-levels'), chips = page.getByTestId('brief-call-chips');
+  await expect(levels.locator('.brief-kgrid > div')).toHaveCount(3);
+  await expect(chips.locator('.brief-chip').first()).toBeAttached();
+  return [conclusion(page), levels, chips];
+}
 // The analysis date as the event titles name it (never 「本日」: the data may be older than today).
 const DAY = `${Number(date.slice(5, 7))}/${Number(date.slice(8))}`;
 /** A variant of one stock's row, and of its research detail when it has one (the stock screen merges the detail in). */
@@ -123,14 +133,14 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
   test('a focus candidate that closes exactly at its pivot reaches it on the analysis date: ピボット到達, in the buy zone, no breakout claimed', async ({ page }) => {
     const { errors } = await openFocus(page, phone);
     await expect(conclusion(page).locator('strong')).toHaveText(`${DAY}にピボット到達`);
-    await expect(conclusion(page)).not.toContainText('上抜け');
+    for (const block of await callBlocks(page)) await expect(block).not.toContainText('上抜け');
     expect(errors).toEqual([]);
   });
 
   test('a close above the pivot from below on the verified +2.0% day with 1.6× volume is a breakout on the analysis date', async ({ page }) => {
     const { errors } = await openFocus(page, phone, { mutate: crossing(phone ? 'ZZNV' : 'ZZKS') });
     await expect(conclusion(page).locator('strong')).toHaveText(`${DAY}に上抜け・出来高1.60×`);
-    await expect(conclusion(page)).not.toContainText('本日');
+    for (const block of await callBlocks(page)) await expect(block).not.toContainText('本日');
     expect(errors).toEqual([]);
   });
 
