@@ -1,0 +1,28 @@
+/* The stock's 4-number strip (plan S2-P2, D4, D17, D19, D20): its own rules (never .brief-kgrid), loaded with the stock chunk.
+   It sits right under the chart card, attached to it: no gap (the stack's gap is taken back), the chart card's bottom border is
+   the line between them and the two share one outline. Text inks only on every day (D17): values in the text ink, labels,
+   notes, the title and the full-width lines in the secondary ink. Sizes from the scale (D19): labels, notes, the title and the
+   lines 12px; values 16px mono (14px in the fit ladder's second form). */
+.brief-chartcard:has(+ .brief-strip) { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+/* What pays for the strip at 375px (plan S2-P2's ledger, in its order): the strip's own padding and gaps at a 2px floor; the
+   前提 line's short form buys no line at 320 / 375 / 390 (368px of text against 262 / 317 / 332), so the full form stays; the
+   call card's row gap below 521px (the last rule of this file). */
+.brief-strip { margin-top: -12px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; min-width: 0; padding: 2px 12px; border: 1px solid var(--line); border-top: 0; border-radius: 0 0 16px 16px; background: var(--surface); color: var(--text); }
+.brief-strip p { margin: 0; }
+.brief-strip .brief-nowrap { display: inline-block; }
+/* The title and its qualifier: one line where both fit (375px and wider); below that the qualifier, whole, on the next line. */
+.brief-strip-title { display: flex; flex-wrap: wrap; font-size: 12px; line-height: 14px; color: var(--text-2); }
+.brief-strip-title > span { white-space: nowrap; }
+.brief-strip-tag::before { content: '・'; }
+.brief-strip-cells { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0 6px; }
+.brief-strip-cells > div, .brief-strip-cells dd { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; min-width: 0; margin: 0; }
+.brief-strip-cells dt, .brief-strip-cells small { font-size: 12px; line-height: 14px; color: var(--text-2); word-break: keep-all; overflow-wrap: anywhere; }
+.brief-strip-cells dd > b { font-size: 16px; line-height: 20px; font-weight: 700; color: var(--text); white-space: nowrap; }
+.brief-strip[data-fit="14"] .brief-strip-cells dd > b { font-size: 14px; }
+.brief-strip[data-fit="2x2"] .brief-strip-cells { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 2px; }
+.brief-strip-line { font-size: 12px; line-height: 14px; color: var(--text-2); }
+@media (max-width: 520px) {
+  .brief-strip { margin-top: -10px; }
+  /* The ledger's last item: the call card's row gap (between the market line and the 銘柄 line). */
+  .brief-card.brief-call { row-gap: 0; }
+}
