@@ -40,27 +40,12 @@ export const PIVOT_DAY_SEPARATOR = '・';
  */
 // eslint-disable-next-line react-refresh/only-export-components -- the card's texts are read by its tests and the rebuild check
 export function pivotDayNote({ view, row, judged, date }) {
-  const day = pivotDay({ view, row, judged, date });
-  if (!day) return null;
-  if (!day.date) return PIVOT_DAY_UNKNOWN;
-  return `ピボット ${money(view.pivot)}＝${day.date}の高値（SE）${day.weekly ? WEEKLY_PATTERN : ''}`;
-}
-
-/**
- * The one reading of the pivot's own day that the VCP card's line (pivotDayNote) and the stock's 4-number strip (plan S2-P2,
- * round 3 C4) both print, so the two never disagree: null when the screen's pivot is not the Setup Engine's current one (no
- * line: a vcp_pivot fallback, another price, no recalculation for the analysis date `date`); `{ date: null }` when its bar is
- * not found on the certified bars `judged` (未確認); else `{ date, weekly }`, `date` the bar's M/D as shortDate writes it and
- * `weekly` true for a weekly detector's pattern (「（週足の型）」).
- */
-// eslint-disable-next-line react-refresh/only-export-components -- read by the strip and by this card's tests
-export function pivotDay({ view, row, judged, date }) {
   const pivot = view?.pivot, engine = row?.se_pivot_price;
   if (!finite(pivot) || !finite(engine) || cents(engine) !== cents(pivot) || !setupCurrent(row, date)) return null;
   const bar = judged ? pivotBar(judged, row) : null;
-  if (!bar) return { date: null, weekly: false };
+  if (!bar) return PIVOT_DAY_UNKNOWN;
   const weekly = Object.hasOwn(PIVOT_TIMEFRAMES, row.se_pattern_primary) && PIVOT_TIMEFRAMES[row.se_pattern_primary] === 'weekly';
-  return { date: shortDate(bar.date, date), weekly };
+  return `ピボット ${money(pivot)}＝${shortDate(bar.date, date)}の高値（SE）${weekly ? WEEKLY_PATTERN : ''}`;
 }
 
 /**

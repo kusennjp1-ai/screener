@@ -6,12 +6,11 @@ import { earningsCall as earningsCallOf, pivotDistanceText, POSITION_NAMES, rsSh
 import { buyGate } from './buyGate';
 import { FACT_KINDS } from './marketGate';
 import { isoDay, shortDate } from './briefShared';
-import StockStrip, { PIVOT_UNKNOWN_NOTE } from './StockStrip';
-
-// The unknown-pivot sentence lives with the strip now (plan S2-P2); its old import path stays.
-export { PIVOT_UNKNOWN_NOTE };
 
 const finite = Number.isFinite;
+// A value that is not there reads — on screen and 未計算 to a screen reader (as DayChange says 前日比 未確認).
+const DASH = <><span aria-hidden="true">—</span><span className="sr-only">未計算</span></>;
+const price = value => finite(value) ? value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : DASH;
 /**
  * A unit a line splits only when it is wider than the whole line (「RS推計 57（基準70）」, 「＋5%」): it moves to the
  * next line whole instead, and at 200% zoom it still wraps inside rather than push the card wider.
@@ -80,6 +79,16 @@ function stageChip(stage) {
 }
 
 /**
+ * A tile's qualifier, from the plan contract and the conclusion: 参考, 試算のみ or 既定条件 (else none), and on the
+ * stop tile 収縮の中 (the stop sits inside the last contraction, ext tone). It sits on the tile's top edge, so a
+ * qualified tile is no taller than a plain one.
+ */
+const Qualifier = ({ text, tone }) => text ? <span className={`brief-tilequal${tone ? ` tone-${tone}` : ''}`}>{text}</span> : null;
+
+/** The one sentence the retired pivot meter said for an unknown pivot (plan D5: kept word for word, a full-width line). */
+export const PIVOT_UNKNOWN_NOTE = 'ピボットを確認できないため位置は未確認です。';
+
+/**
  * The call's market line (plan S2-P1, D2, D18) from marketBand's own fields: the subject and the analysis date, the answer with
  * its kind and the figure with its kind, as units a line breaks only between (after a 「：」 or a 「・」), never inside a word, a
  * figure or a kind label. Open and closed days: 「地合い 10/2：検討可（独自判定）・目安 最大50%（独自設定）」 / 「地合い 10/2：買いは
@@ -117,7 +126,7 @@ function MarketLine({ band, date }) {
 /**
  * The stock's call from the one buy gate (buyGate.js, which the plan reads too), for its three blocks on the stock screen (plan
  * S2-P1, D5): the conclusion card (CallCard: the market line, then the 銘柄 line with buyGate's own title and sub line), the
- * reference the 4-number strip's qualifier reads (`referenced`) and the chip list (Chips), under the chart and the strip. `bars` are the chart's bars as published
+ * level tiles (Levels) and the chip list (Chips), both under the chart. `bars` are the chart's bars as published
  * (display only); `judged` is the same bars when they are certified for the analysis date, else null, and is the only source for
  * anything judged from a chart (the date of the pivot crossing). `template` is the trend template (useStockData's, with its
  * rules), `market` the market verdict (prepared.market) and `earningsCall` the stock view's one earnings call (earningsCall(view,
@@ -136,8 +145,26 @@ function stockCall({ view, plan, stage, technical, bars, judged = null, template
   // A failed breakout past its window (failedBreakoutContext on the certified bars, round 3 R5): one neutral line under the
   // call, whatever the call; it never changes the gate's kind, reason or the plan.
   const context = sells?.failedContext ?? null;
-  // The strip's qualifier reads the call's reference as the level tiles did (the gate's, or the plan's).
-  const referenced = Boolean(reference || plan?.reference);
+  const levels = plan && !plan.blocked ? plan : null;
+  const referenced = reference || plan?.reference;
+  const sizing = referenced ? '参考' : plan?.trialOnly ? '試算のみ' : plan?.defaults ? '既定条件' : null;
+  // The stop inside the last contraction says so on its tile (never moved by itself).
+  const stopQualifier = referenced ? ['参考'] : levels?.stopInsideBase === true ? ['収縮の中', 'ext'] : [sizing];
+  const risk = finite(levels?.riskDollars) ? `$${Math.round(levels.riskDollars).toLocaleString('en-US')}` : null;
+  // Fewer than one share is a result, not a missing value: 1株未満, with the limit that set it.
+  const underOne = levels && finite(levels.risk) && levels.risk > 0 && finite(levels.riskDollars) && levels.riskDollars > 0
+    && (levels.shares === 0 || levels.shares === null);
+  const shares = finite(levels?.shares) && levels.shares > 0 ? `${levels.shares.toLocaleString('en-US')}株` : underOne ? '1株未満' : DASH;
+  // The cap set the count: the loss at the stop is then below the risk budget, so the tile gives the cap and that real risk.
+  const actual = finite(levels?.actualRisk) ? `$${Math.round(levels.actualRisk).toLocaleString('en-US')}` : null;
+  const shareNote = underOne ? (levels.binding === 'cap' ? '1銘柄の上限超' : 'リスク上限超')
+    : levels?.binding === 'cap' && finite(levels.capPercent) ? <><Unit>{`上限${levels.capPercent}%`}</Unit>・<Unit>実リスク {actual || DASH}</Unit></>
+      : <>リスク {risk || DASH}</>;
+  const tiles = [
+    { label: '買いの範囲', value: price(view.pivot), note: <>〜{price(view.upper)}</>, qualifier: [referenced ? '参考' : null] },
+    { label: finite(levels?.stopPercent) ? `損切り −${levels.stopPercent.toFixed(1)}%` : '損切り', value: price(levels?.stop), note: <>買値 {price(levels?.entry)}</>, qualifier: stopQualifier },
+    { label: '株数', value: shares, note: shareNote, qualifier: [sizing] },
+  ];
   // The call states a broken setup itself; any other sell chip, and a near earnings date under another gate, join the 銘柄 line.
   const statesSell = gate.kind === 'broken' || gate.kind === 'failedBreakout';
   const also = [...(sell && !statesSell ? [sell.text] : []), ...(earnings?.soon && gate.kind !== 'earnings' ? [earnings.chip] : [])];
@@ -161,7 +188,9 @@ function stockCall({ view, plan, stage, technical, bars, judged = null, template
     ...(diagnostics?.valid && diagnostics.powerPlay?.mechanicalMatch ? [['パワープレー候補（機械的探索）', 'wait']] : []),
     [earnings ? earnings.chip : '決算日 未確認', earnings?.soon ? 'ext' : ''],
   ];
-  return { gate, tone, title, sub, caution, context, also, chips, referenced };
+  // A stale pivot says why in the call's line; an unknown one keeps the meter's sentence (D5).
+  const pivotUnknown = !view.stale && !finite(view.distance);
+  return { gate, tone, title, sub, caution, context, also, tiles, chips, pivotUnknown };
 }
 
 /** The conclusion card (plan S2-P1, B's form): line 1 the market line, line 2 labelled 銘柄 with buyGate's own title and line. */
@@ -176,21 +205,31 @@ function CallCard({ call, band, date }) {
   </section>;
 }
 
-/** The call's chips (the same chips, order and tones as in the card before, plan D5), under the 4-number strip. */
+/**
+ * The three level tiles (買いの範囲・損切り・株数, with their qualifiers) under the chart (plan D5: they left the card; S2-P2's
+ * strip takes this place), and the retired meter's sentence for an unknown pivot as one full-width line under them.
+ */
+function Levels({ call }) {
+  return <div className="brief-levels" data-testid="brief-levels">
+    <div className="brief-kgrid">{call.tiles.map(tile => <div key={tile.label}><small>{tile.label}</small><b className="numeric">{tile.value}</b><em>{tile.note}</em><Qualifier text={tile.qualifier[0]} tone={tile.qualifier[1]} /></div>)}</div>
+    {call.pivotUnknown && <p className="brief-note">{PIVOT_UNKNOWN_NOTE}</p>}
+  </div>;
+}
+
+/** The call's chips (the same chips, order and tones as in the card before, plan D5), under the level tiles. */
 const Chips = ({ call }) => <div className="brief-tags brief-callchips" data-testid="brief-call-chips">{call.chips.map(([text, t, chipTitle, content]) => <span key={text} className={`brief-chip${t ? ` tone-${t}` : ''}`} title={chipTitle}>{content ?? text}</span>)}</div>;
 
 /**
- * The stock's call on the stock screen (plan S2-P1, S2-P2, D5), in this order: the conclusion card (the market line from `band`,
- * marketBand's value for the analysis `date`, then the 銘柄 line), `chart` (the chart card), the 4-number strip (StockStrip, with
- * the plan's inputs `settings`) and the chips. The other props are stockCall's. Without a band (no market line) the card starts
- * with the 銘柄 line.
+ * The stock's call on the stock screen (plan S2-P1, D5), in this order: the conclusion card (the market line from `band`,
+ * marketBand's value for the analysis `date`, then the 銘柄 line), `chart` (the chart card), the level tiles and the chips.
+ * The other props are stockCall's. Without a band (no market line) the card starts with the 銘柄 line.
  */
-export default function StockVerdict({ band = null, date = null, chart = null, settings = null, ...props }) {
+export default function StockVerdict({ band = null, date = null, chart = null, ...props }) {
   const call = stockCall(props);
   return <>
     <CallCard call={call} band={band} date={date} />
     {chart}
-    <StockStrip view={props.view} plan={props.plan} settings={settings} row={props.row} judged={props.judged ?? null} date={date} market={props.market ?? null} referenced={call.referenced} />
+    <Levels call={call} />
     <Chips call={call} />
   </>;
 }

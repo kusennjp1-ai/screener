@@ -25,7 +25,7 @@ import SellCard, { SELL_NOTE } from './StockSellCard';
  * is the market verdict (brief.market), handed to the conclusion and the plan; `target` the last session the exchange calendar
  * says has closed (BriefApp's marketUpdateState target, the one Today's gate and the 市場 tab read, or null), from which the
  * conclusion's market line says a waiting verdict (plan S2-P1, D18). The order (plan D5, StockVerdict's): the conclusion (the
- * market line and the 銘柄 line), the chart card, the 4-number strip (plan S2-P2), the chips, then the cards. `judged` (the bars
+ * market line and the 銘柄 line), the chart card, the level tiles, the chips, then the cards. `judged` (the bars
  * certified for the analysis date, or null) and `template` (the trend template) also reach the
  * conclusion and the plan, so every value they derive from a chart comes from certified bars only. The
  * chart's period is kept for this tab's session, so it survives the next stock (次へ keeps 週足).
@@ -114,7 +114,7 @@ export default function StockView({ data, header = null, wide = false, market = 
   const band = marketBand(market, { date: data.date, target });
   return <div className="brief-stock">
     {header}
-    <StockVerdict view={view} plan={plan} stage={stage} technical={evidence} bars={bars} judged={judged} template={template} rsHigh={rsHigh} financial={financial} row={row} sells={sells} diagnostics={diagnostics} market={market} earningsCall={call} band={band} date={data.date} settings={settings}
+    <StockVerdict view={view} plan={plan} stage={stage} technical={evidence} bars={bars} judged={judged} template={template} rsHigh={rsHigh} financial={financial} row={row} sells={sells} diagnostics={diagnostics} market={market} earningsCall={call} band={band} date={data.date}
       chart={<StockChartCard data={data} view={view} earningsCall={call} legs={legs} legsValid={vcpPending ? null : legsValid} rsHigh={rsHigh} rsLead={rsLead} gaps={gaps} sells={sells} levels={levels} chartRef={chartRef} range={range} onRange={setRange} notes={notes} wide={wide} />} />
     <div className="brief-grid">
       <TemplateCard template={template} wide={wide} technical={certified ? evidence : null} date={data.date} />
