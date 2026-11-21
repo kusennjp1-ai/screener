@@ -376,7 +376,8 @@ test.describe('round 3 R1: one sell wording per stock, bounded by the pivot\'s o
       const conclusion = page.getByTestId('brief-conclusion'), chip = expected[symbol].bounded;
       await expect(conclusion).not.toHaveAttribute('data-gate', 'failedBreakout');
       await expect(conclusion).not.toContainText(WEAKNESS_ROW_CHIP);
-      if (chip) await expect(conclusion.locator('.brief-tags')).toContainText(chip.full ?? chip.text);
+      // Plan S2-P1 (D5): the call's chips are under the chart (brief-call-chips).
+      if (chip) await expect(page.getByTestId('brief-call-chips')).toContainText(chip.full ?? chip.text);
     }
     expect(errors).toEqual([]);
   });

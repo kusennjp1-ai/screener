@@ -159,7 +159,8 @@ for (const [width, options] of [[390, phone(390, 844)], [1440, { viewport: { wid
     // The chip the conclusion carries is the bounded checks' (sellChipView, its full sentence there), never the 崩れ chip.
     const chip = sellChipView(sells(from));
     expect(chip?.text ?? null).not.toBe(WEAKNESS_ROW_CHIP);
-    if (chip) await expect(conclusion.locator('.brief-tags')).toContainText(chip.full ?? chip.text);
+    // Plan S2-P1 (D5): the call's chips are under the chart (brief-call-chips).
+    if (chip) await expect(page.getByTestId('brief-call-chips')).toContainText(chip.full ?? chip.text);
     expect(errors).toEqual([]);
   });
 });

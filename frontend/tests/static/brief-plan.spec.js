@@ -263,7 +263,9 @@ test.describe('round 2: the plan card on a phone', () => {
     const call = page.getByTestId('brief-conclusion');
     await expect(call).toHaveClass(/tone-zone/);
     await expect(warnings(page)).toHaveCount(1);
-    const tiles = call.locator('.brief-kgrid > div');
+    // Plan S2-P1 (D5): the call's level tiles are under the chart (brief-levels), with the same qualifiers.
+    const tiles = page.getByTestId('brief-levels').locator('.brief-kgrid > div');
+    await expect(tiles).toHaveCount(3);
     await expect(tiles.nth(1).locator('.brief-tilequal')).toHaveText('収縮の中');
     await expect(tiles.nth(1).locator('.brief-tilequal')).toHaveClass(/tone-ext/);
     const heights = await tiles.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect().height));
@@ -343,7 +345,9 @@ test.describe('round 3 R2: the plan of a stock pinned after a gap', () => {
     await expect(structural).toHaveAttribute('data-state', 'unknown');
     await expect(structural).toHaveText(`構造上の損切り目安：収縮の安値 未確認（${reason}）`);
     await expect(page.getByTestId('brief-plan-warn')).toHaveCount(0);
-    await expect(page.getByTestId('brief-conclusion').locator('.brief-tilequal', { hasText: '収縮の中' })).toHaveCount(0);
+    // Plan S2-P1 (D5): the stop tile is under the chart (brief-levels), where it still carries no 収縮の中.
+    await expect(page.getByTestId('brief-levels').locator('.brief-kgrid > div')).toHaveCount(3);
+    await expect(page.getByTestId('brief-levels').locator('.brief-tilequal', { hasText: '収縮の中' })).toHaveCount(0);
     await expect(plan(page)).not.toContainText(PLAN_BLOCKED.low);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);

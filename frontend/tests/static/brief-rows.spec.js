@@ -283,22 +283,23 @@ test.describe('stock tiles at 200% zoom', () => {
   test.use(phoneDevice(188, 600));
   test('kgrid tiles wrap and stay inside their card', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/stock/ZZSD');
-    await expect(page.getByTestId('brief-conclusion').locator('.brief-kgrid > div')).toHaveCount(3);
+    // Plan S2-P1 (D5): the call's level tiles are under the chart, in their own block (brief-levels).
+    await expect(page.getByTestId('brief-levels').locator('.brief-kgrid > div')).toHaveCount(3);
     await expect(page.locator('.brief-plan .brief-kgrid > div')).toHaveCount(3);
     expect(await clippedTileText(page, '.brief-kgrid')).toEqual([]);
     const outside = await page.locator('.brief-kgrid').evaluateAll(grids => grids.flatMap(grid => {
-      const card = grid.closest('.brief-card').getBoundingClientRect();
+      const card = grid.closest('.brief-card, .brief-levels').getBoundingClientRect();
       return [...grid.children].filter(tile => tile.getBoundingClientRect().right > card.right + 0.5).map(tile => tile.textContent);
     }));
     expect(outside).toEqual([]);
-    // Nothing in the conclusion card (its title's rule unit, the meter's names) reaches past the card or the
-    // page: the meter shows its short names. (The page's own overflow is the chart card's, track A.)
+    // Nothing in the conclusion card (its market line's units, its title's rule unit) reaches past the card or the page;
+    // the pivot meter is not drawn any more (plan D5). (The page's own overflow is the chart card's, track A.)
     const conclusion = await page.getByTestId('brief-conclusion').evaluate(card => {
       const edge = Math.min(card.getBoundingClientRect().right, document.documentElement.clientWidth);
       return { wide: [...card.querySelectorAll('*')].filter(node => node.getClientRects().length && node.getBoundingClientRect().right > edge + 0.5).map(node => `${node.className} ${node.textContent.slice(0, 24)}`),
-        names: [...card.querySelectorAll('.brief-meter-labels > span')].map(label => label.innerText) };
+        meter: document.querySelectorAll('.brief-meter').length, market: Boolean(card.querySelector('[data-testid="brief-call-market"]')) };
     });
-    expect(conclusion).toEqual({ wide: [], names: ['土台', '接近', '買い', '超過'] });
+    expect(conclusion).toEqual({ wide: [], meter: 0, market: true });
     expect(errors).toEqual([]);
   });
 });
