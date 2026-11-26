@@ -348,6 +348,10 @@ _Avoid_: 独自 (bare), ソース
 
 ### UI slice S2 terms (B's stock screen)
 
+**ゾーン上限**:
+The buy zone's upper edge, the pivot + 5% (`view.upper`), and its one name on the stock screen (minor B1, S2-P3). The price chart's label by the band's top reads 「ゾーン上限 116.28」 (before S2-P3: 「買いゾーン 〜116.28」); when no spot is free for that label, the chart names the band itself, 「買いゾーン」, with no price (a band, not a level). The chart's price gutter is plain text for the levels (ピボット, 損切り, 安値, a level named at the axis), each in its line's ink, with one filled plate: the last close (終値).
+_Avoid_: 上限+5%, 買いゾーン 〜X (as the level's name)
+
 **結論（銘柄画面）**:
 The stock screen's conclusion card (`StockVerdict`, region 結論, `data-gate` = buyGate's kind) in B's form, two lines (S2-P1). Line 1, the market line: **地合いの帯**'s answer and **新規買いの目安** with the analysis date and each kind beside what it labels, 14px in the text ink on every day: 「地合い 10/2：検討可（独自判定）・目安 最大50%（独自設定）」, 「地合い 10/2：買いは控える（独自判定）・目安 0%（独自設定）」, once a newer session has closed with an open guide the **更新待ちの判定** form 「地合い 10/2時点の判定・更新待ち（独自判定）・目安 最大50%（10/2時点・独自設定）」 (the same `target` as Today and the 市場 tab), and on an unknown market 「地合い 10/2：未確認・買いは見送り」 (no figure). It breaks only after a 「：」 or a 「・」. Line 2 is labelled 銘柄 and is buyGate's own title and line, unchanged; a sell chip the call does not state, or a near earnings date under another gate, joins the 銘柄 label in its own short words (「銘柄・決算まで3日」). The level tiles and the chips are under the chart card (S2-P2's strip takes the tiles' place); the pivot meter is not drawn on the stock screen (its one sentence for an unknown pivot, 「ピボットを確認できないため位置は未確認です。」, is a line under the tiles). On a waiting day only line 1 changes: buyGate's title, tone and plan are as published.
 _Avoid_: ピボットのメーター (retired from the stock screen)
