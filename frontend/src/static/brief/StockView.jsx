@@ -123,7 +123,7 @@ export default function StockView({ data, header = null, wide = false, market = 
       <FundamentalsCard financial={financial} wide={wide} />
       <InstitutionalCard institutional={institutional} />
       <PlanCard view={view} plan={plan} settings={settings} onChange={update} earnings={view.earnings} earningsCall={call} judged={judged} wide={wide} />
-      {bars ? <SellCard sells={sells} reason={certification?.certified ? null : certification?.reason} wide={wide} /> : null}
+      {bars ? <SellCard sells={sells} reason={certification?.certified ? null : certification?.reason} wide={wide} plan={plan} /> : null}
     </div>
     <p className="brief-note brief-pad">候補は購入推奨ではありません。数値は分析基準日の公開データに基づきます。</p>
     {/* The chart's notes describe marks it draws: none while its renderer cannot be loaded (the chart box says so). */}

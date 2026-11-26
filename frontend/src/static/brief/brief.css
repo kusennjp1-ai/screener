@@ -256,6 +256,11 @@
 .brief-check.is-sell-clear { color: var(--text-3); box-shadow: inset 0 0 0 1px var(--line-2); }
 .brief-check.is-sell-unknown, .brief-check.is-sell-na,
 .brief-check.is-unknown, .brief-check.is-not_applicable { color: var(--neutral); box-shadow: inset 0 0 0 1px var(--line-2); }
+/* The sell card's stop row (BEH-1): text inks only, its own rule above it; 該当 alone in bold --neg on one line (D17, minors B4, A4). */
+.brief-check.is-stop-hit, .brief-check.is-stop-clear, .brief-check.is-stop-na, .brief-check.is-stop-unknown { color: var(--text-3); box-shadow: inset 0 0 0 1px var(--line-2); }
+.brief-stoprow li:first-child { border-top: 1px solid var(--line); }
+.brief-stop-state { font-weight: 400; white-space: nowrap; }
+.brief-stop-state.is-hit { color: var(--neg); font-weight: 700; }
 .brief-footprint { margin: 0; font-family: var(--font-mono); font-size: 20px; font-weight: 700; letter-spacing: .02em; }
 .brief-legs { display: flex; align-items: flex-end; gap: 8px; height: 96px; }
 .brief-legs div { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 4px; height: 100%; font-family: var(--font-mono); font-size: 12px; }
