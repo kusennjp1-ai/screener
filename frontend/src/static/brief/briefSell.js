@@ -65,7 +65,7 @@ function pivotGate(list, view, rules) {
   if (view.state === 'wait' || distance < 0) return { on: false, reason: 'ピボットより下（ブレイク前）のため判定しません', short: 'ピボットより下' };
   // A position that is neither the buy zone nor beyond it (low volatility, an acquisition, unjudged) is never judged by the band.
   if (view.state !== 'ext' && view.state !== 'zone') return { on: false, reason: `買いゾーン超過の銘柄ではないため判定しません（位置：${view.stateLabel || '判定不可'}）`, short: `位置：${view.stateLabel || '判定不可'}`, alternative: unjudged };
-  // The distance as every screen prints it (pivotDistanceText: 「±0.0%」 at the pivot's cents, 「+0.1%未満」 a cent or more over it).
+  // The distance as every screen prints it (pivotDistanceText: 「±0.0%」 at the pivot's cents, 「0〜+0.1%」 a cent or more over it).
   if (view.state !== 'ext' || distance < rules.climaxFromPivotPercent) return { on: false, reason: `ブレイク後の上昇が小さいため判定しません（ピボット比 ${pivotDistanceText(view)}・判定は +${rules.climaxFromPivotPercent}%以上）`, short: `ピボット比 ${pivotDistanceText(view)}・+${rules.climaxFromPivotPercent}%未満`, alternative: view.state === 'ext' };
   const n = list.length;
   if (!(list[n - 1].close > pivot)) return { on: false, reason: '日足の終値がピボットを上回っていないため判定しません', short: '終値がピボット以下' };

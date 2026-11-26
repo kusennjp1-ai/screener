@@ -637,15 +637,15 @@ describe('integration review: the base check, the dated SEC summary and the gap 
     expect([other.epsYoy, rowSecChip(other)]).toEqual([null, null]);
   });
 
-  it('prints a close under the pivot by less than 0.05% as −0.1%未満, never −0.0%, and the same over it', () => {
-    expect([distanceText(-0.04), distanceText(-0.05), distanceText(0), distanceText(-3.25), distanceText(null)]).toEqual(['−0.1%未満', '−0.1%', '±0.0%', '−3.3%', '—']);
+  it('prints a close under the pivot by less than 0.05% as 0〜−0.1%, never −0.0%, and the same over it', () => {
+    expect([distanceText(-0.04), distanceText(-0.05), distanceText(0), distanceText(-3.25), distanceText(null)]).toEqual(['0〜−0.1%', '−0.1%', '±0.0%', '−3.3%', '—']);
     expect([underTenth(-0.049), underTenth(-0.05), underTenth(0.01)]).toEqual([true, false, false]);
-    // Over the pivot by less than 0.05%: 「+0.1%未満」, never a 「+0.0%」 that does not exist; an exact zero stays 「±0.0%」.
-    expect([distanceText(0.04), distanceText(0.0064), distanceText(0.05), distanceText(0)]).toEqual(['+0.1%未満', '+0.1%未満', '+0.1%', '±0.0%']);
+    // Over the pivot by less than 0.05%: 「0〜+0.1%」, never a 「+0.0%」 that does not exist; an exact zero stays 「±0.0%」.
+    expect([distanceText(0.04), distanceText(0.0064), distanceText(0.05), distanceText(0)]).toEqual(['0〜+0.1%', '0〜+0.1%', '+0.1%', '±0.0%']);
     expect([overTenth(0.049), overTenth(0.05), overTenth(-0.01), overTenth(0)]).toEqual([true, false, false, false]);
-    expect(positionText(view({ state: 'wait', position: 'near', stateLabel: 'ピボット接近', distance: -0.04, price: 99.96 }))).toBe('ピボット接近 −0.1%未満');
+    expect(positionText(view({ state: 'wait', position: 'near', stateLabel: 'ピボット接近', distance: -0.04, price: 99.96 }))).toBe('ピボット接近 0〜−0.1%');
     // JCI: a close one cent over the pivot (156.85 against 156.84).
-    expect(positionText(view({ distance: (156.85 / 156.84 - 1) * 100, price: 156.85, pivot: 156.84 }))).toBe('買いゾーン +0.1%未満');
+    expect(positionText(view({ distance: (156.85 / 156.84 - 1) * 100, price: 156.85, pivot: 156.84 }))).toBe('買いゾーン 0〜+0.1%');
   });
 
   it('prints a close at the pivot\'s cent as ±0.0% on either side of the float noise, the position unchanged', () => {

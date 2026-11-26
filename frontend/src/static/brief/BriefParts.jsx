@@ -3,13 +3,24 @@ import { money, signed } from '../positionGeometry';
 import { sellChipView } from './briefSell';
 import { meterPercent } from './briefNav';
 import { useEntrance } from './briefPrimitives';
-import { BASE_UNCHECKED_CHIP, baseMuted, BREAKOUT_VOLUME_RATIO, candidateMarketGate, distanceText, earningsCall, pivotDistanceText, positionText, ratioShown, rowBaseHeld, rowEvent, rowSecChip, rowSecChipDrawn, rsShown, templateChip } from './briefCandidate';
+import { BASE_UNCHECKED_CHIP, baseMuted, BREAKOUT_VOLUME_RATIO, candidateMarketGate, distanceText, earningsCall, IN_BAND_OVER, IN_BAND_UNDER, pivotDistanceText, positionText, ratioShown, rowBaseHeld, rowEvent, rowSecChip, rowSecChipDrawn, rsShown, templateChip } from './briefCandidate';
 
 // The layout primitives every track uses (Expander, ScreenNotes, Parts, RiseItem, Toast) live in the
 // frozen briefPrimitives.jsx; they are re-exported here so the old import path keeps working.
 export { Expander, ScreenNotes, Parts, RiseItem, Toast } from './briefPrimitives';
 
 const finite = Number.isFinite;
+
+// distanceText's two in-band forms, as one pattern (the constants escaped, so the forms are never typed twice).
+const IN_BAND = new RegExp(`(${[IN_BAND_OVER, IN_BAND_UNDER].map(form => form.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})`);
+/**
+ * A text with distanceText's in-band form kept on one line (「0〜+0.1%」 never breaks after its 〜; minor C1), the rest of the
+ * text wrapping as before; the text itself when it has no such form.
+ */
+export function KeepDistance({ text }) {
+  if (typeof text !== 'string' || !IN_BAND.test(text)) return text ?? null;
+  return text.split(IN_BAND).map((part, i) => (i % 2 ? <span key={i} className="brief-dist">{part}</span> : part));
+}
 
 export function MiniMeter({ distance, text = distanceText(distance), animate }) {
   if (!finite(distance)) return <span className="brief-minimeter is-unknown" aria-hidden="true"><span className="brief-minimeter-value">未確認</span></span>;
@@ -34,7 +45,7 @@ export function StateChip({ view, muted = false }) {
   const position = view.position || (view.state === 'wait' ? 'near' : view.state);
   const raw = event ? event.tone : POSITION_TONE[position] || 'neutral';
   const tone = view.qualified === false ? (event?.tone === 'ext' ? 'ext' : 'neutral') : muted && raw === 'zone' ? 'neutral' : raw;
-  return <span className={`brief-chip tone-${tone}${tone === 'zone' ? ' is-strong' : ''}`}><span aria-hidden="true">{event ? event.glyph : view.stateGlyph}</span> {event ? event.text : positionText(view)}</span>;
+  return <span className={`brief-chip tone-${tone}${tone === 'zone' ? ' is-strong' : ''}`}><span aria-hidden="true">{event ? event.glyph : view.stateGlyph}</span> {event ? event.text : <KeepDistance text={positionText(view)} />}</span>;
 }
 
 /** A row's position for assistive tech: the day's event with the position after it, or the position alone. */

@@ -346,16 +346,16 @@ describe('the readout\'s 対ピボット (round 3 C5): the pivot-distance rule, 
   const at = (close, pivot, interval = 'day') => chartReadout({ bars: bars(260, i => (i === 259 ? close : 80 + i * 0.01)), interval }, undefined, { certified: true, pivot });
   const rule = (close, readout, pivot) => pivotDistanceText({ price: close, pivot, distance: readout.pivotRatio });
 
-  it('reads 「+0.1%未満」 a cent over the pivot and 「−0.1%未満」 a cent under it, daily and weekly alike', () => {
+  it('reads 「0〜+0.1%」 a cent over the pivot and 「0〜−0.1%」 a cent under it, daily and weekly alike', () => {
     for (const interval of ['day', 'week']) {
       const over = at(89.89, 89.88, interval), under = at(89.87, 89.88, interval);
       expect(formatPercent(over.pivotRatio)).toBe('+0.0%');
       expect(over.pivotText).toBe(rule(89.89, over, 89.88));
-      expect(over.pivotText.startsWith('+')).toBe(true);
+      expect(over.pivotText).toBe('0〜+0.1%');
       expect(over.pivotText).not.toBe(formatPercent(over.pivotRatio));
       expect(formatPercent(under.pivotRatio)).toBe('−0.0%');
       expect(under.pivotText).toBe(rule(89.87, under, 89.88));
-      expect(under.pivotText.startsWith('−')).toBe(true);
+      expect(under.pivotText).toBe('0〜−0.1%');
       expect(under.pivotText).not.toBe(formatPercent(under.pivotRatio));
       // The in-band form is the rule's, whichever cent of the band: the same text as a close 0.04% over or under.
       expect(over.pivotText).toBe(pivotDistanceText({ price: 100.04, pivot: 100, distance: 0.04 }));

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, render } from '@testing-library/react';
-import { BarQuote, CandidateRow, DayChange, Expander, Parts, Reasons, RiseItem, ScreenNotes, StateChip, Toast } from './BriefParts';
-import { rowSecChipDrawn } from './briefCandidate';
+import { BarQuote, CandidateRow, DayChange, Expander, KeepDistance, Parts, Reasons, RiseItem, ScreenNotes, StateChip, Toast } from './BriefParts';
+import { distanceText, rowSecChipDrawn } from './briefCandidate';
 import * as primitives from './briefPrimitives';
 
 // The round-2 row chip (data's secRowChip, plan §2.2): it answers as its owner's module does unless a test
@@ -186,6 +186,23 @@ describe('rows say the day and the decision honestly', () => {
 
 // Step-0 seams D owns and other tracks call (BriefApp's bar, Today's and the list's rows).
 describe('BriefParts seams', () => {
+  it('KeepDistance keeps distanceText\'s in-band form on one line and leaves every other text as it is', () => {
+    // Minor C1: 「0〜+0.1%」 / 「0〜−0.1%」 never break after their 〜; the text around them still wraps.
+    for (const [value, text] of [[0.04, '終値はピボットの上（ピボット比 0〜+0.1%）'], [-0.04, 'ピボット接近 0〜−0.1%']]) {
+      expect(text).toContain(distanceText(value));
+      const { container } = render(<p><KeepDistance text={text} /></p>);
+      expect(container.textContent).toBe(text);
+      expect([...container.querySelectorAll('.brief-dist')].map(span => span.textContent)).toEqual([distanceText(value)]);
+      cleanup();
+    }
+    for (const text of ['ピボット比 +1.2%', '±0.0%', '']) {
+      const { container } = render(<p><KeepDistance text={text} /></p>);
+      expect([container.textContent, container.querySelectorAll('.brief-dist').length]).toEqual([text, 0]);
+      cleanup();
+    }
+    expect(render(<p><KeepDistance text={null} /></p>).container.textContent).toBe('');
+  });
+
   it('BarQuote shows the price and the verified day change after the ticker, and nothing without a price', () => {
     const quote = view => render(<BarQuote view={view} />).container;
     const small = quote({ price: 110.74, change: -1.25 });

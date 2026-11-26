@@ -1,5 +1,6 @@
 import { money, signed } from '../positionGeometry';
 import { Expander } from './briefPrimitives';
+import { KeepDistance } from './BriefParts';
 import { SELL_RULES } from './briefSell';
 import { shortDate } from './briefShared';
 
@@ -21,7 +22,7 @@ function SellChecks({ title, checks }) {
     <h3 className="brief-subhead">{title}</h3>
     <ul className="brief-checks brief-sellchecks">{checks.map(check => <li key={check.key}>
       <span className={`brief-check is-sell-${check.state}`} aria-hidden="true">{SELL_STATE[check.state][0]}</span>
-      <span>{check.label}<span className="sr-only">（{SELL_STATE[check.state][1]}）</span><em>{check.detail}</em></span>
+      <span>{check.label}<span className="sr-only">（{SELL_STATE[check.state][1]}）</span><em><KeepDistance text={check.detail} /></em></span>
     </li>)}</ul>
   </>;
 }
@@ -62,9 +63,9 @@ export default function SellCard({ sells, reason, wide }) {
     {/* The qualifier stays on the card at every width, next to any fired check; the 注記 keeps only the sources. */}
     <h2 id="brief-sell-title">売りのサイン<small>（独自判定）</small></h2>
     {sells ? <>
-      <p className="brief-note">{sells.advance ? `起点（直近1年の安値）${shortDate(sells.advance.startDate, sells.asOf)} の ${price(sells.advance.low)} から ${signed(sells.advance.gainPct)}・${sells.advance.sessions}営業日。` : `起点（直近1年の安値）から +${SELL_RULES.advanceMinPercent}%以上・${SELL_RULES.advanceMinSessions}営業日以上の上昇局面ではないため、起点以来の下落は判定しません。`}{strengthNote(sells)}{status}</p>
+      <p className="brief-note">{sells.advance ? `起点（直近1年の安値）${shortDate(sells.advance.startDate, sells.asOf)} の ${price(sells.advance.low)} から ${signed(sells.advance.gainPct)}・${sells.advance.sessions}営業日。` : `起点（直近1年の安値）から +${SELL_RULES.advanceMinPercent}%以上・${SELL_RULES.advanceMinSessions}営業日以上の上昇局面ではないため、起点以来の下落は判定しません。`}<KeepDistance text={strengthNote(sells)} />{status}</p>
       {/* A failed breakout past its window (failedBreakoutContext, round 3 R5): neutral context outside the fold, never a check. */}
-      {sells.failedContext ? <p className="brief-note" data-testid="brief-failed-context">{sells.failedContext.text}</p> : null}
+      {sells.failedContext ? <p className="brief-note" data-testid="brief-failed-context"><KeepDistance text={sells.failedContext.text} /></p> : null}
       {shown.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
       {quiet.length > 0 && <Expander id="stock-sell-quiet" summary={[count('clear') ? `サインなし ${count('clear')}件` : null, count('na') ? `判定せず ${count('na')}件` : null].filter(Boolean).join('・')}>
         {quiet.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}

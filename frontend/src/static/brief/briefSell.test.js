@@ -127,7 +127,7 @@ describe('the strength (climax) checks judge only an extended stock', () => {
     expect(reason({ state: 'wait', pivot: last * 1.02, distance: -2 })).toBe('ピボットより下（ブレイク前）のため判定しません');
     expect(reason({ state: 'ext', pivot: last / 1.15, distance: 15 })).toBe(`ブレイク後の上昇が小さいため判定しません（ピボット比 +15.0%・判定は +${SELL_RULES.climaxFromPivotPercent}%以上）`);
     // In the buy zone a few cents over the pivot, or at its cents: the distance as every screen prints it (rows'
-    // pivotDistanceText: 「+0.1%未満」, 「±0.0%」), never 「+0.0%」, in the reason and in the card's short line alike.
+    // pivotDistanceText: 「0〜+0.1%」, 「±0.0%」), never 「+0.0%」, in the reason and in the card's short line alike.
     for (const view of [{ state: 'zone', pivot: 100, price: 100.03, distance: 0.03 }, { state: 'zone', pivot: 100, price: 100.004, distance: 0.004 }]) {
       const result = sellSignals(bars, band, { view }), shown = pivotDistanceText(view);
       expect(result.strength[0].detail).toBe(`ブレイク後の上昇が小さいため判定しません（ピボット比 ${shown}・判定は +${SELL_RULES.climaxFromPivotPercent}%以上）`);

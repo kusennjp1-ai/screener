@@ -383,7 +383,7 @@ test.describe('the 375×812 budget one session behind', () => {
   });
 
   // The integration review: the governing variant with a broken watched focus row (ZZNV) and a focus row just under its pivot
-  // (ZZAR at −0.04%, its position chip the longer 「−0.1%未満」; ZZKS moved under its pivot too, so ZZAR is in the five): the
+  // (ZZAR at −0.04%, its position chip the in-band 「0〜−0.1%」; ZZKS moved under its pivot too, so ZZAR is in the five): the
   // compact rows let RS give way rather than add a line.
   test('Today with five watched, a broken setup, a broken watched focus row and rows just under their pivot keeps its headroom', async ({ page }) => {
     const under = rows => { for (const row of rows) if (['ZZKS', 'ZZAR'].includes(row.symbol)) row.se_pivot_price = Math.round(row.current_price * 1.0004 * 100) / 100; };
@@ -392,7 +392,7 @@ test.describe('the 375×812 budget one session behind', () => {
     const focus = page.getByRole('region', { name: '注目候補' });
     await expect(focus.getByTestId('brief-candidate')).toHaveCount(5);
     await expect(focus.locator('[data-testid="brief-candidate"][data-symbol="ZZNV"] .brief-reasons')).toContainText(WEAKNESS);
-    await expect(focus.locator('[data-testid="brief-candidate"][data-symbol="ZZAR"]')).toContainText('0.1%未満');
+    await expect(focus.locator('[data-testid="brief-candidate"][data-symbol="ZZAR"]')).toContainText('0〜−0.1%');
     await settled(page);
     expect(await contentHeight(page)).toBeLessThanOrEqual(1388);
     expect(await horizontalOverflow(page)).toBe(0);
