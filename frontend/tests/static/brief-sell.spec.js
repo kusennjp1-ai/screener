@@ -82,14 +82,14 @@ for (const [width, options] of [[375, phone(375)], [1440, { viewport: { width: 1
     expect(errors).toEqual([]);
   });
 
-  test('says 判定していない項目 n件 while a check is not judged, never 「いま出ているサインはありません」, and names the bar a check is under', async ({ page }) => {
+  test('says 判定なしの項目 n件 while a check is not judged, never 「いま出ているサインはありません」, and names the bar a check is under', async ({ page }) => {
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
     const sell = page.getByTestId('brief-sell');
     const note = sell.locator('.brief-note').first();
-    await expect(note).toContainText(/判定していない項目 \d+件。$/);
+    await expect(note).toContainText(/判定なしの項目 \d+件。$/);
     await expect(sell).not.toContainText('いま出ているサインはありません');
     // The real reason, in short, with the bar it is under (ZZNV sits at its pivot in the buy zone).
-    await expect(note).toContainText('上昇の加速は判定せず（ピボット比 ±0.0%・+20%未満）。');
+    await expect(note).toContainText('上昇の加速は判定なし（ピボット比 ±0.0%・+20%未満）。');
     expect(errors).toEqual([]);
   });
 });

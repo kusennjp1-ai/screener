@@ -621,7 +621,7 @@ describe('the strength checks\' 50-day alternative (VD6)', () => {
     }
   });
 
-  it('stays 判定せず under +25%, when the owner turns it off, or for a low-volatility or acquisition position', () => {
+  it('stays 判定なし under +25%, when the owner turns it off, or for a low-volatility or acquisition position', () => {
     const bars = extended(0.005);
     expect((bars.at(-1).close / sma50(bars) - 1) * 100).toBeLessThan(25);
     const under = sellSignals(bars, SELL_RULES, { view: null });

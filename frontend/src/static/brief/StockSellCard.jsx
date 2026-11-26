@@ -13,9 +13,10 @@ const SELL_INLINE = `保有中の判断材料です。${SOURCES}`;
 /** The sell card's sources, in the stock screen's 注記 below 1024px. */
 export const SELL_NOTE = `売りのサインは保有中の判断材料です。上昇の加速は、ピボット比 +${SELL_RULES.climaxFromPivotPercent}%以上の買いゾーン超過でピボット上抜けから${SELL_RULES.climaxSessions}営業日以上の銘柄か、終値が50日線から +${SELL_RULES.climaxFrom50dPercent}%以上の銘柄でのみ判定し、50日線は割れた日の出来高で、ブレイク失敗は出来高${SELL_RULES.breakVolumeRatio}倍以上の上抜けから${SELL_RULES.failedBreakoutSessions}営業日以内のピボット割れで判定します。${SOURCES}`;
 
-// A check that is not judged for this stock (its reason says why: 「…のため判定しません」) reads 判定せず, never 対象外,
-// which the brief keeps for SEC, funds and unlisted watch symbols (CONTEXT.md).
-const SELL_STATE = { hit: ['!', 'サインあり'], caution: ['△', '注意'], clear: ['·', 'サインなし'], unknown: ['?', '未確認'], na: ['–', '判定せず'] };
+// A check that is not judged for this stock (its reason says why: 「…のため判定しません」) reads 判定なし (D9: one word for the
+// state, in the rows, the fold's summary and the status sentence), never 対象外, which the brief keeps for SEC, funds and
+// unlisted watch symbols (CONTEXT.md).
+const SELL_STATE = { hit: ['!', 'サインあり'], caution: ['△', '注意'], clear: ['·', 'サインなし'], unknown: ['?', '未確認'], na: ['–', '判定なし'] };
 
 function SellChecks({ title, checks }) {
   return <>
@@ -34,12 +35,12 @@ function strengthNote(sells) {
   if (run) return `上昇の加速は、ピボット ${money(run.pivot)} を上抜けた ${shortDate(run.startDate, sells.asOf)} 以降（${run.sessions}営業日）で判定（ピボット比 ${signed(run.distance)}・判定は +${SELL_RULES.climaxFromPivotPercent}%以上かつ上抜けから${SELL_RULES.climaxSessions}営業日以上、独自判定）。`;
   // One line on a phone: the gate's reason with the close against its 50-day line; the 注記 gives both bars.
   const why = sells.runShort, parts = [why?.reason, Number.isFinite(why?.fromSma50) ? `50日線から ${signed(why.fromSma50)}` : null].filter(Boolean);
-  return parts.length ? `上昇の加速は判定せず（${parts.join('・')}）。` : `上昇の加速はピボット比 +${SELL_RULES.climaxFromPivotPercent}%以上でのみ判定します。`;
+  return parts.length ? `上昇の加速は判定なし（${parts.join('・')}）。` : `上昇の加速はピボット比 +${SELL_RULES.climaxFromPivotPercent}%以上でのみ判定します。`;
 }
 
 /**
  * The card's status after the notes: the hits, else a caution on the 50-day line, else unknown checks, else
- * the checks not judged (判定せず: never 「いま出ているサインはありません」 while one is not judged), else none.
+ * the checks not judged (判定なし: never 「いま出ているサインはありません」 while one is not judged), else none.
  */
 function statusLine(sells) {
   if (!sells) return '';
@@ -48,7 +49,7 @@ function statusLine(sells) {
   if (all.some(c => c.state === 'caution')) return ' 50日線の下にあります（大商いの割れは未確認）。';
   if (all.some(c => c.state === 'unknown')) return ' 出ているサインはありませんが、未確認の項目があります。';
   const na = all.filter(c => c.state === 'na').length;
-  return na ? ` 判定していない項目 ${na}件。` : ' いま出ているサインはありません。';
+  return na ? ` 判定なしの項目 ${na}件。` : ' いま出ているサインはありません。';
 }
 
 /** The sell card: fired, cautioned and unknown checks listed, the quiet ones folded on a phone. */
@@ -67,7 +68,7 @@ export default function SellCard({ sells, reason, wide }) {
       {/* A failed breakout past its window (failedBreakoutContext, round 3 R5): neutral context outside the fold, never a check. */}
       {sells.failedContext ? <p className="brief-note" data-testid="brief-failed-context"><KeepDistance text={sells.failedContext.text} /></p> : null}
       {shown.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
-      {quiet.length > 0 && <Expander id="stock-sell-quiet" summary={[count('clear') ? `サインなし ${count('clear')}件` : null, count('na') ? `判定せず ${count('na')}件` : null].filter(Boolean).join('・')}>
+      {quiet.length > 0 && <Expander id="stock-sell-quiet" summary={[count('clear') ? `サインなし ${count('clear')}件` : null, count('na') ? `判定なし ${count('na')}件` : null].filter(Boolean).join('・')}>
         {quiet.map(([title, checks]) => <SellChecks key={title} title={title} checks={checks} />)}
       </Expander>}
     </> : <p className="brief-note">{reason ? `日足を分析基準日の値として検証できないため、売りのサインは未確認です（${reason}）。` : '日足が60本未満のため、売りのサインは未確認です。'}</p>}
