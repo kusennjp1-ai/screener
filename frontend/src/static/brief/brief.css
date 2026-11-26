@@ -117,8 +117,8 @@
 .brief-row-title b { font-size: 16px; letter-spacing: .02em; flex: none; display: inline-block; }
 .brief-row-title span { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .brief-reasons, .brief-tags { display: flex; flex-wrap: wrap; gap: 4px; }
-/* distanceText's in-band form (「0〜+0.1%」, KeepDistance) never breaks after its 〜. */
-.brief-dist { white-space: nowrap; }
+/* distanceText's in-band form (「0〜+0.1%」, KeepDistance) never breaks after its 〜 (not .brief-dist: the 市場 tab's 分配日 row). */
+.brief-inband { white-space: nowrap; }
 .brief-chip { font-size: 11px; line-height: 1.6; padding: 1px 8px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text-2); white-space: nowrap; }
 .brief-chip.tone-zone { color: var(--zone); border-color: var(--zone-edge); background: var(--zone-fill); }
 .brief-chip.tone-zone.is-strong { font-weight: 700; }

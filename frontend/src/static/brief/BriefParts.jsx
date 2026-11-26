@@ -19,7 +19,7 @@ const IN_BAND = new RegExp(`(${[IN_BAND_OVER, IN_BAND_UNDER].map(form => form.re
  */
 export function KeepDistance({ text }) {
   if (typeof text !== 'string' || !IN_BAND.test(text)) return text ?? null;
-  return text.split(IN_BAND).map((part, i) => (i % 2 ? <span key={i} className="brief-dist">{part}</span> : part));
+  return text.split(IN_BAND).map((part, i) => (i % 2 ? <span key={i} className="brief-inband">{part}</span> : part));
 }
 
 export function MiniMeter({ distance, text = distanceText(distance), animate }) {

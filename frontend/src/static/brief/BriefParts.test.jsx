@@ -192,12 +192,12 @@ describe('BriefParts seams', () => {
       expect(text).toContain(distanceText(value));
       const { container } = render(<p><KeepDistance text={text} /></p>);
       expect(container.textContent).toBe(text);
-      expect([...container.querySelectorAll('.brief-dist')].map(span => span.textContent)).toEqual([distanceText(value)]);
+      expect([...container.querySelectorAll('.brief-inband')].map(span => span.textContent)).toEqual([distanceText(value)]);
       cleanup();
     }
     for (const text of ['ピボット比 +1.2%', '±0.0%', '']) {
       const { container } = render(<p><KeepDistance text={text} /></p>);
-      expect([container.textContent, container.querySelectorAll('.brief-dist').length]).toEqual([text, 0]);
+      expect([container.textContent, container.querySelectorAll('.brief-inband').length]).toEqual([text, 0]);
       cleanup();
     }
     expect(render(<p><KeepDistance text={null} /></p>).container.textContent).toBe('');
