@@ -1024,6 +1024,27 @@ describe('brief price chart', () => {
     expect(chartContentKey({ ...base }, 130)).toBe(chartContentKey(base, 130));
   });
 
+  it('centres a T number over its own contraction or over no box, never over another contraction\'s box (minor B7)', () => {
+    // Three contractions side by side on the 3-month chart; the middle one's column is a wall of candles from the plot's top
+    // to its bottom, so no spot by its box is free. Its T number never slides over a neighbour's box (where it would read as
+    // that contraction's number): it stays over its own box, over the candles with its halo.
+    const legs = [[260, 268, 104, 98, 6], [269, 277, 104, 99, 5], [278, 286, 104, 100, 4]].map(([a, b, high, low, depthPct]) => ({ startDate: day(a), endDate: day(b), high, low, depthPct }));
+    const walled = { ...model, bars: bars.map((b, i) => (i >= 269 && i <= 277 ? { ...b, high: 140, low: 20 } : b)), legs };
+    for (const [w, h] of [[262, 292], [332, 340]]) {
+      const el = container(w, h);
+      renderPriceChart(el, walled, { period: 63, animate: false });
+      const boxes = [...el.querySelectorAll('.bc-leg')].map(g => { const r = g.querySelector('rect'); return { leg: Number(g.dataset.leg), x0: Number(r.getAttribute('x')), x1: Number(r.getAttribute('x')) + Number(r.getAttribute('width')) }; });
+      expect(boxes).toHaveLength(3);
+      const numbers = [...el.querySelectorAll('.bc-tlabel')].map(g => ({ leg: Number(g.dataset.leg), text: g.querySelector('text').textContent, c: Number(g.querySelector('text').getAttribute('x')) }));
+      expect(numbers.map(n => n.leg).sort()).toEqual([0, 1, 2]);
+      for (const { leg, text, c } of numbers) {
+        const own = boxes.find(b => b.leg === leg), over = boxes.filter(b => b.leg !== leg && c >= b.x0 && c <= b.x1);
+        expect({ w, text, overOther: over.length > 0 && !(c >= own.x0 && c <= own.x1) }).toEqual({ w, text, overOther: false });
+      }
+      el.remove();
+    }
+  });
+
   it('draws the same chart with and without its speed-ups (the test-only `reference` option bypasses them)', () => {
     // The fixture's stocks and oracles, and crowded charts that send the names through every retry, are checked the same
     // way in priceChart.identity.test.js; here this file's chart at the four plot sizes, and one with every bar spanning

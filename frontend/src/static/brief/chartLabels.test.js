@@ -186,6 +186,25 @@ describe('chart label placer', () => {
     expect(moving.boxes.filter(b => b.leader)).toEqual([]);
   });
 
+  it('with `allow`, never takes a spot it rejects, candle-free or over candles, in place(), when repairing and when settling', () => {
+    // Columns 4-30 belong to another contraction (a T number centred there reads as that one's): the label skips them.
+    const allow = x => !(x + 10 >= 4 && x + 10 <= 30);
+    expect(labelPlacer({ solid }).place(20, along(4, 60, [20]))).toMatchObject({ x: 4, yc: 20 });
+    expect(labelPlacer({ solid }).place(20, along(4, 60, [20]), { allow })).toMatchObject({ x: 22, yc: 20, forced: false });
+    // Over candles too: the forced fallback is an allowed spot, or none.
+    expect(labelPlacer({ solid }).place(20, { list: [[100, 60, 0], [140, 60, 1]] }, { allow: x => x !== 100 })).toMatchObject({ x: 140, forced: true });
+    expect(labelPlacer({ solid }).place(20, { list: [[100, 60, 0]] }, { allow: () => false })).toBeNull();
+    // A label in the way of the one allowed candle-free spot moves for it; a rejected spot is never freed.
+    const placer = labelPlacer({ solid });
+    const first = placer.put(20, along(4, 60, [20]));
+    const t = placer.put(20, { list: [[4, 20, 0], [100, 60, 1]] }, { allow: x => x !== 100 });
+    expect(t.at).toMatchObject({ x: 4, yc: 20, forced: false });
+    expect(first.at).toMatchObject({ x: 40, yc: 20 });
+    const other = labelPlacer({ solid });
+    other.put(20, along(4, 4, [20]));
+    expect(other.put(20, { list: [[4, 20, 0], [100, 60, 1]] }, { allow: x => x !== 4 }).at).toMatchObject({ x: 100, forced: true });
+  });
+
   it('skips a spot where the label\'s leader may not run (its leader null), in place() and when repairing', () => {
     // No leader may run on row 20 (as along a level line): the name takes row 40 though row 20 comes first and is clear.
     const leader = (x, yc) => (yc === 20 ? null : [{ x0: x + 22, x1: 98, y0: yc - 2, y1: yc + 2, leader: 'h' }]);

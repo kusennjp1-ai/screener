@@ -546,6 +546,13 @@ export function renderPriceChart(el, model, options = {}) {
   // keep clear of the lines, and 60px more to keep a level line out of its glyphs); a depth is never left out (over
   // candles with its halo, or elsewhere in the plot when even its box's surroundings are taken).
   const legLabels = legs.map(leg => { const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2; return { leg, x: (x0 + x1) / 2, x0, x1 }; });
+  // A T number is centred over its own box or over no box: centred over another contraction's box it reads as that one's
+  // (minor B7). `allowed(index, w)` is the spot test its searches take (the depth under a box, and the whole-plot spots of a
+  // combined label that found none around its box, are not held to it).
+  const allowed = (index, w) => lx => {
+    const c = lx + w / 2;
+    return legLabels.every(({ leg, x0, x1 }) => leg.index === index || c < x0 || c > x1) || legLabels.some(({ leg, x0, x1 }) => leg.index === index && c >= x0 && c <= x1);
+  };
   const around = (w, ax, ay, { x0, x1, top, low }) => spots({ x0: clampX(x0 - w - 4, w), x1: clampX(x1 + 4, w), ys: lineOf(top - 30, low + 30), inside: inPlot, cost: (lx, yc) => Math.abs(lx - ax) + 2 * Math.abs(yc - ay), near: { cost: 64, x: [ax - 64, ax + 64], y: [ay - 32, ay + 32] } });
   const tLabel = (leg, body, depth) => (at, search) => (at ? `<g class="bc-tlabel" data-leg="${leg.index}">${cut(at)}${text((at.x + width(body) / 2).toFixed(1), (at.yc + 4).toFixed(1), body, `bc-ttext${depth ? ' bc-tdepth' : ''}`, `text-anchor="middle" font-weight="700"${depth ? ` data-depth="${leg.depthPct}"` : ''} ${placedAttrs(at, search)}`)}</g>` : '');
   for (const { leg, x: cx, x0, x1 } of [...legLabels].reverse()) {
@@ -553,7 +560,7 @@ export function renderPriceChart(el, model, options = {}) {
     if (!finite(area.top) || !finite(area.low)) continue;
     const tBody = `T${leg.index + 1}`, tw = width(tBody), depth = finite(leg.depthPct) ? `−${Math.round(leg.depthPct)}%` : null, dw = depth ? width(depth, true) : 0;
     if (depth && x1 - x0 > Math.max(22, dw + 4)) {
-      const t = placer.put(tw, around(tw, cx - tw / 2, area.top - 9, area), { forced: false, repair: true, slack: 24, hard: 60, kin: 'tn' });
+      const t = placer.put(tw, around(tw, cx - tw / 2, area.top - 9, area), { forced: false, repair: true, slack: 24, hard: 60, kin: 'tn', allow: allowed(leg.index, tw) });
       const d = t.at ? placer.put(dw, around(dw, cx - dw / 2, area.low + 11, area), { forced: false, repair: true, slack: 24, hard: 60, kin: 'leg' }) : null;
       if (d?.at) {
         show(t, tLabel(leg, tBody, false));
@@ -563,7 +570,7 @@ export function renderPriceChart(el, model, options = {}) {
       placer.drop(t);
     }
     const body = depth ? `${tBody} ${depth}` : tBody, w = width(body);
-    let label = placer.put(w, around(w, cx - w / 2, area.top - 9, area), { slack: 24, hard: 60, kin: 'tn' });
+    let label = placer.put(w, around(w, cx - w / 2, area.top - 9, area), { slack: 24, hard: 60, kin: 'tn', allow: allowed(leg.index, w) });
     // The whole plot on a coarse grid (8px across, 4px down): only when even the box's surroundings are taken.
     if (!label.at && depth) label = placer.put(w, spots({ x0: 4, x1: pw - w - 4, ys: lineOf(padT + 6, plotBottom - 6, 4), step: 8, cost: (lx, yc) => Math.abs(lx - cx + w / 2) + 2 * Math.abs(yc - area.top + 9) }), { hard: 60, kin: 'tn' });
     show(label, tLabel(leg, body, depth));
