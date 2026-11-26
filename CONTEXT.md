@@ -156,8 +156,9 @@ The sessions since the latest close that broke above today's pivot (`lastPivotCr
 **ピボット到達 / ピボットと同値のまま**:
 A close at the pivot's cents after a close under it: 「M/Dにピボット到達」, green on that day only, as a stock arriving at its buy point. A later close at the pivot's cents is still a touch only while every close since the arrival stayed on the cents; the rows cannot see that far back, so they say what they see (「ピボットと同値のまま」, wait). The conclusion reads the bars: 「ピボット到達からN営業日」 (緑はピボット到達の当日のみ, 独自判定) while no close has broken out since the touch, or the earlier breakout's date when a close went above the pivot before this pullback onto it. Without certified bars it claims neither (ピボットに届いた日を確認できない).
 
-**±0.0% / +0.1%未満 / −0.1%未満**:
-The distance from the pivot to one decimal: 「±0.0%」 only at the pivot's cents (whichever side of the cent the float noise in a published pivot falls), 「+0.1%未満」 or 「−0.1%未満」 for a cent or more over or under the pivot that rounds to 0.0%; never 「+0.0%」 or 「−0.0%」. A close at the pivot's cents that the shared position rule still puts just under the pivot reads 「ピボット接近（ピボットと同値）」, never 「あと0.1%未満」.
+**±0.0% / 0〜+0.1% / 0〜−0.1%**:
+The distance from the pivot to one decimal: 「±0.0%」 only at the pivot's cents (whichever side of the cent the float noise in a published pivot falls), 「0〜+0.1%」 or 「0〜−0.1%」 (`distanceText`'s in-band forms; before UI slice S2 「+0.1%未満」 / 「−0.1%未満」) for a cent or more over or under the pivot that rounds to 0.0%; never 「+0.0%」 or 「−0.0%」. The in-band form is never broken after its 〜 (`KeepDistance`). The near call's gap keeps its own words, 「ピボット接近（あと0.1%未満）」 (「あと0〜」 would print あと0); a close at the pivot's cents that the shared position rule still puts just under the pivot reads 「ピボット接近（ピボットと同値）」, never 「あと0.1%未満」.
+_Avoid_: +0.1%未満, −0.1%未満 (as a distance)
 
 **▲ / ▼**:
 ▲ is the app's amber caution mark wherever it appears: 買いゾーン超過, 下落日の大商い, 分配日 (from round 3 only at 7 days or more; 5–6 take the neutral ○, see **分配日の参考／注意**), the market tab's 注意, and 崩れ / ブレイク失敗; the words beside it always name which. On the price chart ▼ is 上昇の加速 (a holder's sell-into-strength sign). On the sector table ▲N and ▼N are a rank that rose or fell N places, not a caution. The glyphs are hidden from assistive tech; the text names the event.
@@ -351,6 +352,13 @@ _Avoid_: 独自 (bare), ソース
 **ゾーン上限**:
 The buy zone's upper edge, the pivot + 5% (`view.upper`), and its one name on the stock screen (minor B1, S2-P3). The price chart's label by the band's top reads 「ゾーン上限 116.28」 (before S2-P3: 「買いゾーン 〜116.28」); when no spot is free for that label, the chart names the band itself, 「買いゾーン」, with no price (a band, not a level). The chart's price gutter is plain text for the levels (ピボット, 損切り, 安値, a level named at the axis), each in its line's ink, with one filled plate: the last close (終値).
 _Avoid_: 上限+5%, 買いゾーン 〜X (as the level's name)
+
+**判定なし（売りのサイン）**:
+A sell check this stock is not judged by (its reason says why, 「…のため判定しません」): the sell card's row, its quiet fold's summary (「サインなし n件・判定なし n件」), the strength note (「上昇の加速は判定なし（…）」) and the status sentence (「判定なしの項目 n件。」, never 「いま出ているサインはありません」 while one is not judged) all say 判定なし (plan D9, S2-P5; before: 判定せず and 「判定していない項目 n件」). One word for the state; never 対象外 (SEC, funds and unlisted watch symbols only), never 0. The 市場 tab's 「判定していない項目」 counts market signals, not sell checks, and is unchanged.
+_Avoid_: 判定せず, 判定していない項目 (on the sell card)
+
+**Setup Engineの準備条件**:
+The VCP card's Setup Engine line, 「Setup Engineの準備条件（トレンドテンプレートとは別）：土台 N週・深さ N%」 with the pivot's own day after 「・」 (S2-P5, minor B9; before: 「Setup Engine：」). Shown only while the Setup Engine's recalculation is current for the analysis date. The qualifier keeps it apart from the trend template (the 8 published conditions); the abbreviation SE is not used bare in it.
 
 **結論（銘柄画面）**:
 The stock screen's conclusion card (`StockVerdict`, region 結論, `data-gate` = buyGate's kind) in B's form, two lines (S2-P1). Line 1, the market line: **地合いの帯**'s answer and **新規買いの目安** with the analysis date and each kind beside what it labels, 14px in the text ink on every day: 「地合い 10/2：検討可（独自判定）・目安 最大50%（独自設定）」, 「地合い 10/2：買いは控える（独自判定）・目安 0%（独自設定）」, once a newer session has closed with an open guide the **更新待ちの判定** form 「地合い 10/2時点の判定・更新待ち（独自判定）・目安 最大50%（10/2時点・独自設定）」 (the same `target` as Today and the 市場 tab), and on an unknown market 「地合い 10/2：未確認・買いは見送り」 (no figure). It breaks only after a 「：」 or a 「・」. Line 2 is labelled 銘柄 and is buyGate's own title and line, unchanged; a sell chip the call does not state, or a near earnings date under another gate, joins the 銘柄 label in its own short words (「銘柄・決算まで3日」). The level tiles and the chips are under the chart card (S2-P2's strip takes the tiles' place); the pivot meter is not drawn on the stock screen (its one sentence for an unknown pivot, 「ピボットを確認できないため位置は未確認です。」, is a line under the tiles). On a waiting day only line 1 changes: buyGate's title, tone and plan are as published.
