@@ -15,7 +15,7 @@
  */
 export const BOX_GAP = 3, PHRASE_GAP = 14, LABEL_GAP = PHRASE_GAP + 2, FIGURE_GAP = 24;
 /**
- * The gap between two labels' boxes on one row by their kinds (`kin`): the plan's green names (ピボット, 買いゾーン)
+ * The gap between two labels' boxes on one row by their kinds (`kin`): the plan's green names (ピボット, the zone's: ゾーン上限 or 買いゾーン)
  * keep three glyphs apart (two green words read as one); an average's name ('ma') and a contraction's depth under its
  * box ('leg') or its T number ('tn', 「T2 −8%」 too), or two names, keep FIGURE_GAP (and the estimate's slack).
  */

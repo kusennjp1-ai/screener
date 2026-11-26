@@ -134,7 +134,7 @@ describe('brief price chart', () => {
     expect(el.querySelector('.bc-tip')).toBeNull();
     expect(texts(el, '.bc-levelnote')).toEqual(expect.arrayContaining(['ピボット', '損切り −7.0%']));
     expect(collisions(el)).toEqual([]);
-    expect(texts(el, '.bc-zonetext')).toEqual(['買いゾーン 〜113.40']);
+    expect(texts(el, '.bc-zonetext')).toEqual(['ゾーン上限 113.40']);
   });
 
   it('moves the stop line, its tag and its label when the plan changes and clips a contraction that began before the period', () => {
@@ -544,9 +544,9 @@ describe('brief price chart', () => {
     const wide = container(1000, 420);
     renderPriceChart(wide, { ...model, bars: wall, pivot: 100, upper: 110, stop: 93, legs: [] }, { period: 130, animate: false });
     const forced = [...el.querySelectorAll('[data-forced="1"]'), ...wide.querySelectorAll('[data-forced="1"]')];
-    expect(forced.map(node => node.textContent)).toEqual(expect.arrayContaining(['ピボット', '買いゾーン 〜110.00', '50']));
-    // A narrow chart keeps the zone's upper price too: 「買いゾーン 〜110.00」 over the fewest of the wall's candles.
-    expect(el.querySelector('.bc-zonetext').textContent).toBe('買いゾーン 〜110.00');
+    expect(forced.map(node => node.textContent)).toEqual(expect.arrayContaining(['ピボット', 'ゾーン上限 110.00', '50']));
+    // A narrow chart keeps the zone's upper price too: 「ゾーン上限 110.00」 over the fewest of the wall's candles.
+    expect(el.querySelector('.bc-zonetext').textContent).toBe('ゾーン上限 110.00');
     expect(el.querySelector('.bc-zonetext').dataset.forced).toBe('1');
     for (const node of forced) {
       expect(node.dataset.search).toMatch(/^\d+\.\d \d+\.\d \d+\|\d+\.\d( \d+\.\d)*$/);
@@ -732,19 +732,19 @@ describe('brief price chart', () => {
 
   it('on a narrow chart, names the zone with its upper price wherever a spot is free near the band: candle-free first, else over the fewest candles', () => {
     const pw = 332 - 68;
-    // Candles fill the band and the row just above it, but not the rows higher up: 「買いゾーン 〜113.40」 takes one of
+    // Candles fill the band and the row just above it, but not the rows higher up: 「ゾーン上限 113.40」 takes one of
     // those, its glyphs ending within ZONE_ABOVE + 3 of the band's top edge.
     const reaching = bars.map((b, i) => (i > 170 ? { ...b, open: 108.5, close: 112.5, high: 114.5, low: 108.2 } : b));
     const near = container(332, 340);
     renderPriceChart(near, { ...model, bars: reaching, legs: [] }, { period: 130, animate: false });
     const full = near.querySelector('.bc-zonetext'), edge = Number(near.querySelector('.bc-zoneedge').getAttribute('y'));
-    expect(full.textContent).toBe('買いゾーン 〜113.40');
+    expect(full.textContent).toBe('ゾーン上限 113.40');
     expect(full.dataset.forced).toBeUndefined();
     const above = edge - (Number(full.getAttribute('y')) - 4);
     expect(above).toBeGreaterThan(9.5);
     expect(above).toBeLessThanOrEqual(9 + ZONE_ABOVE + 0.5);
     // Candles fill the band and every row up to ZONE_ABOVE above it (but over the last bars, `gap`): no candle-free spot
-    // is left for 「買いゾーン 〜113.40」, so it goes over the fewest candles with its halo, its price still shown (the
+    // is left for 「ゾーン上限 113.40」, so it goes over the fewest candles with its halo, its price still shown (the
     // short 「買いゾーン」 only when no spot is free for the full name at all).
     const crowded = bars.map((b, i) => (i > 170 ? { ...b, open: 108.5, close: 112.5, high: 122, low: 108.2 } : b));
     for (const gap of [40, 0]) {
@@ -752,7 +752,7 @@ describe('brief price chart', () => {
       const el = container(332, 340);
       renderPriceChart(el, { ...model, bars: holed, legs: [] }, { period: 130, animate: false });
       const label = el.querySelector('.bc-zonetext');
-      expect({ gap, name: label.textContent, forced: label.dataset.forced }).toEqual({ gap, name: '買いゾーン 〜113.40', forced: '1' });
+      expect({ gap, name: label.textContent, forced: label.dataset.forced }).toEqual({ gap, name: 'ゾーン上限 113.40', forced: '1' });
       const lx = Number(label.getAttribute('x')), w = _test.width(label.textContent);
       expect(lx).toBeGreaterThanOrEqual(4);
       expect(lx + w).toBeLessThanOrEqual(pw);
@@ -766,7 +766,7 @@ describe('brief price chart', () => {
       const el = container(width, 340);
       renderPriceChart(el, busy(k), { period, animate: false });
       const { labels } = chartBoxes(el), row = (a, b) => a.y0 < b.y1 && a.y1 > b.y0, gap = (a, b) => Math.max(a.x0 - b.x1, b.x0 - a.x1);
-      const pivot = labels.find(l => l.name === 'ピボット'), zone = labels.find(l => l.name.startsWith('買いゾーン'));
+      const pivot = labels.find(l => l.name === 'ピボット'), zone = labels.find(l => l.name.startsWith('ゾーン上限') || l.name === '買いゾーン');
       if (pivot && zone && row(pivot, zone)) expect({ width, period, k, apart: gap(pivot, zone) > 24 }).toEqual({ width, period, k, apart: true });
       const close = labels.flatMap((a, i) => labels.slice(i + 1).filter(b => row(a, b) && gap(a, b) < PHRASE_GAP).map(b => `${a.name} ${b.name} ${gap(a, b).toFixed(1)}`));
       expect({ width, period, k, close }).toEqual({ width, period, k, close: [] });

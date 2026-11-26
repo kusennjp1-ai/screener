@@ -521,15 +521,17 @@ export function renderPriceChart(el, model, options = {}) {
   for (const level of levelLabels) if (level !== high) placeLevel(level);
   // The zone's name: inside the band along its top first, then its lower rows, then just above it and up to ZONE_ABOVE
   // higher; each row from the band's left end rightwards, then leftwards (still over the band by 20px or more where
-  // the band is short). 「買いゾーン 〜116.28」 keeps its upper price wherever a spot is free in those rows: candle-free
-  // first, else over the fewest candles with its halo. Only with every such spot taken does it try 「買いゾーン」, over
-  // FEW_CANDLES candles at most, else the green band goes unnamed. A level line through it is avoided, or cut under it.
+  // the band is short). It names the band's upper edge with its price, 「ゾーン上限 116.28」 (one name per level, the
+  // level's own name ゾーン上限), wherever a spot is free in those rows: candle-free first, else over
+  // the fewest candles with its halo. Only with every such spot taken does it try the band's own name 「買いゾーン」 (no
+  // price, so no level's name), over FEW_CANDLES candles at most, else the green band goes unnamed. A level line through it
+  // is avoided, or cut under it.
   if (zone && zone.height > 14) {
     const zoneSpots = w => {
       const from = clampX(zone.x + 2, w), rows = [...lineOf(zone.top + 8, zone.top + zone.height - 8), ...lineOf(zone.top - 9 - ZONE_ABOVE, zone.top - 9).reverse()];
       return spots({ x0: clampX(zone.x + 20 - w, w), x1: pw - w - 4, ys: rows, inside: inPlot, cost: (lx, yc) => rows.indexOf(yc) * 10000 + (lx >= from ? lx - from : 2000 + from - lx), near: { cost: 9999, x: [-Infinity, Infinity], y: [rows[0], rows[0]] } });
     };
-    let body = `買いゾーン${finite(model.upper) ? ` 〜${fmt(model.upper)}` : ''}`, w = width(body);
+    let body = finite(model.upper) ? `ゾーン上限 ${fmt(model.upper)}` : '買いゾーン', w = width(body);
     let label = placer.put(w, zoneSpots(w), { kin: 'plan', hard: 60 });
     if (!label.at) {
       body = '買いゾーン'; w = width(body);
