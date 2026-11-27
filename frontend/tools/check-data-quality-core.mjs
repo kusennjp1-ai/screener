@@ -85,6 +85,18 @@ const producerCoverage=await producerHistoryCoverage({root:'public/static-data',
 if(producerCoverage && (quality.total!==producerCoverage.total || quality.verified!==producerCoverage.verified))throw Error('Producer protected coverage denominator changed');
 for(const now of new Set([evaluatedAt,checkedAt])) validateResearchParity(wire,canonicalRows,now);
 console.log(`Research transport gate passed: ${wireRaw.length} raw / ${gzipSync(wireRaw).length} gzip bytes; full canonical rules, CSV, rankings and order plan agree.`);
+// The RS line divides by the SPY benchmark. When that file is unavailable or
+// empty, the RS failure below names it instead of the first sampled symbol.
+// Only the message changes; the condition that stops the gate does not.
+const spyGap=await (async()=>{
+  let benchmark;
+  try { benchmark=await read('book-benchmark.json'); }
+  catch(error) { return error.code==='ENOENT'?'book-benchmark.json is absent':`book-benchmark.json is unreadable: ${error.message}`; }
+  if(benchmark?.unavailable===true) return `book-benchmark.json is unavailable: ${benchmark.error||'no error recorded'}`;
+  if(benchmark?.as_of_date!==index.as_of_date) return `book-benchmark.json is for ${benchmark?.as_of_date}, not ${index.as_of_date}`;
+  if(!Array.isArray(benchmark?.bars)||!benchmark.bars.length) return 'book-benchmark.json has no bars';
+  return null;
+})();
 // Open real normal, repaired, split and incomplete symbols. All surfaces use
 // these same canonical details; chart stubs may not retain old levels.
 const sample=new Set(['AMD','TSM','JPM','KLAC','SLAB','ADI','SNDK','NDSN','IRDM','EBAY',index.rows.find(r=>!r.financial_history)?.symbol,index.rows.find(r=>!r.institutional_evidence)?.symbol,index.rows.find(r=>r.setup_recalculation?.status!=='calculated')?.symbol]);
@@ -95,7 +107,9 @@ for(const symbol of sample) {
   for(const key of scalarFields)if(detail[key]!==row[key])throw Error(`Detail mismatch: ${symbol}/${key}`);
   if(row.chart_path) {
     const chart=await read(row.chart_path);
-    if(row.technical_audit?.valid && (!chart.rs_line || chart.rs_line.length<63)) throw Error(`Verified chart lacks RS context: ${symbol}`);
+    if(row.technical_audit?.valid && (!chart.rs_line || chart.rs_line.length<63)) throw Error(spyGap
+      ?`SPY benchmark missing (${spyGap}): no verified chart can carry its RS line. Verified chart lacks RS context: ${symbol}`
+      :`Verified chart lacks RS context: ${symbol}`);
     for(const key of scalarFields)if(chart.stock_data[key]!==row[key])throw Error(`Chart mismatch: ${symbol}/${key}`);
   }
 }

@@ -82,6 +82,35 @@ describe('publication summaries and current canonical decisions', () => {
     } finally { await rm(root, { recursive: true, force: true }); }
   });
 
+  it('names a missing SPY benchmark as the cause when verified charts lack their RS line', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'quality-spy-missing-'));
+    try {
+      const frontend = join(root, 'frontend'), data = join(frontend, 'public/static-data');
+      await mkdir(data, { recursive: true }); await mkdir(join(root, 'data/ibd_reference/ibd50'), { recursive: true });
+      const write = (name, value) => writeFile(join(data, name), JSON.stringify(value));
+      const days = calendarAt(date).sessions.slice(-280);
+      await write('trading-calendar.json', calendarAt(date));
+      const bars = days.map((day, index) => { const close = 50 + index * .25; return { date: day, open: close, close, low: close - 1, high: close + 1, volume: 1e6 }; });
+      const row = sample({ current_price: bars.at(-1).close, se_pivot_price: null, vcp_pivot: null, se_setup_ready: false });
+      await write('manifest.json', { generated_at: '2026-10-02T20:00:00Z', markets: { US: { market: 'US', as_of_date: date, pages: { scan: { path: 'scan.json' } }, assets: { charts: { path: 'charts-index.json' } } } } });
+      await write('scan.json', { as_of_date: date, initial_rows: [row], chunks: [{ path: 'chunk.json' }] });
+      await write('chunk.json', { as_of_date: date, rows: [row] });
+      await write('charts-index.json', { symbols: [{ symbol: row.symbol, path: 'chart.json' }] });
+      await write('chart.json', { symbol: row.symbol, as_of_date: date, bars });
+      // What export-book-benchmark.py --allow-unavailable writes after a failed request.
+      await write('book-benchmark.json', { schema_version: 'book-benchmark-v1', symbol: 'SPY', as_of_date: date, bars: [], unavailable: true, error: `Invalid SPY OHLC at ${date}`, generated_at: '2026-10-03T01:00:00Z' });
+      await write('sector-prices.json', { as_of_date: date, series: {} });
+      const run = tool => execFileSync(process.execPath, [fileURLToPath(new URL(tool, import.meta.url))], { cwd: frontend,
+        env: { ...process.env, FINANCIAL_EVALUATED_AT: new Date(now).toISOString() }, encoding: 'utf8', stdio: 'pipe' });
+      run('./export-research.mjs');
+      let error; try { run('./check-data-quality.mjs'); } catch (caught) { error = caught; }
+      expect(error?.status).toBe(1);
+      const stderr = error.stderr.toString();
+      expect(stderr).toContain(`SPY benchmark missing (book-benchmark.json is unavailable: Invalid SPY OHLC at ${date}): no verified chart can carry its RS line. Verified chart lacks RS context: ${row.symbol}`);
+      expect(error.stdout.toString()).toContain('Quality gate passed: 1/1 verified');
+    } finally { await rm(root, { recursive: true, force: true }); }
+  });
+
   it('accepts a valid or absent fundamentals coverage block and rejects one that disagrees with the published details', async () => {
     const root = await mkdtemp(join(tmpdir(), 'quality-coverage-block-'));
     try {
