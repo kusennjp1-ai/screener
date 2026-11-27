@@ -230,8 +230,11 @@ export function failedBreakoutContext(bars, pivot, { rules = SELL_RULES, from = 
     text: `ブレイク失敗後（${dates}・${low}）`, units: [dates, low] };
 }
 
-/** The stop row's label (plan BEH-1): a holder's fact, never one of the sell signs. */
-export const STOP_ROW_LABEL = '損切りに到達（保有なら）';
+/**
+ * The stop row's label (plan BEH-1): a holder's fact, never one of the sell signs. It names the level it judges, the 仮の損切り
+ * (D8), so a bare 損切り on the stock screen is always the plan's stop.
+ */
+export const STOP_ROW_LABEL = '仮の損切りに到達（保有なら）';
 /** The provisional stop's name with its rule, as the stop row prints it beside the level (独自設定). */
 export const PROVISIONAL_STOP_RULE = `ピボットの −${PROVISIONAL_STOP_PERCENT.toFixed(1)}%・独自設定`;
 
@@ -295,7 +298,7 @@ export function stopReachedCheck(bars, view, { from = null } = {}) {
  * crossings as a floor on their first bar). Null is none.
  * With the failed-breakout check clear and a failed breakout past its window, the result also carries `failedContext`
  * (failedBreakoutContext's, round 3 R5): context for the sell card and the conclusion, outside every check and count.
- * Every result carries `stop` (stopReachedCheck's, BEH-1): the sell card's 損切りに到達 row, outside both sides and every count.
+ * Every result carries `stop` (stopReachedCheck's, BEH-1): the sell card's 仮の損切りに到達 row, outside both sides and every count.
  * Returns null when the bars cannot be judged.
  */
 export function sellSignals(bars, rules = SELL_RULES, { view = null, from = null } = {}) {

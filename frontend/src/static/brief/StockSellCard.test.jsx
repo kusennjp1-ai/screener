@@ -176,7 +176,7 @@ describe('the sell card dates a failed breakout after its window (round 3 R5)', 
 });
 
 // BEH-1 (plan S2-P6): the stop row on the sell card, its place, its words and the status sentence beside it.
-describe('the sell card\'s stop row (損切りに到達, BEH-1)', () => {
+describe('the sell card\'s stop row (仮の損切りに到達, BEH-1)', () => {
   const check = (key, state) => ({ key, label: `${key}の項目`, state, detail: `${key}の内容` });
   const stopOf = state => ({ key: 'stop', label: STOP_ROW_LABEL, state, cause: state === 'na' ? 'lookback' : state === 'unknown' ? 'missingLow' : 'judged', level: 93,
     parts: state === 'hit' || state === 'clear' ? ['仮の損切り $93.00（ピボットの −7.0%・独自設定）', '9/1 の上抜けの後の最安値 $92.00（9/3）'] : null,
@@ -283,19 +283,23 @@ describe('the sell card\'s stop row (損切りに到達, BEH-1)', () => {
     const v = { ...view, state: 'wait', pivot: 100, price: 98, distance: -2, symbol: 'AAA' };
     const sells = stockSells({ judged: bars, diagnostics: null, view: v });
     expect(sells.stop).toEqual(stopReachedCheck(bars, v));
+    // The row is titled by the level it judges (仮の損切り), so a bare 損切り on the screen is always the plan's. Equal printed
+    // strings: one number, said once to be the plan's stop too; different ones: both, each under its own name, and which one the
+    // word judged; a blocked plan has no stop to compare.
+    const LOW = sells.stop.parts[1];
+    expect(LOW).toMatch(/^\S+ の上抜けの後の最安値 \$92\.00（\S+）$/);
     const plans = [
-      ['default', positionPlan(v, {}), null],
-      ['stopPercent 5', positionPlan(v, { stopPercent: 5 }), '計画の損切り $95.00（設定 −5.0%）'],
-      ['structural', { ...positionPlan(v, {}), stop: 94.25, stopPercent: 5.75, stopSource: 'structural' }, '計画の損切り $94.25（構造 −5.8%）'],
-      ['blocked', { blocked: '買いゾーン超過：新規の試算はしません（次の土台を待つ）' }, null],
+      ['default', positionPlan(v, {}), `仮の損切り $93.00（ピボットの −7.0%・独自設定・計画の損切りと同じ）・${LOW}`],
+      ['stopPercent 5', positionPlan(v, { stopPercent: 5 }), `仮の損切り $93.00（ピボットの −7.0%・独自設定）／計画の損切り $95.00（設定 −5.0%）・${LOW}・判定は仮の損切りで行います`],
+      ['structural', { ...positionPlan(v, {}), stop: 94.25, stopPercent: 5.75, stopSource: 'structural' }, `仮の損切り $93.00（ピボットの −7.0%・独自設定）／計画の損切り $94.25（構造 −5.8%）・${LOW}・判定は仮の損切りで行います`],
+      ['blocked', { blocked: '買いゾーン超過：新規の試算はしません（次の土台を待つ）' }, `仮の損切り $93.00（ピボットの −7.0%・独自設定）・${LOW}`],
+      ['no plan', null, `仮の損切り $93.00（ピボットの −7.0%・独自設定）・${LOW}`],
     ];
-    for (const [name, plan, own] of plans) {
+    for (const [name, plan, text] of plans) {
       render(<SellCard sells={sells} plan={plan} />);
       expect({ name, state: row().getAttribute('data-state') }).toEqual({ name, state: 'hit' });
-      const text = row().querySelector('em').textContent;
-      expect({ name, text }).toEqual({ name, text: expect.stringContaining('仮の損切り $93.00（ピボットの −7.0%・独自設定）') });
-      if (own) expect({ name, text }).toEqual({ name, text: expect.stringContaining(`仮の損切り $93.00（ピボットの −7.0%・独自設定）／${own}・`) });
-      else expect({ name, text }).toEqual({ name, text: expect.not.stringContaining('計画の損切り') });
+      expect({ name, label: row().textContent.includes('仮の損切りに到達（保有なら） 該当') }).toEqual({ name, label: true });
+      expect({ name, text: row().querySelector('em').textContent }).toEqual({ name, text });
       cleanup();
     }
     // A four-digit pivot whose plan stop prints one cent apart from the level: both, each under its own name.
@@ -303,6 +307,6 @@ describe('the sell card\'s stop row (損切りに到達, BEH-1)', () => {
     const level = { ...sells.stop, state: 'clear', cause: 'judged', level: 1148.14,
       parts: ['仮の損切り $1,148.14（ピボットの −7.0%・独自設定）', '9/30 の上抜けの後の最安値 $1,180.00（10/1）'] };
     render(<SellCard sells={{ ...sells, stop: level }} plan={{ ...positionPlan(big, {}), stop: 1148.1408 - 0.006 }} />);
-    expect(row().querySelector('em').textContent).toContain('仮の損切り $1,148.14（ピボットの −7.0%・独自設定）／計画の損切り $1,148.13（設定 −7.0%）');
+    expect(row().querySelector('em').textContent).toBe('仮の損切り $1,148.14（ピボットの −7.0%・独自設定）／計画の損切り $1,148.13（設定 −7.0%）・9/30 の上抜けの後の最安値 $1,180.00（10/1）・判定は仮の損切りで行います');
   });
 });

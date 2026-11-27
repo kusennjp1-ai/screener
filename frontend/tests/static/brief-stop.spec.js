@@ -1,4 +1,4 @@
-// Daily brief sell card: the stop row 損切りに到達（保有なら） (BEH-1, plan S2-P6), on synthetic data opened by mutators (the
+// Daily brief sell card: the stop row 仮の損切りに到達（保有なら） (BEH-1, plan S2-P6), on synthetic data opened by mutators (the
 // fixture stays frozen). The row is a holder's fact beside the sell checks: never a sign, never counted.
 import { test, expect } from '@playwright/test';
 import { chartSettled, openBrief, rowBySymbol, SEC_SYMBOL } from './brief-fixture.js';
@@ -40,7 +40,8 @@ const analysisDayBreakout = () => {
 };
 
 const CLAUSE = '損切りの行：仮の損切りに到達しています（サインの件数には含めていません）。';
-const LEVEL = /仮の損切り \$\d+\.\d\d（ピボットの −7\.0%・独自設定）・\d+\/\d+ の上抜けの後の最安値 \$\d+\.\d\d（\d+\/\d+）/;
+// At default settings the plan's stop prints the same as the row's level (D8): the row says so once, beside the level.
+const LEVEL = /^仮の損切り \$\d+\.\d\d（ピボットの −7\.0%・独自設定・計画の損切りと同じ）・\d+\/\d+ の上抜けの後の最安値 \$\d+\.\d\d（\d+\/\d+）$/;
 const sell = page => page.getByTestId('brief-sell');
 /** Plan S2-P2's 「保有なら」 line under the level tiles (D10): on a 該当 row only, in the row's own words and number. */
 const stopNote = page => page.getByTestId('brief-levels-stop');
@@ -78,7 +79,7 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     const { errors } = await openBrief(page, `#/brief/stock/${STOP_SYMBOL}`, { mutate: stopReached(1.0) });
     await chartSettled(page);
     await expect(row(page)).toHaveAttribute('data-state', 'hit');
-    await expect(row(page)).toContainText('損切りに到達（保有なら） 該当');
+    await expect(row(page)).toContainText('仮の損切りに到達（保有なら） 該当');
     await expect(row(page).locator('em')).toHaveText(LEVEL);
     expect(await folded(row(page))).toBe(false);
     expect(await hitWord(page)).toEqual({ text: '該当', color: true, weight: 700, lines: 1 });
@@ -127,7 +128,7 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     const { errors } = await openBrief(page, `#/brief/stock/${DAY_SYMBOL}`, { mutate: analysisDayBreakout() });
     await chartSettled(page);
     await expect(row(page)).toHaveAttribute('data-state', 'na');
-    await expect(row(page)).toContainText('損切りに到達（保有なら） 判定なし（上抜けは分析日・その後の日足はまだありません）');
+    await expect(row(page)).toContainText('仮の損切りに到達（保有なら） 判定なし（上抜けは分析日・その後の日足はまだありません）');
     expect(await folded(row(page))).toBe(!wide);
     await expect(note(page)).not.toContainText('損切りの行');
     await expect(stopNote(page)).toHaveCount(0);
@@ -142,7 +143,7 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     await chartSettled(page);
     await expect(row(page)).toHaveAttribute('data-state', 'hit');
     const detail = await row(page).locator('em').textContent();
-    const [, level, own] = detail.match(/^仮の損切り \$(\d+\.\d\d)（ピボットの −7\.0%・独自設定）／計画の損切り \$(\d+\.\d\d)（設定 −5\.0%）・\d+\/\d+ の上抜けの後の最安値 \$\d+\.\d\d（\d+\/\d+）$/);
+    const [, level, own] = detail.match(/^仮の損切り \$(\d+\.\d\d)（ピボットの −7\.0%・独自設定）／計画の損切り \$(\d+\.\d\d)（設定 −5\.0%）・\d+\/\d+ の上抜けの後の最安値 \$\d+\.\d\d（\d+\/\d+）・判定は仮の損切りで行います$/);
     expect(own).not.toBe(level);
     expect(await planStop(page)).toBe(own);
     await expect(plan(page)).toContainText('損切り幅 5.0%');
@@ -157,6 +158,8 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     const detail = await row(page).locator('em').textContent();
     const [, level, own, percent] = detail.match(/^仮の損切り \$(\d+\.\d\d)（ピボットの −7\.0%・独自設定）／計画の損切り \$(\d+\.\d\d)（構造 −(\d+\.\d)%）・/);
     expect([own, percent]).toEqual(['109.12', '5.3']);
+    // The word judges the 仮の損切り, and the row says so after the measured low.
+    expect(detail).toMatch(/・判定は仮の損切りで行います$/);
     expect(own).not.toBe(level);
     expect(await planStop(page)).toBe(own);
     await expect(plan(page)).toContainText(`損切り幅 ${percent}%（構造上の目安`);
@@ -167,7 +170,7 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
     await chartSettled(page);
     await expect(row(page)).toHaveAttribute('data-state', 'na');
-    await expect(row(page)).toContainText(/損切りに到達（保有なら） 判定なし（計画の買値は \d+\/\d+ 終値・その後の日足はまだありません）/);
+    await expect(row(page)).toContainText(/仮の損切りに到達（保有なら） 判定なし（計画の買値は \d+\/\d+ 終値・その後の日足はまだありません）/);
     expect(await folded(row(page))).toBe(!wide);
     await expect(stopNote(page)).toHaveCount(0);
     expect(errors).toEqual([]);

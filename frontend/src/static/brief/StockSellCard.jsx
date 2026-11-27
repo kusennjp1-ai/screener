@@ -1,7 +1,7 @@
 import { formatPrice, money, signed } from '../positionGeometry';
 import { Expander } from './briefPrimitives';
 import { KeepDistance } from './BriefParts';
-import { SELL_RULES, STOP_ROW_LABEL } from './briefSell';
+import { PROVISIONAL_STOP_RULE, SELL_RULES, STOP_ROW_LABEL } from './briefSell';
 import { shortDate } from './briefShared';
 
 const finite = Number.isFinite;
@@ -65,17 +65,30 @@ const STOP_CLAUSE = { hit: '損切りの行：仮の損切りに到達してい�
 const STOP_UNKNOWN = { key: 'stop', label: STOP_ROW_LABEL, state: 'unknown', cause: 'noSells', detail: null, parts: null };
 
 /**
- * The plan's own stop beside the provisional one when their printed strings differ (D8: another stop setting, the structural
- * stop, a four-digit pivot whose float product rounds the other way), each under its own name; null when they read the same.
+ * The plan's own stop against the provisional one on a judged row (D8), by their printed strings: `{ same: true }` when they read
+ * the same (one number under two names, so the row says so once), `{ same: false, text }` when they differ (another stop setting,
+ * the structural stop, a four-digit pivot whose float product rounds the other way: each under its own name), null without a
+ * judged row or a plan.
  */
-function planStopText(stop, plan) {
-  if (stop.cause !== 'judged' || !plan || plan.blocked || !Number.isFinite(plan.stop) || formatPrice(plan.stop) === formatPrice(stop.level)) return null;
-  return `計画の損切り ${money(plan.stop)}（${plan.stopSource === 'structural' ? '構造' : '設定'} −${plan.stopPercent.toFixed(1)}%）`;
+function planStop(stop, plan) {
+  if (stop.cause !== 'judged' || !plan || plan.blocked || !Number.isFinite(plan.stop)) return null;
+  if (formatPrice(plan.stop) === formatPrice(stop.level)) return { same: true };
+  return { same: false, text: `計画の損切り ${money(plan.stop)}（${plan.stopSource === 'structural' ? '構造' : '設定'} −${plan.stopPercent.toFixed(1)}%）` };
+}
+
+/**
+ * The row's detail: the judged level and the measured low, with the plan's stop said once beside the level (「…・計画の損切りと同じ」,
+ * or 「／計画の損切り Y（…）」 and, at the end, which of the two the word judged); a row not judged gives its reason in brackets.
+ */
+function stopDetail(stop, plan) {
+  if (!stop.parts) return stop.detail ? `（${stop.detail}）` : null;
+  const own = planStop(stop, plan);
+  const level = own?.same ? `仮の損切り ${money(stop.level)}（${PROVISIONAL_STOP_RULE}・計画の損切りと同じ）` : own ? `${stop.parts[0]}／${own.text}` : stop.parts[0];
+  return [level, ...stop.parts.slice(1), ...(own && !own.same ? ['判定は仮の損切りで行います'] : [])].join('・');
 }
 
 function StopRow({ stop, plan }) {
-  const own = planStopText(stop, plan);
-  const detail = stop.parts ? [own ? `${stop.parts[0]}／${own}` : stop.parts[0], ...stop.parts.slice(1)].join('・') : stop.detail ? `（${stop.detail}）` : null;
+  const detail = stopDetail(stop, plan);
   return <ul className="brief-checks brief-sellchecks brief-stoprow" data-testid="brief-sell-stop" data-state={stop.state}><li>
     <span className={`brief-check is-stop-${stop.state}`} aria-hidden="true">{STOP_GLYPH[stop.state]}</span>
     <span>{stop.label} <b className={`brief-stop-state${stop.state === 'hit' ? ' is-hit' : ''}`}>{STOP_WORD[stop.state]}</b>{detail ? <em>{detail}</em> : null}</span>
