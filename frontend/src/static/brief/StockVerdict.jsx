@@ -99,7 +99,7 @@ export const PIVOT_UNKNOWN_NOTE = 'ピボットを確認できないため位置
  * the sell card's row reads 該当, in the row's own words and number. It removes no plan and adds no count, chip or sign (BEH-2
  * stays the owner's).
  */
-export const stopHitNote = level => `保有なら：仮の損切り ${money(level)} に到達しています（売りのカード）`;
+const stopHitNote = level => `保有なら：仮の損切り ${money(level)} に到達しています（売りのカード）`;
 
 /**
  * The call's market line (plan S2-P1, D2, D18) from marketBand's own fields: the subject and the analysis date, the answer with

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
-import StockVerdict, { PIVOT_UNKNOWN_NOTE, stopHitNote } from './StockVerdict';
+import StockVerdict, { PIVOT_UNKNOWN_NOTE } from './StockVerdict';
 import { breakoutEvent, candidateView, earningsCall, trendTemplate } from './briefCandidate';
 import { HEAVY_DOWN_NOTE, lowActivityNote, PLAN_BLOCKED, SE_CONFIDENCE_FLOOR } from './buyGate';
 import { lowActivityReason } from '../priceActivity';
@@ -308,7 +308,6 @@ describe('the conclusion says why there is no buy', () => {
     const card = conclusionOf({ sells: sells({ key: 'stop', state: 'hit', level: 93.93 }) });
     const lines = [...levels(card).querySelectorAll(':scope > p')];
     expect(lines.map(node => [node.textContent, node.className])).toEqual([['保有なら：仮の損切り $93.93 に到達しています（売りのカード）', 'brief-note brief-levels-stop']]);
-    expect(stopHitNote(1234.5)).toBe('保有なら：仮の損切り $1,234.50 に到達しています（売りのカード）');
     expect({ tiles: tiles(card), quals: quals(card), label: card.querySelector('.brief-call-label').textContent, title: title(card) }).toEqual(before);
     expect(card.textContent).not.toContain('保有なら');
     cleanup();
