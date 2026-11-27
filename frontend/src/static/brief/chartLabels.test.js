@@ -200,9 +200,24 @@ describe('chart label placer', () => {
     const t = placer.put(20, { list: [[4, 20, 0], [100, 60, 1]] }, { allow: x => x !== 100 });
     expect(t.at).toMatchObject({ x: 4, yc: 20, forced: false });
     expect(first.at).toMatchObject({ x: 40, yc: 20 });
+    // Repairing: the label in the way of the rejected spot could move (it has a second candle-free spot), so a repair that
+    // ignored `allow` would move it and take that spot; it stays, and the T number keeps its forced spot.
     const other = labelPlacer({ solid });
-    other.put(20, along(4, 4, [20]));
+    const blocker = other.put(20, along(4, 60, [20]));
     expect(other.put(20, { list: [[4, 20, 0], [100, 60, 1]] }, { allow: x => x !== 4 }).at).toMatchObject({ x: 100, forced: true });
+    expect(blocker.at).toMatchObject({ x: 4, yc: 20 });
+    // Settling: a box freed after placement is taken by a forced label only where `allow` takes it.
+    const settled = (options) => {
+      const s = labelPlacer({ solid }), fixed = { x0: 0, x1: 30, y0: 13, y1: 27 };
+      s.take(fixed);
+      const label = s.put(20, { list: [[4, 20, 0], [100, 60, 1]] }, options);
+      expect(label.at).toMatchObject({ x: 100, forced: true });
+      s.release(fixed);
+      s.settle();
+      return label.at;
+    };
+    expect(settled({})).toMatchObject({ x: 4, yc: 20, forced: false });
+    expect(settled({ allow: x => x !== 4 })).toMatchObject({ x: 100, forced: true });
   });
 
   it('skips a spot where the label\'s leader may not run (its leader null), in place() and when repairing', () => {
