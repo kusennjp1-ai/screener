@@ -638,7 +638,7 @@ describe('the call\'s market line', () => {
     expect(card.querySelector('.brief-call-status .brief-call-label').textContent).toBe('銘柄');
   });
 
-  it('is read on the stock screen from the market and the target the screen is given (StockView), with the chart between the card and the tiles', () => {
+  it('is read on the stock screen from the market and the target the screen is given (StockView), with the chart between the card and the tiles on a phone', () => {
     const data = {
       view: { symbol: 'AAA', name: 'Alpha', state: 'wait', stateLabel: 'ピボット待ち', distance: -3, pivot: 100, upper: 105, price: 97, rs: 80, volumeRatio: 1, fromHigh: 10, earnings: null, pivotSource: 'test', asOf: DAY },
       row: { symbol: 'AAA' }, template: null, technical: null, diagnostics: null, financial: null, institutional: null, bars: null, date: DAY,
@@ -649,6 +649,8 @@ describe('the call\'s market line', () => {
     const waiting = read({ market: OPEN, target: '2026-10-05' });
     expect(waiting.text).toBe('地合い 10/2時点の判定・更新待ち（独自判定）・目安 最大50%（10/2時点・独自設定）');
     expect(waiting.order.slice(0, 4)).toEqual(['brief-conclusion', 'brief-card brief-chartcard in', 'brief-levels', 'brief-call-chips']);
+    // At 1024px and wider (no dock, no height line) the tiles and the chips stay above the chart, under the card; the phone order is D5's.
+    expect(read({ market: OPEN, wide: true }).order.slice(0, 4)).toEqual(['brief-conclusion', 'brief-levels', 'brief-call-chips', 'brief-card brief-chartcard in']);
     // No target (the default): the open form.
     expect(read({ market: OPEN }).text).toBe('地合い 10/2：検討可（独自判定）・目安 最大50%（独自設定）');
     expect(read({ market: null }).text).toBe('地合い 10/2：未確認・買いは見送り');

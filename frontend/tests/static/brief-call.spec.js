@@ -7,15 +7,15 @@ import { openBrief, VIEWPORTS, horizontalOverflow, SEC_SYMBOL, chartSettled } fr
 
 const phone = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const WIDTHS = { 320: phone(320, 640), 375: phone(375, 812), 390: VIEWPORTS.phone, 1440: VIEWPORTS.desktop };
-// brief-market-r3.spec.js:60-63 (the FTD-upgraded rows under the 50-day line), :65-66 (長期トレンド警戒), :295 (50日線割れ).
+// brief-market-r3.spec.js:60-63 (the FTD-upgraded rows under the 50-day line), :65-66 (長期トレンド警戒), and its `below50Rows` (50日線割れ).
 const ftdUpgraded = { rows: rows => { for (const row of rows) row.market_above_50dma = false; } };
 const below200 = { rows: rows => { for (const row of rows) { row.market_above_200dma = false; row.market_regime = 'correction'; } } };
 const below50Rows = { rows: rows => { for (const row of rows) { row.market_above_50dma = false; row.market_regime = 'correction'; } } };
-// brief-market.spec.js:394 (上昇に圧力), brief-gate.spec.js:29-30 (新規購入を抑制; one condition unknown).
+// brief-market.spec.js's `pressure` (上昇に圧力), brief-gate.spec.js:29-30 (新規購入を抑制; one condition unknown).
 const pressure = { rows: rows => { for (const row of rows) row.market_regime = 'uptrend_under_pressure'; } };
 const restrain = { rows: rows => { for (const row of rows) row.market_regime = 'correction'; } };
 const partUnknown = { rows: rows => { for (const row of rows) row.market_above_50dma = null; } };
-// brief-decision.spec.js:23: earnings three days after the analysis date.
+// brief-decision.spec.js's `EARNINGS_SOON`: earnings three days after the analysis date.
 const EARNINGS_SOON = { rows: rows => { const row = rows.find(r => r.symbol === SEC_SYMBOL); row.entry_evidence = { ...row.entry_evidence, earnings: { date: '2026-10-05' } }; } };
 // brief-gate.spec.js:50: 10 minutes after the 10/5 close (pending) and two sessions later (late).
 const PENDING = '2026-10-05T20:10:00Z', LATE = '2026-10-07T09:00:00Z';
@@ -204,6 +204,22 @@ test.describe('the 銘柄 line at 390px', () => {
     const order = await page.evaluate(() => ['brief-conclusion', 'brief-price-chart', 'brief-levels', 'brief-call-chips'].map(id => document.querySelector(`[data-testid="${id}"]`).getBoundingClientRect().top));
     expect([...order].sort((a, b) => a - b)).toEqual(order);
     await expect(page.locator('.brief-meter')).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+// At 1024px and wider (no dock and no height line) the tiles and the chips stay above the chart, under the card, as before S2,
+// so the share count, the stop tile, RS推計 and the stage are on the pane's first screen; the phone keeps D5's order (above).
+test.describe('the stock pane at 1440px', () => {
+  test.use({ ...WIDTHS[1440], contextOptions: { reducedMotion: 'reduce' } });
+  test('puts the level tiles and the chips between the card and the chart, on the first screen', async ({ page }) => {
+    const { errors } = await openStock(page, {});
+    const boxes = await page.evaluate(() => ['brief-conclusion', 'brief-levels', 'brief-call-chips', 'brief-price-chart'].map(id => { const box = document.querySelector(`[data-testid="${id}"]`).getBoundingClientRect(); return [Math.round(box.top), Math.round(box.bottom)]; }));
+    const tops = boxes.map(([top]) => top);
+    expect([...tops].sort((a, b) => a - b)).toEqual(tops);
+    expect(boxes[1][1]).toBeLessThanOrEqual(900);
+    expect(boxes[2][1]).toBeLessThanOrEqual(900);
+    await expect(page.getByTestId('brief-levels').locator('.brief-kgrid > div')).toHaveCount(3);
     expect(errors).toEqual([]);
   });
 });

@@ -220,16 +220,17 @@ function Levels({ call }) {
 const Chips = ({ call }) => <div className="brief-tags brief-callchips" data-testid="brief-call-chips">{call.chips.map(([text, t, chipTitle, content]) => <span key={text} className={`brief-chip${t ? ` tone-${t}` : ''}`} title={chipTitle}>{content ?? text}</span>)}</div>;
 
 /**
- * The stock's call on the stock screen (plan S2-P1, D5), in this order: the conclusion card (the market line from `band`,
- * marketBand's value for the analysis `date`, then the 銘柄 line), `chart` (the chart card), the level tiles and the chips.
- * The other props are stockCall's. Without a band (no market line) the card starts with the 銘柄 line.
+ * The stock's call on the stock screen (plan S2-P1, D5), in this order on a phone: the conclusion card (the market line from
+ * `band`, marketBand's value for the analysis `date`, then the 銘柄 line), `chart` (the chart card), the level tiles and the
+ * chips. At 1024px and wider (`wide`: no dock and no height line) the tiles and chips stay above the chart, under the card, as
+ * before S2, until the stock pane is sized (S3-P4). The other props are stockCall's. Without a band (no market line) the card
+ * starts with the 銘柄 line.
  */
-export default function StockVerdict({ band = null, date = null, chart = null, ...props }) {
+export default function StockVerdict({ band = null, date = null, chart = null, wide = false, ...props }) {
   const call = stockCall(props);
+  const levels = <><Levels call={call} /><Chips call={call} /></>;
   return <>
     <CallCard call={call} band={band} date={date} />
-    {chart}
-    <Levels call={call} />
-    <Chips call={call} />
+    {wide ? <>{levels}{chart}</> : <>{chart}{levels}</>}
   </>;
 }
