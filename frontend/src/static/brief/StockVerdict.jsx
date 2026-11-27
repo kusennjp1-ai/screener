@@ -38,8 +38,15 @@ function withUnits(text, units) {
 /** The parts of a call's title a phone line never splits: a crossing date with its verb, the sessions since it and the closing phrases. */
 const TITLE_UNITS = /\d+\/\d+に上抜け|上抜けから\d+営業日超?|（次のピボット待ち）|買いの対象外|ピボットは参考（独自判定）/g;
 
-/** The position under a neutral call, on one phone line: its name and the distance from the pivot. */
-const positionLine = view => <><Unit>位置は参考：</Unit><Unit>{POSITION_NAMES[view.position] || view.stale?.short || view.stateLabel}</Unit>{view.stale || !finite(view.distance) ? '' : <>・<Unit>{`ピボット比 ${pivotDistanceText(view)}`}</Unit></>}。</>;
+/**
+ * The position under a neutral call, on one phone line: its name and the distance from the pivot. The full stop is inside the
+ * last unit, so a phone line never starts with 「。」.
+ */
+function positionLine(view) {
+  const name = POSITION_NAMES[view.position] || view.stale?.short || view.stateLabel;
+  if (view.stale || !finite(view.distance)) return <><Unit>位置は参考：</Unit><Unit>{name}。</Unit></>;
+  return <><Unit>位置は参考：</Unit><Unit>{name}</Unit>・<Unit>{`ピボット比 ${pivotDistanceText(view)}`}。</Unit></>;
+}
 
 /**
  * The line under the call, by the gate's kind: a neutral call names its reason and moves the position

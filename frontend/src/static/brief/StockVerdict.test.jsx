@@ -397,6 +397,8 @@ describe('the conclusion says why there is no buy', () => {
     const card = conclusionOf({ sells: sells('hit') });
     expect(card.className).toContain('tone-neutral');
     expect([title(card), sub(card)]).toEqual(['買いの前提が崩れた（独自判定）', '50日線割れ（9/22・出来高2.20×）。位置は参考：買いゾーン・ピボット比 +1.0%。']);
+    // The position line's full stop is inside its last unit, so a phone line never starts with 「。」.
+    expect([...card.querySelectorAll('.brief-call-status p .brief-nowrap')].map(node => node.textContent).slice(-3)).toEqual(['位置は参考：', '買いゾーン', 'ピボット比 +1.0%。']);
     expect(quals(card)).toEqual(['参考', '参考', '参考']);
     // The title already says the setup broke: the chip is the short form, its sentence in its title, and the 銘柄 line adds
     // no short form of it (plan D5: only a sell chip the call does not state joins that line).
