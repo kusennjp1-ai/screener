@@ -147,7 +147,10 @@
 .bc-rsleader { stroke: var(--accent); opacity: .7; }
 /* The last contraction's low as a tag on a narrow chart (its price in the legend), and a level whose name has no spot by
    its line (its name over its price). */
-.bc-lowtag-fill, .bc-nametag-fill { fill: none; stroke: none; }
+/* The low tag is a name with no number (its price is in the legend): it keeps its dashed box, so it never reads as the caption
+   of the priced tag above or below it (「安値」 over the stop's price). The name tag carries its price and stays plain (minor C5). */
+.bc-lowtag-fill { fill: var(--surface); stroke: var(--text-3); stroke-width: 1; stroke-dasharray: 2 2; }
+.bc-nametag-fill { fill: none; stroke: none; }
 .brief-chart .bc-tagtext.bc-lowtagtext, .brief-chart .bc-tagtext.bc-nametagtext { fill: var(--text-2); }
 .bc-structural { stroke: var(--text-3); stroke-dasharray: 4 3; }
 /* The pivot crossing (certified bars only): a hollow arrow, never the filled ▲ of the 崩れ sell sign; green only
