@@ -274,6 +274,9 @@ test('session wakes come from the exchange calendar: one hour after each actual 
     ['2026-10-30T21:30:00Z', '2026-10-30', '2026-11-02T22:00:00.000Z'], // DST ends over the weekend
     ['2027-03-12T22:30:00Z', '2027-03-12', '2027-03-15T21:00:00.000Z'], // DST starts 2027-03-14: close 20:00Z
     ['2026-12-24T19:00:00Z', '2026-12-24', '2026-12-28T22:00:00.000Z'], // early close, then Christmas
+    // Early close 13:00 ET + 60 min: 19:00Z in winter, 18:00Z in summer.
+    ['2026-12-23T22:00:00Z', '2026-12-23', '2026-12-24T19:00:00.000Z'], // winter early close 18:00Z
+    ['2028-06-30T21:30:00Z', '2028-06-30', '2028-07-03T18:00:00.000Z'], // summer early close 17:00Z (no 2026/2027 summer early close)
   ]) {
     const plan = inspect(now);
     assert.equal(plan.target_session, session, now); assert.equal(plan.reason, 'published_observations_current', now); assert.equal(plan.wake_at, wake, now);
