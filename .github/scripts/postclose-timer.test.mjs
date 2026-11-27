@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {PRODUCER, PUBLISHER, REPOSITORY, planRecovery, planRecoveryWithWake} from './postclose-watchdog.mjs';
-import {DISPATCH_TRIES, FALLBACK_WAKE_MS, MAX_AHEAD_MS, MAX_LINK_WAIT_MS, MIN_LEAD_MS, STALE_FIRE_MS, TIMER, WATCHDOG,
+import {DISPATCH_RETRY_DELAY_MS, DISPATCH_TIMEOUT_MS, DISPATCH_TRIES, FALLBACK_WAKE_MS, MAX_AHEAD_MS, MAX_LINK_WAIT_MS, MIN_LEAD_MS, STALE_FIRE_MS, TIMER, WATCHDOG,
   armWake, dispatchBody, dispatchWorkflow, linkPlan, main, parseFireAt, readReport, runLink, waitAndWake, wakeRequest} from './postclose-timer.mjs';
 
 const minute = 60_000, hour = 60*minute;
@@ -100,6 +100,8 @@ test('a dispatch is retried at most three times and posts only to the named work
   const calls = [], waits = [];
   const attempts = await dispatchWorkflow(TIMER, {fire_at: '2026-11-27T19:00:00Z', reason: 'x'}, {sleep: async ms => { waits.push(ms); }, api: (args, body) => { calls.push({args, body: JSON.parse(body)}); if (calls.length < 3) throw Error('HTTP 502'); }});
   assert.equal(attempts, 3); assert.equal(DISPATCH_TRIES, 3); assert.deepEqual(waits, [5000, 5000]);
+  // Worst case stays far inside the watchdog's ten-minute job.
+  assert(DISPATCH_TRIES*DISPATCH_TIMEOUT_MS+(DISPATCH_TRIES-1)*DISPATCH_RETRY_DELAY_MS <= 2*minute);
   for (const call of calls) {
     assert.deepEqual(call.args, ['api', '--method', 'POST', `repos/${REPOSITORY}/actions/workflows/${TIMER}/dispatches`, '--input', '-']);
     assert.deepEqual(call.body, {ref: 'main', inputs: {fire_at: '2026-11-27T19:00:00Z', reason: 'x'}});

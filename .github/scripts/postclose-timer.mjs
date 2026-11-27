@@ -32,6 +32,9 @@ export const FALLBACK_WAKE_MS = 60*minute;
 // Never request a wake sooner than this, so a bad time cannot spin the chain.
 export const MIN_LEAD_MS = minute;
 export const DISPATCH_TRIES = 3;
+// Bounded so arming stays well inside the watchdog's ten-minute job.
+export const DISPATCH_TIMEOUT_MS = 30_000;
+export const DISPATCH_RETRY_DELAY_MS = 5_000;
 const FIRE_AT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 const REASON = /^[a-z][a-z0-9_]{0,63}$/;
 const MAX_REPORT_BYTES = 16*1024*1024;
@@ -82,7 +85,7 @@ export function readReport(path) {
 }
 
 function github(args, body) {
-  execFileSync('gh', args, {input: body, encoding: 'utf8', timeout: 90_000, maxBuffer: 1024*1024, stdio: ['pipe','pipe','pipe']});
+  execFileSync('gh', args, {input: body, encoding: 'utf8', timeout: DISPATCH_TIMEOUT_MS, maxBuffer: 1024*1024, stdio: ['pipe','pipe','pipe']});
 }
 
 export function dispatchBody(workflow, inputs) {
@@ -104,7 +107,7 @@ export async function dispatchWorkflow(workflow, inputs, {api = github, sleep = 
       return attempt;
     } catch (error) {
       if (attempt >= DISPATCH_TRIES) throw new TimerError(`Dispatch of ${workflow} failed after ${attempt} tries`);
-      await sleep(5_000);
+      await sleep(DISPATCH_RETRY_DELAY_MS);
     }
   }
 }
