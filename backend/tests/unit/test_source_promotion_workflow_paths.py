@@ -179,8 +179,10 @@ class WorkflowSchedulingPathTests(unittest.TestCase):
 
     def test_finite_combine_requires_positive_admission_and_successful_selector(self):
         condition = self.workflow['jobs']['combine-and-build']['if']
+        # fetch-benchmark is the optional early SPY request (continue-on-error);
+        # it is skipped on workflow_run, so the finite route below is unchanged.
         self.assertEqual(self.workflow['jobs']['combine-and-build']['needs'],
-                         ['select-markets', 'build-market'])
+                         ['select-markets', 'build-market', 'fetch-benchmark'])
         # The finite route always skips build-market. Disabled or rejected
         # admission supplies false/empty, and must never enter ordinary fallback.
         for repair in ('', 'false', 'true'):
