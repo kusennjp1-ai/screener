@@ -113,6 +113,47 @@ jobs:
         if: ${{ github.event_name == 'workflow_run' && steps.price-route.outputs.repair == 'false' && steps.pick.outputs.mode == 'noop' && steps.pick.outputs.markets == '[]' }}
         run: ':'
 
+  fetch-benchmark:
+    # Requests SPY for the completed NYSE session at the start, beside
+    # build-market, before the evening hours in which Yahoo returned invalid
+    # SPY series. combine-and-build places the file only when it validates for
+    # the same session as its manifest and keeps it if its own later request
+    # fails; never for another day. Optional: any failure here leaves combine
+    # on its own request, as before, and never fails the run.
+    needs: select-markets
+    if: ${{ github.event_name != 'workflow_run' && needs.select-markets.result == 'success' && needs.select-markets.outputs.mode == 'full' && contains(fromJSON(needs.select-markets.outputs.markets), 'US') }}
+    continue-on-error: true
+    timeout-minutes: 240
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: .github/scripts/session-calendar-requirements.txt
+      - name: Install the exchange clock and the producer's SPY provider
+        run: python -m pip install -r .github/scripts/session-calendar-requirements.txt "$(grep -E '^yfinance==' backend/requirements-runtime.txt)"
+      - name: Request SPY for the completed NYSE session
+        # Retries every 15 minutes until 19:45 New York time on that session.
+        continue-on-error: true
+        run: |
+          target="$(python .github/scripts/postclose-calendar.py | python -c 'import json,sys; print(json.load(sys.stdin)["target_session"])')"
+          echo "Completed NYSE session: $target"
+          python frontend/tools/export-book-benchmark.py --target "$target" --output "$RUNNER_TEMP/early-book-benchmark/book-benchmark.json"
+      - name: Upload the early SPY benchmark
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/early-book-benchmark/book-benchmark.json
+          if-no-files-found: ignore
+          retention-days: 3
+
   ensure_daily_price_release:
     needs: select-markets
     if: ${{ github.event_name != 'workflow_run' && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
@@ -552,7 +593,7 @@ jobs:
   combine-and-build:
     # Preserve fallback after failure or a skip, but not after cancellation.
     if: ${{ !cancelled() && ((github.event_name == 'workflow_run' && needs.select-markets.result == 'success' && needs.select-markets.outputs.repair == 'true') || (github.event_name != 'workflow_run' && needs.build-market.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)))) }}
-    needs: [select-markets, build-market]
+    needs: [select-markets, build-market, fetch-benchmark]
     timeout-minutes: ${{ needs.select-markets.outputs.repair == 'true' && 110 || 360 }}
     permissions:
       contents: read
@@ -948,6 +989,23 @@ jobs:
             --output-dir ../frontend/public/static-data \
             --combine-artifacts-dir /tmp/static-market-artifacts-current \
             --fallback-artifacts-dir /tmp/static-market-artifacts-fallback
+
+      - name: Download the early SPY benchmark
+        id: early-benchmark
+        if: needs.select-markets.outputs.repair != 'true' && needs.select-markets.outputs.mode == 'full'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: book-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/early-book-benchmark
+
+      - name: Place the early SPY benchmark only for the same validated session
+        # The export below requests SPY again: on success it replaces this file
+        # and logs both last bars; after a provider failure it keeps it.
+        if: needs.select-markets.outputs.repair != 'true' && needs.select-markets.outputs.mode == 'full' && steps.early-benchmark.outcome == 'success'
+        continue-on-error: true
+        working-directory: frontend
+        run: python tools/export-book-benchmark.py --place "$RUNNER_TEMP/early-book-benchmark/book-benchmark.json"
 
       - name: Cache public SEC archives and security mappings
         if: needs.select-markets.outputs.repair != 'true'

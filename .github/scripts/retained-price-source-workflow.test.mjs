@@ -22,7 +22,7 @@ function actualStaticGraph(t,{eventName,repair='false',schedule='',market='us',p
   outputs.repair=eventName==='workflow_run'?repair:'';outputs.source_promotion=eventName==='workflow_run'?'':'true';
   const github={event_name:eventName,ref:'refs/heads/main',event:{repository:{default_branch:'main'}}},needs={};
   const format=(pattern,...values)=>pattern.replace(/\{(\d+)\}/g,(_,i)=>values[Number(i)]),contains=(haystack,value)=>haystack.includes(value);
-  for(const name of ['select-markets','ensure_daily_price_release','build-market','combine-and-build','promote-daily-source']){
+  for(const name of ['select-markets','fetch-benchmark','ensure_daily_price_release','build-market','combine-and-build','promote-daily-source']){
     const block=job(staticWorkflow,name),raw=/^    if: (.+)$/m.exec(block)?.[1];assert(raw,`Missing condition ${name}`);
     const expression=raw.replace(/^\$\{\{\s*/,'').replace(/\s*\}\}$/,'').replace(/\bneeds\.([a-zA-Z][\w-]*)/g,(_match,name)=>`needs["${name}"]`);
     assert(!/[;`{}]/.test(expression.replace(/'[^']*'/g,"''")),`Unexpected predicate syntax ${name}`);
@@ -40,13 +40,14 @@ test('disabled CI completion no-ops the entire Static Site acquisition/job graph
   const disabled={enabled:false,activation:null};
   const graph=actualStaticGraph(t,{eventName:'workflow_run',repair:String(disabled.enabled&&disabled.activation!==null)});
   assert.equal(graph.outputs.mode,'noop');assert.equal(graph.outputs.markets,'[]');
-  assert.deepEqual(graph.jobs,{'select-markets':'success',ensure_daily_price_release:'skipped','build-market':'skipped','combine-and-build':'skipped','promote-daily-source':'skipped'});
+  assert.deepEqual(graph.jobs,{'select-markets':'success','fetch-benchmark':'skipped',ensure_daily_price_release:'skipped','build-market':'skipped','combine-and-build':'skipped','promote-daily-source':'skipped'});
 });
 test('genuine finite route reaches only combine; ordinary dispatched full/cache graph remains reachable',t=>{
-  const finite=actualStaticGraph(t,{eventName:'workflow_run',repair:'true'});assert.equal(finite.outputs.mode,'offline_repair');assert.deepEqual(finite.jobs,{'select-markets':'success',ensure_daily_price_release:'skipped','build-market':'skipped','combine-and-build':'success','promote-daily-source':'skipped'});
+  const finite=actualStaticGraph(t,{eventName:'workflow_run',repair:'true'});assert.equal(finite.outputs.mode,'offline_repair');assert.deepEqual(finite.jobs,{'select-markets':'success','fetch-benchmark':'skipped',ensure_daily_price_release:'skipped','build-market':'skipped','combine-and-build':'success','promote-daily-source':'skipped'});
   for(const options of [{eventName:'workflow_dispatch',market:'us'},{eventName:'workflow_dispatch',pricesOnly:'true'}]){
     const graph=actualStaticGraph(t,options);for(const name of ['select-markets','ensure_daily_price_release','build-market','combine-and-build'])assert.equal(graph.jobs[name],'success',JSON.stringify(options)+'/'+name);
     assert.equal(graph.outputs.mode,options.pricesOnly==='true'?'prices_only':'full');
+    assert.equal(graph.jobs['fetch-benchmark'],options.pricesOnly==='true'?'skipped':'success',JSON.stringify(options)+'/fetch-benchmark');
   }
   assert.equal(actualStaticGraph(t,{eventName:'workflow_run',repair:'true',selectFailure:true}).jobs['combine-and-build'],'skipped');
   assert.equal(actualStaticGraph(t,{eventName:'workflow_dispatch',market:'us',selectFailure:true}).jobs['combine-and-build'],'success','Existing ordinary fallback after an upstream failure remains reachable');
@@ -66,12 +67,33 @@ test('finite trigger remains exact CI completion and automatic acquisition uses 
   assert.match(staticWorkflow,/format\('static-site-oct6-\{0\}', github\.event\.workflow_run\.head_sha\)/);assert.match(staticWorkflow,/cancel-in-progress: false/);
 });
 test('finite producer cannot reach acquisition, mutable releases, fallback or promotion',()=>{
-  for(const name of ['ensure_daily_price_release','build-market'])assert.match(job(staticWorkflow,name),/if:.*github\.event_name != 'workflow_run'/,name);
+  for(const name of ['fetch-benchmark','ensure_daily_price_release','build-market'])assert.match(job(staticWorkflow,name),/if:.*github\.event_name != 'workflow_run'/,name);
   for(const name of ['Install backend dependencies','Install frontend dependencies','Download current market artifacts','Download per-market fallback artifacts','Validate market artifacts','Combine static data bundle','Cache public SEC archives and security mappings','Bind downstream close observations after both quality gates','Record the actual downstream producer attempt','Retain downstream source-promotion inputs']){
     assert.match(step(combine,name),/if: needs\.select-markets\.outputs\.repair != 'true'/,name);
   }
   assert.match(job(staticWorkflow,'promote-daily-source'),/needs\.select-markets\.outputs\.mode == 'full'/);
   assert.match(combine,/permissions:\n\s+contents: read\n\s+actions: read/);assert.doesNotMatch(combine,/pages: write|id-token: write/);
+});
+test('early SPY request is optional, read-only, same-session only and cannot fail the producer run',()=>{
+  const early=job(staticWorkflow,'fetch-benchmark');
+  assert.match(early,/^    needs: select-markets$/m);assert.match(early,/^    continue-on-error: true$/m);assert.match(early,/^    timeout-minutes: \d+$/m);
+  assert.match(early,/permissions:\n\s+contents: read\n\s+runs-on:/);assert.doesNotMatch(early,/: write|secrets\.|GH_TOKEN|github\.token/);
+  assert.match(early,/persist-credentials: false/);
+  const request=step(early,'Request SPY for the completed NYSE session');assert.match(request,/continue-on-error: true/);
+  assert.match(request,/postclose-calendar\.py[^\n]*target_session/);assert.match(request,/export-book-benchmark\.py --target "\$target" --output "\$RUNNER_TEMP\/early-book-benchmark\/book-benchmark\.json"/);
+  assert.doesNotMatch(request,/--allow-unavailable|--root|static-data/);
+  const upload=step(early,'Upload the early SPY benchmark');assert.match(upload,/name: book-benchmark-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);assert.match(upload,/if-no-files-found: ignore/);
+  // The relay that wakes the watchdog and the producer's own success do not depend on it.
+  assert.match(combine,/^    needs: \[select-markets, build-market, fetch-benchmark\]$/m);assert.match(combine,/^    if: \$\{\{ !cancelled\(\) && /m);
+  assert.doesNotMatch(job(staticWorkflow,'wake-postclose-watchdog'),/fetch-benchmark/);assert.doesNotMatch(job(staticWorkflow,'promote-daily-source'),/fetch-benchmark/);
+  const download=step(combine,'Download the early SPY benchmark'),place=step(combine,'Place the early SPY benchmark only for the same validated session');
+  for(const block of [download,place]){assert.match(block,/needs\.select-markets\.outputs\.repair != 'true' && needs\.select-markets\.outputs\.mode == 'full'/);assert.match(block,/continue-on-error: true/);}
+  assert.match(download,/name: book-benchmark-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);
+  assert.match(place,/steps\.early-benchmark\.outcome == 'success'/);assert.match(place,/run: python tools\/export-book-benchmark\.py --place "\$RUNNER_TEMP\/early-book-benchmark\/book-benchmark\.json"/);
+  // Placed after the combined manifest exists and before the export's own request, which keeps it only for the same session.
+  const order=['Combine static data bundle','Download the early SPY benchmark','Place the early SPY benchmark only for the same validated session','Build static frontend'].map(name=>combine.indexOf(`      - name: ${name}\n`));
+  assert(order.every((at,i)=>at>0&&(i===0||at>order[i-1])),JSON.stringify(order));
+  assert.match(step(combine,'Build static frontend'),/python tools\/export-book-benchmark\.py --allow-unavailable\n/);
 });
 test('genuine build performs the worker Vite route and verified upload keeps its new identity',()=>{
   const build=step(combine,'Build static frontend'),branch=build.split('if [ "$PRICE_REPAIR" = "true" ]; then')[1]?.split('\n          else')[0];

@@ -197,6 +197,9 @@ jobs:
       - name: Offline daily market history, refresh and source parsing contracts
         run: '"$RUNNER_TEMP/session-calendar-runtime/bin/python" -m unittest discover -s frontend/tools -p "test_collect_market*.py"'
 
+      - name: Offline SPY benchmark validation, same-session retention and early request contracts
+        run: '"$RUNNER_TEMP/session-calendar-runtime/bin/python" -I frontend/tools/test_export_book_benchmark.py'
+
       - name: Post-close clock and recovery contracts
         run: |
           "$RUNNER_TEMP/session-calendar-runtime/bin/python" -m unittest discover -s .github/scripts -p "test_postclose_*.py"
