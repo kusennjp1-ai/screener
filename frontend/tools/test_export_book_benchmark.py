@@ -2,8 +2,13 @@
 import copy
 from datetime import date, timedelta
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
+from unittest import mock
 
 # Load the offline calendar stack once, before any test patches sys.modules:
 # patch.dict removes modules first imported inside it, and numpy 2 cannot be
@@ -16,6 +21,25 @@ except ImportError:
 spec = importlib.util.spec_from_file_location("book_benchmark", Path(__file__).with_name("export-book-benchmark.py"))
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+
+# The exporter repeats its log lines into GITHUB_STEP_SUMMARY when that is set.
+# CI and the release's evidence step run this suite inside a real job, so no
+# fixture line may reach that summary: the variable is removed for the whole
+# module (and the subprocesses it starts), and a test that checks summary lines
+# points it at its own temporary file. Only the variable is cleared; the real
+# summary file is never opened.
+_SUMMARY_GUARD = mock.patch.dict(os.environ)
+# Set only in the nested run of StepSummaryIsolationTests, so it cannot recurse.
+_SUMMARY_PROBE = "BOOK_BENCHMARK_SUMMARY_PROBE"
+
+
+def setUpModule():
+    _SUMMARY_GUARD.start()
+    os.environ.pop("GITHUB_STEP_SUMMARY", None)
+
+
+def tearDownModule():
+    _SUMMARY_GUARD.stop()
 
 
 class BenchmarkValidationTests(unittest.TestCase):
@@ -446,6 +470,27 @@ class SameSessionRetentionTests(unittest.TestCase):
                 result = subprocess.run([sys.executable, str(Path(module.__file__)), "--root", str(self.root), *args], capture_output=True, text=True)
                 self.assertEqual(result.returncode, 2)
                 self.assertIn("error:", result.stderr)
+
+
+class StepSummaryIsolationTests(unittest.TestCase):
+    def test_no_fixture_line_reaches_the_job_summary(self):
+        """Runs this whole suite again with GITHUB_STEP_SUMMARY set, as in CI, and expects no line in it."""
+        if os.environ.get(_SUMMARY_PROBE):
+            self.skipTest("nested run of the summary probe")
+        with tempfile.TemporaryDirectory() as directory:
+            summary = Path(directory) / "step-summary.md"
+            env = {**os.environ, "GITHUB_STEP_SUMMARY": str(summary), _SUMMARY_PROBE: "1"}
+            flags = ["-I"] if sys.flags.isolated else []
+            result = subprocess.run([sys.executable, *flags, str(Path(__file__).resolve())], env=env,
+                                    capture_output=True, text=True, timeout=600)
+            self.assertEqual(result.returncode, 0, result.stderr[-2000:])
+            self.assertRegex(result.stderr, r"Ran [1-9][0-9]* tests")
+            self.assertFalse(summary.exists() and summary.read_text(), summary.read_text() if summary.exists() else "")
+            # The probe is live: the exporter does write to a summary path it is given.
+            with mock.patch.dict(os.environ, {"GITHUB_STEP_SUMMARY": str(summary)}):
+                module.report("probe line", log=lambda text: None)
+            self.assertEqual(summary.read_text(), "probe line\n\n")
+
 
 if __name__ == "__main__":
     unittest.main()
