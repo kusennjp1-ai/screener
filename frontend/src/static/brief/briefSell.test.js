@@ -659,9 +659,9 @@ describe('the strength checks\' 50-day alternative (VD6)', () => {
   });
 });
 
-// BEH-1 (plan S2-P6): 損切りに到達, the sell card's stop row. Bars: 100 sessions flat at 90 under a pivot of 100, then the
+// BEH-1 (plan S2-P6): 仮の損切りに到達, the sell card's stop row. Bars: 100 sessions flat at 90 under a pivot of 100, then the
 // shapes each case names; the level is ピボットの −7.0% in half-up cents (93.00 here).
-describe('the stop row (損切りに到達, BEH-1)', () => {
+describe('the stop row (仮の損切りに到達, BEH-1)', () => {
   const PIVOT = 100;
   const flat = (count = 100, close = 90) => Array.from({ length: count }, () => close);
   /** 100 flat sessions, a crossing `ago` sessions before the last bar (close 101), then closes `after` (each a bar). */
@@ -706,8 +706,18 @@ describe('the stop row (損切りに到達, BEH-1)', () => {
   });
 
   it('says 判定なし for a buy-zone stock (the plan buys at the analysis day\'s close), whatever the lows did', () => {
+    // A dated breakout three sessions before the analysis day (stalled in the zone, or held since): bars follow it, so the
+    // reason is the app's rule for buy-zone stocks, never that no later bar exists.
     const bars = shaped({ low: { 102: 80 } });
-    expect(stopReachedCheck(bars, view('zone'))).toMatchObject({ state: 'na', cause: 'zone', detail: `計画の買値は ${date(bars, bars.length - 1)} 終値・その後の日足はまだありません`, level: null });
+    const held = stopReachedCheck(bars, view('zone'));
+    expect(held).toMatchObject({ state: 'na', cause: 'zone', detail: `買いゾーンの銘柄は判定しません・計画の買値は ${date(bars, bars.length - 1)} 終値`, level: null, breakoutDate: null, low: null, parts: null });
+    // A breakout on the analysis day, or none dated (flat under the pivot): no later bar exists, and the reason says that.
+    const today = make([...flat(), 101]);
+    today.at(-1).low = 80;
+    const none = make([...flat(100, 100), 100]);
+    for (const list of [today, none]) expect(stopReachedCheck(list, view('zone'))).toMatchObject({ state: 'na', cause: 'zone', detail: `計画の買値は ${date(list, list.length - 1)} 終値・その後の日足はまだありません`, level: null, breakoutDate: null });
+    // Without a usable pivot the zone reason stays the analysis day's close.
+    expect(stopReachedCheck(bars, view('zone', null))).toMatchObject({ state: 'na', cause: 'zone', detail: `計画の買値は ${date(bars, bars.length - 1)} 終値・その後の日足はまだありません` });
   });
 
   it('says 判定なし for a breakout on the analysis day (the USEA shape: its own low under the level)', () => {

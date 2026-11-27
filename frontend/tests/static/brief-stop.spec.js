@@ -166,6 +166,20 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     expect(errors).toEqual([]);
   });
 
+  // A buy-zone stock whose breakout was days before the analysis day (ZZHB, the weekly-pattern oracle: 「9/28に上抜け・4営業日前」):
+  // bars follow the breakout, so the reason is the app's rule for buy-zone stocks, never that no later bar exists.
+  test('a buy-zone stock broken out days before reads 判定なし with the buy-zone rule as its reason', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZHB', { oracles: true });
+    await chartSettled(page);
+    await expect(page.getByTestId('brief-conclusion')).toContainText(/\d+\/\d+に上抜け・\d+営業日前/);
+    await expect(row(page)).toHaveAttribute('data-state', 'na');
+    await expect(row(page)).toContainText(/仮の損切りに到達（保有なら） 判定なし（買いゾーンの銘柄は判定しません・計画の買値は \d+\/\d+ 終値）$/);
+    await expect(row(page)).not.toContainText('その後の日足はまだありません');
+    expect(await folded(row(page))).toBe(!wide);
+    await expect(stopNote(page)).toHaveCount(0);
+    expect(errors).toEqual([]);
+  });
+
   test('a buy-zone stock reads 判定なし: the plan buys at the analysis day\'s close', async ({ page }) => {
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
     await chartSettled(page);

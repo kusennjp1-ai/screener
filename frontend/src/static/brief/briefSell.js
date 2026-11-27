@@ -247,6 +247,9 @@ export const PROVISIONAL_STOP_RULE = `ピボットの −${PROVISIONAL_STOP_PERC
  *   (crossingFloor's): the conclusion's bar, the latest re-cross. The failed-breakout check may name an earlier heavy-volume
  *   crossing in the same window, so the two dates can differ.
  * - In the buy zone (`view.state === 'zone'`) the plan buys at the analysis day's close: 'na' (cause 'zone'); no later bar exists.
+ *   The reason names the cause that is true for a holder: after a dated breakout before the analysis day (a stalled or older
+ *   breakout still in the zone) bars do follow it, so the reason is the app's rule for buy-zone stocks (gate ruling S3), not
+ *   missing bars; otherwise (a breakout on the analysis day, or none dated) that no later bar exists. Only the words differ.
  * - A dated breakout before the analysis day: the level is the provisional stop's half-up cents; the window is the lows of the
  *   bars after the breakout bar to the last bar; 'hit' when the lowest low's cents are at or under the level's, else 'clear'.
  *   A low missing (or 0) in the window: 'unknown', never 'clear'.
@@ -262,8 +265,13 @@ export function stopReachedCheck(bars, view, { from = null } = {}) {
   const base = { key: 'stop', label: STOP_ROW_LABEL, level: null, breakoutDate: null, low: null, lowDate: null, parts: null };
   const list = Array.isArray(bars) ? bars : [], n = list.length, asOf = list[n - 1]?.date ?? view?.asOf ?? null;
   const day = date => shortDate(date, asOf), positive = value => finite(value) && value > 0;
-  if (view?.state === 'zone') return { ...base, state: 'na', cause: 'zone', detail: `計画の買値は ${day(asOf)} 終値・その後の日足はまだありません` };
   const pivot = view?.pivot, levelCents = provisionalStopCents(pivot);
+  if (view?.state === 'zone') {
+    const crossing = levelCents === null ? null : pivotCrossings(list, pivot, { lookback: CROSSING_LOOKBACK_SESSIONS, from })[0] ?? null;
+    const breakout = crossing ? breakoutBar(list, pivot, crossing, { from }) : null;
+    const detail = breakout && breakout.sessionsAgo > 0 ? `買いゾーンの銘柄は判定しません・計画の買値は ${day(asOf)} 終値` : `計画の買値は ${day(asOf)} 終値・その後の日足はまだありません`;
+    return { ...base, state: 'na', cause: 'zone', detail };
+  }
   if (levelCents === null) return { ...base, state: 'na', cause: 'noPivot', detail: 'ピボットが未確認' };
   const level = levelCents / 100, floor = floorOf({ from });
   const crossing = pivotCrossings(list, pivot, { lookback: CROSSING_LOOKBACK_SESSIONS, from })[0] ?? null;
