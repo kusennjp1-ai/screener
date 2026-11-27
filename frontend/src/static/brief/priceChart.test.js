@@ -119,7 +119,9 @@ describe('brief price chart', () => {
     const el = container();
     renderPriceChart(el, model, { period: 130, animate: false });
     expect(el.getAttribute('role')).toBe('img');
-    expect(el.getAttribute('aria-label')).toMatch(/TEST の日足チャート.*ピボット 108\.00.*損切りの目安 100\.40.*値幅の収縮 12%→6%/);
+    expect(el.getAttribute('aria-label')).toMatch(/TEST の日足チャート.*ピボット 108\.00.*、損切り 100\.40、.*値幅の収縮 12%→6%/);
+    // One name per level (minor B1): the accessible name calls the stop 損切り, as its tag, the legend and the plan card do.
+    expect(el.getAttribute('aria-label')).not.toContain('損切りの目安');
     expect(el.querySelectorAll('.bc-legbox')).toHaveLength(2);
     expect(el.querySelectorAll('rect.bc-up, rect.bc-down').length).toBe(130);
     expect(el.querySelectorAll('.bc-up, .bc-down').length).toBe(130 * 2);
