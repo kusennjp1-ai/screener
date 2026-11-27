@@ -233,6 +233,13 @@ test('only the newest open main timer run is pending, and an unreadable one leav
   const own = report({action: 'none', reason: 'existing_work_in_flight', wake_at: '2026-11-26T02:25:00.000Z'});
   for (const runs of [() => { throw Error('HTTP 502'); }, [{...retry, display_title: 'Post-close Watchdog Timer'}], []])
     assert.deepEqual((await armWith(own, runs, '2026-11-26T01:25:00Z')).inputs, {fire_at: '2026-11-26T02:25:00.000Z', reason: 'existing_work_in_flight'});
+  // The armed log line tells an unavailable listing from an empty one.
+  const directory = mkdtempSync(join(tmpdir(), 'postclose-timer-')), path = join(directory, 'report.json'), lines = [];
+  try {
+    writeFileSync(path, JSON.stringify(own));
+    for (const runs of [() => { throw Error('HTTP 502'); }, () => [], () => [retry]]) await armWake({reportPath: path, env: mainEnv, now: () => now, log: {log: line => lines.push(JSON.parse(line))}, listRuns: runs, dispatch: async () => {}});
+    assert.deepEqual(lines.map(line => [line.pending_read, line.pending_fire_at]), [['unavailable', null], ['listed', null], ['listed', '2026-11-26T01:33:38.000Z']]);
+  } finally { rmSync(directory, {recursive: true, force: true}); }
 });
 test('after a deploy, an earlier pending wake inside the settle time is replaced, not kept', async () => {
   // A check at 21:33, while the release ran, armed its in-flight wake for 22:33:

@@ -190,14 +190,16 @@ export async function armWake({reportPath, env = process.env, now = Date.now, di
   try {
     check(inMainActions(env), 'Timer dispatch is limited to the default-branch Actions controller');
     const report = readReport(reportPath), current = now(), request = wakeRequest(report, current);
-    let pending = null;
-    try { pending = pendingWake(listRuns(), current); } catch { pending = null; }
+    // The log records whether the waiting run could be read, so "nothing
+    // pending" and "listing unavailable" stay distinguishable afterwards.
+    let pending = null, pendingRead = 'listed';
+    try { pending = pendingWake(listRuns(), current); } catch { pendingRead = 'unavailable'; }
     const chosen = chooseWake(request, report, pending);
     await dispatch(TIMER, {fire_at: chosen.fire_at, reason: chosen.reason});
     summary(env, chosen.replaced
       ? `\nNext watchdog wake: **${chosen.fire_at}** (${chosen.reason}; kept the earlier pending wake; this check asked for ${chosen.replaced.fire_at}, ${chosen.replaced.reason}).\n`
       : `\nNext watchdog wake: **${chosen.fire_at}** (${chosen.reason}; ${chosen.source}).\n`);
-    log.log(JSON.stringify({status: 'armed', ...chosen}));
+    log.log(JSON.stringify({status: 'armed', ...chosen, pending_read: pendingRead, pending_fire_at: pending?.fire_at ?? null}));
     return {status: 'armed', ...chosen};
   } catch (error) {
     const message = String(error?.message || error).slice(0, 300).replace(/[\r\n]/g, ' ');
