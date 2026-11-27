@@ -56,6 +56,14 @@ const hitWord = page => row(page).locator('.brief-stop-state').evaluate(node => 
   const style = getComputedStyle(node), range = document.createRange(); range.selectNodeContents(node);
   return { text: node.textContent, color: style.color === neg, weight: Number(style.fontWeight), lines: new Set([...range.getClientRects()].map(r => Math.round(r.top))).size };
 });
+// The plan settings as brief-plan.spec.js seeds them (key 'brief-plan'): stopPercent 5, and ZZSD's structural stop chosen
+// (positionSizing.js reads `structuralSymbols`, which 「この位置を使う」 writes).
+const PLAN_5 = { 'brief-plan': { account: 50000, riskPercent: 1.25, stopPercent: 5, capPercent: 25 } };
+const STRUCT_SYMBOL = 'ZZSD';
+const PLAN_STRUCT = { 'brief-plan': { account: 50000, riskPercent: 1.25, stopPercent: 7, capPercent: 25, structuralSymbols: [STRUCT_SYMBOL] } };
+const plan = page => page.locator('.brief-plan');
+/** The plan card's printed stop: the −1R price of its R bar. */
+const planStop = async page => (await plan(page).locator('.brief-rbar .r-risk').textContent()).match(/−1R (\d+\.\d\d)/)[1];
 /** The row's type sizes (D19): the line 14px, the measured detail 12px (nothing with a digit under 12px). */
 const sizes = page => row(page).evaluate(node => ({ line: getComputedStyle(node.querySelector('li')).fontSize, detail: node.querySelector('em') ? getComputedStyle(node.querySelector('em')).fontSize : null }));
 
@@ -118,6 +126,34 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     expect(errors).toEqual([]);
   });
 
+  // D8: with another stop setting the row keeps its level and prints the plan's own stop beside it, each under its own name;
+  // the plan's number is the plan card's printed stop.
+  test('stopPercent 5 stored: 仮の損切り and 計画の損切り, two names and two numbers, the second the plan card\'s stop', async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${STOP_SYMBOL}`, { mutate: stopReached(1.0), storage: PLAN_5 });
+    await chartSettled(page);
+    await expect(row(page)).toHaveAttribute('data-state', 'hit');
+    const detail = await row(page).locator('em').textContent();
+    const [, level, own] = detail.match(/^仮の損切り \$(\d+\.\d\d)（ピボットの −7\.0%・独自設定）／計画の損切り \$(\d+\.\d\d)（設定 −5\.0%）・\d+\/\d+ の上抜けの後の最安値 \$\d+\.\d\d（\d+\/\d+）$/);
+    expect(own).not.toBe(level);
+    expect(await planStop(page)).toBe(own);
+    await expect(plan(page)).toContainText('損切り幅 5.0%');
+    expect(errors).toEqual([]);
+  });
+
+  // D8 through positionPlan's own structural path: ZZSD's structural stop applied as 「この位置を使う」 stores it.
+  test('the structural stop applied: 「計画の損切り $109.12（構造 −5.3%）」 beside the row\'s level, the plan card\'s strings', async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${STRUCT_SYMBOL}`, { storage: PLAN_STRUCT });
+    await chartSettled(page);
+    await expect(row(page)).toHaveAttribute('data-state', 'clear');
+    const detail = await row(page).locator('em').textContent();
+    const [, level, own, percent] = detail.match(/^仮の損切り \$(\d+\.\d\d)（ピボットの −7\.0%・独自設定）／計画の損切り \$(\d+\.\d\d)（構造 −(\d+\.\d)%）・/);
+    expect([own, percent]).toEqual(['109.12', '5.3']);
+    expect(own).not.toBe(level);
+    expect(await planStop(page)).toBe(own);
+    await expect(plan(page)).toContainText(`損切り幅 ${percent}%（構造上の目安`);
+    expect(errors).toEqual([]);
+  });
+
   test('a buy-zone stock reads 判定なし: the plan buys at the analysis day\'s close', async ({ page }) => {
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
     await chartSettled(page);
@@ -148,6 +184,47 @@ test.describe('the sell card with the stop row\'s summary segment at 375px', () 
     console.log(JSON.stringify({ state: 'pinned-quiet', sell: height, summaryLines: lines }));
     expect(lines).toBe(1);
     expect(height).toBeLessThanOrEqual(228.5 + 16 - 12);
+    expect(errors).toEqual([]);
+  });
+});
+
+// D17 in both themes (set through storage 'screener:color-mode', as brief-call.spec.js does), on a 50% day and on the 0% day
+// (every row under the 50-day line in a correction, brief-call.spec.js's below50Rows): the row's label, detail and glyph in a
+// text ink, only 該当 in --neg, no ▲, and each at least 4.5:1 against the card.
+const compose = (...parts) => Object.fromEntries([...new Set(parts.flatMap(Object.keys))].map(key => [key, value => { for (const part of parts) part[key]?.(value); }]));
+const below50Rows = { rows: rows => { for (const r of rows) { r.market_above_50dma = false; r.market_regime = 'correction'; } } };
+const DAYS = { '50%': { mutate: stopReached(1.0), line: '目安 最大50%' }, '0%': { mutate: compose(stopReached(1.0), below50Rows), line: '目安 0%' } };
+const luminance = rgb => { const [r, g, b] = rgb.map(v => { v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const contrast = (a, b) => { const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+for (const theme of ['light', 'dark']) for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.describe(`the stop row's inks in the ${theme} theme at ${width}px`, () => {
+  test.use(options);
+  for (const [day, { mutate, line }] of Object.entries(DAYS)) test(`stop reached on a ${day} day`, async ({ page }) => {
+    const { errors } = await openBrief(page, `#/brief/stock/${STOP_SYMBOL}`, { mutate, storage: { 'screener:color-mode': theme } });
+    await chartSettled(page);
+    await expect(page.locator('.brief')).toHaveAttribute('data-theme', theme);
+    await expect(page.getByTestId('brief-call-market')).toContainText(line);
+    await expect(row(page)).toHaveAttribute('data-state', 'hit');
+    await expect(row(page)).not.toContainText('▲');
+    const read = await row(page).evaluate(node => {
+      const probe = document.createElement('span'); node.appendChild(probe);
+      const ink = name => { probe.style.color = `var(${name})`; return getComputedStyle(probe).color; };
+      const inks = ['--text', '--text-2', '--text-3'].map(ink), neg = ink('--neg');
+      probe.remove();
+      let ground = node;
+      while (ground && /rgba\(0, 0, 0, 0\)|transparent/.test(getComputedStyle(ground).backgroundColor)) ground = ground.parentElement;
+      const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
+      const of = el => ({ color: getComputedStyle(el).color, rgb: rgb(getComputedStyle(el).color), weight: Number(getComputedStyle(el).fontWeight) });
+      const li = node.querySelector('li');
+      return { inks, neg, ground: rgb(getComputedStyle(ground).backgroundColor), label: of(li.querySelector(':scope > span:not(.brief-check)')), detail: of(li.querySelector('em')),
+        glyph: of(li.querySelector('.brief-check')), word: { ...of(li.querySelector('.brief-stop-state')), text: li.querySelector('.brief-stop-state').textContent } };
+    });
+    for (const part of ['label', 'detail', 'glyph']) {
+      expect(read.inks, `${part} ${read[part].color}`).toContain(read[part].color);
+      expect(read[part].color, part).not.toBe(read.neg);
+      expect(contrast(read[part].rgb, read.ground), part).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(read.word).toMatchObject({ text: '該当', color: read.neg, weight: 700 });
+    expect(contrast(read.word.rgb, read.ground), 'word').toBeGreaterThanOrEqual(4.5);
     expect(errors).toEqual([]);
   });
 });
