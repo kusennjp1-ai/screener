@@ -1,0 +1,50 @@
+name: Post-close Watchdog Timer
+run-name: Post-close watchdog timer to ${{ inputs.fire_at }} (${{ inputs.reason }})
+
+# Wakes the Post-close Update Watchdog at the time its last inspection chose
+# (plan.wake_at: one hour after the next NYSE close from the watchdog's own
+# exchange calendar, or the end of a cooldown or grace). Waiting method A1:
+# this job sleeps and re-dispatches itself past the six-hour job limit. The
+# watchdog's schedules remain the fallback when a link is lost. This workflow
+# only requests the watchdog with no inputs; it decides nothing and can deploy
+# nothing.
+on:
+  workflow_dispatch:
+    inputs:
+      fire_at:
+        description: 'UTC time to request the watchdog (YYYY-MM-DDTHH:MM:SSZ)'
+        type: string
+        required: true
+      reason:
+        description: 'Watchdog decision that chose this time (record only)'
+        type: string
+        default: 'manual'
+
+permissions:
+  contents: read
+  actions: write
+
+# Only the newest wake waits; an older waiting link is replaced.
+concurrency:
+  group: postclose-timer
+  cancel-in-progress: true
+
+jobs:
+  wait-and-wake:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          sparse-checkout: .github/scripts
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Wait for the next inspection time, then request the watchdog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FIRE_AT: ${{ inputs.fire_at }}
+          WAKE_REASON: ${{ inputs.reason }}
+        run: node .github/scripts/postclose-timer.mjs wait

@@ -204,6 +204,7 @@ jobs:
         run: |
           "$RUNNER_TEMP/session-calendar-runtime/bin/python" -m unittest discover -s .github/scripts -p "test_postclose_*.py"
           node --test .github/scripts/postclose-watchdog.test.mjs
+          POSTCLOSE_PYTHON="$RUNNER_TEMP/session-calendar-runtime/bin/python" node --test .github/scripts/postclose-timer.test.mjs
 
       - name: Journal-backed renewal publisher lifecycle
         env:

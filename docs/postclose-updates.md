@@ -46,6 +46,26 @@ GitHub は schedule が混雑で遅延・欠落する可能性を明記してい
 未配信中に、即時公開を保証することはできない。厳格な時刻 SLA が必要な場合は
 別基盤の時計からこの workflow の `workflow_dispatch` を呼ぶ構成が必要になる。
 
+## 時計による起動（Post-close Watchdog Timer）
+
+schedule に頼らず、監視は自分で次の検査時刻 `plan.wake_at` を決める。
+公開済みなら次の実際の引け＋60 分（冬時間 22:00Z、夏時間 21:00Z、
+短縮取引 19:00Z）。休日・短縮取引・夏時間は監視と同じ NYSE カレンダーから取る。
+待ち・再試行間隔の分岐はその間隔が終わる時刻、取得／公開を要求した場合は
+成功時の起動を待ちつつ保険として 5 時間 45 分後。どの時刻も 1 分後以降、
+次の引け＋60 分以前に収める。判定規則と引け後 2 分の猶予は変えない。
+
+監視の最後のステップ（失敗や遅延の exit 1 でも動く）が、この時刻を
+`Post-close Watchdog Timer` に渡す。レポートが無い・壊れている・要求の
+受理が確認できない場合は 1 時間後。タイマーは 1 本の job が待ち、時刻に
+なると監視を入力なしで要求する。job は 6 時間までなので、それより先の時刻は
+5 時間 45 分ごとに同じ時刻で自分を要求し直す（待ち方 A1）。待っているのは
+常に最新の 1 本だけ（`cancel-in-progress: true`）。6 時間以上前の時刻は
+要求しない。タイマーは判定も公開もしない。権限は `contents: read` と
+`actions: write` のみ。上の schedule はすべて残し、つながりが切れたときの
+予備にする。待ち方を environment の待機（A2）や外部の時計（B）に替える
+場合も、変えるのはタイマー側だけで `wake_at` はそのまま使える。
+
 資料:
 
 - [NYSE trading hours and calendar](https://www.nyse.com/markets/hours-calendars)
@@ -57,7 +77,10 @@ GitHub は schedule が混雑で遅延・欠落する可能性を明記してい
 `python -m unittest discover -s .github/scripts -p test_postclose_calendar.py`
 で夏冬時間、DST 変更、短縮取引、休日、年越しを確認する。
 `node --test .github/scripts/postclose-watchdog.test.mjs` で監視・出典検証・
-重複防止・再試行上限を確認する。
+重複防止・再試行上限・次の検査時刻を確認する。
+`POSTCLOSE_PYTHON=<固定版カレンダーの python> node --test .github/scripts/postclose-timer.test.mjs`
+で実カレンダーからの起動時刻（感謝祭、短縮取引、週末、夏時間）とタイマーの
+待ち・再要求・期限切れを確認する。
 
 `node .github/scripts/postclose-watchdog.mjs --output <path>` は読み取りのみ。
 `--execute` は本リポジトリの main 上の GitHub Actions からしか許可しない。
