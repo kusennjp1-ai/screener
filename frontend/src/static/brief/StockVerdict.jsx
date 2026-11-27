@@ -97,9 +97,9 @@ export const PIVOT_UNKNOWN_NOTE = 'ピボットを確認できないため位置
 /**
  * The stop row's hit beside the share count (plan S2-P2's 「保有なら」 line, D10, S2-P6): one full-width line under the tiles when
  * the sell card's row reads 該当, in the row's own words and number. It removes no plan and adds no count, chip or sign (BEH-2
- * stays the owner's).
+ * stays the owner's). A phone line breaks before the level or before 「（売りのカード）」, never inside either.
  */
-const stopHitNote = level => `保有なら：仮の損切り ${money(level)} に到達しています（売りのカード）`;
+const stopHitNote = level => <>保有なら：<Unit>仮の損切り {money(level)}</Unit> に到達しています<Unit>（売りのカード）</Unit></>;
 
 /**
  * The call's market line (plan S2-P1, D2, D18) from marketBand's own fields: the subject and the analysis date, the answer with
