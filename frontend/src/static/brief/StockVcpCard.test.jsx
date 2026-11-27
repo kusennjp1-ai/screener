@@ -70,13 +70,13 @@ describe('brief VCP card', () => {
   it('shows the Setup Engine base beside the result only when it is current, and says when they differ', () => {
     const row = weeks => ({ setup_recalculation: { status: 'calculated', as_of_date: DATE }, se_base_length_weeks: weeks, se_base_depth_pct: 12.6 });
     render(<VcpCard technical={technical(legs)} bars={bars} judged={null} view={{}} row={row(14.2)} date={DATE} />);
-    expect(screen.getByText('Setup Engine：土台 14週・深さ 13%')).toBeInTheDocument();
+    expect(screen.getByText('Setup Engineの準備条件（トレンドテンプレートとは別）：土台 14週・深さ 13%')).toBeInTheDocument();
     cleanup();
     render(<VcpCard technical={technical(legs)} bars={bars} judged={null} view={{}} row={row(30)} date={DATE} />);
-    expect(screen.getByText('Setup Engine：土台 30週・深さ 13%（独自近似と異なります）')).toBeInTheDocument();
+    expect(screen.getByText('Setup Engineの準備条件（トレンドテンプレートとは別）：土台 30週・深さ 13%（独自近似と異なります）')).toBeInTheDocument();
     cleanup();
     render(<VcpCard technical={technical(legs)} bars={bars} judged={null} view={{}} row={{ ...row(14), setup_recalculation: { status: 'calculated', as_of_date: '2026-09-30' } }} date={DATE} />);
-    expect(screen.queryByText(/^Setup Engine：/)).toBeNull();
+    expect(screen.queryByText(/^Setup Engine/)).toBeNull();
   });
 });
 
@@ -172,7 +172,7 @@ describe('the Setup Engine pivot day and quiet days', () => {
     const base = note.parentElement;
     expect(base.tagName).toBe('P');
     expect(base).toHaveClass('brief-note', 'brief-vcp-engine');
-    expect(base.textContent).toMatch(/^Setup Engine：/);
+    expect(base.textContent).toMatch(/^Setup Engineの準備条件（トレンドテンプレートとは別）：/);
     expect(base.textContent.endsWith(`${PIVOT_DAY_SEPARATOR}${pivotDay}`)).toBe(true);
     expect(base.lastElementChild).toBe(note);
     expect(container.querySelectorAll('p.brief-vcp-pivotday')).toHaveLength(0);
@@ -200,7 +200,7 @@ describe('the Setup Engine pivot day and quiet days', () => {
     // A base with no pivot day to show (a vcp_pivot fallback): the base note reads as before, with no separator.
     const base = render(<VcpCard technical={technical(legs)} bars={weeklyBarsList} judged={weeklyBarsList} view={{ pivot: 89.88 }} row={{ ...current, vcp_pivot: 89.88, se_base_length_weeks: 14, se_base_depth_pct: 12.6 }} date={DATE} />).container;
     expect(base.querySelector('.brief-vcp-pivotday')).toBeNull();
-    expect(base.querySelector('.brief-vcp-engine').textContent).toMatch(/^Setup Engine：土台 14週・深さ 13%(（独自近似と異なります）)?$/);
+    expect(base.querySelector('.brief-vcp-engine').textContent).toMatch(/^Setup Engineの準備条件（トレンドテンプレートとは別）：土台 14週・深さ 13%(（独自近似と異なります）)?$/);
   });
 
   it('keeps the quiet days when the day\'s volume ratio is unknown, and shows neither line without the fields', () => {

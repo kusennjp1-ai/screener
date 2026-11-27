@@ -15,7 +15,7 @@
  */
 export const BOX_GAP = 3, PHRASE_GAP = 14, LABEL_GAP = PHRASE_GAP + 2, FIGURE_GAP = 24;
 /**
- * The gap between two labels' boxes on one row by their kinds (`kin`): the plan's green names (ピボット, 買いゾーン)
+ * The gap between two labels' boxes on one row by their kinds (`kin`): the plan's green names (ピボット, the zone's: ゾーン上限 or 買いゾーン)
  * keep three glyphs apart (two green words read as one); an average's name ('ma') and a contraction's depth under its
  * box ('leg') or its T number ('tn', 「T2 −8%」 too), or two names, keep FIGURE_GAP (and the estimate's slack).
  */
@@ -239,10 +239,11 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
    * segments joining it there to its line, each a box with `leader` 'v' or 'h', its line's `key` and the height `from`
    * which it leaves; null where no leader may run, so no spot there) takes a spot only where every segment is clear of
    * the reserved boxes too (a line's end held as a box with `leader` 'end' included), and reserves them with its box, so
-   * no later label sits on them. Returns { x, yc, box, extra, forced } (the box and the segments in `extra` reserved)
-   * or null.
+   * no later label sits on them. With `allow` ((x, yc) → boolean), a spot it rejects is never taken, over candles or not
+   * (a contraction's T number is never centred over another contraction's box: it would read as that one's). Returns
+   * { x, yc, box, extra, forced } (the box and the segments in `extra` reserved) or null.
    */
-  const place = (w, spotsIn, { forced = true, slack = Infinity, half = 7, perCandle = Infinity, kin = null, hard = 0, leader = null, fewest = false, apart = false, strike: strikeOf = strike } = {}) => {
+  const place = (w, spotsIn, { forced = true, slack = Infinity, half = 7, perCandle = Infinity, kin = null, hard = 0, leader = null, fewest = false, apart = false, strike: strikeOf = strike, allow = null } = {}) => {
     const s = asSpots(spotsIn), known = memo(s, w, half, strikeOf), reach = Math.max(slack, hard);
     // The box a spot is tested with (hits keeps none): a spot's own box is built only once no reserved box is in its way.
     const probe = { x0: 0, x1: 0, y0: 0, y1: 0, label: true, kin };
@@ -251,6 +252,7 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
       s.fill(k);
       const x = s.x[k], yc = s.y[k], cost = s.cost[k];
       if (first && cost > first.cost + reach) break;
+      if (allow && !allow(x, yc)) continue;
       const count = known.solid(k);
       // Over candles: only a forced label's fallback, and none once a candle-free spot is found.
       if (count > 0 && (!forced || first)) continue;
@@ -298,7 +300,7 @@ export function labelPlacer({ solid = () => 0, soft = () => false, strike = () =
     let tries = 0;
     for (let k = 0; k < s.n && tries < 80; k++) {
       s.fill(k);
-      if (known.solid(k) || (hard && known.strike(k))) continue;
+      if (known.solid(k) || (hard && known.strike(k)) || (options.allow && !options.allow(s.x[k], s.y[k]))) continue;
       const x = s.x[k], yc = s.y[k], box = { x0: x, x1: x + w, y0: yc - half, y1: yc + half, label: true, kin: options.kin ?? null };
       const extra = options.leader ? options.leader(x, yc) : [];
       if (!extra) continue;

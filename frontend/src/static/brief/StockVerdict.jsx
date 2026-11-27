@@ -1,10 +1,11 @@
-import { signed } from '../positionGeometry';
+import { money, signed } from '../positionGeometry';
 import { code33ChipView, earningsCaution, earningsChipView } from '../fundamentalsExplain.js';
-import { meterPercent } from './briefNav';
 import { footprint, RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { sellChipView } from './briefSell';
-import { distanceText, earningsCall as earningsCallOf, pivotDistanceText, POSITION_NAMES, rsShown } from './briefCandidate';
+import { earningsCall as earningsCallOf, pivotDistanceText, POSITION_NAMES, rsShown } from './briefCandidate';
 import { buyGate } from './buyGate';
+import { FACT_KINDS } from './marketGate';
+import { isoDay, shortDate } from './briefShared';
 
 const finite = Number.isFinite;
 // A value that is not there reads — on screen and 未計算 to a screen reader (as DayChange says 前日比 未確認).
@@ -37,8 +38,15 @@ function withUnits(text, units) {
 /** The parts of a call's title a phone line never splits: a crossing date with its verb, the sessions since it and the closing phrases. */
 const TITLE_UNITS = /\d+\/\d+に上抜け|上抜けから\d+営業日超?|（次のピボット待ち）|買いの対象外|ピボットは参考（独自判定）/g;
 
-/** The position under a neutral call, on one phone line: its name and the distance from the pivot. */
-const positionLine = view => <><Unit>位置は参考：</Unit><Unit>{POSITION_NAMES[view.position] || view.stale?.short || view.stateLabel}</Unit>{view.stale || !finite(view.distance) ? '' : <>・<Unit>{`ピボット比 ${pivotDistanceText(view)}`}</Unit></>}。</>;
+/**
+ * The position under a neutral call, on one phone line: its name and the distance from the pivot. The full stop is inside the
+ * last unit, so a phone line never starts with 「。」.
+ */
+function positionLine(view) {
+  const name = POSITION_NAMES[view.position] || view.stale?.short || view.stateLabel;
+  if (view.stale || !finite(view.distance)) return <><Unit>位置は参考：</Unit><Unit>{name}。</Unit></>;
+  return <><Unit>位置は参考：</Unit><Unit>{name}</Unit>・<Unit>{`ピボット比 ${pivotDistanceText(view)}`}。</Unit></>;
+}
 
 /**
  * The line under the call, by the gate's kind: a neutral call names its reason and moves the position
@@ -77,29 +85,6 @@ function stageChip(stage) {
   return [text, tone, computed ? text : undefined, computed ? <>{head}<span className="brief-chip-aside">{aside}</span>{tail}</> : undefined];
 }
 
-// The meter's four segments use the position names; a narrow phone breaks a name only between its words.
-const METER_NAMES = ['base', 'near', 'zone', 'ext'].map(key => [key, POSITION_NAMES[key]]);
-const WORDS = /(ピボット|買いゾーン|土台)(?=.)/;
-const breakable = name => { const [, head] = name.match(WORDS) || []; return head ? <>{head}<wbr />{name.slice(head.length)}</> : name; };
-
-// A meter column narrower than its name (a 375px phone at 200% zoom) shows the short name instead (brief-decision.css).
-const METER_SHORT = { base: '土台', near: '接近', zone: '買い', ext: '超過' };
-
-/**
- * The pivot meter. `reference`: the stock is no buy candidate now, so the buy zone is drawn in the neutral
- * line and the meter carries 参考. A stale pivot draws nothing (the call's line already says why).
- */
-function Meter({ distance, text = distanceText(distance), reference, stale }) {
-  if (stale) return null;
-  if (!finite(distance)) return <p className="brief-note">ピボットを確認できないため位置は未確認です。</p>;
-  return <div className={`brief-meter${reference ? ' is-reference' : ''}`} role="img" aria-label={`ピボットからの位置${reference ? '（参考）' : ''} ${text}`}>
-    <span className="brief-meter-labels" aria-hidden="true">{METER_NAMES.map(([key, name]) => <span key={key} className={key === 'zone' ? 'is-zone' : undefined}><span className="brief-meter-name">{breakable(name)}</span><span className="brief-meter-short">{METER_SHORT[key]}</span></span>)}</span>
-    <span className="brief-meter-track" aria-hidden="true"><i className="seg-base" /><i className="seg-near" /><i className="seg-zone" /><i className="seg-ext" /></span>
-    <span className="brief-marker brief-meter-marker is-entering" style={{ '--p': meterPercent(distance) }} aria-hidden="true" />
-    <span className="brief-meter-ticks" aria-hidden="true">{['−10%', '−5%', '0%', '+5%', '+10%'].map(t => <span key={t}>{t}</span>)}</span>
-  </div>;
-}
-
 /**
  * A tile's qualifier, from the plan contract and the conclusion: 参考, 試算のみ or 既定条件 (else none), and on the
  * stop tile 収縮の中 (the stop sits inside the last contraction, ext tone). It sits on the tile's top edge, so a
@@ -107,15 +92,61 @@ function Meter({ distance, text = distanceText(distance), reference, stale }) {
  */
 const Qualifier = ({ text, tone }) => text ? <span className={`brief-tilequal${tone ? ` tone-${tone}` : ''}`}>{text}</span> : null;
 
+/** The one sentence the retired pivot meter said for an unknown pivot (plan D5: kept word for word, a full-width line). */
+export const PIVOT_UNKNOWN_NOTE = 'ピボットを確認できないため位置は未確認です。';
 /**
- * The stock's conclusion card: the call, the pivot meter, the three level tiles and the chip list, from the
- * one buy gate (buyGate.js) the plan reads too. `bars` are the chart's bars as published (display only);
- * `judged` is the same bars when they are certified for the analysis date, else null, and is the only
- * source for anything judged from a chart (the date of the pivot crossing). `template` is the trend
- * template (useStockData's, with its rules), `market` the market verdict (prepared.market) and
- * `earningsCall` the stock view's one earnings call (earningsCall(view, now) when it is not given).
+ * The stop row's hit beside the share count (plan S2-P2's 「保有なら」 line, D10, S2-P6): one full-width line under the tiles when
+ * the sell card's row reads 該当, in the row's own words and number. It removes no plan and adds no count, chip or sign (BEH-2
+ * stays the owner's). A phone line breaks before the level or before 「（売りのカード）」, never inside either.
  */
-export default function StockVerdict({ view, plan, stage, technical, bars, judged = null, template = null, rsHigh, financial, row, sells, diagnostics, market = null, now = Date.now(), earningsCall }) {
+const stopHitNote = level => <>保有なら：<Unit>仮の損切り {money(level)}</Unit> に到達しています<Unit>（売りのカード）</Unit></>;
+
+/**
+ * The call's market line (plan S2-P1, D2, D18) from marketBand's own fields: the subject and the analysis date, the answer with
+ * its kind and the figure with its kind, as units a line breaks only between (after a 「：」 or a 「・」), never inside a word, a
+ * figure or a kind label. Open and closed days: 「地合い 10/2：検討可（独自判定）・目安 最大50%（独自設定）」 / 「地合い 10/2：買いは
+ * 控える（独自判定）・目安 0%（独自設定）」. A waiting verdict (verdictWaiting, the 市場 tab's predicate) is its 更新待ち form, its
+ * answer dated by itself and its figure labelled with the same date (「地合い 10/2時点の判定・更新待ち（独自判定）・目安 最大50%
+ * （10/2時点・独自設定）」). An unknown market has no figure and no kind (「地合い 10/2：未確認・買いは見送り」); loading reads 読込中.
+ * Returns `[{ head?, text, kind? }]`: `head` the subject, `kind` the label in （…） after the unit's text.
+ */
+function marketCallLine(band, date = null) {
+  const subject = band.subject, day = isoDay(date) ? shortDate(date, date) : null;
+  if (band.state === 'loading') return [{ head: subject, text: ` ${band.answer}` }];
+  // The answer breaks only after its own 「・」 (「10/2時点の判定・」「更新待ち」, 「未確認・」「買いは見送り」).
+  const words = band.answer.split(/(?<=・)/);
+  const judged = band.state !== 'unknown';
+  const answer = words.map((text, i) => ({ text, ...(judged && i === words.length - 1 ? { kind: FACT_KINDS.verdict } : {}) }));
+  // The subject and the date end with 「：」, a place to break; the waiting answer carries its own date (「10/2時点の判定」), so
+  // there the subject takes no second one and stays with the answer's first word.
+  const lead = band.state !== 'waiting' && day ? ` ${day}：` : null;
+  const units = lead ? [{ head: subject, text: lead }, ...answer] : [{ ...answer[0], head: subject, text: ` ${answer[0].text}` }, ...answer.slice(1)];
+  if (!judged) return units;
+  // The figure's kind is the band's own label: 独自設定, dated on a waiting day (「10/2時点・独自設定」).
+  const note = /（(.+)）$/.exec(band.guideLabel || '')?.[1] ?? FACT_KINDS.guide;
+  units[units.length - 1] = { ...units[units.length - 1], sep: '・' };
+  return [...units, { text: `目安 ${band.guide}`, kind: note }];
+}
+
+/** The market line: each unit kept whole, its kind label in the secondary text ink, the whole line in text ink (D17). */
+function MarketLine({ band, date }) {
+  if (!band) return null;
+  return <p className="brief-call-market" data-testid="brief-call-market">{marketCallLine(band, date).map((unit, i) => <Unit key={i}>
+    {unit.head ? <span className="brief-call-head">{unit.head}</span> : null}{unit.text}{unit.kind ? <span className="brief-call-kind">（{unit.kind}）</span> : null}{unit.sep || ''}
+  </Unit>)}</p>;
+}
+
+/**
+ * The stock's call from the one buy gate (buyGate.js, which the plan reads too), for its three blocks on the stock screen (plan
+ * S2-P1, D5): the conclusion card (CallCard: the market line, then the 銘柄 line with buyGate's own title and sub line), the
+ * level tiles (Levels) and the chip list (Chips), both under the chart. `bars` are the chart's bars as published
+ * (display only); `judged` is the same bars when they are certified for the analysis date, else null, and is the only source for
+ * anything judged from a chart (the date of the pivot crossing). `template` is the trend template (useStockData's, with its
+ * rules), `market` the market verdict (prepared.market) and `earningsCall` the stock view's one earnings call (earningsCall(view,
+ * now) when it is not given). The 銘柄 line also names, in short, a sell chip the call does not state and a near earnings date
+ * when the gate is not the earnings gate (D5), so neither leaves the first fold with the chips.
+ */
+function stockCall({ view, plan, stage, technical, bars, judged = null, template = null, rsHigh, financial, row, sells, diagnostics, market = null, now = Date.now(), earningsCall }) {
   const earnings = earningsCall === undefined ? earningsCallOf(view, now) : earningsCall;
   const gate = buyGate({ view, template, market, sells, earnings, judged });
   const { tone, title, reference } = gate;
@@ -142,6 +173,14 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
   const shareNote = underOne ? (levels.binding === 'cap' ? '1銘柄の上限超' : 'リスク上限超')
     : levels?.binding === 'cap' && finite(levels.capPercent) ? <><Unit>{`上限${levels.capPercent}%`}</Unit>・<Unit>実リスク {actual || DASH}</Unit></>
       : <>リスク {risk || DASH}</>;
+  const tiles = [
+    { label: '買いの範囲', value: price(view.pivot), note: <>〜{price(view.upper)}</>, qualifier: [referenced ? '参考' : null] },
+    { label: finite(levels?.stopPercent) ? `損切り −${levels.stopPercent.toFixed(1)}%` : '損切り', value: price(levels?.stop), note: <>買値 {price(levels?.entry)}</>, qualifier: stopQualifier },
+    { label: '株数', value: shares, note: shareNote, qualifier: [sizing] },
+  ];
+  // The call states a broken setup itself; any other sell chip, and a near earnings date under another gate, join the 銘柄 line.
+  const statesSell = gate.kind === 'broken' || gate.kind === 'failedBreakout';
+  const also = [...(sell && !statesSell ? [sell.text] : []), ...(earnings?.soon && gate.kind !== 'earnings' ? [earnings.chip] : [])];
   const chips = [
     stageChip(stage),
     // Green only while the base still contracts: a base already broken out of is history (「・土台の高値を上抜け（M/D）」),
@@ -156,20 +195,59 @@ export default function StockVerdict({ view, plan, stage, technical, bars, judge
     ...(financial?.code33?.state === 'pass' ? [[code33.text, code33.tone]] : []),
     // An industry rank without an as-of date is never green (the export has none yet).
     ...(Number.isInteger(row?.ibd_group_rank) ? [[`業種 ${row.ibd_group_rank}位（推計・基準日未確認）`, '']] : []),
-    // The conclusion has the room for the full sentence (the rows show its short form), except under a call that
-    // already says the setup broke: the short form, with the sentence in its title.
-    ...(sell ? [gate.kind === 'broken' || gate.kind === 'failedBreakout' ? [sell.text, sell.tone, sell.title ?? sell.full] : [sell.full ?? sell.text, sell.tone]] : []),
+    // The chip list has the room for the full sentence (the rows show its short form), except under a call that already
+    // says the setup broke: the short form, with the sentence in its title.
+    ...(sell ? [statesSell ? [sell.text, sell.tone, sell.title ?? sell.full] : [sell.full ?? sell.text, sell.tone]] : []),
     ...(diagnostics?.valid && diagnostics.powerPlay?.mechanicalMatch ? [['パワープレー候補（機械的探索）', 'wait']] : []),
     [earnings ? earnings.chip : '決算日 未確認', earnings?.soon ? 'ext' : ''],
   ];
+  // A stale pivot says why in the call's line; an unknown one keeps the meter's sentence (D5).
+  const pivotUnknown = !view.stale && !finite(view.distance);
+  // The stop row at 該当 (BEH-1): its level, for the line under the tiles; null otherwise.
+  const stopHit = sells?.stop?.state === 'hit' && finite(sells.stop.level) ? sells.stop.level : null;
+  return { gate, tone, title, sub, caution, context, also, tiles, chips, pivotUnknown, stopHit };
+}
+
+/** The conclusion card (plan S2-P1, B's form): line 1 the market line, line 2 labelled 銘柄 with buyGate's own title and line. */
+function CallCard({ call, band, date }) {
+  const { gate, tone, title, sub, caution, context, also } = call;
   return <section className={`brief-card brief-call tone-${tone} in`} style={{ '--i': 0 }} aria-label="結論" data-testid="brief-conclusion" data-gate={gate.kind}>
-    <div className="brief-call-status"><span className="brief-call-dot" aria-hidden="true" /><div><strong>{withUnits(title, String(title ?? '').match(TITLE_UNITS) || [])}</strong><p>{sub}</p>{caution && <p className="brief-call-caution">{caution.text}</p>}{context && <p data-testid="brief-failed-context">{withUnits(context.text, context.units)}</p>}</div></div>
-    <Meter distance={view.distance} text={pivotDistanceText(view)} reference={reference} stale={Boolean(view.stale)} />
-    <div className="brief-kgrid">
-      <div><small>買いの範囲</small><b className="numeric">{price(view.pivot)}</b><em>〜{price(view.upper)}</em><Qualifier text={referenced ? '参考' : null} /></div>
-      <div><small>{finite(levels?.stopPercent) ? `損切り −${levels.stopPercent.toFixed(1)}%` : '損切り'}</small><b className="numeric">{price(levels?.stop)}</b><em>買値 {price(levels?.entry)}</em><Qualifier text={stopQualifier[0]} tone={stopQualifier[1]} /></div>
-      <div><small>株数</small><b className="numeric">{shares}</b><em>{shareNote}</em><Qualifier text={sizing} /></div>
-    </div>
-    <div className="brief-tags">{chips.map(([text, t, chipTitle, content]) => <span key={text} className={`brief-chip${t ? ` tone-${t}` : ''}`} title={chipTitle}>{content ?? text}</span>)}</div>
+    <MarketLine band={band} date={date} />
+    <div className="brief-call-status"><span className="brief-call-dot" aria-hidden="true" /><div>
+      <div className="brief-call-label"><span className="brief-call-head">銘柄</span>{also.map(text => <span key={text} className="brief-call-also">・<Unit>{text}</Unit></span>)}</div>
+      <strong>{withUnits(title, String(title ?? '').match(TITLE_UNITS) || [])}</strong><p>{sub}</p>{caution && <p className="brief-call-caution">{caution.text}</p>}{context && <p data-testid="brief-failed-context">{withUnits(context.text, context.units)}</p>}
+    </div></div>
   </section>;
+}
+
+/**
+ * The three level tiles (買いの範囲・損切り・株数, with their qualifiers) under the chart (plan D5: they left the card; S2-P2's
+ * strip takes this place), and under them, each as one full-width line, the retired meter's sentence for an unknown pivot and,
+ * when the sell card's stop row reads 該当, that a holder's provisional stop was reached.
+ */
+function Levels({ call }) {
+  return <div className="brief-levels" data-testid="brief-levels">
+    <div className="brief-kgrid">{call.tiles.map(tile => <div key={tile.label}><small>{tile.label}</small><b className="numeric">{tile.value}</b><em>{tile.note}</em><Qualifier text={tile.qualifier[0]} tone={tile.qualifier[1]} /></div>)}</div>
+    {call.pivotUnknown && <p className="brief-note">{PIVOT_UNKNOWN_NOTE}</p>}
+    {call.stopHit !== null && <p className="brief-note brief-levels-stop" data-testid="brief-levels-stop">{stopHitNote(call.stopHit)}</p>}
+  </div>;
+}
+
+/** The call's chips (the same chips, order and tones as in the card before, plan D5), under the level tiles. */
+const Chips = ({ call }) => <div className="brief-tags brief-callchips" data-testid="brief-call-chips">{call.chips.map(([text, t, chipTitle, content]) => <span key={text} className={`brief-chip${t ? ` tone-${t}` : ''}`} title={chipTitle}>{content ?? text}</span>)}</div>;
+
+/**
+ * The stock's call on the stock screen (plan S2-P1, D5), in this order on a phone: the conclusion card (the market line from
+ * `band`, marketBand's value for the analysis `date`, then the 銘柄 line), `chart` (the chart card), the level tiles and the
+ * chips. At 1024px and wider (`wide`: no dock and no height line) the tiles and chips stay above the chart, under the card, as
+ * before S2, until the stock pane is sized (S3-P4). The other props are stockCall's. Without a band (no market line) the card
+ * starts with the 銘柄 line.
+ */
+export default function StockVerdict({ band = null, date = null, chart = null, wide = false, ...props }) {
+  const call = stockCall(props);
+  const levels = <><Levels call={call} /><Chips call={call} /></>;
+  return <>
+    <CallCard call={call} band={band} date={date} />
+    {wide ? <>{levels}{chart}</> : <>{chart}{levels}</>}
+  </>;
 }

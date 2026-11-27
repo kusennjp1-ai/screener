@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
 import SellCard from './StockSellCard';
-import { failedBreakoutContext, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
+import { failedBreakoutContext, STOP_ROW_LABEL, stockSells, stopReachedCheck, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP } from './briefSell';
+import { positionPlan } from './positionSizing';
 
 const DATE = '2026-10-02';
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -37,22 +38,23 @@ describe('brief stock view', () => {
     render(<StockView data={data(true)} />);
     const sell = screen.getByTestId('brief-sell');
     // The gate's own reason (the 注記 gives both bars): below the pivot, the 50-day alternative never judges either.
-    expect(sell).toHaveTextContent('上昇の加速は判定せず（ピボットより下）。');
+    expect(sell).toHaveTextContent('上昇の加速は判定なし（ピボットより下）。');
     // The advance's 起点 is said as a short date, like every date on the card.
     expect(sell).toHaveTextContent(/起点（直近1年の安値）2025\/1\/1 の /);
-    // A stock below its pivot: the four climax checks are folded as 判定せず with the reason (never 対象外).
-    expect(within(sell).getByText('サインなし 1件・判定せず 4件').closest('summary')).toBeTruthy();
+    // A stock below its pivot: the four climax checks are folded as 判定なし with the reason (never 対象外).
+    // S2-P6 (BEH-1): the stop row's own segment follows the two counts, which are unchanged (USR-m5).
+    expect(within(sell).getByText('サインなし 1件・判定なし 4件／損切り判定なし').closest('summary')).toBeTruthy();
     expect(sell).not.toHaveTextContent('対象外');
     expect(sell).toHaveTextContent('ピボットより下（ブレイク前）のため判定しません');
   });
 
-  it('says 判定していない項目 n件 while a check is not judged, never 「いま出ているサインはありません」', () => {
+  it('says 判定なしの項目 n件 while a check is not judged, never 「いま出ているサインはありません」', () => {
     // A steady advance below its pivot, the book's diagnostics in and clear: nothing fired, the four climax checks not judged.
     const steady = Array.from({ length: 200 }, (_, i) => { const close = 50 * 1.003 ** i; return { date: i === 199 ? DATE : day(i), open: close, high: close * 1.005, low: close * 0.995, close, volume: 10000 }; });
     const diagnostics = { valid: true, as_of_date: DATE, priceWarnings: { below20: false, threeLowerLows: false, currentVolumeRatio: 1, combinedWarning: false, recoveryInUpperHalf: false } };
     render(<StockView data={{ ...data(true), bars: steady, diagnostics }} />);
     const sell = screen.getByTestId('brief-sell');
-    expect(sell).toHaveTextContent('判定していない項目 4件。');
+    expect(sell).toHaveTextContent('判定なしの項目 4件。');
     expect(sell).not.toHaveTextContent('いま出ているサインはありません');
   });
 
@@ -76,7 +78,7 @@ describe('brief stock view on a phone folds what is secondary, never a fired or 
     const quiet = [...sell.querySelectorAll('li')].filter(li => !li.querySelector('.is-sell-hit, .is-sell-unknown'));
     expect(quiet.length).toBeGreaterThan(0);
     for (const li of quiet) expect(folded(li)).toBe(true);
-    expect(within(sell).getByText(/^(サインなし \d+件・)?判定せず \d+件$/).closest('summary')).toBeTruthy();
+    expect(within(sell).getByText(/^(サインなし \d+件・)?判定なし \d+件／損切り(判定なし|該当なし)$/).closest('summary')).toBeTruthy();
   });
 
   it('keeps 独自判定 and 売買の推奨ではありません on the sell card itself, never only behind a fold', () => {
@@ -170,5 +172,141 @@ describe('the sell card dates a failed breakout after its window (round 3 R5)', 
     cleanup();
     render(<StockView data={data(true)} />);
     expect(lines(screen.getByTestId('brief-sell'))).toHaveLength(0);
+  });
+});
+
+// BEH-1 (plan S2-P6): the stop row on the sell card, its place, its words and the status sentence beside it.
+describe('the sell card\'s stop row (仮の損切りに到達, BEH-1)', () => {
+  const check = (key, state) => ({ key, label: `${key}の項目`, state, detail: `${key}の内容` });
+  const stopOf = state => ({ key: 'stop', label: STOP_ROW_LABEL, state, cause: state === 'na' ? 'lookback' : state === 'unknown' ? 'missingLow' : 'judged', level: 93,
+    parts: state === 'hit' || state === 'clear' ? ['仮の損切り $93.00（ピボットの −7.0%・独自設定）', '9/1 の上抜けの後の最安値 $92.00（9/3）'] : null,
+    detail: state === 'na' ? '直近60営業日に上抜けの日付なし' : state === 'unknown' ? '9/1 の上抜けの後の安値が欠けています' : 'judged' });
+  // A sells result as tally() returns it: the counts from the two sides only.
+  const sellsOf = (weakness, stop, strength = ['day-up', 'week-up', 'up-days', 'climax'].map(key => check(key, 'clear'))) => {
+    const hit = list => list.filter(c => c.state === 'hit').length;
+    return { asOf: DATE, advance: null, run: null, runShort: { reason: 'ピボットより下', fromSma50: null }, strength, weakness, stop,
+      hits: hit(strength) + hit(weakness), strengthHits: hit(strength), weaknessHits: hit(weakness), breakdownHits: 0,
+      cautions: weakness.filter(c => c.state === 'caution').length, unknowns: weakness.filter(c => c.state === 'unknown').length };
+  };
+  const clear = () => ['day-down', 'ma50', 'failedBreakout', 'book'].map(key => check(key, 'clear'));
+  const note = () => screen.getByTestId('brief-sell').querySelector('.brief-note').textContent;
+  const row = () => screen.getByTestId('brief-sell-stop');
+  const folded = element => Boolean(element.closest('details'));
+
+  it('never says 「いま出ているサインはありません」 beside a 該当 or 未確認 stop row, and keeps the counts', () => {
+    render(<SellCard sells={sellsOf(clear(), stopOf('hit'))} />);
+    expect(note()).toContain('損切りの行：仮の損切りに到達しています（サインの件数には含めていません）。');
+    expect(note()).not.toContain('いま出ているサインはありません');
+    expect(note()).not.toMatch(/件のサイン/);
+    cleanup();
+    render(<SellCard sells={sellsOf(clear(), stopOf('unknown'))} />);
+    expect(note()).toContain(' 損切りの行は未確認です。');
+    expect(note()).not.toContain('いま出ているサインはありません');
+    cleanup();
+    // Quiet rows leave the sentence as it was.
+    for (const state of ['clear', 'na']) {
+      render(<SellCard sells={sellsOf(clear(), stopOf(state))} />);
+      expect(note()).toContain(' いま出ているサインはありません。');
+      expect(note()).not.toContain('損切りの行');
+      cleanup();
+    }
+  });
+
+  it('follows every other sentence with the stop clause: counted signs, a caution, an unknown check, the checks not judged', () => {
+    const cases = [
+      [[check('day-down', 'clear'), check('ma50', 'hit'), check('failedBreakout', 'hit'), check('book', 'clear')], ' 2件のサインが出ています。'],
+      [[check('day-down', 'clear'), check('ma50', 'caution'), check('failedBreakout', 'clear'), check('book', 'clear')], ' 50日線の下にあります（大商いの割れは未確認）。'],
+      [[check('day-down', 'clear'), check('ma50', 'clear'), check('failedBreakout', 'clear'), check('book', 'unknown')], ' 出ているサインはありませんが、未確認の項目があります。'],
+      [[check('day-down', 'na'), check('ma50', 'clear'), check('failedBreakout', 'clear'), check('book', 'clear')], ' 判定なしの項目 1件。'],
+    ];
+    for (const [weakness, sentence] of cases) for (const [state, clause] of [['hit', '損切りの行：仮の損切りに到達しています（サインの件数には含めていません）。'], ['unknown', '損切りの行は未確認です。']]) {
+      render(<SellCard sells={sellsOf(weakness, stopOf(state))} />);
+      expect(note()).toContain(`${sentence}${clause}`);
+      cleanup();
+    }
+  });
+
+  it('prints 該当 in bold --neg ink on one line, never ▲, outside the fold on a phone', () => {
+    render(<SellCard sells={sellsOf(clear(), stopOf('hit'))} />);
+    expect(row()).toHaveAttribute('data-state', 'hit');
+    expect(row()).toHaveTextContent(`${STOP_ROW_LABEL} 該当`);
+    const word = row().querySelector('.brief-stop-state');
+    expect(word).toHaveClass('is-hit');
+    expect(word.textContent).toBe('該当');
+    expect(row().textContent).not.toContain('▲');
+    expect(row()).toHaveTextContent('仮の損切り $93.00（ピボットの −7.0%・独自設定）・9/1 の上抜けの後の最安値 $92.00（9/3）');
+    expect(folded(row())).toBe(false);
+    // Not one of the signs: no sign glyph class, and the counted rows are the two sides' only.
+    expect(row().querySelector('.is-sell-hit')).toBeNull();
+    cleanup();
+    render(<SellCard sells={sellsOf(clear(), stopOf('unknown'))} />);
+    expect(folded(row())).toBe(false);
+    expect(row()).toHaveTextContent(`${STOP_ROW_LABEL} 未確認（9/1 の上抜けの後の安値が欠けています）`);
+  });
+
+  it('folds a quiet row as the fold\'s first line, with its own summary segment, even when it is the only quiet line', () => {
+    render(<SellCard sells={sellsOf(clear(), stopOf('na'))} />);
+    const summary = screen.getByTestId('brief-sell').querySelector('summary');
+    expect(summary).toHaveTextContent('サインなし 8件／損切り判定なし');
+    expect(folded(row())).toBe(true);
+    expect(row().closest('details').querySelector('ul')).toBe(row());
+    expect(row()).toHaveTextContent(`${STOP_ROW_LABEL} 判定なし（直近60営業日に上抜けの日付なし）`);
+    cleanup();
+    // Every check loud: the fold holds the stop row alone and its summary is the segment alone.
+    const loud = ['day-down', 'ma50', 'failedBreakout', 'book'].map(key => check(key, 'unknown'));
+    render(<SellCard sells={sellsOf(loud, stopOf('clear'), ['day-up', 'week-up', 'up-days', 'climax'].map(key => check(key, 'hit')))} />);
+    expect(screen.getByTestId('brief-sell').querySelector('summary')).toHaveTextContent(/^損切り該当なし$/);
+    expect(folded(row())).toBe(true);
+  });
+
+  it('keeps the row in place at 1024px and wider, whatever its state, and says 未確認 when the bars cannot be judged', () => {
+    for (const state of ['hit', 'clear', 'na', 'unknown']) {
+      render(<SellCard sells={sellsOf(clear(), stopOf(state))} wide />);
+      expect(folded(row())).toBe(false);
+      expect(row()).toHaveAttribute('data-state', state);
+      cleanup();
+    }
+    for (const wide of [false, true]) {
+      render(<SellCard sells={null} reason="最終日足が分析日と不一致" wide={wide} />);
+      expect(row()).toHaveAttribute('data-state', 'unknown');
+      expect(row()).toHaveTextContent(`${STOP_ROW_LABEL} 未確認`);
+      expect(row()).not.toHaveTextContent('該当なし');
+      cleanup();
+    }
+  });
+
+  it('judges at ピボットの −7.0% whatever the plan\'s stop, and names the plan\'s stop beside it when the two read differently (D8)', () => {
+    // A stock that broke out of 100, fell back under it and traded at 92.00 (the level is 93.00): 該当 in every plan below.
+    const closes = [...Array.from({ length: 199 }, (_, i) => 50 * 1.003 ** i), 99, 101, 99, 98];
+    const bars = closes.map((close, i) => ({ date: i === closes.length - 1 ? DATE : day(i), open: close, high: close * 1.005, low: close * 0.995, close, volume: 10000 }));
+    bars[201].low = 92;
+    const v = { ...view, state: 'wait', pivot: 100, price: 98, distance: -2, symbol: 'AAA' };
+    const sells = stockSells({ judged: bars, diagnostics: null, view: v });
+    expect(sells.stop).toEqual(stopReachedCheck(bars, v));
+    // The row is titled by the level it judges (仮の損切り), so a bare 損切り on the screen is always the plan's. Equal printed
+    // strings: one number, said once to be the plan's stop too; different ones: both, each under its own name, and which one the
+    // word judged; a blocked plan has no stop to compare.
+    const LOW = sells.stop.parts[1];
+    expect(LOW).toMatch(/^\S+ の上抜けの後の最安値 \$92\.00（\S+）$/);
+    const plans = [
+      ['default', positionPlan(v, {}), `仮の損切り $93.00（ピボットの −7.0%・独自設定・計画の損切りと同じ）・${LOW}`],
+      ['stopPercent 5', positionPlan(v, { stopPercent: 5 }), `仮の損切り $93.00（ピボットの −7.0%・独自設定）／計画の損切り $95.00（設定 −5.0%）・${LOW}・判定は仮の損切りで行います`],
+      ['structural', { ...positionPlan(v, {}), stop: 94.25, stopPercent: 5.75, stopSource: 'structural' }, `仮の損切り $93.00（ピボットの −7.0%・独自設定）／計画の損切り $94.25（構造 −5.8%）・${LOW}・判定は仮の損切りで行います`],
+      ['blocked', { blocked: '買いゾーン超過：新規の試算はしません（次の土台を待つ）' }, `仮の損切り $93.00（ピボットの −7.0%・独自設定）・${LOW}`],
+      ['no plan', null, `仮の損切り $93.00（ピボットの −7.0%・独自設定）・${LOW}`],
+    ];
+    for (const [name, plan, text] of plans) {
+      render(<SellCard sells={sells} plan={plan} />);
+      expect({ name, state: row().getAttribute('data-state') }).toEqual({ name, state: 'hit' });
+      expect({ name, label: row().textContent.includes('仮の損切りに到達（保有なら） 該当') }).toEqual({ name, label: true });
+      expect({ name, text: row().querySelector('em').textContent }).toEqual({ name, text });
+      cleanup();
+    }
+    // A four-digit pivot whose plan stop prints one cent apart from the level: both, each under its own name.
+    const big = { ...v, pivot: 1234.56, price: 1200 };
+    const level = { ...sells.stop, state: 'clear', cause: 'judged', level: 1148.14,
+      parts: ['仮の損切り $1,148.14（ピボットの −7.0%・独自設定）', '9/30 の上抜けの後の最安値 $1,180.00（10/1）'] };
+    render(<SellCard sells={{ ...sells, stop: level }} plan={{ ...positionPlan(big, {}), stop: 1148.1408 - 0.006 }} />);
+    expect(row().querySelector('em').textContent).toBe('仮の損切り $1,148.14（ピボットの −7.0%・独自設定）／計画の損切り $1,148.13（設定 −7.0%）・9/30 の上抜けの後の最安値 $1,180.00（10/1）・判定は仮の損切りで行います');
   });
 });

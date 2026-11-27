@@ -82,14 +82,14 @@ for (const [width, options] of [[375, phone(375)], [1440, { viewport: { width: 1
     expect(errors).toEqual([]);
   });
 
-  test('says 判定していない項目 n件 while a check is not judged, never 「いま出ているサインはありません」, and names the bar a check is under', async ({ page }) => {
+  test('says 判定なしの項目 n件 while a check is not judged, never 「いま出ているサインはありません」, and names the bar a check is under', async ({ page }) => {
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
     const sell = page.getByTestId('brief-sell');
     const note = sell.locator('.brief-note').first();
-    await expect(note).toContainText(/判定していない項目 \d+件。$/);
+    await expect(note).toContainText(/判定なしの項目 \d+件。$/);
     await expect(sell).not.toContainText('いま出ているサインはありません');
     // The real reason, in short, with the bar it is under (ZZNV sits at its pivot in the buy zone).
-    await expect(note).toContainText('上昇の加速は判定せず（ピボット比 ±0.0%・+20%未満）。');
+    await expect(note).toContainText('上昇の加速は判定なし（ピボット比 ±0.0%・+20%未満）。');
     expect(errors).toEqual([]);
   });
 });
@@ -145,7 +145,12 @@ for (const [width, options] of [[390, phone(390, 844)], [1440, { viewport: { wid
     await chartSettled(page);
     const conclusion = page.getByTestId('brief-conclusion');
     await expect(conclusion).not.toHaveAttribute('data-gate', 'failedBreakout');
-    for (const text of [WEAKNESS_ROW_CHIP, WEAKNESS_CHIP, unbounded.headline]) await expect(conclusion).not.toContainText(text);
+    // Plan S2-P1 (D5): the call is the card and, under the chart, its level tiles and its chips; none of the three says it,
+    // each anchored first (three tiles, a chip) so that no negative passes on an absent block.
+    const levels = page.getByTestId('brief-levels'), callChips = page.getByTestId('brief-call-chips');
+    await expect(levels.locator('.brief-kgrid > div')).toHaveCount(3);
+    await expect(callChips.locator('.brief-chip').first()).toBeAttached();
+    for (const block of [conclusion, levels, callChips]) for (const text of [WEAKNESS_ROW_CHIP, WEAKNESS_CHIP, unbounded.headline]) await expect(block).not.toContainText(text);
     const line = page.getByTestId('brief-sell').locator('li').filter({ hasText: bounded.label });
     await expect(line).toHaveCount(1);
     await expect(line.locator('.brief-check')).toHaveClass(/is-sell-clear/);
@@ -159,7 +164,8 @@ for (const [width, options] of [[390, phone(390, 844)], [1440, { viewport: { wid
     // The chip the conclusion carries is the bounded checks' (sellChipView, its full sentence there), never the 崩れ chip.
     const chip = sellChipView(sells(from));
     expect(chip?.text ?? null).not.toBe(WEAKNESS_ROW_CHIP);
-    if (chip) await expect(conclusion.locator('.brief-tags')).toContainText(chip.full ?? chip.text);
+    // Plan S2-P1 (D5): the call's chips are under the chart (brief-call-chips).
+    if (chip) await expect(page.getByTestId('brief-call-chips')).toContainText(chip.full ?? chip.text);
     expect(errors).toEqual([]);
   });
 });

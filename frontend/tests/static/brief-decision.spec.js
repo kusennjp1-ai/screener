@@ -12,6 +12,9 @@ import { lowActivityReason } from '../../src/static/priceActivity.js';
 
 const phoneDevice = (width, height) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const conclusion = page => page.getByTestId('brief-conclusion');
+// Plan S2-P1 (D5): the call's level tiles and its chips left the card; they are blocks of their own under the chart.
+const levels = page => page.getByTestId('brief-levels');
+const callChips = page => page.getByTestId('brief-call-chips');
 const settled = page => page.evaluate(() => Promise.all(document.getAnimations().map(animation => animation.finished.catch(() => null))));
 /** A variant of one stock's row, and of its research detail when it has one (the stock screen merges the detail in). */
 const onRow = (symbol, fn) => ({ rows: rows => { fn(rows.find(r => r.symbol === symbol)); }, details: details => { for (const detail of Object.values(details)) if (detail.symbol === symbol) fn(detail); } });
@@ -48,7 +51,8 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     test(`a focus candidate that ${label} is a green call`, async ({ page }) => {
       const { errors } = await openFocus(page, phone, mutate ? { mutate } : undefined);
       await expect(conclusion(page)).toHaveClass(/tone-zone/);
-      await expect(conclusion(page).locator('.brief-tilequal', { hasText: '参考' })).toHaveCount(0);
+      await expect(levels(page).locator('.brief-kgrid > div')).toHaveCount(3);
+      await expect(levels(page).locator('.brief-tilequal', { hasText: '参考' })).toHaveCount(0);
       expect(errors).toEqual([]);
     });
   }
@@ -61,8 +65,9 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     const note = conditionNote({ label: 'RS 推計 ≥ 70（公開日足の共通母集団）', value: rowBySymbol.ZZZF.rs_rating, state: 'fail' });
     expect(note).toBe(`未達：RS推計 ${Math.floor(rowBySymbol.ZZZF.rs_rating)}（基準70）`);
     await expect(conclusion(page).locator('.brief-call-status p').first()).toHaveText(new RegExp(`^${note}。位置は参考：`));
-    await expect(conclusion(page).getByRole('img', { name: /^ピボットからの位置（参考）/ })).toHaveClass(/is-reference/);
-    await expect(conclusion(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
+    // The pivot meter is not drawn on the stock screen any more (plan D5): no 参考 scale, the tiles carry 参考.
+    await expect(page.locator('.brief-meter')).toHaveCount(0);
+    await expect(levels(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
     expect(errors).toEqual([]);
   });
 
@@ -76,15 +81,15 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
     await expect(conclusion(page).locator('strong')).toHaveText('地合いが新規の買いを控える状態（独自判定）');
     await expect(conclusion(page).locator('.brief-call-status p')).toHaveText('位置は参考：買いゾーン・ピボット比 ±0.0%。');
     // Never 「控える」 and an order size in the same glance.
-    await expect(conclusion(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
+    await expect(levels(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
     expect(errors).toEqual([]);
   });
 
-  // The phone text floor (desktop keeps its 11px notes, as the other cards do).
+  // The phone text floor (desktop keeps its 11px notes, as the other cards do): the card, and its tiles and chips under the chart.
   if (phone) test('the conclusion card reads at 12px or more', async ({ page }) => {
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`);
-    await expect(conclusion(page).locator('.brief-kgrid > div')).toHaveCount(3);
-    const small = await conclusion(page).evaluate(card => {
+    await expect(levels(page).locator('.brief-kgrid > div')).toHaveCount(3);
+    const small = await page.evaluate(() => [...document.querySelectorAll('[data-testid="brief-conclusion"], [data-testid="brief-levels"], [data-testid="brief-call-chips"]')].flatMap(card => {
       const walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT), out = [];
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
         const element = node.parentElement;
@@ -93,7 +98,7 @@ for (const [name, device] of Object.entries(VIEWPORTS)) test.describe(`${name} $
         if (size < 12) out.push(`${node.textContent.trim().slice(0, 20)} ${size}px`);
       }
       return out;
-    });
+    }));
     expect(small).toEqual([]);
     expect(errors).toEqual([]);
   });
@@ -134,10 +139,8 @@ test.describe('the stock screen at 375×812', () => {
     expect(box.last).toBeGreaterThan(1);
     if (oneLine) expect(box.lines).toBe(1);
     expect(screen).toBeLessThanOrEqual(3056 + 80);
-    // The pivot meter's marker sits clear of the ticks under it (the 0% tick is never covered).
-    const meter = await conclusion(page).evaluate(card => ({ marker: card.querySelector('.brief-meter-marker').getBoundingClientRect().bottom,
-      zero: [...card.querySelectorAll('.brief-meter-ticks span')].find(tick => tick.textContent === '0%').getBoundingClientRect().top }));
-    expect(meter.marker).toBeLessThanOrEqual(meter.zero + 0.5);
+    // The pivot meter (and so its marker over the ticks) is not drawn on the stock screen any more (plan D5).
+    await expect(page.locator('.brief-meter')).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 
@@ -238,7 +241,8 @@ test.describe('round 2: the one buy gate at 375×812', () => {
     await expect(conclusion(page).locator('strong')).toHaveText(`${crossDay(2)}に上抜け・2営業日前`);
     await expect(conclusion(page)).toHaveClass(/tone-zone/);
     await expect(conclusion(page)).toHaveAttribute('data-gate', 'after');
-    await expect(conclusion(page).locator('.brief-tilequal', { hasText: '参考' })).toHaveCount(0);
+    await expect(levels(page).locator('.brief-kgrid > div')).toHaveCount(3);
+    await expect(levels(page).locator('.brief-tilequal', { hasText: '参考' })).toHaveCount(0);
     await settled(page);
     const title = await titleFit(page);
     expect(title.lines).toBe(1);
@@ -260,7 +264,7 @@ test.describe('round 2: the one buy gate at 375×812', () => {
     await expect(conclusion(page)).toHaveClass(new RegExp(`tone-${breakoutEvent(variantView(HEAVY_DOWN)).tone}`));
     await expect(conclusion(page)).toContainText('新規の買いは見送ります（出来高1.40×以上の下落日・独自判定）');
     await expect(conclusion(page)).not.toContainText('買いの範囲です');
-    await expect(conclusion(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
+    await expect(levels(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
     await expect(page.getByRole('region', { name: /^建て玉と損切りの計画/ }).getByRole('heading', { level: 2 })).toContainText('参考（下落日の大商い）');
     expect(errors).toEqual([]);
   });
@@ -275,7 +279,7 @@ test.describe('round 2: the one buy gate at 375×812', () => {
     await expect(conclusion(page)).toContainText(`新規の買いは見送り。${crossDay(25)}に上抜け、`);
     await expect(conclusion(page)).toContainText(line);
     await expect(conclusion(page)).not.toContainText('買いの範囲です');
-    await expect(conclusion(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
+    await expect(levels(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
     await expect(page.getByRole('region', { name: /^建て玉と損切りの計画/ }).getByRole('heading', { level: 2 })).toContainText('参考（停滞）');
     // Two title lines at most at 375, and the stock screen within the allowance with its headroom.
     await settled(page);
@@ -290,10 +294,10 @@ test.describe('round 2: the one buy gate at 375×812', () => {
     await expect(conclusion(page)).toHaveClass(/tone-neutral/);
     await expect(conclusion(page).locator('.brief-call-status p').first()).toHaveText(/^\d+\/\d+に出来高2\.\d\d×で上抜け、ピボットの下へ戻りました。位置は参考：/);
     await expect(conclusion(page)).not.toContainText('出来高を伴ってピボットを上抜けるまで待ちます');
-    await expect(conclusion(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
+    await expect(levels(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
     await expect(page.getByRole('region', { name: /^建て玉と損切りの計画/ }).getByRole('heading', { level: 2 })).toContainText('参考（崩れ）');
     // The call already says the setup broke: the sell chip is the short form, its sentence in its title.
-    await expect(conclusion(page).locator('.brief-chip', { hasText: '崩れ（独自判定）' })).toHaveAttribute('title', /^買いの前提が崩れた／保有なら売りのサイン（独自判定）：/);
+    await expect(callChips(page).locator('.brief-chip', { hasText: '崩れ（独自判定）' })).toHaveAttribute('title', /^買いの前提が崩れた／保有なら売りのサイン（独自判定）：/);
     // The sell card names it among the broken setups.
     const sell = page.getByTestId('brief-sell');
     await expect(sell.locator('li').filter({ has: page.locator('.is-sell-hit') }).filter({ hasText: '出来高を伴う上抜け後のピボット割れ' })).toBeVisible();
@@ -309,7 +313,7 @@ test.describe('round 2: the one buy gate at 375×812', () => {
     await expect(conclusion(page).locator('strong')).toHaveText('土台を確認できない — ピボットは参考（独自判定）');
     await expect(conclusion(page)).toHaveClass(/tone-neutral/);
     await expect(conclusion(page).locator('.brief-call-status p').first()).toHaveText(/^土台の信頼度 31（基準55）。位置は参考：/);
-    await expect(conclusion(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
+    await expect(levels(page).locator('.brief-tilequal')).toHaveText(['参考', '参考', '参考']);
     await expect(page.getByRole('region', { name: /^建て玉と損切りの計画/ }).getByRole('heading', { level: 2 })).toContainText('参考（土台未確認）');
     expect(errors).toEqual([]);
   });
@@ -377,8 +381,8 @@ test.describe('round 2: the RS-only title at 320px', () => {
   });
 });
 
-/** The conclusion's chip lines and the slack after the last chip on each (the line box's width less what it uses). */
-const chipLines = page => conclusion(page).locator('.brief-tags').evaluate(root => {
+/** The call's chip lines and the slack after the last chip on each (the line box's width less what it uses). */
+const chipLines = page => callChips(page).evaluate(root => {
   const box = root.getBoundingClientRect(), rows = new Map();
   for (const chip of root.children) { const b = chip.getBoundingClientRect(); rows.set(Math.round(b.top), Math.max(rows.get(Math.round(b.top)) ?? 0, b.right - box.left)); }
   return { lines: rows.size, slack: Math.min(...[...rows.values()].map(used => box.width - used)) };
@@ -399,17 +403,18 @@ test.describe('round 2: ZZNV at 390×844', () => {
     expect(await page.evaluate(() => scrollY)).toBe(0);
     for (const [name, box] of [['conclusion', call], ['periods', periods], ['readout', readout]]) expect(box.y + box.height, name).toBeLessThan(dock.y);
     expect(chart.y).toBeLessThan(dock.y);
-    // The conclusion's chips stay on two lines with 6px of slack (the stage chip's 日足から算出 is in its title below 768px).
+    // The call's chips (under the chart, plan D5) stay on two lines with 6px of slack (the stage chip's 日足から算出 is in its
+    // title below 768px).
     const chips = await chipLines(page);
     expect(chips.lines).toBeLessThanOrEqual(2);
     expect(chips.slack).toBeGreaterThanOrEqual(6);
-    await expect(conclusion(page).locator('.brief-chip').first()).toHaveAttribute('title', /日足から算出/);
+    await expect(callChips(page).locator('.brief-chip').first()).toHaveAttribute('title', /日足から算出/);
     expect(errors).toEqual([]);
   });
 
   test('with an industry rank the chips keep the three lines they took at step 0, each with 6px of slack', async ({ page }) => {
     const { errors } = await openBrief(page, `#/brief/stock/${SEC_SYMBOL}`, { mutate: INDUSTRY });
-    await expect(conclusion(page).locator('.brief-chip', { hasText: '業種 12位（推計・基準日未確認）' })).toBeVisible();
+    await expect(callChips(page).locator('.brief-chip', { hasText: '業種 12位（推計・基準日未確認）' })).toBeVisible();
     await settled(page);
     const chips = await chipLines(page);
     expect(chips.lines).toBeLessThanOrEqual(3);

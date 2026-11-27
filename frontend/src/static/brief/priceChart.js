@@ -521,15 +521,17 @@ export function renderPriceChart(el, model, options = {}) {
   for (const level of levelLabels) if (level !== high) placeLevel(level);
   // The zone's name: inside the band along its top first, then its lower rows, then just above it and up to ZONE_ABOVE
   // higher; each row from the band's left end rightwards, then leftwards (still over the band by 20px or more where
-  // the band is short). 「買いゾーン 〜116.28」 keeps its upper price wherever a spot is free in those rows: candle-free
-  // first, else over the fewest candles with its halo. Only with every such spot taken does it try 「買いゾーン」, over
-  // FEW_CANDLES candles at most, else the green band goes unnamed. A level line through it is avoided, or cut under it.
+  // the band is short). It names the band's upper edge with its price, 「ゾーン上限 116.28」 (one name per level, the
+  // level's own name ゾーン上限), wherever a spot is free in those rows: candle-free first, else over
+  // the fewest candles with its halo. Only with every such spot taken does it try the band's own name 「買いゾーン」 (no
+  // price, so no level's name), over FEW_CANDLES candles at most, else the green band goes unnamed. A level line through it
+  // is avoided, or cut under it.
   if (zone && zone.height > 14) {
     const zoneSpots = w => {
       const from = clampX(zone.x + 2, w), rows = [...lineOf(zone.top + 8, zone.top + zone.height - 8), ...lineOf(zone.top - 9 - ZONE_ABOVE, zone.top - 9).reverse()];
       return spots({ x0: clampX(zone.x + 20 - w, w), x1: pw - w - 4, ys: rows, inside: inPlot, cost: (lx, yc) => rows.indexOf(yc) * 10000 + (lx >= from ? lx - from : 2000 + from - lx), near: { cost: 9999, x: [-Infinity, Infinity], y: [rows[0], rows[0]] } });
     };
-    let body = `買いゾーン${finite(model.upper) ? ` 〜${fmt(model.upper)}` : ''}`, w = width(body);
+    let body = finite(model.upper) ? `ゾーン上限 ${fmt(model.upper)}` : '買いゾーン', w = width(body);
     let label = placer.put(w, zoneSpots(w), { kin: 'plan', hard: 60 });
     if (!label.at) {
       body = '買いゾーン'; w = width(body);
@@ -544,6 +546,13 @@ export function renderPriceChart(el, model, options = {}) {
   // keep clear of the lines, and 60px more to keep a level line out of its glyphs); a depth is never left out (over
   // candles with its halo, or elsewhere in the plot when even its box's surroundings are taken).
   const legLabels = legs.map(leg => { const x0 = Math.max(0, x(leg.a) - bw / 2), x1 = x(leg.b) + bw / 2; return { leg, x: (x0 + x1) / 2, x0, x1 }; });
+  // A T number is centred over its own box or over no box: centred over another contraction's box it reads as that one's
+  // (minor B7). `allowed(index, w)` is the spot test its searches take (the depth under a box, and the whole-plot spots of a
+  // combined label that found none around its box, are not held to it).
+  const allowed = (index, w) => lx => {
+    const c = lx + w / 2;
+    return legLabels.every(({ leg, x0, x1 }) => leg.index === index || c < x0 || c > x1) || legLabels.some(({ leg, x0, x1 }) => leg.index === index && c >= x0 && c <= x1);
+  };
   const around = (w, ax, ay, { x0, x1, top, low }) => spots({ x0: clampX(x0 - w - 4, w), x1: clampX(x1 + 4, w), ys: lineOf(top - 30, low + 30), inside: inPlot, cost: (lx, yc) => Math.abs(lx - ax) + 2 * Math.abs(yc - ay), near: { cost: 64, x: [ax - 64, ax + 64], y: [ay - 32, ay + 32] } });
   const tLabel = (leg, body, depth) => (at, search) => (at ? `<g class="bc-tlabel" data-leg="${leg.index}">${cut(at)}${text((at.x + width(body) / 2).toFixed(1), (at.yc + 4).toFixed(1), body, `bc-ttext${depth ? ' bc-tdepth' : ''}`, `text-anchor="middle" font-weight="700"${depth ? ` data-depth="${leg.depthPct}"` : ''} ${placedAttrs(at, search)}`)}</g>` : '');
   for (const { leg, x: cx, x0, x1 } of [...legLabels].reverse()) {
@@ -551,7 +560,7 @@ export function renderPriceChart(el, model, options = {}) {
     if (!finite(area.top) || !finite(area.low)) continue;
     const tBody = `T${leg.index + 1}`, tw = width(tBody), depth = finite(leg.depthPct) ? `−${Math.round(leg.depthPct)}%` : null, dw = depth ? width(depth, true) : 0;
     if (depth && x1 - x0 > Math.max(22, dw + 4)) {
-      const t = placer.put(tw, around(tw, cx - tw / 2, area.top - 9, area), { forced: false, repair: true, slack: 24, hard: 60, kin: 'tn' });
+      const t = placer.put(tw, around(tw, cx - tw / 2, area.top - 9, area), { forced: false, repair: true, slack: 24, hard: 60, kin: 'tn', allow: allowed(leg.index, tw) });
       const d = t.at ? placer.put(dw, around(dw, cx - dw / 2, area.low + 11, area), { forced: false, repair: true, slack: 24, hard: 60, kin: 'leg' }) : null;
       if (d?.at) {
         show(t, tLabel(leg, tBody, false));
@@ -561,7 +570,7 @@ export function renderPriceChart(el, model, options = {}) {
       placer.drop(t);
     }
     const body = depth ? `${tBody} ${depth}` : tBody, w = width(body);
-    let label = placer.put(w, around(w, cx - w / 2, area.top - 9, area), { slack: 24, hard: 60, kin: 'tn' });
+    let label = placer.put(w, around(w, cx - w / 2, area.top - 9, area), { slack: 24, hard: 60, kin: 'tn', allow: allowed(leg.index, w) });
     // The whole plot on a coarse grid (8px across, 4px down): only when even the box's surroundings are taken.
     if (!label.at && depth) label = placer.put(w, spots({ x0: 4, x1: pw - w - 4, ys: lineOf(padT + 6, plotBottom - 6, 4), step: 8, cost: (lx, yc) => Math.abs(lx - cx + w / 2) + 2 * Math.abs(yc - area.top + 9) }), { hard: 60, kin: 'tn' });
     show(label, tLabel(leg, body, depth));
@@ -777,7 +786,7 @@ export function renderPriceChart(el, model, options = {}) {
   const box = `viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false"`;
   const depths = (model.legs || []).map(leg => `${Math.round(leg.depthPct)}%`).join('→');
   el.setAttribute('role', 'img');
-  el.setAttribute('aria-label', `${model.symbol} の${unit}足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${hasPivot ? `、ピボット ${fmt(model.pivot)}` : '、ピボット 未確認'}${finite(model.stop) ? `、損切りの目安 ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : model.legsValid === false ? '、収縮は未確認' : ''}${(model.sellMarks || []).some(m => barOf(m.date) !== undefined) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => barOf(m.date) !== undefined).map(m => m.date).join('・')}` : ''}${breakout ? `、ピボットを上抜けた日 ${breakout.date}${breakout.label ? `（${breakout.label}）` : ''}` : ''}${rsKnown.length > 1 ? `。RS線（株価÷S&P 500。RS推計やIBD RSとは別）を表示${model.rsNewHigh && rsLast != null ? '、RS新高値' : ''}` : `。RS線 未配信${model.rsReason ? `（${model.rsReason}）` : ''}`}${earnings ? `。${earnings.text}` : ''}。`);
+  el.setAttribute('aria-label', `${model.symbol} の${unit}足チャート（${bars[0].date}〜${bars[n - 1].date}）。終値 ${fmt(bars[n - 1].close)}${hasPivot ? `、ピボット ${fmt(model.pivot)}` : '、ピボット 未確認'}${finite(model.stop) ? `、損切り ${fmt(model.stop)}` : ''}${depths ? `、値幅の収縮 ${depths}` : model.legsValid === false ? '、収縮は未確認' : ''}${(model.sellMarks || []).some(m => barOf(m.date) !== undefined) ? `、売りのサインの日 ${(model.sellMarks || []).filter(m => barOf(m.date) !== undefined).map(m => m.date).join('・')}` : ''}${breakout ? `、ピボットを上抜けた日 ${breakout.date}${breakout.label ? `（${breakout.label}）` : ''}` : ''}${rsKnown.length > 1 ? `。RS線（株価÷S&P 500。RS推計やIBD RSとは別）を表示${model.rsNewHigh && rsLast != null ? '、RS新高値' : ''}` : `。RS線 未配信${model.rsReason ? `（${model.rsReason}）` : ''}`}${earnings ? `。${earnings.text}` : ''}。`);
   el.innerHTML = `<svg class="bc-layer" ${box}>${B.join('').replaceAll(CUT, cuts.length ? ` mask="url(#${uid}-cutb)"` : '')}</svg><div class="bc-reveal"><svg class="bc-layer" ${box}>${M.join('').replaceAll(CUT, veils.length ? ` mask="url(#${uid}-veil)"` : '')}${veils.length ? cutMask(`${uid}-veil`, veils) : ''}</svg></div><svg class="bc-layer" ${box}>${F.join('').replaceAll(CUT, cuts.length ? ` mask="url(#${uid}-cut)"` : '')}</svg>`;
   const [back, reveal, front] = el.children, mid = reveal.firstChild;
 

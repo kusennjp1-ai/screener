@@ -9,6 +9,7 @@ import { crossingFloor } from './breakoutHistory';
 import { earningsCall } from './briefCandidate';
 import { planLevels } from './positionSizing';
 import StockVerdict from './StockVerdict';
+import { marketBand } from './marketGate';
 import TemplateCard from './StockTemplateCard';
 import StockChartCard, { VCP_NOTE } from './StockChartCard';
 import { priceChartFailed, subscribePriceChart } from './priceChartLoader';
@@ -21,7 +22,11 @@ import SellCard, { SELL_NOTE } from './StockSellCard';
  * The stock screen: the data plumbing shared by its cards (the certified bars, the measured legs, the
  * stage, the RS line's new high and lead marks, the opening gaps, the sell checks and the position plan),
  * then the cards in order and the screen's one 注記 built from the footnote each card exports. `market`
- * is the market verdict (brief.market), handed to the conclusion and the plan. `judged` (the bars
+ * is the market verdict (brief.market), handed to the conclusion and the plan; `target` the last session the exchange calendar
+ * says has closed (BriefApp's marketUpdateState target, the one Today's gate and the 市場 tab read, or null), from which the
+ * conclusion's market line says a waiting verdict (plan S2-P1, D18). The order (plan D5, StockVerdict's): the conclusion (the
+ * market line and the 銘柄 line), the chart card, the level tiles, the chips, then the cards (at 1024px and wider the tiles and the
+ * chips come before the chart card). `judged` (the bars
  * certified for the analysis date, or null) and `template` (the trend template) also reach the
  * conclusion and the plan, so every value they derive from a chart comes from certified bars only. The
  * chart's period is kept for this tab's session, so it survives the next stock (次へ keeps 週足).
@@ -31,7 +36,7 @@ import SellCard, { SELL_NOTE } from './StockSellCard';
  * bars not certified for the analysis date, as published when the evidence is of the current method
  * (or a reviewer's intervals), and otherwise measured again on the certified bars.
  */
-export default function StockView({ data, header = null, wide = false, market = null }) {
+export default function StockView({ data, header = null, wide = false, market = null, target = null }) {
   const { view, template, technical, diagnostics, financial, institutional, bars, row, certification } = data;
   // Values computed here from bars are shown only for bars certified for the analysis date.
   const certified = certification?.certified === true;
@@ -106,10 +111,12 @@ export default function StockView({ data, header = null, wide = false, market = 
   }, [bars, judged, view?.pivot, view?.upper, interval, period, rsLead, gaps, wide, sells, legsValid, legs, levels?.structuralLow, levels?.stop, call?.date, call?.days, call?.soon]);
   if (!view) return <p className="brief-note brief-pad" role="status">銘柄データを読み込み中…</p>;
   const chartDown = chartFailed && Boolean(bars?.length);
+  // The market line reads the band Today's gate reads (marketBand, with the same target: verdictWaiting's form).
+  const band = marketBand(market, { date: data.date, target });
   return <div className="brief-stock">
     {header}
-    <StockVerdict view={view} plan={plan} stage={stage} technical={evidence} bars={bars} judged={judged} template={template} rsHigh={rsHigh} financial={financial} row={row} sells={sells} diagnostics={diagnostics} market={market} earningsCall={call} />
-    <StockChartCard data={data} view={view} earningsCall={call} legs={legs} legsValid={vcpPending ? null : legsValid} rsHigh={rsHigh} rsLead={rsLead} gaps={gaps} sells={sells} levels={levels} chartRef={chartRef} range={range} onRange={setRange} notes={notes} wide={wide} />
+    <StockVerdict view={view} plan={plan} stage={stage} technical={evidence} bars={bars} judged={judged} template={template} rsHigh={rsHigh} financial={financial} row={row} sells={sells} diagnostics={diagnostics} market={market} earningsCall={call} band={band} date={data.date} wide={wide}
+      chart={<StockChartCard data={data} view={view} earningsCall={call} legs={legs} legsValid={vcpPending ? null : legsValid} rsHigh={rsHigh} rsLead={rsLead} gaps={gaps} sells={sells} levels={levels} chartRef={chartRef} range={range} onRange={setRange} notes={notes} wide={wide} />} />
     <div className="brief-grid">
       <TemplateCard template={template} wide={wide} technical={certified ? evidence : null} date={data.date} />
       <VcpCard technical={evidence} bars={bars} judged={judged} view={view} wide={wide} chartRef={chartRef} interval={interval} row={row} date={data.date}
@@ -117,7 +124,7 @@ export default function StockView({ data, header = null, wide = false, market = 
       <FundamentalsCard financial={financial} wide={wide} />
       <InstitutionalCard institutional={institutional} />
       <PlanCard view={view} plan={plan} settings={settings} onChange={update} earnings={view.earnings} earningsCall={call} judged={judged} wide={wide} />
-      {bars ? <SellCard sells={sells} reason={certification?.certified ? null : certification?.reason} wide={wide} /> : null}
+      {bars ? <SellCard sells={sells} reason={certification?.certified ? null : certification?.reason} wide={wide} plan={plan} /> : null}
     </div>
     <p className="brief-note brief-pad">候補は購入推奨ではありません。数値は分析基準日の公開データに基づきます。</p>
     {/* The chart's notes describe marks it draws: none while its renderer cannot be loaded (the chart box says so). */}

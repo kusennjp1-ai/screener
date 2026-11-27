@@ -8,7 +8,7 @@ import { marketLines } from '../portfolioPlan';
 import { EARNINGS_CHIP_NOTE, fundamentalsCoverageWarning, publishedFundamentalsCoverage } from '../fundamentalsExplain.js';
 import { isBreakdown, sellChipView } from './briefSell';
 import MarketCard from './MarketCard';
-import { CandidateRow } from './BriefParts';
+import { CandidateRow, KeepDistance } from './BriefParts';
 import { Parts, RiseItem, ScreenNotes } from './briefPrimitives';
 import { ICON } from './briefIcons';
 import { barDay, PHONE_QUERY } from './briefNav';
@@ -162,7 +162,7 @@ export default function TodayView({ brief, watch, open, now, animate, wide, nav,
         {watchShown.map((view, i) => { const event = events[view.symbol], earnings = earningsCall(view, now); return <RiseItem key={view.symbol} animate={animate} index={i}>
           <button type="button" className="brief-event" data-symbol={view.symbol} onClick={e => open(view.symbol, e.currentTarget, 'watch')}>
             <span className={`brief-event-icon tone-${event.tone}`} aria-hidden="true">{eventIcon(event)}</span>
-            <span><b>{view.symbol}</b> {event.title}<SellChip sell={sells[view.symbol]} /><small>{finite(view.pivot) ? `ピボット ${money(view.pivot)}・ピボット比 ${pivotDistanceText(view)}` : 'ピボット未確認'}{earnings?.soon ? `・${earnings.chip}` : ''}</small></span>
+            <span><b>{view.symbol}</b> <KeepDistance text={event.title} /><SellChip sell={sells[view.symbol]} /><small>{finite(view.pivot) ? <KeepDistance text={`ピボット ${money(view.pivot)}・ピボット比 ${pivotDistanceText(view)}`} /> : 'ピボット未確認'}{earnings?.soon ? `・${earnings.chip}` : ''}</small></span>
             <span className="brief-chevron" aria-hidden="true">{ICON.next}</span>
           </button></RiseItem>; })}</ul>
         : <p className="brief-note">{state !== 'ready' && watch.length ? `ウォッチ中の${watch.length}銘柄は、${state === 'loading' ? '候補の読み込み後に確認します。' : '候補データがないため確認できません。'}` : '銘柄の画面で ☆ を押すと、ピボットへの接近や上抜けをここでお知らせします。'}</p>}

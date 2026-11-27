@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { distanceText, pivotDistanceText } from './briefCandidate';
 import { crossingFloor } from './breakoutHistory';
 import { shortDate } from './briefShared';
-import { bookWarningCheck, failedBreakoutContext, HOLDING_CHIP, HOLDING_ROW_CHIP, isBreakdown, ma50Hit, noBreakoutSincePivot, sellChipView, sellMarks, sellSignals, SELL_RULES, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP, withBookWarning } from './briefSell';
+import { PROVISIONAL_STOP_PERCENT, provisionalStop, provisionalStopCents } from './stopLevel';
+import { bookWarningCheck, failedBreakoutContext, PROVISIONAL_STOP_RULE, STOP_ROW_LABEL, stopReachedCheck, HOLDING_CHIP, HOLDING_ROW_CHIP, isBreakdown, ma50Hit, noBreakoutSincePivot, sellChipView, sellMarks, sellSignals, SELL_RULES, stockSells, WEAKNESS_CHIP, WEAKNESS_ROW_CHIP, withBookWarning } from './briefSell';
 
 // Synthetic bars only: no test here leans on the browser fixture's last-bar jump.
 const day = i => new Date(Date.UTC(2025, 0, 1) + i * 86400000).toISOString().slice(0, 10);
@@ -127,7 +128,7 @@ describe('the strength (climax) checks judge only an extended stock', () => {
     expect(reason({ state: 'wait', pivot: last * 1.02, distance: -2 })).toBe('ピボットより下（ブレイク前）のため判定しません');
     expect(reason({ state: 'ext', pivot: last / 1.15, distance: 15 })).toBe(`ブレイク後の上昇が小さいため判定しません（ピボット比 +15.0%・判定は +${SELL_RULES.climaxFromPivotPercent}%以上）`);
     // In the buy zone a few cents over the pivot, or at its cents: the distance as every screen prints it (rows'
-    // pivotDistanceText: 「+0.1%未満」, 「±0.0%」), never 「+0.0%」, in the reason and in the card's short line alike.
+    // pivotDistanceText: 「0〜+0.1%」, 「±0.0%」), never 「+0.0%」, in the reason and in the card's short line alike.
     for (const view of [{ state: 'zone', pivot: 100, price: 100.03, distance: 0.03 }, { state: 'zone', pivot: 100, price: 100.004, distance: 0.004 }]) {
       const result = sellSignals(bars, band, { view }), shown = pivotDistanceText(view);
       expect(result.strength[0].detail).toBe(`ブレイク後の上昇が小さいため判定しません（ピボット比 ${shown}・判定は +${SELL_RULES.climaxFromPivotPercent}%以上）`);
@@ -621,7 +622,7 @@ describe('the strength checks\' 50-day alternative (VD6)', () => {
     }
   });
 
-  it('stays 判定せず under +25%, when the owner turns it off, or for a low-volatility or acquisition position', () => {
+  it('stays 判定なし under +25%, when the owner turns it off, or for a low-volatility or acquisition position', () => {
     const bars = extended(0.005);
     expect((bars.at(-1).close / sma50(bars) - 1) * 100).toBeLessThan(25);
     const under = sellSignals(bars, SELL_RULES, { view: null });
@@ -655,5 +656,129 @@ describe('the strength checks\' 50-day alternative (VD6)', () => {
     closes.push(closes.at(-1) * 1.06);
     const view = { state: 'ext', pivot, distance: (closes.at(-1) / pivot - 1) * 100 };
     expect(sellSignals(make(closes), SELL_RULES, { view }).run).toMatchObject({ basis: 'pivot', pivot, sessions: 15 });
+  });
+});
+
+// BEH-1 (plan S2-P6): 仮の損切りに到達, the sell card's stop row. Bars: 100 sessions flat at 90 under a pivot of 100, then the
+// shapes each case names; the level is ピボットの −7.0% in half-up cents (93.00 here).
+describe('the stop row (仮の損切りに到達, BEH-1)', () => {
+  const PIVOT = 100;
+  const flat = (count = 100, close = 90) => Array.from({ length: count }, () => close);
+  /** 100 flat sessions, a crossing `ago` sessions before the last bar (close 101), then closes `after` (each a bar). */
+  const shaped = ({ after = [99, 98, 97], low = {} } = {}) => {
+    const bars = make([...flat(), 101, ...after]);
+    for (const [i, value] of Object.entries(low)) bars[Number(i)].low = value;
+    return bars;
+  };
+  const view = (state = 'wait', pivot = PIVOT) => ({ state, pivot, distance: -3, price: 97 });
+  const date = (bars, i) => shortDate(bars[i].date, bars.at(-1).date);
+
+  it('keeps the level in whole cents from the pivot\'s cents, half up: 10.50 gives 9.77, never 9.76', () => {
+    expect(PROVISIONAL_STOP_PERCENT).toBe(7);
+    expect(provisionalStopCents(10.5)).toBe(977);
+    expect(provisionalStopCents(100)).toBe(9300);
+    expect(provisionalStopCents(1234.56)).toBe(114814);
+    expect(provisionalStop(100)).toBeCloseTo(93, 10);
+    for (const missing of [null, undefined, 0, -1, NaN]) { expect(provisionalStopCents(missing)).toBeNull(); expect(provisionalStop(missing)).toBeNull(); }
+  });
+
+  it('judges the lows of the bars after the breakout bar: a later low at or under the level is 該当', () => {
+    const bars = shaped({ low: { 102: 92.5 } });
+    const stop = stopReachedCheck(bars, view());
+    expect(stop).toMatchObject({ key: 'stop', label: STOP_ROW_LABEL, state: 'hit', cause: 'judged', level: 93, low: 92.5, lowDate: bars[102].date, breakoutDate: bars[100].date });
+    expect(stop.parts).toEqual([`仮の損切り $93.00（${PROVISIONAL_STOP_RULE}）`, `${date(bars, 100)} の上抜けの後の最安値 $92.50（${date(bars, 102)}）`]);
+    expect(PROVISIONAL_STOP_RULE).toBe('ピボットの −7.0%・独自設定');
+    expect(stop.detail).toBe(stop.parts.join('・'));
+  });
+
+  it('reads the RLAY shape as 該当なし: the breakout bar\'s own low under the level does not count, later lows above it', () => {
+    const bars = shaped({ low: { 100: 90.1 } });
+    expect(stopReachedCheck(bars, view())).toMatchObject({ state: 'clear', cause: 'judged', low: bars.slice(101).reduce((m, b) => Math.min(m, b.low), Infinity) });
+  });
+
+  it('decides at the cent: a low at the level\'s cents is 該当, one cent over is 該当なし', () => {
+    expect(stopReachedCheck(shaped({ low: { 101: 93.004 } }), view()).state).toBe('hit');
+    expect(stopReachedCheck(shaped({ low: { 101: 93.01 } }), view()).state).toBe('clear');
+    // A pivot whose float product rounds the other way (10.50 × 0.93 = 9.765): the level is 9.77, and 9.77 reaches it.
+    const small = make([...flat(100, 9.5), 10.6, 10.4, 10.2]).map(bar => ({ ...bar }));
+    small[101].low = 9.77;
+    expect(stopReachedCheck(small, view('wait', 10.5))).toMatchObject({ state: 'hit', level: 9.77 });
+  });
+
+  it('says 判定なし for a buy-zone stock (the plan buys at the analysis day\'s close), whatever the lows did', () => {
+    // A dated breakout three sessions before the analysis day (stalled in the zone, or held since): bars follow it, so the
+    // reason is the app's rule for buy-zone stocks, never that no later bar exists.
+    const bars = shaped({ low: { 102: 80 } });
+    const held = stopReachedCheck(bars, view('zone'));
+    expect(held).toMatchObject({ state: 'na', cause: 'zone', detail: `買いゾーンの銘柄は判定しません・計画の買値は ${date(bars, bars.length - 1)} 終値`, level: null, breakoutDate: null, low: null, parts: null });
+    // A breakout on the analysis day, or none dated (flat under the pivot): no later bar exists, and the reason says that.
+    const today = make([...flat(), 101]);
+    today.at(-1).low = 80;
+    const none = make([...flat(100, 100), 100]);
+    for (const list of [today, none]) expect(stopReachedCheck(list, view('zone'))).toMatchObject({ state: 'na', cause: 'zone', detail: `計画の買値は ${date(list, list.length - 1)} 終値・その後の日足はまだありません`, level: null, breakoutDate: null });
+    // Without a usable pivot the zone reason stays the analysis day's close.
+    expect(stopReachedCheck(bars, view('zone', null))).toMatchObject({ state: 'na', cause: 'zone', detail: `計画の買値は ${date(bars, bars.length - 1)} 終値・その後の日足はまだありません` });
+  });
+
+  it('says 判定なし for a breakout on the analysis day (the USEA shape: its own low under the level)', () => {
+    const bars = make([...flat(), 101]);
+    bars.at(-1).low = 80;
+    expect(stopReachedCheck(bars, view('ext'))).toMatchObject({ state: 'na', cause: 'analysisDay', detail: '上抜けは分析日・その後の日足はまだありません', breakoutDate: bars.at(-1).date });
+  });
+
+  it('names the path that left no dated breakout, never "no close above the pivot"', () => {
+    // Above the pivot for the whole look-back (the five extended rows of the rebuild): the look-back.
+    const above = make([...flat(40), ...Array.from({ length: 80 }, () => 112)]);
+    const lookback = stopReachedCheck(above, view('ext'));
+    expect(lookback).toMatchObject({ state: 'na', cause: 'lookback', detail: '直近60営業日に上抜けの日付なし' });
+    // Under the pivot all along: no crossing in the window either.
+    expect(stopReachedCheck(make(flat(120)), view())).toMatchObject({ state: 'na', cause: 'lookback' });
+    // A crossing before the pivot's own bar, with that bar inside the window: the floor (failedBreakoutCheck's reading).
+    const early = shaped({ after: Array.from({ length: 20 }, () => 99) });
+    expect(stopReachedCheck(early, view(), { from: 110 })).toMatchObject({ state: 'na', cause: 'floor', detail: 'ピボットの日以降に上抜けなし' });
+    // The same floor older than the window bounds nothing: the look-back's sentence.
+    expect(stopReachedCheck(make(flat(120)), view(), { from: 5 })).toMatchObject({ cause: 'lookback' });
+    // A crossing that only touched the pivot's cents and fell back: no breakout to date.
+    const touch = make([...flat(), 100, 99, 98]);
+    expect(stopReachedCheck(touch, view())).toMatchObject({ state: 'na', cause: 'touch', detail: 'ピボット到達のみ・上抜けの日付なし' });
+    for (const stop of [lookback, stopReachedCheck(touch, view())]) expect(stop.detail).not.toMatch(/終値.*(上回|超え)/);
+    // Without a usable pivot there is no level.
+    expect(stopReachedCheck(shaped(), { state: 'wait', pivot: null })).toMatchObject({ state: 'na', cause: 'noPivot', level: null });
+    expect(stopReachedCheck(shaped(), null)).toMatchObject({ state: 'na', cause: 'noPivot' });
+  });
+
+  it('says 未確認, never 該当なし, for a low or a close missing where it is read', () => {
+    const lows = shaped();
+    lows[102].low = null;
+    expect(stopReachedCheck(lows, view())).toMatchObject({ state: 'unknown', cause: 'missingLow' });
+    const zeroLow = shaped();
+    zeroLow[101].low = 0;
+    expect(stopReachedCheck(zeroLow, view()).state).toBe('unknown');
+    // A close missing after the last crossing found: the walk cannot tell an earlier breakout.
+    const closes = make(flat(120));
+    closes[115].close = null;
+    expect(stopReachedCheck(closes, view())).toMatchObject({ state: 'unknown', cause: 'missingClose' });
+    // A close missing after a touch: the breakout cannot be told either.
+    const touch = make([...flat(), 100, 100, 100]);
+    touch[102].close = undefined;
+    expect(stopReachedCheck(touch, view())).toMatchObject({ state: 'unknown', cause: 'missingClose' });
+  });
+
+  it('is sells.stop: outside both sides, every count and the breakdown keys, on the same bars and floor', () => {
+    const bars = make([...rising(150), ...flat(5, 100 * 0.985), 101.5, 99, 98.5, 98]);
+    bars[157].low = 92;
+    const v = { state: 'wait', pivot: 100, distance: -2, price: 98 };
+    const sells = sellSignals(bars, SELL_RULES, { view: v });
+    expect(sells.stop).toMatchObject({ state: 'hit', cause: 'judged' });
+    expect(sells.stop).toEqual(stopReachedCheck(bars.slice(-252), v, { from: null }));
+    expect([...sells.strength, ...sells.weakness].some(c => c.key === 'stop')).toBe(false);
+    const hits = [...sells.strength, ...sells.weakness].filter(c => c.state === 'hit').length;
+    expect(sells.hits).toBe(hits);
+    expect(sells.breakdownHits).toBe(sells.weakness.filter(isBreakdown).length);
+    expect(isBreakdown(sells.stop)).toBe(false);
+    // The book's warning re-tallies the result and keeps the row.
+    expect(stockSells({ judged: bars, diagnostics: null, view: v }).stop).toEqual(sells.stop);
+    // The chart's marks and the chip read the two sides only.
+    expect(sellMarks(sells).some(mark => mark.date === sells.stop.lowDate)).toBe(false);
   });
 });

@@ -469,13 +469,16 @@ function shortEvent(view, event) {
 
 /** A close under the pivot by less than 0.05%: one decimal would print a gap of 0.0% that does not exist. */
 export const underTenth = value => finite(value) && value < 0 && Math.abs(value).toFixed(1) === '0.0';
-/** A close over the pivot by less than 0.05%, the same on the other side (「+0.1%未満」, never 「+0.0%」). */
+/** A close over the pivot by less than 0.05%, the same on the other side (「0〜+0.1%」, never 「+0.0%」). */
 export const overTenth = value => finite(value) && value > 0 && value.toFixed(1) === '0.0';
+/** The in-band forms of a distance from the pivot (minors B9, C1: S4's wording): a close within 0.05% over or under it. */
+export const IN_BAND_OVER = '0〜+0.1%';
+export const IN_BAND_UNDER = '0〜−0.1%';
 /**
- * A distance from the pivot as every screen prints it: signed, 「−0.1%未満」 just under the pivot and 「+0.1%未満」 just over
- * it (never a 0.0% that does not exist), 「±0.0%」 for an exact zero.
+ * A distance from the pivot as every screen prints it: signed, 「0〜−0.1%」 just under the pivot and 「0〜+0.1%」 just over
+ * it (never a 0.0% that does not exist), 「±0.0%」 for an exact zero. Screens keep the in-band form on one line (KeepDistance).
  */
-export const distanceText = value => (underTenth(value) ? '−0.1%未満' : overTenth(value) ? '+0.1%未満' : signed(value));
+export const distanceText = value => (underTenth(value) ? IN_BAND_UNDER : overTenth(value) ? IN_BAND_OVER : signed(value));
 /**
  * The price at the pivot's cents (the touch rule's own test): its distance is none to the cent, whichever side of the
  * cent the float noise in a published pivot falls. The position itself (zone or near) stays the shared rule's.

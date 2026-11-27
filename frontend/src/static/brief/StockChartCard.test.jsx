@@ -142,13 +142,14 @@ describe('brief stock chart card', () => {
     list[list.length - 1] = { ...list.at(-1), close: 81.23 };
     const pivotItem = () => [...screen.getByRole('group', { name: '最新の足の値' }).querySelectorAll('.ro-item')].find(node => node.textContent.startsWith('対ピボット'));
     const atCents = pivotDistanceText({ price: 81.23, pivot: 81.23, distance: 0 });
-    for (const [pivot, sign] of [[81.22, '+'], [81.24, '−'], [81.23000000000002, '±'], [81.22999999999999, '±']]) {
+    expect(atCents).toBe('±0.0%');
+    for (const [pivot, form] of [[81.22, '0〜+0.1%'], [81.24, '0〜−0.1%'], [81.23000000000002, atCents], [81.22999999999999, atCents]]) {
       render(<StockView data={{ ...data(true), bars: list, view: { ...view, pivot, upper: pivot * 1.05 } }} />);
       const text = pivotDistanceText({ price: 81.23, pivot, distance: (81.23 / pivot - 1) * 100 });
       expect(pivotItem().textContent).toBe(`対ピボット${text}`);
-      expect(text.startsWith(sign)).toBe(true);
-      // 「±0.0%」 at the pivot's cents only; a cent away is the in-band form, never a signed 0.0%.
-      if (sign === '±') expect(text).toBe(atCents); else expect(text).not.toBe(atCents);
+      // 「±0.0%」 at the pivot's cents only; a cent away is the in-band form (S2-P5: 「0〜+0.1%」 / 「0〜−0.1%」), never a signed 0.0%.
+      expect(text).toBe(form);
+      if (form !== atCents) expect(text).not.toBe(atCents);
       expect(pivotItem().textContent).not.toMatch(/[+−]0\.0%$/);
       cleanup();
     }

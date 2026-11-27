@@ -1,10 +1,11 @@
 // Sell-side checks for the daily-brief screens, from certified daily bars: the climax and breakdown
 // checks, the book's combined warning, the chart marks and the sell chip. Unknown stays unknown.
 import { finite } from '../researchEngine';
-import { signed } from '../positionGeometry';
+import { money, signed } from '../positionGeometry';
 import { BREAKOUT_VOLUME_RATIO, distanceText, pivotDistanceText, ratioShown } from './briefCandidate';
 import { breakoutBar, CROSSING_LOOKBACK_SESSIONS, floorOf, pivotCrossings, STALE_BREAKOUT_SESSIONS } from './breakoutHistory';
 import { shortDate } from './briefShared';
+import { PROVISIONAL_STOP_PERCENT, provisionalStopCents } from './stopLevel';
 
 // Sell-side checks after an advance. The ideas (selling into strength on a climax run,
 // selling into weakness on a heavy-volume 50-day break) follow Minervini's sell rules;
@@ -65,7 +66,7 @@ function pivotGate(list, view, rules) {
   if (view.state === 'wait' || distance < 0) return { on: false, reason: 'ピボットより下（ブレイク前）のため判定しません', short: 'ピボットより下' };
   // A position that is neither the buy zone nor beyond it (low volatility, an acquisition, unjudged) is never judged by the band.
   if (view.state !== 'ext' && view.state !== 'zone') return { on: false, reason: `買いゾーン超過の銘柄ではないため判定しません（位置：${view.stateLabel || '判定不可'}）`, short: `位置：${view.stateLabel || '判定不可'}`, alternative: unjudged };
-  // The distance as every screen prints it (pivotDistanceText: 「±0.0%」 at the pivot's cents, 「+0.1%未満」 a cent or more over it).
+  // The distance as every screen prints it (pivotDistanceText: 「±0.0%」 at the pivot's cents, 「0〜+0.1%」 a cent or more over it).
   if (view.state !== 'ext' || distance < rules.climaxFromPivotPercent) return { on: false, reason: `ブレイク後の上昇が小さいため判定しません（ピボット比 ${pivotDistanceText(view)}・判定は +${rules.climaxFromPivotPercent}%以上）`, short: `ピボット比 ${pivotDistanceText(view)}・+${rules.climaxFromPivotPercent}%未満`, alternative: view.state === 'ext' };
   const n = list.length;
   if (!(list[n - 1].close > pivot)) return { on: false, reason: '日足の終値がピボットを上回っていないため判定しません', short: '終値がピボット以下' };
@@ -230,6 +231,73 @@ export function failedBreakoutContext(bars, pivot, { rules = SELL_RULES, from = 
 }
 
 /**
+ * The stop row's label (plan BEH-1): a holder's fact, never one of the sell signs. It names the level it judges, the 仮の損切り
+ * (D8), so a bare 損切り on the stock screen is always the plan's stop.
+ */
+export const STOP_ROW_LABEL = '仮の損切りに到達（保有なら）';
+/** The provisional stop's name with its rule, as the stop row prints it beside the level (独自設定). */
+export const PROVISIONAL_STOP_RULE = `ピボットの −${PROVISIONAL_STOP_PERCENT.toFixed(1)}%・独自設定`;
+
+/**
+ * 損切りに到達 (plan BEH-1, D7, D8; gate rulings S2 and S3): whether the lowest low after the breakout reached the provisional
+ * stop (stopLevel.js: ピボットの −7.0%, 独自設定, the same for every viewer). It is a holder's fact beside the sell checks,
+ * returned as `sells.stop`: never pushed into `weakness`, never in tally() or BREAKDOWN_KEYS, so no count, chip, tile, gate or
+ * plan moves. Settings-free: the plan's own stop is compared by the card (printed strings), not here.
+ * - The breakout is breakoutBar(lastPivotCrossing(...)) over the last CROSSING_LOOKBACK_SESSIONS (60) sessions with `from`
+ *   (crossingFloor's): the conclusion's bar, the latest re-cross. The failed-breakout check may name an earlier heavy-volume
+ *   crossing in the same window, so the two dates can differ.
+ * - In the buy zone (`view.state === 'zone'`) the plan buys at the analysis day's close: 'na' (cause 'zone'); no later bar exists.
+ *   The reason names the cause that is true for a holder: after a dated breakout before the analysis day (a stalled or older
+ *   breakout still in the zone) bars do follow it, so the reason is the app's rule for buy-zone stocks (gate ruling S3), not
+ *   missing bars; otherwise (a breakout on the analysis day, or none dated) that no later bar exists. Only the words differ.
+ * - A dated breakout before the analysis day: the level is the provisional stop's half-up cents; the window is the lows of the
+ *   bars after the breakout bar to the last bar; 'hit' when the lowest low's cents are at or under the level's, else 'clear'.
+ *   A low missing (or 0) in the window: 'unknown', never 'clear'.
+ * - A breakout on the analysis day: 'na' (cause 'analysisDay'); no later bar exists.
+ * - No dated breakout: 'na' with the path that returned null, never "no close above the pivot": the floor bounded the
+ *   search (the pivot's bar inside the window, as failedBreakoutCheck reads it: cause 'floor'), else the look-back ('lookback');
+ *   the latest crossing only touched the pivot's cents and no close went above them ('touch'). A close missing where the walk
+ *   reads it: 'unknown' (cause 'missingClose'). Without a usable pivot there is no level: 'na' (cause 'noPivot').
+ * Returns `{ key: 'stop', label, state, cause, detail, level, breakoutDate, low, lowDate, parts }` (`level`, `low` in dollars,
+ * whole cents; `parts`: the judged detail's two units, the level and the measured low, which the card may join with the plan's stop).
+ */
+export function stopReachedCheck(bars, view, { from = null } = {}) {
+  const base = { key: 'stop', label: STOP_ROW_LABEL, level: null, breakoutDate: null, low: null, lowDate: null, parts: null };
+  const list = Array.isArray(bars) ? bars : [], n = list.length, asOf = list[n - 1]?.date ?? view?.asOf ?? null;
+  const day = date => shortDate(date, asOf), positive = value => finite(value) && value > 0;
+  const pivot = view?.pivot, levelCents = provisionalStopCents(pivot);
+  if (view?.state === 'zone') {
+    const crossing = levelCents === null ? null : pivotCrossings(list, pivot, { lookback: CROSSING_LOOKBACK_SESSIONS, from })[0] ?? null;
+    const breakout = crossing ? breakoutBar(list, pivot, crossing, { from }) : null;
+    const detail = breakout && breakout.sessionsAgo > 0 ? `買いゾーンの銘柄は判定しません・計画の買値は ${day(asOf)} 終値` : `計画の買値は ${day(asOf)} 終値・その後の日足はまだありません`;
+    return { ...base, state: 'na', cause: 'zone', detail };
+  }
+  if (levelCents === null) return { ...base, state: 'na', cause: 'noPivot', detail: 'ピボットが未確認' };
+  const level = levelCents / 100, floor = floorOf({ from });
+  const crossing = pivotCrossings(list, pivot, { lookback: CROSSING_LOOKBACK_SESSIONS, from })[0] ?? null;
+  if (!crossing) {
+    // The bars the walk reads (pivotCrossings: the closes from the window's first bar, or the floor, to the last).
+    const windowStart = Math.max(1, n - 1 - CROSSING_LOOKBACK_SESSIONS), lowest = floor === null ? windowStart : Math.max(windowStart, floor);
+    if (n < 2 || list.slice(lowest - 1).some(bar => !positive(bar?.close))) return { ...base, level, state: 'unknown', cause: 'missingClose', detail: '終値が欠けているため上抜けの日付を確認できません' };
+    if (floor !== null && floor > windowStart) return { ...base, level, state: 'na', cause: 'floor', detail: 'ピボットの日以降に上抜けなし' };
+    return { ...base, level, state: 'na', cause: 'lookback', detail: `直近${CROSSING_LOOKBACK_SESSIONS}営業日に上抜けの日付なし` };
+  }
+  const breakout = breakoutBar(list, pivot, crossing, { from });
+  if (!breakout) {
+    if (list.slice(crossing.index).some(bar => !positive(bar?.close))) return { ...base, level, state: 'unknown', cause: 'missingClose', detail: '終値が欠けているため上抜けの日付を確認できません' };
+    return { ...base, level, state: 'na', cause: 'touch', detail: 'ピボット到達のみ・上抜けの日付なし' };
+  }
+  if (breakout.sessionsAgo === 0) return { ...base, level, breakoutDate: breakout.date, state: 'na', cause: 'analysisDay', detail: '上抜けは分析日・その後の日足はまだありません' };
+  const after = list.slice(breakout.index + 1);
+  if (!after.every(bar => positive(bar?.low))) return { ...base, level, breakoutDate: breakout.date, state: 'unknown', cause: 'missingLow', detail: `${day(breakout.date)} の上抜けの後の安値が欠けています` };
+  let at = 0;
+  for (let i = 1; i < after.length; i++) if (after[i].low < after[at].low) at = i;
+  const low = after[at].low, lowDate = after[at].date;
+  const parts = [`仮の損切り ${money(level)}（${PROVISIONAL_STOP_RULE}）`, `${day(breakout.date)} の上抜けの後の最安値 ${money(low)}（${day(lowDate)}）`];
+  return { ...base, level, breakoutDate: breakout.date, low, lowDate, parts, state: cents(low) <= levelCents ? 'hit' : 'clear', cause: 'judged', detail: parts.join('・') };
+}
+
+/**
  * Sell checks for the latest bars. Each check is 'hit', 'clear', 'caution' (the 50-day line only: below
  * it without a confirmed heavy-volume break), 'unknown' (an input is missing) or 'na' (not judged, with
  * the reason). `view` (the candidate: state, pivot, distance) gates the strength checks; without it they
@@ -238,6 +306,7 @@ export function failedBreakoutContext(bars, pivot, { rules = SELL_RULES, from = 
  * crossings as a floor on their first bar). Null is none.
  * With the failed-breakout check clear and a failed breakout past its window, the result also carries `failedContext`
  * (failedBreakoutContext's, round 3 R5): context for the sell card and the conclusion, outside every check and count.
+ * Every result carries `stop` (stopReachedCheck's, BEH-1): the sell card's 仮の損切りに到達 row, outside both sides and every count.
  * Returns null when the bars cannot be judged.
  */
 export function sellSignals(bars, rules = SELL_RULES, { view = null, from = null } = {}) {
@@ -290,10 +359,12 @@ export function sellSignals(bars, rules = SELL_RULES, { view = null, from = null
   // Round 3 R5: a failed breakout past its window, as neutral context beside the clear check (on the same bars and floor).
   // Only a result that has the line carries the key, so every other result keeps its shape.
   const failedContext = failed?.state === 'clear' ? failedBreakoutContext(list, view.pivot, { rules, from: listFloor }) : null;
+  // BEH-1: the stop row, on the same bars and floor, outside both sides and every count (tally reads strength and weakness only).
+  const stop = stopReachedCheck(list, view, { from: listFloor });
 
   const run = gate.on ? { basis: gate.basis, startDate: list[gate.origin].date, startClose: list[gate.origin].close, pivot: gate.pivot, distance: gate.distance, fromSma50: gate.fromSma50 ?? null, sessions: n - 1 - gate.origin } : null;
   return tally({ asOf: last.date, advance: inAdvance ? advance : null, run, runReason: gate.on ? null : gate.reason,
-    runShort: gate.on ? null : { reason: gate.short, fromSma50: gate.fromSma50 }, strength, weakness, ...(failedContext ? { failedContext } : {}) });
+    runShort: gate.on ? null : { reason: gate.short, fromSma50: gate.fromSma50 }, strength, weakness, stop, ...(failedContext ? { failedContext } : {}) });
 }
 
 /** The weakness checks that break a buy setup when they hit. */

@@ -889,6 +889,50 @@ for (const theme of ['light', 'dark']) test.describe(`legend in ${theme}`, () =>
   });
 });
 
+// The price gutter (minor C5, S2-P3): the levels' tags are plain text in their lines' inks with no plate, and the last close is
+// the one filled plate (the selected ink, as a pressed period), on a phone and at 1440, in both themes. The tags keep their boxes.
+// The one name-only tag, the last contraction's 安値 (its price is in the legend), keeps its dashed box (S2-C1), so it never reads
+// as the caption of the priced tag beside it.
+for (const theme of ['light', 'dark']) for (const [name, device] of [['390', VIEWPORTS.phone], ['1440', VIEWPORTS.desktop]]) test.describe(`the price gutter at ${name} in ${theme}`, () => {
+  test.use({ ...device, contextOptions: { reducedMotion: 'reduce' } });
+  test('plain level tags in their lines\' inks and one filled 終値 plate', async ({ page }) => {
+    const { errors } = await openBrief(page, '#/brief/stock/ZZNV', { storage: { 'screener:color-mode': theme } });
+    await expect(page.locator('.brief')).toHaveAttribute('data-theme', theme);
+    await chartReady(page);
+    const gutter = await page.evaluate(() => {
+      const chart = document.querySelector('[data-testid="brief-price-chart"]'), ink = selector => { const node = chart.querySelector(selector); return node && getComputedStyle(node).stroke; };
+      const brief = getComputedStyle(document.querySelector('.brief'));
+      return { text: brief.color, ground: brief.backgroundColor, pivotLine: ink('line.bc-pivot'), stopLine: ink('line.bc-stop'),
+        tags: [...chart.querySelectorAll('g.bc-tag')].map(g => { const rect = g.querySelector('rect'), r = getComputedStyle(rect); return { key: g.dataset.tag, fill: r.fill, stroke: r.stroke, dash: r.strokeDasharray, width: Number(rect.getAttribute('width')), height: Number(rect.getAttribute('height')), texts: [...g.querySelectorAll('text')].map(t => getComputedStyle(t).fill), words: [...g.querySelectorAll('text')].map(t => t.textContent) }; }) };
+    });
+    const by = key => gutter.tags.find(tag => tag.key === key);
+    expect(gutter.tags.map(tag => tag.key)).toEqual(expect.arrayContaining(['pivot', 'stop', 'last']));
+    // One filled plate: the last close's, in the text ink, its price in the ground ink (the name-only 安値 box is checked below).
+    expect(gutter.tags.filter(tag => tag.key !== 'low' && tag.fill !== 'none').map(tag => tag.key)).toEqual(['last']);
+    expect(by('last')).toMatchObject({ fill: gutter.text, stroke: 'none', texts: [gutter.ground] });
+    // Every level's tag is plain text with no outline, the pivot's and the stop's in their lines' inks; the boxes are kept.
+    for (const tag of gutter.tags.filter(t => t.key !== 'last' && t.key !== 'low')) {
+      expect(tag.stroke, tag.key).toBe('none');
+      expect(tag.width, tag.key).toBeGreaterThan(0);
+      expect(tag.height, tag.key).toBeGreaterThan(0);
+      for (const fill of tag.texts) expect(fill, tag.key).not.toBe('none');
+    }
+    expect(gutter.pivotLine).toBeTruthy();
+    expect(by('pivot').texts).toEqual([gutter.pivotLine]);
+    expect(by('stop').texts).toEqual([gutter.stopLine]);
+    // The name-only 安値 tag (drawn on a narrow chart): a dashed outline around the word, and no number in it.
+    const low = by('low');
+    if (name === '390') expect(low, 'the 安値 tag on a narrow chart').toBeTruthy();
+    if (low) {
+      expect(low.words).toEqual(['安値']);
+      expect(low.stroke).not.toBe('none');
+      expect(low.dash).not.toBe('none');
+      expect(low.width).toBeGreaterThan(0);
+    }
+    expect(errors).toEqual([]);
+  });
+});
+
 // The card's 520px cap is tightest at 320 (the readout takes 6 rows there): every view keeps the 12px headroom under it.
 test.describe('the chart card at 320×640', () => {
   test.use({ viewport: { width: 320, height: 640 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2, contextOptions: { reducedMotion: 'reduce' } });

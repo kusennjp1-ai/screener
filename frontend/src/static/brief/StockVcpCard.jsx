@@ -134,7 +134,7 @@ export default function VcpCard({ technical, bars, judged, view, wide, chartRef 
         : uncertified ? `${bars?.length ? `日足を分析基準日で検証できないため${uncertified.reason ? `（${uncertified.reason}）` : ''}` : '日足がないため'}、VCPは未確認です。`
           : '測定できる収縮が2回以上ないため、VCPは未確認です。'}</p>
     </>}
-    {engine ? <p className="brief-note brief-vcp-engine">Setup Engine：土台 {engine.weeks === null ? '未確認' : `${Math.round(engine.weeks)}週`}・深さ {engine.depth === null ? '未確認' : `${engine.depth.toFixed(0)}%`}{disagree ? '（独自近似と異なります）' : !print ? '（独自近似は未確認）' : ''}{pivotDayText ? <>{PIVOT_DAY_SEPARATOR}<span className="brief-vcp-pivotday">{pivotDayText}</span></> : null}</p> : null}
+    {engine ? <p className="brief-note brief-vcp-engine">Setup Engineの準備条件（トレンドテンプレートとは別）：土台 {engine.weeks === null ? '未確認' : `${Math.round(engine.weeks)}週`}・深さ {engine.depth === null ? '未確認' : `${engine.depth.toFixed(0)}%`}{disagree ? '（独自近似と異なります）' : !print ? '（独自近似は未確認）' : ''}{pivotDayText ? <>{PIVOT_DAY_SEPARATOR}<span className="brief-vcp-pivotday">{pivotDayText}</span></> : null}</p> : null}
     {!engine && pivotDayText && (wide || pivotDay !== PIVOT_DAY_UNKNOWN) ? <p className="brief-note brief-vcp-pivotday">{pivotDayText}</p> : null}
     <dl className="brief-dl">
       <div><dt>最後の収縮の出来高</dt><dd>{finite(dry) ? <>{times(dry)}<small>直前50日平均比</small></> : '未確認'}</dd></div>

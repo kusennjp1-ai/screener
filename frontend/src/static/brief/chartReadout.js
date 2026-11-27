@@ -203,7 +203,7 @@ export function heavyVolumeBars(model, period) {
  * (undefined) on a past bar or the weekly chart, where they do not apply. `unverified` is true when the
  * bars are not certified: the readout names them 未検証の足 and qualifies the change and volume ratio. `pivotText` is the
  * pivot ratio as every screen prints a distance from the pivot (pivotDistanceText: 「±0.0%」 at the pivot's cents,
- * 「+0.1%未満」/「−0.1%未満」 within 0.05% of it, never 「+0.0%」/「−0.0%」); null when the ratio is.
+ * 「0〜+0.1%」/「0〜−0.1%」 within 0.05% of it, never 「+0.0%」/「−0.0%」); null when the ratio is.
  */
 export function chartReadout(model, index, { certified = false, pivot = null, auditHigh = null } = {}) {
   const series = chartSeries(model);
