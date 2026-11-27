@@ -3,7 +3,7 @@ import { BOOK_TECHNICAL_VERSION, buildBookTechnicalEvidence } from '../bookTechn
 import { ScreenNotes } from './briefPrimitives';
 import useSessionState from './useSessionState';
 import { gapDays, publishedRsLineHigh, rsLeadMarks, rsLineNewHigh, stageFromBars, stagePhase } from './briefChartModel';
-import { CHART_RANGES as RANGES, chartCrossing, chartNotes, earningsMarker, heavyVolumeBars, priceInRange, shortAveragesShown, weeklyBars } from './chartReadout';
+import { CHART_LAYERS, CHART_RANGES as RANGES, chartCrossing, chartNotes, earningsMarker, heavyVolumeBars, priceInRange, shortAveragesShown, weeklyBars } from './chartReadout';
 import { isBreakdown, sellMarks, stockSells } from './briefSell';
 import { crossingFloor } from './breakoutHistory';
 import { earningsCall } from './briefCandidate';
@@ -44,6 +44,9 @@ export default function StockView({ data, header = null, wide = false, market = 
   const [storedRange, setRange] = useSessionState('brief-chart-range', '6m');
   const range = RANGES[storedRange] ? storedRange : '6m';
   const [period, interval] = RANGES[range];
+  // The chart's hidden layers (B's 「表示」, plan S2-P7), kept for this tab's session like the period; none by default.
+  const [storedHidden] = useSessionState('brief-chart-layers', []);
+  const hiddenLayers = useMemo(() => (Array.isArray(storedHidden) ? CHART_LAYERS.map(([key]) => key).filter(key => storedHidden.includes(key)) : []), [storedHidden]);
   // Until the detail arrives the row has neither the published evidence nor the Setup Engine base.
   const vcpPending = (Boolean(row?.research_detail_path) && !data.detail?.data && !data.detail?.isError) || (Boolean(row?.chart_path) && !data.chart?.data && !data.chart?.isError);
   const chartPayload = data.chart?.data;
@@ -115,7 +118,7 @@ export default function StockView({ data, header = null, wide = false, market = 
   return <div className="brief-stock">
     {header}
     <StockVerdict view={view} plan={plan} stage={stage} technical={evidence} bars={bars} judged={judged} template={template} rsHigh={rsHigh} financial={financial} row={row} sells={sells} diagnostics={diagnostics} market={market} earningsCall={call} band={band} date={data.date}
-      chart={<StockChartCard data={data} view={view} earningsCall={call} legs={legs} legsValid={vcpPending ? null : legsValid} rsHigh={rsHigh} rsLead={rsLead} gaps={gaps} sells={sells} levels={levels} chartRef={chartRef} range={range} onRange={setRange} notes={notes} wide={wide} />} />
+      chart={<StockChartCard data={data} view={view} earningsCall={call} legs={legs} legsValid={vcpPending ? null : legsValid} rsHigh={rsHigh} rsLead={rsLead} gaps={gaps} sells={sells} levels={levels} chartRef={chartRef} range={range} onRange={setRange} hiddenLayers={hiddenLayers} notes={notes} wide={wide} />} />
     <div className="brief-grid">
       <TemplateCard template={template} wide={wide} technical={certified ? evidence : null} date={data.date} />
       <VcpCard technical={evidence} bars={bars} judged={judged} view={view} wide={wide} chartRef={chartRef} interval={interval} row={row} date={data.date}

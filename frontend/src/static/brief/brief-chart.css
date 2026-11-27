@@ -19,7 +19,14 @@
   .brief-chartcard .brief-periods button { flex: 1 1 0; min-width: 0; min-height: 44px; padding: 0 4px; font-size: 12px; }
   /* The weekly button carries its week count: a larger share of the row. */
   .brief-chartcard .brief-periods button.brief-period-week { flex-grow: 1.4; }
+  /* With the 「表示」 button the row holds five: the week count and 「表示」 take their own widths (「表示」 on two lines), the
+     three periods share the rest. */
+  .brief-chartcard .brief-periods button.brief-period-week, .brief-chartcard .brief-periods button.brief-period-layers { flex: 0 0 auto; padding: 0 6px; }
 }
+/* The 「表示」 button (plan S2-P7) closes the periods row: 「表示」 over its word (すべて / n項目), so it takes the least width. */
+.brief-chartcard .brief-periods button.brief-period-layers { line-height: 14px; white-space: normal; }
+@media (min-width: 1024px) { .brief-chartcard .brief-periods button.brief-period-layers { padding: 0 8px; } }
+.brief-chartcard .brief-layers-word { display: block; }
 /* On the narrowest phones the week count takes a second line, without its brackets; the readout takes 6 rows
    there, so the plot gives up 8px (300 → 292 at 320×640) and the card keeps 12px under its 520 cap. */
 @media (max-width: 359px) {
