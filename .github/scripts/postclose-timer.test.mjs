@@ -132,6 +132,19 @@ test('the next fire_at comes from the watchdog plan, otherwise one hour later', 
   assert.equal(wakeRequest(report({action: 'none', reason: 'Bad Reason', wake_at: '2026-11-27T19:00:00.000Z'}), now).reason, 'unspecified');
 });
 
+test('an overdue check waiting for the once-only publication retry arms that retry time, not the hourly fallback', () => {
+  // 11-25 session: producer 45709447126 and the release that failed at 01:23:38Z (measured run clocks).
+  const now = '2026-11-26T01:30:00Z', runs = (path, overrides) => [{path: `.github/workflows/${path}`, head_branch: 'main', event: 'workflow_dispatch', repository: {full_name: REPOSITORY}, head_repository: {full_name: REPOSITORY}, status: 'completed', ...overrides}];
+  const plan = planRecoveryWithWake({clock: exchangeClock(now), observed: {fresh: false, stale: ['scan', 'long_history']},
+    producerRuns: runs(PRODUCER, {id: 45709447126, conclusion: 'success', created_at: '2026-11-25T22:00:29Z', updated_at: '2026-11-26T00:56:14Z'}),
+    publisherRuns: runs(PUBLISHER, {id: 45732499990, conclusion: 'failure', created_at: '2026-11-26T00:58:22Z', updated_at: '2026-11-26T01:23:38Z'}),
+    workflowStates: {[PRODUCER]: 'active', [PUBLISHER]: 'active'}, now: at(now)});
+  assert.equal(plan.action, 'none'); assert.equal(plan.reason, 'publication_retry_grace'); assert.equal(plan.overdue, true);
+  assert.equal(plan.wake_at, '2026-11-26T01:33:38.000Z');
+  // The overdue exit 1 still leaves a report whose own wake is used.
+  assert.deepEqual(wakeRequest({...report(plan), checked_at: now}, at(now)+minute), {fire_at: '2026-11-26T01:33:38.000Z', reason: 'publication_retry_grace', source: 'watchdog_plan'});
+});
+
 test('report reading tolerates a missing or malformed file', () => {
   const directory = mkdtempSync(join(tmpdir(), 'postclose-timer-'));
   try {

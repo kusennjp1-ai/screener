@@ -191,6 +191,52 @@ test('failed publisher retries once for same producer, then reacquires after coo
   value.publisherRuns.push(run(PUBLISHER, {id: 301, conclusion: 'failure', created_at: '2026-10-27T21:20:00Z', updated_at: '2026-10-27T21:30:00Z'}));
   assert.equal(planRecovery(value).action, 'acquire');
 });
+// A release that failed minutes ago keeps its once-only retry. Before this
+// grace, a check inside those ten minutes fell through to a full acquisition.
+const failedRelease = (updated_at, overrides = {}) => run(PUBLISHER, {id: 300, event: 'workflow_dispatch', conclusion: 'failure', created_at: '2026-10-27T21:01:00Z', updated_at, ...overrides});
+const at = (value, when) => ({...value, ...context(when), observed: value.observed, producerRuns: value.producerRuns, publisherRuns: value.publisherRuns});
+test('seven minutes after a failed release the check waits for its retry, never a full acquisition', () => {
+  const value = context(); value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [failedRelease('2026-10-27T22:23:00Z')];
+  assert.deepEqual(planRecoveryWithWake(value), {target_session: target, elapsed_minutes: 150, overdue: true, action: 'none', reason: 'publication_retry_grace', wake_at: '2026-10-27T22:33:00.000Z'});
+  assert.equal(planRecovery(at(value, '2026-10-27T22:32:59Z')).reason, 'publication_retry_grace');
+  // Eleven minutes after it: the one retry for this producer, ordinary inputs.
+  const retry = planRecovery(at(value, '2026-10-27T22:34:00Z'));
+  assert.equal(retry.action, 'publish'); assert.equal(retry.reason, 'retry_failed_publication_once'); assert.equal(retry.producer_run_id, 200);
+  assert.deepEqual(dispatchRequestFor(retry), {workflow: PUBLISHER, inputs: {ui_only: false}});
+});
+test('a failed retry gets no second grace: the existing full acquisition and cooldown follow', () => {
+  const value = context(); value.producerRuns = [run(PRODUCER)];
+  value.publisherRuns = [failedRelease('2026-10-27T22:23:00Z', {id: 301, created_at: '2026-10-27T22:00:00Z'}), failedRelease('2026-10-27T21:30:00Z')];
+  const plan = planRecovery(value);
+  assert.equal(plan.action, 'acquire'); assert.equal(plan.acquisition_mode, 'full'); assert.equal(plan.reason, 'published_observations_still_behind');
+  // The rebuilt producer then fails: its durable cooldown, not another publication.
+  value.producerRuns.unshift(run(PRODUCER, {id: 201, conclusion: 'failure', created_at: '2026-10-27T22:31:00Z', updated_at: '2026-10-28T01:00:00Z'}));
+  const cooldown = planRecoveryWithWake(at(value, '2026-10-28T01:05:00Z'));
+  assert.equal(cooldown.reason, 'acquisition_retry_cooldown'); assert.equal(cooldown.retry_after, '2026-10-28T01:20:00.000Z'); assert.equal(cooldown.wake_at, '2026-10-28T01:20:00.000Z');
+});
+test('the grace holds exactly where the once-only retry would fire ten minutes later', () => {
+  for (const conclusion of ['failure', 'cancelled', 'timed_out', 'success'])
+    for (const releases of [1, 2]) for (const producer of ['success', 'failure']) {
+      const value = context(); value.producerRuns = [run(PRODUCER, {conclusion: producer})];
+      value.publisherRuns = [failedRelease('2026-10-27T22:23:00Z', {conclusion}), ...(releases === 2 ? [failedRelease('2026-10-27T21:20:00Z', {id: 299})] : [])];
+      const label = `${conclusion}/${releases}/${producer}`, waiting = planRecovery(value).reason === 'publication_retry_grace';
+      assert.equal(waiting, planRecovery(at(value, '2026-10-27T22:33:00Z')).reason === 'retry_failed_publication_once', label);
+      assert.equal(waiting, conclusion === 'failure' && releases === 1 && producer === 'success', label);
+    }
+});
+test('a release failing three minutes after its producer is retried, not rebuilt, by following each wake', () => {
+  // The F1 timer alone used to land this inside the ten minutes and rebuild.
+  const value = context('2026-10-27T22:25:00Z');
+  value.producerRuns = [run(PRODUCER, {updated_at: '2026-10-27T22:20:00Z'})];
+  value.publisherRuns = [failedRelease('2026-10-27T22:23:00Z', {created_at: '2026-10-27T22:21:00Z'})];
+  let now = value.now, plan;
+  for (let step = 0; step < 5; step++) {
+    plan = planRecoveryWithWake(at(value, new Date(now).toISOString()));
+    if (plan.action !== 'none') break;
+    assert.equal(plan.reason, 'publication_retry_grace'); now = Date.parse(plan.wake_at);
+  }
+  assert.equal(plan.reason, 'retry_failed_publication_once'); assert.equal(new Date(now).toISOString(), '2026-10-27T22:33:00.000Z');
+});
 test('new producer failure observes durable cooldown', () => {
   const value = context(); value.producerRuns = [run(PRODUCER, {conclusion: 'failure', updated_at: '2026-10-27T22:25:00Z'})];
   assert.equal(planRecovery(value).reason, 'acquisition_retry_cooldown');
@@ -408,6 +454,7 @@ const wakeScenarios = () => [
   ['cboe_retry_cooldown', value => {Object.assign(value, context('2026-10-28T00:30:00Z')); value.observed.stale = ['put_call'];
     value.producerRuns = [run(PRODUCER, {id: 1, conclusion: 'failure', created_at: '2026-10-27T21:31:00Z', updated_at: '2026-10-27T23:45:00Z'})];}, '2026-10-28T01:45:00.000Z'],
   ['publication_propagation_grace', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:29:00Z'})];}, '2026-10-27T22:31:00.000Z'],
+  ['publication_retry_grace', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, conclusion: 'failure', created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:23:00Z'})];}, '2026-10-27T22:33:00.000Z'],
   // A raw grace end 30 s ahead is raised to the one-minute floor.
   ['publication_propagation_grace', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:28:30Z'})];}, '2026-10-27T22:31:00.000Z'],
   // Long waits never pass one hour after the next close (2026-10-28 20:00Z).
@@ -436,7 +483,7 @@ test('every wake is at least a minute ahead and at most an hour after the next c
   }
 });
 test('a timed wake lands when the same evidence decides differently', () => {
-  for (const [reason, mutate] of wakeScenarios().filter(([name]) => ['acquisition_retry_cooldown','waiting_for_cboe_publication','cboe_retry_cooldown','publication_propagation_grace'].includes(name))) {
+  for (const [reason, mutate] of wakeScenarios().filter(([name]) => ['acquisition_retry_cooldown','waiting_for_cboe_publication','cboe_retry_cooldown','publication_propagation_grace','publication_retry_grace'].includes(name))) {
     const value = wakeInput(mutate), wake = planRecoveryWithWake(value).wake_at;
     const replan = when => { const later = {...value, ...context(when), observed: value.observed, producerRuns: value.producerRuns, publisherRuns: value.publisherRuns}; return planRecovery(later).reason; };
     if (Date.parse(wake) < Date.parse(value.clock.next_close)+60*60_000) {

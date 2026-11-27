@@ -107,10 +107,12 @@ function normalizeRuns(runs, workflow, now) {
 }
 
 // Next inspection time (post-close timer). Each branch names the earliest time
-// its own evidence can change, so the decision rule itself is not altered. A
-// wake only schedules another full inspection by this same planner, which then
-// re-reads the public site and run history. Every wake is bounded to at least a
-// minute ahead and at most SESSION_WAKE_MINUTES after the next exchange close.
+// its own evidence can change. Timing a wake never alters a decision; the one
+// decision added with it is publication_retry_grace, which waits for the
+// existing once-only retry instead of rebuilding. A wake only schedules another
+// full inspection by this same planner, which then re-reads the public site and
+// run history. Every wake is bounded to at least a minute ahead and at most
+// SESSION_WAKE_MINUTES after the next exchange close.
 export const SESSION_WAKE_MINUTES = 60;
 export const IN_FLIGHT_WAKE_MINUTES = 60;
 export const DISPATCHED_WAKE_MINUTES = 345;
@@ -137,8 +139,12 @@ function decideRecovery({clock, observed, producerRuns, publisherRuns, workflowS
   if (completedProducer && now-Date.parse(completedProducer.updated_at) >= 2*minute) {
     const afterProducer = publishers.filter(run => Date.parse(run.created_at) >= Date.parse(completedProducer.updated_at));
     const noDelivery = afterProducer.length === 0;
-    const retryFailed = afterProducer.length === 1 && lastRelease.conclusion === 'failure' && now-Date.parse(lastRelease.updated_at) >= 10*minute;
+    const retryPending = afterProducer.length === 1 && lastRelease.conclusion === 'failure';
+    const retryFailed = retryPending && now-Date.parse(lastRelease.updated_at) >= 10*minute;
     if (noDelivery || retryFailed) return decision({...common, action: 'publish', reason: noDelivery ? 'producer_completed_without_publisher' : 'retry_failed_publication_once', producer_run_id: completedProducer.id}, dispatched);
+    // Inside those ten minutes, wait for that once-only retry. A check woken
+    // just after the failure must not fall through to a full acquisition.
+    if (retryPending) return decision({...common, action: 'none', reason: 'publication_retry_grace'}, Date.parse(lastRelease.updated_at)+10*minute);
   }
   const attempts = producers.filter(run => Date.parse(run.created_at) >= Date.parse(clock.eligible_at));
   const last = attempts[0];
