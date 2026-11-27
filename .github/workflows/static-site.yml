@@ -1302,3 +1302,32 @@ jobs:
           path: /tmp/source-promotion-completion.json
           retention-days: 7
           if-no-files-found: error
+
+  wake-postclose-watchdog-after-failure:
+    # A failed acquisition has no completion relay (postclose-completion.mjs
+    # admits only a successful producer), so wake the unchanged watchdog with
+    # no inputs instead of waiting for a best-effort schedule. It applies its
+    # durable retry cooldown from run history and hands the end of that wait
+    # to the post-close timer. This job is the run's last; a watchdog that
+    # still sees the run in progress waits its hour as before. A failed
+    # wakeup never changes the run's result; the schedules remain the fallback.
+    continue-on-error: true
+    needs: [select-markets, ensure_daily_price_release, build-market, combine-and-build, promote-daily-source]
+    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && (needs.select-markets.result == 'failure' || needs.ensure_daily_price_release.result == 'failure' || needs.build-market.result == 'failure' || needs.combine-and-build.result == 'failure' || needs.promote-daily-source.result == 'failure') }}
+    permissions:
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Request the post-close watchdog after a failed acquisition
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wake_try in 1 2 3; do
+            if timeout 30 gh api --method POST repos/kusennjp1-ai/screener/actions/workflows/postclose-watchdog.yml/dispatches -f ref=main >/dev/null; then
+              exit 0
+            fi
+            echo "::warning::Failure wakeup attempt $wake_try failed; scheduled recovery remains active."
+            if [ "$wake_try" -lt 3 ]; then sleep 5; fi
+          done
+          exit 1

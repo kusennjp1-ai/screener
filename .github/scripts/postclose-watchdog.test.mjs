@@ -438,6 +438,45 @@ test('workflow wakeup is success-only ordinary full US and default checks keep e
   assert.doesNotMatch(workflow, /continue-on-error: true/);
 });
 
+// After a failed acquisition and after any watchdog-requested release, the
+// run's last job requests the unchanged watchdog with no inputs.
+const jobBlock = (text, name) => { const start = text.indexOf(`\n  ${name}:\n`); assert(start >= 0, `Missing job ${name}`); const rest = text.slice(start+1), end = rest.slice(1).search(/^  [a-zA-Z][\w-]*:\s*$/m); return end < 0 ? rest : rest.slice(0, end+1); };
+const plainWakeup = (body, label) => {
+  assert.match(body, /^    continue-on-error: true\n/m, label); assert.match(body, /^    timeout-minutes: 2\n/m, label);
+  assert.match(body, /^    permissions:\n      actions: write\n(?!      )/m, `${label} holds exactly actions: write`);
+  assert.doesNotMatch(body, /uses:|environment:|secrets\.|contents: |pages: write|id-token|producer_run_id|inputs\[/, label);
+  // A literal path, like REPOSITORY in the scripts: no interpolated REST target.
+  assert.deepEqual(body.match(/gh api[^\n]*/g), [`gh api --method POST repos/${REPOSITORY}/actions/workflows/postclose-watchdog.yml/dispatches -f ref=main >/dev/null; then`], `${label} requests only the watchdog, with no inputs`);
+  assert.match(body, /timeout 30 gh api/); assert.match(body, /for wake_try in 1 2 3; do/); assert.match(body, /if \[ "\$wake_try" -lt 3 \]; then sleep 5; fi/);
+};
+test('a failed acquisition wakes the watchdog from its last job with no inputs', () => {
+  const producer = readFileSync(new URL('../workflows/static-site.yml', import.meta.url), 'utf8');
+  const wake = jobBlock(producer, 'wake-postclose-watchdog-after-failure');
+  plainWakeup(wake, 'failure wakeup');
+  assert.match(wake, /^    needs: \[select-markets, ensure_daily_price_release, build-market, combine-and-build, promote-daily-source\]\n/m);
+  const condition = wake.match(/^    if: \$\{\{ (.+) \}\}\n/m)[1];
+  for (const guard of ['always()', '!cancelled()', "github.event_name == 'workflow_dispatch'", "github.ref == 'refs/heads/main'"]) assert(condition.startsWith(guard) || condition.includes(` && ${guard}`), guard);
+  for (const name of ['select-markets', 'ensure_daily_price_release', 'build-market', 'combine-and-build', 'promote-daily-source']) assert(condition.includes(`needs.${name}.result == 'failure'`), name);
+  assert.doesNotMatch(condition, /success|skipped/, 'never on a run the success relay already wakes');
+  // Every job the run can still be executing is upstream of this one.
+  const jobs = [...producer.matchAll(/^  ([a-zA-Z][\w-]*):\n/gm)].map(match => match[1]).filter(name => !['workflow_run', 'workflow_dispatch'].includes(name));
+  assert.deepEqual(jobs.filter(name => !wake.includes(name) && !['fetch-benchmark', 'wake-postclose-watchdog', 'wake-postclose-watchdog-after-failure'].includes(name)), []);
+  assert.match(jobBlock(producer, 'combine-and-build'), /needs: \[select-markets, build-market, fetch-benchmark\]/);
+  // The success relay is unchanged and still waits for the exact source run.
+  assert.match(jobBlock(producer, 'wake-postclose-watchdog'), /-f producer_run_id="\$GITHUB_RUN_ID" -f producer_run_attempt="\$GITHUB_RUN_ATTEMPT"/);
+});
+test('every watchdog-requested release, deployed or failed, wakes the watchdog from its last job', () => {
+  const release = readFileSync(new URL('../workflows/research-ui-release.yml', import.meta.url), 'utf8');
+  const wake = jobBlock(release, 'wake-postclose-watchdog');
+  plainWakeup(wake, 'release wakeup');
+  assert.match(wake, /^    needs: publish\n/m);
+  assert.match(wake, /^    if: \$\{\{ always\(\) && !cancelled\(\) && github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main' \}\}\n/m);
+  assert(release.trimEnd().endsWith(wake.trimEnd()), 'the wakeup is the last job');
+  // The workflow token stays read-only for actions; only the wakeup can dispatch.
+  assert.match(release, /^permissions:\n  contents: read\n  actions: read\n  pages: write\n  id-token: write\n(?!  )/m);
+  assert.equal((release.match(/^ +actions: write$/gm) || []).length, 1);
+});
+
 // Post-close timer: every decision also names its next inspection time.
 const wakeScenarios = () => [
   ['published_observations_current', value => {value.observed = observePublication(fixture(), target);}, '2026-10-28T21:00:00.000Z'],

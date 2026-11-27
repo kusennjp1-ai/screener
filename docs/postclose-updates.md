@@ -69,6 +69,20 @@ schedule に頼らず、監視は自分で次の検査時刻 `plan.wake_at` を�
 予備にする。待ち方を environment の待機（A2）や外部の時計（B）に替える
 場合も、変えるのはタイマー側だけで `wake_at` はそのまま使える。
 
+## 失敗・公開の終了時の起動
+
+取得の成功時は従来どおり `Static Site` の最後の job が監視を起こし、
+監視はその run の完了と 2 分の猶予を待つ。取得が失敗した run（main への
+`workflow_dispatch`）も最後の job が監視を入力なしで起こし、監視は実行履歴の
+再試行間隔の終わりをタイマーに渡す。監視が要求した `Research UI Release` は
+GITHUB_TOKEN の `workflow_dispatch` なので `workflow_run` を生まない。そこで
+公開・失敗のどちらで終わっても最後の job が監視を入力なしで起こす。失敗なら
+失敗の 10 分後の一度だけの再試行、公開なら 2 分の伝搬猶予の後の確認になる。
+どちらの起動 job も `actions: write` だけを持ち、checkout・environment・
+Pages を使わない。起動に失敗しても run の結果は変えない
+（`continue-on-error`）。起動 job はその run の一部なので、監視が run の
+完了前に履歴を読むと従来どおり進行中として 1 時間後に起きる。
+
 資料:
 
 - [NYSE trading hours and calendar](https://www.nyse.com/markets/hours-calendars)

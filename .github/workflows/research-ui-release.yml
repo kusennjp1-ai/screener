@@ -469,3 +469,34 @@ jobs:
           path: ${{ runner.temp }}/financial-renewal-quota
           retention-days: 14
           if-no-files-found: ignore
+  wake-postclose-watchdog:
+    # A watchdog-requested release is a GITHUB_TOKEN workflow_dispatch run,
+    # which creates no workflow_run event, so wake the unchanged watchdog with
+    # no inputs when this release ends, deployed or failed. Its planner keeps
+    # the two-minute propagation grace, waits for the once-only retry ten
+    # minutes after a failure, and hands that time to the post-close timer.
+    # This job is the run's last; a watchdog that still sees the run in
+    # progress waits its hour as before. Only this job holds actions: write;
+    # it has no environment, checkout or Pages access. continue-on-error keeps
+    # a lost wakeup from turning a deployed release into a failed run, which
+    # the planner would retry. The schedules remain the fallback.
+    needs: publish
+    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' }}
+    continue-on-error: true
+    permissions:
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Request the post-close watchdog after this release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wake_try in 1 2 3; do
+            if timeout 30 gh api --method POST repos/kusennjp1-ai/screener/actions/workflows/postclose-watchdog.yml/dispatches -f ref=main >/dev/null; then
+              exit 0
+            fi
+            echo "::warning::Release wakeup attempt $wake_try failed; scheduled recovery remains active."
+            if [ "$wake_try" -lt 3 ]; then sleep 5; fi
+          done
+          exit 1
