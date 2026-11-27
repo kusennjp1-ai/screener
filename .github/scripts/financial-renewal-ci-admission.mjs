@@ -219,8 +219,11 @@ function verifyOrdinaryNonCiRun(api,listed,proof){
     ||clock(run.updated_at)<clock(run.run_started_at)||clock(run.updated_at)>clock(proof.caller.run_started_at))throw Error('Prior renewal CI caller lacks a terminal ordinary publication');
   equal(triggerIdentity(listed),triggerIdentity(run),'listed prior ordinary caller');
   equal(triggerIdentity(latest),triggerIdentity(run),'prior ordinary caller latest attempt');
-  const jobs=completeJobs(api,run.id,1),route=jobs.filter(job=>job.name==='Route exact renewal CI admission'),publish=jobs.filter(job=>job.name==='publish');
-  if(jobs.length!==2||route.length!==1||publish.length!==1||jobs.some(job=>job.head_sha!==head||job.status!=='completed')||route[0].conclusion!=='success'
+  // The release's last job wakes the post-close watchdog only on main
+  // workflow_dispatch runs; on this workflow_run it is skipped with no steps.
+  // Runs from before it existed lack it.
+  const jobs=completeJobs(api,run.id,1),route=jobs.filter(job=>job.name==='Route exact renewal CI admission'),publish=jobs.filter(job=>job.name==='publish'),wake=jobs.filter(job=>job.name==='wake-postclose-watchdog');
+  if(wake.length>1||wake.some(job=>job.conclusion!=='skipped'||!Array.isArray(job.steps)||job.steps.length!==0)||jobs.length!==2+wake.length||route.length!==1||publish.length!==1||jobs.some(job=>job.head_sha!==head||job.status!=='completed')||route[0].conclusion!=='success'
     ||!['success','skipped'].includes(publish[0].conclusion))throw Error('Prior renewal CI caller lacks exact ordinary routing and publication jobs');
   const markers=route[0].steps?.filter(step=>typeof step.name==='string'&&step.name.startsWith('Ordinary non-CI publication:'))??[];
   if(markers.length!==1||markers[0].status!=='completed'||markers[0].conclusion!=='success')throw Error('Prior renewal CI caller lacks its authenticated ordinary marker');

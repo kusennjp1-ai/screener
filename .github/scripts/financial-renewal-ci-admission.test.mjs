@@ -155,9 +155,9 @@ function ordinaryPrior(f,{sourcePath='.github/workflows/design-acceptance.yml',s
   const run={...clone(f.state.caller),id:19,status:'completed',conclusion:'success',created_at:'2026-10-05T11:56:00Z',run_started_at:'2026-10-05T11:56:00Z',updated_at:'2026-10-05T11:59:00Z'};
   const route={id:191,name:'Route exact renewal CI admission',run_id:19,run_attempt:1,head_sha:f.executing.head_sha,status:'completed',conclusion:'success',started_at:'2026-10-05T11:56:00Z',completed_at:'2026-10-05T11:57:00Z',steps:[{name:'Ordinary non-CI publication: 8/1',status:'completed',conclusion:'success',started_at:'2026-10-05T11:56:30Z',completed_at:'2026-10-05T11:56:40Z'}]};
   const publish={id:192,name:'publish',run_id:19,run_attempt:1,head_sha:f.executing.head_sha,status:'completed',conclusion:publishConclusion,started_at:'2026-10-05T11:57:30Z',completed_at:'2026-10-05T11:58:00Z'};
-  f.state.ownRuns.push(run);
-  const put=()=>{f.state.overrides.set(`repos/${repo}/actions/runs/19/attempts/1`,run);f.state.overrides.set(`repos/${repo}/actions/runs/19`,run);f.state.overrides.set(`repos/${repo}/actions/runs/19/attempts/1/jobs?per_page=100`,[{total_count:2,jobs:[route,publish]}]);f.state.overrides.set(`repos/${repo}/actions/runs/8/attempts/1`,source);f.state.overrides.set(`repos/${repo}/actions/runs/8`,source);};put();
-  return {source,run,route,publish,put};
+  f.state.ownRuns.push(run);const extra=[];
+  const put=()=>{const jobs=[route,publish,...extra];f.state.overrides.set(`repos/${repo}/actions/runs/19/attempts/1`,run);f.state.overrides.set(`repos/${repo}/actions/runs/19`,run);f.state.overrides.set(`repos/${repo}/actions/runs/19/attempts/1/jobs?per_page=100`,[{total_count:jobs.length,jobs}]);f.state.overrides.set(`repos/${repo}/actions/runs/8/attempts/1`,source);f.state.overrides.set(`repos/${repo}/actions/runs/8`,source);};put();
+  return {source,run,route,publish,extra,put};
 }
 function queuedLater(f){
   const run={...clone(f.state.caller),id:21,status:'queued',conclusion:null,created_at:'2026-10-05T12:02:10Z',run_started_at:null,updated_at:'2026-10-05T12:02:10Z'};
@@ -175,6 +175,18 @@ for(const [name,change]of [
   ['wrong job head',n=>n.route.head_sha=other],['wrong job attempt',n=>n.publish.run_attempt=2],['wrong source head',n=>n.source.head_sha=other],['wrong source event',n=>n.source.event='pull_request'],
   ['fork source',n=>n.source.head_repository.id=1],['running source',n=>n.source.status='in_progress'],['unknown source conclusion',n=>n.source.conclusion='unknown'],['missing marker clock',n=>delete n.route.steps[0].completed_at],
 ])test(`prior ordinary exception rejects ${name}`,()=>withFixture('publish',f=>{const n=ordinaryPrior(f);change(n);n.put();assert.throws(()=>verifyRenewalCiAdmission(f.options));}));
+// The release's last job wakes the watchdog only on main workflow_dispatch; on
+// this workflow_run caller GitHub lists it skipped with no steps and the same
+// placeholder clocks as other skipped jobs. Callers from before it lack it.
+const wakeJob=(n,patch={})=>({id:193,name:'wake-postclose-watchdog',run_id:19,run_attempt:1,head_sha:n.route.head_sha,status:'completed',conclusion:'skipped',started_at:'2026-10-05T11:58:31Z',completed_at:'2026-10-05T11:58:30Z',steps:[],...patch});
+for(const publishConclusion of ['success','skipped'])test(`prior ordinary exception admits one skipped release wake job (publish ${publishConclusion})`,()=>withFixture('publish',f=>{
+  const n=ordinaryPrior(f,{publishConclusion});n.extra.push(wakeJob(n));n.put();assert.equal(verifyRenewalCiAdmission(f.options).phase,'publish');
+}));
+for(const [name,change]of [
+  ['wake succeeded',n=>n.extra.push(wakeJob(n,{conclusion:'success'}))],['wake has steps',n=>n.extra.push(wakeJob(n,{steps:[{name:'Request the post-close watchdog after this release',status:'completed',conclusion:'success'}]}))],
+  ['wake missing steps',n=>{const job=wakeJob(n);delete job.steps;n.extra.push(job);}],['wake wrong head',n=>n.extra.push(wakeJob(n,{head_sha:other}))],['wake running',n=>n.extra.push(wakeJob(n,{status:'in_progress',conclusion:null}))],
+  ['duplicate wake',n=>n.extra.push(wakeJob(n),wakeJob(n,{id:194}))],['wake beside an unknown job',n=>n.extra.push(wakeJob(n),wakeJob(n,{id:194,name:'unknown'}))],
+])test(`prior ordinary exception rejects ${name}`,()=>withFixture('publish',f=>{const n=ordinaryPrior(f);change(n);n.put();assert.throws(()=>verifyRenewalCiAdmission(f.options),/exact ordinary routing and publication jobs/);}));
 test('prior ordinary exception rejects source or caller reruns through independent latest APIs',()=>withFixture('publish',f=>{
   const n=ordinaryPrior(f);f.state.overrides.set(`repos/${repo}/actions/runs/8`,{...n.source,run_attempt:2});assert.throws(()=>verifyRenewalCiAdmission(f.options));
   n.put();f.state.overrides.set(`repos/${repo}/actions/runs/19`,{...n.run,run_attempt:2});assert.throws(()=>verifyRenewalCiAdmission(f.options));

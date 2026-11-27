@@ -7,7 +7,7 @@ import {tmpdir} from 'node:os';
 import {join,dirname} from 'node:path';
 import {createRetainedPriceAdmissionApi} from './retained-price-admission-inventory.mjs';
 import {admissionSnapshotResult} from './fixtures/retained-price-admission-inventory.mjs';
-import {PRICE_CI,priceAdmissionDiagnostic,PRICE_REQUEST_PATH,PRICE_REPAIR_STEP,PRICE_HOLD_STEP,priceControllerRoot,verifyPriceActivation,verifyPriceCiProducer,verifyPriceSourceCompletion,routePricePublication,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
+import {PRICE_CI,RELEASE_WAKE_JOB,priceAdmissionDiagnostic,PRICE_REQUEST_PATH,PRICE_REPAIR_STEP,PRICE_HOLD_STEP,priceControllerRoot,verifyPriceActivation,verifyPriceCiProducer,verifyPriceSourceCompletion,routePricePublication,isVerifiedPriceSourceProof} from './retained-price-ci-admission.mjs';
 
 const sha256=b=>createHash('sha256').update(b).digest('hex');
 const repo={id:PRICE_CI.repositoryId,full_name:PRICE_CI.repository,default_branch:'main'};
@@ -238,6 +238,32 @@ test('started, uncertain, rerun, incomplete or artifact-bearing prior callbacks 
   for(const kind of ['producer','publisher'])for(const [label,mutate]of mutations){
     const f=fixture(t);if(kind==='publisher')f.finish();const prior=earlierCallback(f,kind);mutate(prior);prior.sync();
     assert.throws(()=>kind==='producer'?f.produce():f.route(f.producer),undefined,`${kind}: ${label}`);
+  }
+});
+// The release's last job wakes the watchdog only on main workflow_dispatch; on
+// these workflow_run callers GitHub lists it skipped with no steps, in the same
+// literal shape as the observed skipped publish job. Older callers lack it.
+const releaseWake=(job,patch={})=>({...copy(job),id:job.id+1,name:RELEASE_WAKE_JOB,...patch});
+test('publisher callbacks admit at most one skipped release wake job and nothing else extra',t=>{
+  assert.equal(RELEASE_WAKE_JOB,'wake-postclose-watchdog');
+  {const f=fixture(t);f.finish();const prior=earlierCallback(f,'publisher');prior.jobs.push(releaseWake(prior.jobs[1]));prior.sync();assert.equal(f.route(f.producer).price_source,true);}
+  for(const [label,mutate,message]of [
+    ['wake with steps',p=>p.jobs.push(releaseWake(p.jobs[1],{steps:[{name:'Request the post-close watchdog after this release',status:'completed',conclusion:'success'}]})),/downstream work started/],
+    ['wake succeeded',p=>p.jobs.push(releaseWake(p.jobs[1],{conclusion:'success'})),/downstream work started/],
+    ['wake wrong head',p=>p.jobs.push(releaseWake(p.jobs[1],{head_sha:'f'.repeat(40)})),/nonterminal pre-admission job inventory/],
+    ['duplicate wake',p=>p.jobs.push(releaseWake(p.jobs[1]),releaseWake(p.jobs[1],{id:9877})),/job inventory/],
+    ['wake beside an unknown job',p=>p.jobs.push(releaseWake(p.jobs[1]),{...copy(p.jobs[1]),id:9876,name:'unknown'}),/job inventory/],
+  ]){const f=fixture(t);f.finish();const prior=earlierCallback(f,'publisher');mutate(prior);prior.sync();assert.throws(()=>f.route(f.producer),message,label);}
+  {const f=fixture(t);const prior=earlierCallback(f,'producer');prior.jobs.push(releaseWake(prior.jobs[1]));prior.sync();assert.throws(()=>f.produce(),/job inventory/,'producer has no release wake job');}
+});
+test('a proven earlier hold caller may carry only a skipped release wake job',t=>{
+  const hold=(f,extra=[])=>{const held={...f.publisher,id:300,status:'completed',conclusion:'success',updated_at:timestamp(-3280)};f.records.publisher.unshift(held);
+    const base={run_id:300,run_attempt:1,head_sha:f.head,status:'completed',started_at:held.run_started_at,completed_at:held.updated_at};
+    const publish={...base,id:3001,name:'publish',conclusion:'skipped',steps:[]};
+    f.jobRecords[300]=[{...base,id:3000,name:'Route exact renewal CI admission',conclusion:'success',steps:[{name:PRICE_HOLD_STEP,status:'completed',conclusion:'success'}]},publish,...extra.map(patch=>releaseWake(publish,patch))];f.sync();};
+  {const f=fixture(t);f.finish();hold(f,[{}]);assert.equal(f.route(f.producer).price_source,true);}
+  for(const extra of [[{conclusion:'success'}],[{steps:[{name:'Request the post-close watchdog after this release',status:'completed',conclusion:'success'}]}],[{head_sha:'f'.repeat(40)}],[{},{id:3005}],[{status:'in_progress',conclusion:null}]]){
+    const f=fixture(t);f.finish();hold(f,extra);assert.throws(()=>f.route(f.producer),/no-publication hold/,JSON.stringify(extra));
   }
 });
 test('complete no-job and artifact inventories are mandatory for exclusion',t=>{
