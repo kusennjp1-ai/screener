@@ -119,11 +119,15 @@ jobs:
     # SPY series. combine-and-build places the file only when it validates for
     # the same session as its manifest and keeps it if its own later request
     # fails; never for another day. Optional: any failure here leaves combine
-    # on its own request, as before, and never fails the run.
+    # on its own request, as before, and never fails the run. combine needs
+    # this job. A normal run ends within the 90-minute retry window plus
+    # setup; a hang ends as a step failure at 100 minutes, or at the job's
+    # 110-minute limit. The fastest measured US build-market that started
+    # before 19:45 ET on its session took 110.2 minutes.
     needs: select-markets
     if: ${{ github.event_name != 'workflow_run' && needs.select-markets.result == 'success' && needs.select-markets.outputs.mode == 'full' && contains(fromJSON(needs.select-markets.outputs.markets), 'US') }}
     continue-on-error: true
-    timeout-minutes: 240
+    timeout-minutes: 110
     permissions:
       contents: read
     runs-on: ubuntu-latest
@@ -141,8 +145,9 @@ jobs:
         run: python -m pip install -r .github/scripts/session-calendar-requirements.txt "$(grep -E '^yfinance==' backend/requirements-runtime.txt)"
       - name: Request SPY for the completed NYSE session
         # Retries every 15 minutes until 19:45 New York time on that session,
-        # and for at most 2 hours after the first request.
+        # and for at most 90 minutes after the first request.
         continue-on-error: true
+        timeout-minutes: 100
         run: |
           target="$(python .github/scripts/postclose-calendar.py | python -c 'import json,sys; print(json.load(sys.stdin)["target_session"])')"
           echo "Completed NYSE session: $target"

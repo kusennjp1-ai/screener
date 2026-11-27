@@ -80,6 +80,10 @@ test('early SPY request is optional, read-only, same-session only and cannot fai
   assert.match(early,/permissions:\n\s+contents: read\n\s+runs-on:/);assert.doesNotMatch(early,/: write|secrets\.|GH_TOKEN|github\.token/);
   assert.match(early,/persist-credentials: false/);
   const request=step(early,'Request SPY for the completed NYSE session');assert.match(request,/continue-on-error: true/);
+  // combine needs this job: a hang ends as a continue-on-error step failure after the retry window, before the job limit.
+  const retryWindow=Number(readFileSync(new URL('../../frontend/tools/export-book-benchmark.py',import.meta.url),'utf8').match(/^EARLY_RETRY_WINDOW = timedelta\(minutes=(\d+)\)$/m)?.[1]);
+  const stepLimit=Number(request.match(/^        timeout-minutes: (\d+)$/m)?.[1]),jobLimit=Number(early.match(/^    timeout-minutes: (\d+)$/m)?.[1]);
+  assert(retryWindow>0&&retryWindow<stepLimit&&stepLimit<jobLimit&&jobLimit<=retryWindow+30,JSON.stringify({retryWindow,stepLimit,jobLimit}));
   assert.match(request,/postclose-calendar\.py[^\n]*target_session/);assert.match(request,/export-book-benchmark\.py --target "\$target" --output "\$RUNNER_TEMP\/early-book-benchmark\/book-benchmark\.json"/);
   assert.doesNotMatch(request,/--allow-unavailable|--root|static-data/);
   const upload=step(early,'Upload the early SPY benchmark');assert.match(upload,/name: book-benchmark-\$\{\{ github\.run_id \}\}-\$\{\{ github\.run_attempt \}\}/);assert.match(upload,/if-no-files-found: ignore/);

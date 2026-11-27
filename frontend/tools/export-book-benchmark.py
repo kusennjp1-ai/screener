@@ -28,11 +28,14 @@ UNAVAILABLE_RETRY_SECONDS = 600
 # --target: an early request is retried at this spacing only until this New York
 # time on the target date (Yahoo returned invalid SPY series from 20:00 ET on
 # the measured November 2026 days) and for at most this long after the first
-# request, which is less than the fastest measured US build-market job (133
-# minutes), so the job that runs it never holds up the combine job.
+# request. combine-and-build needs the job that runs it, so the window plus that
+# job's setup must stay below, with margin, the fastest measured US build-market
+# job that started before 19:45 ET on its session (110.2 minutes, of 23
+# successful jobs in November 2026). The fastest of any start (89.3 minutes)
+# began after 19:45 ET, when only one request is made.
 EARLY_RETRY_SECONDS = 900
 EARLY_RETRY_DEADLINE_ET = time(19, 45)
-EARLY_RETRY_WINDOW = timedelta(minutes=120)
+EARLY_RETRY_WINDOW = timedelta(minutes=90)
 
 
 class ProviderUnavailable(ValueError):

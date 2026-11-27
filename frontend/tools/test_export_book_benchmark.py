@@ -369,14 +369,15 @@ class SameSessionRetentionTests(unittest.TestCase):
 
     def test_early_target_retries_only_until_the_new_york_deadline(self):
         from datetime import datetime, timezone
-        clock = [datetime(2026, 10, 16, 22, 0, tzinfo=timezone.utc)]  # 18:00 New York time; default deadline 19:45
+        # 18:30 New York time: the default 19:45 deadline comes before the end of the 90-minute window.
+        clock = [datetime(2026, 10, 16, 22, 30, tzinfo=timezone.utc)]
         def sleep(seconds):
             self.sleeps.append(seconds)
             clock[0] += timedelta(seconds=seconds)
         output = self.root / "early.json"
         with self.assertRaises(module.ProviderUnavailable):
             module.prefetch_benchmark(self.TARGET, output, yf=self.provider([False]), clock=lambda: clock[0], sleep=sleep, log=self.lines.append)
-        self.assertEqual(len(self.requests), 8)  # 18:00, 18:15, ... 19:45 New York time
+        self.assertEqual(len(self.requests), 6)  # 18:30, 18:45, ... 19:45 New York time
         self.assertEqual(clock[0], datetime(2026, 10, 16, 23, 45, tzinfo=timezone.utc))
         self.assertFalse(output.exists())
         # A request after the deadline is made once and never repeated.
@@ -391,7 +392,7 @@ class SameSessionRetentionTests(unittest.TestCase):
             module.prefetch_benchmark(date(2026, 10, 19), output, yf=self.provider([True]), clock=lambda: clock[0], sleep=sleep, log=self.lines.append)
         self.assertEqual(self.requests, [])
 
-    def test_early_target_retries_stop_two_hours_after_the_first_request(self):
+    def test_early_target_retries_stop_ninety_minutes_after_the_first_request(self):
         from datetime import datetime, timezone
         # 2026-11-27 closed early at 13:00 New York time; 19:45 is far away, so the window decides.
         clock = [datetime(2026, 11, 27, 18, 5, tzinfo=timezone.utc)]
@@ -401,8 +402,9 @@ class SameSessionRetentionTests(unittest.TestCase):
         with self.assertRaises(module.ProviderUnavailable):
             module.prefetch_benchmark(date(2026, 11, 27), self.root / "early.json", yf=self.provider([False]),
                                       clock=lambda: clock[0], sleep=sleep, log=self.lines.append)
-        self.assertEqual(len(self.requests), 9)  # first request + 120 minutes at 15-minute spacing
-        self.assertEqual(clock[0], datetime(2026, 11, 27, 20, 5, tzinfo=timezone.utc))
+        self.assertEqual(module.EARLY_RETRY_WINDOW, timedelta(minutes=90))
+        self.assertEqual(len(self.requests), 7)  # first request + 90 minutes at 15-minute spacing
+        self.assertEqual(clock[0], datetime(2026, 11, 27, 19, 35, tzinfo=timezone.utc))
         self.assertFalse((self.root / "early.json").exists())
 
     def test_a_malformed_earlier_file_never_fails_a_successful_export(self):
