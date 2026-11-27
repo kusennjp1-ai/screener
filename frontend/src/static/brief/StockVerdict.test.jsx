@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import StockView from './StockView';
-import StockVerdict, { PIVOT_UNKNOWN_NOTE } from './StockVerdict';
+import StockVerdict, { PIVOT_UNKNOWN_NOTE, stopHitNote } from './StockVerdict';
 import { breakoutEvent, candidateView, earningsCall, trendTemplate } from './briefCandidate';
 import { HEAVY_DOWN_NOTE, lowActivityNote, PLAN_BLOCKED, SE_CONFIDENCE_FLOOR } from './buyGate';
 import { lowActivityReason } from '../priceActivity';
@@ -295,6 +295,28 @@ describe('the conclusion says why there is no buy', () => {
     expect(lines.map(node => [node.textContent, node.className])).toEqual([[PIVOT_UNKNOWN_NOTE, 'brief-note']]);
     expect(PIVOT_UNKNOWN_NOTE).toBe('ピボットを確認できないため位置は未確認です。');
     expect(card.textContent).not.toContain(PIVOT_UNKNOWN_NOTE);
+  });
+
+  // Plan S2-P2's 「保有なら」 line (D10, S2-P6): the stop row's 該当 is said beside the share count, in the row's words and number,
+  // as one full-width line under the tiles; the plan, its tiles and qualifiers, the call and the 銘柄 line read as without it.
+  it('says under the tiles that a holder\'s provisional stop was reached when the stop row reads 該当, and nothing else moves', () => {
+    const sells = stop => ({ strength: [], weakness: [], hits: 0, breakdownHits: 0, cautions: 0, unknowns: 0, stop });
+    const plain = conclusionOf({ sells: sells({ key: 'stop', state: 'clear', level: 93.93 }) });
+    const before = { tiles: tiles(plain), quals: quals(plain), label: plain.querySelector('.brief-call-label').textContent, title: title(plain) };
+    expect(levels(plain).querySelector('[data-testid="brief-levels-stop"]')).toBeNull();
+    cleanup();
+    const card = conclusionOf({ sells: sells({ key: 'stop', state: 'hit', level: 93.93 }) });
+    const lines = [...levels(card).querySelectorAll(':scope > p')];
+    expect(lines.map(node => [node.textContent, node.className])).toEqual([['保有なら：仮の損切り $93.93 に到達しています（売りのカード）', 'brief-note brief-levels-stop']]);
+    expect(stopHitNote(1234.5)).toBe('保有なら：仮の損切り $1,234.50 に到達しています（売りのカード）');
+    expect({ tiles: tiles(card), quals: quals(card), label: card.querySelector('.brief-call-label').textContent, title: title(card) }).toEqual(before);
+    expect(card.textContent).not.toContain('保有なら');
+    cleanup();
+    // 判定なし, 未確認 or no stop row: no line.
+    for (const stop of [{ key: 'stop', state: 'na', level: null }, { key: 'stop', state: 'unknown', level: 93.93 }, undefined]) {
+      expect(levels(conclusionOf({ sells: sells(stop) })).querySelector('[data-testid="brief-levels-stop"]')).toBeNull();
+      cleanup();
+    }
   });
 
   it('reads — in every tile without a plan, and the plan contract\'s qualifiers when they are set', () => {

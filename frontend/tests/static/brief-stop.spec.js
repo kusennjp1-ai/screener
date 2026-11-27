@@ -42,6 +42,9 @@ const analysisDayBreakout = () => {
 const CLAUSE = '損切りの行：仮の損切りに到達しています（サインの件数には含めていません）。';
 const LEVEL = /仮の損切り \$\d+\.\d\d（ピボットの −7\.0%・独自設定）・\d+\/\d+ の上抜けの後の最安値 \$\d+\.\d\d（\d+\/\d+）/;
 const sell = page => page.getByTestId('brief-sell');
+/** Plan S2-P2's 「保有なら」 line under the level tiles (D10): on a 該当 row only, in the row's own words and number. */
+const stopNote = page => page.getByTestId('brief-levels-stop');
+const noteFor = async page => `保有なら：仮の損切り $${(await page.getByTestId('brief-sell-stop').locator('em').textContent()).match(/^仮の損切り \$(\d+\.\d\d)/)[1]} に到達しています（売りのカード）`;
 const row = page => page.getByTestId('brief-sell-stop');
 const note = page => sell(page).locator('.brief-note').first();
 const folded = locator => locator.evaluate(node => Boolean(node.closest('details')));
@@ -89,6 +92,10 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     await expect(sell(page).locator('.is-sell-hit')).toHaveCount(0);
     // Not a sign anywhere else: no sell chip in the call, no ▲ 崩れ.
     await expect(page.getByTestId('brief-conclusion')).not.toContainText('崩れ（独自判定）');
+    // Said beside the share count, under the tiles and outside every fold; the 銘柄 line gains no short form for it (D5 is for signs).
+    await expect(stopNote(page)).toHaveText(await noteFor(page));
+    expect(await stopNote(page).evaluate(node => Boolean(node.closest('[data-testid="brief-levels"]')) && !node.closest('details'))).toBe(true);
+    await expect(page.getByTestId('brief-conclusion').locator('.brief-call-label')).toHaveText('銘柄');
     if (!wide) {
       const height = await content(page);
       console.log(JSON.stringify({ state: 'stop-alone', width, content: height, sell: await sell(page).evaluate(node => node.getBoundingClientRect().height) }));
@@ -107,6 +114,7 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     const counted = Number((await note(page).textContent()).match(/ (\d+)件のサインが出ています/)[1]);
     expect(counted).toBe(await sell(page).locator('.is-sell-hit').count());
     expect(await folded(row(page))).toBe(false);
+    await expect(stopNote(page)).toHaveText(await noteFor(page));
     if (!wide) {
       const height = await content(page);
       console.log(JSON.stringify({ state: 'stop-sign', width, content: height, sell: await sell(page).evaluate(node => node.getBoundingClientRect().height) }));
@@ -122,6 +130,7 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     await expect(row(page)).toContainText('損切りに到達（保有なら） 判定なし（上抜けは分析日・その後の日足はまだありません）');
     expect(await folded(row(page))).toBe(!wide);
     await expect(note(page)).not.toContainText('損切りの行');
+    await expect(stopNote(page)).toHaveCount(0);
     if (!wide) await expect(sell(page).locator('summary')).toContainText(/／損切り判定なし$/);
     expect(errors).toEqual([]);
   });
@@ -160,6 +169,7 @@ for (const [width, options] of [[375, phone(375)], [1440, desktop]]) test.descri
     await expect(row(page)).toHaveAttribute('data-state', 'na');
     await expect(row(page)).toContainText(/損切りに到達（保有なら） 判定なし（計画の買値は \d+\/\d+ 終値・その後の日足はまだありません）/);
     expect(await folded(row(page))).toBe(!wide);
+    await expect(stopNote(page)).toHaveCount(0);
     expect(errors).toEqual([]);
   });
 });
@@ -205,6 +215,19 @@ for (const theme of ['light', 'dark']) for (const [width, options] of [[375, pho
     await expect(page.getByTestId('brief-call-market')).toContainText(line);
     await expect(row(page)).toHaveAttribute('data-state', 'hit');
     await expect(row(page)).not.toContainText('▲');
+    // The line under the tiles: a text ink (never --neg), 12px, at least 4.5:1 against the page.
+    const noteInk = await stopNote(page).evaluate(node => {
+      const probe = document.createElement('span'); node.appendChild(probe);
+      const ink = name => { probe.style.color = `var(${name})`; return getComputedStyle(probe).color; };
+      const inks = ['--text', '--text-2', '--text-3'].map(ink), neg = ink('--neg'); probe.remove();
+      let ground = node; while (ground && /rgba\(0, 0, 0, 0\)|transparent/.test(getComputedStyle(ground).backgroundColor)) ground = ground.parentElement;
+      const rgb = value => value.match(/[\d.]+/g).slice(0, 3).map(Number);
+      return { inks, neg, color: getComputedStyle(node).color, rgb: rgb(getComputedStyle(node).color), ground: rgb(getComputedStyle(ground).backgroundColor), size: getComputedStyle(node).fontSize };
+    });
+    expect(noteInk.inks).toContain(noteInk.color);
+    expect(noteInk.color).not.toBe(noteInk.neg);
+    expect(noteInk.size).toBe('12px');
+    expect(contrast(noteInk.rgb, noteInk.ground)).toBeGreaterThanOrEqual(4.5);
     const read = await row(page).evaluate(node => {
       const probe = document.createElement('span'); node.appendChild(probe);
       const ink = name => { probe.style.color = `var(${name})`; return getComputedStyle(probe).color; };

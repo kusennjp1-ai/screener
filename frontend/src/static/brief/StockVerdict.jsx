@@ -1,4 +1,4 @@
-import { signed } from '../positionGeometry';
+import { money, signed } from '../positionGeometry';
 import { code33ChipView, earningsCaution, earningsChipView } from '../fundamentalsExplain.js';
 import { footprint, RS_LEAD_FROM_HIGH_PERCENT } from './briefChartModel';
 import { sellChipView } from './briefSell';
@@ -87,6 +87,12 @@ const Qualifier = ({ text, tone }) => text ? <span className={`brief-tilequal${t
 
 /** The one sentence the retired pivot meter said for an unknown pivot (plan D5: kept word for word, a full-width line). */
 export const PIVOT_UNKNOWN_NOTE = 'ピボットを確認できないため位置は未確認です。';
+/**
+ * The stop row's hit beside the share count (plan S2-P2's 「保有なら」 line, D10, S2-P6): one full-width line under the tiles when
+ * the sell card's row reads 該当, in the row's own words and number. It removes no plan and adds no count, chip or sign (BEH-2
+ * stays the owner's).
+ */
+export const stopHitNote = level => `保有なら：仮の損切り ${money(level)} に到達しています（売りのカード）`;
 
 /**
  * The call's market line (plan S2-P1, D2, D18) from marketBand's own fields: the subject and the analysis date, the answer with
@@ -190,7 +196,9 @@ function stockCall({ view, plan, stage, technical, bars, judged = null, template
   ];
   // A stale pivot says why in the call's line; an unknown one keeps the meter's sentence (D5).
   const pivotUnknown = !view.stale && !finite(view.distance);
-  return { gate, tone, title, sub, caution, context, also, tiles, chips, pivotUnknown };
+  // The stop row at 該当 (BEH-1): its level, for the line under the tiles; null otherwise.
+  const stopHit = sells?.stop?.state === 'hit' && finite(sells.stop.level) ? sells.stop.level : null;
+  return { gate, tone, title, sub, caution, context, also, tiles, chips, pivotUnknown, stopHit };
 }
 
 /** The conclusion card (plan S2-P1, B's form): line 1 the market line, line 2 labelled 銘柄 with buyGate's own title and line. */
@@ -207,12 +215,14 @@ function CallCard({ call, band, date }) {
 
 /**
  * The three level tiles (買いの範囲・損切り・株数, with their qualifiers) under the chart (plan D5: they left the card; S2-P2's
- * strip takes this place), and the retired meter's sentence for an unknown pivot as one full-width line under them.
+ * strip takes this place), and under them, each as one full-width line, the retired meter's sentence for an unknown pivot and,
+ * when the sell card's stop row reads 該当, that a holder's provisional stop was reached.
  */
 function Levels({ call }) {
   return <div className="brief-levels" data-testid="brief-levels">
     <div className="brief-kgrid">{call.tiles.map(tile => <div key={tile.label}><small>{tile.label}</small><b className="numeric">{tile.value}</b><em>{tile.note}</em><Qualifier text={tile.qualifier[0]} tone={tile.qualifier[1]} /></div>)}</div>
     {call.pivotUnknown && <p className="brief-note">{PIVOT_UNKNOWN_NOTE}</p>}
+    {call.stopHit !== null && <p className="brief-note brief-levels-stop" data-testid="brief-levels-stop">{stopHitNote(call.stopHit)}</p>}
   </div>;
 }
 

@@ -39,6 +39,9 @@
 .brief-levels { display: grid; gap: 8px; min-width: 0; }
 .brief-levels .brief-kgrid > div { position: relative; }
 .brief-tilequal { position: absolute; top: -9px; right: 8px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: 999px; background: var(--surface); font-size: 12px; line-height: 16px; font-weight: 400; color: var(--text-2); white-space: nowrap; }
+/* The stop row's hit under the tiles (「保有なら：仮の損切り X に到達しています（売りのカード）」): 12px as the strip's state lines,
+   in the text ink rather than the note's muted one, so it is read beside the share count (D17: a text ink, never --neg). */
+.brief-levels .brief-levels-stop { color: var(--text); }
 /* The stop inside the last contraction (収縮の中, positionPlan's stopInsideBase): the stop tile's qualifier in the ext tone. */
 .brief-tilequal.tone-ext { border-color: var(--ext); color: var(--ext); font-weight: 700; }
 /* Below 768px the stage chip's 日足から算出 is in its title and read out, not drawn (StockVerdict's stageChip), so the
