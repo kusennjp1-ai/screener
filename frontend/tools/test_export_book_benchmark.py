@@ -5,6 +5,14 @@ import importlib.util
 from pathlib import Path
 import unittest
 
+# Load the offline calendar stack once, before any test patches sys.modules:
+# patch.dict removes modules first imported inside it, and numpy 2 cannot be
+# imported a second time in one process.
+try:
+    import pandas_market_calendars  # noqa: F401
+except ImportError:
+    pass
+
 spec = importlib.util.spec_from_file_location("book_benchmark", Path(__file__).with_name("export-book-benchmark.py"))
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
