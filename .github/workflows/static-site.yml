@@ -140,7 +140,8 @@ jobs:
       - name: Install the exchange clock and the producer's SPY provider
         run: python -m pip install -r .github/scripts/session-calendar-requirements.txt "$(grep -E '^yfinance==' backend/requirements-runtime.txt)"
       - name: Request SPY for the completed NYSE session
-        # Retries every 15 minutes until 19:45 New York time on that session.
+        # Retries every 15 minutes until 19:45 New York time on that session,
+        # and for at most 2 hours after the first request.
         continue-on-error: true
         run: |
           target="$(python .github/scripts/postclose-calendar.py | python -c 'import json,sys; print(json.load(sys.stdin)["target_session"])')"

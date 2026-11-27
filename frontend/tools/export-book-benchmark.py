@@ -26,10 +26,13 @@ NEW_YORK = ZoneInfo("America/New_York")
 UNAVAILABLE_RETRIES = 9
 UNAVAILABLE_RETRY_SECONDS = 600
 # --target: an early request is retried at this spacing only until this New York
-# time on the target date. Yahoo returned invalid SPY series from 20:00 ET on
-# the measured November 2026 days, so the early request stops before that.
+# time on the target date (Yahoo returned invalid SPY series from 20:00 ET on
+# the measured November 2026 days) and for at most this long after the first
+# request, which is less than the fastest measured US build-market job (133
+# minutes), so the job that runs it never holds up the combine job.
 EARLY_RETRY_SECONDS = 900
 EARLY_RETRY_DEADLINE_ET = time(19, 45)
+EARLY_RETRY_WINDOW = timedelta(minutes=120)
 
 
 class ProviderUnavailable(ValueError):
@@ -330,23 +333,27 @@ def export_or_unavailable(root: Path, *, yf=None, clock=None, sleep=clock_time.s
             sleep(interval)
         except Exception as error:
             return write_unavailable(root, as_of_date, error, log)
-    compare_same_session(existing, result, log)
     write_benchmark(destination, result)
+    try:
+        compare_same_session(existing, result, log)
+    except Exception as error:  # The comparison is a diagnostic; it never fails a written export.
+        log(f"::warning::SPY same-session comparison could not be made: {type(error).__name__}: {error}")
     return summary_of(destination, result)
 
 
 def prefetch_benchmark(target: date, output: Path, *, yf=None, clock=None, sleep=clock_time.sleep,
-                       interval=EARLY_RETRY_SECONDS, deadline: datetime | None = None, log=print):
+                       interval=EARLY_RETRY_SECONDS, deadline: datetime | None = None, window=EARLY_RETRY_WINDOW, log=print):
     """Manifest-free early request for the closed NYSE session target, written to output.
 
     Retries provider failures until the deadline (19:45 New York time on target by
-    default). Writes nothing unless the series validates; never touches a static-data root.
+    default) or until window after the first request, whichever is earlier. Writes
+    nothing unless the series validates; never touches a static-data root.
     """
     import pandas_market_calendars as mcal
     if yf is None:
         import yfinance as yf
     clock = clock or (lambda: datetime.now(timezone.utc))
-    deadline = deadline or datetime.combine(target, EARLY_RETRY_DEADLINE_ET, tzinfo=NEW_YORK)
+    deadline = min(deadline or datetime.combine(target, EARLY_RETRY_DEADLINE_ET, tzinfo=NEW_YORK), clock() + window)
     attempt = 1
     while True:
         try:

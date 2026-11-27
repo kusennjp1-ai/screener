@@ -204,20 +204,29 @@ class SameSessionRetentionTests(unittest.TestCase):
         self.directory.cleanup()
 
     def provider(self, outcomes, close=101.0, multi=False):
-        """outcomes: per request True (a full series) or False (no prices); the last outcome repeats."""
-        import pandas as pd
+        """outcomes: per request True (a full series) or False (no prices); the last outcome repeats.
+
+        The frame is duck-typed (only what fetch_benchmark reads), so the test does not
+        depend on how a pandas/numpy release builds frames or column indexes."""
+        from datetime import datetime, time
         from types import SimpleNamespace
+        class Frame:
+            def __init__(self, rows, levels):
+                self.rows, self.empty = rows, not rows
+                self.columns = SimpleNamespace(nlevels=levels, get_level_values=lambda level: ["SPY"] * 5)
+            def xs(self, key, axis, level):
+                assert (key, axis, level) == ("SPY", 1, -1)
+                return Frame(self.rows, 1)
+            def iterrows(self):
+                return iter(self.rows)
         def download(symbol, start, end, **kwargs):
             self.requests.append((symbol, start, end))
             if not outcomes[min(len(self.requests), len(outcomes)) - 1]:
                 return None
             days = self.mcal.get_calendar("NYSE").schedule(start_date=start, end_date=date.fromisoformat(end) - timedelta(days=1)).index
-            rows = {"Open": 100.0, "High": 102.0, "Low": 99.0, "Close": 101.0, "Volume": 1000.0}
-            data = pd.DataFrame({key: [value] * len(days) for key, value in rows.items()}, index=pd.DatetimeIndex(days))
-            data.iloc[-1, data.columns.get_loc("Close")] = close
-            if multi:
-                data.columns = pd.MultiIndex.from_tuples([(column, "SPY") for column in data.columns])
-            return data
+            rows = [(datetime.combine(day.date(), time()), {"Open": 100.0, "High": 102.0, "Low": 99.0, "Close": 101.0, "Volume": 1000.0}) for day in days]
+            rows[-1][1]["Close"] = close
+            return Frame(rows, 2 if multi else 1)
         return SimpleNamespace(download=download, __version__="test-provider")
 
     def series(self, target, close=101.0):
@@ -373,6 +382,30 @@ class SameSessionRetentionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "has not closed yet"):
             module.prefetch_benchmark(date(2026, 10, 19), output, yf=self.provider([True]), clock=lambda: clock[0], sleep=sleep, log=self.lines.append)
         self.assertEqual(self.requests, [])
+
+    def test_early_target_retries_stop_two_hours_after_the_first_request(self):
+        from datetime import datetime, timezone
+        # 2026-11-27 closed early at 13:00 New York time; 19:45 is far away, so the window decides.
+        clock = [datetime(2026, 11, 27, 18, 5, tzinfo=timezone.utc)]
+        def sleep(seconds):
+            self.sleeps.append(seconds)
+            clock[0] += timedelta(seconds=seconds)
+        with self.assertRaises(module.ProviderUnavailable):
+            module.prefetch_benchmark(date(2026, 11, 27), self.root / "early.json", yf=self.provider([False]),
+                                      clock=lambda: clock[0], sleep=sleep, log=self.lines.append)
+        self.assertEqual(len(self.requests), 9)  # first request + 120 minutes at 15-minute spacing
+        self.assertEqual(clock[0], datetime(2026, 11, 27, 20, 5, tzinfo=timezone.utc))
+        self.assertFalse((self.root / "early.json").exists())
+
+    def test_a_malformed_earlier_file_never_fails_a_successful_export(self):
+        self.manifest("2026-10-16")
+        valid = self.json.loads(self.series(self.TARGET))
+        valid["bars"][0]["date"] = ["not", "hashable"]
+        (self.root / "book-benchmark.json").write_text(self.json.dumps(valid))
+        result = self.export(self.provider([True]))
+        self.assertNotIn("unavailable", result)
+        self.assertEqual(self.json.loads(self.benchmark())["bars"][-1]["date"], "2026-10-16")
+        self.assertTrue(any("comparison could not be made" in line for line in self.lines))
 
     def test_early_file_is_placed_only_for_the_same_validated_session(self):
         early = self.root / "early.json"
