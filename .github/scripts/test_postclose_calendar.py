@@ -44,6 +44,21 @@ class PostcloseCalendarTests(unittest.TestCase):
         self.assertEqual(self.at('2026-12-25T23:00:00Z')['target_session'], '2026-12-24')
         self.assertEqual(self.at('2027-01-01T23:00:00Z')['target_session'], '2026-12-31')
 
+    def test_next_close_for_the_post_close_timer(self):
+        # The timer wakes the watchdog an hour after next_close; holidays,
+        # early closes and DST come only from this exchange calendar.
+        for now, session, close in [
+            ('2026-11-25T23:00:00Z', '2026-11-27', '2026-11-27T18:00:00Z'),
+            ('2026-11-27T19:00:00Z', '2026-11-30', '2026-11-30T21:00:00Z'),
+            ('2026-10-30T21:30:00Z', '2026-11-02', '2026-11-02T21:00:00Z'),
+            ('2027-03-12T22:30:00Z', '2027-03-15', '2027-03-15T20:00:00Z'),
+            ('2026-12-24T19:00:00Z', '2026-12-28', '2026-12-28T21:00:00Z'),
+        ]:
+            with self.subTest(now=now):
+                value = self.at(now)
+                self.assertEqual(value['next_session'], session)
+                self.assertEqual(value['next_close'], close)
+
     def test_naive_clock_rejected(self):
         with self.assertRaises(ValueError):
             calendar.calendar_at(datetime(2026, 10, 27, 22))

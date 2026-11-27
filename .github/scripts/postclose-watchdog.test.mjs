@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {BASE_URL, ENVIRONMENT_KEYS, PRODUCER, PUBLISHER, REPOSITORY, observePublication, planRecovery, dispatchRequestFor, readPublicObservations, recentWorkflowRuns, validateClock, main} from './postclose-watchdog.mjs';
+import {BASE_URL, ENVIRONMENT_KEYS, PRODUCER, PUBLISHER, REPOSITORY, observePublication, planRecovery, planRecoveryWithWake, dispatchRequestFor, readPublicObservations, recentWorkflowRuns, validateClock, main} from './postclose-watchdog.mjs';
 import {completionRequest, waitForProducer, COMPLETION_TIMEOUT_MS, EVENT_GRACE_MS} from './postclose-completion.mjs';
 import {LONG_HISTORY_ENVIRONMENT_KEYS} from '../../frontend/src/static/marketUpdateState.js';
 
@@ -390,4 +390,67 @@ test('workflow wakeup is success-only ordinary full US and default checks keep e
   assert.match(workflow, /if: inputs.producer_run_id != '' \|\| inputs.producer_run_attempt != ''/);
   assert(workflow.indexOf('postclose-completion.mjs') < workflow.indexOf('postclose-watchdog.mjs --execute'));
   assert.doesNotMatch(workflow, /continue-on-error: true/);
+});
+
+// Post-close timer: every decision also names its next inspection time.
+const wakeScenarios = () => [
+  ['published_observations_current', value => {value.observed = observePublication(fixture(), target);}, '2026-10-28T21:00:00.000Z'],
+  ['existing_work_in_flight', value => {value.producerRuns = [run(PRODUCER, {status: 'in_progress', conclusion: null})];}, '2026-10-27T23:30:00.000Z'],
+  ['producer_completed_without_publisher', value => {value.producerRuns = [run(PRODUCER)];}, '2026-10-28T04:15:00.000Z'],
+  ['retry_failed_publication_once', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, conclusion: 'failure', created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T21:10:00Z'})];}, '2026-10-28T04:15:00.000Z'],
+  ['completed_session_not_published', () => {}, '2026-10-28T04:15:00.000Z'],
+  ['published_observations_still_behind', value => {value.producerRuns = [run(PRODUCER, {conclusion: 'failure'})];}, '2026-10-28T04:15:00.000Z'],
+  ['acquisition_retry_cooldown', value => {value.producerRuns = [run(PRODUCER, {conclusion: 'failure', updated_at: '2026-10-27T22:25:00Z'})];}, '2026-10-27T22:35:00.000Z'],
+  ['acquisition_retry_cooldown', value => {value.producerRuns = Array.from({length: 6}, (_, i) => run(PRODUCER, {id: 200+i, conclusion: 'failure', created_at: `2026-10-27T20:${10+i}:00Z`, updated_at: '2026-10-27T21:00:00Z'}));}, '2026-10-28T03:00:00.000Z'],
+  ['waiting_for_cboe_publication', value => {Object.assign(value, context('2026-10-27T21:20:00Z')); value.observed.stale = ['put_call'];}, '2026-10-27T21:30:00.000Z'],
+  ['cboe_retry_budget_used_until_next_session', value => {Object.assign(value, context('2026-10-28T05:00:00Z')); value.observed.stale = ['put_call'];
+    value.producerRuns = [run(PRODUCER, {id: 1, conclusion: 'failure', created_at: '2026-10-27T21:31:00Z', updated_at: '2026-10-27T22:00:00Z'}), run(PRODUCER, {id: 2, conclusion: 'failure', created_at: '2026-10-28T00:05:00Z', updated_at: '2026-10-28T01:00:00Z'})];}, '2026-10-28T21:00:00.000Z'],
+  ['cboe_retry_cooldown', value => {Object.assign(value, context('2026-10-28T00:30:00Z')); value.observed.stale = ['put_call'];
+    value.producerRuns = [run(PRODUCER, {id: 1, conclusion: 'failure', created_at: '2026-10-27T21:31:00Z', updated_at: '2026-10-27T23:45:00Z'})];}, '2026-10-28T01:45:00.000Z'],
+  ['publication_propagation_grace', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:29:00Z'})];}, '2026-10-27T22:31:00.000Z'],
+  // A raw grace end 30 s ahead is raised to the one-minute floor.
+  ['publication_propagation_grace', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:28:30Z'})];}, '2026-10-27T22:31:00.000Z'],
+  // Long waits never pass one hour after the next close (2026-10-28 20:00Z).
+  ['completed_session_not_published', value => {Object.assign(value, context('2026-10-28T17:00:00Z'));}, '2026-10-28T21:00:00.000Z'],
+  ['acquisition_retry_cooldown', value => {Object.assign(value, context('2026-10-28T17:00:00Z')); value.producerRuns = Array.from({length: 6}, (_, i) => run(PRODUCER, {id: 200+i, conclusion: 'failure', created_at: `2026-10-27T20:${10+i}:00Z`, updated_at: '2026-10-28T16:00:00Z'}));}, '2026-10-28T21:00:00.000Z'],
+];
+const wakeInput = mutate => { const value = context(); mutate(value); return value; };
+
+test('the wake wrapper returns exactly the planner decision plus wake_at', () => {
+  for (const [reason, mutate] of wakeScenarios()) {
+    const value = wakeInput(mutate), {wake_at, ...plan} = planRecoveryWithWake(value);
+    assert.deepEqual(plan, planRecovery(wakeInput(mutate)), reason); assert.equal(plan.reason, reason);
+    assert.equal(typeof wake_at, 'string');
+  }
+  // The decision object of the published branch is unchanged byte for byte.
+  const fresh = wakeInput(wakeScenarios()[0][1]);
+  assert.deepEqual(planRecoveryWithWake(fresh), {target_session: target, elapsed_minutes: 150, overdue: false, action: 'none', reason: 'published_observations_current', wake_at: '2026-10-28T21:00:00.000Z'});
+});
+test('each decision names its own next inspection time from the exchange clock and run history', () => {
+  for (const [reason, mutate, expected] of wakeScenarios()) assert.equal(planRecoveryWithWake(wakeInput(mutate)).wake_at, expected, reason);
+});
+test('every wake is at least a minute ahead and at most an hour after the next close', () => {
+  for (const [reason, mutate] of wakeScenarios()) {
+    const value = wakeInput(mutate), wake = Date.parse(planRecoveryWithWake(value).wake_at);
+    assert(wake >= value.now+60_000, reason); assert(wake <= Date.parse(value.clock.next_close)+60*60_000, reason);
+  }
+});
+test('a timed wake lands when the same evidence decides differently', () => {
+  for (const [reason, mutate] of wakeScenarios().filter(([name]) => ['acquisition_retry_cooldown','waiting_for_cboe_publication','cboe_retry_cooldown','publication_propagation_grace'].includes(name))) {
+    const value = wakeInput(mutate), wake = planRecoveryWithWake(value).wake_at;
+    const replan = when => { const later = {...value, ...context(when), observed: value.observed, producerRuns: value.producerRuns, publisherRuns: value.publisherRuns}; return planRecovery(later).reason; };
+    if (Date.parse(wake) < Date.parse(value.clock.next_close)+60*60_000) {
+      // Just before the wake the same branch still holds, unless the wake was
+      // raised to the one-minute floor.
+      if (replan(new Date(Date.parse(wake)-1000).toISOString()) !== reason) assert.equal(Date.parse(wake), value.now+60_000, `${reason} wake is late only by the floor`);
+      assert.notEqual(replan(wake), reason, `${reason} has ended at its wake`);
+    }
+  }
+});
+test('the watchdog hands its report to the post-close timer after every check', () => {
+  const workflow = readFileSync(new URL('../workflows/postclose-watchdog.yml', import.meta.url), 'utf8');
+  const arm = workflow.split('      - name: Arm the next watchdog wake\n')[1];
+  assert(arm, 'arm step present'); assert.doesNotMatch(arm, /- name:|- uses:/, 'arm step is the last step');
+  assert.match(arm, /^        if: always\(\)\n/); assert.match(arm, /run: node \.github\/scripts\/postclose-timer\.mjs arm --report postclose-watchdog-report\.json\n?$/);
+  assert.match(workflow, /--execute --output postclose-watchdog-report\.json/);
 });
