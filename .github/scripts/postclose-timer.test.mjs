@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {PRODUCER, PUBLISHER, REPOSITORY, planRecovery, planRecoveryWithWake} from './postclose-watchdog.mjs';
 import {DISPATCH_RETRY_DELAY_MS, DISPATCH_TIMEOUT_MS, DISPATCH_TRIES, FALLBACK_WAKE_MS, MAX_AHEAD_MS, MAX_LINK_WAIT_MS, MIN_LEAD_MS, STALE_FIRE_MS, TIMER, WATCHDOG,
-  armWake, dispatchBody, dispatchWorkflow, linkPlan, main, parseFireAt, readReport, runLink, waitAndWake, wakeRequest} from './postclose-timer.mjs';
+  armWake, chooseWake, dispatchBody, dispatchWorkflow, linkPlan, main, parseFireAt, pendingWake, readReport, runLink, waitAndWake, wakeRequest} from './postclose-timer.mjs';
 
 const minute = 60_000, hour = 60*minute;
 const at = value => Date.parse(value);
@@ -161,22 +161,99 @@ test('arming is limited to main Actions and never fails the watchdog', async () 
     writeFileSync(path, JSON.stringify(report({action: 'none', reason: 'published_observations_current', wake_at: '2026-11-27T19:00:00.000Z'})));
     for (const env of [{}, {...mainEnv, GITHUB_REF: 'refs/heads/feature'}, {...mainEnv, GITHUB_REPOSITORY: 'fork/screener'}, {...mainEnv, GITHUB_ACTIONS: 'false'}]) {
       const outside = [];
-      const result = await armWake({reportPath: path, env, now: () => at('2026-11-25T23:31:00Z'), log, dispatch: async (...call) => { outside.push(call); }});
+      const result = await armWake({reportPath: path, env, now: () => at('2026-11-25T23:31:00Z'), log, listRuns: () => assert.fail('no read outside main Actions'), dispatch: async (...call) => { outside.push(call); }});
       assert.equal(result.status, 'not_armed'); assert.deepEqual(outside, [], 'no dispatch outside main Actions');
     }
     assert(lines.every(line => line.startsWith('::warning::')));
     const sent = [];
-    const armed = await armWake({reportPath: path, env: mainEnv, now: () => at('2026-11-25T23:31:00Z'), log: quiet, dispatch: async (workflow, inputs) => { sent.push({workflow, inputs}); }});
+    const armed = await armWake({reportPath: path, env: mainEnv, now: () => at('2026-11-25T23:31:00Z'), log: quiet, listRuns: () => [], dispatch: async (workflow, inputs) => { sent.push({workflow, inputs}); }});
     assert.deepEqual(sent, [{workflow: TIMER, inputs: {fire_at: '2026-11-27T19:00:00.000Z', reason: 'published_observations_current'}}]); assert.equal(armed.status, 'armed');
     sent.length = 0;
-    await armWake({reportPath: join(directory, 'absent.json'), env: mainEnv, now: () => at('2026-11-25T23:31:00Z'), log: quiet, dispatch: async (workflow, inputs) => { sent.push({workflow, inputs}); }});
+    await armWake({reportPath: join(directory, 'absent.json'), env: mainEnv, now: () => at('2026-11-25T23:31:00Z'), log: quiet, listRuns: () => [], dispatch: async (workflow, inputs) => { sent.push({workflow, inputs}); }});
     assert.deepEqual(sent, [{workflow: TIMER, inputs: {fire_at: '2026-11-26T00:31:00.000Z', reason: 'watchdog_report_unavailable'}}]);
     lines.length = 0;
-    const lost = await armWake({reportPath: path, env: mainEnv, now: () => at('2026-11-25T23:31:00Z'), log, dispatch: async () => { throw Error('Dispatch of postclose-timer.yml failed after 3 tries'); }});
+    const lost = await armWake({reportPath: path, env: mainEnv, now: () => at('2026-11-25T23:31:00Z'), log, listRuns: () => [], dispatch: async () => { throw Error('Dispatch of postclose-timer.yml failed after 3 tries'); }});
     assert.equal(lost.status, 'not_armed'); assert.match(lines[0], /^::warning::Post-close timer not armed .*schedules remain the fallback/);
   } finally { rmSync(directory, {recursive: true, force: true}); }
 });
 
+// A timer run as the Actions API lists it; run-name carries its fire_at.
+const timerRun = (fire_at, reason, overrides = {}) => ({id: 900, path: `.github/workflows/${TIMER}`, head_branch: 'main', event: 'workflow_dispatch', repository: {full_name: REPOSITORY},
+  status: 'in_progress', conclusion: null, created_at: '2026-11-26T01:24:00Z', display_title: `Post-close watchdog timer to ${fire_at} (${reason})`, ...overrides});
+const armWith = async (reportValue, runs, now) => {
+  const directory = mkdtempSync(join(tmpdir(), 'postclose-timer-')), path = join(directory, 'postclose-watchdog-report.json'), sent = [];
+  try {
+    if (reportValue) writeFileSync(path, JSON.stringify(reportValue));
+    const result = await armWake({reportPath: path, env: mainEnv, now: () => at(now), log: quiet, listRuns: typeof runs === 'function' ? runs : () => runs, dispatch: async (workflow, inputs) => { sent.push({workflow, inputs}); }});
+    assert.equal(sent.length, 1); assert.equal(sent[0].workflow, TIMER); return {result, inputs: sent[0].inputs};
+  } finally { rmSync(directory, {recursive: true, force: true}); }
+};
+test('arming keeps the earliest pending wake: an hourly fallback never replaces a nearer ten-minute retry', async () => {
+  // 01:24 a check waits for the once-only retry at 01:33:38 and arms it.
+  const retry = timerRun('2026-11-26T01:33:38.000Z', 'publication_retry_grace');
+  // 01:25 another check fails verification: its own wake would be the +60 fallback (02:25).
+  const failed = {schema_version: 'postclose-watchdog-report-v1', status: 'verification_failed', error: 'Public HTTP 503'};
+  const kept = await armWith(failed, [retry], '2026-11-26T01:25:00Z');
+  assert.deepEqual(kept.inputs, {fire_at: '2026-11-26T01:33:38.000Z', reason: 'publication_retry_grace'});
+  assert.equal(kept.result.source, 'earlier_pending_wake'); assert.deepEqual(kept.result.replaced, {fire_at: '2026-11-26T02:25:00.000Z', reason: 'watchdog_verification_failed', source: 'fallback'});
+  // An in-flight result (+60) keeps it too.
+  const inFlight = await armWith(report({action: 'none', reason: 'existing_work_in_flight', wake_at: '2026-11-26T02:25:00.000Z'}), [retry], '2026-11-26T01:25:00Z');
+  assert.equal(inFlight.inputs.fire_at, '2026-11-26T01:33:38.000Z');
+  // A nearer wake than the pending one replaces it, as before.
+  const sooner = await armWith(report({action: 'none', reason: 'acquisition_retry_cooldown', wake_at: '2026-11-26T01:30:00.000Z'}), [retry], '2026-11-26T01:25:00Z');
+  assert.deepEqual(sooner.inputs, {fire_at: '2026-11-26T01:30:00.000Z', reason: 'acquisition_retry_cooldown'}); assert.equal(sooner.result.source, 'watchdog_plan');
+});
+test('the timer run that is firing now is not a pending wake, so the chain neither stops nor spins', async () => {
+  // The run that just requested this watchdog is still finishing, with its fire_at in the past.
+  const firing = timerRun('2026-11-26T01:33:38.000Z', 'publication_retry_grace');
+  for (const now of ['2026-11-26T01:33:38Z', '2026-11-26T01:34:30Z']) {
+    const armed = await armWith(report({action: 'none', reason: 'published_observations_current', wake_at: '2026-11-26T22:00:00.000Z'}), [firing], now);
+    assert.deepEqual(armed.inputs, {fire_at: '2026-11-26T22:00:00.000Z', reason: 'published_observations_current'}, now);
+  }
+  assert.equal(pendingWake([firing], at('2026-11-26T01:33:38Z')), null);
+  // Following the chain: each check arms a time at least a minute ahead of itself.
+  const plan = report({action: 'none', reason: 'acquisition_retry_cooldown', wake_at: '2026-11-26T01:34:00.000Z'});
+  const next = await armWith(plan, [firing], '2026-11-26T01:34:30Z');
+  assert.equal(next.inputs.fire_at, '2026-11-26T01:35:30.000Z');
+});
+test('only the newest open main timer run is pending, and an unreadable one leaves today\'s arming', async () => {
+  const now = at('2026-11-26T01:25:00Z'), retry = timerRun('2026-11-26T01:33:38.000Z', 'publication_retry_grace');
+  assert.deepEqual(pendingWake([retry], now), {fire_at: '2026-11-26T01:33:38.000Z', reason: 'publication_retry_grace', run_id: 900});
+  // A newer queued run will cancel the older one: its time is the pending one.
+  assert.equal(pendingWake([retry, timerRun('2026-11-26T02:25:00.000Z', 'existing_work_in_flight', {id: 901, status: 'queued', created_at: '2026-11-26T01:24:30Z'})], now).fire_at, '2026-11-26T02:25:00.000Z');
+  // Completed and cancelled runs do not wait.
+  assert.equal(pendingWake([{...retry, status: 'completed', conclusion: 'cancelled'}], now), null);
+  for (const overrides of [{path: '.github/workflows/other.yml'}, {head_branch: 'feature'}, {event: 'schedule'}, {repository: {full_name: 'fork/screener'}},
+    {display_title: 'Post-close Watchdog Timer'}, {display_title: 'Post-close watchdog timer to tomorrow (x)'}, {display_title: undefined},
+    {display_title: 'Post-close watchdog timer to 2026-12-30T00:00:00Z (x)'}]) assert.equal(pendingWake([{...retry, ...overrides}], now), null, JSON.stringify(overrides));
+  assert.equal(pendingWake(null, now), null); assert.equal(pendingWake([null, 'x'], now), null);
+  assert.equal(pendingWake([timerRun('2026-11-26T01:33:38Z', 'Bad Reason')], now).reason, 'unspecified');
+  assert.equal(pendingWake([timerRun('2026-11-26T01:33:38Z', '$(id)')], now), null);
+  // A failed read or an unreadable run arms this check's own wake, as before.
+  const own = report({action: 'none', reason: 'existing_work_in_flight', wake_at: '2026-11-26T02:25:00.000Z'});
+  for (const runs of [() => { throw Error('HTTP 502'); }, [{...retry, display_title: 'Post-close Watchdog Timer'}], []])
+    assert.deepEqual((await armWith(own, runs, '2026-11-26T01:25:00Z')).inputs, {fire_at: '2026-11-26T02:25:00.000Z', reason: 'existing_work_in_flight'});
+});
+test('after a deploy, an earlier pending wake inside the settle time is replaced, not kept', async () => {
+  // A check at 21:33, while the release ran, armed its in-flight wake for 22:33:
+  // three minutes after this 22:30 deploy, inside its settle time.
+  const pending = timerRun('2026-10-27T22:33:00.000Z', 'existing_work_in_flight', {created_at: '2026-10-27T21:33:00Z'});
+  const runs = (workflow, overrides) => [{id: 300, path: `.github/workflows/${workflow}`, head_branch: 'main', event: 'workflow_dispatch', repository: {full_name: REPOSITORY}, head_repository: {full_name: REPOSITORY}, status: 'completed', conclusion: 'success', ...overrides}];
+  const now = '2026-10-27T22:31:00Z';
+  const clock = {schema_version: 'postclose-session-clock-v1', exchange: 'NYSE', provider: 'pandas_market_calendars', provider_version: '5.4.0', evaluated_at: now, target_session: '2026-10-27', target_close: '2026-10-27T20:00:00Z', eligible_at: '2026-10-27T20:02:00Z', next_session: '2026-10-28', next_close: '2026-10-28T20:00:00Z', next_eligible_at: '2026-10-28T20:02:00Z', acquisition_grace_minutes: 2};
+  // The release woke this check one minute after it deployed; Pages still shows the previous session.
+  const plan = planRecoveryWithWake({clock, observed: {fresh: false, stale: ['scan', 'long_history']}, workflowStates: {[PRODUCER]: 'active', [PUBLISHER]: 'active'}, now: at(now),
+    producerRuns: runs(PRODUCER, {id: 200, created_at: '2026-10-27T20:05:00Z', updated_at: '2026-10-27T21:00:00Z'}),
+    publisherRuns: runs(PUBLISHER, {created_at: '2026-10-27T21:40:00Z', updated_at: '2026-10-27T22:30:00Z'})});
+  assert.equal(plan.reason, 'publication_propagation_grace'); assert.equal(plan.wake_at, '2026-10-27T22:40:00.000Z'); assert.equal(plan.wake_not_before, '2026-10-27T22:40:00.000Z');
+  const armed = await armWith({...report(plan), checked_at: now}, [pending], now);
+  assert.deepEqual(armed.inputs, {fire_at: '2026-10-27T22:40:00.000Z', reason: 'publication_propagation_grace'}); assert.equal(armed.result.source, 'watchdog_plan');
+  // A pending wake at or after the settle time is still the earliest and is kept.
+  const laterPending = timerRun('2026-10-27T22:40:00.000Z', 'acquisition_retry_cooldown');
+  assert.equal((await armWith({...report({...plan, wake_at: '2026-10-27T22:45:00.000Z'}), checked_at: now}, [laterPending], now)).result.source, 'earlier_pending_wake');
+  // A malformed settle time keeps this check's own wake.
+  assert.equal(chooseWake({fire_at: '2026-10-27T22:45:00.000Z', reason: 'x', source: 'watchdog_plan'}, report({wake_at: '2026-10-27T22:45:00.000Z', wake_not_before: 'soon'}), {fire_at: '2026-10-27T22:41:00.000Z', reason: 'y'}).source, 'watchdog_plan');
+});
 test('waiting is limited to main Actions and validates fire_at before sleeping', async () => {
   const never = () => assert.fail('must not sleep or dispatch');
   await assert.rejects(waitAndWake({env: {FIRE_AT: '2026-11-25T22:00:00Z'}, sleep: never, dispatch: never, log: quiet}), /default-branch Actions/);

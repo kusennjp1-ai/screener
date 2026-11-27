@@ -24,7 +24,8 @@ permissions:
   contents: read
   actions: write
 
-# Only the newest wake waits; an older waiting link is replaced.
+# Only the newest run waits; an older waiting link is replaced. Arming reads
+# the waiting run's fire_at first and carries it forward when it is earlier.
 concurrency:
   group: postclose-timer
   cancel-in-progress: true

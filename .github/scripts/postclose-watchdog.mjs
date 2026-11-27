@@ -117,6 +117,16 @@ export const SESSION_WAKE_MINUTES = 60;
 export const IN_FLIGHT_WAKE_MINUTES = 60;
 export const DISPATCHED_WAKE_MINUTES = 345;
 export const WAKE_FLOOR_MS = minute;
+// A release that ends successfully has usually deployed, and Pages may serve
+// the previous publication for a short while. No timed wake lands sooner than
+// this after a successful release ends, so the woken inspection reads the new
+// deploy instead of taking a still-propagating site for a missing session.
+// Only the wake time moves: every decision, the two-minute propagation grace
+// included, is unchanged, and an inspection started otherwise (a schedule, a
+// workflow wakeup) decides exactly as before. Ten minutes is also the wait
+// after a failed release, so both outcomes are inspected about ten minutes
+// after the release ends.
+export const PUBLICATION_SETTLE_MINUTES = 10;
 
 function decideRecovery({clock, observed, producerRuns, publisherRuns, workflowStates, now}) {
   validateClock(clock, now);
@@ -126,7 +136,9 @@ function decideRecovery({clock, observed, producerRuns, publisherRuns, workflowS
   const putCallOnly = observed.stale.length === 1 && observed.stale[0] === 'put_call';
   const common = {target_session: clock.target_session, elapsed_minutes: elapsedMinutes, overdue: !observed.fresh && elapsedMinutes >= (putCallOnly ? 240 : 120)};
   const nextSession = Date.parse(clock.next_close)+SESSION_WAKE_MINUTES*minute, dispatched = now+DISPATCHED_WAKE_MINUTES*minute;
-  const decision = (plan, wake) => ({plan, wake});
+  const deployedAt = Math.max(-Infinity, ...publishers.filter(run => run.status === 'completed' && run.conclusion === 'success').map(run => Date.parse(run.updated_at)));
+  const settled = deployedAt+PUBLICATION_SETTLE_MINUTES*minute;
+  const decision = (plan, wake) => ({plan, wake, notBefore: settled > now ? settled : null});
   if (observed.fresh) return decision({...common, action: 'none', reason: 'published_observations_current'}, nextSession);
   const active = [...producers, ...publishers].filter(run => run.status !== 'completed');
   if (active.length) return decision({...common, action: 'none', reason: 'existing_work_in_flight', active_runs: active.map(run => ({id: run.id, workflow: run.path, status: run.status}))}, now+IN_FLIGHT_WAKE_MINUTES*minute);
@@ -174,12 +186,16 @@ export function planRecovery(input) {
 
 // The same plan plus wake_at, the time the post-close timer should request the
 // next inspection. A successful producer wakes the watchdog itself, so for
-// dispatched work DISPATCHED_WAKE_MINUTES is only the backstop.
+// dispatched work DISPATCHED_WAKE_MINUTES is only the backstop. Within
+// PUBLICATION_SETTLE_MINUTES of a successful release, wake_at is no sooner than
+// that settle time, and wake_not_before names it so the timer does not keep an
+// earlier pending wake inside it.
 export function planRecoveryWithWake(input) {
-  const {plan, wake} = decideRecovery(input);
+  const {plan, wake, notBefore} = decideRecovery(input);
   const latest = Date.parse(input.clock.next_close)+SESSION_WAKE_MINUTES*minute;
   check(Number.isFinite(wake), 'Recovery branch has no wake time');
-  return {...plan, wake_at: new Date(Math.min(latest, Math.max(input.now+WAKE_FLOOR_MS, wake))).toISOString()};
+  const at = Math.min(latest, Math.max(input.now+WAKE_FLOOR_MS, wake, notBefore ?? -Infinity));
+  return {...plan, wake_at: new Date(at).toISOString(), ...(notBefore === null ? {} : {wake_not_before: new Date(notBefore).toISOString()})};
 }
 
 export function dispatchRequestFor(plan) {

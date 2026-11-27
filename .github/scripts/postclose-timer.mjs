@@ -4,8 +4,9 @@
 // the NYSE calendar, its two-minute grace, run history and the public site;
 // this file only carries a time. A hosted job lasts at most six hours, so a
 // longer wait re-dispatches this workflow with the same fire_at, one link per
-// MAX_LINK_WAIT_MS. The watchdog's schedules stay as the fallback when a link
-// is lost.
+// MAX_LINK_WAIT_MS. Only the newest timer run waits, so arming carries an
+// earlier pending wake forward instead of replacing it with a later one. The
+// watchdog's schedules stay as the fallback when a link is lost.
 //
 // Replacing A1 (an environment wait timer, A2, or an external clock calling
 // workflow_dispatch, B) changes only TIMER/armWake's dispatch and runLink;
@@ -20,6 +21,8 @@ import {REPOSITORY} from './postclose-watchdog.mjs';
 
 export const TIMER = 'postclose-timer.yml';
 export const WATCHDOG = 'postclose-watchdog.yml';
+// Matches run-name in postclose-timer.yml: the only place a run shows its fire_at.
+const TIMER_RUN_NAME = /^Post-close watchdog timer to (\S+) \(([^()]*)\)$/;
 const minute = 60_000;
 // Below the 360-minute hosted job limit with room for checkout and dispatch.
 export const MAX_LINK_WAIT_MS = 345*minute;
@@ -77,6 +80,39 @@ export function wakeRequest(report, now) {
   return {fire_at: iso(Math.max(at, now+MIN_LEAD_MS)), reason: wakeReason(report.plan.reason), source: 'watchdog_plan'};
 }
 
+// The wake the timer will fire next: the newest timer run on main that has not
+// completed (cancel-in-progress leaves it the only one), read from its run
+// name. A wake whose time has come is the run that is firing now, not a pending
+// wake. null when nothing is pending or the run cannot be read.
+export function pendingWake(runs, now) {
+  if (!Array.isArray(runs)) return null;
+  const open = runs.filter(run => run && typeof run === 'object' && run.status !== 'completed').sort((a, b) => Date.parse(b.created_at)-Date.parse(a.created_at) || b.id-a.id);
+  const newest = open[0];
+  if (!newest || newest.path !== `.github/workflows/${TIMER}` || newest.head_branch !== 'main' || newest.event !== 'workflow_dispatch' || newest.repository?.full_name !== REPOSITORY) return null;
+  const match = TIMER_RUN_NAME.exec(typeof newest.display_title === 'string' ? newest.display_title : '');
+  if (!match) return null;
+  let at;
+  try { at = parseFireAt(match[1]); } catch { return null; }
+  if (at <= now || at > now+MAX_AHEAD_MS) return null;
+  return {fire_at: iso(at), reason: wakeReason(match[2]), run_id: newest.id};
+}
+
+// What to arm: this check's wake, unless an earlier wake is already pending.
+// Only the newest timer run waits, so arming a later time would replace a
+// nearer one (a ten-minute retry replaced by an hourly fallback). The earlier
+// time is carried into the new dispatch instead. A pending wake before this
+// plan's wake_not_before (the settle time after a successful release) is not
+// kept. Without a readable pending run, this check's own wake is armed.
+export function chooseWake(request, report, pending) {
+  if (!pending || Date.parse(pending.fire_at) > Date.parse(request.fire_at)) return request;
+  if (request.source === 'watchdog_plan' && report.plan.wake_not_before !== undefined) {
+    let floor;
+    try { floor = parseFireAt(report.plan.wake_not_before); } catch { return request; }
+    if (Date.parse(pending.fire_at) < floor) return request;
+  }
+  return {fire_at: pending.fire_at, reason: pending.reason, source: 'earlier_pending_wake', replaced: {fire_at: request.fire_at, reason: request.reason, source: request.source}};
+}
+
 export function readReport(path) {
   try {
     if (statSync(path).size > MAX_REPORT_BYTES) return null;
@@ -86,6 +122,13 @@ export function readReport(path) {
 
 function github(args, body) {
   execFileSync('gh', args, {input: body, encoding: 'utf8', timeout: DISPATCH_TIMEOUT_MS, maxBuffer: 1024*1024, stdio: ['pipe','pipe','pipe']});
+}
+
+// Read only: the newest timer runs on main. Open runs are always the newest,
+// because each dispatch cancels the one waiting before it.
+export function listTimerRuns() {
+  const raw = execFileSync('gh', ['api', `repos/${REPOSITORY}/actions/workflows/${TIMER}/runs?branch=main&per_page=10`], {encoding: 'utf8', timeout: DISPATCH_TIMEOUT_MS, maxBuffer: 4*1024*1024, stdio: ['ignore','pipe','pipe']});
+  return JSON.parse(raw).workflow_runs;
 }
 
 export function dispatchBody(workflow, inputs) {
@@ -143,14 +186,19 @@ function summary(env, text) {
 
 // Watchdog side: best effort. A lost link only leaves the schedules in charge,
 // so an arming failure is a warning and never changes the watchdog's result.
-export async function armWake({reportPath, env = process.env, now = Date.now, dispatch = dispatchWorkflow, log = console} = {}) {
+export async function armWake({reportPath, env = process.env, now = Date.now, dispatch = dispatchWorkflow, listRuns = listTimerRuns, log = console} = {}) {
   try {
     check(inMainActions(env), 'Timer dispatch is limited to the default-branch Actions controller');
-    const request = wakeRequest(readReport(reportPath), now());
-    await dispatch(TIMER, {fire_at: request.fire_at, reason: request.reason});
-    summary(env, `\nNext watchdog wake: **${request.fire_at}** (${request.reason}; ${request.source}).\n`);
-    log.log(JSON.stringify({status: 'armed', ...request}));
-    return {status: 'armed', ...request};
+    const report = readReport(reportPath), current = now(), request = wakeRequest(report, current);
+    let pending = null;
+    try { pending = pendingWake(listRuns(), current); } catch { pending = null; }
+    const chosen = chooseWake(request, report, pending);
+    await dispatch(TIMER, {fire_at: chosen.fire_at, reason: chosen.reason});
+    summary(env, chosen.replaced
+      ? `\nNext watchdog wake: **${chosen.fire_at}** (${chosen.reason}; kept the earlier pending wake; this check asked for ${chosen.replaced.fire_at}, ${chosen.replaced.reason}).\n`
+      : `\nNext watchdog wake: **${chosen.fire_at}** (${chosen.reason}; ${chosen.source}).\n`);
+    log.log(JSON.stringify({status: 'armed', ...chosen}));
+    return {status: 'armed', ...chosen};
   } catch (error) {
     const message = String(error?.message || error).slice(0, 300).replace(/[\r\n]/g, ' ');
     log.log(`::warning::Post-close timer not armed (${message}); the watchdog schedules remain the fallback.`);

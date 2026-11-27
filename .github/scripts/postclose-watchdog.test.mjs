@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
-import {BASE_URL, ENVIRONMENT_KEYS, PRODUCER, PUBLISHER, REPOSITORY, observePublication, planRecovery, planRecoveryWithWake, dispatchRequestFor, readPublicObservations, recentWorkflowRuns, validateClock, main} from './postclose-watchdog.mjs';
+import {BASE_URL, ENVIRONMENT_KEYS, PRODUCER, PUBLISHER, PUBLICATION_SETTLE_MINUTES, REPOSITORY, observePublication, planRecovery, planRecoveryWithWake, dispatchRequestFor, readPublicObservations, recentWorkflowRuns, validateClock, main} from './postclose-watchdog.mjs';
 import {completionRequest, waitForProducer, COMPLETION_TIMEOUT_MS, EVENT_GRACE_MS} from './postclose-completion.mjs';
 import {LONG_HISTORY_ENVIRONMENT_KEYS} from '../../frontend/src/static/marketUpdateState.js';
 
@@ -492,21 +492,27 @@ const wakeScenarios = () => [
     value.producerRuns = [run(PRODUCER, {id: 1, conclusion: 'failure', created_at: '2026-10-27T21:31:00Z', updated_at: '2026-10-27T22:00:00Z'}), run(PRODUCER, {id: 2, conclusion: 'failure', created_at: '2026-10-28T00:05:00Z', updated_at: '2026-10-28T01:00:00Z'})];}, '2026-10-28T21:00:00.000Z'],
   ['cboe_retry_cooldown', value => {Object.assign(value, context('2026-10-28T00:30:00Z')); value.observed.stale = ['put_call'];
     value.producerRuns = [run(PRODUCER, {id: 1, conclusion: 'failure', created_at: '2026-10-27T21:31:00Z', updated_at: '2026-10-27T23:45:00Z'})];}, '2026-10-28T01:45:00.000Z'],
-  ['publication_propagation_grace', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:29:00Z'})];}, '2026-10-27T22:31:00.000Z'],
+  // A successful release: the wake waits for the ten-minute publication settle.
+  ['publication_propagation_grace', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:29:00Z'})];}, '2026-10-27T22:39:00.000Z'],
+  // A failed release (no retry pending for it) keeps the two-minute grace end.
+  ['publication_propagation_grace', value => {value.publisherRuns = [run(PUBLISHER, {id: 300, conclusion: 'failure', created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:29:00Z'})];}, '2026-10-27T22:31:00.000Z'],
   ['publication_retry_grace', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, conclusion: 'failure', created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:23:00Z'})];}, '2026-10-27T22:33:00.000Z'],
   // A raw grace end 30 s ahead is raised to the one-minute floor.
-  ['publication_propagation_grace', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:28:30Z'})];}, '2026-10-27T22:31:00.000Z'],
+  ['publication_propagation_grace', value => {value.publisherRuns = [run(PUBLISHER, {id: 300, conclusion: 'failure', created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:28:30Z'})];}, '2026-10-27T22:31:00.000Z'],
+  ['publication_propagation_grace', value => {value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [run(PUBLISHER, {id: 300, created_at: '2026-10-27T21:01:00Z', updated_at: '2026-10-27T22:28:30Z'})];}, '2026-10-27T22:38:30.000Z'],
   // Long waits never pass one hour after the next close (2026-10-28 20:00Z).
   ['completed_session_not_published', value => {Object.assign(value, context('2026-10-28T17:00:00Z'));}, '2026-10-28T21:00:00.000Z'],
   ['acquisition_retry_cooldown', value => {Object.assign(value, context('2026-10-28T17:00:00Z')); value.producerRuns = Array.from({length: 6}, (_, i) => run(PRODUCER, {id: 200+i, conclusion: 'failure', created_at: `2026-10-27T20:${10+i}:00Z`, updated_at: '2026-10-28T16:00:00Z'}));}, '2026-10-28T21:00:00.000Z'],
 ];
 const wakeInput = mutate => { const value = context(); mutate(value); return value; };
 
-test('the wake wrapper returns exactly the planner decision plus wake_at', () => {
+test('the wake wrapper returns exactly the planner decision plus wake_at (and wake_not_before after a successful release)', () => {
   for (const [reason, mutate] of wakeScenarios()) {
-    const value = wakeInput(mutate), {wake_at, ...plan} = planRecoveryWithWake(value);
+    const value = wakeInput(mutate), {wake_at, wake_not_before, ...plan} = planRecoveryWithWake(value);
     assert.deepEqual(plan, planRecovery(wakeInput(mutate)), reason); assert.equal(plan.reason, reason);
     assert.equal(typeof wake_at, 'string');
+    const deployed = value.publisherRuns.filter(item => item.conclusion === 'success').map(item => Date.parse(item.updated_at)+PUBLICATION_SETTLE_MINUTES*60_000).filter(end => end > value.now);
+    assert.equal(wake_not_before, deployed.length ? new Date(Math.max(...deployed)).toISOString() : undefined, reason);
   }
   // The decision object of the published branch is unchanged byte for byte.
   const fresh = wakeInput(wakeScenarios()[0][1]);
@@ -527,11 +533,51 @@ test('a timed wake lands when the same evidence decides differently', () => {
     const replan = when => { const later = {...value, ...context(when), observed: value.observed, producerRuns: value.producerRuns, publisherRuns: value.publisherRuns}; return planRecovery(later).reason; };
     if (Date.parse(wake) < Date.parse(value.clock.next_close)+60*60_000) {
       // Just before the wake the same branch still holds, unless the wake was
-      // raised to the one-minute floor.
-      if (replan(new Date(Date.parse(wake)-1000).toISOString()) !== reason) assert.equal(Date.parse(wake), value.now+60_000, `${reason} wake is late only by the floor`);
+      // raised to the one-minute floor or to the post-deploy settle time.
+      const settle = planRecoveryWithWake(value).wake_not_before;
+      if (replan(new Date(Date.parse(wake)-1000).toISOString()) !== reason) assert(Date.parse(wake) === value.now+60_000 || wake === settle, `${reason} wake is late only by the floor or the settle`);
       assert.notEqual(replan(wake), reason, `${reason} has ended at its wake`);
     }
   }
+});
+// A watchdog-requested release that deployed at 22:29 wakes the watchdog from
+// its last job. Pages can still serve the previous publication then.
+const deployedRelease = (updated_at = '2026-10-27T22:29:00Z', overrides = {}) => run(PUBLISHER, {id: 300, event: 'workflow_dispatch', created_at: '2026-10-27T21:01:00Z', updated_at, ...overrides});
+test('after a deploy not yet visible on Pages, the next timed inspection waits for the publication settle time', () => {
+  assert.equal(PUBLICATION_SETTLE_MINUTES, 10);
+  const value = context('2026-10-27T22:30:00Z'); value.producerRuns = [run(PRODUCER)]; value.publisherRuns = [deployedRelease()];
+  // The public site still shows the previous session (stale), one minute after the deploy.
+  assert.equal(value.observed.fresh, false);
+  const plan = planRecoveryWithWake(value);
+  assert.deepEqual(plan, {target_session: target, elapsed_minutes: 150, overdue: true, action: 'none', reason: 'publication_propagation_grace', wake_at: '2026-10-27T22:39:00.000Z', wake_not_before: '2026-10-27T22:39:00.000Z'});
+  // The woken check reads the propagated deploy: no acquisition.
+  const woken = {...at(value, plan.wake_at), observed: observePublication(fixture(), target)};
+  assert.equal(planRecovery(woken).reason, 'published_observations_current');
+  // The decision rule itself is unchanged: a check started otherwise (a schedule)
+  // after the two-minute grace that still sees the old site acquires, as before.
+  assert.equal(planRecovery(at(value, '2026-10-27T22:31:00Z')).action, 'acquire');
+  assert.equal(planRecovery(at(value, '2026-10-27T22:30:59Z')).reason, 'publication_propagation_grace');
+});
+test('every branch waits for the settle time after a successful release, and only then', () => {
+  // A cooldown that would end at 22:35, inside the settle time of a 22:29 deploy.
+  const cooldown = context('2026-10-27T22:30:00Z');
+  cooldown.producerRuns = [run(PRODUCER, {conclusion: 'failure', updated_at: '2026-10-27T22:25:00Z'})]; cooldown.publisherRuns = [deployedRelease()];
+  const held = planRecoveryWithWake(cooldown);
+  assert.equal(held.reason, 'acquisition_retry_cooldown'); assert.equal(held.retry_after, '2026-10-27T22:35:00.000Z');
+  assert.equal(held.wake_at, '2026-10-27T22:39:00.000Z'); assert.equal(held.wake_not_before, '2026-10-27T22:39:00.000Z');
+  const {wake_at, wake_not_before, ...decision} = held; assert.deepEqual(decision, planRecovery(cooldown));
+  // Later wakes are already past the settle time and stay exactly as they were.
+  const inFlight = context('2026-10-27T22:30:00Z'); inFlight.publisherRuns = [deployedRelease(), run(PUBLISHER, {id: 301, status: 'in_progress', conclusion: null, created_at: '2026-10-27T22:29:30Z'})];
+  assert.equal(planRecoveryWithWake(inFlight).wake_at, '2026-10-27T23:30:00.000Z');
+  // Failed, cancelled and older releases add nothing.
+  for (const release of [deployedRelease('2026-10-27T22:29:00Z', {conclusion: 'failure'}), deployedRelease('2026-10-27T22:29:00Z', {conclusion: 'cancelled'}), deployedRelease('2026-10-27T22:20:00Z')]) {
+    const value = context('2026-10-27T22:30:00Z'); value.producerRuns = [run(PRODUCER, {conclusion: 'failure', updated_at: '2026-10-27T22:25:00Z'})]; value.publisherRuns = [release];
+    const plan = planRecoveryWithWake(value); assert.equal(plan.wake_not_before, undefined, release.conclusion); assert.equal(plan.wake_at, '2026-10-27T22:35:00.000Z', release.conclusion);
+  }
+  // Just before the next close the settle time stays far inside the cap (next close + 60).
+  const late = context('2026-10-28T19:59:00Z'); late.producerRuns = [run(PRODUCER, {conclusion: 'failure', updated_at: '2026-10-28T19:58:00Z'})];
+  late.publisherRuns = [deployedRelease('2026-10-28T19:58:30Z', {created_at: '2026-10-28T19:00:00Z'})];
+  assert.equal(planRecoveryWithWake(late).wake_at, '2026-10-28T20:08:30.000Z');
 });
 test('the watchdog hands its report to the post-close timer after every check', () => {
   const workflow = readFileSync(new URL('../workflows/postclose-watchdog.yml', import.meta.url), 'utf8');
