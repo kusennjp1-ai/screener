@@ -241,7 +241,8 @@ export const PROVISIONAL_STOP_RULE = `ピボットの −${PROVISIONAL_STOP_PERC
  * returned as `sells.stop`: never pushed into `weakness`, never in tally() or BREAKDOWN_KEYS, so no count, chip, tile, gate or
  * plan moves. Settings-free: the plan's own stop is compared by the card (printed strings), not here.
  * - The breakout is breakoutBar(lastPivotCrossing(...)) over the last CROSSING_LOOKBACK_SESSIONS (60) sessions with `from`
- *   (crossingFloor's), the same bar the conclusion and the failed-breakout check name.
+ *   (crossingFloor's): the conclusion's bar, the latest re-cross. The failed-breakout check may name an earlier heavy-volume
+ *   crossing in the same window, so the two dates can differ.
  * - In the buy zone (`view.state === 'zone'`) the plan buys at the analysis day's close: 'na' (cause 'zone'); no later bar exists.
  * - A dated breakout before the analysis day: the level is the provisional stop's half-up cents; the window is the lows of the
  *   bars after the breakout bar to the last bar; 'hit' when the lowest low's cents are at or under the level's, else 'clear'.
