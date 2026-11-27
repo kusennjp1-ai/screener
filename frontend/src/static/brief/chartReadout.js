@@ -236,18 +236,6 @@ export function chartReadout(model, index, { certified = false, pivot = null, au
 /** Two years of weeks: the weekly period's length (CHART_RANGES['2yw']). */
 const TWO_YEARS_OF_WEEKS = CHART_RANGES['2yw'][0];
 /**
- * The chart's layers (plan S2-P7, B's 「表示」): 水準 (the pivot, zone, stop and 52-week lines with their tags), 収縮 (the
- * contraction boxes, their T numbers, depths and lows), 移動平均, 出来高 and RS線, every one shown by default. The choice is
- * kept for this tab's session, like the period.
- */
-export const CHART_LAYERS = [['levels', '水準'], ['legs', '収縮'], ['averages', '移動平均'], ['volume', '出来高'], ['rs', 'RS線']];
-/** The 「表示」 button's word: 「すべて」 or 「n項目」, never a count over a count (B's round-2 rule: it would read as a date). */
-export function layerWord(hidden = []) {
-  const shown = CHART_LAYERS.filter(([key]) => !hidden.includes(key)).length;
-  return shown === CHART_LAYERS.length ? 'すべて' : shown ? `${shown}項目` : 'なし';
-}
-
-/**
  * The weekly period's button: 「週足2年」 only when two years of weeks exist, otherwise the honest count. Without
  * bars (a chart not delivered, failed or still loading) the count is unknown, never 0: 「週足（本数 未確認）」.
  */

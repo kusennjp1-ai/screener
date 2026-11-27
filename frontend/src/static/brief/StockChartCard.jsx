@@ -6,7 +6,7 @@ import { crossingFloor } from './breakoutHistory';
 import { auditValues } from '../qualificationAudit';
 import { newYorkDate } from '../evidenceTime';
 import { ratioShown } from './briefCandidate';
-import { CHART_RANGES as RANGES, chartCrossing, chartReadout, formatPercent, formatPrice, heavyVolumeBars, layerWord, priceInRange, shortAveragesShown, structuralLowLegend, weeklyBars, weeklyRangeLabel } from './chartReadout';
+import { CHART_RANGES as RANGES, chartCrossing, chartReadout, formatPercent, formatPrice, heavyVolumeBars, priceInRange, shortAveragesShown, structuralLowLegend, weeklyBars, weeklyRangeLabel } from './chartReadout';
 
 /** The 上げ下げ出来高比 footnote, in the stock screen's 注記 below 1024px. */
 export const VCP_NOTE = '上げ下げ出来高比（50日）は、上げた日の出来高 ÷ 下げた日の出来高です。1超は買いが優勢です。';
@@ -179,7 +179,7 @@ function WeeklyLabel({ bars }) {
  * bars only. `earningsCall` is the screen's one earnings call (StockView's earningsCall): the date axis
  * counts the same days as the chips and the plan, and the chart redraws when today's New York date changes.
  */
-export default function StockChartCard({ data, view, earningsCall = null, legs, legsValid = false, rsHigh, rsLead = null, gaps = [], sells, levels, chartRef, range = '6m', onRange, hiddenLayers = [], notes = [], wide = false }) {
+export default function StockChartCard({ data, view, earningsCall = null, legs, legsValid = false, rsHigh, rsLead = null, gaps = [], sells, levels, chartRef, range = '6m', onRange, notes = [], wide = false }) {
   const { bars, row, certification } = data;
   const [period, interval] = RANGES[range] || RANGES['6m'];
   const certified = certification?.certified === true;
@@ -238,9 +238,7 @@ export default function StockChartCard({ data, view, earningsCall = null, legs, 
   const undrawn = useSyncExternalStore(subscribePriceChart, priceChartFailed, priceChartFailed) && Boolean(model);
   return <section ref={card} className="brief-card brief-chartcard in" style={{ '--i': 1 }} aria-label="株価チャート">
     <div className="brief-chartcard-head">
-      <div className="brief-periods" role="group" aria-label="表示期間">{Object.keys(RANGES).map(key => <button key={key} type="button" className={key === '2yw' ? 'brief-period-week' : undefined} aria-pressed={range === key} aria-label={key === '2yw' ? weeklyRangeLabel(bars) : undefined} disabled={undrawn} onClick={() => onRange?.(key)}>{key === '2yw' ? <WeeklyLabel bars={bars} /> : RANGES[key][2]}</button>)}
-        <button type="button" className="brief-period-layers" aria-haspopup="dialog" aria-expanded="false" aria-label={`チャートに表示するものを選ぶ（いま${layerWord(hiddenLayers)}）`} disabled={undrawn}>表示<span className="brief-layers-word">{layerWord(hiddenLayers)}</span></button>
-      </div>
+      <div className="brief-periods" role="group" aria-label="表示期間">{Object.keys(RANGES).map(key => <button key={key} type="button" className={key === '2yw' ? 'brief-period-week' : undefined} aria-pressed={range === key} aria-label={key === '2yw' ? weeklyRangeLabel(bars) : undefined} disabled={undrawn} onClick={() => onRange?.(key)}>{key === '2yw' ? <WeeklyLabel bars={bars} /> : RANGES[key][2]}</button>)}</div>
       {readout ? <Readout readout={readout} compact={!wide} reason={certification?.reason ?? null} /> : null}
     </div>
     {model ? <PriceChart ref={chartRef} model={model} period={period} onScrub={onScrub} selected={index} onLatest={onLatest} onLegend={onLegend} /> : <p className="brief-note brief-chart-placeholder" role="status">{data.chart.isError ? '日足チャートを取得できません。' : row?.chart_path ? '日足チャートを読み込み中…' : 'この銘柄の日足チャートは未配信です。'}</p>}
