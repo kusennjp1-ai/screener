@@ -113,6 +113,53 @@ jobs:
         if: ${{ github.event_name == 'workflow_run' && steps.price-route.outputs.repair == 'false' && steps.pick.outputs.mode == 'noop' && steps.pick.outputs.markets == '[]' }}
         run: ':'
 
+  fetch-benchmark:
+    # Requests SPY for the completed NYSE session at the start, beside
+    # build-market, before the evening hours in which Yahoo returned invalid
+    # SPY series. combine-and-build places the file only when it validates for
+    # the same session as its manifest and keeps it if its own later request
+    # fails; never for another day. Optional: any failure here leaves combine
+    # on its own request, as before, and never fails the run. combine needs
+    # this job. A normal run ends within the 90-minute retry window plus
+    # setup; a hang ends as a step failure at 100 minutes, or at the job's
+    # 110-minute limit. The fastest measured US build-market that started
+    # before 19:45 ET on its session took 110.2 minutes.
+    needs: select-markets
+    if: ${{ github.event_name != 'workflow_run' && needs.select-markets.result == 'success' && needs.select-markets.outputs.mode == 'full' && contains(fromJSON(needs.select-markets.outputs.markets), 'US') }}
+    continue-on-error: true
+    timeout-minutes: 110
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: .github/scripts/session-calendar-requirements.txt
+      - name: Install the exchange clock and the producer's SPY provider
+        run: python -m pip install -r .github/scripts/session-calendar-requirements.txt "$(grep -E '^yfinance==' backend/requirements-runtime.txt)"
+      - name: Request SPY for the completed NYSE session
+        # Retries every 15 minutes until 19:45 New York time on that session,
+        # and for at most 90 minutes after the first request.
+        continue-on-error: true
+        timeout-minutes: 100
+        run: |
+          target="$(python .github/scripts/postclose-calendar.py | python -c 'import json,sys; print(json.load(sys.stdin)["target_session"])')"
+          echo "Completed NYSE session: $target"
+          python frontend/tools/export-book-benchmark.py --target "$target" --output "$RUNNER_TEMP/early-book-benchmark/book-benchmark.json"
+      - name: Upload the early SPY benchmark
+        uses: actions/upload-artifact@v4
+        with:
+          name: book-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/early-book-benchmark/book-benchmark.json
+          if-no-files-found: ignore
+          retention-days: 3
+
   ensure_daily_price_release:
     needs: select-markets
     if: ${{ github.event_name != 'workflow_run' && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
@@ -552,7 +599,7 @@ jobs:
   combine-and-build:
     # Preserve fallback after failure or a skip, but not after cancellation.
     if: ${{ !cancelled() && ((github.event_name == 'workflow_run' && needs.select-markets.result == 'success' && needs.select-markets.outputs.repair == 'true') || (github.event_name != 'workflow_run' && needs.build-market.result != 'cancelled' && (github.event_name == 'workflow_dispatch' || github.ref == format('refs/heads/{0}', github.event.repository.default_branch)))) }}
-    needs: [select-markets, build-market]
+    needs: [select-markets, build-market, fetch-benchmark]
     timeout-minutes: ${{ needs.select-markets.outputs.repair == 'true' && 110 || 360 }}
     permissions:
       contents: read
@@ -949,6 +996,23 @@ jobs:
             --combine-artifacts-dir /tmp/static-market-artifacts-current \
             --fallback-artifacts-dir /tmp/static-market-artifacts-fallback
 
+      - name: Download the early SPY benchmark
+        id: early-benchmark
+        if: needs.select-markets.outputs.repair != 'true' && needs.select-markets.outputs.mode == 'full'
+        continue-on-error: true
+        uses: actions/download-artifact@v4
+        with:
+          name: book-benchmark-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/early-book-benchmark
+
+      - name: Place the early SPY benchmark only for the same validated session
+        # The export below requests SPY again: on success it replaces this file
+        # and logs both last bars; after a provider failure it keeps it.
+        if: needs.select-markets.outputs.repair != 'true' && needs.select-markets.outputs.mode == 'full' && steps.early-benchmark.outcome == 'success'
+        continue-on-error: true
+        working-directory: frontend
+        run: python tools/export-book-benchmark.py --place "$RUNNER_TEMP/early-book-benchmark/book-benchmark.json"
+
       - name: Cache public SEC archives and security mappings
         if: needs.select-markets.outputs.repair != 'true'
         uses: actions/cache@v4
@@ -1238,3 +1302,32 @@ jobs:
           path: /tmp/source-promotion-completion.json
           retention-days: 7
           if-no-files-found: error
+
+  wake-postclose-watchdog-after-failure:
+    # A failed acquisition has no completion relay (postclose-completion.mjs
+    # admits only a successful producer), so wake the unchanged watchdog with
+    # no inputs instead of waiting for a best-effort schedule. It applies its
+    # durable retry cooldown from run history and hands the end of that wait
+    # to the post-close timer. This job is the run's last; a watchdog that
+    # still sees the run in progress waits its hour as before. A failed
+    # wakeup never changes the run's result; the schedules remain the fallback.
+    continue-on-error: true
+    needs: [select-markets, ensure_daily_price_release, build-market, combine-and-build, promote-daily-source]
+    if: ${{ always() && !cancelled() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && (needs.select-markets.result == 'failure' || needs.ensure_daily_price_release.result == 'failure' || needs.build-market.result == 'failure' || needs.combine-and-build.result == 'failure' || needs.promote-daily-source.result == 'failure') }}
+    permissions:
+      actions: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Request the post-close watchdog after a failed acquisition
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for wake_try in 1 2 3; do
+            if timeout 30 gh api --method POST repos/kusennjp1-ai/screener/actions/workflows/postclose-watchdog.yml/dispatches -f ref=main >/dev/null; then
+              exit 0
+            fi
+            echo "::warning::Failure wakeup attempt $wake_try failed; scheduled recovery remains active."
+            if [ "$wake_try" -lt 3 ]; then sleep 5; fi
+          done
+          exit 1

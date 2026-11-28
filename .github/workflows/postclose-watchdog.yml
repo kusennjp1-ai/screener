@@ -79,3 +79,12 @@ jobs:
             postclose-completion-report.json
           if-no-files-found: warn
           retention-days: 7
+      # Hands this inspection's plan.wake_at (one hour after the next NYSE close,
+      # or the end of a cooldown) to the Post-close Watchdog Timer. Runs after an
+      # overdue or failed check too; without a usable report it asks for an hour
+      # later. Best effort: the schedules above stay the fallback.
+      - name: Arm the next watchdog wake
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/postclose-timer.mjs arm --report postclose-watchdog-report.json

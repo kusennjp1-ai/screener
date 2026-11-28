@@ -106,16 +106,42 @@ function normalizeRuns(runs, workflow, now) {
   }).sort((a, b) => Date.parse(b.created_at)-Date.parse(a.created_at));
 }
 
-export function planRecovery({clock, observed, producerRuns, publisherRuns, workflowStates, now}) {
+// Next inspection time (post-close timer). Each branch names the earliest time
+// its own evidence can change. Timing a wake never alters a decision; the one
+// decision added with it is publication_retry_grace, which waits for the
+// existing once-only retry instead of rebuilding. A wake only schedules another
+// full inspection by this same planner, which then re-reads the public site and
+// run history. Every wake is bounded to at least a minute ahead and at most
+// SESSION_WAKE_MINUTES after the next exchange close.
+export const SESSION_WAKE_MINUTES = 60;
+export const IN_FLIGHT_WAKE_MINUTES = 60;
+export const DISPATCHED_WAKE_MINUTES = 345;
+export const WAKE_FLOOR_MS = minute;
+// A release that ends successfully has usually deployed, and Pages may serve
+// the previous publication for a short while. No timed wake lands sooner than
+// this after a successful release ends, so the woken inspection reads the new
+// deploy instead of taking a still-propagating site for a missing session.
+// Only the wake time moves: every decision, the two-minute propagation grace
+// included, is unchanged, and an inspection started otherwise (a schedule, a
+// workflow wakeup) decides exactly as before. Ten minutes is also the wait
+// after a failed release, so both outcomes are inspected about ten minutes
+// after the release ends.
+export const PUBLICATION_SETTLE_MINUTES = 10;
+
+function decideRecovery({clock, observed, producerRuns, publisherRuns, workflowStates, now}) {
   validateClock(clock, now);
   for (const name of [PRODUCER, PUBLISHER]) check(workflowStates[name] === 'active', `${name} is disabled or unavailable`);
   const producers = normalizeRuns(producerRuns, PRODUCER, now), publishers = normalizeRuns(publisherRuns, PUBLISHER, now);
   const elapsedMinutes = Math.floor((now-Date.parse(clock.target_close))/minute);
   const putCallOnly = observed.stale.length === 1 && observed.stale[0] === 'put_call';
   const common = {target_session: clock.target_session, elapsed_minutes: elapsedMinutes, overdue: !observed.fresh && elapsedMinutes >= (putCallOnly ? 240 : 120)};
-  if (observed.fresh) return {...common, action: 'none', reason: 'published_observations_current'};
+  const nextSession = Date.parse(clock.next_close)+SESSION_WAKE_MINUTES*minute, dispatched = now+DISPATCHED_WAKE_MINUTES*minute;
+  const deployedAt = Math.max(-Infinity, ...publishers.filter(run => run.status === 'completed' && run.conclusion === 'success').map(run => Date.parse(run.updated_at)));
+  const settled = deployedAt+PUBLICATION_SETTLE_MINUTES*minute;
+  const decision = (plan, wake) => ({plan, wake, notBefore: settled > now ? settled : null});
+  if (observed.fresh) return decision({...common, action: 'none', reason: 'published_observations_current'}, nextSession);
   const active = [...producers, ...publishers].filter(run => run.status !== 'completed');
-  if (active.length) return {...common, action: 'none', reason: 'existing_work_in_flight', active_runs: active.map(run => ({id: run.id, workflow: run.path, status: run.status}))};
+  if (active.length) return decision({...common, action: 'none', reason: 'existing_work_in_flight', active_runs: active.map(run => ({id: run.id, workflow: run.path, status: run.status}))}, now+IN_FLIGHT_WAKE_MINUTES*minute);
   const completedProducer = producers.find(run => run.conclusion === 'success' && Date.parse(run.created_at) >= Date.parse(clock.eligible_at));
   const lastRelease = publishers[0];
   // A producer can complete while its workflow_run event is lost. Give event
@@ -125,8 +151,12 @@ export function planRecovery({clock, observed, producerRuns, publisherRuns, work
   if (completedProducer && now-Date.parse(completedProducer.updated_at) >= 2*minute) {
     const afterProducer = publishers.filter(run => Date.parse(run.created_at) >= Date.parse(completedProducer.updated_at));
     const noDelivery = afterProducer.length === 0;
-    const retryFailed = afterProducer.length === 1 && lastRelease.conclusion === 'failure' && now-Date.parse(lastRelease.updated_at) >= 10*minute;
-    if (noDelivery || retryFailed) return {...common, action: 'publish', reason: noDelivery ? 'producer_completed_without_publisher' : 'retry_failed_publication_once', producer_run_id: completedProducer.id};
+    const retryPending = afterProducer.length === 1 && lastRelease.conclusion === 'failure';
+    const retryFailed = retryPending && now-Date.parse(lastRelease.updated_at) >= 10*minute;
+    if (noDelivery || retryFailed) return decision({...common, action: 'publish', reason: noDelivery ? 'producer_completed_without_publisher' : 'retry_failed_publication_once', producer_run_id: completedProducer.id}, dispatched);
+    // Inside those ten minutes, wait for that once-only retry. A check woken
+    // just after the failure must not fall through to a full acquisition.
+    if (retryPending) return decision({...common, action: 'none', reason: 'publication_retry_grace'}, Date.parse(lastRelease.updated_at)+10*minute);
   }
   const attempts = producers.filter(run => Date.parse(run.created_at) >= Date.parse(clock.eligible_at));
   const last = attempts[0];
@@ -134,20 +164,38 @@ export function planRecovery({clock, observed, producerRuns, publisherRuns, work
   // publication or trigger an expensive universe rebuild every ten minutes.
   if (putCallOnly) {
     const optionRetries = attempts.filter(run => Date.parse(run.created_at) >= Date.parse(clock.target_close)+90*minute);
-    if (elapsedMinutes < 90) return {...common, action: 'none', reason: 'waiting_for_cboe_publication'};
-    if (optionRetries.length >= 2) return {...common, action: 'none', reason: 'cboe_retry_budget_used_until_next_session'};
-    if (optionRetries.length && now-Date.parse(optionRetries[0].updated_at) < 120*minute) return {...common, action: 'none', reason: 'cboe_retry_cooldown'};
+    if (elapsedMinutes < 90) return decision({...common, action: 'none', reason: 'waiting_for_cboe_publication'}, Date.parse(clock.target_close)+90*minute);
+    if (optionRetries.length >= 2) return decision({...common, action: 'none', reason: 'cboe_retry_budget_used_until_next_session'}, nextSession);
+    if (optionRetries.length && now-Date.parse(optionRetries[0].updated_at) < 120*minute) return decision({...common, action: 'none', reason: 'cboe_retry_cooldown'}, Date.parse(optionRetries[0].updated_at)+120*minute);
   }
   // Run history survives runner/cache loss. After six acquisitions, slow to
   // six-hour catchup instead of repeatedly rebuilding an unavailable source.
   const cooldown = (attempts.length >= 6 ? 360 : Math.min(60, Math.max(10, attempts.length*10)))*minute;
-  if (last && now-Date.parse(last.updated_at) < cooldown) return {...common, action: 'none', reason: 'acquisition_retry_cooldown', retry_after: new Date(Date.parse(last.updated_at)+cooldown).toISOString()};
-  if (lastRelease && now-Date.parse(lastRelease.updated_at) < 2*minute) return {...common, action: 'none', reason: 'publication_propagation_grace'};
+  if (last && now-Date.parse(last.updated_at) < cooldown) return decision({...common, action: 'none', reason: 'acquisition_retry_cooldown', retry_after: new Date(Date.parse(last.updated_at)+cooldown).toISOString()}, Date.parse(last.updated_at)+cooldown);
+  if (lastRelease && now-Date.parse(lastRelease.updated_at) < 2*minute) return decision({...common, action: 'none', reason: 'publication_propagation_grace'}, Date.parse(lastRelease.updated_at)+2*minute);
   // Prices-only charts are capped at the existing feature-run date. A full
   // snapshot is required to advance the public session under that contract.
   const acquisitionMode = 'full';
-  return {...common, action: 'acquire', acquisition_mode: acquisitionMode,
-    reason: attempts.length ? 'published_observations_still_behind' : 'completed_session_not_published'};
+  return decision({...common, action: 'acquire', acquisition_mode: acquisitionMode,
+    reason: attempts.length ? 'published_observations_still_behind' : 'completed_session_not_published'}, dispatched);
+}
+
+export function planRecovery(input) {
+  return decideRecovery(input).plan;
+}
+
+// The same plan plus wake_at, the time the post-close timer should request the
+// next inspection. A successful producer wakes the watchdog itself, so for
+// dispatched work DISPATCHED_WAKE_MINUTES is only the backstop. Within
+// PUBLICATION_SETTLE_MINUTES of a successful release, wake_at is no sooner than
+// that settle time, and wake_not_before names it so the timer does not keep an
+// earlier pending wake inside it.
+export function planRecoveryWithWake(input) {
+  const {plan, wake, notBefore} = decideRecovery(input);
+  const latest = Date.parse(input.clock.next_close)+SESSION_WAKE_MINUTES*minute;
+  check(Number.isFinite(wake), 'Recovery branch has no wake time');
+  const at = Math.min(latest, Math.max(input.now+WAKE_FLOOR_MS, wake, notBefore ?? -Infinity));
+  return {...plan, wake_at: new Date(at).toISOString(), ...(notBefore === null ? {} : {wake_not_before: new Date(notBefore).toISOString()})};
 }
 
 export function dispatchRequestFor(plan) {
@@ -237,7 +285,7 @@ export async function main(args = process.argv.slice(2)) {
     check(workflow.path === `.github/workflows/${name}`, 'Workflow identity mismatch'); workflowStates[name] = workflow.state;
     inventories[name] = recentWorkflowRuns(name, Math.min(now-12*60*minute, Date.parse(clock.eligible_at)), path => github(['api', path]));
   }
-  const plan = planRecovery({clock, observed, producerRuns: inventories[PRODUCER], publisherRuns: inventories[PUBLISHER], workflowStates, now});
+  const plan = planRecoveryWithWake({clock, observed, producerRuns: inventories[PRODUCER], publisherRuns: inventories[PUBLISHER], workflowStates, now});
   const report = {schema_version: 'postclose-watchdog-report-v1', checked_at: new Date(now).toISOString(), clock, observed, plan, execute, dispatched: false};
   if (execute && ['acquire','publish'].includes(plan.action)) {
     const {workflow, inputs} = dispatchRequestFor(plan);
@@ -253,7 +301,7 @@ export async function main(args = process.argv.slice(2)) {
     }
   }
   saveReport(args, report);
-  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### US close update check\n\nExpected session: **${clock.target_session}** (close ${clock.target_close}).\n\n| Observation | Published session |\n| --- | --- |\n${Object.entries(observed.fields).map(([key, value]) => `| ${key} | ${value || 'unavailable'} |`).join('\n')}\n\n${observed.long_breadth_missing_environment_keys ? `Long-history final row is an older-schema capture without ${observed.long_breadth_missing_environment_keys.join(', ')}; it is not current.\n\n` : ''}Current chart observations: ${observed.charts.current}/${observed.charts.observed}. Action: ${plan.action}${plan.acquisition_mode ? ` (${plan.acquisition_mode})` : ''}; ${plan.reason}.\n\n${report.dispatched ? 'Requested the existing gated workflow; this is not publication confirmation.' : 'No workflow dispatched.'}\n`);
+  if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, `### US close update check\n\nExpected session: **${clock.target_session}** (close ${clock.target_close}).\n\n| Observation | Published session |\n| --- | --- |\n${Object.entries(observed.fields).map(([key, value]) => `| ${key} | ${value || 'unavailable'} |`).join('\n')}\n\n${observed.long_breadth_missing_environment_keys ? `Long-history final row is an older-schema capture without ${observed.long_breadth_missing_environment_keys.join(', ')}; it is not current.\n\n` : ''}Current chart observations: ${observed.charts.current}/${observed.charts.observed}. Action: ${plan.action}${plan.acquisition_mode ? ` (${plan.acquisition_mode})` : ''}; ${plan.reason}. Next inspection time: ${plan.wake_at}.\n\n${report.dispatched ? 'Requested the existing gated workflow; this is not publication confirmation.' : 'No workflow dispatched.'}\n`);
   console.log(JSON.stringify(report, null, 2));
   if (plan.overdue) { console.error(`::error::US ${clock.target_session} still missing ${observed.stale.join(', ')} ${plan.elapsed_minutes} minutes after close; recovery ${plan.reason}.`); if (execute) process.exitCode = 1; }
   return report;

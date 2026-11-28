@@ -85,7 +85,14 @@ export function checkArchiveWorkflow(text){
 }
 
 export function checkPublisherStep(text){
-  assert.deepEqual(jobs(text),['renewal_route','publish'],'the publisher keeps exactly two jobs');
+  // Routing, the one Pages job, and a final watchdog wakeup that holds only
+  // actions: write and can reach neither Pages, the environment nor any tree.
+  assert.deepEqual(jobs(text),['renewal_route','publish','wake-postclose-watchdog'],'the publisher keeps routing, publish and the watchdog wakeup only');
+  const wake=job(text,'wake-postclose-watchdog');
+  assert.match(wake,/^    needs: publish\n/m);assert.match(wake,/^    continue-on-error: true\n/m);assert.match(wake,/^    timeout-minutes: 2\n/m);
+  assert.match(wake,/^    permissions:\n      actions: write\n(?!      )/m,'the wakeup job holds exactly actions: write');
+  assert.doesNotMatch(wake,/environment:|uses:|secrets\.|pages: write|id-token|contents: |release\/|\bnpm\b|\bnode\b|inputs\[|producer_run/);
+  assert.deepEqual(wake.match(/gh api[^\n]*/g),['gh api --method POST repos/kusennjp1-ai/screener/actions/workflows/postclose-watchdog.yml/dispatches -f ref=main >/dev/null; then'],'the wakeup only requests the watchdog with no inputs');
   const publish=job(text,'publish');
   assert.doesNotMatch(publish,/^    permissions:/m,'publish keeps the workflow permissions');
   assert.match(text,/^permissions:\n  contents: read\n  actions: read\n  pages: write\n  id-token: write\n(?!  )/m,'publisher workflow permissions are exactly these four');
@@ -158,7 +165,14 @@ test('the publisher admits the archive from controller tooling before the approv
     ['job permissions',text.replace('    environment:\n      name: github-pages\n','    permissions:\n      contents: write\n    environment:\n      name: github-pages\n')],
     ['extra workflow permission',text.replace('  id-token: write\n','  id-token: write\n  packages: write\n')],
     ['extra workflow permissions',text.replace('  id-token: write\n','  id-token: write\n  deployments: write\n  issues: write\n')],
-    ['third job',text+'  archive:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'],
+    ['another job',text+'  archive:\n    runs-on: ubuntu-latest\n    steps:\n      - run: true\n'],
+    ['wakeup with Pages',text.replace('    permissions:\n      actions: write\n','    permissions:\n      actions: write\n      pages: write\n')],
+    ['wakeup with contents',text.replace('    permissions:\n      actions: write\n','    permissions:\n      actions: write\n      contents: write\n')],
+    ['wakeup in the Pages environment',text.replace('    needs: publish\n','    needs: publish\n    environment:\n      name: github-pages\n')],
+    ['wakeup checkout',text.replace('      - name: Request the post-close watchdog after this release\n','      - uses: actions/checkout@v4\n      - name: Request the post-close watchdog after this release\n')],
+    ['wakeup can fail the release',text.replace('    needs: publish\n    if: ${{ always() && !cancelled() && github.event_name == \'workflow_dispatch\' && github.ref == \'refs/heads/main\' }}\n    continue-on-error: true\n','    needs: publish\n    if: ${{ always() && !cancelled() && github.event_name == \'workflow_dispatch\' && github.ref == \'refs/heads/main\' }}\n')],
+    ['wakeup with inputs',text.replace('dispatches -f ref=main >','dispatches -f ref=main -f inputs[producer_run_id]=1 >')],
+    ['wakeup to another workflow',text.replace('workflows/postclose-watchdog.yml/dispatches -f ref=main >','workflows/static-site.yml/dispatches -f ref=main >')],
   ]){assert.notEqual(changed,text,label);assert.throws(()=>checkPublisherStep(changed),undefined,label);}
 });
 

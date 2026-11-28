@@ -1,19 +1,57 @@
 """Restore only prior published observations; never reconstruct historical passes."""
 import hashlib
 import gzip
+import http.client
 import json
 from pathlib import Path
 import re
+import socket
+import time
 from urllib.request import urlopen
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 ROOT = Path('public/static-data')
 BASE = 'https://kusennjp1-ai.github.io/screener/static-data/'
+# A transient public-site failure (HTTP 5xx, a timeout or a dropped
+# connection) is read again after these waits. Every other error, a 404
+# included, raises at once exactly as before, and every byte read is still
+# checked below. One restore waits at most RETRY_BUDGET_SECONDS in total.
+RETRY_DELAYS = (30, 60, 120)
+RETRY_BUDGET_SECONDS = 600
+retry_waited = 0
+sleep = time.sleep
+
+
+def transient(error):
+    if isinstance(error, HTTPError):
+        return 500 <= error.code <= 599
+    if isinstance(error, URLError):
+        return isinstance(error.reason, (TimeoutError, socket.timeout, ConnectionError))
+    return isinstance(error, (TimeoutError, socket.timeout, ConnectionError, http.client.IncompleteRead))
+
+
+def read_public(url, timeout):
+    """Return the complete body of one public file, retrying only transient failures."""
+    global retry_waited
+    for attempt, delay in enumerate((*RETRY_DELAYS, None), start=1):
+        try:
+            with urlopen(url, timeout=timeout) as response:
+                return response.read()
+        except Exception as error:
+            if delay is None or not transient(error) or retry_waited + delay > RETRY_BUDGET_SECONDS:
+                raise
+            detail = type(error).__name__
+            if isinstance(error, HTTPError):
+                detail = f'HTTP {error.code}'
+                error.close()
+            print(f'Public read of {url} failed ({detail}); retry {attempt}/{len(RETRY_DELAYS)} in {delay}s')
+            retry_waited += delay
+            sleep(delay)
+
 
 def restore_selection_history():
     try:
-        with urlopen(BASE + 'candidate-history/index.json', timeout=30) as response:
-            catalog = json.load(response)
+        catalog = json.loads(read_public(BASE + 'candidate-history/index.json', 30))
     except HTTPError as error:
         if error.code == 404:
             print('First release: no published candidate history yet')
@@ -22,8 +60,7 @@ def restore_selection_history():
     for ref in catalog['snapshots']:
         if not re.fullmatch(r'candidate-history/\d{4}-\d{2}-\d{2}-[a-f0-9]{16}\.json(?:\.gz)?', ref['path']):
             raise ValueError('Unexpected history path')
-        with urlopen(BASE + ref['path'], timeout=60) as response:
-            raw = response.read()
+        raw = read_public(BASE + ref['path'], 60)
         content = gzip.decompress(raw) if ref['path'].endswith('.gz') else raw
         if hashlib.sha256(raw).hexdigest() != ref['sha256'] or json.loads(content)['as_of'] != ref['as_of']:
             raise ValueError('Published history failed integrity validation')
@@ -71,8 +108,7 @@ def restore_performance_history():
     # A missing/regressed website must never erase that verified history.
     existing = performance_references(json.loads(index.read_text(encoding='utf-8'))) if index.exists() else {}
     try:
-        with urlopen(BASE + 'candidate-performance-history/index.json', timeout=30) as response:
-            catalog = json.load(response)
+        catalog = json.loads(read_public(BASE + 'candidate-performance-history/index.json', 30))
     except HTTPError as error:
         if error.code != 404:
             raise
@@ -92,8 +128,7 @@ def restore_performance_history():
         if previous_ref and previous_ref['sha256'] == ref['sha256']:
             raw = previous_raw
         else:
-            with urlopen(BASE + ref['path'], timeout=60) as response:
-                raw = response.read()
+            raw = read_public(BASE + ref['path'], 60)
         value, observations = performance_payload(ref, raw)
         if previous and value['cohort'] != previous['cohort']:
             raise ValueError('Published performance changed an existing cohort identity')

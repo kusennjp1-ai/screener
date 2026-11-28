@@ -446,6 +446,31 @@ for(const [name,mutate]of [
 ])test('CI replay rejects '+name,async()=>{const f=ciApiFixture(),p=ciAddPriorHold(f);mutate(f,p);await assert.rejects(ciAdmission(f));});
 for(const [name,mutate]of [['running',(f,r)=>{r.status='in_progress';}],['completed',(f,r)=>{r.status='completed';r.conclusion='success';}],['rerun',(f,r)=>{r.run_attempt=2;}],['started job',(f,r)=>{f.jobs.set(r.id,[ciJob(r,9991,CI_ROUTE)]);}],['unrelated event',(f,r)=>{r.event='workflow_dispatch';}]])test('CI queued successor rejects '+name,async()=>{const f=ciApiFixture(),r=ciAddQueued(f);mutate(f,r);await assert.rejects(ciAdmission(f));});
 
+// The release's last job (wake-postclose-watchdog) runs only on main
+// workflow_dispatch; on a workflow_run caller it is skipped with no steps
+// (GitHub's placeholder clocks, as in the observed skipped publish job).
+const CI_WAKE='wake-postclose-watchdog';
+const ciSkippedWake=(run,id,patch={})=>ciJob(run,id,CI_WAKE,{conclusion:'skipped',started_at:'2026-10-17T10:08:31Z',completed_at:'2026-10-17T10:08:30Z',...patch});
+test('CI release wake job is accepted absent, unstarted on the active caller, or skipped on prior and historical callers',async()=>{
+  for(const ownWake of [null,'queued','waiting']){const f=ciApiFixture(),p=ciAddPriorHold(f);f.jobs.get(p.id).push(ciSkippedWake(p,9392));if(ownWake)f.jobs.get(f.own.id).push(ciJob(f.own,9402,CI_WAKE,{status:ownWake,conclusion:null,started_at:null,completed_at:null}));
+    const proof=await ciAdmission(f);assert.equal(proof.prior_holds.length,1);assert.equal(proof.caller.job_id,9401);
+    const receipt=ciHistoricalReceipt(proof),old=Date.now;ciCompletePublication(f);f.jobs.set(f.own.id,[...f.jobs.get(f.own.id).filter(j=>j.name!==CI_WAKE),ciSkippedWake(f.own,9402)]);
+    try{Date.now=()=>Date.parse('2026-11-01T00:00:00Z');assert.equal(validateOrdinaryCarryReceipt(receipt.receipt,receipt.publication,{api:f.api}),receipt.receipt);}finally{Date.now=old;}}
+});
+for(const [name,mutate]of [
+ ['prior wake succeeded',(f,p)=>{f.jobs.get(p.id).push(ciSkippedWake(p,9392,{conclusion:'success'}));}],
+ ['prior wake has steps',(f,p)=>{f.jobs.get(p.id).push(ciSkippedWake(p,9392,{steps:[{name:'Request the post-close watchdog after this release',status:'completed',conclusion:'success'}]}));}],
+ ['prior wake wrong head',(f,p)=>{f.jobs.get(p.id).push(ciSkippedWake(p,9392,{head_sha:'f'.repeat(40)}));}],
+ ['duplicate prior wake',(f,p)=>{f.jobs.get(p.id).push(ciSkippedWake(p,9392),ciSkippedWake(p,9393));}],
+ ['prior wake beside an unknown job',(f,p)=>{f.jobs.get(p.id).push(ciSkippedWake(p,9392),ciJob(p,9990,'Deploy',{conclusion:'skipped'}));}],
+ ['active caller wake started',(f)=>{f.jobs.get(f.own.id).push(ciJob(f.own,9402,CI_WAKE,{status:'in_progress',conclusion:null,completed_at:null}));}],
+ ['active caller wake already skipped',(f)=>{f.jobs.get(f.own.id).push(ciSkippedWake(f.own,9402));}],
+ ['duplicate active caller wake',(f)=>{f.jobs.get(f.own.id).push(...[9402,9403].map(id=>ciJob(f.own,id,CI_WAKE,{status:'queued',conclusion:null,started_at:null,completed_at:null})));}],
+])test('CI release wake job rejects '+name,async()=>{const f=ciApiFixture(),p=ciAddPriorHold(f);mutate(f,p);await assert.rejects(ciAdmission(f),name.includes('unknown')?/not a proven hold/:/wake job ran or changed/);});
+for(const [name,patch]of [['succeeded',{conclusion:'success'}],['has steps',{steps:[{name:'Request the post-close watchdog after this release',status:'completed',conclusion:'success'}]}],['wrong head',{head_sha:'f'.repeat(40)}],['duplicate',null]])test('CI historical caller wake job rejects '+name,async()=>{
+  const f=ciApiFixture(),receipt=ciHistoricalReceipt(await ciAdmission(f)),old=Date.now;ciCompletePublication(f);f.jobs.get(f.own.id).push(...(patch?[ciSkippedWake(f.own,9402,patch)]:[ciSkippedWake(f.own,9402),ciSkippedWake(f.own,9403)]));
+  try{Date.now=()=>Date.parse('2026-11-01T00:00:00Z');assert.throws(()=>validateOrdinaryCarryReceipt(receipt.receipt,receipt.publication,{api:f.api}),/wake job ran or changed/);}finally{Date.now=old;}
+});
 test('CI enabled stale-source and non-CI completions are authenticated no-publication holds',async()=>{for(const kind of ['stale CI','design','static']){const f=ciApiFixture(),run=ciRun(9090,CI.source.head_sha,'ci',{created_at:'2026-10-17T10:01:00Z',run_started_at:'2026-10-17T10:02:00Z',updated_at:'2026-10-17T10:04:00Z'});if(kind==='design'){run.workflow_id=371793291;run.path='.github/workflows/design-acceptance.yml';}if(kind==='static'){run.workflow_id=294257497;run.path='.github/workflows/static-site.yml';run.event='schedule';}f.runs.set(run.id,run);f.event.workflow_run=clone(run);const result=await ciRoute(f);assert.equal(result.ordinary_hold,true);assert.equal(result.ordinary_ci,false);assert.equal(result.ordinary_hold_marker,`Hold ordinary carry v4-ci ${readOrdinaryCiRequest(f.root).sha256} 9090/1`);assert(!f.calls.some(c=>c.endpoint===f.ciEndpoint));}});
 test('CI enabled malformed trigger never falls through to generic publication',async()=>{const f=ciApiFixture();f.event.workflow_run.path='.github/workflows/unlisted.yml';f.runs.set(f.trigger.id,clone(f.event.workflow_run));await assert.rejects(ciRoute(f));});
 

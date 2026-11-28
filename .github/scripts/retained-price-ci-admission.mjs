@@ -13,6 +13,11 @@ export const PRICE_CI=Object.freeze({repository:'kusennjp1-ai/screener',reposito
   publisher:{id:364666954,path:'.github/workflows/research-ui-release.yml'}});
 export const PRICE_HOLD_STEP='Hold finite retained-price activation';
 export const PRICE_REPAIR_STEP='Verify finite retained-price repair';
+// The release's last job wakes the post-close watchdog only on main
+// workflow_dispatch runs. Every release run read here is a workflow_run, where
+// that job is always skipped with no steps; runs from before it existed lack it.
+export const RELEASE_WAKE_JOB='wake-postclose-watchdog';
+const skippedReleaseWake=j=>j.name===RELEASE_WAKE_JOB&&j.status==='completed'&&j.conclusion==='skipped'&&Array.isArray(j.steps)&&j.steps.length===0;
 const prefix=`repos/${PRICE_CI.repository}`;
 const sourceProofs=new WeakMap();
 const runObservations=new WeakMap();
@@ -182,7 +187,8 @@ function preAdmissionCallback(api,activation,listed,workflow,ci){
   if(all.length===0){require(run.conclusion==='cancelled','zero-job callback is not cancelled');return {...observation,reason:'cancelled_before_jobs_and_required_ci'};}
   const producer=workflow===PRICE_CI.producer,name=producer?'select-markets':'Route exact renewal CI admission';
   const expectedJobs=producer?[name,'ensure_daily_price_release','build-market','combine-and-build','promote-daily-source']:[name,'publish'];
-  require(all.length===expectedJobs.length&&expectedJobs.every(n=>all.filter(j=>j.name===n).length===1),'unknown or incomplete pre-admission job inventory');
+  const wakes=producer?0:all.filter(j=>j.name===RELEASE_WAKE_JOB).length;
+  require(wakes<=1&&all.length===expectedJobs.length+wakes&&expectedJobs.every(n=>all.filter(j=>j.name===n).length===1),'unknown or incomplete pre-admission job inventory');
   require(all.every(j=>j.head_sha===activation.executing.sha&&j.status==='completed'&&Array.isArray(j.steps)),'nonterminal pre-admission job inventory');
   require(all.every(j=>clock(j.started_at)<ci.required_completed_at&&clock(j.completed_at)<ci.required_completed_at),'pre-admission job reaches CI admission');
   const route=all.find(j=>j.name===name);
@@ -253,8 +259,8 @@ export function verifyPriceSourceCompletion({root=priceControllerRoot(),sourceRu
 function priorHold(api,activation,listed,ci){
   if(listed.conclusion!=='success')return preAdmissionCallback(api,activation,listed,PRICE_CI.publisher,ci);
   const run=exactAttempt(api,listed.id,PRICE_CI.publisher,activation.executing.sha,'workflow_run');equal(completedIdentity(listed),completedIdentity(run),'previous hold run');require(run.status==='completed'&&run.conclusion==='success','previous publication caller is not a completed hold');
-  const all=jobs(api,run.id),route=all.filter(j=>j.name==='Route exact renewal CI admission'),publish=all.filter(j=>j.name==='publish');
-  require(all.length===2&&route.length===1&&publish.length===1&&all.every(j=>j.head_sha===activation.executing.sha&&j.status==='completed')&&route[0].conclusion==='success'&&publish[0].conclusion==='skipped','previous caller is not a proven no-publication hold');
+  const all=jobs(api,run.id),route=all.filter(j=>j.name==='Route exact renewal CI admission'),publish=all.filter(j=>j.name==='publish'),wakes=all.filter(j=>j.name===RELEASE_WAKE_JOB);
+  require(wakes.length<=1&&wakes.every(skippedReleaseWake)&&all.length===2+wakes.length&&route.length===1&&publish.length===1&&all.every(j=>j.head_sha===activation.executing.sha&&j.status==='completed')&&route[0].conclusion==='success'&&publish[0].conclusion==='skipped','previous caller is not a proven no-publication hold');
   const marker=route[0].steps?.filter(s=>s.name===PRICE_HOLD_STEP);require(marker?.length===1&&marker[0].status==='completed'&&marker[0].conclusion==='success','previous caller lacks exact hold marker');
   return {reason:'verified_finite_publication_hold',run:runObservations.get(run),jobs:all};
 }
