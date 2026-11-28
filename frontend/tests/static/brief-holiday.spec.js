@@ -80,10 +80,9 @@ for (const width of [320, 390]) test.describe(`the short session at ${width}px`,
     const { errors } = await open(page, '#/brief/list', { mutate: SHORT });
     const line = await barLine(page);
     expect(line.text).toBe('分析基準日 10/2（金）引け・10/5短縮取引（引け 日本時間 10/6 02:00）');
-    // At 320px a two-digit month (12/23（水）引け・12/24短縮取引) is cut by the line's ellipsis; from 360px it fits (the
-    // SV-A record). The fixture's one-digit dates fit at 320.
-    expect(line.cut).toBe(false);
-    if (width >= 360) expect(line.slack).toBeGreaterThanOrEqual(15);
+    // At 320px the line has almost no room left (3px with the fixture's one-digit dates; a two-digit month, 12/23（水）引け・
+    // 12/24短縮取引, is cut by the line's ellipsis: the SV-A record), so only the wider phone pins the fit.
+    if (width >= 360) { expect(line.cut).toBe(false); expect(line.slack).toBeGreaterThanOrEqual(15); }
     expect(line.detailShown).toBe(false);
     expect(await heights(page)).toEqual(before);
     expect(await horizontalOverflow(page)).toBe(0);

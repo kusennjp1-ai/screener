@@ -127,6 +127,13 @@ describe('the holiday and short-session line', () => {
       text: '12/25（金）は米国市場の休場日です（取引所カレンダー）。次の取引日は12/28（月）です。' });
   });
 
+  it('across a year: the bar\'s date carries the year as the late detail\'s does, the sentence names the weekday', () => {
+    // New Year's Day 2027 (a Friday) after the 12/31 analysis; the next session Monday 1/4.
+    expect(closureNote({ trends: calendar('2026-12-31'), date: '2026-12-31', now: at('2027-01-01T12:00:00Z') })).toMatchObject({
+      closed: ['2027-01-01'], next: '2027-01-04', early: false, age: '2027/1/1休場', detail: '（次の取引日 1/4（月））',
+      text: '1/1（金）は米国市場の休場日です（取引所カレンダー）。次の取引日は1/4（月）です。' });
+  });
+
   it('names only the weekdays: a Friday holiday before a weekend, and two closed weekdays', () => {
     // Thanksgiving 2025 on the session list itself: 11/27 is not in it, and 11/28 closes at 13:00 New York.
     expect(closureNote({ trends: calendar('2025-11-26'), date: '2025-11-26', now: at('2025-11-27T22:00:00Z') })).toMatchObject({
