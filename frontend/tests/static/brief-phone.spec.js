@@ -190,14 +190,23 @@ test.describe('tiles at 320px', () => {
 
 for (const [width, device] of Object.entries(PHONES)) test.describe(`list filters at ${width}px`, () => {
   test.use(device);
-  test('all four filters are on screen, none scrolled away', async ({ page }) => {
+  // Plan SV-P1 (T8, R5-4) replaces the 2×2 grid of four filters with six count tabs in one strip that scrolls inside itself:
+  // the strip, never the page, scrolls sideways; every tab keeps a 44px target and the pressed tab is in view
+  // (brief-tabs.spec.js holds the fade and the reveal).
+  test('the six count tabs scroll inside their strip, never the page, each a 44px target with the pressed one in view', async ({ page }) => {
     const { errors } = await openBrief(page, '#/brief/list');
     const seg = page.getByRole('group', { name: '絞り込み' });
-    await expect(seg.getByRole('button')).toHaveCount(4);
-    const boxes = await seg.getByRole('button').evaluateAll(buttons => buttons.map(button => { const box = button.getBoundingClientRect(); return { left: box.left, right: box.right, height: box.height }; }));
+    await expect(seg.getByRole('button')).toHaveCount(6);
+    const frame = await seg.boundingBox();
     const innerWidth = await page.evaluate(() => innerWidth);
-    for (const box of boxes) { expect(box.left).toBeGreaterThanOrEqual(0); expect(box.right).toBeLessThanOrEqual(innerWidth); expect(box.height).toBeGreaterThanOrEqual(44); }
-    expect(await seg.evaluate(node => node.scrollWidth - node.clientWidth)).toBe(0);
+    expect(frame.x).toBeGreaterThanOrEqual(0);
+    expect(frame.x + frame.width).toBeLessThanOrEqual(innerWidth);
+    const boxes = await seg.getByRole('button').evaluateAll(buttons => buttons.map(button => { const box = button.getBoundingClientRect(); return { left: box.left, right: box.right, height: box.height, pressed: button.getAttribute('aria-pressed') }; }));
+    for (const box of boxes) expect(box.height).toBeGreaterThanOrEqual(44);
+    const pressed = boxes.find(box => box.pressed === 'true');
+    expect(pressed.left).toBeGreaterThanOrEqual(frame.x);
+    expect(pressed.right).toBeLessThanOrEqual(frame.x + frame.width);
+    expect(await seg.evaluate(node => node.scrollWidth - node.clientWidth)).toBeGreaterThan(0);
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

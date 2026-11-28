@@ -1,7 +1,7 @@
 // Candidate view model for the daily-brief screens: the trend template, a candidate's position, the
 // brief's order, Today's focus pool and the list filters. Every value comes from the published research
 // rows and the existing rule functions; unknown stays unknown.
-import { assess, entryPlan, finite, highDistance } from '../researchEngine';
+import { assess, entryPlan, entryZonePercent, finite, highDistance } from '../researchEngine';
 import { canonicalPivot } from '../researchPresentation';
 import { signed, stateKey, STATES } from '../positionGeometry';
 import { auditValues, verifiedVolumeRatio } from '../qualificationAudit';
@@ -508,9 +508,43 @@ export function briefOrder(a, b) {
   return zone || (b.rs ?? -1) - (a.rs ?? -1) || a.symbol.localeCompare(b.symbol);
 }
 
+/** ピボット接近's band below the pivot, and ピボット直下's (a named subset of it), in percent (独自設定). */
+export const NEAR_PIVOT_PERCENT = 5;
+export const AT_PIVOT_PERCENT = 2;
 // One eligibility rule for Today's focus rows, their counts and the list's zone/near filters.
 const inZone = view => view.state === 'zone';
-const nearPivot = view => view.state === 'wait' && finite(view.distance) && view.distance >= -5;
+const nearPivot = view => view.state === 'wait' && finite(view.distance) && view.distance >= -NEAR_PIVOT_PERCENT;
+// ピボット直下 compares the distance as the row prints it (one decimal, distanceText), so a row printed 「−2.0%」 is inside 「−2.0%以内」.
+const atPivot = view => nearPivot(view) && Number(Math.abs(view.distance).toFixed(1)) <= AT_PIVOT_PERCENT;
+/**
+ * The count rule of the 候補 tabs (plan SV, the round-2 critique's blocker): a tab's number counts only the stocks whose
+ * membership is decided, and a stock the data cannot place in or out of it is counted apart as 未確認, never as a miss.
+ * - The position is undecided without a usable price or pivot (判定不可: no pivot fetched, the Setup Engine's recalculation
+ *   unavailable, or waiting after a bar repair). Decided instead: a pivot more than 25% from the price (`stale`: 旧ピボット・
+ *   有効な買い水準なし) and a recalculated base with no valid pivot (canonicalPivot's 再計算済み・現在有効なピボットなし): the
+ *   stock is in no band of a valid pivot.
+ * - The selection is undecided for a stock that is not selected, has no exclusion, misses no condition and has one or more
+ *   unconfirmed (or no counts at all): it would be selected if every unconfirmed condition held.
+ * - あと1条件 is undecided for a stock that is not selected, misses at most one condition and has one or more unconfirmed.
+ * A stock is 未確認 for a tab when neither its selection nor its position rules it out and one of them is undecided.
+ */
+const recalculatedWithoutPivot = row => !positive(row?.se_pivot_price ?? row?.vcp_pivot) && row?.setup_recalculation?.status === 'calculated';
+export const positionUnknown = view => view?.state === 'na' && !view?.stale && (!positive(view.price) || !recalculatedWithoutPivot(view.row));
+const countsUnknown = view => !Number.isInteger(view?.failed) || !Number.isInteger(view?.unknown);
+export const selectionUnknown = view => Boolean(view) && !view.qualified && !view.exclusion && (countsUnknown(view) || (view.failed === 0 && view.unknown > 0));
+const oneUnknown = view => Boolean(view) && !view.qualified && (countsUnknown(view) || (view.failed <= 1 && view.unknown > 0));
+const bandUnknown = (view, inBand) => (view.qualified && positionUnknown(view)) || (selectionUnknown(view) && (inBand(view) || positionUnknown(view)));
+// The analysis day's breakout and the cases the rows cannot decide: no verified day (no event), a close above the pivot's
+// cents after one at them ('undated'), a breakout of a pivot that is only a reference (baseMuted), an up-day crossing whose
+// volume is missing ('cross' with no ratio: 「上抜け・出来高 未確認」), or no usable pivot. A crossing on a known volume under
+// the bar (「上抜け・出来高不足」) or on a down day is decided: not a breakout.
+const breakoutHit = view => dayEvent(view)?.kind === 'breakout' && !baseMuted(view);
+const breakoutOpen = view => {
+  if (positionUnknown(view)) return true;
+  if (!inZone(view)) return false;
+  const event = dayEvent(view);
+  return !event || event.kind === 'undated' || (event.kind === 'breakout' && baseMuted(view)) || (event.kind === 'cross' && !finite(view.volumeRatio) && view.change > 0);
+};
 const focusPool = (ranked, date, bundle) => (ranked || []).filter(item => item?.assessment?.qualified).map(item => memoCandidateView(item, date, bundle))
   .filter(view => inZone(view) || nearPivot(view));
 
@@ -563,21 +597,24 @@ export function focusHeadingNote(market, state) {
   return gate === 'hold' ? '（地合い：買いは控える・監視のみ）' : gate === 'unknown' ? '（地合い未確認）' : null;
 }
 
+// Each filter's `unknown` counts the stocks it cannot decide (the count rule above), never as a miss; `why` ends in a noun:
+// the list says 「…のため判定していません」 after it.
 export const LIST_FILTERS = {
-  zone: { label: '買いゾーン', test: view => view.qualified && inZone(view) },
-  near: { label: 'ピボット接近', test: view => view.qualified && nearPivot(view) },
-  all: { label: '選定すべて', test: view => view.qualified },
-  one: { label: 'あと1条件', test: view => !view.qualified && view.failed === 1 && view.unknown === 0 },
+  zone: { label: '買いゾーン', test: view => view.qualified && inZone(view), unknown: view => bandUnknown(view, inZone), why: 'ピボットか選定の条件が未確認' },
+  near: { label: 'ピボット接近', test: view => view.qualified && nearPivot(view), unknown: view => bandUnknown(view, nearPivot), why: 'ピボットか選定の条件が未確認' },
+  all: { label: '選定すべて', test: view => view.qualified, unknown: selectionUnknown, why: '選定の条件が未確認' },
+  one: { label: 'あと1条件', test: view => !view.qualified && view.failed === 1 && view.unknown === 0, unknown: oneUnknown, why: '条件が未確認' },
   // Today's focus pool (the zone and near filters together). Hidden: never a segment button.
   focus: { label: '注目候補', hidden: true, test: view => view.qualified && (inZone(view) || nearPivot(view)) },
-  // The analysis day's breakouts among the selected stocks (Today's 「うち上抜けN」 and the 条件 menu). Hidden. A
-  // selected stock in the zone whose day is not verified (no event), whose close above the pivot follows one at its
-  // cents (breakoutEvent's 'undated': the rows cannot tell the day's breakout from a rise after an earlier one), or
-  // whose breakout is of a pivot that is only a reference (baseMuted: the conclusion reads 土台を確認できない), is counted
-  // apart (`unknown`), never as a miss. `why` ends in a noun: the list says 「…のため判定していません」 after it.
-  breakout: { label: '上抜け', hidden: true, test: view => view.qualified && dayEvent(view)?.kind === 'breakout' && !baseMuted(view),
-    unknown: view => view.qualified && inZone(view) && (!dayEvent(view) || dayEvent(view).kind === 'undated' || (dayEvent(view).kind === 'breakout' && baseMuted(view))),
-    why: '分析基準日の値動きが未検証か、上抜けの日が未確認か、Setup Engineの土台が未確認' },
+  // ピボット接近's rows within AT_PIVOT_PERCENT of the pivot (a list filter only: the rows' state word stays ピボット接近).
+  // Hidden: a tab of the phone's strip, never a segment button wider.
+  at: { label: 'ピボット直下', hidden: true, test: view => view.qualified && atPivot(view), unknown: view => bandUnknown(view, atPivot), why: 'ピボットか選定の条件が未確認' },
+  // The analysis day's breakouts among the selected stocks (Today's 「うち上抜けN」, the phone's strip and the 条件 menu).
+  // Hidden. What the rows cannot decide (breakoutOpen: the day not verified, the breakout day not told, a reference pivot, a
+  // missing volume, no pivot) is counted apart, never as a miss.
+  breakout: { label: '上抜け', hidden: true, test: view => view.qualified && breakoutHit(view),
+    unknown: view => (view.qualified && breakoutOpen(view)) || (selectionUnknown(view) && (breakoutHit(view) || breakoutOpen(view))),
+    why: '分析基準日の値動きが未検証か、上抜けの日か出来高が未確認か、Setup Engineの土台が未確認' },
   // The selected stocks whose latest SEC EPS change is EPS_YOY_FILTER_PERCENT or more; a stock whose SEC summary
   // is missing, not dated for the analysis date or without the value is counted apart (`unknown`), never as a miss.
   // `field`: the published row field it reads (absent from older publications: 未収録).
@@ -587,12 +624,33 @@ export const LIST_FILTERS = {
 };
 /** A list filter's label as the screen shows it: the breakout filter names the analysis date (「10/2の上抜け」); `short` is the 条件 menu's. */
 export const filterLabel = (key, date) => key === 'breakout' ? `${isoDay(date) ? `${shortDate(date)}の` : ''}上抜け` : LIST_FILTERS[key]?.label || '';
+/** The phone's count tabs in the strip's order (plan T1-T5): 選定すべて first, the day's breakouts, then the zone, ピボット直下, ピボット接近 and あと1条件. */
+export const LIST_TABS = Object.freeze(['all', 'breakout', 'zone', 'at', 'near', 'one']);
+const tenth = value => `\u2212${value.toFixed(1)}%`;
+/**
+ * The one sentence of each tab's population, for the line under the phone's strip (plan T9, R5-16 c): our words, with
+ * 独自設定 on every threshold of our own, the numbers read from the rules' own constants. Null for a key that is not a tab.
+ */
+export function tabDefinition(key, date) {
+  const day = isoDay(date) ? shortDate(date) : '分析基準日';
+  return {
+    all: 'TT 8/8と日足の整合性を満たし、株価$10以上・売買代金$2,000万以上（独自設定）の銘柄。',
+    breakout: `前日の終値がピボットの下で、${day}の終値がピボットを上回った選定銘柄（上昇日・出来高${BREAKOUT_VOLUME_RATIO}×以上・独自設定）。`,
+    zone: `ピボット〜その＋${entryZonePercent('minervini')}%（独自設定）の選定銘柄。`,
+    at: `ピボット接近のうち、ピボットまで${tenth(AT_PIVOT_PERCENT)}以内（独自設定）。`,
+    near: `ピボットまで${tenth(NEAR_PIVOT_PERCENT)}以内（独自設定）の選定銘柄。`,
+    one: '選定の条件のうち未達が1つだけで、未確認がない銘柄。',
+  }[key] ?? null;
+}
+/** What 「未確認 n」 beside a tab's count means, for the phone's 注記. */
+export const TAB_UNKNOWN_NOTE = '件数の横の「未確認 n」は、データが欠けていて（条件・ピボット・値動きの検証・出来高・Setup Engineの土台）その絞り込みに入るか判定できない銘柄の数です。件数と一覧には含めません。';
 /**
  * Every list filter's count over the same views in one pass, plus `unknown` counts for the filters that have
  * them ({ zone: 5, …, eps: 3 } and { breakout: 0, eps: 18 }), and `unpublished`: for a filter that reads a
- * published field, true when no selected row carries it (an older publication: 未収録, never 該当0).
+ * published field, true when no selected row carries it (an older publication: 未収録, never 該当0). `pending` are the
+ * stocks the list does not show whose membership a tab cannot decide (listPending): they only ever count as 未確認.
  */
-export function filterCounts(views) {
+export function filterCounts(views, pending = []) {
   const keys = Object.keys(LIST_FILTERS), filters = keys.map(key => LIST_FILTERS[key]);
   const hits = keys.map(() => 0), misses = keys.map(() => 0), carried = keys.map(() => false), list = views || [];
   for (const view of list) {
@@ -603,6 +661,7 @@ export function filterCounts(views) {
       if (filter.field && !carried[k] && view.qualified && view.row && Object.hasOwn(view.row, filter.field)) carried[k] = true;
     }
   }
+  for (const view of pending || []) for (let k = 0; k < keys.length; k++) if (!filters[k].test(view) && filters[k].unknown?.(view)) misses[k] += 1;
   const pick = (when, value) => Object.fromEntries(keys.flatMap((key, k) => (when(filters[k]) ? [[key, value(k)]] : [])));
   return { counts: pick(() => true, k => hits[k]), unknown: pick(filter => filter.unknown, k => misses[k]), unpublished: pick(filter => filter.field, k => !carried[k]) };
 }

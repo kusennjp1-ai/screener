@@ -269,7 +269,7 @@ export default function BriefApp() {
     return () => (window.cancelIdleCallback ? window.cancelIdleCallback(idle) : clearTimeout(idle));
   }, []);
   const left = from === 'today' ? <TodayView brief={brief} watch={watch} open={open} now={now} animate={animate} wide={wide} nav={todayNav} onUnwatch={toggleWatch} ageNote={ageLine?.note || null} ageLine={ageLine} target={target} />
-    : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} limits={listLimits} setLimits={setListLimits} origin={kept} wide={wide} onUnwatch={toggleWatch} />;
+    : from === 'market' ? <Suspense fallback={<p className="brief-note" role="status">市場の画面を読み込み中…</p>}><MarketScreen brief={brief} /></Suspense> : <ListView brief={brief} kind={from} watch={watch} open={open} now={now} animate={animate} listState={listState} setListState={setListState} limits={listLimits} setLimits={setListLimits} origin={kept} wide={wide} onUnwatch={toggleWatch} target={target} ageLine={ageLine} />;
   const watching = symbol && watch.includes(symbol);
   const at = selected ? sequence.indexOf(selected) : -1;
   return <div className="leader-shell brief" data-theme={dark ? 'dark' : 'light'}>

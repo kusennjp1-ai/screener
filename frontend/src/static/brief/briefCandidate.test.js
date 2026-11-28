@@ -310,10 +310,13 @@ describe('selection and order are unchanged by the round-1 wording', () => {
     const views = ranked.map(item => candidateView(item, DATE));
     expect(views.slice().sort(briefOrder).map(v => v.symbol)).toEqual(['Z1', 'Z2', 'Z3', 'U1', 'N2', 'N1', 'N3', 'B1', 'E1', 'S1']);
     expect(Object.fromEntries(Object.entries(LIST_FILTERS).map(([key, filter]) => [key, views.filter(filter.test).map(v => v.symbol)]))).toEqual({
-      zone: ['Z1', 'Z2'], near: ['N1', 'N2'], all: ['Z1', 'Z2', 'N1', 'N2', 'B1', 'E1', 'S1'], one: ['Z3', 'N3'], focus: ['Z1', 'Z2', 'N1', 'N2'], breakout: [], eps: [] });
+      zone: ['Z1', 'Z2'], near: ['N1', 'N2'], all: ['Z1', 'Z2', 'N1', 'N2', 'B1', 'E1', 'S1'], one: ['Z3', 'N3'], focus: ['Z1', 'Z2', 'N1', 'N2'], at: ['N1'], breakout: [], eps: [] });
     // The one-pass counts agree with every filter's own test.
-    // No row carries sec_summary (an older publication): the EPS filter is 未収録, not 該当0.
-    expect(filterCounts(views)).toEqual({ counts: { zone: 2, near: 2, all: 7, one: 2, focus: 4, breakout: 0, eps: 0 }, unknown: { breakout: 0, eps: 7 }, unpublished: { eps: true } });
+    // No row carries sec_summary (an older publication): the EPS filter is 未収録, not 該当0. U1 (nothing unmet, two conditions
+    // unconfirmed, a breakout day in the zone) could be selected: 未確認 for 買いゾーン, 選定すべて, あと1条件 and 上抜け (the SV
+    // count rule), never in a plain count.
+    expect(filterCounts(views)).toEqual({ counts: { zone: 2, near: 2, all: 7, one: 2, focus: 4, at: 1, breakout: 0, eps: 0 },
+      unknown: { zone: 1, near: 0, all: 1, one: 1, at: 0, breakout: 1, eps: 7 }, unpublished: { eps: true } });
   });
 });
 
@@ -535,7 +538,7 @@ describe('round 2 review: unknowns, 未収録 and one wording per stock', () => 
     expect([v.state, v.event]).toEqual(['zone', null]);
     expect(filterCounts([verified, v])).toMatchObject({ counts: { breakout: 1 }, unknown: { breakout: 1 } });
     // It ends in a noun: the list says 「…のため判定していません」 after it.
-    expect(LIST_FILTERS.breakout.why).toBe('分析基準日の値動きが未検証か、上抜けの日が未確認か、Setup Engineの土台が未確認');
+    expect(LIST_FILTERS.breakout.why).toBe('分析基準日の値動きが未検証か、上抜けの日か出来高が未確認か、Setup Engineの土台が未確認');
     // A close above the pivot after one at its cents: the day's breakout or a rise after an earlier one, which the rows
     // cannot tell apart (the conclusion reads the bars), so 未確認 too, never a hit or a miss.
     const cent = verdict(audited('CNT', { price: 101, pivot: 100, change: 1, volume: 1.6 }));

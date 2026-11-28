@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import useMediaQuery from '../useMediaQuery';
-import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, filterCounts, filterLabel, LIST_FILTERS, LIST_SORTS, matchesSearch, memoCandidateView, rowSecChip, rowSecChipDrawn } from './briefCandidate';
+import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, baseMuted, briefOrder, filterCounts, filterLabel, LIST_FILTERS, LIST_SORTS, LIST_TABS, matchesSearch, memoCandidateView, rowSecChip, rowSecChipDrawn, TAB_UNKNOWN_NOTE, tabDefinition } from './briefCandidate';
+import { marketBand } from './marketGate';
 import { sellChipView } from './briefSell';
 import { CandidateRow } from './BriefParts';
 import { EARNINGS_CHIP_NOTE } from '../fundamentalsExplain.js';
@@ -26,9 +28,34 @@ const ALL_POPULATION = '選定すべて：TT 8/8＋株価$10以上・売買代�
 const HIDDEN_FILTER_TEXT = { focus: '注目候補（ゾーン＋接近）' };
 // The hidden filters the 条件 menu offers, in its order.
 const CONDITION_FILTERS = ['breakout', 'eps'];
+// On a phone the day's breakouts are a tab of the strip, so the menu keeps the EPS filter only.
+const PHONE_CONDITION_FILTERS = ['eps'];
+// The market states whose gate sentence takes the slot above the phone's strip (plan R5-11): a 0% day, an unknown market and a
+// waiting verdict. Never while the market loads (nothing flashes) and never on an open day, unless the publication is late.
+const GATE_SENTENCE_STATES = new Set(['closed', 'unknown', 'waiting']);
+// The strip's edge fade is 10px (brief.css): a revealed tab keeps its text this far inside the edge.
+const STRIP_REVEAL_PAD = 16;
 const DEFAULT_FILTER = 'zone';
 // A phone's watch rows are compact (Today's focus rows' fit): said with the tab's notes while a row's caution can take TT 8/8's room.
 const WATCH_TT_NOTE = 'スマホのウォッチでは、行に収まらないときRS推計を省き、注意のチップがある行では「TT 8/8」も省くことがあります（どちらも銘柄の画面に表示）。';
+
+/**
+ * The stocks the 候補 list does not show whose membership in a tab cannot be decided (the count rule, briefCandidate's
+ * LIST_FILTERS): not selected, at most one condition unmet and some unconfirmed (or no counts). They are only ever counted
+ * as 未確認, never listed.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- a pure helper beside listSource
+export function listPending(brief) {
+  return (brief.ranked || []).filter(item => {
+    const a = item.assessment;
+    if (!a || a.qualified || (a.failed === 1 && a.unknown === 0)) return false;
+    return !Number.isInteger(a.failed) || !Number.isInteger(a.unknown) || (a.unknown > 0 && a.failed <= 1);
+  }).map(item => memoCandidateView(item, brief.date, brief.bundle.data));
+}
+
+/** The gate sentence's units (plan R5-11): a line breaks only after a 「・」 or before a （…） label, never inside either. */
+// eslint-disable-next-line react-refresh/only-export-components -- tested with the strip
+export const gateUnits = text => String(text).split(/(?<=・)|(?=（)/);
 
 /** Every view a list screen can show, before its filter. */
 // eslint-disable-next-line react-refresh/only-export-components -- the stock pane steps through the same rows
@@ -66,20 +93,25 @@ export function UnlistedWatchRow({ symbol, date, onRemove }) {
   </li>;
 }
 
-export default function ListView({ brief, kind, watch, open, now, animate, listState, setListState, limits, setLimits, origin, wide, onUnwatch }) {
+export default function ListView({ brief, kind, watch, open, now, animate, listState, setListState, limits, setLimits, origin, wide, onUnwatch, target = null, ageLine = null }) {
   const phone = useMediaQuery(PHONE_QUERY);
+  // The phone's 候補 header (plan SV-P1): the count tabs as one scrolling strip, the selected tab's definition under it, and
+  // on a 0%, unknown or waiting day the gate sentence above it. Wider screens keep their segment and their notes unchanged.
+  const tabs = phone && kind !== 'watch';
   const pageSize = phone ? PHONE_PAGE : 50;
   const { filter, query } = listState;
   // Under a qualified-only filter every row is TT 8/8: a phone and the desktop's narrow column leave the constant chip
   // out (the 注記 says so), which leaves room for the day's and the base's chips; a tablet's wide rows keep it, as do
   // あと1条件 and the watch list.
   const constantTemplate = (phone || wide) && kind !== 'watch' && filter !== 'one';
-  const ttNote = constantTemplate ? `買いゾーン・ピボット接近・選定すべての行はすべてTT 8/8のため、${phone ? 'スマホでは' : ''}「TT 8/8」の表示を省いています（あと1条件では未達・未確認の数を表示します）。` : null;
+  const ttNote = constantTemplate ? `${tabs ? '上抜け・買いゾーン・ピボット直下・ピボット接近・選定すべて' : '買いゾーン・ピボット接近・選定すべて'}の行はすべてTT 8/8のため、${phone ? 'スマホでは' : ''}「TT 8/8」の表示を省いています（あと1条件では未達・未確認の数を表示します）。` : null;
   const update = patch => setListState(state => ({ ...state, ...patch }));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const views = useMemo(() => listSource(brief, kind, watch), [brief.bundle.data, brief.ranked, brief.date, kind, watch]);
-  // Every filter's count (and the EPS filter's 未確認) in one pass over the same rows.
-  const tally = useMemo(() => filterCounts(views), [views]), counts = tally.counts;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const pending = useMemo(() => (kind === 'watch' ? [] : listPending(brief)), [brief.bundle.data, brief.ranked, brief.date, kind]);
+  // Every filter's count and its 未確認 in one pass over the same rows (and the stocks only a 未確認 can count).
+  const tally = useMemo(() => filterCounts(views, pending), [views, pending]), counts = tally.counts;
   const shown = useMemo(() => listShown(views, kind, listState), [views, kind, listState]);
   // The rows shown are kept per list across a stock's round trip (BriefApp holds them). Coming back
   // from a stock, or after stepping past the last row shown, the stock last open is rendered too.
@@ -92,7 +124,9 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   const ordered = useMemo(() => (kind === 'watch' ? watchOrder(shown, sells) : shown), [kind, shown, sells]);
   const unlisted = useMemo(() => (kind === 'watch' ? unlistedWatch(brief, watch) : []), [kind, brief, watch]);
   const state = bundleState(brief);
-  const hidden = LIST_FILTERS[filter]?.hidden ? filter : null;
+  // A hidden filter is said by its chip; on a phone the strip's tabs (the day's breakouts, ピボット直下) are pressed instead.
+  const tabbed = tabs && LIST_TABS.includes(filter);
+  const hidden = LIST_FILTERS[filter]?.hidden && !tabbed ? filter : null;
   // The desktop paints FIRST_ROWS rows first and the rest of the page once those are on screen (two frames, then
   // REST_DELAY_MS) and the browser is idle (each new list again), so a tab switch never waits for rows below the fold.
   const deferKey = `${kind}|${filter}|${query}|${listState.sort}|${brief.date}`;
@@ -118,7 +152,39 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   // and a chip left on from an earlier publication says so too).
   const unpublished = key => state === 'ready' && tally.unpublished[key] === true;
   const countText = key => state !== 'ready' ? '—' : unpublished(key) ? '未収録' : LIST_FILTERS[key].unknown ? `該当${counts[key]}・未確認${tally.unknown[key]}` : String(counts[key]);
-  const missing = state === 'ready' && hidden && LIST_FILTERS[hidden].unknown ? tally.unknown[hidden] : 0;
+  const judged = tabbed ? filter : hidden;
+  const missing = state === 'ready' && judged && LIST_FILTERS[judged].unknown ? tally.unknown[judged] : 0;
+  // The tab's 「未確認 n」 beside its count, only while n is above 0, but always on the day's breakouts (plan T2): a tab never
+  // reads a bare 0 while some stock is 未確認. Nothing while the bundle loads (the count reads 「—」).
+  const tabUnknown = key => (state !== 'ready' || !LIST_FILTERS[key].unknown ? null : key === 'breakout' || tally.unknown[key] > 0 ? tally.unknown[key] : null);
+  const band = tabs ? marketBand(brief.market, { loading: Boolean(brief.marketLoading), date: brief.date, target }) : null;
+  const gateText = band && (GATE_SENTENCE_STATES.has(band.state) || (band.state === 'open' && ageLine?.tone === 'warn')) ? band.line1Labelled : null;
+  const strip = useRef(null);
+  // The pressed tab is brought inside the strip by its own scroll (never scrollIntoView, which would move the page), and the
+  // edge with more tabs fades (data-more-start / data-more-end, brief.css).
+  useLayoutEffect(() => {
+    const node = strip.current;
+    if (!node) return;
+    const pressed = node.querySelector('[aria-pressed="true"]');
+    if (pressed) {
+      const box = pressed.getBoundingClientRect(), frame = node.getBoundingClientRect();
+      const shift = box.left < frame.left + STRIP_REVEAL_PAD ? box.left - frame.left - STRIP_REVEAL_PAD : box.right > frame.right - STRIP_REVEAL_PAD ? box.right - frame.right + STRIP_REVEAL_PAD : 0;
+      if (shift) { if (typeof node.scrollTo === 'function') node.scrollTo({ left: node.scrollLeft + shift }); else node.scrollLeft += shift; }
+    }
+  }, [tabs, filter, state]);
+  useEffect(() => {
+    const node = strip.current;
+    if (!node) return undefined;
+    const mark = () => {
+      node.toggleAttribute('data-more-start', node.scrollLeft > 1);
+      node.toggleAttribute('data-more-end', node.scrollWidth - node.clientWidth - node.scrollLeft > 1);
+    };
+    mark();
+    node.addEventListener('scroll', mark, { passive: true });
+    const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(mark) : null;
+    if (observer) { observer.observe(node); for (const child of node.children) observer.observe(child); }
+    return () => { node.removeEventListener('scroll', mark); observer?.disconnect(); };
+  }, [tabs, state]);
   // The watch tab has no filters and no 注記 of its own: its rows' base and SEC chips (独自判定・独自設定) and a grey row's
   // 土台未確認 state their rules here only while a row carries one. On a phone its rows are compact, as Today's focus rows:
   // a caution takes the RS chip's place and RS gives way rather than add a line (it stays in the row's label), so the
@@ -135,8 +201,20 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
   const uncheckedNote = kind !== 'watch' && ordered.some(view => view.qualified && baseMuted(view)) ? BASE_UNCHECKED_NOTE : null;
   return <>
     <header className="brief-hero in" style={{ '--i': 0 }}><small className="numeric">{brief.date ? `${barDay(brief.date)}引け` : '日付未確認'}</small><h1>{kind === 'watch' ? 'ウォッチ' : '候補'}</h1></header>
+    {/* The gate sentence (plan R5-11): marketBand's own line, the one the bar, Today and the stock call read, kept whole by its units. */}
+    {gateText && <p className="brief-gateline" data-testid="brief-list-gate" data-band={band.state}>{gateUnits(gateText).map((unit, i) => <span key={i} className="brief-nowrap">{unit}</span>)}{' '}
+      <Link className="brief-nowrap brief-gateline-link" to="/brief/market" aria-label="市場の詳細">市場 <span aria-hidden="true">›</span></Link></p>}
     {kind !== 'watch' && <div className="brief-filters">
-      <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).filter(([, value]) => !value.hidden).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => choose(key)}>{value.label}<span className="numeric">{state === 'ready' ? counts[key] : '—'}</span></button>)}</div>
+      {tabs ? <div className="brief-seg brief-countstrip" role="group" aria-label="絞り込み" aria-describedby={tabbed ? 'brief-tabdef' : undefined} ref={strip}>{LIST_TABS.map(key => {
+        const unknown = tabUnknown(key);
+        return <button type="button" key={key} aria-pressed={filter === key} onClick={() => choose(key)}>
+          <span className="brief-tab-label">{filterLabel(key, brief.date)}</span>
+          <span className="brief-tab-count"><span className="numeric">{state === 'ready' ? counts[key] : '—'}</span>{unknown === null ? null : <span className="brief-tab-unknown"> 未確認 {unknown}</span>}</span>
+        </button>;
+      })}</div>
+        : <div className="brief-seg" role="group" aria-label="絞り込み">{Object.entries(LIST_FILTERS).filter(([, value]) => !value.hidden).map(([key, value]) => <button type="button" key={key} aria-pressed={filter === key} onClick={() => choose(key)}>{value.label}<span className="numeric">{state === 'ready' ? counts[key] : '—'}</span></button>)}</div>}
+      {/* The selected tab's population in one sentence, right under the strip (plan T9), on every day. */}
+      {tabs && tabbed && <p className="brief-tabdef" id="brief-tabdef">{tabDefinition(filter, brief.date)}</p>}
       {/* A hidden filter (Today's tiles or the 条件 menu) is said as a chip that clears it, only while it is on. */}
       {hidden && <button type="button" className="brief-filterchip" onClick={() => choose(DEFAULT_FILTER)}>
         {HIDDEN_FILTER_TEXT[hidden] || filterLabel(hidden, brief.date)}<span className="numeric">{countText(hidden)}</span><span aria-hidden="true">×</span><span className="sr-only">（絞り込みを解除）</span>
@@ -151,10 +229,10 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
           reads 条件, and the filter it chose is said by its chip above, which clears it. */}
       <label className="brief-sort brief-cond"><span className="sr-only">条件で絞り込む</span><select value="" onChange={e => e.target.value && choose(e.target.value)}>
         <option value="">条件</option>
-        {CONDITION_FILTERS.map(key => <option key={key} value={key} disabled={unpublished(key)}>{unpublished(key) ? `${LIST_FILTERS[key].short}（この公開は未収録）` : `${filterLabel(key, brief.date)}（${countText(key)}）`}</option>)}
+        {(tabs ? PHONE_CONDITION_FILTERS : CONDITION_FILTERS).map(key => <option key={key} value={key} disabled={unpublished(key)}>{unpublished(key) ? `${LIST_FILTERS[key].short}（この公開は未収録）` : `${filterLabel(key, brief.date)}（${countText(key)}）`}</option>)}
       </select></label>
     </div>}
-    {kind !== 'watch' && filter === 'all' && <p className="brief-note brief-population">{ALL_POPULATION}</p>}
+    {kind !== 'watch' && !tabs && filter === 'all' && <p className="brief-note brief-population">{ALL_POPULATION}</p>}
     <section className={`brief-card in${kind === 'watch' ? ' brief-watchlist' : ''}`} style={{ '--i': 1 }} aria-label={kind === 'watch' ? 'ウォッチ中の銘柄' : '選定銘柄の一覧'}>
       {ordered.length || unlisted.length ? <ol className="brief-rows">
         {unlisted.map(symbol => <UnlistedWatchRow key={symbol} symbol={symbol} date={brief.date} onRemove={onUnwatch} />)}
@@ -162,10 +240,10 @@ export default function ListView({ brief, kind, watch, open, now, animate, listS
       </ol>
         : <p className="brief-note">{state !== 'ready' ? BUNDLE_TEXT[state] : kind === 'watch' ? '銘柄の画面で ☆ を押すと、ここに並びます。'
           // A filter that could not judge some stocks says so: no hit is not the same as no stock.
-          : missing > 0 && !query ? `該当なし。ほか${missing}銘柄は${LIST_FILTERS[hidden].why}のため判定していません。` : 'この条件の選定銘柄はありません。'}</p>}
+          : missing > 0 && !query ? `該当なし。ほか${missing}銘柄は${LIST_FILTERS[judged].why}のため判定していません。` : 'この条件の選定銘柄はありません。'}</p>}
       {ordered.length > limit && <button type="button" className="brief-morebutton" onClick={() => setLimit(limit + pageSize)}>さらに表示（残り {ordered.length - limit}件）</button>}
       {wide && (kind === 'watch' ? watchNotes : [LIST_NOTE, uncheckedNote, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]).map(note => note && <p key={note} className="brief-note">{note}</p>)}
     </section>
-    <ScreenNotes id={kind === 'watch' ? 'watch' : 'list'} wide={wide} notes={kind === 'watch' ? watchNotes : [LIST_NOTE, uncheckedNote, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]} />
+    <ScreenNotes id={kind === 'watch' ? 'watch' : 'list'} wide={wide} notes={kind === 'watch' ? watchNotes : [LIST_NOTE, tabs ? TAB_UNKNOWN_NOTE : null, uncheckedNote, BASE_NOTE, EARNINGS_CHIP_NOTE, ttNote]} />
   </>;
 }

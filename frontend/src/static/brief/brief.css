@@ -419,9 +419,27 @@ html[data-brief-nav="tab"]::view-transition-new(root), html[data-brief-nav="pane
   .brief-q-legend { font-size: 12px; }
   /* The market redesign names each side of a tile pair (S&P / NAS, 高 / 安), which was a 12px note before. */
   .brief-market .brief-pair-name { font-size: 12px; }
-  /* The four list filters as a 2×2 grid: the fourth one and every focus ring stay on screen. */
-  .brief-seg { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); flex: 1 1 100%; overflow: visible; }
-  .brief-seg button { justify-content: center; }
+  /* The 候補 count tabs (plan SV-P1, T8, R5-4): one row that scrolls sideways, each tab its label over its count (with
+     「未確認 n」 on the count's line), the edge that has more tabs fading over 10px (ListView sets data-more-start /
+     data-more-end), so a cut tab and the fade both say the strip goes on. */
+  .brief-filters { min-width: 0; }
+  .brief-countstrip { flex: 1 1 100%; min-width: 0; overflow-x: auto; overscroll-behavior-x: contain; scroll-snap-type: x proximity; }
+  .brief-countstrip::-webkit-scrollbar { display: none; }
+  .brief-countstrip[data-more-end] { -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 10px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 10px), transparent); }
+  .brief-countstrip[data-more-start] { -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 10px), transparent); mask-image: linear-gradient(to left, #000 calc(100% - 10px), transparent); }
+  .brief-countstrip[data-more-start][data-more-end] { -webkit-mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 10px), transparent); mask-image: linear-gradient(to right, transparent, #000 10px, #000 calc(100% - 10px), transparent); }
+  .brief-countstrip button { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0; min-height: 56px; padding: 4px 12px 6px; text-align: left; white-space: nowrap; scroll-snap-align: start; }
+  .brief-countstrip .brief-tab-label { font-size: 12px; line-height: 16px; color: inherit; }
+  .brief-countstrip .brief-tab-count { display: flex; align-items: baseline; font-size: 12px; color: inherit; }
+  .brief-countstrip .brief-tab-count .numeric { font-size: 20px; line-height: 24px; font-weight: 700; color: inherit; }
+  .brief-countstrip .brief-tab-unknown { margin-left: 6px; font-size: 12px; line-height: 16px; color: var(--text-2); }
+  .brief-countstrip button[aria-pressed="true"] .brief-tab-unknown { color: inherit; }
+  /* The selected tab's definition, right under the strip (plan T9): 12px on a 16px line. */
+  .brief-tabdef { flex: 1 1 100%; margin: -2px 0 0; font-size: 12px; line-height: 16px; color: var(--text-2); }
+  /* The gate sentence above the strip (plan R5-11, D19): 14px on a 20px line, broken only between its units. */
+  .brief-gateline { margin: 0; font-size: 14px; line-height: 20px; font-weight: 700; color: var(--text); }
+  .brief-gateline .brief-nowrap { display: inline-block; max-width: 100%; }
+  .brief-gateline-link { font-weight: 400; color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
 }
 /* A focused control is never under the sticky bar or the fixed dock (their sizes live on .brief). */
 @media (max-width: 1023px) {

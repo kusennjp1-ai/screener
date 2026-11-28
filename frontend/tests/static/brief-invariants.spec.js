@@ -176,8 +176,11 @@ test.describe('a close at the pivot\'s cents the day before', () => {
     const chip = row.locator('.brief-reasons > .brief-chip').first();
     const out = { errors, chip: stripGlyph(await chip.textContent()), chipClass: await chip.getAttribute('class'), link: await page.getByTestId('brief-breakout-link').count() };
     await page.goto('/#/brief/list');
-    await page.getByRole('combobox', { name: '条件で絞り込む' }).selectOption('breakout');
-    out.filter = await page.locator('.brief-filterchip').textContent();
+    // On a phone the day's breakouts are a count tab of the strip (plan SV-P1), with its 「未確認 n」 beside its count.
+    const tab = page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /上抜け/ });
+    await tab.click();
+    await expect(tab).toHaveAttribute('aria-pressed', 'true');
+    out.filter = await tab.textContent();
     out.listed = await page.locator('[data-testid="brief-candidate"][data-symbol="ZZNV"]').count();
     out.listNote = await page.locator('.brief-card .brief-note').first().textContent();
     await page.goto('/#/brief/stock/ZZNV');
@@ -197,7 +200,7 @@ test.describe('a close at the pivot\'s cents the day before', () => {
     expect(seen.link, 'no 「うち上抜け」 for it').toBe(0);
     expect(seen.listed).toBe(0);
     if (kind === 'undated') {
-      expect(seen.filter).toMatch(/未確認[1-9]/);
+      expect(seen.filter).toMatch(/未確認 [1-9]/);
       expect(seen.listNote).toContain(LIST_FILTERS.breakout.why);
     }
   };

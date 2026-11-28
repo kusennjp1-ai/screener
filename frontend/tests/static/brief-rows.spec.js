@@ -423,9 +423,13 @@ test.describe('the day on the rows (390px)', () => {
     await link.click();
     await expect(page).toHaveURL(/#\/brief\/list$/);
     expect(await symbolsShown(page)).toEqual(['ZZKS']);
-    const chip = page.getByRole('button', { name: new RegExp(`^${DAY}の上抜け\\s*該当1・未確認0`) });
-    expect((await chip.boundingBox()).height).toBeGreaterThanOrEqual(44);
-    await chip.click();
+    // On a phone the day's breakouts are a count tab of the strip, pressed, with its 「未確認 n」 (plan SV-P1; S2 drew a chip that
+    // cleared the filter): 買いゾーン is one tap away.
+    const tab = page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: new RegExp(`^${DAY}の上抜け`) });
+    await expect(tab).toHaveAttribute('aria-pressed', 'true');
+    await expect(tab).toHaveText(`${DAY}の上抜け1 未確認 0`);
+    expect((await tab.boundingBox()).height).toBeGreaterThanOrEqual(44);
+    await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ }).click();
     await expect(page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^買いゾーン/ })).toHaveAttribute('aria-pressed', 'true');
     expect(await symbolsShown(page)).toEqual(['ZZKS', 'ZZNV', 'ZZNH', 'ZZDM', 'ZZOD']);
     expect(await asciiMinus(page)).toEqual([]);
@@ -454,7 +458,8 @@ test.describe('the day on the rows (390px)', () => {
     expect(await symbolsShown(page)).toEqual(['ZZAR']);
     await chip.click();
     await page.getByRole('group', { name: '絞り込み' }).getByRole('button', { name: /^選定すべて/ }).click();
-    await expect(page.locator('.brief-population')).toHaveText('選定すべて：TT 8/8＋株価$10以上・売買代金$2,000万以上');
+    // On a phone 選定すべて's population is its tab's definition under the strip (plan SV-P1, T9), with 独自設定 on its thresholds.
+    await expect(page.locator('.brief-countstrip + .brief-tabdef')).toHaveText('TT 8/8と日足の整合性を満たし、株価$10以上・売買代金$2,000万以上（独自設定）の銘柄。');
     await page.getByRole('combobox', { name: '並び順' }).selectOption({ label: 'EPS前年比' });
     expect((await symbolsShown(page)).slice(0, 2)).toEqual(['ZZAR', 'ZZHE']);
     expect(errors).toEqual([]);

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, within } from '@testing-library/react';
 import { withAuditFixture } from '../testAuditFixture';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 import ListView, { listShown, watchOrder } from './ListView';
 import { BASE_CAUTION_NOTE, BASE_UNCHECKED_NOTE, candidateView, LIST_FILTERS } from './briefCandidate';
 import { EARNINGS_CHIP_NOTE } from '../fundamentalsExplain.js';
@@ -20,10 +21,10 @@ const brief = { bundle: { data: { date: DATE, rankings: { minervini: ranked } },
 
 const list = (filter = 'zone', { kind = 'list', watch = [], setListState = () => {}, onUnwatch = () => {} } = {}) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>
+  return render(<MemoryRouter><QueryClientProvider client={client}>
     <ListView brief={brief} kind={kind} watch={watch} open={() => {}} now={0} animate={false} listState={{ filter, sort: 'priority', query: '' }} setListState={setListState}
       limits={{}} setLimits={() => {}} origin={null} wide onUnwatch={onUnwatch} />
-  </QueryClientProvider>);
+  </QueryClientProvider></MemoryRouter>);
 };
 
 describe('candidate list segment', () => {
@@ -53,10 +54,10 @@ describe('the list notes', () => {
 
   it('state the base and earnings chips\' rules on the watch tab only while one of its rows carries the chip (plan rule 13)', () => {
     const notes = view => [...view.container.querySelectorAll('.brief-note')].map(note => note.textContent);
-    const watchOf = (rows, wide = true) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    const watchOf = (rows, wide = true) => render(<MemoryRouter><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ListView brief={{ ...brief, bundle: { ...brief.bundle, data: { date: DATE, rankings: { minervini: rows } } }, ranked: rows }} kind="watch" watch={rows.map(r => r.row.symbol)} open={() => {}} now={Date.parse(`${DATE}T20:00:00Z`)} animate={false}
         listState={{ filter: 'zone', sort: 'priority', query: '' }} setListState={() => {}} limits={{}} setLimits={() => {}} origin={null} wide={wide} onUnwatch={() => {}} />
-    </QueryClientProvider>);
+    </QueryClientProvider></MemoryRouter>);
     // Plain rows: no notes on the watch tab.
     expect(notes(watchOf([item('ZON1', 101)]))).toEqual([]);
     cleanup();
@@ -132,10 +133,10 @@ describe('the watch list', () => {
   });
 
   it('renders every watched row while the 候補 tab has a search', () => {
-    const { getAllByTestId } = render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+    const { getAllByTestId } = render(<MemoryRouter><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
       <ListView brief={brief} kind="watch" watch={['NEA1', 'ZON1', 'FAR1']} open={() => {}} now={0} animate={false} listState={{ filter: 'zone', sort: 'priority', query: 'ZON1' }} setListState={() => {}}
         limits={{}} setLimits={() => {}} origin={null} wide onUnwatch={() => {}} />
-    </QueryClientProvider>);
+    </QueryClientProvider></MemoryRouter>);
     expect(getAllByTestId('brief-candidate')).toHaveLength(3);
   });
 });
@@ -151,10 +152,10 @@ describe('round 2 filters on the 候補 list', () => {
   };
   const rows = [audited('BRK1', 101, { eps: 40 }), audited('BRK2', 101.2, { eps: 10 }), audited('TCH1', 100, { eps: null }), audited('NEA1', 97)];
   const day = { bundle: { data: { date: DATE, rankings: { minervini: rows } }, isLoading: false, isError: false }, manifest: { isLoading: false, isError: false }, ranked: rows, date: DATE, market: null, version: 'v1' };
-  const show = (filter, { setListState = () => {}, data = day, wide = true, sort = 'priority' } = {}) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+  const show = (filter, { setListState = () => {}, data = day, wide = true, sort = 'priority' } = {}) => render(<MemoryRouter><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <ListView brief={data} kind="list" watch={[]} open={() => {}} now={0} animate={false} listState={{ filter, sort, query: '' }} setListState={setListState}
       limits={{}} setLimits={() => {}} origin={null} wide={wide} onUnwatch={() => {}} />
-  </QueryClientProvider>);
+  </QueryClientProvider></MemoryRouter>);
 
   it('offers the breakout and EPS filters in one 条件 menu, never as segment buttons, each with its count and its 未確認', () => {
     const { getByRole } = show('zone');
@@ -222,10 +223,10 @@ describe('the 条件 menu and its empty states, honestly', () => {
     return { row, assessment: { qualified: true, passed: 9, failed: 0, unknown: 0, total: 9 } };
   };
   const day = rows => ({ bundle: { data: { date: DATE, rankings: { minervini: rows } }, isLoading: false, isError: false }, manifest: { isLoading: false, isError: false }, ranked: rows, date: DATE, market: null, version: 'v1' });
-  const show = (filter, rows, { wide = true } = {}) => render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+  const show = (filter, rows, { wide = true } = {}) => render(<MemoryRouter><QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
     <ListView brief={day(rows)} kind="list" watch={[]} open={() => {}} now={0} animate={false} listState={{ filter, sort: 'priority', query: '' }} setListState={() => {}}
       limits={{}} setLimits={() => {}} origin={null} wide={wide} onUnwatch={() => {}} />
-  </QueryClientProvider>);
+  </QueryClientProvider></MemoryRouter>);
   const options = (container, name) => [...within(container).getByRole('combobox', { name }).querySelectorAll('option')].map(option => [option.textContent, option.disabled]);
 
   it('says the EPS filter is not in this publication (未収録) when no row carries sec_summary, and offers no EPS sort', () => {
