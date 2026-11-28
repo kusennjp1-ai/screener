@@ -162,13 +162,16 @@ None: the list is empty.
 
 ## SVA-H Package H: the holiday and short-session line (latency plan F9)
 
-Status: **done.** Product commit `76384388` (`feat(frontend): say the exchange calendar's holiday and short session on the bar`)
-on `dce782a6`, then this record, then a test-only commit `764eea8b` (a New Year vitest case and the spec's 320 px short-session
-assertion), then this record's update. Every measurement below ran on `76384388` with the tree clean; `764eea8b` changes no
-served file (no yardstick or harness tool reads either test file), so the yardstick, the harness, the build and the full suites
-carry to it, and its two test files were re-run alone on it (below). No cap, budget, token, waiver, build target, Design
-Acceptance tool, fixture or frozen spec was edited, and no existing assertion changed: the static suite gains one file
-(`brief-holiday.spec.js`, 19 tests), vitest gains 7 tests.
+Status: **done, with fix round 1.** Product commit `76384388` (`feat(frontend): say the exchange calendar's holiday and short
+session on the bar`) on `dce782a6`, then this record, then a test-only commit `764eea8b` (a New Year vitest case and the spec's
+320 px short-session assertion), then this record's update. **Fix round 1** (the critics' orders: 休場 lost at 320 px across a
+year and over several closed days; the short session's 320 px pin): product commit `ebc72d93` (`fix(frontend): keep 休場 whole
+on a 320 px bar across a year and over several closed days`), then this record's update (its own section below). The yardstick's
+full run, surfaces, the ledgers, the harness and the full static suite ran on `76384388` with the tree clean and carry to
+`ebc72d93` for the reason stated in the fix round's section; what `ebc72d93` touches was re-run on it. No cap, budget, token,
+waiver, build target, Design Acceptance tool, fixture or frozen spec was edited, and no assertion of a file outside Package H
+changed: the static suite gains one file (`brief-holiday.spec.js`, 23 tests after fix round 1), vitest gains 7 tests (the fix
+round extends three of them).
 `brief-phone.spec.js:192-200` (the four filter buttons) is untouched: it belongs to the 候補 header packages, not to H.
 
 ### What the line says, and from what
@@ -194,6 +197,11 @@ No holiday name is said (the calendar carries none), and no wording says 最新 
 | holiday, the next session short (Thanksgiving) | 「分析基準日 11/25（水）引け・11/26休場」 + 「（11/27 短縮取引・引け 日本時間 11/28 03:00）」 | 「11/26（木）は米国市場の休場日です（取引所カレンダー）。次の取引日 11/27（金）は短縮取引で、引けは日本時間 11/28 03:00 の予定です。」 |
 | holiday (Christmas, Good Friday) | 「…引け・12/25休場」 + 「（次の取引日 12/28（月））」 | 「12/25（金）は米国市場の休場日です（取引所カレンダー）。次の取引日は12/28（月）です。」 |
 | the next session short (Christmas Eve) | 「…引け・12/24短縮取引」 + 「（引け 日本時間 12/25 03:00）」 | 「次の取引日 12/24（木）は短縮取引で、引けは日本時間 12/25 03:00 の予定です。」 |
+| holiday across a year (New Year's Day 2027; fix round 1) | 「分析基準日 12/31（木）引け・1/1休場」 + 「（次の取引日 1/4（月））」 | 「1/1（金）は米国市場の休場日です（取引所カレンダー）。次の取引日は1/4（月）です。」 |
+| two or more closed weekdays (Hurricane Sandy 2012's 10/29-10/30; fix round 1) | 「分析基準日 10/26（金）引け・休場10/29〜」 + 「（次の取引日 10/31（水））」 | 「10/29（月）・10/30（火）は米国市場の休場日です（取引所カレンダー）。次の取引日は10/31（水）です。」 (three or more: 「10/26（月）〜10/28（水）は…」) |
+
+The bar's age never carries the year and, for two or more closed weekdays, names only the first, with the word first (fix
+round 1); the detail and the sentence are unchanged and the sentence names every closed day.
 
 Where it is said, and where not:
 
@@ -213,7 +221,8 @@ the bar line's existing size (12 px below 521 px, 11 px wider; the 11 px floor h
 (休場 / 短縮取引), never by colour. Its contrast is the existing line's: `text-3` on `ground`, 8.27:1 dark and 4.82:1 light
 (computed from `tokens.js`; the spec measures the class, colour, weight, size and height equal to the plain line's).
 
-**What a phone actually shows.** The age only: 「分析基準日 11/25（水）引け・11/26休場」. The next session, its short close and its
+**What a phone actually shows.** The age only: 「分析基準日 11/25（水）引け・11/26休場」 (or 「…12/31（木）引け・1/1休場」,
+「…10/26（金）引け・休場10/29〜」; at 320 px a two-digit short session only reads 「…12/23（水）引け・12/24短縮…」, below). The next session, its short close and its
 close in Japan time are in the line's text (so in the accessible name) but wrapped out of view on every phone width measured
 (320-390), and visible at 1440 and in 市場's disclosure.
 
@@ -231,11 +240,20 @@ text, in px, and whether the age is cut.
 
 Never cut with the fixture's dates. Real dates with two-digit months, measured by putting the text into the line
 (a second scratch probe): 「分析基準日 11/25（水）引け・11/26休場」 has 12.8 / 52.8 / 67.8 / 82.8 px at 320 / 360 / 375 / 390;
-「分析基準日 12/23（水）引け・12/24短縮取引」 has **−11.2** / 28.8 / 43.8 / 58.8 px, that is **cut by its ellipsis at 320 px only**
-(deviation 4, owner question 3). Across a year the bar's date carries the year, as the late detail's does: New Year's Day after
-the 12/31 analysis reads 「分析基準日 12/31（木）引け・2027/1/1休場」, **−8.8** / 31.2 / 46.2 / 61.2 px, so it is also cut at 320 px
-only (without the year it would have 27.2 px there; owner question 5). The spec pins the holiday's room at ≥ 15 px at 320, 375 and
-390 with the fixture's dates (the two-digit months take 14.4 px); the short session's fit is pinned at 390 only.
+「分析基準日 12/23（水）引け・12/24短縮取引」 has **−11.2** / 28.8 / 43.8 / 58.8 px, that is **cut by its ellipsis at 320 px only**,
+where it reads **「分析基準日 12/23（水）引け・12/24短縮…」** (取引 is lost, 短縮 and the date survive; deviation 4, owner question 3).
+The rows below for the year and several closed days are fix round 1's (its section has the before and after).
+
+| Real line at 12 px (実測, fix round 1's probe; the CI fonts) | 320 | 360 | 375 |
+|---|---|---|---|
+| 「分析基準日 12/31（木）引け・1/1休場」 (was 「…2027/1/1休場」: −8.8, read 「…引け・2027/1/1…」) | 27.2 | 67.2 | 82.2 |
+| 「分析基準日 10/26（金）引け・休場10/29〜」 (was 「…10/29・10/30休場」: −35.2, read 「…引け・10/29・10…」) | 0.8 | 40.8 | 55.8 |
+| 「分析基準日 10/2（金）引け・休場10/5〜」 (the fixture's two-day closure, rendered; was 「…10/5・10/6休場」: −13.6, read 「…10/5・10/6…」) | 15.2 | 55.2 | — |
+
+The spec pins the holiday's room at ≥ 15 px at 320, 375 and 390 with the fixture's dates (the two-digit months take 14.4 px), the
+fixture's short session uncut at 320 and 390 with ≥ 15 px at 390 (fix round 1 restores the 320 px pin), the fixture's two-day
+closure uncut with ≥ 15 px at 320, 375 and 390, and the real words for 11/25, 12/31 and Sandy uncut at 320 (fix round 1's
+section).
 
 No new height: `brief-holiday.spec.js` opens each screen with and without the closure and compares `document.documentElement.scrollHeight` and
 `#brief-main`'s height (equal on 今日, 候補, ウォッチ and 市場 at 320, 375 and 390, on 候補 with the short session at 320 and 390,
@@ -321,8 +339,12 @@ The closure views' heights equal the default views' (above: 候補 593, Today 12
    question 2.
 3. **Today's notes do not carry the sentence**, though Today's notes carry the late age's: a note line is new height on an
    owner-line screen. On a phone the short close and its time are therefore not in view (owner question 4).
-4. **320 px**: the short-session-only line (Christmas Eve, a two-digit month) and the New Year line (「2027/1/1休場」) lose
-   their last characters to the line's ellipsis at 320 px (−11.2 and −8.8 px); both fit from 360 px. Owner questions 3 and 5.
+4. **320 px, the short session**: the short-session-only line with a two-digit month (Christmas Eve after the 12/23 analysis)
+   overflows by 11.2 px at 320 px and reads **「分析基準日 12/23（水）引け・12/24短縮…」**: 短縮 and the date stay, 取引 is lost to the
+   ellipsis (実測, fix round 1's probe; the critics read the same). It fits from 360 px (28.8 px). 「12/24短縮」 would have 12.8 px
+   at 320; the wording is left to the owner (owner question 3). Before fix round 1 the New Year line (「2027/1/1休場」, −8.8 px) and
+   any line of two or more closed weekdays (「10/29・10/30休場」, −35.2 px) also lost 休場 at 320 px (they read 「…2027/1/1…」 and
+   「…10/29・10…」); fix round 1 changed both forms (deviation 8), and no 休場 line is cut at 320 px with the real dates measured.
 5. **The yardstick gained states** (`hol`, `short`; 12 views, 30 view-modes) and `s1/tools.sha256` was re-pinned (only
    `states.mjs` changed); their base is the S2 head tree on 4462, as SVA-P0's gate says.
 6. **The ledger's rebuild dir.** The yardstick's default rebuild (the `bd20584` snapshot) no longer exists in the scratch, so the ledgers ran
@@ -330,6 +352,12 @@ The closure views' heights equal the default views' (above: 候補 593, Today 12
    for byte. The snapshot itself was not re-run.
 7. **F9's test list**: the Python collector test is not written (no collector change); 「Playwright static (390px と 1440px)」 is
    `brief-holiday.spec.js` at 320, 375, 390 and 1440; Design Acceptance is not run here (not measured, above).
+8. **The bar's closure age (fix round 1) follows its own date rule.** It never carries the year (「1/1休場」 after 12/31), though
+   the late detail does (「（2027/1/4 未反映）」, unchanged), and for two or more closed weekdays it names only the first, with the
+   word first (「休場10/29〜」), so the bar no longer names the last closed day (the 市場 sentence names every one, the detail the
+   next session), and its word order differs from a single closure's (「11/26休場」). Measured alternatives at 320 px with Sandy's
+   dates: 「10/29〜休場」 0.8 px (a narrower box would cut 休場 first), 「10/29・10/30休場」 −35.2, 「2日間休場」 17.6 (no date; after a
+   Friday it can read as the weekend). Owner question 6.
 
 ### Owner lines
 
@@ -339,9 +367,10 @@ None moves (the table above). The entry chunk grows 0.79 kB gzip to 114.70 (line
 
 1. 休場日の名前（感謝祭など）を出すには、公開する取引所カレンダーに名前を足す変更（`collect-market-trends.py`、F9 の前半）が要ります。今回は「公開済みのデータだけを使う」指示に従い、名前は出していません。名前の追加を別の作業として行いますか？
 2. 休場の一行は、分析日の公開が届いた時点から次の取引日の引けまで出ます（例: 11/26 16:34 JST 〜 11/28 03:00 JST）。F9 の案（11/27 06:00 JST 〜 11/28 03:00 JST）より早く出ます。この範囲でよいですか？
-3. 幅 320px のスマホでは、短縮取引だけの日（クリスマスイブ）の行が末尾で「…」になります（11.2px 不足、実測）。360px 以上では収まります。「12/24短縮」のように短くしますか、それとも今のままでよいですか？
+3. 幅 320px のスマホでは、短縮取引だけの日（クリスマスイブ、12/23 の分析）の行が「分析基準日 12/23（水）引け・12/24短縮…」と表示され、「取引」が「…」で隠れます（11.2px 不足、実測）。日付と「短縮」は見えます。360px 以上では全文が収まります（28.8px の余裕）。「12/24短縮」に短くすると 320px でも収まります（12.8px の余裕、実測）。短くしますか、それとも今のままでよいですか？
 4. スマホのバーに見えるのは「11/26休場」までで、翌日の短縮取引と引けの時刻（日本時間 03:00）は、市場タブの「推移」の説明（閉じた欄）と幅 1024px 以上でだけ見えます。Today の注記に全文を出すと高さが増えるため出していません。スマホでも時刻を見せる必要がありますか？
-5. 年をまたぐ休場（元日）は、バーの日付に年が付いて「2027/1/1休場」になります（遅れの表示「（2027/1/4 未反映）」と同じ決まりです）。このため幅 320px では末尾が「…」になります（8.8px 不足、実測）。年を付けずに「1/1休場」とすれば 320px でも収まります（27.2px の余裕）。年を外しますか？
+5. 年をまたぐ休場（元日）は、修正前は「2027/1/1休場」で、幅 320px では「分析基準日 12/31（木）引け・2027/1/1…」と表示され「休場」が見えなくなっていました（8.8px 不足、実測）。修正後はバーだけ年を外して「1/1休場」にしました（320px で 27.2px の余裕、実測）。詳細と市場タブの文は「1/1（金）」「次の取引日 1/4（月）」のまま、遅れの表示は「（2027/1/4 未反映）」と年付きのままです。バーで年を外すこの形でよいですか？
+6. 平日が 2 日以上続けて休場のとき（例: 2012 年のハリケーン・サンディ、10/29・10/30）、修正前は「10/29・10/30休場」で、幅 320px では「…引け・10/29・10…」と表示され「休場」が消えていました（35.2px 不足、実測）。修正後はバーを「休場10/29〜」（最初の休場日から、「休場」を先頭）にしました。320px で 0.8px の余裕で全文が収まり（実測）、もっと狭い表示でも「…」がかかるのは日付の側で、「休場」は残ります。2 日目以降の日付はバーには出ず、市場タブの文（「10/29（月）・10/30（火）は米国市場の休場日です」）に出ます。ほかの案は「10/29〜休場」（0.8px、狭いと「休場」から隠れます）、「2日間休場」（17.6px、日付がなく金曜の後だと週末と読めます）です。この形でよいですか？
 
 ### Allow-list delta (this package)
 
@@ -358,3 +387,60 @@ stops on any difference it cannot name; the SV-A list is now 30 entries, sha256
 |---|---|---|---|
 | SVA-P0 | 0 | 0 | — |
 | SVA-H | 30 (closure views only) | 0 | above |
+
+### SVA-H fix round 1 (the critics' orders)
+
+**The orders.** Major: at 320 px the closure age lost the word 休場 for real dates (New Year after a 12/31 analysis read
+「…引け・2027/1/1…」, −8.8 px; two closed weekdays read 「…引け・10/29・10…」, −35.2 px), while the record said only that the end
+becomes 「…」. Minor: on a short-session-only day at 320 px 「…12/23（水）引け・12/24短縮取引」 overflows by 11.2 px and reads
+「…12/24短縮…」; `764eea8b` had removed the 320 px `cut=false` pin of the fixture's short session (3.2 px of room); deviation 4
+and owner question 3 did not state the visible text.
+
+**What changed** (`ebc72d93`, `closureNote` in `briefFreshness.js` only; nothing else in the served tree). The bar's closure age:
+
+- one closed weekday: 「11/26休場」 as before, but its date never carries the year: 「1/1休場」 after 12/31 (was 「2027/1/1休場」);
+- two or more closed weekdays: 「休場10/29〜」, the first closed day with the word first (was 「10/29・10/30休場」, three or more
+  「10/29〜10/31休場」), so a narrower box than the CI fonts' could only cut the date, never 休場;
+- the next session short with no closure: 「12/24短縮取引」 as before (its date without the year too; 短縮 versus 短縮取引 is left
+  to the owner, question 3).
+
+`missingDays` and `shortDate` are unchanged (the late detail shares them and keeps its year), and so are `detail` and `text`: the
+detail names the next session, the 市場 sentence every closed day. Deviation 4 is corrected, deviation 8 and owner question 6 are
+new, owner questions 3 and 5 are rewritten with the visible text.
+
+**Tests.** Vitest (no new case, three extended): the New Year case says 「1/1休場」 and pins the late detail's year
+(「（2027/1/4・2027/1/5 未反映）」) and a two-day closure across the year (「休場1/1〜」); the two-day case says 「休場10/5〜」 with
+its detail; a three-day closure with two-digit days and a short session after it says 「休場10/26〜」 and the range in the sentence.
+`brief-holiday.spec.js` (19 → 23 tests): the 320 px `cut=false` pin of the fixture's short session is back (deliberately
+re-tightened from `764eea8b`); a two-day closure (10/5 and 10/6 dropped from the fixture's calendar by the spec's own mutator)
+is rendered on 候補 at 320, 375 and 390 px: 「分析基準日 10/2（金）引け・休場10/5〜（次の取引日 10/7（水））」, uncut with ≥ 15 px of
+room, the detail out of view, the screen as tall as without it, no overflow, no page error; and the real calendar's words at
+320 px. **The real-date cases are injected**: the fixture's analysis date is fixed (`routeBrief` serves `research.json` with the
+frozen fixture's date), so the spec reads `closureNote` (imported from the source) on real NYSE sessions around 11/25/2026,
+12/31/2026 and 10/26/2012 (Hurricane Sandy's 10/29-10/30; pandas_market_calendars 5.5.0, the backend's, cut to four sessions
+each) at a clock where the age is current, and puts the real date and the product's age and detail into the live line (markup,
+class and font the product's): 「…11/25（水）引け・11/26休場」, 「…12/31（木）引け・1/1休場」 and 「…10/26（金）引け・休場10/29〜」 are
+uncut, with the 休場 glyphs inside the age's box (Sandy's line has 0.8 px of room).
+
+| Check (fix round 1, on `ebc72d93` unless tagged; CI-faithful, port 4461) | Result (実測) |
+|---|---|
+| Fit probe (scratch, text injection into the live line at 320 / 360 / 375 px, the CI fonts); the visible text of a cut line computed as the longest prefix plus 「…」 that fits the age's box, in a clone with the line's font | the Fit section's second table and deviation 4; the old lines read 「…引け・2027/1/1…」, 「…引け・10/29・10…」, 「…引け・10/29〜10…」 (three days), 「…10/5・10/6…」 (the fixture's two days) and the short session 「…12/23（水）引け・12/24短縮…」 |
+| `briefFreshness.test.js` and `MarketUpdateStatus.test.jsx` under `TZ` = Asia/Tokyo, America/Los_Angeles, UTC (on the working tree that became `ebc72d93`) | 23 of 23 in each |
+| `npx vitest run` (the session-calendar and replay Python set) | 256 files passed, 1 skipped; **4347 passed, 1 skipped** (`764eea8b`'s 4347: no case added, three extended), 04:19-04:24Z |
+| `brief-holiday.spec.js` | **23 passed** (1.0 min) |
+| `brief-freshness.spec.js` (the late age's line, uncut at 320 px) | **20 passed** |
+| The closure views: `values.mjs run` on `ebc72d93`, port 4461, `--views '^(hol\|short)-m50/'`, 04:15-04:18Z | 30 view-modes, 20 matrix records, 0 unreached / page errors / notes; **30 of 30 values and 20 of 20 matrix records equal** to the full run's (`76384388`) records of the same keys (the closure states are one closed day in the same year, so no wording moved) |
+| Gate 2 again: `values.mjs diff` the new views' base → this run, the SV-A list, `--subset` | 362 differences, **362 allowed, 0 failures**; matrix 20 compared, 0 differences, 0 height infos (as on `76384388`); the allow-list is unchanged (`9f4cc03f…`) |
+| `phrases.mjs diff` the new views' base → this run | **0 new hits** |
+| The tool pin (`s1/tools.sha256`) | 17 of 17 before and after |
+| `npm run lint` | 0 errors, 4 warnings (main's) |
+| `run-build.sh` on `ebc72d93` | `npm run build` entry **114.70 kB gzip** / 330.38 raw (`76384388`: 114.70 / 330.33; line 134.00); Design Acceptance entry `index-pL98jb64.js` 114.52 kB (114,402 bytes gzip-9) |
+
+**Carried from `76384388`, not re-run on `ebc72d93`** (未検証 on this head): the yardstick's full values run (852 view-modes) and
+gate 1, surfaces, the ledger and its stop mirror, the harness (probe, oracle probe, dump, heights) and the full static suite.
+The reason: `ebc72d93` changes only the string `closureNote` returns as the bar's age for two or more closed weekdays or across a
+year. `closureNote` returns null on every calendar those tools read but the closure states (the fixture's own calendar: 1434
+clocks, 0 lines, the Other checks table), the closure states' records are equal to `76384388`'s (above), the ledger and the
+clock facts never read `closureNote` (they read `freshness` and `freshnessLine`, unchanged), and the only spec that renders a
+closure (`brief-holiday.spec.js`) was re-run. Heights and owner lines: unchanged (the closure views' matrix records are equal;
+the two-day rendering's heights equal the plain screen's in the spec).
