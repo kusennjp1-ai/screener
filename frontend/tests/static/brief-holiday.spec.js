@@ -3,9 +3,11 @@
 // Tuesday 10/6 closes at 13:00 New York (17:00Z); SHORT: 10/5 closes at 13:00. At the fixture's clock (10/3 16:35Z) the
 // 10/2 analysis is current, so the bar's 「米国株」 becomes 「10/5休場」 / 「10/5短縮取引」 in the line's own tone, its detail
 // where it fits. The line is the bar's one line: every screen is as tall as without the closure, nothing overflows, and
-// a late or pending age keeps its own line.
+// a late or pending age keeps its own line. TWO: 10/5 and 10/6 have no session (「休場10/5〜」). The real calendar's words
+// (a two-digit month, across a year, two closed weekdays) are put into the live line at 320px (REAL).
 import { test, expect } from '@playwright/test';
 import { openBrief, horizontalOverflow, VIEWPORTS } from './brief-fixture.js';
+import { closureNote } from '../../src/static/brief/briefFreshness.js';
 
 const phone = (width, height = 812) => ({ viewport: { width, height }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });
 const HOLIDAY = { trends: value => {
@@ -14,6 +16,19 @@ const HOLIDAY = { trends: value => {
   schedule.sessions.find(row => row.date === '2026-10-06').close_at = '2026-10-06T17:00:00Z';
 } };
 const SHORT = { trends: value => { value.refresh_schedule.sessions.find(row => row.date === '2026-10-05').close_at = '2026-10-05T17:00:00Z'; } };
+const TWO = { trends: value => { const schedule = value.refresh_schedule; schedule.sessions = schedule.sessions.filter(row => !['2026-10-05', '2026-10-06'].includes(row.date)); } };
+// Real NYSE calendars around three analysis dates (pandas_market_calendars 5.5.0, the sessions as collect-market-trends.py
+// lists them, cut to a few): Thanksgiving 2026 with the short day after it, New Year's Day 2027, and Hurricane Sandy's two
+// closed weekdays in 2012 (two-digit days, the widest line), each read by closureNote at a clock the age is current.
+const calendar = (rows, validUntil) => ({ data: { refresh_schedule: { provider: 'pandas_market_calendars:NYSE', valid_until: validUntil, sessions: rows.map(([date, close_at]) => ({ date, close_at })) } }, loading: false });
+const REAL = [
+  { name: 'a two-digit month', date: '2026-11-25', day: '11/25（水）', now: '2026-11-26T12:00:00Z', age: '11/26休場',
+    trends: calendar([['2026-11-24', '2026-11-24T21:00:00Z'], ['2026-11-25', '2026-11-25T21:00:00Z'], ['2026-11-27', '2026-11-27T18:00:00Z'], ['2026-11-30', '2026-11-30T21:00:00Z']], '2026-12-01T05:00:00Z') },
+  { name: 'across a year', date: '2026-12-31', day: '12/31（木）', now: '2027-01-01T12:00:00Z', age: '1/1休場',
+    trends: calendar([['2026-12-30', '2026-12-30T21:00:00Z'], ['2026-12-31', '2026-12-31T21:00:00Z'], ['2027-01-04', '2027-01-04T21:00:00Z'], ['2027-01-05', '2027-01-05T21:00:00Z']], '2027-01-06T05:00:00Z') },
+  { name: 'two closed weekdays', date: '2012-10-26', day: '10/26（金）', now: '2012-10-29T12:00:00Z', age: '休場10/29〜',
+    trends: calendar([['2012-10-25', '2012-10-25T20:00:00Z'], ['2012-10-26', '2012-10-26T20:00:00Z'], ['2012-10-31', '2012-10-31T20:00:00Z'], ['2012-11-01', '2012-11-01T20:00:00Z']], '2012-11-02T04:00:00Z') },
+];
 const SCREENS = [['今日', '#/brief'], ['候補', '#/brief/list'], ['ウォッチ', '#/brief/watch'], ['市場', '#/brief/market']];
 const WATCH = { 'research-watch': ['ZZNV', 'ZZSD'] };
 const settled = page => page.evaluate(() => Promise.all(document.getAnimations().filter(a => a.effect?.getComputedTiming().iterations !== Infinity).map(a => a.finished.catch(() => null))));
@@ -80,11 +95,68 @@ for (const width of [320, 390]) test.describe(`the short session at ${width}px`,
     const { errors } = await open(page, '#/brief/list', { mutate: SHORT });
     const line = await barLine(page);
     expect(line.text).toBe('分析基準日 10/2（金）引け・10/5短縮取引（引け 日本時間 10/6 02:00）');
-    // At 320px the line has almost no room left (3px with the fixture's one-digit dates; a two-digit month, 12/23（水）引け・
-    // 12/24短縮取引, is cut by the line's ellipsis: the SV-A record), so only the wider phone pins the fit.
-    if (width >= 360) { expect(line.cut).toBe(false); expect(line.slack).toBeGreaterThanOrEqual(15); }
+    // Uncut with the fixture's one-digit dates (3.2px of room at 320px). A two-digit month is 14.4px wider: at 320px
+    // 12/23（水）引け・12/24短縮取引 is cut by the line's ellipsis to 「…12/24短縮…」 (the SV-A record, an owner question).
+    expect(line.cut).toBe(false);
+    if (width >= 360) expect(line.slack).toBeGreaterThanOrEqual(15);
     expect(line.detailShown).toBe(false);
     expect(await heights(page)).toEqual(before);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+for (const width of [320, 375, 390]) test.describe(`two closed weekdays at ${width}px`, () => {
+  test.use(phone(width));
+  test('the 候補 bar says 休場 first, from the first closed day, uncut, and the screen is as tall as without it', async ({ page }) => {
+    const plain = await page.context().newPage();
+    await open(plain, '#/brief/list');
+    const before = await heights(plain);
+    await plain.close();
+    const { errors } = await open(page, '#/brief/list', { mutate: TWO });
+    const line = await barLine(page);
+    expect(line.text).toBe('分析基準日 10/2（金）引け・休場10/5〜（次の取引日 10/7（水））');
+    // 15.2px of room at 320px with the fixture's dates: the real two-digit days are 14.4px wider (the next test).
+    expect(line.cut).toBe(false);
+    expect(line.slack).toBeGreaterThanOrEqual(15);
+    expect(line.detailShown).toBe(false);
+    expect(await heights(page)).toEqual(before);
+    expect(await horizontalOverflow(page)).toBe(0);
+    expect(errors).toEqual([]);
+  });
+});
+
+test.describe('the holiday line with real dates at 320px', () => {
+  test.use(phone(320));
+  test('keeps 休場 whole: a two-digit month, across a year, and two closed weekdays, in the live line', async ({ page }) => {
+    const { errors } = await open(page, '#/brief/list', { mutate: HOLIDAY });
+    await expect(page.locator('.brief-bar-age')).toHaveText('分析基準日 10/2（金）引け・10/5休場');
+    for (const real of REAL) {
+      const note = closureNote({ trends: real.trends, date: real.date, now: Date.parse(real.now) });
+      expect(note?.age, real.name).toBe(real.age);
+      // The fixture's analysis date is fixed, so the real date and the product's age and detail replace the line's text;
+      // the line's markup, class and font stay the product's.
+      await page.locator('.brief-bar-date').evaluate((node, { date, day, age, detail }) => {
+        const line = node.querySelector('.brief-bar-age'), time = line.querySelector('time');
+        time.textContent = day; time.dateTime = date;
+        while (time.nextSibling) time.nextSibling.remove();
+        line.append(`引け・${age}`);
+        node.querySelector('.brief-bar-missing').textContent = detail;
+      }, { date: real.date, day: real.day, age: note.age, detail: note.detail });
+      const line = await barLine(page);
+      expect(line.age, real.name).toBe(`分析基準日 ${real.day}引け・${real.age}`);
+      expect(line.cut, real.name).toBe(false);
+      expect(line.slack, real.name).toBeGreaterThanOrEqual(0);
+      // The word's own glyphs are inside the age's box (two closed weekdays have 0.8px of room; the word comes first, so a
+      // narrower box could only cut the date after it).
+      const word = await page.locator('.brief-bar-age').evaluate(age => {
+        const text = [...age.childNodes].find(child => child.nodeType === 3 && child.nodeValue.includes('休場')), at = text.nodeValue.indexOf('休場');
+        const range = document.createRange(); range.setStart(text, at); range.setEnd(text, at + 2);
+        return { right: range.getBoundingClientRect().right, box: age.getBoundingClientRect().right };
+      });
+      expect(word.right, real.name).toBeLessThanOrEqual(word.box + 0.5);
+      expect(line.detailShown, real.name).toBe(false);
+    }
     expect(await horizontalOverflow(page)).toBe(0);
     expect(errors).toEqual([]);
   });

@@ -78,8 +78,12 @@ const dayName = iso => `${shortDate(iso, iso)}（${WEEKDAY[weekday(iso)]}）`;
  * - `closed`: the weekdays (Mon-Fri) strictly between the analysis date and the next listed session, the days the
  *   calendar lists no session for (休場). A weekend is never one, and nothing is guessed without a valid calendar.
  * - `early`: the next session closes before 16:00 New York (短縮取引), its close (`closeAt`) as the calendar gives it.
- * `age` replaces the bar's 「米国株」 (「11/26休場」, 「12/24短縮取引」); `detail` follows it where it fits; `text` is the
- * whole sentence. The calendar carries no holiday names, so none is said. Nothing here changes a judgement or a value.
+ * `age` replaces the bar's 「米国株」: one closed weekday 「11/26休場」, two or more 「休場10/29〜」 (from the first, the word
+ * first so that the line's ellipsis can only reach the date: the whole list does not fit a 320 px phone), the next
+ * session short 「12/24短縮取引」; its dates never carry the year (「1/1休場」 after 12/31: the day after the analysis
+ * date needs none, and the year does not fit at 320 px). `detail` follows it where it fits; `text` is the whole
+ * sentence, every closed day named. The calendar carries no holiday names, so none is said. Nothing here changes a
+ * judgement or a value.
  */
 export function closureNote({ trends, date, now } = {}) {
   if (freshness({ trends, date, now }).state !== 'current') return null;
@@ -94,12 +98,12 @@ export function closureNote({ trends, date, now } = {}) {
   }
   const closeAt = Date.parse(next.close_at), early = newYorkMinutes(closeAt) < REGULAR_CLOSE_MINUTES;
   if (!closed.length && !early) return null;
-  const days = missingDays(closed, date), named = closed.length <= 2 ? closed.map(dayName).join('・') : `${dayName(closed[0])}〜${dayName(closed.at(-1))}`;
-  const clock = tokyoClock(closeAt), nextDay = shortDate(next.date, date);
+  const named = closed.length <= 2 ? closed.map(dayName).join('・') : `${dayName(closed[0])}〜${dayName(closed.at(-1))}`;
+  const clock = tokyoClock(closeAt), nextDay = shortDate(next.date, date), barDate = iso => shortDate(iso, iso);
   const holiday = closed.length ? `${named}は米国市場の休場日です（取引所カレンダー）。` : '';
   const session = early ? `次の取引日 ${dayName(next.date)}は短縮取引で、引けは日本時間 ${clock} の予定です。` : `次の取引日は${dayName(next.date)}です。`;
   return { closed, next: next.date, early, closeAt,
-    age: closed.length ? `${days}休場` : `${nextDay}短縮取引`,
+    age: closed.length > 1 ? `休場${barDate(closed[0])}〜` : closed.length ? `${barDate(closed[0])}休場` : `${barDate(next.date)}短縮取引`,
     detail: closed.length ? (early ? `（${nextDay} 短縮取引・引け 日本時間 ${clock}）` : `（次の取引日 ${dayName(next.date)}）`) : `（引け 日本時間 ${clock}）`,
     text: `${holiday}${session}` };
 }

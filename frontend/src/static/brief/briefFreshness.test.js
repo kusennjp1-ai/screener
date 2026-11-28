@@ -127,11 +127,17 @@ describe('the holiday and short-session line', () => {
       text: '12/25（金）は米国市場の休場日です（取引所カレンダー）。次の取引日は12/28（月）です。' });
   });
 
-  it('across a year: the bar\'s date carries the year as the late detail\'s does, the sentence names the weekday', () => {
-    // New Year's Day 2027 (a Friday) after the 12/31 analysis; the next session Monday 1/4.
+  it('across a year: the bar\'s age leaves the year out (it does not fit at 320 px), the sentence names the weekday', () => {
+    // New Year's Day 2027 (a Friday) after the 12/31 analysis; the next session Monday 1/4. The late detail keeps its
+    // year (「（2027/1/4 未反映）」); the closure age is the day after the analysis date and needs none.
     expect(closureNote({ trends: calendar('2026-12-31'), date: '2026-12-31', now: at('2027-01-01T12:00:00Z') })).toMatchObject({
-      closed: ['2027-01-01'], next: '2027-01-04', early: false, age: '2027/1/1休場', detail: '（次の取引日 1/4（月））',
+      closed: ['2027-01-01'], next: '2027-01-04', early: false, age: '1/1休場', detail: '（次の取引日 1/4（月））',
       text: '1/1（金）は米国市場の休場日です（取引所カレンダー）。次の取引日は1/4（月）です。' });
+    expect(freshnessLine(freshness({ trends: calendar('2026-12-31'), date: '2026-12-31', now: at('2027-01-06T09:00:00Z') }), '2026-12-31').detail).toBe('（2027/1/4・2027/1/5 未反映）');
+    // Two closed weekdays across the year (an edited calendar): the word first, from the first day, without the year.
+    const two = calendar('2026-12-31', sessions => sessions.filter(row => row.date !== '2027-01-04'));
+    expect(closureNote({ trends: two, date: '2026-12-31', now: at('2027-01-01T12:00:00Z') })).toMatchObject({ closed: ['2027-01-01', '2027-01-04'], next: '2027-01-05',
+      age: '休場1/1〜', detail: '（次の取引日 1/5（火））', text: '1/1（金）・1/4（月）は米国市場の休場日です（取引所カレンダー）。次の取引日は1/5（火）です。' });
   });
 
   it('names only the weekdays: a Friday holiday before a weekend, and two closed weekdays', () => {
@@ -140,10 +146,18 @@ describe('the holiday and short-session line', () => {
       closed: ['2025-11-27'], next: '2025-11-28', early: true, age: '11/27休場', detail: '（11/28 短縮取引・引け 日本時間 11/29 03:00）' });
     // Good Friday 2026 (4/3): Thursday's analysis, the next session Monday 4/6.
     expect(closureNote({ trends: calendar('2026-04-02'), date: '2026-04-02', now: at('2026-04-04T12:00:00Z') })).toMatchObject({ closed: ['2026-04-03'], age: '4/3休場' });
-    // Two weekdays the calendar lists no session for (a closure the fixture's dates do not have, as an edited calendar).
+    // Two weekdays the calendar lists no session for (a closure the fixture's dates do not have, as an edited calendar):
+    // the bar's age names the first with the word first (「休場10/5〜」: the whole list is cut at 320 px, and a cut must never
+    // take 休場); the sentence names both.
     const two = calendar(DATE, sessions => sessions.filter(row => !['2026-10-05', '2026-10-06'].includes(row.date)));
-    expect(closureNote({ trends: two, date: DATE, now: at('2026-10-03T16:35:00Z') })).toMatchObject({ closed: ['2026-10-05', '2026-10-06'], next: '2026-10-07', age: '10/5・10/6休場',
-      text: '10/5（月）・10/6（火）は米国市場の休場日です（取引所カレンダー）。次の取引日は10/7（水）です。' });
+    expect(closureNote({ trends: two, date: DATE, now: at('2026-10-03T16:35:00Z') })).toMatchObject({ closed: ['2026-10-05', '2026-10-06'], next: '2026-10-07', age: '休場10/5〜',
+      detail: '（次の取引日 10/7（水））', text: '10/5（月）・10/6（火）は米国市場の休場日です（取引所カレンダー）。次の取引日は10/7（水）です。' });
+    // Three closed weekdays with two-digit days, the short session after them: the same age, the range in the sentence.
+    const three = calendar('2026-10-23', sessions => sessions.filter(row => !['2026-10-26', '2026-10-27', '2026-10-28'].includes(row.date))
+      .map(row => row.date === '2026-10-29' ? { ...row, close_at: '2026-10-29T17:00:00Z' } : row));
+    expect(closureNote({ trends: three, date: '2026-10-23', now: at('2026-10-24T12:00:00Z') })).toMatchObject({ closed: ['2026-10-26', '2026-10-27', '2026-10-28'], next: '2026-10-29',
+      early: true, age: '休場10/26〜', detail: '（10/29 短縮取引・引け 日本時間 10/30 02:00）',
+      text: '10/26（月）〜10/28（水）は米国市場の休場日です（取引所カレンダー）。次の取引日 10/29（木）は短縮取引で、引けは日本時間 10/30 02:00 の予定です。' });
   });
 
   it('says nothing over an ordinary weekend, on a daylight-time Monday, or on an ordinary day', () => {
