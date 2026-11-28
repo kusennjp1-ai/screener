@@ -50,6 +50,60 @@ export function freshness({ trends, date, now } = {}) {
   return { state: 'stale', missing, next: nextClose };
 }
 
+// The regular NYSE close on the New York wall clock (16:00), in minutes: a session the calendar closes earlier is a
+// short session. Compared on the wall clock, never in UTC against another session (a daylight-time change moves the
+// UTC close by an hour without shortening the session).
+const REGULAR_CLOSE_MINUTES = 16 * 60;
+let newYork, tokyo;
+const parts = (format, ms) => Object.fromEntries(format.formatToParts(ms).map(part => [part.type, part.value]));
+function newYorkMinutes(ms) {
+  newYork ||= new Intl.DateTimeFormat('en-US', { timeZone: 'America/New_York', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const { hour, minute } = parts(newYork, ms);
+  return Number(hour) * 60 + Number(minute);
+}
+/** An instant as Japan's wall clock names it: 「11/28 03:00」. */
+function tokyoClock(ms) {
+  tokyo ||= new Intl.DateTimeFormat('en-US', { timeZone: 'Asia/Tokyo', month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+  const { month, day, hour, minute } = parts(tokyo, ms);
+  return `${month}/${day} ${hour}:${minute}`;
+}
+const WEEKDAY = '日月火水木金土';
+const weekday = iso => new Date(`${iso}T12:00:00Z`).getUTCDay();
+const dayName = iso => `${shortDate(iso, iso)}（${WEEKDAY[weekday(iso)]}）`;
+
+/**
+ * What the exchange calendar says about the gap before the next session (latency plan F9), from the same valid
+ * refresh_schedule as freshness and only while the publication is current (a late, pending, unknown or loading age
+ * keeps its own line, so this never hides it): `{ closed, next, early, closeAt, age, detail, text }` or null.
+ * - `closed`: the weekdays (Mon-Fri) strictly between the analysis date and the next listed session, the days the
+ *   calendar lists no session for (休場). A weekend is never one, and nothing is guessed without a valid calendar.
+ * - `early`: the next session closes before 16:00 New York (短縮取引), its close (`closeAt`) as the calendar gives it.
+ * `age` replaces the bar's 「米国株」 (「11/26休場」, 「12/24短縮取引」); `detail` follows it where it fits; `text` is the
+ * whole sentence. The calendar carries no holiday names, so none is said. Nothing here changes a judgement or a value.
+ */
+export function closureNote({ trends, date, now } = {}) {
+  if (freshness({ trends, date, now }).state !== 'current') return null;
+  const asset = trends && Object.hasOwn(trends, 'data') ? trends.data : trends;
+  const sessions = validSessions(asset?.refresh_schedule, now), at = sessions?.findIndex(row => row.date === date) ?? -1;
+  const next = at >= 0 ? sessions[at + 1] : null;
+  if (!next) return null;
+  const closed = [];
+  for (let day = Date.parse(`${date}T12:00:00Z`) + 86400000, end = Date.parse(`${next.date}T12:00:00Z`); day < end; day += 86400000) {
+    const iso = new Date(day).toISOString().slice(0, 10);
+    if (weekday(iso) % 6) closed.push(iso);
+  }
+  const closeAt = Date.parse(next.close_at), early = newYorkMinutes(closeAt) < REGULAR_CLOSE_MINUTES;
+  if (!closed.length && !early) return null;
+  const days = missingDays(closed, date), named = closed.length <= 2 ? closed.map(dayName).join('・') : `${dayName(closed[0])}〜${dayName(closed.at(-1))}`;
+  const clock = tokyoClock(closeAt), nextDay = shortDate(next.date, date);
+  const holiday = closed.length ? `${named}は米国市場の休場日です（取引所カレンダー）。` : '';
+  const session = early ? `次の取引日 ${dayName(next.date)}は短縮取引で、引けは日本時間 ${clock} の予定です。` : `次の取引日は${dayName(next.date)}です。`;
+  return { closed, next: next.date, early, closeAt,
+    age: closed.length ? `${days}休場` : `${nextDay}短縮取引`,
+    detail: closed.length ? (early ? `（${nextDay} 短縮取引・引け 日本時間 ${clock}）` : `（次の取引日 ${dayName(next.date)}）`) : `（引け 日本時間 ${clock}）`,
+    text: `${holiday}${session}` };
+}
+
 /** The missing sessions as the bar names them: 「10/5」, 「10/5・10/6」, 「10/5〜10/8」. */
 export function missingDays(missing, reference) {
   if (!missing?.length) return '';

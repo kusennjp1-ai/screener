@@ -17,7 +17,7 @@ import './brief-watch.css';
 import './brief-gate.css';
 import { useBriefData, useWatchlist, useWatchSellChecks } from './useBriefData';
 import { filterLabel, focusCandidates, memoCandidateView } from './briefCandidate';
-import { freshness, freshnessLine } from './briefFreshness';
+import { closureNote, freshness, freshnessLine } from './briefFreshness';
 import { trendsStatus } from './briefEnvironment';
 import { marketUpdateState } from '../marketUpdateState';
 import TodayView from './TodayView';
@@ -68,39 +68,45 @@ function Tabs({ current, watchCount, go }) {
 
 /**
  * The publication's age (briefFreshness) for the bar, re-read when it can next change (a session's close or
- * the end of its grace), so an open page turns stale without a reload.
+ * the end of its grace), so an open page turns stale without a reload; and, from the same clock reading, what the
+ * exchange calendar says about the gap before the next session (closureNote: a holiday or a short session, only
+ * while the age is current, so it ends at that session's close with the same timer).
  */
 function useFreshness(trends, date) {
   const [tick, setTick] = useState(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps -- tick re-reads the clock
-  const value = useMemo(() => freshness({ trends, date, now: Date.now() }), [trends?.data, trends?.loading, date, tick]);
+  const [value, closure] = useMemo(() => { const now = Date.now(); return [freshness({ trends, date, now }), closureNote({ trends, date, now })]; }, [trends?.data, trends?.loading, date, tick]);
   useEffect(() => {
     if (!Number.isFinite(value.next)) return undefined;
     // At most 6 hours ahead (setTimeout's range, and a sleeping device's clock).
     const timer = setTimeout(() => setTick(count => count + 1), Math.min(Math.max(value.next - Date.now(), 0) + 1000, 6 * 3600000));
     return () => clearTimeout(timer);
   }, [value.next]);
-  return value;
+  return [value, closure];
 }
 
 /**
  * The bar's date line: 「分析基準日 10/2（金）引け・米国株」, or once the publication is late 「…引け・2営業日前」 in
  * the warning tone with 「（10/5・10/6 未反映）」 where it fits (the rest of the line is clipped, never the
  * page: brief-watch.css), or 「…・鮮度未確認」 without a valid exchange calendar. The whole sentence stays in
- * the accessible text.
+ * the accessible text. While the age is current and the exchange calendar lists no session on a weekday before the
+ * next one, or the next session closes early (`closure`, latency plan F9), 「米国株」 becomes 「11/26休場」 or
+ * 「12/24短縮取引」 in the line's own tone, its detail (the next session, its close in Japan time) where it fits, as
+ * the missing sessions are: the same one line, no new height.
  */
-function BarDate({ brief, line }) {
+function BarDate({ brief, line, closure }) {
   if (!brief.date) return <span className="numeric">分析基準日 {brief.manifest.isLoading || brief.bundle.isLoading ? '取得中' : '未確認'}</span>;
+  const detail = line ? line.detail : closure?.detail;
   return <span className={`numeric brief-bar-date${line ? ` is-${line.tone}` : ''}`} data-testid="brief-bar-date">
-    <span className="brief-bar-age">分析基準日 <time dateTime={brief.date}>{barDay(brief.date)}</time>引け・{line ? line.age : '米国株'}</span>
-    {line?.detail ? <span className="brief-bar-missing">{line.detail}</span> : null}
+    <span className="brief-bar-age">分析基準日 <time dateTime={brief.date}>{barDay(brief.date)}</time>引け・{line ? line.age : closure ? closure.age : '米国株'}</span>
+    {detail ? <span className="brief-bar-missing">{detail}</span> : null}
   </span>;
 }
 
 export default function BriefApp() {
   const brief = useBriefData();
   const { watch, toggle, storageError } = useWatchlist();
-  const age = useFreshness(brief.trends, brief.date);
+  const [age, closure] = useFreshness(brief.trends, brief.date);
   const ageLine = useMemo(() => freshnessLine(age, brief.date), [age, brief.date]);
   // The last session the exchange calendar says has closed (marketUpdateState, as the 市場 tab reads it), re-read whenever the
   // age is (useFreshness's tick at each close): Today's gate and the stock's market line say a waiting verdict from it
@@ -280,7 +286,7 @@ export default function BriefApp() {
       </> : <>
         {/* The phone's Today hides the hero date, so the bar alone says the analysis date (with its weekday), or
             one that could not be read: 未確認, never 取得中 for good. */}
-        <div className="brief-bar-title"><b>米国株スクリーナー</b><BarDate brief={brief} line={ageLine} /></div>
+        <div className="brief-bar-title"><b>米国株スクリーナー</b><BarDate brief={brief} line={ageLine} closure={closure} /></div>
       </>}
       <ThemeToggle />
     </header>

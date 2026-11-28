@@ -59,4 +59,24 @@ describe('market update disclosure source clocks',()=>{
   const input=data();delete input.long_history;view(input);
   expect(within(acquisitionRow()).getByText('未確認')).toBeInTheDocument();
  });
+ it('says the exchange calendar\'s holiday and short session first in its explanation, closed, and nothing on an ordinary day',()=>{
+  // The Wednesday before Thanksgiving 2026: no session on 11/26; 11/27 closes at 13:00 New York (18:00Z).
+  const schedule=sessions=>({provider:'pandas_market_calendars:NYSE',valid_until:'2026-12-01T05:00:00Z',sessions});
+  const input=sessions=>({...data(),as_of_date:'2026-11-25',long_history:{as_of_date:'2026-11-25',retrieved_at:'2026-11-26T04:08:20Z'},refresh_schedule:schedule(sessions)});
+  const holiday=[{date:'2026-11-24',close_at:'2026-11-24T21:00:00Z'},{date:'2026-11-25',close_at:'2026-11-25T21:00:00Z'},{date:'2026-11-27',close_at:'2026-11-27T18:00:00Z'},{date:'2026-11-30',close_at:'2026-11-30T21:00:00Z'}];
+  const at=now=>render(<MarketUpdateStatus data={input(holiday)} now={Date.parse(now)}/>);
+  const shown=at('2026-11-26T22:00:00Z');
+  expect(shown.container.querySelector('details')).not.toHaveAttribute('open');
+  expect(shown.container.querySelectorAll('details p')).toHaveLength(1);
+  expect(shown.container.querySelector('details p').textContent).toBe('11/26（木）は米国市場の休場日です（取引所カレンダー）。次の取引日 11/27（金）は短縮取引で、引けは日本時間 11/28 03:00 の予定です。終値と取得日時は別です。休日・夏時間・短縮取引を取引カレンダーで確認します。データ配信が遅れた場合は再取得し、確認できるまで以前の観測日を保持します。取得日時は長期履歴のものです。個別の指数・P/Cの最終観測日は各グラフに表示します。');
+  expect(shown.container.querySelector('summary').textContent).not.toMatch(/休場|短縮/);
+  cleanup();
+  // After 11/27 closed (the analysis is behind): the explanation is the general one again.
+  const after=at('2026-11-27T19:00:00Z');
+  expect(after.container.querySelector('details p').textContent).toMatch(/^終値と取得日時は別です。/);
+  cleanup();
+  const ordinary=render(<MarketUpdateStatus data={input([{date:'2026-11-24',close_at:'2026-11-24T21:00:00Z'},{date:'2026-11-25',close_at:'2026-11-25T21:00:00Z'},{date:'2026-11-26',close_at:'2026-11-26T21:00:00Z'}])} now={Date.parse('2026-11-26T03:00:00Z')}/>);
+  expect(ordinary.container.querySelector('details p').textContent).toMatch(/^終値と取得日時は別です。/);
+  expect(ordinary.container).not.toHaveTextContent(/休場日|短縮取引で/);
+ });
 });

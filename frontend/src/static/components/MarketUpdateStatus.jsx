@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { marketUpdateState } from '../marketUpdateState';
+import { closureNote } from '../brief/briefFreshness';
 import { formatPublished } from '../researchPresentation';
 import MetricDisclosure from './MetricDisclosure';
 import './marketUpdateStatus.css';
@@ -16,12 +17,15 @@ export default function MarketUpdateStatus({data, now: suppliedNow}) {
  },[suppliedNow]);
  if(!data)return null;
  const state=marketUpdateState(data,suppliedNow??clock);
+ // The exchange calendar's holiday or short session before the next session (latency plan F9), only while the daily
+ // analysis is current: said first in the explanation, inside the closed disclosure (no new height).
+ const closure=closureNote({trends:data,date:data.as_of_date,now:suppliedNow??clock});
  // A long history the reader withdrew (long_history_error) is known: excluded by validation, not awaiting an update.
  const withdrawn=!data.long_history&&typeof data.long_history_error==='string';
  const day=(state.state==='pending'?state.target:state.daily)?.slice(5).replace('-','/');
  const status=withdrawn?`${day||'日付未確認'} · 長期履歴は検証で除外`:state.state==='current'?`${day} · 長期履歴反映`:state.state==='pending'?`${day} 履歴更新待ち`:`${day||'日付未確認'} · 更新状況を確認`;
  return <MetricDisclosure className="market-update-status" summary={<span data-update-state={withdrawn?'withdrawn':state.state}><span aria-hidden="true">◷</span><span>{status}</span></span>}>
   <dl><div><dt>日次の分析基準日</dt><dd>{state.daily||'未確認'}</dd></div><div><dt>長期履歴の最終日</dt><dd>{withdrawn?'検証で除外':state.history||'未取得'}</dd></div><div><dt>最新の取引終了日</dt><dd>{state.target||'取引カレンダー未確認'}</dd></div><div><dt>長期履歴の取得</dt><dd>{withdrawn?'検証で除外':formatPublished(typeof data.long_history?.retrieved_at==='string'?data.long_history.retrieved_at:undefined)}</dd></div>{state.reason&&<div><dt>長期履歴の形式</dt><dd>{state.reason}</dd></div>}</dl>
-  <p>終値と取得日時は別です。休日・夏時間・短縮取引を取引カレンダーで確認します。データ配信が遅れた場合は再取得し、確認できるまで以前の観測日を保持します。取得日時は長期履歴のものです。個別の指数・P/Cの最終観測日は各グラフに表示します。</p>
+  <p>{closure?closure.text:null}終値と取得日時は別です。休日・夏時間・短縮取引を取引カレンダーで確認します。データ配信が遅れた場合は再取得し、確認できるまで以前の観測日を保持します。取得日時は長期履歴のものです。個別の指数・P/Cの最終観測日は各グラフに表示します。</p>
  </MetricDisclosure>;
 }
