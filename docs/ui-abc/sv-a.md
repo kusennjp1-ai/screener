@@ -29,7 +29,8 @@ view.
 
 ## Orders carried to a later package
 
-None of S2's carried orders is addressed to SV-A. S2's items 4 (the `STOP_ROW_LABEL` comment, for the next package that edits
+None of S2's carried orders is addressed to SV-A. S2's items 2 and 3 ("any later attempt at the strip") concern S2-P2's 4-number
+strip on the stock screen, not this slice's strip of count tabs on 候補. S2's items 4 (the `STOP_ROW_LABEL` comment, for the next package that edits
 `frontend/src/static/brief/briefSell.js`), 5 (S3-P4) and 6 (S3-P0) stay carried in S2's record; SV-A is not scoped to touch
 `briefSell.js`, and if one of its packages does, item 4 applies to it.
 
@@ -80,13 +81,14 @@ or frozen spec was edited.
 | build | `75f1f609` (`run-build.sh`, archive of HEAD) | `npm run build` entry **113.91 kB gzip** / 328.45 raw (line 134.00); Design Acceptance entry `index-DAOu9dBS.js` 113.73 kB (113,617 bytes gzip-9) | build file `aad3f165dbb30db1ae79ea9b7849e0f04db4ff755b228b75993470e5ed0c762d` |
 | the tool pin | — | 17 files, 17 of 17 OK | `1d06dacd01a28011f9d88169bf91d6069adc7d8d133ce0347d80488bded90d2c` (S2-P6's pin, unchanged) |
 
-### The live check on this head (実測; `e7afacdd`, this worktree clean, CI-faithful: Chrome for Testing 147 headless shell, the CI fonts, Node 22; port 4461 only, no other browser running at its start; 00:18-00:41Z on 11-28)
+### The live check on this head (実測; `e7afacdd`, this worktree clean, CI-faithful: Chrome for Testing 147 headless shell, the CI fonts, Node 22; port 4461 only, no other browser running at its start; Node v22.23.4; 00:18-00:41Z on 11-28, the resume 00:41-00:42Z)
 
 - `values.mjs run` with a `--views` filter: every 候補 view-mode of the matrix (screens `list` and `list-*`: 177, that is 59 at each
   of 375, 390f and 1440) and one control each of Today (`below50/today`), ウォッチ (`basisconflict/watch5`), 市場
   (`basisconflict/market-t0`, phone only) and the stock screen (`stock-touch@pub`): **188 view-modes, 125 matrix records**. The first
   pass: 187 passed and 1 timed out (`390f pend-m50/list`: the page closed at the 180 s limit, the known flake); **re-run once with
-  `--resume`: passed**. 0 unreached, 0 page errors, 0 notes.
+  `--resume`: passed**. 0 unreached, 0 page errors, 0 notes; the merged files: values
+  `59b13ef22e121674a1e4ada90dc24697b3f162faa6ebbc291575f0a8f1e7018c`, matrix `81914c1b9209fa4c8db4e0c23aa06a6eafd8cb4f7015d16fd1110211023e26ce`.
 - `values.mjs diff` against the base with the SV-A list (empty) and `--subset`: **0 differences, 0 failures; matrix 125 compared, 0
   differences, 0 height infos**, exit 0. Every one of the 188 values records and 125 matrix records is byte-identical, line for line,
   to the base's record of the same view-mode.
@@ -108,13 +110,14 @@ or frozen spec was edited.
 - The yardstick's sensitivity carries from S2-P0's live-gate proof (the plants it found), because every pinned tool is byte-identical
   to the bytes that proof ran; it was not re-proved here.
 
-### Heights and owner lines (the base readings; 375x812 unless tagged; the values run's matrix and the harness heights file)
+### Heights and owner lines (実測 on `9b2ee399`, carried to this head by the identity above; the base readings at 375x812 unless tagged; the values run's matrix and the harness heights file)
 
 | Line | Bound | Base reading |
 |---|---|---|
 | Entry chunk | ≤ 134.00 kB gzip | 113.91 |
 | Today | 1388 | 1360 (`below50/today`, the tallest of 19 Today views); harness governing state 1330 |
-| 候補 | 708 (its spec asserts 720); **this slice: ≤ 700 by its own measurement** | **593** on the default tab 買いゾーン (`list-zone`) in 12 of 13 market states (`manifest503` 316) and in the 6 pending and late lists; harness governing state (default 買いゾーン) 593. The other tabs, which no owner line bounds: あと1条件 up to 1070, ピボット接近 up to 1246, 選定すべて up to 1564 (1596 in `row-bigprice`, whose recipe also opens the longer list) |
+| 候補 | 708 (its spec asserts 720); **this slice: ≤ 700 by its own measurement** | **593** on the default tab 買いゾーン (`list-zone`) in 12 of 13 market states (`manifest503` 316) and in the 6 pending and late lists; harness governing state (default 買いゾーン) 593. The 720 is `brief-compact.spec.js:24`'s `BUDGET.list`, read at 375x812 as
+the bottom of `#brief-main .brief-stack` on `#/brief/list` as it opens, that is on the default tab (`:15`, `:32-37`). The other tabs, which neither that spec nor an owner line bounds: あと1条件 up to 1070, ピボット接近 up to 1246, 選定すべて up to 1564 (1596 in `row-bigprice`, whose recipe also opens the longer list) |
 | ウォッチ | 508 | 442 (`watch5`); 377 (`watch4`, `watchbroken`) |
 | 市場 | 1288 | 1228 (harness governing state, one session behind; 1219 at base); `market-t0` up to 1300 in the matrix (`basisconflict`, `below50`); the harness's FTD-conflict screen 1300 and 1322 one session behind (owner finding O8, main's own overrun, no spec on it) |
 | Stock `STOCK_CAP` (stalls) | 3124 | 3119 (`stock-stalls@late`, the tallest of 112 stock views). The stopPercent 4.5 state, which has no matrix view, is not re-measured: S2-P2 read 3134 at publication and 3155 late on the S2-P1 head (an overrun the S1 head already had, 3168; S2-P8's record), 未検証 since |
@@ -139,7 +142,9 @@ or frozen spec was edited.
    serve the same frontend source as main; the only difference in `frontend` is a spec no tool reads (above). The 188 view-mode live
    check on this head is added as the proof that this worktree reproduces it (its `node_modules` is a link to the main checkout's).
 2. The yardstick's README had no S2-C1 section (S2-C1's paragraph sat in a scratch draft); it is appended there now, beside the new
-   SV-A section. Scratch only.
+   SV-A section. Scratch only (the README's earlier bytes are kept beside this package's scratch outputs).
+3. The live check needed one `--resume`: `390f pend-m50/list` timed out once (page closed at the 180 s limit) and passed on its
+   re-run, as S2's packages handled the same flake.
 
 ### Owner lines
 
