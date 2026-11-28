@@ -356,8 +356,12 @@ The closure views' heights equal the default views' (above: 候補 593, Today 12
    the late detail does (「（2027/1/4 未反映）」, unchanged), and for two or more closed weekdays it names only the first, with the
    word first (「休場10/29〜」), so the bar no longer names the last closed day (the 市場 sentence names every one, the detail the
    next session), and its word order differs from a single closure's (「11/26休場」). Measured alternatives at 320 px with Sandy's
-   dates: 「10/29〜休場」 0.8 px (a narrower box would cut 休場 first), 「10/29・10/30休場」 −35.2, 「2日間休場」 17.6 (no date; after a
-   Friday it can read as the weekend). Owner question 6.
+   dates: 「10/29〜休場」 0.8 px, 「10/29・10/30休場」 −35.2, 「2日間休場」 17.6 (no date; after a Friday it can read as the weekend).
+   **The trade-off of the chosen form** (実測, the same probe at 319-305 px standing in for a box narrower than the CI fonts'
+   320 px line, e.g. a device font with wider digits): 「休場10/29〜」 keeps the word and loses the date first, 「休場10/29…」 at 2-4
+   px short but **「休場10/2…」 from about 6 px short** (305 px: 「休場10/…」), which can be read as another date; 「10/29〜休場」
+   keeps the date and loses the word, 「10/29〜休…」 at 2-4 px short and 「10/29〜…」 from 6 px. With the CI fonts at 320 px neither
+   is cut. Owner question 6.
 
 ### Owner lines
 
@@ -370,7 +374,7 @@ None moves (the table above). The entry chunk grows 0.79 kB gzip to 114.70 (line
 3. 幅 320px のスマホでは、短縮取引だけの日（クリスマスイブ、12/23 の分析）の行が「分析基準日 12/23（水）引け・12/24短縮…」と表示され、「取引」が「…」で隠れます（11.2px 不足、実測）。日付と「短縮」は見えます。360px 以上では全文が収まります（28.8px の余裕）。「12/24短縮」に短くすると 320px でも収まります（12.8px の余裕、実測）。短くしますか、それとも今のままでよいですか？
 4. スマホのバーに見えるのは「11/26休場」までで、翌日の短縮取引と引けの時刻（日本時間 03:00）は、市場タブの「推移」の説明（閉じた欄）と幅 1024px 以上でだけ見えます。Today の注記に全文を出すと高さが増えるため出していません。スマホでも時刻を見せる必要がありますか？
 5. 年をまたぐ休場（元日）は、修正前は「2027/1/1休場」で、幅 320px では「分析基準日 12/31（木）引け・2027/1/1…」と表示され「休場」が見えなくなっていました（8.8px 不足、実測）。修正後はバーだけ年を外して「1/1休場」にしました（320px で 27.2px の余裕、実測）。詳細と市場タブの文は「1/1（金）」「次の取引日 1/4（月）」のまま、遅れの表示は「（2027/1/4 未反映）」と年付きのままです。バーで年を外すこの形でよいですか？
-6. 平日が 2 日以上続けて休場のとき（例: 2012 年のハリケーン・サンディ、10/29・10/30）、修正前は「10/29・10/30休場」で、幅 320px では「…引け・10/29・10…」と表示され「休場」が消えていました（35.2px 不足、実測）。修正後はバーを「休場10/29〜」（最初の休場日から、「休場」を先頭）にしました。320px で 0.8px の余裕で全文が収まり（実測）、もっと狭い表示でも「…」がかかるのは日付の側で、「休場」は残ります。2 日目以降の日付はバーには出ず、市場タブの文（「10/29（月）・10/30（火）は米国市場の休場日です」）に出ます。ほかの案は「10/29〜休場」（0.8px、狭いと「休場」から隠れます）、「2日間休場」（17.6px、日付がなく金曜の後だと週末と読めます）です。この形でよいですか？
+6. 平日が 2 日以上続けて休場のとき（例: 2012 年のハリケーン・サンディ、10/29・10/30）、修正前は「10/29・10/30休場」で、幅 320px では「…引け・10/29・10…」と表示され「休場」が消えていました（35.2px 不足、実測）。修正後はバーを「休場10/29〜」（最初の休場日から、「休場」を先頭）にしました。320px で 0.8px の余裕で全文が収まります（実測、CI のフォント）。端末のフォントで文字幅が広く、これより狭くなった場合は「…」がかかるのは日付の側で「休場」は残りますが、約 6px 不足すると「休場10/2…」と表示され、別の日付（10/2）に読めるおそれがあります（2〜4px 不足なら「休場10/29…」、実測）。2 日目以降の日付はバーには出ず、市場タブの文（「10/29（月）・10/30（火）は米国市場の休場日です」）に出ます。ほかの案は「10/29〜休場」（0.8px。狭くなると日付は残り「休場」から隠れます: 「10/29〜休…」、6px 不足で「10/29〜…」）、「2日間休場」（17.6px の余裕。日付がなく、金曜の後だと週末のことと読めます）です。「休場10/29〜」（休場を残し日付が欠けうる）と「10/29〜休場」（日付を残し休場が欠けうる）のどちらにしますか？
 
 ### Allow-list delta (this package)
 
@@ -420,11 +424,14 @@ frozen fixture's date), so the spec reads `closureNote` (imported from the sourc
 12/31/2026 and 10/26/2012 (Hurricane Sandy's 10/29-10/30; pandas_market_calendars 5.5.0, the backend's, cut to four sessions
 each) at a clock where the age is current, and puts the real date and the product's age and detail into the live line (markup,
 class and font the product's): 「…11/25（水）引け・11/26休場」, 「…12/31（木）引け・1/1休場」 and 「…10/26（金）引け・休場10/29〜」 are
-uncut, with the 休場 glyphs inside the age's box (Sandy's line has 0.8 px of room).
+uncut, with the 休場 glyphs inside the age's box (Sandy's line has 0.8 px of room). The four-session lists were re-read from the
+backend's pandas_market_calendars 5.5.0 (the backend venv) and are equal to what the spec carries (the probe venv's 5.4.0 lists
+the same sessions).
 
 | Check (fix round 1, on `ebc72d93` unless tagged; CI-faithful, port 4461) | Result (実測) |
 |---|---|
 | Fit probe (scratch, text injection into the live line at 320 / 360 / 375 px, the CI fonts); the visible text of a cut line computed as the longest prefix plus 「…」 that fits the age's box, in a clone with the line's font | the Fit section's second table and deviation 4; the old lines read 「…引け・2027/1/1…」, 「…引け・10/29・10…」, 「…引け・10/29〜10…」 (three days), 「…10/5・10/6…」 (the fixture's two days) and the short session 「…12/23（水）引け・12/24短縮…」 |
+| The Sandy line on a narrower box (the same probe at 319, 317, 315, 313, 311, 309 and 305 px) | 319: uncut; 317 and 315: 「…引け・休場10/29…」; 313-309: 「…引け・休場10/2…」; 305: 「…引け・休場10/…」 (「10/29〜休場」: 「…10/29〜休…」, then 「…10/29〜…」 from 313); deviation 8 |
 | `briefFreshness.test.js` and `MarketUpdateStatus.test.jsx` under `TZ` = Asia/Tokyo, America/Los_Angeles, UTC (on the working tree that became `ebc72d93`) | 23 of 23 in each |
 | `npx vitest run` (the session-calendar and replay Python set) | 256 files passed, 1 skipped; **4347 passed, 1 skipped** (`764eea8b`'s 4347: no case added, three extended), 04:19-04:24Z |
 | `brief-holiday.spec.js` | **23 passed** (1.0 min) |
